@@ -1,0 +1,11 @@
+* text auto
+
+# shell scripts
+*.sh text eol=lf
+
+# binary files
+*.gif binary
+*.jpg binary
+*.mp4 binary
+*.png binary
+*.webp binary
