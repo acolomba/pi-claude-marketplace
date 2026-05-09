@@ -14,7 +14,7 @@
 - [ ] **MA-4**: Store paths in portable form -- leading `~` preserved verbatim, expanded at access time
 - [ ] **MA-5**: GitHub sources clone into `<staging>/<uuid>/`, read manifest, then atomically rename into final location
 - [ ] **MA-6**: Non-empty target directory at `sourceCloneDir(name)` from a prior failed add MUST fail with "stale source clone"
-- [ ] **MA-7**: Missing `git` on PATH MUST surface the canonical "git not found" error
+- [x] ~~**MA-7**: Missing `git` on PATH MUST surface the canonical "git not found" error~~ (**superseded by D-18/D-21**: Phase 1 adopts `isomorphic-git`, eliminating the `git CLI not found` failure mode entirely. PRD §5.1.1 MA-7 is no longer applicable; this is a deliberate user-contract change recorded in PROJECT.md Key Decisions.)
 - [ ] **MA-8**: Duplicate name in chosen scope MUST fail with "remove it first or use a different source"
 - [ ] **MA-9**: Manifest-read or state-save failure after clone MUST clean up staged clone; cleanup failures append, not mask
 - [ ] **MA-10**: Reject SSH URLs, arbitrary `://` URLs, `owner/repo@<ref>` syntax, and browser-paste `/tree/<ref>` URLs with explanatory hints
@@ -354,7 +354,7 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | MA-4        | Phase 4 | Pending |
 | MA-5        | Phase 4 | Pending |
 | MA-6        | Phase 4 | Pending |
-| MA-7        | Phase 4 | Pending |
+| MA-7        | --      | Superseded by D-18/D-21 |
 | MA-8        | Phase 4 | Pending |
 | MA-9        | Phase 4 | Pending |
 | MA-10       | Phase 4 | Pending |
@@ -552,8 +552,8 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 **Coverage:**
 
 - v1 requirements: 200 total (file footer previously claimed 134; corrected here)
-- Mapped to phases: 200 (100%)
-- Unmapped: 0
+- Mapped to phases: 199 (99.5%) -- MA-7 superseded by D-21 (Phase 1 adopted isomorphic-git, removing the "git CLI not found" failure mode)
+- Unmapped: 0 (MA-7 is superseded, not unmapped)
 
 **Per-phase counts:**
 
@@ -562,7 +562,7 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | Phase 1: Foundations & Toolchain              | 23 (NFR-1, NFR-4, NFR-6, NFR-9, NFR-10, IL-1..5, ES-1..5, PS-1..5, AS-1, AS-4, AS-5)                                                    |
 | Phase 2: Domain Core & Persistence Primitives | 39 (NFR-7, NFR-12, SP-1..7, SC-1..4, SC-7, MM-1..7, PR-1..6, RN-1..2, ST-1..9)                                                          |
 | Phase 3: Resource Bridges                     | 34 (SK-1..5, CM-1..4, AG-1..12, MC-1..8, RN-4..6, AS-8..9)                                                                              |
-| Phase 4: Marketplace Orchestrators            | 44 (MA-1..11, MR-1..8, ML-1..4, MU-1..9, MAU-1..4, SC-5..6, RH-1..5, NFR-5)                                                             |
+| Phase 4: Marketplace Orchestrators            | 43 (MA-1..6, MA-8..11 (MA-7 superseded by D-21), MR-1..8, ML-1..4, MU-1..9, MAU-1..4, SC-5..6, RH-1..5, NFR-5)        |
 | Phase 5: Plugin Orchestrators                 | 47 (PI-1..15, PU-1..8, PUP-1..9, PL-1..7, RN-3, AS-2..3, AS-6..7, NFR-2..3)                                                             |
 | Phase 6: Edge Layer & Tab Completion          | 13 (TC-1..9, AP-1..4)                                                                                                                   |
 | Phase 7: Integration & Pi Wiring              | 4 (NFR-8, NFR-11) -- note: NFR-2/3 land in Phase 5 since they describe orchestrator behavior; Phase 7 verifies them in live environment |
