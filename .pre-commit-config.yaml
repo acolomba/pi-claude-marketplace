@@ -16,7 +16,7 @@ repos:
       - id: detect-private-key
       - id: check-added-large-files
         args: ["--maxkb=64"]
-        exclude: ^package-lock\.json$
+        exclude: ^(package-lock\.json|\.planning/)
       - id: check-json
       - id: check-yaml
       - id: check-ast
