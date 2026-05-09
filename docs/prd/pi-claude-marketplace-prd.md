@@ -51,6 +51,8 @@ ______________________________________________________________________
     - [7.2 Plugin with agents and MCP servers, soft-deps unloaded (degraded path)](#72-plugin-with-agents-and-mcp-servers-soft-deps-unloaded-degraded-path)
     - [7.3 GitHub source -- non-fast-forward divergence (unhappy path, recovery)](#73-github-source----non-fast-forward-divergence-unhappy-path-recovery)
     - [7.4 Plugin removal with locked data dir (warning, retryable)](#74-plugin-removal-with-locked-data-dir-warning-retryable)
+    - [7.5 Concurrent install converges via state-guard (race recovery)](#75-concurrent-install-converges-via-state-guard-race-recovery)
+    - [7.6 Marketplace remove with unloaded soft-deps (warning surfaces, hint emitted)](#76-marketplace-remove-with-unloaded-soft-deps-warning-surfaces-hint-emitted)
   - [8. State Diagrams](#8-state-diagrams)
     - [8.1 Per-plugin state](#81-per-plugin-state)
     - [8.2 Per-marketplace state](#82-per-marketplace-state)
@@ -183,16 +185,16 @@ ______________________________________________________________________
 
 #### 5.1.2 `marketplace remove <name> [--scope user|project]` (alias `rm`)
 
-| ID       | Requirement                                                                                                                                                                                                      |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **MR-1** | If `--scope` is omitted, the system MUST resolve the scope from state; if the name exists in both scopes, the command MUST fail with a disambiguation error.                                                     |
-| **MR-2** | Removing a marketplace MUST drop installed-plugin staged resources (skills, prompts, agents, MCP servers) for every plugin in that marketplace, then drop the marketplace record.                                |
-| **MR-3** | Per-plugin failures during cleanup MUST collect into `failedPlugins[]`. The marketplace record MUST be preserved when any plugin failed; plugins that were cleaned successfully MUST be dropped from the record. |
-| **MR-4** | A partial-failure removal MUST surface at `warning` severity and tell the user "fix the underlying issue and retry."                                                                                             |
-| **MR-5** | After successful state commit, the system MUST clean up: per-plugin data dirs, the marketplace data dir (only on full success), and the GitHub source clone dir.                                                 |
-| **MR-6** | Post-state cleanup failures MUST be aggregated into one "removed but post-state cleanup failed for N path(s)" error with every leaked path listed.                                                               |
-| **MR-7** | GitHub clone dirs MUST be retained when any plugin cleanup failed.                                                                                                                                               |
-| **MR-8** | Removal MUST emit a reload hint listing the plugins whose resources were dropped.                                                                                                                                |
+| ID       | Requirement                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **MR-1** | If `--scope` is omitted, the system MUST resolve the scope from state; if the name exists in both scopes, the command MUST fail with a disambiguation error.                                                                                                                                                                                                                                                                                                                                                |
+| **MR-2** | Removing a marketplace MUST drop installed-plugin staged resources (skills, prompts, agents, MCP servers) for every plugin in that marketplace, then drop the marketplace record.                                                                                                                                                                                                                                                                                                                           |
+| **MR-3** | Per-plugin failures during cleanup MUST be caught individually (so other plugins can continue) and collected into `failedPlugins[]` with their original error chained via `Error.cause`. The marketplace record MUST be preserved when any plugin failed; plugins that were cleaned successfully MUST be dropped from the record. The per-plugin failure conditions themselves are error-grade (e.g., foreign-content guard per AG-5/PU-7); cascade aggregation does not soften them, it only batches them. |
+| **MR-4** | A removal in which one or more plugins failed cleanup MUST surface ONE aggregated `warning`-severity notification listing every failed plugin with its (possibly chained) cause and ending with "fix the underlying issue and retry." Cascade does NOT emit a separate notify call per failed plugin.                                                                                                                                                                                                       |
+| **MR-5** | After successful state commit, the system MUST clean up: per-plugin data dirs, the marketplace data dir (only on full success), and the GitHub source clone dir.                                                                                                                                                                                                                                                                                                                                            |
+| **MR-6** | Post-state cleanup failures MUST be aggregated into one "removed but post-state cleanup failed for N path(s)" error with every leaked path listed.                                                                                                                                                                                                                                                                                                                                                          |
+| **MR-7** | GitHub clone dirs MUST be retained when any plugin cleanup failed.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| **MR-8** | Successful removal MUST emit a reload hint (verb: `drop`) listing the dropped plugins, but ONLY when at least one plugin's resources were actually removed. A removal that found no installed plugins (or whose plugins all failed cleanup) MUST NOT emit a hint.                                                                                                                                                                                                                                           |
 
 #### 5.1.3 `marketplace list [--scope user|project]`
 
@@ -283,6 +285,7 @@ stateDiagram-v2
 | **PUP-6** | Update MUST be three phases: prepare (write to staging) → state-guard swap → physical replace + commit prepared agents/MCP. A failure in phase 3 (post-state) MUST surface a recovery hint pointing at `plugin-uninstall + plugin-install for "<name>".`                                                                                                 |
 | **PUP-7** | On failure during phase 3, the staging dir MUST be cleaned up and the partially-prepared agents/MCP staging MUST be aborted; aborts must not mask the original error.                                                                                                                                                                                    |
 | **PUP-8** | Reload hint MUST be emitted when at least one plugin was actually updated.                                                                                                                                                                                                                                                                               |
+| **PUP-9** | A direct (non-cascade) `update` that throws at any phase MUST surface as an `error`-severity notification with the original cause chained via `Error.cause` (per ES-4). The `failed` partition (MU-7) is used only by cascade-mode updates that aggregate per-plugin outcomes.                                                                           |
 
 ```mermaid
 sequenceDiagram
@@ -423,16 +426,16 @@ flowchart LR
 
 ### 5.8 MCP Servers Bridge (pi-mcp-adapter soft dependency)
 
-| ID       | Requirement                                                                                                                                                                                                                                                             |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **MC-1** | The `mcpServers` declaration MUST be resolved with precedence: marketplace entry > plugin manifest > standalone `.mcp.json` at plugin root. First match wins; malformed at the matched source MUST throw (no fallthrough).                                              |
-| **MC-2** | A `.mcp.json` may use either the canonical unwrapped form (top-level entries) or the legacy wrapped form (`{ "mcpServers": { ... } }`). Both MUST parse.                                                                                                                |
-| **MC-3** | A plugin whose only declaration is a malformed `mcpServers` MUST surface as **unavailable** with `malformed mcpServers: <reason>` -- silent fallthrough is not allowed.                                                                                                 |
-| **MC-4** | Server-name collisions MUST be checked across all four pi-mcp-adapter slots: `~/.config/mcp/mcp.json`, `~/.pi/agent/mcp.json`, `<cwd>/.mcp.json`, `<cwd>/.pi/mcp.json`. Self-replace within the same scope's mcp.json is allowed; foreign collisions MUST refuse stage. |
-| **MC-5** | Each staged entry MUST carry a `_claudeMarketplace: { plugin, marketplace }` marker so uninstall/update drops only its own entries.                                                                                                                                     |
-| **MC-6** | Staging MUST be two-phase (compute next doc in memory; commit via atomic JSON write). The "noop" branch (no new servers AND no previous ours) MUST not materialize the file.                                                                                            |
-| **MC-7** | Unstage MUST tolerate a missing `mcpServers` field (null/missing) without crashing.                                                                                                                                                                                     |
-| **MC-8** | An unloaded `pi-mcp-adapter` MUST NOT block install/update; the user-facing message MUST include the standard pi-mcp-adapter warning when servers were staged.                                                                                                          |
+| ID       | Requirement                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **MC-1** | The `mcpServers` declaration MUST be resolved with precedence: marketplace entry > plugin manifest > standalone `.mcp.json` at plugin root. First match wins; malformed at the matched source MUST throw (no fallthrough). Under `strict=false`, this precedence chain applies only when the marketplace entry itself declares `mcpServers`; manifest- or standalone-only declarations under `strict=false` are conflicts (per MM-7), not precedence fallbacks. |
+| **MC-2** | A `.mcp.json` may use either the canonical unwrapped form (top-level entries) or the legacy wrapped form (`{ "mcpServers": { ... } }`). Both MUST parse.                                                                                                                                                                                                                                                                                                        |
+| **MC-3** | A plugin whose only declaration is a malformed `mcpServers` MUST surface as **unavailable** with `malformed mcpServers: <reason>` -- silent fallthrough is not allowed.                                                                                                                                                                                                                                                                                         |
+| **MC-4** | Server-name collisions MUST be checked across all four pi-mcp-adapter slots: `~/.config/mcp/mcp.json`, `~/.pi/agent/mcp.json`, `<cwd>/.mcp.json`, `<cwd>/.pi/mcp.json`. Self-replace within the same scope's mcp.json is allowed; foreign collisions MUST refuse stage.                                                                                                                                                                                         |
+| **MC-5** | Each staged entry MUST carry a `_claudeMarketplace: { plugin, marketplace }` marker so uninstall/update drops only its own entries.                                                                                                                                                                                                                                                                                                                             |
+| **MC-6** | Staging MUST be two-phase (compute next doc in memory; commit via atomic JSON write). The "noop" branch (no new servers AND no previous ours) MUST not materialize the file.                                                                                                                                                                                                                                                                                    |
+| **MC-7** | Unstage MUST tolerate a missing `mcpServers` field (null/missing) without crashing.                                                                                                                                                                                                                                                                                                                                                                             |
+| **MC-8** | An unloaded `pi-mcp-adapter` MUST NOT block install/update; the user-facing message MUST include the standard pi-mcp-adapter warning when servers were staged.                                                                                                                                                                                                                                                                                                  |
 
 ```mermaid
 flowchart LR
@@ -565,7 +568,7 @@ ______________________________________________________________________
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **ST-1** | State MUST live at `<extensionRoot>/state.json` with `schemaVersion: 1`. Save MUST be atomic (tmp + rename).                                                                                                                                     |
 | **ST-2** | Per-marketplace records MUST carry: name, scope, source, addedFromCwd, manifestPath, marketplaceRoot, optional lastUpdatedAt, optional autoupdate, plugins map.                                                                                  |
-| **ST-3** | Per-plugin install records MUST carry: version, resolvedSource (`absolute` or `relative` path), compatibility, resources (skills, prompts, agents, mcpServers), installedAt, updatedAt.                                                          |
+| **ST-3** | Per-plugin install records MUST carry: version, `resolvedSource` (an absolute filesystem path string; always absolute, no kind discriminator), compatibility, resources (skills, prompts, agents, mcpServers), installedAt, updatedAt.           |
 | **ST-4** | Legacy records missing `manifestPath`/`marketplaceRoot` MUST be load-time-migrated by deriving them from `(source, addedFromCwd, name, extensionRoot)` and persisted asynchronously (best-effort save; warns on failure but doesn't block read). |
 | **ST-5** | Legacy plugin records missing `resources.agents` or `resources.mcpServers` MUST be load-time-normalized to `[]`.                                                                                                                                 |
 | **ST-6** | Source-record validation MUST funnel through the same factory as parse-time validation, so corrupt state is caught at load.                                                                                                                      |
@@ -706,6 +709,50 @@ journey
   section User remediation
     User removes leaked path manually: 4: User
     Future installs see a clean slate: 5: User
+```
+
+### 7.5 Concurrent install converges via state-guard (race recovery)
+
+```mermaid
+journey
+  title Two install invocations race on the same plugin
+  section Both invocations begin
+    Process A reads state (plugin not installed): 4: User
+    Process B reads state (plugin not installed): 4: User
+  section A wins the commit
+    A stages skills, agents, MCP: 4: Extension
+    A enters state-guard, re-reads state, sees no record, saves NEW: 5: Extension
+    A emits Run /reload to load it.: 5: User
+  section B detects the race at commit
+    B stages skills, agents, MCP: 4: Extension
+    B enters state-guard, re-reads state, sees A's record: 3: Extension
+    B detects concurrent install (PI-15), rolls back staged resources: 3: Extension
+    B reports plugin "X" was installed by another process; retry if needed.: 3: User
+  section No corruption
+    State has exactly one install record: 5: User
+    Disk has exactly one set of staged resources: 5: User
+```
+
+### 7.6 Marketplace remove with unloaded soft-deps (warning surfaces, hint emitted)
+
+```mermaid
+journey
+  title Remove a marketplace whose plugins staged agents and MCP servers when pi-mcp-adapter is unloaded
+  section Setup
+    Marketplace mp has plugin pl with agents and MCP entries: 4: User
+    pi-mcp-adapter is not loaded in this Pi session: 3: User
+  section Remove
+    Run /claude:plugin marketplace remove mp: 4: User
+    Cascade unstages agents (pi-subagents loaded; succeeds): 4: Extension
+    Cascade unstages MCP entries (writes scoped mcp.json directly): 4: Extension
+    State commit drops the marketplace record: 5: Extension
+  section Surfaced messaging
+    Success line: Removed marketplace mp: 5: User
+    Soft-dep warning per RH-5: pi-mcp-adapter is not loaded; install/load it ... and run /reload: 3: User
+    Reload hint per MR-8: Run /reload to drop "pl".: 4: User
+  section Followup
+    User loads pi-mcp-adapter and runs /reload: 5: User
+    Stale MCP entries pruned at next mcp.json read: 5: Extension
 ```
 
 ______________________________________________________________________
