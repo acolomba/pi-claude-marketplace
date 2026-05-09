@@ -4,36 +4,41 @@ on:
   push:
     branches:
       - main
-    tags:
-      - "v*"
+      - features/**
   pull_request:
     branches:
       - main
-  workflow_dispatch:
 
-permissions:
-  contents: read
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+# D-01: single-Node-version matrix. Node 24 only -- the latest stable LTS line
+# at the time of Phase 1 planning. Justification (per CONTEXT.md):
+#   - Node 24 satisfies write-file-atomic@^8's `^22.22.2 || ^24.15.0 || >=26.0.0`
+#     engine floor.
+#   - Node 24 supports native TS strip (no `tsx`, no `--experimental-strip-types`).
+#   - Multi-version matrix maintenance overhead is not justified for V1.
+#
+# Note: ROADMAP.md Phase 1 success criterion 5 originally specified Node
+# 22/24/26. D-01 supersedes that with single-version Node 24. If a future
+# audit reopens this, add `node-version: [22, 24, 26]` and a `strategy.matrix`
+# block; the rest of the workflow is matrix-ready.
 
 jobs:
   check:
+    name: npm run check (Node 24)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
           cache: "npm"
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Run checks
+      - name: Run full check pipeline
+        # NFR-6: typecheck + ESLint + Prettier + node:test
         run: npm run check
