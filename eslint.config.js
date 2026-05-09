@@ -6,7 +6,7 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["build/", "coverage/", "dist/", "node_modules/"],
+    ignores: [".claude/", "build/", "coverage/", "dist/", "node_modules/"],
   },
   js.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
