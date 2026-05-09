@@ -63,6 +63,9 @@ ______________________________________________________________________
   - [10. Non-functional Requirements](#10-non-functional-requirements)
   - [11. Out of Scope (V1)](#11-out-of-scope-v1)
   - [12. Acceptance Criteria Summary](#12-acceptance-criteria-summary)
+  - [Appendix A: Subcommand index](#appendix-a-subcommand-index)
+  - [Appendix B: Generated-name conventions](#appendix-b-generated-name-conventions)
+  - [Appendix C: Reload-hint verbs](#appendix-c-reload-hint-verbs)
 
 ______________________________________________________________________
 
@@ -103,17 +106,21 @@ ______________________________________________________________________
 ## 3. Glossary
 
 - **Pi** -- the host coding agent (`@mariozechner/pi-coding-agent`).
-- **Extension** -- a Pi extension; this product registers `claude:plugin` and one `resources_discover` listener and a `session_start` listener.
+- **Extension** -- a Pi extension; this product registers the `claude:plugin` LLM tool family, one `resources_discover` listener (the bridge that exposes staged skills/prompts to Pi), and one `session_start` listener (the wrapper that adds `/claude:plugin`-scoped fish-style space normalization to the autocomplete provider; see §6.6 TC-7).
 - **Scope** -- `user` or `project`. User scope writes to `~/.pi/agent/`; project scope writes to `<cwd>/.pi/`.
 - **Marketplace** -- a Claude marketplace, identified by a name from its `marketplace.json`.
 - **Marketplace source** -- how a marketplace is fetched: GitHub `owner/repo[#<ref>]`, GitHub HTTPS URL, or a local path.
 - **Plugin** -- a Claude plugin, identified by `<plugin>@<marketplace>`.
 - **Component** -- one of skills, commands, agents (supported), or hooks, lspServers, monitors, themes, outputStyles, channels, userConfig, bin, settings (unsupported), plus mcpServers (supported, with soft dep).
-- **Strict marketplace** -- `marketplace.json` `strict: true` (default) → resolver takes the union of marketplace-entry and plugin-manifest declarations. `strict: false` → resolver uses the marketplace entry only and treats plugin-manifest declarations of unsupported components as conflicts.
+- **Strict marketplace** -- `marketplace.json` `strict: true` (default) → resolver takes the union of four declaration sources: the marketplace-entry component fields, the plugin-manifest component fields, implicit-by-convention directories (`skills/`, `commands/`, `agents/`), and standalone files at the plugin root (`hooks/hooks.json`, `.mcp.json`). `strict: false` → resolver uses the marketplace-entry declarations only and treats any of the other three sources declaring unsupported components (or declaring `mcpServers` without a matching entry-level declaration) as conflicts.
 - **Generated name** -- the deterministic name produced for a Pi-side artefact: `<plugin>-<skill>` for skills, `<plugin>:<command>` for commands, `claude-marketplace-<plugin>-<agent>` for agents.
 - **Reload hint** -- the trailing `Run /reload to <verb> ...` line appended to messages whenever generated resources changed.
 - **Soft dependency** -- a runtime dependency probed via tool registration, not via a manifest field. `pi-subagents` (probed by the `subagent` tool) and `pi-mcp-adapter` (probed by tool name `mcp` or `sourceInfo.source` containing `pi-mcp-adapter`).
 - **State guard** -- a transactional helper that re-reads state on entry, applies a closure, and atomically saves; throws and skips save on closure throw.
+- **Installable** -- the resolver returned `installable: true` for the plugin: source kind is `path`, source dir exists, manifest is well-formed, no unsupported components are declared, no path-containment violation. An installable plugin can be installed; it is not yet installed unless a state record exists.
+- **Installed** -- a state record for `(marketplace, plugin, scope)` exists in `state.json`; the plugin's resources are presumed staged on disk per the record's `resources.*` fields.
+- **Available** -- shorthand used by the `list` subcommand for plugins that are installable AND not currently installed in the chosen scope. Available plugins can be installed without warnings other than the ones the resolver attached as notes.
+- **Unavailable** -- shorthand used by the `list` subcommand for plugins for which the resolver returned `installable: false`. Unavailable plugins surface their reason as a resolver note (e.g., `contains hooks`, `unsupported source kind: github`).
 
 ______________________________________________________________________
 
@@ -198,26 +205,26 @@ ______________________________________________________________________
 
 #### 5.1.4 `marketplace update [<name>] [--scope user|project]`
 
-| ID       | Requirement                                                                                                                                                                                                            |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **MU-1** | Without a name, the command MUST refresh every marketplace in the chosen scope (or both scopes if `--scope` is omitted).                                                                                               |
-| **MU-2** | For GitHub sources, the system MUST `git fetch` then either `git pull --ff-only` (symbolic HEAD) or re-checkout the stored ref (detached HEAD).                                                                        |
-| **MU-3** | A non-fast-forward divergence MUST surface as an error and MUST NOT clobber local work; recovery is `marketplace remove` + re-add.                                                                                     |
-| **MU-4** | The manifest pointer MUST be re-read from the refreshed clone and persisted before any plugin cascade runs (so an interrupted cascade still leaves the marketplace pointing at the latest manifest).                   |
-| **MU-5** | If the clone advanced but the manifest save failed, the error message MUST tell the user "Retry the command."                                                                                                          |
-| **MU-6** | The plugin upgrade cascade MUST run only when the per-marketplace `autoupdate` flag is true. With autoupdate off (default), `marketplace update` is just a manifest refresh.                                           |
-| **MU-7** | The cascade MUST partition every installed plugin into `updated`, `unchanged`, `skipped`, `failed` and render them in that order; "skipped" includes "not in manifest" and "no longer installable."                    |
-| **MU-8** | If a refreshed manifest adds plugins not currently installed, the cascade MUST NOT auto-install them.                                                                                                                  |
-| **MU-9** | A successful update MUST emit a reload hint listing every plugin whose resources changed; `pi-subagents`/`pi-mcp-adapter` warnings MUST be appended when staged agents/MCP servers exist and the soft dep is unloaded. |
+| ID       | Requirement                                                                                                                                                                                                                                                                                               |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **MU-1** | Without a name, the command MUST refresh every marketplace in the chosen scope (or both scopes if `--scope` is omitted). When no marketplaces are configured in the resolved scope set, the command MUST succeed silently with the message `No marketplaces configured.` and MUST NOT emit a reload hint. |
+| **MU-2** | For GitHub sources, the system MUST `git fetch` then either `git pull --ff-only` (symbolic HEAD) or re-checkout the stored ref (detached HEAD).                                                                                                                                                           |
+| **MU-3** | A non-fast-forward divergence MUST surface as an error and MUST NOT clobber local work; recovery is `marketplace remove` + re-add.                                                                                                                                                                        |
+| **MU-4** | The manifest pointer MUST be re-read from the refreshed clone and persisted before any plugin cascade runs (so an interrupted cascade still leaves the marketplace pointing at the latest manifest).                                                                                                      |
+| **MU-5** | If the clone advanced but the manifest save failed, the error message MUST tell the user "Retry the command."                                                                                                                                                                                             |
+| **MU-6** | The plugin upgrade cascade MUST run only when the per-marketplace `autoupdate` flag is true. With autoupdate off (default), `marketplace update` is just a manifest refresh.                                                                                                                              |
+| **MU-7** | The cascade MUST partition every installed plugin into `updated`, `unchanged`, `skipped`, `failed` and render them in that order; "skipped" includes "not in manifest" and "no longer installable."                                                                                                       |
+| **MU-8** | If a refreshed manifest adds plugins not currently installed, the cascade MUST NOT auto-install them.                                                                                                                                                                                                     |
+| **MU-9** | A successful update MUST emit a reload hint listing every plugin whose resources changed; `pi-subagents`/`pi-mcp-adapter` warnings MUST be appended when staged agents/MCP servers exist and the soft dep is unloaded.                                                                                    |
 
 #### 5.1.5 `marketplace autoupdate [<name>]` and `marketplace noautoupdate [<name>]`
 
-| ID        | Requirement                                                                                                                                        |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **MAU-1** | `autoupdate` MUST set the per-marketplace flag to true; `noautoupdate` MUST clear it. The default is off.                                          |
-| **MAU-2** | Without a name, both commands MUST flip the flag for every marketplace in the chosen scope (default `user`).                                       |
-| **MAU-3** | The operation MUST be idempotent: marketplaces whose flag already matches the requested state MUST be reported as `Already enabled/disabled: ...`. |
-| **MAU-4** | The autoupdate flag MUST round-trip through `state.json`. A missing/undefined value MUST be treated as `false`.                                    |
+| ID        | Requirement                                                                                                                                                                                                        |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **MAU-1** | `autoupdate` MUST set the per-marketplace flag to true; `noautoupdate` MUST clear it. The default is off.                                                                                                          |
+| **MAU-2** | Without a name, both commands MUST flip the flag for every marketplace in the chosen scope when `--scope` is provided, or for every marketplace in BOTH scopes when `--scope` is omitted (matching SC-6 and MU-1). |
+| **MAU-3** | The operation MUST be idempotent: marketplaces whose flag already matches the requested state MUST be reported as `Already enabled/disabled: ...`.                                                                 |
+| **MAU-4** | The autoupdate flag MUST round-trip through `state.json`. A missing/undefined value MUST be treated as `false`.                                                                                                    |
 
 ```mermaid
 stateDiagram-v2
@@ -266,16 +273,16 @@ stateDiagram-v2
 
 #### 5.2.3 `update [<plugin>@<marketplace> | @<marketplace>]`
 
-| ID        | Requirement                                                                                                                                                                                                                                              |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **PUP-1** | Three forms: bare → every installed plugin in the chosen scope; `@mp` → every installed plugin in `mp`; `pl@mp` → just `pl`.                                                                                                                             |
-| **PUP-2** | `update` MUST refresh the github clone (`syncClone`) for each marketplace once before reading the manifest. (This is asymmetric with `install`, which does not sync.)                                                                                    |
-| **PUP-3** | If the resolved version equals the recorded version, the plugin MUST be reported `unchanged` (no I/O on disk artefacts).                                                                                                                                 |
-| **PUP-4** | If the plugin is no longer installable per the resolver, the outcome MUST be `skipped` with `no longer installable: <notes>`.                                                                                                                            |
-| **PUP-5** | If the plugin is missing from the refreshed manifest, the outcome MUST be `skipped: not in manifest`.                                                                                                                                                    |
-| **PUP-6** | Update MUST be three phases: prepare (write to staging) → state-guard swap → physical replace + commit prepared agents/MCP. A failure in phase 3 (post-state) MUST surface a recovery hint pointing at `plugin-uninstall + plugin-install for "<name>".` |
-| **PUP-7** | On failure during phase 3, the staging dir MUST be cleaned up and the partially-prepared agents/MCP staging MUST be aborted; aborts must not mask the original error.                                                                                    |
-| **PUP-8** | Reload hint MUST be emitted when at least one plugin was actually updated.                                                                                                                                                                               |
+| ID        | Requirement                                                                                                                                                                                                                                                                                                                                              |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **PUP-1** | Three forms: bare → every installed plugin in the chosen scope; `@mp` → every installed plugin in `mp`; `pl@mp` → just `pl`. When the resolved target set is empty (no plugins installed in the chosen scope; no plugins installed in `mp`), the command MUST succeed silently with the message `No plugins installed.` and MUST NOT emit a reload hint. |
+| **PUP-2** | `update` MUST refresh the github clone (`syncClone`) for each marketplace once before reading the manifest. (This is asymmetric with `install`, which does not sync.)                                                                                                                                                                                    |
+| **PUP-3** | If the resolved version equals the recorded version, the plugin MUST be reported `unchanged` (no I/O on disk artefacts).                                                                                                                                                                                                                                 |
+| **PUP-4** | If the plugin is no longer installable per the resolver, the outcome MUST be `skipped` with `no longer installable: <notes>`.                                                                                                                                                                                                                            |
+| **PUP-5** | If the plugin is missing from the refreshed manifest, the outcome MUST be `skipped: not in manifest`.                                                                                                                                                                                                                                                    |
+| **PUP-6** | Update MUST be three phases: prepare (write to staging) → state-guard swap → physical replace + commit prepared agents/MCP. A failure in phase 3 (post-state) MUST surface a recovery hint pointing at `plugin-uninstall + plugin-install for "<name>".`                                                                                                 |
+| **PUP-7** | On failure during phase 3, the staging dir MUST be cleaned up and the partially-prepared agents/MCP staging MUST be aborted; aborts must not mask the original error.                                                                                                                                                                                    |
+| **PUP-8** | Reload hint MUST be emitted when at least one plugin was actually updated.                                                                                                                                                                                                                                                                               |
 
 ```mermaid
 sequenceDiagram
@@ -383,25 +390,32 @@ flowchart LR
 
 ### 5.7 Agents Bridge (pi-subagents soft dependency)
 
-| ID        | Requirement                                                                                                                                                                                                                             |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **AG-1**  | Agent files MUST be staged at `<scope>/agents/claude-marketplace-<plugin>-<agent>.md` (deliberately outside the extension's `resources/` because pi-subagents reads from a fixed convention path).                                      |
-| **AG-2**  | An on-disk agent index `<extensionRoot>/agents-index.json` (schemaVersion 1) MUST track `(plugin, marketplace, sourceAgent, generatedName, sourcePath, targetPath, sourceHash, originalModel?, droppedFields, droppedTools, warnings)`. |
-| **AG-3**  | The index MUST be partitioned by `(marketplace, plugin)` so re-staging affects only entries owned by the current operation.                                                                                                             |
-| **AG-4**  | Per-row index validation failures MUST soft-fail (drop the row, surface a "agent index corruption (entry dropped)" warning); file-level corruption MUST throw.                                                                          |
-| **AG-5**  | Generated agent files MUST start with `claude-marketplace-` and contain the generated marker constant. Removal MUST refuse to touch any file failing those checks (foreign content).                                                    |
-| **AG-6**  | Source frontmatter MUST be parsed (line-based YAML; supports tolerating `:` in description values). Body is everything after the closing `---`.                                                                                         |
-| **AG-7**  | Field mappings (see AG-7 detail below the table). Each frontmatter field MUST be translated according to the rules in §5.7 AG-7 detail.                                                                                                 |
-| **AG-8**  | YAML emitter MUST be parser-safe (single quotes flipped if value already double-quoted; embedded newlines normalized to spaces; HTML-comment-style `-->` escaped).                                                                      |
-| **AG-9**  | Cross-plugin name guard MUST refuse to overwrite agents owned by a different `(marketplace, plugin)` and report `"<name>" already owned by <other-mp>/<other-plugin>"`.                                                                 |
-| **AG-10** | Staging is two-phase: write to a tmp dir under the extension's `agents-staging/`, then atomic rename + index save. The "noop" branch (no agents declared and no previous entries) MUST not materialize any directory.                   |
-| **AG-11** | `convertAgent` MUST throw when the mapped tool list is empty (pi-subagents has no representation for "no tools"). The error message MUST list the source `tools:` and `disallowedTools:`.                                               |
-| **AG-12** | Source-name collisions within a single plugin MUST throw with both source names listed.                                                                                                                                                 |
+| ID        | Requirement                                                                                                                                                                                                                                                                                                                            |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **AG-1**  | Agent files MUST be staged at `<scope>/agents/claude-marketplace-<plugin>-<agent>.md` (deliberately outside the extension's `resources/` because pi-subagents reads from a fixed convention path).                                                                                                                                     |
+| **AG-2**  | An on-disk agent index `<extensionRoot>/agents-index.json` (schemaVersion 1) MUST track `(plugin, marketplace, sourceAgent, generatedName, sourcePath, targetPath, sourceHash, originalModel?, droppedFields, droppedTools, warnings)`.                                                                                                |
+| **AG-3**  | The index MUST be partitioned by `(marketplace, plugin)` so re-staging affects only entries owned by the current operation.                                                                                                                                                                                                            |
+| **AG-4**  | Per-row index validation failures MUST soft-fail (drop the row, surface a "agent index corruption (entry dropped)" warning); file-level corruption MUST throw.                                                                                                                                                                         |
+| **AG-5**  | Generated agent files MUST start with `claude-marketplace-` (basename) AND contain the literal marker string `generated by pi-claude-marketplace` inside an HTML-comment provenance block placed immediately after the closing `---` of the frontmatter. Removal MUST refuse to touch any file failing either check (foreign content). |
+| **AG-6**  | Source frontmatter MUST be parsed (line-based YAML; supports tolerating `:` in description values). Body is everything after the closing `---`.                                                                                                                                                                                        |
+| **AG-7**  | Field mappings (see AG-7 detail below the table). Each frontmatter field MUST be translated according to the rules in §5.7 AG-7 detail.                                                                                                                                                                                                |
+| **AG-8**  | YAML emitter MUST be parser-safe (single quotes flipped if value already double-quoted; embedded newlines normalized to spaces; HTML-comment-style `-->` escaped).                                                                                                                                                                     |
+| **AG-9**  | Cross-plugin name guard MUST refuse to overwrite agents owned by a different `(marketplace, plugin)` and report `"<name>" already owned by <other-mp>/<other-plugin>"`.                                                                                                                                                                |
+| **AG-10** | Staging is two-phase: write to a tmp dir under the extension's `agents-staging/`, then atomic rename + index save. The "noop" branch (no agents declared and no previous entries) MUST not materialize any directory.                                                                                                                  |
+| **AG-11** | `convertAgent` MUST throw when the mapped tool list is empty (pi-subagents has no representation for "no tools"). The error message MUST list the source `tools:` and `disallowedTools:`.                                                                                                                                              |
+| **AG-12** | Source-name collisions within a single plugin MUST throw with both source names listed.                                                                                                                                                                                                                                                |
 
 #### AG-7 detail -- frontmatter field mappings
 
 - `model:` -- `sonnet` → `anthropic/claude-sonnet-4-6`, `opus` → `anthropic/claude-opus-4-7`, `haiku` → `anthropic/claude-haiku-4-5`. `inherit` → omit + record `originalModel`. Unknown → omit + warn.
-- `tools:` -- Map known Claude tools (`Read`, `Bash`, `Edit`, `Write`, `Grep`, `Glob`, `LS`) to Pi names (`read`, `bash`, …). Unknown tools dropped. Missing → default `read,bash,edit` with a warning.
+- `tools:` -- Map known Claude tools to Pi names per the table below. Unknown tools (e.g., `WebFetch`, `NotebookEdit`) are silently dropped. Missing `tools:` → default `read,bash,edit` with a warning.
+  - `Read` → `read`
+  - `Bash` → `bash`
+  - `Edit` → `edit`
+  - `Write` → `write`
+  - `Grep` → `grep`
+  - `Glob` → `find` (note: name change, not a 1:1 rename of the Pi tool)
+  - `LS` → `ls`
 - `disallowedTools:` -- Filtered out of the mapped list.
 - `thinking:` / `effort:` -- Allowlist `off,minimal,low,medium,high,xhigh`. `thinking` wins; invalid → fall back to `effort` if valid; otherwise omit + warn.
 - `skills:` -- Each token resolved as `<plugin>-<skill>`; unknown → drop + warn.
@@ -469,7 +483,7 @@ ______________________________________________________________________
 | **SC-3** | A `ScopedLocations` object MUST be a typed bundle that's the only way to derive on-disk paths for an operation; hand-crafted shapes that mix scopes MUST not type-check (brand symbol).                                                                                                           |
 | **SC-4** | Scope resolution rules for name-targeted commands. When `--scope` is provided, use that scope and error if the name is not found there. When `--scope` is omitted, search both scopes; error if found in both ("Use --scope user or --scope project to disambiguate"); error if found in neither. |
 | **SC-5** | `marketplace add` defaults to `user` when scope is omitted.                                                                                                                                                                                                                                       |
-| **SC-6** | `marketplace list` and `marketplace update` (no name) MUST enumerate both scopes when `--scope` is omitted.                                                                                                                                                                                       |
+| **SC-6** | `marketplace list`, `marketplace update` (no name), `marketplace autoupdate` (no name), and `marketplace noautoupdate` (no name) MUST enumerate both scopes when `--scope` is omitted.                                                                                                            |
 | **SC-7** | Path containment MUST be enforced for every name-derived path: plugin data dirs, marketplace data dirs, source clone dirs, recorded skill/prompt paths, agent target paths.                                                                                                                       |
 
 ### 6.3 Manifest Schema & Strict Mode
@@ -497,13 +511,14 @@ ______________________________________________________________________
 
 ### 6.5 Resource Naming, Generation & Conflicts
 
-| ID       | Requirement                                                                                                                                                                                                                                                    |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **RN-1** | Generated names MUST be deterministic functions of `(plugin, source-name)`. Skill: `<plugin>-<skill>` (prefix elided). Command: `<plugin>:<command>` (prefix elided). Agent: `claude-marketplace-<plugin>-<agent>` (with `<plugin>-` prefix on source elided). |
-| **RN-2** | All names -- marketplace, plugin, skill, command, agent, MCP server -- MUST be `assertSafeName`: non-empty, trimmed, not `.`/`..`, no path separators, no control chars.                                                                                       |
-| **RN-3** | Cross-plugin install conflict guard MUST run BEFORE any disk write and MUST list every conflicting name in one message.                                                                                                                                        |
-| **RN-4** | Cross-marketplace agent ownership: re-staging an agent name owned by a different `(marketplace, plugin)` MUST throw with the conflicting owner identified.                                                                                                     |
-| **RN-5** | MCP server-name collisions MUST be checked against all four pi-mcp-adapter slots (see MC-4).                                                                                                                                                                   |
+| ID       | Requirement                                                                                                                                                                                                                                                       |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **RN-1** | Generated names MUST be deterministic functions of `(plugin, source-name)`. Skill: `<plugin>-<skill>` (prefix elided). Command: `<plugin>:<command>` (prefix elided). Agent: `claude-marketplace-<plugin>-<agent>` (with `<plugin>-` prefix on source elided).    |
+| **RN-2** | All names -- marketplace, plugin, skill, command, agent, MCP server -- MUST be `assertSafeName`: non-empty, trimmed, not `.`/`..`, no path separators, no control chars.                                                                                          |
+| **RN-3** | Cross-plugin install conflict guard MUST run BEFORE any disk write and MUST list every conflicting name in one message.                                                                                                                                           |
+| **RN-4** | Cross-marketplace agent ownership: re-staging an agent name owned by a different `(marketplace, plugin)` MUST throw with the conflicting owner identified.                                                                                                        |
+| **RN-5** | MCP server-name collisions MUST be checked against all four pi-mcp-adapter slots (see MC-4).                                                                                                                                                                      |
+| **RN-6** | Within a single plugin, two distinct skill source names that elide to the same generated skill name (e.g., a plugin `foo` with sources `foo-bar` and `bar`) MUST throw with both source names listed. The same rule applies to commands. (For agents, see AG-12.) |
 
 ### 6.6 Tab Completion
 
@@ -594,10 +609,13 @@ ______________________________________________________________________
 
 ### 6.13 Internationalization, Logging & Telemetry
 
-V1 emits English-only messages and uses `console.warn` only for the migration-persist soft failure. There is no in-band telemetry. The successor architecture should consider:
-
-- A pluggable message catalog for i18n.
-- Structured event emission (success, warning, error, cleanup-leak, rollback) for downstream tooling.
+| ID       | Requirement                                                                                                                                                                                                                                                                                                                      |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **IL-1** | All user-visible messages MUST be English-only in V1; no message catalog, no locale negotiation.                                                                                                                                                                                                                                 |
+| **IL-2** | Every user-visible message MUST be delivered through `ctx.ui.notify(message, severity)` (see ES-1). Direct writes to `process.stdout`/`process.stderr` are forbidden in command and bridge code.                                                                                                                                 |
+| **IL-3** | The single sanctioned use of `console.warn` is the load-time `state.json` migration save: when `migrateLegacyMarketplaceRecords` rewrites a legacy record and the best-effort save fails, the failure MUST be reported via `console.warn` (so a read can proceed) rather than thrown. No other code path may use `console.warn`. |
+| **IL-4** | V1 MUST NOT emit telemetry (no metrics, no event sink, no analytics endpoint). Adding telemetry is a successor-architecture concern.                                                                                                                                                                                             |
+| **IL-5** | The successor architecture should consider: a pluggable message catalog for i18n; a structured event channel for `success` / `warning` / `error` / `cleanup-leak` / `rollback`; and severity-aware log levels separate from the user-facing notify channel.                                                                      |
 
 ______________________________________________________________________
 
@@ -760,14 +778,15 @@ stateDiagram-v2
   ResolvingTarget --> NoChange : toVersion == fromVersion
   ResolvingTarget --> Preparing : version differs
   Preparing --> SwappingState : staging tmp ok
-  Preparing --> AbortPrepare : staging error
+  Preparing --> AbortStaging : staging error\n(rollback partial: ...)
   SwappingState --> ReplacingDisk : state-guard saves NEW
-  SwappingState --> AbortPrepare : concurrent change
+  SwappingState --> AbortConcurrent : concurrent change\n(changed concurrently; retry the update)
   ReplacingDisk --> Committing : old removed, new in place
   ReplacingDisk --> RecoveryRequired : phase 3 error\n(state already NEW)
   Committing --> Updated : agents/MCP committed
   Committing --> RecoveryRequired : commit error
-  AbortPrepare --> [*]
+  AbortStaging --> [*]
+  AbortConcurrent --> [*]
   RecoveryRequired --> [*] : message advises\nuninstall + install
   NoChange --> [*]
   Updated --> [*]
@@ -896,18 +915,20 @@ ______________________________________________________________________
 
 ## 10. Non-functional Requirements
 
-| ID         | Requirement                                                                                                                                                                                                                                                                                         |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **NFR-1**  | All disk mutations MUST be atomic at the file level (tmp + rename or atomic JSON write).                                                                                                                                                                                                            |
-| **NFR-2**  | No fix should require an `pi` restart; `Run /reload` MUST suffice to make staged resources discoverable.                                                                                                                                                                                            |
-| **NFR-3**  | All operations MUST be safe to retry on transient failure (idempotent or fail-clean).                                                                                                                                                                                                               |
-| **NFR-4**  | The extension MUST work with Node ≥ 22.                                                                                                                                                                                                                                                             |
-| **NFR-5**  | The extension MUST not require network access for `install`, `list`, `uninstall`, `marketplace remove`, or `marketplace add` against a path source. Network access is required for `marketplace add` to a GitHub source and for `update` / `marketplace update` against GitHub-source marketplaces. |
-| **NFR-6**  | The full quality bar is `npm run check` = typecheck + ESLint + Prettier + tests. The successor MUST keep these gates.                                                                                                                                                                               |
-| **NFR-7**  | The TypeScript surface MUST use `strictly typed` resolved-plugin variants -- installable consumers do not get to read `pluginRoot` from a non-installable plugin.                                                                                                                                   |
-| **NFR-8**  | The successor SHOULD cache marketplace manifests with mtime invalidation to remove the per-`list` re-read cost (BACKLOG performance item).                                                                                                                                                          |
-| **NFR-9**  | The system MUST never print sensitive paths beyond what's already in the user's terminal session.                                                                                                                                                                                                   |
-| **NFR-10** | The system MUST refuse to write outside `<scopeRoot>/claude-marketplace/`, `<scopeRoot>/agents/`, or `<scopeRoot>/mcp.json` for any reason.                                                                                                                                                         |
+| ID         | Requirement                                                                                                                                                                                                                                                                                                                           |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **NFR-1**  | All disk mutations MUST be atomic at the file level (tmp + rename or atomic JSON write).                                                                                                                                                                                                                                              |
+| **NFR-2**  | No fix should require an `pi` restart; `Run /reload` MUST suffice to make staged resources discoverable.                                                                                                                                                                                                                              |
+| **NFR-3**  | All operations MUST be safe to retry on transient failure (idempotent or fail-clean).                                                                                                                                                                                                                                                 |
+| **NFR-4**  | The extension MUST work with Node ≥ 22.                                                                                                                                                                                                                                                                                               |
+| **NFR-5**  | The extension MUST not require network access for `install`, `list`, `uninstall`, `marketplace remove`, or `marketplace add` against a path source. Network access is required for `marketplace add` to a GitHub source and for `update` / `marketplace update` against GitHub-source marketplaces.                                   |
+| **NFR-6**  | The full quality bar is `npm run check` = typecheck + ESLint + Prettier + tests. The successor MUST keep these gates.                                                                                                                                                                                                                 |
+| **NFR-7**  | The TypeScript surface MUST use `strictly typed` resolved-plugin variants -- installable consumers do not get to read `pluginRoot` from a non-installable plugin.                                                                                                                                                                     |
+| **NFR-8**  | The successor SHOULD cache marketplace manifests with mtime invalidation to remove the per-`list` re-read cost (BACKLOG performance item).                                                                                                                                                                                            |
+| **NFR-9**  | The system MUST never print sensitive paths beyond what's already in the user's terminal session.                                                                                                                                                                                                                                     |
+| **NFR-10** | The system MUST refuse to write outside `<scopeRoot>/claude-marketplace/`, `<scopeRoot>/agents/`, or `<scopeRoot>/mcp.json` for any reason.                                                                                                                                                                                           |
+| **NFR-11** | The Pi extension API dependency is declared as `@mariozechner/pi-coding-agent` peer dependency with no version pin (`*`); the extension is developed against `^0.70.6`. The successor SHOULD pin a minimum supported Pi API version once the surface stabilizes.                                                                      |
+| **NFR-12** | The Claude `marketplace.json` parser is forward-compatible: it does not check or assume any schema version field. Unknown plugin source kinds parse to `{ kind: "unknown", reason }` rather than failing. The parser targets the de-facto schema observable in `anthropics/claude-plugins-official` as of the V1 implementation date. |
 
 ______________________________________________________________________
 
@@ -934,7 +955,7 @@ ______________________________________________________________________
 
 ## 12. Acceptance Criteria Summary
 
-The V1 implementation passes 397 unit/integration tests covering the requirements above. Key examples (each requirement traces to one or more test):
+The V1 implementation has unit and integration tests covering the requirements above; each requirement traces to at least one named test. Representative examples by area:
 
 | Area               | Representative tests (excerpts)                                                                                                                                                                                                                                                                                                              |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
