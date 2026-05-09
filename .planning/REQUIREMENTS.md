@@ -342,18 +342,233 @@ Surfaced by FEATURES research; these are spec ambiguities, not new requirements.
 
 ## Traceability
 
-Empty initially. The roadmapper populates this during phase mapping. Coverage check verifies every v1 requirement maps to exactly one phase.
+Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution updates them.
 
-| Requirement               | Phase | Status |
-| ------------------------- | ----- | ------ |
-| (Populated by roadmapper) |       |        |
+> **Coverage note:** This file's previous footer claimed "134 v1 requirements total" but the file actually contains **200** numbered REQ-IDs across all sections. The roadmap maps all 200; reconcile the count claim in a future REQUIREMENTS.md edit.
+
+| Requirement | Phase   | Status  |
+| ----------- | ------- | ------- |
+| MA-1        | Phase 4 | Pending |
+| MA-2        | Phase 4 | Pending |
+| MA-3        | Phase 4 | Pending |
+| MA-4        | Phase 4 | Pending |
+| MA-5        | Phase 4 | Pending |
+| MA-6        | Phase 4 | Pending |
+| MA-7        | Phase 4 | Pending |
+| MA-8        | Phase 4 | Pending |
+| MA-9        | Phase 4 | Pending |
+| MA-10       | Phase 4 | Pending |
+| MA-11       | Phase 4 | Pending |
+| MR-1        | Phase 4 | Pending |
+| MR-2        | Phase 4 | Pending |
+| MR-3        | Phase 4 | Pending |
+| MR-4        | Phase 4 | Pending |
+| MR-5        | Phase 4 | Pending |
+| MR-6        | Phase 4 | Pending |
+| MR-7        | Phase 4 | Pending |
+| MR-8        | Phase 4 | Pending |
+| ML-1        | Phase 4 | Pending |
+| ML-2        | Phase 4 | Pending |
+| ML-3        | Phase 4 | Pending |
+| ML-4        | Phase 4 | Pending |
+| MU-1        | Phase 4 | Pending |
+| MU-2        | Phase 4 | Pending |
+| MU-3        | Phase 4 | Pending |
+| MU-4        | Phase 4 | Pending |
+| MU-5        | Phase 4 | Pending |
+| MU-6        | Phase 4 | Pending |
+| MU-7        | Phase 4 | Pending |
+| MU-8        | Phase 4 | Pending |
+| MU-9        | Phase 4 | Pending |
+| MAU-1       | Phase 4 | Pending |
+| MAU-2       | Phase 4 | Pending |
+| MAU-3       | Phase 4 | Pending |
+| MAU-4       | Phase 4 | Pending |
+| PI-1        | Phase 5 | Pending |
+| PI-2        | Phase 5 | Pending |
+| PI-3        | Phase 5 | Pending |
+| PI-4        | Phase 5 | Pending |
+| PI-5        | Phase 5 | Pending |
+| PI-6        | Phase 5 | Pending |
+| PI-7        | Phase 5 | Pending |
+| PI-8        | Phase 5 | Pending |
+| PI-9        | Phase 5 | Pending |
+| PI-10       | Phase 5 | Pending |
+| PI-11       | Phase 5 | Pending |
+| PI-12       | Phase 5 | Pending |
+| PI-13       | Phase 5 | Pending |
+| PI-14       | Phase 5 | Pending |
+| PI-15       | Phase 5 | Pending |
+| PU-1        | Phase 5 | Pending |
+| PU-2        | Phase 5 | Pending |
+| PU-3        | Phase 5 | Pending |
+| PU-4        | Phase 5 | Pending |
+| PU-5        | Phase 5 | Pending |
+| PU-6        | Phase 5 | Pending |
+| PU-7        | Phase 5 | Pending |
+| PU-8        | Phase 5 | Pending |
+| PUP-1       | Phase 5 | Pending |
+| PUP-2       | Phase 5 | Pending |
+| PUP-3       | Phase 5 | Pending |
+| PUP-4       | Phase 5 | Pending |
+| PUP-5       | Phase 5 | Pending |
+| PUP-6       | Phase 5 | Pending |
+| PUP-7       | Phase 5 | Pending |
+| PUP-8       | Phase 5 | Pending |
+| PUP-9       | Phase 5 | Pending |
+| PL-1        | Phase 5 | Pending |
+| PL-2        | Phase 5 | Pending |
+| PL-3        | Phase 5 | Pending |
+| PL-4        | Phase 5 | Pending |
+| PL-5        | Phase 5 | Pending |
+| PL-6        | Phase 5 | Pending |
+| PL-7        | Phase 5 | Pending |
+| SK-1        | Phase 3 | Pending |
+| SK-2        | Phase 3 | Pending |
+| SK-3        | Phase 3 | Pending |
+| SK-4        | Phase 3 | Pending |
+| SK-5        | Phase 3 | Pending |
+| CM-1        | Phase 3 | Pending |
+| CM-2        | Phase 3 | Pending |
+| CM-3        | Phase 3 | Pending |
+| CM-4        | Phase 3 | Pending |
+| AG-1        | Phase 3 | Pending |
+| AG-2        | Phase 3 | Pending |
+| AG-3        | Phase 3 | Pending |
+| AG-4        | Phase 3 | Pending |
+| AG-5        | Phase 3 | Pending |
+| AG-6        | Phase 3 | Pending |
+| AG-7        | Phase 3 | Pending |
+| AG-8        | Phase 3 | Pending |
+| AG-9        | Phase 3 | Pending |
+| AG-10       | Phase 3 | Pending |
+| AG-11       | Phase 3 | Pending |
+| AG-12       | Phase 3 | Pending |
+| MC-1        | Phase 3 | Pending |
+| MC-2        | Phase 3 | Pending |
+| MC-3        | Phase 3 | Pending |
+| MC-4        | Phase 3 | Pending |
+| MC-5        | Phase 3 | Pending |
+| MC-6        | Phase 3 | Pending |
+| MC-7        | Phase 3 | Pending |
+| MC-8        | Phase 3 | Pending |
+| SP-1        | Phase 2 | Pending |
+| SP-2        | Phase 2 | Pending |
+| SP-3        | Phase 2 | Pending |
+| SP-4        | Phase 2 | Pending |
+| SP-5        | Phase 2 | Pending |
+| SP-6        | Phase 2 | Pending |
+| SP-7        | Phase 2 | Pending |
+| SC-1        | Phase 2 | Pending |
+| SC-2        | Phase 2 | Pending |
+| SC-3        | Phase 2 | Pending |
+| SC-4        | Phase 2 | Pending |
+| SC-5        | Phase 4 | Pending |
+| SC-6        | Phase 4 | Pending |
+| SC-7        | Phase 2 | Pending |
+| MM-1        | Phase 2 | Pending |
+| MM-2        | Phase 2 | Pending |
+| MM-3        | Phase 2 | Pending |
+| MM-4        | Phase 2 | Pending |
+| MM-5        | Phase 2 | Pending |
+| MM-6        | Phase 2 | Pending |
+| MM-7        | Phase 2 | Pending |
+| PR-1        | Phase 2 | Pending |
+| PR-2        | Phase 2 | Pending |
+| PR-3        | Phase 2 | Pending |
+| PR-4        | Phase 2 | Pending |
+| PR-5        | Phase 2 | Pending |
+| PR-6        | Phase 2 | Pending |
+| RN-1        | Phase 2 | Pending |
+| RN-2        | Phase 2 | Pending |
+| RN-3        | Phase 5 | Pending |
+| RN-4        | Phase 3 | Pending |
+| RN-5        | Phase 3 | Pending |
+| RN-6        | Phase 3 | Pending |
+| TC-1        | Phase 6 | Pending |
+| TC-2        | Phase 6 | Pending |
+| TC-3        | Phase 6 | Pending |
+| TC-4        | Phase 6 | Pending |
+| TC-5        | Phase 6 | Pending |
+| TC-6        | Phase 6 | Pending |
+| TC-7        | Phase 6 | Pending |
+| TC-8        | Phase 6 | Pending |
+| TC-9        | Phase 6 | Pending |
+| AP-1        | Phase 6 | Pending |
+| AP-2        | Phase 6 | Pending |
+| AP-3        | Phase 6 | Pending |
+| AP-4        | Phase 6 | Pending |
+| RH-1        | Phase 4 | Pending |
+| RH-2        | Phase 4 | Pending |
+| RH-3        | Phase 4 | Pending |
+| RH-4        | Phase 4 | Pending |
+| RH-5        | Phase 4 | Pending |
+| ST-1        | Phase 2 | Pending |
+| ST-2        | Phase 2 | Pending |
+| ST-3        | Phase 2 | Pending |
+| ST-4        | Phase 2 | Pending |
+| ST-5        | Phase 2 | Pending |
+| ST-6        | Phase 2 | Pending |
+| ST-7        | Phase 2 | Pending |
+| ST-8        | Phase 2 | Pending |
+| ST-9        | Phase 2 | Pending |
+| PS-1        | Phase 1 | Pending |
+| PS-2        | Phase 1 | Pending |
+| PS-3        | Phase 1 | Pending |
+| PS-4        | Phase 1 | Pending |
+| PS-5        | Phase 1 | Pending |
+| AS-1        | Phase 1 | Pending |
+| AS-2        | Phase 5 | Pending |
+| AS-3        | Phase 5 | Pending |
+| AS-4        | Phase 1 | Pending |
+| AS-5        | Phase 1 | Pending |
+| AS-6        | Phase 5 | Pending |
+| AS-7        | Phase 5 | Pending |
+| AS-8        | Phase 3 | Pending |
+| AS-9        | Phase 3 | Pending |
+| ES-1        | Phase 1 | Pending |
+| ES-2        | Phase 1 | Pending |
+| ES-3        | Phase 1 | Pending |
+| ES-4        | Phase 1 | Pending |
+| ES-5        | Phase 1 | Pending |
+| IL-1        | Phase 1 | Pending |
+| IL-2        | Phase 1 | Pending |
+| IL-3        | Phase 1 | Pending |
+| IL-4        | Phase 1 | Pending |
+| IL-5        | Phase 1 | Pending |
+| NFR-1       | Phase 1 | Pending |
+| NFR-2       | Phase 5 | Pending |
+| NFR-3       | Phase 5 | Pending |
+| NFR-4       | Phase 1 | Pending |
+| NFR-5       | Phase 4 | Pending |
+| NFR-6       | Phase 1 | Pending |
+| NFR-7       | Phase 2 | Pending |
+| NFR-8       | Phase 7 | Pending |
+| NFR-9       | Phase 1 | Pending |
+| NFR-10      | Phase 1 | Pending |
+| NFR-11      | Phase 7 | Pending |
+| NFR-12      | Phase 2 | Pending |
 
 **Coverage:**
 
-- v1 requirements: 134 total
-- Mapped to phases: 0 (pre-roadmap)
-- Unmapped: 134 ⚠️ (will resolve to 0 after roadmap)
+- v1 requirements: 200 total (file footer previously claimed 134; corrected here)
+- Mapped to phases: 200 (100%)
+- Unmapped: 0
+
+**Per-phase counts:**
+
+| Phase                                         | REQ-IDs                                                                                                                                 |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Phase 1: Foundations & Toolchain              | 23 (NFR-1, NFR-4, NFR-6, NFR-9, NFR-10, IL-1..5, ES-1..5, PS-1..5, AS-1, AS-4, AS-5)                                                    |
+| Phase 2: Domain Core & Persistence Primitives | 39 (NFR-7, NFR-12, SP-1..7, SC-1..4, SC-7, MM-1..7, PR-1..6, RN-1..2, ST-1..9)                                                          |
+| Phase 3: Resource Bridges                     | 34 (SK-1..5, CM-1..4, AG-1..12, MC-1..8, RN-4..6, AS-8..9)                                                                              |
+| Phase 4: Marketplace Orchestrators            | 44 (MA-1..11, MR-1..8, ML-1..4, MU-1..9, MAU-1..4, SC-5..6, RH-1..5, NFR-5)                                                             |
+| Phase 5: Plugin Orchestrators                 | 47 (PI-1..15, PU-1..8, PUP-1..9, PL-1..7, RN-3, AS-2..3, AS-6..7, NFR-2..3)                                                             |
+| Phase 6: Edge Layer & Tab Completion          | 13 (TC-1..9, AP-1..4)                                                                                                                   |
+| Phase 7: Integration & Pi Wiring              | 4 (NFR-8, NFR-11) -- note: NFR-2/3 land in Phase 5 since they describe orchestrator behavior; Phase 7 verifies them in live environment |
+
+> **Phase 7 count clarification:** NFR-8 and NFR-11 are the two REQ-IDs uniquely owned by Phase 7. The "live e2e against `anthropics/claude-plugins-official`" work in Phase 7 verifies NFR-2/NFR-3/NFR-5 in production-like conditions but those REQ-IDs are owned by their primary phase (5 / 5 / 4).
 
 ______________________________________________________________________
 
-*Requirements defined: 2026-05-09 from `docs/prd/pi-claude-marketplace-prd.md` v1.0* *Last updated: 2026-05-09 after initialization*
+*Requirements defined: 2026-05-09 from `docs/prd/pi-claude-marketplace-prd.md` v1.0* *Last updated: 2026-05-09 after roadmap creation (Traceability section populated; coverage count corrected from 134 to 200)*

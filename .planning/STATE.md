@@ -1,0 +1,72 @@
+# Project State
+
+## Project Reference
+
+See: .planning/PROJECT.md (updated 2026-05-09)
+
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 1 -- Foundations & Toolchain
+
+## Current Position
+
+Phase: 1 of 7 (Foundations & Toolchain) Plan: 0 of TBD in current phase Status: Ready to plan Last activity: 2026-05-09 -- ROADMAP.md and STATE.md initialized; 7 phases derived from requirements; 200 v1 REQ-IDs mapped to phases
+
+Progress: [░░░░░░░░░░] 0%
+
+## Performance Metrics
+
+**Velocity:**
+
+- Total plans completed: 0
+- Average duration: -
+- Total execution time: -
+
+**By Phase:**
+
+| Phase | Plans | Total | Avg/Plan |
+| ----- | ----- | ----- | -------- |
+| -     | -     | -     | -        |
+
+**Recent Trend:**
+
+- Last 5 plans: -
+- Trend: -
+
+<!-- Updated after each plan completion -->
+
+## Accumulated Context
+
+### Decisions
+
+Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecting current work:
+
+- Initialization: Adopt PRD verbatim as V1 spec (1068 lines, ~100 requirements)
+- Initialization: Skip `/gsd-map-codebase` (PRD §9 already documents V1 architecture)
+- Initialization: Two scopes only (`user`, `project`); no Claude `local`
+- Initialization: 12-char SHA-256 truncation locked as user contract (PI-7)
+- Roadmap: Adopt synthesizer's 7-phase split (dependency-graph inside-out: foundations → primitives → bridges → marketplace orchestrators → plugin orchestrators → edge → integration)
+- Roadmap: Phase ledger primitive lands in Phase 2 (transaction primitive, not Phase 5 use-case)
+- Roadmap: `MARKERS.ts` and symlink-aware `assertPathInside` land in Phase 1 so they propagate to every later phase
+- Roadmap: Gap 3 (component-path supplement vs. replace) resolved in Phase 5 as supplement-fix; documented as "behavior corrected vs. V1"
+
+### Pending Todos
+
+None yet.
+
+### Blockers/Concerns
+
+- Coverage count discrepancy: REQUIREMENTS.md footer claims "134 v1 requirements total" but the file contains 200 numbered REQ-IDs. Roadmap maps all 200 (the actual content). Reconcile in next REQUIREMENTS.md edit.
+- Behavioral Gaps 1, 2, 4-10 (FEATURES Gap series) need explicit resolutions logged in PROJECT.md Key Decisions before Phase 4/5 planning. SUMMARY.md provides recommended resolutions.
+- Phase 7 research flag: verify `resources_discover` event contract and `pi.registerCommand` surface in `@mariozechner/pi-coding-agent@^0.73.1` vs. V1's `^0.70.6` baseline (low probability of breaking change).
+- `write-file-atomic@^8` Node engine constraint bumps effective floor from 22.0 to 22.22.2; confirm CI Node range before adopting in Phase 1.
+
+## Deferred Items
+
+Items acknowledged and carried forward from previous milestone close:
+
+| Category                    | Item | Status | Deferred At |
+| --------------------------- | ---- | ------ | ----------- |
+| *(none -- first milestone)* |      |        |             |
+
+## Session Continuity
+
+Last session: 2026-05-09 15:41 Stopped at: Roadmap created (7 phases, 200 v1 REQ-IDs mapped); ready to plan Phase 1 Resume file: None
