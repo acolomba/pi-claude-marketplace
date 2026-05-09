@@ -6,9 +6,6 @@ node_modules/
 /build/
 /coverage/
 
-# package artifacts
-*.tgz
-
 # logs
 *.log
 npm-debug.log*
@@ -16,16 +13,16 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# ide
-/.idea/
-/.vscode/
+# mac
+.DS_Store
 
-# local pi state
+# pi state
 /.pi/
 /.pi-lens/
+/.ralph/
+
+# package artifacts
+*.tgz
 
 # worktrees
 /.worktrees/
-
-# mac
-.DS_Store

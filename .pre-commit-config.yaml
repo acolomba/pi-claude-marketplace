@@ -27,7 +27,7 @@ repos:
     rev: v4.0.0-alpha.8
     hooks:
       - id: prettier
-        types_or: [json, ts]
+        files: '\.(js|json|ts)$'
 
   - repo: https://github.com/sirosen/texthooks
     rev: 0.7.1
@@ -66,14 +66,28 @@ repos:
       - id: mdformat
         additional_dependencies:
           - mdformat-gfm
+        exclude: ^tests/fixtures/
 
   - repo: https://github.com/DavidAnson/markdownlint-cli2
     rev: v0.20.0
     hooks:
       - id: markdownlint-cli2
+        exclude: ^tests/fixtures/
 
   - repo: local
     hooks:
+      - id: npm-lint
+        name: npm lint
+        entry: npm run lint
+        language: system
+        pass_filenames: false
+        files: '^(eslint\.config\.js|extensions/.*\.ts|package(-lock)?\.json)$'
+      - id: npm-format-check
+        name: npm format check
+        entry: npm run format:check
+        language: system
+        pass_filenames: false
+        files: '^(eslint\.config\.js|extensions/.*\.ts|package(-lock)?\.json|tsconfig\.json)$'
       - id: npm-typecheck
         name: npm typecheck
         entry: npm run typecheck
