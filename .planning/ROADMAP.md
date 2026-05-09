@@ -28,10 +28,26 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Goal**: Every subsequent phase has atomic IO, symlink-safe containment, stable user-contract markers, output-channel discipline, ESM baseline, and CI matrix to build on **Depends on**: Nothing (first phase) **Requirements**: NFR-1, NFR-4, NFR-6, NFR-9, NFR-10, IL-1, IL-2, IL-3, IL-4, IL-5, ES-1, ES-2, ES-3, ES-4, ES-5, PS-1, PS-2, PS-3, PS-4, PS-5, AS-1, AS-4, AS-5 **Success Criteria** (what must be TRUE):
 
 1. JSON writes to `state.json` / `mcp.json` / `agents-index.json` survive a kernel-crash simulation (fsync of file + parent dir; `write-file-atomic@^8` adopted)
+
 2. A test plugin containing a symlink whose target escapes the scope root is rejected with `PathContainmentError` before any byte is written
+
 3. ESLint emits an error when any file under `src/edge/`, `src/orchestrators/`, or `src/bridges/` calls `process.stdout.write` / `process.stderr.write` / `console.warn` outside the one sanctioned `migrateLegacyMarketplaceRecords` callsite
+
 4. `MARKERS.ts` exports the five ES-5 verbatim strings (pi-subagents, pi-mcp-adapter, reload hint, manual recovery, rollback partial) and a snapshot test asserts byte-for-byte PRD equivalence
-5. `npm run check` (typecheck + ESLint + Prettier + `node --test`) passes on Node 22, 24, and 26 in CI **Plans**: TBD
+
+5. `npm run check` (typecheck + ESLint + Prettier + `node --test`) passes on Node 24 in CI
+
+   **Note (2026-05-09):** Original criterion text said "Node 22, 24, and 26 in CI" but Phase 1 CONTEXT.md decision D-01 locked the matrix to Node 24 only ("removes the matrix maintenance overhead"). Plan 07 includes a checkpoint where the user explicitly resolves this discrepancy.
+
+**Plans**: 7 plans
+
+- [ ] `01-01-PLAN.md` -- Toolchain rewire: package.json + eslint.config.js (Wave 0)
+- [ ] `01-02-PLAN.md` -- shared/ core: markers, errors, notify, atomic-json, path-safety (Wave 1)
+- [ ] `01-03-PLAN.md` -- 9-folder skeleton + READMEs + platform/git.ts (isomorphic-git wrapper) (Wave 1)
+- [ ] `01-04-PLAN.md` -- index.ts entrypoint + delete legacy stub + REQUIREMENTS/PROJECT D-21 supersession (Wave 1)
+- [ ] `01-05-PLAN.md` -- tests/architecture/\* + prd-extract helper + canary fixture (Wave 2)
+- [ ] `01-06-PLAN.md` -- tests/shared/\* unit tests + index-smoke regression guard (Wave 2)
+- [ ] `01-07-PLAN.md` -- .github/workflows/ci.yml + closing checkpoint + Phase 2 handoff SUMMARY (Wave 3)
 
 ### Phase 2: Domain Core & Persistence Primitives
 
@@ -101,7 +117,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 | Phase                                   | Plans Complete | Status      | Completed |
 | --------------------------------------- | -------------- | ----------- | --------- |
-| 1. Foundations & Toolchain              | 0/TBD          | Not started | -         |
+| 1. Foundations & Toolchain              | 0/7            | Not started | -         |
 | 2. Domain Core & Persistence Primitives | 0/TBD          | Not started | -         |
 | 3. Resource Bridges                     | 0/TBD          | Not started | -         |
 | 4. Marketplace Orchestrators            | 0/TBD          | Not started | -         |
