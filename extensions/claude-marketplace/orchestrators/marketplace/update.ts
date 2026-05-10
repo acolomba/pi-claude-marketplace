@@ -223,11 +223,11 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
           await refreshGitHubClone(cloneDir, source.ref, gitOps, () => {
             cloneAdvanced = true;
           });
-          await refreshManifestPointer(record, cloneDir);
+          await validateManifestAtRoot(record, cloneDir);
         } else if (source.kind === "path") {
           // NFR-5: NO gitOps. Re-read + re-validate manifest at the
           // existing on-disk location.
-          await refreshManifestPointer(record, record.marketplaceRoot);
+          await validateManifestAtRoot(record, record.marketplaceRoot);
         } else {
           throw new Error(
             `Cannot update marketplace "${name}": unsupported source kind "${source.kind}"`,
@@ -452,12 +452,19 @@ async function refreshGitHubClone(
 }
 
 /**
- * MU-4 / MU-5: re-read and re-validate the marketplace.json from the
- * given root. Mutates `record.manifestPath` and `record.marketplaceRoot`
- * to the canonical post-refresh values. Throws on read or validation
- * failure -- the caller wraps as `MarketplaceUpdateError`.
+ * MU-4 / MU-5: re-read and re-validate the marketplace.json at the
+ * given root. Throws on read or validation failure -- the caller wraps
+ * as `MarketplaceUpdateError`.
+ *
+ * WR-03: previously named `refreshManifestPointer` and unconditionally
+ * wrote `record.manifestPath` and `record.marketplaceRoot`. For path
+ * sources the caller already passes `record.marketplaceRoot`, and for
+ * github sources `cloneDir === record.marketplaceRoot` after `add`. The
+ * writes were no-ops that obscured the function's actual purpose (just
+ * validate). Writes are now gated on a real change so a future
+ * "did anything change?" optimization can rely on identity.
  */
-async function refreshManifestPointer(
+async function validateManifestAtRoot(
   record: ExtensionState["marketplaces"][string],
   marketplaceRoot: string,
 ): Promise<void> {
@@ -468,6 +475,11 @@ async function refreshManifestPointer(
     throw new Error(`Refreshed marketplace manifest at ${manifestPath} failed schema validation`);
   }
 
-  record.manifestPath = manifestPath;
-  record.marketplaceRoot = marketplaceRoot;
+  if (record.manifestPath !== manifestPath) {
+    record.manifestPath = manifestPath;
+  }
+
+  if (record.marketplaceRoot !== marketplaceRoot) {
+    record.marketplaceRoot = marketplaceRoot;
+  }
 }
