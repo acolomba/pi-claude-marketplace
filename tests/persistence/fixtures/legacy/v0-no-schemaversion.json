@@ -1,0 +1,28 @@
+{
+  "marketplaces": {
+    "alpha": {
+      "name": "alpha",
+      "scope": "user",
+      "source": "./alpha-local",
+      "addedFromCwd": "/some/cwd",
+      "plugins": {
+        "p1": {
+          "version": "1.0.0",
+          "resolvedSource": "/abs/p1",
+          "compatibility": {
+            "installable": true,
+            "notes": [],
+            "supported": ["skills"],
+            "unsupported": []
+          },
+          "resources": {
+            "skills": ["alpha-s1"],
+            "prompts": []
+          },
+          "installedAt": "2025-01-01T00:00:00.000Z",
+          "updatedAt": "2025-01-01T00:00:00.000Z"
+        }
+      }
+    }
+  }
+}
