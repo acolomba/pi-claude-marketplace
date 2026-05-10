@@ -29,6 +29,15 @@
 //
 // V1 carry-forward shape only (D-09 staging dir, D-12 GitOps injection,
 // D-14 follow-upstream-blindly all supersede V1 specifics).
+//
+// WR-05 trade-off note: the MA-8 duplicate-name check for github sources
+// runs AFTER the clone fills `stagingDir`. We accept the cost of one
+// wasted network clone per duplicate-name attempt because the marketplace
+// name is derived from the manifest's `name` field -- which only exists
+// inside the cloned tree. Resolving without cloning would require a
+// raw.githubusercontent.com manifest probe that bypasses the GitOps
+// surface (and the D-12/D-13 layering rules); the current cost is
+// considered acceptable per design.
 
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, stat } from "node:fs/promises";
