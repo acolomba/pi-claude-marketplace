@@ -5,6 +5,7 @@ import {
   githubSource,
   parsePluginSource,
   pathSource,
+  sourceLogical,
   type ParsedSource,
 } from "../../extensions/claude-marketplace/domain/source.ts";
 
@@ -175,4 +176,39 @@ test("NFR-12 unknown branch carries verbatim raw + reason for forward-compat", (
     assert.equal(typeof got.reason, "string");
     assert.ok(got.reason.length > 0);
   }
+});
+
+// ML-2 -- sourceLogical helper. Per Plan 04-01, returns the user-visible
+// logical label for the `marketplace list` renderer; branches on
+// ParsedSource.kind. Note: the GitHubSource fixtures are produced via
+// parsePluginSource() because the codebase's githubSource() factory
+// validates a single `raw` string rather than accepting owner/repo/ref
+// directly (plan-doc deviation noted in 04-01 SUMMARY).
+test("sourceLogical: PathSource returns verbatim logical (tilde preserved)", () => {
+  const s = pathSource("~/projects/local-mp");
+  assert.equal(sourceLogical(s), "~/projects/local-mp");
+});
+
+test("sourceLogical: GitHubSource synthesizes canonical URL without ref", () => {
+  const s = githubSource("anthropics/claude-plugins-official");
+  assert.equal(sourceLogical(s), "https://github.com/anthropics/claude-plugins-official");
+});
+
+test("sourceLogical: GitHubSource synthesizes canonical URL with #ref suffix", () => {
+  const parsed = parsePluginSource("https://github.com/anthropics/claude-plugins-official#v1.0");
+  assert.equal(parsed.kind, "github");
+  if (parsed.kind !== "github") {
+    throw new Error("test fixture broken -- expected github");
+  }
+
+  assert.equal(sourceLogical(parsed), "https://github.com/anthropics/claude-plugins-official#v1.0");
+});
+
+test("sourceLogical: UnknownSource falls back to raw", () => {
+  const parsed = parsePluginSource("git@github.com:foo/bar.git");
+  if (parsed.kind !== "unknown") {
+    throw new Error("test fixture broken -- expected unknown");
+  }
+
+  assert.equal(sourceLogical(parsed), "git@github.com:foo/bar.git");
 });
