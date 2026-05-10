@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "agents": [
+    {
+      "plugin": "acme",
+      "marketplace": "mp",
+      "sourceAgent": "bot",
+      "generatedName": "claude-marketplace-acme-bot",
+      "sourcePath": "/x",
+      "targetPath": "/y",
+      "sourceHash": "h",
+      "droppedFields": [],
+      "droppedTools": [],
+      "warnings": []
+    },
+    {
+      "plugin": "acme",
+      "marketplace": "mp",
+      "sourceAgent": "bot2",
+      "sourcePath": "/x2",
+      "targetPath": "/y2",
+      "sourceHash": "h2",
+      "droppedFields": [],
+      "droppedTools": [],
+      "warnings": []
+    }
+  ]
+}
