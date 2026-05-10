@@ -106,6 +106,14 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
 
     // D-02: hand-rolled try/catch per plugin. NOT the phase-ledger runner --
     // MR-3 requires continuation across plugin failures.
+    //
+    // WR-01: state mutation (delete record.plugins[pluginName]) is folded
+    // into THIS loop. Previously a second loop ran the deletes after
+    // cascade aggregation -- correct only because cascade is fail-soft
+    // (always returns ok:false rather than throwing). Inlining removes
+    // that dependency: if cascade ever changes to throw, only the
+    // already-cleaned entries are persisted because withStateGuard saves
+    // on no-throw.
     for (const [pluginName, plugin] of Object.entries(record.plugins)) {
       const outcome = await cascade(pluginName, opts.name, locations, plugin);
       if (outcome.ok) {
@@ -124,17 +132,13 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
         dropped.commands.push(...outcome.dropped.commands);
         dropped.agents.push(...outcome.dropped.agents);
         dropped.mcpServers.push(...outcome.dropped.mcpServers);
+        // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- record.plugins is a dynamic-key Record<string, ...>.
+        delete record.plugins[pluginName];
       } else {
         // D-03: outcome.cause is set when ok===false (see UnstageOutcome).
         const cause = outcome.cause ?? new Error(`unknown cascade failure for ${pluginName}`);
         failedPlugins.push({ name: pluginName, cause });
       }
-    }
-
-    // Apply state mutations.
-    for (const cleaned of cleanedPluginNames) {
-      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- record.plugins is a dynamic-key Record<string, ...>.
-      delete record.plugins[cleaned];
     }
 
     if (failedPlugins.length === 0) {
