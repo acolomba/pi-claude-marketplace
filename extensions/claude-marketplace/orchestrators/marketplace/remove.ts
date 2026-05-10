@@ -19,7 +19,7 @@
 //        - marketplace data dir + GitHub clone dir (ONLY when failedPlugins.length === 0; MR-7)
 //        - aggregate leaks into one error per MR-6
 //   4. Compose user-visible output:
-//        - if failedPlugins: ONE notifyWarning ending with "Fix the underlying issue and retry." (MR-4)
+//        - if failedPlugins: ONE notifyWarning ending with the canonical retry trailer (MR-4)
 //        - else: notifySuccess body + soft-dep warnings (RH-5) + trailing reload hint (RH-1, verb 'drop')
 //
 // D-02: hand-rolled try/catch loop (NOT the phase-ledger runner).
