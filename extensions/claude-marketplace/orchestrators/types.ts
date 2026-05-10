@@ -19,6 +19,14 @@ export type PluginUpdatePartition = "updated" | "unchanged" | "skipped" | "faile
  *   - unchanged: name only (resolved version matched install record)
  *   - skipped: name + optional notes (e.g., resolver could not load)
  *   - failed: notes carries the chained error message tail (Error.cause walk)
+ *
+ * WR-04: optional stagedAgents / stagedMcpServers fields carry the
+ * names of resources the plugin's update actually staged. RH-5 soft-dep
+ * warnings (Phase 4 marketplace update; Phase 5 plugin update) use
+ * these to decide whether pi-subagents / pi-mcp-adapter need a warning,
+ * instead of firing on every plugin update regardless of staged content.
+ * Optional because Phase 4 ships the orchestrator before Phase 5 wires
+ * the real implementation; tests that don't exercise RH-5 omit them.
  */
 export interface PluginUpdateOutcome {
   readonly partition: PluginUpdatePartition;
@@ -26,6 +34,10 @@ export interface PluginUpdateOutcome {
   readonly fromVersion?: string;
   readonly toVersion?: string;
   readonly notes?: readonly string[];
+  /** WR-04: agents staged by this plugin's update (RH-5 input). */
+  readonly stagedAgents?: readonly string[];
+  /** WR-04: MCP servers staged by this plugin's update (RH-5 input). */
+  readonly stagedMcpServers?: readonly string[];
 }
 
 /**

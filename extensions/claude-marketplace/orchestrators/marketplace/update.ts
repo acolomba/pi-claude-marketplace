@@ -317,18 +317,33 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
 
   let body = baseLines.join("\n");
 
-  // RH-5 (per-marketplace; we don't yet know what was staged across the
-  // cascade -- best-effort using the updated[] notes' kind hints if the
-  // PluginUpdateFn surfaced them. Phase 4 conservatively treats both
-  // soft-dep slots as "may need warning" iff any updated[] entries
-  // exist). When `pi` is not supplied (legacy callers / minimal tests),
-  // we skip the soft-dep composition entirely -- the helpers require an
+  // RH-5: aggregate the per-plugin staged resource lists across
+  // partitions.updated. WR-04: previously this section used a
+  // placeholder `["plugin"]` array that fired the soft-dep warning on
+  // EVERY successful plugin update regardless of whether agents / MCP
+  // servers were actually staged. Now we read stagedAgents /
+  // stagedMcpServers off each PluginUpdateOutcome (optional fields
+  // populated by Phase 5's plugin/update.ts) and only fire the warning
+  // when at least one outcome contributed names.
+  //
+  // When `pi` is not supplied (legacy callers / minimal tests), we
+  // skip the soft-dep composition entirely -- the helpers require an
   // ExtensionAPI reference.
   if (pi !== undefined) {
-    const dummyAgentsHint = updatedNames.length > 0 ? ["plugin"] : [];
-    const dummyMcpHint = updatedNames.length > 0 ? ["plugin"] : [];
-    const subagentWarn = subagentWarningIfNeeded(pi, dummyAgentsHint);
-    const mcpWarn = mcpAdapterWarningIfNeeded(pi, dummyMcpHint);
+    const stagedAgents: string[] = [];
+    const stagedMcpServers: string[] = [];
+    for (const o of partitions.updated) {
+      if (o.stagedAgents !== undefined) {
+        stagedAgents.push(...o.stagedAgents);
+      }
+
+      if (o.stagedMcpServers !== undefined) {
+        stagedMcpServers.push(...o.stagedMcpServers);
+      }
+    }
+
+    const subagentWarn = subagentWarningIfNeeded(pi, stagedAgents);
+    const mcpWarn = mcpAdapterWarningIfNeeded(pi, stagedMcpServers);
     if (subagentWarn !== "") {
       body = `${body}\n${subagentWarn}`;
     }
