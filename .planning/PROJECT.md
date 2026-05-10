@@ -130,4 +130,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ______________________________________________________________________
 
-*Last updated: 2026-05-09 after initialization from `docs/prd/pi-claude-marketplace-prd.md` v1.0*
+*Last updated: 2026-05-09 -- Phase 1 (Foundations & Toolchain) complete: atomic-IO primitives, symlink-aware path safety, ES-5 marker constants, output-channel discipline, ESM baseline, isomorphic-git wrapper, 9-folder skeleton, 30-test architecture+unit suite, Node 24 CI workflow.*
