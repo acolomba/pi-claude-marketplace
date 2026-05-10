@@ -92,14 +92,29 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 ### Phase 4: Marketplace Orchestrators
 
-**Goal**: A user can manage marketplace records (`add`, `remove`/`rm`, `list`, `update`, `autoupdate`/`noautoupdate`) with atomic clone-then-rename, cascade with aggregated failures, manifest pointer refresh, and reload-hint emission only when resources actually change **Depends on**: Phases 2, 3 **Requirements**: MA-1, MA-2, MA-3, MA-4, MA-5, MA-6, MA-7, MA-8, MA-9, MA-10, MA-11, MR-1, MR-2, MR-3, MR-4, MR-5, MR-6, MR-7, MR-8, ML-1, ML-2, ML-3, ML-4, MU-1, MU-2, MU-3, MU-4, MU-5, MU-6, MU-7, MU-8, MU-9, MAU-1, MAU-2, MAU-3, MAU-4, SC-5, SC-6, RH-1, RH-2, RH-3, RH-4, RH-5, NFR-5 **Success Criteria** (what must be TRUE):
+**Goal**: A user can manage marketplace records (`add`, `remove`/`rm`, `list`, `update`, `autoupdate`/`noautoupdate`) with atomic clone-then-rename, cascade with aggregated failures, manifest pointer refresh, and reload-hint emission only when resources actually change **Depends on**: Phases 2, 3 **Requirements**: MA-1, MA-2, MA-3, MA-4, MA-5, MA-6, ~~MA-7~~ (superseded by Phase 1 D-21), MA-8, MA-9, MA-10, MA-11, MR-1, MR-2, MR-3, MR-4, MR-5, MR-6, MR-7, MR-8, ML-1, ML-2, ML-3, ML-4, MU-1, MU-2, MU-3, MU-4, MU-5, MU-6, MU-7, MU-8, MU-9, MAU-1, MAU-2, MAU-3, MAU-4, SC-5, SC-6, RH-1, RH-2, RH-3, RH-4, RH-5, NFR-5 **Success Criteria** (what must be TRUE):
 
 1. `marketplace add anthropics/claude-plugins-official` clones into `<staging>/<uuid>/`, reads the manifest, atomically renames into final location, persists the record, and emits `Added marketplace "<name>" in user scope.` with NO reload hint (MA-11)
 2. `marketplace remove <name>` cascade-drops every installed plugin's resources, aggregates per-plugin failures into `failedPlugins[]` with `Error.cause`, retains the record when any plugin failed, and emits exactly ONE `warning`-severity notification ending with "fix the underlying issue and retry"
-3. `marketplace update` against a GitHub source runs `git fetch` + `git pull --ff-only` (or re-checkouts a stored ref on detached HEAD), refuses non-fast-forward divergence with a clear error, refreshes the manifest pointer before any cascade, and only cascades plugin upgrades when the per-marketplace `autoupdate` flag is true
+3. `marketplace update` against a GitHub source follows upstream blindly via `gitOps.fetch` + `gitOps.forceUpdateRef` + `gitOps.checkout` (Phase 4 D-14 supersedes PRD MU-2/MU-3 -- the local clone is read-only by contract, so non-fast-forward divergence cannot occur). Manifest pointer is refreshed and persisted before any cascade; plugin upgrades cascade only when the per-marketplace `autoupdate` flag is true
 4. `marketplace list` shows one line per marketplace grouped by scope, formatted `<icon> <name> (<source.logical>) [autoupdate]?`, WITHOUT loading any marketplace's manifest, and emits `No marketplaces configured.` when both scopes are empty
 5. The reload hint follows PRD §6.8 verbatim (`Run /reload to load it.` / `Run /reload to load "n1", "n2", ...".`, verbs `load`/`refresh`/`drop`), is emitted ONLY when generated resources changed, and `pi-subagents` / `pi-mcp-adapter` warnings (probed via `pi.getAllTools()`) appear BEFORE the trailing reload hint when the relevant dep is unloaded
-6. Network is touched only by GitHub-source `marketplace add` and `marketplace update`; path-source `add`, `list`, `remove`, and the autoupdate flag flips MUST NOT touch the network **Plans**: TBD
+6. Network is touched only by GitHub-source `marketplace add` and `marketplace update`; path-source `add`, `list`, `remove`, and the autoupdate flag flips MUST NOT touch the network
+
+**Note (2026-05-10):** PRD MU-2 and MU-3 are superseded by Phase 4 D-14 ("follow-upstream-blindly" semantics). The local marketplace clone is read-only by contract; `marketplace update` overwrites the local branch ref to the remote SHA via `forceUpdateRef + checkout` instead of `pull --ff-only`. Recorded in REQUIREMENTS.md and PROJECT.md by Plan 04-10.
+
+**Plans**: 10 plans
+
+- [ ] `04-01-PLAN.md` -- Wave 1 foundations: 4 error classes + sourcesStagingDir + sourceLogical + orchestrators/types.ts (Wave 1)
+- [ ] `04-02-PLAN.md` -- Wave 1 shared.ts: GitOps interface + DEFAULT_GIT_OPS + cascadeUnstagePlugin + resolveScopeFromState + applyAutoupdateFlip + formatErrorWithCauses (Wave 1)
+- [ ] `04-03-PLAN.md` -- Wave 1 presentation: reload-hint.ts + soft-dep.ts + marketplace-list.ts + tests (Wave 1)
+- [ ] `04-04-PLAN.md` -- Wave 1 test infrastructure: tests/helpers/git-mock.ts + 3 marketplace fixtures (Wave 1)
+- [ ] `04-05-PLAN.md` -- Wave 2 add.ts: marketplace add (github + path branches; MA-1..6, MA-8..11, MA-9 cleanup) + tests (Wave 2)
+- [ ] `04-06-PLAN.md` -- Wave 2 remove.ts + cascade.test.ts: cascade fan-out, MR-3 aggregation, MR-4 single warning, MR-5/6/7 post-state cleanup (Wave 2)
+- [ ] `04-07-PLAN.md` -- Wave 2 list.ts: read-only orchestrator (no guard, no manifest reads, no network) + tests (Wave 2)
+- [ ] `04-08-PLAN.md` -- Wave 2 update.ts: D-14 fetch+forceUpdateRef+checkout sequence, outer-guard/cascade-outside, MU-7 partition rendering + tests (Wave 2)
+- [ ] `04-09-PLAN.md` -- Wave 2 autoupdate.ts: idempotent flip via applyAutoupdateFlip, MAU-1..4 + SC-6 + tests (Wave 2)
+- [ ] `04-10-PLAN.md` -- Wave 3 documentation supersession: REQUIREMENTS.md MU-2/MU-3 strikethrough + PROJECT.md D-23 row (Wave 3)
 
 ### Phase 5: Plugin Orchestrators
 

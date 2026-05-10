@@ -1129,32 +1129,36 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`source.logical` access for both `PathSource` and `GitHubSource` in list rendering.**
    - **What we know:** `domain/source.ts:25-36` declares `PathSource.logical` but `GitHubSource` has only `raw` (and `owner`/`repo`/`ref`). V1's renderer used `source.logical` uniformly via a getter that mapped github sources to `https://github.com/<owner>/<repo>[#<ref>]`.
    - **What's unclear:** Should Phase 4 extend `GitHubSource` with a computed `logical` getter, or branch in the renderer on `kind`?
    - **Recommendation:** Add a `sourceLogical(source: ParsedSource): string` helper in `domain/source.ts` (pure function, type-narrowing on `kind`). Returns `source.raw` for path, `https://github.com/<owner>/<repo>[#<ref>]` for github. Use it in `list.ts`. This keeps `GitHubSource` immutable and avoids accessor inconsistencies.
+   - **RESOLVED:** `sourceLogical(ParsedSource): string` helper added to `domain/source.ts` -- encoded in Plan 04-01 Task 2. Pure function with type-narrowing switch on `source.kind`; returns `source.logical` for path, `https://github.com/<owner>/<repo>[#<ref>]` for github, `source.raw` for unknown (NFR-12 forward-compat). Consumed by `presentation/marketplace-list.ts` (Plan 04-03 Task 3) and indirectly by `list.ts` (Plan 04-07).
 
 2. **Reload-hint name list ordering for `marketplace remove`.**
    - **What we know:** MR-8 says "listing the dropped plugins". The cascade visits plugins in `Object.entries(record.plugins)` order (insertion order on most engines).
    - **What's unclear:** Is plugin-name alphabetical order required, or is insertion-order acceptable?
    - **Recommendation:** Sort alphabetically before passing to `reloadHint`. Deterministic output is the safer user-contract; tests can assert sorted order. PRD §6.8 RH-2 doesn't constrain order; PRD §5.1.2 MR-8 only says "listing".
+   - **RESOLVED:** Alphabetical sort applied to the cascade primitive's plugin-name return path so consumers receive deterministic order -- encoded in Plan 04-02 Task 1 (`cascadeUnstagePlugin` ordering invariant) and Plan 04-06 Task 1 (`removeMarketplace` consumes the sorted `removedSorted` list before passing to `reloadHint("drop", removedSorted)`). Tests in Plan 04-06 Task 3 assert alphabetical order in the rendered hint.
 
 3. **Whether `marketplace update` (bare, both scopes) re-reads each marketplace's manifest sequentially or batches.**
    - **What we know:** Deferred-ideas section says "Phase 4 implements sequentially". CONTEXT.md confirms.
    - **What's unclear:** None -- locked.
+   - **RESOLVED:** Already locked in CONTEXT.md -- Phase 4 implements sequentially (no change). Encoded in Plan 04-08 Task 1 (`updateAllMarketplaces` iterates `targets` with a for-loop, one `await refreshOneMarketplace` per iteration).
 
 4. **`RH-5` warning text exact phrasing for the soft-dep "install/load it ... and run /reload" suffix.**
    - **What we know:** `shared/markers.ts` only locks the prefix `pi-subagents is not loaded; ` and `pi-mcp-adapter is not loaded; `. The suffix is composed by `presentation/soft-dep.ts`.
    - **What's unclear:** Exact wording for the suffix. PRD §6.8 RH-5 says "include the canonical `<name> is not loaded; install/load it … and run /reload` warning line".
    - **Recommendation:** Phase 4 ships `<prefix>install/load it (e.g. via /pi:packages add npm:<name>) and run /reload.` -- one stable line. Snapshot test in `tests/presentation/soft-dep.test.ts`. If a future PRD revision tightens the contract, the test catches it.
+   - **RESOLVED:** Phase 4 ships the suffix `install/load it (e.g. via /pi:packages add npm:<name>) and run /reload.` -- encoded in Plan 04-03 Task 2 (`soft-dep.ts` composes `${PI_SUBAGENTS_NOT_LOADED}install/load it (e.g. via /pi:packages add npm:pi-subagents) and run /reload.` and the parallel mcp-adapter form). Byte-equality snapshot test in `tests/presentation/soft-dep.test.ts` (Plan 04-03 Task 2) covers both forms.
 
 5. **`marketplace remove` chained-cause depth for MR-3 cascade reporting.**
    - **What we know:** ES-4 says `formatErrorWithCauses` flattens to depth 5.
    - **What's unclear:** Phase 4 ships its own helper or waits for Phase 6's shared `formatErrorWithCauses`?
    - **Recommendation:** Ship a local copy in `orchestrators/marketplace/shared.ts` mirroring V1's reference (`marketplace/update.ts::formatErrorWithCauses`, lines 252-275). Phase 6 can later promote to a shared helper without changing Phase 4 behavior.
-
+   - **RESOLVED:** Phase 4-local `formatErrorWithCauses` with the depth-5 bound -- encoded in Plan 04-02 Task 2 (added to `orchestrators/marketplace/shared.ts`; signature `formatErrorWithCauses(err: unknown, maxDepth: number = 5): string`). Consumed by `remove.ts` (Plan 04-06) and `update.ts` (Plan 04-08). Phase 6 may later promote to `shared/errors.ts` without changing the Phase 4 surface.
 ______________________________________________________________________
 
 ## Environment Availability
