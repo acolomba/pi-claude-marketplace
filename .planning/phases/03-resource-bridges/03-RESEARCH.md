@@ -1553,7 +1553,7 @@ When N conflicts: `Refusing to stage agents for <mp>/<plugin>: "n1" already owne
 |------|-------|----------|
 | (a) Re-staging same owner = OK | Index has `acme.bot` owned by `mp1/acme`; prepare for `mp1/acme` re-discovers `bot.md` | Returns `staged`; `_previousEntries` has the prior row; commit removes-then-renames; index ends with one row |
 | (b) Re-staging different owner = throw | Index has `acme.bot` owned by `mp1/acme`; prepare for `mp2/acme` discovers `bot.md` | `AgentOwnershipConflictError` with `"claude-marketplace-acme-bot" already owned by mp1/acme` |
-| (c) Target path orphaned (ours basename, no index row) | A file `claude-marketplace-acme-bot.md` exists with marker, but no row in index | Treated as ours by `isOwnedAgentFile` (TRUE positive). NOT treated as foreign. The orphan is NOT cleaned by Phase 3 -- Phase 5's PI-6 cross-plugin guard catches it before prepare runs (the bridge sees no row, so partition has no `_previousEntries` and nothing flags it). **Recommendation:** Phase 3 plan adds an integration test confirming this bypass and either (i) logs a warning during prepare if a target file exists without a matching index row, or (ii) accepts the bypass as out-of-scope (PI-6 in Phase 5 is the safety net). |
+| (c) Target path orphaned (ours basename, no index row) | A file `claude-marketplace-acme-bot.md` exists with marker, but no row in index | Treated as ours by `isOwnedAgentFile` (TRUE positive). NOT treated as foreign. The orphan is NOT cleaned by Phase 3 -- Phase 5's PI-6 cross-plugin guard catches it before prepare runs (the bridge sees no row, so partition has no `_previousEntries` and nothing flags it). **RESOLVED:** Phase 3 plan adds an integration test confirming this bypass and either (i) logs a warning during prepare if a target file exists without a matching index row, or (ii) accepts the bypass as out-of-scope (PI-6 in Phase 5 is the safety net). |
 | (d) Foreign content (no `claude-marketplace-` prefix) | Index has `acme.bot` owned by `mp1/acme`; on disk a foreign file lives at the index's targetPath | `AgentForeignContentError` (refusal, not soft-fail) |
 | (e) Foreign content (prefix OK, marker missing) | Index has `acme.bot`; on disk: `claude-marketplace-acme-bot.md` but body lacks marker | `AgentForeignContentError` |
 
@@ -1699,7 +1699,7 @@ export function substituteClaudeVars(content: string, vars: ClaudePluginVars): s
 
 - SkillsBridge: in `prepareStageSkills`, after `cp -r` of the skill dir into staging, `readFile` the staged `SKILL.md`, run `substituteClaudeVars`, `writeFile` back. Only `SKILL.md` -- other files in the skill dir (resources, scripts) are copied verbatim.
 - CommandsBridge: in `prepareStageCommands`, `readFile` the source `.md` file, substitute, `writeFile` to the staged path.
-- AgentsBridge: substitution applied INSIDE `convertAgent` (V1 line ~470 `substitutePluginVars(body, ...)`). D-08 explicitly says "Agents do NOT need substitution in their bodies (no AG-* requirement)" -- BUT V1 actually substitutes in agent bodies via `substitutePluginVars`. **OPEN QUESTION → planner:** D-08 is in tension with V1 behavior. PI-10 (PRD §5.2.1) says substitution applies in "skill bodies, command files, agent bodies" -- which CONTRADICTS D-08's claim that agents don't need it. Recommendation: Phase 3 plan PRESERVES V1 behavior (substitute in agent bodies too) because PI-10 is the user-facing PRD contract; D-08's "no AG-* requirement" wording reflects that AG-* requirements don't mention it explicitly, but PI-10 requires it across all three. If planner agrees, mark D-08 as superseded by PI-10 in CONTEXT.md. **Default for RESEARCH.md: substitute in agent bodies, matching V1.**
+- AgentsBridge: substitution applied INSIDE `convertAgent` (V1 line ~470 `substitutePluginVars(body, ...)`). D-08 explicitly says "Agents do NOT need substitution in their bodies (no AG-* requirement)" -- BUT V1 actually substitutes in agent bodies via `substitutePluginVars`. **OPEN QUESTION → planner:** D-08 is in tension with V1 behavior. PI-10 (PRD §5.2.1) says substitution applies in "skill bodies, command files, agent bodies" -- which CONTRADICTS D-08's claim that agents don't need it. RESOLVED: Phase 3 plan PRESERVES V1 behavior (substitute in agent bodies too) because PI-10 is the user-facing PRD contract; D-08's "no AG-* requirement" wording reflects that AG-* requirements don't mention it explicitly, but PI-10 requires it across all three. If planner agrees, mark D-08 as superseded by PI-10 in CONTEXT.md. **Default for RESEARCH.md: substitute in agent bodies, matching V1.**
 
 ### Resolved values
 
@@ -1957,7 +1957,7 @@ Framework install: NONE (`node:test` is built-in, Phase 1 D-02 already dropped `
 4. **Putting `previousNames` discovery in the bridge.** Bridges shouldn't read `state.json` -- they accept `previousNames: readonly string[]` as input. Phase 5's orchestrator reads state and passes the names. Otherwise the bridge becomes coupled to `persistence/state-io.ts` and the unit-test setup gets ugly.
 5. **Using `fs.cp({recursive:true})` to commit a staging tree.** `fs.cp` is OK for prepare (copying source skill dir into staging tmp), but the commit-side rename of staging-to-target MUST be `fs.rename`, not `fs.cp + fs.rm`. `fs.rename` is atomic on same FS; `cp+rm` is not.
 6. **Forgetting `assertPathInside` on staged paths.** Every name-derived path -- including the `<staging>/<generatedName>` path -- must go through `assertPathInside` to defend against `generatedName === "../escape"`. The Phase 2 generators (`generatedSkillName` etc.) already call `assertSafeName`, but the `path.join` result must still be `assertPathInside`'d (defense in depth).
-7. **Trusting `fs.cp` on symlinks.** A skill source dir might contain symlinks (a malicious or careless author). `fs.cp({recursive: true, dereference: false})` is the default and follows symlinks -- which COULD escape. Phase 3 SHOULD pass `dereference: false, verbatimSymlinks: true` so symlinks are copied as symlinks, NOT resolved. **OPEN QUESTION → planner:** how does Phase 3 handle symlinks inside a skill dir? Phase 1 D-14 refuses ALL symlinks via `assertPathInside` walking parents -- but that's at `assertPathInside` time on the destination, not on the COPIED source content. Recommendation: walk the source skill dir with `lstat` before `cp`, refuse if any inner path is a symlink. (V1 doesn't do this -- gap in V1.)
+7. **Trusting `fs.cp` on symlinks.** A skill source dir might contain symlinks (a malicious or careless author). `fs.cp({recursive: true, dereference: false})` is the default and follows symlinks -- which COULD escape. Phase 3 SHOULD pass `dereference: false, verbatimSymlinks: true` so symlinks are copied as symlinks, NOT resolved. **OPEN QUESTION → planner:** how does Phase 3 handle symlinks inside a skill dir? Phase 1 D-14 refuses ALL symlinks via `assertPathInside` walking parents -- but that's at `assertPathInside` time on the destination, not on the COPIED source content. RESOLVED: walk the source skill dir with `lstat` before `cp`, refuse if any inner path is a symlink. (V1 doesn't do this -- gap in V1.)
 8. **Renaming `agents-index.json` field from `agents` to `entries`.** V1 stored entries under field `agents`. Renaming breaks every existing user's wire shape. Phase 3 MUST preserve the V1 field name `agents` in the schema; rename only at hypothetical schemaVersion 2.
 9. **Using `process.cwd()` inside the bridge.** V1's `loadEffectiveServerNames(cwd)` takes cwd as a param. Phase 3 MUST do the same -- pass cwd into the bridge via input. Calling `process.cwd()` inside a bridge breaks unit testability (tests would need to chdir, breaking parallelism).
 10. **Computing `pluginDataDir` differently in the bridge vs. orchestrator.** The bridge's substituted body has the dataDir path embedded as a literal string. If Phase 3's bridge computes it as `<extensionRoot>/data/<mp>/<plugin>/` and Phase 5's orchestrator computes it as `<scopeRoot>/claude-marketplace/data/<mp>/<plugin>/` -- well, those are identical strings -- but if a future refactor moves dataDir, BOTH must update or substitution breaks. **Mitigation:** Phase 3's bridge accepts `pluginDataDir: string` as input -- the orchestrator computes it once via `locations.pluginDataDir(mp, plugin)` and passes it down.
@@ -2201,7 +2201,7 @@ export class AgentOwnershipConflictError extends Error {
 | Secrets/env vars | None | None |
 | Build artifacts | None (Phase 1 already hooked tsx-removal + `node --test` direct) | None |
 
-**The one open compatibility question:** the on-disk `agents-index.json` field name. V1 stored entries under `agents:`; Phase 3 might be tempted to rename to `entries:`. **Recommendation:** preserve `agents:` for byte-compatible round-trip. (Logged in OPEN QUESTIONS for the planner.)
+**The one open compatibility question:** the on-disk `agents-index.json` field name. V1 stored entries under `agents:`; Phase 3 might be tempted to rename to `entries:`. **RESOLVED:** preserve `agents:` for byte-compatible round-trip. (Logged in OPEN QUESTIONS for the planner.)
 
 ---
 
@@ -2374,7 +2374,7 @@ const mcpPrep = await mcp.prepareStageMcpServers({
 | # | Claim | Section | Risk if Wrong |
 |---|-------|---------|---------------|
 | A1 | V1 `agents-index.json` field is `agents:`; Phase 3 preserves the field name | persistence/agents-index-schema | If renamed to `entries:`, every existing user's V1 install record becomes invalid; data migration required |
-| A2 | `${CLAUDE_PLUGIN_DATA}` substitution applies to agent bodies (matches V1 + PI-10), despite D-08 wording | Body-Placeholder Substitution | If D-08 strict reading is correct, agent bodies that reference `${CLAUDE_PLUGIN_DATA}` won't work. Recommendation: planner confirms PI-10 wins over D-08 wording. |
+| A2 | `${CLAUDE_PLUGIN_DATA}` substitution applies to agent bodies (matches V1 + PI-10), despite D-08 wording | Body-Placeholder Substitution | If D-08 strict reading is correct, agent bodies that reference `${CLAUDE_PLUGIN_DATA}` won't work. RESOLVED: planner confirms PI-10 wins over D-08 wording. |
 | A3 | Skills source directory MAY contain symlinks; bridge needs to refuse them via lstat-walk before `cp` | Pitfalls #7 | If accepted, a malicious plugin's skill dir with a symlink to `/etc/passwd` could land in `<extensionRoot>/skills-staging/`. V1 has this gap. |
 | A4 | `<scopeRoot>/agents/` and `<extensionRoot>/agents-staging/` are guaranteed-same-FS | Atomicity / EXDEV Risk | If a user mounts `<scopeRoot>/agents/` on a separate FS (e.g., NFS), `rename` fails with EXDEV. Documented as outside supported topology. |
 | A5 | The `_claudeMarketplace` marker is per-server, not per-doc | bridges/mcp/marker.ts | If the marker shape changes to per-doc, two plugins can't coexist in same `mcp.json` without unstage stomping each other. V1 chose per-server; Phase 3 preserves. |
@@ -2383,37 +2383,37 @@ const mcpPrep = await mcp.prepareStageMcpServers({
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`agents-index.json` field name compatibility (A1).**
    - What we know: V1 stores entries under `agents:`. Phase 3 D-07 introduces a TypeBox schema.
    - What's unclear: Does the schema preserve `agents:` field name or rename to `entries:`?
-   - Recommendation: PRESERVE `agents:` for byte-compat. Rename only at hypothetical schemaVersion 2. Planner verifies in 03-01-PLAN.
+   - RESOLVED: PRESERVE `agents:` for byte-compat. Rename only at hypothetical schemaVersion 2. Planner verifies in 03-01-PLAN.
 
 2. **Variable substitution in agent bodies (A2; D-08 vs PI-10).**
    - What we know: V1 substitutes in agent bodies. PRD §5.2.1 PI-10 says substitution applies in skill bodies, command files, AND agent bodies. CONTEXT.md D-08 says "Agents do NOT need substitution".
    - What's unclear: Which prevails -- PRD PI-10 or CONTEXT.md D-08?
-   - Recommendation: PI-10 prevails (PRD is the spec; D-08's wording reflects that AG-* requirements don't list it but PI-10 does). Phase 3 plan substitutes in agent bodies -- matches V1.
+   - RESOLVED: PI-10 prevails (PRD is the spec; D-08's wording reflects that AG-* requirements don't list it but PI-10 does). Phase 3 plan substitutes in agent bodies -- matches V1.
 
 3. **Symlink handling inside skill source dirs (A3).**
    - What we know: Phase 1 D-14 refuses ALL symlinks via `assertPathInside`. But that protects the BRIDGE'S target paths, not the source dir's CONTENTS being copied.
    - What's unclear: Should `bridges/skills/prepare.ts` walk the source skill dir with `lstat` and refuse if any inner path is a symlink, before `cp`?
-   - Recommendation: YES -- walk + refuse. Add to Phase 3 plan as a hardening over V1 (V1 has this gap).
+   - RESOLVED: YES -- walk + refuse. Add to Phase 3 plan as a hardening over V1 (V1 has this gap).
 
 4. **Skills directory hardening: dotfiles, control-char names.**
    - What we know: V1 calls `assertSafeName(entry.name, ...)` which throws on path separators + control chars but DOES allow dotfiles (e.g., `.git`).
    - What's unclear: Should `bridges/skills/discover.ts` skip directories starting with `.` (dotfiles)?
-   - Recommendation: skip dotfiles by convention (a `.git` subdir under `skills/` is probably an artifact of a misplaced `.gitignore`, not a real skill). Phase 3 plan adds this.
+   - RESOLVED: skip dotfiles by convention (a `.git` subdir under `skills/` is probably an artifact of a misplaced `.gitignore`, not a real skill). Phase 3 plan adds this.
 
 5. **`bridges/mcp/parse.ts` location vs Phase 2's `domain/components/mcp.ts`.**
    - What we know: CONTEXT.md "Phase 2 carry-forward" mentions `domain/components/mcp.ts` -- which suggests Phase 2 may already ship the schema/validator. V1's `mcp/parse.ts` does both shape validation AND precedence chain resolution.
    - What's unclear: Does `parseMcpServers` (shape) live in `domain/components/mcp.ts` (Phase 2) and `resolvePluginMcpServers` (precedence) in `bridges/mcp/parse.ts` (Phase 3)? Or both in one file?
-   - Recommendation: split. Schema-validation primitive in Phase 2 `domain/components/mcp.ts`; precedence-chain orchestration in Phase 3 `bridges/mcp/parse.ts`. Planner verifies Phase 2's actual shipped surface in 03-01-PLAN.
+   - RESOLVED: split. Schema-validation primitive in Phase 2 `domain/components/mcp.ts`; precedence-chain orchestration in Phase 3 `bridges/mcp/parse.ts`. Planner verifies Phase 2's actual shipped surface in 03-01-PLAN.
 
 6. **Phase 5 cross-plugin guard (PI-6) ordering vs bridge prepare.**
    - What we know: D-05 says cross-bridge name guard runs in Phase 5 BEFORE any bridge's prepare.
    - What's unclear: How does Phase 5 know what generated names a bridge will produce without running prepare? Answer: Phase 5 calls `discoverPluginSkills` / `discoverPluginCommands` / `discoverPluginAgents` to get the generated-name list (which is pure, no disk writes), runs PI-6 cross-check, THEN calls prepare on each bridge.
-   - Recommendation: Phase 3 EXPORTS the discovery functions as standalone (not just internal to prepare) so Phase 5 can call them without prepare's side effects. RESEARCH.md treats `discoverPluginSkills` etc. as already public; planner confirms.
+   - RESOLVED: Phase 3 EXPORTS the discovery functions as standalone (not just internal to prepare) so Phase 5 can call them without prepare's side effects. RESEARCH.md treats `discoverPluginSkills` etc. as already public; planner confirms.
 
 ---
 
