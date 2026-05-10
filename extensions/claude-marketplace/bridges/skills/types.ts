@@ -1,0 +1,100 @@
+// bridges/skills/types.ts
+//
+// Type contracts for the skills bridge (Phase 3 Plan 03-03).
+//
+// Discriminated union `PreparedSkillsStaging = noop | staged` shape carries
+// V1's prepare/commit/abort discipline (V1 `agent/stage.ts` lines 322-468) but
+// localizes the staging dir to the bridge per D-04 (per-skill atomic dir
+// rename at commit instead of orchestrator-level tree rename).
+//
+// W-05 fix: StageSkillsCommitResult exposes `recorded: StagedSkillRecord[]`
+// so Phase 5 orchestrators can populate state.json without re-discovering
+// skills (CONTEXT.md "Integration Points" line 192).
+
+import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
+import type { ScopedLocations } from "../../persistence/locations.ts";
+
+/** A skill enumerated by `discoverPluginSkills` (one entry per source skill dir). */
+export interface DiscoveredSkill {
+  /** Directory name in the source plugin (e.g. `acme-knowledge`, `helper`). */
+  readonly sourceName: string;
+  /** `<plugin>-<skill>` with SK-2 elision applied (e.g. `acme-knowledge`, `acme-helper`). */
+  readonly generatedName: string;
+  /** Absolute path to the source skill directory. */
+  readonly skillDir: string;
+}
+
+/** Input bundle for `prepareStageSkills`. */
+export interface StageSkillsInput {
+  readonly locations: ScopedLocations;
+  readonly marketplaceName: string;
+  readonly pluginName: string;
+  readonly pluginRoot: string;
+  readonly pluginDataDir: string;
+  readonly resolved: ResolvedPluginInstallable;
+  /**
+   * Names from a previous install of this plugin -- their target dirs are
+   * deleted before commit-time renames so re-stages cleanly replace prior
+   * staged content. Empty / absent on fresh installs.
+   */
+  readonly previousSkillNames?: readonly string[];
+}
+
+/**
+ * One row in `StageSkillsCommitResult.recorded` -- the source/target pair the
+ * Phase 5 orchestrator reads to populate state.json.
+ */
+export interface StagedSkillRecord {
+  readonly generatedName: string;
+  /** Absolute source dir under the resolved plugin. */
+  readonly sourcePath: string;
+  /** Absolute target dir under `<extensionRoot>/resources/skills/<name>/`. */
+  readonly targetPath: string;
+}
+
+/** Result returned by `commitPreparedSkills` and embedded in the noop variant. */
+export interface StageSkillsCommitResult {
+  readonly stagedNames: readonly string[];
+  /** W-05: Phase 5 reads `recorded` to populate state.json. */
+  readonly recorded: readonly StagedSkillRecord[];
+  readonly warnings: readonly string[];
+}
+
+/** `prepareStageSkills` returns a discriminated union; orchestrators MUST narrow on `kind`. */
+export type PreparedSkillsStaging = PreparedSkillsNoop | PreparedSkillsStaged;
+
+/** No-op variant: no skills discovered AND no previous-name cleanup needed. */
+export interface PreparedSkillsNoop {
+  readonly kind: "noop";
+  /** `recorded`/`stagedNames`/`warnings` are all empty for the noop. */
+  readonly result: StageSkillsCommitResult;
+}
+
+/**
+ * Staged variant: a per-skill staging directory was materialized; the
+ * orchestrator MUST call either `commitPreparedSkills` or
+ * `abortPreparedSkills` exactly once. Internal `_`-prefixed fields are NOT
+ * re-exported from the barrel (D-01 opaque-handle discipline).
+ */
+export interface PreparedSkillsStaged {
+  readonly kind: "staged";
+  readonly locations: ScopedLocations;
+  readonly stagingRoot: string;
+  readonly result: StageSkillsCommitResult;
+  /** Internal -- orchestrators MUST NOT read these. */
+  readonly _previousNames: readonly string[];
+  /** Internal -- per-skill staging-to-target rename pairs for commit. */
+  readonly _renamePairs: readonly { from: string; to: string }[];
+}
+
+/** Input bundle for `unstagePluginSkills`. */
+export interface UnstageSkillsInput {
+  readonly locations: ScopedLocations;
+  readonly previousSkillNames: readonly string[];
+}
+
+/** Result of `unstagePluginSkills`. */
+export interface UnstageSkillsResult {
+  readonly removedNames: readonly string[];
+  readonly warnings: readonly string[];
+}
