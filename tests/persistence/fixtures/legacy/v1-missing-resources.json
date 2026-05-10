@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "marketplaces": {
+    "gamma": {
+      "name": "gamma",
+      "scope": "user",
+      "source": { "kind": "path", "raw": "./gamma", "logical": "./gamma" },
+      "addedFromCwd": "/some/cwd",
+      "manifestPath": "/abs/gamma/.claude-plugin/marketplace.json",
+      "marketplaceRoot": "/abs/gamma",
+      "plugins": {
+        "p2": {
+          "version": "0.1",
+          "resolvedSource": "/abs/p2",
+          "compatibility": {
+            "installable": true,
+            "notes": [],
+            "supported": [],
+            "unsupported": []
+          },
+          "resources": {
+            "skills": [],
+            "prompts": []
+          },
+          "installedAt": "2025-01-01T00:00:00.000Z",
+          "updatedAt": "2025-01-01T00:00:00.000Z"
+        }
+      }
+    }
+  }
+}
