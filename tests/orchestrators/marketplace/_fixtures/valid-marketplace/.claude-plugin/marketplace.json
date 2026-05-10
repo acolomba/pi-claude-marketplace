@@ -1,0 +1,12 @@
+{
+  "name": "valid-marketplace",
+  "owner": { "name": "Phase 4 Tests" },
+  "plugins": [
+    {
+      "name": "hello",
+      "source": "./plugins/hello",
+      "description": "Hello plugin (test fixture)",
+      "version": "1.0.0"
+    }
+  ]
+}

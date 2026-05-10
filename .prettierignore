@@ -1,1 +1,4 @@
 .claude/
+
+# Intentionally-malformed JSON fixture used by Phase 4 MA-9 cleanup tests.
+tests/orchestrators/marketplace/_fixtures/invalid-manifest/.claude-plugin/marketplace.json

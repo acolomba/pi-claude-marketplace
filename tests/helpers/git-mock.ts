@@ -83,6 +83,7 @@ export function makeMockGitOps(initial?: Partial<MockGitState>): MockGitOpsHandl
       if (state.cloneThrows !== undefined) {
         throw state.cloneThrows;
       }
+
       await mkdir(opts.dir, { recursive: true });
       if (state.fixtureSourceDir !== undefined) {
         // Copy fixture contents into the requested clone dir. The
@@ -90,6 +91,7 @@ export function makeMockGitOps(initial?: Partial<MockGitState>): MockGitOpsHandl
         // exactly as it would after a real clone.
         await cp(state.fixtureSourceDir, opts.dir, { recursive: true });
       }
+
       // Initialize a default branch ref so subsequent resolveRef
       // queries return a deterministic SHA (tests can override
       // before clone if they want a specific value).
@@ -105,9 +107,11 @@ export function makeMockGitOps(initial?: Partial<MockGitState>): MockGitOpsHandl
       if (state.fetchThrows !== undefined) {
         throw state.fetchThrows;
       }
+
       // No-op: real fetch refreshes remote refs; tests mutate
       // state.remoteRefs directly between fetch and forceUpdateRef
       // to simulate the upstream change.
+      await Promise.resolve();
     },
 
     async forceUpdateRef(opts): Promise<void> {
@@ -121,6 +125,8 @@ export function makeMockGitOps(initial?: Partial<MockGitState>): MockGitOpsHandl
       if (state.checkoutThrows !== undefined) {
         throw state.checkoutThrows;
       }
+
+      await Promise.resolve();
       // Resolve the ref against local then remote. If neither has it,
       // throw -- this mirrors isomorphic-git's behavior for a
       // SHA-no-longer-exists case (D-14 detached-HEAD failure path).
@@ -134,31 +140,38 @@ export function makeMockGitOps(initial?: Partial<MockGitState>): MockGitOpsHandl
           state.head = opts.ref;
           return;
         }
+
         throw new Error(`mock checkout: unknown ref "${opts.ref}"`);
       }
+
       state.head = resolved;
     },
 
     async resolveRef(opts): Promise<string> {
       state.resolveRefCalls.push({ ...opts });
+      await Promise.resolve();
       const fromLocal = state.localRefs[opts.ref];
       if (fromLocal !== undefined) {
         return fromLocal;
       }
+
       const fromRemote = state.remoteRefs[opts.ref];
       if (fromRemote !== undefined) {
         return fromRemote;
       }
+
       // HEAD: return current head SHA.
       if (opts.ref === "HEAD") {
         return state.head;
       }
+
       if (opts.ref === "refs/remotes/origin/HEAD") {
         const fallback = state.remoteRefs["refs/remotes/origin/main"];
         if (fallback !== undefined) {
           return fallback;
         }
       }
+
       throw new Error(`mock resolveRef: unknown ref "${opts.ref}"`);
     },
   };

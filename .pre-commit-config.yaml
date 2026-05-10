@@ -18,6 +18,7 @@ repos:
         args: ["--maxkb=64"]
         exclude: ^(package-lock\.json|\.planning/)
       - id: check-json
+        exclude: ^tests/orchestrators/marketplace/_fixtures/invalid-manifest/
       - id: check-yaml
       - id: check-ast
       - id: sort-simple-yaml
