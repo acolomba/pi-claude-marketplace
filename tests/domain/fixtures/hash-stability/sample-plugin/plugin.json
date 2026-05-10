@@ -1,0 +1,5 @@
+{
+  "name": "sample-plugin",
+  "version": "1.0.0",
+  "description": "Hash-stability fixture for tests/domain/version.test.ts"
+}

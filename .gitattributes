@@ -9,3 +9,9 @@
 *.mp4 binary
 *.png binary
 *.webp binary
+
+# hash-stability fixtures: treat as binary so git does NOT normalize line
+# endings (CRLF/LF) or BOM bytes. The whole point of these fixtures is to
+# round-trip byte-for-byte through clone/checkout so the PI-7 snapshot
+# hash stays stable across platforms.
+tests/domain/fixtures/hash-stability/** -text

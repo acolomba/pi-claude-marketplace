@@ -1,4 +1,4 @@
-exclude: ^\.claude/
+exclude: ^(\.claude/|tests/domain/fixtures/hash-stability/)
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
