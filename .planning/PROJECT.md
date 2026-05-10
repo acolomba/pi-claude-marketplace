@@ -130,4 +130,6 @@ This document evolves at phase transitions and milestone boundaries.
 
 ______________________________________________________________________
 
+*Last updated: 2026-05-10 -- Phase 2 (Domain Core & Persistence Primitives) complete: hand-written source parser with discriminated `ParsedSource` union, TypeBox 1.x JIT-compiled manifest schemas (marketplace + plugin + mcp), `assertSafeName` + 3 generators, `computeHashVersion` with PI-7 12-hex pinned snapshot (`hash-743f35130ec4`), `ScopedLocations` brand bundle, `state.json` schema/IO + legacy migration with single sanctioned `console.warn`, `installable: true | false` discriminated resolver (NFR-7) with `resolveStrict` + `resolveLoose`, transaction primitives (`runPhases` ledger + `formatRollbackError` + `withStateGuard`). 188-test suite, 5/5 must-haves verified.*
+
 *Last updated: 2026-05-09 -- Phase 1 (Foundations & Toolchain) complete: atomic-IO primitives, symlink-aware path safety, ES-5 marker constants, output-channel discipline, ESM baseline, isomorphic-git wrapper, 9-folder skeleton, 30-test architecture+unit suite, Node 24 CI workflow.*
