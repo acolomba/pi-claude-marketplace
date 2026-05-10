@@ -14,29 +14,40 @@
  *   - not "." or ".."
  *   - no path separators ("/" or "\\")
  *   - no ASCII control chars (charCode < 0x20 or === 0x7f)
+ *
+ * The optional `label` argument is prepended to error messages
+ * (e.g. `assertSafeName(skill.generatedName, "generated skill name")` -->
+ * `generated skill name "..." must not contain path separators.`). When
+ * omitted, messages use the legacy capitalized "Name" form for
+ * backward-compatibility with Phase 2 call sites and tests.
  */
-export function assertSafeName(name: string): void {
+export function assertSafeName(name: string, label?: string): void {
+  // When `label` is provided, prepend it (lowercase form for sentence-flow);
+  // when omitted, fall back to "Name" so legacy single-arg call sites and
+  // their tests keep matching the same regexes.
+  const prefix = label !== undefined ? `${label} ` : "Name ";
+
   if (typeof name !== "string") {
-    throw new Error(`Name must be a string (got ${typeof name}).`);
+    throw new Error(`${prefix}must be a string (got ${typeof name}).`);
   }
 
   if (name.trim() === "") {
-    throw new Error("Name must be a non-empty string.");
+    throw new Error(`${prefix}must be a non-empty string.`);
   }
 
   if (name === "." || name === "..") {
-    throw new Error(`Name must not be "." or "..".`);
+    throw new Error(`${prefix}must not be "." or "..".`);
   }
 
   if (name.includes("/") || name.includes("\\")) {
-    throw new Error(`Name "${name}" must not contain path separators.`);
+    throw new Error(`${prefix}"${name}" must not contain path separators.`);
   }
 
   for (let i = 0; i < name.length; i++) {
     const code = name.charCodeAt(i);
 
     if (code < 0x20 || code === 0x7f) {
-      throw new Error(`Name "${name}" must not contain ASCII control characters.`);
+      throw new Error(`${prefix}"${name}" must not contain ASCII control characters.`);
     }
   }
 }

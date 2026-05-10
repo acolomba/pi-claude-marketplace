@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "acme-server": {
+      "command": "node",
+      "args": ["server.js"]
+    }
+  }
+}

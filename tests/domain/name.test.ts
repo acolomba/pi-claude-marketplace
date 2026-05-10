@@ -151,3 +151,41 @@ test("AG-1 generatedAgentName always starts with claude-marketplace- (AG-5 marke
   const result = generatedAgentName("acme", "bot");
   assert.ok(result.startsWith("claude-marketplace-"));
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// B-02: assertSafeName accepts an optional `label` argument used in error
+// messages (Phase 3 bridges pass it for human-readable context).
+// ──────────────────────────────────────────────────────────────────────────
+
+test("B-02 assertSafeName(name) single-arg call still accepts valid names (back-compat)", () => {
+  assert.doesNotThrow(() => {
+    assertSafeName("foo");
+  });
+});
+
+test("B-02 assertSafeName(name, label) prepends label to error message", () => {
+  assert.throws(() => {
+    assertSafeName("../bad", "skill name");
+  }, /skill name "\.\.\/bad" must not contain path separators/);
+});
+
+test("B-02 assertSafeName(name, label) labels empty-string error", () => {
+  assert.throws(() => {
+    assertSafeName("", "generated command name");
+  }, /generated command name must be a non-empty string/);
+});
+
+test("B-02 assertSafeName(name, label) labels control-char error", () => {
+  assert.throws(() => {
+    assertSafeName("foo\tbar", "agent name");
+  }, /agent name "foo\tbar" must not contain ASCII control characters/);
+});
+
+test("B-02 assertSafeName(name) without label keeps legacy message form", () => {
+  // Regression guard: the older Phase 2 message form used "Name " as the
+  // prefix. Existing tests rely on this exact text; verify it survives the
+  // optional-label extension.
+  assert.throws(() => {
+    assertSafeName("");
+  }, /Name must be a non-empty string/);
+});

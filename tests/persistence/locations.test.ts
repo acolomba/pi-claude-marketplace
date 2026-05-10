@@ -97,3 +97,91 @@ test("SC-7 sourceCloneDir('mp') happy path returns under sourcesDir", async () =
   assert.ok(got.startsWith(loc.sourcesDir));
   assert.ok(got.endsWith("mp"));
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// Phase 3 (Plan 03-01): bridge-target paths added to ScopedLocations.
+// agentsIndexPath, skillsStagingDir, commandsStagingDir, skillsTargetDir,
+// promptsTargetDir.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("D-07 locationsFor('user') sets agentsIndexPath to <extensionRoot>/agents-index.json", () => {
+  const loc = locationsFor("user", "/anywhere");
+  assert.equal(loc.agentsIndexPath, path.join(loc.extensionRoot, "agents-index.json"));
+});
+
+test("D-07 locationsFor('project') sets agentsIndexPath under <extensionRoot>", () => {
+  const loc = locationsFor("project", "/my/proj");
+  assert.equal(
+    loc.agentsIndexPath,
+    path.join("/my/proj", ".pi", "claude-marketplace", "agents-index.json"),
+  );
+});
+
+test("D-04 locationsFor('project') sets skillsStagingDir to <extensionRoot>/skills-staging", () => {
+  const loc = locationsFor("project", "/my/proj");
+  assert.equal(
+    loc.skillsStagingDir,
+    path.join("/my/proj", ".pi", "claude-marketplace", "skills-staging"),
+  );
+});
+
+test("D-04 locationsFor('project') sets commandsStagingDir to <extensionRoot>/commands-staging", () => {
+  const loc = locationsFor("project", "/my/proj");
+  assert.equal(
+    loc.commandsStagingDir,
+    path.join("/my/proj", ".pi", "claude-marketplace", "commands-staging"),
+  );
+});
+
+test("SK-1 locationsFor('project') sets skillsTargetDir to <extensionRoot>/resources/skills", () => {
+  const loc = locationsFor("project", "/my/proj");
+  assert.equal(
+    loc.skillsTargetDir,
+    path.join("/my/proj", ".pi", "claude-marketplace", "resources", "skills"),
+  );
+});
+
+test("CM-1 locationsFor('project') sets promptsTargetDir to <extensionRoot>/resources/prompts", () => {
+  const loc = locationsFor("project", "/my/proj");
+  assert.equal(
+    loc.promptsTargetDir,
+    path.join("/my/proj", ".pi", "claude-marketplace", "resources", "prompts"),
+  );
+});
+
+test("SC-3 ScopedLocations new bridge-target fields are not writable (frozen)", () => {
+  const loc = locationsFor("user", "/x") as ScopedLocations & {
+    agentsIndexPath: string;
+    skillsStagingDir: string;
+    commandsStagingDir: string;
+    skillsTargetDir: string;
+    promptsTargetDir: string;
+  };
+  assert.throws(() => {
+    loc.agentsIndexPath = "/tmp/evil";
+  }, /Cannot assign to read only property|object is not extensible/);
+  assert.throws(() => {
+    loc.skillsStagingDir = "/tmp/evil";
+  }, /Cannot assign to read only property|object is not extensible/);
+  assert.throws(() => {
+    loc.commandsStagingDir = "/tmp/evil";
+  }, /Cannot assign to read only property|object is not extensible/);
+  assert.throws(() => {
+    loc.skillsTargetDir = "/tmp/evil";
+  }, /Cannot assign to read only property|object is not extensible/);
+  assert.throws(() => {
+    loc.promptsTargetDir = "/tmp/evil";
+  }, /Cannot assign to read only property|object is not extensible/);
+});
+
+test("Phase 3 bridge-target dirs are all under extensionRoot (defense-in-depth)", () => {
+  const loc = locationsFor("project", "/p");
+  // String-prefix containment check: every bridge target lives under
+  // extensionRoot. Bridges still call assertPathInside before writing leaf
+  // paths under these dirs.
+  assert.ok(loc.agentsIndexPath.startsWith(loc.extensionRoot));
+  assert.ok(loc.skillsStagingDir.startsWith(loc.extensionRoot));
+  assert.ok(loc.commandsStagingDir.startsWith(loc.extensionRoot));
+  assert.ok(loc.skillsTargetDir.startsWith(loc.extensionRoot));
+  assert.ok(loc.promptsTargetDir.startsWith(loc.extensionRoot));
+});

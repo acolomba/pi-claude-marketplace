@@ -47,8 +47,18 @@ export interface ScopedLocations {
   readonly agentsDir: string;
   /** `<extensionRoot>/agents-staging/` -- pre-rename staging tree. */
   readonly agentsStagingDir: string;
+  /** `<extensionRoot>/agents-index.json` -- on-disk agent ownership index (D-07). */
+  readonly agentsIndexPath: string;
   /** `<scopeRoot>/mcp.json` -- MCP server registry (SC-2). */
   readonly mcpJsonPath: string;
+  /** `<extensionRoot>/skills-staging/` -- per-skill atomic-rename source (Phase 3 D-04). */
+  readonly skillsStagingDir: string;
+  /** `<extensionRoot>/commands-staging/` -- per-command atomic-rename source. */
+  readonly commandsStagingDir: string;
+  /** `<extensionRoot>/resources/skills/` -- per-skill atomic-rename target (SK-1). */
+  readonly skillsTargetDir: string;
+  /** `<extensionRoot>/resources/prompts/` -- per-command atomic-rename target (CM-1). */
+  readonly promptsTargetDir: string;
   /** `<extensionRoot>/data/` -- per-marketplace, per-plugin cache root. */
   readonly dataRoot: string;
   /** `<extensionRoot>/sources/` -- where GitHub clones land. */
@@ -81,9 +91,24 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
   const stateJsonPath = path.join(extensionRoot, "state.json");
   const agentsDir = path.join(scopeRoot, "agents");
   const agentsStagingDir = path.join(extensionRoot, "agents-staging");
+  const agentsIndexPath = path.join(extensionRoot, "agents-index.json");
   const mcpJsonPath = path.join(scopeRoot, "mcp.json");
+  const skillsStagingDir = path.join(extensionRoot, "skills-staging");
+  const commandsStagingDir = path.join(extensionRoot, "commands-staging");
+  const skillsTargetDir = path.join(extensionRoot, "resources", "skills");
+  const promptsTargetDir = path.join(extensionRoot, "resources", "prompts");
   const dataRoot = path.join(extensionRoot, "data");
   const sourcesDir = path.join(extensionRoot, "sources");
+
+  // T-03-04 disposition: every new field above is constructed from
+  // `extensionRoot` joined to a HARD-CODED suffix; no untrusted name
+  // components participate. Per W-10 / B-04, the bridges that join leaf
+  // names onto these dirs MUST call assertPathInside on the resulting
+  // leaf -- enforced in their plans (03-03 / 03-04 / 03-05 / 03-06).
+  // We do not call assertPathInside here because (a) it is async and
+  // locationsFor is sync (callers like loadState/saveState rely on the
+  // sync shape), and (b) the suffix-only construction makes a containment
+  // escape impossible at this layer.
 
   const bundle: ScopedLocations = Object.freeze({
     [SCOPED_LOCATIONS_BRAND]: true as const,
@@ -93,7 +118,12 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
     stateJsonPath,
     agentsDir,
     agentsStagingDir,
+    agentsIndexPath,
     mcpJsonPath,
+    skillsStagingDir,
+    commandsStagingDir,
+    skillsTargetDir,
+    promptsTargetDir,
     dataRoot,
     sourcesDir,
 
