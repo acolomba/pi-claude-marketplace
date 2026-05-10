@@ -1,0 +1,307 @@
+import assert from "node:assert/strict";
+import { cp, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import test from "node:test";
+
+import { addMarketplace } from "../../../extensions/claude-marketplace/orchestrators/marketplace/add.ts";
+import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
+import { loadState } from "../../../extensions/claude-marketplace/persistence/state-io.ts";
+import {
+  MarketplaceDuplicateNameError,
+  StaleSourceCloneError,
+} from "../../../extensions/claude-marketplace/shared/errors.ts";
+import { pathExists } from "../../../extensions/claude-marketplace/shared/fs-utils.ts";
+import { fixtureMarketplaceDir, makeMockGitOps } from "../../helpers/git-mock.ts";
+
+import type { ScopedLocations } from "../../../extensions/claude-marketplace/persistence/locations.ts";
+import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+
+interface NotifyRecord {
+  message: string;
+  severity?: string;
+}
+
+function makeCtx(): { ctx: ExtensionContext; notifications: NotifyRecord[] } {
+  const notifications: NotifyRecord[] = [];
+  const ctx = {
+    ui: {
+      notify: (msg: string, sev?: string): void => {
+        notifications.push(sev === undefined ? { message: msg } : { message: msg, severity: sev });
+      },
+    },
+    pi: { getAllTools: (): unknown[] => [] },
+  } as unknown as ExtensionContext;
+  return { ctx, notifications };
+}
+
+async function withTmpScope<T>(
+  fn: (env: { cwd: string; locations: ScopedLocations }) => Promise<T>,
+): Promise<T> {
+  const cwd = await mkdtemp(path.join(tmpdir(), "mp-add-"));
+  const locations = locationsFor("project", cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  try {
+    return await fn({ cwd, locations });
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+}
+
+test("MA-5 + MA-11: github source clones, validates, renames, mutates state, emits exact success message; NO reload hint", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    const { ctx, notifications } = makeCtx();
+    const { gitOps, state } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    await addMarketplace({
+      ctx,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+
+    // gitOps.clone called exactly once with correct URL.
+    assert.equal(state.cloneCalls.length, 1);
+    const cloneCall = state.cloneCalls[0];
+    assert.ok(cloneCall);
+    assert.equal(cloneCall.url, "https://github.com/anthropics/claude-plugins-official.git");
+
+    // State has the recorded marketplace under the manifest's `name` field
+    // (the fixture's `name` is "valid-marketplace").
+    const persisted = await loadState(locations.extensionRoot);
+    assert.ok("valid-marketplace" in persisted.marketplaces);
+    const recorded = persisted.marketplaces["valid-marketplace"];
+    assert.ok(recorded);
+    assert.equal(recorded.scope, "project");
+
+    // Exactly one notification, MA-11 byte-for-byte; default severity (no `severity` key).
+    assert.equal(notifications.length, 1);
+    const note = notifications[0];
+    assert.ok(note);
+    assert.equal(note.message, 'Added marketplace "valid-marketplace" in project scope.');
+    assert.equal(note.severity, undefined);
+    // RH-1: NO reload hint substring in any notification.
+    assert.equal(note.message.includes("Run /reload to "), false);
+  });
+});
+
+test("MA-6: pre-existing non-empty sources/<name>/ throws StaleSourceCloneError", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    const { ctx } = makeCtx();
+    // Pre-create the final dir with a marker file so pathExists returns true.
+    const finalDir = await locations.sourceCloneDir("valid-marketplace");
+    await mkdir(finalDir, { recursive: true });
+    await writeFile(path.join(finalDir, ".stale"), "x");
+
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    await assert.rejects(
+      addMarketplace({
+        ctx,
+        scope: "project",
+        cwd,
+        rawSource: "anthropics/claude-plugins-official",
+        gitOps,
+      }),
+      (err: unknown): err is StaleSourceCloneError => err instanceof StaleSourceCloneError,
+    );
+  });
+});
+
+test("MA-8: duplicate name in same scope throws MarketplaceDuplicateNameError", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx } = makeCtx();
+    const { gitOps: gitOps1 } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+    // First add succeeds.
+    await addMarketplace({
+      ctx,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps: gitOps1,
+    });
+
+    const { gitOps: gitOps2 } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+    // Second add for same name throws.
+    await assert.rejects(
+      addMarketplace({
+        ctx,
+        scope: "project",
+        cwd,
+        rawSource: "anthropics/claude-plugins-official",
+        gitOps: gitOps2,
+      }),
+      (err: unknown): err is MarketplaceDuplicateNameError =>
+        err instanceof MarketplaceDuplicateNameError,
+    );
+  });
+});
+
+test("MA-9: invalid manifest after clone triggers cleanupStaging + appendLeakToError", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    const { ctx } = makeCtx();
+    const { gitOps, state } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("invalid-manifest"),
+    });
+
+    let caught: unknown;
+    try {
+      await addMarketplace({
+        ctx,
+        scope: "project",
+        cwd,
+        rawSource: "anthropics/claude-plugins-official",
+        gitOps,
+      });
+    } catch (e) {
+      caught = e;
+    }
+
+    // (1) Threw a manifest-related error.
+    assert.ok(caught instanceof Error, "addMarketplace should throw on invalid manifest");
+
+    // (2) The clone DID happen (NFR-5 not violated for github source).
+    assert.equal(state.cloneCalls.length, 1);
+
+    // (3) State rollback: no marketplace recorded (guard rolled back).
+    const persisted = await loadState(locations.extensionRoot);
+    assert.equal(
+      Object.keys(persisted.marketplaces).length,
+      0,
+      "state must NOT contain the partial marketplace",
+    );
+
+    // (4) appendLeakToError ran: staging dir cleanup attempted, leak chain present.
+    //     If cleanupStaging succeeded, the parent sources-staging/ dir is gone
+    //     or contains no leftover uuid subdirs (this run's staging dir was removed).
+    //     If cleanupStaging itself failed, err.message contains the canonical
+    //     leak phrase from appendLeakToError.
+    // MA-9 contract: either staging dir empty (cleanup succeeded) OR err.message reports leak.
+    const sourcesStagingRoot = path.join(locations.extensionRoot, "sources-staging");
+    const stagingExists = await pathExists(sourcesStagingRoot);
+    if (stagingExists) {
+      const remaining = await readdir(sourcesStagingRoot);
+      const cleanupSucceeded = remaining.length === 0;
+      const errMsg = caught instanceof Error ? caught.message : "";
+      const leakReported = /staging.*leak|leak.*staging|orphan|leaked|additionally/i.test(errMsg);
+      assert.ok(
+        cleanupSucceeded || leakReported,
+        `MA-9 contract: either staging dir empty (cleanup succeeded) or err.message reports leak. ` +
+          `Got: stagingExists=${String(stagingExists)}, remaining=${JSON.stringify(remaining)}, msg=${errMsg}`,
+      );
+    }
+    // If sources-staging dir doesn't exist at all, cleanup succeeded fully (acceptable).
+  });
+});
+
+test("MA-10: unknown source kind throws with parser's reason", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx } = makeCtx();
+    const { gitOps, state } = makeMockGitOps();
+
+    await assert.rejects(
+      addMarketplace({
+        ctx,
+        scope: "project",
+        cwd,
+        rawSource: "git@github.com:foo/bar.git",
+        gitOps,
+      }),
+      (err: unknown): err is Error =>
+        err instanceof Error && err.message.includes("Cannot add marketplace from"),
+    );
+
+    // NFR-5: unknown source NEVER reached gitOps.clone.
+    assert.equal(state.cloneCalls.length, 0);
+  });
+});
+
+test("NFR-5: path-source add never calls gitOps", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    const { ctx, notifications } = makeCtx();
+    // Set up a local marketplace fixture by copying the valid-marketplace fixture
+    // into a non-claude-marketplace location and pointing rawSource at it.
+    const localMpDir = await mkdtemp(path.join(tmpdir(), "mp-local-"));
+    try {
+      const fixtureSrc = fixtureMarketplaceDir("valid-marketplace");
+      await cp(fixtureSrc, localMpDir, { recursive: true });
+
+      const { gitOps, state } = makeMockGitOps();
+
+      // Use absolute path so domain/source.ts classifies as path source.
+      await addMarketplace({ ctx, scope: "project", cwd, rawSource: localMpDir, gitOps });
+
+      // Zero gitOps calls (NFR-5).
+      assert.equal(state.cloneCalls.length, 0);
+      assert.equal(state.fetchCalls.length, 0);
+      assert.equal(state.forceUpdateRefCalls.length, 0);
+      assert.equal(state.checkoutCalls.length, 0);
+      assert.equal(state.resolveRefCalls.length, 0);
+
+      // State updated; success notification emitted.
+      const persisted = await loadState(locations.extensionRoot);
+      assert.ok("valid-marketplace" in persisted.marketplaces);
+      const note = notifications[0];
+      assert.ok(note);
+      assert.equal(note.message, 'Added marketplace "valid-marketplace" in project scope.');
+    } finally {
+      await rm(localMpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("MA-3: path source accepts a direct path to marketplace.json (not just the directory)", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    const { ctx } = makeCtx();
+    const localMpDir = await mkdtemp(path.join(tmpdir(), "mp-local-"));
+    try {
+      await cp(fixtureMarketplaceDir("valid-marketplace"), localMpDir, { recursive: true });
+      const directManifestPath = path.join(localMpDir, ".claude-plugin", "marketplace.json");
+      const { gitOps } = makeMockGitOps();
+
+      await addMarketplace({ ctx, scope: "project", cwd, rawSource: directManifestPath, gitOps });
+
+      const persisted = await loadState(locations.extensionRoot);
+      assert.ok("valid-marketplace" in persisted.marketplaces);
+    } finally {
+      await rm(localMpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("MA-4: tilde paths are preserved verbatim in stored source.raw", async () => {
+  // We don't actually resolve the tilde to a real homedir -- just verify
+  // the parser's source.raw is preserved (the actual disk read happens
+  // through ParsedSource.resolved, which expandTilde already handled).
+  // This test documents the contract; the parser test in
+  // tests/domain/source.test.ts is the deeper coverage.
+  const { pathSource } = await import("../../../extensions/claude-marketplace/domain/source.ts");
+  const source = pathSource("~/projects/local-mp");
+  assert.equal(source.raw, "~/projects/local-mp"); // verbatim
+});
+
+test("MA-2 / SC-5: orchestrator accepts scope='project' (caller defaults; orchestrator does not invent)", async () => {
+  // The edge layer (Phase 6) defaults --scope to "user". This test
+  // confirms the orchestrator threads the value through verbatim.
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+    // Use project scope so we get a real tmp scope root; the assertion
+    // is just that the scope is reflected in the success message.
+    await addMarketplace({ ctx, scope: "project", cwd, rawSource: "owner/repo", gitOps });
+    const note = notifications[0];
+    assert.ok(note);
+    assert.ok(note.message.includes("in project scope"));
+  });
+});
