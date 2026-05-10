@@ -46,18 +46,16 @@ function narrowOnDiscriminator(): string | undefined {
 // NEGATIVE narrowing -- the load-bearing assertion of this file (NFR-7).
 // ──────────────────────────────────────────────────────────────────────────
 
-function consumeNotInstallable(): string {
+function consumeNotInstallable(): void {
   // @ts-expect-error -- NFR-7: pluginRoot must NOT be accessible on the not-installable variant.
-  return notInst.pluginRoot;
+  void notInst.pluginRoot;
 }
 
-function narrowOnDiscriminatorNegative(): string | undefined {
+function narrowOnDiscriminatorNegative(): void {
   if (!r.installable) {
     // @ts-expect-error -- NFR-7: r is narrowed to ResolvedPluginNotInstallable here; pluginRoot must be inaccessible.
-    return r.pluginRoot;
+    void r.pluginRoot;
   }
-
-  return undefined;
 }
 
 // Reference the helpers so tsc doesn't flag them as unused (they're not
