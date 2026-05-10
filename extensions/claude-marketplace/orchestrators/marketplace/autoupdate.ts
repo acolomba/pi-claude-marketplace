@@ -10,14 +10,14 @@
 //   scopes = opts.scope !== undefined ? [opts.scope] : ["user", "project"]   // SC-6
 //   for each scope:
 //     withStateGuard(locations, async (state) => {
-//       result = applyAutoupdateFlip(state, opts.name, opts.enable)        // MAU-1, MAU-3, MAU-4
+//       result = applyAutoupdateFlipInPlace(state, opts.name, opts.enable)  // MAU-1, MAU-3, MAU-4
 //     })  // saves state.json on no-throw
 //     accumulate result.changed[] and result.unchanged[] across scopes
 //
 //   compose user-visible message:
 //     - changed   non-empty: "Enabled autoupdate: <names>." or "Disabled autoupdate: <names>."
 //     - unchanged non-empty: "Already enabled: <names>." or "Already disabled: <names>."   // MAU-3
-//     - both empty (single-name not found in any scope): MarketplaceNotFoundError surfaces from applyAutoupdateFlip
+//     - both empty (single-name not found in any scope): MarketplaceNotFoundError surfaces from applyAutoupdateFlipInPlace
 //
 // NFR-5: zero git surface -- autoupdate never imports platform/git
 // or DEFAULT_GIT_OPS.
@@ -27,7 +27,7 @@ import { errorMessage } from "../../shared/errors.ts";
 import { notifyError, notifySuccess } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
-import { applyAutoupdateFlip } from "./shared.ts";
+import { applyAutoupdateFlipInPlace } from "./shared.ts";
 
 import type { Scope } from "../../shared/types.ts";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
@@ -55,14 +55,14 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
     const locations = locationsFor(scope, opts.cwd);
     try {
       const result = await withStateGuard(locations, (state) => {
-        // applyAutoupdateFlip mutates state in place and returns frozen
-        // changed/unchanged arrays. The guard saves on no-throw.
-        return applyAutoupdateFlip(state, opts.name, opts.enable);
+        // applyAutoupdateFlipInPlace mutates state in place and returns
+        // plain changed/unchanged arrays. The guard saves on no-throw.
+        return applyAutoupdateFlipInPlace(state, opts.name, opts.enable);
       });
       overallChanged.push(...result.changed);
       overallUnchanged.push(...result.unchanged);
     } catch (err) {
-      // For single-name flips: applyAutoupdateFlip throws
+      // For single-name flips: applyAutoupdateFlipInPlace throws
       // MarketplaceNotFoundError when the name is absent from THIS
       // scope. With SC-6 bare-form, that is expected if the name only
       // lives in the OTHER scope; we collect and only surface if BOTH

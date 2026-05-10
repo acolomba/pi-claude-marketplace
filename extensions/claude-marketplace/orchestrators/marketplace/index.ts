@@ -8,7 +8,7 @@
 // Cross-subcommand helpers (from shared.ts).
 export {
   DEFAULT_GIT_OPS,
-  applyAutoupdateFlip,
+  applyAutoupdateFlipInPlace,
   cascadeUnstagePlugin,
   formatErrorWithCauses,
   resolveScopeFromState,

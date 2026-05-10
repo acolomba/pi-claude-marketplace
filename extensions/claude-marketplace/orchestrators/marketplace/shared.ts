@@ -18,7 +18,7 @@
 //     Throws MarketplaceNotFoundError or MarketplaceAmbiguousScopeError
 //     (both already exported by shared/errors.ts via Plan 04-01).
 //
-//   - applyAutoupdateFlip (MAU-1..4): single helper used by
+//   - applyAutoupdateFlipInPlace (MAU-1..4): single helper used by
 //     autoupdate.ts. Idempotent -- already-matching marketplaces land
 //     in `unchanged[]`.
 //
@@ -248,10 +248,13 @@ export interface AutoupdateFlipResult {
  * - MAU-4: missing/undefined `record.autoupdate` is read as `false`
  *   via the `?? false` coalescing.
  *
- * The `state` parameter is mutated in place (the caller is INSIDE
- * a withStateGuard closure; the guard saves on no-throw).
+ * WR-06: name suffix "InPlace" is deliberate -- the `state` parameter
+ * is MUTATED in place (the caller is INSIDE a withStateGuard closure;
+ * the guard saves on no-throw). Returning the result as a plain object
+ * (no Object.freeze) makes that contract unambiguous: callers must not
+ * conclude from a frozen return that the function is pure.
  */
-export function applyAutoupdateFlip(
+export function applyAutoupdateFlipInPlace(
   state: ExtensionState,
   name: string | undefined,
   enable: boolean,
@@ -272,10 +275,7 @@ export function applyAutoupdateFlip(
       changed.push(name);
     }
 
-    return Object.freeze({
-      changed: Object.freeze(changed),
-      unchanged: Object.freeze(unchanged),
-    });
+    return { changed, unchanged };
   }
 
   for (const [mp, record] of Object.entries(state.marketplaces)) {
@@ -287,10 +287,7 @@ export function applyAutoupdateFlip(
     }
   }
 
-  return Object.freeze({
-    changed: Object.freeze(changed),
-    unchanged: Object.freeze(unchanged),
-  });
+  return { changed, unchanged };
 }
 
 /**
