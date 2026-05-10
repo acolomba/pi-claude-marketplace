@@ -59,7 +59,16 @@ Decimal phases appear between their surrounding integers in numeric order.
 2. Source-parser fixtures cover every accept/reject case in PRD §6.1 (owner/repo, https GitHub with `.git`/`#ref`/trailing slash, paths starting with `/`, `./`, `../`, `~`, plus rejects for `git@`, `://` non-github, browser-paste `/tree/<ref>`, `owner/repo@ref`, `~user/foo`)
 3. `withStateGuard` round-trips an in-process concurrent install: second caller observes the first's commit, hard-fails with "was installed concurrently" on conflicting target, soft-converges on idempotent uninstall
 4. Legacy `state.json` records (missing `manifestPath` / `marketplaceRoot`, missing `resources.agents` / `resources.mcpServers`) load successfully and are normalized; the single sanctioned `console.warn` fires only when async best-effort migration save fails
-5. SHA-256 12-hex content hash is stable across a snapshot test (algorithm + truncation length + walk-filter list locked as user contract per PI-7) **Plans**: TBD
+5. SHA-256 12-hex content hash is stable across a snapshot test (algorithm + truncation length + walk-filter list locked as user contract per PI-7)
+
+**Plans**: 6 plans
+
+- [ ] `02-01-PLAN.md` -- shared/types.ts (Scope) + domain/source.ts (parsePluginSource + factories) + tests (Wave 1)
+- [ ] `02-02-PLAN.md` -- domain/manifest.ts + components/{plugin,mcp}.ts (TypeBox JIT validators) + tests (Wave 1)
+- [ ] `02-03-PLAN.md` -- domain/name.ts (assertSafeName + 3 generators) + domain/version.ts (computeHashVersion + HASH_WALK_SKIP) + hash-stability fixtures + tests (Wave 1)
+- [ ] `02-04-PLAN.md` -- persistence/{locations,state-io,migrate}.ts (ScopedLocations brand + STATE_SCHEMA + IL-3 sanctioned console.warn) + 3 legacy fixtures + tests (Wave 2)
+- [ ] `02-05-PLAN.md` -- domain/resolver.ts (ResolvedPlugin discriminated union + resolveStrict + resolveLoose + requireInstallable) + NFR-7 type-level test + strict/loose tests (Wave 2)
+- [ ] `02-06-PLAN.md` -- transaction/{phase-ledger,rollback,with-state-guard}.ts + tests (SC-3 in-process concurrent verifier) (Wave 3)
 
 ### Phase 3: Resource Bridges
 
@@ -120,7 +129,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 | Phase                                   | Plans Complete | Status      | Completed |
 | --------------------------------------- | -------------- | ----------- | --------- |
 | 1. Foundations & Toolchain              | 0/7            | Not started | -         |
-| 2. Domain Core & Persistence Primitives | 0/TBD          | Not started | -         |
+| 2. Domain Core & Persistence Primitives | 0/6            | Not started | -         |
 | 3. Resource Bridges                     | 0/TBD          | Not started | -         |
 | 4. Marketplace Orchestrators            | 0/TBD          | Not started | -         |
 | 5. Plugin Orchestrators                 | 0/TBD          | Not started | -         |
