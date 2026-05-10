@@ -41,8 +41,8 @@
 ### Marketplace Lifecycle: `marketplace update` (PRD §5.1.4)
 
 - [ ] **MU-1**: No-name form refreshes every marketplace in chosen scope; empty-set succeeds silently with `No marketplaces configured.`
-- [ ] **MU-2**: GitHub sources `git fetch` then `git pull --ff-only` (symbolic HEAD) or re-checkout stored ref (detached HEAD)
-- [ ] **MU-3**: Non-fast-forward divergence surfaces as error; recovery is `marketplace remove` + re-add
+- [x] ~~**MU-2**: GitHub sources `git fetch` then `git pull --ff-only` (symbolic HEAD) or re-checkout stored ref (detached HEAD)~~ (**superseded by Phase 4 D-14**: the local marketplace clone is read-only by contract; `marketplace update` follows upstream blindly via `fetch + forceUpdateRef + checkout` -- see `.planning/phases/04-marketplace-orchestrators/04-CONTEXT.md` D-14. This is a deliberate user-contract change recorded in PROJECT.md Key Decisions.)
+- [x] ~~**MU-3**: Non-fast-forward divergence surfaces as error; recovery is `marketplace remove` + re-add~~ (**superseded by Phase 4 D-14**: the local clone is never altered, so non-fast-forward divergence cannot exist as a user-visible failure mode; `marketplace update` overwrites the local ref unconditionally -- see `.planning/phases/04-marketplace-orchestrators/04-CONTEXT.md` D-14.)
 - [ ] **MU-4**: Manifest pointer re-read and persisted before any plugin cascade runs
 - [ ] **MU-5**: If clone advanced but manifest save failed, error MUST tell user "Retry the command."
 - [ ] **MU-6**: Plugin upgrade cascade runs only when per-marketplace `autoupdate` flag is true
@@ -372,8 +372,8 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | ML-3        | Phase 4 | Pending |
 | ML-4        | Phase 4 | Pending |
 | MU-1        | Phase 4 | Pending |
-| MU-2        | Phase 4 | Pending |
-| MU-3        | Phase 4 | Pending |
+| MU-2        | --      | Superseded by Phase 4 D-14 |
+| MU-3        | --      | Superseded by Phase 4 D-14 |
 | MU-4        | Phase 4 | Pending |
 | MU-5        | Phase 4 | Pending |
 | MU-6        | Phase 4 | Pending |
@@ -552,8 +552,8 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 **Coverage:**
 
 - v1 requirements: 200 total (file footer previously claimed 134; corrected here)
-- Mapped to phases: 199 (99.5%) -- MA-7 superseded by D-21 (Phase 1 adopted isomorphic-git, removing the "git CLI not found" failure mode)
-- Unmapped: 0 (MA-7 is superseded, not unmapped)
+- Mapped to phases: 197 (98.5%) -- MA-7 superseded by D-21 (Phase 1 adopted isomorphic-git, removing the "git CLI not found" failure mode); MU-2 and MU-3 superseded by Phase 4 D-14 (follow-upstream-blindly semantics; the local marketplace clone is read-only by contract, so non-fast-forward divergence cannot occur)
+- Unmapped: 0 (MA-7, MU-2, MU-3 are superseded, not unmapped)
 
 **Per-phase counts:**
 
@@ -562,7 +562,7 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | Phase 1: Foundations & Toolchain              | 23 (NFR-1, NFR-4, NFR-6, NFR-9, NFR-10, IL-1..5, ES-1..5, PS-1..5, AS-1, AS-4, AS-5)                                                    |
 | Phase 2: Domain Core & Persistence Primitives | 39 (NFR-7, NFR-12, SP-1..7, SC-1..4, SC-7, MM-1..7, PR-1..6, RN-1..2, ST-1..9)                                                          |
 | Phase 3: Resource Bridges                     | 34 (SK-1..5, CM-1..4, AG-1..12, MC-1..8, RN-4..6, AS-8..9)                                                                              |
-| Phase 4: Marketplace Orchestrators            | 43 (MA-1..6, MA-8..11 (MA-7 superseded by D-21), MR-1..8, ML-1..4, MU-1..9, MAU-1..4, SC-5..6, RH-1..5, NFR-5)        |
+| Phase 4: Marketplace Orchestrators            | 41 (MA-1..6, MA-8..11 (MA-7 superseded by D-21), MR-1..8, ML-1..4, MU-1, MU-4..9 (MU-2, MU-3 superseded by Phase 4 D-14), MAU-1..4, SC-5..6, RH-1..5, NFR-5) |
 | Phase 5: Plugin Orchestrators                 | 47 (PI-1..15, PU-1..8, PUP-1..9, PL-1..7, RN-3, AS-2..3, AS-6..7, NFR-2..3)                                                             |
 | Phase 6: Edge Layer & Tab Completion          | 13 (TC-1..9, AP-1..4)                                                                                                                   |
 | Phase 7: Integration & Pi Wiring              | 4 (NFR-8, NFR-11) -- note: NFR-2/3 land in Phase 5 since they describe orchestrator behavior; Phase 7 verifies them in live environment |
