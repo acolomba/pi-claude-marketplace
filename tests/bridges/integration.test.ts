@@ -276,6 +276,7 @@ describe("integration: full-plugin staging", () => {
         `MC-5: server "${name}" carries _claudeMarketplace marker`,
       );
     }
+
     assert.ok(result.recorded.length > 0, "MC-6: at least one server recorded");
     assert.equal(
       result.recorded[0]!.targetPath,
