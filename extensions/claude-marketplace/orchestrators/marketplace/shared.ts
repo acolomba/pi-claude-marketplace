@@ -62,7 +62,16 @@ export class AgentsUnstageFailureError extends Error {
 }
 
 /**
- * D-12, D-13: marketplace orchestrator git surface. EXACTLY 5 primitives.
+ * D-12, D-13: marketplace orchestrator git surface.
+ *
+ * Six primitives. The 5 base primitives (clone / fetch / forceUpdateRef
+ * / checkout / resolveRef) cover the standard D-14 sequence. CR-01
+ * added a 6th -- `currentBranch` -- because the D-14 default-branch
+ * tracking path needs to distinguish "what is the symbolic name of the
+ * local branch" from "what SHA does HEAD point at". `resolveRef('HEAD')`
+ * returns a SHA; using that SHA as the `ref` to forceUpdateRef writes a
+ * meaningless `refs/<40-hex>` -- the local branch never advances.
+ *
  * No `pull` -- D-14 requires the three-step force-overwrite path
  * (fetch → forceUpdateRef → checkout) that `pull --ff-only` cannot
  * express because the local branch may diverge from the remote SHA.
@@ -78,6 +87,13 @@ export interface GitOps {
   checkout(opts: { dir: string; ref: string }): Promise<void>;
   /** Resolve a ref name to its SHA (used to read remote SHA after fetch). */
   resolveRef(opts: { dir: string; ref: string }): Promise<string>;
+  /**
+   * CR-01: return the symbolic name of the currently checked-out branch
+   * (e.g. "main"), or undefined when HEAD is detached. Required by the
+   * D-14 default-branch path so the caller can build
+   * `refs/heads/<branch>` for forceUpdateRef.
+   */
+  currentBranch(opts: { dir: string }): Promise<string | undefined>;
 }
 
 /**
@@ -94,6 +110,7 @@ export const DEFAULT_GIT_OPS: GitOps = {
   forceUpdateRef: defaultGit.forceUpdateRef,
   checkout: defaultGit.checkout,
   resolveRef: defaultGit.resolveRef,
+  currentBranch: defaultGit.currentBranch,
 };
 
 /**

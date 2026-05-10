@@ -154,6 +154,72 @@ test("MU-4 + D-14: github source refreshes via fetch+forceUpdateRef+checkout in 
   });
 });
 
+test("CR-01 / D-14 default-branch: forceUpdateRef target is refs/heads/<branch>, NOT the HEAD SHA", async () => {
+  // Default-branch tracking (storedRef === undefined): the seeded
+  // marketplace has no `ref` fragment. The refresh path must read the
+  // symbolic branch name via gitOps.currentBranch(), then
+  // forceUpdateRef("refs/heads/<branch>", remoteSha). Previously it
+  // erroneously used resolveRef("HEAD") (which returns a SHA) as the
+  // ref argument, producing a meaningless `refs/<40-hex>` write.
+  await withHermeticHome(async ({ cwd }) => {
+    await seedGithubMarketplace({ cwd, name: "defaultbranch" });
+    const { ctx } = makeCtx();
+    const remoteSha = "abcdef000000000000000000000000000000000a";
+    const { gitOps, state } = makeMockGitOps({
+      remoteRefs: {
+        "refs/remotes/origin/HEAD": remoteSha,
+        "refs/remotes/origin/main": remoteSha,
+      },
+      localRefs: { "refs/heads/main": "0000000000000000000000000000000000000001" },
+      currentBranchOverride: "main",
+    });
+
+    await updateMarketplace({ ctx, name: "defaultbranch", scope: "project", cwd, gitOps });
+
+    // currentBranch was consulted (CR-01 contract).
+    assert.equal(state.currentBranchCalls.length, 1);
+    // forceUpdateRef received the symbolic-name form, NOT a 40-hex SHA.
+    assert.equal(state.forceUpdateRefCalls.length, 1);
+    const fur = state.forceUpdateRefCalls[0];
+    assert.ok(fur !== undefined);
+    assert.equal(fur.ref, "refs/heads/main");
+    assert.equal(fur.value, remoteSha);
+    assert.equal(/^[a-f0-9]{40}$/i.test(fur.ref), false, "ref must NOT be a raw SHA");
+    // Checkout is by branch name, not SHA.
+    assert.equal(state.checkoutCalls.length, 1);
+    const co = state.checkoutCalls[0];
+    assert.ok(co !== undefined);
+    assert.equal(co.ref, "main");
+  });
+});
+
+test("CR-01 / D-14 default-branch: detached HEAD -> checkout SHA directly, no forceUpdateRef", async () => {
+  // When currentBranch() returns undefined (detached HEAD), the refresh
+  // path must NOT write any local ref -- there is no symbolic branch
+  // to advance. It checks out the remote SHA directly.
+  await withHermeticHome(async ({ cwd }) => {
+    await seedGithubMarketplace({ cwd, name: "detached" });
+    const { ctx } = makeCtx();
+    const remoteSha = "abcdef000000000000000000000000000000000b";
+    const { gitOps, state } = makeMockGitOps({
+      remoteRefs: {
+        "refs/remotes/origin/HEAD": remoteSha,
+        "refs/remotes/origin/main": remoteSha,
+      },
+      currentBranchOverride: null, // null = detached HEAD
+    });
+
+    await updateMarketplace({ ctx, name: "detached", scope: "project", cwd, gitOps });
+
+    assert.equal(state.currentBranchCalls.length, 1);
+    assert.equal(state.forceUpdateRefCalls.length, 0, "detached HEAD must NOT write local ref");
+    assert.equal(state.checkoutCalls.length, 1);
+    const co = state.checkoutCalls[0];
+    assert.ok(co !== undefined);
+    assert.equal(co.ref, remoteSha);
+  });
+});
+
 test("D-14: detached-HEAD path checks out SHA directly without forceUpdateRef", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const sha = "abcdef0000000000000000000000000000000002";

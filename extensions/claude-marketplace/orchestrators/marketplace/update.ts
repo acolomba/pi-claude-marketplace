@@ -393,15 +393,35 @@ async function refreshGitHubClone(
   onFetchSucceeded?.();
 
   if (storedRef === undefined) {
-    // Default-branch tracking: read remote HEAD and force-update local
-    // current branch to it.
+    // Default-branch tracking. Read remote HEAD's SHA and the symbolic
+    // name of the local branch (e.g. "main"), then force-update
+    // refs/heads/<branch> to that SHA and check out the branch by name.
+    //
+    // CR-01: previously, this path called resolveRef("HEAD") which
+    // returns a SHA, then passed that SHA as the `ref` to
+    // forceUpdateRef -- writing a meaningless `refs/<40-hex>` and
+    // leaving the local branch unchanged. The fix routes through the
+    // `currentBranch` primitive (returns the symbolic name or undefined
+    // for detached HEAD). On detached HEAD the SHA is checked out
+    // directly without writing any local ref.
     const remoteSha = await gitOps.resolveRef({
       dir: cloneDir,
       ref: "refs/remotes/origin/HEAD",
     });
-    const currentBranch = await gitOps.resolveRef({ dir: cloneDir, ref: "HEAD" });
-    await gitOps.forceUpdateRef({ dir: cloneDir, ref: currentBranch, value: remoteSha });
-    await gitOps.checkout({ dir: cloneDir, ref: currentBranch });
+    const localBranch = await gitOps.currentBranch({ dir: cloneDir });
+    if (localBranch === undefined) {
+      // Detached HEAD in the local clone -- just check out the remote
+      // SHA directly. No local branch ref to advance.
+      await gitOps.checkout({ dir: cloneDir, ref: remoteSha });
+      return;
+    }
+
+    await gitOps.forceUpdateRef({
+      dir: cloneDir,
+      ref: `refs/heads/${localBranch}`,
+      value: remoteSha,
+    });
+    await gitOps.checkout({ dir: cloneDir, ref: localBranch });
     return;
   }
 

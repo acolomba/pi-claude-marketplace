@@ -79,6 +79,10 @@ export interface ForceUpdateRefOptions {
   value: string;
 }
 
+export interface CurrentBranchOptions {
+  dir: string;
+}
+
 export interface ListBranchesOptions {
   dir: string;
   /** Default undefined = local branches; pass "origin" for remote branches. */
@@ -159,6 +163,27 @@ export async function forceUpdateRef(opts: ForceUpdateRefOptions): Promise<void>
     value: opts.value,
     force: true,
   });
+}
+
+/**
+ * Return the symbolic name of the currently checked-out branch (e.g.
+ * "main"), or undefined when HEAD is detached. Wraps isomorphic-git's
+ * `currentBranch({ fs, dir })`.
+ *
+ * CR-01: required by the D-14 default-branch path so the orchestrator
+ * can `forceUpdateRef("refs/heads/<branch>", remoteSha)` instead of
+ * mistakenly using the HEAD SHA as a ref name (which produced a
+ * meaningless `refs/<40-hex>` write).
+ *
+ * Source: node_modules/isomorphic-git/index.d.ts:1266 currentBranch
+ * returns Promise<string | void>; we normalize void -> undefined.
+ */
+export async function currentBranch(opts: CurrentBranchOptions): Promise<string | undefined> {
+  // isomorphic-git's currentBranch returns Promise<string | void>; the
+  // void variant carries no string, so the ?? funnel normalizes to
+  // undefined.
+  const branch = await git.currentBranch({ fs, dir: opts.dir });
+  return branch ?? undefined;
 }
 
 export async function listBranches(opts: ListBranchesOptions): Promise<string[]> {

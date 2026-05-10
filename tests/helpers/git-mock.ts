@@ -37,11 +37,20 @@ export interface MockGitState {
    */
   fixtureSourceDir?: string;
   /** Call logs for D-14 sequence assertions. */
+  /**
+   * CR-01: optional override for `gitOps.currentBranch`. When set, the
+   * mock returns this value instead of inferring from localRefs. Use
+   * `null` to simulate a detached HEAD (the mock translates null to
+   * undefined when calling). When unset, the mock derives "main" from
+   * the default localRefs (or undefined if none).
+   */
+  currentBranchOverride?: string | null;
   cloneCalls: { dir: string; url: string; ref?: string; singleBranch?: boolean }[];
   fetchCalls: { dir: string; remote?: string; ref?: string }[];
   forceUpdateRefCalls: { dir: string; ref: string; value: string }[];
   checkoutCalls: { dir: string; ref: string }[];
   resolveRefCalls: { dir: string; ref: string }[];
+  currentBranchCalls: { dir: string }[];
   /**
    * Optional override hooks: tests can install behavior overrides
    * for individual methods (e.g., make checkout throw to simulate
@@ -71,10 +80,14 @@ export function makeMockGitOps(initial?: Partial<MockGitState>): MockGitOpsHandl
     forceUpdateRefCalls: [],
     checkoutCalls: [],
     resolveRefCalls: [],
+    currentBranchCalls: [],
     ...(initial?.fixtureSourceDir !== undefined && { fixtureSourceDir: initial.fixtureSourceDir }),
     ...(initial?.cloneThrows !== undefined && { cloneThrows: initial.cloneThrows }),
     ...(initial?.fetchThrows !== undefined && { fetchThrows: initial.fetchThrows }),
     ...(initial?.checkoutThrows !== undefined && { checkoutThrows: initial.checkoutThrows }),
+    ...(initial?.currentBranchOverride !== undefined && {
+      currentBranchOverride: initial.currentBranchOverride,
+    }),
   };
 
   const gitOps: GitOps = {
@@ -173,6 +186,25 @@ export function makeMockGitOps(initial?: Partial<MockGitState>): MockGitOpsHandl
       }
 
       throw new Error(`mock resolveRef: unknown ref "${opts.ref}"`);
+    },
+
+    async currentBranch(opts): Promise<string | undefined> {
+      state.currentBranchCalls.push({ ...opts });
+      await Promise.resolve();
+      // CR-01: explicit override wins (null = detached HEAD).
+      if (state.currentBranchOverride !== undefined) {
+        return state.currentBranchOverride ?? undefined;
+      }
+
+      // Default: derive from localRefs. If "refs/heads/main" is the only
+      // local branch, that's the current one. Otherwise undefined
+      // (detached HEAD).
+      const headKeys = Object.keys(state.localRefs).filter((k) => k.startsWith("refs/heads/"));
+      if (headKeys.length === 1) {
+        return headKeys[0]!.slice("refs/heads/".length);
+      }
+
+      return undefined;
     },
   };
 
