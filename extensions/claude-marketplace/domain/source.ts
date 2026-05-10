@@ -186,3 +186,29 @@ export function githubSource(raw: string): GitHubSource {
 
   return parsed;
 }
+
+/**
+ * ML-2 / list-format helper. Returns the user-visible logical source label
+ * for the `marketplace list` renderer.
+ *
+ * - PathSource: returns `source.logical` (the verbatim user-typed path with
+ *   `~` preserved per ST-6 / MA-4).
+ * - GitHubSource: synthesizes the canonical `https://github.com/<owner>/<repo>[#<ref>]`
+ *   URL; this matches PRD §5.1.3 ML-2 "logical" semantics for github sources.
+ * - UnknownSource: falls back to `source.raw` so forward-compat source kinds
+ *   list verbatim (the renderer's tolerance matches NFR-12).
+ */
+export function sourceLogical(source: ParsedSource): string {
+  switch (source.kind) {
+    case "path":
+      return source.logical;
+
+    case "github": {
+      const refSuffix = source.ref === undefined ? "" : `#${source.ref}`;
+      return `https://github.com/${source.owner}/${source.repo}${refSuffix}`;
+    }
+
+    case "unknown":
+      return source.raw;
+  }
+}

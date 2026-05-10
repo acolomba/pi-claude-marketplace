@@ -70,6 +70,8 @@ export interface ScopedLocations {
   marketplaceDataDir(mp: string): Promise<string>;
   /** Returns `<sourcesDir>/<mp>/` after SC-7 containment check. */
   sourceCloneDir(mp: string): Promise<string>;
+  /** Returns `<extensionRoot>/sources-staging/<uuid>/` after SC-7 / NFR-10 containment check (D-09 same-FS sibling of `sourcesDir`). */
+  sourcesStagingDir(uuid: string): Promise<string>;
 }
 
 /**
@@ -142,6 +144,13 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
     async sourceCloneDir(mp: string): Promise<string> {
       const candidate = path.join(sourcesDir, mp);
       await assertPathInside(sourcesDir, candidate, `sourceCloneDir(${mp})`);
+      return candidate;
+    },
+
+    async sourcesStagingDir(uuid: string): Promise<string> {
+      const sourcesStagingRoot = path.join(extensionRoot, "sources-staging");
+      const candidate = path.join(sourcesStagingRoot, uuid);
+      await assertPathInside(sourcesStagingRoot, candidate, `sourcesStagingDir(${uuid})`);
       return candidate;
     },
   });
