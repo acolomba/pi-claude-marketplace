@@ -184,15 +184,24 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
     }
   }
 
-  // MR-6: aggregate leaks into one error if any.
+  // MR-6: aggregate leaks into one user-visible warning.
+  //
+  // WR-02: state.json has already been saved by withStateGuard --
+  // throwing here would propagate to the edge layer and get translated
+  // into a user-visible error, despite state being committed. The MR-6
+  // contract is "marketplace removed BUT cleanup failed", which is a
+  // warning, not an error. Use ctx.ui.notify with severity 'warning'
+  // (IL-2) and return cleanly so callers can chain.
   const realLeaks = cleanupLeaks.filter((l): l is string => l !== undefined);
   if (realLeaks.length > 0) {
-    throw appendLeaks(
+    const aggregated = appendLeaks(
       new Error(
         `Marketplace removed but post-state cleanup failed for ${realLeaks.length} path(s).`,
       ),
       realLeaks,
     );
+    notifyWarning(opts.ctx, formatErrorWithCauses(aggregated));
+    return;
   }
 
   // MR-4 / MR-3: ONE aggregated warning notification when ANY plugin failed.
