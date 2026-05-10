@@ -196,6 +196,26 @@ test("D-14: SHA-no-longer-exists (checkout throws) surfaces as notifyError with 
   });
 });
 
+test("CR-05 / MU-5: pre-fetch failure (gitOps.fetch throws) does NOT append 'Retry the command.'", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    await seedGithubMarketplace({ cwd, name: "offline", ref: "main" });
+    const { ctx, notifications } = makeCtx();
+    // Simulate DNS / network-unreachable on fetch -- cloneAdvanced must
+    // stay false, so the retry hint is suppressed.
+    const { gitOps } = makeMockGitOps({
+      fetchThrows: new Error("mock: ENETUNREACH https://github.com"),
+    });
+    await updateMarketplace({ ctx, name: "offline", scope: "project", cwd, gitOps });
+
+    assert.equal(notifications.length, 1);
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    assert.equal(first.severity, "error");
+    // The MU-5 retry hint MUST NOT appear when fetch itself failed.
+    assert.equal(first.message.includes("Retry the command."), false);
+  });
+});
+
 test("MU-5: clone advances + manifest re-validation fails -- 'Retry the command.' retry hint", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const locations = locationsFor("project", cwd);

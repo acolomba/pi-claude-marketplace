@@ -21,15 +21,17 @@
 //             if (record.source.kind === "github"):
 //               cloneAdvanced = false
 //               try {
-//                 cloneAdvanced = true;  // MU-5: set BEFORE refresh so any
-//                                        // step inside (fetch/forceUpdateRef/
-//                                        // checkout) leaves cloneAdvanced=true
-//                                        // and the catch applies "Retry the command."
-//                 refreshGitHubClone(cloneDir, record.source.ref, gitOps);
+//                 refreshGitHubClone(cloneDir, record.source.ref, gitOps,
+//                                    () => { cloneAdvanced = true; });
+//                 // CR-05 / MU-5: the onFetchSucceeded callback flips
+//                 // cloneAdvanced to true ONLY after gitOps.fetch returns.
+//                 // Pre-fetch throws (DNS/network/auth) leave cloneAdvanced
+//                 // at false so the "Retry the command." hint is suppressed.
+//                 // Any later D-14 step throw (forceUpdateRef/checkout) or
+//                 // manifest re-read throw still produces the retry hint.
 //                 manifest = read+validate <marketplaceRoot>/.claude-plugin/marketplace.json
 //                 record.lastUpdatedAt = now
 //               } catch (err) {
-//                 // MU-5: clone advanced + manifest save fails -> "Retry the command."
 //                 throw new MarketplaceUpdateError(..., { cause, retryHint: cloneAdvanced ? "Retry the command." : "" })
 //               }
 //             else if path:
@@ -210,15 +212,17 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       try {
         if (source.kind === "github") {
           const cloneDir = await locations.sourceCloneDir(name);
-          // MU-5 ordering: set cloneAdvanced=true BEFORE refreshGitHubClone
-          // so any throw INSIDE refreshGitHubClone (fetch / forceUpdateRef /
-          // checkout) leaves cloneAdvanced=true and the catch correctly
-          // applies the MU-5 "Retry the command." retry hint. The D-14
-          // sequence touches the working tree after fetch returns, so the
-          // conservative stance is "anything past source-kind dispatch
-          // counts as clone-advanced." See RESEARCH §lines 499-512.
-          cloneAdvanced = true;
-          await refreshGitHubClone(cloneDir, source.ref, gitOps);
+          // MU-5 ordering (CR-05): cloneAdvanced is flipped to true ONLY
+          // after `gitOps.fetch` returns successfully. A pre-fetch
+          // failure (DNS, network unreachable, auth) is unrecoverable
+          // from the user's perspective, so the "Retry the command."
+          // hint would be misleading. refreshGitHubClone fires the
+          // onFetchSucceeded callback the instant fetch returns, so any
+          // later D-14 step throw (forceUpdateRef / checkout) still
+          // produces the retry hint.
+          await refreshGitHubClone(cloneDir, source.ref, gitOps, () => {
+            cloneAdvanced = true;
+          });
           await refreshManifestPointer(record, cloneDir);
         } else if (source.kind === "path") {
           // NFR-5: NO gitOps. Re-read + re-validate manifest at the
@@ -234,10 +238,17 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       } catch (err) {
         // MU-5: clone advanced but manifest save failed → retry hint.
         // For path source or pre-clone failures, retry hint is "".
+        //
+        // ESLint cannot follow the control flow from the
+        // onFetchSucceeded callback (passed to refreshGitHubClone) back
+        // to this scope -- it concludes cloneAdvanced is "always
+        // falsy". Disable the narrowing check here.
         throw new MarketplaceUpdateError(
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cloneAdvanced is set via callback inside refreshGitHubClone (CR-05).
           cloneAdvanced
             ? `Marketplace "${name}" clone advanced but manifest could not be persisted.`
             : `Failed to update marketplace "${name}".`,
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cloneAdvanced is set via callback inside refreshGitHubClone (CR-05).
           { cause: err, retryHint: cloneAdvanced ? "Retry the command." : "" },
         );
       }
@@ -368,6 +379,7 @@ async function refreshGitHubClone(
   cloneDir: string,
   storedRef: string | undefined,
   gitOps: GitOps,
+  onFetchSucceeded?: () => void,
 ): Promise<void> {
   // Step 1: fetch (no merge, no working-tree changes -- just refresh remote refs).
   await gitOps.fetch({
@@ -375,6 +387,10 @@ async function refreshGitHubClone(
     remote: "origin",
     ...(storedRef !== undefined && { ref: storedRef }),
   });
+  // CR-05: fetch returned cleanly -- signal "clone advanced" to the
+  // caller so any later D-14 step that throws produces the MU-5
+  // "Retry the command." hint. Pre-fetch throws skip this callback.
+  onFetchSucceeded?.();
 
   if (storedRef === undefined) {
     // Default-branch tracking: read remote HEAD and force-update local
