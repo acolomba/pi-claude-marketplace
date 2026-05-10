@@ -73,6 +73,12 @@ export interface ResolveRefOptions {
   ref: string;
 }
 
+export interface ForceUpdateRefOptions {
+  dir: string;
+  ref: string;
+  value: string;
+}
+
 export interface ListBranchesOptions {
   dir: string;
   /** Default undefined = local branches; pass "origin" for remote branches. */
@@ -132,6 +138,26 @@ export async function resolveRef(opts: ResolveRefOptions): Promise<string> {
     fs,
     dir: opts.dir,
     ref: opts.ref,
+  });
+}
+
+/**
+ * D-14 step 2 (symbolic HEAD): force-set a local ref to a given SHA.
+ * Wraps isomorphic-git's `writeRef({ force: true })`. Phase 4
+ * orchestrators call this via the GitOps interface; exposing it here
+ * keeps orchestrator-tier code from importing isomorphic-git directly
+ * (D-13).
+ *
+ * Source: node_modules/isomorphic-git/index.d.ts -- writeRef({ fs, dir,
+ * ref, value, force, symbolic? }).
+ */
+export async function forceUpdateRef(opts: ForceUpdateRefOptions): Promise<void> {
+  await git.writeRef({
+    fs,
+    dir: opts.dir,
+    ref: opts.ref,
+    value: opts.value,
+    force: true,
   });
 }
 

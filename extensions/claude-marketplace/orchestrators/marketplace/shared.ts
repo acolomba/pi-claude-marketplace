@@ -64,26 +64,17 @@ export interface GitOps {
 }
 
 /**
- * D-13 default implementation. Four primitives wrap `platform/git.ts`
- * verbatim; `forceUpdateRef` uses isomorphic-git's `writeRef({force:true})`
- * directly because `platform/git.ts` does not expose a force-ref-update
- * wrapper. Dynamic import keeps the platform layer authoritative -- this
- * file is the only orchestrator-tier site that touches isomorphic-git
- * directly, and it does so for D-14 only.
- *
- * Source: node_modules/isomorphic-git/index.d.ts:695
- *   writeRef({ fs, dir, ref, value, force, symbolic? })
+ * D-13 default implementation. All five primitives delegate to
+ * `platform/git.ts`, which is the only file that imports isomorphic-git.
+ * No dynamic imports -- D-13's "no orchestrator-tier isomorphic-git
+ * dependency" boundary is now enforced statically.
  */
 export const DEFAULT_GIT_OPS: GitOps = {
   clone: defaultGit.clone,
   fetch: async (o): Promise<void> => {
     await defaultGit.fetch(o);
   },
-  forceUpdateRef: async ({ dir, ref, value }): Promise<void> => {
-    const git = await import("isomorphic-git");
-    const fs = await import("node:fs");
-    await git.writeRef({ fs: fs.default, dir, ref, value, force: true });
-  },
+  forceUpdateRef: defaultGit.forceUpdateRef,
   checkout: defaultGit.checkout,
   resolveRef: defaultGit.resolveRef,
 };
