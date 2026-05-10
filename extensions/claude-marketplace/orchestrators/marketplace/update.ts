@@ -72,11 +72,7 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../presentation/soft-dep.ts";
-import {
-  MarketplaceNotFoundError,
-  MarketplaceUpdateError,
-  errorMessage,
-} from "../../shared/errors.ts";
+import { MarketplaceNotFoundError, MarketplaceUpdateError } from "../../shared/errors.ts";
 import { notifyError, notifySuccess } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
@@ -279,10 +275,14 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       try {
         outcome = await pluginUpdate(plugin, name, scope);
       } catch (err) {
+        // ES-4 / CR-03: walk Error.cause via formatErrorWithCauses so a
+        // chained Error (the entire purpose of the chained-error contract)
+        // does not have its tail truncated when it reaches the MU-7
+        // "Failed:" partition. errorMessage() returns only .message.
         outcome = {
           partition: "failed",
           name: plugin,
-          notes: [errorMessage(err)],
+          notes: [formatErrorWithCauses(err)],
         };
       }
 
