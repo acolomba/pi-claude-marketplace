@@ -33,11 +33,13 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 3. ESLint emits an error when any file under `src/edge/`, `src/orchestrators/`, or `src/bridges/` calls `process.stdout.write` / `process.stderr.write` / `console.warn` outside the one sanctioned `migrateLegacyMarketplaceRecords` callsite
 
-4. `MARKERS.ts` exports the five ES-5 verbatim strings (pi-subagents, pi-mcp-adapter, reload hint, manual recovery, rollback partial) and a snapshot test asserts byte-for-byte PRD equivalence
+4. `shared/markers.ts` exports the five ES-5 verbatim strings (pi-subagents, pi-mcp-adapter, reload hint, manual recovery, rollback partial) and a snapshot test asserts each export is a byte-for-byte **prefix** of the corresponding PRD §6.12 literal (the runtime caller appends parameter context after the prefix; see Phase 1 CONTEXT.md decision B-4)
+
+   **Note (2026-05-09, resolved):** Original criterion text said "byte-for-byte PRD equivalence" which would force markers.ts to embed runtime parameter context. CONTEXT.md decision B-4 locks prefix-equivalence as the correct semantic; user signed off (`approved-prefix-equivalence`) at the Plan 07 checkpoint. The `markers-snapshot.test.ts` assertion enforces prefix-equality.
 
 5. `npm run check` (typecheck + ESLint + Prettier + `node --test`) passes on Node 24 in CI
 
-   **Note (2026-05-09):** Original criterion text said "Node 22, 24, and 26 in CI" but Phase 1 CONTEXT.md decision D-01 locked the matrix to Node 24 only ("removes the matrix maintenance overhead"). Plan 07 includes a checkpoint where the user explicitly resolves this discrepancy.
+   **Note (2026-05-09, resolved):** Original criterion text said "Node 22, 24, and 26 in CI" but Phase 1 CONTEXT.md decision D-01 locked the matrix to Node 24 only ("removes the matrix maintenance overhead"). User signed off (`approved-d01`) at the Plan 07 checkpoint. Workflow is matrix-ready -- a future reopen adds `strategy.matrix.node-version` without rewriting the rest.
 
 **Plans**: 7 plans
 
