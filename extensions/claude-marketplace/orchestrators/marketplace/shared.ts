@@ -40,9 +40,26 @@ import { loadState } from "../../persistence/state-io.ts";
 import * as defaultGit from "../../platform/git.ts";
 import { MarketplaceAmbiguousScopeError, MarketplaceNotFoundError } from "../../shared/errors.ts";
 
+import type { UnstageAgentFailure } from "../../bridges/agents/types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
+
+/**
+ * CR-06: AG-5 foreign-content failure carries the structured per-agent
+ * `failed[]` from the agents bridge so downstream consumers (Phase 5
+ * partial-success removal, diagnostics, tests) can read individual
+ * failure reasons WITHOUT re-parsing the textual message. The message
+ * formatting is preserved for the user-visible surface.
+ */
+export class AgentsUnstageFailureError extends Error {
+  readonly failedAgents: readonly UnstageAgentFailure[];
+  constructor(message: string, failedAgents: readonly UnstageAgentFailure[]) {
+    super(message);
+    this.name = "AgentsUnstageFailureError";
+    this.failedAgents = failedAgents;
+  }
+}
 
 /**
  * D-12, D-13: marketplace orchestrator git surface. EXACTLY 5 primitives.
@@ -150,8 +167,18 @@ export async function cascadeUnstagePlugin(
     if (agentsResult.failed.length > 0) {
       // AG-5 foreign content: index rows preserved by the bridge;
       // surface as plugin failure so MR-3 aggregation runs.
+      //
+      // CR-06: preserve the structured `failed[]` array on the thrown
+      // error so downstream consumers (Phase 5 partial-success removal,
+      // diagnostics, tests) can read per-agent reasons WITHOUT having
+      // to re-parse the textual message. The textual message remains
+      // the same so the existing user-visible surface is unchanged.
       const reasons = agentsResult.failed.map((f) => `${f.generatedName}: ${f.reason}`).join("; ");
-      throw new Error(`Failed to remove ${agentsResult.failed.length} agent(s): ${reasons}`);
+      const err = new AgentsUnstageFailureError(
+        `Failed to remove ${agentsResult.failed.length} agent(s): ${reasons}`,
+        agentsResult.failed,
+      );
+      throw err;
     }
 
     const mcpResult = await unstageMcpServers({
