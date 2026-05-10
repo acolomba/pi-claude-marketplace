@@ -31,7 +31,7 @@
 // D-14 follow-upstream-blindly all supersede V1 specifics).
 
 import { randomUUID } from "node:crypto";
-import { readFile, rename, stat } from "node:fs/promises";
+import { mkdir, readFile, rename, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { MARKETPLACE_VALIDATOR } from "../../domain/manifest.ts";
@@ -156,7 +156,9 @@ async function addGithubInGuard(args: {
     }
 
     // 5. Atomic rename -- same FS by D-09 (sources-staging/ and sources/
-    //    are siblings under extensionRoot).
+    //    are siblings under extensionRoot). Ensure the parent (sources/)
+    //    exists; on a fresh scope it has not been created yet.
+    await mkdir(path.dirname(finalDir), { recursive: true });
     await rename(stagingDir, finalDir);
     stagedAtFinal = true;
 
