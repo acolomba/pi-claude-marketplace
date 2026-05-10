@@ -156,7 +156,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 | 1. Foundations & Toolchain              | 0/7            | Not started | -         |
 | 2. Domain Core & Persistence Primitives | 0/6            | Not started | -         |
 | 3. Resource Bridges                     | 0/TBD          | Not started | -         |
-| 4. Marketplace Orchestrators            | 0/TBD          | Not started | -         |
+| 4. Marketplace Orchestrators            | 0/10 | Planned    |  |
 | 5. Plugin Orchestrators                 | 0/TBD          | Not started | -         |
 | 6. Edge Layer & Tab Completion          | 0/TBD          | Not started | -         |
 | 7. Integration & Pi Wiring              | 0/TBD          | Not started | -         |
