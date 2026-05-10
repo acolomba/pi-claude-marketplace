@@ -289,6 +289,59 @@ test("MA-4: tilde paths are preserved verbatim in stored source.raw", async () =
   assert.equal(source.raw, "~/projects/local-mp"); // verbatim
 });
 
+test("CR-02 / MA-4: ~/path is expanded against $HOME for the on-disk probe; source.raw stays verbatim", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    const { ctx, notifications } = makeCtx();
+    // Stand up a hermetic HOME containing the fixture so that
+    // "~/projects/local-mp" resolves to a real directory.
+    const originalHome = process.env.HOME;
+    const home = await mkdtemp(path.join(tmpdir(), "mp-add-home-"));
+    process.env.HOME = home;
+    try {
+      const tildeRelDir = path.join("projects", "local-mp");
+      const localMpDir = path.join(home, tildeRelDir);
+      await mkdir(path.dirname(localMpDir), { recursive: true });
+      await cp(fixtureMarketplaceDir("valid-marketplace"), localMpDir, { recursive: true });
+
+      const { gitOps, state } = makeMockGitOps();
+      await addMarketplace({
+        ctx,
+        scope: "project",
+        cwd,
+        rawSource: `~/${tildeRelDir}`,
+        gitOps,
+      });
+
+      // NFR-5: path source MUST NOT touch gitOps.
+      assert.equal(state.cloneCalls.length, 0);
+      assert.equal(state.fetchCalls.length, 0);
+
+      // State updated; success notification emitted.
+      const persisted = await loadState(locations.extensionRoot);
+      assert.ok("valid-marketplace" in persisted.marketplaces);
+      const recorded = persisted.marketplaces["valid-marketplace"];
+      assert.ok(recorded);
+      // SP-7 / MA-4: source.raw must keep the verbatim "~" form.
+      const src = recorded.source as { kind: string; raw: string };
+      assert.equal(src.raw, `~/${tildeRelDir}`);
+      // marketplaceRoot is the EXPANDED on-disk path so update/list can read it.
+      assert.equal(recorded.marketplaceRoot, localMpDir);
+
+      const note = notifications[0];
+      assert.ok(note);
+      assert.equal(note.message, 'Added marketplace "valid-marketplace" in project scope.');
+    } finally {
+      if (originalHome === undefined) {
+        delete process.env.HOME;
+      } else {
+        process.env.HOME = originalHome;
+      }
+
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+});
+
 test("MA-2 / SC-5: orchestrator accepts scope='project' (caller defaults; orchestrator does not invent)", async () => {
   // The edge layer (Phase 6) defaults --scope to "user". This test
   // confirms the orchestrator threads the value through verbatim.

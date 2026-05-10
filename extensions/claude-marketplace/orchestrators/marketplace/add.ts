@@ -32,6 +32,7 @@
 
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, stat } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
 import { MARKETPLACE_VALIDATOR } from "../../domain/manifest.ts";
@@ -204,8 +205,19 @@ async function addPathInGuard(args: {
   // (no `resolved` field yet -- the resolved-path layer is deferred to
   // Phase 4 location/index helpers). We use `source.logical` here since
   // it equals `raw` verbatim (SP-7) and is the on-disk lookup key for
-  // path-source `add`. Tests pass already-expanded absolute paths.
-  const onDiskPath = source.logical;
+  // path-source `add`.
+  //
+  // CR-02 (SP-7 / MA-4): Node's fs APIs do NOT perform shell tilde
+  // expansion -- stat("~/...") returns ENOENT against a literal "~"
+  // directory. Expand "~" and "~/..." against os.homedir() before
+  // probing on disk. The stored `source.raw` keeps the verbatim "~"
+  // form (SP-7); only the on-disk lookup is rewritten.
+  const onDiskPath =
+    source.logical === "~"
+      ? os.homedir()
+      : source.logical.startsWith("~/")
+        ? path.join(os.homedir(), source.logical.slice(2))
+        : source.logical;
   const probe = await stat(onDiskPath);
   let manifestPath: string;
   let marketplaceRoot: string;
