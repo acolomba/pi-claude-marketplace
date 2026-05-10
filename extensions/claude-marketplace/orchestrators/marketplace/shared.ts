@@ -36,10 +36,13 @@ import { unstagePluginAgents } from "../../bridges/agents/index.ts";
 import { unstagePluginCommands } from "../../bridges/commands/index.ts";
 import { unstageMcpServers } from "../../bridges/mcp/index.ts";
 import { unstagePluginSkills } from "../../bridges/skills/index.ts";
+import { loadState } from "../../persistence/state-io.ts";
 import * as defaultGit from "../../platform/git.ts";
+import { MarketplaceAmbiguousScopeError, MarketplaceNotFoundError } from "../../shared/errors.ts";
 
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { Scope } from "../../shared/types.ts";
 
 /**
  * D-12, D-13: marketplace orchestrator git surface. EXACTLY 5 primitives.
@@ -188,4 +191,139 @@ export async function cascadeUnstagePlugin(
       cause: err instanceof Error ? err : new Error(String(err)),
     });
   }
+}
+
+/** MAU-1..4: idempotent autoupdate-flip outcome. */
+export interface AutoupdateFlipResult {
+  /** Marketplace names whose flag actually changed in this call. */
+  readonly changed: readonly string[];
+  /** Marketplace names whose flag already matched the requested value. */
+  readonly unchanged: readonly string[];
+}
+
+/**
+ * MAU-1..4 / RESEARCH Pattern 7: idempotent autoupdate-flip.
+ * - When `name` is undefined, flip every marketplace in this scope's
+ *   state (MAU-2 bare form).
+ * - When `name` is given but missing, throw MarketplaceNotFoundError
+ *   with an empty scope list -- the caller fills the scope detail.
+ * - MAU-3: already-matching marketplaces report as "unchanged"; the
+ *   caller composes the user-visible "Already enabled/disabled: ..."
+ *   line.
+ * - MAU-4: missing/undefined `record.autoupdate` is read as `false`
+ *   via the `?? false` coalescing.
+ *
+ * The `state` parameter is mutated in place (the caller is INSIDE
+ * a withStateGuard closure; the guard saves on no-throw).
+ */
+export function applyAutoupdateFlip(
+  state: ExtensionState,
+  name: string | undefined,
+  enable: boolean,
+): AutoupdateFlipResult {
+  const changed: string[] = [];
+  const unchanged: string[] = [];
+
+  if (name !== undefined) {
+    const record = state.marketplaces[name];
+    if (record === undefined) {
+      throw new MarketplaceNotFoundError(name, []);
+    }
+
+    if ((record.autoupdate ?? false) === enable) {
+      unchanged.push(name);
+    } else {
+      record.autoupdate = enable;
+      changed.push(name);
+    }
+
+    return Object.freeze({
+      changed: Object.freeze(changed),
+      unchanged: Object.freeze(unchanged),
+    });
+  }
+
+  for (const [mp, record] of Object.entries(state.marketplaces)) {
+    if ((record.autoupdate ?? false) === enable) {
+      unchanged.push(mp);
+    } else {
+      record.autoupdate = enable;
+      changed.push(mp);
+    }
+  }
+
+  return Object.freeze({
+    changed: Object.freeze(changed),
+    unchanged: Object.freeze(unchanged),
+  });
+}
+
+/**
+ * MR-1 cross-scope resolution. Without --scope, search both scopes;
+ * throw on dual-found (`MarketplaceAmbiguousScopeError`) or not-found
+ * (`MarketplaceNotFoundError`). Used by `remove.ts` and `update.ts`
+ * when --scope is omitted.
+ *
+ * D-04 boundary: this helper performs READ-ONLY state loads. The
+ * caller's withStateGuard wraps the state mutation that follows; an
+ * additional fresh load happens inside that guard.
+ */
+export async function resolveScopeFromState(
+  mpName: string,
+  userLocations: ScopedLocations,
+  projectLocations: ScopedLocations,
+): Promise<{ scope: Scope; locations: ScopedLocations }> {
+  const [userState, projectState] = await Promise.all([
+    loadState(userLocations.extensionRoot),
+    loadState(projectLocations.extensionRoot),
+  ]);
+  const inUser = mpName in userState.marketplaces;
+  const inProject = mpName in projectState.marketplaces;
+  if (inUser && inProject) {
+    throw new MarketplaceAmbiguousScopeError(mpName);
+  }
+
+  if (inUser) {
+    return { scope: "user", locations: userLocations };
+  }
+
+  if (inProject) {
+    return { scope: "project", locations: projectLocations };
+  }
+
+  throw new MarketplaceNotFoundError(mpName, ["user", "project"]);
+}
+
+/**
+ * ES-4 / Pitfall 10: walk Error.cause up to depth 5 and join the
+ * messages with ` -- caused by: `. Phase 4-local; Phase 6 may
+ * promote to shared/errors.ts without changing this signature.
+ *
+ * The depth bound prevents pathological cycles (an Error whose
+ * cause is itself or forms a loop). 5 levels matches V1's
+ * reference (marketplace/update.ts::formatErrorWithCauses).
+ */
+// eslint-disable-next-line @typescript-eslint/no-inferrable-types -- explicit `: number = 5` matches the plan's grep-gate done criterion (Plan 04-02 Task 2).
+export function formatErrorWithCauses(err: unknown, maxDepth: number = 5): string {
+  const parts: string[] = [];
+  let current: unknown = err;
+  for (let depth = 0; depth < maxDepth && current !== undefined; depth++) {
+    // Rule 1 deviation from verbatim: `String(current)` violates @typescript-eslint/no-base-to-string
+    // on unknown-with-toString. Equivalent semantics via instanceof / typeof / Object.prototype.toString.
+    const message =
+      current instanceof Error
+        ? current.message
+        : typeof current === "string"
+          ? current
+          : Object.prototype.toString.call(current);
+
+    parts.push(message);
+    if (current instanceof Error && current.cause !== undefined && current.cause !== current) {
+      current = current.cause;
+    } else {
+      break;
+    }
+  }
+
+  return parts.join(" -- caused by: ");
 }
