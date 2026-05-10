@@ -115,7 +115,7 @@ test("cascadeUnstagePlugin (c): bogus locations -- agents-index.json IO surface 
     // The cascade primitive may catch into ok:false OR may pass through
     // skills/commands cleanly and only fail at agents -- assert the
     // shape, not the specific bridge.
-    if (outcome.ok === false) {
+    if (!outcome.ok) {
       assert.ok(outcome.cause instanceof Error);
     } else {
       // If the agents bridge accommodates this case as a clean miss,
