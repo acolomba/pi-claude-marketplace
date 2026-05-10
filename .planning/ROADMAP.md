@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 1: Foundations & Toolchain** - Atomic IO, symlink-aware containment, MARKERS constants, output-channel discipline, ESM baseline, CI matrix
 - [ ] **Phase 2: Domain Core & Persistence Primitives** - Pure resolver, TypeBox manifest schemas, branded ScopedLocations, state persistence, withStateGuard + Phase ledger
 - [x] **Phase 3: Resource Bridges** - Skills, commands, agents, MCP servers staging with prepare/commit/abort discipline
-- [ ] **Phase 4: Marketplace Orchestrators** - `marketplace add/remove/list/update/autoupdate`, reload-hint and soft-dep presentation primitives
+- [x] **Phase 4: Marketplace Orchestrators** - `marketplace add/remove/list/update/autoupdate`, reload-hint and soft-dep presentation primitives
 - [ ] **Phase 5: Plugin Orchestrators** - `install/uninstall/update` using Phase ledger + all four bridges; top-level `list`; component-path supplement fix
 - [ ] **Phase 6: Edge Layer & Tab Completion** - `/claude:plugin` router, argument parsing, tab completion, Usage blocks, error formatting
 - [ ] **Phase 7: Integration & Pi Wiring** - `index.ts` entrypoint, `platform/pi-api.ts` wrapper, live e2e tests with pinned-SHA strategy, peer-dep floor
@@ -105,16 +105,16 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Plans**: 10 plans
 
-- [ ] `04-01-PLAN.md` -- Wave 1 foundations: 4 error classes + sourcesStagingDir + sourceLogical + orchestrators/types.ts (Wave 1)
-- [ ] `04-02-PLAN.md` -- Wave 1 shared.ts: GitOps interface + DEFAULT_GIT_OPS + cascadeUnstagePlugin + resolveScopeFromState + applyAutoupdateFlip + formatErrorWithCauses (Wave 1)
-- [ ] `04-03-PLAN.md` -- Wave 1 presentation: reload-hint.ts + soft-dep.ts + marketplace-list.ts + tests (Wave 1)
-- [ ] `04-04-PLAN.md` -- Wave 1 test infrastructure: tests/helpers/git-mock.ts + 3 marketplace fixtures (Wave 1)
-- [ ] `04-05-PLAN.md` -- Wave 2 add.ts: marketplace add (github + path branches; MA-1..6, MA-8..11, MA-9 cleanup) + tests (Wave 2)
-- [ ] `04-06-PLAN.md` -- Wave 2 remove.ts + cascade.test.ts: cascade fan-out, MR-3 aggregation, MR-4 single warning, MR-5/6/7 post-state cleanup (Wave 2)
-- [ ] `04-07-PLAN.md` -- Wave 2 list.ts: read-only orchestrator (no guard, no manifest reads, no network) + tests (Wave 2)
-- [ ] `04-08-PLAN.md` -- Wave 2 update.ts: D-14 fetch+forceUpdateRef+checkout sequence, outer-guard/cascade-outside, MU-7 partition rendering + tests (Wave 2)
-- [ ] `04-09-PLAN.md` -- Wave 2 autoupdate.ts: idempotent flip via applyAutoupdateFlip, MAU-1..4 + SC-6 + tests (Wave 2)
-- [ ] `04-10-PLAN.md` -- Wave 3 documentation supersession: REQUIREMENTS.md MU-2/MU-3 strikethrough + PROJECT.md D-23 row (Wave 3)
+- [x] `04-01-PLAN.md` -- Wave 1 foundations: 4 error classes + sourcesStagingDir + sourceLogical + orchestrators/types.ts (Wave 1)
+- [x] `04-02-PLAN.md` -- Wave 1 shared.ts: GitOps interface + DEFAULT_GIT_OPS + cascadeUnstagePlugin + resolveScopeFromState + applyAutoupdateFlip + formatErrorWithCauses (Wave 1)
+- [x] `04-03-PLAN.md` -- Wave 1 presentation: reload-hint.ts + soft-dep.ts + marketplace-list.ts + tests (Wave 1)
+- [x] `04-04-PLAN.md` -- Wave 1 test infrastructure: tests/helpers/git-mock.ts + 3 marketplace fixtures (Wave 1)
+- [x] `04-05-PLAN.md` -- Wave 2 add.ts: marketplace add (github + path branches; MA-1..6, MA-8..11, MA-9 cleanup) + tests (Wave 2)
+- [x] `04-06-PLAN.md` -- Wave 2 remove.ts + cascade.test.ts: cascade fan-out, MR-3 aggregation, MR-4 single warning, MR-5/6/7 post-state cleanup (Wave 2)
+- [x] `04-07-PLAN.md` -- Wave 2 list.ts: read-only orchestrator (no guard, no manifest reads, no network) + tests (Wave 2)
+- [x] `04-08-PLAN.md` -- Wave 2 update.ts: D-14 fetch+forceUpdateRef+checkout sequence, outer-guard/cascade-outside, MU-7 partition rendering + tests (Wave 2)
+- [x] `04-09-PLAN.md` -- Wave 2 autoupdate.ts: idempotent flip via applyAutoupdateFlip, MAU-1..4 + SC-6 + tests (Wave 2)
+- [x] `04-10-PLAN.md` -- Wave 3 documentation supersession: REQUIREMENTS.md MU-2/MU-3 strikethrough + PROJECT.md D-23 row (Wave 3)
 
 ### Phase 5: Plugin Orchestrators
 
@@ -156,7 +156,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 | 1. Foundations & Toolchain              | 0/7            | Not started | -         |
 | 2. Domain Core & Persistence Primitives | 0/6            | Not started | -         |
 | 3. Resource Bridges                     | 0/TBD          | Not started | -         |
-| 4. Marketplace Orchestrators            | 0/10 | Planned    |  |
+| 4. Marketplace Orchestrators            | 10/10          | Complete    | 2026-05-10 |
 | 5. Plugin Orchestrators                 | 0/TBD          | Not started | -         |
 | 6. Edge Layer & Tab Completion          | 0/TBD          | Not started | -         |
 | 7. Integration & Pi Wiring              | 0/TBD          | Not started | -         |
