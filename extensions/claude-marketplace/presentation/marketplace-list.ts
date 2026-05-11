@@ -16,6 +16,14 @@ import { sourceLogical } from "../domain/source.ts";
 
 import type { ParsedSource } from "../domain/source.ts";
 
+// Plan 06-04 D-02 re-exports: edge/ cannot import from domain/ (D-11
+// BLOCK C). To let `edge/handlers/tools.ts` format the LLM-tool surface
+// using the SAME `sourceLogical` projection used by the slash-command
+// renderer, re-surface them through presentation/ -- a folder edge/ may
+// import from.
+export { sourceLogical };
+export type { ParsedSource };
+
 /**
  * D-11 boundary: `presentation/` cannot import from `persistence/`. Define the
  * minimal structural shape this renderer consumes from `MarketplaceRecord`

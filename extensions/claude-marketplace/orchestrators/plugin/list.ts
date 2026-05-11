@@ -127,134 +127,138 @@ async function loadManifestSoftly(manifestPath: string): Promise<MarketplaceMani
 }
 
 /**
- * D-06 orchestrator half. Read-only listing of plugins grouped by scope
- * then by marketplace. Constructs the {@link PluginListPayload} + warnings
- * tuple and hands it to {@link renderPluginList}.
+ * Plan 06-04 D-02 extraction: pure payload builder. Performs the same
+ * state + manifest + resolver work as {@link listPlugins} but returns the
+ * structured payload + warnings instead of emitting via notify. Used by
+ * `edge/handlers/tools.ts` (claude_marketplace_plugin_list LLM tool) to
+ * read the same data without crossing the edge -> persistence import
+ * boundary (BLOCK C).
+ *
+ * On any THROWN failure outside the per-marketplace try/catch (e.g.,
+ * state.json schema invalid -- TC-9 surface), the throw propagates to the
+ * caller. Per-marketplace manifest failures (TC-8) are soft-failed into
+ * `warnings[]` per PL-6.
  */
-export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
-  const { ctx } = opts;
+export async function loadPluginListPayload(
+  opts: ListPluginsOptions,
+): Promise<{ payload: PluginListPayload; warnings: readonly string[] }> {
   const scopes: readonly Scope[] = opts.scope !== undefined ? [opts.scope] : ["user", "project"];
   const marketplaces: PluginListMarketplace[] = [];
   const warnings: string[] = [];
 
-  try {
-    for (const scope of scopes) {
-      const locations = locationsFor(scope, opts.cwd);
-      const state = await loadState(locations.extensionRoot);
+  for (const scope of scopes) {
+    const locations = locationsFor(scope, opts.cwd);
+    const state = await loadState(locations.extensionRoot);
 
-      for (const [mpName, mp] of Object.entries(state.marketplaces)) {
-        // PL-3 marketplace narrowing.
-        if (opts.marketplace !== undefined && opts.marketplace !== mpName) {
+    for (const [mpName, mp] of Object.entries(state.marketplaces)) {
+      // PL-3 marketplace narrowing.
+      if (opts.marketplace !== undefined && opts.marketplace !== mpName) {
+        continue;
+      }
+
+      // PL-6 manifest soft-fail.
+      let manifest: MarketplaceManifest | undefined;
+      try {
+        manifest = await loadManifestSoftly(mp.manifestPath);
+      } catch (err) {
+        warnings.push(
+          `could not load manifest for "${mpName}" (${scope} scope): ${errorMessage(err)}`,
+        );
+      }
+
+      const plugins: PluginListEntry[] = [];
+      const installedRecords = mp.plugins;
+      const installedNames = new Set(Object.keys(installedRecords));
+
+      // Installed entries (always derived from state; manifest is consulted
+      // only for decoration -- description + upgradable flag).
+      for (const [pluginName, record] of Object.entries(installedRecords)) {
+        if (!shouldShow(opts, "installed")) {
           continue;
         }
 
-        // PL-6 manifest soft-fail. The manifest informs (a) the
-        // installed-entry decoration (description + upgradable), and
-        // (b) the available / uninstallable buckets. On failure, the
-        // installed plugins still render from state.
-        let manifest: MarketplaceManifest | undefined;
-        try {
-          manifest = await loadManifestSoftly(mp.manifestPath);
-        } catch (err) {
-          warnings.push(
-            `could not load manifest for "${mpName}" (${scope} scope): ${errorMessage(err)}`,
-          );
-        }
+        const manifestEntry = manifest?.plugins.find((p) => p.name === pluginName);
 
-        const plugins: PluginListEntry[] = [];
-        const installedRecords = mp.plugins;
-        const installedNames = new Set(Object.keys(installedRecords));
+        // PL-5 string compare. NOT semver.
+        const upgradable =
+          manifestEntry?.version !== undefined && manifestEntry.version !== record.version;
 
-        // Installed entries (always derived from state; manifest is
-        // consulted only for decoration -- description + upgradable flag).
-        for (const [pluginName, record] of Object.entries(installedRecords)) {
-          if (!shouldShow(opts, "installed")) {
+        const entry: PluginListEntry = {
+          name: pluginName,
+          status: "installed",
+          version: record.version,
+          upgradable,
+          ...(manifestEntry?.description !== undefined && {
+            description: manifestEntry.description,
+          }),
+        };
+        plugins.push(entry);
+      }
+
+      // Available + uninstallable entries -- only when manifest loaded.
+      if (manifest !== undefined) {
+        for (const manifestEntry of manifest.plugins) {
+          if (installedNames.has(manifestEntry.name)) {
             continue;
           }
 
-          const manifestEntry = manifest?.plugins.find((p) => p.name === pluginName);
+          let status: PluginRenderStatus = "available";
+          let probeNotes: readonly string[] | undefined;
 
-          // PL-5 string compare. NOT semver. Any difference -- including
-          // hash-<hex> values per PI-7 -- yields upgradable=true. Same
-          // string yields upgradable=false. Missing manifest version (or
-          // missing manifest altogether) yields upgradable=false because
-          // we have nothing to compare against.
-          const upgradable =
-            manifestEntry?.version !== undefined && manifestEntry.version !== record.version;
+          try {
+            const resolved = await resolveStrict(manifestEntry, {
+              marketplaceRoot: mp.marketplaceRoot,
+            });
+
+            if (!resolved.installable) {
+              status = "uninstallable";
+              if (resolved.notes.length > 0) {
+                probeNotes = resolved.notes;
+              }
+            }
+          } catch (probeErr) {
+            status = "uninstallable";
+            probeNotes = [errorMessage(probeErr)];
+          }
+
+          if (!shouldShow(opts, status)) {
+            continue;
+          }
 
           const entry: PluginListEntry = {
-            name: pluginName,
-            status: "installed",
-            version: record.version,
-            upgradable,
-            ...(manifestEntry?.description !== undefined && {
+            name: manifestEntry.name,
+            status,
+            ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
+            ...(manifestEntry.description !== undefined && {
               description: manifestEntry.description,
             }),
+            ...(probeNotes !== undefined && { notes: probeNotes }),
           };
           plugins.push(entry);
         }
-
-        // Available + uninstallable entries -- only when manifest loaded.
-        // Without a manifest there is no source-of-truth for either bucket.
-        if (manifest !== undefined) {
-          for (const manifestEntry of manifest.plugins) {
-            if (installedNames.has(manifestEntry.name)) {
-              continue; // installed entries handled above
-            }
-
-            // Eager probe: resolve compatibility to bucket the entry.
-            // Per-entry try/catch mirrors PL-6 soft-fail discipline --
-            // a thrown resolver error becomes uninstallable+notes; the
-            // remaining manifest entries continue to be probed.
-            let status: PluginRenderStatus = "available";
-            let probeNotes: readonly string[] | undefined;
-
-            try {
-              const resolved = await resolveStrict(manifestEntry, {
-                marketplaceRoot: mp.marketplaceRoot,
-              });
-
-              if (!resolved.installable) {
-                status = "uninstallable";
-                if (resolved.notes.length > 0) {
-                  probeNotes = resolved.notes;
-                }
-              }
-            } catch (probeErr) {
-              status = "uninstallable";
-              probeNotes = [errorMessage(probeErr)];
-            }
-
-            if (!shouldShow(opts, status)) {
-              continue;
-            }
-
-            const entry: PluginListEntry = {
-              name: manifestEntry.name,
-              status,
-              ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
-              ...(manifestEntry.description !== undefined && {
-                description: manifestEntry.description,
-              }),
-              ...(probeNotes !== undefined && { notes: probeNotes }),
-            };
-            plugins.push(entry);
-          }
-        }
-
-        // Compose marketplace block. Include even when `plugins` is empty
-        // so the renderer can emit the "(no plugins)" placeholder line --
-        // this preserves the autoupdate-tag visibility for empty buckets.
-        marketplaces.push({
-          name: mpName,
-          scope,
-          autoupdate: mp.autoupdate === true,
-          plugins,
-        });
       }
-    }
 
-    const payload: PluginListPayload = { marketplaces };
+      marketplaces.push({
+        name: mpName,
+        scope,
+        autoupdate: mp.autoupdate === true,
+        plugins,
+      });
+    }
+  }
+
+  return { payload: { marketplaces }, warnings };
+}
+
+/**
+ * D-06 orchestrator half. Read-only listing of plugins grouped by scope
+ * then by marketplace. Delegates to {@link loadPluginListPayload} for the
+ * payload construction; this wrapper handles notify side-effects.
+ */
+export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
+  const { ctx } = opts;
+  try {
+    const { payload, warnings } = await loadPluginListPayload(opts);
     notifySuccess(ctx, renderPluginList(payload, warnings));
   } catch (err) {
     notifyError(ctx, errorMessage(err), err);

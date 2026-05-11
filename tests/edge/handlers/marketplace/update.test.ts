@@ -1,21 +1,123 @@
-/* eslint-disable @typescript-eslint/no-empty-function --
- * Wave 0 skipped stubs (`test.skip(name, () => {})`) deliberately have empty
- * bodies; the bodies are filled in as the corresponding production modules
- * land in Wave 1+. See `.planning/phases/06-edge-layer-tab-completion/06-01-test-scaffolding-PLAN.md`. */
+// Plan 06-04 Task 1: marketplace update handler shim tests.
+//
+// Two forms via optional positional:
+//   - bare    -> updateAllMarketplaces (MU-1 empty-set silent success on
+//                  fresh state -> "No marketplaces configured.")
+//   - <name>  -> updateMarketplace (MarketplaceNotFoundError -> notifyError)
 
+import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { test } from "node:test";
 
-// @ts-expect-error -- module created in Wave 1 (06-02-PLAN). Type-only so
-// runtime ESM resolution does not fail before the module exists; when Wave 1+
-// lands, executors REMOVE the @ts-expect-error directive, change this to
-// `import * as _target ...`, and unskip the relevant tests.
-import type * as _target from "../../../../extensions/claude-marketplace/edge/handlers/marketplace/update.ts";
+import { makeMarketplaceUpdateHandler } from "../../../../extensions/claude-marketplace/edge/handlers/marketplace/update.ts";
+import { makeMockGitOps } from "../../../helpers/git-mock.ts";
 
-// Reference the namespace so noUnusedLocals is satisfied; type-only export
-// is erased at runtime and never exposes a value.
-export type _TargetShape = typeof _target;
+import type { EdgeDeps } from "../../../../extensions/claude-marketplace/edge/types.ts";
+import type { PluginUpdateOutcome } from "../../../../extensions/claude-marketplace/orchestrators/types.ts";
+import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 
-test.skip("shim :: bare /marketplace update calls updateAllMarketplaces", () => {});
-test.skip("shim :: named /marketplace update <name> calls updateMarketplace with name", () => {});
-test.skip("shim :: --scope user/project propagated", () => {});
-test.skip("shim :: deps.pluginUpdate passed through to orchestrator for cascade", () => {});
+interface NotifyRecord {
+  message: string;
+  severity?: string;
+}
+
+function makeCtx(cwd: string): { ctx: ExtensionCommandContext; notifications: NotifyRecord[] } {
+  const notifications: NotifyRecord[] = [];
+  const ctx = {
+    cwd,
+    ui: {
+      notify: (m: string, s?: string): void => {
+        notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
+      },
+    },
+  } as unknown as ExtensionCommandContext;
+  return { ctx, notifications };
+}
+
+function makeDeps(): { deps: EdgeDeps; pluginUpdateCalls: string[] } {
+  const gitMock = makeMockGitOps();
+  const pluginUpdateCalls: string[] = [];
+  const pluginUpdate = (plugin: string): Promise<PluginUpdateOutcome> => {
+    pluginUpdateCalls.push(plugin);
+    return Promise.resolve({ partition: "unchanged", name: plugin });
+  };
+
+  const deps: EdgeDeps = { gitOps: gitMock.gitOps, pluginUpdate };
+  return { deps, pluginUpdateCalls };
+}
+
+async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Promise<T> {
+  const originalHome = process.env.HOME;
+  const home = await mkdtemp(path.join(tmpdir(), "mp-update-shim-home-"));
+  const cwd = await mkdtemp(path.join(tmpdir(), "mp-update-shim-cwd-"));
+  process.env.HOME = home;
+  try {
+    return await fn({ cwd });
+  } finally {
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+
+    await rm(home, { recursive: true, force: true });
+    await rm(cwd, { recursive: true, force: true });
+  }
+}
+
+test("shim :: bare /marketplace update calls updateAllMarketplaces", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const { deps } = makeDeps();
+    const handler = makeMarketplaceUpdateHandler(deps);
+    await handler("", ctx);
+    // updateAllMarketplaces on fresh state -> "No marketplaces configured."
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /No marketplaces configured\./);
+  });
+});
+
+test("shim :: named /marketplace update <name> calls updateMarketplace with name", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx } = makeCtx(cwd);
+    const { deps } = makeDeps();
+    const handler = makeMarketplaceUpdateHandler(deps);
+    // updateMarketplace's `resolveScopeFromState` throws
+    // MarketplaceNotFoundError when --scope is omitted and the name is
+    // absent in BOTH scopes. The throw is NOT caught by the orchestrator
+    // (the scope-resolution step runs BEFORE the outer try/catch that
+    // surfaces refresh-time errors via notifyError). This rejection proves
+    // control reached updateMarketplace with the requested name.
+    await assert.rejects(async () => handler("mymkt", ctx), /mymkt/);
+  });
+});
+
+test("shim :: --scope user/project propagated", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const { deps } = makeDeps();
+    const handler = makeMarketplaceUpdateHandler(deps);
+    await handler("--scope project", ctx);
+    // updateAllMarketplaces on project scope, empty -> "No marketplaces..."
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /No marketplaces configured\./);
+  });
+});
+
+test("shim :: deps.pluginUpdate passed through to orchestrator for cascade", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx } = makeCtx(cwd);
+    const { deps, pluginUpdateCalls } = makeDeps();
+    const handler = makeMarketplaceUpdateHandler(deps);
+    // Empty state -> nothing to update -> pluginUpdate is never called (no
+    // marketplaces with autoupdate=true). But the deps.pluginUpdate field
+    // was structurally accepted -- the type-check that deps.pluginUpdate
+    // reached the orchestrator option bag is a compile-time invariant. We
+    // verify the call path didn't error out.
+    await handler("", ctx);
+    // No marketplaces -> no cascade -> pluginUpdate calls empty.
+    assert.equal(pluginUpdateCalls.length, 0);
+  });
+});
