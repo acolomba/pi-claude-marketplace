@@ -1,13 +1,12 @@
 // transaction/with-state-guard.ts
 //
-// Intra-process state lifecycle wrapper (ST-7).
+// Cross-process state lifecycle wrapper (ST-7 + Phase 7 D-06).
 //
-// Concurrency scope (RESEARCH.md Pitfall 4, MUST stay in this docstring):
-//   This is an INTRA-process preflight guard, NOT a cross-process
-//   transaction. Two pi processes targeting the same scope can still
-//   last-writer-wins on state.json. Cross-process safety is provided by
-//   write-file-atomic's queue (Phase 1 D-03) at the byte level only;
-//   the in-memory mutation race window is real but small.
+// Concurrency scope:
+//   Phase 7 D-06 adds a per-scope proper-lockfile lock around the full
+//   load -> mutate -> save critical section. write-file-atomic remains the
+//   byte-safety layer; this guard now prevents cross-process state/disk drift
+//   caused by last-writer-wins state.json writes.
 //
 // ST-8 (concurrent install hard-fail) and ST-9 (update concurrent
 // change) are CALLER-supplied invariants checked INSIDE the mutate
@@ -28,19 +27,23 @@
 //     await runPhases(buildPhases(state), { ...ctx, state });
 //   });
 
+import { mkdir } from "node:fs/promises";
+
+import lockfile from "proper-lockfile";
+
 import { loadState, saveState, type ExtensionState } from "../persistence/state-io.ts";
+import { StateLockHeldError } from "../shared/errors.ts";
 
 import type { ScopedLocations } from "../persistence/locations.ts";
 
 /**
  * ST-7: load fresh state, hand to closure, save only on no-throw.
  *
- * Concurrency scope: this is an INTRA-process preflight guard, not a
- * cross-process transaction. Two pi processes against the same scope
- * can still last-writer-wins on state.json -- cross-process safety
- * lives only at the byte level via write-file-atomic's queue (Phase 1
- * D-03), not at the load-mutate-save granularity. (RESEARCH.md
- * Pitfall 4.)
+ * Concurrency scope: Phase 7 D-06 acquires a per-scope proper-lockfile
+ * lock before loadState and releases it after saveState (or after any
+ * mutate/save throw) so two Pi processes cannot last-writer-wins state.json
+ * into state/disk drift. write-file-atomic remains the byte-level safety
+ * layer for the final write.
  *
  * @param locations  ScopedLocations for the target scope (`locationsFor(scope, cwd)`)
  * @param mutate     async or sync closure that receives the fresh state and may mutate it
@@ -53,8 +56,27 @@ export async function withStateGuard<T>(
   locations: ScopedLocations,
   mutate: (state: ExtensionState) => Promise<T> | T,
 ): Promise<T> {
-  const fresh = await loadState(locations.extensionRoot);
-  const result = await mutate(fresh);
-  await saveState(locations.extensionRoot, fresh);
-  return result;
+  await mkdir(locations.extensionRoot, { recursive: true });
+
+  let release: (() => Promise<void>) | undefined;
+  try {
+    release = await lockfile.lock(locations.extensionRoot, {
+      lockfilePath: locations.stateLockFile,
+      realpath: false,
+      retries: 0,
+      stale: 10_000,
+      update: 2_000,
+    });
+  } catch (err) {
+    throw new StateLockHeldError(locations.scope, locations.stateLockFile, { cause: err });
+  }
+
+  try {
+    const fresh = await loadState(locations.extensionRoot);
+    const result = await mutate(fresh);
+    await saveState(locations.extensionRoot, fresh);
+    return result;
+  } finally {
+    await release();
+  }
 }
