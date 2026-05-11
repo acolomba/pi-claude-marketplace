@@ -24,3 +24,14 @@ export const ROLLBACK_PARTIAL = "(rollback partial: ";
  * tests/architecture/markers-snapshot.test.ts.
  */
 export const RECOVERY_PLUGIN_REINSTALL_PREFIX = "plugin-uninstall + plugin-install for";
+
+/**
+ * D-08 state-lock contention prefix (Phase 7 extension beyond ES-5).
+ *
+ * Stable user-contract prefix. The transaction layer appends the scope and
+ * lock path when a second process attempts to mutate the same scope while a
+ * `withStateGuard` lock is already held. This constant is NOT a member of
+ * the original ES-5 enum; it is a Phase 7 extension to the markers surface,
+ * drift-guarded by tests/architecture/markers-snapshot.test.ts.
+ */
+export const STATE_LOCK_HELD_PREFIX = "Another claude-marketplace operation is in progress for";

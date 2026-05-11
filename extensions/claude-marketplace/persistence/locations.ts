@@ -44,6 +44,8 @@ export interface ScopedLocations {
   readonly extensionRoot: string;
   /** `<extensionRoot>/state.json` -- atomic state file. */
   readonly stateJsonPath: string;
+  /** `<extensionRoot>/.state-lock` -- Phase 7 per-scope cross-process lock sentinel. */
+  readonly stateLockFile: string;
   /** `<scopeRoot>/agents/` -- where pi-subagents agents are written (SC-2). */
   readonly agentsDir: string;
   /** `<extensionRoot>/agents-staging/` -- pre-rename staging tree. */
@@ -116,6 +118,7 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
 
   const extensionRoot = path.join(scopeRoot, "claude-marketplace");
   const stateJsonPath = path.join(extensionRoot, "state.json");
+  const stateLockFile = path.join(extensionRoot, ".state-lock");
   const agentsDir = path.join(scopeRoot, "agents");
   const agentsStagingDir = path.join(extensionRoot, "agents-staging");
   const agentsIndexPath = path.join(extensionRoot, "agents-index.json");
@@ -146,6 +149,7 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
     scopeRoot,
     extensionRoot,
     stateJsonPath,
+    stateLockFile,
     agentsDir,
     agentsStagingDir,
     agentsIndexPath,

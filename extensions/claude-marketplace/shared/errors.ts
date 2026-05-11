@@ -147,6 +147,26 @@ export class ConcurrentUninstallError extends Error {
 }
 
 /**
+ * D-08 fail-fast cross-process state lock contention.
+ *
+ * Thrown by `transaction/with-state-guard.ts` before loading state when
+ * another Pi process already owns this scope's `.state-lock` sentinel.
+ */
+export class StateLockHeldError extends Error {
+  readonly scope: "user" | "project";
+  readonly lockPath: string;
+  constructor(scope: "user" | "project", lockPath: string, options?: ErrorOptions) {
+    super(
+      `Another claude-marketplace operation is in progress for ${scope} scope (${lockPath}). Retry after it completes.`,
+      options,
+    );
+    this.name = "StateLockHeldError";
+    this.scope = scope;
+    this.lockPath = lockPath;
+  }
+}
+
+/**
  * PUP-6 aggregate phase-3 failure for plugin update.
  *
  * Wraps the heterogeneous-undo phase-3a failures from update.ts's
