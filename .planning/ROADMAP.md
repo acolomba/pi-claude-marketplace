@@ -148,7 +148,13 @@ Decimal phases appear between their surrounding integers in numeric order.
 2. Plugin tokens for `install/uninstall/update <here>` complete to `<plugin>@<marketplace>` form per PRD §6.6 detail rules; `update` accepts the bare `@<marketplace>` form; per-marketplace manifest-load failures soft-fail to empty set while top-level `state.json` errors propagate (no silent hide)
 3. Argument parser tokenizes single- and double-quoted spaced arguments correctly, rejects missing/invalid `--scope` value with a clear error, accepts `--scope` at any position, and emits the relevant `Usage:` block at `error` severity on empty/unknown subcommand
 4. All terminal completions include trailing space; double-space collapse via fish-style normalization scoped to `/claude:plugin` (does not affect other commands)
-5. Every user-visible message routes through `ctx.ui.notify` via the typed wrapper from Phase 1; ESLint blocks any new `process.stdout`/`stderr` write in `src/edge/` **Plans**: TBD **UI hint**: yes
+5. Every user-visible message routes through `ctx.ui.notify` via the typed wrapper from Phase 1; ESLint blocks any new `process.stdout`/`stderr` write in `src/edge/` **Plans**: 5 plans **UI hint**: yes
+
+- [ ] `06-01-test-scaffolding-PLAN.md` -- Wave 0 test scaffolding: 18 new test files under tests/edge/**/*.test.ts + tests/shared/completion-cache.test.ts with skipped stubs covering every AP-1..4 / TC-1..9 / D-02 / D-03 / D-04 behavior (Wave 0)
+- [ ] `06-02-edge-primitives-PLAN.md` -- Wave 1 edge primitives: port V1 args.ts + commands/_args.ts + commands/router.ts verbatim (modulo notify routing); TC-7 normalize.ts; EdgeDeps in types.ts; persistence/locations.ts cache helpers (Wave 1)
+- [ ] `06-03-completion-cache-and-completions-PLAN.md` -- Wave 2 two-tier cache + completion dispatcher: shared/completion-cache.ts (D-03 file + memory + ManifestSoftFailError + 10-min TTL clock seam); edge/completions/data.ts (status-aware accessors); edge/completions/provider.ts (5-branch dispatcher TC-1..6/TC-8/TC-9) (Wave 2)
+- [ ] `06-04-handlers-and-llm-tools-PLAN.md` -- Wave 2 handlers + LLM tools (parallel with 06-03): 9 thin-shim handlers under edge/handlers/{plugin,marketplace}/ + edge/handlers/tools.ts (D-02 two read-only LLM tools with extended params + PL-1 union semantics) (Wave 2)
+- [ ] `06-05-register-and-invalidation-PLAN.md` -- Wave 3 register + cache invalidation + ESLint: edge/register.ts (D-04 two registration helpers + session_start TC-7 wrapper); orchestrators/edge-deps.ts (LocationsResolver constructor; BLOCK C indirection); cache-invalidation call-sites in 5 mutating orchestrators (marketplace add/remove/update, plugin install/uninstall); eslint.config.js no-restricted-syntax rule for process.stdout/stderr in edge/ (Wave 3)
 
 ### Phase 7: Integration & Pi Wiring
 
@@ -171,5 +177,5 @@ Decimal phases appear between their surrounding integers in numeric order.
 | 3. Resource Bridges                     | 0/TBD          | Not started | -         |
 | 4. Marketplace Orchestrators            | 10/10          | Complete    | 2026-05-10 |
 | 5. Plugin Orchestrators                 | 10/10          | Complete    | 2026-05-11 |
-| 6. Edge Layer & Tab Completion          | 0/TBD          | Not started | -         |
+| 6. Edge Layer & Tab Completion          | 0/5            | Not started | -         |
 | 7. Integration & Pi Wiring              | 0/TBD          | Not started | -         |
