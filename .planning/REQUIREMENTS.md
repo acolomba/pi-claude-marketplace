@@ -184,7 +184,7 @@
 - [ ] **PR-1**: Resolver returns discriminated union `{ installable: true, pluginRoot, ... }` or `{ installable: false, ... }`; latter MUST NOT expose `pluginRoot`
 - [ ] **PR-2**: Mark unavailable for non-`path` source, source path escape, missing source dir, malformed manifest, declared unsupported components, malformed `mcpServers`, non-string component path, escaping component path, array-form supported component path
 - [ ] **PR-3**: Unsupported component name produces note `contains <name>` and disqualifies install
-- [ ] **PR-4**: Detect implicit components by convention only when corresponding manifest field absent
+- [x] ~~**PR-4**: Detect implicit components by convention only when corresponding manifest field absent~~ (**superseded by Phase 5 D-07**: custom componentPath arrays now SUPPLEMENT defaults rather than replace them; implicit-by-convention is always detected when the conventional dir exists. Behavior corrected vs V1 per Gap 3 / COMP-01 -- see `.planning/phases/05-plugin-orchestrators/05-CONTEXT.md` D-07. This is a deliberate user-contract change recorded in PROJECT.md Key Decisions.)
 - [ ] **PR-5**: `dependencies` present adds note `declares dependencies that must be installed manually` but keeps installable
 - [ ] **PR-6**: `requireInstallable` narrows to installable variant or throws `Plugin "<n>" is not installable: <notes>` (or `is no longer installable` for update)
 
@@ -476,7 +476,7 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | PR-1        | Phase 2 | Pending |
 | PR-2        | Phase 2 | Pending |
 | PR-3        | Phase 2 | Pending |
-| PR-4        | Phase 2 | Pending |
+| PR-4        | --      | Superseded by Phase 5 D-07 |
 | PR-5        | Phase 2 | Pending |
 | PR-6        | Phase 2 | Pending |
 | RN-1        | Phase 2 | Pending |
@@ -552,15 +552,15 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 **Coverage:**
 
 - v1 requirements: 200 total (file footer previously claimed 134; corrected here)
-- Mapped to phases: 197 (98.5%) -- MA-7 superseded by D-21 (Phase 1 adopted isomorphic-git, removing the "git CLI not found" failure mode); MU-2 and MU-3 superseded by Phase 4 D-14 (follow-upstream-blindly semantics; the local marketplace clone is read-only by contract, so non-fast-forward divergence cannot occur)
-- Unmapped: 0 (MA-7, MU-2, MU-3 are superseded, not unmapped)
+- Mapped to phases: 196 (98.0%) -- MA-7 superseded by D-21 (Phase 1 adopted isomorphic-git, removing the "git CLI not found" failure mode); MU-2 and MU-3 superseded by Phase 4 D-14 (follow-upstream-blindly semantics; the local marketplace clone is read-only by contract, so non-fast-forward divergence cannot occur); PR-4 superseded by Phase 5 D-07 (custom componentPath arrays now SUPPLEMENT defaults rather than replace them; behavior corrected vs V1 per COMP-01 / Gap 3)
+- Unmapped: 0 (MA-7, MU-2, MU-3, PR-4 are superseded, not unmapped)
 
 **Per-phase counts:**
 
 | Phase                                         | REQ-IDs                                                                                                                                 |
 | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | Phase 1: Foundations & Toolchain              | 23 (NFR-1, NFR-4, NFR-6, NFR-9, NFR-10, IL-1..5, ES-1..5, PS-1..5, AS-1, AS-4, AS-5)                                                    |
-| Phase 2: Domain Core & Persistence Primitives | 39 (NFR-7, NFR-12, SP-1..7, SC-1..4, SC-7, MM-1..7, PR-1..6, RN-1..2, ST-1..9)                                                          |
+| Phase 2: Domain Core & Persistence Primitives | 38 (NFR-7, NFR-12, SP-1..7, SC-1..4, SC-7, MM-1..7, PR-1..3, PR-5, PR-6, RN-1..2, ST-1..9) -- PR-4 superseded by Phase 5 D-07            |
 | Phase 3: Resource Bridges                     | 34 (SK-1..5, CM-1..4, AG-1..12, MC-1..8, RN-4..6, AS-8..9)                                                                              |
 | Phase 4: Marketplace Orchestrators            | 41 (MA-1..6, MA-8..11 (MA-7 superseded by D-21), MR-1..8, ML-1..4, MU-1, MU-4..9 (MU-2, MU-3 superseded by Phase 4 D-14), MAU-1..4, SC-5..6, RH-1..5, NFR-5) |
 | Phase 5: Plugin Orchestrators                 | 47 (PI-1..15, PU-1..8, PUP-1..9, PL-1..7, RN-3, AS-2..3, AS-6..7, NFR-2..3)                                                             |
@@ -571,4 +571,4 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 
 ______________________________________________________________________
 
-*Requirements defined: 2026-05-09 from `docs/prd/pi-claude-marketplace-prd.md` v1.0* *Last updated: 2026-05-09 after roadmap creation (Traceability section populated; coverage count corrected from 134 to 200)*
+*Requirements defined: 2026-05-09 from `docs/prd/pi-claude-marketplace-prd.md` v1.0* *Last updated: 2026-05-10 -- Phase 5 D-07 supersedes PR-4 (COMP-01 / Gap 3 supplement-not-replace; custom componentPath arrays now supplement defaults rather than replace them)*
