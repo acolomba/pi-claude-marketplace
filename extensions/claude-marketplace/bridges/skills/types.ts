@@ -18,7 +18,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 export interface DiscoveredSkill {
   /** Directory name in the source plugin (e.g. `acme-knowledge`, `helper`). */
   readonly sourceName: string;
-  /** `<plugin>-<skill>` with SK-2 elision applied (e.g. `acme-knowledge`, `acme-helper`). */
+  /** `<plugin>:<skill>` with SK-2 elision applied (e.g. `acme:knowledge`, `acme:helper`). */
   readonly generatedName: string;
   /** Absolute path to the source skill directory. */
   readonly skillDir: string;

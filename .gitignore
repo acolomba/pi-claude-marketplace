@@ -1,14 +1,15 @@
 # ai harnesses
 .codex
 .opencode
-
-# dependencies
-node_modules/
+.serena
 
 # build output
 /dist/
 /build/
 /coverage/
+
+# dependencies
+node_modules/
 
 # logs
 *.log

@@ -40,8 +40,40 @@ List plugins available for installation with:
 Install a plugin with:
 
 ```text
-/claude:plugin install feature-dev@claude-plugins-official
+/claude:plugin install pr-review-toolkit@claude-plugins-official
 ```
+
+Then reload:
+
+```text
+/reload
+```
+
+### Name mapping
+
+Command and skill names are prefixed with the plugin name. If the command or skill is already prefixed with the plugin name plus `-`, that common part is elided.
+
+| Plugin | Command or skill name | Pi name   |
+| ------ | --------------------- | --------- |
+| `foo`  | `bar`                 | `foo:bar` |
+| `foo`  | `foo-bar`             | `foo:bar` |
+| `foo`  | `foo`                 | `foo:foo` |
+
+Skills can additionally be invoked through Pi's `/skill` command:
+
+| Plugin | Skill name | Pi name          |
+| ------ | ---------- | ---------------- |
+| `foo`  | `bar`      | `/skill:foo:bar` |
+| `foo`  | `foo-bar`  | `/skill:foo:bar` |
+| `foo`  | `foo`      | `/skill:foo:foo` |
+
+MCP server names are not prefixed or rewritten. The server name is the key from the plugin's `mcpServers` object. If another MCP config already uses that name, the plugin install or update fails.
+
+| Plugin | `mcpServers` key | Pi MCP server name               |
+| ------ | ---------------- | -------------------------------- |
+| `foo`  | `api`            | `api`                            |
+| `foo`  | `foo-api`        | `foo-api`                        |
+| `bar`  | `api`            | conflict if `api` already exists |
 
 ## Development
 

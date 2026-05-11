@@ -110,8 +110,8 @@
 
 ### Skills Bridge (PRD §5.5)
 
-- [ ] **SK-1**: Skills staged at `<scope>/claude-marketplace/resources/skills/<plugin>-<skill>/SKILL.md` with full directory copy
-- [ ] **SK-2**: Generated skill name `<plugin>-<skill>`, prefix elided when source already starts with `<plugin>-`
+- [ ] **SK-1**: Skills staged at `<scope>/claude-marketplace/resources/skills/<plugin>:<skill>/SKILL.md` with full directory copy
+- [ ] **SK-2**: Generated skill name `<plugin>:<skill>`, `<plugin>-` prefix stripped from source when present; source equal to plugin name becomes `<plugin>:<plugin>`
 - [ ] **SK-3**: Generated `SKILL.md` frontmatter `name` rewritten to generated name; other frontmatter preserved
 - [ ] **SK-4**: `${CLAUDE_PLUGIN_ROOT}` and `${CLAUDE_PLUGIN_DATA}` substituted inside `SKILL.md`
 - [ ] **SK-5**: `resources_discover` reports `skills/` from both scopes; per-scope failures aggregate into single thrown error
@@ -190,7 +190,7 @@
 
 ### Resource Naming, Generation & Conflicts (PRD §6.5)
 
-- [ ] **RN-1**: Generated names deterministic from `(plugin, source-name)`. Skill: `<plugin>-<skill>` (prefix elided). Command: `<plugin>:<command>` (prefix elided). Agent: `claude-marketplace-<plugin>-<agent>` (with `<plugin>-` prefix on source elided)
+- [ ] **RN-1**: Generated names deterministic from `(plugin, source-name)`. Skill: `<plugin>:<skill>` (prefix elided). Command: `<plugin>:<command>` (prefix elided). Agent: `claude-marketplace-<plugin>-<agent>` (with `<plugin>-` prefix on source elided)
 - [ ] **RN-2**: All names `assertSafeName`: non-empty, trimmed, not `.`/`..`, no path separators, no control chars
 - [ ] **RN-3**: Cross-plugin install conflict guard runs BEFORE any disk write and lists every conflicting name in one message
 - [ ] **RN-4**: Cross-marketplace agent ownership: re-staging agent owned by different `(marketplace, plugin)` throws with conflicting owner

@@ -51,7 +51,7 @@ test("SK-5 discoverPluginSkills returns sorted DiscoveredSkill[] for fixture plu
   assert.equal(discovered[1]!.sourceName, "helper");
 });
 
-test("SK-2 discoverPluginSkills generates name 'acme-knowledge' (elided) for source already prefixed", async () => {
+test("SK-2 discoverPluginSkills generates name 'acme:knowledge' (elided) for source already prefixed", async () => {
   const pluginRoot = path.join(FIXTURES, "test-plugin");
   const skillsDir = path.join(pluginRoot, "skills");
   const resolved = makeResolved(pluginRoot, skillsDir);
@@ -59,10 +59,10 @@ test("SK-2 discoverPluginSkills generates name 'acme-knowledge' (elided) for sou
   const { discovered } = await discoverPluginSkills({ pluginName: "acme", resolved });
   const acmeKnowledge = discovered.find((s) => s.sourceName === "acme-knowledge");
   assert.ok(acmeKnowledge, "acme-knowledge entry missing");
-  assert.equal(acmeKnowledge.generatedName, "acme-knowledge");
+  assert.equal(acmeKnowledge.generatedName, "acme:knowledge");
 });
 
-test("SK-2 discoverPluginSkills generates name 'acme-helper' (prefix-add) for unprefixed source", async () => {
+test("SK-2 discoverPluginSkills generates name 'acme:helper' for unprefixed source", async () => {
   const pluginRoot = path.join(FIXTURES, "test-plugin");
   const skillsDir = path.join(pluginRoot, "skills");
   const resolved = makeResolved(pluginRoot, skillsDir);
@@ -70,7 +70,7 @@ test("SK-2 discoverPluginSkills generates name 'acme-helper' (prefix-add) for un
   const { discovered } = await discoverPluginSkills({ pluginName: "acme", resolved });
   const helper = discovered.find((s) => s.sourceName === "helper");
   assert.ok(helper, "helper entry missing");
-  assert.equal(helper.generatedName, "acme-helper");
+  assert.equal(helper.generatedName, "acme:helper");
 });
 
 test("SK-5 discoverPluginSkills returns [] when skills dir missing (ENOENT graceful)", async () => {
@@ -201,8 +201,8 @@ test("D-07 discoverPluginSkills iterates multi-element componentPaths.skills (no
 test("D-07 discoverPluginSkills first-wins dedup across array elements (collision -> warning)", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-dedup-"));
   try {
-    // Two dirs each contain a "shared" subdir with SKILL.md. Both elide to
-    // the generated name "acme-shared". First-wins: dir `a` is kept; dir
+    // Two dirs each contain a "shared" subdir with SKILL.md. Both generate
+    // the name "acme:shared". First-wins: dir `a` is kept; dir
     // `b` surfaces a soft-fail warning. RN-6 within-dir collisions are NOT
     // exercised here -- those are HARD errors at `assertNoSkillCollisions`.
     const a = path.join(tmp, "a");
@@ -227,7 +227,7 @@ test("D-07 discoverPluginSkills first-wins dedup across array elements (collisio
     assert.equal(discovered.length, 1, "first-wins keeps only one");
     assert.equal(discovered[0]!.skillDir, path.join(a, "shared"), "dir 'a' wins");
     assert.equal(warnings.length, 1);
-    assert.match(warnings[0]!, /elides to generated name "acme-shared"/);
+    assert.match(warnings[0]!, /elides to generated name "acme:shared"/);
     assert.match(warnings[0]!, /ignoring duplicate/);
   } finally {
     await cleanupStaging(tmp, "test-cleanup");

@@ -90,7 +90,7 @@ test("AG-8 emitGeneratedAgentFile emits fields in deterministic order: name, des
       model: "anthropic/claude-sonnet-4-6",
       tools: ["read", "bash"],
       thinking: "high",
-      skills: ["acme-knowledge"],
+      skills: ["acme:knowledge"],
     },
     provenance: {
       pluginName: "acme",

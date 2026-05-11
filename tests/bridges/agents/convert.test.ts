@@ -132,16 +132,16 @@ test("AG-7 convertAgent description fallback: uses synthetic when frontmatter de
 });
 
 test("AG-7 convertAgent skills field preserved when matches knownSkills (after AG-1 elision)", () => {
-  // generatedSkillName('acme', 'knowledge') = 'acme-knowledge'
+  // generatedSkillName('acme', 'knowledge') = 'acme:knowledge'
   const out = convertAgent({
     pluginName: "acme",
     pluginRoot: "/root",
     pluginDataDir: "/data",
-    knownSkills: ["acme-knowledge"],
+    knownSkills: ["acme:knowledge"],
     discovered: makeDiscovered({ raw: { tools: "Read", skills: "knowledge" } }),
     sourceHash: "abc",
   });
-  assert.match(out.fileContent, /skills: acme-knowledge/);
+  assert.match(out.fileContent, /skills: acme:knowledge/);
 });
 
 test("AG-7 convertAgent skills field warns when reference is unknown", () => {
