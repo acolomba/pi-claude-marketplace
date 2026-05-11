@@ -27,7 +27,7 @@
 
 import { notifyUsageError } from "../shared/notify.ts";
 
-import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionCommandContext } from "../platform/pi-api.ts";
 
 export interface SubcommandHandlers {
   install: (args: string, ctx: ExtensionCommandContext) => Promise<void>;

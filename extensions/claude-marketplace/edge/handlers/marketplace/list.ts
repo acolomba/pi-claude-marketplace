@@ -9,7 +9,7 @@ import { listMarketplaces } from "../../../orchestrators/marketplace/list.ts";
 import { notifyError } from "../../../shared/notify.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
 
-import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
 const USAGE = "Usage: /claude:plugin marketplace list [--scope user|project]";
 

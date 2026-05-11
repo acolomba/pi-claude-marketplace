@@ -45,8 +45,8 @@ import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
 import { cascadeUnstagePlugin, formatErrorWithCauses, resolveScopeFromState } from "./shared.ts";
 
+import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 export interface RemoveMarketplaceOptions {
   readonly ctx: ExtensionContext;

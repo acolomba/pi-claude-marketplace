@@ -45,9 +45,9 @@ import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.t
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { cascadeUnstagePlugin, formatErrorWithCauses } from "../marketplace/shared.ts";
 
+import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { UnstageOutcome } from "../marketplace/shared.ts";
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 /**
  * PU-1..8 options bundle. `scope` + `cwd` together resolve a `ScopedLocations`

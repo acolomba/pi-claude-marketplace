@@ -66,8 +66,8 @@ import { DEFAULT_GIT_OPS, type GitOps } from "./shared.ts";
 import type { GitHubSource, PathSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 export interface AddMarketplaceOptions {
   readonly ctx: ExtensionContext;

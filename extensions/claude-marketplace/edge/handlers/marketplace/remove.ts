@@ -12,7 +12,7 @@ import { removeMarketplace } from "../../../orchestrators/marketplace/remove.ts"
 import { notifyError } from "../../../shared/notify.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
 
-import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
 const USAGE = "Usage: /claude:plugin marketplace remove <name> [--scope user|project]";
 

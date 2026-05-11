@@ -64,7 +64,6 @@ const EXPECTED_FORBIDDEN: Record<string, string[]> = {
     `${EXTENSION_ROOT}/domain`,
     `${EXTENSION_ROOT}/transaction`,
     `${EXTENSION_ROOT}/persistence`,
-    `${EXTENSION_ROOT}/platform`,
   ],
   [`${EXTENSION_ROOT}/orchestrators`]: [`${EXTENSION_ROOT}/edge`],
   [`${EXTENSION_ROOT}/bridges`]: [
@@ -72,7 +71,6 @@ const EXPECTED_FORBIDDEN: Record<string, string[]> = {
     `${EXTENSION_ROOT}/orchestrators`,
     `${EXTENSION_ROOT}/transaction`,
     `${EXTENSION_ROOT}/presentation`,
-    `${EXTENSION_ROOT}/platform`,
   ],
   [`${EXTENSION_ROOT}/domain`]: [
     `${EXTENSION_ROOT}/edge`,
@@ -81,7 +79,6 @@ const EXPECTED_FORBIDDEN: Record<string, string[]> = {
     `${EXTENSION_ROOT}/transaction`,
     `${EXTENSION_ROOT}/persistence`,
     `${EXTENSION_ROOT}/presentation`,
-    `${EXTENSION_ROOT}/platform`,
   ],
   [`${EXTENSION_ROOT}/transaction`]: [
     `${EXTENSION_ROOT}/edge`,
@@ -89,7 +86,6 @@ const EXPECTED_FORBIDDEN: Record<string, string[]> = {
     `${EXTENSION_ROOT}/bridges`,
     `${EXTENSION_ROOT}/domain`,
     `${EXTENSION_ROOT}/presentation`,
-    `${EXTENSION_ROOT}/platform`,
   ],
   [`${EXTENSION_ROOT}/persistence`]: [
     `${EXTENSION_ROOT}/edge`,
@@ -97,7 +93,6 @@ const EXPECTED_FORBIDDEN: Record<string, string[]> = {
     `${EXTENSION_ROOT}/bridges`,
     `${EXTENSION_ROOT}/transaction`,
     `${EXTENSION_ROOT}/presentation`,
-    `${EXTENSION_ROOT}/platform`,
   ],
   [`${EXTENSION_ROOT}/presentation`]: [
     `${EXTENSION_ROOT}/edge`,
@@ -105,7 +100,6 @@ const EXPECTED_FORBIDDEN: Record<string, string[]> = {
     `${EXTENSION_ROOT}/bridges`,
     `${EXTENSION_ROOT}/transaction`,
     `${EXTENSION_ROOT}/persistence`,
-    `${EXTENSION_ROOT}/platform`,
   ],
   [`${EXTENSION_ROOT}/platform`]: [
     `${EXTENSION_ROOT}/edge`,
@@ -124,7 +118,6 @@ const EXPECTED_FORBIDDEN: Record<string, string[]> = {
     `${EXTENSION_ROOT}/transaction`,
     `${EXTENSION_ROOT}/persistence`,
     `${EXTENSION_ROOT}/presentation`,
-    `${EXTENSION_ROOT}/platform`,
   ],
 };
 

@@ -16,7 +16,7 @@ import { errorMessage } from "../../../shared/errors.ts";
 import { notifyError } from "../../../shared/notify.ts";
 import { parseArgs } from "../../args.ts";
 
-import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
 const USAGE =
   "Usage: /claude:plugin list [<marketplace>] [--installed] [--available] [--unavailable] [--scope user|project]";

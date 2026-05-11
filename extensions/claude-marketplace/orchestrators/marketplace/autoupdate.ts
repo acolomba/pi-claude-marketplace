@@ -29,8 +29,8 @@ import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
 import { applyAutoupdateFlipInPlace } from "./shared.ts";
 
+import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 export interface AutoupdateOptions {
   readonly ctx: ExtensionContext;

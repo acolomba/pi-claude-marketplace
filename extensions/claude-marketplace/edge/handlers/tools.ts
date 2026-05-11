@@ -32,9 +32,9 @@ import { loadVisibleMarketplaces } from "../../orchestrators/marketplace/shared.
 import { loadPluginListPayload } from "../../orchestrators/plugin/list.ts";
 import { sourceLogical } from "../../presentation/marketplace-list.ts";
 
+import type { ExtensionAPI } from "../../platform/pi-api.ts";
 import type { ParsedSource } from "../../presentation/marketplace-list.ts";
 import type { PluginRenderStatus } from "../../presentation/plugin-list.ts";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
 // ─── LLM tool parameter schemas (TypeBox) ─────────────────────────────────
 

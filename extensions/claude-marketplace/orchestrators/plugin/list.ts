@@ -52,8 +52,8 @@ import {
 import { errorMessage } from "../../shared/errors.ts";
 import { notifyError, notifySuccess } from "../../shared/notify.ts";
 
+import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 /**
  * Options bag for {@link listPlugins}. Phase 6 edge layer constructs this

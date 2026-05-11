@@ -1,6 +1,6 @@
 import { notifyWarning } from "./shared/notify.ts";
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "./platform/pi-api.ts";
 
 /**
  * pi-claude-marketplace -- thin Pi extension entrypoint (D-13).

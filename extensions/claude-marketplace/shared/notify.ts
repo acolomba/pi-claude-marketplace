@@ -1,6 +1,6 @@
 import { errorMessage } from "./errors.ts";
 
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext } from "../platform/pi-api.ts";
 
 /**
  * shared/notify.ts -- the SOLE sanctioned ctx.ui.notify call site (D-07).

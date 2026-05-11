@@ -11,7 +11,7 @@ import { notifyError } from "../../../shared/notify.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
 
 import type { UpdatePluginsTarget } from "../../../orchestrators/plugin/update.ts";
-import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
 const USAGE =
   "Usage: /claude:plugin update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]";

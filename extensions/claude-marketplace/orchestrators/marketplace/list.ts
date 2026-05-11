@@ -22,9 +22,9 @@ import { renderMarketplaceList } from "../../presentation/marketplace-list.ts";
 import { notifySuccess } from "../../shared/notify.ts";
 
 import type { ParsedSource } from "../../domain/source.ts";
+import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { MarketplaceListEntry } from "../../presentation/marketplace-list.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 export interface ListMarketplacesOptions {
   readonly ctx: ExtensionContext;
