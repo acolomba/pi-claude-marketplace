@@ -33,7 +33,7 @@
   "license": "MIT",
   "name": "pi-claude-marketplace",
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": ">=0.70.6",
+    "@mariozechner/pi-coding-agent": ">=0.73.1",
     "typebox": "*"
   },
   "pi": {
