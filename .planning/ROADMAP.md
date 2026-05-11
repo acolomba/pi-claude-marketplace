@@ -125,7 +125,20 @@ Decimal phases appear between their surrounding integers in numeric order.
 3. `update` runs `syncClone` once per marketplace, computes resolved version, partitions plugins into `updated`/`unchanged`/`skipped`/`failed`, executes the 3-phase atomic swap (prepare in tmp → state-guard swap with old-resource snapshot → physical replace + soft-dep commit), aggregates phase-3a failures before phase-3b, and emits a recovery hint pointing at uninstall+install on phase-3 failure
 4. `uninstall` orders correctly (skills/prompts → agents → MCP → state commit → per-plugin data dir), survives concurrent uninstall by another process via silent converge, refuses loudly when foreign content is found at an agent target file (PU-7), and emits `Run /reload to drop "<plugin>"` only when at least one resource was removed
 5. Top-level `list` (no flags) shows every bucket grouped by scope; with a marketplace name shows only that marketplace; each entry shows icon (●/○/⊘), name, optional `(<version>)`, status marker, description on second indented line truncated at column 66; `upgradable` flag is set iff manifest version differs (string compare) from install record; manifest load failure shows `[warning] could not load manifest: <reason>` and STILL renders installed plugins
-6. Custom component-path arrays SUPPLEMENT defaults rather than replace them (Gap 3 / COMP-01 fix vs. V1 behavior), documented in CHANGELOG as "behavior corrected vs. V1" **Plans**: TBD
+6. Custom component-path arrays SUPPLEMENT defaults rather than replace them (Gap 3 / COMP-01 fix vs. V1 behavior), documented in CHANGELOG as "behavior corrected vs. V1"
+
+**Plans**: 10 plans
+
+- [ ] `05-01-PLAN.md` -- Wave 0 shared/ extensions: RECOVERY_PLUGIN_REINSTALL_PREFIX in markers.ts + 4 new error classes in errors.ts + markers-snapshot test block + errors.test.ts cases (Wave 0)
+- [ ] `05-02-PLAN.md` -- Wave 0 PI-14 chokepoint + architectural test: formatRollbackError PathContainmentError bypass + tests/architecture/no-orchestrator-network.test.ts (NFR-5 / PI-2 / PL-3 source-grep) (Wave 0)
+- [ ] `05-03-PLAN.md` -- Wave 0 D-07 COMP-01 fix: resolver ComponentPathsSchema array migration + 3 bridge discover.ts iteration with first-wins dedup + resolver-comp01.test.ts fixtures + pluginDataDir escape tests (Wave 0)
+- [ ] `05-04-PLAN.md` -- Wave 1 PI-6 guard: orchestrators/plugin/shared.ts::assertNoCrossPluginConflicts (D-05) + 5-case shared.test.ts (Wave 1)
+- [ ] `05-05-PLAN.md` -- Wave 1 presentation: pure formatter presentation/plugin-list.ts (D-06 split; icon legend + col-66 truncation + autoupdate tag + manifest warning lines) + plugin-list.test.ts (Wave 1)
+- [ ] `05-06-PLAN.md` -- Wave 2 install.ts: 5-phase Phase<InstallCtx>[] ledger (D-01) + withStateGuard composition + PI-15 early sanity + post-state pluginDataDir mkdir + soft-dep + reload hint + PI-1..15 + AS-6/AS-7 tests (Wave 2)
+- [ ] `05-07-PLAN.md` -- Wave 2 uninstall.ts: cascadeUnstagePlugin reuse (D-09) + PU-5 silent converge + PU-7 propagation + post-state data-dir rm + PU-1..8 tests (Wave 2)
+- [ ] `05-08-PLAN.md` -- Wave 2 list.ts: read-only orchestrator (D-06 split; PL-1 filter union + PL-5 string compare + PL-6 manifest soft-fail + PL-7 autoupdate tag) + PL-1..7 tests + source-grep self-test (Wave 2)
+- [ ] `05-09-PLAN.md` -- Wave 3 update.ts: paired updateSinglePlugin (PluginUpdateFn) + updatePlugins (PUP-1 three forms) + hand-rolled 3-phase swap (D-03) + RECOVERY_PLUGIN_REINSTALL_PREFIX (D-04) + syncCloneOnce memo + PUP-9 cascade/direct routing + WR-04 fields + orchestrators/plugin/index.ts barrel + orchestrators/index.ts extension + PUP-1..9 tests (Wave 3)
+- [ ] `05-10-PLAN.md` -- Wave 4 documentation supersession: REQUIREMENTS.md PR-4 strikethrough + PROJECT.md D-24 row + CHANGELOG entry for COMP-01 behavior-corrected-vs-V1 (Wave 4)
 
 ### Phase 6: Edge Layer & Tab Completion
 
@@ -157,6 +170,6 @@ Decimal phases appear between their surrounding integers in numeric order.
 | 2. Domain Core & Persistence Primitives | 0/6            | Not started | -         |
 | 3. Resource Bridges                     | 0/TBD          | Not started | -         |
 | 4. Marketplace Orchestrators            | 10/10          | Complete    | 2026-05-10 |
-| 5. Plugin Orchestrators                 | 0/TBD          | Not started | -         |
+| 5. Plugin Orchestrators                 | 0/10           | Not started | -         |
 | 6. Edge Layer & Tab Completion          | 0/TBD          | Not started | -         |
 | 7. Integration & Pi Wiring              | 0/TBD          | Not started | -         |
