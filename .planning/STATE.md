@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Phase 06 complete
-last_updated: "2026-05-11T19:40:38.024Z"
+last_updated: "2026-05-11T19:47:51.785Z"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 51
-  completed_plans: 46
-  percent: 90
+  completed_plans: 47
+  percent: 92
 ---
 
 # Project State
@@ -23,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 07 (integration-pi-wiring) -- EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 
-Progress: [█████████░] 90%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
@@ -51,6 +51,7 @@ Progress: [█████████░] 90%
 
 <!-- Updated after each plan completion -->
 | Phase 07 P01 | 9 min | 3 tasks | 29 files |
+| Phase 07 P02 | 4 min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - Roadmap: `MARKERS.ts` and symlink-aware `assertPathInside` land in Phase 1 so they propagate to every later phase
 - Roadmap: Gap 3 (component-path supplement vs. replace) resolved in Phase 5 as supplement-fix; documented as "behavior corrected vs. V1"
 - [Phase 07]: Pi API imports now flow through platform/pi-api.ts; @mariozechner/pi-coding-agent peer floor is pinned to >=0.73.1. -- Plan 07-01 established the NFR-11 wrapper and peer-dependency floor.
+- [Phase 07]: NFR-8 manifest mtime caching remains deferred; Plan 07-02 shipped only the domain read seam and architecture gate.
+- [Phase 07]: Completion resolver manifest reads route through the same domain seam as marketplace and plugin orchestrators.
 
 ### Pending Todos
 
@@ -89,4 +92,4 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-11T19:40:20.204Z
+Last session: 2026-05-11T19:47:45.724Z

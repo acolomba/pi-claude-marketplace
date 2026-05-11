@@ -281,7 +281,7 @@
 - [ ] **NFR-5**: Network access required only for GitHub-source `marketplace add` and `update`/`marketplace update` against GitHub-source marketplaces
 - [ ] **NFR-6**: `npm run check` = typecheck + ESLint + Prettier + tests; successor MUST keep these gates green
 - [ ] **NFR-7**: TypeScript surface uses strictly typed resolved-plugin variants; installable consumers cannot read `pluginRoot` from non-installable
-- [ ] **NFR-8**: Successor SHOULD cache marketplace manifests with mtime invalidation (BACKLOG performance item)
+- [x] **NFR-8**: Successor SHOULD cache marketplace manifests with mtime invalidation (BACKLOG performance item)
 - [ ] **NFR-9**: System MUST never print sensitive paths beyond what's already in user's terminal
 - [ ] **NFR-10**: System MUST refuse to write outside `<scopeRoot>/claude-marketplace/`, `<scopeRoot>/agents/`, or `<scopeRoot>/mcp.json`
 - [x] **NFR-11**: Pi extension API declared as `@mariozechner/pi-coding-agent` peer dep; successor SHOULD pin a minimum version once API stabilizes
@@ -543,7 +543,7 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | NFR-5       | Phase 4 | Pending |
 | NFR-6       | Phase 1 | Pending |
 | NFR-7       | Phase 2 | Pending |
-| NFR-8       | Phase 7 | Pending |
+| NFR-8       | Phase 7 | Complete |
 | NFR-9       | Phase 1 | Pending |
 | NFR-10      | Phase 1 | Pending |
 | NFR-11      | Phase 7 | Complete |
