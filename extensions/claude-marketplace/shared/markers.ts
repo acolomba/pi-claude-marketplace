@@ -11,3 +11,16 @@ export const PI_MCP_ADAPTER_NOT_LOADED = "pi-mcp-adapter is not loaded; ";
 export const RELOAD_HINT_PREFIX = "Run /reload to ";
 export const MANUAL_RECOVERY_REQUIRED = "MANUAL RECOVERY REQUIRED: ";
 export const ROLLBACK_PARTIAL = "(rollback partial: ";
+
+/**
+ * PUP-6 recovery hint (Phase 5 extension beyond ES-5).
+ *
+ * Stable user-contract prefix. The runtime caller in
+ * `orchestrators/plugin/update.ts` appends ` "${pluginName}".` after this
+ * prefix to compose the final user-visible hint. This constant is NOT a
+ * member of the original ES-5 enum (which lists pi-subagents /
+ * pi-mcp-adapter / reload-hint / manual-recovery / rollback-partial only);
+ * it is a Phase 5 extension to the markers surface, drift-guarded by
+ * tests/architecture/markers-snapshot.test.ts.
+ */
+export const RECOVERY_PLUGIN_REINSTALL_PREFIX = "plugin-uninstall + plugin-install for";
