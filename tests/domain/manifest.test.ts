@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import { MCP_SERVERS_VALIDATOR } from "../../extensions/claude-marketplace/domain/components/mcp.ts";
@@ -6,7 +9,10 @@ import {
   PLUGIN_ENTRY_VALIDATOR,
   PLUGIN_MANIFEST_VALIDATOR,
 } from "../../extensions/claude-marketplace/domain/components/plugin.ts";
-import { MARKETPLACE_VALIDATOR } from "../../extensions/claude-marketplace/domain/manifest.ts";
+import {
+  loadMarketplaceManifest,
+  MARKETPLACE_VALIDATOR,
+} from "../../extensions/claude-marketplace/domain/manifest.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // MM-1: MARKETPLACE_SCHEMA accept matrix
@@ -63,6 +69,40 @@ test("MM-1 MARKETPLACE rejects plugins as object", () => {
 
 test("MM-1 MARKETPLACE rejects plugins as null", () => {
   assert.equal(MARKETPLACE_VALIDATOR.Check({ name: "x", plugins: null }), false);
+});
+
+test("NFR-8 loadMarketplaceManifest reads and validates marketplace.json through the domain seam", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "pi-cm-manifest-"));
+  try {
+    const manifestPath = path.join(tmp, "marketplace.json");
+    await writeFile(
+      manifestPath,
+      JSON.stringify({ name: "test-marketplace", plugins: [{ name: "p", source: "./p" }] }),
+      "utf8",
+    );
+
+    const manifest = await loadMarketplaceManifest(manifestPath);
+
+    assert.equal(manifest.name, "test-marketplace");
+    assert.equal(manifest.plugins[0]?.name, "p");
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("NFR-8 loadMarketplaceManifest rejects schema-invalid marketplace.json", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "pi-cm-manifest-invalid-"));
+  try {
+    const manifestPath = path.join(tmp, "marketplace.json");
+    await writeFile(manifestPath, JSON.stringify({ name: "missing-plugins" }), "utf8");
+
+    await assert.rejects(
+      () => loadMarketplaceManifest(manifestPath),
+      /marketplace\.json schema invalid|schema validation/i,
+    );
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
 });
 
 // ──────────────────────────────────────────────────────────────────────────
