@@ -36,7 +36,8 @@ function makeResolved(name: string, pluginRoot: string): ResolvedPluginInstallab
     supported: ["agents"],
     unsupported: [],
     notes: [],
-    componentPaths: { agents: "agents" },
+    // D-07: componentPaths.agents is now `readonly string[]`.
+    componentPaths: { skills: [], commands: [], agents: ["agents"] },
     mcpServers: {},
   };
 }

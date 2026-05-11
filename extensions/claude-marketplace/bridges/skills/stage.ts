@@ -86,18 +86,27 @@ export async function prepareStageSkills(input: StageSkillsInput): Promise<Prepa
   const { locations, pluginName, pluginRoot, pluginDataDir, resolved } = input;
   const previousNames = input.previousSkillNames ?? [];
 
-  const discovered = await discoverPluginSkills({ pluginName, resolved });
+  // D-07: discover returns { discovered, warnings }. warnings surface
+  // duplicate-generated-name first-wins skips across multiple
+  // componentPaths.skills entries; RN-6 within-dir source-name
+  // collisions are still hard errors via assertNoSkillCollisions.
+  const { discovered, warnings: discoverWarnings } = await discoverPluginSkills({
+    pluginName,
+    resolved,
+  });
   assertNoSkillCollisions(discovered);
 
   // AS-8-style materialization gate: nothing to stage AND nothing to clean
   // up -> noop. Mirrors mcp/agents bridge symmetry; no per-SK requirement.
+  // D-07: discoverWarnings still surface even on noop -- a duplicate
+  // generated name across array elements is observable.
   if (discovered.length === 0 && previousNames.length === 0) {
     return {
       kind: "noop",
       result: {
         stagedNames: Object.freeze([]),
         recorded: Object.freeze([]),
-        warnings: Object.freeze([]),
+        warnings: Object.freeze([...discoverWarnings]),
       },
     };
   }
@@ -158,7 +167,7 @@ export async function prepareStageSkills(input: StageSkillsInput): Promise<Prepa
     result: {
       stagedNames: Object.freeze(stagedNames),
       recorded: Object.freeze(recorded),
-      warnings: Object.freeze([]),
+      warnings: Object.freeze([...discoverWarnings]),
     },
     _previousNames: Object.freeze(previousNames),
     _renamePairs: Object.freeze(renamePairs),

@@ -15,6 +15,7 @@ function makeResolved(
   pluginRoot: string,
   commandsRel: string | undefined,
 ): ResolvedPluginInstallable {
+  // D-07: componentPaths.commands is now `readonly string[]`.
   return {
     installable: true,
     name: "acme",
@@ -22,7 +23,11 @@ function makeResolved(
     supported: commandsRel === undefined ? [] : ["commands"],
     unsupported: [],
     notes: [],
-    componentPaths: commandsRel === undefined ? {} : { commands: commandsRel },
+    componentPaths: {
+      skills: [],
+      commands: commandsRel === undefined ? [] : [commandsRel],
+      agents: [],
+    },
     mcpServers: {},
   };
 }
@@ -34,7 +39,7 @@ const FIXTURE_PLUGIN_ROOT = path.resolve(import.meta.dirname, "..", "_fixtures",
 test("CM-4 discoverPluginCommands enumerates flat *.md only (test-plugin fixture)", async () => {
   const resolved = makeResolved(FIXTURE_PLUGIN_ROOT, "commands");
 
-  const out = await discoverPluginCommands({ pluginName: "acme", resolved });
+  const { discovered: out } = await discoverPluginCommands({ pluginName: "acme", resolved });
 
   assert.equal(out.length, 2, "expected exactly 2 .md commands in fixture");
   const names = out.map((c) => c.sourceName);
@@ -52,7 +57,7 @@ test("CM-4 discoverPluginCommands ignores non-md files", async () => {
     await writeFile(path.join(commandsDir, "config.json"), "{}");
 
     const resolved = makeResolved(tmp, "commands");
-    const out = await discoverPluginCommands({ pluginName: "acme", resolved });
+    const { discovered: out } = await discoverPluginCommands({ pluginName: "acme", resolved });
 
     assert.equal(out.length, 1, "only the .md file should be discovered");
     assert.equal(out[0]?.sourceName, "real");
@@ -71,7 +76,7 @@ test("CM-4 discoverPluginCommands does NOT recurse into subdirs", async () => {
     await writeFile(path.join(commandsDir, "subdir", "nested.md"), "nested body");
 
     const resolved = makeResolved(tmp, "commands");
-    const out = await discoverPluginCommands({ pluginName: "acme", resolved });
+    const { discovered: out } = await discoverPluginCommands({ pluginName: "acme", resolved });
 
     assert.equal(out.length, 1, "subdir entries must be skipped");
     assert.equal(out[0]?.sourceName, "top");
@@ -84,7 +89,7 @@ test("CM-4 discoverPluginCommands does NOT recurse into subdirs", async () => {
 
 test("CM-2 generated name elides plugin prefix when source starts with `<plugin>-`", async () => {
   const resolved = makeResolved(FIXTURE_PLUGIN_ROOT, "commands");
-  const out = await discoverPluginCommands({ pluginName: "acme", resolved });
+  const { discovered: out } = await discoverPluginCommands({ pluginName: "acme", resolved });
 
   const elided = out.find((c) => c.sourceName === "acme-deploy");
   assert.ok(elided, "fixture missing acme-deploy.md");
@@ -93,7 +98,7 @@ test("CM-2 generated name elides plugin prefix when source starts with `<plugin>
 
 test("CM-2 generated name has plain `<plugin>:` prefix when source has no plugin prefix", async () => {
   const resolved = makeResolved(FIXTURE_PLUGIN_ROOT, "commands");
-  const out = await discoverPluginCommands({ pluginName: "acme", resolved });
+  const { discovered: out } = await discoverPluginCommands({ pluginName: "acme", resolved });
 
   const plain = out.find((c) => c.sourceName === "status");
   assert.ok(plain, "fixture missing status.md");
@@ -108,9 +113,9 @@ test("discoverPluginCommands returns [] when commands dir missing (ENOENT gracef
   try {
     // Point componentPaths.commands at a path that does not exist.
     const resolved = makeResolved(tmp, "commands"); // tmp/commands -- never created
-    const out = await discoverPluginCommands({ pluginName: "acme", resolved });
+    const { discovered: out } = await discoverPluginCommands({ pluginName: "acme", resolved });
 
-    assert.deepEqual(out, []);
+    assert.deepEqual([...out], []);
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
@@ -128,7 +133,7 @@ test("discoverPluginCommands returns sorted output by sourceName", async () => {
     await writeFile(path.join(commandsDir, "middle.md"), "m");
 
     const resolved = makeResolved(tmp, "commands");
-    const out = await discoverPluginCommands({ pluginName: "acme", resolved });
+    const { discovered: out } = await discoverPluginCommands({ pluginName: "acme", resolved });
 
     assert.deepEqual(
       out.map((c) => c.sourceName),
@@ -149,7 +154,7 @@ test("discoverPluginCommands skips dotfile-prefixed entries", async () => {
     await writeFile(path.join(commandsDir, "visible.md"), "visible");
 
     const resolved = makeResolved(tmp, "commands");
-    const out = await discoverPluginCommands({ pluginName: "acme", resolved });
+    const { discovered: out } = await discoverPluginCommands({ pluginName: "acme", resolved });
 
     assert.equal(out.length, 1);
     assert.equal(out[0]?.sourceName, "visible");
@@ -181,11 +186,87 @@ test("discoverPluginCommands refuses symlinked .md entries (POSIX-only)", async 
     await writeFile(path.join(commandsDir, "real-cmd.md"), "real");
 
     const resolved = makeResolved(tmp, "commands");
-    const out = await discoverPluginCommands({ pluginName: "acme", resolved });
+    const { discovered: out } = await discoverPluginCommands({ pluginName: "acme", resolved });
 
     const names = out.map((c) => c.sourceName);
     assert.ok(!names.includes("linked"), "symlinked .md must be skipped");
     assert.ok(names.includes("real-cmd"), "non-symlink .md must be present");
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// D-07 (COMP-01): multi-element componentPaths.commands.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("D-07 discoverPluginCommands iterates multi-element componentPaths.commands (no collision)", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-cmds-multi-"));
+
+  try {
+    const a = path.join(tmp, "a");
+    const b = path.join(tmp, "b");
+    await mkdir(a, { recursive: true });
+    await mkdir(b, { recursive: true });
+    await writeFile(path.join(a, "one.md"), "body-a");
+    await writeFile(path.join(b, "two.md"), "body-b");
+
+    const resolved: ResolvedPluginInstallable = {
+      installable: true,
+      name: "acme",
+      pluginRoot: tmp,
+      supported: ["commands"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [], commands: [a, b], agents: [] },
+      mcpServers: {},
+    };
+    const { discovered: out, warnings } = await discoverPluginCommands({
+      pluginName: "acme",
+      resolved,
+    });
+
+    const names = out.map((c) => c.sourceName).sort();
+    assert.deepEqual(names, ["one", "two"]);
+    assert.deepEqual([...warnings], [], "no warnings when generated names disjoint");
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("D-07 discoverPluginCommands first-wins dedup across array elements (collision -> warning)", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-cmds-dedup-"));
+
+  try {
+    // Both dirs contain `shared.md`. They elide to generated name
+    // "acme:shared". First-wins keeps dir `a`; dir `b` surfaces a warning.
+    const a = path.join(tmp, "a");
+    const b = path.join(tmp, "b");
+    await mkdir(a, { recursive: true });
+    await mkdir(b, { recursive: true });
+    await writeFile(path.join(a, "shared.md"), "from-a");
+    await writeFile(path.join(b, "shared.md"), "from-b");
+
+    const resolved: ResolvedPluginInstallable = {
+      installable: true,
+      name: "acme",
+      pluginRoot: tmp,
+      supported: ["commands"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [], commands: [a, b], agents: [] },
+      mcpServers: {},
+    };
+    const { discovered: out, warnings } = await discoverPluginCommands({
+      pluginName: "acme",
+      resolved,
+    });
+
+    assert.equal(out.length, 1, "first-wins keeps only one");
+    assert.equal(out[0]!.commandFile, path.join(a, "shared.md"), "dir 'a' wins");
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /elides to generated name "acme:shared"/);
+    assert.match(warnings[0]!, /ignoring duplicate/);
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }

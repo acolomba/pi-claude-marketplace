@@ -26,6 +26,7 @@ function makeResolved(
   pluginRoot: string,
   skillsDirAbs: string | undefined,
 ): ResolvedPluginInstallable {
+  // D-07: componentPaths.skills is now `readonly string[]`.
   return {
     installable: true,
     name,
@@ -33,7 +34,11 @@ function makeResolved(
     supported: [],
     unsupported: [],
     notes: [],
-    componentPaths: skillsDirAbs === undefined ? {} : { skills: skillsDirAbs },
+    componentPaths: {
+      skills: skillsDirAbs === undefined ? [] : [skillsDirAbs],
+      commands: [],
+      agents: [],
+    },
     mcpServers: {},
   };
 }

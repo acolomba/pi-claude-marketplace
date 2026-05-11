@@ -159,12 +159,26 @@ test("PR-2(8) escaping component path (skills: '../outside') -> notInstallable",
   );
 });
 
-test("PR-2(9) array-form supported component path -> notInstallable", async () => {
+// D-07 (COMP-01) narrows PR-2(9): top-level arrays of strings are now LEGAL.
+// Only non-string elements (or nested arrays) inside the array are rejected
+// at the element level. The error note now reads "is not a string" (from
+// PR-2 case 7) or "contains nested array element" rather than "array-form".
+test("PR-2(9) [D-07 narrowed] array containing non-string element -> notInstallable", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
-  const r = await resolveStrict(basicEntry({ source: "./local", skills: ["skills/"] }), ctx);
+  const r = await resolveStrict(basicEntry({ source: "./local", skills: [42] }), ctx);
   assert.equal(r.installable, false);
   assert.ok(
-    r.notes.some((n) => n.includes("array-form")),
+    r.notes.some((n) => n.includes("is not a string")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+});
+
+test("PR-2(9) [D-07 narrowed] nested array element -> notInstallable with descriptive note", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r = await resolveStrict(basicEntry({ source: "./local", skills: [["skills"]] }), ctx);
+  assert.equal(r.installable, false);
+  assert.ok(
+    r.notes.some((n) => n.includes("nested array element")),
     `notes: ${r.notes.join(" / ")}`,
   );
 });
@@ -188,7 +202,11 @@ test("PR-3 multiple unsupported components both surface as notes", async () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// PR-4: implicit-by-convention (only when entry + manifest both absent)
+// PR-4 [D-07/COMP-01 SUPERSEDED]: implicit-by-convention now SUPPLEMENTS
+// declared paths rather than acting as a fallback-only short-circuit. The
+// strict-resolver Step 7 computes the UNION of declared + implicit; first-
+// wins dedup preserves declared-first ordering. The supersession docs land
+// in Plan 05-10; the behavior change lands here.
 // ──────────────────────────────────────────────────────────────────────────
 
 test("PR-4 implicit-by-convention populates componentPaths.skills when neither entry nor manifest declares it", async () => {
@@ -200,12 +218,14 @@ test("PR-4 implicit-by-convention populates componentPaths.skills when neither e
   assert.equal(r.installable, true, `notes if not: ${r.notes.join(" / ")}`);
 
   if (r.installable) {
-    assert.equal(r.componentPaths.skills, "skills");
+    assert.deepEqual(r.componentPaths.skills, ["skills"]);
     assert.ok(r.supported.includes("skills"));
   }
 });
 
-test("PR-4 entry-declared skills wins over implicit-by-convention", async () => {
+// D-07 corollary: entry declares "custom" AND implicit "skills/" exists ->
+// UNION (declared-first ordering), NOT a short-circuit on the declared path.
+test("D-07 entry-declared path UNIONs with implicit-by-convention (was: PR-4 short-circuit)", async () => {
   const ctx = mockCtx(MP, {
     [ROOT("./local")]: "dir",
     [path.join(ROOT("./local"), "skills")]: "dir",
@@ -215,7 +235,8 @@ test("PR-4 entry-declared skills wins over implicit-by-convention", async () => 
   assert.equal(r.installable, true);
 
   if (r.installable) {
-    assert.equal(r.componentPaths.skills, "custom");
+    // Declared first, implicit-by-convention appended after.
+    assert.deepEqual(r.componentPaths.skills, ["custom", "skills"]);
   }
 });
 
@@ -291,5 +312,8 @@ test("MM-5 happy path: valid entry + manifest with skills -> installable with sk
   if (r.installable) {
     assert.equal(r.pluginRoot, localRoot);
     assert.ok(r.supported.includes("skills"));
+    // D-07: manifest declares "skills" AND implicit "skills/" exists; UNION
+    // applies first-wins dedup so the result is a single-element ["skills"].
+    assert.deepEqual(r.componentPaths.skills, ["skills"]);
   }
 });

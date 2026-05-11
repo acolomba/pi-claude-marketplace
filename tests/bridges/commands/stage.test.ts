@@ -41,6 +41,7 @@ async function tmpScope(): Promise<TmpScope> {
 }
 
 function makeResolved(pluginRoot: string, commandsRel?: string): ResolvedPluginInstallable {
+  // D-07: componentPaths.commands is now `readonly string[]`.
   return {
     installable: true,
     name: "acme",
@@ -48,7 +49,11 @@ function makeResolved(pluginRoot: string, commandsRel?: string): ResolvedPluginI
     supported: commandsRel === undefined ? [] : ["commands"],
     unsupported: [],
     notes: [],
-    componentPaths: commandsRel === undefined ? {} : { commands: commandsRel },
+    componentPaths: {
+      skills: [],
+      commands: commandsRel === undefined ? [] : [commandsRel],
+      agents: [],
+    },
     mcpServers: {},
   };
 }
