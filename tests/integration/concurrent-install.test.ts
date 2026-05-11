@@ -163,12 +163,15 @@ async function runRace(
       });
     });
 
+  const firstResult = waitResult(first, firstPlugin);
+  const secondResult = waitResult(second, secondPlugin);
+
   first.send({ plugin: firstPlugin, marketplace: "mp", cwd: env.cwd });
   second.send({ plugin: secondPlugin, marketplace: "mp", cwd: env.cwd });
 
   return {
-    first: await waitResult(first, firstPlugin),
-    second: await waitResult(second, secondPlugin),
+    first: await firstResult,
+    second: await secondResult,
   };
 }
 
