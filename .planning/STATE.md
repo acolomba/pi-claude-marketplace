@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Phase 06 complete
-last_updated: "2026-05-11T19:47:51.785Z"
+last_updated: "2026-05-11T20:14:19.594Z"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 51
-  completed_plans: 47
-  percent: 92
+  completed_plans: 48
+  percent: 94
 ---
 
 # Project State
@@ -23,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 07 (integration-pi-wiring) -- EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 
-Progress: [█████████░] 92%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Progress: [█████████░] 92%
 <!-- Updated after each plan completion -->
 | Phase 07 P01 | 9 min | 3 tasks | 29 files |
 | Phase 07 P02 | 4 min | 3 tasks | 9 files |
+| Phase 07 P03 | 6 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -70,6 +71,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 07]: Pi API imports now flow through platform/pi-api.ts; @mariozechner/pi-coding-agent peer floor is pinned to >=0.73.1. -- Plan 07-01 established the NFR-11 wrapper and peer-dependency floor.
 - [Phase 07]: NFR-8 manifest mtime caching remains deferred; Plan 07-02 shipped only the domain read seam and architecture gate.
 - [Phase 07]: Completion resolver manifest reads route through the same domain seam as marketplace and plugin orchestrators.
+- [Phase 07]: [Phase 07]: resources_discover now reads staged skills/prompts directly from disk across user and project scopes; index.ts wires the real Pi command/tool/event surface. -- Plan 07-03 replaced the Phase 1 stub with real Pi wiring and made /reload discovery reflect disk state.
 
 ### Pending Todos
 
@@ -92,4 +94,4 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-11T19:47:45.724Z
+Last session: 2026-05-11T20:14:07.264Z

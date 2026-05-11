@@ -166,9 +166,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 4. Peer dependency `@mariozechner/pi-coding-agent` declares a pinned floor (≥0.70.6 minimum, ideally ≥0.73.1 if no breaking change observed); package publish dry-run validates the manifest
 5. Architecture verifiably supports adding manifest-mtime caching later (NFR-8 BACKLOG): a single seam exists where `marketplace.json` is read on the manifest path, isolated from orchestrator logic **Plans**: 6 plans
 
-- [ ] `07-01-PLAN.md` -- Pi API wrapper/import boundary and peer-dep floor (Wave 1)
-- [ ] `07-02-PLAN.md` -- NFR-8 manifest read seam and architecture test (Wave 1)
-- [ ] `07-03-PLAN.md` -- Real `index.ts` Pi wiring and disk-backed `resources_discover` (Wave 2)
+- [x] `07-01-PLAN.md` -- Pi API wrapper/import boundary and peer-dep floor (Wave 1)
+- [x] `07-02-PLAN.md` -- NFR-8 manifest read seam and architecture test (Wave 1)
+- [x] `07-03-PLAN.md` -- Real `index.ts` Pi wiring and disk-backed `resources_discover` (Wave 2)
 - [ ] `07-04-PLAN.md` -- Cross-process state lock and concurrent install integration test (Wave 3)
 - [ ] `07-05-PLAN.md` -- Pinned e2e fixtures, e2e tests, and CI/nightly workflows (Wave 4)
 - [ ] `07-06-PLAN.md` -- PI-15 supersession docs and validation sign-off (Wave 5)
@@ -185,4 +185,4 @@ Decimal phases appear between their surrounding integers in numeric order.
 | 4. Marketplace Orchestrators            | 10/10          | Complete    | 2026-05-10 |
 | 5. Plugin Orchestrators                 | 10/10          | Complete    | 2026-05-11 |
 | 6. Edge Layer & Tab Completion          | 0/5            | Not started | -         |
-| 7. Integration & Pi Wiring              | 2/6            | In Progress | -         |
+| 7. Integration & Pi Wiring              | 3/6            | In Progress | -         |
