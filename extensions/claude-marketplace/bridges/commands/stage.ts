@@ -92,18 +92,26 @@ export async function prepareStageCommands(
 ): Promise<PreparedCommandsStaging> {
   const { locations, pluginName, pluginRoot, pluginDataDir, resolved } = input;
   const previousNames = input.previousCommandNames ?? [];
-  const discovered = await discoverPluginCommands({ pluginName, resolved });
+  // D-07: discover returns { discovered, warnings }. warnings carry
+  // duplicate-generated-name first-wins skips across multiple
+  // componentPaths.commands entries.
+  const { discovered, warnings: discoverWarnings } = await discoverPluginCommands({
+    pluginName,
+    resolved,
+  });
 
   assertNoCommandCollisions(discovered);
 
-  // Materialization gate (symmetry with skills bridge).
+  // Materialization gate (symmetry with skills bridge). D-07: surface
+  // discoverWarnings even on noop so duplicate-generated-name skips
+  // remain observable.
   if (discovered.length === 0 && previousNames.length === 0) {
     return {
       kind: "noop",
       result: {
         stagedNames: Object.freeze<string[]>([]),
         recorded: Object.freeze<StagedCommandRecord[]>([]),
-        warnings: Object.freeze<string[]>([]),
+        warnings: Object.freeze([...discoverWarnings]),
       },
     };
   }
@@ -149,7 +157,7 @@ export async function prepareStageCommands(
     result: {
       stagedNames: Object.freeze(stagedNames),
       recorded: Object.freeze(recorded),
-      warnings: Object.freeze<string[]>([]),
+      warnings: Object.freeze([...discoverWarnings]),
     },
     _previousNames: Object.freeze([...previousNames]),
     _renamePairs: Object.freeze(renamePairs),

@@ -6,7 +6,6 @@ import {
   type ScopedLocations,
   locationsFor,
 } from "../../extensions/claude-marketplace/persistence/locations.ts";
-import { PathContainmentError } from "../../extensions/claude-marketplace/shared/path-safety.ts";
 
 /**
  * SC-1, SC-2, SC-3, SC-7 -- ScopedLocations brand bundle behavior.
@@ -62,19 +61,34 @@ test("SC-3 ScopedLocations is frozen (cannot mutate scope after construction)", 
   }, /Cannot assign to read only property|object is not extensible/);
 });
 
-test("SC-7 pluginDataDir('../escape', 'p') throws PathContainmentError", async () => {
+// Plan 05-03 D-07 corollary: assertSafeName is now the upstream gate inside
+// each helper (Rule 2 mitigation for T-5-09). Names containing path
+// separators "/" / "\", traversal segments "." / "..", or control chars
+// are rejected at the input boundary BEFORE assertPathInside fires. The
+// downstream PathContainmentError is therefore unreachable for these
+// particular escape inputs; the upstream Error suffices to refuse.
+test("SC-7 pluginDataDir('../escape', 'p') throws (upstream assertSafeName rejects '..' name)", async () => {
   const loc = locationsFor("project", "/p");
-  await assert.rejects(() => loc.pluginDataDir("../escape", "plugin"), PathContainmentError);
+  await assert.rejects(
+    () => loc.pluginDataDir("../escape", "plugin"),
+    /must not contain path separators|must not be|must not contain ASCII control/,
+  );
 });
 
-test("SC-7 marketplaceDataDir('../escape') throws PathContainmentError", async () => {
+test("SC-7 marketplaceDataDir('../escape') throws (upstream assertSafeName rejects '/' name)", async () => {
   const loc = locationsFor("project", "/p");
-  await assert.rejects(() => loc.marketplaceDataDir("../escape"), PathContainmentError);
+  await assert.rejects(
+    () => loc.marketplaceDataDir("../escape"),
+    /must not contain path separators|must not be|must not contain ASCII control/,
+  );
 });
 
-test("SC-7 sourceCloneDir('../../etc') throws PathContainmentError", async () => {
+test("SC-7 sourceCloneDir('../../etc') throws (upstream assertSafeName rejects '/' name)", async () => {
   const loc = locationsFor("project", "/p");
-  await assert.rejects(() => loc.sourceCloneDir("../../etc"), PathContainmentError);
+  await assert.rejects(
+    () => loc.sourceCloneDir("../../etc"),
+    /must not contain path separators|must not be|must not contain ASCII control/,
+  );
 });
 
 test("SC-7 pluginDataDir('mp', 'plugin') happy path returns under dataRoot", async () => {
@@ -82,6 +96,56 @@ test("SC-7 pluginDataDir('mp', 'plugin') happy path returns under dataRoot", asy
   const got = await loc.pluginDataDir("mp", "plugin");
   assert.ok(got.startsWith(loc.dataRoot));
   assert.ok(got.endsWith(path.join("mp", "plugin")));
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// Plan 05-03 T-5-09: pluginDataDir name-input containment coverage.
+//
+// assertPathInside alone does NOT catch a plugin name like "p/sub" because
+// path.join("dataRoot", "mp", "p/sub") -> "dataRoot/mp/p/sub" -- which
+// IS inside dataRoot, just nested one level too deep. The upstream
+// assertSafeName gate inside pluginDataDir refuses every separator-bearing
+// input regardless of dataRoot containment.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("T-5-09 pluginDataDir refuses plugin name with '/' separator (upstream assertSafeName)", async () => {
+  const loc = locationsFor("project", "/p");
+  await assert.rejects(() => loc.pluginDataDir("ok", "p/sub"), /must not contain path separators/);
+});
+
+test("T-5-09 pluginDataDir refuses plugin name with '\\\\' separator (upstream assertSafeName)", async () => {
+  const loc = locationsFor("project", "/p");
+  await assert.rejects(() => loc.pluginDataDir("ok", "p\\sub"), /must not contain path separators/);
+});
+
+test("T-5-09 pluginDataDir refuses marketplace name with '/' separator (upstream assertSafeName)", async () => {
+  const loc = locationsFor("project", "/p");
+  await assert.rejects(() => loc.pluginDataDir("a/b", "ok"), /must not contain path separators/);
+});
+
+test("T-5-09 pluginDataDir refuses marketplace name with '\\\\' separator (upstream assertSafeName)", async () => {
+  const loc = locationsFor("project", "/p");
+  await assert.rejects(() => loc.pluginDataDir("a\\b", "ok"), /must not contain path separators/);
+});
+
+test("T-5-09 pluginDataDir refuses '.' plugin name", async () => {
+  const loc = locationsFor("project", "/p");
+  await assert.rejects(() => loc.pluginDataDir("ok", "."), /must not be/);
+});
+
+test("T-5-09 pluginDataDir refuses '..' marketplace name (without separator)", async () => {
+  const loc = locationsFor("project", "/p");
+  await assert.rejects(() => loc.pluginDataDir("..", "p"), /must not be/);
+});
+
+test("T-5-09 pluginDataDir refuses empty plugin name", async () => {
+  const loc = locationsFor("project", "/p");
+  await assert.rejects(() => loc.pluginDataDir("ok", ""), /must be a non-empty string/);
+});
+
+test("T-5-09 pluginDataDir refuses control-char plugin name", async () => {
+  const loc = locationsFor("project", "/p");
+  await assert.rejects(() => loc.pluginDataDir("ok", "p\x00sub"), /must not contain ASCII control/);
 });
 
 test("SC-7 marketplaceDataDir('mp') happy path returns under dataRoot", async () => {

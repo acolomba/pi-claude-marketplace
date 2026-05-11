@@ -80,11 +80,20 @@ export async function prepareStagePluginAgents(
     knownSkills,
   } = input;
 
-  // Step 1: discover.
-  const discovered: readonly DiscoveredAgent[] =
+  // Step 1: discover. D-07 signature: discoverPluginAgents now takes
+  // `agentsDirs: readonly string[]`. The legacy `agentsSourceDir: ""`
+  // sentinel maps to an empty array; a non-empty string maps to a
+  // single-element array. Phase 5 callers building over the new
+  // `componentPaths.agents: readonly string[]` shape pass the array
+  // directly (translation lives at the StageAgentsInput boundary).
+  // D-07 warnings (duplicate generated names across array elements)
+  // are folded into `aggregatedWarnings` below.
+  const discoverResult =
     agentsSourceDir === ""
-      ? []
-      : await discoverPluginAgents({ pluginName, agentsDir: agentsSourceDir });
+      ? { discovered: [] as readonly DiscoveredAgent[], warnings: [] as readonly string[] }
+      : await discoverPluginAgents({ pluginName, agentsDirs: [agentsSourceDir] });
+  const discovered: readonly DiscoveredAgent[] = discoverResult.discovered;
+  const discoverWarnings: readonly string[] = discoverResult.warnings;
 
   // Step 2: AG-12 collision detection (within this plugin's set).
   assertNoAgentCollisions(
@@ -127,11 +136,13 @@ export async function prepareStagePluginAgents(
     );
   }
 
-  // Aggregate warnings (corruptions + per-agent warnings) -- needed for
-  // both noop and staged paths so they're built up here.
+  // Aggregate warnings (corruptions + per-agent warnings + D-07 dedup
+  // warnings) -- needed for both noop and staged paths so they're built
+  // up here.
   const aggregatedWarnings: string[] = [
     ...loaded.corruptions.map((c) => `agent index corruption (entry dropped): ${c}`),
     ...converted.flatMap((c) => formatAgentWarnings(c)),
+    ...discoverWarnings,
   ];
 
   // Step 6: AS-9 noop short-circuit. Nothing to write AND no previous

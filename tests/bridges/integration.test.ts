@@ -73,10 +73,11 @@ function makeResolved(): ResolvedPluginInstallable {
     supported: ["skills", "commands", "agents"],
     unsupported: [],
     notes: [],
+    // D-07: componentPaths.* are now `readonly string[]`.
     componentPaths: {
-      skills: path.join(FIXTURE_PLUGIN, "skills"),
-      commands: "commands",
-      agents: "agents",
+      skills: [path.join(FIXTURE_PLUGIN, "skills")],
+      commands: ["commands"],
+      agents: ["agents"],
     },
     mcpServers: {},
   };

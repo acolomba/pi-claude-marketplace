@@ -33,10 +33,15 @@ import { parsePluginSource, type ParsedSource } from "./source.ts";
 // Schema + types
 // ──────────────────────────────────────────────────────────────────────────
 
+// D-07 (COMP-01): array-per-kind shape. The resolver UNIONs declared
+// (entry > manifest order) + implicit-by-convention paths with first-wins
+// dedup; the array semantics let `componentPaths.skills` carry both the
+// declared `custom/skills` and the conventional `skills` simultaneously
+// (PR-4 short-circuit semantics SUPERSEDED -- docs deferred to Plan 05-10).
 const ComponentPathsSchema = Type.Object({
-  skills: Type.Optional(Type.String()),
-  commands: Type.Optional(Type.String()),
-  agents: Type.Optional(Type.String()),
+  skills: Type.Array(Type.String()),
+  commands: Type.Array(Type.String()),
+  agents: Type.Array(Type.String()),
 });
 
 const McpServersFieldSchema = Type.Record(Type.String(), Type.Unknown());
@@ -145,7 +150,7 @@ interface PartialResolution {
   supported: string[];
   unsupported: string[];
   notes: string[];
-  componentPaths: { skills?: string; commands?: string; agents?: string };
+  componentPaths: { skills: string[]; commands: string[]; agents: string[] };
   mcpServers: Record<string, unknown>;
 }
 
@@ -154,7 +159,7 @@ function emptyResolution(): PartialResolution {
     supported: [],
     unsupported: [],
     notes: [],
-    componentPaths: {},
+    componentPaths: { skills: [], commands: [], agents: [] },
     mcpServers: {},
   };
 }
@@ -312,18 +317,55 @@ async function preflightStages(
 }
 
 /**
- * Validate a single component-path declaration. Returns `{ ok: true, relative }`
+ * D-07 helper: normalize an untrusted entry / manifest `componentPaths.<kind>`
+ * field into a flat readonly string-or-other-element array. The element-level
+ * `validateComponentPath` call rejects non-string elements (and nested arrays);
+ * we deliberately keep `unknown` typing on each element here so the rejection
+ * messaging stays consistent with the V1-shape PR-2 case 7 path.
+ *
+ * - `undefined` / `null` -> `[]` (not declared)
+ * - a single string       -> `[string]`
+ * - an array              -> the array as-is (element-level validation later)
+ * - any other shape       -> `[value]` (forces validateComponentPath to emit
+ *                            the "not a string" failure note for the caller)
+ */
+function readPathOrArray(value: unknown): readonly unknown[] {
+  if (value === undefined || value === null) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  return [value];
+}
+
+/**
+ * Validate a single component-path ELEMENT. Returns `{ ok: true, relative }`
  * on success (caller adds to componentPaths + supported), or
  * `{ ok: false, reason }` on failure (caller adds note + flips notInstallable).
+ *
+ * D-07 narrowing: the resolver now accepts a top-level array of strings as
+ * legal input (the schema is `Type.Array(Type.String())`). Callers MUST
+ * normalize their raw inputs through `readPathOrArray` BEFORE handing each
+ * element to this function. Per-element non-string / nested-array values
+ * are still rejected here (the schema-level guard does not survive the
+ * `as unknown` coercion that the resolver uses to read untrusted entry /
+ * manifest fields).
  */
 async function validateComponentPath(
   kind: SupportedKind,
   raw: unknown,
   pluginRoot: string,
 ): Promise<{ ok: true; relative: string } | { ok: false; reason: string }> {
-  // PR-2 case 9: array form is rejected.
+  // D-07: nested arrays are still rejected at the element level. Top-level
+  // arrays are handled by `readPathOrArray` BEFORE this function is called.
   if (Array.isArray(raw)) {
-    return { ok: false, reason: `component path for "${kind}" is array-form; must be a string` };
+    return {
+      ok: false,
+      reason: `component path for "${kind}" contains nested array element; must be a string`,
+    };
   }
 
   // PR-2 case 7: non-string is rejected.
@@ -375,37 +417,45 @@ export async function resolveStrict(
   const { pluginRoot, manifest, partial } = pre;
   let dirty = false; // any "notInstallable" reason found in steps 7-9
 
-  // Step 7 (MM-5): component paths -- entry > manifest > implicit-by-convention.
+  // Step 7 (MM-5 + D-07/COMP-01): component paths are the UNION of declared
+  // (entry > manifest order) + implicit-by-convention. PR-4 is SUPERSEDED:
+  // implicit-by-convention is ADDITIVE rather than fallback-only -- if the
+  // conventional dir exists on disk and is not already declared, it is
+  // appended to the array. First-wins dedup by relative-path string preserves
+  // ordering (declared first, implicit last).
   for (const kind of SUPPORTED_COMPONENT_KINDS) {
-    const fromEntry = (entry as unknown as Record<string, unknown>)[kind];
-    const fromManifest = manifest ? manifest[kind] : undefined;
+    const seenPaths = new Set<string>();
 
-    if (fromEntry !== undefined) {
-      const v = await validateComponentPath(kind, fromEntry, pluginRoot);
+    const fromEntry = readPathOrArray((entry as Record<string, unknown>)[kind]);
+    const fromManifest = readPathOrArray(manifest?.[kind]);
+
+    for (const raw of [...fromEntry, ...fromManifest]) {
+      const v = await validateComponentPath(kind, raw, pluginRoot);
 
       if (v.ok) {
-        partial.componentPaths[kind] = v.relative;
-        partial.supported.push(kind);
+        if (!seenPaths.has(v.relative)) {
+          seenPaths.add(v.relative);
+          partial.componentPaths[kind].push(v.relative);
+        }
       } else {
         partial.notes.push(v.reason);
         dirty = true;
       }
-    } else if (fromManifest !== undefined) {
-      const v = await validateComponentPath(kind, fromManifest, pluginRoot);
+    }
 
-      if (v.ok) {
-        partial.componentPaths[kind] = v.relative;
-        partial.supported.push(kind);
-      } else {
-        partial.notes.push(v.reason);
-        dirty = true;
+    // Implicit-by-convention: fires whenever the conventional dir exists,
+    // regardless of declared inputs (D-07 SUPPLEMENT semantics). Dedup
+    // against already-declared paths preserves declared-first ordering.
+    const conventionalRel = kind; // "skills" / "commands" / "agents"
+    if ((await statKindOf(ctx)(path.join(pluginRoot, conventionalRel))) === "dir") {
+      if (!seenPaths.has(conventionalRel)) {
+        partial.componentPaths[kind].push(conventionalRel);
+        seenPaths.add(conventionalRel);
       }
-    } else {
-      // PR-4: implicit-by-convention only when neither entry nor manifest declares.
-      if ((await statKindOf(ctx)(path.join(pluginRoot, kind))) === "dir") {
-        partial.componentPaths[kind] = kind;
-        partial.supported.push(kind);
-      }
+    }
+
+    if (partial.componentPaths[kind].length > 0) {
+      partial.supported.push(kind);
     }
   }
 
@@ -473,21 +523,33 @@ export async function resolveLoose(
   const { pluginRoot, manifest, partial } = pre;
   let dirty = false;
 
-  // Step 7 (MM-6 entry-only): no implicit-by-convention; manifest declarations
-  // without a matching entry-level declaration are a conflict.
+  // Step 7 (MM-6 entry-only, D-07 array shape): no implicit-by-convention;
+  // manifest declarations without a matching entry-level declaration are a
+  // conflict. Array shape mirrors strict mode, but with first-wins dedup
+  // applied only to entry-declared paths (no convention probing).
   for (const kind of SUPPORTED_COMPONENT_KINDS) {
     const fromEntry = (entry as unknown as Record<string, unknown>)[kind];
     const fromManifest = manifest ? manifest[kind] : undefined;
 
     if (fromEntry !== undefined) {
-      const v = await validateComponentPath(kind, fromEntry, pluginRoot);
+      const seenPaths = new Set<string>();
 
-      if (v.ok) {
-        partial.componentPaths[kind] = v.relative;
+      for (const raw of readPathOrArray(fromEntry)) {
+        const v = await validateComponentPath(kind, raw, pluginRoot);
+
+        if (v.ok) {
+          if (!seenPaths.has(v.relative)) {
+            seenPaths.add(v.relative);
+            partial.componentPaths[kind].push(v.relative);
+          }
+        } else {
+          partial.notes.push(v.reason);
+          dirty = true;
+        }
+      }
+
+      if (partial.componentPaths[kind].length > 0) {
         partial.supported.push(kind);
-      } else {
-        partial.notes.push(v.reason);
-        dirty = true;
       }
     } else if (fromManifest !== undefined) {
       // MM-6: manifest declared but entry didn't -> conflict.

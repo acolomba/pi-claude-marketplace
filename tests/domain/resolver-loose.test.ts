@@ -76,7 +76,8 @@ test("MM-6 entry.skills declared -> installable with skills", async () => {
   assert.equal(r.installable, true, `notes if not: ${r.notes.join(" / ")}`);
 
   if (r.installable) {
-    assert.equal(r.componentPaths.skills, "skills");
+    // D-07 array shape (loose mode is entry-only with no convention probe).
+    assert.deepEqual(r.componentPaths.skills, ["skills"]);
     assert.ok(r.supported.includes("skills"));
   }
 });
@@ -107,7 +108,8 @@ test("MM-6 entry + manifest both absent + <pluginRoot>/skills exists -> installa
   assert.equal(r.installable, true, `notes: ${r.notes.join(" / ")}`);
 
   if (r.installable) {
-    assert.equal(r.componentPaths.skills, undefined, "no implicit-by-convention in loose mode");
+    // D-07 array shape: empty array (no implicit-by-convention in loose mode).
+    assert.deepEqual(r.componentPaths.skills, [], "no implicit-by-convention in loose mode");
     assert.ok(!r.supported.includes("skills"));
   }
 });
@@ -200,8 +202,30 @@ test("MM-6 loose happy path: entry declares skills and commands -> installable w
   assert.equal(r.installable, true, `notes: ${r.notes.join(" / ")}`);
 
   if (r.installable) {
-    assert.equal(r.componentPaths.skills, "skills");
-    assert.equal(r.componentPaths.commands, "commands");
+    // D-07 array shape.
+    assert.deepEqual(r.componentPaths.skills, ["skills"]);
+    assert.deepEqual(r.componentPaths.commands, ["commands"]);
     assert.deepEqual(r.supported.sort(), ["commands", "skills"]);
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// D-07: loose mode accepts top-level arrays in entry-only fields with first-
+// wins dedup; no implicit-by-convention probing.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("D-07 loose: entry.skills as multi-element array preserves declared order with dedup", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "a")]: "dir",
+    [path.join(localRoot, "b")]: "dir",
+  });
+  const r = await resolveLoose(basicEntry({ source: "./local", skills: ["a", "b", "a"] }), ctx);
+  assert.equal(r.installable, true, `notes: ${r.notes.join(" / ")}`);
+
+  if (r.installable) {
+    // First-wins dedup; declared order preserved.
+    assert.deepEqual(r.componentPaths.skills, ["a", "b"]);
   }
 });

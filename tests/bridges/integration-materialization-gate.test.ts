@@ -101,7 +101,8 @@ describe("integration: materialization gate", () => {
         supported: ["agents"],
         unsupported: [],
         notes: [],
-        componentPaths: { agents: "agents" },
+        // D-07: componentPaths.* are now `readonly string[]`.
+        componentPaths: { skills: [], commands: [], agents: ["agents"] },
         mcpServers: {},
       };
 
