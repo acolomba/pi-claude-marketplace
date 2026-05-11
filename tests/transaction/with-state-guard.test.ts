@@ -4,11 +4,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import lockfile from "proper-lockfile";
+
 import { pathSource } from "../../extensions/claude-marketplace/domain/source.ts";
 import {
   locationsFor,
   type ScopedLocations,
 } from "../../extensions/claude-marketplace/persistence/locations.ts";
+import { StateLockHeldError } from "../../extensions/claude-marketplace/shared/errors.ts";
 import { withStateGuard } from "../../extensions/claude-marketplace/transaction/with-state-guard.ts";
 
 import type { ExtensionState } from "../../extensions/claude-marketplace/persistence/state-io.ts";
@@ -140,6 +143,99 @@ test("ST-7 fresh-load: second withStateGuard sees first's commit", async () => {
       return state.marketplaces.mp1?.plugins.p1?.version;
     });
     assert.equal(observed, "1.0.0");
+  } finally {
+    await cleanup();
+  }
+});
+
+test("D-06 withStateGuard holds the per-scope lock across load-mutate-save", async () => {
+  const { loc, cleanup } = await setupTmpScope();
+  try {
+    await withStateGuard(loc, async (state) => {
+      assert.equal(
+        await lockfile.check(loc.extensionRoot, {
+          lockfilePath: loc.stateLockFile,
+          realpath: false,
+        }),
+        true,
+      );
+      withInstalledPlugin(state, "mp1", "p1", "1.0.0");
+    });
+
+    assert.equal(
+      await lockfile.check(loc.extensionRoot, {
+        lockfilePath: loc.stateLockFile,
+        realpath: false,
+      }),
+      false,
+    );
+  } finally {
+    await cleanup();
+  }
+});
+
+test("D-07 pre-held state lock fails fast with StateLockHeldError and does not run mutate", async () => {
+  const { loc, cleanup } = await setupTmpScope();
+  const release = await lockfile.lock(loc.extensionRoot, {
+    lockfilePath: loc.stateLockFile,
+    realpath: false,
+  });
+
+  try {
+    let mutateRan = false;
+    await assert.rejects(
+      () =>
+        withStateGuard(loc, () => {
+          mutateRan = true;
+        }),
+      (err: unknown) => err instanceof StateLockHeldError && err.lockPath === loc.stateLockFile,
+    );
+    assert.equal(mutateRan, false);
+  } finally {
+    await release();
+    await cleanup();
+  }
+});
+
+test("D-06 mutate failure releases the lock for the next state guard call", async () => {
+  const { loc, cleanup } = await setupTmpScope();
+  try {
+    await assert.rejects(
+      () =>
+        withStateGuard(loc, () => {
+          throw new Error("simulated mutate failure while lock held");
+        }),
+      /simulated mutate failure while lock held/,
+    );
+
+    await withStateGuard(loc, (state) => {
+      withInstalledPlugin(state, "mp1", "p1", "1.0.0");
+    });
+
+    const onDisk = await readOnDisk(loc.stateJsonPath);
+    assert.equal(onDisk.marketplaces.mp1?.plugins.p1?.version, "1.0.0");
+  } finally {
+    await cleanup();
+  }
+});
+
+test("D-06 save failure releases the lock for the next state guard call", async () => {
+  const { loc, cleanup } = await setupTmpScope();
+  try {
+    await assert.rejects(
+      () =>
+        withStateGuard(loc, (state) => {
+          (state as { schemaVersion: number }).schemaVersion = 2;
+        }),
+      /saveState refused/,
+    );
+
+    await withStateGuard(loc, (state) => {
+      withInstalledPlugin(state, "mp1", "p1", "1.0.0");
+    });
+
+    const onDisk = await readOnDisk(loc.stateJsonPath);
+    assert.equal(onDisk.marketplaces.mp1?.plugins.p1?.version, "1.0.0");
   } finally {
     await cleanup();
   }
