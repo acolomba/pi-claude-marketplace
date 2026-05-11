@@ -16,6 +16,7 @@
 import os from "node:os";
 import path from "node:path";
 
+import { assertSafeName } from "../domain/name.ts";
 import { assertPathInside } from "../shared/path-safety.ts";
 
 import type { Scope } from "../shared/types.ts";
@@ -130,18 +131,32 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
     sourcesDir,
 
     async pluginDataDir(mp: string, plugin: string): Promise<string> {
+      // Defense-in-depth: route both name inputs through assertSafeName before
+      // path.join + assertPathInside (T-5-09 mitigation per Plan 05-03 threat
+      // model). assertPathInside alone does NOT catch every embedded separator
+      // (e.g. `plugin = "p/sub"` joins to `<dataRoot>/mp/p/sub` which STAYS
+      // inside dataRoot). assertSafeName upstream rejects "/" and "\" path
+      // separators, "." / ".." traversal segments, and ASCII control chars.
+      assertSafeName(mp, `pluginDataDir marketplace name "${mp}"`);
+      assertSafeName(plugin, `pluginDataDir plugin name "${plugin}"`);
       const candidate = path.join(dataRoot, mp, plugin);
       await assertPathInside(dataRoot, candidate, `pluginDataDir(${mp}, ${plugin})`);
       return candidate;
     },
 
     async marketplaceDataDir(mp: string): Promise<string> {
+      // Defense-in-depth: assertSafeName upstream rejects separator-bearing
+      // marketplace names that path.join would silently nest under dataRoot.
+      assertSafeName(mp, `marketplaceDataDir marketplace name "${mp}"`);
       const candidate = path.join(dataRoot, mp);
       await assertPathInside(dataRoot, candidate, `marketplaceDataDir(${mp})`);
       return candidate;
     },
 
     async sourceCloneDir(mp: string): Promise<string> {
+      // Defense-in-depth: assertSafeName upstream rejects separator-bearing
+      // marketplace names that path.join would silently nest under sourcesDir.
+      assertSafeName(mp, `sourceCloneDir marketplace name "${mp}"`);
       const candidate = path.join(sourcesDir, mp);
       await assertPathInside(sourcesDir, candidate, `sourceCloneDir(${mp})`);
       return candidate;
