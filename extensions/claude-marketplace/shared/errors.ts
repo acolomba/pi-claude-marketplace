@@ -171,3 +171,35 @@ export class PluginUpdatePhase3Error extends Error {
     this.failures = failures;
   }
 }
+
+export interface ResourcesDiscoverFailure {
+  readonly scope: "user" | "project";
+  readonly kind: "skills" | "prompts";
+  readonly path: string;
+  readonly cause: unknown;
+}
+
+/**
+ * SK-5 / D-12 aggregate error for Pi's resources_discover event.
+ *
+ * The discovery aggregator attempts every per-scope/per-kind disk read before
+ * throwing. `failures` preserves the complete failure set for tests and callers;
+ * `Error.cause` carries the first failure cause so existing cause-chain formatters
+ * still have a useful root cause to display.
+ */
+export class AggregateResourcesDiscoverError extends Error {
+  readonly failures: readonly ResourcesDiscoverFailure[];
+  constructor(failures: readonly ResourcesDiscoverFailure[]) {
+    const details = failures
+      .map(
+        (failure) =>
+          `${failure.scope}/${failure.kind} at ${failure.path}: ${errorMessage(failure.cause)}`,
+      )
+      .join("; ");
+    super(`Failed to discover Pi resources: ${details}`, {
+      cause: failures[0]?.cause,
+    });
+    this.name = "AggregateResourcesDiscoverError";
+    this.failures = Object.freeze([...failures]);
+  }
+}

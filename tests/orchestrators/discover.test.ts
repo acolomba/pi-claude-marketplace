@@ -33,11 +33,11 @@ function makeLocations(scope: Scope, root: string): ScopedLocations {
     sourcesDir: path.join(extensionRoot, "sources"),
     cacheDir: path.join(extensionRoot, "cache"),
     marketplaceNamesCacheFile: path.join(extensionRoot, "cache", "marketplace-names.json"),
-    pluginDataDir: async () => path.join(extensionRoot, "data", "mp", "plugin"),
-    marketplaceDataDir: async () => path.join(extensionRoot, "data", "mp"),
-    sourceCloneDir: async () => path.join(extensionRoot, "sources", "mp"),
-    sourcesStagingDir: async () => path.join(extensionRoot, "sources-staging", "uuid"),
-    pluginCacheFile: async () => path.join(extensionRoot, "cache", "plugins", "mp.json"),
+    pluginDataDir: () => Promise.resolve(path.join(extensionRoot, "data", "mp", "plugin")),
+    marketplaceDataDir: () => Promise.resolve(path.join(extensionRoot, "data", "mp")),
+    sourceCloneDir: () => Promise.resolve(path.join(extensionRoot, "sources", "mp")),
+    sourcesStagingDir: () => Promise.resolve(path.join(extensionRoot, "sources-staging", "uuid")),
+    pluginCacheFile: () => Promise.resolve(path.join(extensionRoot, "cache", "plugins", "mp.json")),
   } as unknown as ScopedLocations;
 }
 
