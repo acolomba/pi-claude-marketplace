@@ -249,3 +249,67 @@ test("Phase 3 bridge-target dirs are all under extensionRoot (defense-in-depth)"
   assert.ok(loc.skillsTargetDir.startsWith(loc.extensionRoot));
   assert.ok(loc.promptsTargetDir.startsWith(loc.extensionRoot));
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// Phase 6 (Plan 06-02) D-03 completion-cache path helpers:
+// cacheDir, marketplaceNamesCacheFile, pluginCacheFile.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("D-03 locationsFor('project') sets cacheDir to <extensionRoot>/cache", () => {
+  const loc = locationsFor("project", "/my/proj");
+  assert.equal(loc.cacheDir, path.join("/my/proj", ".pi", "claude-marketplace", "cache"));
+  assert.ok(loc.cacheDir.startsWith(loc.extensionRoot));
+});
+
+test("D-03 locationsFor('user') sets cacheDir under user extensionRoot", () => {
+  const loc = locationsFor("user", "/anywhere");
+  assert.ok(loc.cacheDir.endsWith(path.join(".pi", "agent", "claude-marketplace", "cache")));
+  assert.ok(loc.cacheDir.startsWith(loc.extensionRoot));
+});
+
+test("D-03 locationsFor('project') sets marketplaceNamesCacheFile to <cacheDir>/marketplace-names.json", () => {
+  const loc = locationsFor("project", "/my/proj");
+  assert.equal(
+    loc.marketplaceNamesCacheFile,
+    path.join("/my/proj", ".pi", "claude-marketplace", "cache", "marketplace-names.json"),
+  );
+  assert.ok(loc.marketplaceNamesCacheFile.startsWith(loc.cacheDir));
+});
+
+test("D-03 pluginCacheFile('safe-name') happy path returns under cacheDir/plugins", async () => {
+  const loc = locationsFor("project", "/p");
+  const got = await loc.pluginCacheFile("safe-name");
+  assert.ok(got.startsWith(loc.cacheDir));
+  assert.equal(got, path.join(loc.cacheDir, "plugins", "safe-name.json"));
+});
+
+test("D-03 pluginCacheFile('../../etc') refused by upstream assertSafeName (T-EDGE-5b)", async () => {
+  const loc = locationsFor("project", "/p");
+  await assert.rejects(
+    () => loc.pluginCacheFile("../../etc"),
+    /must not contain path separators|must not be|must not contain ASCII control/,
+  );
+});
+
+test("D-03 pluginCacheFile refuses '/' separator (T-EDGE-5b)", async () => {
+  const loc = locationsFor("project", "/p");
+  await assert.rejects(() => loc.pluginCacheFile("a/b"), /must not contain path separators/);
+});
+
+test("D-03 pluginCacheFile refuses empty name", async () => {
+  const loc = locationsFor("project", "/p");
+  await assert.rejects(() => loc.pluginCacheFile(""), /must be a non-empty string/);
+});
+
+test("SC-3 ScopedLocations cache fields are not writable (frozen)", () => {
+  const loc = locationsFor("user", "/x") as ScopedLocations & {
+    cacheDir: string;
+    marketplaceNamesCacheFile: string;
+  };
+  assert.throws(() => {
+    loc.cacheDir = "/tmp/evil";
+  }, /Cannot assign to read only property|object is not extensible/);
+  assert.throws(() => {
+    loc.marketplaceNamesCacheFile = "/tmp/evil";
+  }, /Cannot assign to read only property|object is not extensible/);
+});
