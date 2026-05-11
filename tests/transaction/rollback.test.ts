@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { ROLLBACK_PARTIAL } from "../../extensions/claude-marketplace/shared/markers.ts";
+import {
+  PathContainmentError,
+  SymlinkRefusedError,
+} from "../../extensions/claude-marketplace/shared/path-safety.ts";
 import { formatRollbackError } from "../../extensions/claude-marketplace/transaction/rollback.ts";
 
 import type { RunPhasesResult } from "../../extensions/claude-marketplace/transaction/phase-ledger.ts";
@@ -92,4 +96,73 @@ test("D-03 single-chokepoint: marker prefix is the imported ROLLBACK_PARTIAL con
     got.message.includes(ROLLBACK_PARTIAL),
     `marker prefix drift: got "${got.message}", expected to contain "${ROLLBACK_PARTIAL}"`,
   );
+});
+
+/**
+ * D-02 / PI-14 -- formatRollbackError MUST short-circuit when the
+ * originalError is a PathContainmentError (or its SymlinkRefusedError
+ * subclass per Phase 1 D-17). The violation surfaces verbatim instead
+ * of being folded into the (rollback partial: ...) marker, so every
+ * mutating orchestrator (install / update / uninstall) inherits PI-14
+ * compliance from this single chokepoint.
+ *
+ * These tests deliberately pass a non-empty `rollbackPartials` array so
+ * the pre-D-02 code path would compose the marker; the bypass MUST
+ * suppress it and return the originalError reference unchanged.
+ */
+test("PI-14 / D-02: PathContainmentError originalError bypasses rollback-partial wrapping", () => {
+  const original = new PathContainmentError("/scope-root", "/escaped/path", "test");
+  const result: RunPhasesResult = {
+    ok: false,
+    error: original,
+    rollbackPartials: [{ phase: "skills", msg: "leak" }],
+    leaks: [],
+  };
+  const got = formatRollbackError(result, original);
+  // Verbatim return -- NOT wrapped.
+  assert.strictEqual(got, original, "expected the original PathContainmentError reference");
+  // ES-5 marker MUST NOT be composed onto the message.
+  assert.equal(
+    got.message.includes(ROLLBACK_PARTIAL),
+    false,
+    `marker leaked into PathContainmentError message: "${got.message}"`,
+  );
+  // Type discrimination preserved (name + instanceof) so downstream
+  // notifyError can still identify a containment violation.
+  assert.equal(got.name, "PathContainmentError");
+  assert.ok(got instanceof PathContainmentError);
+  // Cause chain intact: returned error IS the original (strict-equal),
+  // so any wrapper above can still traverse `.cause` on errors farther
+  // up the stack without losing the containment violation identity.
+});
+
+test("PI-14 / D-02: SymlinkRefusedError (subclass) bypasses rollback-partial wrapping", () => {
+  const original = new SymlinkRefusedError(
+    "/scope",
+    "/scope/link/escaped",
+    "test",
+    "/scope/link",
+    "/escaped",
+  );
+  const result: RunPhasesResult = {
+    ok: false,
+    error: original,
+    rollbackPartials: [{ phase: "agents", msg: "leak" }],
+    leaks: [],
+  };
+  const got = formatRollbackError(result, original);
+  assert.strictEqual(got, original, "expected the original SymlinkRefusedError reference");
+  assert.equal(
+    got.message.includes(ROLLBACK_PARTIAL),
+    false,
+    `marker leaked into SymlinkRefusedError message: "${got.message}"`,
+  );
+  assert.equal(got.name, "SymlinkRefusedError");
+  // Subclass relationship intact -- one instanceof at the chokepoint
+  // catches both (Phase 1 D-17 contract).
+  assert.ok(
+    got instanceof PathContainmentError,
+    "SymlinkRefusedError must remain an instance of PathContainmentError",
+  );
+  assert.ok(got instanceof SymlinkRefusedError);
 });
