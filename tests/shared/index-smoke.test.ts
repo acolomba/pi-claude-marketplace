@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
+import { mkdtemp } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import claudeMarketplaceExtension from "../../extensions/claude-marketplace/index.ts";
+import { cleanupStaging } from "../../extensions/claude-marketplace/shared/fs-utils.ts";
+
+import type { ExtensionAPI } from "../../extensions/claude-marketplace/platform/pi-api.ts";
 
 /**
  * Plan 04 regression guard: index.ts loads cleanly, exports a default
@@ -18,28 +24,48 @@ interface RegistrationLog {
   name: string;
 }
 
-function makePiMock(log: RegistrationLog[]): unknown {
-  return {
-    registerCommand(name: string) {
+interface MockPi {
+  readonly pi: ExtensionAPI;
+  readonly commands: Map<string, unknown>;
+  readonly events: Map<string, (() => unknown)[]>;
+  readonly tools: Map<string, unknown>;
+}
+
+function makePiMock(log: RegistrationLog[]): MockPi {
+  const commands = new Map<string, unknown>();
+  const events = new Map<string, (() => unknown)[]>();
+  const tools = new Map<string, unknown>();
+
+  const pi = {
+    registerCommand(name: string, options: unknown) {
       log.push({ type: "command", name });
+      commands.set(name, options);
     },
     registerTool(tool: { name: string }) {
       log.push({ type: "tool", name: tool.name });
+      tools.set(tool.name, tool);
     },
-    on(event: string) {
+    on(event: string, handler: () => unknown) {
       log.push({ type: "event", name: event });
+      const handlers = events.get(event) ?? [];
+      handlers.push(handler);
+      events.set(event, handlers);
     },
-  };
+
+    getAllTools: (): unknown[] => [],
+  } as unknown as ExtensionAPI;
+
+  return { pi, commands, events, tools };
 }
 
 test("default export is a function", () => {
   assert.equal(typeof claudeMarketplaceExtension, "function");
 });
 
-test("registers exactly 1 command (claude:plugin), 1 event (resources_discover), 0 tools", () => {
+test("registers command, read-only tools, session_start, and resources_discover exactly once", () => {
   const log: RegistrationLog[] = [];
-  const pi = makePiMock(log);
-  claudeMarketplaceExtension(pi as never);
+  const { pi } = makePiMock(log);
+  claudeMarketplaceExtension(pi);
 
   const commands = log.filter((e) => e.type === "command");
   const events = log.filter((e) => e.type === "event");
@@ -47,11 +73,34 @@ test("registers exactly 1 command (claude:plugin), 1 event (resources_discover),
 
   assert.equal(commands.length, 1, `expected exactly 1 command, got ${JSON.stringify(commands)}`);
   assert.equal(commands[0]!.name, "claude:plugin");
-  assert.equal(events.length, 1, `expected exactly 1 event handler, got ${JSON.stringify(events)}`);
-  assert.equal(events[0]!.name, "resources_discover");
+  assert.deepEqual(events.map((e) => e.name).sort(), ["resources_discover", "session_start"]);
   assert.equal(
     tools.length,
-    0,
-    `Phase 1 must register 0 LLM tools (Phase 6 lands them); got ${JSON.stringify(tools)}`,
+    2,
+    `Phase 7 must register 2 read-only LLM tools; got ${JSON.stringify(tools)}`,
   );
+  assert.deepEqual(tools.map((e) => e.name).sort(), [
+    "claude_marketplace_list",
+    "claude_marketplace_plugin_list",
+  ]);
+});
+
+test("resources_discover handler resolves project cwd at invocation time", async () => {
+  const log: RegistrationLog[] = [];
+  const { pi, events } = makePiMock(log);
+  claudeMarketplaceExtension(pi);
+
+  const handlers = events.get("resources_discover") ?? [];
+  assert.equal(handlers.length, 1, "exactly one resources_discover handler");
+
+  const originalCwd = process.cwd();
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "index-smoke-"));
+  try {
+    process.chdir(tmp);
+    const result = await handlers[0]!();
+    assert.deepEqual(result, { skillPaths: [], promptPaths: [] });
+  } finally {
+    process.chdir(originalCwd);
+    await cleanupStaging(tmp, "test-cleanup");
+  }
 });
