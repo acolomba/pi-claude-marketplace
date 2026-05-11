@@ -8,6 +8,7 @@ import {
   GENERATED_AGENT_MARKER,
   GENERATED_AGENT_PREFIX,
 } from "../../extensions/claude-marketplace/bridges/agents/marker.ts";
+import { locationsFor } from "../../extensions/claude-marketplace/persistence/locations.ts";
 import * as markers from "../../extensions/claude-marketplace/shared/markers.ts";
 import { extractEs5MarkerLiterals } from "../helpers/prd-extract.ts";
 
@@ -107,4 +108,24 @@ test("AG-5 GENERATED_AGENT_PREFIX is byte-for-byte 'claude-marketplace-'", () =>
  */
 test("PUP-6 recovery-hint prefix is byte-for-byte 'plugin-uninstall + plugin-install for'", () => {
   assert.equal(markers.RECOVERY_PLUGIN_REINSTALL_PREFIX, "plugin-uninstall + plugin-install for");
+});
+
+/**
+ * D-08 state-lock marker (Phase 7 extension beyond ES-5).
+ *
+ * This constant is intentionally excluded from the original ES-5 literals
+ * table above. It is a Phase 7 user-contract prefix for fail-fast
+ * cross-process lock contention.
+ */
+test("D-08 state-lock-held prefix is byte-for-byte 'Another claude-marketplace operation is in progress for'", () => {
+  assert.equal(
+    markers.STATE_LOCK_HELD_PREFIX,
+    "Another claude-marketplace operation is in progress for",
+  );
+});
+
+test("D-09 state lock file is the .state-lock sentinel below extensionRoot", () => {
+  const locations = locationsFor("project", "/tmp/pi-project");
+
+  assert.equal(locations.stateLockFile, path.join(locations.extensionRoot, ".state-lock"));
 });
