@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Phase 06 complete
-last_updated: "2026-05-11T20:28:39.568Z"
+last_updated: "2026-05-11T20:38:23.767Z"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 51
-  completed_plans: 49
-  percent: 96
+  completed_plans: 50
+  percent: 98
 ---
 
 # Project State
@@ -23,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 07 (integration-pi-wiring) -- EXECUTING
-Plan: 5 of 6
+Plan: 6 of 6
 
-Progress: [██████████] 96%
+Progress: [██████████] 98%
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Progress: [██████████] 96%
 | Phase 07 P02 | 4 min | 3 tasks | 9 files |
 | Phase 07 P03 | 6 min | 2 tasks | 5 files |
 | Phase 07 P04 | 11 min | 3 tasks | 10 files |
+| Phase 07 P05 | 7 min | 3 tasks | 20 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 07]: [Phase 07]: resources_discover now reads staged skills/prompts directly from disk across user and project scopes; index.ts wires the real Pi command/tool/event surface. -- Plan 07-03 replaced the Phase 1 stub with real Pi wiring and made /reload discovery reflect disk state.
 - [Phase 07]: withStateGuard now owns cross-process same-scope mutation safety via a fail-fast proper-lockfile `.state-lock` around load-mutate-save. -- Plan 07-04 satisfies NFR-3 retry safety for concurrent installs.
 - [Phase 07]: Concurrent install race verification uses forked IPC children invoking the real `installPlugin` path and asserts state/disk alignment after one lock-held loser. -- Plan 07-04 established the multi-process test pattern.
+- [Phase 07]: [Phase 07]: PR e2e now uses pinned upstream SHA 6196a61bdeece7b9889ecda1e45bd7085788ae75 while nightly e2e uses floating main for upstream drift classification. -- Plan 07-05 established deterministic PR e2e and separate nightly drift classification.
+- [Phase 07]: [Phase 07]: Real Pi runtime smoke is automated through the installed pi package bin with isolated HOME/cwd, avoiding the blocked agent-core API path. -- Research found agent-core lacks extension-loading API, so the package-bin smoke is the automatable runtime gate.
 
 ### Pending Todos
 
@@ -97,4 +100,4 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-11T20:28:39.561Z
+Last session: 2026-05-11T20:37:59.479Z
