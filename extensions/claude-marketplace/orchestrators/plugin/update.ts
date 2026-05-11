@@ -38,7 +38,6 @@
 // formatErrorWithCauses, resolveScopeFromState). MUST NOT import from
 // orchestrators/marketplace/{add,remove,list,update,autoupdate}.ts.
 
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -65,7 +64,7 @@ import {
   prepareStageSkills,
 } from "../../bridges/skills/index.ts";
 import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/components/plugin.ts";
-import { MARKETPLACE_VALIDATOR } from "../../domain/manifest.ts";
+import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { computeHashVersion } from "../../domain/version.ts";
 import { locationsFor } from "../../persistence/locations.ts";
@@ -881,13 +880,7 @@ async function refreshGitHubClone(
 async function loadCachedMarketplaceManifest(
   manifestPath: string,
 ): Promise<{ name: string; plugins: readonly PluginEntry[] }> {
-  const raw = await readFile(manifestPath, "utf8");
-  const parsed: unknown = JSON.parse(raw);
-  if (!MARKETPLACE_VALIDATOR.Check(parsed)) {
-    throw new Error(`Cached marketplace manifest at ${manifestPath} failed schema validation`);
-  }
-
-  return parsed;
+  return loadMarketplaceManifest(manifestPath);
 }
 
 /**

@@ -29,7 +29,7 @@
 // orchestrators/marketplace/shared.ts (named exports only -- no add.ts /
 // remove.ts / update.ts cycle).
 
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -56,7 +56,7 @@ import {
   unstagePluginSkills,
 } from "../../bridges/skills/index.ts";
 import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
-import { MARKETPLACE_VALIDATOR } from "../../domain/manifest.ts";
+import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { computeHashVersion } from "../../domain/version.ts";
 import { locationsFor } from "../../persistence/locations.ts";
@@ -149,14 +149,7 @@ interface InstallCtx {
 async function loadCachedMarketplaceManifest(
   manifestPath: string,
 ): Promise<{ name: string; plugins: readonly PluginEntry[] }> {
-  const raw = await readFile(manifestPath, "utf8");
-  const parsed: unknown = JSON.parse(raw);
-  if (!MARKETPLACE_VALIDATOR.Check(parsed)) {
-    throw new Error(`Cached marketplace manifest at ${manifestPath} failed schema validation`);
-  }
-
-  // The validator narrows; PluginEntry is the per-entry shape inside `plugins`.
-  return parsed;
+  return loadMarketplaceManifest(manifestPath);
 }
 
 /**

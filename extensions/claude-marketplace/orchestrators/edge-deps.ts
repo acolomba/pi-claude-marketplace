@@ -28,9 +28,7 @@
 //     The cache layer's getPluginIndex catches that discriminator and
 //     writes the TC-8 `_loadError` poison row (returning [] to callers).
 
-import { readFile } from "node:fs/promises";
-
-import { MARKETPLACE_VALIDATOR } from "../domain/manifest.ts";
+import { loadMarketplaceManifest } from "../domain/manifest.ts";
 import { resolveStrict } from "../domain/resolver.ts";
 import { locationsFor } from "../persistence/locations.ts";
 import { loadState } from "../persistence/state-io.ts";
@@ -123,11 +121,7 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
           );
         }
 
-        const raw = await readFile(mp.manifestPath, "utf8");
-        const parsed: unknown = JSON.parse(raw);
-        if (!MARKETPLACE_VALIDATOR.Check(parsed)) {
-          throw new Error(`marketplace.json at ${mp.manifestPath} failed schema validation.`);
-        }
+        const parsed = await loadMarketplaceManifest(mp.manifestPath);
 
         const installedNames = new Set(Object.keys(mp.plugins));
         const rows: PluginIndexRow[] = [];

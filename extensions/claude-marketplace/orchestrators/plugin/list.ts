@@ -36,9 +36,7 @@
 //   marketplaces are small (<100 plugins typical); a resolver-result cache
 //   is the post-V1 NFR-8 perf path -- NOT introduced here.
 
-import { readFile } from "node:fs/promises";
-
-import { MARKETPLACE_VALIDATOR, type MarketplaceManifest } from "../../domain/manifest.ts";
+import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
 import { resolveStrict } from "../../domain/resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
@@ -112,18 +110,7 @@ function shouldShow(opts: ListPluginsOptions, status: PluginRenderStatus): boole
  * manifests typed-narrow to `MarketplaceManifest` via the .Check return guard.
  */
 async function loadManifestSoftly(manifestPath: string): Promise<MarketplaceManifest> {
-  const raw = await readFile(manifestPath, "utf8");
-  const parsed: unknown = JSON.parse(raw);
-
-  if (!MARKETPLACE_VALIDATOR.Check(parsed)) {
-    const firstErr = MARKETPLACE_VALIDATOR.Errors(parsed)[0];
-    const detail = firstErr
-      ? `${firstErr.instancePath || "<root>"}: ${firstErr.message}`
-      : "(no detail)";
-    throw new Error(`marketplace.json schema invalid: ${detail}`);
-  }
-
-  return parsed;
+  return loadMarketplaceManifest(manifestPath);
 }
 
 /**

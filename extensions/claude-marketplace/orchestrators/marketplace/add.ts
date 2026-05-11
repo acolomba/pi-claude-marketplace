@@ -40,11 +40,11 @@
 // considered acceptable per design.
 
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, stat } from "node:fs/promises";
+import { mkdir, rename, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { MARKETPLACE_VALIDATOR } from "../../domain/manifest.ts";
+import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import {
@@ -165,11 +165,7 @@ async function addGithubInGuard(args: {
   try {
     // 2. Read + validate manifest.
     const manifestPath = path.join(stagingDir, ".claude-plugin", "marketplace.json");
-    const text = await readFile(manifestPath, "utf8");
-    const parsed: unknown = JSON.parse(text);
-    if (!MARKETPLACE_VALIDATOR.Check(parsed)) {
-      throw new Error(`Cloned marketplace manifest at ${manifestPath} failed schema validation`);
-    }
+    const parsed = await loadMarketplaceManifest(manifestPath);
 
     const derivedName = (parsed as { name: string }).name;
 
@@ -261,11 +257,7 @@ async function addPathInGuard(args: {
   }
 
   // Read + validate manifest.
-  const text = await readFile(manifestPath, "utf8");
-  const parsed: unknown = JSON.parse(text);
-  if (!MARKETPLACE_VALIDATOR.Check(parsed)) {
-    throw new Error(`Local marketplace manifest at ${manifestPath} failed schema validation`);
-  }
+  const parsed = await loadMarketplaceManifest(manifestPath);
 
   const derivedName = (parsed as { name: string }).name;
 

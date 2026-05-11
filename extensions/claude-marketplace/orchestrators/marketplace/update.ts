@@ -66,10 +66,9 @@
 // command-registration time. (Rule 3 deviation from PLAN.md snippet
 // which mistakenly wrote `subagentWarningIfNeeded(ctx, ...)`.)
 
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { MARKETPLACE_VALIDATOR } from "../../domain/manifest.ts";
+import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
@@ -502,11 +501,7 @@ async function validateManifestAtRoot(
   marketplaceRoot: string,
 ): Promise<void> {
   const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
-  const text = await readFile(manifestPath, "utf8");
-  const parsed: unknown = JSON.parse(text);
-  if (!MARKETPLACE_VALIDATOR.Check(parsed)) {
-    throw new Error(`Refreshed marketplace manifest at ${manifestPath} failed schema validation`);
-  }
+  await loadMarketplaceManifest(manifestPath);
 
   if (record.manifestPath !== manifestPath) {
     record.manifestPath = manifestPath;
