@@ -284,7 +284,7 @@
 - [ ] **NFR-8**: Successor SHOULD cache marketplace manifests with mtime invalidation (BACKLOG performance item)
 - [ ] **NFR-9**: System MUST never print sensitive paths beyond what's already in user's terminal
 - [ ] **NFR-10**: System MUST refuse to write outside `<scopeRoot>/claude-marketplace/`, `<scopeRoot>/agents/`, or `<scopeRoot>/mcp.json`
-- [ ] **NFR-11**: Pi extension API declared as `@mariozechner/pi-coding-agent` peer dep; successor SHOULD pin a minimum version once API stabilizes
+- [x] **NFR-11**: Pi extension API declared as `@mariozechner/pi-coding-agent` peer dep; successor SHOULD pin a minimum version once API stabilizes
 - [ ] **NFR-12**: `marketplace.json` parser is forward-compatible (no schema-version check; unknown source kinds parse to `{ kind: "unknown", reason }`)
 
 ## v2 Requirements
@@ -546,7 +546,7 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | NFR-8       | Phase 7 | Pending |
 | NFR-9       | Phase 1 | Pending |
 | NFR-10      | Phase 1 | Pending |
-| NFR-11      | Phase 7 | Pending |
+| NFR-11      | Phase 7 | Complete |
 | NFR-12      | Phase 2 | Pending |
 
 **Coverage:**

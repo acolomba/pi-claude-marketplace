@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Phase 06 complete
-last_updated: "2026-05-11T19:28:02.568Z"
+last_updated: "2026-05-11T19:40:38.024Z"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 51
-  completed_plans: 45
-  percent: 88
+  completed_plans: 46
+  percent: 90
 ---
 
 # Project State
@@ -18,14 +18,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-09)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 06 -- edge-layer-tab-completion
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 07 -- integration-pi-wiring
 
 ## Current Position
 
-Phase: 06 -- COMPLETE
-Plan: 1 of 5
+Phase: 07 (integration-pi-wiring) -- EXECUTING
+Plan: 2 of 6
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█████████░] 90%
 
 ## Performance Metrics
 
@@ -50,6 +50,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: -
 
 <!-- Updated after each plan completion -->
+| Phase 07 P01 | 9 min | 3 tasks | 29 files |
 
 ## Accumulated Context
 
@@ -65,6 +66,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - Roadmap: Phase ledger primitive lands in Phase 2 (transaction primitive, not Phase 5 use-case)
 - Roadmap: `MARKERS.ts` and symlink-aware `assertPathInside` land in Phase 1 so they propagate to every later phase
 - Roadmap: Gap 3 (component-path supplement vs. replace) resolved in Phase 5 as supplement-fix; documented as "behavior corrected vs. V1"
+- [Phase 07]: Pi API imports now flow through platform/pi-api.ts; @mariozechner/pi-coding-agent peer floor is pinned to >=0.73.1. -- Plan 07-01 established the NFR-11 wrapper and peer-dependency floor.
 
 ### Pending Todos
 
@@ -87,4 +89,4 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-11T18:50:17.240Z
+Last session: 2026-05-11T19:40:20.204Z
