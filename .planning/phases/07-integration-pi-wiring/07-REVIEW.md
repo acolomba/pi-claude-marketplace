@@ -1,6 +1,6 @@
 ---
 phase: 07-integration-pi-wiring
-reviewed: 2026-05-11T21:05:00Z
+reviewed: 2026-05-11T21:28:00Z
 depth: standard
 files_reviewed: 28
 files_reviewed_list:
@@ -34,30 +34,31 @@ files_reviewed_list:
   - .github/workflows/ci.yml
   - .github/workflows/e2e-nightly.yml
 findings:
-  critical: 2
-  warning: 3
+  critical: 0
+  warning: 1
   info: 0
-  total: 5
-status: issues_found
+  total: 1
+status: warnings
 ---
 
 # Phase 7: Code Review Report
 
-**Reviewed:** 2026-05-11T21:05:00Z
+**Reviewed:** 2026-05-11T21:28:00Z
 **Depth:** standard
 **Files Reviewed:** 28
-**Status:** issues_found
+**Status:** warnings
 
 ## Summary
 
-Reviewed Phase 7 Pi wiring, manifest seam, resources discovery, state-locking, e2e/integration tests, package scripts, and CI workflows. The implementation contains correctness issues in project-scope discovery and cross-scope autoupdate error handling, plus robustness/test-gate gaps around lock cleanup and runtime smoke coverage.
+Reviewed Phase 7 Pi wiring, manifest seam, resources discovery, state-locking, e2e/integration tests, package scripts, and CI workflows. The original blocker findings were fixed in `6a7e15a`; the remaining item is a non-blocking smoke-test robustness warning.
 
-## Critical Issues
+## Resolved Critical Issues
 
 ### CR-01: `resources_discover` ignores the event cwd and can discover the wrong project scope
 
 **Classification:** BLOCKER
 **File:** `extensions/claude-marketplace/index.ts:12-25`
+**Status:** Resolved in `6a7e15a`
 **Issue:** The handler casts `pi.on("resources_discover", ...)` to a zero-argument callback and uses `process.cwd()` for project locations. The modeled event includes `cwd`, and the e2e test passes that cwd, but the implementation ignores it. In a real Pi process serving a session whose project cwd differs from the process cwd, `/reload` will miss that project's staged resources or expose resources from the wrong project root.
 
 **Fix:** Accept the event argument and resolve the project scope from `event.cwd`, falling back only when absent if the runtime truly permits that.
@@ -81,6 +82,7 @@ onResourcesDiscover("resources_discover", async (event) => {
 
 **Classification:** BLOCKER
 **File:** `extensions/claude-marketplace/orchestrators/marketplace/autoupdate.ts:54-88`
+**Status:** Resolved in `6a7e15a`
 **Issue:** `setMarketplaceAutoupdate` catches every error from `withStateGuard` and treats it like a tolerable per-scope miss. After Phase 7, `withStateGuard` can throw `StateLockHeldError` or other real IO failures. If one scope succeeds and the other is locked, the function emits a normal success message and silently leaves the locked scope unchanged; if a bare command hits a locked scope plus an empty other scope, it can claim `No marketplaces configured.` This is incorrect user-visible behavior for a mutating operation.
 
 **Fix:** Only suppress `MarketplaceNotFoundError` for the single-name, no-scope cross-scope lookup case. Surface `StateLockHeldError` and other non-not-found errors immediately, or aggregate them as warning/error partial failures.
@@ -96,12 +98,13 @@ onResourcesDiscover("resources_discover", async (event) => {
 }
 ```
 
-## Warnings
+## Resolved Warnings
 
 ### WR-01: Lock release failures can mask the original mutate/save failure
 
 **Classification:** WARNING
 **File:** `extensions/claude-marketplace/transaction/with-state-guard.ts:74-81`
+**Status:** Resolved in `6a7e15a`
 **Issue:** The `finally` block awaits `release()` directly. If `mutate`, `loadState`, or `saveState` throws and the release call also throws, the release error replaces the original failure. That hides the actionable cause from users and from rollback/error handling.
 
 **Fix:** Preserve the primary error and append release failure details instead of letting `release()` mask it.
@@ -130,20 +133,24 @@ try {
 
 **Classification:** WARNING
 **File:** `extensions/claude-marketplace/transaction/with-state-guard.ts:62-72`
+**Status:** Resolved in `6a7e15a`
 **Issue:** Any `proper-lockfile.lock` failure is converted to `StateLockHeldError`. Permission errors, invalid paths, filesystem failures, or corrupted lockfile state will be reported as "Another claude-marketplace operation is in progress," which gives users the wrong recovery action and can hide real filesystem defects.
 
 **Fix:** Inspect the lock error and only throw `StateLockHeldError` for actual held-lock conditions. Propagate or wrap other errors with their real cause and message.
+
+## Remaining Warnings
 
 ### WR-03: Runtime smoke can pass without proving the extension registered or handled anything
 
 **Classification:** WARNING
 **File:** `tests/e2e/_helpers.ts:196-202`; `tests/e2e/pi-runtime-smoke.test.ts:6-10`
+**Status:** Non-blocking residual risk
 **Issue:** The smoke runs `pi --offline --no-extensions --extension <index.ts> --help` and accepts any help output that lacks `failed to load` / `error loading`. Many CLIs render help before fully loading extensions or without exercising command/event registration, so this can pass while the extension entrypoint, command wiring, or `resources_discover` handler is broken.
 
 **Fix:** Make the smoke assert a real noninteractive extension surface: invoke `/claude:plugin` help/list through the Pi command dispatch if available, or assert the runtime reports the extension-loaded command/tool/event registrations. If Pi has no such noninteractive surface, fail closed with explicit manual smoke evidence rather than accepting generic help output.
 
 ---
 
-_Reviewed: 2026-05-11T21:05:00Z_
+_Reviewed: 2026-05-11T21:28:00Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
