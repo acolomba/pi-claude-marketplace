@@ -74,8 +74,13 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../presentation/soft-dep.ts";
-import { MarketplaceNotFoundError, MarketplaceUpdateError } from "../../shared/errors.ts";
-import { notifyError, notifySuccess } from "../../shared/notify.ts";
+import { invalidateMarketplaceCache } from "../../shared/completion-cache.ts";
+import {
+  MarketplaceNotFoundError,
+  MarketplaceUpdateError,
+  errorMessage,
+} from "../../shared/errors.ts";
+import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
 import {
@@ -269,6 +274,19 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     }
 
     return;
+  }
+
+  // D-03-INV (Plan 06-05): post-state-commit completion-cache invalidation.
+  // Manifest refresh may have changed the plugin set; drop the cached
+  // plugin index so the next completion read rebuilds from the freshly
+  // updated marketplace.json. Memory-only op; defense-in-depth try/catch.
+  try {
+    invalidateMarketplaceCache(scope, name);
+  } catch (err) {
+    notifyWarning(
+      ctx,
+      `Marketplace "${name}" updated; completion cache refresh deferred: ${errorMessage(err)}`,
+    );
   }
 
   // CASCADE OUTSIDE the outer guard (D-08). Honors MU-4 literal

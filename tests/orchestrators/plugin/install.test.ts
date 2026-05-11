@@ -15,6 +15,10 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/claude-marketplace/persistence/state-io.ts";
+import {
+  __resetCacheForTests,
+  getPluginIndex,
+} from "../../../extensions/claude-marketplace/shared/completion-cache.ts";
 
 import type { ExtensionState } from "../../../extensions/claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
@@ -1150,6 +1154,63 @@ test("Sanity: staged agent target carries the AG-5 owned-agent marker", async ()
         body.includes(GENERATED_AGENT_MARKER),
         `staged agent must include AG-5 owned-agent marker; got: ${body}`,
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-03-INV :: install invalidates plugin cache for the target marketplace", async () => {
+  // Plan 06-05 wires invalidateMarketplaceCache into installPlugin's
+  // post-state-commit window (after the AS-6 pluginDataDir mkdir, before
+  // AS-7 surfaces foreign-content rows). The plugin moves from
+  // status="available" -> status="installed", so the cached plugin index
+  // for this (scope, marketplace) pair MUST be dropped. Memory-only op;
+  // the file is left intact as a rebuild source. Test pattern: pre-warm
+  // memory + delete the on-disk file -> run install -> next read MUST
+  // re-invoke rebuild (proves memory cleared).
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d03inv-"));
+    try {
+      __resetCacheForTests();
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        pluginVersion: "1.0.0",
+        skills: [{ sourceName: "tool" }],
+      });
+
+      // Pre-warm the plugin index memory entry.
+      const pluginCachePath = await locations.pluginCacheFile("mp");
+      let rebuildCount = 0;
+      await getPluginIndex(pluginCachePath, "project", "mp", () => {
+        rebuildCount += 1;
+        return Promise.resolve([{ name: "hello", status: "available" }]);
+      });
+      assert.equal(rebuildCount, 1, "pre-test: rebuild invoked on first read");
+
+      // Drop the on-disk cache file so the next memory-miss MUST rebuild.
+      await rm(pluginCachePath, { force: true });
+
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // Memory must be cleared; with file absent, next read invokes rebuild.
+      await getPluginIndex(pluginCachePath, "project", "mp", () => {
+        rebuildCount += 1;
+        return Promise.resolve([{ name: "hello", status: "installed" }]);
+      });
+      assert.equal(rebuildCount, 2, "post-invalidation read re-invokes rebuild");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

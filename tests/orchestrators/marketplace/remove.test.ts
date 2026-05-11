@@ -12,6 +12,11 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/claude-marketplace/persistence/state-io.ts";
+import { atomicWriteJson } from "../../../extensions/claude-marketplace/shared/atomic-json.ts";
+import {
+  __resetCacheForTests,
+  getMarketplaceNames,
+} from "../../../extensions/claude-marketplace/shared/completion-cache.ts";
 import {
   MarketplaceAmbiguousScopeError,
   MarketplaceNotFoundError,
@@ -477,6 +482,89 @@ test("MR-7 inverse: github-source clone dir REMOVED on full cascade success", as
       assert.equal(await pathExists(cloneDir), false, "clone dir removed on full success");
       const after = await loadState(locations.extensionRoot);
       assert.equal("acme-mp" in after.marketplaces, false, "record removed on full success");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-03-INV :: remove unlinks the plugin cache file and invalidates marketplace-names", async () => {
+  // Plan 06-05 wires dropMarketplaceCache + invalidateMarketplaceNames into
+  // removeMarketplace's post-state-commit window. The plugin cache file
+  // MUST be unlinked because the marketplace is gone (no rebuild path
+  // can recover it); the marketplace-names cache file is left intact
+  // (the memory entry is dropped so a subsequent read re-derives the
+  // current marketplace set from state.json). This test verifies BOTH
+  // limbs: the on-disk plugin cache file disappears, AND the in-memory
+  // marketplace-names entry is cleared.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "remove-d03inv-"));
+    try {
+      __resetCacheForTests();
+      const locations = locationsFor("project", cwd);
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          "to-go": {
+            name: "to-go",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: {},
+          },
+        },
+      });
+
+      // Pre-create the plugin cache file via atomicWriteJson so the
+      // dropMarketplaceCache call has something to unlink. The shape
+      // matches PLUGIN_INDEX_CACHE_SCHEMA so a stray read+validate would
+      // succeed; the test does NOT depend on the content surviving.
+      const pluginCachePath = await locations.pluginCacheFile("to-go");
+      await atomicWriteJson(pluginCachePath, {
+        schemaVersion: 1,
+        lastRefreshedAt: "2026-01-01T00:00:00.000Z",
+        plugins: [],
+      });
+      assert.equal(
+        await pathExists(pluginCachePath),
+        true,
+        "pre-test: cache file seeded successfully",
+      );
+
+      // Pre-warm the marketplace-names memory entry, then drop the
+      // marketplace-names cache file so a post-invalidation read forces
+      // a rebuild invocation (proves the memory entry was cleared).
+      const namesCachePath = locations.marketplaceNamesCacheFile;
+      let namesRebuildCount = 0;
+      await getMarketplaceNames(namesCachePath, "project", () => {
+        namesRebuildCount += 1;
+        return Promise.resolve(["to-go"]);
+      });
+      assert.equal(namesRebuildCount, 1, "pre-test: names cache warmed");
+      await rm(namesCachePath, { force: true });
+
+      const { ctx, pi } = makeCtx();
+      await removeMarketplace({ ctx, pi, name: "to-go", scope: "project", cwd });
+
+      // Plugin cache file MUST be absent (dropMarketplaceCache executed).
+      assert.equal(
+        await pathExists(pluginCachePath),
+        false,
+        "plugin cache file unlinked by dropMarketplaceCache",
+      );
+
+      // Marketplace-names memory cleared: next read forces rebuild.
+      await getMarketplaceNames(namesCachePath, "project", () => {
+        namesRebuildCount += 1;
+        return Promise.resolve([]);
+      });
+      assert.equal(
+        namesRebuildCount,
+        2,
+        "marketplace-names memory invalidated -- next read rebuilds",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

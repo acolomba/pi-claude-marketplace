@@ -48,13 +48,17 @@ import { MARKETPLACE_VALIDATOR } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import {
+  invalidateMarketplaceCache,
+  invalidateMarketplaceNames,
+} from "../../shared/completion-cache.ts";
+import {
   MarketplaceDuplicateNameError,
   StaleSourceCloneError,
   appendLeakToError,
   errorMessage,
 } from "../../shared/errors.ts";
 import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
-import { notifySuccess } from "../../shared/notify.ts";
+import { notifySuccess, notifyWarning } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
 import { DEFAULT_GIT_OPS, type GitOps } from "./shared.ts";
@@ -110,6 +114,21 @@ export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void>
   if (recordedName === undefined) {
     // Defensive: the guard always sets it on success.
     throw new Error("addMarketplace: internal error -- guard returned without recording a name");
+  }
+
+  // D-03-INV (Plan 06-05): post-state-commit completion-cache invalidation.
+  // The marketplace-names cache for this scope and the plugin index for the
+  // newly recorded marketplace are both stale-by-construction. Memory-only
+  // ops cannot throw under normal operation; the try/catch is defense-in-
+  // depth so a cache hiccup never rolls back the user's primary success.
+  try {
+    invalidateMarketplaceNames(opts.scope);
+    invalidateMarketplaceCache(opts.scope, recordedName);
+  } catch (err) {
+    notifyWarning(
+      opts.ctx,
+      `Marketplace "${recordedName}" added; completion cache refresh deferred: ${errorMessage(err)}`,
+    );
   }
 
   // MA-11: success -- exact stable string, NO reload hint.

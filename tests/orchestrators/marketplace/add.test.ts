@@ -8,6 +8,10 @@ import { addMarketplace } from "../../../extensions/claude-marketplace/orchestra
 import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../../extensions/claude-marketplace/persistence/state-io.ts";
 import {
+  __resetCacheForTests,
+  getMarketplaceNames,
+} from "../../../extensions/claude-marketplace/shared/completion-cache.ts";
+import {
   MarketplaceDuplicateNameError,
   StaleSourceCloneError,
 } from "../../../extensions/claude-marketplace/shared/errors.ts";
@@ -356,5 +360,68 @@ test("MA-2 / SC-5: orchestrator accepts scope='project' (caller defaults; orches
     const note = notifications[0];
     assert.ok(note);
     assert.ok(note.message.includes("in project scope"));
+  });
+});
+
+test("D-03-INV :: add invalidates marketplace-names cache for the new scope", async () => {
+  // Plan 06-05 wires invalidateMarketplaceNames + invalidateMarketplaceCache
+  // into addMarketplace's post-state-commit window. The cache module's
+  // invalidate*() helpers are memory-only (the file is preserved as a
+  // rebuild source). To prove the invalidation fires, we:
+  //   1. __resetCacheForTests() to isolate from prior test pollution.
+  //   2. Warm the in-memory marketplace-names map by calling
+  //      getMarketplaceNames(...) once with a sentinel rebuild that returns
+  //      a deliberately stale shape and writes the cache file.
+  //   3. Delete the on-disk cache file so the next memory-miss falls
+  //      through to rebuild rather than file hit.
+  //   4. Run addMarketplace -- this MUST clear the in-memory entry.
+  //   5. Call getMarketplaceNames again with a different rebuild that
+  //      increments a counter; the increment proves memory was cleared
+  //      AND the file is gone, i.e. the orchestrator routed through the
+  //      invalidation call site.
+  await withTmpScope(async ({ cwd, locations }) => {
+    __resetCacheForTests();
+    const { ctx } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    // Pre-warm: rebuild returns a stale shape so we can detect "served from
+    // memory" vs. "rebuild ran again".
+    let rebuildCount = 0;
+    const cachePath = locations.marketplaceNamesCacheFile;
+    await getMarketplaceNames(cachePath, "project", () => {
+      rebuildCount += 1;
+      return Promise.resolve(["stale-mp"]);
+    });
+    assert.equal(rebuildCount, 1, "initial warm-up triggers rebuild exactly once");
+
+    // Sanity: second call served from memory (no rebuild).
+    await getMarketplaceNames(cachePath, "project", () => {
+      rebuildCount += 1;
+      return Promise.resolve(["never-invoked"]);
+    });
+    assert.equal(rebuildCount, 1, "memory hit on second call -- no rebuild");
+
+    // Drop the on-disk cache file so the next memory-miss MUST rebuild.
+    await rm(cachePath, { force: true });
+
+    // Run addMarketplace -- D-03-INV must fire invalidateMarketplaceNames.
+    await addMarketplace({
+      ctx,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+
+    // Post-add: memory is dropped AND file is absent. The next read MUST
+    // re-invoke the rebuild closure. Without the orchestrator-side
+    // invalidation this assertion would fail (counter would stay at 1).
+    await getMarketplaceNames(cachePath, "project", () => {
+      rebuildCount += 1;
+      return Promise.resolve(["valid-marketplace"]);
+    });
+    assert.equal(rebuildCount, 2, "post-invalidation read re-invokes rebuild");
   });
 });
