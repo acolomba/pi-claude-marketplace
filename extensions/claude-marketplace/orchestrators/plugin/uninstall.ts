@@ -39,6 +39,7 @@ import { rm } from "node:fs/promises";
 import { locationsFor } from "../../persistence/locations.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../presentation/soft-dep.ts";
+import { invalidateMarketplaceCache } from "../../shared/completion-cache.ts";
 import { appendLeaks, errorMessage } from "../../shared/errors.ts";
 import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
@@ -148,6 +149,19 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- `alreadyGone` is mutated inside the withStateGuard closure above; TS flow analysis cannot prove the closure executed, so it sees the variable as still `false`. The check is required at runtime.
   if (alreadyGone) {
     return;
+  }
+
+  // D-03-INV (Plan 06-05): post-state-commit completion-cache invalidation.
+  // Plugin moved from "installed" -> "available"; drop the cached plugin
+  // index for this marketplace so the next completion read rebuilds with
+  // the new status. Memory-only op; defense-in-depth try/catch.
+  try {
+    invalidateMarketplaceCache(scope, marketplace);
+  } catch (err) {
+    notifyWarning(
+      ctx,
+      `Plugin "${plugin}" uninstalled; completion cache refresh deferred: ${errorMessage(err)}`,
+    );
   }
 
   // POST-state-commit per PU-2 / D-08: drop the per-plugin data dir AFTER the

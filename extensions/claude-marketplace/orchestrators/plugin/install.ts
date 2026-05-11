@@ -62,6 +62,7 @@ import { computeHashVersion } from "../../domain/version.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../presentation/soft-dep.ts";
+import { invalidateMarketplaceCache } from "../../shared/completion-cache.ts";
 import { ConcurrentInstallError, errorMessage } from "../../shared/errors.ts";
 import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
 import { runPhases, type Phase } from "../../transaction/phase-ledger.ts";
@@ -583,6 +584,19 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<void> {
     notifyWarning(
       ctx,
       `Plugin "${plugin}" installed; data dir creation deferred at ${installCtx.pluginDataDir}: ${errorMessage(mkdirErr)}`,
+    );
+  }
+
+  // D-03-INV (Plan 06-05): post-state-commit completion-cache invalidation.
+  // Plugin moved from "available" -> "installed"; drop the cached plugin
+  // index for this marketplace so the next completion read rebuilds with
+  // the new status. Memory-only op; defense-in-depth try/catch.
+  try {
+    invalidateMarketplaceCache(scope, marketplace);
+  } catch (err) {
+    notifyWarning(
+      ctx,
+      `Plugin "${plugin}" installed; completion cache refresh deferred: ${errorMessage(err)}`,
     );
   }
 

@@ -18,6 +18,10 @@ import {
   saveState,
 } from "../../../extensions/claude-marketplace/persistence/state-io.ts";
 import { atomicWriteJson } from "../../../extensions/claude-marketplace/shared/atomic-json.ts";
+import {
+  __resetCacheForTests,
+  getPluginIndex,
+} from "../../../extensions/claude-marketplace/shared/completion-cache.ts";
 import { pathExists } from "../../../extensions/claude-marketplace/shared/fs-utils.ts";
 
 import type { AgentsIndex } from "../../../extensions/claude-marketplace/persistence/agents-index-schema.ts";
@@ -679,4 +683,54 @@ test("NFR-5: uninstall.ts has zero git surface (no platform/git, no DEFAULT_GIT_
   assert.equal(stripped.includes("platform/git"), false, "must not import platform/git");
   assert.equal(stripped.includes("DEFAULT_GIT_OPS"), false, "must not reference DEFAULT_GIT_OPS");
   assert.equal(stripped.includes("gitOps"), false, "must not reference gitOps");
+});
+
+test("D-03-INV :: uninstall invalidates plugin cache for the target marketplace", async () => {
+  // Plan 06-05 wires invalidateMarketplaceCache into uninstallPlugin's
+  // post-state-commit window (after withStateGuard closes, before
+  // pluginDataDir rm). The plugin moves from status="installed" ->
+  // status="available", so the cached plugin index for this (scope,
+  // marketplace) pair MUST be dropped. Memory-only op; the file is left
+  // intact as a rebuild source. Test pattern: pre-warm memory + delete
+  // the on-disk file -> run uninstall -> next read MUST re-invoke
+  // rebuild (proves memory cleared).
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-d03inv-"));
+    try {
+      __resetCacheForTests();
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+
+      // Pre-warm the plugin index memory entry.
+      const pluginCachePath = await locations.pluginCacheFile("mp");
+      let rebuildCount = 0;
+      await getPluginIndex(pluginCachePath, "project", "mp", () => {
+        rebuildCount += 1;
+        return Promise.resolve([{ name: "hello", status: "installed" }]);
+      });
+      assert.equal(rebuildCount, 1, "pre-test: rebuild invoked on first read");
+
+      // Drop the on-disk cache file so the next memory-miss MUST rebuild.
+      await rm(pluginCachePath, { force: true });
+
+      const { ctx, pi } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // Memory must be cleared; with file absent, next read invokes rebuild.
+      await getPluginIndex(pluginCachePath, "project", "mp", () => {
+        rebuildCount += 1;
+        return Promise.resolve([{ name: "hello", status: "available" }]);
+      });
+      assert.equal(rebuildCount, 2, "post-invalidation read re-invokes rebuild");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
 });

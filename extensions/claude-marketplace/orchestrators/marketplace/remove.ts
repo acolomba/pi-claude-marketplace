@@ -38,6 +38,7 @@ import { rm } from "node:fs/promises";
 import { locationsFor } from "../../persistence/locations.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../presentation/soft-dep.ts";
+import { dropMarketplaceCache, invalidateMarketplaceNames } from "../../shared/completion-cache.ts";
 import { MarketplaceNotFoundError, appendLeaks, errorMessage } from "../../shared/errors.ts";
 import { notifySuccess, notifyWarning } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
@@ -146,6 +147,23 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
       delete state.marketplaces[opts.name];
     }
   });
+
+  // D-03-INV (Plan 06-05): post-state-commit completion-cache cleanup.
+  // The marketplace-names cache is memory-only; the per-marketplace plugin
+  // cache file must be unlinked because the marketplace itself is gone
+  // (no rebuild path can recover it). Failure routes through notifyWarning
+  // so the primary remove success surface stays intact -- cache cleanup is
+  // a hygienic concern, not a contract.
+  try {
+    invalidateMarketplaceNames(resolved.scope);
+    const cachePath = await locations.pluginCacheFile(opts.name);
+    await dropMarketplaceCache(cachePath, resolved.scope, opts.name);
+  } catch (err) {
+    notifyWarning(
+      opts.ctx,
+      `Marketplace "${opts.name}" removed; completion cache cleanup deferred: ${errorMessage(err)}`,
+    );
+  }
 
   // POST-STATE cleanup (MR-5/MR-6/MR-7). Runs OUTSIDE the guard;
   // state.json already saved.

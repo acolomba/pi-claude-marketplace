@@ -11,6 +11,10 @@ import {
 } from "../../../extensions/claude-marketplace/orchestrators/marketplace/update.ts";
 import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/claude-marketplace/persistence/state-io.ts";
+import {
+  __resetCacheForTests,
+  getPluginIndex,
+} from "../../../extensions/claude-marketplace/shared/completion-cache.ts";
 import { fixtureMarketplaceDir, makeMockGitOps } from "../../helpers/git-mock.ts";
 
 import type {
@@ -552,5 +556,46 @@ test("NFR-5: path-source update calls zero gitOps methods", async () => {
     } finally {
       await rm(localMpDir, { recursive: true, force: true });
     }
+  });
+});
+
+test("D-03-INV :: update invalidates plugin cache for that marketplace", async () => {
+  // Plan 06-05 wires invalidateMarketplaceCache into updateMarketplace's
+  // post-state-commit window (after the inner withStateGuard returns,
+  // before any cascade runs). Manifest refresh may have changed the plugin
+  // set, so the cached plugin index for this (scope, marketplace) pair
+  // MUST be dropped. Memory-only op; the file is left intact as a rebuild
+  // source. Test pattern: pre-warm memory + delete the on-disk file ->
+  // run update -> next read MUST re-invoke rebuild (proves memory cleared).
+  await withHermeticHome(async ({ cwd }) => {
+    __resetCacheForTests();
+    await seedGithubMarketplace({ cwd, name: "official", ref: "main" });
+    const { ctx } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+    });
+
+    // Pre-warm the plugin index memory entry.
+    const locations = locationsFor("project", cwd);
+    const pluginCachePath = await locations.pluginCacheFile("official");
+    let rebuildCount = 0;
+    await getPluginIndex(pluginCachePath, "project", "official", () => {
+      rebuildCount += 1;
+      return Promise.resolve([{ name: "stale-plugin", status: "available" }]);
+    });
+    assert.equal(rebuildCount, 1, "pre-test: rebuild invoked on first read");
+
+    // Drop the on-disk cache file so the next memory-miss MUST rebuild.
+    await rm(pluginCachePath, { force: true });
+
+    // Run update: must invalidate the plugin cache for (project, official).
+    await updateMarketplace({ ctx, name: "official", scope: "project", cwd, gitOps });
+
+    // Memory must be cleared; with file absent, next read invokes rebuild.
+    await getPluginIndex(pluginCachePath, "project", "official", () => {
+      rebuildCount += 1;
+      return Promise.resolve([]);
+    });
+    assert.equal(rebuildCount, 2, "post-invalidation read re-invokes rebuild");
   });
 });
