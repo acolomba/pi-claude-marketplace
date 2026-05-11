@@ -17,7 +17,7 @@ import {
 
 interface AcceptCase {
   readonly name: string;
-  readonly raw: string;
+  readonly raw: unknown;
   readonly expect: Partial<ParsedSource> & { kind: ParsedSource["kind"] };
 }
 
@@ -72,6 +72,21 @@ const ACCEPT_CASES: readonly AcceptCase[] = [
     name: "SP-5 https github empty fragment",
     raw: "https://github.com/o/r#",
     expect: { kind: "github", owner: "o", repo: "r" },
+  },
+  {
+    name: "MM-3 object url source",
+    raw: { source: "url", url: "https://github.com/obra/superpowers.git", sha: "abc123" },
+    expect: { kind: "url", url: "https://github.com/obra/superpowers.git", sha: "abc123" },
+  },
+  {
+    name: "MM-3 object git-subdir source",
+    raw: { source: "git-subdir", url: "https://github.com/o/r.git", path: "plugins/p" },
+    expect: { kind: "git-subdir", url: "https://github.com/o/r.git", path: "plugins/p" },
+  },
+  {
+    name: "MM-3 object npm source",
+    raw: { source: "npm", package: "@scope/plugin", version: "1.2.3" },
+    expect: { kind: "npm", package: "@scope/plugin", version: "1.2.3" },
   },
 ];
 

@@ -174,6 +174,47 @@ test("PR-3 loose: entry declares unsupported component -> notInstallable", async
   assert.ok(r.notes.some((n) => n === "contains themes"));
 });
 
+test("PR-4 loose: hooks/hooks.json convention -> notInstallable", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: { contents: JSON.stringify({ hooks: {} }) },
+  });
+  const r = await resolveLoose(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.installable, false);
+  assert.ok(r.notes.some((n) => n === "contains hooks"));
+});
+
+test("PR-4 loose: discovers unsupported default component locations", async () => {
+  const cases: readonly {
+    readonly kind: string;
+    readonly relativePath: string;
+    readonly stat: "dir" | { contents: string };
+  }[] = [
+    { kind: "lspServers", relativePath: ".lsp.json", stat: { contents: "{}" } },
+    {
+      kind: "monitors",
+      relativePath: path.join("monitors", "monitors.json"),
+      stat: { contents: "[]" },
+    },
+    { kind: "themes", relativePath: "themes", stat: "dir" },
+    { kind: "outputStyles", relativePath: "output-styles", stat: "dir" },
+    { kind: "bin", relativePath: "bin", stat: "dir" },
+    { kind: "settings", relativePath: "settings.json", stat: { contents: "{}" } },
+  ];
+
+  for (const c of cases) {
+    const localRoot = ROOT(`./local-${c.kind}`);
+    const ctx = mockCtx(MP, {
+      [localRoot]: "dir",
+      [path.join(localRoot, c.relativePath)]: c.stat,
+    });
+    const r = await resolveLoose(basicEntry({ source: `./local-${c.kind}` }), ctx);
+    assert.equal(r.installable, false, `${c.kind} should be unavailable`);
+    assert.ok(r.notes.includes(`contains ${c.kind}`), `notes: ${r.notes.join(" / ")}`);
+  }
+});
+
 test("PR-5 loose: entry.dependencies -> installable with manual-install note", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r = await resolveLoose(

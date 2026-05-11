@@ -365,20 +365,18 @@ test("MA-2 / SC-5: orchestrator accepts scope='project' (caller defaults; orches
 
 test("D-03-INV :: add invalidates marketplace-names cache for the new scope", async () => {
   // Plan 06-05 wires invalidateMarketplaceNames + invalidateMarketplaceCache
-  // into addMarketplace's post-state-commit window. The cache module's
-  // invalidate*() helpers are memory-only (the file is preserved as a
-  // rebuild source). To prove the invalidation fires, we:
+  // into addMarketplace's post-state-commit window. To prove the invalidation
+  // fires, we:
   //   1. __resetCacheForTests() to isolate from prior test pollution.
   //   2. Warm the in-memory marketplace-names map by calling
   //      getMarketplaceNames(...) once with a sentinel rebuild that returns
   //      a deliberately stale shape and writes the cache file.
-  //   3. Delete the on-disk cache file so the next memory-miss falls
-  //      through to rebuild rather than file hit.
-  //   4. Run addMarketplace -- this MUST clear the in-memory entry.
-  //   5. Call getMarketplaceNames again with a different rebuild that
+  //   3. Run addMarketplace -- this MUST clear the in-memory entry and unlink
+  //      the stale on-disk cache file.
+  //   4. Call getMarketplaceNames again with a different rebuild that
   //      increments a counter; the increment proves memory was cleared
-  //      AND the file is gone, i.e. the orchestrator routed through the
-  //      invalidation call site.
+  //      and the file was removed, i.e. the orchestrator routed through the
+  //      invalidation call site rather than rehydrating stale disk data.
   await withTmpScope(async ({ cwd, locations }) => {
     __resetCacheForTests();
     const { ctx } = makeCtx();
@@ -403,9 +401,6 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
     });
     assert.equal(rebuildCount, 1, "memory hit on second call -- no rebuild");
 
-    // Drop the on-disk cache file so the next memory-miss MUST rebuild.
-    await rm(cachePath, { force: true });
-
     // Run addMarketplace -- D-03-INV must fire invalidateMarketplaceNames.
     await addMarketplace({
       ctx,
@@ -416,8 +411,8 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
     });
 
     // Post-add: memory is dropped AND file is absent. The next read MUST
-    // re-invoke the rebuild closure. Without the orchestrator-side
-    // invalidation this assertion would fail (counter would stay at 1).
+    // re-invoke the rebuild closure. Without disk invalidation, stale
+    // marketplace-names.json would serve "stale-mp" and counter would stay 1.
     await getMarketplaceNames(cachePath, "project", () => {
       rebuildCount += 1;
       return Promise.resolve(["valid-marketplace"]);

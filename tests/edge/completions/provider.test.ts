@@ -130,7 +130,7 @@ test('TC-1 :: top-level keyword filtering by prefix ("ins" -> install only)', as
 // TC-2 -- nested marketplace subcommand keywords.
 // ---------------------------------------------------------------------------
 
-test("TC-2 :: after marketplace surfaces nested keywords (add/remove/list/update/autoupdate/noautoupdate)", async () => {
+test("TC-2 :: after marketplace surfaces nested keywords and aliases", async () => {
   __resetCacheForTests();
   const f = await emptyFixture();
   try {
@@ -140,8 +140,10 @@ test("TC-2 :: after marketplace surfaces nested keywords (add/remove/list/update
       "add",
       "autoupdate",
       "list",
+      "ls",
       "noautoupdate",
       "remove",
+      "rm",
       "update",
     ]);
   } finally {
@@ -149,14 +151,23 @@ test("TC-2 :: after marketplace surfaces nested keywords (add/remove/list/update
   }
 });
 
-test("TC-2 :: nested keyword set excludes rm (surfaced only via router alias)", async () => {
+test("TC-2 :: nested keyword prefix surfaces rm and ls aliases", async () => {
   __resetCacheForTests();
   const f = await emptyFixture();
   try {
-    const items = await getArgumentCompletions("marketplace ", f.resolver);
-    assert.ok(items !== null);
-    const labels = items.map((i) => i.label);
-    assert.equal(labels.includes("rm"), false, "rm must NOT appear in TC-2 completions");
+    const rmItems = await getArgumentCompletions("marketplace r", f.resolver);
+    assert.ok(rmItems !== null);
+    assert.deepEqual(
+      rmItems.map((i) => i.label),
+      ["remove", "rm"],
+    );
+
+    const lsItems = await getArgumentCompletions("marketplace l", f.resolver);
+    assert.ok(lsItems !== null);
+    assert.deepEqual(
+      lsItems.map((i) => i.label),
+      ["list", "ls"],
+    );
   } finally {
     await f.cleanup();
   }
@@ -261,6 +272,88 @@ test("TC-5 :: marketplace remove <here> completes with marketplace names", async
     assert.deepEqual(
       items.map((i) => i.label),
       ["mp-a"],
+    );
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("TC-5 :: marketplace remove --scope project <here> completes with marketplace names", async () => {
+  __resetCacheForTests();
+  const f = await makeFixture({
+    state: { user: {}, project: { "superpowers-marketplace": {} } },
+    manifests: { user: {}, project: {} },
+  });
+  try {
+    const items = await getArgumentCompletions(
+      "marketplace remove --scope project superpowers",
+      f.resolver,
+    );
+    assert.ok(items !== null);
+    assert.deepEqual(
+      items.map((i) => i.label),
+      ["superpowers-marketplace"],
+    );
+    assert.deepEqual(
+      items.map((i) => i.value),
+      ["marketplace remove --scope project superpowers-marketplace "],
+    );
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("TC-5 :: marketplace rm --scope project <here> completes with marketplace names", async () => {
+  __resetCacheForTests();
+  const f = await makeFixture({
+    state: { user: {}, project: { "superpowers-marketplace": {} } },
+    manifests: { user: {}, project: {} },
+  });
+  try {
+    const items = await getArgumentCompletions(
+      "marketplace rm --scope project superpowers",
+      f.resolver,
+    );
+    assert.ok(items !== null);
+    assert.deepEqual(
+      items.map((i) => i.label),
+      ["superpowers-marketplace"],
+    );
+    assert.deepEqual(
+      items.map((i) => i.value),
+      ["marketplace rm --scope project superpowers-marketplace "],
+    );
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("TC-5 :: marketplace ls does not take a marketplace-name positional", async () => {
+  __resetCacheForTests();
+  const f = await makeFixture({
+    state: { user: { "mp-a": {} }, project: {} },
+    manifests: { user: {}, project: {} },
+  });
+  try {
+    const items = await getArgumentCompletions("marketplace ls ", f.resolver);
+    assert.equal(items, null);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("TC-6 :: install --scope project <here> still completes plugin refs", async () => {
+  __resetCacheForTests();
+  const f = await makeFixture({
+    state: { user: {}, project: { mp: {} } },
+    manifests: { user: {}, project: { mp: [{ name: "solo", status: "available" }] } },
+  });
+  try {
+    const items = await getArgumentCompletions("install --scope project so", f.resolver);
+    assert.ok(items !== null);
+    assert.deepEqual(
+      items.map((i) => i.label),
+      ["solo@mp"],
     );
   } finally {
     await f.cleanup();

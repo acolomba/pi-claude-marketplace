@@ -1,7 +1,7 @@
 // edge/handlers/marketplace/remove.ts
 //
 // Thin-shim handler factory for
-// `/claude:plugin marketplace remove <name> [--scope user|project]`.
+// `/claude:plugin marketplace <remove|rm> <name> [--scope user|project]`.
 // (Also reached via the `rm` alias -- routed through this same handler by
 // `routeMarketplace` in edge/router.ts.)
 //
@@ -14,7 +14,7 @@ import { parseCommandArgs } from "../../args-schema.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
-const USAGE = "Usage: /claude:plugin marketplace remove <name> [--scope user|project]";
+const USAGE = "Usage: /claude:plugin marketplace <remove|rm> <name> [--scope user|project]";
 
 export function makeRemoveHandler(
   pi: ExtensionAPI,

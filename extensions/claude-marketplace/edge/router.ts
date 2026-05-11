@@ -16,9 +16,7 @@
 // `TOP_LEVEL_USAGE` and `MARKETPLACE_USAGE` are PRD-stable strings carried
 // verbatim from V1.
 //
-// `routeMarketplace` accepts `case "remove":` and `case "rm":` for the
-// alias surface (TC-2 carry-forward) -- the `rm` form is accepted but not
-// surfaced in completions (per 06-CONTEXT decisions §carry-forward).
+// `routeMarketplace` accepts `rm` and `ls` as aliases for `remove` and `list`.
 //
 // Router signature is pure-functional (`routeClaudePlugin(args, handlers, ctx)`)
 // so handlers + ctx can be mocked without an `ExtensionAPI` instance.
@@ -48,13 +46,13 @@ export const TOP_LEVEL_USAGE =
   "  uninstall <plugin>@<marketplace> [--scope user|project]\n" +
   "  update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
   "  list [<marketplace>] [--scope user|project]\n" +
-  "  marketplace <add|remove|list|update|autoupdate|noautoupdate> ...";
+  "  marketplace <add|remove|rm|list|ls|update|autoupdate|noautoupdate> ...";
 
 export const MARKETPLACE_USAGE =
-  "Usage: /claude:plugin marketplace <add|remove|list|update|autoupdate|noautoupdate> ...\n" +
+  "Usage: /claude:plugin marketplace <add|remove|rm|list|ls|update|autoupdate|noautoupdate> ...\n" +
   "  add <source> [--scope user|project]\n" +
   "  remove <name> [--scope user|project]   (alias: rm)\n" +
-  "  list [--scope user|project]\n" +
+  "  list [--scope user|project]            (alias: ls)\n" +
   "  update [<name>] [--scope user|project]\n" +
   "  autoupdate [<name>] [--scope user|project]\n" +
   "  noautoupdate [<name>] [--scope user|project]";
@@ -126,6 +124,7 @@ export async function routeMarketplace(
     case "rm":
       return handlers.marketplaceRemove(rest, ctx);
     case "list":
+    case "ls":
       return handlers.marketplaceList(rest, ctx);
     case "update":
       return handlers.marketplaceUpdate(rest, ctx);

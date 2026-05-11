@@ -324,6 +324,44 @@ test("PL-2: bare form enumerates BOTH scopes; both render with scope-header line
   });
 });
 
+test("PL-2: same plugin name in two marketplaces stays under both marketplace headers", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "anthropics",
+      manifest: { name: "anthropics", plugins: [{ name: "superpowers", source: "./superpowers" }] },
+      installablePluginDirs: ["superpowers"],
+    });
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "superpowers-marketplace",
+      manifest: {
+        name: "superpowers-marketplace",
+        plugins: [
+          { name: "superpowers", source: { source: "url", url: "https://example.test/s.git" } },
+        ],
+      },
+    });
+
+    const { ctx, notifications } = makeCtx();
+    await listPlugins({ ctx, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    const anthropicsIdx = out.indexOf("anthropics");
+    const superpowersMpIdx = out.indexOf("superpowers-marketplace");
+    assert.ok(anthropicsIdx !== -1, out);
+    assert.ok(superpowersMpIdx !== -1, out);
+    assert.ok(anthropicsIdx < superpowersMpIdx, out);
+    assert.match(out.slice(anthropicsIdx, superpowersMpIdx), /○ superpowers/);
+    assert.match(out.slice(superpowersMpIdx), /⊘ superpowers .*unsupported source kind: url/);
+  });
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // PL-3: marketplace narrowing
 // ──────────────────────────────────────────────────────────────────────────

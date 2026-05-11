@@ -91,6 +91,12 @@ export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void>
     throw new Error(`Cannot add marketplace from "${opts.rawSource}": ${source.reason}`);
   }
 
+  if (source.kind !== "github" && source.kind !== "path") {
+    throw new Error(
+      `Cannot add marketplace from "${opts.rawSource}": unsupported source kind ${source.kind}`,
+    );
+  }
+
   let recordedName: string | undefined;
   await withStateGuard(locations, async (state) => {
     if (source.kind === "github") {
@@ -118,11 +124,11 @@ export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void>
 
   // D-03-INV (Plan 06-05): post-state-commit completion-cache invalidation.
   // The marketplace-names cache for this scope and the plugin index for the
-  // newly recorded marketplace are both stale-by-construction. Memory-only
-  // ops cannot throw under normal operation; the try/catch is defense-in-
-  // depth so a cache hiccup never rolls back the user's primary success.
+  // newly recorded marketplace are both stale-by-construction. Cache cleanup
+  // runs after the state commit so a cache hiccup never rolls back the user's
+  // primary success.
   try {
-    invalidateMarketplaceNames(opts.scope);
+    await invalidateMarketplaceNames(locations.marketplaceNamesCacheFile, opts.scope);
     invalidateMarketplaceCache(opts.scope, recordedName);
   } catch (err) {
     notifyWarning(

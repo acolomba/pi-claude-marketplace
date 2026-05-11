@@ -149,13 +149,12 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
   });
 
   // D-03-INV (Plan 06-05): post-state-commit completion-cache cleanup.
-  // The marketplace-names cache is memory-only; the per-marketplace plugin
-  // cache file must be unlinked because the marketplace itself is gone
-  // (no rebuild path can recover it). Failure routes through notifyWarning
-  // so the primary remove success surface stays intact -- cache cleanup is
-  // a hygienic concern, not a contract.
+  // The marketplace-names cache and per-marketplace plugin cache file must be
+  // unlinked because the marketplace set changed and this marketplace is gone.
+  // Failure routes through notifyWarning so the primary remove success surface
+  // stays intact -- cache cleanup is a hygienic concern, not a contract.
   try {
-    invalidateMarketplaceNames(resolved.scope);
+    await invalidateMarketplaceNames(locations.marketplaceNamesCacheFile, resolved.scope);
     const cachePath = await locations.pluginCacheFile(opts.name);
     await dropMarketplaceCache(cachePath, resolved.scope, opts.name);
   } catch (err) {

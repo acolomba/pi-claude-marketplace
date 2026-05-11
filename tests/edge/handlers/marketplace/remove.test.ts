@@ -64,7 +64,7 @@ test("shim :: missing name positional emits USAGE", async () => {
     await handler("", ctx);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
-    assert.match(notifications[0]!.message, /Usage: \/claude:plugin marketplace remove/);
+    assert.match(notifications[0]!.message, /Usage: \/claude:plugin marketplace <remove\|rm>/);
   });
 });
 

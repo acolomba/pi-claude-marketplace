@@ -492,11 +492,10 @@ test("D-03-INV :: remove unlinks the plugin cache file and invalidates marketpla
   // Plan 06-05 wires dropMarketplaceCache + invalidateMarketplaceNames into
   // removeMarketplace's post-state-commit window. The plugin cache file
   // MUST be unlinked because the marketplace is gone (no rebuild path
-  // can recover it); the marketplace-names cache file is left intact
-  // (the memory entry is dropped so a subsequent read re-derives the
-  // current marketplace set from state.json). This test verifies BOTH
-  // limbs: the on-disk plugin cache file disappears, AND the in-memory
-  // marketplace-names entry is cleared.
+  // can recover it); the marketplace-names cache file MUST also be unlinked
+  // because the marketplace set changed. This test verifies BOTH limbs: the
+  // on-disk plugin cache file disappears, AND marketplace-names does not
+  // rehydrate stale disk data after memory is cleared.
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "remove-d03inv-"));
     try {
@@ -533,9 +532,9 @@ test("D-03-INV :: remove unlinks the plugin cache file and invalidates marketpla
         "pre-test: cache file seeded successfully",
       );
 
-      // Pre-warm the marketplace-names memory entry, then drop the
-      // marketplace-names cache file so a post-invalidation read forces
-      // a rebuild invocation (proves the memory entry was cleared).
+      // Pre-warm the marketplace-names memory entry and disk file. Remove must
+      // unlink this stale file; otherwise the post-invalidation read below
+      // would serve ["to-go"] from disk without invoking the rebuild closure.
       const namesCachePath = locations.marketplaceNamesCacheFile;
       let namesRebuildCount = 0;
       await getMarketplaceNames(namesCachePath, "project", () => {
@@ -543,7 +542,6 @@ test("D-03-INV :: remove unlinks the plugin cache file and invalidates marketpla
         return Promise.resolve(["to-go"]);
       });
       assert.equal(namesRebuildCount, 1, "pre-test: names cache warmed");
-      await rm(namesCachePath, { force: true });
 
       const { ctx, pi } = makeCtx();
       await removeMarketplace({ ctx, pi, name: "to-go", scope: "project", cwd });
@@ -555,7 +553,13 @@ test("D-03-INV :: remove unlinks the plugin cache file and invalidates marketpla
         "plugin cache file unlinked by dropMarketplaceCache",
       );
 
-      // Marketplace-names memory cleared: next read forces rebuild.
+      assert.equal(
+        await pathExists(namesCachePath),
+        false,
+        "marketplace-names cache file unlinked by invalidateMarketplaceNames",
+      );
+
+      // Marketplace-names memory and file cleared: next read forces rebuild.
       await getMarketplaceNames(namesCachePath, "project", () => {
         namesRebuildCount += 1;
         return Promise.resolve([]);

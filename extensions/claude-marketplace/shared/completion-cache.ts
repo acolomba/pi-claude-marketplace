@@ -32,7 +32,7 @@
 //         - any other throw -> propagate (TC-9)
 //
 // Invalidation API
-//   invalidateMarketplaceNames(scope) -- memory-only drop
+//   invalidateMarketplaceNames(path, scope) -- memory drop + unlink (ENOENT silent)
 //   invalidateMarketplaceCache(scope, mp) -- memory-only drop
 //   dropMarketplaceCache(path, scope, mp) -- memory drop + unlink (ENOENT silent)
 //
@@ -59,11 +59,11 @@ import { errorMessage } from "./errors.ts";
 import type { Scope } from "./types.ts";
 
 // ---------------------------------------------------------------------------
-// Cache file schemas (D-03 -- schemaVersion: 1; drop+rebuild on mismatch).
+// Cache file schemas (D-03 -- drop+rebuild on schemaVersion mismatch).
 // ---------------------------------------------------------------------------
 
 export const MARKETPLACE_NAMES_CACHE_SCHEMA = Type.Object({
-  schemaVersion: Type.Literal(1),
+  schemaVersion: Type.Literal(2),
   names: Type.Array(Type.String()),
 });
 const MARKETPLACE_NAMES_VALIDATOR = Compile(MARKETPLACE_NAMES_CACHE_SCHEMA);
@@ -228,7 +228,7 @@ export async function getMarketplaceNames(
   // Rebuild from authoritative source; state.json errors surface (TC-9).
   const names = await rebuild();
   await atomicWriteJson(marketplaceNamesCachePath, {
-    schemaVersion: 1 as const,
+    schemaVersion: 2 as const,
     names: [...names],
   });
   memMarketplaceNames.set(scope, names);
@@ -330,9 +330,26 @@ export async function getPluginIndex(
 // Invalidation API.
 // ---------------------------------------------------------------------------
 
-/** Drop the in-memory marketplace-names entry for `scope`. File on disk is left intact. */
-export function invalidateMarketplaceNames(scope: Scope): void {
+/**
+ * Drop the marketplace-names memory entry AND unlink the cache file. Names
+ * change whenever marketplaces are added or removed; leaving the file intact
+ * would let the next completion process rehydrate stale names from disk.
+ * ENOENT on the file is silent (already absent is OK).
+ */
+export async function invalidateMarketplaceNames(
+  marketplaceNamesCachePath: string,
+  scope: Scope,
+): Promise<void> {
   memMarketplaceNames.delete(scope);
+  try {
+    await unlink(marketplaceNamesCachePath);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return;
+    }
+
+    throw err;
+  }
 }
 
 /** Drop the in-memory plugin-index entry for (`scope`, `marketplace`). File on disk is left intact. */

@@ -13,8 +13,7 @@
 //      always; --installed / --available / --unavailable when head ===
 //      "list").
 //   3. TC-2 -- head === "marketplace" && tokens.length === 1 -> nested
-//      marketplace subcommand keywords (`rm` NOT surfaced; router accepts
-//      it as alias).
+//      marketplace subcommand keywords, including aliases (`rm`, `ls`).
 //   4. TC-6 -- head in {install, uninstall, update} && tokens.length === 1
 //      -> `<plugin>@<marketplace>` via getPluginRefCompletions (status-
 //      aware filter per D-03).
@@ -32,6 +31,7 @@
 
 import {
   buildItem,
+  extractPositionals,
   getMarketplaceCompletions,
   getMarketplaceNamesAcrossScopes,
   getPluginRefCompletions,
@@ -52,7 +52,9 @@ export const TOP_LEVEL_SUBCOMMANDS = [
 export const MARKETPLACE_SUBCOMMANDS = [
   "add",
   "remove",
+  "rm",
   "list",
+  "ls",
   "update",
   "autoupdate",
   "noautoupdate",
@@ -61,8 +63,8 @@ export const MARKETPLACE_SUBCOMMANDS = [
 /**
  * Verbs (after `marketplace`) that take a marketplace-name positional.
  * `add` and `list` are excluded (`add` takes a source URL; `list` has no
- * positional). `rm` IS accepted (router alias for `remove`) but the
- * keyword itself is NOT surfaced from MARKETPLACE_SUBCOMMANDS (TC-2).
+ * positional). `rm` is accepted as the router alias for `remove` and still
+ * takes the same marketplace-name positional.
  */
 const MARKETPLACE_VERBS_WITH_NAME_ARG: readonly string[] = [
   "remove",
@@ -88,7 +90,8 @@ export async function getArgumentCompletions(
     }));
   }
 
-  const head = tokens[0] ?? "";
+  const positionals = extractPositionals(tokens);
+  const positionalHead = positionals[0] ?? "";
 
   // Branch 2a (TC-4): token immediately after `--scope`.
   const prevToken = tokens[tokens.length - 1];
@@ -104,7 +107,7 @@ export async function getArgumentCompletions(
     const flags: { name: string; description?: string }[] = [
       { name: "--scope", description: "Scope: user or project" },
     ];
-    if (head === "list") {
+    if (positionalHead === "list") {
       flags.push(
         { name: "--installed", description: "Show installed plugins" },
         { name: "--available", description: "Show available plugins" },
@@ -125,7 +128,7 @@ export async function getArgumentCompletions(
   // value rebuilds the entire argumentText as `marketplace <chosen> ` --
   // the existing `marketplace` head is already in argumentTextPrefix, so
   // `headPrefix + label + " "` produces the correct shape.
-  if (head === "marketplace" && tokens.length === 1) {
+  if (positionalHead === "marketplace" && positionals.length === 1) {
     return MARKETPLACE_SUBCOMMANDS.filter((s) => s.startsWith(current)).map((label) => ({
       label,
       value: `${headPrefix}${label} `,
@@ -136,19 +139,19 @@ export async function getArgumentCompletions(
   // D-03 corollary: install hides `installed`; uninstall/update keep only
   // `installed`. `allowMarketplaceOnly` is true only for `update` (V1 parity
   // -- bare @<marketplace> means "update every installed plugin in this mp").
-  if (head === "install" && tokens.length === 1) {
+  if (positionalHead === "install" && positionals.length === 1) {
     return getPluginRefCompletions("install", current, argumentTextPrefix, resolver, {
       allowMarketplaceOnly: false,
     });
   }
 
-  if (head === "uninstall" && tokens.length === 1) {
+  if (positionalHead === "uninstall" && positionals.length === 1) {
     return getPluginRefCompletions("uninstall", current, argumentTextPrefix, resolver, {
       allowMarketplaceOnly: false,
     });
   }
 
-  if (head === "update" && tokens.length === 1) {
+  if (positionalHead === "update" && positionals.length === 1) {
     return getPluginRefCompletions("update", current, argumentTextPrefix, resolver, {
       allowMarketplaceOnly: true,
     });
@@ -158,11 +161,11 @@ export async function getArgumentCompletions(
   // `marketplace <verb> <here>`. Skip `marketplace add` (free-form source)
   // and `marketplace list` (no positional).
   const wantsMarketplaceName =
-    (head === "list" && tokens.length === 1) ||
-    (head === "marketplace" &&
-      tokens.length === 2 &&
-      tokens[1] !== undefined &&
-      MARKETPLACE_VERBS_WITH_NAME_ARG.includes(tokens[1]));
+    (positionalHead === "list" && positionals.length === 1) ||
+    (positionalHead === "marketplace" &&
+      positionals.length === 2 &&
+      positionals[1] !== undefined &&
+      MARKETPLACE_VERBS_WITH_NAME_ARG.includes(positionals[1]));
   if (wantsMarketplaceName) {
     return getMarketplaceCompletions(
       await getMarketplaceNamesAcrossScopes(resolver),

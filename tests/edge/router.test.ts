@@ -1,6 +1,6 @@
 // tests/edge/router.test.ts
 //
-// AP-3 + dispatch + TC-2 rm-alias coverage for routeClaudePlugin /
+// AP-3 + dispatch + TC-2 alias coverage for routeClaudePlugin /
 // routeMarketplace. The router is a pure function of
 // `(args, handlers, ctx)`, so these tests instantiate handlers as spies,
 // build a notify-recording `ctx`, and assert directly on the recorded
@@ -168,6 +168,14 @@ test("routeMarketplace :: dispatches list to handlers.marketplaceList", async ()
   const { ctx, notifications } = makeCtx();
   const { handlers, calls } = makeHandlers();
   await routeClaudePlugin("marketplace list", handlers, ctx);
+  assert.deepEqual(calls, [{ name: "marketplaceList", args: "" }]);
+  assert.deepEqual(notifications, []);
+});
+
+test("routeMarketplace :: dispatches ls alias to handlers.marketplaceList", async () => {
+  const { ctx, notifications } = makeCtx();
+  const { handlers, calls } = makeHandlers();
+  await routeClaudePlugin("marketplace ls", handlers, ctx);
   assert.deepEqual(calls, [{ name: "marketplaceList", args: "" }]);
   assert.deepEqual(notifications, []);
 });

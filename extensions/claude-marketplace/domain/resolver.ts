@@ -145,6 +145,22 @@ const UNSUPPORTED_COMPONENT_KINDS = [
   "bin",
   "settings",
 ] as const;
+type UnsupportedKind = (typeof UNSUPPORTED_COMPONENT_KINDS)[number];
+
+const UNSUPPORTED_COMPONENT_CONVENTIONS: Partial<
+  Record<
+    UnsupportedKind,
+    readonly { readonly relativePath: string; readonly kind: "file" | "dir" }[]
+  >
+> = {
+  hooks: [{ relativePath: path.join("hooks", "hooks.json"), kind: "file" }],
+  lspServers: [{ relativePath: ".lsp.json", kind: "file" }],
+  monitors: [{ relativePath: path.join("monitors", "monitors.json"), kind: "file" }],
+  themes: [{ relativePath: "themes", kind: "dir" }],
+  outputStyles: [{ relativePath: "output-styles", kind: "dir" }],
+  bin: [{ relativePath: "bin", kind: "dir" }],
+  settings: [{ relativePath: "settings.json", kind: "file" }],
+};
 
 interface PartialResolution {
   supported: string[];
@@ -197,6 +213,77 @@ function installable(
   };
 }
 
+function nestedExperimentalValue(
+  record: Record<string, unknown> | null | undefined,
+  key: string,
+): unknown {
+  const experimental = record?.experimental;
+  if (typeof experimental !== "object" || experimental === null) {
+    return undefined;
+  }
+
+  return (experimental as Record<string, unknown>)[key];
+}
+
+function declaresUnsupportedKind(
+  kind: UnsupportedKind,
+  entry: Record<string, unknown>,
+  manifest: Record<string, unknown> | null,
+): boolean {
+  if (entry[kind] !== undefined || manifest?.[kind] !== undefined) {
+    return true;
+  }
+
+  // Current Claude Code schema declares these experimental components under
+  // `experimental.*`, while older manifests may still use top-level fields.
+  if (kind === "themes" || kind === "monitors") {
+    return (
+      nestedExperimentalValue(entry, kind) !== undefined ||
+      nestedExperimentalValue(manifest, kind) !== undefined
+    );
+  }
+
+  return false;
+}
+
+async function hasUnsupportedConvention(
+  ctx: ResolveContext,
+  pluginRoot: string,
+  kind: UnsupportedKind,
+): Promise<boolean> {
+  for (const convention of UNSUPPORTED_COMPONENT_CONVENTIONS[kind] ?? []) {
+    if (
+      (await statKindOf(ctx)(path.join(pluginRoot, convention.relativePath))) === convention.kind
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function collectUnsupportedKinds(
+  entry: Record<string, unknown>,
+  manifest: Record<string, unknown> | null,
+  pluginRoot: string,
+  ctx: ResolveContext,
+): Promise<UnsupportedKind[]> {
+  const found: UnsupportedKind[] = [];
+
+  for (const kind of UNSUPPORTED_COMPONENT_KINDS) {
+    if (declaresUnsupportedKind(kind, entry, manifest)) {
+      found.push(kind);
+      continue;
+    }
+
+    if (await hasUnsupportedConvention(ctx, pluginRoot, kind)) {
+      found.push(kind);
+    }
+  }
+
+  return found;
+}
+
 /**
  * Steps 1-6 are shared between resolveStrict and resolveLoose. Returns
  * either:
@@ -220,25 +307,7 @@ async function preflightStages(
   assertSafeName(entry.name);
 
   // Classify source. PluginEntry.source is Type.Unknown() per MM-3.
-  let parsedSource: ParsedSource;
-
-  if (typeof entry.source === "string") {
-    parsedSource = parsePluginSource(entry.source);
-  } else if (
-    typeof entry.source === "object" &&
-    entry.source !== null &&
-    "kind" in (entry.source as Record<string, unknown>)
-  ) {
-    // Already classified (e.g., loaded from state.json). Trust the kind tag.
-    parsedSource = entry.source as ParsedSource;
-  } else {
-    return {
-      kind: "notInstallable",
-      result: notInstallable(entry.name, partial, [
-        `source field is missing or has unrecognized shape`,
-      ]),
-    };
-  }
+  const parsedSource: ParsedSource = parsePluginSource(entry.source);
 
   // PR-2 case 1: only path sources are installable in V1 (MM-3).
   if (parsedSource.kind !== "path") {
@@ -490,13 +559,12 @@ export async function resolveStrict(
     }
   }
 
-  // Step 9 (PR-3): unsupported components.
-  for (const k of UNSUPPORTED_COMPONENT_KINDS) {
-    if ((entry as Record<string, unknown>)[k] !== undefined || manifest?.[k] !== undefined) {
-      partial.notes.push(`contains ${k}`);
-      partial.unsupported.push(k);
-      dirty = true;
-    }
+  // Step 9 (PR-3 / PR-4): unsupported components declared explicitly or via
+  // Claude Code default locations (.lsp.json, hooks/hooks.json, etc.).
+  for (const kind of await collectUnsupportedKinds(entry, manifest, pluginRoot, ctx)) {
+    partial.notes.push(`contains ${kind}`);
+    partial.unsupported.push(kind);
+    dirty = true;
   }
 
   // Step 10 (PR-5): dependencies stay installable but get a note.
@@ -584,13 +652,11 @@ export async function resolveLoose(
     }
   }
 
-  // Step 9 (PR-3): unsupported components -- same as strict.
-  for (const k of UNSUPPORTED_COMPONENT_KINDS) {
-    if ((entry as Record<string, unknown>)[k] !== undefined || manifest?.[k] !== undefined) {
-      partial.notes.push(`contains ${k}`);
-      partial.unsupported.push(k);
-      dirty = true;
-    }
+  // Step 9 (PR-3 / PR-4): unsupported components -- same as strict.
+  for (const kind of await collectUnsupportedKinds(entry, manifest, pluginRoot, ctx)) {
+    partial.notes.push(`contains ${kind}`);
+    partial.unsupported.push(kind);
+    dirty = true;
   }
 
   // Step 10 (PR-5): dependencies stay installable but get a note.

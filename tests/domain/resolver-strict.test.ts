@@ -85,6 +85,16 @@ test("PR-2(1) non-path source kind (github) -> notInstallable", async () => {
   );
 });
 
+test("PR-2(1) upstream object source kind (url) -> notInstallable", async () => {
+  const ctx = mockCtx(MP, {});
+  const r = await resolveStrict(
+    basicEntry({ source: { source: "url", url: "https://github.com/obra/superpowers.git" } }),
+    ctx,
+  );
+  assert.equal(r.installable, false);
+  assert.ok(r.notes.includes("unsupported source kind: url"), `notes: ${r.notes.join(" / ")}`);
+});
+
 test("PR-2(2) source path escape -> notInstallable", async () => {
   const ctx = mockCtx(MP, {});
   const r = await resolveStrict(basicEntry({ source: "../escape" }), ctx);
@@ -127,6 +137,70 @@ test("PR-2(5) / PR-3 declared unsupported component (hooks) -> notInstallable + 
     `notes: ${r.notes.join(" / ")}`,
   );
   assert.ok(r.unsupported.includes("hooks"));
+});
+
+test("PR-4 hooks/hooks.json convention -> notInstallable + 'contains hooks' note", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: { contents: JSON.stringify({ hooks: {} }) },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.installable, false);
+  assert.ok(
+    r.notes.some((n) => n === "contains hooks"),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+  assert.ok(r.unsupported.includes("hooks"));
+});
+
+test("PR-4 discovers unsupported default component locations", async () => {
+  const cases: readonly {
+    readonly kind: string;
+    readonly relativePath: string;
+    readonly stat: "dir" | { contents: string };
+  }[] = [
+    { kind: "lspServers", relativePath: ".lsp.json", stat: { contents: "{}" } },
+    {
+      kind: "monitors",
+      relativePath: path.join("monitors", "monitors.json"),
+      stat: { contents: "[]" },
+    },
+    { kind: "themes", relativePath: "themes", stat: "dir" },
+    { kind: "outputStyles", relativePath: "output-styles", stat: "dir" },
+    { kind: "bin", relativePath: "bin", stat: "dir" },
+    { kind: "settings", relativePath: "settings.json", stat: { contents: "{}" } },
+  ];
+
+  for (const c of cases) {
+    const localRoot = ROOT(`./local-${c.kind}`);
+    const ctx = mockCtx(MP, {
+      [localRoot]: "dir",
+      [path.join(localRoot, c.relativePath)]: c.stat,
+    });
+    const r = await resolveStrict(basicEntry({ source: `./local-${c.kind}` }), ctx);
+    assert.equal(r.installable, false, `${c.kind} should be unavailable`);
+    assert.ok(r.notes.includes(`contains ${c.kind}`), `notes: ${r.notes.join(" / ")}`);
+    assert.ok(r.unsupported.includes(c.kind), `unsupported: ${r.unsupported.join(" / ")}`);
+  }
+});
+
+test("PR-3 experimental themes/monitors declarations are unsupported", async () => {
+  const localRoot = ROOT("./local");
+  const manifestPath = path.join(localRoot, ".claude-plugin", "plugin.json");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [manifestPath]: {
+      contents: JSON.stringify({
+        name: "p1",
+        experimental: { themes: "./themes", monitors: "./monitors.json" },
+      }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.installable, false);
+  assert.ok(r.notes.includes("contains themes"), `notes: ${r.notes.join(" / ")}`);
+  assert.ok(r.notes.includes("contains monitors"), `notes: ${r.notes.join(" / ")}`);
 });
 
 test("PR-2(6) malformed mcpServers (array form) -> notInstallable", async () => {

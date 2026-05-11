@@ -38,13 +38,13 @@ async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
 // Schema version snapshots (D-03 -- bump to 2 should fail these tests loudly).
 // ---------------------------------------------------------------------------
 
-test("schemaVersion snapshot :: MARKETPLACE_NAMES_CACHE_SCHEMA.schemaVersion === 1", () => {
+test("schemaVersion snapshot :: MARKETPLACE_NAMES_CACHE_SCHEMA.schemaVersion === 2", () => {
   __resetCacheForTests();
   // The schema is a TypeBox Type.Object; the schemaVersion property is a
   // literal `1`. Reach into the JSON-schema representation (TypeBox 1.x
   // exposes the schema's properties through the .properties field).
   const properties = MARKETPLACE_NAMES_CACHE_SCHEMA.properties;
-  assert.equal(properties.schemaVersion.const, 1);
+  assert.equal(properties.schemaVersion.const, 2);
 });
 
 test("schemaVersion snapshot :: PLUGIN_INDEX_CACHE_SCHEMA.schemaVersion === 1", () => {
@@ -105,7 +105,7 @@ test("getMarketplaceNames :: file hit on memory miss; no rebuild", async () => {
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "marketplace-names.json");
     // Pre-seed file (simulates a prior session's cache on disk).
-    await writeFile(filePath, JSON.stringify({ schemaVersion: 1, names: ["pre-seeded"] }), "utf8");
+    await writeFile(filePath, JSON.stringify({ schemaVersion: 2, names: ["pre-seeded"] }), "utf8");
 
     let rebuildCalls = 0;
     const names = await getMarketplaceNames(filePath, "user", () => {
@@ -144,11 +144,11 @@ test("getMarketplaceNames :: ENOENT triggers rebuild + atomic write", async () =
   });
 });
 
-test("getMarketplaceNames :: schemaVersion mismatch drops + rebuilds", async () => {
+test("getMarketplaceNames :: stale schemaVersion 1 drops + rebuilds", async () => {
   __resetCacheForTests();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "marketplace-names.json");
-    await writeFile(filePath, JSON.stringify({ schemaVersion: 99, names: ["stale"] }), "utf8");
+    await writeFile(filePath, JSON.stringify({ schemaVersion: 1, names: ["stale"] }), "utf8");
 
     let rebuildCalls = 0;
     const result = await getMarketplaceNames(filePath, "user", () => {
@@ -314,7 +314,7 @@ test("D-03-TTL :: getPluginIndex serves in-memory before TTL expiry", async () =
 // Invalidation API.
 // ---------------------------------------------------------------------------
 
-test("invalidateMarketplaceNames :: next read rebuilds from authoritative source", async () => {
+test("invalidateMarketplaceNames :: removes cache file + memory entry", async () => {
   __resetCacheForTests();
   await withTempDir(async (dir) => {
     const filePath = path.join(dir, "marketplace-names.json");
@@ -330,21 +330,21 @@ test("invalidateMarketplaceNames :: next read rebuilds from authoritative source
 
     // Mutate authoritative source.
     names = ["fresh"];
-    invalidateMarketplaceNames("user");
+    await invalidateMarketplaceNames(filePath, "user");
 
-    // memory dropped; file still says "initial". Memory miss -> file hit ->
-    // returns "initial" (D-03: invalidate is memory-only). To force a rebuild
-    // we must also unlink the file.
-    const afterInvalidateMemoryOnly = await getMarketplaceNames(filePath, "user", rebuild);
-    assert.deepEqual([...afterInvalidateMemoryOnly], ["initial"]);
-    assert.equal(rebuildCalls, 1, "memory invalidation alone falls back to file");
-
-    // With the file removed, the next read must rebuild.
-    await rm(filePath, { force: true });
-    invalidateMarketplaceNames("user");
-    const afterFileRemoval = await getMarketplaceNames(filePath, "user", rebuild);
-    assert.deepEqual([...afterFileRemoval], ["fresh"]);
+    // File gone AND memory dropped -- next read rebuilds.
+    await assert.rejects(() => readFile(filePath, "utf8"), { code: "ENOENT" });
+    const afterInvalidate = await getMarketplaceNames(filePath, "user", rebuild);
+    assert.deepEqual([...afterInvalidate], ["fresh"]);
     assert.equal(rebuildCalls, 2);
+  });
+});
+
+test("invalidateMarketplaceNames :: ENOENT on cache file is silent", async () => {
+  __resetCacheForTests();
+  await withTempDir(async (dir) => {
+    const filePath = path.join(dir, "marketplace-names.json");
+    await invalidateMarketplaceNames(filePath, "user");
   });
 });
 

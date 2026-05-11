@@ -33,6 +33,32 @@ export interface GitHubSource {
   readonly owner: string;
   readonly repo: string;
   readonly ref?: string; // optional, populated from `#<ref>` fragment
+  readonly sha?: string;
+}
+
+export interface UrlSource {
+  readonly kind: "url";
+  readonly raw: string;
+  readonly url: string;
+  readonly ref?: string;
+  readonly sha?: string;
+}
+
+export interface GitSubdirSource {
+  readonly kind: "git-subdir";
+  readonly raw: string;
+  readonly url: string;
+  readonly path: string;
+  readonly ref?: string;
+  readonly sha?: string;
+}
+
+export interface NpmSource {
+  readonly kind: "npm";
+  readonly raw: string;
+  readonly package: string;
+  readonly version?: string;
+  readonly registry?: string;
 }
 
 export interface UnknownSource {
@@ -41,7 +67,13 @@ export interface UnknownSource {
   readonly reason: string; // human-readable; D-08 forward-compat tail
 }
 
-export type ParsedSource = PathSource | GitHubSource | UnknownSource;
+export type ParsedSource =
+  | PathSource
+  | GitHubSource
+  | UrlSource
+  | GitSubdirSource
+  | NpmSource
+  | UnknownSource;
 
 /** Per-user tilde reject message (SP-4). */
 const TILDE_USER_HINT = "per-user tilde (~user/...) is not supported; use ~/...";
@@ -63,7 +95,188 @@ function nonRelativeReason(raw: string): string {
   return `non-relative string source ${raw} cannot be classified`;
 }
 
-export function parsePluginSource(raw: string): ParsedSource {
+function optionalString(obj: Record<string, unknown>, key: string): string | undefined {
+  return typeof obj[key] === "string" ? obj[key] : undefined;
+}
+
+function withOptionalSourceFields<T extends ParsedSource>(
+  source: T,
+  obj: Record<string, unknown>,
+): T {
+  const ref = optionalString(obj, "ref");
+  const sha = optionalString(obj, "sha");
+  return {
+    ...source,
+    ...(ref !== undefined && { ref }),
+    ...(sha !== undefined && { sha }),
+  };
+}
+
+function githubObjectSource(repo: string, obj: Record<string, unknown>): ParsedSource {
+  const parsed = parsePluginSource(repo);
+  if (parsed.kind !== "github") {
+    return {
+      kind: "unknown",
+      raw: repo,
+      reason: parsed.kind === "unknown" ? parsed.reason : `github source repo is not owner/repo`,
+    };
+  }
+
+  return withOptionalSourceFields(parsed, obj);
+}
+
+function parseObjectPluginSource(raw: Record<string, unknown>): ParsedSource {
+  if (typeof raw.kind === "string") {
+    switch (raw.kind) {
+      case "path": {
+        const value = optionalString(raw, "raw") ?? optionalString(raw, "logical");
+        return value === undefined
+          ? { kind: "unknown", raw: JSON.stringify(raw), reason: "path source is missing raw" }
+          : pathSource(value);
+      }
+
+      case "github": {
+        const value = optionalString(raw, "raw");
+        return value === undefined
+          ? { kind: "unknown", raw: JSON.stringify(raw), reason: "github source is missing raw" }
+          : githubObjectSource(value, raw);
+      }
+
+      case "url": {
+        const url = optionalString(raw, "url");
+        return url === undefined
+          ? { kind: "unknown", raw: JSON.stringify(raw), reason: "url source is missing url" }
+          : withOptionalSourceFields({ kind: "url", raw: url, url }, raw);
+      }
+
+      case "git-subdir": {
+        const url = optionalString(raw, "url");
+        const subPath = optionalString(raw, "path");
+        if (url === undefined || subPath === undefined) {
+          return {
+            kind: "unknown",
+            raw: JSON.stringify(raw),
+            reason: "git-subdir source is missing url or path",
+          };
+        }
+
+        return withOptionalSourceFields({ kind: "git-subdir", raw: url, url, path: subPath }, raw);
+      }
+
+      case "npm": {
+        const pkg = optionalString(raw, "package");
+        if (pkg === undefined) {
+          return {
+            kind: "unknown",
+            raw: JSON.stringify(raw),
+            reason: "npm source is missing package",
+          };
+        }
+
+        const version = optionalString(raw, "version");
+        const registry = optionalString(raw, "registry");
+        return {
+          kind: "npm",
+          raw: pkg,
+          package: pkg,
+          ...(version !== undefined && { version }),
+          ...(registry !== undefined && { registry }),
+        };
+      }
+
+      case "unknown":
+        return {
+          kind: "unknown",
+          raw: typeof raw.raw === "string" ? raw.raw : JSON.stringify(raw),
+          reason: typeof raw.reason === "string" ? raw.reason : "unknown source missing reason",
+        };
+
+      default:
+        return {
+          kind: "unknown",
+          raw: JSON.stringify(raw),
+          reason: `unrecognized source kind: ${raw.kind}`,
+        };
+    }
+  }
+
+  const discriminator = raw.source;
+  if (typeof discriminator !== "string") {
+    return {
+      kind: "unknown",
+      raw: JSON.stringify(raw),
+      reason: `object source is missing source discriminator`,
+    };
+  }
+
+  switch (discriminator) {
+    case "github": {
+      const repo = optionalString(raw, "repo");
+      return repo === undefined
+        ? { kind: "unknown", raw: JSON.stringify(raw), reason: "github source is missing repo" }
+        : githubObjectSource(repo, raw);
+    }
+
+    case "url": {
+      const url = optionalString(raw, "url");
+      return url === undefined
+        ? { kind: "unknown", raw: JSON.stringify(raw), reason: "url source is missing url" }
+        : withOptionalSourceFields({ kind: "url", raw: url, url }, raw);
+    }
+
+    case "git-subdir": {
+      const url = optionalString(raw, "url");
+      const subPath = optionalString(raw, "path");
+      if (url === undefined || subPath === undefined) {
+        return {
+          kind: "unknown",
+          raw: JSON.stringify(raw),
+          reason: "git-subdir source is missing url or path",
+        };
+      }
+
+      return withOptionalSourceFields({ kind: "git-subdir", raw: url, url, path: subPath }, raw);
+    }
+
+    case "npm": {
+      const pkg = optionalString(raw, "package");
+      if (pkg === undefined) {
+        return {
+          kind: "unknown",
+          raw: JSON.stringify(raw),
+          reason: "npm source is missing package",
+        };
+      }
+
+      const version = optionalString(raw, "version");
+      const registry = optionalString(raw, "registry");
+      return {
+        kind: "npm",
+        raw: pkg,
+        package: pkg,
+        ...(version !== undefined && { version }),
+        ...(registry !== undefined && { registry }),
+      };
+    }
+
+    default:
+      return {
+        kind: "unknown",
+        raw: JSON.stringify(raw),
+        reason: `unrecognized source kind: ${discriminator}`,
+      };
+  }
+}
+
+export function parsePluginSource(raw: unknown): ParsedSource {
+  if (typeof raw !== "string") {
+    if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
+      return parseObjectPluginSource(raw as Record<string, unknown>);
+    }
+
+    return { kind: "unknown", raw: String(raw), reason: "source must be a string or object" };
+  }
+
   // path forms (SP-1, SP-7)
   if (raw === "~" || raw.startsWith("~/")) {
     return { kind: "path", raw, logical: raw };
@@ -206,6 +419,21 @@ export function sourceLogical(source: ParsedSource): string {
     case "github": {
       const refSuffix = source.ref === undefined ? "" : `#${source.ref}`;
       return `https://github.com/${source.owner}/${source.repo}${refSuffix}`;
+    }
+
+    case "url": {
+      const refSuffix = source.ref === undefined ? "" : `#${source.ref}`;
+      return `${source.url}${refSuffix}`;
+    }
+
+    case "git-subdir": {
+      const refSuffix = source.ref === undefined ? "" : `#${source.ref}`;
+      return `${source.url}${refSuffix}/${source.path}`;
+    }
+
+    case "npm": {
+      const versionSuffix = source.version === undefined ? "" : `@${source.version}`;
+      return `npm:${source.package}${versionSuffix}`;
     }
 
     case "unknown":
