@@ -1,21 +1,88 @@
-/* eslint-disable @typescript-eslint/no-empty-function --
- * Wave 0 skipped stubs (`test.skip(name, () => {})`) deliberately have empty
- * bodies; the bodies are filled in as the corresponding production modules
- * land in Wave 1+. See `.planning/phases/06-edge-layer-tab-completion/06-01-test-scaffolding-PLAN.md`. */
+// tests/edge/args-schema.test.ts
+//
+// Schema-driven `parseCommandArgs` validator coverage. The validator is
+// independent of `ExtensionContext` -- callers inject a `notifyError`
+// closure. These tests wire a spy in place of the closure and assert
+// both the spy's calls and the return shape.
 
+import assert from "node:assert/strict";
 import { test } from "node:test";
 
-// @ts-expect-error -- module created in Wave 1 (06-02-PLAN). Type-only so
-// runtime ESM resolution does not fail before the module exists; when Wave 1+
-// lands, executors REMOVE the @ts-expect-error directive, change this to
-// `import * as _target ...`, and unskip the relevant tests.
-import type * as _target from "../../extensions/claude-marketplace/edge/args-schema.ts";
+import {
+  parseCommandArgs,
+  type PositionalSpec,
+} from "../../extensions/claude-marketplace/edge/args-schema.ts";
 
-// Reference the namespace so noUnusedLocals is satisfied; type-only export
-// is erased at runtime and never exposes a value.
-export type _TargetShape = typeof _target;
+function makeNotifyErrorSpy(): {
+  notifyError: (message: string) => void;
+  calls: string[];
+} {
+  const calls: string[] = [];
+  return {
+    notifyError: (m: string): void => {
+      calls.push(m);
+    },
+    calls,
+  };
+}
 
-test.skip("parseCommandArgs :: required positional missing emits usage via notifyError and returns undefined", () => {});
-test.skip("parseCommandArgs :: optional positional missing returns parsed with property undefined", () => {});
-test.skip("parseCommandArgs :: tokenizer throw routes through notifyError + returns undefined", () => {});
-test.skip("parseCommandArgs :: typed return shape (compile-time check)", () => {});
+test("parseCommandArgs :: required positional missing emits usage via notifyError and returns undefined", () => {
+  const { notifyError, calls } = makeNotifyErrorSpy();
+  const schema = {
+    positional: [{ name: "ref" }] as const satisfies readonly PositionalSpec[],
+    usage: "Usage: /claude:plugin install <ref>",
+  };
+  const result = parseCommandArgs("", schema, notifyError);
+  assert.equal(result, undefined);
+  assert.deepEqual(calls, ["Usage: /claude:plugin install <ref>"]);
+});
+
+test("parseCommandArgs :: optional positional missing returns parsed with property undefined", () => {
+  const { notifyError, calls } = makeNotifyErrorSpy();
+  const schema = {
+    positional: [
+      { name: "name" },
+      { name: "extra", required: false },
+    ] as const satisfies readonly PositionalSpec[],
+    usage: "Usage: /claude:plugin marketplace update [<name>]",
+  };
+  const result = parseCommandArgs("my-marketplace", schema, notifyError);
+  assert.deepEqual(calls, []);
+  assert.notEqual(result, undefined);
+  assert.equal(result?.name, "my-marketplace");
+  assert.equal(result?.extra, undefined);
+});
+
+test("parseCommandArgs :: tokenizer throw routes through notifyError + returns undefined", () => {
+  const { notifyError, calls } = makeNotifyErrorSpy();
+  const schema = {
+    positional: [{ name: "ref" }] as const satisfies readonly PositionalSpec[],
+    usage: "Usage: /claude:plugin install <ref>",
+  };
+  const result = parseCommandArgs("--scope foo", schema, notifyError);
+  assert.equal(result, undefined);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0] ?? "", /^Invalid --scope value: "foo"\. Must be "user" or "project"\.$/);
+});
+
+test("parseCommandArgs :: typed return shape (compile-time check)", () => {
+  const { notifyError } = makeNotifyErrorSpy();
+  const schema = {
+    positional: [
+      { name: "marketplace" },
+      { name: "plugin", required: false },
+    ] as const satisfies readonly PositionalSpec[],
+    usage: "usage",
+  };
+  const result = parseCommandArgs("mp1 plug1 --scope user", schema, notifyError);
+  assert.notEqual(result, undefined);
+  // Required positional => string at type level. Runtime confirms.
+  const marketplace: string = result!.marketplace;
+  // Optional positional => string | undefined. Runtime returns a string here.
+  const plugin: string | undefined = result!.plugin;
+  // scope is always optional.
+  const scope: "user" | "project" | undefined = result!.scope;
+  assert.equal(marketplace, "mp1");
+  assert.equal(plugin, "plug1");
+  assert.equal(scope, "user");
+});

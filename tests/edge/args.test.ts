@@ -1,30 +1,92 @@
-/* eslint-disable @typescript-eslint/no-empty-function --
- * Wave 0 skipped stubs (`test.skip(name, () => {})`) deliberately have empty
- * bodies; the bodies are filled in as the corresponding production modules
- * land in Wave 1+. See `.planning/phases/06-edge-layer-tab-completion/06-01-test-scaffolding-PLAN.md`. */
+// tests/edge/args.test.ts
+//
+// AP-1 / AP-2 / AP-4 coverage for the verbatim V1 tokenizer + --scope
+// validator now living in extensions/claude-marketplace/edge/args.ts.
 
+import assert from "node:assert/strict";
 import { test } from "node:test";
 
-// @ts-expect-error -- module created in Wave 1 (06-02-PLAN). Type-only so
-// runtime ESM resolution does not fail before the module exists; when Wave 1+
-// lands, executors REMOVE the @ts-expect-error directive, change this to
-// `import * as _target ...`, and unskip the relevant tests.
-import type * as _target from "../../extensions/claude-marketplace/edge/args.ts";
+import { parseArgs } from "../../extensions/claude-marketplace/edge/args.ts";
 
-// Reference the namespace so noUnusedLocals is satisfied; type-only export
-// is erased at runtime and never exposes a value.
-export type _TargetShape = typeof _target;
+test("AP-1 :: tokenize bare string", () => {
+  const result = parseArgs("install foo@bar");
+  assert.deepEqual(result.positional, ["install", "foo@bar"]);
+  assert.equal(result.scope, undefined);
+});
 
-test.skip("AP-1 :: tokenize bare string", () => {});
-test.skip("AP-1 :: tokenize single-quoted spaced argument", () => {});
-test.skip("AP-1 :: tokenize double-quoted spaced argument", () => {});
-test.skip("AP-1 :: tokenize mixed quotes in same input", () => {});
-test.skip("AP-1 :: tokenize unicode/non-ASCII positionals", () => {});
-test.skip("AP-2 :: --scope user is valid", () => {});
-test.skip("AP-2 :: --scope project is valid", () => {});
-test.skip("AP-2 :: --scope missing value throws clear error", () => {});
-test.skip("AP-2 :: --scope invalid value (foo) throws clear error", () => {});
-test.skip("AP-4 :: --scope accepted at position 0", () => {});
-test.skip("AP-4 :: --scope accepted at middle position", () => {});
-test.skip("AP-4 :: --scope accepted at end position", () => {});
-test.skip("AP-4 :: positionals extracted in order regardless of --scope position", () => {});
+test("AP-1 :: tokenize single-quoted spaced argument", () => {
+  const result = parseArgs("install 'foo bar'");
+  assert.deepEqual(result.positional, ["install", "foo bar"]);
+});
+
+test("AP-1 :: tokenize double-quoted spaced argument", () => {
+  const result = parseArgs('install "foo bar"');
+  assert.deepEqual(result.positional, ["install", "foo bar"]);
+});
+
+test("AP-1 :: tokenize mixed quotes in same input", () => {
+  // Outer single quotes wrap a literal double quote -- V1 has no escape
+  // semantics so the inner `"` is just data.
+  const result = parseArgs('install \'foo"bar\' "baz qux"');
+  assert.deepEqual(result.positional, ["install", 'foo"bar', "baz qux"]);
+});
+
+test("AP-1 :: tokenize unicode/non-ASCII positionals", () => {
+  const result = parseArgs("install plügin@märket 𝕦𝕥𝕗-𝟠");
+  assert.deepEqual(result.positional, ["install", "plügin@märket", "𝕦𝕥𝕗-𝟠"]);
+});
+
+test("AP-2 :: --scope user is valid", () => {
+  const result = parseArgs("--scope user install foo@bar");
+  assert.deepEqual(result.positional, ["install", "foo@bar"]);
+  assert.equal(result.scope, "user");
+});
+
+test("AP-2 :: --scope project is valid", () => {
+  const result = parseArgs("--scope project install foo@bar");
+  assert.deepEqual(result.positional, ["install", "foo@bar"]);
+  assert.equal(result.scope, "project");
+});
+
+test("AP-2 :: --scope missing value throws clear error", () => {
+  assert.throws(
+    () => parseArgs("--scope"),
+    /^Error: --scope requires a value: "user" or "project"\.$/,
+  );
+});
+
+test("AP-2 :: --scope invalid value (foo) throws clear error", () => {
+  assert.throws(
+    () => parseArgs("--scope foo"),
+    /^Error: Invalid --scope value: "foo"\. Must be "user" or "project"\.$/,
+  );
+});
+
+test("AP-4 :: --scope accepted at position 0", () => {
+  const result = parseArgs("--scope user install foo@bar");
+  assert.deepEqual(result.positional, ["install", "foo@bar"]);
+  assert.equal(result.scope, "user");
+});
+
+test("AP-4 :: --scope accepted at middle position", () => {
+  const result = parseArgs("install --scope user foo@bar");
+  assert.deepEqual(result.positional, ["install", "foo@bar"]);
+  assert.equal(result.scope, "user");
+});
+
+test("AP-4 :: --scope accepted at end position", () => {
+  const result = parseArgs("install foo@bar --scope user");
+  assert.deepEqual(result.positional, ["install", "foo@bar"]);
+  assert.equal(result.scope, "user");
+});
+
+test("AP-4 :: positionals extracted in order regardless of --scope position", () => {
+  const a = parseArgs("--scope user install foo@bar baz");
+  const b = parseArgs("install --scope user foo@bar baz");
+  const c = parseArgs("install foo@bar --scope user baz");
+  const d = parseArgs("install foo@bar baz --scope user");
+  assert.deepEqual(a.positional, ["install", "foo@bar", "baz"]);
+  assert.deepEqual(b.positional, ["install", "foo@bar", "baz"]);
+  assert.deepEqual(c.positional, ["install", "foo@bar", "baz"]);
+  assert.deepEqual(d.positional, ["install", "foo@bar", "baz"]);
+});

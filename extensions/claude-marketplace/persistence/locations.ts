@@ -64,6 +64,21 @@ export interface ScopedLocations {
   readonly dataRoot: string;
   /** `<extensionRoot>/sources/` -- where GitHub clones land. */
   readonly sourcesDir: string;
+  /**
+   * `<extensionRoot>/cache/` -- Phase 6 D-03 completion cache root.
+   * Sibling of `dataRoot`, `sourcesDir`. Optimization-only: every file
+   * inside this directory is rebuildable from `state.json` +
+   * `marketplace.json` and may be deleted at any time.
+   */
+  readonly cacheDir: string;
+  /**
+   * `<extensionRoot>/cache/marketplace-names.json` -- Phase 6 D-03
+   * file-backed marketplace-names cache (per scope). Holds the union
+   * of marketplace names visible in this scope; consumed by
+   * `getMarketplaceNames(scope)` in `shared/completion-cache.ts`
+   * (Plan 06-03).
+   */
+  readonly marketplaceNamesCacheFile: string;
 
   /** Returns `<dataRoot>/<mp>/<plugin>/` after SC-7 containment check. */
   pluginDataDir(mp: string, plugin: string): Promise<string>;
@@ -73,6 +88,15 @@ export interface ScopedLocations {
   sourceCloneDir(mp: string): Promise<string>;
   /** Returns `<extensionRoot>/sources-staging/<uuid>/` after SC-7 / NFR-10 containment check (D-09 same-FS sibling of `sourcesDir`). */
   sourcesStagingDir(uuid: string): Promise<string>;
+  /**
+   * Phase 6 D-03: returns `<cacheDir>/plugins/<marketplace>.json` after
+   * `assertSafeName` + `assertPathInside` containment checks. Consumed
+   * by `getPluginIndex(scope, marketplace)` in `shared/completion-cache.ts`
+   * (Plan 06-03). The cache file is optimization-only -- it can be
+   * deleted at any time and will be lazily rebuilt from authoritative
+   * sources.
+   */
+  pluginCacheFile(marketplace: string): Promise<string>;
 }
 
 /**
@@ -102,6 +126,9 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
   const promptsTargetDir = path.join(extensionRoot, "resources", "prompts");
   const dataRoot = path.join(extensionRoot, "data");
   const sourcesDir = path.join(extensionRoot, "sources");
+  // Phase 6 D-03: completion cache root. Sibling of dataRoot, sourcesDir.
+  const cacheDir = path.join(extensionRoot, "cache");
+  const marketplaceNamesCacheFile = path.join(cacheDir, "marketplace-names.json");
 
   // T-03-04 disposition: every new field above is constructed from
   // `extensionRoot` joined to a HARD-CODED suffix; no untrusted name
@@ -129,6 +156,8 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
     promptsTargetDir,
     dataRoot,
     sourcesDir,
+    cacheDir,
+    marketplaceNamesCacheFile,
 
     async pluginDataDir(mp: string, plugin: string): Promise<string> {
       // Defense-in-depth: route both name inputs through assertSafeName before
@@ -166,6 +195,17 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
       const sourcesStagingRoot = path.join(extensionRoot, "sources-staging");
       const candidate = path.join(sourcesStagingRoot, uuid);
       await assertPathInside(sourcesStagingRoot, candidate, `sourcesStagingDir(${uuid})`);
+      return candidate;
+    },
+
+    async pluginCacheFile(marketplace: string): Promise<string> {
+      // Phase 6 D-03 / T-EDGE-5b: marketplace names originate in user-
+      // supplied state, so route through assertSafeName before composing
+      // a path. assertPathInside enforces NFR-10 containment on the
+      // resulting leaf path against cacheDir.
+      assertSafeName(marketplace, `pluginCacheFile marketplace name "${marketplace}"`);
+      const candidate = path.join(cacheDir, "plugins", `${marketplace}.json`);
+      await assertPathInside(cacheDir, candidate, `pluginCacheFile(${marketplace})`);
       return candidate;
     },
   });
