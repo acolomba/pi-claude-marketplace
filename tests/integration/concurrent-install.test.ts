@@ -199,6 +199,7 @@ async function listSkillDirs(cwd: string): Promise<readonly string[]> {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
       return [];
     }
+
     throw err;
   }
 }

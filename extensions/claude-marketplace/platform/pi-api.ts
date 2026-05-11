@@ -58,11 +58,12 @@ export function hasLoadedPiSubagents(pi: ExtensionAPI): boolean {
 export function hasLoadedPiMcpAdapter(pi: ExtensionAPI): boolean {
   try {
     return pi.getAllTools().some((tool) => {
-      if (tool.name === "mcp") {
+      const candidate = tool as { name?: unknown; sourceInfo?: { source?: unknown } };
+      if (candidate.name === "mcp") {
         return true;
       }
 
-      const src: unknown = tool.sourceInfo.source;
+      const src = candidate.sourceInfo?.source;
       return typeof src === "string" && src.includes("pi-mcp-adapter");
     });
   } catch {

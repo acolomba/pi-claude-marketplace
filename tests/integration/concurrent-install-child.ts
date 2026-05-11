@@ -45,7 +45,7 @@ function sendResult(result: {
   });
 }
 
-process.on("message", async (message: unknown) => {
+async function handleMessage(message: unknown): Promise<void> {
   if (!isStartMessage(message)) {
     sendResult({ ok: false, message: `invalid start message: ${JSON.stringify(message)}` });
     return;
@@ -93,6 +93,10 @@ process.on("message", async (message: unknown) => {
       notifications,
     });
   }
+}
+
+process.on("message", (message: unknown) => {
+  void handleMessage(message);
 });
 
 process.send?.("ready");
