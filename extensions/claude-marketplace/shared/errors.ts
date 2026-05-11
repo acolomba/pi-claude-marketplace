@@ -89,3 +89,85 @@ export class MarketplaceUpdateError extends Error {
     this.retryHint = opts.retryHint ?? "";
   }
 }
+
+/**
+ * PI-6 / RN-3 cross-bridge name conflict at install/update time.
+ *
+ * Thrown by orchestrators/plugin/shared.ts::assertNoCrossPluginConflicts
+ * BEFORE any disk write. The message lists every conflicting (kind, name,
+ * owning-plugin) tuple in deterministic order: skills first, then commands,
+ * then agents; alphabetical within each kind. MCP server names are
+ * EXCLUDED per PRD §6.5 (MC-4 handles them at the bridge layer).
+ */
+export class CrossPluginConflictError extends Error {
+  readonly conflicts: readonly string[];
+  constructor(conflicts: readonly string[]) {
+    super(`Cross-plugin name conflict:\n${conflicts.map((c) => `  - ${c}`).join("\n")}`);
+    this.name = "CrossPluginConflictError";
+    this.conflicts = conflicts;
+  }
+}
+
+/**
+ * PI-15 concurrent install detected at the state-guard save boundary.
+ *
+ * Thrown inside the `withStateGuard` closure of
+ * orchestrators/plugin/install.ts when a re-read of state shows the plugin
+ * record already exists (another process beat us to the commit). The outer
+ * `runPhases` result unwinds the staged resources via the ledger's
+ * `undo` chain; `formatRollbackError` composes the final user message.
+ */
+export class ConcurrentInstallError extends Error {
+  readonly plugin: string;
+  readonly marketplace: string;
+  constructor(plugin: string, marketplace: string) {
+    super(`Plugin "${plugin}" was installed concurrently in marketplace "${marketplace}".`);
+    this.name = "ConcurrentInstallError";
+    this.plugin = plugin;
+    this.marketplace = marketplace;
+  }
+}
+
+/**
+ * PU-5 silent-converge sentinel for uninstall.
+ *
+ * Thrown inside the `withStateGuard` closure of
+ * orchestrators/plugin/uninstall.ts when the plugin record is already
+ * absent at re-load time (another process completed the uninstall first).
+ * The caller catches this sentinel and returns success with no
+ * user-visible notification per PRD §5.2.2 PU-5 verbatim semantics.
+ */
+export class ConcurrentUninstallError extends Error {
+  readonly plugin: string;
+  constructor(plugin: string) {
+    super(`Plugin "${plugin}" already uninstalled.`);
+    this.name = "ConcurrentUninstallError";
+    this.plugin = plugin;
+  }
+}
+
+/**
+ * PUP-6 aggregate phase-3 failure for plugin update.
+ *
+ * Wraps the heterogeneous-undo phase-3a failures from update.ts's
+ * hand-rolled 3-phase sequence. `failures` carries one entry per bridge
+ * (`skills` | `commands` | `agents` | `mcp`) whose `commit*` threw. The
+ * constructor's `message` argument typically embeds the
+ * RECOVERY_PLUGIN_REINSTALL_PREFIX-composed recovery hint; the
+ * `Error.cause` (passed via the options bag) carries the chained
+ * originating error for `formatErrorWithCauses` depth-5 walk.
+ */
+export interface Phase3Failure {
+  readonly phase: "skills" | "commands" | "agents" | "mcp";
+  readonly msg: string;
+  readonly cause: unknown;
+}
+
+export class PluginUpdatePhase3Error extends Error {
+  readonly failures: readonly Phase3Failure[];
+  constructor(message: string, failures: readonly Phase3Failure[], options?: ErrorOptions) {
+    super(message, options);
+    this.name = "PluginUpdatePhase3Error";
+    this.failures = failures;
+  }
+}
