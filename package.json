@@ -32,6 +32,12 @@
     "claude",
     "marketplace"
   ],
+  "files": [
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md",
+    "extensions/claude-marketplace/**"
+  ],
   "license": "MIT",
   "name": "pi-claude-marketplace",
   "peerDependencies": {
