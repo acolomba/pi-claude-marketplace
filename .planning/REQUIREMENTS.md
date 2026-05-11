@@ -73,7 +73,7 @@
 - [ ] **PI-12**: MCP servers staged + `pi-mcp-adapter` unloaded → message includes the canonical pi-mcp-adapter warning string
 - [ ] **PI-13**: Plugins declaring `dependencies` install with manual-install warning
 - [ ] **PI-14**: Path-containment violations throw `PathContainmentError`; MUST NOT be folded into "rollback partial" line
-- [ ] **PI-15**: Concurrent install detected at state-guard commit rolls back staged resources with "was installed concurrently" error
+- [x] ~~**PI-15**: Concurrent install detected at state-guard commit rolls back staged resources with "was installed concurrently" error~~ (**superseded by Phase 7 D-08**: cross-process installs now fail before the state-guard commit by acquiring the per-scope `.state-lock` first. A loser surfaces `STATE_LOCK_HELD_PREFIX` (`Another claude-marketplace operation is in progress for`) with retry as the recovery action instead of reaching the old `was installed concurrently` rollback path.)
 
 ### Plugin Lifecycle: `uninstall` (PRD §5.2.2)
 
@@ -398,7 +398,7 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | PI-12       | Phase 5 | Pending |
 | PI-13       | Phase 5 | Pending |
 | PI-14       | Phase 5 | Pending |
-| PI-15       | Phase 5 | Pending |
+| PI-15       | --      | Superseded by Phase 7 D-08 |
 | PU-1        | Phase 5 | Pending |
 | PU-2        | Phase 5 | Pending |
 | PU-3        | Phase 5 | Pending |
@@ -552,8 +552,8 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 **Coverage:**
 
 - v1 requirements: 200 total (file footer previously claimed 134; corrected here)
-- Mapped to phases: 196 (98.0%) -- MA-7 superseded by D-21 (Phase 1 adopted isomorphic-git, removing the "git CLI not found" failure mode); MU-2 and MU-3 superseded by Phase 4 D-14 (follow-upstream-blindly semantics; the local marketplace clone is read-only by contract, so non-fast-forward divergence cannot occur); PR-4 superseded by Phase 5 D-07 (custom componentPath arrays now SUPPLEMENT defaults rather than replace them; behavior corrected vs V1 per COMP-01 / Gap 3)
-- Unmapped: 0 (MA-7, MU-2, MU-3, PR-4 are superseded, not unmapped)
+- Mapped to phases: 195 (97.5%) -- MA-7 superseded by D-21 (Phase 1 adopted isomorphic-git, removing the "git CLI not found" failure mode); MU-2 and MU-3 superseded by Phase 4 D-14 (follow-upstream-blindly semantics; the local marketplace clone is read-only by contract, so non-fast-forward divergence cannot occur); PR-4 superseded by Phase 5 D-07 (custom componentPath arrays now SUPPLEMENT defaults rather than replace them; behavior corrected vs V1 per COMP-01 / Gap 3); PI-15 superseded by Phase 7 D-08 (per-scope lock acquisition fails losers with `STATE_LOCK_HELD_PREFIX` before state-guard commit)
+- Unmapped: 0 (MA-7, MU-2, MU-3, PR-4, PI-15 are superseded, not unmapped)
 
 **Per-phase counts:**
 
@@ -563,7 +563,7 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | Phase 2: Domain Core & Persistence Primitives | 38 (NFR-7, NFR-12, SP-1..7, SC-1..4, SC-7, MM-1..7, PR-1..3, PR-5, PR-6, RN-1..2, ST-1..9) -- PR-4 superseded by Phase 5 D-07            |
 | Phase 3: Resource Bridges                     | 34 (SK-1..5, CM-1..4, AG-1..12, MC-1..8, RN-4..6, AS-8..9)                                                                              |
 | Phase 4: Marketplace Orchestrators            | 41 (MA-1..6, MA-8..11 (MA-7 superseded by D-21), MR-1..8, ML-1..4, MU-1, MU-4..9 (MU-2, MU-3 superseded by Phase 4 D-14), MAU-1..4, SC-5..6, RH-1..5, NFR-5) |
-| Phase 5: Plugin Orchestrators                 | 47 (PI-1..15, PU-1..8, PUP-1..9, PL-1..7, RN-3, AS-2..3, AS-6..7, NFR-2..3)                                                             |
+| Phase 5: Plugin Orchestrators                 | 46 (PI-1..14, PU-1..8, PUP-1..9, PL-1..7, RN-3, AS-2..3, AS-6..7, NFR-2..3) -- PI-15 superseded by Phase 7 D-08                           |
 | Phase 6: Edge Layer & Tab Completion          | 13 (TC-1..9, AP-1..4)                                                                                                                   |
 | Phase 7: Integration & Pi Wiring              | 4 (NFR-8, NFR-11) -- note: NFR-2/3 land in Phase 5 since they describe orchestrator behavior; Phase 7 verifies them in live environment |
 
@@ -571,4 +571,4 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 
 ______________________________________________________________________
 
-*Requirements defined: 2026-05-09 from `docs/prd/pi-claude-marketplace-prd.md` v1.0* *Last updated: 2026-05-10 -- Phase 5 D-07 supersedes PR-4 (COMP-01 / Gap 3 supplement-not-replace; custom componentPath arrays now supplement defaults rather than replace them)*
+*Requirements defined: 2026-05-09 from `docs/prd/pi-claude-marketplace-prd.md` v1.0* *Last updated: 2026-05-11 -- Phase 7 D-08 supersedes PI-15: concurrent install losers now fail at per-scope lock acquisition with `STATE_LOCK_HELD_PREFIX` instead of reaching the old state-guard commit rollback marker.*
