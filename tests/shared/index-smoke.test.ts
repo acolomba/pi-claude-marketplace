@@ -27,13 +27,13 @@ interface RegistrationLog {
 interface MockPi {
   readonly pi: ExtensionAPI;
   readonly commands: Map<string, unknown>;
-  readonly events: Map<string, (() => unknown)[]>;
+  readonly events: Map<string, ((event: unknown) => unknown)[]>;
   readonly tools: Map<string, unknown>;
 }
 
 function makePiMock(log: RegistrationLog[]): MockPi {
   const commands = new Map<string, unknown>();
-  const events = new Map<string, (() => unknown)[]>();
+  const events = new Map<string, ((event: unknown) => unknown)[]>();
   const tools = new Map<string, unknown>();
 
   const pi = {
@@ -45,7 +45,7 @@ function makePiMock(log: RegistrationLog[]): MockPi {
       log.push({ type: "tool", name: tool.name });
       tools.set(tool.name, tool);
     },
-    on(event: string, handler: () => unknown) {
+    on(event: string, handler: (event: unknown) => unknown) {
       log.push({ type: "event", name: event });
       const handlers = events.get(event) ?? [];
       handlers.push(handler);
@@ -93,16 +93,36 @@ test("resources_discover handler resolves project cwd at invocation time", async
   const handlers = events.get("resources_discover") ?? [];
   assert.equal(handlers.length, 1, "exactly one resources_discover handler");
 
-  const originalCwd = process.cwd();
-  const tmp = await mkdtemp(path.join(os.tmpdir(), "index-smoke-"));
+  const eventCwd = await mkdtemp(path.join(os.tmpdir(), "index-smoke-event-cwd-"));
+  const processCwd = await mkdtemp(path.join(os.tmpdir(), "index-smoke-process-cwd-"));
   try {
-    const projectPromptDir = path.join(tmp, ".pi", "claude-marketplace", "resources", "prompts");
+    const projectPromptDir = path.join(
+      eventCwd,
+      ".pi",
+      "claude-marketplace",
+      "resources",
+      "prompts",
+    );
     const projectPrompt = path.join(projectPromptDir, "cwd-captured.md");
     await mkdir(projectPromptDir, { recursive: true });
     await writeFile(projectPrompt, "# cwd captured\n");
 
-    process.chdir(tmp);
-    const result = await handlers[0]!();
+    const wrongPromptDir = path.join(
+      processCwd,
+      ".pi",
+      "claude-marketplace",
+      "resources",
+      "prompts",
+    );
+    const wrongPrompt = path.join(wrongPromptDir, "process-cwd.md");
+    await mkdir(wrongPromptDir, { recursive: true });
+    await writeFile(wrongPrompt, "# process cwd\n");
+
+    const result = await handlers[0]!({
+      cwd: eventCwd,
+      reason: "reload",
+      type: "resources_discover",
+    });
     assert.ok(
       typeof result === "object" &&
         result !== null &&
@@ -118,8 +138,13 @@ test("resources_discover handler resolves project cwd at invocation time", async
       ),
       `expected invocation-time cwd prompt in ${JSON.stringify(result.promptPaths)}`,
     );
+    assert.equal(
+      promptPaths.some((promptPath) => promptPath.endsWith("process-cwd.md")),
+      false,
+      `expected process cwd not to be used in ${JSON.stringify(result.promptPaths)}`,
+    );
   } finally {
-    process.chdir(originalCwd);
-    await cleanupStaging(tmp, "test-cleanup");
+    await cleanupStaging(eventCwd, "test-cleanup");
+    await cleanupStaging(processCwd, "test-cleanup");
   }
 });

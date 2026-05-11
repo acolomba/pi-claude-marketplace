@@ -23,7 +23,7 @@
 // or DEFAULT_GIT_OPS.
 
 import { locationsFor } from "../../persistence/locations.ts";
-import { errorMessage } from "../../shared/errors.ts";
+import { errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
 import { notifyError, notifySuccess } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
@@ -67,6 +67,11 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
       // scope. With SC-6 bare-form, that is expected if the name only
       // lives in the OTHER scope; we collect and only surface if BOTH
       // scopes failed AND no flips happened anywhere.
+      if (!(opts.name !== undefined && err instanceof MarketplaceNotFoundError)) {
+        notifyError(opts.ctx, errorMessage(err), err);
+        return;
+      }
+
       errors.push({ scope, cause: err });
     }
   }

@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import lockfile from "proper-lockfile";
+
 import { pathSource } from "../../../extensions/claude-marketplace/domain/source.ts";
 import { setMarketplaceAutoupdate } from "../../../extensions/claude-marketplace/orchestrators/marketplace/autoupdate.ts";
 import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
@@ -215,6 +217,37 @@ test("Single-name flip across BOTH scopes when --scope omitted: flips in user sc
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.message, "Enabled autoupdate: only.");
     assert.notEqual(notifications[0]!.severity, "error");
+  });
+});
+
+test("single-name cross-scope flip surfaces state lock failures instead of reporting partial success", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const userLocations = locationsFor("user", cwd);
+    const projectLocations = locationsFor("project", cwd);
+    await mkdir(userLocations.extensionRoot, { recursive: true });
+    await mkdir(projectLocations.extensionRoot, { recursive: true });
+    await saveState(userLocations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: { only: makeMarketplaceRecord("only", "user", cwd, false) },
+    });
+    const release = await lockfile.lock(projectLocations.extensionRoot, {
+      lockfilePath: projectLocations.stateLockFile,
+      realpath: false,
+    });
+
+    try {
+      const { ctx, notifications } = makeCtx();
+      await setMarketplaceAutoupdate({ ctx, name: "only", enable: true, cwd });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]!.severity, "error");
+      assert.match(
+        notifications[0]!.message,
+        /Another claude-marketplace operation is in progress/,
+      );
+    } finally {
+      await release();
+    }
   });
 });
 

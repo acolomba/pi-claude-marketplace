@@ -32,7 +32,7 @@ import { mkdir } from "node:fs/promises";
 import lockfile from "proper-lockfile";
 
 import { loadState, saveState, type ExtensionState } from "../persistence/state-io.ts";
-import { StateLockHeldError } from "../shared/errors.ts";
+import { errorMessage, StateLockHeldError } from "../shared/errors.ts";
 
 import type { ScopedLocations } from "../persistence/locations.ts";
 
@@ -68,15 +68,47 @@ export async function withStateGuard<T>(
       update: 2_000,
     });
   } catch (err) {
-    throw new StateLockHeldError(locations.scope, locations.stateLockFile, { cause: err });
+    if (isLockHeldError(err)) {
+      throw new StateLockHeldError(locations.scope, locations.stateLockFile, { cause: err });
+    }
+
+    throw toError(err);
   }
 
+  let result: T | undefined;
+  let primaryError: unknown;
   try {
     const fresh = await loadState(locations.extensionRoot);
-    const result = await mutate(fresh);
+    result = await mutate(fresh);
     await saveState(locations.extensionRoot, fresh);
-    return result;
+  } catch (err) {
+    primaryError = err;
   } finally {
-    await release();
+    try {
+      await release();
+    } catch (releaseErr) {
+      if (primaryError === undefined) {
+        primaryError = releaseErr;
+      }
+    }
   }
+
+  if (primaryError !== undefined) {
+    throw toError(primaryError);
+  }
+
+  return result as T;
+}
+
+function toError(err: unknown): Error {
+  return err instanceof Error ? err : new Error(errorMessage(err));
+}
+
+function isLockHeldError(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: unknown }).code === "ELOCKED"
+  );
 }

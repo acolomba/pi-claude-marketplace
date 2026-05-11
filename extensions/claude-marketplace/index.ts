@@ -6,18 +6,22 @@ import { DEFAULT_GIT_OPS } from "./orchestrators/marketplace/shared.ts";
 import { updateSinglePlugin } from "./orchestrators/plugin/update.ts";
 import { locationsFor } from "./persistence/locations.ts";
 
-import type { ExtensionAPI, ResourcesDiscoverResult } from "./platform/pi-api.ts";
+import type {
+  ExtensionAPI,
+  ResourcesDiscoverEvent,
+  ResourcesDiscoverResult,
+} from "./platform/pi-api.ts";
 
 export default function claudeMarketplaceExtension(pi: ExtensionAPI): void {
   const onResourcesDiscover = pi.on.bind(pi) as unknown as (
     event: "resources_discover",
-    handler: () => Promise<ResourcesDiscoverResult>,
+    handler: (event: ResourcesDiscoverEvent) => Promise<ResourcesDiscoverResult>,
   ) => void;
 
-  onResourcesDiscover("resources_discover", async () => {
+  onResourcesDiscover("resources_discover", async (event) => {
     const discovered = await aggregateDiscoveredResources(
       locationsFor("user", homedir()),
-      locationsFor("project", process.cwd()),
+      locationsFor("project", event.cwd),
     );
     return {
       skillPaths: [...discovered.skillPaths],
