@@ -13,6 +13,7 @@
 // Error.cause chain.
 
 import { ROLLBACK_PARTIAL } from "../shared/markers.ts";
+import { PathContainmentError } from "../shared/path-safety.ts";
 
 import type { RunPhasesResult } from "./phase-ledger.ts";
 
@@ -26,8 +27,22 @@ import type { RunPhasesResult } from "./phase-ledger.ts";
  *
  * The marker prefix is sourced from the shared markers module (D-03
  * single chokepoint); inlining a literal here is a drift hazard.
+ *
+ * D-02 / PI-14: PathContainmentError (and its SymlinkRefusedError
+ * subclass per Phase 1 D-17) MUST NOT be folded into the
+ * "(rollback partial: ...)" marker. This single chokepoint inherits
+ * the bypass for every mutating orchestrator (install, update,
+ * uninstall) so the violation surfaces VERBATIM to the user without
+ * being masked by partial-rollback framing. Mirrors the SAME bypass
+ * already present at `transaction/phase-ledger.ts:86-88` for undo-time
+ * PathContainmentError; the difference is the chokepoint -- ledger
+ * bypasses undo aggregation, here we bypass marker composition.
  */
 export function formatRollbackError(result: RunPhasesResult, originalError: Error): Error {
+  if (originalError instanceof PathContainmentError) {
+    return originalError;
+  }
+
   if (result.rollbackPartials.length === 0) {
     return originalError;
   }
