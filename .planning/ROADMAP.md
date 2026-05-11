@@ -164,7 +164,14 @@ Decimal phases appear between their surrounding integers in numeric order.
 2. A live e2e suite installs ≥3 representative plugins from `anthropics/claude-plugins-official` at a pinned SHA, exercises the soft-dep degraded path (with and without `pi-subagents` / `pi-mcp-adapter` loaded), and verifies the `Run /reload` hint causes the new resources to surface; the same suite runs nightly against floating `main` and classifies failures by mode (upstream change vs. regression)
 3. A multi-process concurrency test starts two Pi processes both targeting the same scope, both running `install` simultaneously, and verifies one wins cleanly while the other rolls back with the documented "was installed concurrently" error
 4. Peer dependency `@mariozechner/pi-coding-agent` declares a pinned floor (≥0.70.6 minimum, ideally ≥0.73.1 if no breaking change observed); package publish dry-run validates the manifest
-5. Architecture verifiably supports adding manifest-mtime caching later (NFR-8 BACKLOG): a single seam exists where `marketplace.json` is read on the manifest path, isolated from orchestrator logic **Plans**: TBD
+5. Architecture verifiably supports adding manifest-mtime caching later (NFR-8 BACKLOG): a single seam exists where `marketplace.json` is read on the manifest path, isolated from orchestrator logic **Plans**: 6 plans
+
+- [ ] `07-01-PLAN.md` -- Pi API wrapper/import boundary and peer-dep floor (Wave 1)
+- [ ] `07-02-PLAN.md` -- NFR-8 manifest read seam and architecture test (Wave 1)
+- [ ] `07-03-PLAN.md` -- Real `index.ts` Pi wiring and disk-backed `resources_discover` (Wave 2)
+- [ ] `07-04-PLAN.md` -- Cross-process state lock and concurrent install integration test (Wave 3)
+- [ ] `07-05-PLAN.md` -- Pinned e2e fixtures, e2e tests, and CI/nightly workflows (Wave 4)
+- [ ] `07-06-PLAN.md` -- PI-15 supersession docs and validation sign-off (Wave 5)
 
 ## Progress
 
