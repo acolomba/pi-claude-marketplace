@@ -6,7 +6,15 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: [".claude/", ".planning/", "build/", "coverage/", "dist/", "node_modules/"],
+    ignores: [
+      ".claude/",
+      ".opencode/",
+      ".planning/",
+      "build/",
+      "coverage/",
+      "dist/",
+      "node_modules/",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
@@ -206,9 +214,8 @@ export default tseslint.config(
                 "./extensions/claude-marketplace/bridges",
                 "./extensions/claude-marketplace/transaction",
                 "./extensions/claude-marketplace/persistence",
-                "./extensions/claude-marketplace/platform",
               ],
-              message: "presentation/ may only import from domain/, shared/.",
+              message: "presentation/ may only import from domain/, shared/, platform/.",
             },
             {
               target: "./extensions/claude-marketplace/platform",
