@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Phase 06 complete
-last_updated: "2026-05-11T20:38:23.767Z"
+status: Phase 07 complete - ready for verification
+last_updated: "2026-05-11T20:42:58.901Z"
 progress:
   total_phases: 7
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 51
-  completed_plans: 50
-  percent: 98
+  completed_plans: 51
+  percent: 100
 ---
 
 # Project State
@@ -22,10 +22,10 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 
 ## Current Position
 
-Phase: 07 (integration-pi-wiring) -- EXECUTING
+Phase: 07 (integration-pi-wiring) -- COMPLETE
 Plan: 6 of 6
 
-Progress: [██████████] 98%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -55,6 +55,7 @@ Progress: [██████████] 98%
 | Phase 07 P03 | 6 min | 2 tasks | 5 files |
 | Phase 07 P04 | 11 min | 3 tasks | 10 files |
 | Phase 07 P05 | 7 min | 3 tasks | 20 files |
+| Phase 07 P06 | 2 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 07]: Concurrent install race verification uses forked IPC children invoking the real `installPlugin` path and asserts state/disk alignment after one lock-held loser. -- Plan 07-04 established the multi-process test pattern.
 - [Phase 07]: [Phase 07]: PR e2e now uses pinned upstream SHA 6196a61bdeece7b9889ecda1e45bd7085788ae75 while nightly e2e uses floating main for upstream drift classification. -- Plan 07-05 established deterministic PR e2e and separate nightly drift classification.
 - [Phase 07]: [Phase 07]: Real Pi runtime smoke is automated through the installed pi package bin with isolated HOME/cwd, avoiding the blocked agent-core API path. -- Research found agent-core lacks extension-loading API, so the package-bin smoke is the automatable runtime gate.
+- [Phase 07]: D-25 supersedes PI-15 old concurrent-install marker; lock losers fail at per-scope acquisition with `STATE_LOCK_HELD_PREFIX` and retry guidance. -- Plan 07-06 recorded the REQUIREMENTS/PROJECT/CHANGELOG traceability trail.
+- [Phase 07]: Validation sign-off is approved; NFR-2, NFR-3, NFR-8, and NFR-11 map to green automated gates including real Pi-runtime smoke. -- Plan 07-06 closed the phase gate evidence.
 
 ### Pending Todos
 
@@ -85,9 +88,7 @@ None yet.
 
 ### Blockers/Concerns
 
-- Coverage count discrepancy: REQUIREMENTS.md footer claims "134 v1 requirements total" but the file contains 200 numbered REQ-IDs. Roadmap maps all 200 (the actual content). Reconcile in next REQUIREMENTS.md edit.
 - Behavioral Gaps 1, 2, 4-10 (FEATURES Gap series) need explicit resolutions logged in PROJECT.md Key Decisions before Phase 4/5 planning. SUMMARY.md provides recommended resolutions.
-- Phase 7 research flag: verify `resources_discover` event contract and `pi.registerCommand` surface in `@mariozechner/pi-coding-agent@^0.73.1` vs. V1's `^0.70.6` baseline (low probability of breaking change).
 - `write-file-atomic@^8` Node engine constraint bumps effective floor from 22.0 to 22.22.2; confirm CI Node range before adopting in Phase 1.
 
 ## Deferred Items
@@ -100,4 +101,4 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-11T20:37:59.479Z
+Last session: 2026-05-11T20:42:58.893Z

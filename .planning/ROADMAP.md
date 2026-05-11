@@ -170,8 +170,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] `07-02-PLAN.md` -- NFR-8 manifest read seam and architecture test (Wave 1)
 - [x] `07-03-PLAN.md` -- Real `index.ts` Pi wiring and disk-backed `resources_discover` (Wave 2)
 - [x] `07-04-PLAN.md` -- Cross-process state lock and concurrent install integration test (Wave 3)
-- [ ] `07-05-PLAN.md` -- Pinned e2e fixtures, e2e tests, and CI/nightly workflows (Wave 4)
-- [ ] `07-06-PLAN.md` -- PI-15 supersession docs and validation sign-off (Wave 5)
+- [x] `07-05-PLAN.md` -- Pinned e2e fixtures, e2e tests, and CI/nightly workflows (Wave 4)
+- [x] `07-06-PLAN.md` -- PI-15 supersession docs and validation sign-off (Wave 5)
 
 ## Progress
 
@@ -185,4 +185,4 @@ Decimal phases appear between their surrounding integers in numeric order.
 | 4. Marketplace Orchestrators            | 10/10          | Complete    | 2026-05-10 |
 | 5. Plugin Orchestrators                 | 10/10          | Complete    | 2026-05-11 |
 | 6. Edge Layer & Tab Completion          | 0/5            | Not started | -         |
-| 7. Integration & Pi Wiring              | 4/6            | In Progress | -         |
+| 7. Integration & Pi Wiring              | 6/6            | Complete    | 2026-05-11 |
