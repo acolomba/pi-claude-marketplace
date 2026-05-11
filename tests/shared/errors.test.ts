@@ -4,7 +4,11 @@ import test from "node:test";
 import {
   appendLeakToError,
   appendLeaks,
+  ConcurrentInstallError,
+  ConcurrentUninstallError,
+  CrossPluginConflictError,
   errorMessage,
+  PluginUpdatePhase3Error,
 } from "../../extensions/claude-marketplace/shared/errors.ts";
 
 /**
@@ -47,4 +51,66 @@ test("appendLeaks accumulates multiple leaks via repeated cause-chaining", () =>
   const intermediate = (result as Error & { cause: Error }).cause;
   assert.equal(intermediate.message, "root (additionally: leak1)");
   assert.equal((intermediate as Error & { cause: Error }).cause, base);
+});
+
+/**
+ * Phase 5 plan 05-01 Task 2 -- four new error classes consumed by the plugin
+ * orchestrators (install/uninstall/update). Each smoke test covers:
+ *   - `extends Error` instanceof contract
+ *   - `name` property set verbatim (matters for `err.name === "..."` callsites)
+ *   - readonly payload fields preserved verbatim from constructor args
+ *   - message format (where the caller doesn't compose it themselves)
+ */
+
+test("CrossPluginConflictError: PI-6 / RN-3 multi-conflict construction", () => {
+  const conflicts = [
+    'skill "foo" already owned by plugin "a"',
+    'agent "bar" already owned by plugin "b"',
+  ] as const;
+  const err = new CrossPluginConflictError(conflicts);
+  assert.ok(err instanceof Error);
+  assert.equal(err.name, "CrossPluginConflictError");
+  assert.deepEqual(err.conflicts, conflicts);
+  // Message must contain both conflict rows verbatim so the user sees every offender.
+  assert.match(err.message, /skill "foo" already owned by plugin "a"/);
+  assert.match(err.message, /agent "bar" already owned by plugin "b"/);
+  assert.match(err.message, /^Cross-plugin name conflict:/);
+});
+
+test("ConcurrentInstallError: PI-15 verbatim message and payload fields", () => {
+  const err = new ConcurrentInstallError("foo", "official");
+  assert.ok(err instanceof Error);
+  assert.equal(err.name, "ConcurrentInstallError");
+  assert.equal(err.plugin, "foo");
+  assert.equal(err.marketplace, "official");
+  assert.equal(err.message, 'Plugin "foo" was installed concurrently in marketplace "official".');
+});
+
+test("ConcurrentUninstallError: PU-5 silent-converge sentinel", () => {
+  const err = new ConcurrentUninstallError("foo");
+  assert.ok(err instanceof Error);
+  assert.equal(err.name, "ConcurrentUninstallError");
+  assert.equal(err.plugin, "foo");
+  assert.equal(err.message, 'Plugin "foo" already uninstalled.');
+});
+
+test("PluginUpdatePhase3Error: PUP-6 aggregate with cause + failures payload", () => {
+  const outer = new Error("outer");
+  const inner = new Error("inner");
+  const err = new PluginUpdatePhase3Error(
+    "plugin update phase 3 failed",
+    [{ phase: "skills", msg: "oops", cause: inner }],
+    { cause: outer },
+  );
+  assert.ok(err instanceof Error);
+  assert.equal(err.name, "PluginUpdatePhase3Error");
+  // Error.cause must be the outer-passed cause (NOT swallowed by the constructor).
+  assert.equal((err as Error & { cause: unknown }).cause, outer);
+  assert.equal(err.failures.length, 1);
+  const first = err.failures[0];
+  assert.ok(first, "failures[0] must be present");
+  assert.equal(first.phase, "skills");
+  assert.equal(first.msg, "oops");
+  assert.equal(first.cause, inner);
+  assert.equal(err.message, "plugin update phase 3 failed");
 });
