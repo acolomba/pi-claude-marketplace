@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -96,9 +96,28 @@ test("resources_discover handler resolves project cwd at invocation time", async
   const originalCwd = process.cwd();
   const tmp = await mkdtemp(path.join(os.tmpdir(), "index-smoke-"));
   try {
+    const projectPromptDir = path.join(tmp, ".pi", "claude-marketplace", "resources", "prompts");
+    const projectPrompt = path.join(projectPromptDir, "cwd-captured.md");
+    await mkdir(projectPromptDir, { recursive: true });
+    await writeFile(projectPrompt, "# cwd captured\n");
+
     process.chdir(tmp);
     const result = await handlers[0]!();
-    assert.deepEqual(result, { skillPaths: [], promptPaths: [] });
+    assert.ok(
+      typeof result === "object" &&
+        result !== null &&
+        "promptPaths" in result &&
+        Array.isArray(result.promptPaths),
+    );
+    const promptPaths = result.promptPaths as string[];
+    assert.ok(
+      promptPaths.some((promptPath) =>
+        promptPath.endsWith(
+          path.join(".pi", "claude-marketplace", "resources", "prompts", "cwd-captured.md"),
+        ),
+      ),
+      `expected invocation-time cwd prompt in ${JSON.stringify(result.promptPaths)}`,
+    );
   } finally {
     process.chdir(originalCwd);
     await cleanupStaging(tmp, "test-cleanup");
