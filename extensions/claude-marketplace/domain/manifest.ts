@@ -8,6 +8,8 @@
 // is `typebox` with no scope; the 0.34 LTS path used the scoped name plus
 // `/compiler`, which is NOT what we want here).
 
+import { readFile } from "node:fs/promises";
+
 import Type from "typebox";
 import { Compile } from "typebox/compile";
 
@@ -35,3 +37,25 @@ export type MarketplaceManifest = Type.Static<typeof MARKETPLACE_SCHEMA>;
 
 /** JIT-compiled validator (D-07). Use `.Check(value)` or `.Parse(value)`. */
 export const MARKETPLACE_VALIDATOR = Compile(MARKETPLACE_SCHEMA);
+
+/**
+ * NFR-8 / Phase 7 D-14: single domain seam for reading marketplace manifests.
+ *
+ * Future mtime-based caching wraps this function. Keep this function focused
+ * on path-based marketplace.json reads only: no cache state, invalidation, or
+ * caller-specific error wrapping belongs here.
+ */
+export async function loadMarketplaceManifest(manifestPath: string): Promise<MarketplaceManifest> {
+  const raw = await readFile(manifestPath, "utf8");
+  const parsed: unknown = JSON.parse(raw);
+
+  if (!MARKETPLACE_VALIDATOR.Check(parsed)) {
+    const firstErr = MARKETPLACE_VALIDATOR.Errors(parsed)[0];
+    const detail = firstErr
+      ? `${firstErr.instancePath || "<root>"}: ${firstErr.message}`
+      : "(no detail)";
+    throw new Error(`marketplace.json schema invalid: ${detail}`);
+  }
+
+  return parsed;
+}
