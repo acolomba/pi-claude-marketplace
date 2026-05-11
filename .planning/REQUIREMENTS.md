@@ -276,7 +276,7 @@
 
 - [ ] **NFR-1**: All disk mutations atomic at file level (tmp + rename or atomic JSON write)
 - [x] **NFR-2**: No fix requires Pi restart; `Run /reload` MUST suffice
-- [ ] **NFR-3**: All operations safe to retry on transient failure (idempotent or fail-clean)
+- [x] **NFR-3**: All operations safe to retry on transient failure (idempotent or fail-clean)
 - [ ] **NFR-4**: Extension MUST work with Node ≥ 22
 - [ ] **NFR-5**: Network access required only for GitHub-source `marketplace add` and `update`/`marketplace update` against GitHub-source marketplaces
 - [ ] **NFR-6**: `npm run check` = typecheck + ESLint + Prettier + tests; successor MUST keep these gates green
@@ -538,7 +538,7 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | IL-5        | Phase 1 | Pending |
 | NFR-1       | Phase 1 | Pending |
 | NFR-2       | Phase 5 | Complete |
-| NFR-3       | Phase 5 | Pending |
+| NFR-3       | Phase 5 | Complete |
 | NFR-4       | Phase 1 | Pending |
 | NFR-5       | Phase 4 | Pending |
 | NFR-6       | Phase 1 | Pending |

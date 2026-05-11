@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Phase 06 complete
-last_updated: "2026-05-11T20:14:19.594Z"
+last_updated: "2026-05-11T20:28:39.568Z"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 51
-  completed_plans: 48
-  percent: 94
+  completed_plans: 49
+  percent: 96
 ---
 
 # Project State
@@ -23,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 07 (integration-pi-wiring) -- EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 
-Progress: [█████████░] 94%
+Progress: [██████████] 96%
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Progress: [█████████░] 94%
 | Phase 07 P01 | 9 min | 3 tasks | 29 files |
 | Phase 07 P02 | 4 min | 3 tasks | 9 files |
 | Phase 07 P03 | 6 min | 2 tasks | 5 files |
+| Phase 07 P04 | 11 min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 07]: NFR-8 manifest mtime caching remains deferred; Plan 07-02 shipped only the domain read seam and architecture gate.
 - [Phase 07]: Completion resolver manifest reads route through the same domain seam as marketplace and plugin orchestrators.
 - [Phase 07]: [Phase 07]: resources_discover now reads staged skills/prompts directly from disk across user and project scopes; index.ts wires the real Pi command/tool/event surface. -- Plan 07-03 replaced the Phase 1 stub with real Pi wiring and made /reload discovery reflect disk state.
+- [Phase 07]: withStateGuard now owns cross-process same-scope mutation safety via a fail-fast proper-lockfile `.state-lock` around load-mutate-save. -- Plan 07-04 satisfies NFR-3 retry safety for concurrent installs.
+- [Phase 07]: Concurrent install race verification uses forked IPC children invoking the real `installPlugin` path and asserts state/disk alignment after one lock-held loser. -- Plan 07-04 established the multi-process test pattern.
 
 ### Pending Todos
 
@@ -94,4 +97,4 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-11T20:14:07.264Z
+Last session: 2026-05-11T20:28:39.561Z
