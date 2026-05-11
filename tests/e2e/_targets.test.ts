@@ -32,7 +32,7 @@ test("07-05 Task 1 :: fixture snapshots live under the full pinned SHA", async (
   await access(path.join(FIXTURE_ROOT, "marketplace.json"));
 
   for (const target of TARGETS) {
-    const fixturePath = path.join(FIXTURE_ROOT, target.sourceDirectory, "plugin.json");
+    const fixturePath = path.join(FIXTURE_ROOT, target.fixtureDirectory, "plugin.json");
     const parsed = JSON.parse(await readFile(fixturePath, "utf8")) as { name?: unknown };
     assert.equal(parsed.name, target.plugin);
   }

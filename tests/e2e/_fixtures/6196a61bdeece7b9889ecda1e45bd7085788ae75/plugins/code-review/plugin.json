@@ -1,0 +1,8 @@
+{
+  "name": "code-review",
+  "description": "Automated code review for pull requests using multiple specialized agents with confidence-based scoring",
+  "author": {
+    "name": "Anthropic",
+    "email": "support@anthropic.com"
+  }
+}

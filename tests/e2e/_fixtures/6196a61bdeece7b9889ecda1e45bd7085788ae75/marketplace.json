@@ -1,0 +1,52 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "claude-plugins-official",
+  "description": "Deterministic Plan 07-05 snapshot of selected anthropics/claude-plugins-official plugins.",
+  "owner": {
+    "name": "Anthropic",
+    "email": "support@anthropic.com"
+  },
+  "plugins": [
+    {
+      "name": "frontend-design",
+      "description": "Create distinctive, production-grade frontend interfaces with high design quality. Generates creative, polished code that avoids generic AI aesthetics.",
+      "author": {
+        "name": "Anthropic",
+        "email": "support@anthropic.com"
+      },
+      "source": "./plugins/frontend-design",
+      "category": "development",
+      "homepage": "https://github.com/anthropics/claude-plugins-public/tree/main/plugins/frontend-design"
+    },
+    {
+      "name": "code-review",
+      "description": "Automated code review for pull requests using multiple specialized agents with confidence-based scoring to filter false positives",
+      "author": {
+        "name": "Anthropic",
+        "email": "support@anthropic.com"
+      },
+      "source": "./plugins/code-review",
+      "category": "productivity",
+      "homepage": "https://github.com/anthropics/claude-plugins-public/tree/main/plugins/code-review"
+    },
+    {
+      "name": "code-simplifier",
+      "description": "Agent that simplifies and refines code for clarity, consistency, and maintainability while preserving functionality. Focuses on recently modified code.",
+      "author": {
+        "name": "Anthropic",
+        "email": "support@anthropic.com"
+      },
+      "source": "./plugins/code-simplifier",
+      "category": "productivity",
+      "homepage": "https://github.com/anthropics/claude-plugins-official/tree/main/plugins/code-simplifier"
+    },
+    {
+      "name": "context7",
+      "description": "Upstash Context7 MCP server for up-to-date documentation lookup. Pull version-specific documentation and code examples directly from source repositories into your LLM context.",
+      "category": "development",
+      "source": "./external_plugins/context7",
+      "homepage": "https://github.com/anthropics/claude-plugins-public/tree/main/external_plugins/context7",
+      "tags": ["community-managed"]
+    }
+  ]
+}
