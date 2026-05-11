@@ -36,6 +36,7 @@ import { unstagePluginAgents } from "../../bridges/agents/index.ts";
 import { unstagePluginCommands } from "../../bridges/commands/index.ts";
 import { unstageMcpServers } from "../../bridges/mcp/index.ts";
 import { unstagePluginSkills } from "../../bridges/skills/index.ts";
+import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import * as defaultGit from "../../platform/git.ts";
 import { MarketplaceAmbiguousScopeError, MarketplaceNotFoundError } from "../../shared/errors.ts";
@@ -324,6 +325,35 @@ export async function resolveScopeFromState(
   }
 
   throw new MarketplaceNotFoundError(mpName, ["user", "project"]);
+}
+
+/**
+ * Plan 06-04 D-02: structural loader for the LLM-tool surface. Walks
+ * loadState across the requested scope set (or both scopes when undefined)
+ * and returns a flat array of {scope, record} tuples. Read-only: no
+ * notifications, no mutation. Used by `edge/handlers/tools.ts` to feed
+ * `claude_marketplace_list` and `claude_marketplace_plugin_list` without
+ * crossing the edge -> persistence import boundary (BLOCK C).
+ *
+ * Returned `record` is the persistence-tier MarketplaceRecord verbatim.
+ * Callers project the fields they need (name, source, plugins map, etc.).
+ */
+export async function loadVisibleMarketplaces(opts: {
+  readonly cwd: string;
+  /** When undefined, enumerate BOTH scopes (SC-6). */
+  readonly scope?: Scope;
+}): Promise<readonly { scope: Scope; record: ExtensionState["marketplaces"][string] }[]> {
+  const scopes: readonly Scope[] = opts.scope !== undefined ? [opts.scope] : ["user", "project"];
+  const out: { scope: Scope; record: ExtensionState["marketplaces"][string] }[] = [];
+  for (const scope of scopes) {
+    const locations = locationsFor(scope, opts.cwd);
+    const state = await loadState(locations.extensionRoot);
+    for (const record of Object.values(state.marketplaces)) {
+      out.push({ scope, record });
+    }
+  }
+
+  return out;
 }
 
 /**
