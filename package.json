@@ -45,7 +45,9 @@
   },
   "scripts": {
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test",
-    "test": "node --test \"tests/**/*.test.ts\"",
+    "test": "node --test \"tests/{architecture,bridges,domain,edge,helpers,orchestrators,persistence,presentation,shared,transaction}/**/*.test.ts\"",
+    "test:e2e": "PI_CM_E2E_REF=pinned node --test \"tests/e2e/**/*.test.ts\"",
+    "test:e2e:nightly": "PI_CM_E2E_REF=main node --test \"tests/e2e/**/*.test.ts\"",
     "test:integration": "node --test \"tests/integration/**/*.test.ts\"",
     "format": "prettier --write \"**/*.{js,json,ts}\"",
     "format:check": "prettier --check \"**/*.{js,json,ts}\"",

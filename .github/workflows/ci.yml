@@ -42,3 +42,12 @@ jobs:
       - name: Run full check pipeline
         # NFR-6: typecheck + ESLint + Prettier + node:test
         run: npm run check
+
+      - name: Run integration tests
+        run: npm run test:integration
+
+      - name: Run pinned e2e tests
+        run: npm run test:e2e
+
+      - name: Validate package manifest
+        run: npm pack --dry-run
