@@ -162,6 +162,7 @@ async function readMarketplaceNamesFile(filePath: string): Promise<readonly stri
 
 interface PluginIndexFileResult {
   readonly rows: readonly PluginIndexRow[];
+  readonly lastRefreshedAt: string;
   /**
    * True when the cache file already contains the TC-8 soft-fail poison row
    * (_loadError set). The caller should hydrate memory with empty rows and
@@ -191,7 +192,12 @@ async function readPluginIndexFile(filePath: string): Promise<PluginIndexFileRes
 
   // Validator narrows `parsed.plugins` to the row shape.
   const isPoisoned = parsed._loadError !== undefined;
-  return { rows: parsed.plugins, isPoisoned };
+  return { rows: parsed.plugins, lastRefreshedAt: parsed.lastRefreshedAt, isPoisoned };
+}
+
+function pluginIndexFileIsFresh(result: PluginIndexFileResult, now: () => number): boolean {
+  const loadedAt = Date.parse(result.lastRefreshedAt);
+  return Number.isFinite(loadedAt) && now() - loadedAt <= PLUGIN_INDEX_TTL_MS;
 }
 
 // ---------------------------------------------------------------------------
@@ -277,15 +283,21 @@ export async function getPluginIndex(
 
   const fromFile = await readPluginIndexFile(pluginCachePath);
   if (fromFile !== undefined) {
-    // Poison rows hydrate as [] without re-running rebuild (TC-8: stay
-    // soft-failed until explicit invalidation; reads return [] forever).
-    if (fromFile.isPoisoned) {
-      memPluginIndex.set(key, { rows: [], loadedAt: now() });
-      return [];
-    }
+    if (!pluginIndexFileIsFresh(fromFile, now)) {
+      // File cache TTL catches status changes made by another Pi process or
+      // by older versions that only invalidated the in-memory entry.
+      memPluginIndex.delete(key);
+    } else {
+      // Poison rows hydrate as [] without re-running rebuild (TC-8: stay
+      // soft-failed until explicit invalidation; reads return [] forever).
+      if (fromFile.isPoisoned) {
+        memPluginIndex.set(key, { rows: [], loadedAt: now() });
+        return [];
+      }
 
-    memPluginIndex.set(key, { rows: fromFile.rows, loadedAt: now() });
-    return fromFile.rows;
+      memPluginIndex.set(key, { rows: fromFile.rows, loadedAt: now() });
+      return fromFile.rows;
+    }
   }
 
   // Rebuild path: TC-8 discriminator vs. TC-9 propagation.

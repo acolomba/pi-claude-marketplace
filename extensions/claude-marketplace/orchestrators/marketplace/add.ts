@@ -47,10 +47,7 @@ import path from "node:path";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import {
-  invalidateMarketplaceCache,
-  invalidateMarketplaceNames,
-} from "../../shared/completion-cache.ts";
+import { dropMarketplaceCache, invalidateMarketplaceNames } from "../../shared/completion-cache.ts";
 import {
   MarketplaceDuplicateNameError,
   StaleSourceCloneError,
@@ -129,7 +126,11 @@ export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void>
   // primary success.
   try {
     await invalidateMarketplaceNames(locations.marketplaceNamesCacheFile, opts.scope);
-    invalidateMarketplaceCache(opts.scope, recordedName);
+    await dropMarketplaceCache(
+      await locations.pluginCacheFile(recordedName),
+      opts.scope,
+      recordedName,
+    );
   } catch (err) {
     notifyWarning(
       opts.ctx,

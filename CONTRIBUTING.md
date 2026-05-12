@@ -15,6 +15,7 @@ The use of generative AI is welcome, provided these conditions are met:
 
 ```bash
 npm install
+git lfs install
 pre-commit install
 pre-commit install --hook-type commit-msg
 ```

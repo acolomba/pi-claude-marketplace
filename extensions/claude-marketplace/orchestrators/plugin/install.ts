@@ -30,7 +30,6 @@
 // remove.ts / update.ts cycle).
 
 import { mkdir } from "node:fs/promises";
-import path from "node:path";
 
 import {
   commitPreparedAgents,
@@ -58,11 +57,10 @@ import {
 import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
-import { computeHashVersion } from "../../domain/version.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../presentation/soft-dep.ts";
-import { invalidateMarketplaceCache } from "../../shared/completion-cache.ts";
+import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import { ConcurrentInstallError, errorMessage } from "../../shared/errors.ts";
 import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
 import { runPhases, type Phase } from "../../transaction/phase-ledger.ts";
@@ -70,7 +68,11 @@ import { formatRollbackError } from "../../transaction/rollback.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { formatErrorWithCauses } from "../marketplace/shared.ts";
 
-import { assertNoCrossPluginConflicts } from "./shared.ts";
+import {
+  assertNoCrossPluginConflicts,
+  pickAgentsSourceDir,
+  resolvePluginVersion,
+} from "./shared.ts";
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
@@ -150,49 +152,6 @@ async function loadCachedMarketplaceManifest(
   manifestPath: string,
 ): Promise<{ name: string; plugins: readonly PluginEntry[] }> {
   return loadMarketplaceManifest(manifestPath);
-}
-
-/**
- * PI-7 version precedence:
- *   1. entry.version  (the marketplace.json plugin entry's `version`)
- *   2. hash-<12hex>   (computeHashVersion over the resolved pluginRoot)
- *
- * The PRD §11 PI-7 wording is "manifest.version > entry.version > hash".
- * In the present codebase the marketplace manifest entry IS the source of
- * truth (there is no separate per-plugin manifest.json at the orchestrator
- * tier -- the plugin.json is consumed by the RESOLVER for componentPath
- * union, not for version). The entry's `version` field is therefore the
- * single "declared" rank above the hash fallback.
- */
-async function resolveInstallVersion(
-  entry: PluginEntry,
-  installable: ResolvedPluginInstallable,
-): Promise<string> {
-  if (typeof entry.version === "string" && entry.version.length > 0) {
-    return entry.version;
-  }
-
-  return computeHashVersion(installable.pluginRoot);
-}
-
-/**
- * Translate the resolver's `componentPaths.agents: readonly string[]` into
- * the bridge's `agentsSourceDir: string` API. The bridge wraps a single
- * directory into a one-element array internally (see bridges/agents/stage.ts
- * step 1). When the resolver produced an empty array (no agents declared
- * and no implicit `agents/` dir), the bridge sentinel "" instructs the
- * bridge to short-circuit discovery without listing the dir.
- *
- * Resolver paths are RELATIVE (validateComponentPath returns `relative`);
- * the bridge expects an ABSOLUTE source dir. Join against pluginRoot here.
- */
-function pickAgentsSourceDir(installable: ResolvedPluginInstallable): string {
-  const first = installable.componentPaths.agents[0];
-  if (first === undefined) {
-    return "";
-  }
-
-  return path.isAbsolute(first) ? first : path.join(installable.pluginRoot, first);
 }
 
 /**
@@ -302,7 +261,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<void> {
       assertNoCrossPluginConflicts(scope, generatedNames, state);
 
       // PI-7 version precedence (entry > hash).
-      const version = await resolveInstallVersion(entry, installable);
+      const version = await resolvePluginVersion(entry, installable);
 
       // Resolve the per-plugin data dir up front; the bridges receive it
       // for ${CLAUDE_PLUGIN_DATA} substitution. The directory itself is
@@ -583,9 +542,9 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<void> {
   // D-03-INV (Plan 06-05): post-state-commit completion-cache invalidation.
   // Plugin moved from "available" -> "installed"; drop the cached plugin
   // index for this marketplace so the next completion read rebuilds with
-  // the new status. Memory-only op; defense-in-depth try/catch.
+  // the new status. Defense-in-depth try/catch.
   try {
-    invalidateMarketplaceCache(scope, marketplace);
+    await dropMarketplaceCache(await locations.pluginCacheFile(marketplace), scope, marketplace);
   } catch (err) {
     notifyWarning(
       ctx,

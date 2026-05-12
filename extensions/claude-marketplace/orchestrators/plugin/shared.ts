@@ -5,18 +5,21 @@
 // that the install / update / uninstall / list orchestrators import to
 // satisfy a single named requirement.
 //
-// Right now this file exports exactly one helper, `assertNoCrossPluginConflicts`
-// (PI-6 / RN-3 cross-bridge name conflict guard). If a second consumer
-// emerges across plugin + marketplace orchestrators, promote helpers to
-// `orchestrators/types.ts` per the Phase 4 D-06 elevation rule.
+// Shared helpers stay here while their consumers are confined to the plugin
+// orchestrator family. If a consumer emerges outside plugin orchestrators,
+// promote the helper to a wider orchestrators/shared surface.
 //
 // Per D-11 import boundaries, this file lives in `orchestrators/plugin/`
-// and may import from `shared/` and `persistence/` (type-only). No
-// imports from `bridges/` or `orchestrators/marketplace/*` for THIS
-// helper.
+// and may import from `domain/`, `shared/`, and `persistence/` (type-only).
+// No imports from `bridges/` or `orchestrators/marketplace/*`.
 
+import path from "node:path";
+
+import { computeHashVersion } from "../../domain/version.ts";
 import { CrossPluginConflictError } from "../../shared/errors.ts";
 
+import type { PluginEntry } from "../../domain/components/plugin.ts";
+import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
 
@@ -31,6 +34,28 @@ export interface CrossPluginGeneratedNames {
   readonly skills: readonly string[];
   readonly commands: readonly string[];
   readonly agents: readonly string[];
+}
+
+/** PI-7 / PUP-3 version precedence: marketplace entry version, then content hash. */
+export async function resolvePluginVersion(
+  entry: PluginEntry,
+  installable: ResolvedPluginInstallable,
+): Promise<string> {
+  if (typeof entry.version === "string" && entry.version.length > 0) {
+    return entry.version;
+  }
+
+  return computeHashVersion(installable.pluginRoot);
+}
+
+/** Bridge adapter for the resolver's `componentPaths.agents` array shape. */
+export function pickAgentsSourceDir(installable: ResolvedPluginInstallable): string {
+  const first = installable.componentPaths.agents[0];
+  if (first === undefined) {
+    return "";
+  }
+
+  return path.isAbsolute(first) ? first : path.join(installable.pluginRoot, first);
 }
 
 function compareNames(a: string, b: string): number {

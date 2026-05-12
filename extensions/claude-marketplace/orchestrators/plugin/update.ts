@@ -38,8 +38,6 @@
 // formatErrorWithCauses, resolveScopeFromState). MUST NOT import from
 // orchestrators/marketplace/{add,remove,list,update,autoupdate}.ts.
 
-import path from "node:path";
-
 import {
   abortPreparedAgents,
   commitPreparedAgents,
@@ -66,11 +64,11 @@ import {
 import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
-import { computeHashVersion } from "../../domain/version.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../presentation/soft-dep.ts";
+import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   appendLeaks,
   errorMessage,
@@ -78,16 +76,22 @@ import {
   type Phase3Failure,
 } from "../../shared/errors.ts";
 import { RECOVERY_PLUGIN_REINSTALL_PREFIX } from "../../shared/markers.ts";
-import { notifyError, notifySuccess } from "../../shared/notify.ts";
+import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import {
   DEFAULT_GIT_OPS,
   formatErrorWithCauses,
+  refreshGitHubClone,
+  renderPartition,
   resolveScopeFromState,
   type GitOps,
 } from "../marketplace/shared.ts";
 
-import { assertNoCrossPluginConflicts } from "./shared.ts";
+import {
+  assertNoCrossPluginConflicts,
+  pickAgentsSourceDir,
+  resolvePluginVersion,
+} from "./shared.ts";
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
@@ -368,7 +372,7 @@ async function preflightUpdate(
   }
 
   const fromVersion = record.version;
-  const toVersion = await resolveUpdateVersion(entry, installable);
+  const toVersion = await resolvePluginVersion(entry, installable);
   if (toVersion === fromVersion) {
     return { partition: "unchanged", name: plugin, fromVersion, toVersion };
   }
@@ -665,6 +669,7 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   // Success: WR-04 fields populated for Phase 4 cascade-side RH-5 composition.
   const stagedAgents = handles.agents.result.recorded.map((r) => r.generatedName);
   const stagedMcpServers = handles.mcp.result.recorded.map((r) => r.generatedName);
+  await dropPluginCompletionCache(args);
   return {
     partition: "updated",
     name: plugin,
@@ -673,6 +678,23 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
     stagedAgents,
     stagedMcpServers,
   };
+}
+
+async function dropPluginCompletionCache(args: ThreePhaseArgs): Promise<void> {
+  try {
+    await dropMarketplaceCache(
+      await args.locations.pluginCacheFile(args.marketplace),
+      args.scope,
+      args.marketplace,
+    );
+  } catch (err) {
+    if (isDirectUpdate(args) && args.ctx !== undefined) {
+      notifyWarning(
+        args.ctx,
+        `Plugin "${args.plugin}" updated; completion cache refresh deferred: ${errorMessage(err)}`,
+      );
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -765,28 +787,6 @@ function isDirectUpdate(args: ThreePhaseArgs): boolean {
   return args.cascade === false;
 }
 
-function renderPartition(
-  lines: string[],
-  label: string,
-  outcomes: readonly PluginUpdateOutcome[],
-  withVersions: boolean,
-): void {
-  if (outcomes.length === 0) {
-    return;
-  }
-
-  lines.push(`${label}:`);
-  for (const o of [...outcomes].sort((a, b) => a.name.localeCompare(b.name))) {
-    if (withVersions && o.fromVersion !== undefined && o.toVersion !== undefined) {
-      lines.push(`  - ${o.name} (${o.fromVersion} → ${o.toVersion})`);
-    } else if (o.notes !== undefined && o.notes.length > 0) {
-      lines.push(`  - ${o.name}: ${o.notes.join("; ")}`);
-    } else {
-      lines.push(`  - ${o.name}`);
-    }
-  }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -858,105 +858,10 @@ async function enumerateMarketplaceTarget(
   }));
 }
 
-/**
- * D-14 follow-upstream-blindly sequence for GitHub-source clones. Mirrors
- * Phase 4 marketplace/update.ts::refreshGitHubClone but inlined here since
- * Phase 4 did not export it (D-11 import boundary).
- */
-async function refreshGitHubClone(
-  cloneDir: string,
-  storedRef: string | undefined,
-  gitOps: GitOps,
-): Promise<void> {
-  await gitOps.fetch({
-    dir: cloneDir,
-    remote: "origin",
-    ...(storedRef !== undefined && { ref: storedRef }),
-  });
-
-  if (storedRef === undefined) {
-    // Default-branch tracking.
-    const remoteSha = await gitOps.resolveRef({
-      dir: cloneDir,
-      ref: "refs/remotes/origin/HEAD",
-    });
-    const localBranch = await gitOps.currentBranch({ dir: cloneDir });
-    if (localBranch === undefined) {
-      // Detached HEAD: check out the remote SHA directly.
-      await gitOps.checkout({ dir: cloneDir, ref: remoteSha });
-      return;
-    }
-
-    await gitOps.forceUpdateRef({
-      dir: cloneDir,
-      ref: `refs/heads/${localBranch}`,
-      value: remoteSha,
-    });
-    await gitOps.checkout({ dir: cloneDir, ref: localBranch });
-    return;
-  }
-
-  // Probe whether storedRef is a branch on origin.
-  let remoteSha: string | undefined;
-  try {
-    remoteSha = await gitOps.resolveRef({
-      dir: cloneDir,
-      ref: `refs/remotes/origin/${storedRef}`,
-    });
-  } catch {
-    remoteSha = undefined;
-  }
-
-  if (remoteSha === undefined) {
-    // Detached HEAD path: storedRef is a tag/SHA.
-    await gitOps.checkout({ dir: cloneDir, ref: storedRef });
-  } else {
-    await gitOps.forceUpdateRef({
-      dir: cloneDir,
-      ref: `refs/heads/${storedRef}`,
-      value: remoteSha,
-    });
-    await gitOps.checkout({ dir: cloneDir, ref: storedRef });
-  }
-}
-
 async function loadCachedMarketplaceManifest(
   manifestPath: string,
 ): Promise<{ name: string; plugins: readonly PluginEntry[] }> {
   return loadMarketplaceManifest(manifestPath);
-}
-
-/**
- * PI-7-symmetric version precedence for the update path. The PRD §11 PI-7
- * contract is "entry.version > hash"; on update, an entry that previously
- * carried `entry.version: "1.0.0"` may have been bumped to `"1.1.0"`, OR
- * may have lost its version field entirely (manifest author error). In the
- * latter case we fall back to the hash; the comparison with `record.version`
- * is STRING equality (PUP-3).
- */
-async function resolveUpdateVersion(
-  entry: PluginEntry,
-  installable: ResolvedPluginInstallable,
-): Promise<string> {
-  if (typeof entry.version === "string" && entry.version.length > 0) {
-    return entry.version;
-  }
-
-  return computeHashVersion(installable.pluginRoot);
-}
-
-/**
- * Translate the resolver's `componentPaths.agents: readonly string[]` into
- * the bridge's `agentsSourceDir: string` API. Empty array -> "" sentinel
- * (no agents component). First-element wins (mirrors install.ts).
- */
-function pickAgentsSourceDir(installable: ResolvedPluginInstallable): string {
-  const first = installable.componentPaths.agents[0];
-  if (first === undefined) {
-    return "";
-  }
-
-  return path.isAbsolute(first) ? first : path.join(installable.pluginRoot, first);
 }
 
 /**

@@ -2,11 +2,17 @@
 
 [![CI](https://github.com/acolomba/pi-claude-marketplace/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/acolomba/pi-claude-marketplace/actions/workflows/ci.yml) [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=alert_status)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=coverage)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Bugs](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=bugs)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=code_smells)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=sqale_rating)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=reliability_rating)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=security_rating)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace)
 
-Access Claude plugin marketplaces from Pi Coding Agent.
+Access the Claude plugin marketplaces from Pi Coding Agent.
+
+<!-- markdownlint-disable MD033 -->
+
+<video src="demos/marketplace-add-plugin-install.mp4" width="720" controls/>
+
+<!-- markdownlint-enable MD033 -->
 
 ## Features
 
-Install plugins from the Claude plugin marketplace with these components:
+Installs plugins from the Claude plugin marketplace that contain these components:
 
 - Commands.
 - Skills.
@@ -148,7 +154,7 @@ Refresh one marketplace, or all marketplaces when no name is provided:
 /claude:plugin marketplace update
 ```
 
-Remove a marketplace and any plugins installed from it:
+Remove a marketplace and all plugins installed from it:
 
 ```text
 /claude:plugin marketplace remove claude-plugins-official
@@ -222,6 +228,12 @@ Install pre-commit hooks:
 ```bash
 pre-commit install
 pre-commit install --hook-type commit-msg
+```
+
+Enable Git LFS for large binary assets such as images and videos:
+
+```bash
+git lfs install
 ```
 
 Build with:

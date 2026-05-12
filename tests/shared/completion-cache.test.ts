@@ -260,6 +260,39 @@ test("D-03-TTL :: getPluginIndex re-reads file after 10-min TTL via injected clo
   });
 });
 
+test("D-03-TTL :: stale plugin-index file rebuilds instead of serving old statuses", async () => {
+  __resetCacheForTests();
+  await withTempDir(async (dir) => {
+    const filePath = path.join(dir, "plugins", "mp-a.json");
+    const clock = 1_000_000;
+    let rebuildCalls = 0;
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        schemaVersion: 1,
+        lastRefreshedAt: new Date(clock - 10 * 60 * 1000 - 1).toISOString(),
+        plugins: [{ name: "before", status: "available" }],
+      }),
+      "utf8",
+    );
+
+    const rows = await getPluginIndex(
+      filePath,
+      "user",
+      "mp-a",
+      () => {
+        rebuildCalls++;
+        return Promise.resolve([{ name: "before", status: "installed" }]);
+      },
+      { now: () => clock },
+    );
+
+    assert.deepEqual(rows, [{ name: "before", status: "installed" }]);
+    assert.equal(rebuildCalls, 1, "stale file cache must rebuild from state/manifest");
+  });
+});
+
 test("D-03-TTL :: getPluginIndex serves in-memory before TTL expiry", async () => {
   __resetCacheForTests();
   await withTempDir(async (dir) => {

@@ -39,7 +39,7 @@ import { rm } from "node:fs/promises";
 import { locationsFor } from "../../persistence/locations.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../presentation/soft-dep.ts";
-import { invalidateMarketplaceCache } from "../../shared/completion-cache.ts";
+import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import { appendLeaks, errorMessage } from "../../shared/errors.ts";
 import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
@@ -154,9 +154,9 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
   // D-03-INV (Plan 06-05): post-state-commit completion-cache invalidation.
   // Plugin moved from "installed" -> "available"; drop the cached plugin
   // index for this marketplace so the next completion read rebuilds with
-  // the new status. Memory-only op; defense-in-depth try/catch.
+  // the new status. Defense-in-depth try/catch.
   try {
-    invalidateMarketplaceCache(scope, marketplace);
+    await dropMarketplaceCache(await locations.pluginCacheFile(marketplace), scope, marketplace);
   } catch (err) {
     notifyWarning(
       ctx,

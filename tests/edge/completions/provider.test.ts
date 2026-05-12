@@ -278,6 +278,28 @@ test("TC-5 :: marketplace remove <here> completes with marketplace names", async
   }
 });
 
+test("TC-5 :: exact marketplace remove token without trailing space completes marketplace names", async () => {
+  __resetCacheForTests();
+  const f = await makeFixture({
+    state: { user: { "mp-a": {} }, project: {} },
+    manifests: { user: {}, project: {} },
+  });
+  try {
+    const items = await getArgumentCompletions("marketplace remove", f.resolver);
+    assert.ok(items !== null);
+    assert.deepEqual(
+      items.map((i) => i.label),
+      ["mp-a"],
+    );
+    assert.deepEqual(
+      items.map((i) => i.value),
+      ["marketplace remove mp-a "],
+    );
+  } finally {
+    await f.cleanup();
+  }
+});
+
 test("TC-5 :: marketplace remove --scope project <here> completes with marketplace names", async () => {
   __resetCacheForTests();
   const f = await makeFixture({
@@ -489,6 +511,36 @@ test("TC-6 :: uninstall <here> -- status filter shows only installed plugins", a
     assert.equal(
       labels.some((l) => l.startsWith("p-avail")),
       false,
+    );
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("TC-6 :: exact uninstall token without trailing space completes installed plugin refs", async () => {
+  __resetCacheForTests();
+  const f = await makeFixture({
+    state: { user: { mp: {} }, project: {} },
+    manifests: {
+      user: {
+        mp: [
+          { name: "p-installed", status: "installed" },
+          { name: "p-avail", status: "available" },
+        ],
+      },
+      project: {},
+    },
+  });
+  try {
+    const items = await getArgumentCompletions("uninstall", f.resolver);
+    assert.ok(items !== null);
+    assert.deepEqual(
+      items.map((i) => i.label),
+      ["p-installed@mp"],
+    );
+    assert.deepEqual(
+      items.map((i) => i.value),
+      ["uninstall p-installed@mp "],
     );
   } finally {
     await f.cleanup();

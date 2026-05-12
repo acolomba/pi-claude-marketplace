@@ -45,6 +45,7 @@ import type { UnstageAgentFailure } from "../../bridges/agents/types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { PluginUpdateOutcome } from "../types.ts";
 
 /**
  * CR-06: AG-5 foreign-content failure carries the structured per-agent
@@ -113,6 +114,93 @@ export const DEFAULT_GIT_OPS: GitOps = {
   resolveRef: defaultGit.resolveRef,
   currentBranch: defaultGit.currentBranch,
 };
+
+/**
+ * D-14 follow-upstream-blindly sequence. Three forms:
+ *   - storedRef === undefined (default-branch tracking):
+ *       fetch + resolveRef('refs/remotes/origin/HEAD') + forceUpdateRef + checkout
+ *   - storedRef is a branch on origin (symbolic HEAD):
+ *       fetch + resolveRef('refs/remotes/origin/<ref>') + forceUpdateRef + checkout
+ *   - storedRef is a tag/SHA (detached HEAD):
+ *       fetch + checkout (resolveRef of refs/remotes/origin/<ref> fails, then
+ *       checkout throws if the SHA no longer exists).
+ */
+export async function refreshGitHubClone(
+  cloneDir: string,
+  storedRef: string | undefined,
+  gitOps: GitOps,
+  onFetchSucceeded?: () => void,
+): Promise<void> {
+  await gitOps.fetch({
+    dir: cloneDir,
+    remote: "origin",
+    ...(storedRef !== undefined && { ref: storedRef }),
+  });
+  onFetchSucceeded?.();
+
+  if (storedRef === undefined) {
+    const remoteSha = await gitOps.resolveRef({
+      dir: cloneDir,
+      ref: "refs/remotes/origin/HEAD",
+    });
+    const localBranch = await gitOps.currentBranch({ dir: cloneDir });
+    if (localBranch === undefined) {
+      await gitOps.checkout({ dir: cloneDir, ref: remoteSha });
+      return;
+    }
+
+    await gitOps.forceUpdateRef({
+      dir: cloneDir,
+      ref: `refs/heads/${localBranch}`,
+      value: remoteSha,
+    });
+    await gitOps.checkout({ dir: cloneDir, ref: localBranch });
+    return;
+  }
+
+  let remoteSha: string | undefined;
+  try {
+    remoteSha = await gitOps.resolveRef({
+      dir: cloneDir,
+      ref: `refs/remotes/origin/${storedRef}`,
+    });
+  } catch {
+    remoteSha = undefined;
+  }
+
+  if (remoteSha === undefined) {
+    await gitOps.checkout({ dir: cloneDir, ref: storedRef });
+  } else {
+    await gitOps.forceUpdateRef({
+      dir: cloneDir,
+      ref: `refs/heads/${storedRef}`,
+      value: remoteSha,
+    });
+    await gitOps.checkout({ dir: cloneDir, ref: storedRef });
+  }
+}
+
+export function renderPartition(
+  lines: string[],
+  label: string,
+  outcomes: readonly PluginUpdateOutcome[],
+  withVersions: boolean,
+): void {
+  if (outcomes.length === 0) {
+    return;
+  }
+
+  lines.push(`${label}:`);
+  for (const o of [...outcomes].sort((a, b) => a.name.localeCompare(b.name))) {
+    if (withVersions && o.fromVersion !== undefined && o.toVersion !== undefined) {
+      lines.push(`  - ${o.name} (${o.fromVersion} → ${o.toVersion})`);
+    } else if (o.notes !== undefined && o.notes.length > 0) {
+      lines.push(`  - ${o.name}: ${o.notes.join("; ")}`);
+    } else {
+      lines.push(`  - ${o.name}`);
+    }
+  }
+}
 
 /**
  * D-02, D-03: result of one plugin's cascade through the 4 bridges.

@@ -122,6 +122,30 @@ function marketplaceSubcommandCompletions(current: string, headPrefix: string): 
   }));
 }
 
+function isTopLevelSubcommand(token: string): token is (typeof TOP_LEVEL_SUBCOMMANDS)[number] {
+  return TOP_LEVEL_SUBCOMMANDS.includes(token as (typeof TOP_LEVEL_SUBCOMMANDS)[number]);
+}
+
+function isMarketplaceSubcommand(token: string): token is (typeof MARKETPLACE_SUBCOMMANDS)[number] {
+  return MARKETPLACE_SUBCOMMANDS.includes(token as (typeof MARKETPLACE_SUBCOMMANDS)[number]);
+}
+
+function promoteExactSubcommandToken(parts: { tokens: string[]; current: string }): {
+  tokens: string[];
+  current: string;
+} {
+  const { tokens, current } = parts;
+  if (tokens.length === 0 && isTopLevelSubcommand(current)) {
+    return { tokens: [current], current: "" };
+  }
+
+  if (tokens.length === 1 && tokens[0] === "marketplace" && isMarketplaceSubcommand(current)) {
+    return { tokens: [tokens[0], current], current: "" };
+  }
+
+  return parts;
+}
+
 function marketplaceNameWanted(positionals: readonly string[]): boolean {
   const positionalHead = positionals[0] ?? "";
   return (
@@ -137,7 +161,7 @@ export async function getArgumentCompletions(
   prefix: string,
   resolver: LocationsResolver,
 ): Promise<AutocompleteItem[] | null> {
-  const { tokens, current } = splitCompletionInput(prefix);
+  const { tokens, current } = promoteExactSubcommandToken(splitCompletionInput(prefix));
   const argumentTextPrefix = tokens.join(" ");
   const headPrefix = argumentTextPrefix === "" ? "" : argumentTextPrefix + " ";
 

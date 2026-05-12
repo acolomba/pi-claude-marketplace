@@ -73,7 +73,7 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../presentation/soft-dep.ts";
-import { invalidateMarketplaceCache } from "../../shared/completion-cache.ts";
+import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   MarketplaceNotFoundError,
   MarketplaceUpdateError,
@@ -85,6 +85,8 @@ import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import {
   DEFAULT_GIT_OPS,
   formatErrorWithCauses,
+  refreshGitHubClone,
+  renderPartition,
   resolveScopeFromState,
   type GitOps,
 } from "./shared.ts";
@@ -302,7 +304,7 @@ function appendSoftDepWarnings(
 }
 
 async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
-  const { ctx, name, scope, pluginUpdate, pi } = args;
+  const { ctx, name, scope, locations, pluginUpdate, pi } = args;
 
   let snapshot: { autoupdate: boolean; plugins: readonly string[] };
   try {
@@ -323,9 +325,9 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   // D-03-INV (Plan 06-05): post-state-commit completion-cache invalidation.
   // Manifest refresh may have changed the plugin set; drop the cached
   // plugin index so the next completion read rebuilds from the freshly
-  // updated marketplace.json. Memory-only op; defense-in-depth try/catch.
+  // updated marketplace.json. Defense-in-depth try/catch.
   try {
-    invalidateMarketplaceCache(scope, name);
+    await dropMarketplaceCache(await locations.pluginCacheFile(name), scope, name);
   } catch (err) {
     notifyWarning(
       ctx,
@@ -355,115 +357,6 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
 
   const hint = reloadHint("refresh", updatedNames);
   notifySuccess(ctx, appendReloadHint(body, hint));
-}
-
-function renderPartition(
-  lines: string[],
-  label: string,
-  outcomes: readonly PluginUpdateOutcome[],
-  withVersions: boolean,
-): void {
-  if (outcomes.length === 0) {
-    return;
-  }
-
-  lines.push(`${label}:`);
-  for (const o of [...outcomes].sort((a, b) => a.name.localeCompare(b.name))) {
-    if (withVersions && o.fromVersion !== undefined && o.toVersion !== undefined) {
-      lines.push(`  - ${o.name} (${o.fromVersion} → ${o.toVersion})`);
-    } else if (o.notes !== undefined && o.notes.length > 0) {
-      lines.push(`  - ${o.name}: ${o.notes.join("; ")}`);
-    } else {
-      lines.push(`  - ${o.name}`);
-    }
-  }
-}
-
-/**
- * D-14 follow-upstream-blindly sequence. Three forms:
- *   - storedRef === undefined (default-branch tracking):
- *       fetch + resolveRef('refs/remotes/origin/HEAD') + forceUpdateRef + checkout
- *   - storedRef is a branch on origin (symbolic HEAD):
- *       fetch + resolveRef('refs/remotes/origin/<ref>') + forceUpdateRef + checkout
- *   - storedRef is a tag/SHA (detached HEAD):
- *       fetch + checkout (resolveRef of refs/remotes/origin/<ref> fails →
- *       fall through to detached path; if SHA no longer exists,
- *       checkout throws -- caller wraps as MarketplaceUpdateError).
- */
-async function refreshGitHubClone(
-  cloneDir: string,
-  storedRef: string | undefined,
-  gitOps: GitOps,
-  onFetchSucceeded?: () => void,
-): Promise<void> {
-  // Step 1: fetch (no merge, no working-tree changes -- just refresh remote refs).
-  await gitOps.fetch({
-    dir: cloneDir,
-    remote: "origin",
-    ...(storedRef !== undefined && { ref: storedRef }),
-  });
-  // CR-05: fetch returned cleanly -- signal "clone advanced" to the
-  // caller so any later D-14 step that throws produces the MU-5
-  // "Retry the command." hint. Pre-fetch throws skip this callback.
-  onFetchSucceeded?.();
-
-  if (storedRef === undefined) {
-    // Default-branch tracking. Read remote HEAD's SHA and the symbolic
-    // name of the local branch (e.g. "main"), then force-update
-    // refs/heads/<branch> to that SHA and check out the branch by name.
-    //
-    // CR-01: previously, this path called resolveRef("HEAD") which
-    // returns a SHA, then passed that SHA as the `ref` to
-    // forceUpdateRef -- writing a meaningless `refs/<40-hex>` and
-    // leaving the local branch unchanged. The fix routes through the
-    // `currentBranch` primitive (returns the symbolic name or undefined
-    // for detached HEAD). On detached HEAD the SHA is checked out
-    // directly without writing any local ref.
-    const remoteSha = await gitOps.resolveRef({
-      dir: cloneDir,
-      ref: "refs/remotes/origin/HEAD",
-    });
-    const localBranch = await gitOps.currentBranch({ dir: cloneDir });
-    if (localBranch === undefined) {
-      // Detached HEAD in the local clone -- just check out the remote
-      // SHA directly. No local branch ref to advance.
-      await gitOps.checkout({ dir: cloneDir, ref: remoteSha });
-      return;
-    }
-
-    await gitOps.forceUpdateRef({
-      dir: cloneDir,
-      ref: `refs/heads/${localBranch}`,
-      value: remoteSha,
-    });
-    await gitOps.checkout({ dir: cloneDir, ref: localBranch });
-    return;
-  }
-
-  // Probe whether storedRef is a branch on origin.
-  let remoteSha: string | undefined;
-  try {
-    remoteSha = await gitOps.resolveRef({
-      dir: cloneDir,
-      ref: `refs/remotes/origin/${storedRef}`,
-    });
-  } catch {
-    remoteSha = undefined;
-  }
-
-  if (remoteSha === undefined) {
-    // Detached HEAD path. If the SHA/tag no longer exists, checkout
-    // throws -- caller wraps as MarketplaceUpdateError.
-    await gitOps.checkout({ dir: cloneDir, ref: storedRef });
-  } else {
-    // Symbolic HEAD path.
-    await gitOps.forceUpdateRef({
-      dir: cloneDir,
-      ref: `refs/heads/${storedRef}`,
-      value: remoteSha,
-    });
-    await gitOps.checkout({ dir: cloneDir, ref: storedRef });
-  }
 }
 
 /**
