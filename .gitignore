@@ -1,7 +1,12 @@
 # ai harnesses
-.codex
-.opencode
-.serena
+/.claude/*
+!/.claude/settings.json
+/.codex
+/.opencode
+/.pi/
+/.pi-lens/
+/.ralph/
+/.serena
 
 # build output
 /dist/
@@ -20,11 +25,6 @@ pnpm-debug.log*
 
 # mac
 .DS_Store
-
-# pi state
-/.pi/
-/.pi-lens/
-/.ralph/
 
 # package artifacts
 *.tgz

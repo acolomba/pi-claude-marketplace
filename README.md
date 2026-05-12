@@ -2,18 +2,26 @@
 
 Access Claude plugin marketplaces from Pi Coding Agent.
 
-These Claude Code plugin features are supported:
+## Features
+
+Install plugins from the Claude plugin marketplace with these components:
 
 - Commands.
 - Skills.
 - Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents).
 - MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter)
 
-Plugins that contain unsupported features are marked as "unavailable". The compatible parts may still be installed, but the plugin will not to work as originally intended.
+Plugins that contain unsupported components are marked as "unavailable". The compatible parts may still be installed, but the plugin will not to work as originally intended.
+
+## Prerequisites
+
+- [Pi Coding Agent](https://pi.dev)
+- [pi-subagents](https://pi.dev/packages/pi-subagents) extension (optional but recommended).
+- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) extension (optional but recommended).
 
 ## Usage
 
-Install with:
+Install the Pi extension with:
 
 ```bash
 pi install npm:pi-claude-marketplace
@@ -49,15 +57,15 @@ Then reload:
 /reload
 ```
 
-### Name mapping
+## Name mapping
 
 Command and skill names are prefixed with the plugin name. If the command or skill is already prefixed with the plugin name plus `-`, that common part is elided.
 
-| Plugin | Command or skill name | Pi name   |
-| ------ | --------------------- | --------- |
-| `foo`  | `bar`                 | `foo:bar` |
-| `foo`  | `foo-bar`             | `foo:bar` |
-| `foo`  | `foo`                 | `foo:foo` |
+| Plugin | Command or skill name | Pi name    |
+| ------ | --------------------- | ---------- |
+| `foo`  | `bar`                 | `/foo:bar` |
+| `foo`  | `foo-bar`             | `/foo:bar` |
+| `foo`  | `foo`                 | `/foo:foo` |
 
 Skills can additionally be invoked through Pi's `/skill` command:
 
@@ -75,12 +83,125 @@ MCP server names are not prefixed or rewritten. The server name is the key from 
 | `foo`  | `foo-api`        | `foo-api`                        |
 | `bar`  | `api`            | conflict if `api` already exists |
 
-## Development
+## `/claude:plugin` reference
 
-```bash
-npm install
-npm run check
+This extension mirrors Claude Code's `/plugin` command where Pi exposes the same underlying plugin concepts. Use `/claude:plugin` in Pi for marketplace and plugin operations, then run `/reload` after installing, uninstalling, or updating plugins so Pi discovers the changed resources.
+
+### Marketplace
+
+Add a marketplace from a GitHub repository shorthand, matching Claude Code's common `/plugin marketplace add owner/repo` form:
+
+```text
+/claude:plugin marketplace add anthropics/claude-plugins-official
 ```
+
+Add the same marketplace from a GitHub URL:
+
+```text
+/claude:plugin marketplace add https://github.com/anthropics/claude-plugins-official
+```
+
+Pin a GitHub marketplace to a branch, tag, or commit with a `#ref` suffix:
+
+```text
+/claude:plugin marketplace add https://github.com/anthropics/claude-plugins-official#main
+```
+
+Add a marketplace from the local filesystem. The path may be a directory containing `.claude-plugin/marketplace.json` or a direct path to a `marketplace.json` file:
+
+```text
+/claude:plugin marketplace add ./my-marketplace
+/claude:plugin marketplace add ./my-marketplace/.claude-plugin/marketplace.json
+```
+
+Add a marketplace local to the current project with `--scope project`. The default scope is `user`:
+
+```text
+/claude:plugin marketplace add anthropics/claude-plugins-official --scope project
+```
+
+List configured marketplaces:
+
+```text
+/claude:plugin marketplace list
+/claude:plugin marketplace ls
+```
+
+Refresh one marketplace, or all marketplaces when no name is provided:
+
+```text
+/claude:plugin marketplace update claude-plugins-official
+/claude:plugin marketplace update
+```
+
+Remove a marketplace and any plugins installed from it:
+
+```text
+/claude:plugin marketplace remove claude-plugins-official
+/claude:plugin marketplace rm claude-plugins-official
+```
+
+Toggle marketplace auto-updates:
+
+```text
+/claude:plugin marketplace autoupdate claude-plugins-official
+/claude:plugin marketplace noautoupdate claude-plugins-official
+```
+
+`/claude:plugin marketplace add`, `remove`, `list`, and `update` intentionally follow Claude Code's `/plugin marketplace ...` command shape where this extension supports the same operation. Today this extension accepts GitHub shorthands such as `owner/repo`, GitHub HTTPS URLs, and filesystem paths; arbitrary Git hosts and remote `marketplace.json` URLs are not installable yet.
+
+### Plugin
+
+List plugins available for installation. Omit the marketplace name to list across configured marketplaces:
+
+```text
+/claude:plugin list claude-plugins-official --available
+/claude:plugin list --available
+```
+
+Filter list output by status:
+
+```text
+/claude:plugin list --installed
+/claude:plugin list --available
+/claude:plugin list --unavailable
+```
+
+Install a plugin, using the same `<plugin>@<marketplace>` reference format as Claude Code's `/plugin install`:
+
+```text
+/claude:plugin install pr-review-toolkit@claude-plugins-official
+```
+
+Install into project scope instead of user scope:
+
+```text
+/claude:plugin install pr-review-toolkit@claude-plugins-official --scope project
+```
+
+Update one installed plugin, every installed plugin from one marketplace, or all installed plugins:
+
+```text
+/claude:plugin update pr-review-toolkit@claude-plugins-official
+/claude:plugin update @claude-plugins-official
+/claude:plugin update
+```
+
+Uninstall a plugin:
+
+```text
+/claude:plugin uninstall pr-review-toolkit@claude-plugins-official
+```
+
+Reload Pi after changes:
+
+```text
+/reload
+```
+
+Claude Code users may expect `/reload-plugins`; in Pi, use `/reload`. Claude Code's `/plugin` interactive tabs, plugin enable/disable commands, local scope, hooks, output styles, and LSP server activation are not provided by this extension.
+
+## Development
 
 Install pre-commit hooks:
 
@@ -89,10 +210,23 @@ pre-commit install
 pre-commit install --hook-type commit-msg
 ```
 
+Build with:
+
+```bash
+npm install
+npm run check
+```
+
 ## AI disclaimer
 
-This project was developed with AI agent engineering practices using the [GSD](https://github.com/gsd-build/get-shit-done) spec-driven development system.
+This project is developed with AI agent engineering practices using the [GSD](https://github.com/gsd-build/get-shit-done) spec-driven development system.
 
-A prototype was developed using vibe coding until it was feature-complete, then a PRD was extracted from the implementation, and reviewed by the author.
+The author vibe-coded a prototype until it was feature-complete for a first release, then extracted and reviewed a PRD from the implementation.
 
 The PRD was then used to guide GSD through discussion, planning and implementation phases.
+
+## License
+
+This project is licensed under the MIT License - see the [COPYING](COPYING) file for details
+
+Copyright 2026 [Alessandro Colomba](https://github.com/acolomba)
