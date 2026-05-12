@@ -61,7 +61,7 @@ export function emitYamlScalar(value: string): string {
  * informational; safe to mangle the rare token.
  */
 export function sanitizeProvenance(value: string): string {
-  return value.replace(/-->/g, "--&gt;");
+  return value.replaceAll("-->", "--&gt;");
 }
 
 export interface ParsedFrontmatter {
@@ -183,9 +183,10 @@ export function emitGeneratedAgentFile(input: {
   // inheritProjectContext / inheritSkills are extension-side defaults and
   // intentionally hardcoded -- they describe how this bridge interacts with
   // pi-subagents and are not derived from the source agent.
-  const lines: string[] = [];
-  lines.push(`name: ${frontmatter.name}`);
-  lines.push(`description: ${emitYamlScalar(frontmatter.description)}`);
+  const lines: string[] = [
+    `name: ${frontmatter.name}`,
+    `description: ${emitYamlScalar(frontmatter.description)}`,
+  ];
   if (frontmatter.model !== undefined) {
     lines.push(`model: ${frontmatter.model}`);
   }
@@ -199,33 +200,28 @@ export function emitGeneratedAgentFile(input: {
     lines.push(`skills: ${frontmatter.skills.join(",")}`);
   }
 
-  lines.push("systemPromptMode: replace");
-  lines.push("inheritProjectContext: true");
-  lines.push("inheritSkills: false");
+  lines.push("systemPromptMode: replace", "inheritProjectContext: true", "inheritSkills: false");
   const generatedFrontmatter = "---\n" + lines.join("\n") + "\n---\n";
 
   // Provenance HTML comment. Free-text fields are sanitized so a literal
   // `-->` can't terminate the surrounding HTML comment early.
-  const provenanceLines: string[] = [];
-  provenanceLines.push("<!--");
-  provenanceLines.push(GENERATED_AGENT_MARKER);
-  provenanceLines.push(`plugin: ${provenance.pluginName}`);
-  provenanceLines.push(`sourceAgent: ${provenance.sourceName}`);
-  provenanceLines.push(`sourcePath: ${sanitizeProvenance(provenance.sourcePath)}`);
+  const provenanceLines: string[] = [
+    "<!--",
+    GENERATED_AGENT_MARKER,
+    `plugin: ${provenance.pluginName}`,
+    `sourceAgent: ${provenance.sourceName}`,
+    `sourcePath: ${sanitizeProvenance(provenance.sourcePath)}`,
+  ];
   if (provenance.originalModel !== undefined) {
     provenanceLines.push(`originalModel: ${sanitizeProvenance(provenance.originalModel)}`);
   }
 
   provenanceLines.push(
-    `droppedFields: ${provenance.droppedFields.length > 0 ? sanitizeProvenance(provenance.droppedFields.join(", ")) : "(none)"}`,
+    `droppedFields: ${formatOptionalProvenanceList(provenance.droppedFields)}`,
+    `droppedTools: ${formatOptionalProvenanceList(provenance.droppedTools)}`,
+    `warnings: ${formatOptionalProvenanceList(provenance.warnings)}`,
+    "-->",
   );
-  provenanceLines.push(
-    `droppedTools: ${provenance.droppedTools.length > 0 ? sanitizeProvenance(provenance.droppedTools.join(", ")) : "(none)"}`,
-  );
-  provenanceLines.push(
-    `warnings: ${provenance.warnings.length > 0 ? sanitizeProvenance(provenance.warnings.join(", ")) : "(none)"}`,
-  );
-  provenanceLines.push("-->");
   const provenanceComment = provenanceLines.join("\n") + "\n";
 
   // Body: ensure exactly one leading blank line and a trailing newline so
@@ -236,4 +232,8 @@ export function emitGeneratedAgentFile(input: {
     : bodyWithLeadingBlank + "\n";
 
   return generatedFrontmatter + "\n" + provenanceComment + bodyFinal;
+}
+
+function formatOptionalProvenanceList(values: readonly string[]): string {
+  return values.length === 0 ? "(none)" : sanitizeProvenance(values.join(", "));
 }

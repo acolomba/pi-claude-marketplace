@@ -105,7 +105,7 @@ export async function loadAgentsIndex(loc: ScopedLocations): Promise<LoadedAgent
   try {
     parsed = JSON.parse(text);
   } catch (err) {
-    throw new Error(`Failed to parse agents-index at ${indexPath}: ${errorMessage(err)}`, {
+    throw new TypeError(`Failed to parse agents-index at ${indexPath}: ${errorMessage(err)}`, {
       cause: err,
     });
   }

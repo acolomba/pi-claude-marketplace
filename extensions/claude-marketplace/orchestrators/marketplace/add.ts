@@ -242,12 +242,7 @@ async function addPathInGuard(args: {
   // directory. Expand "~" and "~/..." against os.homedir() before
   // probing on disk. The stored `source.raw` keeps the verbatim "~"
   // form (SP-7); only the on-disk lookup is rewritten.
-  const onDiskPath =
-    source.logical === "~"
-      ? os.homedir()
-      : source.logical.startsWith("~/")
-        ? path.join(os.homedir(), source.logical.slice(2))
-        : source.logical;
+  const onDiskPath = expandTildePath(source.logical);
   const probe = await stat(onDiskPath);
   let manifestPath: string;
   let marketplaceRoot: string;
@@ -286,4 +281,12 @@ async function addPathInGuard(args: {
     plugins: {},
   };
   return derivedName;
+}
+
+function expandTildePath(sourcePath: string): string {
+  if (sourcePath === "~") {
+    return os.homedir();
+  }
+
+  return sourcePath.startsWith("~/") ? path.join(os.homedir(), sourcePath.slice(2)) : sourcePath;
 }

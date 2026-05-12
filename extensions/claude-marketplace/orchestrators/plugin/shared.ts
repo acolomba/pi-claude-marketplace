@@ -37,6 +37,50 @@ function compareNames(a: string, b: string): number {
   return a.localeCompare(b);
 }
 
+function collectOwners(state: ExtensionState): {
+  skillOwners: Map<string, { plugin: string; marketplace: string }>;
+  commandOwners: Map<string, { plugin: string; marketplace: string }>;
+  agentOwners: Map<string, { plugin: string; marketplace: string }>;
+} {
+  const skillOwners = new Map<string, { plugin: string; marketplace: string }>();
+  const commandOwners = new Map<string, { plugin: string; marketplace: string }>();
+  const agentOwners = new Map<string, { plugin: string; marketplace: string }>();
+
+  for (const [mpName, mp] of Object.entries(state.marketplaces)) {
+    for (const [pluginName, plugin] of Object.entries(mp.plugins)) {
+      for (const n of plugin.resources.skills) {
+        skillOwners.set(n, { plugin: pluginName, marketplace: mpName });
+      }
+
+      for (const n of plugin.resources.prompts) {
+        commandOwners.set(n, { plugin: pluginName, marketplace: mpName });
+      }
+
+      for (const n of plugin.resources.agents) {
+        agentOwners.set(n, { plugin: pluginName, marketplace: mpName });
+      }
+    }
+  }
+
+  return { skillOwners, commandOwners, agentOwners };
+}
+
+function collectConflicts(
+  kind: string,
+  names: readonly string[],
+  owners: ReadonlyMap<string, { plugin: string; marketplace: string }>,
+): string[] {
+  const conflicts: string[] = [];
+  for (const n of [...names].sort(compareNames)) {
+    const owner = owners.get(n);
+    if (owner !== undefined) {
+      conflicts.push(`${kind} "${n}" already owned by plugin "${owner.plugin}"`);
+    }
+  }
+
+  return conflicts;
+}
+
 /**
  * PI-6 / RN-3 cross-bridge name conflict guard.
  *
@@ -72,49 +116,12 @@ export function assertNoCrossPluginConflicts(
 ): void {
   // Build owner maps from current state. Key: generated name; Value: owning
   // plugin name (the marketplace pair is also useful in messages; capture both).
-  const skillOwners = new Map<string, { plugin: string; marketplace: string }>();
-  const commandOwners = new Map<string, { plugin: string; marketplace: string }>();
-  const agentOwners = new Map<string, { plugin: string; marketplace: string }>();
-
-  for (const [mpName, mp] of Object.entries(state.marketplaces)) {
-    for (const [pluginName, plugin] of Object.entries(mp.plugins)) {
-      for (const n of plugin.resources.skills) {
-        skillOwners.set(n, { plugin: pluginName, marketplace: mpName });
-      }
-
-      for (const n of plugin.resources.prompts) {
-        commandOwners.set(n, { plugin: pluginName, marketplace: mpName });
-      }
-
-      for (const n of plugin.resources.agents) {
-        agentOwners.set(n, { plugin: pluginName, marketplace: mpName });
-      }
-      // MCP server names INTENTIONALLY skipped per PRD §6.5 / D-05 corollary.
-    }
-  }
-
-  const conflicts: string[] = [];
-
-  for (const n of [...generatedNames.skills].sort(compareNames)) {
-    const owner = skillOwners.get(n);
-    if (owner !== undefined) {
-      conflicts.push(`skill "${n}" already owned by plugin "${owner.plugin}"`);
-    }
-  }
-
-  for (const n of [...generatedNames.commands].sort(compareNames)) {
-    const owner = commandOwners.get(n);
-    if (owner !== undefined) {
-      conflicts.push(`command "${n}" already owned by plugin "${owner.plugin}"`);
-    }
-  }
-
-  for (const n of [...generatedNames.agents].sort(compareNames)) {
-    const owner = agentOwners.get(n);
-    if (owner !== undefined) {
-      conflicts.push(`agent "${n}" already owned by plugin "${owner.plugin}"`);
-    }
-  }
+  const { skillOwners, commandOwners, agentOwners } = collectOwners(state);
+  const conflicts = [
+    ...collectConflicts("skill", generatedNames.skills, skillOwners),
+    ...collectConflicts("command", generatedNames.commands, commandOwners),
+    ...collectConflicts("agent", generatedNames.agents, agentOwners),
+  ];
 
   if (conflicts.length > 0) {
     throw new CrossPluginConflictError(conflicts);

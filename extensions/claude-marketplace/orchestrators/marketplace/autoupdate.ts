@@ -44,6 +44,27 @@ export interface AutoupdateOptions {
   readonly cwd: string;
 }
 
+function shouldCollectNotFound(opts: AutoupdateOptions, err: unknown): boolean {
+  return opts.name !== undefined && err instanceof MarketplaceNotFoundError;
+}
+
+function missingEverywhere(
+  opts: AutoupdateOptions,
+  result: {
+    readonly changed: readonly string[];
+    readonly unchanged: readonly string[];
+    readonly errors: readonly unknown[];
+    readonly scopes: readonly Scope[];
+  },
+): boolean {
+  return (
+    opts.name !== undefined &&
+    result.changed.length === 0 &&
+    result.unchanged.length === 0 &&
+    result.errors.length === result.scopes.length
+  );
+}
+
 export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise<void> {
   const scopes: readonly Scope[] = opts.scope !== undefined ? [opts.scope] : ["user", "project"];
 
@@ -67,7 +88,7 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
       // scope. With SC-6 bare-form, that is expected if the name only
       // lives in the OTHER scope; we collect and only surface if BOTH
       // scopes failed AND no flips happened anywhere.
-      if (!(opts.name !== undefined && err instanceof MarketplaceNotFoundError)) {
+      if (!shouldCollectNotFound(opts, err)) {
         notifyError(opts.ctx, errorMessage(err), err);
         return;
       }
@@ -80,10 +101,12 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
   // from EVERY iterated scope (no changed/unchanged accumulated and
   // every scope errored), surface as a single error.
   if (
-    opts.name !== undefined &&
-    overallChanged.length === 0 &&
-    overallUnchanged.length === 0 &&
-    errors.length === scopes.length
+    missingEverywhere(opts, {
+      changed: overallChanged,
+      unchanged: overallUnchanged,
+      errors,
+      scopes,
+    })
   ) {
     const first = errors[0];
     if (first !== undefined) {

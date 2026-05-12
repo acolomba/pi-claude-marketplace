@@ -83,6 +83,68 @@ function getMcpServers(doc: RawMcpDoc): Record<string, unknown> {
   return m;
 }
 
+function partitionExistingServers(
+  existing: Record<string, unknown>,
+  pluginName: string,
+  marketplaceName: string,
+): { ours: Set<string>; theirs: Record<string, unknown> } {
+  const ours = new Set<string>();
+  const theirs: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(existing)) {
+    if (isOwnedBy(value, pluginName, marketplaceName)) {
+      ours.add(name);
+    } else {
+      theirs[name] = value;
+    }
+  }
+
+  return { ours, theirs };
+}
+
+async function assertNoMcpCollisions(input: {
+  cwd: string;
+  names: readonly string[];
+  ours: ReadonlySet<string>;
+  theirs: Record<string, unknown>;
+  mcpJsonPath: string;
+}): Promise<void> {
+  if (input.names.length === 0) {
+    return;
+  }
+
+  const effective = await loadEffectiveServerNames(input.cwd);
+  for (const name of input.names) {
+    if (input.ours.has(name)) {
+      continue;
+    }
+
+    const owningPath = effective.get(name);
+    if (owningPath !== undefined && owningPath !== input.mcpJsonPath) {
+      throw new McpServerCollisionError(name, owningPath);
+    }
+
+    if (Object.hasOwn(input.theirs, name)) {
+      throw new McpServerCollisionError(name, input.mcpJsonPath);
+    }
+  }
+}
+
+function stampServers(
+  servers: Record<string, unknown>,
+  pluginName: string,
+  marketplaceName: string,
+): Record<string, unknown> {
+  const marker = buildMarker(pluginName, marketplaceName);
+  const stamped: Record<string, unknown> = {};
+  for (const [name, entry] of Object.entries(servers)) {
+    const entryObj =
+      typeof entry === "object" && entry !== null && !Array.isArray(entry) ? entry : {};
+    stamped[name] = { ...entryObj, [CLAUDE_MARKETPLACE_MARKER_KEY]: marker };
+  }
+
+  return stamped;
+}
+
 /**
  * MC-6 prepare: in-memory only. Reads the scope's `mcp.json`, partitions
  * existing entries by marker, runs the MC-4 cross-slot collision check
@@ -102,37 +164,19 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   const existing = getMcpServers(doc);
 
   // Partition existing into ours-vs-theirs by marker (MC-5).
-  const ours = new Set<string>();
-  const theirs: Record<string, unknown> = {};
-  for (const [name, value] of Object.entries(existing)) {
-    if (isOwnedBy(value, pluginName, marketplaceName)) {
-      ours.add(name);
-    } else {
-      theirs[name] = value;
-    }
-  }
+  const { ours, theirs } = partitionExistingServers(existing, pluginName, marketplaceName);
 
   const newNames = Object.keys(servers);
 
   // MC-4 / RN-5 cross-slot collision check. Self-replace inside own scope
   // is allowed (`ours.has(name)`); otherwise any existing declarer wins.
-  if (newNames.length > 0) {
-    const effective = await loadEffectiveServerNames(cwd);
-    for (const name of newNames) {
-      if (ours.has(name)) {
-        continue;
-      }
-
-      const owningPath = effective.get(name);
-      if (owningPath !== undefined && owningPath !== locations.mcpJsonPath) {
-        throw new McpServerCollisionError(name, owningPath);
-      }
-
-      if (Object.prototype.hasOwnProperty.call(theirs, name)) {
-        throw new McpServerCollisionError(name, locations.mcpJsonPath);
-      }
-    }
-  }
+  await assertNoMcpCollisions({
+    cwd,
+    names: newNames,
+    ours,
+    theirs,
+    mcpJsonPath: locations.mcpJsonPath,
+  });
 
   // AS-8 noop: nothing new AND nothing previously-ours. Don't materialize
   // the file; commit returns the noop result without touching disk.
@@ -146,15 +190,7 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   }
 
   // MC-5 marker stamp -- every new entry carries `_claudeMarketplace`.
-  const marker = buildMarker(pluginName, marketplaceName);
-  const stamped: Record<string, unknown> = {};
-  for (const [name, entry] of Object.entries(servers)) {
-    const entryObj =
-      typeof entry === "object" && entry !== null && !Array.isArray(entry)
-        ? (entry as Record<string, unknown>)
-        : {};
-    stamped[name] = { ...entryObj, [CLAUDE_MARKETPLACE_MARKER_KEY]: marker };
-  }
+  const stamped = stampServers(servers, pluginName, marketplaceName);
 
   // Merge: keep theirs verbatim; replace ours with stamped (or drop if
   // no new servers but ours.size > 0).

@@ -67,6 +67,45 @@ export interface RemoveMarketplaceOptions {
   readonly cascade?: typeof cascadeUnstagePlugin;
 }
 
+function resourcesDropped(dropped: {
+  readonly skills: readonly string[];
+  readonly commands: readonly string[];
+  readonly agents: readonly string[];
+  readonly mcpServers: readonly string[];
+}): boolean {
+  return (
+    dropped.skills.length > 0 ||
+    dropped.commands.length > 0 ||
+    dropped.agents.length > 0 ||
+    dropped.mcpServers.length > 0
+  );
+}
+
+async function removePath(
+  cleanupLeaks: string[],
+  label: string,
+  pathPromise: Promise<string>,
+): Promise<void> {
+  try {
+    await rm(await pathPromise, { recursive: true, force: true });
+  } catch (err) {
+    cleanupLeaks.push(`${label}: ${errorMessage(err)}`);
+  }
+}
+
+function failureWarning(
+  name: string,
+  failedPlugins: readonly { name: string; cause: Error }[],
+): string {
+  const lines: string[] = [`Marketplace "${name}" not fully removed.`, "", "Failed plugins:"];
+  for (const f of failedPlugins) {
+    lines.push(`  - ${f.name}: ${formatErrorWithCauses(f.cause)}`);
+  }
+
+  lines.push("", "Fix the underlying issue and retry.");
+  return lines.join("\n");
+}
+
 export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise<void> {
   const cascade = opts.cascade ?? cascadeUnstagePlugin;
 
@@ -120,12 +159,7 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
       if (outcome.ok) {
         cleanedPluginNames.push(pluginName);
         // RH-1: only count plugins whose resources actually changed.
-        if (
-          outcome.dropped.skills.length > 0 ||
-          outcome.dropped.commands.length > 0 ||
-          outcome.dropped.agents.length > 0 ||
-          outcome.dropped.mcpServers.length > 0
-        ) {
+        if (resourcesDropped(outcome.dropped)) {
           removedPlugins.push(pluginName);
         }
 
@@ -166,38 +200,29 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
 
   // POST-STATE cleanup (MR-5/MR-6/MR-7). Runs OUTSIDE the guard;
   // state.json already saved.
-  const cleanupLeaks: (string | undefined)[] = [];
+  const cleanupLeaks: string[] = [];
   for (const cleaned of cleanedPluginNames) {
-    try {
-      await rm(await locations.pluginDataDir(opts.name, cleaned), {
-        recursive: true,
-        force: true,
-      });
-    } catch (err) {
-      cleanupLeaks.push(`plugin data ${opts.name}/${cleaned}: ${errorMessage(err)}`);
-    }
+    await removePath(
+      cleanupLeaks,
+      `plugin data ${opts.name}/${cleaned}`,
+      locations.pluginDataDir(opts.name, cleaned),
+    );
   }
 
   if (failedPlugins.length === 0) {
-    try {
-      await rm(await locations.marketplaceDataDir(opts.name), {
-        recursive: true,
-        force: true,
-      });
-    } catch (err) {
-      cleanupLeaks.push(`marketplace data ${opts.name}: ${errorMessage(err)}`);
-    }
+    await removePath(
+      cleanupLeaks,
+      `marketplace data ${opts.name}`,
+      locations.marketplaceDataDir(opts.name),
+    );
 
     // MR-7: GitHub clone dirs retained when any plugin failed; here failedPlugins.length === 0.
     if (sourceKindAtRecord === "github") {
-      try {
-        await rm(await locations.sourceCloneDir(opts.name), {
-          recursive: true,
-          force: true,
-        });
-      } catch (err) {
-        cleanupLeaks.push(`source clone ${opts.name}: ${errorMessage(err)}`);
-      }
+      await removePath(
+        cleanupLeaks,
+        `source clone ${opts.name}`,
+        locations.sourceCloneDir(opts.name),
+      );
     }
   }
 
@@ -209,7 +234,7 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
   // contract is "marketplace removed BUT cleanup failed", which is a
   // warning, not an error. Use ctx.ui.notify with severity 'warning'
   // (IL-2) and return cleanly so callers can chain.
-  const realLeaks = cleanupLeaks.filter((l): l is string => l !== undefined);
+  const realLeaks = cleanupLeaks;
   if (realLeaks.length > 0) {
     const aggregated = appendLeaks(
       new Error(
@@ -223,18 +248,7 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
 
   // MR-4 / MR-3: ONE aggregated warning notification when ANY plugin failed.
   if (failedPlugins.length > 0) {
-    const lines: string[] = [
-      `Marketplace "${opts.name}" not fully removed.`,
-      "",
-      "Failed plugins:",
-    ];
-    for (const f of failedPlugins) {
-      lines.push(`  - ${f.name}: ${formatErrorWithCauses(f.cause)}`);
-    }
-
-    lines.push("");
-    lines.push("Fix the underlying issue and retry.");
-    notifyWarning(opts.ctx, lines.join("\n"));
+    notifyWarning(opts.ctx, failureWarning(opts.name, failedPlugins));
     return;
   }
 

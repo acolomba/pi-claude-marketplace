@@ -94,35 +94,55 @@ export async function assertPathInside(
   let current = parent;
   for (const segment of segments) {
     current = path.join(current, segment);
-    try {
-      const stats = await lstat(current);
-      if (stats.isSymbolicLink()) {
-        // Read the link target for the error message; ENOENT-tolerant
-        // (the link could vanish between lstat and readlink -- unlikely).
-        let target = "<unreadable>";
-        try {
-          target = await readlink(current);
-        } catch {
-          // Leave target as "<unreadable>" -- the link path itself is what
-          // matters for the user-visible error.
-        }
+    const canContinue = await assertNoSymlinkSegment(parent, child, label, current);
+    if (!canContinue) {
+      return;
+    }
+  }
+}
 
-        throw new SymlinkRefusedError(parent, child, label, current, target);
-      }
-    } catch (err) {
-      // ENOENT on a not-yet-existing leaf is fine: this function is called
-      // BEFORE writes (e.g., creating a new agent file). Only re-raise other
-      // errors (and re-raise our own SymlinkRefusedError, which we just threw).
-      if (err instanceof PathContainmentError) {
-        throw err;
-      }
+async function assertNoSymlinkSegment(
+  parent: string,
+  child: string,
+  label: string,
+  current: string,
+): Promise<boolean> {
+  try {
+    const stats = await lstat(current);
+    if (stats.isSymbolicLink()) {
+      throw new SymlinkRefusedError(
+        parent,
+        child,
+        label,
+        current,
+        await readSymlinkTarget(current),
+      );
+    }
 
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code === "ENOENT") {
-        return;
-      }
-
+    return true;
+  } catch (err) {
+    // ENOENT on a not-yet-existing leaf is fine: this function is called
+    // BEFORE writes (e.g., creating a new agent file). Only re-raise other
+    // errors (and re-raise our own SymlinkRefusedError, which we just threw).
+    if (err instanceof PathContainmentError) {
       throw err;
     }
+
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") {
+      return false;
+    }
+
+    throw err;
+  }
+}
+
+async function readSymlinkTarget(current: string): Promise<string> {
+  try {
+    return await readlink(current);
+  } catch {
+    // Leave target as "<unreadable>" -- the link path itself is what matters
+    // for the user-visible error.
+    return "<unreadable>";
   }
 }

@@ -36,7 +36,7 @@ export interface ListMarketplacesOptions {
 
 export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<void> {
   // SC-6: bare form enumerates both scopes; explicit --scope narrows.
-  const scopes: readonly Scope[] = opts.scope !== undefined ? [opts.scope] : ["user", "project"];
+  const scopes: readonly Scope[] = opts.scope === undefined ? ["user", "project"] : [opts.scope];
 
   const allRecords: MarketplaceListEntry[] = [];
   for (const scope of scopes) {

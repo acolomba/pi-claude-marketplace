@@ -25,10 +25,10 @@ export function assertSafeName(name: string, label?: string): void {
   // When `label` is provided, prepend it (lowercase form for sentence-flow);
   // when omitted, fall back to "Name" so legacy single-arg call sites and
   // their tests keep matching the same regexes.
-  const prefix = label !== undefined ? `${label} ` : "Name ";
+  const prefix = label === undefined ? "Name " : `${label} `;
 
   if (typeof name !== "string") {
-    throw new Error(`${prefix}must be a string (got ${typeof name}).`);
+    throw new TypeError(`${prefix}must be a string (got ${typeof name}).`);
   }
 
   if (name.trim() === "") {
@@ -44,7 +44,7 @@ export function assertSafeName(name: string, label?: string): void {
   }
 
   for (let i = 0; i < name.length; i++) {
-    const code = name.charCodeAt(i);
+    const code = name.codePointAt(i) ?? 0;
 
     if (code < 0x20 || code === 0x7f) {
       throw new Error(`${prefix}"${name}" must not contain ASCII control characters.`);
@@ -60,14 +60,7 @@ export function assertSafeName(name: string, label?: string): void {
  * equal to the plugin name does not elide and becomes acme:acme.
  */
 export function generatedSkillName(plugin: string, source: string): string {
-  assertSafeName(plugin);
-  assertSafeName(source);
-  const prefix = `${plugin}-`;
-  const elided = source.startsWith(prefix) ? source.slice(prefix.length) : source;
-  assertSafeName(elided);
-  const generated = `${plugin}:${elided}`;
-  assertSafeName(generated);
-  return generated;
+  return generatedColonName(plugin, source);
 }
 
 /**
@@ -78,6 +71,10 @@ export function generatedSkillName(plugin: string, source: string): string {
  * elided from `source` (acme + acme-foo -> acme:foo, NOT acme:acme-foo).
  */
 export function generatedCommandName(plugin: string, source: string): string {
+  return generatedColonName(plugin, source);
+}
+
+function generatedColonName(plugin: string, source: string): string {
   assertSafeName(plugin);
   assertSafeName(source);
   const prefix = `${plugin}-`;

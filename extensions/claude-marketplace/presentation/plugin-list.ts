@@ -161,18 +161,22 @@ export function renderPluginList(
 
     out.push(`${scope} scope`);
     for (const mp of mps) {
-      const tag = mp.autoupdate ? " [autoupdate]" : "";
-      out.push(`  ${mp.name}${tag}`);
-      if (mp.plugins.length === 0) {
-        out.push("    (no plugins)");
-        continue;
-      }
-
-      for (const p of mp.plugins) {
-        out.push(renderPluginEntry(p));
-      }
+      appendMarketplaceBlock(out, mp);
     }
   }
 
   return out.join("\n");
+}
+
+function appendMarketplaceBlock(out: string[], mp: PluginListMarketplace): void {
+  const tag = mp.autoupdate ? " [autoupdate]" : "";
+  out.push(`  ${mp.name}${tag}`);
+  if (mp.plugins.length === 0) {
+    out.push("    (no plugins)");
+    return;
+  }
+
+  for (const p of mp.plugins) {
+    out.push(renderPluginEntry(p));
+  }
 }

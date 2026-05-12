@@ -374,9 +374,7 @@ export function convertAgent(input: {
       pluginName,
       sourceName,
       sourcePath,
-      ...(modelResult.originalModel !== undefined
-        ? { originalModel: modelResult.originalModel }
-        : {}),
+      ...(modelResult.originalModel !== undefined && { originalModel: modelResult.originalModel }),
       droppedFields,
       droppedTools: toolsResult.dropped,
       warnings,
@@ -393,9 +391,7 @@ export function convertAgent(input: {
     droppedFields,
     droppedTools: toolsResult.dropped,
     warnings,
-    ...(modelResult.originalModel !== undefined
-      ? { originalModel: modelResult.originalModel }
-      : {}),
+    ...(modelResult.originalModel !== undefined && { originalModel: modelResult.originalModel }),
   };
 
   return result;
@@ -420,7 +416,8 @@ export function assertNoAgentCollisions(
   const collisions: string[] = [];
   for (const [generatedName, sources] of groups) {
     if (sources.length > 1) {
-      collisions.push(`"${generatedName}" <- [${sources.map((s) => `"${s}"`).join(", ")}]`);
+      const quotedSources = sources.map((s) => `"${s}"`).join(", ");
+      collisions.push(`"${generatedName}" <- [${quotedSources}]`);
     }
   }
 

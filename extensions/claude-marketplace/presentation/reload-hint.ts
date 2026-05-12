@@ -35,7 +35,8 @@ export function reloadHint(verb: ReloadVerb, names: readonly string[]): string {
     return `${RELOAD_HINT_PREFIX}${verb} it.`;
   }
 
-  return `${RELOAD_HINT_PREFIX}${verb} ${names.map((n) => `"${n}"`).join(", ")}.`;
+  const quotedNames = names.map((n) => `"${n}"`).join(", ");
+  return `${RELOAD_HINT_PREFIX}${verb} ${quotedNames}.`;
 }
 
 /**

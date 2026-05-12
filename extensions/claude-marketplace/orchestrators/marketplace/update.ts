@@ -132,12 +132,12 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
   const userLocations = locationsFor("user", opts.cwd);
   const projectLocations = locationsFor("project", opts.cwd);
   const resolved =
-    opts.scope !== undefined
-      ? {
+    opts.scope === undefined
+      ? await resolveScopeFromState(opts.name, userLocations, projectLocations)
+      : {
           scope: opts.scope,
           locations: opts.scope === "user" ? userLocations : projectLocations,
-        }
-      : await resolveScopeFromState(opts.name, userLocations, projectLocations);
+        };
 
   await refreshOneMarketplace({
     ctx: opts.ctx,
@@ -156,7 +156,7 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
  */
 export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions): Promise<void> {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
-  const scopes: readonly Scope[] = opts.scope !== undefined ? [opts.scope] : ["user", "project"];
+  const scopes: readonly Scope[] = opts.scope === undefined ? ["user", "project"] : [opts.scope];
 
   // Collect (scope, marketplaceName) pairs from a single fresh state read per scope.
   const targets: { scope: Scope; locations: ScopedLocations; name: string }[] = [];
@@ -198,70 +198,115 @@ interface RefreshOneArgs {
   readonly pi?: ExtensionAPI;
 }
 
+async function refreshRecord(
+  record: ExtensionState["marketplaces"][string],
+  args: RefreshOneArgs,
+): Promise<void> {
+  const { name, locations, gitOps } = args;
+  const source = record.source as ParsedSource;
+  let cloneAdvanced = false;
+  try {
+    if (source.kind === "github") {
+      const cloneDir = await locations.sourceCloneDir(name);
+      await refreshGitHubClone(cloneDir, source.ref, gitOps, () => {
+        cloneAdvanced = true;
+      });
+      await validateManifestAtRoot(record, cloneDir);
+    } else if (source.kind === "path") {
+      await validateManifestAtRoot(record, record.marketplaceRoot);
+    } else {
+      throw new Error(
+        `Cannot update marketplace "${name}": unsupported source kind "${source.kind}"`,
+      );
+    }
+
+    record.lastUpdatedAt = new Date().toISOString();
+  } catch (err) {
+    throw new MarketplaceUpdateError(
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cloneAdvanced is set via callback inside refreshGitHubClone (CR-05).
+      cloneAdvanced
+        ? `Marketplace "${name}" clone advanced but manifest could not be persisted.`
+        : `Failed to update marketplace "${name}".`,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cloneAdvanced is set via callback inside refreshGitHubClone (CR-05).
+      { cause: err, retryHint: cloneAdvanced ? "Retry the command." : "" },
+    );
+  }
+}
+
+async function snapshotAfterRefresh(
+  args: RefreshOneArgs,
+): Promise<{ autoupdate: boolean; plugins: readonly string[] }> {
+  const { name, scope, locations } = args;
+  return withStateGuard(locations, async (state) => {
+    const record = state.marketplaces[name];
+    if (record === undefined) {
+      throw new MarketplaceNotFoundError(name, [scope]);
+    }
+
+    await refreshRecord(record, args);
+    return {
+      autoupdate: record.autoupdate ?? false,
+      plugins: Object.keys(record.plugins),
+    };
+  });
+}
+
+async function cascadeAutoupdates(
+  snapshot: { autoupdate: boolean; plugins: readonly string[] },
+  name: string,
+  scope: Scope,
+  pluginUpdate: PluginUpdateFn | undefined,
+): Promise<Record<PluginUpdateOutcome["partition"], PluginUpdateOutcome[]>> {
+  const partitions: Record<PluginUpdateOutcome["partition"], PluginUpdateOutcome[]> = {
+    updated: [],
+    unchanged: [],
+    skipped: [],
+    failed: [],
+  };
+  if (!snapshot.autoupdate || pluginUpdate === undefined) {
+    return partitions;
+  }
+
+  for (const plugin of snapshot.plugins) {
+    let outcome: PluginUpdateOutcome;
+    try {
+      outcome = await pluginUpdate(plugin, name, scope);
+    } catch (err) {
+      outcome = {
+        partition: "failed",
+        name: plugin,
+        notes: [formatErrorWithCauses(err)],
+      };
+    }
+
+    partitions[outcome.partition].push(outcome);
+  }
+
+  return partitions;
+}
+
+function appendSoftDepWarnings(
+  body: string,
+  pi: ExtensionAPI | undefined,
+  updated: readonly PluginUpdateOutcome[],
+): string {
+  if (pi === undefined) {
+    return body;
+  }
+
+  const stagedAgents = updated.flatMap((o) => o.stagedAgents ?? []);
+  const stagedMcpServers = updated.flatMap((o) => o.stagedMcpServers ?? []);
+  const subagentWarn = subagentWarningIfNeeded(pi, stagedAgents);
+  const mcpWarn = mcpAdapterWarningIfNeeded(pi, stagedMcpServers);
+  return [body, subagentWarn, mcpWarn].filter((line) => line !== "").join("\n");
+}
+
 async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
-  const { ctx, name, scope, locations, gitOps, pluginUpdate, pi } = args;
+  const { ctx, name, scope, pluginUpdate, pi } = args;
 
   let snapshot: { autoupdate: boolean; plugins: readonly string[] };
   try {
-    snapshot = await withStateGuard(locations, async (state) => {
-      const record = state.marketplaces[name];
-      if (record === undefined) {
-        throw new MarketplaceNotFoundError(name, [scope]);
-      }
-
-      // Schema stores `source` as Type.Unknown(); state-io's load funnel
-      // guarantees it has the discriminated `kind` field of ParsedSource.
-      const source = record.source as ParsedSource;
-      let cloneAdvanced = false;
-      try {
-        if (source.kind === "github") {
-          const cloneDir = await locations.sourceCloneDir(name);
-          // MU-5 ordering (CR-05): cloneAdvanced is flipped to true ONLY
-          // after `gitOps.fetch` returns successfully. A pre-fetch
-          // failure (DNS, network unreachable, auth) is unrecoverable
-          // from the user's perspective, so the "Retry the command."
-          // hint would be misleading. refreshGitHubClone fires the
-          // onFetchSucceeded callback the instant fetch returns, so any
-          // later D-14 step throw (forceUpdateRef / checkout) still
-          // produces the retry hint.
-          await refreshGitHubClone(cloneDir, source.ref, gitOps, () => {
-            cloneAdvanced = true;
-          });
-          await validateManifestAtRoot(record, cloneDir);
-        } else if (source.kind === "path") {
-          // NFR-5: NO gitOps. Re-read + re-validate manifest at the
-          // existing on-disk location.
-          await validateManifestAtRoot(record, record.marketplaceRoot);
-        } else {
-          throw new Error(
-            `Cannot update marketplace "${name}": unsupported source kind "${source.kind}"`,
-          );
-        }
-
-        record.lastUpdatedAt = new Date().toISOString();
-      } catch (err) {
-        // MU-5: clone advanced but manifest save failed → retry hint.
-        // For path source or pre-clone failures, retry hint is "".
-        //
-        // ESLint cannot follow the control flow from the
-        // onFetchSucceeded callback (passed to refreshGitHubClone) back
-        // to this scope -- it concludes cloneAdvanced is "always
-        // falsy". Disable the narrowing check here.
-        throw new MarketplaceUpdateError(
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cloneAdvanced is set via callback inside refreshGitHubClone (CR-05).
-          cloneAdvanced
-            ? `Marketplace "${name}" clone advanced but manifest could not be persisted.`
-            : `Failed to update marketplace "${name}".`,
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cloneAdvanced is set via callback inside refreshGitHubClone (CR-05).
-          { cause: err, retryHint: cloneAdvanced ? "Retry the command." : "" },
-        );
-      }
-
-      return {
-        autoupdate: record.autoupdate ?? false,
-        plugins: Object.keys(record.plugins),
-      };
-    });
+    snapshot = await snapshotAfterRefresh(args);
   } catch (err) {
     // MU-5 + ES-4: surface MarketplaceUpdateError or any other failure
     // via notifyError with chained cause. The retryHint is appended
@@ -290,33 +335,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
 
   // CASCADE OUTSIDE the outer guard (D-08). Honors MU-4 literal
   // "persisted before any plugin cascade runs".
-  const partitions: Record<PluginUpdateOutcome["partition"], PluginUpdateOutcome[]> = {
-    updated: [],
-    unchanged: [],
-    skipped: [],
-    failed: [],
-  };
-  if (snapshot.autoupdate && pluginUpdate !== undefined) {
-    // MU-8: enumerate snapshot.plugins (state-driven, NOT manifest-driven).
-    for (const plugin of snapshot.plugins) {
-      let outcome: PluginUpdateOutcome;
-      try {
-        outcome = await pluginUpdate(plugin, name, scope);
-      } catch (err) {
-        // ES-4 / CR-03: walk Error.cause via formatErrorWithCauses so a
-        // chained Error (the entire purpose of the chained-error contract)
-        // does not have its tail truncated when it reaches the MU-7
-        // "Failed:" partition. errorMessage() returns only .message.
-        outcome = {
-          partition: "failed",
-          name: plugin,
-          notes: [formatErrorWithCauses(err)],
-        };
-      }
-
-      partitions[outcome.partition].push(outcome);
-    }
-  }
+  const partitions = await cascadeAutoupdates(snapshot, name, scope, pluginUpdate);
 
   // SUCCESS path composition:
   // - Body lists per-partition results in MU-7 order: updated → unchanged → skipped → failed
@@ -332,43 +351,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     renderPartition(baseLines, "Failed", partitions.failed, false);
   }
 
-  let body = baseLines.join("\n");
-
-  // RH-5: aggregate the per-plugin staged resource lists across
-  // partitions.updated. WR-04: previously this section used a
-  // placeholder `["plugin"]` array that fired the soft-dep warning on
-  // EVERY successful plugin update regardless of whether agents / MCP
-  // servers were actually staged. Now we read stagedAgents /
-  // stagedMcpServers off each PluginUpdateOutcome (optional fields
-  // populated by Phase 5's plugin/update.ts) and only fire the warning
-  // when at least one outcome contributed names.
-  //
-  // When `pi` is not supplied (legacy callers / minimal tests), we
-  // skip the soft-dep composition entirely -- the helpers require an
-  // ExtensionAPI reference.
-  if (pi !== undefined) {
-    const stagedAgents: string[] = [];
-    const stagedMcpServers: string[] = [];
-    for (const o of partitions.updated) {
-      if (o.stagedAgents !== undefined) {
-        stagedAgents.push(...o.stagedAgents);
-      }
-
-      if (o.stagedMcpServers !== undefined) {
-        stagedMcpServers.push(...o.stagedMcpServers);
-      }
-    }
-
-    const subagentWarn = subagentWarningIfNeeded(pi, stagedAgents);
-    const mcpWarn = mcpAdapterWarningIfNeeded(pi, stagedMcpServers);
-    if (subagentWarn !== "") {
-      body = `${body}\n${subagentWarn}`;
-    }
-
-    if (mcpWarn !== "") {
-      body = `${body}\n${mcpWarn}`;
-    }
-  }
+  const body = appendSoftDepWarnings(baseLines.join("\n"), pi, partitions.updated);
 
   const hint = reloadHint("refresh", updatedNames);
   notifySuccess(ctx, appendReloadHint(body, hint));
@@ -468,17 +451,17 @@ async function refreshGitHubClone(
     remoteSha = undefined;
   }
 
-  if (remoteSha !== undefined) {
+  if (remoteSha === undefined) {
+    // Detached HEAD path. If the SHA/tag no longer exists, checkout
+    // throws -- caller wraps as MarketplaceUpdateError.
+    await gitOps.checkout({ dir: cloneDir, ref: storedRef });
+  } else {
     // Symbolic HEAD path.
     await gitOps.forceUpdateRef({
       dir: cloneDir,
       ref: `refs/heads/${storedRef}`,
       value: remoteSha,
     });
-    await gitOps.checkout({ dir: cloneDir, ref: storedRef });
-  } else {
-    // Detached HEAD path. If the SHA/tag no longer exists, checkout
-    // throws -- caller wraps as MarketplaceUpdateError.
     await gitOps.checkout({ dir: cloneDir, ref: storedRef });
   }
 }

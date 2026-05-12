@@ -39,6 +39,42 @@ export interface DiscoverPluginSkillsResult {
   readonly warnings: readonly string[];
 }
 
+async function readEntriesGracefully(dir: string): Promise<Dirent[]> {
+  try {
+    return await readdir(dir, { withFileTypes: true, encoding: "utf8" });
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return [];
+    }
+
+    throw err;
+  }
+}
+
+async function hasRegularSkillFile(skillDir: string): Promise<boolean> {
+  const skillStat = await lstat(path.join(skillDir, "SKILL.md")).catch(() => null);
+  return skillStat?.isFile() === true && !skillStat.isSymbolicLink();
+}
+
+async function isSkillDir(entry: Dirent, skillsDir: string): Promise<boolean> {
+  if (entry.name.startsWith(".") || !entry.isDirectory()) {
+    return false;
+  }
+
+  const full = path.join(skillsDir, entry.name);
+  const stat = await lstat(full);
+  return !stat.isSymbolicLink() && (await hasRegularSkillFile(full));
+}
+
+function duplicateWarning(sourceName: string, skillsDir: string, generatedName: string): string {
+  return (
+    `skill source "${sourceName}" in "${skillsDir}" elides to generated name ` +
+    `"${generatedName}" already produced by an earlier componentPaths.skills entry; ` +
+    `ignoring duplicate.`
+  );
+}
+
 /**
  * Enumerate skill subdirs in `resolved.componentPaths.skills`. The array
  * may be empty (no skills declared and no implicit-by-convention) or
@@ -72,56 +108,24 @@ export async function discoverPluginSkills(input: {
       ? skillsRel
       : path.join(input.resolved.pluginRoot, skillsRel);
 
-    let entries: Dirent[];
-    try {
-      entries = await readdir(skillsDir, { withFileTypes: true, encoding: "utf8" });
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code === "ENOENT" || code === "ENOTDIR") {
-        continue;
-      }
-
-      throw err;
-    }
+    const entries = await readEntriesGracefully(skillsDir);
 
     const sorted = [...entries].sort((a, b) => a.name.localeCompare(b.name));
 
     for (const entry of sorted) {
-      // Skip dotfile-prefixed entries (e.g. `.gitkeep`, `.DS_Store`) -- planner-
-      // resolved hardening; they are never plugin-author-intended skills.
-      if (entry.name.startsWith(".")) {
-        continue;
-      }
-
-      if (!entry.isDirectory()) {
-        continue;
-      }
-
       const full = path.join(skillsDir, entry.name);
 
       // Refuse symlinked skill dirs (RESEARCH "Easy mistakes" #7).
       // readdir's `withFileTypes` reports the link's TYPE (so a symlink to a
       // directory shows isDirectory()=true). lstat is the only way to detect
       // the link itself.
-      const stat = await lstat(full);
-      if (stat.isSymbolicLink()) {
+      if (!(await isSkillDir(entry, skillsDir))) {
         continue;
       }
 
       // Validate the source name (defense in depth -- assertSafeName throws
       // on path separators, control chars, ".."/".").
       assertSafeName(entry.name, `skill directory name in ${skillsDir}`);
-
-      // Require a regular (non-symlink) SKILL.md file.
-      const skillMdPath = path.join(full, "SKILL.md");
-      const skillStat = await lstat(skillMdPath).catch(() => null);
-      if (!skillStat?.isFile()) {
-        continue;
-      }
-
-      if (skillStat.isSymbolicLink()) {
-        continue;
-      }
 
       const generatedName = generatedSkillName(input.pluginName, entry.name);
 
@@ -130,11 +134,7 @@ export async function discoverPluginSkills(input: {
       // RN-6 within-dir source-name collisions are still hard errors at
       // `assertNoSkillCollisions` time.
       if (seenByGenerated.has(generatedName)) {
-        warnings.push(
-          `skill source "${entry.name}" in "${skillsDir}" elides to generated name ` +
-            `"${generatedName}" already produced by an earlier componentPaths.skills entry; ` +
-            `ignoring duplicate.`,
-        );
+        warnings.push(duplicateWarning(entry.name, skillsDir, generatedName));
         continue;
       }
 

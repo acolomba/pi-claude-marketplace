@@ -64,7 +64,8 @@ export function assertNoCommandCollisions(discovered: readonly DiscoveredCommand
 
   for (const [gen, sources] of groups) {
     if (sources.length > 1) {
-      collisions.push(`"${gen}" <- [${sources.map((s) => `"${s}"`).join(", ")}]`);
+      const quotedSources = sources.map((s) => `"${s}"`).join(", ");
+      collisions.push(`"${gen}" <- [${quotedSources}]`);
     }
   }
 

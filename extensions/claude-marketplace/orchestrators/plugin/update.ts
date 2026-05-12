@@ -297,11 +297,26 @@ interface ThreePhaseArgs {
   readonly ctx?: ExtensionContext;
 }
 
-async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOutcome> {
-  const { plugin, marketplace, scope, cwd, locations } = args;
+interface PrepHandles {
+  skills: PreparedSkillsStaging;
+  commands: PreparedCommandsStaging;
+  agents: PreparedAgentsStaging;
+  mcp: PreparedMcpStaging;
+}
 
-  // ─── Pre-phase: resolve current vs new (PUP-3/4/5 short-circuits) ─────────
+interface PluginPreflight {
+  readonly state: ExtensionState;
+  readonly record: ExtensionState["marketplaces"][string]["plugins"][string];
+  readonly entry: PluginEntry;
+  readonly installable: ResolvedPluginInstallable;
+  readonly fromVersion: string;
+  readonly toVersion: string;
+}
 
+async function preflightUpdate(
+  args: ThreePhaseArgs,
+): Promise<PluginPreflight | PluginUpdateOutcome> {
+  const { plugin, marketplace, scope, locations } = args;
   const state = await loadState(locations.extensionRoot);
   const mp = state.marketplaces[marketplace];
   if (mp === undefined) {
@@ -314,17 +329,12 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
 
   const record = mp.plugins[plugin];
   if (record === undefined) {
-    return {
-      partition: "skipped",
-      name: plugin,
-      notes: ["not installed"],
-    };
+    return { partition: "skipped", name: plugin, notes: ["not installed"] };
   }
 
   const manifest = await loadCachedMarketplaceManifest(mp.manifestPath);
   const entryRaw = manifest.plugins.find((p) => p.name === plugin);
   if (entryRaw === undefined) {
-    // PUP-5: entry vanished from refreshed manifest.
     return {
       partition: "skipped",
       name: plugin,
@@ -343,8 +353,6 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   }
 
   const entry: PluginEntry = entryRaw;
-
-  // PUP-4 skipped: requireInstallable throws "is no longer installable" per PR-6.
   let installable: ResolvedPluginInstallable;
   try {
     const resolved = await resolveStrict(entry, { marketplaceRoot: mp.marketplaceRoot });
@@ -359,17 +367,184 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
     };
   }
 
-  // PUP-3 unchanged: STRING equality on version (PI-7; NOT semver).
   const fromVersion = record.version;
   const toVersion = await resolveUpdateVersion(entry, installable);
   if (toVersion === fromVersion) {
-    return {
-      partition: "unchanged",
-      name: plugin,
-      fromVersion,
-      toVersion,
-    };
+    return { partition: "unchanged", name: plugin, fromVersion, toVersion };
   }
+
+  return { state, record, entry, installable, fromVersion, toVersion };
+}
+
+function isOutcome(value: PluginPreflight | PluginUpdateOutcome): value is PluginUpdateOutcome {
+  return "partition" in value;
+}
+
+async function discoverGeneratedNames(
+  plugin: string,
+  installable: ResolvedPluginInstallable,
+): Promise<{
+  skills: readonly string[];
+  commands: readonly string[];
+  agents: readonly string[];
+  agentsSourceDir: string;
+}> {
+  const skillsDiscovery = await discoverPluginSkills({ pluginName: plugin, resolved: installable });
+  const commandsDiscovery = await discoverPluginCommands({
+    pluginName: plugin,
+    resolved: installable,
+  });
+  const agentsSourceDir = pickAgentsSourceDir(installable);
+  const agentsDiscovery =
+    agentsSourceDir === ""
+      ? { discovered: [] as readonly { readonly generatedName: string }[] }
+      : await discoverPluginAgents({ pluginName: plugin, agentsDirs: [agentsSourceDir] });
+
+  return {
+    skills: skillsDiscovery.discovered.map((s) => s.generatedName),
+    commands: commandsDiscovery.discovered.map((c) => c.generatedName),
+    agents: agentsDiscovery.discovered.map((a) => a.generatedName),
+    agentsSourceDir,
+  };
+}
+
+async function prepareUpdateHandles(
+  args: ThreePhaseArgs,
+  preflight: PluginPreflight,
+  agentsSourceDir: string,
+): Promise<PrepHandles> {
+  const { plugin, marketplace, cwd, locations } = args;
+  const { installable, record } = preflight;
+  const pluginDataDir = await locations.pluginDataDir(marketplace, plugin);
+  const handles: Partial<PrepHandles> = {};
+
+  try {
+    handles.skills = await prepareStageSkills({
+      locations,
+      marketplaceName: marketplace,
+      pluginName: plugin,
+      pluginRoot: installable.pluginRoot,
+      pluginDataDir,
+      resolved: installable,
+      previousSkillNames: record.resources.skills,
+    });
+    handles.commands = await prepareStageCommands({
+      locations,
+      marketplaceName: marketplace,
+      pluginName: plugin,
+      pluginRoot: installable.pluginRoot,
+      pluginDataDir,
+      resolved: installable,
+      previousCommandNames: record.resources.prompts,
+    });
+    handles.agents = await prepareStagePluginAgents({
+      locations,
+      marketplaceName: marketplace,
+      pluginName: plugin,
+      pluginRoot: installable.pluginRoot,
+      pluginDataDir,
+      resolved: installable,
+      agentsSourceDir,
+    });
+    handles.mcp = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: marketplace,
+      pluginName: plugin,
+      servers: installable.mcpServers,
+      sourcePath: `${installable.pluginRoot}#mcpServers`,
+    });
+  } catch (err) {
+    throw appendLeaks(err, await abortPartialHandles(handles));
+  }
+
+  return handles as PrepHandles;
+}
+
+async function abortPartialHandles(handles: Partial<PrepHandles>): Promise<(string | undefined)[]> {
+  const leaks: (string | undefined)[] = [];
+  if (handles.mcp !== undefined) {
+    abortPreparedMcp(handles.mcp);
+  }
+
+  if (handles.agents !== undefined) {
+    leaks.push(await abortPreparedAgents(handles.agents));
+  }
+
+  if (handles.commands !== undefined) {
+    await abortPreparedCommands(handles.commands);
+  }
+
+  if (handles.skills !== undefined) {
+    await abortPreparedSkills(handles.skills);
+  }
+
+  return leaks;
+}
+
+async function abortHandles(handles: PrepHandles): Promise<(string | undefined)[]> {
+  abortPreparedMcp(handles.mcp);
+  const leaks = [await abortPreparedAgents(handles.agents)];
+  await abortPreparedCommands(handles.commands);
+  await abortPreparedSkills(handles.skills);
+  return leaks;
+}
+
+async function swapStateRecord(
+  args: ThreePhaseArgs,
+  preflight: PluginPreflight,
+  handles: PrepHandles,
+): Promise<void> {
+  const { plugin, marketplace, locations } = args;
+  const { installable, fromVersion, toVersion } = preflight;
+  await withStateGuard(locations, (s) => {
+    const sMp = s.marketplaces[marketplace];
+    if (sMp === undefined) {
+      throw new Error(
+        `Marketplace "${marketplace}" disappeared from state during update of "${plugin}".`,
+      );
+    }
+
+    const sRecord = sMp.plugins[plugin];
+    if (sRecord === undefined) {
+      throw new Error(`Plugin "${plugin}" was concurrently uninstalled.`);
+    }
+
+    if (sRecord.version !== fromVersion) {
+      throw new Error(
+        `Plugin "${plugin}" was concurrently updated; expected version "${fromVersion}", found "${sRecord.version}".`,
+      );
+    }
+
+    sRecord.version = toVersion;
+    sRecord.resources = {
+      skills: handles.skills.result.recorded.map((r) => r.generatedName),
+      prompts: handles.commands.result.recorded.map((r) => r.generatedName),
+      agents: handles.agents.result.recorded.map((r) => r.generatedName),
+      mcpServers: handles.mcp.result.recorded.map((r) => r.generatedName),
+    };
+    sRecord.compatibility = {
+      installable: true,
+      notes: [...installable.notes],
+      supported: [...installable.supported],
+      unsupported: [...installable.unsupported],
+    };
+    sRecord.resolvedSource = installable.pluginRoot;
+    sRecord.updatedAt = new Date().toISOString();
+  });
+}
+
+async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOutcome> {
+  const { plugin, marketplace, scope } = args;
+
+  // ─── Pre-phase: resolve current vs new (PUP-3/4/5 short-circuits) ─────────
+
+  const preflight = await preflightUpdate(args);
+  if (isOutcome(preflight)) {
+    return preflight;
+  }
+
+  const { installable, fromVersion, toVersion } = preflight;
 
   // ─── Phase 1: prepare into tmp ────────────────────────────────────────────
   //
@@ -384,110 +559,10 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   // conflict (a plugin updating its skill names from {a,b} -> {a,c} would
   // otherwise self-conflict on "a").
 
-  const skillsDiscovery = await discoverPluginSkills({ pluginName: plugin, resolved: installable });
-  const commandsDiscovery = await discoverPluginCommands({
-    pluginName: plugin,
-    resolved: installable,
-  });
-  const agentsSourceDir = pickAgentsSourceDir(installable);
-  const agentsDiscovery =
-    agentsSourceDir === ""
-      ? { discovered: [] as readonly { readonly generatedName: string }[] }
-      : await discoverPluginAgents({ pluginName: plugin, agentsDirs: [agentsSourceDir] });
-
-  const generatedNames = {
-    skills: skillsDiscovery.discovered.map((s) => s.generatedName),
-    commands: commandsDiscovery.discovered.map((c) => c.generatedName),
-    agents: agentsDiscovery.discovered.map((a) => a.generatedName),
-  };
-
-  const stateForGuard = removePluginRecord(state, marketplace, plugin);
+  const generatedNames = await discoverGeneratedNames(plugin, installable);
+  const stateForGuard = removePluginRecord(preflight.state, marketplace, plugin);
   assertNoCrossPluginConflicts(scope, generatedNames, stateForGuard);
-
-  const pluginDataDir = await locations.pluginDataDir(marketplace, plugin);
-
-  interface PrepHandles {
-    skills?: PreparedSkillsStaging;
-    commands?: PreparedCommandsStaging;
-    agents?: PreparedAgentsStaging;
-    mcp?: PreparedMcpStaging;
-  }
-  const handles: PrepHandles = {};
-
-  try {
-    handles.skills = await prepareStageSkills({
-      locations,
-      marketplaceName: marketplace,
-      pluginName: plugin,
-      pluginRoot: installable.pluginRoot,
-      pluginDataDir,
-      resolved: installable,
-      previousSkillNames: record.resources.skills,
-    });
-
-    handles.commands = await prepareStageCommands({
-      locations,
-      marketplaceName: marketplace,
-      pluginName: plugin,
-      pluginRoot: installable.pluginRoot,
-      pluginDataDir,
-      resolved: installable,
-      previousCommandNames: record.resources.prompts,
-    });
-
-    handles.agents = await prepareStagePluginAgents({
-      locations,
-      marketplaceName: marketplace,
-      pluginName: plugin,
-      pluginRoot: installable.pluginRoot,
-      pluginDataDir,
-      resolved: installable,
-      agentsSourceDir,
-    });
-
-    handles.mcp = await prepareStageMcpServers({
-      locations,
-      cwd,
-      marketplaceName: marketplace,
-      pluginName: plugin,
-      servers: installable.mcpServers,
-      sourcePath: `${installable.pluginRoot}#mcpServers`,
-    });
-  } catch (err) {
-    // PUP-7 abort sequencing (reverse order). Pitfall 4: each abort is
-    // guarded individually because the abort signatures differ:
-    //   - abortPreparedMcp:      sync void
-    //   - abortPreparedAgents:   async, returns leak descriptor (string|undefined)
-    //   - abortPreparedCommands: async void
-    //   - abortPreparedSkills:   async void
-    // Collect agents-side leak descriptor via appendLeaks so the ORIGINAL
-    // error is never masked by the cleanup leak.
-    const leaks: (string | undefined)[] = [];
-    if (handles.mcp !== undefined) {
-      abortPreparedMcp(handles.mcp);
-    }
-
-    if (handles.agents !== undefined) {
-      leaks.push(await abortPreparedAgents(handles.agents));
-    }
-
-    if (handles.commands !== undefined) {
-      await abortPreparedCommands(handles.commands);
-    }
-
-    if (handles.skills !== undefined) {
-      await abortPreparedSkills(handles.skills);
-    }
-
-    throw appendLeaks(err, leaks);
-  }
-
-  // After successful phase 1, every handle is defined; capture via locals
-  // so phase 2/3 callsites don't repeat the non-null narrow.
-  const skillsHandle = handles.skills;
-  const commandsHandle = handles.commands;
-  const agentsHandle = handles.agents;
-  const mcpHandle = handles.mcp;
+  const handles = await prepareUpdateHandles(args, preflight, generatedNames.agentsSourceDir);
 
   // ─── Phase 2: state-guard swap (with old-resource snapshot) ───────────────
   //
@@ -502,52 +577,10 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   // <extensionRoot>/resources/skills/, etc.
 
   try {
-    await withStateGuard(locations, (s) => {
-      const sMp = s.marketplaces[marketplace];
-      if (sMp === undefined) {
-        throw new Error(
-          `Marketplace "${marketplace}" disappeared from state during update of "${plugin}".`,
-        );
-      }
-
-      const sRecord = sMp.plugins[plugin];
-      if (sRecord === undefined) {
-        // ST-9: plugin concurrently uninstalled between our load and now.
-        throw new Error(`Plugin "${plugin}" was concurrently uninstalled.`);
-      }
-
-      if (sRecord.version !== fromVersion) {
-        // ST-9: plugin concurrently updated by another process.
-        throw new Error(
-          `Plugin "${plugin}" was concurrently updated; expected version "${fromVersion}", found "${sRecord.version}".`,
-        );
-      }
-
-      // Swap in new resources + version + updatedAt.
-      sRecord.version = toVersion;
-      sRecord.resources = {
-        skills: skillsHandle.result.recorded.map((r) => r.generatedName),
-        prompts: commandsHandle.result.recorded.map((r) => r.generatedName),
-        agents: agentsHandle.result.recorded.map((r) => r.generatedName),
-        mcpServers: mcpHandle.result.recorded.map((r) => r.generatedName),
-      };
-      sRecord.compatibility = {
-        installable: true,
-        notes: [...installable.notes],
-        supported: [...installable.supported],
-        unsupported: [...installable.unsupported],
-      };
-      sRecord.resolvedSource = installable.pluginRoot;
-      sRecord.updatedAt = new Date().toISOString();
-    });
+    await swapStateRecord(args, preflight, handles);
   } catch (err) {
     // Phase 2 failure: abort all prep handles + rethrow.
-    const leaks: (string | undefined)[] = [];
-    abortPreparedMcp(mcpHandle);
-    leaks.push(await abortPreparedAgents(agentsHandle));
-    await abortPreparedCommands(commandsHandle);
-    await abortPreparedSkills(skillsHandle);
-    throw appendLeaks(err, leaks);
+    throw appendLeaks(err, await abortHandles(handles));
   }
 
   // ─── Phase 3a: physical replace; aggregate failures across bridges ────────
@@ -564,7 +597,7 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   const phase3aFailures: Phase3Failure[] = [];
 
   try {
-    const leak = await commitPreparedSkills(skillsHandle);
+    const leak = await commitPreparedSkills(handles.skills);
     if (leak !== undefined) {
       phase3aFailures.push({
         phase: "skills",
@@ -577,13 +610,13 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   }
 
   try {
-    await commitPreparedCommands(commandsHandle);
+    await commitPreparedCommands(handles.commands);
   } catch (err) {
     phase3aFailures.push({ phase: "commands", msg: errorMessage(err), cause: err });
   }
 
   try {
-    const leak = await commitPreparedAgents(agentsHandle);
+    const leak = await commitPreparedAgents(handles.agents);
     if (leak !== undefined) {
       phase3aFailures.push({
         phase: "agents",
@@ -596,7 +629,7 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   }
 
   try {
-    await commitPreparedMcp(mcpHandle);
+    await commitPreparedMcp(handles.mcp);
   } catch (err) {
     phase3aFailures.push({ phase: "mcp", msg: errorMessage(err), cause: err });
   }
@@ -630,8 +663,8 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   }
 
   // Success: WR-04 fields populated for Phase 4 cascade-side RH-5 composition.
-  const stagedAgents = agentsHandle.result.recorded.map((r) => r.generatedName);
-  const stagedMcpServers = mcpHandle.result.recorded.map((r) => r.generatedName);
+  const stagedAgents = handles.agents.result.recorded.map((r) => r.generatedName);
+  const stagedMcpServers = handles.mcp.result.recorded.map((r) => r.generatedName);
   return {
     partition: "updated",
     name: plugin,
@@ -665,63 +698,62 @@ function renderPartitionAndNotify(
 
   // MU-7-equivalent body. The leading summary line is followed by the
   // per-partition listings.
-  const baseLines: string[] = [];
-  if (partitions.updated.length > 0) {
-    baseLines.push(
-      partitions.updated.length === 1
-        ? `Updated plugin "${updatedNames[0] ?? ""}".`
-        : `Updated ${partitions.updated.length.toString()} plugins.`,
-    );
-  } else if (
-    partitions.failed.length === 0 &&
-    partitions.skipped.length === 0 &&
-    partitions.unchanged.length > 0
-  ) {
-    baseLines.push("All targeted plugins are already up to date.");
-  } else if (
-    partitions.failed.length === 0 &&
-    partitions.unchanged.length === 0 &&
-    partitions.skipped.length > 0
-  ) {
-    baseLines.push("No plugins were updated.");
-  } else {
-    baseLines.push("Plugin update complete.");
-  }
-
+  const baseLines: string[] = [partitionSummary(partitions, updatedNames)];
   renderPartition(baseLines, "Updated", partitions.updated, /*withVersions*/ true);
   renderPartition(baseLines, "Unchanged", partitions.unchanged, false);
   renderPartition(baseLines, "Skipped", partitions.skipped, false);
   renderPartition(baseLines, "Failed", partitions.failed, false);
 
-  let body = baseLines.join("\n");
-
-  // RH-5 soft-dep composition: aggregate stagedAgents + stagedMcpServers
-  // across the `updated` partition (matches Phase 4 update.ts).
-  const stagedAgents: string[] = [];
-  const stagedMcpServers: string[] = [];
-  for (const o of partitions.updated) {
-    if (o.stagedAgents !== undefined) {
-      stagedAgents.push(...o.stagedAgents);
-    }
-
-    if (o.stagedMcpServers !== undefined) {
-      stagedMcpServers.push(...o.stagedMcpServers);
-    }
-  }
-
-  const subagentWarn = subagentWarningIfNeeded(pi, stagedAgents);
-  const mcpWarn = mcpAdapterWarningIfNeeded(pi, stagedMcpServers);
-  if (subagentWarn !== "") {
-    body = `${body}\n${subagentWarn}`;
-  }
-
-  if (mcpWarn !== "") {
-    body = `${body}\n${mcpWarn}`;
-  }
+  const body = appendPluginSoftDepWarnings(baseLines.join("\n"), pi, partitions.updated);
 
   // PUP-8 / RH-1 / RH-2: reload hint with verb 'refresh' iff updated[].length > 0.
   const hint = reloadHint("refresh", updatedNames);
   notifySuccess(ctx, appendReloadHint(body, hint));
+}
+
+function partitionSummary(
+  partitions: Record<PluginUpdateOutcome["partition"], PluginUpdateOutcome[]>,
+  updatedNames: readonly string[],
+): string {
+  if (partitions.updated.length > 0) {
+    return partitions.updated.length === 1
+      ? `Updated plugin "${updatedNames[0] ?? ""}."`
+      : `Updated ${partitions.updated.length.toString()} plugins.`;
+  }
+
+  if (
+    partitions.failed.length === 0 &&
+    partitions.skipped.length === 0 &&
+    partitions.unchanged.length > 0
+  ) {
+    return "All targeted plugins are already up to date.";
+  }
+
+  if (
+    partitions.failed.length === 0 &&
+    partitions.unchanged.length === 0 &&
+    partitions.skipped.length > 0
+  ) {
+    return "No plugins were updated.";
+  }
+
+  return "Plugin update complete.";
+}
+
+function appendPluginSoftDepWarnings(
+  body: string,
+  pi: ExtensionAPI,
+  updated: readonly PluginUpdateOutcome[],
+): string {
+  const stagedAgents = updated.flatMap((o) => o.stagedAgents ?? []);
+  const stagedMcpServers = updated.flatMap((o) => o.stagedMcpServers ?? []);
+  return [
+    body,
+    subagentWarningIfNeeded(pi, stagedAgents),
+    mcpAdapterWarningIfNeeded(pi, stagedMcpServers),
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
 }
 
 function renderPartition(
@@ -762,45 +794,12 @@ async function enumerateTargets(opts: UpdatePluginsOptions): Promise<readonly Re
   const explicitScope = opts.scope;
 
   if (target.kind === "plugin" || target.kind === "marketplace") {
-    const mpName = target.marketplace;
-    let scope: Scope;
-    let locations: ScopedLocations;
-    if (explicitScope !== undefined) {
-      scope = explicitScope;
-      locations = locationsFor(scope, cwd);
-      const state = await loadState(locations.extensionRoot);
-      if (state.marketplaces[mpName] === undefined) {
-        throw new Error(`Marketplace "${mpName}" not found in ${scope} scope.`);
-      }
-    } else {
-      const userLocations = locationsFor("user", cwd);
-      const projectLocations = locationsFor("project", cwd);
-      const resolved = await resolveScopeFromState(mpName, userLocations, projectLocations);
-      scope = resolved.scope;
-      locations = resolved.locations;
-    }
-
-    const state = await loadState(locations.extensionRoot);
-    const mp = state.marketplaces[mpName];
-    if (mp === undefined) {
-      throw new Error(`Marketplace "${mpName}" not found in ${scope} scope.`);
-    }
-
-    if (target.kind === "plugin") {
-      return [{ plugin: target.plugin, marketplace: mpName, scope, locations }];
-    }
-
-    return Object.keys(mp.plugins).map((p) => ({
-      plugin: p,
-      marketplace: mpName,
-      scope,
-      locations,
-    }));
+    return enumerateMarketplaceTarget(cwd, explicitScope, target);
   }
 
   // bare form: every installed plugin across selected scope(s).
   const scopes: readonly Scope[] =
-    explicitScope !== undefined ? [explicitScope] : ["user", "project"];
+    explicitScope === undefined ? ["user", "project"] : [explicitScope];
   const out: ResolvedTarget[] = [];
   for (const sc of scopes) {
     const locations = locationsFor(sc, cwd);
@@ -813,6 +812,41 @@ async function enumerateTargets(opts: UpdatePluginsOptions): Promise<readonly Re
   }
 
   return out;
+}
+
+async function enumerateMarketplaceTarget(
+  cwd: string,
+  explicitScope: Scope | undefined,
+  target: Extract<UpdatePluginsTarget, { kind: "plugin" | "marketplace" }>,
+): Promise<readonly ResolvedTarget[]> {
+  const mpName = target.marketplace;
+  const resolved =
+    explicitScope === undefined
+      ? await resolveScopeFromState(mpName, locationsFor("user", cwd), locationsFor("project", cwd))
+      : { scope: explicitScope, locations: locationsFor(explicitScope, cwd) };
+  const state = await loadState(resolved.locations.extensionRoot);
+  const mp = state.marketplaces[mpName];
+  if (mp === undefined) {
+    throw new Error(`Marketplace "${mpName}" not found in ${resolved.scope} scope.`);
+  }
+
+  if (target.kind === "plugin") {
+    return [
+      {
+        plugin: target.plugin,
+        marketplace: mpName,
+        scope: resolved.scope,
+        locations: resolved.locations,
+      },
+    ];
+  }
+
+  return Object.keys(mp.plugins).map((p) => ({
+    plugin: p,
+    marketplace: mpName,
+    scope: resolved.scope,
+    locations: resolved.locations,
+  }));
 }
 
 /**
@@ -864,15 +898,15 @@ async function refreshGitHubClone(
     remoteSha = undefined;
   }
 
-  if (remoteSha !== undefined) {
+  if (remoteSha === undefined) {
+    // Detached HEAD path: storedRef is a tag/SHA.
+    await gitOps.checkout({ dir: cloneDir, ref: storedRef });
+  } else {
     await gitOps.forceUpdateRef({
       dir: cloneDir,
       ref: `refs/heads/${storedRef}`,
       value: remoteSha,
     });
-    await gitOps.checkout({ dir: cloneDir, ref: storedRef });
-  } else {
-    // Detached HEAD path: storedRef is a tag/SHA.
     await gitOps.checkout({ dir: cloneDir, ref: storedRef });
   }
 }

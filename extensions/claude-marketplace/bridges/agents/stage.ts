@@ -169,15 +169,15 @@ export async function prepareStagePluginAgents(
   const foreignPreservedEntries: AgentsIndexEntry[] = [];
   for (const entry of previousEntries) {
     const safety = await isOwnedAgentFile(entry.targetPath);
-    if (!safety.ok) {
+    if (safety.ok) {
+      safePreviousEntries.push(entry);
+    } else {
       ag5Failures.push({
         generatedName: entry.generatedName,
         targetPath: entry.targetPath,
         reason: safety.reason,
       });
       foreignPreservedEntries.push(entry);
-    } else {
-      safePreviousEntries.push(entry);
     }
   }
 

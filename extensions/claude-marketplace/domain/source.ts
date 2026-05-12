@@ -167,49 +167,47 @@ function npmObjectSource(obj: Record<string, unknown>): ParsedSource {
   };
 }
 
-function parseObjectPluginSource(raw: Record<string, unknown>): ParsedSource {
-  if (typeof raw.kind === "string") {
-    switch (raw.kind) {
-      case "path": {
-        const value = optionalString(raw, "raw") ?? optionalString(raw, "logical");
-        return value === undefined
-          ? unknownObjectSource(raw, "path source is missing raw")
-          : pathSource(value);
-      }
-
-      case "github": {
-        const value = optionalString(raw, "raw");
-        return value === undefined
-          ? unknownObjectSource(raw, "github source is missing raw")
-          : githubObjectSource(value, raw);
-      }
-
-      case "url":
-        return urlObjectSource(raw);
-
-      case "git-subdir":
-        return gitSubdirObjectSource(raw);
-
-      case "npm":
-        return npmObjectSource(raw);
-
-      case "unknown":
-        return {
-          kind: "unknown",
-          raw: typeof raw.raw === "string" ? raw.raw : JSON.stringify(raw),
-          reason: typeof raw.reason === "string" ? raw.reason : "unknown source missing reason",
-        };
-
-      default:
-        return unknownObjectSource(raw, `unrecognized source kind: ${raw.kind}`);
+function parseKindObjectSource(raw: Record<string, unknown>, kind: string): ParsedSource {
+  switch (kind) {
+    case "path": {
+      const value = optionalString(raw, "raw") ?? optionalString(raw, "logical");
+      return value === undefined
+        ? unknownObjectSource(raw, "path source is missing raw")
+        : pathSource(value);
     }
-  }
 
-  const discriminator = raw.source;
-  if (typeof discriminator !== "string") {
-    return unknownObjectSource(raw, "object source is missing source discriminator");
-  }
+    case "github": {
+      const value = optionalString(raw, "raw");
+      return value === undefined
+        ? unknownObjectSource(raw, "github source is missing raw")
+        : githubObjectSource(value, raw);
+    }
 
+    case "url":
+      return urlObjectSource(raw);
+
+    case "git-subdir":
+      return gitSubdirObjectSource(raw);
+
+    case "npm":
+      return npmObjectSource(raw);
+
+    case "unknown":
+      return {
+        kind: "unknown",
+        raw: typeof raw.raw === "string" ? raw.raw : JSON.stringify(raw),
+        reason: typeof raw.reason === "string" ? raw.reason : "unknown source missing reason",
+      };
+
+    default:
+      return unknownObjectSource(raw, `unrecognized source kind: ${kind}`);
+  }
+}
+
+function parseDiscriminatorObjectSource(
+  raw: Record<string, unknown>,
+  discriminator: string,
+): ParsedSource {
   switch (discriminator) {
     case "github": {
       const repo = optionalString(raw, "repo");
@@ -230,6 +228,19 @@ function parseObjectPluginSource(raw: Record<string, unknown>): ParsedSource {
     default:
       return unknownObjectSource(raw, `unrecognized source kind: ${discriminator}`);
   }
+}
+
+function parseObjectPluginSource(raw: Record<string, unknown>): ParsedSource {
+  if (typeof raw.kind === "string") {
+    return parseKindObjectSource(raw, raw.kind);
+  }
+
+  const discriminator = raw.source;
+  if (typeof discriminator !== "string") {
+    return unknownObjectSource(raw, "object source is missing source discriminator");
+  }
+
+  return parseDiscriminatorObjectSource(raw, discriminator);
 }
 
 export function parsePluginSource(raw: unknown): ParsedSource {

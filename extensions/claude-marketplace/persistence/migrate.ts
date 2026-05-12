@@ -33,6 +33,67 @@ export interface MigrationResult {
   readonly mutated: boolean;
 }
 
+function ensureMarketplacePaths(
+  mpName: string,
+  mp: Record<string, unknown>,
+  extensionRoot: string,
+): boolean {
+  let mutated = false;
+  if (mp.manifestPath === undefined) {
+    mp.manifestPath = path.join(
+      extensionRoot,
+      "sources",
+      mpName,
+      ".claude-plugin",
+      "marketplace.json",
+    );
+    mutated = true;
+  }
+
+  if (mp.marketplaceRoot === undefined) {
+    mp.marketplaceRoot = path.join(extensionRoot, "sources", mpName);
+    mutated = true;
+  }
+
+  return mutated;
+}
+
+function ensurePluginResources(mp: Record<string, unknown>): boolean {
+  const plugins = mp.plugins;
+  if (typeof plugins !== "object" || plugins === null || Array.isArray(plugins)) {
+    return false;
+  }
+
+  let mutated = false;
+  for (const plRaw of Object.values(plugins as Record<string, unknown>)) {
+    if (typeof plRaw !== "object" || plRaw === null || Array.isArray(plRaw)) {
+      continue;
+    }
+
+    const pl = plRaw as Record<string, unknown>;
+    const resources =
+      typeof pl.resources === "object" && pl.resources !== null
+        ? (pl.resources as Record<string, unknown>)
+        : {};
+    if (pl.resources !== resources) {
+      pl.resources = resources;
+      mutated = true;
+    }
+
+    if (resources.agents === undefined) {
+      resources.agents = [];
+      mutated = true;
+    }
+
+    if (resources.mcpServers === undefined) {
+      resources.mcpServers = [];
+      mutated = true;
+    }
+  }
+
+  return mutated;
+}
+
 /**
  * Normalize a parsed state.json's `marketplaces` map to the current shape.
  *
@@ -83,53 +144,8 @@ export function migrateLegacyMarketplaceRecords(
 
     const mp = mpRaw as Record<string, unknown>;
 
-    // ST-4: derive default manifestPath / marketplaceRoot if absent.
-    if (mp.manifestPath === undefined) {
-      mp.manifestPath = path.join(
-        extensionRoot,
-        "sources",
-        mpName,
-        ".claude-plugin",
-        "marketplace.json",
-      );
-      mutated = true;
-    }
-
-    if (mp.marketplaceRoot === undefined) {
-      mp.marketplaceRoot = path.join(extensionRoot, "sources", mpName);
-      mutated = true;
-    }
-
-    // ST-5: normalize per-plugin resources.agents / resources.mcpServers to [].
-    const plugins = mp.plugins;
-    if (typeof plugins === "object" && plugins !== null && !Array.isArray(plugins)) {
-      for (const plRaw of Object.values(plugins as Record<string, unknown>)) {
-        if (typeof plRaw !== "object" || plRaw === null || Array.isArray(plRaw)) {
-          continue;
-        }
-
-        const pl = plRaw as Record<string, unknown>;
-        let resources: Record<string, unknown>;
-
-        if (typeof pl.resources === "object" && pl.resources !== null) {
-          resources = pl.resources as Record<string, unknown>;
-        } else {
-          resources = {};
-          pl.resources = resources;
-          mutated = true;
-        }
-
-        if (resources.agents === undefined) {
-          resources.agents = [];
-          mutated = true;
-        }
-
-        if (resources.mcpServers === undefined) {
-          resources.mcpServers = [];
-          mutated = true;
-        }
-      }
-    }
+    mutated = ensureMarketplacePaths(mpName, mp, extensionRoot) || mutated;
+    mutated = ensurePluginResources(mp) || mutated;
 
     marketplaces[mpName] = mp;
   }

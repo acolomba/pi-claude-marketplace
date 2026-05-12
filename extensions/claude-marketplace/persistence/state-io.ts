@@ -105,6 +105,37 @@ function firstValidationErrorDetail(value: unknown): string {
   return `${first.instancePath || "<root>"}: ${first.message}`;
 }
 
+function normalizeStoredSource(mpName: string, mp: Record<string, unknown>): void {
+  const src = mp.source;
+
+  if (typeof src === "string") {
+    const parsedSrc = parsePluginSource(src);
+    if (parsedSrc.kind === "unknown") {
+      throw new Error(
+        `state.json marketplace "${mpName}" has unclassifiable source: ${parsedSrc.reason}`,
+      );
+    }
+
+    mp.source = parsedSrc;
+    return;
+  }
+
+  if (typeof src !== "object" || src === null) {
+    throw new Error(`state.json marketplace "${mpName}" has missing or invalid source`);
+  }
+
+  const obj = src as { kind?: unknown; raw?: unknown };
+  if (obj.kind === "path" && typeof obj.raw === "string") {
+    mp.source = pathSource(obj.raw);
+  } else if (obj.kind === "github" && typeof obj.raw === "string") {
+    mp.source = githubSource(obj.raw);
+  } else if (obj.kind !== "unknown") {
+    throw new Error(
+      `state.json marketplace "${mpName}" has malformed source object (missing kind/raw)`,
+    );
+  }
+}
+
 /**
  * ST-1, ST-4, ST-5, ST-6: load + migrate + revalidate state.json.
  *
@@ -154,34 +185,7 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
     }
 
     const mp = mpRaw as Record<string, unknown>;
-    const src = mp.source;
-
-    if (typeof src === "string") {
-      // V1 legacy: source as raw string -- run through parsePluginSource to classify.
-      const parsedSrc = parsePluginSource(src);
-      if (parsedSrc.kind === "unknown") {
-        throw new Error(
-          `state.json marketplace "${mpName}" has unclassifiable source: ${parsedSrc.reason}`,
-        );
-      }
-
-      mp.source = parsedSrc;
-    } else if (typeof src === "object" && src !== null) {
-      const obj = src as { kind?: unknown; raw?: unknown };
-      if (obj.kind === "path" && typeof obj.raw === "string") {
-        mp.source = pathSource(obj.raw);
-      } else if (obj.kind === "github" && typeof obj.raw === "string") {
-        mp.source = githubSource(obj.raw);
-      } else if (obj.kind === "unknown") {
-        // Forward-compat tail (NFR-12): accept as-is. Resolver later disqualifies.
-      } else {
-        throw new Error(
-          `state.json marketplace "${mpName}" has malformed source object (missing kind/raw)`,
-        );
-      }
-    } else {
-      throw new Error(`state.json marketplace "${mpName}" has missing or invalid source`);
-    }
+    normalizeStoredSource(mpName, mp);
   }
 
   const normalized: unknown = { schemaVersion: 1, marketplaces };

@@ -372,12 +372,7 @@ export function formatErrorWithCauses(err: unknown, maxDepth: number = 5): strin
   for (let depth = 0; depth < maxDepth && current !== undefined; depth++) {
     // Rule 1 deviation from verbatim: `String(current)` violates @typescript-eslint/no-base-to-string
     // on unknown-with-toString. Equivalent semantics via instanceof / typeof / Object.prototype.toString.
-    const message =
-      current instanceof Error
-        ? current.message
-        : typeof current === "string"
-          ? current
-          : Object.prototype.toString.call(current);
+    const message = errorCauseMessage(current);
 
     parts.push(message);
     if (current instanceof Error && current.cause !== undefined && current.cause !== current) {
@@ -388,4 +383,12 @@ export function formatErrorWithCauses(err: unknown, maxDepth: number = 5): strin
   }
 
   return parts.join(" -- caused by: ");
+}
+
+function errorCauseMessage(current: unknown): string {
+  if (current instanceof Error) {
+    return current.message;
+  }
+
+  return typeof current === "string" ? current : Object.prototype.toString.call(current);
 }

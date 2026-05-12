@@ -38,6 +38,36 @@ export interface DiscoverPluginAgentsResult {
   readonly warnings: readonly string[];
 }
 
+async function readEntriesGracefully(dir: string): Promise<Dirent[]> {
+  try {
+    return await readdir(dir, { withFileTypes: true });
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return [];
+    }
+
+    throw err;
+  }
+}
+
+async function isAgentFile(dir: string, entry: Dirent): Promise<boolean> {
+  if (entry.name.startsWith(".") || !entry.isFile() || !entry.name.endsWith(".md")) {
+    return false;
+  }
+
+  const stat = await lstat(path.join(dir, entry.name));
+  return !stat.isSymbolicLink();
+}
+
+function duplicateWarning(sourceName: string, agentsDir: string, generatedName: string): string {
+  return (
+    `agent source "${sourceName}" in "${agentsDir}" elides to generated name ` +
+    `"${generatedName}" already produced by an earlier componentPaths.agents entry; ` +
+    `ignoring duplicate.`
+  );
+}
+
 /**
  * AG-1 / AG-6: discover plugin's agent files (flat, non-recursive).
  *
@@ -59,39 +89,16 @@ export async function discoverPluginAgents(input: {
   const warnings: string[] = [];
 
   for (const agentsDir of agentsDirs) {
-    let entries: Dirent[];
-    try {
-      entries = await readdir(agentsDir, { withFileTypes: true });
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code === "ENOENT" || code === "ENOTDIR") {
-        continue;
-      }
-
-      throw err;
-    }
+    const entries = await readEntriesGracefully(agentsDir);
 
     const sorted = [...entries].sort((a, b) => a.name.localeCompare(b.name));
 
     for (const entry of sorted) {
-      if (entry.name.startsWith(".")) {
-        continue;
-      }
-
-      if (!entry.isFile()) {
-        continue;
-      }
-
-      if (!entry.name.endsWith(".md")) {
-        continue;
-      }
-
       const sourcePath = path.join(agentsDir, entry.name);
       // T-03-27: refuse symlinks before reading the file. lstat-based check
       // (does NOT follow). Symlinks discovered here are skipped silently
       // (V1 behavior); a malicious plugin can't escape via symlink.
-      const stat = await lstat(sourcePath);
-      if (stat.isSymbolicLink()) {
+      if (!(await isAgentFile(agentsDir, entry))) {
         continue;
       }
 
@@ -112,11 +119,7 @@ export async function discoverPluginAgents(input: {
       // collisions on generated name are caught later by
       // `assertNoAgentCollisions` (hard error).
       if (seenByGenerated.has(generatedName)) {
-        warnings.push(
-          `agent source "${sourceName}" in "${agentsDir}" elides to generated name ` +
-            `"${generatedName}" already produced by an earlier componentPaths.agents entry; ` +
-            `ignoring duplicate.`,
-        );
+        warnings.push(duplicateWarning(sourceName, agentsDir, generatedName));
         continue;
       }
 

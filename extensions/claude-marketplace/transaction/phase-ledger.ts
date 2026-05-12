@@ -50,6 +50,31 @@ export interface RunPhasesResult {
   readonly leaks: readonly string[];
 }
 
+async function rollbackExecuted<C>(
+  executed: readonly Phase<C>[],
+  ctx: C,
+): Promise<RollbackPartial[]> {
+  const partials: RollbackPartial[] = [];
+
+  for (const done of executed.slice().reverse()) {
+    if (!done.undo) {
+      continue;
+    }
+
+    try {
+      await done.undo(ctx);
+    } catch (undoErr) {
+      if (undoErr instanceof PathContainmentError) {
+        throw undoErr;
+      }
+
+      partials.push({ phase: done.name, msg: errorMessage(undoErr) });
+    }
+  }
+
+  return partials;
+}
+
 /**
  * Run an ordered ledger of phases. On the first throw, walk the executed
  * phases in REVERSE ORDER calling each phase's `undo` (if present),
@@ -71,25 +96,8 @@ export async function runPhases<C>(phases: readonly Phase<C>[], ctx: C): Promise
       executed.push(phase);
     } catch (err) {
       const original = err instanceof Error ? err : new Error(String(err));
-      const partials: RollbackPartial[] = [];
-
       // Reverse-order undo of every phase that DID succeed.
-      for (const done of executed.slice().reverse()) {
-        if (!done.undo) {
-          continue;
-        }
-
-        try {
-          await done.undo(ctx);
-        } catch (undoErr) {
-          // PI-14: PathContainmentError is loud; never fold into "rollback partial".
-          if (undoErr instanceof PathContainmentError) {
-            throw undoErr;
-          }
-
-          partials.push({ phase: done.name, msg: errorMessage(undoErr) });
-        }
-      }
+      const partials = await rollbackExecuted(executed, ctx);
 
       return {
         ok: false,

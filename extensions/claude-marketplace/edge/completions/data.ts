@@ -109,7 +109,7 @@ export function splitCompletionInput(input: string): { tokens: string[]; current
     return { tokens: allTokens, current: "" };
   }
 
-  const current = allTokens[allTokens.length - 1] ?? "";
+  const current = allTokens.at(-1) ?? "";
   return { tokens: allTokens.slice(0, -1), current };
 }
 
@@ -237,11 +237,7 @@ export async function getPluginToMarketplacesMap(
         rebuildPluginIndex(resolver, scope, mp),
       );
       for (const row of rows) {
-        const keep =
-          (mode === "install" && row.status !== "installed") ||
-          (mode === "uninstall" && row.status === "installed") ||
-          (mode === "update" && row.status === "installed");
-        if (!keep) {
+        if (!statusMatchesMode(mode, row)) {
           continue;
         }
 
@@ -256,6 +252,56 @@ export async function getPluginToMarketplacesMap(
   }
 
   return result;
+}
+
+function statusMatchesMode(mode: "install" | "uninstall" | "update", row: PluginIndexRow): boolean {
+  switch (mode) {
+    case "install":
+      return row.status !== "installed";
+    case "uninstall":
+    case "update":
+      return row.status === "installed";
+  }
+}
+
+async function getPluginHalfCompletions(
+  mode: "install" | "uninstall" | "update",
+  currentPrefix: string,
+  argumentTextPrefix: string,
+  resolver: LocationsResolver,
+): Promise<AutocompleteItem[]> {
+  const map = await getPluginToMarketplacesMap(mode, resolver);
+  const items: AutocompleteItem[] = [];
+  for (const [name, mps] of map) {
+    if (!name.startsWith(currentPrefix)) {
+      continue;
+    }
+
+    if (mps.length === 1 && mps[0] !== undefined) {
+      items.push(buildItem(argumentTextPrefix, `${name}@${mps[0]}`, true));
+      continue;
+    }
+
+    items.push(buildItem(argumentTextPrefix, `${name}@`, false));
+  }
+
+  return items;
+}
+
+async function getMarketplaceOnlyCompletions(
+  marketplacePart: string,
+  argumentTextPrefix: string,
+  resolver: LocationsResolver,
+  allowMarketplaceOnly: boolean,
+): Promise<AutocompleteItem[]> {
+  if (!allowMarketplaceOnly) {
+    return [];
+  }
+
+  const all = await getMarketplaceNamesAcrossScopes(resolver);
+  return all
+    .filter((m) => m.startsWith(marketplacePart))
+    .map((m) => buildItem(argumentTextPrefix, `@${m}`, true));
 }
 
 /**
@@ -282,35 +328,19 @@ export async function getPluginRefCompletions(
   const at = currentPrefix.indexOf("@");
 
   if (at === -1) {
-    const map = await getPluginToMarketplacesMap(mode, resolver);
-    const items: AutocompleteItem[] = [];
-    for (const [name, mps] of map) {
-      if (!name.startsWith(currentPrefix)) {
-        continue;
-      }
-
-      if (mps.length === 1 && mps[0] !== undefined) {
-        items.push(buildItem(argumentTextPrefix, `${name}@${mps[0]}`, true));
-      } else {
-        items.push(buildItem(argumentTextPrefix, `${name}@`, false));
-      }
-    }
-
-    return items;
+    return getPluginHalfCompletions(mode, currentPrefix, argumentTextPrefix, resolver);
   }
 
   const pluginPart = currentPrefix.slice(0, at);
   const marketplacePart = currentPrefix.slice(at + 1);
 
   if (pluginPart === "") {
-    if (!options.allowMarketplaceOnly) {
-      return [];
-    }
-
-    const all = await getMarketplaceNamesAcrossScopes(resolver);
-    return all
-      .filter((m) => m.startsWith(marketplacePart))
-      .map((m) => buildItem(argumentTextPrefix, `@${m}`, true));
+    return getMarketplaceOnlyCompletions(
+      marketplacePart,
+      argumentTextPrefix,
+      resolver,
+      options.allowMarketplaceOnly,
+    );
   }
 
   const map = await getPluginToMarketplacesMap(mode, resolver);

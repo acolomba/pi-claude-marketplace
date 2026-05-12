@@ -77,6 +77,8 @@ export const ResolvedPluginSchema = Type.Union([
 export type ResolvedPluginInstallable = Type.Static<typeof ResolvedPluginInstallableSchema>;
 export type ResolvedPluginNotInstallable = Type.Static<typeof ResolvedPluginNotInstallableSchema>;
 export type ResolvedPlugin = Type.Static<typeof ResolvedPluginSchema>;
+type StatKind = "file" | "dir" | null;
+type StatKindReader = (p: string) => Promise<StatKind>;
 
 // ──────────────────────────────────────────────────────────────────────────
 // Context (injectable for tests)
@@ -85,10 +87,10 @@ export type ResolvedPlugin = Type.Static<typeof ResolvedPluginSchema>;
 export interface ResolveContext {
   readonly marketplaceRoot: string;
   readonly readFileText?: (p: string) => Promise<string>;
-  readonly statKind?: (p: string) => Promise<"file" | "dir" | null>;
+  readonly statKind?: StatKindReader;
 }
 
-async function defaultStatKind(p: string): Promise<"file" | "dir" | null> {
+async function defaultStatKind(p: string): Promise<StatKind> {
   try {
     const s = await stat(p);
 
@@ -110,7 +112,7 @@ async function defaultStatKind(p: string): Promise<"file" | "dir" | null> {
   }
 }
 
-function statKindOf(ctx: ResolveContext): (p: string) => Promise<"file" | "dir" | null> {
+function statKindOf(ctx: ResolveContext): StatKindReader {
   return ctx.statKind ?? defaultStatKind;
 }
 
@@ -284,6 +286,63 @@ async function collectUnsupportedKinds(
   return found;
 }
 
+function sourceUnsupportedReason(parsedSource: ParsedSource): string | undefined {
+  if (parsedSource.kind === "path") {
+    return undefined;
+  }
+
+  return parsedSource.kind === "unknown"
+    ? `unsupported source kind: unknown (${parsedSource.reason})`
+    : `unsupported source kind: ${parsedSource.kind}`;
+}
+
+async function sourceEscapeReason(
+  ctx: ResolveContext,
+  pluginRoot: string,
+  rawSource: string,
+): Promise<string | undefined> {
+  try {
+    await assertPathInside(ctx.marketplaceRoot, pluginRoot, `plugin source path "${rawSource}"`);
+    return undefined;
+  } catch (err) {
+    if (err instanceof PathContainmentError) {
+      return `source path escapes marketplace root: ${rawSource}`;
+    }
+
+    throw err;
+  }
+}
+
+async function readManifest(
+  ctx: ResolveContext,
+  pluginRoot: string,
+): Promise<{ ok: true; manifest: Record<string, unknown> | null } | { ok: false; reason: string }> {
+  const manifestPath = path.join(pluginRoot, ".claude-plugin", "plugin.json");
+  if ((await statKindOf(ctx)(manifestPath)) !== "file") {
+    return { ok: true, manifest: null };
+  }
+
+  try {
+    const raw = await readFileTextOf(ctx)(manifestPath);
+    const parsed: unknown = JSON.parse(raw);
+
+    if (!PLUGIN_MANIFEST_VALIDATOR.Check(parsed)) {
+      const firstErr = PLUGIN_MANIFEST_VALIDATOR.Errors(parsed)[0];
+      const detail = firstErr
+        ? `${firstErr.instancePath || "(root)"}: ${firstErr.message}`
+        : "(no detail)";
+      return { ok: false, reason: `malformed plugin.json: ${detail}` };
+    }
+
+    return { ok: true, manifest: parsed };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: `malformed plugin.json: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
 /**
  * Steps 1-6 are shared between resolveStrict and resolveLoose. Returns
  * either:
@@ -310,37 +369,23 @@ async function preflightStages(
   const parsedSource: ParsedSource = parsePluginSource(entry.source);
 
   // PR-2 case 1: only path sources are installable in V1 (MM-3).
-  if (parsedSource.kind !== "path") {
-    const reason =
-      parsedSource.kind === "unknown"
-        ? `unsupported source kind: unknown (${parsedSource.reason})`
-        : `unsupported source kind: ${parsedSource.kind}`;
+  const unsupportedReason = sourceUnsupportedReason(parsedSource);
+  if (unsupportedReason !== undefined) {
     return {
       kind: "notInstallable",
-      result: notInstallable(entry.name, partial, [reason]),
+      result: notInstallable(entry.name, partial, [unsupportedReason]),
     };
   }
 
   // PR-2 case 2: source path escape.
   const pluginRoot = path.resolve(ctx.marketplaceRoot, parsedSource.raw);
+  const escapeReason = await sourceEscapeReason(ctx, pluginRoot, parsedSource.raw);
 
-  try {
-    await assertPathInside(
-      ctx.marketplaceRoot,
-      pluginRoot,
-      `plugin source path "${parsedSource.raw}"`,
-    );
-  } catch (err) {
-    if (err instanceof PathContainmentError) {
-      return {
-        kind: "notInstallable",
-        result: notInstallable(entry.name, partial, [
-          `source path escapes marketplace root: ${parsedSource.raw}`,
-        ]),
-      };
-    }
-
-    throw err;
+  if (escapeReason !== undefined) {
+    return {
+      kind: "notInstallable",
+      result: notInstallable(entry.name, partial, [escapeReason]),
+    };
   }
 
   // PR-2 case 3: source dir does not exist.
@@ -352,37 +397,15 @@ async function preflightStages(
   }
 
   // PR-2 case 4: malformed plugin.json (best-effort -- absence is OK).
-  let manifest: Record<string, unknown> | null = null;
-  const manifestPath = path.join(pluginRoot, ".claude-plugin", "plugin.json");
-
-  if ((await statKindOf(ctx)(manifestPath)) === "file") {
-    try {
-      const raw = await readFileTextOf(ctx)(manifestPath);
-      const parsed: unknown = JSON.parse(raw);
-
-      if (!PLUGIN_MANIFEST_VALIDATOR.Check(parsed)) {
-        const firstErr = PLUGIN_MANIFEST_VALIDATOR.Errors(parsed)[0];
-        const detail = firstErr
-          ? `${firstErr.instancePath || "(root)"}: ${firstErr.message}`
-          : "(no detail)";
-        return {
-          kind: "notInstallable",
-          result: notInstallable(entry.name, partial, [`malformed plugin.json: ${detail}`]),
-        };
-      }
-
-      manifest = parsed;
-    } catch (err) {
-      return {
-        kind: "notInstallable",
-        result: notInstallable(entry.name, partial, [
-          `malformed plugin.json: ${err instanceof Error ? err.message : String(err)}`,
-        ]),
-      };
-    }
+  const manifestResult = await readManifest(ctx, pluginRoot);
+  if (!manifestResult.ok) {
+    return {
+      kind: "notInstallable",
+      result: notInstallable(entry.name, partial, [manifestResult.reason]),
+    };
   }
 
-  return { kind: "ok", pluginRoot, manifest, partial };
+  return { kind: "ok", pluginRoot, manifest: manifestResult.manifest, partial };
 }
 
 /**
@@ -469,6 +492,203 @@ async function validateComponentPath(
   return { ok: true, relative: raw };
 }
 
+function addComponentPath(
+  partial: PartialResolution,
+  kind: SupportedKind,
+  seenPaths: Set<string>,
+  relative: string,
+): void {
+  if (seenPaths.has(relative)) {
+    return;
+  }
+
+  seenPaths.add(relative);
+  partial.componentPaths[kind].push(relative);
+}
+
+async function addValidatedComponentPath(
+  partial: PartialResolution,
+  kind: SupportedKind,
+  seenPaths: Set<string>,
+  raw: unknown,
+  pluginRoot: string,
+): Promise<boolean> {
+  const v = await validateComponentPath(kind, raw, pluginRoot);
+
+  if (v.ok) {
+    addComponentPath(partial, kind, seenPaths, v.relative);
+    return false;
+  }
+
+  partial.notes.push(v.reason);
+  return true;
+}
+
+async function collectStrictComponentKind(
+  entry: PluginEntry,
+  manifest: Record<string, unknown> | null,
+  partial: PartialResolution,
+  pluginRoot: string,
+  ctx: ResolveContext,
+  kind: SupportedKind,
+): Promise<boolean> {
+  let dirty = false;
+  const seenPaths = new Set<string>();
+  const fromEntry = readPathOrArray((entry as Record<string, unknown>)[kind]);
+  const fromManifest = readPathOrArray(manifest?.[kind]);
+
+  for (const raw of [...fromEntry, ...fromManifest]) {
+    dirty = (await addValidatedComponentPath(partial, kind, seenPaths, raw, pluginRoot)) || dirty;
+  }
+
+  if ((await statKindOf(ctx)(path.join(pluginRoot, kind))) === "dir") {
+    addComponentPath(partial, kind, seenPaths, kind);
+  }
+
+  if (partial.componentPaths[kind].length > 0) {
+    partial.supported.push(kind);
+  }
+
+  return dirty;
+}
+
+async function readStandaloneMcp(
+  ctx: ResolveContext,
+  pluginRoot: string,
+): Promise<{ ok: true; value: unknown } | { ok: false; reason: string }> {
+  const mcpPath = path.join(pluginRoot, ".mcp.json");
+  if ((await statKindOf(ctx)(mcpPath)) !== "file") {
+    return { ok: true, value: undefined };
+  }
+
+  try {
+    const raw = await readFileTextOf(ctx)(mcpPath);
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return { ok: true, value: "mcpServers" in parsed ? parsed.mcpServers : parsed };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: `malformed mcpServers (.mcp.json): ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+function applyMcpValue(partial: PartialResolution, mcp: unknown, detail = true): boolean {
+  if (mcp === undefined) {
+    return false;
+  }
+
+  if (MCP_SERVERS_VALIDATOR.Check(mcp)) {
+    partial.mcpServers = mcp;
+    return false;
+  }
+
+  if (detail) {
+    const firstErr = MCP_SERVERS_VALIDATOR.Errors(mcp)[0];
+    partial.notes.push(`malformed mcpServers: ${firstErr ? firstErr.message : "shape mismatch"}`);
+  } else {
+    partial.notes.push(`malformed mcpServers`);
+  }
+
+  return true;
+}
+
+async function applyStrictMcp(
+  entry: PluginEntry,
+  manifest: Record<string, unknown> | null,
+  partial: PartialResolution,
+  pluginRoot: string,
+  ctx: ResolveContext,
+): Promise<boolean> {
+  const declaredMcp = (entry as Record<string, unknown>).mcpServers ?? manifest?.mcpServers;
+  const mcpResult =
+    declaredMcp === undefined ? await readStandaloneMcp(ctx, pluginRoot) : undefined;
+
+  if (mcpResult?.ok === false) {
+    partial.notes.push(mcpResult.reason);
+    return true;
+  }
+
+  return applyMcpValue(partial, declaredMcp ?? mcpResult?.value);
+}
+
+async function collectLooseComponentKind(
+  entry: PluginEntry,
+  manifest: Record<string, unknown> | null,
+  partial: PartialResolution,
+  pluginRoot: string,
+  kind: SupportedKind,
+): Promise<boolean> {
+  const fromEntry = (entry as Record<string, unknown>)[kind];
+  const fromManifest = manifest?.[kind];
+
+  if (fromEntry === undefined) {
+    if (fromManifest === undefined) {
+      return false;
+    }
+
+    partial.notes.push(
+      `component declarations conflict: manifest declares "${kind}" but entry does not`,
+    );
+    return true;
+  }
+
+  let dirty = false;
+  const seenPaths = new Set<string>();
+  for (const raw of readPathOrArray(fromEntry)) {
+    dirty = (await addValidatedComponentPath(partial, kind, seenPaths, raw, pluginRoot)) || dirty;
+  }
+
+  if (partial.componentPaths[kind].length > 0) {
+    partial.supported.push(kind);
+  }
+
+  return dirty;
+}
+
+async function applyLooseMcp(
+  entry: PluginEntry,
+  manifest: Record<string, unknown> | null,
+  partial: PartialResolution,
+  pluginRoot: string,
+  ctx: ResolveContext,
+): Promise<boolean> {
+  const entryMcp = (entry as Record<string, unknown>).mcpServers;
+
+  if (entryMcp === undefined) {
+    const manifestMcp = manifest?.mcpServers;
+    const standaloneExists = (await statKindOf(ctx)(path.join(pluginRoot, ".mcp.json"))) === "file";
+
+    if (manifestMcp === undefined && !standaloneExists) {
+      return false;
+    }
+
+    partial.notes.push(
+      `component declarations conflict: manifest/standalone mcpServers without entry-level declaration`,
+    );
+    return true;
+  }
+
+  return applyMcpValue(partial, entryMcp, false);
+}
+
+async function addUnsupportedKindNotes(
+  entry: PluginEntry,
+  manifest: Record<string, unknown> | null,
+  pluginRoot: string,
+  ctx: ResolveContext,
+  partial: PartialResolution,
+): Promise<boolean> {
+  let dirty = false;
+  for (const kind of await collectUnsupportedKinds(entry, manifest, pluginRoot, ctx)) {
+    partial.notes.push(`contains ${kind}`);
+    partial.unsupported.push(kind);
+    dirty = true;
+  }
+
+  return dirty;
+}
+
 /**
  * MM-5 strict: union of entry + manifest + implicit-by-convention + standalone-file
  * declarations.
@@ -493,79 +713,16 @@ export async function resolveStrict(
   // appended to the array. First-wins dedup by relative-path string preserves
   // ordering (declared first, implicit last).
   for (const kind of SUPPORTED_COMPONENT_KINDS) {
-    const seenPaths = new Set<string>();
-
-    const fromEntry = readPathOrArray((entry as Record<string, unknown>)[kind]);
-    const fromManifest = readPathOrArray(manifest?.[kind]);
-
-    for (const raw of [...fromEntry, ...fromManifest]) {
-      const v = await validateComponentPath(kind, raw, pluginRoot);
-
-      if (v.ok) {
-        if (!seenPaths.has(v.relative)) {
-          seenPaths.add(v.relative);
-          partial.componentPaths[kind].push(v.relative);
-        }
-      } else {
-        partial.notes.push(v.reason);
-        dirty = true;
-      }
-    }
-
-    // Implicit-by-convention: fires whenever the conventional dir exists,
-    // regardless of declared inputs (D-07 SUPPLEMENT semantics). Dedup
-    // against already-declared paths preserves declared-first ordering.
-    const conventionalRel = kind; // "skills" / "commands" / "agents"
-    if ((await statKindOf(ctx)(path.join(pluginRoot, conventionalRel))) === "dir") {
-      if (!seenPaths.has(conventionalRel)) {
-        partial.componentPaths[kind].push(conventionalRel);
-        seenPaths.add(conventionalRel);
-      }
-    }
-
-    if (partial.componentPaths[kind].length > 0) {
-      partial.supported.push(kind);
-    }
+    dirty =
+      (await collectStrictComponentKind(entry, manifest, partial, pluginRoot, ctx, kind)) || dirty;
   }
 
   // Step 8 (MM-5): mcpServers union (entry > manifest > standalone .mcp.json).
-  let mcp: unknown = (entry as Record<string, unknown>).mcpServers ?? manifest?.mcpServers;
-
-  if (mcp === undefined) {
-    const mcpPath = path.join(pluginRoot, ".mcp.json");
-
-    if ((await statKindOf(ctx)(mcpPath)) === "file") {
-      try {
-        const raw = await readFileTextOf(ctx)(mcpPath);
-        const parsed = JSON.parse(raw) as Record<string, unknown>;
-        // MC-2: accept both wrapped and unwrapped forms.
-        mcp = "mcpServers" in parsed ? (parsed as { mcpServers: unknown }).mcpServers : parsed;
-      } catch (err) {
-        partial.notes.push(
-          `malformed mcpServers (.mcp.json): ${err instanceof Error ? err.message : String(err)}`,
-        );
-        dirty = true;
-      }
-    }
-  }
-
-  if (mcp !== undefined) {
-    if (MCP_SERVERS_VALIDATOR.Check(mcp)) {
-      partial.mcpServers = mcp;
-    } else {
-      const firstErr = MCP_SERVERS_VALIDATOR.Errors(mcp)[0];
-      partial.notes.push(`malformed mcpServers: ${firstErr ? firstErr.message : "shape mismatch"}`);
-      dirty = true;
-    }
-  }
+  dirty = (await applyStrictMcp(entry, manifest, partial, pluginRoot, ctx)) || dirty;
 
   // Step 9 (PR-3 / PR-4): unsupported components declared explicitly or via
   // Claude Code default locations (.lsp.json, hooks/hooks.json, etc.).
-  for (const kind of await collectUnsupportedKinds(entry, manifest, pluginRoot, ctx)) {
-    partial.notes.push(`contains ${kind}`);
-    partial.unsupported.push(kind);
-    dirty = true;
-  }
+  dirty = (await addUnsupportedKindNotes(entry, manifest, pluginRoot, ctx, partial)) || dirty;
 
   // Step 10 (PR-5): dependencies stay installable but get a note.
   if ((entry as Record<string, unknown>).dependencies !== undefined) {
@@ -596,68 +753,15 @@ export async function resolveLoose(
   // conflict. Array shape mirrors strict mode, but with first-wins dedup
   // applied only to entry-declared paths (no convention probing).
   for (const kind of SUPPORTED_COMPONENT_KINDS) {
-    const fromEntry = (entry as unknown as Record<string, unknown>)[kind];
-    const fromManifest = manifest ? manifest[kind] : undefined;
-
-    if (fromEntry !== undefined) {
-      const seenPaths = new Set<string>();
-
-      for (const raw of readPathOrArray(fromEntry)) {
-        const v = await validateComponentPath(kind, raw, pluginRoot);
-
-        if (v.ok) {
-          if (!seenPaths.has(v.relative)) {
-            seenPaths.add(v.relative);
-            partial.componentPaths[kind].push(v.relative);
-          }
-        } else {
-          partial.notes.push(v.reason);
-          dirty = true;
-        }
-      }
-
-      if (partial.componentPaths[kind].length > 0) {
-        partial.supported.push(kind);
-      }
-    } else if (fromManifest !== undefined) {
-      // MM-6: manifest declared but entry didn't -> conflict.
-      partial.notes.push(
-        `component declarations conflict: manifest declares "${kind}" but entry does not`,
-      );
-      dirty = true;
-    }
+    dirty = (await collectLooseComponentKind(entry, manifest, partial, pluginRoot, kind)) || dirty;
     // No implicit-by-convention in loose mode.
   }
 
   // Step 8 (MM-7 loose mcpServers).
-  const entryMcp = (entry as Record<string, unknown>).mcpServers;
-
-  if (entryMcp !== undefined) {
-    if (MCP_SERVERS_VALIDATOR.Check(entryMcp)) {
-      partial.mcpServers = entryMcp;
-    } else {
-      partial.notes.push(`malformed mcpServers`);
-      dirty = true;
-    }
-  } else {
-    // MM-7: manifest or standalone .mcp.json without entry-level declaration -> conflict.
-    const manifestMcp = manifest?.mcpServers;
-    const standaloneExists = (await statKindOf(ctx)(path.join(pluginRoot, ".mcp.json"))) === "file";
-
-    if (manifestMcp !== undefined || standaloneExists) {
-      partial.notes.push(
-        `component declarations conflict: manifest/standalone mcpServers without entry-level declaration`,
-      );
-      dirty = true;
-    }
-  }
+  dirty = (await applyLooseMcp(entry, manifest, partial, pluginRoot, ctx)) || dirty;
 
   // Step 9 (PR-3 / PR-4): unsupported components -- same as strict.
-  for (const kind of await collectUnsupportedKinds(entry, manifest, pluginRoot, ctx)) {
-    partial.notes.push(`contains ${kind}`);
-    partial.unsupported.push(kind);
-    dirty = true;
-  }
+  dirty = (await addUnsupportedKindNotes(entry, manifest, pluginRoot, ctx, partial)) || dirty;
 
   // Step 10 (PR-5): dependencies stay installable but get a note.
   if ((entry as Record<string, unknown>).dependencies !== undefined) {
@@ -674,8 +778,10 @@ export function requireInstallable(
   r: ResolvedPlugin,
   op: "install" | "update" = "install",
 ): asserts r is ResolvedPluginInstallable {
-  if (!r.installable) {
-    const verb = op === "update" ? "is no longer installable" : "is not installable";
-    throw new Error(`Plugin "${r.name}" ${verb}: ${r.notes.join("; ")}`);
+  if (r.installable) {
+    return;
   }
+
+  const verb = op === "update" ? "is no longer installable" : "is not installable";
+  throw new Error(`Plugin "${r.name}" ${verb}: ${r.notes.join("; ")}`);
 }

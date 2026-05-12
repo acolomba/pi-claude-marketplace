@@ -84,7 +84,7 @@ export class MarketplaceAmbiguousScopeError extends Error {
 export class MarketplaceUpdateError extends Error {
   readonly retryHint: string;
   constructor(message: string, opts: { cause?: unknown; retryHint?: string } = {}) {
-    super(message, opts.cause !== undefined ? { cause: opts.cause } : undefined);
+    super(message, opts.cause === undefined ? undefined : { cause: opts.cause });
     this.name = "MarketplaceUpdateError";
     this.retryHint = opts.retryHint ?? "";
   }
@@ -102,7 +102,8 @@ export class MarketplaceUpdateError extends Error {
 export class CrossPluginConflictError extends Error {
   readonly conflicts: readonly string[];
   constructor(conflicts: readonly string[]) {
-    super(`Cross-plugin name conflict:\n${conflicts.map((c) => `  - ${c}`).join("\n")}`);
+    const conflictLines = conflicts.map((c) => `  - ${c}`).join("\n");
+    super(`Cross-plugin name conflict:\n${conflictLines}`);
     this.name = "CrossPluginConflictError";
     this.conflicts = conflicts;
   }

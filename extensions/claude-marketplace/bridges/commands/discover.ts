@@ -35,6 +35,37 @@ export interface DiscoverPluginCommandsResult {
   readonly warnings: readonly string[];
 }
 
+async function readEntriesGracefully(dir: string): Promise<Dirent[]> {
+  try {
+    return await readdir(dir, { withFileTypes: true });
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return [];
+    }
+
+    throw err;
+  }
+}
+
+async function isCommandFile(dir: string, entry: Dirent): Promise<boolean> {
+  if (entry.name.startsWith(".") || !entry.isFile() || !entry.name.endsWith(".md")) {
+    return false;
+  }
+
+  const stat = await lstat(path.join(dir, entry.name));
+  return !stat.isSymbolicLink();
+}
+
+function duplicateWarning(sourceName: string, commandsDir: string, generatedName: string): string {
+  return (
+    `command source "${sourceName}" in "${commandsDir}" elides to generated name ` +
+    `"${generatedName}" already produced by an earlier componentPaths.commands entry; ` +
+    `ignoring duplicate.`
+  );
+}
+
 export async function discoverPluginCommands(input: {
   pluginName: string;
   resolved: ResolvedPluginInstallable;
@@ -53,42 +84,16 @@ export async function discoverPluginCommands(input: {
       ? commandsRel
       : path.resolve(input.resolved.pluginRoot, commandsRel);
 
-    let entries: Dirent[];
-
-    try {
-      entries = await readdir(commandsDir, { withFileTypes: true });
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-
-      if (code === "ENOENT" || code === "ENOTDIR") {
-        continue;
-      }
-
-      throw err;
-    }
+    const entries = await readEntriesGracefully(commandsDir);
 
     // Deterministic ordering for stable warning messages and test assertions.
     const sorted = [...entries].sort((a, b) => a.name.localeCompare(b.name));
 
     for (const entry of sorted) {
-      if (entry.name.startsWith(".")) {
-        continue;
-      }
-
-      if (!entry.isFile()) {
-        continue;
-      }
-
-      if (!entry.name.endsWith(".md")) {
-        continue;
-      }
-
       const full = path.join(commandsDir, entry.name);
       // Refuse symlinked `.md` entries. Even if the link target lives inside
       // the plugin root, the bridge does not honor symlinks (D-14 / PS-1).
-      const stat = await lstat(full);
-
-      if (stat.isSymbolicLink()) {
+      if (!(await isCommandFile(commandsDir, entry))) {
         continue;
       }
 
@@ -98,11 +103,7 @@ export async function discoverPluginCommands(input: {
 
       // D-07 first-wins dedup by generated command name.
       if (seenByGenerated.has(generatedName)) {
-        warnings.push(
-          `command source "${sourceName}" in "${commandsDir}" elides to generated name ` +
-            `"${generatedName}" already produced by an earlier componentPaths.commands entry; ` +
-            `ignoring duplicate.`,
-        );
+        warnings.push(duplicateWarning(sourceName, commandsDir, generatedName));
         continue;
       }
 

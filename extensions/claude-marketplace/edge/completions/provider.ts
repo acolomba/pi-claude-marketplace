@@ -30,7 +30,6 @@
 // through this dispatcher. Tests inject a hermetic mock resolver.
 
 import {
-  buildItem,
   extractPositionals,
   getMarketplaceCompletions,
   getMarketplaceNamesAcrossScopes,
@@ -66,13 +65,69 @@ export const MARKETPLACE_SUBCOMMANDS = [
  * positional). `rm` is accepted as the router alias for `remove` and still
  * takes the same marketplace-name positional.
  */
-const MARKETPLACE_VERBS_WITH_NAME_ARG: readonly string[] = [
+const MARKETPLACE_VERBS_WITH_NAME_ARG = new Set([
   "remove",
   "rm",
   "update",
   "autoupdate",
   "noautoupdate",
-];
+]);
+
+function topLevelCompletions(current: string): AutocompleteItem[] {
+  return TOP_LEVEL_SUBCOMMANDS.filter((s) => s.startsWith(current)).map((label) => ({
+    label,
+    value: label + " ",
+  }));
+}
+
+function scopeValueCompletions(current: string, headPrefix: string): AutocompleteItem[] {
+  return ["user", "project"]
+    .filter((v) => v.startsWith(current))
+    .map((v) => ({ label: v, value: `${headPrefix}${v} ` }));
+}
+
+function flagCompletions(
+  current: string,
+  positionalHead: string,
+  headPrefix: string,
+): AutocompleteItem[] {
+  const flags: { name: string; description?: string }[] = [
+    { name: "--scope", description: "Scope: user or project" },
+  ];
+  if (positionalHead === "list") {
+    flags.push(
+      { name: "--installed", description: "Show installed plugins" },
+      { name: "--available", description: "Show available plugins" },
+      { name: "--unavailable", description: "Show unavailable plugins" },
+    );
+  }
+
+  return flags
+    .filter((f) => f.name.startsWith(current))
+    .map((f) => ({
+      label: f.name,
+      value: `${headPrefix}${f.name} `,
+      ...(f.description !== undefined ? { description: f.description } : {}),
+    }));
+}
+
+function marketplaceSubcommandCompletions(current: string, headPrefix: string): AutocompleteItem[] {
+  return MARKETPLACE_SUBCOMMANDS.filter((s) => s.startsWith(current)).map((label) => ({
+    label,
+    value: `${headPrefix}${label} `,
+  }));
+}
+
+function marketplaceNameWanted(positionals: readonly string[]): boolean {
+  const positionalHead = positionals[0] ?? "";
+  return (
+    (positionalHead === "list" && positionals.length === 1) ||
+    (positionalHead === "marketplace" &&
+      positionals.length === 2 &&
+      positionals[1] !== undefined &&
+      MARKETPLACE_VERBS_WITH_NAME_ARG.has(positionals[1]))
+  );
+}
 
 export async function getArgumentCompletions(
   prefix: string,
@@ -84,44 +139,22 @@ export async function getArgumentCompletions(
 
   // Branch 1 (TC-1): top-level subcommand keyword.
   if (tokens.length === 0) {
-    return TOP_LEVEL_SUBCOMMANDS.filter((s) => s.startsWith(current)).map((label) => ({
-      label,
-      value: label + " ",
-    }));
+    return topLevelCompletions(current);
   }
 
   const positionals = extractPositionals(tokens);
   const positionalHead = positionals[0] ?? "";
 
   // Branch 2a (TC-4): token immediately after `--scope`.
-  const prevToken = tokens[tokens.length - 1];
+  const prevToken = tokens.at(-1);
   if (prevToken === "--scope") {
-    return ["user", "project"]
-      .filter((v) => v.startsWith(current))
-      .map((v) => ({ label: v, value: `${headPrefix}${v} ` }));
+    return scopeValueCompletions(current, headPrefix);
   }
 
   // Branch 2b (TC-3): flag-name completion (- or -- prefix; pi only has
   // long flags so both behave identically).
   if (current.startsWith("-")) {
-    const flags: { name: string; description?: string }[] = [
-      { name: "--scope", description: "Scope: user or project" },
-    ];
-    if (positionalHead === "list") {
-      flags.push(
-        { name: "--installed", description: "Show installed plugins" },
-        { name: "--available", description: "Show available plugins" },
-        { name: "--unavailable", description: "Show unavailable plugins" },
-      );
-    }
-
-    return flags
-      .filter((f) => f.name.startsWith(current))
-      .map((f) => ({
-        label: f.name,
-        value: `${headPrefix}${f.name} `,
-        ...(f.description !== undefined ? { description: f.description } : {}),
-      }));
+    return flagCompletions(current, positionalHead, headPrefix);
   }
 
   // Branch 3 (TC-2): nested marketplace subcommand keyword. The completion
@@ -129,10 +162,7 @@ export async function getArgumentCompletions(
   // the existing `marketplace` head is already in argumentTextPrefix, so
   // `headPrefix + label + " "` produces the correct shape.
   if (positionalHead === "marketplace" && positionals.length === 1) {
-    return MARKETPLACE_SUBCOMMANDS.filter((s) => s.startsWith(current)).map((label) => ({
-      label,
-      value: `${headPrefix}${label} `,
-    }));
+    return marketplaceSubcommandCompletions(current, headPrefix);
   }
 
   // Branch 4 (TC-6): <plugin>@<marketplace> for install / uninstall / update.
@@ -160,13 +190,7 @@ export async function getArgumentCompletions(
   // Branch 5 (TC-5): marketplace-name positional for `list <here>` and
   // `marketplace <verb> <here>`. Skip `marketplace add` (free-form source)
   // and `marketplace list` (no positional).
-  const wantsMarketplaceName =
-    (positionalHead === "list" && positionals.length === 1) ||
-    (positionalHead === "marketplace" &&
-      positionals.length === 2 &&
-      positionals[1] !== undefined &&
-      MARKETPLACE_VERBS_WITH_NAME_ARG.includes(positionals[1]));
-  if (wantsMarketplaceName) {
+  if (marketplaceNameWanted(positionals)) {
     return getMarketplaceCompletions(
       await getMarketplaceNamesAcrossScopes(resolver),
       current,
@@ -182,4 +206,4 @@ export async function getArgumentCompletions(
 }
 
 // Re-export buildItem so unit tests of the dispatcher can compare values.
-export { buildItem };
+export { buildItem } from "./data.ts";

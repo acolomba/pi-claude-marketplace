@@ -113,6 +113,93 @@ async function loadManifestSoftly(manifestPath: string): Promise<MarketplaceMani
   return loadMarketplaceManifest(manifestPath);
 }
 
+function scopesForList(opts: ListPluginsOptions): readonly Scope[] {
+  return opts.scope === undefined ? ["user", "project"] : [opts.scope];
+}
+
+function installedEntry(
+  pluginName: string,
+  record: { readonly version: string },
+  manifest: MarketplaceManifest | undefined,
+): PluginListEntry {
+  const manifestEntry = manifest?.plugins.find((p) => p.name === pluginName);
+  return {
+    name: pluginName,
+    status: "installed",
+    version: record.version,
+    upgradable: manifestEntry?.version !== undefined && manifestEntry.version !== record.version,
+    ...(manifestEntry?.description !== undefined && {
+      description: manifestEntry.description,
+    }),
+  };
+}
+
+async function manifestEntryStatus(
+  manifestEntry: MarketplaceManifest["plugins"][number],
+  marketplaceRoot: string,
+): Promise<{ status: PluginRenderStatus; notes?: readonly string[] }> {
+  try {
+    const resolved = await resolveStrict(manifestEntry, { marketplaceRoot });
+
+    if (resolved.installable || resolved.notes.length === 0) {
+      return { status: resolved.installable ? "available" : "uninstallable" };
+    }
+
+    return { status: "uninstallable", notes: resolved.notes };
+  } catch (probeErr) {
+    return { status: "uninstallable", notes: [errorMessage(probeErr)] };
+  }
+}
+
+async function availableEntry(
+  manifestEntry: MarketplaceManifest["plugins"][number],
+  marketplaceRoot: string,
+): Promise<PluginListEntry> {
+  const { status, notes } = await manifestEntryStatus(manifestEntry, marketplaceRoot);
+  return {
+    name: manifestEntry.name,
+    status,
+    ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
+    ...(manifestEntry.description !== undefined && {
+      description: manifestEntry.description,
+    }),
+    ...(notes !== undefined && { notes }),
+  };
+}
+
+async function collectMarketplacePlugins(
+  opts: ListPluginsOptions,
+  mp: Awaited<ReturnType<typeof loadState>>["marketplaces"][string],
+  manifest: MarketplaceManifest | undefined,
+): Promise<PluginListEntry[]> {
+  const plugins: PluginListEntry[] = [];
+  const installedRecords = mp.plugins;
+  const installedNames = new Set(Object.keys(installedRecords));
+
+  for (const [pluginName, record] of Object.entries(installedRecords)) {
+    if (shouldShow(opts, "installed")) {
+      plugins.push(installedEntry(pluginName, record, manifest));
+    }
+  }
+
+  if (manifest === undefined) {
+    return plugins;
+  }
+
+  for (const manifestEntry of manifest.plugins) {
+    if (installedNames.has(manifestEntry.name)) {
+      continue;
+    }
+
+    const entry = await availableEntry(manifestEntry, mp.marketplaceRoot);
+    if (shouldShow(opts, entry.status)) {
+      plugins.push(entry);
+    }
+  }
+
+  return plugins;
+}
+
 /**
  * Plan 06-04 D-02 extraction: pure payload builder. Performs the same
  * state + manifest + resolver work as {@link listPlugins} but returns the
@@ -129,7 +216,7 @@ async function loadManifestSoftly(manifestPath: string): Promise<MarketplaceMani
 export async function loadPluginListPayload(
   opts: ListPluginsOptions,
 ): Promise<{ payload: PluginListPayload; warnings: readonly string[] }> {
-  const scopes: readonly Scope[] = opts.scope !== undefined ? [opts.scope] : ["user", "project"];
+  const scopes = scopesForList(opts);
   const marketplaces: PluginListMarketplace[] = [];
   const warnings: string[] = [];
 
@@ -153,77 +240,7 @@ export async function loadPluginListPayload(
         );
       }
 
-      const plugins: PluginListEntry[] = [];
-      const installedRecords = mp.plugins;
-      const installedNames = new Set(Object.keys(installedRecords));
-
-      // Installed entries (always derived from state; manifest is consulted
-      // only for decoration -- description + upgradable flag).
-      for (const [pluginName, record] of Object.entries(installedRecords)) {
-        if (!shouldShow(opts, "installed")) {
-          continue;
-        }
-
-        const manifestEntry = manifest?.plugins.find((p) => p.name === pluginName);
-
-        // PL-5 string compare. NOT semver.
-        const upgradable =
-          manifestEntry?.version !== undefined && manifestEntry.version !== record.version;
-
-        const entry: PluginListEntry = {
-          name: pluginName,
-          status: "installed",
-          version: record.version,
-          upgradable,
-          ...(manifestEntry?.description !== undefined && {
-            description: manifestEntry.description,
-          }),
-        };
-        plugins.push(entry);
-      }
-
-      // Available + uninstallable entries -- only when manifest loaded.
-      if (manifest !== undefined) {
-        for (const manifestEntry of manifest.plugins) {
-          if (installedNames.has(manifestEntry.name)) {
-            continue;
-          }
-
-          let status: PluginRenderStatus = "available";
-          let probeNotes: readonly string[] | undefined;
-
-          try {
-            const resolved = await resolveStrict(manifestEntry, {
-              marketplaceRoot: mp.marketplaceRoot,
-            });
-
-            if (!resolved.installable) {
-              status = "uninstallable";
-              if (resolved.notes.length > 0) {
-                probeNotes = resolved.notes;
-              }
-            }
-          } catch (probeErr) {
-            status = "uninstallable";
-            probeNotes = [errorMessage(probeErr)];
-          }
-
-          if (!shouldShow(opts, status)) {
-            continue;
-          }
-
-          const entry: PluginListEntry = {
-            name: manifestEntry.name,
-            status,
-            ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
-            ...(manifestEntry.description !== undefined && {
-              description: manifestEntry.description,
-            }),
-            ...(probeNotes !== undefined && { notes: probeNotes }),
-          };
-          plugins.push(entry);
-        }
-      }
+      const plugins = await collectMarketplacePlugins(opts, mp, manifest);
 
       marketplaces.push({
         name: mpName,

@@ -32,7 +32,7 @@ import { loadVisibleMarketplaces } from "../../orchestrators/marketplace/shared.
 import { loadPluginListPayload } from "../../orchestrators/plugin/list.ts";
 import { sourceLogical } from "../../presentation/marketplace-list.ts";
 
-import type { ExtensionAPI } from "../../platform/pi-api.ts";
+import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { ParsedSource } from "../../presentation/marketplace-list.ts";
 import type { PluginRenderStatus } from "../../presentation/plugin-list.ts";
 
@@ -124,12 +124,7 @@ interface PluginRow {
 }
 
 function renderPluginRow(row: PluginRow): string {
-  const tag =
-    row.status === "installed"
-      ? "[installed]"
-      : row.status === "available"
-        ? "[available]"
-        : "[unavailable]";
+  const tag = statusLabel(row.status);
   const parts: string[] = [`  ${tag} ${row.name}`];
   if (row.version !== undefined) {
     parts.push(row.version);
@@ -140,6 +135,17 @@ function renderPluginRow(row: PluginRow): string {
   }
 
   return parts.join("  ");
+}
+
+function statusLabel(status: PluginRenderStatus): string {
+  switch (status) {
+    case "installed":
+      return "[installed]";
+    case "available":
+      return "[available]";
+    case "uninstallable":
+      return "[unavailable]";
+  }
 }
 
 function applyFilter(params: { installed?: boolean; available?: boolean; unavailable?: boolean }): {
@@ -171,6 +177,75 @@ function statusKey(status: PluginRenderStatus): "i" | "a" | "u" {
   }
 }
 
+async function marketplaceExists(params: {
+  marketplace: string;
+  scope?: "user" | "project";
+  cwd: string;
+}): Promise<boolean> {
+  const visible = await loadVisibleMarketplaces({
+    cwd: params.cwd,
+    ...(params.scope !== undefined && { scope: params.scope }),
+  });
+  return visible.some((m) => m.record.name === params.marketplace);
+}
+
+async function loadToolPluginPayload(
+  params: {
+    marketplace?: string;
+    scope?: "user" | "project";
+    installed?: boolean;
+    available?: boolean;
+    unavailable?: boolean;
+  },
+  ctx: ExtensionContext,
+  buckets: { i: boolean; a: boolean; u: boolean },
+): Promise<Awaited<ReturnType<typeof loadPluginListPayload>>["payload"]> {
+  const result = await loadPluginListPayload({
+    ctx,
+    cwd: ctx.cwd,
+    ...(params.scope !== undefined && { scope: params.scope }),
+    ...(params.marketplace !== undefined && { marketplace: params.marketplace }),
+    ...(buckets.i && { installed: true }),
+    ...(buckets.a && { available: true }),
+    ...(buckets.u && { unavailable: true }),
+  });
+  return result.payload;
+}
+
+function renderPluginPayload(
+  payload: Awaited<ReturnType<typeof loadPluginListPayload>>["payload"],
+  buckets: { i: boolean; a: boolean; u: boolean },
+): { lines: string[]; rows: PluginRow[] } {
+  const lines: string[] = [];
+  const rows: PluginRow[] = [];
+  for (const mp of payload.marketplaces) {
+    lines.push(`Marketplace ${mp.name} (${mp.scope})`);
+    if (mp.plugins.length === 0) {
+      lines.push("  (no plugins)");
+      continue;
+    }
+
+    for (const p of mp.plugins) {
+      if (!buckets[statusKey(p.status)]) {
+        continue;
+      }
+
+      const row: PluginRow = {
+        marketplace: mp.name,
+        scope: mp.scope,
+        name: p.name,
+        status: p.status,
+        ...(p.version !== undefined && { version: p.version }),
+        ...(p.notes !== undefined && p.notes.length > 0 && { notes: p.notes }),
+      };
+      lines.push(renderPluginRow(row));
+      rows.push(row);
+    }
+  }
+
+  return { lines, rows };
+}
+
 export function registerListPluginsTool(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "claude_marketplace_plugin_list",
@@ -191,12 +266,12 @@ export function registerListPluginsTool(pi: ExtensionAPI): void {
       // Loaded VIA loadVisibleMarketplaces so the BLOCK C import boundary
       // is preserved.
       if (params.marketplace !== undefined) {
-        const visible = await loadVisibleMarketplaces({
+        const exists = await marketplaceExists({
+          marketplace: params.marketplace,
           cwd: ctx.cwd,
           ...(params.scope !== undefined && { scope: params.scope }),
         });
-        const found = visible.some((m) => m.record.name === params.marketplace);
-        if (!found) {
+        if (!exists) {
           return {
             content: [{ type: "text", text: `Marketplace "${params.marketplace}" not found.` }],
             details: { plugins: [] },
@@ -210,16 +285,7 @@ export function registerListPluginsTool(pi: ExtensionAPI): void {
       // line format AND `details.plugins`.
       let payload;
       try {
-        const result = await loadPluginListPayload({
-          ctx,
-          cwd: ctx.cwd,
-          ...(params.scope !== undefined && { scope: params.scope }),
-          ...(params.marketplace !== undefined && { marketplace: params.marketplace }),
-          ...(buckets.i && { installed: true }),
-          ...(buckets.a && { available: true }),
-          ...(buckets.u && { unavailable: true }),
-        });
-        payload = result.payload;
+        payload = await loadToolPluginPayload(params, ctx, buckets);
       } catch (err) {
         // TC-9: state.json error propagates as a tool error surface (the
         // agent should see a clear failure rather than an empty list).
@@ -235,35 +301,7 @@ export function registerListPluginsTool(pi: ExtensionAPI): void {
         };
       }
 
-      const lines: string[] = [];
-      const rows: PluginRow[] = [];
-      for (const mp of payload.marketplaces) {
-        lines.push(`Marketplace ${mp.name} (${mp.scope})`);
-        if (mp.plugins.length === 0) {
-          lines.push("  (no plugins)");
-          continue;
-        }
-
-        for (const p of mp.plugins) {
-          // Defense-in-depth: the orchestrator already filtered, but assert
-          // at the tool layer too so a future shouldShow change doesn't
-          // leak rows past the LLM-tool contract.
-          if (!buckets[statusKey(p.status)]) {
-            continue;
-          }
-
-          const row: PluginRow = {
-            marketplace: mp.name,
-            scope: mp.scope,
-            name: p.name,
-            status: p.status,
-            ...(p.version !== undefined && { version: p.version }),
-            ...(p.notes !== undefined && p.notes.length > 0 && { notes: p.notes }),
-          };
-          lines.push(renderPluginRow(row));
-          rows.push(row);
-        }
-      }
+      const { lines, rows } = renderPluginPayload(payload, buckets);
 
       if (rows.length === 0 && payload.marketplaces.length === 0) {
         return {

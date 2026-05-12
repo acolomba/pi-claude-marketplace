@@ -1,6 +1,7 @@
 import js from "@eslint/js";
 import stylistic from "@stylistic/eslint-plugin";
 import importX from "eslint-plugin-import-x";
+import sonarjs from "eslint-plugin-sonarjs";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
@@ -25,6 +26,7 @@ export default tseslint.config(
     plugins: {
       "@stylistic": stylistic,
       "import-x": importX,
+      sonarjs,
     },
     languageOptions: {
       globals: {
@@ -63,6 +65,12 @@ export default tseslint.config(
         "error",
         { blankLine: "always", prev: "block-like", next: "*" },
       ],
+      "prefer-object-has-own": "error",
+      "sonarjs/cognitive-complexity": ["error", 15],
+      "sonarjs/no-identical-functions": "error",
+      "sonarjs/no-inverted-boolean-check": "error",
+      "sonarjs/no-nested-conditional": "error",
+      "sonarjs/no-nested-template-literals": "error",
       curly: ["error", "all"],
     },
   },
@@ -286,6 +294,11 @@ export default tseslint.config(
       "@typescript-eslint/dot-notation": "off",
       "no-restricted-syntax": "off",
       "no-console": "off",
+      "sonarjs/cognitive-complexity": "off",
+      "sonarjs/no-identical-functions": "off",
+      "sonarjs/no-inverted-boolean-check": "off",
+      "sonarjs/no-nested-conditional": "off",
+      "sonarjs/no-nested-template-literals": "off",
     },
   },
   {
