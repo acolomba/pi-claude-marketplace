@@ -4,7 +4,7 @@
   },
   "description": "Access Claude plugin marketplaces from Pi.",
   "devDependencies": {
-    "@mariozechner/pi-coding-agent": "^0.70.6",
+    "@mariozechner/pi-coding-agent": "^0.73.1",
     "prettier": "^3.6.2",
     "typebox": "^1.1.38",
     "typescript": "^5.9.3"
