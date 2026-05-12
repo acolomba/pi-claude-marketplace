@@ -11,8 +11,8 @@
 // platform/. Only orchestrators/, shared/, edge/ (sibling) imports.
 
 import { installPlugin } from "../../../orchestrators/plugin/install.ts";
-import { notifyError } from "../../../shared/notify.ts";
-import { parseCommandArgs } from "../../args-schema.ts";
+
+import { parseRequiredPluginMarketplaceRef } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
@@ -27,37 +27,18 @@ export function makeInstallHandler(
   pi: ExtensionAPI,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
-    const parsed = parseCommandArgs(
-      args,
-      {
-        positional: [{ name: "ref" }] as const,
-        usage: USAGE,
-      },
-      (message) => {
-        notifyError(ctx, message);
-      },
-    );
+    const parsed = parseRequiredPluginMarketplaceRef(args, ctx, USAGE);
     if (parsed === undefined) {
       return;
     }
 
-    // Split `<plugin>@<marketplace>`; reject missing/leading/trailing `@`.
-    const atIdx = parsed.ref.indexOf("@");
-    if (atIdx <= 0 || atIdx === parsed.ref.length - 1) {
-      notifyError(ctx, USAGE);
-      return;
-    }
-
-    const plugin = parsed.ref.slice(0, atIdx);
-    const marketplace = parsed.ref.slice(atIdx + 1);
-
     await installPlugin({
       ctx,
       pi,
-      scope: parsed.scope ?? "user",
+      scope: parsed.scope,
       cwd: ctx.cwd,
-      marketplace,
-      plugin,
+      marketplace: parsed.marketplace,
+      plugin: parsed.plugin,
     });
   };
 }

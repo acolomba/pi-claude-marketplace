@@ -10,6 +10,8 @@ import { updatePlugins } from "../../../orchestrators/plugin/update.ts";
 import { notifyError } from "../../../shared/notify.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
 
+import { splitPluginMarketplaceRef } from "./shared.ts";
+
 import type { UpdatePluginsTarget } from "../../../orchestrators/plugin/update.ts";
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
@@ -40,16 +42,15 @@ export function makeUpdateHandler(
     } else if (parsed.ref.startsWith("@") && parsed.ref.length > 1) {
       target = { kind: "marketplace", marketplace: parsed.ref.slice(1) };
     } else {
-      const atIdx = parsed.ref.indexOf("@");
-      if (atIdx <= 0 || atIdx === parsed.ref.length - 1) {
+      const ref = splitPluginMarketplaceRef(parsed.ref);
+      if (ref === undefined) {
         notifyError(ctx, USAGE);
         return;
       }
 
       target = {
         kind: "plugin",
-        plugin: parsed.ref.slice(0, atIdx),
-        marketplace: parsed.ref.slice(atIdx + 1),
+        ...ref,
       };
     }
 

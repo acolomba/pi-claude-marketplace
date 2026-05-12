@@ -15,6 +15,29 @@ import { Compile } from "typebox/compile";
 
 import { MCP_SERVERS_SCHEMA } from "./mcp.ts";
 
+const PLUGIN_METADATA_FIELDS = {
+  description: Type.Optional(Type.String()),
+  version: Type.Optional(Type.String()),
+};
+
+const SUPPORTED_COMPONENT_PATH_FIELDS = {
+  skills: Type.Optional(Type.Unknown()),
+  commands: Type.Optional(Type.Unknown()),
+  agents: Type.Optional(Type.Unknown()),
+};
+
+const UNSUPPORTED_COMPONENT_FIELDS = {
+  hooks: Type.Optional(Type.Unknown()),
+  lspServers: Type.Optional(Type.Unknown()),
+  monitors: Type.Optional(Type.Unknown()),
+  themes: Type.Optional(Type.Unknown()),
+  outputStyles: Type.Optional(Type.Unknown()),
+  channels: Type.Optional(Type.Unknown()),
+  userConfig: Type.Optional(Type.Unknown()),
+  bin: Type.Optional(Type.Unknown()),
+  settings: Type.Optional(Type.Unknown()),
+};
+
 /**
  * MM-2: plugin entry inside `marketplace.json` `plugins[]`. Required
  * fields are `name` (safe-name validation runs separately at the resolver
@@ -29,25 +52,14 @@ export const PLUGIN_ENTRY_SCHEMA = Type.Object({
   source: Type.Unknown(), // MM-3 -- classified by parsePluginSource; not validated here
 
   // optional metadata (MM-2)
-  description: Type.Optional(Type.String()),
-  version: Type.Optional(Type.String()),
+  ...PLUGIN_METADATA_FIELDS,
 
   // optional supported component-path fields (MM-2: string form preferred;
   // array form is rejected by the resolver per PR-2)
-  skills: Type.Optional(Type.Unknown()),
-  commands: Type.Optional(Type.Unknown()),
-  agents: Type.Optional(Type.Unknown()),
+  ...SUPPORTED_COMPONENT_PATH_FIELDS,
 
   // optional opaque "unsupported component" declarations (MM-2 / PR-3)
-  hooks: Type.Optional(Type.Unknown()),
-  lspServers: Type.Optional(Type.Unknown()),
-  monitors: Type.Optional(Type.Unknown()),
-  themes: Type.Optional(Type.Unknown()),
-  outputStyles: Type.Optional(Type.Unknown()),
-  channels: Type.Optional(Type.Unknown()),
-  userConfig: Type.Optional(Type.Unknown()),
-  bin: Type.Optional(Type.Unknown()),
-  settings: Type.Optional(Type.Unknown()),
+  ...UNSUPPORTED_COMPONENT_FIELDS,
 
   // optional mcpServers map (MM-2 / MC-1)
   mcpServers: Type.Optional(MCP_SERVERS_SCHEMA),
@@ -68,22 +80,10 @@ export const PLUGIN_ENTRY_VALIDATOR = Compile(PLUGIN_ENTRY_SCHEMA);
  */
 export const PLUGIN_MANIFEST_SCHEMA = Type.Object({
   name: Type.Optional(Type.String()),
-  description: Type.Optional(Type.String()),
-  version: Type.Optional(Type.String()),
 
-  skills: Type.Optional(Type.Unknown()),
-  commands: Type.Optional(Type.Unknown()),
-  agents: Type.Optional(Type.Unknown()),
-
-  hooks: Type.Optional(Type.Unknown()),
-  lspServers: Type.Optional(Type.Unknown()),
-  monitors: Type.Optional(Type.Unknown()),
-  themes: Type.Optional(Type.Unknown()),
-  outputStyles: Type.Optional(Type.Unknown()),
-  channels: Type.Optional(Type.Unknown()),
-  userConfig: Type.Optional(Type.Unknown()),
-  bin: Type.Optional(Type.Unknown()),
-  settings: Type.Optional(Type.Unknown()),
+  ...PLUGIN_METADATA_FIELDS,
+  ...SUPPORTED_COMPONENT_PATH_FIELDS,
+  ...UNSUPPORTED_COMPONENT_FIELDS,
 
   mcpServers: Type.Optional(MCP_SERVERS_SCHEMA),
   dependencies: Type.Optional(Type.Unknown()),
