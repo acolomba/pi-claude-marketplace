@@ -59,7 +59,7 @@
     "extensions": [
       "./extensions/claude-marketplace/index.ts"
     ],
-    "video": "https://raw.githubusercontent.com/acolomba/pi-claude-marketplace/main/demos/marketplace-add-plugin-install.mp4"
+    "video": "https://raw.githubusercontent.com/acolomba/pi-claude-marketplace/main/demos/marketplace-add-plugin-install.gif"
   },
   "repository": {
     "type": "git",

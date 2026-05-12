@@ -1,4 +1,4 @@
-Output demos/marketplace-add-plugin-install.mp4
+Output demos/marketplace-add-plugin-install.gif
 
 Require pi
 

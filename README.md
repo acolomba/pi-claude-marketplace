@@ -4,11 +4,7 @@
 
 Access Claude plugin marketplaces from Pi Coding Agent.
 
-<!-- markdownlint-disable MD033 -->
-
-<video src="https://github.com/acolomba/pi-claude-marketplace/raw/ec9cbcb59f8efe06c60dcbf5b1b91a7edbd4053c/demos/marketplace-add-plugin-install.mp4" width="720" controls></video>
-
-<!-- markdownlint-enable MD033 -->
+![Marketplace install demo](demos/marketplace-add-plugin-install.gif)
 
 ## Features
 
