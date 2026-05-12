@@ -115,8 +115,8 @@ jobs:
         run: npm pack --dry-run
 
   publish:
-    # TEMP: publish prerelease from PR to verify npm README metadata ingestion.
-    if: github.event_name == 'pull_request' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+    # Only publish on version tags after tests and package validation pass.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: [package]
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -138,4 +138,4 @@ jobs:
           package-manager-cache: false
 
       - name: Publish to npm
-        run: npm publish --access public --provenance --tag alpha
+        run: npm publish --access public --provenance
