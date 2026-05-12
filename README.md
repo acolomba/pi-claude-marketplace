@@ -25,13 +25,13 @@ Plugins that contain unsupported components are marked as "unavailable". The com
 
 ## Usage
 
-Install the Pi extension with:
+Install the Pi extension:
 
 ```bash
 pi install npm:pi-claude-marketplace
 ```
 
-In Pi, add the Anthropic marketplace with:
+In Pi, add the Anthropic marketplace:
 
 ```text
 /claude:plugin marketplace add anthropics/claude-plugins-official
@@ -43,13 +43,13 @@ A marketplace may also be added local to a project:
 /claude:plugin marketplace add anthropics/claude-plugins-official --scope project
 ```
 
-List plugins available for installation with:
+List plugins available for installation:
 
 ```text
 /claude:plugin list claude-plugins-official --available
 ```
 
-Install a plugin with:
+Install a plugin:
 
 ```text
 /claude:plugin install pr-review-toolkit@claude-plugins-official
@@ -61,7 +61,7 @@ Then reload:
 /reload
 ```
 
-Set autoupdate with:
+Set autoupdate:
 
 ```text
 /claude:plugin marketplace autoupdate claude-plugins-official
@@ -232,7 +232,7 @@ Enable Git LFS for large binary assets such as images and videos:
 git lfs install
 ```
 
-Build with:
+Build:
 
 ```bash
 npm install
