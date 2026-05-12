@@ -10,7 +10,7 @@ Install plugins from the Claude plugin marketplace with these components:
 
 - Commands.
 - Skills.
-- Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents).
+- Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents)
 - MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter)
 
 Plugins that contain unsupported components are marked as "unavailable". The compatible parts may still be installed, but the plugin will not to work as originally intended.
@@ -57,6 +57,18 @@ Then reload:
 
 ```text
 /reload
+```
+
+Set autoupdate with:
+
+```text
+/claude:plugin marketplace autoupdate claude-plugins-official
+```
+
+Plugins are automatically updated when the marketplace is updated:
+
+```text
+/claude:plugin marketplace update
 ```
 
 ### Name mapping
@@ -143,7 +155,7 @@ Remove a marketplace and any plugins installed from it:
 /claude:plugin marketplace rm claude-plugins-official
 ```
 
-Toggle marketplace auto-updates:
+Toggle marketplace plugin auto-updates. When the marketplace is updated manually, plugins are automatically updated:
 
 ```text
 /claude:plugin marketplace autoupdate claude-plugins-official

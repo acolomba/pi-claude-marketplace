@@ -33,6 +33,10 @@ export interface CrossPluginGeneratedNames {
   readonly agents: readonly string[];
 }
 
+function compareNames(a: string, b: string): number {
+  return a.localeCompare(b);
+}
+
 /**
  * PI-6 / RN-3 cross-bridge name conflict guard.
  *
@@ -91,21 +95,21 @@ export function assertNoCrossPluginConflicts(
 
   const conflicts: string[] = [];
 
-  for (const n of [...generatedNames.skills].sort()) {
+  for (const n of [...generatedNames.skills].sort(compareNames)) {
     const owner = skillOwners.get(n);
     if (owner !== undefined) {
       conflicts.push(`skill "${n}" already owned by plugin "${owner.plugin}"`);
     }
   }
 
-  for (const n of [...generatedNames.commands].sort()) {
+  for (const n of [...generatedNames.commands].sort(compareNames)) {
     const owner = commandOwners.get(n);
     if (owner !== undefined) {
       conflicts.push(`command "${n}" already owned by plugin "${owner.plugin}"`);
     }
   }
 
-  for (const n of [...generatedNames.agents].sort()) {
+  for (const n of [...generatedNames.agents].sort(compareNames)) {
     const owner = agentOwners.get(n);
     if (owner !== undefined) {
       conflicts.push(`agent "${n}" already owned by plugin "${owner.plugin}"`);
