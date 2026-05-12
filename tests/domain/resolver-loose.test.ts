@@ -18,9 +18,9 @@ import test from "node:test";
 import {
   type ResolveContext,
   resolveLoose,
-} from "../../extensions/claude-marketplace/domain/resolver.ts";
+} from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
 
-import type { PluginEntry } from "../../extensions/claude-marketplace/domain/components/plugin.ts";
+import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 
 function mockCtx(
   marketplaceRoot: string,

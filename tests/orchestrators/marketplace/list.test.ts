@@ -4,10 +4,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { githubSource, pathSource } from "../../../extensions/claude-marketplace/domain/source.ts";
-import { listMarketplaces } from "../../../extensions/claude-marketplace/orchestrators/marketplace/list.ts";
-import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
-import { saveState } from "../../../extensions/claude-marketplace/persistence/state-io.ts";
+import {
+  githubSource,
+  pathSource,
+} from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { listMarketplaces } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 
@@ -174,7 +177,7 @@ test("SC-6: bare form enumerates BOTH user and project; user-only entry appears 
 
 test("ML-3: list source has zero imports from domain/manifest (no manifest reads)", async () => {
   const src = await readFile(
-    "extensions/claude-marketplace/orchestrators/marketplace/list.ts",
+    "extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts",
     "utf8",
   );
   const code = stripComments(src);
@@ -197,7 +200,7 @@ function stripComments(src: string): string {
 
 test("NFR-5: list source has zero imports from platform/git or gitOps surface", async () => {
   const src = await readFile(
-    "extensions/claude-marketplace/orchestrators/marketplace/list.ts",
+    "extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts",
     "utf8",
   );
   const code = stripComments(src);
@@ -208,7 +211,7 @@ test("NFR-5: list source has zero imports from platform/git or gitOps surface", 
 
 test("D-04 corollary: list does not use withStateGuard", async () => {
   const src = await readFile(
-    "extensions/claude-marketplace/orchestrators/marketplace/list.ts",
+    "extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts",
     "utf8",
   );
   const code = stripComments(src);

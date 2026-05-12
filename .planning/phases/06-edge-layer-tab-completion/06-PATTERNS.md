@@ -8,14 +8,14 @@
 
 | New / Modified File | Role | Data Flow | Closest Analog | Match Quality |
 |---------------------|------|-----------|----------------|---------------|
-| `edge/router.ts` | router | request-response | `git show features/initial:extensions/claude-marketplace/commands/router.ts` | exact (V1 port verbatim, notify routing changes) |
-| `edge/args.ts` | parser | transform | `git show features/initial:extensions/claude-marketplace/args.ts` | exact (V1 port verbatim, import path only) |
-| `edge/args-schema.ts` | parser | transform | `git show features/initial:extensions/claude-marketplace/commands/_args.ts` | exact (V1 port verbatim, import paths) |
+| `edge/router.ts` | router | request-response | `git show features/initial:extensions/pi-claude-marketplace/commands/router.ts` | exact (V1 port verbatim, notify routing changes) |
+| `edge/args.ts` | parser | transform | `git show features/initial:extensions/pi-claude-marketplace/args.ts` | exact (V1 port verbatim, import path only) |
+| `edge/args-schema.ts` | parser | transform | `git show features/initial:extensions/pi-claude-marketplace/commands/_args.ts` | exact (V1 port verbatim, import paths) |
 | `edge/types.ts` | types | -- | `orchestrators/types.ts` | role-match (cross-module types module) |
-| `edge/register.ts` | registration | event-driven | `git show features/initial:extensions/claude-marketplace/index.ts` (V1 entrypoint) | role-match (V1 was monolithic; new is two helpers) |
-| `edge/completions/provider.ts` | completion dispatcher | request-response | `git show features/initial:extensions/claude-marketplace/index.ts` (getArgumentCompletions block) | exact (port verbatim with cache-backed accessors) |
-| `edge/completions/data.ts` | accessor | read-through | `git show features/initial:extensions/claude-marketplace/completions.ts` (load* helpers) | role-match (V1 loaders replaced by cache reads) |
-| `edge/completions/normalize.ts` | utility | transform | `git show features/initial:extensions/claude-marketplace/completions.ts::normalizeCompletionWhitespace` | exact (V1 port verbatim) |
+| `edge/register.ts` | registration | event-driven | `git show features/initial:extensions/pi-claude-marketplace/index.ts` (V1 entrypoint) | role-match (V1 was monolithic; new is two helpers) |
+| `edge/completions/provider.ts` | completion dispatcher | request-response | `git show features/initial:extensions/pi-claude-marketplace/index.ts` (getArgumentCompletions block) | exact (port verbatim with cache-backed accessors) |
+| `edge/completions/data.ts` | accessor | read-through | `git show features/initial:extensions/pi-claude-marketplace/completions.ts` (load* helpers) | role-match (V1 loaders replaced by cache reads) |
+| `edge/completions/normalize.ts` | utility | transform | `git show features/initial:extensions/pi-claude-marketplace/completions.ts::normalizeCompletionWhitespace` | exact (V1 port verbatim) |
 | `edge/handlers/plugin/install.ts` | handler (shim) | request-response | `orchestrators/plugin/install.ts` (caller-side) + Pattern 1 in RESEARCH.md | role-match (thin shim wrapper) |
 | `edge/handlers/plugin/uninstall.ts` | handler (shim) | request-response | `orchestrators/plugin/uninstall.ts` (callee) | role-match |
 | `edge/handlers/plugin/update.ts` | handler (shim) | request-response | `orchestrators/plugin/update.ts` (callee) | role-match |
@@ -25,7 +25,7 @@
 | `edge/handlers/marketplace/list.ts` | handler (shim) | request-response | `orchestrators/marketplace/list.ts` (callee; also V1 `handleMarketplaceList`) | exact |
 | `edge/handlers/marketplace/update.ts` | handler (shim) | request-response | `orchestrators/marketplace/update.ts` (callee) | role-match |
 | `edge/handlers/marketplace/autoupdate.ts` | handler (shim, dual-form) | request-response | `orchestrators/marketplace/autoupdate.ts` (callee) | role-match |
-| `edge/handlers/tools.ts` | LLM tool registration | request-response | `git show features/initial:extensions/claude-marketplace/commands/list-marketplaces.ts` | exact (V1 port + filter params) |
+| `edge/handlers/tools.ts` | LLM tool registration | request-response | `git show features/initial:extensions/pi-claude-marketplace/commands/list-marketplaces.ts` | exact (V1 port + filter params) |
 | `shared/completion-cache.ts` | cache module | read-through + invalidation | `shared/atomic-json.ts` (atomic I/O) + `persistence/state-io.ts` (read+validate+rebuild) | novel composite |
 | `persistence/locations.ts` (extension) | path helper | -- | existing `pluginDataDir`/`marketplaceDataDir`/`sourceCloneDir` method pattern | exact (in-place additive) |
 | `orchestrators/marketplace/add.ts` (edit) | orchestrator | + cache-invalidation hook | existing post-state-commit window in same file (after `withStateGuard` at line 108) | exact (in-place edit) |
@@ -51,7 +51,7 @@
 
 ### `edge/router.ts` (router, request-response)
 
-**Analog:** `git show features/initial:extensions/claude-marketplace/commands/router.ts`
+**Analog:** `git show features/initial:extensions/pi-claude-marketplace/commands/router.ts`
 
 **Port verbatim with two refinements:**
 
@@ -139,7 +139,7 @@ The `routeMarketplace` accepts `case "remove": case "rm":` aliasing -- TC-2 acce
 
 ### `edge/args.ts` (parser, transform)
 
-**Analog:** `git show features/initial:extensions/claude-marketplace/args.ts`
+**Analog:** `git show features/initial:extensions/pi-claude-marketplace/args.ts`
 
 **Port verbatim** -- only the import of `Scope` changes (`./types.ts` → `../shared/types.ts`). See RESEARCH.md §V1 Source Extracts → args.ts (lines 524-569) for the entire body. AP-1 tokenizer + AP-2/AP-4 `--scope` validation flow with `throw new Error(...)` on missing/invalid value; the caller (`parseCommandArgs`) catches and routes through `notifyError`.
 
@@ -160,7 +160,7 @@ function tokenize(input: string): string[] { /* V1 body */ }
 
 ### `edge/args-schema.ts` (parser, transform)
 
-**Analog:** `git show features/initial:extensions/claude-marketplace/commands/_args.ts`
+**Analog:** `git show features/initial:extensions/pi-claude-marketplace/commands/_args.ts`
 
 **Port verbatim** -- imports change to `./args.ts`, `../shared/errors.ts`, `../shared/types.ts`. Exports `PositionalSpec`, `ParsedCommandArgs`, `parseCommandArgs`. The `parseArgsOrNotify` helper catches `parseArgs` throws and forwards `errorMessage(err)` to the injected `notifyError` callback. On missing required positional, emits `schema.usage` via `notifyError` and returns `undefined`.
 
@@ -177,7 +177,7 @@ export function parseCommandArgs<const Spec extends readonly PositionalSpec[]>(
 
 ### `edge/completions/provider.ts` (completion dispatcher, request-response)
 
-**Analog:** `git show features/initial:extensions/claude-marketplace/index.ts` (the `getArgumentCompletions: async (prefix) => { ... }` block inside `pi.registerCommand`).
+**Analog:** `git show features/initial:extensions/pi-claude-marketplace/index.ts` (the `getArgumentCompletions: async (prefix) => { ... }` block inside `pi.registerCommand`).
 
 **Port the dispatcher branches** -- five branches, exact V1 logic (verified in V1 `index.ts` and reproduced in RESEARCH.md lines 680-765). Two changes:
 
@@ -249,7 +249,7 @@ if (head === "update" && tokens.length === 1) {
 
 ### `edge/completions/data.ts` (accessor, read-through)
 
-**Analog (replaced):** `git show features/initial:extensions/claude-marketplace/completions.ts` (the four `load*` functions: `loadKnownMarketplaceNames`, `loadAvailablePluginNames`, `loadInstalledPluginNames`, `loadPluginToMarketplacesMap`).
+**Analog (replaced):** `git show features/initial:extensions/pi-claude-marketplace/completions.ts` (the four `load*` functions: `loadKnownMarketplaceNames`, `loadAvailablePluginNames`, `loadInstalledPluginNames`, `loadPluginToMarketplacesMap`).
 
 **Port the pure helpers verbatim** -- `buildItem`, `splitCompletionInput`, `extractPositionals`, `getScopeCompletions`, `getMarketplaceCompletions`, `getPluginCompletions`. These are pure functions with no I/O; the only change is the import of `AutocompleteItem` (now re-exported via `@mariozechner/pi-coding-agent` -- verify; otherwise import directly from `@mariozechner/pi-tui`).
 
@@ -319,7 +319,7 @@ The status filter (D-03 corollary):
 
 ### `edge/completions/normalize.ts` (utility, transform)
 
-**Analog:** `git show features/initial:extensions/claude-marketplace/completions.ts::normalizeCompletionWhitespace` + `isClaudePluginCommandLine` + `CLAUDE_PLUGIN_LINE`.
+**Analog:** `git show features/initial:extensions/pi-claude-marketplace/completions.ts::normalizeCompletionWhitespace` + `isClaudePluginCommandLine` + `CLAUDE_PLUGIN_LINE`.
 
 **Port verbatim** -- all three symbols are V1 carry-forward (TC-7 locked):
 ```typescript
@@ -563,7 +563,7 @@ The router calls `handlers.marketplaceAutoupdate = makeAutoupdateHandler(true)` 
 
 ### `edge/handlers/tools.ts` (LLM tool registration)
 
-**Analog:** `git show features/initial:extensions/claude-marketplace/commands/list-marketplaces.ts` (V1's `registerListMarketplacesTool` + `registerListPluginsTool`).
+**Analog:** `git show features/initial:extensions/pi-claude-marketplace/commands/list-marketplaces.ts` (V1's `registerListMarketplacesTool` + `registerListPluginsTool`).
 
 **Port `registerListMarketplacesTool` verbatim** -- parameters: `Type.Object({})`, body queries `listVisibleMarketplaces` and renders one line per marketplace. NOTE: V1's body uses `Object.keys(m.plugins).length` for the plugin count -- this is correct under new state schema (presence of plugin record ≡ installed, per Phase 2 D-09).
 
@@ -629,7 +629,7 @@ export interface SubcommandHandlers {
 
 ### `edge/register.ts` (registration, event-driven)
 
-**Analog:** `git show features/initial:extensions/claude-marketplace/index.ts` (V1 entrypoint).
+**Analog:** `git show features/initial:extensions/pi-claude-marketplace/index.ts` (V1 entrypoint).
 
 **V1 entrypoint is monolithic** -- it imports every handler, sets up `pi.registerCommand`, `pi.on("session_start", ...)`, and `pi.on("resources_discover", ...)` in one function. The new layout splits this:
 - `edge/register.ts::registerClaudePluginCommand(pi, deps)` -- slash command + session_start autocomplete wrapper. Phase 6.
@@ -1027,7 +1027,7 @@ function makeMockPi(): { pi: ExtensionAPI; registered: Map<string, ToolDefinitio
 }
 ```
 
-Then: invoke `registerListMarketplacesTool(pi)` → look up `registered.get("claude_marketplace_list")` → call `.execute(...)` → assert return shape.
+Then: invoke `registerListMarketplacesTool(pi)` → look up `registered.get("pi_claude_marketplace_list")` → call `.execute(...)` → assert return shape.
 
 For state-dependent paths, combine with `withHermeticHome` from `install.test.ts`.
 
@@ -1054,7 +1054,7 @@ function makeMockPi(): { pi: ExtensionAPI; events: { [k: string]: Function[] }; 
 Tests:
 - `registerClaudePluginCommand(pi, deps)` → `commands` has `"claude:plugin"`, `events["session_start"]` has length 1.
 - Fire the session_start handler → it invokes `ctx.ui.addAutocompleteProvider` with a factory that produces a wrapper using `normalizeCompletionWhitespace`.
-- `registerClaudeMarketplaceTools(pi)` → `tools` has both `"claude_marketplace_list"` and `"claude_marketplace_plugin_list"`.
+- `registerClaudeMarketplaceTools(pi)` → `tools` has both `"pi_claude_marketplace_list"` and `"pi_claude_marketplace_plugin_list"`.
 
 ---
 
@@ -1110,7 +1110,7 @@ For memory-only invalidations, the simplest test asserts that a `notifyWarning` 
 
 ### Pattern: Notify discipline (BLOCK A)
 
-**Source:** `extensions/claude-marketplace/shared/notify.ts`
+**Source:** `extensions/pi-claude-marketplace/shared/notify.ts`
 
 **Apply to:** Every Phase 6 file in `edge/` and the cache invalidation insertions in `orchestrators/`. Direct `ctx.ui.notify` is FORBIDDEN -- use these wrappers:
 
@@ -1138,7 +1138,7 @@ export function notifyUsageError(ctx: ExtensionContext, message: string, usageBl
 
 ### Pattern: Path containment (BLOCK ?)
 
-**Source:** `extensions/claude-marketplace/shared/path-safety.ts::assertPathInside`
+**Source:** `extensions/pi-claude-marketplace/shared/path-safety.ts::assertPathInside`
 
 **Apply to:** Every cache file path in `persistence/locations.ts` (specifically `pluginCacheFile(marketplace)`). The cacheDir and marketplaceNamesCacheFile are hard-coded suffixes (no untrusted input) so they don't need containment checks; only `pluginCacheFile` accepts the marketplace name and must run `assertSafeName` + `assertPathInside`.
 
@@ -1154,7 +1154,7 @@ async pluginCacheFile(marketplace: string): Promise<string> {
 
 ### Pattern: Atomic JSON write (NFR-1)
 
-**Source:** `extensions/claude-marketplace/shared/atomic-json.ts::atomicWriteJson`
+**Source:** `extensions/pi-claude-marketplace/shared/atomic-json.ts::atomicWriteJson`
 
 **Apply to:** Every cache file write in `shared/completion-cache.ts`. Goes through `write-file-atomic@^8` queue.
 
@@ -1164,7 +1164,7 @@ await atomicWriteJson(cacheFilePath, { schemaVersion: 1, names: [...] });
 
 ### Pattern: TypeBox JIT validators at module load (D-07)
 
-**Source:** `extensions/claude-marketplace/persistence/state-io.ts` lines 33-84
+**Source:** `extensions/pi-claude-marketplace/persistence/state-io.ts` lines 33-84
 
 **Apply to:** `shared/completion-cache.ts` cache schemas + `edge/handlers/tools.ts` LLM tool parameter schemas (the latter is NOT compiled -- Pi compiles them; just `Type.Object({...})` inline).
 
@@ -1237,12 +1237,12 @@ Files with no close codebase match (planner should use RESEARCH.md patterns inst
 ## Metadata
 
 **Analog search scope:**
-- `extensions/claude-marketplace/edge/` (current state: minimal scaffold)
-- `extensions/claude-marketplace/orchestrators/{plugin,marketplace}/` (Phase 4/5 outputs)
-- `extensions/claude-marketplace/shared/` (Phase 1 outputs)
-- `extensions/claude-marketplace/persistence/` (Phase 2 outputs)
+- `extensions/pi-claude-marketplace/edge/` (current state: minimal scaffold)
+- `extensions/pi-claude-marketplace/orchestrators/{plugin,marketplace}/` (Phase 4/5 outputs)
+- `extensions/pi-claude-marketplace/shared/` (Phase 1 outputs)
+- `extensions/pi-claude-marketplace/persistence/` (Phase 2 outputs)
 - `tests/orchestrators/`, `tests/shared/`, `tests/persistence/`
-- V1 reference: `git show features/initial:extensions/claude-marketplace/{args,index,completions}.ts` + `commands/{router,_args,list-marketplaces}.ts`
+- V1 reference: `git show features/initial:extensions/pi-claude-marketplace/{args,index,completions}.ts` + `commands/{router,_args,list-marketplaces}.ts`
 
 **Files scanned:** ~25 (5 V1 references, 15 current Phase 1-5 outputs, 5 test analogs)
 

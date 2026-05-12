@@ -8,11 +8,11 @@ import { fileURLToPath } from "node:url";
 import {
   loadAgentsIndex,
   saveAgentsIndex,
-} from "../../extensions/claude-marketplace/persistence/agents-index-io.ts";
-import { locationsFor } from "../../extensions/claude-marketplace/persistence/locations.ts";
+} from "../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
+import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
-import type { AgentsIndex } from "../../extensions/claude-marketplace/persistence/agents-index-schema.ts";
-import type { ScopedLocations } from "../../extensions/claude-marketplace/persistence/locations.ts";
+import type { AgentsIndex } from "../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
+import type { ScopedLocations } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 /**
  * AG-2 / AG-4 -- agents-index.json load/save behavior.
@@ -38,7 +38,7 @@ interface TmpScope {
 
 async function tmpScope(): Promise<TmpScope> {
   const dir = await mkdtemp(path.join(tmpdir(), "pi-cm-agents-index-test-"));
-  // locationsFor("project", cwd) -> extensionRoot = <cwd>/.pi/claude-marketplace
+  // locationsFor("project", cwd) -> extensionRoot = <cwd>/.pi/pi-claude-marketplace
   const loc = locationsFor("project", dir);
   // Pre-create extensionRoot so single-row + corruption fixtures can be
   // written without mkdir-on-each-test boilerplate. The "creates parent
@@ -88,7 +88,7 @@ test("AG-2 loadAgentsIndex round-trips a single-row index from the single-row.js
     assert.equal(got.schemaVersion, 1);
     assert.equal(got.agents.length, 1);
     assert.equal(got.agents[0]?.plugin, "acme");
-    assert.equal(got.agents[0]?.generatedName, "claude-marketplace-acme-bot");
+    assert.equal(got.agents[0]?.generatedName, "pi-claude-marketplace-acme-bot");
     assert.equal(got.agents[0]?.originalModel, "sonnet");
     assert.deepEqual([...got.corruptions], []);
   } finally {
@@ -175,7 +175,7 @@ test("AG-2 saveAgentsIndex round-trips: save then load returns same agents", asy
           plugin: "p",
           marketplace: "m",
           sourceAgent: "s",
-          generatedName: "claude-marketplace-p-s",
+          generatedName: "pi-claude-marketplace-p-s",
           sourcePath: "/src",
           targetPath: "/dst",
           sourceHash: "abc123",

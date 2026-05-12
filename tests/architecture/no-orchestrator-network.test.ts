@@ -10,10 +10,10 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
  * NFR-5 / PI-2 / PL-3 architectural surface guard.
  *
  * Forbidden surface, by file:
- *   - extensions/claude-marketplace/orchestrators/plugin/install.ts
+ *   - extensions/pi-claude-marketplace/orchestrators/plugin/install.ts
  *     MUST NOT import `gitOps` / `platform/git` / `DEFAULT_GIT_OPS`
  *     (PI-2: install consults the cached manifest only; NO network sync).
- *   - extensions/claude-marketplace/orchestrators/plugin/list.ts
+ *   - extensions/pi-claude-marketplace/orchestrators/plugin/list.ts
  *     MUST NOT import `gitOps` / `platform/git` / `DEFAULT_GIT_OPS`
  *     (PL-3 + NFR-5: list is read-only against state + manifest; no network).
  *
@@ -39,8 +39,8 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
  *   .planning/phases/05-plugin-orchestrators/05-PATTERNS.md.
  */
 const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
-  "extensions/claude-marketplace/orchestrators/plugin/install.ts",
-  "extensions/claude-marketplace/orchestrators/plugin/list.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
 ];
 
 const FORBIDDEN_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> = [

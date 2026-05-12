@@ -4,12 +4,12 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { getArgumentCompletions } from "../../../extensions/claude-marketplace/edge/completions/provider.ts";
-import { __resetCacheForTests } from "../../../extensions/claude-marketplace/shared/completion-cache.ts";
+import { getArgumentCompletions } from "../../../extensions/pi-claude-marketplace/edge/completions/provider.ts";
+import { __resetCacheForTests } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
-import type { LocationsResolver } from "../../../extensions/claude-marketplace/edge/completions/data.ts";
-import type { PluginIndexRow } from "../../../extensions/claude-marketplace/shared/completion-cache.ts";
-import type { Scope } from "../../../extensions/claude-marketplace/shared/types.ts";
+import type { LocationsResolver } from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
+import type { PluginIndexRow } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 /**
  * Wave 2 / Plan 06-03 tests for edge/completions/provider.ts (TC-1..TC-9
@@ -94,14 +94,21 @@ async function emptyFixture(): Promise<Fixture> {
 // TC-1 -- top-level subcommand keywords.
 // ---------------------------------------------------------------------------
 
-test("TC-1 :: first positional surfaces top-level keywords (install/uninstall/update/list/marketplace)", async () => {
+test("TC-1 :: first positional surfaces top-level keywords (install/uninstall/update/list/ls/marketplace)", async () => {
   __resetCacheForTests();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("", f.resolver);
     assert.ok(items !== null);
     const labels = items.map((i) => i.label);
-    assert.deepEqual([...labels].sort(), ["install", "list", "marketplace", "uninstall", "update"]);
+    assert.deepEqual([...labels].sort(), [
+      "install",
+      "list",
+      "ls",
+      "marketplace",
+      "uninstall",
+      "update",
+    ]);
     // All terminal completions get a trailing space (TC-7 cross-check).
     for (const item of items) {
       assert.match(item.value, / $/, `expected trailing space in value: ${item.value}`);
@@ -120,6 +127,21 @@ test('TC-1 :: top-level keyword filtering by prefix ("ins" -> install only)', as
     assert.deepEqual(
       items.map((i) => i.label),
       ["install"],
+    );
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test('TC-1 :: top-level keyword filtering by prefix ("l" -> list and ls)', async () => {
+  __resetCacheForTests();
+  const f = await emptyFixture();
+  try {
+    const items = await getArgumentCompletions("l", f.resolver);
+    assert.ok(items !== null);
+    assert.deepEqual(
+      items.map((i) => i.label),
+      ["list", "ls"],
     );
   } finally {
     await f.cleanup();
@@ -205,6 +227,21 @@ test("TC-3 :: - prefix on list head also surfaces --installed/--available/--unav
   }
 });
 
+test("TC-3 :: - prefix on ls alias also surfaces --installed/--available/--unavailable", async () => {
+  __resetCacheForTests();
+  const f = await emptyFixture();
+  try {
+    const items = await getArgumentCompletions("ls -", f.resolver);
+    assert.ok(items !== null);
+    const labels = items.map((i) => i.label);
+    for (const expected of ["--scope", "--installed", "--available", "--unavailable"]) {
+      assert.ok(labels.includes(expected), `expected ${expected} in: ${labels.join(", ")}`);
+    }
+  } finally {
+    await f.cleanup();
+  }
+});
+
 test("TC-3 :: -- and - prefixes behave identically", async () => {
   __resetCacheForTests();
   const f = await emptyFixture();
@@ -253,6 +290,24 @@ test("TC-5 :: list <here> completes with union of marketplace names from both sc
   });
   try {
     const items = await getArgumentCompletions("list ", f.resolver);
+    assert.ok(items !== null);
+    assert.deepEqual([...items.map((i) => i.label)].sort(), ["mp-p", "mp-u"]);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("TC-5 :: ls <here> completes with union of marketplace names from both scopes", async () => {
+  __resetCacheForTests();
+  const f = await makeFixture({
+    state: {
+      user: { "mp-u": {} },
+      project: { "mp-p": {}, "mp-u": {} },
+    },
+    manifests: { user: {}, project: {} },
+  });
+  try {
+    const items = await getArgumentCompletions("ls ", f.resolver);
     assert.ok(items !== null);
     assert.deepEqual([...items.map((i) => i.label)].sort(), ["mp-p", "mp-u"]);
   } finally {

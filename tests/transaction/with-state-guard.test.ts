@@ -6,15 +6,15 @@ import test from "node:test";
 
 import lockfile from "proper-lockfile";
 
-import { pathSource } from "../../extensions/claude-marketplace/domain/source.ts";
+import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   locationsFor,
   type ScopedLocations,
-} from "../../extensions/claude-marketplace/persistence/locations.ts";
-import { StateLockHeldError } from "../../extensions/claude-marketplace/shared/errors.ts";
-import { withStateGuard } from "../../extensions/claude-marketplace/transaction/with-state-guard.ts";
+} from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { StateLockHeldError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { withStateGuard } from "../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 
-import type { ExtensionState } from "../../extensions/claude-marketplace/persistence/state-io.ts";
+import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 /**
  * ST-7 / ST-8 / ST-9 / SC-3 -- withStateGuard intra-process state lifecycle.

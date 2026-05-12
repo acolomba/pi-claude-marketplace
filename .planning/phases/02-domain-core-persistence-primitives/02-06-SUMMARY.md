@@ -29,14 +29,14 @@ tech-stack:
 
 key-files:
   created:
-    - extensions/claude-marketplace/transaction/phase-ledger.ts
-    - extensions/claude-marketplace/transaction/rollback.ts
-    - extensions/claude-marketplace/transaction/with-state-guard.ts
+    - extensions/pi-claude-marketplace/transaction/phase-ledger.ts
+    - extensions/pi-claude-marketplace/transaction/rollback.ts
+    - extensions/pi-claude-marketplace/transaction/with-state-guard.ts
     - tests/transaction/phase-ledger.test.ts
     - tests/transaction/rollback.test.ts
     - tests/transaction/with-state-guard.test.ts
   modified:
-    - extensions/claude-marketplace/transaction/index.ts
+    - extensions/pi-claude-marketplace/transaction/index.ts
 
 key-decisions:
   - "Phase callbacks in tests use Promise.resolve()/Promise.reject() rather than async-with-empty-body so @typescript-eslint/require-await passes without inline disables."
@@ -88,10 +88,10 @@ completed: 2026-05-10
 
 ## Files Created/Modified
 
-- `extensions/claude-marketplace/transaction/phase-ledger.ts` (107 lines) -- pure async ledger; Phase<C>, RollbackPartial, RunPhasesResult, runPhases<C>; reverse-order undo; PI-14 re-throw
-- `extensions/claude-marketplace/transaction/rollback.ts` (39 lines) -- D-03 marker assembly; imports ROLLBACK_PARTIAL; ES-4 cause chain
-- `extensions/claude-marketplace/transaction/with-state-guard.ts` (60 lines) -- ST-7 load-fresh/mutate/save-on-success; Pitfall 4 docstring (verbatim INTRA-process scope wording)
-- `extensions/claude-marketplace/transaction/index.ts` -- re-exports the public surface (runPhases, Phase, RollbackPartial, RunPhasesResult, formatRollbackError, withStateGuard)
+- `extensions/pi-claude-marketplace/transaction/phase-ledger.ts` (107 lines) -- pure async ledger; Phase<C>, RollbackPartial, RunPhasesResult, runPhases<C>; reverse-order undo; PI-14 re-throw
+- `extensions/pi-claude-marketplace/transaction/rollback.ts` (39 lines) -- D-03 marker assembly; imports ROLLBACK_PARTIAL; ES-4 cause chain
+- `extensions/pi-claude-marketplace/transaction/with-state-guard.ts` (60 lines) -- ST-7 load-fresh/mutate/save-on-success; Pitfall 4 docstring (verbatim INTRA-process scope wording)
+- `extensions/pi-claude-marketplace/transaction/index.ts` -- re-exports the public surface (runPhases, Phase, RollbackPartial, RunPhasesResult, formatRollbackError, withStateGuard)
 - `tests/transaction/phase-ledger.test.ts` (239 lines) -- 8 tests covering D-01, AS-4, PI-14, happy path, empty-array, missing-undo skip, ctx threading
 - `tests/transaction/rollback.test.ts` (95 lines) -- 5 tests covering D-03 single-chokepoint, AS-4 marker emission, ES-4 cause chain, no-partial short-circuit
 - `tests/transaction/with-state-guard.test.ts` (249 lines) -- 6 tests covering ST-7 (3 cases: happy + throw + fresh-load), SC-3 / ST-8 hard-fail, ST-8 soft-converge, ST-9 update-concurrent-change
@@ -139,7 +139,7 @@ completed: 2026-05-10
 - **Found during:** Task 3 + Task 4 + Task 5 + Task 6 lint.
 - **Issue:** ESLint flat-config import-x/order requires a blank line between `internal` and `type` import groups; multiple test files placed type imports adjacent to value imports without the blank-line separator. Two test cases also violated `@typescript-eslint/prefer-optional-chain` (`mp && mp.plugins.p1` -> `mp?.plugins.p1`) and `@stylistic/padding-line-between-statements`.
 - **Fix:** Reordered imports to put `type X` lines after a blank line; rewrote `mp && mp.plugins.p1` patterns as `mp?.plugins.p1`; added blank line before the `throw` statement in the soft-converge test path.
-- **Files modified:** `extensions/claude-marketplace/transaction/with-state-guard.ts`, `tests/transaction/phase-ledger.test.ts`, `tests/transaction/rollback.test.ts`, `tests/transaction/with-state-guard.test.ts`
+- **Files modified:** `extensions/pi-claude-marketplace/transaction/with-state-guard.ts`, `tests/transaction/phase-ledger.test.ts`, `tests/transaction/rollback.test.ts`, `tests/transaction/with-state-guard.test.ts`
 - **Verification:** `npm run check` exits 0.
 
 **5. [Rule 1 - Bug] Acceptance-criteria literal grep tripped by comments mentioning the marker prefix**
@@ -147,7 +147,7 @@ completed: 2026-05-10
 - **Found during:** Task 1 + Task 2 acceptance-criteria check.
 - **Issue:** Plan's acceptance criterion for `phase-ledger.ts` requires `grep -c "class " ... == 0`; the original docstring used the phrase "coordinator class with `add()`" three times. Plan's acceptance criterion for `rollback.ts` requires `grep -c "(rollback partial:" ... == 0` (D-03: NO inline prefix string -- only via import); the original docstring quoted the literal marker shape. Although both grep matches were in comments and not in code, the criteria are literal string matches.
 - **Fix:** Reworded comments in `phase-ledger.ts` (`coordinator class` -> `coordinator-class` + `coordinator-with-\`add()\` API`) and in `rollback.ts` (replaced literal marker quotation with a structural description: "open-paren + that prefix string + per-phase entries..."). Semantic intent preserved; literal grep counts go to zero.
-- **Files modified:** `extensions/claude-marketplace/transaction/phase-ledger.ts`, `extensions/claude-marketplace/transaction/rollback.ts`
+- **Files modified:** `extensions/pi-claude-marketplace/transaction/phase-ledger.ts`, `extensions/pi-claude-marketplace/transaction/rollback.ts`
 - **Verification:** All literal-grep acceptance criteria pass; typecheck and lint stay green.
 
 ---
@@ -218,9 +218,9 @@ None -- no external service configuration required.
 
 ## Self-Check: PASSED
 
-- [x] `extensions/claude-marketplace/transaction/phase-ledger.ts` exists at `ef9b1ef`.
-- [x] `extensions/claude-marketplace/transaction/rollback.ts` exists at `1efaa18`.
-- [x] `extensions/claude-marketplace/transaction/with-state-guard.ts` + `transaction/index.ts` updated at `30f7966`.
+- [x] `extensions/pi-claude-marketplace/transaction/phase-ledger.ts` exists at `ef9b1ef`.
+- [x] `extensions/pi-claude-marketplace/transaction/rollback.ts` exists at `1efaa18`.
+- [x] `extensions/pi-claude-marketplace/transaction/with-state-guard.ts` + `transaction/index.ts` updated at `30f7966`.
 - [x] `tests/transaction/phase-ledger.test.ts` exists at `2f86723` (8 tests pass).
 - [x] `tests/transaction/rollback.test.ts` exists at `5ac6acf` (5 tests pass).
 - [x] `tests/transaction/with-state-guard.test.ts` exists at `4b9734f` (6 tests pass).

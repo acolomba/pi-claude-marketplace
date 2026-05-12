@@ -7,7 +7,7 @@ import test from "node:test";
 import {
   MCP_COLLISION_SLOTS,
   loadEffectiveServerNames,
-} from "../../../extensions/claude-marketplace/bridges/mcp/collision-slots.ts";
+} from "../../../extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts";
 
 // MC-4 / RN-5 -- four-slot enumeration + first-declarer-wins.
 

@@ -30,12 +30,12 @@ tech-stack:
 
 key-files:
   created:
-    - extensions/claude-marketplace/domain/resolver.ts
+    - extensions/pi-claude-marketplace/domain/resolver.ts
     - tests/domain/resolver.types.test.ts
     - tests/domain/resolver-strict.test.ts
     - tests/domain/resolver-loose.test.ts
   modified:
-    - extensions/claude-marketplace/domain/index.ts
+    - extensions/pi-claude-marketplace/domain/index.ts
 
 key-decisions:
   - "Adopted void-style @ts-expect-error pattern in type-level test to satisfy @typescript-eslint/no-unsafe-return without losing the NFR-7 directive."
@@ -87,8 +87,8 @@ completed: 2026-05-10
 
 ## Files Created/Modified
 
-- `extensions/claude-marketplace/domain/resolver.ts` (553 lines) -- ResolvedPlugin union schemas + resolveStrict + resolveLoose + requireInstallable + injectable ResolveContext
-- `extensions/claude-marketplace/domain/index.ts` -- re-exports the resolver public API
+- `extensions/pi-claude-marketplace/domain/resolver.ts` (553 lines) -- ResolvedPlugin union schemas + resolveStrict + resolveLoose + requireInstallable + injectable ResolveContext
+- `extensions/pi-claude-marketplace/domain/index.ts` -- re-exports the resolver public API
 - `tests/domain/resolver.types.test.ts` (76 lines) -- NFR-7 type-level verifier (load-bearing assertion: `npm run typecheck`)
 - `tests/domain/resolver-strict.test.ts` (295 lines) -- 17 tests (9 PR-2 + PR-3 multi + 2 PR-4 + PR-5 + 3 PR-6 + happy path)
 - `tests/domain/resolver-loose.test.ts` (207 lines) -- 9 tests (3 MM-6 + 3 MM-7 + PR-3 + PR-5 + happy path)
@@ -108,7 +108,7 @@ completed: 2026-05-10
 - **Found during:** Task 1 (typecheck)
 - **Issue:** Plan code template used `.Errors(parsed).First()`. TypeBox 1.x `Errors()` returns a plain array; there is no `.First()` method. tsc reported `TS2339: Property 'First' does not exist on type 'TLocalizedValidationError[]'`.
 - **Fix:** Replaced `.First()` with `[0]`; replaced `firstErr.path` with `firstErr.instancePath || "(root)"` to match the actual error shape.
-- **Files modified:** `extensions/claude-marketplace/domain/resolver.ts`
+- **Files modified:** `extensions/pi-claude-marketplace/domain/resolver.ts`
 - **Verification:** `npm run typecheck` exits 0; both PR-2(4) and PR-2(6) tests still pass and emit the expected note text.
 - **Committed in:** `3a006cd` (Task 1 commit, fixed before commit)
 
@@ -116,7 +116,7 @@ completed: 2026-05-10
 - **Found during:** Task 1 (lint) and Task 3 (lint)
 - **Issue:** The plan's verbatim code template included unnecessary `as Record<string, unknown>` and `as unknown as PluginEntry` casts that tripped `@typescript-eslint/no-unnecessary-type-assertion`. Plan also had `(manifest && manifest[k] !== undefined)` which tripped `prefer-optional-chain`.
 - **Fix:** Removed unnecessary casts (TypeScript already narrowed correctly after `.Check()` guards); converted to optional chain `manifest?.[k]`; reordered import groups in test files (`type` group goes after `object` group per import-x/order config).
-- **Files modified:** `extensions/claude-marketplace/domain/resolver.ts`, `tests/domain/resolver-strict.test.ts`
+- **Files modified:** `extensions/pi-claude-marketplace/domain/resolver.ts`, `tests/domain/resolver-strict.test.ts`
 - **Verification:** `npm run lint` exits 0.
 - **Committed in:** `3a006cd` (Task 1 inline) and `bad1b0b` (Task 3 inline)
 
@@ -140,7 +140,7 @@ The plan's success criterion 1 (NFR-7 verifier) requires that `tests/domain/reso
 2. **Second run (regression simulation):** Temporarily added `pluginRoot: Type.String()` to `ResolvedPluginNotInstallableSchema`. `tsc` reported:
    - `tests/domain/resolver.types.test.ts(50,3): error TS2578: Unused '@ts-expect-error' directive.`
    - `tests/domain/resolver.types.test.ts(56,5): error TS2578: Unused '@ts-expect-error' directive.`
-   - `extensions/claude-marketplace/domain/resolver.ts(167,3): error TS2741: Property 'pluginRoot' is missing` (bonus catch in the `notInstallable()` factory -- T-02-24 mitigation).
+   - `extensions/pi-claude-marketplace/domain/resolver.ts(167,3): error TS2741: Property 'pluginRoot' is missing` (bonus catch in the `notInstallable()` factory -- T-02-24 mitigation).
    The temporary edit was then reverted; typecheck returned to green.
 
 This proves the test catches a regression. Subsequent fix-commit `bd21690` (void-style) was followed by an identical two-step verification with the same outcome.
@@ -162,11 +162,11 @@ None - no external service configuration required.
 
 ## Self-Check: PASSED
 
-- [x] `extensions/claude-marketplace/domain/resolver.ts` exists (553 lines)
+- [x] `extensions/pi-claude-marketplace/domain/resolver.ts` exists (553 lines)
 - [x] `tests/domain/resolver.types.test.ts` exists (76 lines)
 - [x] `tests/domain/resolver-strict.test.ts` exists (295 lines)
 - [x] `tests/domain/resolver-loose.test.ts` exists (207 lines)
-- [x] `extensions/claude-marketplace/domain/index.ts` re-exports ResolvedPlugin types + functions
+- [x] `extensions/pi-claude-marketplace/domain/index.ts` re-exports ResolvedPlugin types + functions
 - [x] Commit `3a006cd` (feat: resolver) on branch
 - [x] Commit `a7b2162` (test: NFR-7 verifier) on branch
 - [x] Commit `bd21690` (fix: no-unsafe-return) on branch

@@ -5,13 +5,13 @@ subsystem: commands-bridge
 tags: [commands-bridge, prepare-commit-abort, rn-6, cm-1, cm-3, cm-4, wave-2]
 dependency_graph:
   requires:
-    - extensions/claude-marketplace/persistence/locations.ts (commandsStagingDir, promptsTargetDir, ScopedLocations)
-    - extensions/claude-marketplace/domain/name.ts (assertSafeName, generatedCommandName)
-    - extensions/claude-marketplace/domain/resolver.ts (ResolvedPluginInstallable + componentPaths.commands)
-    - extensions/claude-marketplace/shared/vars.ts (substituteClaudeVars from Plan 03-01)
-    - extensions/claude-marketplace/shared/fs-utils.ts (cleanupStaging from Plan 03-01)
-    - extensions/claude-marketplace/shared/errors.ts (appendLeakToError)
-    - extensions/claude-marketplace/shared/path-safety.ts (assertPathInside)
+    - extensions/pi-claude-marketplace/persistence/locations.ts (commandsStagingDir, promptsTargetDir, ScopedLocations)
+    - extensions/pi-claude-marketplace/domain/name.ts (assertSafeName, generatedCommandName)
+    - extensions/pi-claude-marketplace/domain/resolver.ts (ResolvedPluginInstallable + componentPaths.commands)
+    - extensions/pi-claude-marketplace/shared/vars.ts (substituteClaudeVars from Plan 03-01)
+    - extensions/pi-claude-marketplace/shared/fs-utils.ts (cleanupStaging from Plan 03-01)
+    - extensions/pi-claude-marketplace/shared/errors.ts (appendLeakToError)
+    - extensions/pi-claude-marketplace/shared/path-safety.ts (assertPathInside)
   provides:
     - bridges/commands/types.ts (DiscoveredCommand, StageCommandsInput, StageCommandsCommitResult, StagedCommandRecord, PreparedCommandsStaging discriminated union, UnstageCommandsInput/Result)
     - bridges/commands/discover.ts (discoverPluginCommands -- CM-4 flat *.md scan, sorted, symlink-refusing)
@@ -31,11 +31,11 @@ tech-stack:
     - "Object.freeze on result lists + readonly types throughout"
 key-files:
   created:
-    - extensions/claude-marketplace/bridges/commands/types.ts
-    - extensions/claude-marketplace/bridges/commands/discover.ts
-    - extensions/claude-marketplace/bridges/commands/stage.ts
-    - extensions/claude-marketplace/bridges/commands/unstage.ts
-    - extensions/claude-marketplace/bridges/commands/index.ts
+    - extensions/pi-claude-marketplace/bridges/commands/types.ts
+    - extensions/pi-claude-marketplace/bridges/commands/discover.ts
+    - extensions/pi-claude-marketplace/bridges/commands/stage.ts
+    - extensions/pi-claude-marketplace/bridges/commands/unstage.ts
+    - extensions/pi-claude-marketplace/bridges/commands/index.ts
     - tests/bridges/commands/discover.test.ts
     - tests/bridges/commands/stage.test.ts
     - tests/bridges/commands/unstage.test.ts
@@ -64,7 +64,7 @@ Wave 2 / commands-bridge primitive lands the prepare/commit/abort/unstage triple
 
 ### Source Modules
 
-**`extensions/claude-marketplace/bridges/commands/types.ts`** (new)
+**`extensions/pi-claude-marketplace/bridges/commands/types.ts`** (new)
 
 Pure type module exposing:
 
@@ -75,7 +75,7 @@ Pure type module exposing:
 - `PreparedCommandsStaging = PreparedCommandsNoop | PreparedCommandsStaged` discriminated union; the staged branch carries `kind: "staged"`, `locations`, `stagingRoot`, `result`, plus the bridge-internal underscore-prefixed `_previousNames` / `_renamePairs` consumed by `commitPreparedCommands`.
 - `UnstageCommandsInput` / `UnstageCommandsResult`.
 
-**`extensions/claude-marketplace/bridges/commands/discover.ts`** (new)
+**`extensions/pi-claude-marketplace/bridges/commands/discover.ts`** (new)
 
 `discoverPluginCommands({ pluginName, resolved })`:
 
@@ -85,7 +85,7 @@ Pure type module exposing:
 - Sorts by `entry.name` (`localeCompare`) for deterministic test assertions and stable warning ordering.
 - Calls `assertSafeName(sourceName, label)` with a label including the commands dir path; calls `generatedCommandName(pluginName, sourceName)` for CM-2 elision.
 
-**`extensions/claude-marketplace/bridges/commands/stage.ts`** (new)
+**`extensions/pi-claude-marketplace/bridges/commands/stage.ts`** (new)
 
 Three top-level exports:
 
@@ -103,14 +103,14 @@ Three top-level exports:
   - Otherwise, for each previous name: contain target path, `unlink` (ENOENT-tolerant). Then `mkdir promptsTargetDir`, then per-file `rename` from staging to target. Returns `cleanupStaging(stagingRoot, ...)` so the caller can surface a leak via `appendLeakToError` if cleanup itself fails.
 - `abortPreparedCommands(prepared)`: Noop branch returns; otherwise `cleanupStaging`.
 
-**`extensions/claude-marketplace/bridges/commands/unstage.ts`** (new)
+**`extensions/pi-claude-marketplace/bridges/commands/unstage.ts`** (new)
 
 `unstagePluginCommands({ locations, previousCommandNames })`:
 
 - For each name: `assertPathInside(promptsTargetDir, target, "command to unstage")`, `unlink` with ENOENT silenced (the silenced case is omitted from `removedNames`, so the result accurately reflects what was actually removed).
 - Returns `{ removedNames: Object.freeze(removed), warnings: Object.freeze([]) }`.
 
-**`extensions/claude-marketplace/bridges/commands/index.ts`** (new)
+**`extensions/pi-claude-marketplace/bridges/commands/index.ts`** (new)
 
 Barrel re-exports:
 
@@ -170,7 +170,7 @@ Both behaviors are now covered by green tests in `discover.test.ts` (cases `CM-2
 - **Found during:** Task 1 implementation while reading the resolver.
 - **Issue:** Plan code dereferenced `componentPaths.commands` directly; the field is `Type.Optional(Type.String())` and is `undefined` for installable plugins without a commands directory. Without a guard, `readdir(undefined)` would throw.
 - **Fix:** Top-of-function guard returns `[]`. Documented inline. Test `prepareStageCommands returns kind:"noop" when no commands AND no previousCommandNames (empty-mcp fixture)` exercises this path through to the noop branch.
-- **Files modified:** `extensions/claude-marketplace/bridges/commands/discover.ts`.
+- **Files modified:** `extensions/pi-claude-marketplace/bridges/commands/discover.ts`.
 - **Commit:** `5abb656`.
 
 **2. [Rule 1 - Bug] commandsDir composition**
@@ -178,7 +178,7 @@ Both behaviors are now covered by green tests in `discover.test.ts` (cases `CM-2
 - **Found during:** Task 1 implementation.
 - **Issue:** Plan draft code passed `componentPaths.commands` directly to `readdir`; that field is relative to `pluginRoot` per the resolver contract.
 - **Fix:** `path.resolve(resolved.pluginRoot, commandsRel)` to compose the absolute commands directory.
-- **Files modified:** `extensions/claude-marketplace/bridges/commands/discover.ts`.
+- **Files modified:** `extensions/pi-claude-marketplace/bridges/commands/discover.ts`.
 - **Commit:** `5abb656`.
 
 **3. [Rule 3 - Blocking] readdir overload type narrowing**
@@ -186,7 +186,7 @@ Both behaviors are now covered by green tests in `discover.test.ts` (cases `CM-2
 - **Found during:** Task 1 typecheck.
 - **Issue:** Without an explicit annotation, TypeScript inferred the buffer-returning `readdir` overload from the contextual type, which broke every downstream `entry.name` `.endsWith()` / `.localeCompare()` call.
 - **Fix:** Annotate the result variable as `Dirent[]` (the string-named variant); add a `node:fs` `Dirent` type import.
-- **Files modified:** `extensions/claude-marketplace/bridges/commands/discover.ts`.
+- **Files modified:** `extensions/pi-claude-marketplace/bridges/commands/discover.ts`.
 - **Commit:** `5abb656`.
 
 **4. [Rule 1 - Bug] Plan done-criterion "internals NOT in barrel" tripped by comment**
@@ -194,7 +194,7 @@ Both behaviors are now covered by green tests in `discover.test.ts` (cases `CM-2
 - **Found during:** Task 2 verification.
 - **Issue:** Plan done-check `grep -c "_previousNames\|_renamePairs" .../index.ts` expects 0; my barrel comment mentioned both names literally, returning 1.
 - **Fix:** Rephrased the comment to describe the fields without naming them literally; the export surface itself was already correct.
-- **Files modified:** `extensions/claude-marketplace/bridges/commands/index.ts`.
+- **Files modified:** `extensions/pi-claude-marketplace/bridges/commands/index.ts`.
 - **Commit:** `8d459d4`.
 
 ### Auth Gates
@@ -241,5 +241,5 @@ None -- all surface introduced is local-fs only, contained within the existing `
 - All Task 1 and Task 2 done-criteria grep checks pass.
 - `npm run test` exit 0 with 264 passing.
 - `npx tsc --noEmit` exit 0.
-- `npx eslint extensions/claude-marketplace/bridges/commands/ tests/bridges/commands/` exit 0.
+- `npx eslint extensions/pi-claude-marketplace/bridges/commands/ tests/bridges/commands/` exit 0.
 - `npx prettier --check` exit 0.

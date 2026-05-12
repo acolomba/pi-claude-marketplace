@@ -19,7 +19,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { makeInstallHandler } from "../../../../extensions/claude-marketplace/edge/handlers/plugin/install.ts";
+import { makeInstallHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 
@@ -130,7 +130,7 @@ test('shim :: --scope project calls installPlugin with scope: "project"', async 
     const handler = makeInstallHandler(makePi());
     await handler("myplug@mymkt --scope project", ctx);
     // Empty project state -> "not found" surfaces. The shim selected the
-    // project locations (state.json under <cwd>/.pi/claude-marketplace/).
+    // project locations (state.json under <cwd>/.pi/pi-claude-marketplace/).
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
     assert.match(notifications[0]!.message, /not found in marketplace "mymkt"/);

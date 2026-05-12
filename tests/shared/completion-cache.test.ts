@@ -14,9 +14,9 @@ import {
   ManifestSoftFailError,
   MARKETPLACE_NAMES_CACHE_SCHEMA,
   PLUGIN_INDEX_CACHE_SCHEMA,
-} from "../../extensions/claude-marketplace/shared/completion-cache.ts";
+} from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
-import type { PluginIndexRow } from "../../extensions/claude-marketplace/shared/completion-cache.ts";
+import type { PluginIndexRow } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 /**
  * D-03 two-tier completion cache primitives + TC-8 soft-fail + TC-9

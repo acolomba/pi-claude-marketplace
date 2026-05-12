@@ -16,7 +16,7 @@ Landed the three Phase 4 presentation helpers -- `reload-hint`, `soft-dep`, `mar
 
 ### Task 1: presentation/reload-hint.ts + tests
 
-Created `extensions/claude-marketplace/presentation/reload-hint.ts`:
+Created `extensions/pi-claude-marketplace/presentation/reload-hint.ts`:
 
 - **`ReloadVerb` type** -- `"install" | "uninstall" | "update" | "add" | "remove"`.
 - **`reloadHint(verb): string`** -- returns the standardized PRD §6.12 ES-5 byte-stable string `\n\nRun /reload to ${verb} the {plugin|marketplace}.` (Pi extensions can't trigger reload themselves; the user must run /reload).
@@ -28,7 +28,7 @@ Commit: `feat(04-03): add presentation/reload-hint helpers + tests`
 
 ### Task 2: presentation/soft-dep.ts + tests
 
-Created `extensions/claude-marketplace/presentation/soft-dep.ts`:
+Created `extensions/pi-claude-marketplace/presentation/soft-dep.ts`:
 
 - **`hasLoadedPiSubagents(ctx)` / `hasLoadedPiMcpAdapter(ctx)`** -- host-side probe predicates that check `ctx.loadedExtensions` for the soft-dep extension presence.
 - **`subagentWarningIfNeeded(ctx, opts)` / `mcpAdapterWarningIfNeeded(ctx, opts)`** -- return the user-facing degraded-mode warning when the soft-dep is absent, else `null`. PRD §6.6 IS-2 / IS-3 -- soft-degrade never blocks install.
@@ -39,12 +39,12 @@ Commit: `feat(04-03): add presentation/soft-dep probes + tests`
 
 ### Task 3: presentation/marketplace-list.ts + barrel + tests
 
-Created `extensions/claude-marketplace/presentation/marketplace-list.ts`:
+Created `extensions/pi-claude-marketplace/presentation/marketplace-list.ts`:
 
 - **`MarketplaceListEntry` interface** -- minimal structural shape the renderer consumes (`name`, `scope`, `source`, `autoupdate?`). Declared locally to honour D-11 (presentation cannot import from persistence). `MarketplaceRecord` from `state-io.ts` is a structural superset, so call sites pass `MarketplaceRecord[]` without casts.
 - **`renderMarketplaceList(records): string`** -- ML-1 group-by-scope (user before project, blank line between groups, empty-scope omitted entirely), ML-2 `<icon> <name> (<source.logical>)[ [autoupdate]]` format using the `sourceLogical()` helper from `domain/source.ts` for the canonical URL / path string, ML-4 byte-stable `"No marketplaces configured."` for the empty case. ML-3 (no manifest reads) holds trivially -- this file does not touch IO at all.
 
-Replaced the Phase 1 placeholder `extensions/claude-marketplace/presentation/index.ts` with a barrel re-exporting all three Phase 4 presentation modules (`appendReloadHint`, `reloadHint`, `ReloadVerb`, `hasLoadedPiMcpAdapter`, `hasLoadedPiSubagents`, `mcpAdapterWarningIfNeeded`, `subagentWarningIfNeeded`, `renderMarketplaceList`).
+Replaced the Phase 1 placeholder `extensions/pi-claude-marketplace/presentation/index.ts` with a barrel re-exporting all three Phase 4 presentation modules (`appendReloadHint`, `reloadHint`, `ReloadVerb`, `hasLoadedPiMcpAdapter`, `hasLoadedPiSubagents`, `mcpAdapterWarningIfNeeded`, `subagentWarningIfNeeded`, `renderMarketplaceList`).
 
 6 marketplace-list tests cover the ML-1 / ML-2 / ML-4 contract verbatim plus a github-source canonical-URL case and an empty-scope-omitted case.
 
@@ -58,10 +58,10 @@ Commit: `feat(04-03): add presentation/marketplace-list renderer + barrel + test
 
 ## Key files created/modified
 
-- `extensions/claude-marketplace/presentation/reload-hint.ts` -- created
-- `extensions/claude-marketplace/presentation/soft-dep.ts` -- created
-- `extensions/claude-marketplace/presentation/marketplace-list.ts` -- created
-- `extensions/claude-marketplace/presentation/index.ts` -- replaced (Phase 1 placeholder → real barrel)
+- `extensions/pi-claude-marketplace/presentation/reload-hint.ts` -- created
+- `extensions/pi-claude-marketplace/presentation/soft-dep.ts` -- created
+- `extensions/pi-claude-marketplace/presentation/marketplace-list.ts` -- created
+- `extensions/pi-claude-marketplace/presentation/index.ts` -- replaced (Phase 1 placeholder → real barrel)
 - `tests/presentation/reload-hint.test.ts` -- created
 - `tests/presentation/soft-dep.test.ts` -- created
 - `tests/presentation/marketplace-list.test.ts` -- created

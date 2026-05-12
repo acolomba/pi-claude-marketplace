@@ -8,7 +8,7 @@ import {
   PathContainmentError,
   SymlinkRefusedError,
   assertPathInside,
-} from "../../extensions/claude-marketplace/shared/path-safety.ts";
+} from "../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
 /**
  * PS-1..5, NFR-10, D-14..17 -- assertPathInside symlink-refusing chokepoint.

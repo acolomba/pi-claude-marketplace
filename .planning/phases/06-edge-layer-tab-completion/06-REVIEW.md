@@ -4,35 +4,35 @@ reviewed: 2026-05-11T15:39:00Z
 depth: standard
 files_reviewed: 29
 files_reviewed_list:
-  - extensions/claude-marketplace/edge/args-schema.ts
-  - extensions/claude-marketplace/edge/args.ts
-  - extensions/claude-marketplace/edge/completions/data.ts
-  - extensions/claude-marketplace/edge/completions/normalize.ts
-  - extensions/claude-marketplace/edge/completions/provider.ts
-  - extensions/claude-marketplace/edge/handlers/marketplace/add.ts
-  - extensions/claude-marketplace/edge/handlers/marketplace/autoupdate.ts
-  - extensions/claude-marketplace/edge/handlers/marketplace/list.ts
-  - extensions/claude-marketplace/edge/handlers/marketplace/remove.ts
-  - extensions/claude-marketplace/edge/handlers/marketplace/update.ts
-  - extensions/claude-marketplace/edge/handlers/plugin/install.ts
-  - extensions/claude-marketplace/edge/handlers/plugin/list.ts
-  - extensions/claude-marketplace/edge/handlers/plugin/uninstall.ts
-  - extensions/claude-marketplace/edge/handlers/plugin/update.ts
-  - extensions/claude-marketplace/edge/handlers/tools.ts
-  - extensions/claude-marketplace/edge/register.ts
-  - extensions/claude-marketplace/edge/router.ts
-  - extensions/claude-marketplace/edge/types.ts
-  - extensions/claude-marketplace/orchestrators/edge-deps.ts
-  - extensions/claude-marketplace/orchestrators/marketplace/add.ts
-  - extensions/claude-marketplace/orchestrators/marketplace/remove.ts
-  - extensions/claude-marketplace/orchestrators/marketplace/shared.ts
-  - extensions/claude-marketplace/orchestrators/marketplace/update.ts
-  - extensions/claude-marketplace/orchestrators/plugin/install.ts
-  - extensions/claude-marketplace/orchestrators/plugin/list.ts
-  - extensions/claude-marketplace/orchestrators/plugin/uninstall.ts
-  - extensions/claude-marketplace/persistence/locations.ts
-  - extensions/claude-marketplace/presentation/marketplace-list.ts
-  - extensions/claude-marketplace/shared/completion-cache.ts
+  - extensions/pi-claude-marketplace/edge/args-schema.ts
+  - extensions/pi-claude-marketplace/edge/args.ts
+  - extensions/pi-claude-marketplace/edge/completions/data.ts
+  - extensions/pi-claude-marketplace/edge/completions/normalize.ts
+  - extensions/pi-claude-marketplace/edge/completions/provider.ts
+  - extensions/pi-claude-marketplace/edge/handlers/marketplace/add.ts
+  - extensions/pi-claude-marketplace/edge/handlers/marketplace/autoupdate.ts
+  - extensions/pi-claude-marketplace/edge/handlers/marketplace/list.ts
+  - extensions/pi-claude-marketplace/edge/handlers/marketplace/remove.ts
+  - extensions/pi-claude-marketplace/edge/handlers/marketplace/update.ts
+  - extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts
+  - extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts
+  - extensions/pi-claude-marketplace/edge/handlers/plugin/uninstall.ts
+  - extensions/pi-claude-marketplace/edge/handlers/plugin/update.ts
+  - extensions/pi-claude-marketplace/edge/handlers/tools.ts
+  - extensions/pi-claude-marketplace/edge/register.ts
+  - extensions/pi-claude-marketplace/edge/router.ts
+  - extensions/pi-claude-marketplace/edge/types.ts
+  - extensions/pi-claude-marketplace/orchestrators/edge-deps.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/list.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts
+  - extensions/pi-claude-marketplace/persistence/locations.ts
+  - extensions/pi-claude-marketplace/presentation/marketplace-list.ts
+  - extensions/pi-claude-marketplace/shared/completion-cache.ts
 findings:
   critical: 0
   warning: 4
@@ -88,7 +88,7 @@ discriminated-union resolver contract (NFR-7), and path-containment chokepoints
 
 ### WR-01: autoupdate orchestrator skips completion-cache invalidation
 
-**File:** `extensions/claude-marketplace/orchestrators/marketplace/autoupdate.ts:57-63`
+**File:** `extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts:57-63`
 
 **Issue:** The autoupdate flip mutates `state.marketplaces[name].autoupdate`
 inside `withStateGuard`, but no `invalidateMarketplaceNames` /
@@ -135,7 +135,7 @@ autoupdate flag) so the next reader does not have to re-derive this.
 
 ### WR-02: misleading "captured at registration time" comment in register.ts
 
-**File:** `extensions/claude-marketplace/edge/register.ts:89-94`
+**File:** `extensions/pi-claude-marketplace/edge/register.ts:89-94`
 
 **Issue:** The comment block says
 
@@ -189,8 +189,8 @@ which is the design intent.
 
 ### WR-03: `getScopeCompletions` is exported but never called; V1 description UX lost
 
-**File:** `extensions/claude-marketplace/edge/completions/data.ts:141-153`
-**File:** `extensions/claude-marketplace/edge/completions/provider.ts:93-99`
+**File:** `extensions/pi-claude-marketplace/edge/completions/data.ts:141-153`
+**File:** `extensions/pi-claude-marketplace/edge/completions/provider.ts:93-99`
 
 **Issue:** `data.ts` exports `getScopeCompletions(argumentTextPrefix)` that
 emits `--scope user` / `--scope project` items WITH descriptions
@@ -252,7 +252,7 @@ if (prevToken === "--scope") {
 
 ### WR-04: `edge-deps.ts::loadManifestForMarketplace` re-loads state.json on every manifest probe
 
-**File:** `extensions/claude-marketplace/orchestrators/edge-deps.ts:107-187`
+**File:** `extensions/pi-claude-marketplace/orchestrators/edge-deps.ts:107-187`
 
 **Issue:** `loadManifestForMarketplace(scope, marketplace)` calls
 `loadState(locations.extensionRoot)` on line 113 to look up
@@ -324,7 +324,7 @@ rebuild and the manifest rebuild.
 
 ### IN-01: `args.ts` dead-code branch `if (token === undefined)` is unreachable
 
-**File:** `extensions/claude-marketplace/edge/args.ts:33-39`
+**File:** `extensions/pi-claude-marketplace/edge/args.ts:33-39`
 
 **Issue:** `tokens` comes from `tokenize(args)` which returns `string[]`
 (no `undefined` members are ever pushed). The loop condition
@@ -349,7 +349,7 @@ explicitly marks it as defensive-only:
 
 ### IN-02: `parseArgs` returns mutable `string[]` despite consumer treating it as readonly
 
-**File:** `extensions/claude-marketplace/edge/args.ts:23-26`
+**File:** `extensions/pi-claude-marketplace/edge/args.ts:23-26`
 
 **Issue:** `ParsedArgs.positional: string[]` is mutable. Consumers
 (`args-schema.ts`, `provider.ts`'s `splitCompletionInput`, etc.) treat
@@ -372,7 +372,7 @@ internal indexing remains valid).
 
 ### IN-03: `data.ts::splitCompletionInput` regex split silently coalesces unicode whitespace
 
-**File:** `extensions/claude-marketplace/edge/completions/data.ts:106-114`
+**File:** `extensions/pi-claude-marketplace/edge/completions/data.ts:106-114`
 
 **Issue:** `input.split(/\s+/)` matches all Unicode whitespace
 characters (newline, tab, form feed, plus categories that JavaScript's
@@ -402,7 +402,7 @@ collapsing, which the existing `.filter((t) => t !== "")` covers.
 
 ### IN-04: `register.ts` `pi.on("session_start", ...)` autocomplete-provider stacking is unbounded
 
-**File:** `extensions/claude-marketplace/edge/register.ts:101-117`
+**File:** `extensions/pi-claude-marketplace/edge/register.ts:101-117`
 
 **Issue:** The comment on line 97 says
 
@@ -442,9 +442,9 @@ provider chains across sessions; documentation under
 
 ### IN-05: `tools.ts::loadVisibleMarketplaces` then `loadPluginListPayload` reads state.json twice for the existence check
 
-**File:** `extensions/claude-marketplace/edge/handlers/tools.ts:193-237`
+**File:** `extensions/pi-claude-marketplace/edge/handlers/tools.ts:193-237`
 
-**Issue:** The `claude_marketplace_plugin_list` LLM tool first calls
+**Issue:** The `pi_claude_marketplace_plugin_list` LLM tool first calls
 `loadVisibleMarketplaces({ cwd, scope })` to test for marketplace
 existence (line 194), then calls `loadPluginListPayload(...)`
 (line 213). Both helpers load state.json internally; the same scope's

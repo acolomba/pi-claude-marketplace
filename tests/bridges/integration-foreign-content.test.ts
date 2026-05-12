@@ -5,7 +5,7 @@
 //
 // Verifies ROADMAP success criterion 2: AG-5 foreign content (a previously-
 // indexed target file whose body has lost the verbatim marker, OR whose
-// basename no longer matches `claude-marketplace-*`) is preserved BYTE-
+// basename no longer matches `pi-claude-marketplace-*`) is preserved BYTE-
 // IDENTICAL on commit and surfaced via the bridge's `result.failed[]` array
 // (D-06 corollary: prepare-time foreign content does NOT throw, it surfaces
 // softly so the install can still proceed for the agents that ARE owned).
@@ -27,13 +27,13 @@ import { fileURLToPath } from "node:url";
 import {
   commitPreparedAgents,
   prepareStagePluginAgents,
-} from "../../extensions/claude-marketplace/bridges/agents/index.ts";
-import { loadAgentsIndex } from "../../extensions/claude-marketplace/persistence/agents-index-io.ts";
-import { locationsFor } from "../../extensions/claude-marketplace/persistence/locations.ts";
-import { atomicWriteJson } from "../../extensions/claude-marketplace/shared/atomic-json.ts";
+} from "../../extensions/pi-claude-marketplace/bridges/agents/index.ts";
+import { loadAgentsIndex } from "../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
+import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { atomicWriteJson } from "../../extensions/pi-claude-marketplace/shared/atomic-json.ts";
 
-import type { ResolvedPluginInstallable } from "../../extensions/claude-marketplace/domain/resolver.ts";
-import type { AgentsIndex } from "../../extensions/claude-marketplace/persistence/agents-index-schema.ts";
+import type { ResolvedPluginInstallable } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import type { AgentsIndex } from "../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE_PLUGIN = path.resolve(HERE, "_fixtures", "test-plugin");
@@ -61,7 +61,7 @@ describe("integration: foreign content preservation", () => {
   let pluginDataDir: string;
 
   // Pre-seeded foreign-content target paths inside <scopeRoot>/agents/.
-  // The basename matches `claude-marketplace-acme-orphan` so AG-5's basename
+  // The basename matches `pi-claude-marketplace-acme-orphan` so AG-5's basename
   // gate passes; the body is the no-marker fixture, so AG-5's marker gate
   // fails -- triggering the soft-fail path in stage.ts step 7.
   let orphanTarget: string;
@@ -76,7 +76,7 @@ describe("integration: foreign content preservation", () => {
 
     // Pre-seed the foreign target file with byte-exact content from the
     // fixture corpus.
-    orphanTarget = path.join(locations.agentsDir, "claude-marketplace-acme-orphan.md");
+    orphanTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-orphan.md");
     await copyFile(path.join(FIXTURE_FOREIGN, "no-marker.md"), orphanTarget);
 
     // Pre-seed the agents-index with an entry pointing at the foreign file.
@@ -90,7 +90,7 @@ describe("integration: foreign content preservation", () => {
           plugin: PLUGIN_NAME,
           marketplace: MARKETPLACE_NAME,
           sourceAgent: "orphan",
-          generatedName: "claude-marketplace-acme-orphan",
+          generatedName: "pi-claude-marketplace-acme-orphan",
           sourcePath: "/orig/orphan.md",
           targetPath: orphanTarget,
           sourceHash: "deadbeef",
@@ -139,7 +139,7 @@ describe("integration: foreign content preservation", () => {
     assert.ok(failure, "AG-5: failed[] contains orphan targetPath");
     assert.equal(
       failure.generatedName,
-      "claude-marketplace-acme-orphan",
+      "pi-claude-marketplace-acme-orphan",
       "AG-5: failed[] entry carries generatedName from index",
     );
 
@@ -160,7 +160,9 @@ describe("integration: foreign content preservation", () => {
       3,
       "AG-5: foreign-preserved row kept in index alongside new rows",
     );
-    const orphanRow = ourEntries.find((e) => e.generatedName === "claude-marketplace-acme-orphan");
+    const orphanRow = ourEntries.find(
+      (e) => e.generatedName === "pi-claude-marketplace-acme-orphan",
+    );
     assert.ok(orphanRow, "AG-5: orphan row preserved in agents-index after commit");
   });
 

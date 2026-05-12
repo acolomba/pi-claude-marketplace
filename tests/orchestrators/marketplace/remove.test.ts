@@ -4,26 +4,26 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { pathSource } from "../../../extensions/claude-marketplace/domain/source.ts";
-import { removeMarketplace } from "../../../extensions/claude-marketplace/orchestrators/marketplace/remove.ts";
-import { cascadeUnstagePlugin } from "../../../extensions/claude-marketplace/orchestrators/marketplace/shared.ts";
-import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
+import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { removeMarketplace } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts";
+import { cascadeUnstagePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
   saveState,
-} from "../../../extensions/claude-marketplace/persistence/state-io.ts";
-import { atomicWriteJson } from "../../../extensions/claude-marketplace/shared/atomic-json.ts";
+} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { atomicWriteJson } from "../../../extensions/pi-claude-marketplace/shared/atomic-json.ts";
 import {
   __resetCacheForTests,
   getMarketplaceNames,
-} from "../../../extensions/claude-marketplace/shared/completion-cache.ts";
+} from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   MarketplaceAmbiguousScopeError,
   MarketplaceNotFoundError,
-} from "../../../extensions/claude-marketplace/shared/errors.ts";
-import { pathExists } from "../../../extensions/claude-marketplace/shared/fs-utils.ts";
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
-import type { ExtensionState } from "../../../extensions/claude-marketplace/persistence/state-io.ts";
+import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 interface NotifyRecord {
@@ -292,7 +292,7 @@ test("NFR-5: remove for a path-source marketplace makes no network calls", async
   // contract by reading the source file and confirming no
   // import of platform/git or DEFAULT_GIT_OPS appears.
   const src = await readFile(
-    "extensions/claude-marketplace/orchestrators/marketplace/remove.ts",
+    "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts",
     "utf8",
   );
   assert.equal(src.includes("platform/git"), false);

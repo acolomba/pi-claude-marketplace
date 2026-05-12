@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { githubSource, pathSource } from "../../extensions/claude-marketplace/domain/source.ts";
-import { renderMarketplaceList } from "../../extensions/claude-marketplace/presentation/marketplace-list.ts";
+import { githubSource, pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
+import { renderMarketplaceList } from "../../extensions/pi-claude-marketplace/presentation/marketplace-list.ts";
 
-import type { MarketplaceListEntry } from "../../extensions/claude-marketplace/presentation/marketplace-list.ts";
+import type { MarketplaceListEntry } from "../../extensions/pi-claude-marketplace/presentation/marketplace-list.ts";
 
 function makeRecord(
   over: Partial<MarketplaceListEntry> & { name: string; scope: "user" | "project" },

@@ -32,7 +32,7 @@ key-files:
   created:
     - tests/architecture/no-orchestrator-network.test.ts
   modified:
-    - extensions/claude-marketplace/transaction/rollback.ts
+    - extensions/pi-claude-marketplace/transaction/rollback.ts
     - tests/transaction/rollback.test.ts
 
 key-decisions:
@@ -81,7 +81,7 @@ Each task was committed atomically:
 
 ## Files Created/Modified
 
-- `extensions/claude-marketplace/transaction/rollback.ts` (modified) -- Added `PathContainmentError` import and `instanceof` short-circuit at the top of `formatRollbackError` so containment errors bypass the `(rollback partial: ...)` marker composition.
+- `extensions/pi-claude-marketplace/transaction/rollback.ts` (modified) -- Added `PathContainmentError` import and `instanceof` short-circuit at the top of `formatRollbackError` so containment errors bypass the `(rollback partial: ...)` marker composition.
 - `tests/transaction/rollback.test.ts` (modified) -- Added imports for `PathContainmentError` + `SymlinkRefusedError` and two new test cases verifying (a) `PathContainmentError` bypass with strict-equal identity, marker absence, and name/instanceof discrimination; (b) `SymlinkRefusedError` subclass bypass with both `instanceof PathContainmentError` and `instanceof SymlinkRefusedError`.
 - `tests/architecture/no-orchestrator-network.test.ts` (created) -- New standalone architectural source-grep test enforcing NFR-5 / PI-2 / PL-3 for the future plugin `install.ts` + `list.ts`. Includes block + line `stripComments` preprocessor and an ENOENT skip path for Wave 0 forward-compatibility.
 
@@ -118,7 +118,7 @@ None. No new network endpoints, auth paths, file-access patterns, or trust-bound
 
 ## Self-Check: PASSED
 
-- `extensions/claude-marketplace/transaction/rollback.ts` -- FOUND, contains `instanceof PathContainmentError`
+- `extensions/pi-claude-marketplace/transaction/rollback.ts` -- FOUND, contains `instanceof PathContainmentError`
 - `tests/transaction/rollback.test.ts` -- FOUND, contains `PathContainmentError` import + two new test names (`PI-14 / D-02: PathContainmentError originalError bypasses…`, `PI-14 / D-02: SymlinkRefusedError (subclass) bypasses…`)
 - `tests/architecture/no-orchestrator-network.test.ts` -- FOUND, contains `stripComments`, `FORBIDDEN_TARGETS`, `FORBIDDEN_PATTERNS`, ENOENT skip path
 - Commit `8eddb6d` -- FOUND in git log

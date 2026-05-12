@@ -25,8 +25,8 @@ tech-stack:
 
 key-files:
   created:
-    - extensions/claude-marketplace/persistence/agents-index-schema.ts
-    - extensions/claude-marketplace/persistence/agents-index-io.ts
+    - extensions/pi-claude-marketplace/persistence/agents-index-schema.ts
+    - extensions/pi-claude-marketplace/persistence/agents-index-io.ts
     - tests/persistence/agents-index-schema.test.ts
     - tests/persistence/agents-index-io.test.ts
     - tests/persistence/fixtures/agents-index/empty.json
@@ -88,8 +88,8 @@ Each task committed atomically:
 
 ### Created
 
-- `extensions/claude-marketplace/persistence/agents-index-schema.ts` -- TypeBox 1.x schema definitions and JIT-compiled validators. Default `Type` import + `Type.Static<typeof X>` shape (matches Phase 2 `state-io.ts`).
-- `extensions/claude-marketplace/persistence/agents-index-io.ts` -- `loadAgentsIndex` and `saveAgentsIndex` plus the `LoadedAgentsIndex` interface; per-row error formatting helper.
+- `extensions/pi-claude-marketplace/persistence/agents-index-schema.ts` -- TypeBox 1.x schema definitions and JIT-compiled validators. Default `Type` import + `Type.Static<typeof X>` shape (matches Phase 2 `state-io.ts`).
+- `extensions/pi-claude-marketplace/persistence/agents-index-io.ts` -- `loadAgentsIndex` and `saveAgentsIndex` plus the `LoadedAgentsIndex` interface; per-row error formatting helper.
 - `tests/persistence/agents-index-schema.test.ts` -- 7 cases pinning accept/reject contract + the `entries:` wire-shape regression guard.
 - `tests/persistence/agents-index-io.test.ts` -- 10 cases covering ENOENT, parse failure, schemaVersion checks, agents-array check, per-row drop, save round-trip, save-rejection on bad input, and parent-dir creation. Uses `locationsFor("project", tmpdir)` to produce a fully-realized `ScopedLocations`.
 - `tests/persistence/fixtures/agents-index/empty.json` -- `{schemaVersion:1, agents:[]}`.
@@ -134,7 +134,7 @@ Each task committed atomically:
 - **Found during:** Task 2 module authoring.
 - **Issue:** The plan instructs `loadAgentsIndex` and `saveAgentsIndex` to accept `ScopedLocations` and call `loc.agentsIndexPath`. That field is added by Plan 03-01 (Task 2). Both 03-01 and 03-02 are in `wave: 1` with `depends_on: []` (both run in parallel worktrees), and Plan 03-02 explicitly notes "If executor finds it missing, the dependency on Plan 03-01 was violated -- investigate before proceeding." In MY worktree, `loc.agentsIndexPath` does NOT exist on `ScopedLocations` -- the field is added in 03-01's worktree only. Two paths forward: (a) duplicate 03-01's interface extension here, accepting a guaranteed merge conflict on `locations.ts`, or (b) localize the path derivation inside the IO module from the already-present `loc.extensionRoot`.
 - **Fix:** Chose (b). Added `agentsIndexPathFor(loc)` private helper that returns `path.join(loc.extensionRoot, "agents-index.json")`. This is structurally identical to Phase 2's `stateJsonPathFor(extensionRoot)` and produces the SAME runtime path that 03-01's `loc.agentsIndexPath` will produce after merge. The IO module's signatures (`loadAgentsIndex(loc)` / `saveAgentsIndex(loc, index)`) match exactly what Plan 03-05 expects to call. A trivial follow-up after the wave-1 merge can swap the helper for direct `loc.agentsIndexPath` access if desired -- not strictly necessary since both forms produce the same path.
-- **Files modified:** `extensions/claude-marketplace/persistence/agents-index-io.ts` (helper inside the module instead of consuming the missing brand field).
+- **Files modified:** `extensions/pi-claude-marketplace/persistence/agents-index-io.ts` (helper inside the module instead of consuming the missing brand field).
 - **Verification:** `npx tsc --noEmit` clean; 10 IO tests pass; full `npm run check` green.
 - **Committed in:** `554ea62` (Task 2 commit).
 
@@ -200,8 +200,8 @@ The schema implementation matches RESEARCH.md lines 678-700 verbatim with one ed
 ## Self-Check: PASSED
 
 - Created files exist:
-  - `extensions/claude-marketplace/persistence/agents-index-schema.ts` -- FOUND
-  - `extensions/claude-marketplace/persistence/agents-index-io.ts` -- FOUND
+  - `extensions/pi-claude-marketplace/persistence/agents-index-schema.ts` -- FOUND
+  - `extensions/pi-claude-marketplace/persistence/agents-index-io.ts` -- FOUND
   - `tests/persistence/agents-index-schema.test.ts` -- FOUND
   - `tests/persistence/agents-index-io.test.ts` -- FOUND
   - `tests/persistence/fixtures/agents-index/empty.json` -- FOUND

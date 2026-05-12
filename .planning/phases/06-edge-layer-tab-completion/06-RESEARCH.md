@@ -13,18 +13,18 @@
 
 **D-01 corollary (Router stays in `edge/router.ts`, NOT inside `register.ts`):** `routeClaudePlugin(args, handlers, ctx)` and `routeMarketplace(args, handlers, ctx)` are pure functions of `(args, handlers, ctx)`. Testable without Pi. `register.ts` builds the `SubcommandHandlers` record from `EdgeDeps` and passes it to `routeClaudePlugin`. Router stays unaware of `pi.registerCommand` / `pi.registerTool`.
 
-**D-02 (Two read-only LLM tools, with `claude_marketplace_plugin_list` extended):**
-- `claude_marketplace_list` -- V1 verbatim. Parameters: `Type.Object({})`. Returns `[<scope>] <name> -- <N> plugin(s) -- <source.logical>` per line. `details: { marketplaces }`.
-- `claude_marketplace_plugin_list` -- V1 baseline + filter parameters: `Type.Object({ marketplace?: string, scope?: "user"|"project", installed?: boolean, available?: boolean, unavailable?: boolean })`. Omitting `marketplace` enumerates all marketplaces. No-filter = all three buckets. PL-1 union semantics when any filter is set. Status assignment: `installed` from state-record presence (D-09 schema has no `installed` boolean -- presence ≡ installed); `available` from manifest entry where resolver is installable and the plugin is not in state; `unavailable` from manifest entry where resolver returns not-installable.
+**D-02 (Two read-only LLM tools, with `pi_claude_marketplace_plugin_list` extended):**
+- `pi_claude_marketplace_list` -- V1 verbatim. Parameters: `Type.Object({})`. Returns `[<scope>] <name> -- <N> plugin(s) -- <source.logical>` per line. `details: { marketplaces }`.
+- `pi_claude_marketplace_plugin_list` -- V1 baseline + filter parameters: `Type.Object({ marketplace?: string, scope?: "user"|"project", installed?: boolean, available?: boolean, unavailable?: boolean })`. Omitting `marketplace` enumerates all marketplaces. No-filter = all three buckets. PL-1 union semantics when any filter is set. Status assignment: `installed` from state-record presence (D-09 schema has no `installed` boolean -- presence ≡ installed); `available` from manifest entry where resolver is installable and the plugin is not in state; `unavailable` from manifest entry where resolver returns not-installable.
 
-**D-02 corollary (No mutating LLM tools):** Two tools above are the entire Phase 6 LLM surface. No `claude_install`, `claude_uninstall`, `claude_update`, `claude_marketplace_add`.
+**D-02 corollary (No mutating LLM tools):** Two tools above are the entire Phase 6 LLM surface. No `claude_install`, `claude_uninstall`, `claude_update`, `pi_claude_marketplace_add`.
 
 **D-02 corollary (Registration in `edge/handlers/tools.ts`; called from `edge/register.ts`):** Tool definitions live in `handlers/tools.ts`. `register.ts` exports `registerClaudeMarketplaceTools(pi)` which calls both `pi.registerTool` invocations.
 
 **D-03 (Two-tier file + in-memory cache; status-aware completion filtering):**
 - File-backed layer:
-  - `<scopeRoot>/claude-marketplace/cache/marketplace-names.json` per scope. Schema: `{ schemaVersion: 1, names: string[] }`.
-  - `<scopeRoot>/claude-marketplace/cache/plugins/<marketplace>.json` per (scope, marketplace). Schema: `{ schemaVersion: 1, lastRefreshedAt: <iso>, manifestRef?: <sha-or-version>, plugins: [{ name, status: "installed" | "available" | "unavailable", version? }] }`.
+  - `<scopeRoot>/pi-claude-marketplace/cache/marketplace-names.json` per scope. Schema: `{ schemaVersion: 1, names: string[] }`.
+  - `<scopeRoot>/pi-claude-marketplace/cache/plugins/<marketplace>.json` per (scope, marketplace). Schema: `{ schemaVersion: 1, lastRefreshedAt: <iso>, manifestRef?: <sha-or-version>, plugins: [{ name, status: "installed" | "available" | "unavailable", version? }] }`.
 - In-memory layer in `shared/completion-cache.ts`:
   - Marketplace-name index: lazy, no TTL, invalidated by `invalidateMarketplaceNames(scope)`.
   - Plugin index per (scope, marketplace): lazy, 10-min TTL safety net + explicit invalidation by `invalidateMarketplaceCache(scope, mp)` / `dropMarketplaceCache(scope, mp)`.
@@ -39,7 +39,7 @@
 
 **D-03 corollary (Rebuild semantics):** In-memory miss → file → rebuild from `loadState` + manifest. Rebuild writes atomically via `shared/atomic-json.atomicWriteJson`. TC-8 (manifest soft-fail): cache `{ plugins: [], _loadError: "<reason>" }`, return empty list to completion, no throw. TC-9 (state.json error): propagate -- `getMarketplaceNames` / `getPluginIndex` both throw.
 
-**D-03 corollary (Cache is optimization, not authoritative):** Corrupt/missing cache → rebuild lazily. External tools may delete `<scopeRoot>/claude-marketplace/cache/` safely. Schema mismatch → drop + rebuild.
+**D-03 corollary (Cache is optimization, not authoritative):** Corrupt/missing cache → rebuild lazily. External tools may delete `<scopeRoot>/pi-claude-marketplace/cache/` safely. Schema mismatch → drop + rebuild.
 
 **D-03 corollary (Invalidation call-sites in Phase 4/5 orchestrators):**
 - `orchestrators/marketplace/add.ts` → `invalidateMarketplaceNames(scope)` + `invalidateMarketplaceCache(scope, name)`.
@@ -67,7 +67,7 @@
 
 ### Claude's Discretion
 - Cache schema versioning: single `schemaVersion: 1`; drop+rebuild on mismatch.
-- Cache file naming: `<scopeRoot>/claude-marketplace/cache/marketplace-names.json` + `<scopeRoot>/claude-marketplace/cache/plugins/<marketplace>.json` (chosen to match Phase 5 D-08 `data/` sibling pattern).
+- Cache file naming: `<scopeRoot>/pi-claude-marketplace/cache/marketplace-names.json` + `<scopeRoot>/pi-claude-marketplace/cache/plugins/<marketplace>.json` (chosen to match Phase 5 D-08 `data/` sibling pattern).
 - In-memory map keys: string keys `${scope}::${marketplace}` for plugin index, `${scope}` for marketplace names.
 - Atomic-JSON for cache writes: `shared/atomic-json.atomicWriteJson` (Phase 1 D-03).
 - Cross-marketplace plugin disambiguation: per-(marketplace, plugin) row in cache; consumer dedupes in `getPluginRefCompletions`.
@@ -76,15 +76,15 @@
 ### Deferred Ideas (OUT OF SCOPE)
 - `--force` install flag (PRD §11).
 - Tokenizer escape support (`\"`, `\\`, `\n`).
-- Top-level `claude_plugin_list` (subsumed by extended `claude_marketplace_plugin_list`).
-- `claude_marketplace_info`, `claude_plugin_info` tools.
+- Top-level `claude_plugin_list` (subsumed by extended `pi_claude_marketplace_plugin_list`).
+- `pi_claude_marketplace_info`, `claude_plugin_info` tools.
 - mtime-based cache invalidation safety net.
 - NFR-8 manifest-mtime caching layer (separate from D-03 completion cache).
 - i18n / locale negotiation.
 - Rich interactive selectors in completions.
 - Cache inspection / invalidation slash command.
 - JSON output / dry-run modes.
-- `claude_marketplace_plugin_list` returning `version` for available plugins.
+- `pi_claude_marketplace_plugin_list` returning `version` for available plugins.
 - Telemetry on completion latency (IL-4).
 - `marketplace info <name>`.
 - `--scope=user` equals-separator form.
@@ -118,7 +118,7 @@
 - **write-file-atomic@^8** for cache file writes (via `shared/atomic-json.ts`).
 - **NFR-1:** All disk mutations atomic. Cache writes MUST use `atomicWriteJson`.
 - **NFR-5 (network policy):** Completion paths MUST NOT touch network. Cache reads/rebuilds are pure local file I/O.
-- **NFR-10 (containment):** All cache paths through `assertPathInside` against `<scopeRoot>/claude-marketplace/`.
+- **NFR-10 (containment):** All cache paths through `assertPathInside` against `<scopeRoot>/pi-claude-marketplace/`.
 - **IL-2 (output channel):** Every user-visible message through `shared/notify.ts` wrappers. Direct `ctx.ui.notify` is forbidden everywhere except `shared/notify.ts` (`no-restricted-syntax` ESLint rule, BLOCK A in eslint.config.js).
 - **IL-1 (English only V1):** No locale negotiation, no message catalog. Usage strings + tool descriptions stay English.
 - **IL-3 (single sanctioned `console.warn`):** Only the load-time legacy migration save failure in `persistence/migrate.ts`. New Phase 6 code MAY NOT add `console.*` calls.
@@ -252,7 +252,7 @@ edge/register.ts (callback set up by registerClaudePluginCommand)
 
 ### Recommended Project Structure
 ```
-extensions/claude-marketplace/
+extensions/pi-claude-marketplace/
 ├── edge/
 │   ├── README.md                         # already exists; Phase 6 updates Planned Contents
 │   ├── index.ts                          # already exists; remains placeholder until barrel needed
@@ -388,7 +388,7 @@ export interface PluginIndexRow {
 
 // Read API (called from edge/completions/data.ts):
 export async function getMarketplaceNames(
-  marketplaceNamesCachePath: string,    // <scopeRoot>/claude-marketplace/cache/marketplace-names.json
+  marketplaceNamesCachePath: string,    // <scopeRoot>/pi-claude-marketplace/cache/marketplace-names.json
   scope: Scope,
   rebuild: () => Promise<string[]>,     // injected: invokes loadState
 ): Promise<string[]>;
@@ -520,7 +520,7 @@ export interface AutocompleteProvider {
 
 Read each block with `git show features/initial:<path>`. Phase 6 should port verbatim except where annotations call out a refinement.
 
-### `extensions/claude-marketplace/args.ts` (V1)
+### `extensions/pi-claude-marketplace/args.ts` (V1)
 
 **Whole file ports verbatim to `edge/args.ts`** -- only the import path for `Scope` changes (V1: `./types.ts`; new: `../shared/types.ts`).
 
@@ -570,7 +570,7 @@ function tokenize(input: string): string[] {
 
 Note: AP-2 throws -- caller (`parseCommandArgs`) catches and routes through `notifyError`.
 
-### `extensions/claude-marketplace/commands/_args.ts` (V1)
+### `extensions/pi-claude-marketplace/commands/_args.ts` (V1)
 
 **Whole file ports verbatim to `edge/args-schema.ts`** -- imports change (`../args.ts → ./args.ts`, `../errors.ts → ../shared/errors.ts`, `../types.ts → ../shared/types.ts`).
 
@@ -585,7 +585,7 @@ export function parseCommandArgs<const Spec extends readonly PositionalSpec[]>(
 
 Returns `undefined` on tokenizer throw or missing-required-positional; emits via the injected `notifyError` callback. Returned object has typed positional properties + `scope?: Scope`.
 
-### `extensions/claude-marketplace/commands/router.ts` (V1)
+### `extensions/pi-claude-marketplace/commands/router.ts` (V1)
 
 **Whole file ports verbatim to `edge/router.ts`** -- only the `SubcommandHandlers` type's import of `ExtensionCommandContext` is unchanged. The `TOP_LEVEL_USAGE` and `MARKETPLACE_USAGE` consts are part of the user contract (AP-3) and copy verbatim.
 
@@ -594,7 +594,7 @@ Two important behaviors:
 - `routeMarketplace` accepts `case "remove": case "rm":` -- TC-2 says `rm` is accepted but NOT surfaced in completions; the router fall-through carries that contract.
 - On unknown subcommand, V1 calls `ctx.ui.notify(...)` directly. **Phase 6 port must route through `notifyUsageError(ctx, …)`** (BLOCK A ESLint rule). Use the form: `notifyUsageError(ctx, `Unknown subcommand: "${head}".`, TOP_LEVEL_USAGE)` -- this puts the message on line 1, blank line, then Usage. Matches V1 string structure modulo the blank line being explicit.
 
-### `extensions/claude-marketplace/completions.ts` (V1)
+### `extensions/pi-claude-marketplace/completions.ts` (V1)
 
 The 318-line V1 file decomposes into three Phase 6 files:
 
@@ -675,7 +675,7 @@ function isClaudePluginCommandLine(line: string): boolean {
 }
 ```
 
-### `extensions/claude-marketplace/index.ts` (V1 -- dispatcher logic)
+### `extensions/pi-claude-marketplace/index.ts` (V1 -- dispatcher logic)
 
 The V1 dispatcher inside `pi.registerCommand("claude:plugin", { getArgumentCompletions: async (prefix) => { … } })` is THE port target for `edge/completions/provider.ts::getArgumentCompletions`. Structure:
 
@@ -769,13 +769,13 @@ Branches 4 and 5 source data via `edge/completions/data.ts` which goes through `
 **TOP_LEVEL_SUBCOMMANDS = `["install", "uninstall", "update", "list", "marketplace"]`** (V1 verbatim).
 **MARKETPLACE_SUBCOMMANDS = `["add", "remove", "list", "update", "autoupdate", "noautoupdate"]`** (V1 verbatim -- `rm` excluded by design).
 
-### V1 LLM tools -- `extensions/claude-marketplace/commands/list-marketplaces.ts`
+### V1 LLM tools -- `extensions/pi-claude-marketplace/commands/list-marketplaces.ts`
 
 The full V1 file ports to `edge/handlers/tools.ts` with two changes:
 
-1. **`claude_marketplace_list` parameters unchanged** -- `Type.Object({})`. Body queries `loadState` for both scopes and renders one line per marketplace as `[<scope>] <name> -- <N> plugin(s) -- <source.logical>`. In the new state schema, `mp.plugins` is a `Record<string, PluginInstallRecord>`; the count is `Object.keys(mp.plugins).length` (different from V1's `mp.plugins.filter(p => p.installed).length` -- V1 had a separate `installed: bool` field which no longer exists).
+1. **`pi_claude_marketplace_list` parameters unchanged** -- `Type.Object({})`. Body queries `loadState` for both scopes and renders one line per marketplace as `[<scope>] <name> -- <N> plugin(s) -- <source.logical>`. In the new state schema, `mp.plugins` is a `Record<string, PluginInstallRecord>`; the count is `Object.keys(mp.plugins).length` (different from V1's `mp.plugins.filter(p => p.installed).length` -- V1 had a separate `installed: bool` field which no longer exists).
 
-2. **`claude_marketplace_plugin_list` parameters extended per D-02:**
+2. **`pi_claude_marketplace_plugin_list` parameters extended per D-02:**
    ```typescript
    parameters: Type.Object({
      marketplace: Type.Optional(Type.String({ description: "Marketplace name to list plugins for" })),
@@ -883,10 +883,10 @@ The `invalidate*` functions are MEMORY-ONLY (no I/O), so they cannot throw under
 ## Cache File Path Scheme (compose check)
 
 Decision: cache files live at:
-- `<scopeRoot>/claude-marketplace/cache/marketplace-names.json` -- one per scope
-- `<scopeRoot>/claude-marketplace/cache/plugins/<marketplace>.json` -- one per (scope, marketplace)
+- `<scopeRoot>/pi-claude-marketplace/cache/marketplace-names.json` -- one per scope
+- `<scopeRoot>/pi-claude-marketplace/cache/plugins/<marketplace>.json` -- one per (scope, marketplace)
 
-**Containment check:** `<scopeRoot>/claude-marketplace/` is the `extensionRoot` (verified in `persistence/locations.ts` lines 95). The cache directory and all cache files are below `extensionRoot`. Path composition via `path.join` plus `assertPathInside(extensionRoot, candidate, "cacheFile(...)")` is the same pattern used by `pluginDataDir`, `marketplaceDataDir`, `sourceCloneDir` in `locations.ts` lines 110-155.
+**Containment check:** `<scopeRoot>/pi-claude-marketplace/` is the `extensionRoot` (verified in `persistence/locations.ts` lines 95). The cache directory and all cache files are below `extensionRoot`. Path composition via `path.join` plus `assertPathInside(extensionRoot, candidate, "cacheFile(...)")` is the same pattern used by `pluginDataDir`, `marketplaceDataDir`, `sourceCloneDir` in `locations.ts` lines 110-155.
 
 **Marketplace name validation:** The `<marketplace>` segment of the plugin cache path is potentially attacker-influenced (it comes from manifest `.name` originally; `assertSafeName` already runs at marketplace-add time and at every dataDir/cloneDir call). The planner should mirror the existing `pluginDataDir` pattern:
 ```typescript
@@ -985,13 +985,13 @@ Verified in `/Users/acolomba/src/pi-claude-marketplace/eslint.config.js`:
 ```javascript
 // BLOCK C: import-x/no-restricted-paths
 {
-  target: "./extensions/claude-marketplace/edge",
+  target: "./extensions/pi-claude-marketplace/edge",
   from: [
-    "./extensions/claude-marketplace/bridges",
-    "./extensions/claude-marketplace/domain",
-    "./extensions/claude-marketplace/transaction",
-    "./extensions/claude-marketplace/persistence",
-    "./extensions/claude-marketplace/platform",
+    "./extensions/pi-claude-marketplace/bridges",
+    "./extensions/pi-claude-marketplace/domain",
+    "./extensions/pi-claude-marketplace/transaction",
+    "./extensions/pi-claude-marketplace/persistence",
+    "./extensions/pi-claude-marketplace/platform",
   ],
   message: "edge/ may only import from orchestrators/, presentation/, shared/.",
 }
@@ -1001,7 +1001,7 @@ Verified in `/Users/acolomba/src/pi-claude-marketplace/eslint.config.js`:
 
 Cross-check: `shared/` rule says `shared/ MUST NOT import from any extension folder. Pure leaves only.` This means `shared/completion-cache.ts` CANNOT import from `persistence/locations.ts`, `domain/manifest.ts`, or `persistence/state-io.ts` -- it must accept all paths and read functions as parameters. The architecture honors this: `shared/completion-cache.ts` exposes `getMarketplaceNames(path, scope, rebuild)` where `rebuild` is injected by the caller (edge or orchestrator).
 
-**Output discipline (BLOCK A, also already in place):** Direct `process.stdout.write`, `process.stderr.write`, `console.*` calls and direct `ctx.ui.notify` are blocked across `extensions/claude-marketplace/**/*.ts`. The single per-file override (`shared/notify.ts`) is the sanctioned chokepoint. **Phase 6 plan files MUST route every user-visible message through one of `notifySuccess`/`notifyWarning`/`notifyError`/`notifyUsageError`** -- same as Phases 4 and 5. ROADMAP SC5 explicitly says "ESLint blocks any new `process.stdout`/`stderr` write in `src/edge/`" -- this is already covered by BLOCK A applied to `extensions/claude-marketplace/**`.
+**Output discipline (BLOCK A, also already in place):** Direct `process.stdout.write`, `process.stderr.write`, `console.*` calls and direct `ctx.ui.notify` are blocked across `extensions/pi-claude-marketplace/**/*.ts`. The single per-file override (`shared/notify.ts`) is the sanctioned chokepoint. **Phase 6 plan files MUST route every user-visible message through one of `notifySuccess`/`notifyWarning`/`notifyError`/`notifyUsageError`** -- same as Phases 4 and 5. ROADMAP SC5 explicitly says "ESLint blocks any new `process.stdout`/`stderr` write in `src/edge/`" -- this is already covered by BLOCK A applied to `extensions/pi-claude-marketplace/**`.
 
 ## TypeBox Patterns for LLM Tool Parameter Schemas
 
@@ -1021,7 +1021,7 @@ Pattern verified across Phase 1-5 codebase:
 
    This is shown by V1: V1 inlines the schema directly in the `parameters:` field of `pi.registerTool({...})`. Phase 6 ports verbatim.
 
-3. **Schema for filter parameters of `claude_marketplace_plugin_list`:**
+3. **Schema for filter parameters of `pi_claude_marketplace_plugin_list`:**
    ```typescript
    parameters: Type.Object({
      marketplace: Type.Optional(Type.String({ description: "Marketplace name to list plugins for" })),
@@ -1037,7 +1037,7 @@ Pattern verified across Phase 1-5 codebase:
    The `Type.Static<typeof PARAMS>` (which `execute(params)` receives) infers to:
    `{ marketplace?: string; scope?: "user" | "project"; installed?: boolean; available?: boolean; unavailable?: boolean }`.
 
-4. **Schema for empty parameters of `claude_marketplace_list`:**
+4. **Schema for empty parameters of `pi_claude_marketplace_list`:**
    ```typescript
    parameters: Type.Object({}),
    ```
@@ -1270,7 +1270,7 @@ No external dependencies beyond what Phase 1-5 already require (Node ≥22, npm,
 | A1 | Pi-tui's `addAutocompleteProvider` STACKS wrappers (line 136 d.ts comment confirms) | Pitfall 4 | If it OVERWRITES, then V1's wrapper would be the only one -- even more benign than current analysis. Net: no functional risk. |
 | A2 | V1's `getPluginRefCompletions` correctness is preserved by refining `mode: "install"|"uninstall"|"update"` with the D-03 status filter (no other behavioral change) | TC-6 carry-forward | If status semantics change subtly (e.g., `unavailable` and `installed` need separate completion treatment), the planner must add a sub-mode parameter. Low risk -- D-03 corollary is explicit. |
 | A3 | The post-state-commit window in each orchestrator is clearly identifiable by the closing of the outer `withStateGuard` followed by data-dir mkdir / rm operations | Cache-Invalidation Insertion-Point Map | If a future orchestrator refactor moves cleanup steps inside the guard, the insertion point must follow. Low risk -- pattern is uniform across Phase 4/5. |
-| A4 | `marketplaceCount` for `claude_marketplace_list` is `Object.keys(mp.plugins).length`, not a filtered subset (V1's `filter(p => p.installed)`) -- because the new D-09 state schema has no `installed` field | LLM tool extracts | If a future schema reintroduces `installed: boolean` (unlikely; D-09 explicitly removes it), the count must filter. Low risk -- D-09 is locked. |
+| A4 | `marketplaceCount` for `pi_claude_marketplace_list` is `Object.keys(mp.plugins).length`, not a filtered subset (V1's `filter(p => p.installed)`) -- because the new D-09 state schema has no `installed` field | LLM tool extracts | If a future schema reintroduces `installed: boolean` (unlikely; D-09 explicitly removes it), the count must filter. Low risk -- D-09 is locked. |
 | A5 | Reading `process.cwd()` inside `getArgumentCompletions` (V1 parity) is acceptable for Phase 6 | Pitfall 3 | If Pi adds a `ctx`-aware completion API in a future Pi version, the planner can switch. Low risk -- V1 has shipped this pattern for years. |
 | A6 | The 10-min TTL constant is locked in `shared/completion-cache.ts` as a module-level const (D-03 escalation note "Both knobs are local to `shared/completion-cache.ts` constants" confirms) | Pattern 2 | If user wants this configurable, surface as Open Question -- not flagged as such because D-03 explicit. |
 
@@ -1283,12 +1283,12 @@ No external dependencies beyond what Phase 1-5 already require (Node ≥22, npm,
 - `/Users/acolomba/src/pi-claude-marketplace/.planning/ROADMAP.md` lines 143-152 -- Phase 6 entry
 - `/Users/acolomba/src/pi-claude-marketplace/node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/types.d.ts` -- Pi API surface (`ExtensionAPI.registerCommand`, `registerTool`, `on(session_start)`, `ExtensionContext.ui.notify`, `ExtensionContext.ui.addAutocompleteProvider`)
 - `/Users/acolomba/src/pi-claude-marketplace/node_modules/@mariozechner/pi-tui/dist/autocomplete.d.ts` -- `AutocompleteItem`, `AutocompleteProvider`
-- V1 source at `git show features/initial:extensions/claude-marketplace/{args,index,completions}.ts` + `git show features/initial:extensions/claude-marketplace/commands/{router,_args,list-marketplaces}.ts`
+- V1 source at `git show features/initial:extensions/pi-claude-marketplace/{args,index,completions}.ts` + `git show features/initial:extensions/pi-claude-marketplace/commands/{router,_args,list-marketplaces}.ts`
 - `/Users/acolomba/src/pi-claude-marketplace/eslint.config.js` -- BLOCK A (output discipline) + BLOCK C (import boundaries) verified in-place
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/shared/{notify,atomic-json,path-safety,fs-utils,types}.ts` -- Phase 1 primitives Phase 6 consumes
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/persistence/{locations,state-io}.ts` -- Phase 2 primitives; cache rebuild consumes
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/orchestrators/{marketplace,plugin}/*.ts` -- Phase 4/5 orchestrators Phase 6 wraps + invalidation insertion sites
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/domain/{manifest,resolver}.ts` -- `MARKETPLACE_VALIDATOR`, `resolveStrict` consumed by cache rebuild
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/shared/{notify,atomic-json,path-safety,fs-utils,types}.ts` -- Phase 1 primitives Phase 6 consumes
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/persistence/{locations,state-io}.ts` -- Phase 2 primitives; cache rebuild consumes
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/orchestrators/{marketplace,plugin}/*.ts` -- Phase 4/5 orchestrators Phase 6 wraps + invalidation insertion sites
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/domain/{manifest,resolver}.ts` -- `MARKETPLACE_VALIDATOR`, `resolveStrict` consumed by cache rebuild
 
 ### Secondary (MEDIUM confidence)
 - `/Users/acolomba/src/pi-claude-marketplace/.planning/research/PITFALLS.md` -- Pitfall 11 (cwd), 13 (completion staleness), 15 (notify discipline)

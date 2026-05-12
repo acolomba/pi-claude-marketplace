@@ -4,21 +4,21 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { addMarketplace } from "../../../extensions/claude-marketplace/orchestrators/marketplace/add.ts";
-import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
-import { loadState } from "../../../extensions/claude-marketplace/persistence/state-io.ts";
+import { addMarketplace } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
   __resetCacheForTests,
   getMarketplaceNames,
-} from "../../../extensions/claude-marketplace/shared/completion-cache.ts";
+} from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   MarketplaceDuplicateNameError,
   StaleSourceCloneError,
-} from "../../../extensions/claude-marketplace/shared/errors.ts";
-import { pathExists } from "../../../extensions/claude-marketplace/shared/fs-utils.ts";
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { fixtureMarketplaceDir, makeMockGitOps } from "../../helpers/git-mock.ts";
 
-import type { ScopedLocations } from "../../../extensions/claude-marketplace/persistence/locations.ts";
+import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 interface NotifyRecord {
@@ -264,7 +264,7 @@ test("NFR-5: path-source add never calls gitOps", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     const { ctx, notifications } = makeCtx();
     // Set up a local marketplace fixture by copying the valid-marketplace fixture
-    // into a non-claude-marketplace location and pointing rawSource at it.
+    // into a non-pi-claude-marketplace location and pointing rawSource at it.
     const localMpDir = await mkdtemp(path.join(tmpdir(), "mp-local-"));
     try {
       const fixtureSrc = fixtureMarketplaceDir("valid-marketplace");
@@ -319,7 +319,7 @@ test("MA-4: tilde paths are preserved verbatim in stored source.raw", async () =
   // through ParsedSource.resolved, which expandTilde already handled).
   // This test documents the contract; the parser test in
   // tests/domain/source.test.ts is the deeper coverage.
-  const { pathSource } = await import("../../../extensions/claude-marketplace/domain/source.ts");
+  const { pathSource } = await import("../../../extensions/pi-claude-marketplace/domain/source.ts");
   const source = pathSource("~/projects/local-mp");
   assert.equal(source.raw, "~/projects/local-mp"); // verbatim
 });

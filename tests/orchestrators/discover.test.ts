@@ -7,15 +7,15 @@ import test from "node:test";
 import {
   aggregateDiscoveredResources,
   type DiscoveredResources,
-} from "../../extensions/claude-marketplace/orchestrators/discover.ts";
-import { AggregateResourcesDiscoverError } from "../../extensions/claude-marketplace/shared/errors.ts";
-import { cleanupStaging } from "../../extensions/claude-marketplace/shared/fs-utils.ts";
+} from "../../extensions/pi-claude-marketplace/orchestrators/discover.ts";
+import { AggregateResourcesDiscoverError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { cleanupStaging } from "../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
-import type { ScopedLocations } from "../../extensions/claude-marketplace/persistence/locations.ts";
-import type { Scope } from "../../extensions/claude-marketplace/shared/types.ts";
+import type { ScopedLocations } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
 
 function makeLocations(scope: Scope, root: string): ScopedLocations {
-  const extensionRoot = path.join(root, "claude-marketplace");
+  const extensionRoot = path.join(root, "pi-claude-marketplace");
   return {
     scope,
     scopeRoot: root,

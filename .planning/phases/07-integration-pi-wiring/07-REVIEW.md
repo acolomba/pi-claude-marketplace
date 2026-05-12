@@ -4,24 +4,24 @@ reviewed: 2026-05-11T21:28:00Z
 depth: standard
 files_reviewed: 28
 files_reviewed_list:
-  - extensions/claude-marketplace/platform/pi-api.ts
-  - extensions/claude-marketplace/presentation/soft-dep.ts
-  - extensions/claude-marketplace/domain/manifest.ts
-  - extensions/claude-marketplace/orchestrators/discover.ts
-  - extensions/claude-marketplace/index.ts
-  - extensions/claude-marketplace/transaction/with-state-guard.ts
-  - extensions/claude-marketplace/persistence/locations.ts
-  - extensions/claude-marketplace/shared/errors.ts
-  - extensions/claude-marketplace/shared/markers.ts
-  - extensions/claude-marketplace/orchestrators/edge-deps.ts
-  - extensions/claude-marketplace/edge/register.ts
-  - extensions/claude-marketplace/orchestrators/plugin/install.ts
-  - extensions/claude-marketplace/orchestrators/plugin/uninstall.ts
-  - extensions/claude-marketplace/orchestrators/plugin/update.ts
-  - extensions/claude-marketplace/orchestrators/marketplace/add.ts
-  - extensions/claude-marketplace/orchestrators/marketplace/remove.ts
-  - extensions/claude-marketplace/orchestrators/marketplace/update.ts
-  - extensions/claude-marketplace/orchestrators/marketplace/autoupdate.ts
+  - extensions/pi-claude-marketplace/platform/pi-api.ts
+  - extensions/pi-claude-marketplace/presentation/soft-dep.ts
+  - extensions/pi-claude-marketplace/domain/manifest.ts
+  - extensions/pi-claude-marketplace/orchestrators/discover.ts
+  - extensions/pi-claude-marketplace/index.ts
+  - extensions/pi-claude-marketplace/transaction/with-state-guard.ts
+  - extensions/pi-claude-marketplace/persistence/locations.ts
+  - extensions/pi-claude-marketplace/shared/errors.ts
+  - extensions/pi-claude-marketplace/shared/markers.ts
+  - extensions/pi-claude-marketplace/orchestrators/edge-deps.ts
+  - extensions/pi-claude-marketplace/edge/register.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/update.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts
   - tests/e2e/_helpers.ts
   - tests/e2e/resources-discover.test.ts
   - tests/e2e/install-soft-deps.test.ts
@@ -57,7 +57,7 @@ Reviewed Phase 7 Pi wiring, manifest seam, resources discovery, state-locking, e
 ### CR-01: `resources_discover` ignores the event cwd and can discover the wrong project scope
 
 **Classification:** BLOCKER
-**File:** `extensions/claude-marketplace/index.ts:12-25`
+**File:** `extensions/pi-claude-marketplace/index.ts:12-25`
 **Status:** Resolved in `6a7e15a`
 **Issue:** The handler casts `pi.on("resources_discover", ...)` to a zero-argument callback and uses `process.cwd()` for project locations. The modeled event includes `cwd`, and the e2e test passes that cwd, but the implementation ignores it. In a real Pi process serving a session whose project cwd differs from the process cwd, `/reload` will miss that project's staged resources or expose resources from the wrong project root.
 
@@ -81,7 +81,7 @@ onResourcesDiscover("resources_discover", async (event) => {
 ### CR-02: Autoupdate swallows lock/IO failures as if they were missing-scope lookups
 
 **Classification:** BLOCKER
-**File:** `extensions/claude-marketplace/orchestrators/marketplace/autoupdate.ts:54-88`
+**File:** `extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts:54-88`
 **Status:** Resolved in `6a7e15a`
 **Issue:** `setMarketplaceAutoupdate` catches every error from `withStateGuard` and treats it like a tolerable per-scope miss. After Phase 7, `withStateGuard` can throw `StateLockHeldError` or other real IO failures. If one scope succeeds and the other is locked, the function emits a normal success message and silently leaves the locked scope unchanged; if a bare command hits a locked scope plus an empty other scope, it can claim `No marketplaces configured.` This is incorrect user-visible behavior for a mutating operation.
 
@@ -103,7 +103,7 @@ onResourcesDiscover("resources_discover", async (event) => {
 ### WR-01: Lock release failures can mask the original mutate/save failure
 
 **Classification:** WARNING
-**File:** `extensions/claude-marketplace/transaction/with-state-guard.ts:74-81`
+**File:** `extensions/pi-claude-marketplace/transaction/with-state-guard.ts:74-81`
 **Status:** Resolved in `6a7e15a`
 **Issue:** The `finally` block awaits `release()` directly. If `mutate`, `loadState`, or `saveState` throws and the release call also throws, the release error replaces the original failure. That hides the actionable cause from users and from rollback/error handling.
 
@@ -132,9 +132,9 @@ try {
 ### WR-02: Lock acquisition wraps all failures as contention
 
 **Classification:** WARNING
-**File:** `extensions/claude-marketplace/transaction/with-state-guard.ts:62-72`
+**File:** `extensions/pi-claude-marketplace/transaction/with-state-guard.ts:62-72`
 **Status:** Resolved in `6a7e15a`
-**Issue:** Any `proper-lockfile.lock` failure is converted to `StateLockHeldError`. Permission errors, invalid paths, filesystem failures, or corrupted lockfile state will be reported as "Another claude-marketplace operation is in progress," which gives users the wrong recovery action and can hide real filesystem defects.
+**Issue:** Any `proper-lockfile.lock` failure is converted to `StateLockHeldError`. Permission errors, invalid paths, filesystem failures, or corrupted lockfile state will be reported as "Another pi-claude-marketplace operation is in progress," which gives users the wrong recovery action and can hide real filesystem defects.
 
 **Fix:** Inspect the lock error and only throw `StateLockHeldError` for actual held-lock conditions. Propagate or wrap other errors with their real cause and message.
 

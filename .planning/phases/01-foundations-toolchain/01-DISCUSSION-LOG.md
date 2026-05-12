@@ -124,15 +124,15 @@ ______________________________________________________________________
 
 **User's choice:** Yes -- strict ESLint import-x boundaries (Recommended) **Notes:** Without enforcement, the rename is just cosmetic.
 
-### Q3 -- Where do the 9 folders live relative to extensions/claude-marketplace/?
+### Q3 -- Where do the 9 folders live relative to extensions/pi-claude-marketplace/?
 
 | Option                                        | Description                                             | Selected |
 | --------------------------------------------- | ------------------------------------------------------- | -------- |
-| Directly inside extension dir                 | extensions/claude-marketplace/{edge,orchestrators,...}/ | ✓        |
-| Wrapped in extensions/claude-marketplace/src/ | Adds one path level                                     |          |
+| Directly inside extension dir                 | extensions/pi-claude-marketplace/{edge,orchestrators,...}/ | ✓        |
+| Wrapped in extensions/pi-claude-marketplace/src/ | Adds one path level                                     |          |
 | You decide                                    | Mirror V1: folders directly inside the extension dir    |          |
 
-**User's choice:** Directly inside extension dir (Recommended) **Notes:** Replaces current stub `claude-marketplace.ts` with a directory; entrypoint is `extensions/claude-marketplace/index.ts`.
+**User's choice:** Directly inside extension dir (Recommended) **Notes:** Replaces current stub `pi-claude-marketplace.ts` with a directory; entrypoint is `extensions/pi-claude-marketplace/index.ts`.
 
 ### Q4 -- Phase 1 scaffold scope
 

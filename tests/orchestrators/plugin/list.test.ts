@@ -13,10 +13,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { pathSource } from "../../../extensions/claude-marketplace/domain/source.ts";
-import { listPlugins } from "../../../extensions/claude-marketplace/orchestrators/plugin/list.ts";
-import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
-import { saveState } from "../../../extensions/claude-marketplace/persistence/state-io.ts";
+import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { listPlugins } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 
@@ -596,20 +596,29 @@ function stripComments(src: string): string {
 }
 
 test("NFR-5 / PL-3: list.ts source has zero imports from platform/git", async () => {
-  const src = await readFile("extensions/claude-marketplace/orchestrators/plugin/list.ts", "utf8");
+  const src = await readFile(
+    "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
+    "utf8",
+  );
   const code = stripComments(src);
   assert.equal(code.includes("platform/git"), false);
 });
 
 test("NFR-5 / PL-3: list.ts source contains no DEFAULT_GIT_OPS or gitOps reference", async () => {
-  const src = await readFile("extensions/claude-marketplace/orchestrators/plugin/list.ts", "utf8");
+  const src = await readFile(
+    "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
+    "utf8",
+  );
   const code = stripComments(src);
   assert.equal(code.includes("DEFAULT_GIT_OPS"), false);
   assert.equal(code.includes("gitOps"), false);
 });
 
 test("D-04 corollary: list.ts does not use withStateGuard (read-only)", async () => {
-  const src = await readFile("extensions/claude-marketplace/orchestrators/plugin/list.ts", "utf8");
+  const src = await readFile(
+    "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
+    "utf8",
+  );
   const code = stripComments(src);
   assert.equal(code.includes("withStateGuard"), false);
 });

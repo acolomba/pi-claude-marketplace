@@ -35,7 +35,7 @@ export {
 
 /** Filename prefix that identifies a generated agent file on disk. Safety
  *  checks reject any target whose basename does not start with this. */
-const GENERATED_AGENT_PREFIX = "claude-marketplace-";
+const GENERATED_AGENT_PREFIX = "pi-claude-marketplace-";
 
 export interface AgentIndexEntry {
   plugin: string;
@@ -195,7 +195,7 @@ type SafetyResult = { ok: true } | { ok: false; reason: string };
  *
  *  Rules:
  *  - Missing file (ENOENT) -> ok (nothing to clobber).
- *  - Filename must start with `claude-marketplace-`.
+ *  - Filename must start with `pi-claude-marketplace-`.
  *  - File must contain GENERATED_AGENT_MARKER. */
 async function isSafeToTouch(targetPath: string): Promise<SafetyResult> {
   const base = path.basename(targetPath);

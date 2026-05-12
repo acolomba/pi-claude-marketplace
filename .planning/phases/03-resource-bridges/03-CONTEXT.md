@@ -7,10 +7,10 @@
 
 All four resource bridges (skills, commands, agents, MCP servers) stage and unstage atomically. Each bridge owns its own `prepare/commit/abort/unstage` primitive set with marker discipline and per-bridge collision/ownership guards. Phase 3 owns 33 v1 REQ-IDs (SK-1..5, CM-1..4, AG-1..12, MC-1..8, RN-4..6, AS-8, AS-9) and produces:
 
-- `bridges/skills/{prepare,commit,abort,unstage}.ts` -- directory copy + atomic rename per skill into `<scope>/claude-marketplace/resources/skills/<plugin>-<skill>/`
-- `bridges/commands/{prepare,commit,abort,unstage}.ts` -- per-file write + atomic rename into `<scope>/claude-marketplace/resources/prompts/<plugin>:<command>.md`
+- `bridges/skills/{prepare,commit,abort,unstage}.ts` -- directory copy + atomic rename per skill into `<scope>/pi-claude-marketplace/resources/skills/<plugin>-<skill>/`
+- `bridges/commands/{prepare,commit,abort,unstage}.ts` -- per-file write + atomic rename into `<scope>/pi-claude-marketplace/resources/prompts/<plugin>:<command>.md`
 - `bridges/agents/{prepare,commit,abort,unstage,index,convert,frontmatter}.ts` -- tmp staging dir, atomic rename of agent files into `<scope>/agents/`, atomic JSON write of `agents-index.json`, AG-7 field-mapping pipeline
-- `bridges/mcp/{prepare,commit,abort,unstage,parse,merge,slots}.ts` -- in-memory merge of `<scope>/mcp.json` with `_claudeMarketplace` markers, MCP_COLLISION_SLOTS check across 4 pi-mcp-adapter slots
+- `bridges/mcp/{prepare,commit,abort,unstage,parse,merge,slots}.ts` -- in-memory merge of `<scope>/mcp.json` with `_piClaudeMarketplace` markers, MCP_COLLISION_SLOTS check across 4 pi-mcp-adapter slots
 - `shared/vars.ts` -- `${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PLUGIN_DATA}` substitution helper (consumed by skills + commands bridges)
 - `persistence/agents-index-schema.ts` -- TypeBox schema + JIT validator for `agents-index.json` (schemaVersion 1)
 
@@ -38,10 +38,10 @@ This phase ends with `npm run check` green, every bridge primitive callable in i
 
 - **D-04 (Compute-target-then-atomic-apply per bridge):** Each bridge's `commit` uniformly does: (1) identify owned artefacts via index/state/marker check; (2) compute target spec = (existing-not-owned ∪ new-staged); (3) atomic-apply. Install (no previous), uninstall (no new, drop owned), and update re-stage (drop owned + add new) collapse into the same primitive -- they are different inputs to the same operation. This locks the "unstage-first vs swap-and-commit" question by making it a non-question: there is no distinct unstage step inside commit; there is one compute-and-apply.
 - **D-04 atomic-apply granularity by bridge:**
-  - **Skills:** Per-skill directory rename. Stage `agents-staging`-equivalent under `<scope>/claude-marketplace/resources/skills-staging/<uuid>-<plugin>-<skill>/`, then atomic-rename to `<scope>/claude-marketplace/resources/skills/<plugin>-<skill>/`. Same-FS guarantee (same scope root).
-  - **Commands:** Per-file atomic rename. Stage `<plugin>:<command>.md` to a tmp adjacent to the prompts dir, atomic-rename to `<scope>/claude-marketplace/resources/prompts/<plugin>:<command>.md`. (Per-file is atomic per-OS rename guarantee.)
-  - **Agents:** Per-file atomic rename matching V1. Stage each agent file under `<extensionRoot>/agents-staging/<uuid>/<basename>.md`, atomic-rename per-file to `<scope>/agents/claude-marketplace-<plugin>-<agent>.md`, then `atomicWriteJson(agents-index.json)`. Per-AG-10, the staging dir lives under the extension's `agents-staging/`, NOT under `<scope>/agents/`. Cross-file consistency relies on (a) ledger ordering, (b) marker discipline making unstage idempotent.
-  - **MCP:** In-memory merge per MC-6. Read current `<scope>/mcp.json`, drop entries with `_claudeMarketplace.{plugin,marketplace}` matching the current operation, add new entries with the marker, `atomicWriteJson(<scope>/mcp.json)`. The "noop" branch (no new servers AND no previous ours) MUST NOT materialize the file (PRD §5.8 MC-6 + Phase 3 success criterion 4).
+  - **Skills:** Per-skill directory rename. Stage `agents-staging`-equivalent under `<scope>/pi-claude-marketplace/resources/skills-staging/<uuid>-<plugin>-<skill>/`, then atomic-rename to `<scope>/pi-claude-marketplace/resources/skills/<plugin>-<skill>/`. Same-FS guarantee (same scope root).
+  - **Commands:** Per-file atomic rename. Stage `<plugin>:<command>.md` to a tmp adjacent to the prompts dir, atomic-rename to `<scope>/pi-claude-marketplace/resources/prompts/<plugin>:<command>.md`. (Per-file is atomic per-OS rename guarantee.)
+  - **Agents:** Per-file atomic rename matching V1. Stage each agent file under `<extensionRoot>/agents-staging/<uuid>/<basename>.md`, atomic-rename per-file to `<scope>/agents/pi-claude-marketplace-<plugin>-<agent>.md`, then `atomicWriteJson(agents-index.json)`. Per-AG-10, the staging dir lives under the extension's `agents-staging/`, NOT under `<scope>/agents/`. Cross-file consistency relies on (a) ledger ordering, (b) marker discipline making unstage idempotent.
+  - **MCP:** In-memory merge per MC-6. Read current `<scope>/mcp.json`, drop entries with `_piClaudeMarketplace.{plugin,marketplace}` matching the current operation, add new entries with the marker, `atomicWriteJson(<scope>/mcp.json)`. The "noop" branch (no new servers AND no previous ours) MUST NOT materialize the file (PRD §5.8 MC-6 + Phase 3 success criterion 4).
 - **D-04 corollary:** `abort(prep)` cleans up the bridge's own staging tmp (e.g., `agents-staging/<uuid>/`); it is invoked when the bridge's own commit threw partway. Once commit returns successfully, `abort` is a no-op -- rollback is `unstage`, not `abort`. Phase 5's ledger uses `unstage` as `Phase.undo`, not `abort`.
 
 ### Same-Bridge Collision & Cross-Owner Refusal (D-05)
@@ -49,18 +49,18 @@ This phase ends with `npm run check` green, every bridge primitive callable in i
 - **D-05 (Per-bridge collision detection; cross-bridge guard is Phase 5):** Each bridge enforces same-bridge collisions and cross-owner refusals during `prepare`:
   - **Skills:** No same-name conflict possible within a single plugin (RN-1 generated names are unique by construction); cross-marketplace collisions on the same generated `<plugin>-<skill>` directory refuse stage with the conflicting owner.
   - **Commands:** Same as skills.
-  - **Agents:** AG-9 cross-(marketplace, plugin) refusal -- if a target file basename `claude-marketplace-<plugin>-<agent>.md` exists and the marker check (D-06 below) shows it's owned by a DIFFERENT (marketplace, plugin), throw with `"<name>" already owned by <other-mp>/<other-plugin>"`. Same-(marketplace, plugin) self-replace is allowed. AG-12 source-name collisions inside a single plugin throw with both source names listed.
+  - **Agents:** AG-9 cross-(marketplace, plugin) refusal -- if a target file basename `pi-claude-marketplace-<plugin>-<agent>.md` exists and the marker check (D-06 below) shows it's owned by a DIFFERENT (marketplace, plugin), throw with `"<name>" already owned by <other-mp>/<other-plugin>"`. Same-(marketplace, plugin) self-replace is allowed. AG-12 source-name collisions inside a single plugin throw with both source names listed.
   - **MCP:** MC-4 server-name collisions checked across all four `pi-mcp-adapter` slots from a single `MCP_COLLISION_SLOTS` constant in `bridges/mcp/slots.ts`. Self-replace within the same scope's `mcp.json` is allowed; foreign collisions refuse stage.
 - **D-05 corollary:** **Cross-bridge guard (PI-6: skill name == command name == agent name)** runs in Phase 5's `orchestrators/install.ts` BEFORE any bridge's `prepare` is invoked. Phase 3 does NOT cross-check between bridges -- bridges are siloed primitives.
 
 ### Marker Discipline & Foreign-Content Refusal (D-06)
 
 - **D-06 (Markers per bridge):**
-  - **Skills:** No marker required (the directory name `<plugin>-<skill>` and its location under `claude-marketplace/resources/skills/` is the marker; foreign content is impossible because we own the entire directory tree).
+  - **Skills:** No marker required (the directory name `<plugin>-<skill>` and its location under `pi-claude-marketplace/resources/skills/` is the marker; foreign content is impossible because we own the entire directory tree).
   - **Commands:** Same -- the file path is the marker.
-  - **Agents:** **Two-part marker** per AG-5 -- (a) basename starts with `claude-marketplace-`, (b) body contains the verbatim `generated by pi-claude-marketplace` string inside an HTML-comment provenance block placed immediately after the closing `---` of the frontmatter. Removal MUST refuse to touch any file failing either check (foreign content). The HTML-comment block is emitted by `bridges/agents/frontmatter.ts` during commit; the marker check is the gate inside `unstage` and `prepare`'s overwrite-detection.
-  - **MCP:** `_claudeMarketplace: { plugin, marketplace }` field embedded in each staged server entry per MC-5. Unstage drops only entries where this field's `(plugin, marketplace)` tuple matches.
-- **D-06 corollary (Phase 3 success criterion 2 binding):** "Every staged agent file starts with `claude-marketplace-` AND contains the verbatim `generated by pi-claude-marketplace` HTML-comment marker; foreign content at a target file is retained in the index with `failed[]` and is not overwritten." The `failed[]` channel is the agents bridge's prepare-time refusal: foreign-target files do NOT block the install but DO surface as warnings in the bridge's `CommitResult.failed[]`. Phase 5 aggregates these into the user-visible message.
+  - **Agents:** **Two-part marker** per AG-5 -- (a) basename starts with `pi-claude-marketplace-`, (b) body contains the verbatim `generated by pi-claude-marketplace` string inside an HTML-comment provenance block placed immediately after the closing `---` of the frontmatter. Removal MUST refuse to touch any file failing either check (foreign content). The HTML-comment block is emitted by `bridges/agents/frontmatter.ts` during commit; the marker check is the gate inside `unstage` and `prepare`'s overwrite-detection.
+  - **MCP:** `_piClaudeMarketplace: { plugin, marketplace }` field embedded in each staged server entry per MC-5. Unstage drops only entries where this field's `(plugin, marketplace)` tuple matches.
+- **D-06 corollary (Phase 3 success criterion 2 binding):** "Every staged agent file starts with `pi-claude-marketplace-` AND contains the verbatim `generated by pi-claude-marketplace` HTML-comment marker; foreign content at a target file is retained in the index with `failed[]` and is not overwritten." The `failed[]` channel is the agents bridge's prepare-time refusal: foreign-target files do NOT block the install but DO surface as warnings in the bridge's `CommitResult.failed[]`. Phase 5 aggregates these into the user-visible message.
 
 ### agents-index.json Schema (D-07)
 
@@ -69,7 +69,7 @@ This phase ends with `npm run check` green, every bridge primitive callable in i
 
 ### Variable Substitution (D-08)
 
-- **D-08 (`shared/vars.ts` for `${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PLUGIN_DATA}`, applied to skills + commands + agents):** SK-4 mandates substitution in `SKILL.md`; CM-3 mandates substitution in command bodies; **PRD §5.2.1 PI-10 mandates substitution in agent bodies as well** (verified against PRD on 2026-05-10 -- PI-10 is the binding requirement that lists all three component types). The substitution helper is a pure function `substituteClaudeVars(body: string, vars: { pluginRoot, pluginData }): string` -- exported from `shared/vars.ts` because all three bridges consume it. Variables: `${CLAUDE_PLUGIN_ROOT}` resolves to the absolute `pluginRoot` path (already constrained by `assertPathInside`); `${CLAUDE_PLUGIN_DATA}` resolves to `<scopeRoot>/claude-marketplace/data/<marketplace>/<plugin>/` (per PRD §4 / §8.1). The `data/` subdir creation lives in Phase 5's install orchestrator (after the bridge state commit), NOT in Phase 3 -- bridges only emit the substituted string; the dir doesn't need to exist for substitution to be byte-correct.
+- **D-08 (`shared/vars.ts` for `${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PLUGIN_DATA}`, applied to skills + commands + agents):** SK-4 mandates substitution in `SKILL.md`; CM-3 mandates substitution in command bodies; **PRD §5.2.1 PI-10 mandates substitution in agent bodies as well** (verified against PRD on 2026-05-10 -- PI-10 is the binding requirement that lists all three component types). The substitution helper is a pure function `substituteClaudeVars(body: string, vars: { pluginRoot, pluginData }): string` -- exported from `shared/vars.ts` because all three bridges consume it. Variables: `${CLAUDE_PLUGIN_ROOT}` resolves to the absolute `pluginRoot` path (already constrained by `assertPathInside`); `${CLAUDE_PLUGIN_DATA}` resolves to `<scopeRoot>/pi-claude-marketplace/data/<marketplace>/<plugin>/` (per PRD §4 / §8.1). The `data/` subdir creation lives in Phase 5's install orchestrator (after the bridge state commit), NOT in Phase 3 -- bridges only emit the substituted string; the dir doesn't need to exist for substitution to be byte-correct.
 
 #### D-08 Decision Update (2026-05-10)
 
@@ -77,7 +77,7 @@ The original D-08 wording said "Agents do NOT need substitution in their bodies 
 
 ### Resource Naming (D-09)
 
-- **D-09 (Reuse Phase 2 `domain/name.ts`; add SK-2/CM-2 prefix-elision helpers if not already present):** Phase 2 D-05 already shipped `assertSafeName` + the three generators (`<plugin>-<skill>`, `<plugin>:<command>`, `claude-marketplace-<plugin>-<agent>`). Phase 3 verifies they handle SK-2 ("prefix elided when source skill name already starts with `<plugin>-`") and CM-2 ("`<plugin>-` prefix stripped from source name when present"). If the Phase 2 helpers don't yet handle the elision, Phase 3 ADDS the elision logic to `domain/name.ts` (NOT in bridges/) since it's reusable name generation. **Verification step in Phase 3 plan:** read `domain/name.ts` and confirm; if missing, add and add tests.
+- **D-09 (Reuse Phase 2 `domain/name.ts`; add SK-2/CM-2 prefix-elision helpers if not already present):** Phase 2 D-05 already shipped `assertSafeName` + the three generators (`<plugin>-<skill>`, `<plugin>:<command>`, `pi-claude-marketplace-<plugin>-<agent>`). Phase 3 verifies they handle SK-2 ("prefix elided when source skill name already starts with `<plugin>-`") and CM-2 ("`<plugin>-` prefix stripped from source name when present"). If the Phase 2 helpers don't yet handle the elision, Phase 3 ADDS the elision logic to `domain/name.ts` (NOT in bridges/) since it's reusable name generation. **Verification step in Phase 3 plan:** read `domain/name.ts` and confirm; if missing, add and add tests.
 
 ### resources_discover (D-10)
 
@@ -112,10 +112,10 @@ The user said "i'll leave it to you" on every gray area presented. Each decision
 - `docs/prd/pi-claude-marketplace-prd.md` §6.5 -- RN-1..6 resource naming + `assertSafeName`; RN-4..6 are Phase 3 deliverables (RN-1..2 landed in Phase 2)
 - `docs/prd/pi-claude-marketplace-prd.md` §6.10 -- PS-1..5 path safety; SC-7 path containment for every name-derived path (agent target paths, recorded skill/prompt paths)
 - `docs/prd/pi-claude-marketplace-prd.md` §6.11 -- AS-1..AS-9 atomic staging; AS-8/9 are Phase 3 (per-bridge atomic commit semantics)
-- `docs/prd/pi-claude-marketplace-prd.md` §6.12 -- ES-5 marker strings (Phase 3 emits the `pi-subagents is not loaded` and `pi-mcp-adapter is not loaded` warnings via `notifyWarning`; also constrains the `_claudeMarketplace` marker shape)
+- `docs/prd/pi-claude-marketplace-prd.md` §6.12 -- ES-5 marker strings (Phase 3 emits the `pi-subagents is not loaded` and `pi-mcp-adapter is not loaded` warnings via `notifyWarning`; also constrains the `_piClaudeMarketplace` marker shape)
 - `docs/prd/pi-claude-marketplace-prd.md` §8.1 -- Per-plugin state shape (`resources.skills`, `resources.prompts`, `resources.agents`, `resources.mcpServers`); the bridge `CommitResult.recorded` fields populate these
 - `docs/prd/pi-claude-marketplace-prd.md` §9.2 -- Persistence layout per scope (where each bridge writes)
-- `docs/prd/pi-claude-marketplace-prd.md` Appendix B -- Generated-name conventions (skill: `<plugin>-<skill>`; command: `<plugin>:<command>`; agent: `claude-marketplace-<plugin>-<agent>`)
+- `docs/prd/pi-claude-marketplace-prd.md` Appendix B -- Generated-name conventions (skill: `<plugin>-<skill>`; command: `<plugin>:<command>`; agent: `pi-claude-marketplace-<plugin>-<agent>`)
 
 ### Project planning
 
@@ -127,19 +127,19 @@ The user said "i'll leave it to you" on every gray area presented. Each decision
 ### Phase 1 carry-forward (consumed by Phase 3)
 
 - `.planning/phases/01-foundations-toolchain/01-CONTEXT.md` -- D-03 (`write-file-atomic@^8` for JSON), D-06/D-07 (notify wrappers + ESLint output discipline), D-08 (markers), D-11 (import boundaries: `bridges/` may import only from `domain/`, `persistence/`, `shared/`), D-14..17 (`assertPathInside` with symlink refusal -- every bridge target path goes through it)
-- `extensions/claude-marketplace/shared/atomic-json.ts` -- `atomicWriteJson` (Phase 3 uses for `mcp.json` and `agents-index.json`)
-- `extensions/claude-marketplace/shared/markers.ts` -- ES-5 strings (Phase 3 emits via `notifyWarning`)
-- `extensions/claude-marketplace/shared/notify.ts` -- `notifySuccess/Warning/Error` (every Phase 3 user-visible message routes through these)
-- `extensions/claude-marketplace/shared/path-safety.ts` -- `assertPathInside` with `SymlinkRefusedError` (Phase 3 calls on every name-derived path)
-- `extensions/claude-marketplace/shared/errors.ts` -- `PathContainmentError` chain; Phase 3 adds new error types here (`AgentForeignContentError`, `McpServerCollisionError`, `BridgeStagingError` as needed)
+- `extensions/pi-claude-marketplace/shared/atomic-json.ts` -- `atomicWriteJson` (Phase 3 uses for `mcp.json` and `agents-index.json`)
+- `extensions/pi-claude-marketplace/shared/markers.ts` -- ES-5 strings (Phase 3 emits via `notifyWarning`)
+- `extensions/pi-claude-marketplace/shared/notify.ts` -- `notifySuccess/Warning/Error` (every Phase 3 user-visible message routes through these)
+- `extensions/pi-claude-marketplace/shared/path-safety.ts` -- `assertPathInside` with `SymlinkRefusedError` (Phase 3 calls on every name-derived path)
+- `extensions/pi-claude-marketplace/shared/errors.ts` -- `PathContainmentError` chain; Phase 3 adds new error types here (`AgentForeignContentError`, `McpServerCollisionError`, `BridgeStagingError` as needed)
 
 ### Phase 2 carry-forward (consumed by Phase 3)
 
 - `.planning/phases/02-domain-core-persistence-primitives/02-CONTEXT.md` -- D-04/D-05 (resolver + name.ts), D-09 (state shape with `marketplaces[mp].plugins[plugin]`), D-01..D-03 (Phase 5 will use these to wire bridges; Phase 3 references for context)
-- `extensions/claude-marketplace/domain/resolver.ts` -- Phase 3's bridges read `pluginRoot` from the `installable: true` variant of `ResolvedPlugin`; NFR-7 type discrimination ensures non-installable plugins can't reach the bridges
-- `extensions/claude-marketplace/domain/name.ts` -- `assertSafeName` + the three generators; Phase 3 verifies SK-2 and CM-2 elision logic exists or adds it
-- `extensions/claude-marketplace/persistence/locations.ts` -- branded `ScopedLocations` -- the only way bridges derive on-disk paths
-- `extensions/claude-marketplace/persistence/state-schema.ts` -- `STATE_SCHEMA` precedent for Phase 3's `agents-index-schema.ts`
+- `extensions/pi-claude-marketplace/domain/resolver.ts` -- Phase 3's bridges read `pluginRoot` from the `installable: true` variant of `ResolvedPlugin`; NFR-7 type discrimination ensures non-installable plugins can't reach the bridges
+- `extensions/pi-claude-marketplace/domain/name.ts` -- `assertSafeName` + the three generators; Phase 3 verifies SK-2 and CM-2 elision logic exists or adds it
+- `extensions/pi-claude-marketplace/persistence/locations.ts` -- branded `ScopedLocations` -- the only way bridges derive on-disk paths
+- `extensions/pi-claude-marketplace/persistence/state-schema.ts` -- `STATE_SCHEMA` precedent for Phase 3's `agents-index-schema.ts`
 
 ### Research foundation (already produced)
 
@@ -158,26 +158,26 @@ The user said "i'll leave it to you" on every gray area presented. Each decision
 
 ### V1 reference (read selectively when implementing the same concern)
 
-- `git show features/initial:extensions/claude-marketplace/agent/{stage,convert,frontmatter}.ts` -- V1 agents bridge; AG-7 mappings + AG-8 emitter patterns
-- `git show features/initial:extensions/claude-marketplace/mcp/{stage,parse,marker,effective-config}.ts` -- V1 MCP bridge; MC-1 precedence chain + MC-4 4-slot collision check
-- `git show features/initial:extensions/claude-marketplace/resource/stage.ts` -- V1 skills + commands staging (the file likely covers both since they share the directory layout)
-- `git show features/initial:extensions/claude-marketplace/plugin/install.ts` -- V1's 4-phase install order (informs D-02's bridge-as-Phase composition documentation)
+- `git show features/initial:extensions/pi-claude-marketplace/agent/{stage,convert,frontmatter}.ts` -- V1 agents bridge; AG-7 mappings + AG-8 emitter patterns
+- `git show features/initial:extensions/pi-claude-marketplace/mcp/{stage,parse,marker,effective-config}.ts` -- V1 MCP bridge; MC-1 precedence chain + MC-4 4-slot collision check
+- `git show features/initial:extensions/pi-claude-marketplace/resource/stage.ts` -- V1 skills + commands staging (the file likely covers both since they share the directory layout)
+- `git show features/initial:extensions/pi-claude-marketplace/plugin/install.ts` -- V1's 4-phase install order (informs D-02's bridge-as-Phase composition documentation)
 
 ## Existing Code Insights
 
 ### Reusable Assets (Phase 1 + Phase 2 outputs)
 
-- **`extensions/claude-marketplace/shared/atomic-json.ts`** -- `atomicWriteJson(filePath, value)` for `agents-index.json` and `mcp.json`. Already wraps `write-file-atomic@^8`'s fsync + concurrent-write queue (Phase 1 D-03).
-- **`extensions/claude-marketplace/shared/path-safety.ts`** -- `assertPathInside(parent, child)` with `SymlinkRefusedError`. Every Phase 3 path computation routes through here (SC-7).
-- **`extensions/claude-marketplace/shared/notify.ts`** -- All Phase 3 user-visible messages (e.g., AG-9 `"<name>" already owned by ...`, MC-3 `malformed mcpServers: <reason>`, AS-9 staging failures) route through `notifyWarning` / `notifyError`.
-- **`extensions/claude-marketplace/shared/markers.ts`** -- `PI_SUBAGENTS_NOT_LOADED`, `PI_MCP_ADAPTER_NOT_LOADED` constants. Phase 3's bridges DO NOT emit these directly; Phase 4/5 orchestrators emit them based on `pi.getAllTools()` probing (PRD §9.3). Phase 3 just provides the bridge surface.
-- **`extensions/claude-marketplace/shared/errors.ts`** -- `PathContainmentError` + `SymlinkRefusedError`. Phase 3 ADDS: `AgentForeignContentError extends PathContainmentError` (refusal to overwrite non-`claude-marketplace-` agent files), `McpServerCollisionError extends Error` (4-slot collision), `BridgeStagingError extends Error` (tmp staging failure with `Error.cause`).
-- **`extensions/claude-marketplace/domain/name.ts`** -- `assertSafeName` + the three generators (Phase 2 D-05). Phase 3 verifies SK-2 + CM-2 elision; adds if missing.
-- **`extensions/claude-marketplace/domain/resolver.ts`** -- Bridges read `pluginRoot` from `ResolvedPlugin & { installable: true }` only.
-- **`extensions/claude-marketplace/persistence/locations.ts`** -- `ScopedLocations` brand (Phase 2 D-09). All bridge target paths derive from this; new helpers may be added as needed (e.g., `skillsTargetDir(loc, pluginName, skillName)`, `agentsTargetFile(loc, pluginName, agentName)`).
-- **`extensions/claude-marketplace/persistence/state-io.ts`** -- `loadState`, `saveState`. Phase 3 bridges DO NOT write state directly; Phase 5 orchestrators do that as the final state-commit phase. But the `resources.{skills,prompts,agents,mcpServers}` shapes recorded in state come from each bridge's `CommitResult`.
-- **`extensions/claude-marketplace/transaction/{phase-ledger,rollback,with-state-guard}.ts`** -- Phase 5's orchestrators use these to compose bridge primitives. Phase 3 has no direct dependency.
-- **`extensions/claude-marketplace/{bridges/skills,bridges/commands,bridges/agents,bridges/mcp}/`** -- Empty placeholders scaffolded by Phase 1 D-12; each has a `README.md` with allowed imports + planned contents. Phase 3 fills them.
+- **`extensions/pi-claude-marketplace/shared/atomic-json.ts`** -- `atomicWriteJson(filePath, value)` for `agents-index.json` and `mcp.json`. Already wraps `write-file-atomic@^8`'s fsync + concurrent-write queue (Phase 1 D-03).
+- **`extensions/pi-claude-marketplace/shared/path-safety.ts`** -- `assertPathInside(parent, child)` with `SymlinkRefusedError`. Every Phase 3 path computation routes through here (SC-7).
+- **`extensions/pi-claude-marketplace/shared/notify.ts`** -- All Phase 3 user-visible messages (e.g., AG-9 `"<name>" already owned by ...`, MC-3 `malformed mcpServers: <reason>`, AS-9 staging failures) route through `notifyWarning` / `notifyError`.
+- **`extensions/pi-claude-marketplace/shared/markers.ts`** -- `PI_SUBAGENTS_NOT_LOADED`, `PI_MCP_ADAPTER_NOT_LOADED` constants. Phase 3's bridges DO NOT emit these directly; Phase 4/5 orchestrators emit them based on `pi.getAllTools()` probing (PRD §9.3). Phase 3 just provides the bridge surface.
+- **`extensions/pi-claude-marketplace/shared/errors.ts`** -- `PathContainmentError` + `SymlinkRefusedError`. Phase 3 ADDS: `AgentForeignContentError extends PathContainmentError` (refusal to overwrite non-`pi-claude-marketplace-` agent files), `McpServerCollisionError extends Error` (4-slot collision), `BridgeStagingError extends Error` (tmp staging failure with `Error.cause`).
+- **`extensions/pi-claude-marketplace/domain/name.ts`** -- `assertSafeName` + the three generators (Phase 2 D-05). Phase 3 verifies SK-2 + CM-2 elision; adds if missing.
+- **`extensions/pi-claude-marketplace/domain/resolver.ts`** -- Bridges read `pluginRoot` from `ResolvedPlugin & { installable: true }` only.
+- **`extensions/pi-claude-marketplace/persistence/locations.ts`** -- `ScopedLocations` brand (Phase 2 D-09). All bridge target paths derive from this; new helpers may be added as needed (e.g., `skillsTargetDir(loc, pluginName, skillName)`, `agentsTargetFile(loc, pluginName, agentName)`).
+- **`extensions/pi-claude-marketplace/persistence/state-io.ts`** -- `loadState`, `saveState`. Phase 3 bridges DO NOT write state directly; Phase 5 orchestrators do that as the final state-commit phase. But the `resources.{skills,prompts,agents,mcpServers}` shapes recorded in state come from each bridge's `CommitResult`.
+- **`extensions/pi-claude-marketplace/transaction/{phase-ledger,rollback,with-state-guard}.ts`** -- Phase 5's orchestrators use these to compose bridge primitives. Phase 3 has no direct dependency.
+- **`extensions/pi-claude-marketplace/{bridges/skills,bridges/commands,bridges/agents,bridges/mcp}/`** -- Empty placeholders scaffolded by Phase 1 D-12; each has a `README.md` with allowed imports + planned contents. Phase 3 fills them.
 
 ### Established Patterns (carry forward unchanged)
 

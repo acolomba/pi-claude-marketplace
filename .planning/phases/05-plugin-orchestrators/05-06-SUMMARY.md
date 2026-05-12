@@ -32,7 +32,7 @@ tech-stack:
 
 key-files:
   created:
-    - extensions/claude-marketplace/orchestrators/plugin/install.ts
+    - extensions/pi-claude-marketplace/orchestrators/plugin/install.ts
     - tests/orchestrators/plugin/install.test.ts
   modified: []
 
@@ -105,7 +105,7 @@ Each task was committed atomically:
 
 ## Files Created/Modified
 
-- **Created:** `extensions/claude-marketplace/orchestrators/plugin/install.ts` (644 lines) -- the `installPlugin` entrypoint, `InstallPluginOptions` and local `InstallCtx` types, `loadCachedMarketplaceManifest` / `resolveInstallVersion` / `pickAgentsSourceDir` helpers, and the 5-phase ledger composition.
+- **Created:** `extensions/pi-claude-marketplace/orchestrators/plugin/install.ts` (644 lines) -- the `installPlugin` entrypoint, `InstallPluginOptions` and local `InstallCtx` types, `loadCachedMarketplaceManifest` / `resolveInstallVersion` / `pickAgentsSourceDir` helpers, and the 5-phase ledger composition.
 - **Created:** `tests/orchestrators/plugin/install.test.ts` (1157 lines) -- 19 end-to-end tests across PI-3..15 + AS-6 + AS-7 + NFR-5 + 2 sanity assertions. `seedPathMarketplaceWithPlugin` helper builds the marketplace tree + plugin source tree on disk and seeds `state.json` with the marketplace record.
 
 ## Decisions Made
@@ -142,7 +142,7 @@ PI-8 (atomic staging + cleanup warnings) is exercised indirectly through PI-9 (w
 
 ## Self-Check: PASSED
 
-- `extensions/claude-marketplace/orchestrators/plugin/install.ts`: FOUND
+- `extensions/pi-claude-marketplace/orchestrators/plugin/install.ts`: FOUND
 - `tests/orchestrators/plugin/install.test.ts`: FOUND
 - Commit `0963249`: FOUND
 - Commit `4861021`: FOUND

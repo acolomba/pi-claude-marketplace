@@ -243,7 +243,7 @@ Phase 5 introduces no new runtime libraries.
 
 ### Component Responsibilities (Phase 5 surface)
 
-| File (path absolute under `extensions/claude-marketplace/`) | New / Modified | Lines (est.) | Purpose |
+| File (path absolute under `extensions/pi-claude-marketplace/`) | New / Modified | Lines (est.) | Purpose |
 |------|----------------|-----:|---------|
 | `orchestrators/plugin/install.ts` | NEW | ~260 | 5-phase ledger; PI-1..15; rollback via runPhases + formatRollbackError; eager `pluginDataDir` mkdir post-state-commit |
 | `orchestrators/plugin/uninstall.ts` | NEW | ~140 | Reuses `cascadeUnstagePlugin`; PU-1..8; data-dir rm-rf post-state-commit; concurrent-converge sentinel |
@@ -271,7 +271,7 @@ Phase 5 introduces no new runtime libraries.
 | `tests/domain/resolver-strict.test.ts` | MODIFIED | ~+5/-5 | Existing tests asserting single-string `componentPaths.skills` need update to array semantics |
 | `tests/domain/resolver-loose.test.ts` | MODIFIED | ~+5/-5 | Same |
 | `tests/persistence/locations.test.ts` | MODIFIED | +1 case | `pluginDataDir(mp, plugin)` already exists; add containment escape case if not covered |
-| `extensions/claude-marketplace/orchestrators/index.ts` | MODIFIED | +4 lines | Barrel re-exports |
+| `extensions/pi-claude-marketplace/orchestrators/index.ts` | MODIFIED | +4 lines | Barrel re-exports |
 | `REQUIREMENTS.md` | MODIFIED | 1 line | PR-4 strikethrough |
 | `.planning/PROJECT.md` | MODIFIED | +1 row | D-24 (COMP-01 supersession) |
 | `CHANGELOG.md` (or equivalent in `docs/`) | NEW/MODIFIED | +1 entry | "behavior corrected vs. V1: custom component-path arrays now SUPPLEMENT defaults" |
@@ -867,7 +867,7 @@ test("D-07: loose mode stays entry-only (no union)", async () => {
 ```typescript
 // tests/architecture/plugin-orchestrators-no-network.test.ts (NEW -- sketch)
 test("PI-2 / NFR-5: install.ts has zero gitOps surface imports", async () => {
-  const src = await readFile("extensions/claude-marketplace/orchestrators/plugin/install.ts", "utf8");
+  const src = await readFile("extensions/pi-claude-marketplace/orchestrators/plugin/install.ts", "utf8");
   const code = stripComments(src);
   assert.equal(code.includes("platform/git"), false);
   assert.equal(code.includes("DEFAULT_GIT_OPS"), false);
@@ -1056,33 +1056,33 @@ Phase 5 introduces no new external dependencies. All required primitives are alr
 - `/Users/acolomba/src/pi-claude-marketplace/.planning/REQUIREMENTS.md` (REQ-IDs)
 - `/Users/acolomba/src/pi-claude-marketplace/.planning/ROADMAP.md` lines 110-160 (Phase 5 goal + 6 success criteria + Phase 4 / 5 progress)
 - `/Users/acolomba/src/pi-claude-marketplace/.planning/config.json` (workflow flags)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/transaction/phase-ledger.ts` (`runPhases<C>` + `Phase<C>` + `RollbackPartial` + `RunPhasesResult`)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/transaction/rollback.ts` (`formatRollbackError`, ROLLBACK_PARTIAL chokepoint -- D-02 extension target)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/transaction/with-state-guard.ts` (ST-7 wrapper; outer-guard / inner-ledger composition pattern)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/orchestrators/types.ts` (`PluginUpdateFn`, `PluginUpdateOutcome`, `PluginUpdatePartition` -- Phase 5 D-09 implementation surface)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/orchestrators/marketplace/shared.ts` (`GitOps`, `DEFAULT_GIT_OPS`, `cascadeUnstagePlugin`, `resolveScopeFromState`, `formatErrorWithCauses`, `applyAutoupdateFlipInPlace`, `AgentsUnstageFailureError`)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/orchestrators/marketplace/add.ts` (atomic staging-dir-then-rename + withStateGuard + appendLeaks pattern; reference for install staging-dir leak handling)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/orchestrators/marketplace/remove.ts` (post-state-commit cleanup + per-plugin cascade injection seam + MR-3/MR-6 aggregation -- the closest analog to uninstall.ts)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/orchestrators/marketplace/list.ts` (orchestrator-presentation split; D-04 corollary: no withStateGuard for read-only)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/orchestrators/marketplace/update.ts` (D-14 follow-upstream-blindly sequence; partition rendering MU-7; soft-dep WR-04 fields; cloneAdvanced CR-05; outer-guard-cascade-outside D-08 -- the closest analog to update.ts)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/orchestrators/marketplace/autoupdate.ts` (idempotent flip pattern; SC-6 enumeration)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/domain/resolver.ts` (`ComponentPathsSchema`, `resolveStrict`, `resolveLoose`, `validateComponentPath`, `requireInstallable` -- D-07 migration target)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/domain/manifest.ts` (`MARKETPLACE_VALIDATOR`)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/domain/components/plugin.ts` (`PluginEntry`, `PluginManifest` -- `dependencies` is `Type.Optional(Type.Unknown())`)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/domain/version.ts` (`computeHashVersion`, `HASH_WALK_SKIP`)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/persistence/locations.ts` (`pluginDataDir`/`marketplaceDataDir`/`sourceCloneDir` methods on ScopedLocations; A1 verification)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/persistence/state-io.ts` (`STATE_SCHEMA`, `PLUGIN_INSTALL_RECORD_SCHEMA`, `loadState`/`saveState` -- `resources.{skills,prompts,agents,mcpServers}: string[]`)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/bridges/skills/{discover,stage,unstage,types}.ts` (signature surface for D-07 + install ledger phases)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/bridges/commands/{discover,stage,types}.ts` (same)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/bridges/agents/{discover,stage,unstage,marker,index,types}.ts` (foreign-content marker; `findOwnershipConflicts`; `prepareStagePluginAgents` throws on AG-9; `commitPreparedAgents` preserves foreign-preserved entries)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/bridges/mcp/{stage,unstage,parse,index,types}.ts` (`McpServerCollisionError`, MC-4 / MC-6 / MC-7 surfaces; `loadEffectiveServerNames`)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/shared/markers.ts` (5 ES-5 prefixes; D-04 extension target)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/shared/errors.ts` (existing error classes; `appendLeakToError`, `appendLeaks`, `errorMessage`)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/shared/notify.ts` (sole `ctx.ui.notify` chokepoint; severity-named wrappers)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/shared/fs-utils.ts` (`cleanupStaging`, `pathExists`)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/presentation/marketplace-list.ts` (D-06 precedent; icon constant; payload-driven render; `[autoupdate]` suffix shape)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/presentation/reload-hint.ts` (`reloadHint`, `appendReloadHint`, `ReloadVerb`)
-- `/Users/acolomba/src/pi-claude-marketplace/extensions/claude-marketplace/presentation/soft-dep.ts` (`subagentWarningIfNeeded`, `mcpAdapterWarningIfNeeded`, ExtensionAPI vs ExtensionContext gotcha)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/transaction/phase-ledger.ts` (`runPhases<C>` + `Phase<C>` + `RollbackPartial` + `RunPhasesResult`)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/transaction/rollback.ts` (`formatRollbackError`, ROLLBACK_PARTIAL chokepoint -- D-02 extension target)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/transaction/with-state-guard.ts` (ST-7 wrapper; outer-guard / inner-ledger composition pattern)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/orchestrators/types.ts` (`PluginUpdateFn`, `PluginUpdateOutcome`, `PluginUpdatePartition` -- Phase 5 D-09 implementation surface)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts` (`GitOps`, `DEFAULT_GIT_OPS`, `cascadeUnstagePlugin`, `resolveScopeFromState`, `formatErrorWithCauses`, `applyAutoupdateFlipInPlace`, `AgentsUnstageFailureError`)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts` (atomic staging-dir-then-rename + withStateGuard + appendLeaks pattern; reference for install staging-dir leak handling)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts` (post-state-commit cleanup + per-plugin cascade injection seam + MR-3/MR-6 aggregation -- the closest analog to uninstall.ts)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts` (orchestrator-presentation split; D-04 corollary: no withStateGuard for read-only)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts` (D-14 follow-upstream-blindly sequence; partition rendering MU-7; soft-dep WR-04 fields; cloneAdvanced CR-05; outer-guard-cascade-outside D-08 -- the closest analog to update.ts)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts` (idempotent flip pattern; SC-6 enumeration)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/domain/resolver.ts` (`ComponentPathsSchema`, `resolveStrict`, `resolveLoose`, `validateComponentPath`, `requireInstallable` -- D-07 migration target)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/domain/manifest.ts` (`MARKETPLACE_VALIDATOR`)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/domain/components/plugin.ts` (`PluginEntry`, `PluginManifest` -- `dependencies` is `Type.Optional(Type.Unknown())`)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/domain/version.ts` (`computeHashVersion`, `HASH_WALK_SKIP`)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/persistence/locations.ts` (`pluginDataDir`/`marketplaceDataDir`/`sourceCloneDir` methods on ScopedLocations; A1 verification)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/persistence/state-io.ts` (`STATE_SCHEMA`, `PLUGIN_INSTALL_RECORD_SCHEMA`, `loadState`/`saveState` -- `resources.{skills,prompts,agents,mcpServers}: string[]`)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/bridges/skills/{discover,stage,unstage,types}.ts` (signature surface for D-07 + install ledger phases)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/bridges/commands/{discover,stage,types}.ts` (same)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/bridges/agents/{discover,stage,unstage,marker,index,types}.ts` (foreign-content marker; `findOwnershipConflicts`; `prepareStagePluginAgents` throws on AG-9; `commitPreparedAgents` preserves foreign-preserved entries)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/bridges/mcp/{stage,unstage,parse,index,types}.ts` (`McpServerCollisionError`, MC-4 / MC-6 / MC-7 surfaces; `loadEffectiveServerNames`)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/shared/markers.ts` (5 ES-5 prefixes; D-04 extension target)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/shared/errors.ts` (existing error classes; `appendLeakToError`, `appendLeaks`, `errorMessage`)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/shared/notify.ts` (sole `ctx.ui.notify` chokepoint; severity-named wrappers)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/shared/fs-utils.ts` (`cleanupStaging`, `pathExists`)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/presentation/marketplace-list.ts` (D-06 precedent; icon constant; payload-driven render; `[autoupdate]` suffix shape)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/presentation/reload-hint.ts` (`reloadHint`, `appendReloadHint`, `ReloadVerb`)
+- `/Users/acolomba/src/pi-claude-marketplace/extensions/pi-claude-marketplace/presentation/soft-dep.ts` (`subagentWarningIfNeeded`, `mcpAdapterWarningIfNeeded`, ExtensionAPI vs ExtensionContext gotcha)
 - `/Users/acolomba/src/pi-claude-marketplace/tests/orchestrators/marketplace/list.test.ts` (test pattern: hermetic HOME, NotifyRecord ctx, ML-3 + NFR-5 source-grep, `stripComments`)
 - `/Users/acolomba/src/pi-claude-marketplace/tests/orchestrators/marketplace/update.test.ts` first 100 lines (fixture pattern, makeMockGitOps, seedGithubMarketplace, withHermeticHome, makeGithubSource)
 - `/Users/acolomba/src/pi-claude-marketplace/.planning/phases/04-marketplace-orchestrators/04-CONTEXT.md` (D-01..D-14; the architectural family Phase 5 mirrors)

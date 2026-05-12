@@ -38,7 +38,7 @@ ______________________________________________________________________
 
 **D-08 (Cascade runs OUTSIDE the marketplace's state-guard):** The marketplace's outer guard wraps ONLY the manifest-pointer refresh + autoupdate-flag readback + persist. Guard closes; cascade loop runs; each `PluginUpdateFn` call opens its own state-guard internally.
 
-**D-09 (Staging at `<scopeRoot>/claude-marketplace/sources-staging/<uuid>/`):** Same-FS guarantee by construction. New helper `sourcesStagingDir(loc, uuid)` added to `persistence/locations.ts`. UUID via `node:crypto.randomUUID()`.
+**D-09 (Staging at `<scopeRoot>/pi-claude-marketplace/sources-staging/<uuid>/`):** Same-FS guarantee by construction. New helper `sourcesStagingDir(loc, uuid)` added to `persistence/locations.ts`. UUID via `node:crypto.randomUUID()`.
 
 **D-10 (Reuse `shared/fs-utils.cleanupStaging` + `shared/errors.appendLeakToError`):** MA-9 cleanup uses Phase 3 helpers. Cleanup failures return a leak descriptor string; `appendLeakToError(originalError, leakDescriptor)` chains it.
 
@@ -146,7 +146,7 @@ ______________________________________________________________________
 - **File ops:** All disk mutations atomic (tmp + rename or atomic JSON write) -- NFR-1.
 - **Recovery model:** No fix may require Pi process restart; `Run /reload` must suffice. All operations idempotent / fail-clean.
 - **Network policy:** Network only for GitHub-source `marketplace add` and `update`/`marketplace update` against GitHub-source marketplaces; `install`, `list`, `uninstall`, `marketplace remove`, path-source `marketplace add` MUST NOT touch the network -- NFR-5.
-- **Containment:** Refuse writes outside `<scopeRoot>/claude-marketplace/`, `<scopeRoot>/agents/`, `<scopeRoot>/mcp.json` -- NFR-10.
+- **Containment:** Refuse writes outside `<scopeRoot>/pi-claude-marketplace/`, `<scopeRoot>/agents/`, `<scopeRoot>/mcp.json` -- NFR-10.
 - **Quality bar:** `npm run check` must stay green (typecheck + ESLint + Prettier + `node --test`).
 - **Output channel:** All user-visible messages MUST go through `ctx.ui.notify(...)` via `shared/notify.ts` wrappers (`notifySuccess`/`notifyWarning`/`notifyError`). Direct `process.stdout`/`process.stderr` writes forbidden -- IL-2.
 - **No telemetry V1; English only V1.**
@@ -330,7 +330,7 @@ ______________________________________________________________________
 ### Recommended Project Structure
 
 ```
-extensions/claude-marketplace/
+extensions/pi-claude-marketplace/
 ├── orchestrators/
 │   ├── index.ts                # barrel; re-exports per-subcommand orchestrators
 │   ├── types.ts                # NEW: PluginUpdateFn + PluginUpdateOutcome
@@ -737,7 +737,7 @@ export function applyAutoupdateFlip(
 - **Don't use `git.pull` from `platform/git.ts`** in Phase 4. D-13 drops `pull` from the Phase 4 `GitOps` surface. The `pull` export remains in `platform/git.ts` for Phase 5 (which may consume it for plugin update sync) -- but only `fetch + forceUpdateRef + checkout` for marketplace update.
 - **Don't compose multi-line success messages by hand-concatenating `\n`.** Use a helper that joins parts and runs through `appendReloadHint`. The PRD §6.12 ES-5 marker tests at `tests/architecture/markers-snapshot.test.ts` will fail loudly on any divergence.
 - **Don't call `notifyError` from inside the cascade loop** -- MR-4 mandates ONE aggregated `warning` notification at the end. Per-plugin `notifyError` calls multiply the user-visible noise.
-- **Don't write to `<scopeRoot>/sources-staging/`** -- it must be `<scopeRoot>/claude-marketplace/sources-staging/` (D-09). The `extensionRoot` already includes the `claude-marketplace/` segment; pass through `assertPathInside(extensionRoot, candidate)`.
+- **Don't write to `<scopeRoot>/sources-staging/`** -- it must be `<scopeRoot>/pi-claude-marketplace/sources-staging/` (D-09). The `extensionRoot` already includes the `pi-claude-marketplace/` segment; pass through `assertPathInside(extensionRoot, candidate)`.
 
 ______________________________________________________________________
 
@@ -780,7 +780,7 @@ ______________________________________________________________________
 
 **Why it happens:** APFS firmlinks, Docker bind-mounts, or `/tmp` being tmpfs.
 
-**How to avoid:** D-09 staging at `<scopeRoot>/claude-marketplace/sources-staging/<uuid>/` is sibling-of-target by construction. Both dirs are under `extensionRoot`, so they share a filesystem regardless of how scope roots are mounted. Do NOT add an EXDEV fallback -- treat it as a misconfiguration error. Document the residual hazard if `extensionRoot` is itself a mountpoint on top of two filesystems (rare, but possible with bind mounts).
+**How to avoid:** D-09 staging at `<scopeRoot>/pi-claude-marketplace/sources-staging/<uuid>/` is sibling-of-target by construction. Both dirs are under `extensionRoot`, so they share a filesystem regardless of how scope roots are mounted. Do NOT add an EXDEV fallback -- treat it as a misconfiguration error. Document the residual hazard if `extensionRoot` is itself a mountpoint on top of two filesystems (rare, but possible with bind mounts).
 
 **Warning signs:** Pitfall #1 of `.planning/research/PITFALLS.md` documents this. Tests that mount different parts of the test tmp dir on different volumes will catch it.
 
@@ -1187,13 +1187,13 @@ ______________________________________________________________________
 - `.planning/phases/04-marketplace-orchestrators/04-CONTEXT.md` -- 14 locked decisions D-01..D-14; supersedes PRD MU-2/MU-3.
 - `.planning/REQUIREMENTS.md` -- 38 owned REQ-IDs for Phase 4.
 - On-disk verification (read 2026-05-10):
-  - `extensions/claude-marketplace/platform/git.ts` -- existing `clone`/`fetch`/`pull`/`checkout`/`resolveRef`/`listBranches`/`listRemotes` surface verified.
-  - `extensions/claude-marketplace/persistence/state-io.ts` -- `STATE_SCHEMA` includes `autoupdate?: boolean`, `manifestPath: string`, `marketplaceRoot: string`, `plugins: Record<...>` -- confirmed.
-  - `extensions/claude-marketplace/persistence/locations.ts` -- `ScopedLocations` brand + `sourceCloneDir(mp)` method exists; `sourcesDir` exposed; `agentsStagingDir` precedent for staging-dir pattern.
-  - `extensions/claude-marketplace/transaction/with-state-guard.ts` -- guard contract confirmed.
-  - `extensions/claude-marketplace/bridges/{skills,commands,agents,mcp}/unstage.ts` -- four unstage signatures verified.
-  - `extensions/claude-marketplace/shared/{notify,markers,errors,fs-utils,path-safety,atomic-json}.ts` -- helper surfaces all confirmed.
-  - `extensions/claude-marketplace/domain/{source,manifest,name,resolver}.ts` -- domain primitives confirmed.
+  - `extensions/pi-claude-marketplace/platform/git.ts` -- existing `clone`/`fetch`/`pull`/`checkout`/`resolveRef`/`listBranches`/`listRemotes` surface verified.
+  - `extensions/pi-claude-marketplace/persistence/state-io.ts` -- `STATE_SCHEMA` includes `autoupdate?: boolean`, `manifestPath: string`, `marketplaceRoot: string`, `plugins: Record<...>` -- confirmed.
+  - `extensions/pi-claude-marketplace/persistence/locations.ts` -- `ScopedLocations` brand + `sourceCloneDir(mp)` method exists; `sourcesDir` exposed; `agentsStagingDir` precedent for staging-dir pattern.
+  - `extensions/pi-claude-marketplace/transaction/with-state-guard.ts` -- guard contract confirmed.
+  - `extensions/pi-claude-marketplace/bridges/{skills,commands,agents,mcp}/unstage.ts` -- four unstage signatures verified.
+  - `extensions/pi-claude-marketplace/shared/{notify,markers,errors,fs-utils,path-safety,atomic-json}.ts` -- helper surfaces all confirmed.
+  - `extensions/pi-claude-marketplace/domain/{source,manifest,name,resolver}.ts` -- domain primitives confirmed.
 - `node_modules/isomorphic-git/index.d.ts` -- confirmed `writeRef({ ref, value, force, symbolic? })` for D-13's `forceUpdateRef`; confirmed `fetch`, `checkout`, `resolveRef` accept the parameters used in Pattern 3.
 - `tests/architecture/import-boundaries.test.ts` -- D-11 forbidden-imports matrix; orchestrators/* must NOT import edge/*; bridges, transaction, persistence, presentation, platform, shared all permitted.
 - npm registry, queried 2026-05-10:
@@ -1203,7 +1203,7 @@ ______________________________________________________________________
 
 ### Secondary (MEDIUM confidence)
 
-- V1 reference at `git show features/initial:extensions/claude-marketplace/marketplace/{add,remove,list,update,autoupdate}.ts` -- pattern reference; V1 uses `git pull --ff-only` semantics now superseded by D-14.
+- V1 reference at `git show features/initial:extensions/pi-claude-marketplace/marketplace/{add,remove,list,update,autoupdate}.ts` -- pattern reference; V1 uses `git pull --ff-only` semantics now superseded by D-14.
 - V1 `presentation/reload-hint.ts` and `presentation/marketplace-list.ts` -- shape reference for Phase 4 presentation helpers; confirmed verb table + format string + softer-dep probe pattern.
 - `.planning/research/PITFALLS.md` -- Pitfalls 1, 3, 4, 5 directly applicable to Phase 4 (EXDEV, soft-dep coupling, AG-5 marker drift, schema migration).
 - `.planning/phases/03-resource-bridges/VERIFICATION.md` -- Phase 3 closure confirms 441 tests green; bridges' unstage contracts validated.

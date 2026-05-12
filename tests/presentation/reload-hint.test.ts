@@ -4,8 +4,8 @@ import test from "node:test";
 import {
   appendReloadHint,
   reloadHint,
-} from "../../extensions/claude-marketplace/presentation/reload-hint.ts";
-import { RELOAD_HINT_PREFIX } from "../../extensions/claude-marketplace/shared/markers.ts";
+} from "../../extensions/pi-claude-marketplace/presentation/reload-hint.ts";
+import { RELOAD_HINT_PREFIX } from "../../extensions/pi-claude-marketplace/shared/markers.ts";
 
 test("RH-1: empty names returns empty string (no reload hint emitted)", () => {
   assert.equal(reloadHint("load", []), "");

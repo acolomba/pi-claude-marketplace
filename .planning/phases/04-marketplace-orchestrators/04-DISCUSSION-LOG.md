@@ -115,12 +115,12 @@ ______________________________________________________________________
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| `<scopeRoot>/claude-marketplace/sources-staging/<uuid>/` | Sibling of final `sources/`; same-FS by construction; scope-local lifecycle | ✓ |
+| `<scopeRoot>/pi-claude-marketplace/sources-staging/<uuid>/` | Sibling of final `sources/`; same-FS by construction; scope-local lifecycle | ✓ |
 | `<extensionRoot>/sources-staging/<uuid>/` (V1 layout) | Centralized under extension root; EXDEV risk | |
 | `os.tmpdir()/pi-claude-marketplace/<uuid>/` | Cross-mount risk almost guaranteed (tmpfs on Linux) | |
 | You decide | Claude picks based on AS-1 same-FS guarantee | |
 
-**User's choice:** `<scopeRoot>/claude-marketplace/sources-staging/<uuid>/` (Recommended)
+**User's choice:** `<scopeRoot>/pi-claude-marketplace/sources-staging/<uuid>/` (Recommended)
 **Notes:** Same FS by construction; scope-local leaks don't pollute the other scope; new helper `sourcesStagingDir(loc, uuid)` added to `persistence/locations.ts`.
 
 ### Q2: MA-9 cleanup implementation

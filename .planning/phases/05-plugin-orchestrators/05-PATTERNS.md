@@ -18,22 +18,22 @@ The planner should treat each "Pattern Assignments" entry as a contract: the fil
 
 | New/Modified File | New/Edit | Role | Data Flow | Closest Analog | Match Quality |
 |-------------------|----------|------|-----------|----------------|---------------|
-| `extensions/claude-marketplace/orchestrators/plugin/install.ts` | NEW | orchestrator | CRUD (5-phase ledger + state) | `orchestrators/marketplace/add.ts` (D-04 outer guard, MA-style record-write) + `transaction/phase-ledger.ts` (ledger consumer pattern; install is THE first production consumer per Phase 2 D-01) | composite |
-| `extensions/claude-marketplace/orchestrators/plugin/uninstall.ts` | NEW | orchestrator | CRUD (cascade reuse + post-state cleanup) | `orchestrators/marketplace/remove.ts` (closest: cascade loop + post-state rm of dataDir + sourceCloneDir) -- adapt for SINGLE-plugin cascade + PU-5 silent converge + PU-7 propagation | exact |
-| `extensions/claude-marketplace/orchestrators/plugin/update.ts` | NEW | orchestrator | CRUD (hand-rolled 3-phase swap + cascade-safe entrypoint) | `orchestrators/marketplace/update.ts` (closest: outer-guard + cascade + partition rendering + RH-5 WR-04 composition) -- but D-03 mandates hand-rolled 3-phase instead of the marketplace orchestrator's `withStateGuard(refresh)` shape | role-match (heterogeneous-undo deviation noted) |
-| `extensions/claude-marketplace/orchestrators/plugin/list.ts` | NEW | orchestrator | read-only | `orchestrators/marketplace/list.ts` (loadState per scope + payload to renderer; NO `withStateGuard`, NO `gitOps`) -- but EXTEND with PL-5 upgradable detection (re-read manifest per marketplace, soft-fail per PL-6) | role-match (Phase 5 list adds manifest reads on top of state) |
-| `extensions/claude-marketplace/orchestrators/plugin/shared.ts` | NEW | shared | request-response (pure function over state snapshot) | `orchestrators/marketplace/shared.ts::applyAutoupdateFlipInPlace` (idempotent helper that takes state + returns structured result) for `assertNoCrossPluginConflicts`; `orchestrators/marketplace/update.ts::refreshGitHubClone` for any `syncCloneOnce` memo | role-match |
-| `extensions/claude-marketplace/presentation/plugin-list.ts` | NEW | presentation | transform (payload → string) | `presentation/marketplace-list.ts` (groups-by-scope, icon-prefix, byte-stable empty case, header-then-rows) -- truncate-at-66 + icon legend (●/○/⊘) + version paren + [autoupdate] header are NEW; pattern shape is identical | partial (rendering shape match; private helpers are new) |
-| `extensions/claude-marketplace/domain/resolver.ts` | EDIT | domain | (schema migration + Step-7 logic) | self (modify in place); the strict resolver's Step 7 loop at lines 379-410 is the migration site | self (D-07 schema + Step-7 list union) |
-| `extensions/claude-marketplace/bridges/skills/discover.ts` | EDIT | bridge | request-response | self (modify in place); the existing for-loop at lines 56-100 is the iteration site -- wrap the body in an outer `for (const skillsDir of input.resolved.componentPaths.skills)` loop | self (array iteration; first-wins dedup) |
-| `extensions/claude-marketplace/bridges/commands/discover.ts` | EDIT | bridge | request-response | self + `bridges/skills/discover.ts` pattern | self |
-| `extensions/claude-marketplace/bridges/agents/discover.ts` | EDIT | bridge | request-response | self (already takes `agentsDir: string`; caller now passes ONE per array element OR signature flips to array) -- prefer signature flip for symmetry with skills/commands; the existing read loop at lines 42-99 stays unchanged inside | self (signature change to plural; dedup map at caller) |
-| `extensions/claude-marketplace/shared/markers.ts` | EDIT | markers | (constant addition) | self (extend in place); existing constants at lines 9-13 are the pattern | self |
-| `extensions/claude-marketplace/shared/errors.ts` | EDIT | errors | (class additions) | self (extend); existing `MarketplaceDuplicateNameError` (lines 46-55) + `MarketplaceUpdateError` (lines 84-91) are the two patterns -- one-arg name and aggregate-with-cause-and-retryHint | self |
-| `extensions/claude-marketplace/transaction/rollback.ts` | EDIT | transaction | request-response | self (add `instanceof PathContainmentError` short-circuit at top of `formatRollbackError`) -- mirrors the SAME bypass already present in `phase-ledger.ts` lines 86-88 for undo failures | self (single chokepoint extension) |
-| `extensions/claude-marketplace/persistence/locations.ts` | EDIT (CONFIRMED EXISTS) | persistence | request-response | self; `pluginDataDir` is ALREADY present at lines 132-136 (see Pitfall below). Phase 5 only adds containment-escape test coverage; no source change required. | self (verify-existence-only) |
-| `extensions/claude-marketplace/orchestrators/index.ts` | EDIT | (barrel) | (none) | `orchestrators/marketplace/index.ts` (template; mirror its 5-line per-subcommand barrel pattern at the plugin layer) | exact |
-| `extensions/claude-marketplace/orchestrators/plugin/index.ts` | NEW | (barrel) | (none) | `orchestrators/marketplace/index.ts` -- copy the structure 1:1 | exact |
+| `extensions/pi-claude-marketplace/orchestrators/plugin/install.ts` | NEW | orchestrator | CRUD (5-phase ledger + state) | `orchestrators/marketplace/add.ts` (D-04 outer guard, MA-style record-write) + `transaction/phase-ledger.ts` (ledger consumer pattern; install is THE first production consumer per Phase 2 D-01) | composite |
+| `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts` | NEW | orchestrator | CRUD (cascade reuse + post-state cleanup) | `orchestrators/marketplace/remove.ts` (closest: cascade loop + post-state rm of dataDir + sourceCloneDir) -- adapt for SINGLE-plugin cascade + PU-5 silent converge + PU-7 propagation | exact |
+| `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts` | NEW | orchestrator | CRUD (hand-rolled 3-phase swap + cascade-safe entrypoint) | `orchestrators/marketplace/update.ts` (closest: outer-guard + cascade + partition rendering + RH-5 WR-04 composition) -- but D-03 mandates hand-rolled 3-phase instead of the marketplace orchestrator's `withStateGuard(refresh)` shape | role-match (heterogeneous-undo deviation noted) |
+| `extensions/pi-claude-marketplace/orchestrators/plugin/list.ts` | NEW | orchestrator | read-only | `orchestrators/marketplace/list.ts` (loadState per scope + payload to renderer; NO `withStateGuard`, NO `gitOps`) -- but EXTEND with PL-5 upgradable detection (re-read manifest per marketplace, soft-fail per PL-6) | role-match (Phase 5 list adds manifest reads on top of state) |
+| `extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts` | NEW | shared | request-response (pure function over state snapshot) | `orchestrators/marketplace/shared.ts::applyAutoupdateFlipInPlace` (idempotent helper that takes state + returns structured result) for `assertNoCrossPluginConflicts`; `orchestrators/marketplace/update.ts::refreshGitHubClone` for any `syncCloneOnce` memo | role-match |
+| `extensions/pi-claude-marketplace/presentation/plugin-list.ts` | NEW | presentation | transform (payload → string) | `presentation/marketplace-list.ts` (groups-by-scope, icon-prefix, byte-stable empty case, header-then-rows) -- truncate-at-66 + icon legend (●/○/⊘) + version paren + [autoupdate] header are NEW; pattern shape is identical | partial (rendering shape match; private helpers are new) |
+| `extensions/pi-claude-marketplace/domain/resolver.ts` | EDIT | domain | (schema migration + Step-7 logic) | self (modify in place); the strict resolver's Step 7 loop at lines 379-410 is the migration site | self (D-07 schema + Step-7 list union) |
+| `extensions/pi-claude-marketplace/bridges/skills/discover.ts` | EDIT | bridge | request-response | self (modify in place); the existing for-loop at lines 56-100 is the iteration site -- wrap the body in an outer `for (const skillsDir of input.resolved.componentPaths.skills)` loop | self (array iteration; first-wins dedup) |
+| `extensions/pi-claude-marketplace/bridges/commands/discover.ts` | EDIT | bridge | request-response | self + `bridges/skills/discover.ts` pattern | self |
+| `extensions/pi-claude-marketplace/bridges/agents/discover.ts` | EDIT | bridge | request-response | self (already takes `agentsDir: string`; caller now passes ONE per array element OR signature flips to array) -- prefer signature flip for symmetry with skills/commands; the existing read loop at lines 42-99 stays unchanged inside | self (signature change to plural; dedup map at caller) |
+| `extensions/pi-claude-marketplace/shared/markers.ts` | EDIT | markers | (constant addition) | self (extend in place); existing constants at lines 9-13 are the pattern | self |
+| `extensions/pi-claude-marketplace/shared/errors.ts` | EDIT | errors | (class additions) | self (extend); existing `MarketplaceDuplicateNameError` (lines 46-55) + `MarketplaceUpdateError` (lines 84-91) are the two patterns -- one-arg name and aggregate-with-cause-and-retryHint | self |
+| `extensions/pi-claude-marketplace/transaction/rollback.ts` | EDIT | transaction | request-response | self (add `instanceof PathContainmentError` short-circuit at top of `formatRollbackError`) -- mirrors the SAME bypass already present in `phase-ledger.ts` lines 86-88 for undo failures | self (single chokepoint extension) |
+| `extensions/pi-claude-marketplace/persistence/locations.ts` | EDIT (CONFIRMED EXISTS) | persistence | request-response | self; `pluginDataDir` is ALREADY present at lines 132-136 (see Pitfall below). Phase 5 only adds containment-escape test coverage; no source change required. | self (verify-existence-only) |
+| `extensions/pi-claude-marketplace/orchestrators/index.ts` | EDIT | (barrel) | (none) | `orchestrators/marketplace/index.ts` (template; mirror its 5-line per-subcommand barrel pattern at the plugin layer) | exact |
+| `extensions/pi-claude-marketplace/orchestrators/plugin/index.ts` | NEW | (barrel) | (none) | `orchestrators/marketplace/index.ts` -- copy the structure 1:1 | exact |
 | `tests/orchestrators/plugin/install.test.ts` | NEW | integration-test | (tmp HOME + state seed + bridge spy) | `tests/orchestrators/marketplace/update.test.ts` (hermetic-HOME helper + NotifyRecord ctx + state seed + outcome partition assertions) + `tests/orchestrators/marketplace/cascade.test.ts` (withTmpScope + bridge pre-stage on disk) | composite |
 | `tests/orchestrators/plugin/uninstall.test.ts` | NEW | integration-test | (state seed + cascade reuse + foreign-content fixture) | `tests/orchestrators/marketplace/cascade.test.ts` (closest: real cascade IO surface assertions + bogus-locations shape tests; bridge IO seeds) + `tests/orchestrators/marketplace/update.test.ts` (notify recorder + hermetic HOME) | composite |
 | `tests/orchestrators/plugin/update.test.ts` | NEW | integration-test | (3-phase swap + partition outcome) | `tests/orchestrators/marketplace/update.test.ts` (D-14 sequencing assertion via gitOps mock; partition rendering; WR-04 stagedAgents threading) | exact (model after this) |
@@ -705,7 +705,7 @@ function stripComments(src: string): string {
 }
 
 test("NFR-5: list source has zero gitOps surface", async () => {
-  const src = await readFile("extensions/claude-marketplace/orchestrators/plugin/list.ts", "utf8");
+  const src = await readFile("extensions/pi-claude-marketplace/orchestrators/plugin/list.ts", "utf8");
   const code = stripComments(src);
   assert.equal(code.includes("platform/git"), false);
   assert.equal(code.includes("DEFAULT_GIT_OPS"), false);
@@ -743,8 +743,8 @@ This avoids breaking the `assert.equal(literals.length, 5, ...)` assertion at li
 **Forbidden patterns** (the NFR-5 / PI-2 / PL-3 architectural surface):
 ```typescript
 const FORBIDDEN_TARGETS = [
-  "extensions/claude-marketplace/orchestrators/plugin/install.ts",
-  "extensions/claude-marketplace/orchestrators/plugin/list.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
 ];
 const FORBIDDEN_PATTERNS: ReadonlyArray<RegExp> = [
   /from\s+["'][^"']*platform\/git[^"']*["']/,
@@ -795,7 +795,7 @@ test("COMP-01 fixture c: BOTH; manifest declares ['custom/skills'] AND default s
 
 ### Pattern S-1: User-output channel discipline (D-07 / IL-2)
 
-**Source:** `extensions/claude-marketplace/shared/notify.ts` (lines 21-47).
+**Source:** `extensions/pi-claude-marketplace/shared/notify.ts` (lines 21-47).
 **Apply to:** EVERY new orchestrator file (`install.ts`, `uninstall.ts`, `update.ts`, `list.ts`); the `presentation/plugin-list.ts` formatter MUST NOT touch `ctx`.
 
 ```typescript
@@ -815,7 +815,7 @@ notifyError(ctx, formatErrorWithCauses(err), err);
 
 ### Pattern S-2: Marker-constant sourcing (D-04 / D-08)
 
-**Source:** `extensions/claude-marketplace/shared/markers.ts` (5 existing + 1 new constant).
+**Source:** `extensions/pi-claude-marketplace/shared/markers.ts` (5 existing + 1 new constant).
 **Apply to:** EVERY new file that mentions user-contract strings.
 
 ```typescript
@@ -831,7 +831,7 @@ const hint = `${RECOVERY_PLUGIN_REINSTALL_PREFIX} "${plugin}".`;
 
 ### Pattern S-3: `withStateGuard` outer composition (Phase 2 D-02)
 
-**Source:** `extensions/claude-marketplace/transaction/with-state-guard.ts` (lines 52-60).
+**Source:** `extensions/pi-claude-marketplace/transaction/with-state-guard.ts` (lines 52-60).
 **Apply to:** install (wraps `runPhases`), uninstall (wraps cascade + state delete), update phase-2 (wraps the swap).
 
 ```typescript
@@ -845,7 +845,7 @@ await withStateGuard(locations, async (state) => {
 
 ### Pattern S-4: Soft-dep warning composition (RH-3..5)
 
-**Source:** `extensions/claude-marketplace/presentation/soft-dep.ts` (lines 73-99).
+**Source:** `extensions/pi-claude-marketplace/presentation/soft-dep.ts` (lines 73-99).
 **Apply to:** install (PI-11/12), update (RH-5 phase-3b), uninstall (when agents/mcp were dropped).
 
 ```typescript
@@ -861,7 +861,7 @@ const mcpWarn = mcpAdapterWarningIfNeeded(pi, stagedMcpServerNames);
 
 ### Pattern S-5: Reload-hint composition (RH-1/RH-2)
 
-**Source:** `extensions/claude-marketplace/presentation/reload-hint.ts` (lines 29-48).
+**Source:** `extensions/pi-claude-marketplace/presentation/reload-hint.ts` (lines 29-48).
 **Apply to:** install (verb `"load"`), uninstall (verb `"drop"`; gated on ≥1 dropped resource per PU-8), update (verb `"refresh"`; gated on partition.updated nonempty).
 
 ```typescript
@@ -873,7 +873,7 @@ notifySuccess(ctx, appendReloadHint(body, hint));
 
 ### Pattern S-6: Error-cause walk depth-5 (ES-4)
 
-**Source:** `extensions/claude-marketplace/orchestrators/marketplace/shared.ts::formatErrorWithCauses` (lines 339-361).
+**Source:** `extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts::formatErrorWithCauses` (lines 339-361).
 **Apply to:** uninstall PU-7 propagation (chained `AgentsUnstageFailureError`); update PUP-6 phase-3 aggregate error surface.
 
 ```typescript
@@ -884,7 +884,7 @@ notifyError(ctx, formatErrorWithCauses(err), err);
 
 ### Pattern S-7: Path containment (NFR-10 / PS-1..5)
 
-**Source:** `extensions/claude-marketplace/shared/path-safety.ts` -- `assertPathInside`, `PathContainmentError`, `SymlinkRefusedError` (subclass).
+**Source:** `extensions/pi-claude-marketplace/shared/path-safety.ts` -- `assertPathInside`, `PathContainmentError`, `SymlinkRefusedError` (subclass).
 **Apply to:** every name-derived path. ALREADY enforced by `locations.pluginDataDir(...)` (which routes through `assertPathInside` at `locations.ts:132-136`).
 
 **For Phase 5:** orchestrators call `locations.pluginDataDir(...)` only; they do NOT compose path strings themselves. The D-02 PI-14 rollback bypass means a containment violation propagates verbatim instead of being folded into `(rollback partial: ...)`.
@@ -962,15 +962,15 @@ These mirror RESEARCH.md §"Common Pitfalls" but are restated here so the planne
 ## Metadata
 
 **Analog search scope:**
-- `extensions/claude-marketplace/orchestrators/marketplace/{add,remove,list,update,autoupdate,shared,index}.ts`
-- `extensions/claude-marketplace/orchestrators/types.ts`
-- `extensions/claude-marketplace/transaction/{phase-ledger,rollback,with-state-guard}.ts`
-- `extensions/claude-marketplace/presentation/{marketplace-list,reload-hint,soft-dep}.ts`
-- `extensions/claude-marketplace/shared/{markers,errors,notify,fs-utils,path-safety}.ts`
-- `extensions/claude-marketplace/persistence/locations.ts`
-- `extensions/claude-marketplace/domain/resolver.ts`
-- `extensions/claude-marketplace/bridges/{skills,commands,agents}/{discover,types,index}.ts`
-- `extensions/claude-marketplace/bridges/agents/index.ts`
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/{add,remove,list,update,autoupdate,shared,index}.ts`
+- `extensions/pi-claude-marketplace/orchestrators/types.ts`
+- `extensions/pi-claude-marketplace/transaction/{phase-ledger,rollback,with-state-guard}.ts`
+- `extensions/pi-claude-marketplace/presentation/{marketplace-list,reload-hint,soft-dep}.ts`
+- `extensions/pi-claude-marketplace/shared/{markers,errors,notify,fs-utils,path-safety}.ts`
+- `extensions/pi-claude-marketplace/persistence/locations.ts`
+- `extensions/pi-claude-marketplace/domain/resolver.ts`
+- `extensions/pi-claude-marketplace/bridges/{skills,commands,agents}/{discover,types,index}.ts`
+- `extensions/pi-claude-marketplace/bridges/agents/index.ts`
 - `tests/orchestrators/marketplace/{list,update,cascade}.test.ts`
 - `tests/presentation/marketplace-list.test.ts`
 - `tests/transaction/rollback.test.ts`

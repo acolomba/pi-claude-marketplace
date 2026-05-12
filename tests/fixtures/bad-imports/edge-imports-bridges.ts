@@ -9,11 +9,11 @@
 // `ignores: ["tests/fixtures/bad-imports/**"]` block in eslint.config.js
 // (added in Plan 01). The canary test passes `ignore: false` to override.
 //
-// The import target `extensions/claude-marketplace/bridges/index.ts` is a
+// The import target `extensions/pi-claude-marketplace/bridges/index.ts` is a
 // placeholder shipped by Plan 03 (`export {};`). It exists -- the fixture
 // is NOT failing because of a missing file; it's failing because edge/ may
 // not import from bridges/ per D-11.
 
-import "../../../extensions/claude-marketplace/bridges/index.ts";
+import "../../../extensions/pi-claude-marketplace/bridges/index.ts";
 
 export {};

@@ -29,7 +29,7 @@ key-files:
   modified:
     - ".planning/REQUIREMENTS.md"
     - ".planning/PROJECT.md"
-    - "extensions/claude-marketplace/orchestrators/marketplace/index.ts"
+    - "extensions/pi-claude-marketplace/orchestrators/marketplace/index.ts"
 
 key-decisions:
   - "D-23 (2026-05-10): adopt follow-upstream-blindly semantics for `marketplace update`; supersede PRD MU-2 and MU-3 (recorded in PROJECT.md Key Decisions). The user-contract change is recorded in `.planning/` artifacts only; PRD §5.1.4 retains the original MU-2/MU-3 text as historical baseline (parallel to D-21 / MA-7)."
@@ -77,7 +77,7 @@ Each task was committed atomically (with `SKIP=trufflehog` to satisfy the worktr
 
 - `.planning/REQUIREMENTS.md` -- MU-2/MU-3 list items, Traceability table rows, Coverage block, Phase 4 Per-phase counts row
 - `.planning/PROJECT.md` -- Key Decisions table gains row D-23 immediately after D-22
-- `extensions/claude-marketplace/orchestrators/marketplace/index.ts` -- consolidated barrel re-export for the Phase 4 marketplace orchestrators layer
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/index.ts` -- consolidated barrel re-export for the Phase 4 marketplace orchestrators layer
 
 ## Exact strings introduced into REQUIREMENTS.md
 
@@ -116,7 +116,7 @@ The Key Decisions table gained exactly one new row, dated 2026-05-10, decision *
 
 `git diff docs/prd/pi-claude-marketplace-prd.md` is empty (0 lines). The PRD is the historical baseline; the D-14 supersession lives in `.planning/` artifacts only, parallel to how Plan 01-04 handled D-21 / MA-7.
 
-## Barrel re-export final shape (extensions/claude-marketplace/orchestrators/marketplace/index.ts)
+## Barrel re-export final shape (extensions/pi-claude-marketplace/orchestrators/marketplace/index.ts)
 
 After Plan 04-10 the barrel exposes:
 
@@ -154,7 +154,7 @@ None - no external service configuration required.
 
 - `.planning/REQUIREMENTS.md` modified -- 4 occurrences of `superseded by Phase 4 D-14` (FOUND).
 - `.planning/PROJECT.md` modified -- 1 occurrence of `D-23 (2026-05-10)` (FOUND).
-- `extensions/claude-marketplace/orchestrators/marketplace/index.ts` modified -- contains `addMarketplace`, `removeMarketplace`, `listMarketplaces`, `updateMarketplace`, `updateAllMarketplaces`, `setMarketplaceAutoupdate`, `DEFAULT_GIT_OPS`, `cascadeUnstagePlugin` (FOUND).
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/index.ts` modified -- contains `addMarketplace`, `removeMarketplace`, `listMarketplaces`, `updateMarketplace`, `updateAllMarketplaces`, `setMarketplaceAutoupdate`, `DEFAULT_GIT_OPS`, `cascadeUnstagePlugin` (FOUND).
 - `git log --oneline` shows three new commits: `51c9c11` (Task 1), `eba786a` (Task 2), `0e367f9` (Task 3) (FOUND).
 - `git diff docs/prd/pi-claude-marketplace-prd.md` is empty (PRD UNCHANGED).
 - `git diff .planning/STATE.md` is empty; `git diff .planning/ROADMAP.md` is empty (orchestrator-owned files UNCHANGED, as required by worktree-mode contract).

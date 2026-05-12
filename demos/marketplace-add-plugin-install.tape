@@ -10,7 +10,7 @@ Set Height 1080
 Set TypingSpeed 55ms
 
 Hide
-Type "pi --no-extensions --no-skills --no-prompt-templates -e ./extensions/claude-marketplace/index.ts -e /opt/homebrew/lib/node_modules/pi-mcp-adapter/index.ts -e /opt/homebrew/lib/node_modules/pi-subagents/src/extension/index.ts"
+Type "pi --no-extensions --no-skills --no-prompt-templates -e ./extensions/pi-claude-marketplace/index.ts -e /opt/homebrew/lib/node_modules/pi-mcp-adapter/index.ts -e /opt/homebrew/lib/node_modules/pi-subagents/src/extension/index.ts"
 Enter
 Sleep 3000ms
 Show

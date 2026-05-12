@@ -27,7 +27,7 @@ tech-stack:
 
 key-files:
   created:
-    - "extensions/claude-marketplace/presentation/plugin-list.ts"
+    - "extensions/pi-claude-marketplace/presentation/plugin-list.ts"
     - "tests/presentation/plugin-list.test.ts"
   modified: []
 
@@ -69,7 +69,7 @@ completed: 2026-05-11
 
 ## Accomplishments
 
-- D-06 presentation half of top-level `list` shipped: `extensions/claude-marketplace/presentation/plugin-list.ts` (178 lines) exports `renderPluginList(payload, warnings = [])` returning a byte-stable string.
+- D-06 presentation half of top-level `list` shipped: `extensions/pi-claude-marketplace/presentation/plugin-list.ts` (178 lines) exports `renderPluginList(payload, warnings = [])` returning a byte-stable string.
 - Payload contract locked: `PluginListPayload { marketplaces: PluginListMarketplace[] }`, `PluginListMarketplace { name, scope, autoupdate, plugins }`, `PluginListEntry { name, status, version?, upgradable?, description?, notes? }`, `PluginRenderStatus = "installed" | "available" | "uninstallable"`.
 - D-06 corollary honored: `truncateColumn66`, `iconFor`, `renderPluginEntry`, and the `ICON_*` constants are all private to the file (not exported, not promoted to shared text-utils).
 - D-11 boundary honored: zero `persistence/` imports; all payload interfaces declared locally.
@@ -90,7 +90,7 @@ Each task was committed atomically:
 
 ## Files Created/Modified
 
-- `extensions/claude-marketplace/presentation/plugin-list.ts` -- Pure top-level plugin list formatter. Exports `renderPluginList`, payload type tree, and `PluginRenderStatus`. Private helpers: `truncateColumn66`, `iconFor`, `renderPluginEntry`, `ICON_*` constants. No state read, no `ctx`, no IO. (178 lines)
+- `extensions/pi-claude-marketplace/presentation/plugin-list.ts` -- Pure top-level plugin list formatter. Exports `renderPluginList`, payload type tree, and `PluginRenderStatus`. Private helpers: `truncateColumn66`, `iconFor`, `renderPluginEntry`, `ICON_*` constants. No state read, no `ctx`, no IO. (178 lines)
 - `tests/presentation/plugin-list.test.ts` -- Seven test cases locking PL-1/PL-2/PL-4/PL-5/PL-6/PL-7 contracts plus the parametric column-66 truncation boundary (lengths 65/66/67/100). All pass. (129 lines)
 
 ## Decisions Made
@@ -142,7 +142,7 @@ None.
 
 ## Self-Check: PASSED
 
-- File `extensions/claude-marketplace/presentation/plugin-list.ts`: FOUND
+- File `extensions/pi-claude-marketplace/presentation/plugin-list.ts`: FOUND
 - File `tests/presentation/plugin-list.test.ts`: FOUND
 - Commit `434629c`: FOUND
 - Commit `b796b75`: FOUND

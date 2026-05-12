@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { rewriteFrontmatterName } from "../../../extensions/claude-marketplace/bridges/skills/rewrite-frontmatter.ts";
+import { rewriteFrontmatterName } from "../../../extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts";
 
 // SK-3: rewriteFrontmatterName carry-forward (V1 algorithm verbatim).
 

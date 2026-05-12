@@ -14,7 +14,7 @@ import {
   routeClaudePlugin,
   TOP_LEVEL_USAGE,
   type SubcommandHandlers,
-} from "../../extensions/claude-marketplace/edge/router.ts";
+} from "../../extensions/pi-claude-marketplace/edge/router.ts";
 
 import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 
@@ -137,6 +137,14 @@ test("routeClaudePlugin :: dispatches list to handlers.list", async () => {
   const { handlers, calls } = makeHandlers();
   await routeClaudePlugin("list bar", handlers, ctx);
   assert.deepEqual(calls, [{ name: "list", args: "bar" }]);
+  assert.deepEqual(notifications, []);
+});
+
+test("routeClaudePlugin :: dispatches ls alias to handlers.list", async () => {
+  const { ctx, notifications } = makeCtx();
+  const { handlers, calls } = makeHandlers();
+  await routeClaudePlugin("ls bar --scope project", handlers, ctx);
+  assert.deepEqual(calls, [{ name: "list", args: "bar --scope project" }]);
   assert.deepEqual(notifications, []);
 });
 

@@ -48,11 +48,11 @@ tech-stack:
 
 key-files:
   created:
-    - extensions/claude-marketplace/orchestrators/plugin/update.ts
-    - extensions/claude-marketplace/orchestrators/plugin/index.ts
+    - extensions/pi-claude-marketplace/orchestrators/plugin/update.ts
+    - extensions/pi-claude-marketplace/orchestrators/plugin/index.ts
     - tests/orchestrators/plugin/update.test.ts
   modified:
-    - extensions/claude-marketplace/orchestrators/index.ts
+    - extensions/pi-claude-marketplace/orchestrators/index.ts
 
 key-decisions:
   - "D-03 hand-rolled discipline preserved -- the 3-phase swap is NOT composed via runPhases (heterogeneous-undo flow does not fit the ledger contract)"
@@ -121,9 +121,9 @@ Each task was committed atomically:
 
 ## Files Created/Modified
 
-- **Created:** `extensions/claude-marketplace/orchestrators/plugin/update.ts` (955 lines) -- `updateSinglePlugin: PluginUpdateFn`, `updatePlugins(opts)`, internal `runThreePhaseUpdate`, `enumerateTargets`, `refreshGitHubClone` (inlined from Phase 4), `loadCachedMarketplaceManifest`, `resolveUpdateVersion`, `pickAgentsSourceDir`, `removePluginRecord`, `renderPartitionAndNotify`, `renderPartition`.
-- **Created:** `extensions/claude-marketplace/orchestrators/plugin/index.ts` (23 lines) -- per-subcommand barrel mirroring `orchestrators/marketplace/index.ts`. Exports `installPlugin`, `uninstallPlugin`, `updatePlugins`, `updateSinglePlugin`, `listPlugins`, `assertNoCrossPluginConflicts` and their option/type shapes.
-- **Modified:** `extensions/claude-marketplace/orchestrators/index.ts` (8 lines -> 59 lines) -- replaced `export {}` placeholder with explicit named re-exports from both per-subcommand barrels plus the cross-orchestrator type contracts (`PluginUpdateFn`, `PluginUpdateOutcome`, `PluginUpdatePartition`).
+- **Created:** `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts` (955 lines) -- `updateSinglePlugin: PluginUpdateFn`, `updatePlugins(opts)`, internal `runThreePhaseUpdate`, `enumerateTargets`, `refreshGitHubClone` (inlined from Phase 4), `loadCachedMarketplaceManifest`, `resolveUpdateVersion`, `pickAgentsSourceDir`, `removePluginRecord`, `renderPartitionAndNotify`, `renderPartition`.
+- **Created:** `extensions/pi-claude-marketplace/orchestrators/plugin/index.ts` (23 lines) -- per-subcommand barrel mirroring `orchestrators/marketplace/index.ts`. Exports `installPlugin`, `uninstallPlugin`, `updatePlugins`, `updateSinglePlugin`, `listPlugins`, `assertNoCrossPluginConflicts` and their option/type shapes.
+- **Modified:** `extensions/pi-claude-marketplace/orchestrators/index.ts` (8 lines -> 59 lines) -- replaced `export {}` placeholder with explicit named re-exports from both per-subcommand barrels plus the cross-orchestrator type contracts (`PluginUpdateFn`, `PluginUpdateOutcome`, `PluginUpdatePartition`).
 - **Created:** `tests/orchestrators/plugin/update.test.ts` (813 lines after prettier) -- 15 tests covering PUP-1..9 + WR-04 + NFR-5. `seedPathMarketplace` helper builds the marketplace tree + plugin source tree on disk and seeds `state.json`; `rewriteManifest` simulates a manifest mutation between calls.
 
 ## Decisions Made
@@ -160,9 +160,9 @@ Each task was committed atomically:
 
 ## Self-Check: PASSED
 
-- `extensions/claude-marketplace/orchestrators/plugin/update.ts`: FOUND
-- `extensions/claude-marketplace/orchestrators/plugin/index.ts`: FOUND
-- `extensions/claude-marketplace/orchestrators/index.ts`: FOUND (modified)
+- `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts`: FOUND
+- `extensions/pi-claude-marketplace/orchestrators/plugin/index.ts`: FOUND
+- `extensions/pi-claude-marketplace/orchestrators/index.ts`: FOUND (modified)
 - `tests/orchestrators/plugin/update.test.ts`: FOUND
 - Commit `bbb0224`: FOUND
 - Commit `c55d93e`: FOUND

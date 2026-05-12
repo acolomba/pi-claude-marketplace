@@ -6,7 +6,7 @@
 
 Atomic IO primitives, symlink-safe path containment, stable ES-5 marker constants, output-channel discipline, ESM/Node 24 baseline, CI matrix, and the architectural skeleton (9-folder layout with import-direction enforcement) that every subsequent phase builds on.
 
-This phase ends with `npm run check` green, the new layout's empty folders + READMEs in place, and `extensions/claude-marketplace/index.ts` taking over from the current stub `extensions/claude-marketplace.ts`.
+This phase ends with `npm run check` green, the new layout's empty folders + READMEs in place, and `extensions/pi-claude-marketplace/index.ts` taking over from the current stub `extensions/pi-claude-marketplace.ts`.
 
 ## Implementation Decisions
 
@@ -15,22 +15,22 @@ This phase ends with `npm run check` green, the new layout's empty folders + REA
 - **D-01:** CI tests against **Node 24 only** (single-version matrix). Justification: Node 24 satisfies write-file-atomic@^8's 22.22.2 floor, supports native TS strip via `node --test`, and removes the matrix maintenance overhead. Earlier Node ranges are out of scope.
 - **D-02:** **Drop tsx**; tests run as `node --test "tests/**/*.test.ts"` directly. The `--import tsx` invocation V1 used is no longer needed on Node 24.
 - **D-03:** **Adopt `write-file-atomic@^8`** as a runtime dependency, used **only for JSON files** (state.json, mcp.json, agents-index.json). Hand-rolled tmp+rename remains for staging directories (Phase 3's bridges have a different problem shape).
-- **D-04:** **Phase 1 fully rewires `package.json`**: update `pi.extensions` to `./extensions/claude-marketplace/index.ts` (the new directory entrypoint), update test globs to match the new layout, and bump `typebox` 1.1.34→1.1.38, `prettier` 3.6.2→3.8.3, `globals` 17.5.0→17.6.0. Phase 1 ends with `npm run check` actually green -- not merely "ready to be green later."
+- **D-04:** **Phase 1 fully rewires `package.json`**: update `pi.extensions` to `./extensions/pi-claude-marketplace/index.ts` (the new directory entrypoint), update test globs to match the new layout, and bump `typebox` 1.1.34→1.1.38, `prettier` 3.6.2→3.8.3, `globals` 17.5.0→17.6.0. Phase 1 ends with `npm run check` actually green -- not merely "ready to be green later."
 - **D-05:** **Pin `@mariozechner/pi-coding-agent` peer-dep floor** to a defensible version (research recommends `>=0.70.6` or `>=0.73.1` if Phase 7 confirms compatibility). Eliminates V1's `*` declaration. Final pinned version is set in Phase 7 after the e2e suite verifies the surface; Phase 1 chooses an interim floor that matches the Pi version development is happening against.
 
 ### Output Discipline
 
-- **D-06:** **ESLint `no-restricted-syntax`** in `eslint.config.js` blocks `process.stdout.write`, `process.stderr.write`, `console.log`, `console.warn`, `console.error`, `console.info` calls in `extensions/claude-marketplace/`. Sanctioned exception: `eslint-disable-next-line` at the single `migrateLegacyMarketplaceRecords` callsite (per IL-3). Pure config -- no custom rule code.
+- **D-06:** **ESLint `no-restricted-syntax`** in `eslint.config.js` blocks `process.stdout.write`, `process.stderr.write`, `console.log`, `console.warn`, `console.error`, `console.info` calls in `extensions/pi-claude-marketplace/`. Sanctioned exception: `eslint-disable-next-line` at the single `migrateLegacyMarketplaceRecords` callsite (per IL-3). Pure config -- no custom rule code.
 - **D-07:** **`ctx.ui.notify` wrapper uses severity-named helpers**: `notifySuccess(ctx, msg)`, `notifyWarning(ctx, msg)`, `notifyError(ctx, msg, cause?)`. Severity is part of the function name (typo-proof at compile time). The error variant's optional `cause` argument feeds `Error.cause` per ES-4. Callers MUST go through these -- direct `ctx.ui.notify` is allowed in the wrapper file only.
 - **D-08:** **Single `shared/markers.ts`** module exports the 5 ES-5 strings as named consts: `PI_SUBAGENTS_NOT_LOADED`, `PI_MCP_ADAPTER_NOT_LOADED`, `RELOAD_HINT_PREFIX`, `MANUAL_RECOVERY_REQUIRED`, `ROLLBACK_PARTIAL`. Single import site for all downstream code.
 - **D-09:** **MARKERS snapshot test parses PRD §6.12 at runtime** (reads `docs/prd/pi-claude-marketplace-prd.md`, extracts marker strings via a stable regex, asserts `markers.ts` exports match byte-for-byte). PRD is ground truth per ES-5; the test catches drift in either direction (PRD edit OR markers edit).
 
 ### Module Layout
 
-- **D-10:** **9-folder split** under `extensions/claude-marketplace/`: `edge/`, `orchestrators/`, `bridges/`, `domain/`, `transaction/`, `persistence/`, `presentation/`, `platform/`, `shared/`. Folders are direct children of the extension dir (no extra `src/` wrapper) -- matches V1's pattern. Architecture-research-recommended layout, adopted from day one because there is no V1 source on this branch to migrate.
+- **D-10:** **9-folder split** under `extensions/pi-claude-marketplace/`: `edge/`, `orchestrators/`, `bridges/`, `domain/`, `transaction/`, `persistence/`, `presentation/`, `platform/`, `shared/`. Folders are direct children of the extension dir (no extra `src/` wrapper) -- matches V1's pattern. Architecture-research-recommended layout, adopted from day one because there is no V1 source on this branch to migrate.
 - **D-11:** **Strict ESLint `import-x` boundary rules** (`no-restricted-paths`) enforce layering: `edge/` may import from `orchestrators/`, `presentation/`, `shared/`; `orchestrators/` from `bridges/`, `domain/`, `transaction/`, `shared/`; `bridges/` from `domain/`, `persistence/`, `shared/`; `domain/` and `shared/` MUST NOT import upward. Violations fail CI. The seam is the value of the rename -- without enforcement, the layout is just cosmetic.
 - **D-12:** **Phase 1 scaffolds all 9 folders with placeholder READMEs**, each explaining the folder's purpose, allowed imports, and a planned-contents TODO list. Boundary rules wired up for all 9 even though most are empty. Subsequent phases just add files -- no scaffold work in any later phase.
-- **D-13:** **Replace `extensions/claude-marketplace.ts` (current stub) with `extensions/claude-marketplace/index.ts`** (the new directory entrypoint). The stub's two registered tools (`claude_marketplace_list` + the slash command) get re-implemented inside the new layout in later phases; Phase 1's index.ts is a thin entrypoint that sets up the `pi.registerCommand`/`pi.registerTool` surface and delegates to `edge/` modules (which will be empty at end of Phase 1, populated by Phase 6).
+- **D-13:** **Replace `extensions/pi-claude-marketplace.ts` (current stub) with `extensions/pi-claude-marketplace/index.ts`** (the new directory entrypoint). The stub's two registered tools (`pi_claude_marketplace_list` + the slash command) get re-implemented inside the new layout in later phases; Phase 1's index.ts is a thin entrypoint that sets up the `pi.registerCommand`/`pi.registerTool` surface and delegates to `edge/` modules (which will be empty at end of Phase 1, populated by Phase 6).
 
 ### Path Safety (Symlink Handling)
 
@@ -95,8 +95,8 @@ The user said "You decide" on these, captured here so downstream agents know Cla
 
 ### Reusable Assets
 
-- **`extensions/claude-marketplace.ts` (current stub)** -- Two registered surfaces (`claude_marketplace_list` tool + `claude-marketplace:list` command), both returning "not implemented yet". Phase 1 deletes this file and replaces it with `extensions/claude-marketplace/index.ts` (a directory entrypoint). The stub's `pi.registerTool` / `pi.registerCommand` invocation pattern is a useful reference for the new entrypoint's shape.
-- **V1 source on `features/initial`** at `extensions/claude-marketplace/{agent,commands,location,marketplace,mcp,plugin,presentation,resource,state,transaction}/` -- Reference for behavior and edge cases. Architecture-research already extracted the relevant patterns. Planner should `git show features/initial:extensions/claude-marketplace/<file>` only when implementing the same concern, not as wholesale model.
+- **`extensions/pi-claude-marketplace.ts` (current stub)** -- Two registered surfaces (`pi_claude_marketplace_list` tool + `pi-claude-marketplace:list` command), both returning "not implemented yet". Phase 1 deletes this file and replaces it with `extensions/pi-claude-marketplace/index.ts` (a directory entrypoint). The stub's `pi.registerTool` / `pi.registerCommand` invocation pattern is a useful reference for the new entrypoint's shape.
+- **V1 source on `features/initial`** at `extensions/pi-claude-marketplace/{agent,commands,location,marketplace,mcp,plugin,presentation,resource,state,transaction}/` -- Reference for behavior and edge cases. Architecture-research already extracted the relevant patterns. Planner should `git show features/initial:extensions/pi-claude-marketplace/<file>` only when implementing the same concern, not as wholesale model.
 
 ### Established Patterns
 
@@ -106,7 +106,7 @@ The user said "You decide" on these, captured here so downstream agents know Cla
 
 ### Integration Points
 
-- **`package.json` `pi.extensions`** -- Phase 1 rewires this to `./extensions/claude-marketplace/index.ts`. Pi loads the extension via this pointer at runtime.
+- **`package.json` `pi.extensions`** -- Phase 1 rewires this to `./extensions/pi-claude-marketplace/index.ts`. Pi loads the extension via this pointer at runtime.
 - **`package.json` `test` script glob** -- Currently `tests/{agent,commands,helpers,location,marketplace,mcp,plugin,presentation,resource,state,transaction}/**/*.test.ts` (V1 paths). Phase 1 rewires to `tests/**/*.test.ts` (or equivalent for the new layout's test directory structure).
 - **`eslint.config.js`** -- Phase 1 adds the `no-restricted-syntax` rules (D-06) and the `import-x/no-restricted-paths` boundary rules (D-11). Doesn't replace; extends.
 - **`.gitignore`** -- Already configured. No Phase 1 additions expected.

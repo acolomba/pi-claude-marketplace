@@ -13,9 +13,9 @@ requires:
   - phase: 01-foundations-toolchain/07
     provides: "Phase 2 handoff item #1 -- Move Scope to shared/types.ts so edge/ can import without crossing D-11"
 provides:
-  - "extensions/claude-marketplace/shared/types.ts -- Scope = 'user' | 'project' (SC-1) + SCOPES tuple"
-  - "extensions/claude-marketplace/domain/source.ts -- ParsedSource discriminated union + parsePluginSource + pathSource/githubSource factories"
-  - "extensions/claude-marketplace/domain/index.ts -- public API surface re-export"
+  - "extensions/pi-claude-marketplace/shared/types.ts -- Scope = 'user' | 'project' (SC-1) + SCOPES tuple"
+  - "extensions/pi-claude-marketplace/domain/source.ts -- ParsedSource discriminated union + parsePluginSource + pathSource/githubSource factories"
+  - "extensions/pi-claude-marketplace/domain/index.ts -- public API surface re-export"
   - "tests/domain/source.test.ts -- 28-case PRD §6.1 coverage suite"
   - "tests/domain/ directory (created -- Wave 0 of VALIDATION.md)"
 affects:
@@ -40,11 +40,11 @@ tech-stack:
 
 key-files:
   created:
-    - extensions/claude-marketplace/shared/types.ts
-    - extensions/claude-marketplace/domain/source.ts
+    - extensions/pi-claude-marketplace/shared/types.ts
+    - extensions/pi-claude-marketplace/domain/source.ts
     - tests/domain/source.test.ts
   modified:
-    - extensions/claude-marketplace/domain/index.ts (placeholder -> public surface re-export)
+    - extensions/pi-claude-marketplace/domain/index.ts (placeholder -> public surface re-export)
 
 key-decisions:
   - "Followed CONTEXT.md D-06 verbatim: hand-written parser, NOT TypeBox. Slash counting, tilde detection, hash-fragment splitting, /tree/<ref> rejection are character-level operations that read cleaner as conditional code than nested TypeBox unions."
@@ -96,9 +96,9 @@ Each task was committed atomically:
 
 ## Files Created/Modified
 
-- `extensions/claude-marketplace/shared/types.ts` -- Scope union (SC-1), SCOPES readonly tuple, no runtime side effects
-- `extensions/claude-marketplace/domain/source.ts` -- ParsedSource discriminated union (PathSource/GitHubSource/UnknownSource), parsePluginSource(raw), parseGitHubUrl helper, pathSource()/githubSource() SP-6/ST-6 factories
-- `extensions/claude-marketplace/domain/index.ts` -- replaced Phase 1 `export {}` placeholder with re-exports of 4 types + 3 functions
+- `extensions/pi-claude-marketplace/shared/types.ts` -- Scope union (SC-1), SCOPES readonly tuple, no runtime side effects
+- `extensions/pi-claude-marketplace/domain/source.ts` -- ParsedSource discriminated union (PathSource/GitHubSource/UnknownSource), parsePluginSource(raw), parseGitHubUrl helper, pathSource()/githubSource() SP-6/ST-6 factories
+- `extensions/pi-claude-marketplace/domain/index.ts` -- replaced Phase 1 `export {}` placeholder with re-exports of 4 types + 3 functions
 - `tests/domain/source.test.ts` -- 28-case suite covering PRD §6.1 SP-1..7 + MM-4 + NFR-12 (12 accept rows, 9 reject rows, 4 factory tests, 3 targeted hint/forward-compat tests)
 
 ## Decisions Made
@@ -144,14 +144,14 @@ Each task was committed atomically:
 - **Found during:** Task 2 (`npm run lint` after writing source.ts per plan-specified contents)
 - **Issue:** Plan-specified action contained statements without surrounding blank lines (stylistic rule) and single-line `if`/`while` bodies without braces (`curly` rule).
 - **Fix:** Ran `npx eslint --fix` to auto-add blank lines and braces. Then manually reformatted the auto-fixed `{rest = rest.slice(0, -1);}` single-line bodies to multi-line bodies for readability (no semantic change). Prettier confirmed formatting.
-- **Files modified:** `extensions/claude-marketplace/domain/source.ts`
+- **Files modified:** `extensions/pi-claude-marketplace/domain/source.ts`
 - **Verification:** Full `npm run check` exits 0; behavior identical to plan-specified action; tests still pass.
 - **Committed in:** `33309d5` (Task 2 commit)
 
 **5. [Rule 1 -- Plan-spec consistency note] Task 1 acceptance criterion vs action body conflict**
 
 - **Found during:** Task 1 (post-write acceptance verification)
-- **Issue:** Task 1's action specified an exact file body containing the comment text `// Code \`local\` scope is intentionally NOT introduced.` (intentional documentation of SC-1's exclusion). The Task 1 acceptance criterion `grep -c "local" extensions/claude-marketplace/shared/types.ts` returns `0` -- but the action body produces `1` (the comment match). The behavioral intent (no `'local'` *type literal*) is satisfied: `grep -E '"local"'` returns no matches. Wrote the file per the plan's verbatim action body and treated this as a known acceptance-criterion-vs-action-spec mismatch in the plan.
+- **Issue:** Task 1's action specified an exact file body containing the comment text `// Code \`local\` scope is intentionally NOT introduced.` (intentional documentation of SC-1's exclusion). The Task 1 acceptance criterion `grep -c "local" extensions/pi-claude-marketplace/shared/types.ts` returns `0` -- but the action body produces `1` (the comment match). The behavioral intent (no `'local'` *type literal*) is satisfied: `grep -E '"local"'` returns no matches. Wrote the file per the plan's verbatim action body and treated this as a known acceptance-criterion-vs-action-spec mismatch in the plan.
 - **Fix:** Kept the file body as the plan specified (preserving the SC-1 documentation comment). The behavioral check (`grep -E '"local"' produces no match`) is satisfied. Plan author should consider revising the criterion to `grep -c '\"local\"'` (looking for the *literal type member*) in any future iteration.
 - **Files modified:** None (no fix needed -- file body matches action verbatim)
 - **Verification:** SC-1 satisfied: `Scope` union has exactly two members, `'user'` and `'project'`. `grep -E '"local"' shared/types.ts` returns no match.
@@ -193,9 +193,9 @@ None -- pure code/test additions, no external service configuration, no env vars
 
 ## Self-Check: PASSED
 
-- `extensions/claude-marketplace/shared/types.ts` exists -- FOUND
-- `extensions/claude-marketplace/domain/source.ts` exists, 188 lines (≥ 80 min) -- FOUND
-- `extensions/claude-marketplace/domain/index.ts` exists with 3 function re-exports -- FOUND
+- `extensions/pi-claude-marketplace/shared/types.ts` exists -- FOUND
+- `extensions/pi-claude-marketplace/domain/source.ts` exists, 188 lines (≥ 80 min) -- FOUND
+- `extensions/pi-claude-marketplace/domain/index.ts` exists with 3 function re-exports -- FOUND
 - `tests/domain/source.test.ts` exists, 28 tests, all pass -- FOUND
 - Task 1 commit `4f9eb75` (`feat(02-01): add shared/types.ts with Scope union (SC-1)`) -- FOUND in `git log`
 - Task 2 commit `33309d5` (`feat(02-01): add domain/source.ts hand-written parser + factories`) -- FOUND in `git log`

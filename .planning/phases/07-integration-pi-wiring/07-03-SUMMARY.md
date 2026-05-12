@@ -21,11 +21,11 @@ tech-stack:
 
 key-files:
   created:
-    - extensions/claude-marketplace/orchestrators/discover.ts
+    - extensions/pi-claude-marketplace/orchestrators/discover.ts
     - tests/orchestrators/discover.test.ts
   modified:
-    - extensions/claude-marketplace/index.ts
-    - extensions/claude-marketplace/shared/errors.ts
+    - extensions/pi-claude-marketplace/index.ts
+    - extensions/pi-claude-marketplace/shared/errors.ts
     - tests/shared/index-smoke.test.ts
 
 key-decisions:
@@ -72,9 +72,9 @@ completed: 2026-05-11
 
 ## Files Created/Modified
 
-- `extensions/claude-marketplace/orchestrators/discover.ts` - Pure disk-backed resources discovery aggregator for Pi reloads.
-- `extensions/claude-marketplace/shared/errors.ts` - Adds `AggregateResourcesDiscoverError` and structured failure metadata.
-- `extensions/claude-marketplace/index.ts` - Real Pi extension entrypoint wiring command, tools, and discovery.
+- `extensions/pi-claude-marketplace/orchestrators/discover.ts` - Pure disk-backed resources discovery aggregator for Pi reloads.
+- `extensions/pi-claude-marketplace/shared/errors.ts` - Adds `AggregateResourcesDiscoverError` and structured failure metadata.
+- `extensions/pi-claude-marketplace/index.ts` - Real Pi extension entrypoint wiring command, tools, and discovery.
 - `tests/orchestrators/discover.test.ts` - Discovery behavior tests for missing dirs, deterministic output, no dedup, filtering, and aggregate failures.
 - `tests/shared/index-smoke.test.ts` - Entrypoint smoke coverage for real command/tool/event registration and invocation-time cwd discovery.
 
@@ -91,7 +91,7 @@ completed: 2026-05-11
 - **Found during:** Task 2 (real Pi entrypoint wiring)
 - **Issue:** TypeScript rejected `pi.on("resources_discover", ...)` because the peer `ExtensionAPI` overload set does not include that event name.
 - **Fix:** Bound `pi.on` to `pi`, cast only the event registration function to the modeled `resources_discover` signature, and returned mutable arrays matching `ResourcesDiscoverResult`.
-- **Files modified:** `extensions/claude-marketplace/index.ts`
+- **Files modified:** `extensions/pi-claude-marketplace/index.ts`
 - **Verification:** `npm run typecheck`, `npm run lint`, and plan test suite passed.
 - **Committed in:** `0086ba0`
 
@@ -135,7 +135,7 @@ Plan 07-04 can build on a loadable Pi extension entrypoint. `/reload` discovery 
 
 ## Self-Check: PASSED
 
-- Found `extensions/claude-marketplace/orchestrators/discover.ts`.
+- Found `extensions/pi-claude-marketplace/orchestrators/discover.ts`.
 - Found `tests/orchestrators/discover.test.ts`.
 - Found commits `4bf8b2f`, `48a14e5`, `4da05e2`, and `0086ba0`.
 - Verified plan-level test suite and typecheck completed successfully.

@@ -11,13 +11,13 @@ import { test } from "node:test";
 import {
   registerClaudeMarketplaceTools,
   registerClaudePluginCommand,
-} from "../../extensions/claude-marketplace/edge/register.ts";
+} from "../../extensions/pi-claude-marketplace/edge/register.ts";
 
-import type { EdgeDeps } from "../../extensions/claude-marketplace/edge/types.ts";
+import type { EdgeDeps } from "../../extensions/pi-claude-marketplace/edge/types.ts";
 import type {
   PluginUpdateFn,
   PluginUpdateOutcome,
-} from "../../extensions/claude-marketplace/orchestrators/types.ts";
+} from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import type { AutocompleteItem, AutocompleteProvider } from "@mariozechner/pi-tui";
 
@@ -295,19 +295,19 @@ test("D-04 :: registerClaudeMarketplaceTools calls pi.registerTool exactly twice
   assert.equal(tools.size, 2, "exactly two tools registered");
 });
 
-test("D-04 :: registerClaudeMarketplaceTools registers claude_marketplace_list", () => {
+test("D-04 :: registerClaudeMarketplaceTools registers pi_claude_marketplace_list", () => {
   const { pi, tools } = makeMockPi();
   registerClaudeMarketplaceTools(pi);
 
-  assert.ok(tools.has("claude_marketplace_list"), "claude_marketplace_list registered");
+  assert.ok(tools.has("pi_claude_marketplace_list"), "pi_claude_marketplace_list registered");
 });
 
-test("D-04 :: registerClaudeMarketplaceTools registers claude_marketplace_plugin_list", () => {
+test("D-04 :: registerClaudeMarketplaceTools registers pi_claude_marketplace_plugin_list", () => {
   const { pi, tools } = makeMockPi();
   registerClaudeMarketplaceTools(pi);
 
   assert.ok(
-    tools.has("claude_marketplace_plugin_list"),
-    "claude_marketplace_plugin_list registered",
+    tools.has("pi_claude_marketplace_plugin_list"),
+    "pi_claude_marketplace_plugin_list registered",
   );
 });

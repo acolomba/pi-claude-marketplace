@@ -7,13 +7,13 @@ tags: [skills, bridge, prepare-commit-abort, atomic-rename, symlink-hardening, w
 # Dependency graph
 dependency_graph:
   requires:
-    - extensions/claude-marketplace/persistence/locations.ts (skillsStagingDir + skillsTargetDir from Plan 03-01)
-    - extensions/claude-marketplace/shared/vars.ts (substituteClaudeVars from Plan 03-01)
-    - extensions/claude-marketplace/shared/fs-utils.ts (cleanupStaging from Plan 03-01)
-    - extensions/claude-marketplace/shared/errors.ts (appendLeakToError)
-    - extensions/claude-marketplace/shared/path-safety.ts (assertPathInside)
-    - extensions/claude-marketplace/domain/name.ts (assertSafeName + generatedSkillName from Phase 2 + B-02 label arg from Plan 03-01)
-    - extensions/claude-marketplace/domain/resolver.ts (ResolvedPluginInstallable from Phase 2)
+    - extensions/pi-claude-marketplace/persistence/locations.ts (skillsStagingDir + skillsTargetDir from Plan 03-01)
+    - extensions/pi-claude-marketplace/shared/vars.ts (substituteClaudeVars from Plan 03-01)
+    - extensions/pi-claude-marketplace/shared/fs-utils.ts (cleanupStaging from Plan 03-01)
+    - extensions/pi-claude-marketplace/shared/errors.ts (appendLeakToError)
+    - extensions/pi-claude-marketplace/shared/path-safety.ts (assertPathInside)
+    - extensions/pi-claude-marketplace/domain/name.ts (assertSafeName + generatedSkillName from Phase 2 + B-02 label arg from Plan 03-01)
+    - extensions/pi-claude-marketplace/domain/resolver.ts (ResolvedPluginInstallable from Phase 2)
   provides:
     - bridges/skills/types.ts -- DiscoveredSkill, StageSkillsInput, StagedSkillRecord, StageSkillsCommitResult, PreparedSkillsStaging discriminated union, UnstageSkillsInput, UnstageSkillsResult
     - bridges/skills/discover.ts -- discoverPluginSkills (also serves SK-5 per-scope helper)
@@ -37,12 +37,12 @@ tech-stack:
 
 key-files:
   created:
-    - extensions/claude-marketplace/bridges/skills/types.ts
-    - extensions/claude-marketplace/bridges/skills/discover.ts
-    - extensions/claude-marketplace/bridges/skills/rewrite-frontmatter.ts
-    - extensions/claude-marketplace/bridges/skills/stage.ts
-    - extensions/claude-marketplace/bridges/skills/unstage.ts
-    - extensions/claude-marketplace/bridges/skills/index.ts
+    - extensions/pi-claude-marketplace/bridges/skills/types.ts
+    - extensions/pi-claude-marketplace/bridges/skills/discover.ts
+    - extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts
+    - extensions/pi-claude-marketplace/bridges/skills/stage.ts
+    - extensions/pi-claude-marketplace/bridges/skills/unstage.ts
+    - extensions/pi-claude-marketplace/bridges/skills/index.ts
     - tests/bridges/skills/discover.test.ts
     - tests/bridges/skills/rewrite-frontmatter.test.ts
     - tests/bridges/skills/stage.test.ts
@@ -77,7 +77,7 @@ Wave-2 parallel bridge implementation for skills. Provides the prepare/commit/ab
 
 ### Source Modules (6)
 
-**`extensions/claude-marketplace/bridges/skills/types.ts`** -- type contracts for the bridge.
+**`extensions/pi-claude-marketplace/bridges/skills/types.ts`** -- type contracts for the bridge.
 
 - `DiscoveredSkill` (sourceName, generatedName, skillDir).
 - `StageSkillsInput` (locations, marketplaceName, pluginName, pluginRoot, pluginDataDir, resolved, optional previousSkillNames).
@@ -86,7 +86,7 @@ Wave-2 parallel bridge implementation for skills. Provides the prepare/commit/ab
 - `PreparedSkillsStaging = PreparedSkillsNoop | PreparedSkillsStaged` -- discriminated union; `staged` carries internal `_previousNames` and `_renamePairs` orchestrators MUST NOT read.
 - `UnstageSkillsInput`, `UnstageSkillsResult`.
 
-**`extensions/claude-marketplace/bridges/skills/discover.ts`** -- SK-5 enumeration.
+**`extensions/pi-claude-marketplace/bridges/skills/discover.ts`** -- SK-5 enumeration.
 
 - `discoverPluginSkills({ pluginName, resolved })` returns `readonly DiscoveredSkill[]`.
 - ENOENT/ENOTDIR on the skills dir → return `[]` (SK-5 graceful).
@@ -97,11 +97,11 @@ Wave-2 parallel bridge implementation for skills. Provides the prepare/commit/ab
 - `assertSafeName` on every directory name (defense-in-depth).
 - `generatedSkillName(plugin, source)` from Phase 2 -- handles SK-2 elision.
 
-**`extensions/claude-marketplace/bridges/skills/rewrite-frontmatter.ts`** -- SK-3 carry-forward.
+**`extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts`** -- SK-3 carry-forward.
 
 - `rewriteFrontmatterName(content, newName)` -- pure string ops; no YAML parser, no eval (T-03-17 mitigation). V1 algorithm verbatim per PATTERNS.md lines 173-193.
 
-**`extensions/claude-marketplace/bridges/skills/stage.ts`** -- prepare/commit/abort + collision check.
+**`extensions/pi-claude-marketplace/bridges/skills/stage.ts`** -- prepare/commit/abort + collision check.
 
 - `assertNoSkillCollisions(discovered)` -- RN-6: throws Error listing every collision group with both source names quoted.
 - `prepareStageSkills(input)`:
@@ -120,13 +120,13 @@ Wave-2 parallel bridge implementation for skills. Provides the prepare/commit/ab
   1. `kind === "noop"` → return.
   2. Best-effort `cleanupStaging` on stagingRoot.
 
-**`extensions/claude-marketplace/bridges/skills/unstage.ts`** -- post-install removal.
+**`extensions/pi-claude-marketplace/bridges/skills/unstage.ts`** -- post-install removal.
 
 - `unstagePluginSkills({ locations, previousSkillNames })`:
   - For each name: `assertSafeName`, `assertPathInside`, `pathExists` pre-check (so the result reflects work done), `rm({recursive:true, force:true})` with ENOENT tolerated for TOCTOU safety.
   - Returns frozen `removedNames` (only names whose dir existed pre-call) and `warnings`.
 
-**`extensions/claude-marketplace/bridges/skills/index.ts`** -- public-surface barrel.
+**`extensions/pi-claude-marketplace/bridges/skills/index.ts`** -- public-surface barrel.
 
 - Exports the 5 functions + 1 named-export-grouped predicate.
 - Re-exports types: `DiscoveredSkill`, `PreparedSkillsStaging`, `StagedSkillRecord`, `StageSkillsCommitResult`, `StageSkillsInput`, `UnstageSkillsInput`, `UnstageSkillsResult`.
@@ -194,7 +194,7 @@ The plan reads "Phase 2 resolver guarantees `componentPaths` populated for insta
 - **Found during:** Task 1 typecheck.
 - **Issue:** `entries: Awaited<ReturnType<typeof readdir>>` resolved to `Dirent<NonSharedBuffer>[]` because the readdir overload TypeScript picked happens to be the buffer-encoding variant. Dirent's `name` field on that variant is a `Buffer`, not a string -- breaking `entry.name.startsWith(".")`, `localeCompare`, etc.
 - **Fix:** Imported `Dirent` from `node:fs` (the `node:fs/promises` re-export of `Dirent` is module-private and not exposed). Annotated entries explicitly as `Dirent[]` and passed `encoding: "utf8"` to `readdir`. ESLint then ran `--fix` and removed the unnecessary `<string>` type-arg (default).
-- **Files modified:** `extensions/claude-marketplace/bridges/skills/discover.ts`.
+- **Files modified:** `extensions/pi-claude-marketplace/bridges/skills/discover.ts`.
 - **Commit:** `35cb069` (rolled into Task 1).
 
 **2. [Rule 1 - Bug] unstage.ts: removedNames inflated by ENOENT names**
@@ -202,7 +202,7 @@ The plan reads "Phase 2 resolver guarantees `componentPaths` populated for insta
 - **Found during:** Task 2 unstage tests.
 - **Issue:** Initial implementation called `rm({recursive:true, force:true})` and tried/caught ENOENT to decide whether to push the name to `removedNames`. But `force:true` silences ENOENT before the catch can fire, so every requested name landed in `removedNames` regardless of whether it actually existed. Tests explicitly asserting "only existing names should be in removedNames" failed.
 - **Fix:** Added `pathExists(dir)` pre-check (lstat-based, from `shared/fs-utils.ts`). If the dir does not exist pre-call, skip silently. The post-rm catch is kept as TOCTOU defense.
-- **Files modified:** `extensions/claude-marketplace/bridges/skills/unstage.ts`.
+- **Files modified:** `extensions/pi-claude-marketplace/bridges/skills/unstage.ts`.
 - **Commit:** `3668453` (rolled into Task 2).
 
 **3. [Rule 3 - Blocking] gitlint title length (>72) on Task 1's first commit attempt**
@@ -226,7 +226,7 @@ The plan reads "Phase 2 resolver guarantees `componentPaths` populated for insta
 - **Found during:** Task 1 lint.
 - **Issue:** ESLint flagged 12 issues in `discover.ts` and `discover.test.ts`: import-x/order grouping; `@typescript-eslint/no-unnecessary-type-arguments` on `Dirent<string>`; `@typescript-eslint/prefer-optional-chain`; `@stylistic/padding-line-between-statements` empty lines after `if`/`for`; `@typescript-eslint/no-unnecessary-type-assertion` on test non-null assertions where ESLint inferred non-undefined from `.find` + `assert.ok`.
 - **Fix:** Ran `npm run lint -- --fix` to apply automatic corrections. Manual followup not required.
-- **Files modified:** `extensions/claude-marketplace/bridges/skills/discover.ts`, `tests/bridges/skills/discover.test.ts`.
+- **Files modified:** `extensions/pi-claude-marketplace/bridges/skills/discover.ts`, `tests/bridges/skills/discover.test.ts`.
 - **Commit:** `35cb069`.
 
 **6. [Rule 3 - Blocking] Lint auto-fix on second task: import-x/order; prefer-includes-equivalent style; padding-line; no-confusing-void-expression**
@@ -234,7 +234,7 @@ The plan reads "Phase 2 resolver guarantees `componentPaths` populated for insta
 - **Found during:** Task 2 lint.
 - **Issue:** ESLint flagged 6 issues in `unstage.ts` and `stage.test.ts`. Same kinds of cosmetic / import-ordering rules.
 - **Fix:** `npm run lint -- --fix`. Then `npx prettier --write` on the test file to absorb formatter's wrapped-string preferences.
-- **Files modified:** `extensions/claude-marketplace/bridges/skills/unstage.ts`, `tests/bridges/skills/stage.test.ts`.
+- **Files modified:** `extensions/pi-claude-marketplace/bridges/skills/unstage.ts`, `tests/bridges/skills/stage.test.ts`.
 - **Commit:** `3668453`.
 
 ### Authentication Gates
@@ -266,12 +266,12 @@ None -- the surface added by this plan is fully covered by the plan's `<threat_m
 ## Self-Check: PASSED
 
 - All created files exist on disk:
-  - `extensions/claude-marketplace/bridges/skills/types.ts` -- FOUND
-  - `extensions/claude-marketplace/bridges/skills/discover.ts` -- FOUND
-  - `extensions/claude-marketplace/bridges/skills/rewrite-frontmatter.ts` -- FOUND
-  - `extensions/claude-marketplace/bridges/skills/stage.ts` -- FOUND
-  - `extensions/claude-marketplace/bridges/skills/unstage.ts` -- FOUND
-  - `extensions/claude-marketplace/bridges/skills/index.ts` -- FOUND
+  - `extensions/pi-claude-marketplace/bridges/skills/types.ts` -- FOUND
+  - `extensions/pi-claude-marketplace/bridges/skills/discover.ts` -- FOUND
+  - `extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts` -- FOUND
+  - `extensions/pi-claude-marketplace/bridges/skills/stage.ts` -- FOUND
+  - `extensions/pi-claude-marketplace/bridges/skills/unstage.ts` -- FOUND
+  - `extensions/pi-claude-marketplace/bridges/skills/index.ts` -- FOUND
   - `tests/bridges/skills/discover.test.ts` -- FOUND
   - `tests/bridges/skills/rewrite-frontmatter.test.ts` -- FOUND
   - `tests/bridges/skills/stage.test.ts` -- FOUND

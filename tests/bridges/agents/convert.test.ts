@@ -7,16 +7,16 @@ import {
   MODEL_MAP,
   THINKING_VALUES,
   TOOL_MAP,
-} from "../../../extensions/claude-marketplace/bridges/agents/convert.ts";
+} from "../../../extensions/pi-claude-marketplace/bridges/agents/convert.ts";
 
-import type { DiscoveredAgent } from "../../../extensions/claude-marketplace/bridges/agents/types.ts";
+import type { DiscoveredAgent } from "../../../extensions/pi-claude-marketplace/bridges/agents/types.ts";
 
 // AG-7 mapping pipeline + AG-11 / AG-12 throws + MODEL_MAP / TOOL_MAP user
 // contract.
 
 function makeDiscovered(overrides: Partial<DiscoveredAgent> = {}): DiscoveredAgent {
   const sourceName = overrides.sourceName ?? "bot";
-  const generatedName = overrides.generatedName ?? `claude-marketplace-acme-${sourceName}`;
+  const generatedName = overrides.generatedName ?? `pi-claude-marketplace-acme-${sourceName}`;
   return {
     sourceName,
     generatedName,
@@ -196,8 +196,8 @@ test("AG-12 assertNoAgentCollisions throws with both source names listed when tw
   assert.throws(
     () => {
       assertNoAgentCollisions([
-        { sourceName: "bot", generatedName: "claude-marketplace-acme-bot" },
-        { sourceName: "acme-bot", generatedName: "claude-marketplace-acme-bot" },
+        { sourceName: "bot", generatedName: "pi-claude-marketplace-acme-bot" },
+        { sourceName: "acme-bot", generatedName: "pi-claude-marketplace-acme-bot" },
       ]);
     },
     (err: unknown) => {
@@ -213,8 +213,8 @@ test("AG-12 assertNoAgentCollisions throws with both source names listed when tw
 test("AG-12 assertNoAgentCollisions returns silently when no collisions", () => {
   assert.doesNotThrow(() => {
     assertNoAgentCollisions([
-      { sourceName: "bot", generatedName: "claude-marketplace-acme-bot" },
-      { sourceName: "helper", generatedName: "claude-marketplace-acme-helper" },
+      { sourceName: "bot", generatedName: "pi-claude-marketplace-acme-bot" },
+      { sourceName: "helper", generatedName: "pi-claude-marketplace-acme-helper" },
     ]);
   });
 });

@@ -12,14 +12,14 @@ This pattern map drives the planner's tasks for the 9-folder skeleton, `shared/`
 
 | New / Modified File | Role | Data Flow | Closest Analog | Match Quality |
 |---------------------|------|-----------|----------------|---------------|
-| `extensions/claude-marketplace/index.ts` | entrypoint | event-driven (Pi API) | `features/initial:extensions/claude-marketplace/index.ts` | exact (role) -- Phase 1 trims to skeleton |
-| `extensions/claude-marketplace/shared/atomic-json.ts` | utility | file-I/O (JSON write) | `features/initial:extensions/claude-marketplace/fs-utils.ts` (atomicWriteJson) | role-match -- replace impl with `write-file-atomic` |
-| `extensions/claude-marketplace/shared/path-safety.ts` | utility | file-I/O (lstat walk) | NONE on `features/initial` (V1 had no symlink check); RESEARCH.md Pattern 2 is canonical | greenfield with embedded research code |
-| `extensions/claude-marketplace/shared/markers.ts` | constants module | request-response (read-only consts) | NONE on V1 (markers were inline literals in `presentation/reload-hint.ts` etc.); PRD §6.12 is the source of truth | greenfield (extracted from PRD) |
-| `extensions/claude-marketplace/shared/notify.ts` | utility (presentation seam) | request-response (sync wrapper) | NONE on V1 (callers used `ctx.ui.notify(...)` directly throughout); RESEARCH.md Pattern 7 is canonical | greenfield (new API surface) |
-| `extensions/claude-marketplace/shared/errors.ts` | utility (error helpers) | transform | `features/initial:extensions/claude-marketplace/errors.ts` | exact (verbatim port) |
-| `extensions/claude-marketplace/platform/git.ts` | platform facade | request-response (network/IO) | `features/initial:extensions/claude-marketplace/marketplace/git.ts` | role-match -- replace `execFile("git")` with `isomorphic-git` |
-| `extensions/claude-marketplace/{edge,orchestrators,bridges,domain,transaction,persistence,presentation,platform,shared}/README.md` | documentation | n/a | NONE on V1 (V1 had no folder READMEs) | greenfield -- 9 placeholder READMEs |
+| `extensions/pi-claude-marketplace/index.ts` | entrypoint | event-driven (Pi API) | `features/initial:extensions/pi-claude-marketplace/index.ts` | exact (role) -- Phase 1 trims to skeleton |
+| `extensions/pi-claude-marketplace/shared/atomic-json.ts` | utility | file-I/O (JSON write) | `features/initial:extensions/pi-claude-marketplace/fs-utils.ts` (atomicWriteJson) | role-match -- replace impl with `write-file-atomic` |
+| `extensions/pi-claude-marketplace/shared/path-safety.ts` | utility | file-I/O (lstat walk) | NONE on `features/initial` (V1 had no symlink check); RESEARCH.md Pattern 2 is canonical | greenfield with embedded research code |
+| `extensions/pi-claude-marketplace/shared/markers.ts` | constants module | request-response (read-only consts) | NONE on V1 (markers were inline literals in `presentation/reload-hint.ts` etc.); PRD §6.12 is the source of truth | greenfield (extracted from PRD) |
+| `extensions/pi-claude-marketplace/shared/notify.ts` | utility (presentation seam) | request-response (sync wrapper) | NONE on V1 (callers used `ctx.ui.notify(...)` directly throughout); RESEARCH.md Pattern 7 is canonical | greenfield (new API surface) |
+| `extensions/pi-claude-marketplace/shared/errors.ts` | utility (error helpers) | transform | `features/initial:extensions/pi-claude-marketplace/errors.ts` | exact (verbatim port) |
+| `extensions/pi-claude-marketplace/platform/git.ts` | platform facade | request-response (network/IO) | `features/initial:extensions/pi-claude-marketplace/marketplace/git.ts` | role-match -- replace `execFile("git")` with `isomorphic-git` |
+| `extensions/pi-claude-marketplace/{edge,orchestrators,bridges,domain,transaction,persistence,presentation,platform,shared}/README.md` | documentation | n/a | NONE on V1 (V1 had no folder READMEs) | greenfield -- 9 placeholder READMEs |
 | `eslint.config.js` (modified) | config | n/a | current `eslint.config.js` (already on `features/initial-gsd`) | exact (extend, do not replace) |
 | `package.json` (modified) | config | n/a | current `package.json` | exact (rewire) |
 | `tests/architecture/markers-snapshot.test.ts` | test (snapshot) | file-I/O (PRD parse) | NONE on V1 (no architecture tests); RESEARCH.md Pattern 6 is canonical | greenfield |
@@ -36,9 +36,9 @@ This pattern map drives the planner's tasks for the 9-folder skeleton, `shared/`
 
 ## Pattern Assignments
 
-### `extensions/claude-marketplace/index.ts` (entrypoint, event-driven)
+### `extensions/pi-claude-marketplace/index.ts` (entrypoint, event-driven)
 
-**Analog:** `features/initial:extensions/claude-marketplace/index.ts`
+**Analog:** `features/initial:extensions/pi-claude-marketplace/index.ts`
 
 **Imports + factory shape (lines 1, 21-28 of analog):**
 
@@ -100,9 +100,9 @@ Result is roughly 25 lines vs V1's 200+. Skeleton from RESEARCH.md Pattern 8 is 
 
 ---
 
-### `extensions/claude-marketplace/shared/atomic-json.ts` (utility, file-I/O)
+### `extensions/pi-claude-marketplace/shared/atomic-json.ts` (utility, file-I/O)
 
-**Analog:** `features/initial:extensions/claude-marketplace/fs-utils.ts` (the `atomicWriteJson` function specifically)
+**Analog:** `features/initial:extensions/pi-claude-marketplace/fs-utils.ts` (the `atomicWriteJson` function specifically)
 
 **V1 pattern to REPLACE (analog lines 41-49):**
 
@@ -153,7 +153,7 @@ Phase 1's `shared/atomic-json.ts` exports ONLY `atomicWriteJson`. Other fs helpe
 
 ---
 
-### `extensions/claude-marketplace/shared/path-safety.ts` (utility, file-I/O)
+### `extensions/pi-claude-marketplace/shared/path-safety.ts` (utility, file-I/O)
 
 **Analog:** NONE on `features/initial`. V1 had no symlink-aware containment; only string-level `path.relative` checks. **This is brand-new contract beyond V1** (CONTEXT.md D-14: "PRD doesn't specify symlink behavior -- this is new contract beyond V1").
 
@@ -208,9 +208,9 @@ export async function assertPathInside(parent: string, child: string, label: str
 
 ---
 
-### `extensions/claude-marketplace/shared/markers.ts` (constants, request-response)
+### `extensions/pi-claude-marketplace/shared/markers.ts` (constants, request-response)
 
-**Analog:** NONE on V1. V1 had marker strings INLINED at usage sites (e.g., `features/initial:extensions/claude-marketplace/presentation/reload-hint.ts` line 16: `` ` Run /reload to ${verb} it.` ``). D-08 centralizes them.
+**Analog:** NONE on V1. V1 had marker strings INLINED at usage sites (e.g., `features/initial:extensions/pi-claude-marketplace/presentation/reload-hint.ts` line 16: `` ` Run /reload to ${verb} it.` ``). D-08 centralizes them.
 
 **Source of truth:** PRD §6.12 ES-5 row, which lists 5 backtick-quoted literals.
 
@@ -235,7 +235,7 @@ export const ROLLBACK_PARTIAL = "(rollback partial: ";
 
 ---
 
-### `extensions/claude-marketplace/shared/notify.ts` (utility, request-response)
+### `extensions/pi-claude-marketplace/shared/notify.ts` (utility, request-response)
 
 **Analog:** NONE on V1. V1 callers used `ctx.ui.notify(message, "warning")` directly throughout (e.g., current stub line 35: `ctx.ui.notify("Claude marketplace access is not implemented yet.", "warning");`).
 
@@ -267,7 +267,7 @@ export function notifyError(ctx: ExtensionContext, message: string, cause?: unkn
 
 ```javascript
 {
-  files: ["extensions/claude-marketplace/shared/notify.ts"],
+  files: ["extensions/pi-claude-marketplace/shared/notify.ts"],
   rules: { "no-restricted-syntax": "off" },
 },
 ```
@@ -276,9 +276,9 @@ The rule is on globally; the override turns it off only for `notify.ts` so the w
 
 ---
 
-### `extensions/claude-marketplace/shared/errors.ts` (utility, transform)
+### `extensions/pi-claude-marketplace/shared/errors.ts` (utility, transform)
 
-**Analog:** `features/initial:extensions/claude-marketplace/errors.ts` (verbatim port).
+**Analog:** `features/initial:extensions/pi-claude-marketplace/errors.ts` (verbatim port).
 
 **Verbatim file body to copy** (analog lines 1-40):
 
@@ -313,15 +313,15 @@ export function appendLeaks(err: unknown, leaks: readonly (string | undefined)[]
 }
 ```
 
-**Divergences from V1:** **NONE**. Verbatim port. Only the file location moves: `extensions/claude-marketplace/errors.ts` → `extensions/claude-marketplace/shared/errors.ts`.
+**Divergences from V1:** **NONE**. Verbatim port. Only the file location moves: `extensions/pi-claude-marketplace/errors.ts` → `extensions/pi-claude-marketplace/shared/errors.ts`.
 
 **Why `shared/`** (per RESEARCH.md Open Question 4): the helpers have no upward deps and every layer might catch + wrap. `shared/` is the only folder importable from everywhere.
 
 ---
 
-### `extensions/claude-marketplace/platform/git.ts` (platform facade, request-response)
+### `extensions/pi-claude-marketplace/platform/git.ts` (platform facade, request-response)
 
-**Analog:** `features/initial:extensions/claude-marketplace/marketplace/git.ts` (V1's CLI shell-out version).
+**Analog:** `features/initial:extensions/pi-claude-marketplace/marketplace/git.ts` (V1's CLI shell-out version).
 
 **V1 pattern to REPLACE (analog lines 1-55):**
 
@@ -416,7 +416,7 @@ export async function fetch(opts: { dir: string; remote?: string; ref?: string }
 
 ## Purpose
 
-Phase 6 lands the user-facing command surface: argument parsing for `/claude:plugin <subcommand>`, completion providers, the `claude_marketplace_list` LLM tool, and the dispatch table that maps subcommands to orchestrators.
+Phase 6 lands the user-facing command surface: argument parsing for `/claude:plugin <subcommand>`, completion providers, the `pi_claude_marketplace_list` LLM tool, and the dispatch table that maps subcommands to orchestrators.
 
 ## Allowed Imports
 
@@ -427,7 +427,7 @@ Phase 6 lands the user-facing command surface: argument parsing for `/claude:plu
 - [ ] `router.ts` -- top-level subcommand dispatch (Phase 6)
 - [ ] `args.ts` -- flag/positional parsing helpers (Phase 6)
 - [ ] `completions.ts` -- getArgumentCompletions provider (Phase 6)
-- [ ] `handlers/list.ts` -- `claude_marketplace_list` LLM tool (Phase 6)
+- [ ] `handlers/list.ts` -- `pi_claude_marketplace_list` LLM tool (Phase 6)
 ```
 
 Same shape × 9. Per-folder text varies but the section structure is fixed.
@@ -467,10 +467,10 @@ export default tseslint.config(
 
 **Phase 1 ADDS (per D-06 + D-11; RESEARCH.md Patterns 3 and 4):**
 
-1. **Output-discipline block** scoped to `extensions/claude-marketplace/**/*.ts` -- 6 `no-restricted-syntax` selectors covering `process.stdout.write`, `process.stderr.write`, `console.log/warn/error/info`, plus a 7th selector forbidding direct `ctx.ui.notify(` (D-07). Elevate `no-console` from `"warn"` to `"error"` for that scope.
-2. **Import-boundary block** scoped to `extensions/claude-marketplace/**/*.ts` -- `import-x/no-restricted-paths` with 9 zones (one per folder) per RESEARCH.md Pattern 4.
+1. **Output-discipline block** scoped to `extensions/pi-claude-marketplace/**/*.ts` -- 6 `no-restricted-syntax` selectors covering `process.stdout.write`, `process.stderr.write`, `console.log/warn/error/info`, plus a 7th selector forbidding direct `ctx.ui.notify(` (D-07). Elevate `no-console` from `"warn"` to `"error"` for that scope.
+2. **Import-boundary block** scoped to `extensions/pi-claude-marketplace/**/*.ts` -- `import-x/no-restricted-paths` with 9 zones (one per folder) per RESEARCH.md Pattern 4.
 3. **Per-file overrides:**
-   - `extensions/claude-marketplace/shared/notify.ts` → `"no-restricted-syntax": "off"` (the wrapper IS the sanctioned site)
+   - `extensions/pi-claude-marketplace/shared/notify.ts` → `"no-restricted-syntax": "off"` (the wrapper IS the sanctioned site)
    - `tests/**/*.ts` → already exists; APPEND `"no-restricted-syntax": "off"`, `"no-console": "off"`
 4. **NEW eslint config files override:** if `eslint.config.js` itself does not need the new restrictions (it doesn't import from the extension), the existing `disableTypeChecked` config block is sufficient.
 
@@ -488,7 +488,7 @@ export default tseslint.config(
 
 | Field | Current | Phase 1 target |
 |-------|---------|----------------|
-| `pi.extensions` | `["./extensions/claude-marketplace/index.ts"]` | unchanged (already correct, but file does not exist yet -- Phase 1 makes it exist; per RESEARCH.md Pitfall #7) |
+| `pi.extensions` | `["./extensions/pi-claude-marketplace/index.ts"]` | unchanged (already correct, but file does not exist yet -- Phase 1 makes it exist; per RESEARCH.md Pitfall #7) |
 | `dependencies` | (none) | **NEW**: `"write-file-atomic": "^8.0.0"`, `"isomorphic-git": "^1.37.6"` |
 | `devDependencies.tsx` | `"^4.21.0"` | **REMOVE** (per D-02) |
 | `devDependencies.typebox` | `"^1.1.34"` | `"^1.1.38"` |
@@ -517,7 +517,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import * as markers from "../../extensions/claude-marketplace/shared/markers.ts";
+import * as markers from "../../extensions/pi-claude-marketplace/shared/markers.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const PRD_PATH = path.join(REPO_ROOT, "docs/prd/pi-claude-marketplace-prd.md");
@@ -563,12 +563,12 @@ test("import-x/no-restricted-paths zones match the 9-folder spec", () => {
   // import-x/no-restricted-paths, assert zones.length === 9, assert per-target
   // forbidden-set matches an expected map.
   const expected: Record<string, string[]> = {
-    "./extensions/claude-marketplace/edge": [
-      "./extensions/claude-marketplace/bridges",
-      "./extensions/claude-marketplace/domain",
-      "./extensions/claude-marketplace/transaction",
-      "./extensions/claude-marketplace/persistence",
-      "./extensions/claude-marketplace/platform",
+    "./extensions/pi-claude-marketplace/edge": [
+      "./extensions/pi-claude-marketplace/bridges",
+      "./extensions/pi-claude-marketplace/domain",
+      "./extensions/pi-claude-marketplace/transaction",
+      "./extensions/pi-claude-marketplace/persistence",
+      "./extensions/pi-claude-marketplace/platform",
     ],
     // ... 8 more entries ...
   };
@@ -585,7 +585,7 @@ The canary test requires `tests/fixtures/bad-imports/edge-imports-bridges.ts`:
 
 ```typescript
 // Deliberately violates the import-x boundary. Run via the canary test.
-import "../../../extensions/claude-marketplace/bridges/index.ts";
+import "../../../extensions/pi-claude-marketplace/bridges/index.ts";
 export {};
 ```
 
@@ -638,7 +638,7 @@ import {
   GENERATED_AGENT_MARKER,
   emitGeneratedAgentFile,
   // ...
-} from "../../extensions/claude-marketplace/agent/frontmatter.ts";
+} from "../../extensions/pi-claude-marketplace/agent/frontmatter.ts";
 
 test("emitYamlScalar wraps double-quoted input in single quotes", () => {
   const out = emitYamlScalar('"hello world"');
@@ -663,7 +663,7 @@ This is the canonical V1 unit-test scaffolding: `import assert from "node:assert
 
 ### Pattern: Severity-named notify wrappers (apply to ALL controller / presentation files in later phases)
 
-**Source:** `extensions/claude-marketplace/shared/notify.ts` (NEW, per D-07).
+**Source:** `extensions/pi-claude-marketplace/shared/notify.ts` (NEW, per D-07).
 **Apply to:** every file in `edge/`, `orchestrators/`, `bridges/`, `presentation/` once those folders gain content. Phase 1: only `index.ts` consumes (one call to `notifyWarning`).
 
 ```typescript
@@ -678,7 +678,7 @@ Direct `ctx.ui.notify(...)` outside `shared/notify.ts` is forbidden by the eslin
 
 ### Pattern: Atomic JSON write (apply to `state.json`, `mcp.json`, `agents-index.json` in P2/P3/P5)
 
-**Source:** `extensions/claude-marketplace/shared/atomic-json.ts` (NEW, per D-03).
+**Source:** `extensions/pi-claude-marketplace/shared/atomic-json.ts` (NEW, per D-03).
 **Apply to:** every JSON file write that participates in `withStateGuard`.
 
 ```typescript
@@ -691,7 +691,7 @@ NOT for staging-tree commits (Phase 3 keeps V1's hand-rolled `mkdir`+`writeFile`
 
 ### Pattern: Path-containment chokepoint (apply to EVERY name-derived path in P3+)
 
-**Source:** `extensions/claude-marketplace/shared/path-safety.ts` (NEW, per D-14..D-17).
+**Source:** `extensions/pi-claude-marketplace/shared/path-safety.ts` (NEW, per D-14..D-17).
 **Apply to:** every site that resolves a path from user input or plugin manifest -- bridges (Phase 3), orchestrators (Phase 4-5), persistence (Phase 2). Phase 1: zero callsites yet.
 
 ```typescript
@@ -718,14 +718,14 @@ try { /* ... */ } catch (err) {
 ### Pattern: ESLint output discipline (eslint.config.js)
 
 **Source:** `eslint.config.js` (modified, per D-06).
-**Apply to:** all files under `extensions/claude-marketplace/`.
+**Apply to:** all files under `extensions/pi-claude-marketplace/`.
 
 The 6-selector + `no-console: "error"` block is verbatim from RESEARCH.md Pattern 3. The single sanctioned `console.warn` site (load-time `migrateLegacyMarketplaceRecords` per IL-3) lands in Phase 2 -- its disable-comment incantation is documented in RESEARCH.md lines 611-621 for that planner.
 
 ### Pattern: ESLint import-direction enforcement
 
 **Source:** `eslint.config.js` (modified, per D-11).
-**Apply to:** all files under `extensions/claude-marketplace/`.
+**Apply to:** all files under `extensions/pi-claude-marketplace/`.
 
 The 9-zone `import-x/no-restricted-paths` block from RESEARCH.md Pattern 4 (lines 643-778) is verbatim. Each zone is `{ target, from: [forbidden_sources], message }`. Tests (`tests/architecture/import-boundaries.test.ts`) verify the zone array structure.
 
@@ -737,7 +737,7 @@ The 9-zone `import-x/no-restricted-paths` block from RESEARCH.md Pattern 4 (line
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { /* SUT */ } from "../../extensions/claude-marketplace/<path>.ts";
+import { /* SUT */ } from "../../extensions/pi-claude-marketplace/<path>.ts";
 
 test("description", () => {
   // Arrange / Act / Assert
@@ -778,20 +778,20 @@ Files / decisions where V1 has zero precedent -- planner uses RESEARCH.md as can
 
 **Analog search scope:**
 
-- `features/initial` branch (V1 source) -- `extensions/claude-marketplace/{agent,commands,location,marketplace,mcp,plugin,presentation,resource,state,transaction}/` and `tests/{agent,commands,location,...}/`
-- Current `features/initial-gsd` branch -- `extensions/claude-marketplace.ts` (stub), `eslint.config.js`, `package.json`, `tsconfig.json`
+- `features/initial` branch (V1 source) -- `extensions/pi-claude-marketplace/{agent,commands,location,marketplace,mcp,plugin,presentation,resource,state,transaction}/` and `tests/{agent,commands,location,...}/`
+- Current `features/initial-gsd` branch -- `extensions/pi-claude-marketplace.ts` (stub), `eslint.config.js`, `package.json`, `tsconfig.json`
 - RESEARCH.md (HIGH-confidence patterns where V1 has no precedent)
 
 **Files inspected (verified 2026-05-09 via `git show` or `Read`):**
 
-- `features/initial:extensions/claude-marketplace/index.ts` (V1 entrypoint, 200+ lines)
-- `features/initial:extensions/claude-marketplace/fs-utils.ts` (atomicWriteJson, pathExists, dirExists, cleanupStaging)
-- `features/initial:extensions/claude-marketplace/errors.ts` (errorMessage, appendLeakToError, appendLeaks -- verbatim port target)
-- `features/initial:extensions/claude-marketplace/marketplace/git.ts` (V1 `execFile("git")` wrapper -- replaced by isomorphic-git)
-- `features/initial:extensions/claude-marketplace/presentation/reload-hint.ts` (V1's inlined `Run /reload to ${verb}` literal -- extraction source for `RELOAD_HINT_PREFIX`)
+- `features/initial:extensions/pi-claude-marketplace/index.ts` (V1 entrypoint, 200+ lines)
+- `features/initial:extensions/pi-claude-marketplace/fs-utils.ts` (atomicWriteJson, pathExists, dirExists, cleanupStaging)
+- `features/initial:extensions/pi-claude-marketplace/errors.ts` (errorMessage, appendLeakToError, appendLeaks -- verbatim port target)
+- `features/initial:extensions/pi-claude-marketplace/marketplace/git.ts` (V1 `execFile("git")` wrapper -- replaced by isomorphic-git)
+- `features/initial:extensions/pi-claude-marketplace/presentation/reload-hint.ts` (V1's inlined `Run /reload to ${verb}` literal -- extraction source for `RELOAD_HINT_PREFIX`)
 - `features/initial:tests/fixtures.test.ts`, `features/initial:tests/agent/frontmatter.test.ts` (test scaffolding pattern)
 - `features/initial:eslint.config.js` (V1 baseline -- identical to current except for `.claude/` ignore)
-- Current `extensions/claude-marketplace.ts` (stub registering `claude_marketplace_list` tool + `claude-marketplace:list` command)
+- Current `extensions/pi-claude-marketplace.ts` (stub registering `pi_claude_marketplace_list` tool + `pi-claude-marketplace:list` command)
 - Current `eslint.config.js`, `package.json`, `tsconfig.json` (modification targets)
 
 **Pattern extraction date:** 2026-05-09

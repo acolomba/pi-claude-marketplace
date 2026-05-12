@@ -35,7 +35,7 @@
     "CHANGELOG.md",
     "LICENSE",
     "README.md",
-    "extensions/claude-marketplace/**"
+    "extensions/pi-claude-marketplace/**"
   ],
   "homepage": "https://github.com/acolomba/pi-claude-marketplace#readme",
   "keywords": [
@@ -57,7 +57,7 @@
   },
   "pi": {
     "extensions": [
-      "./extensions/claude-marketplace/index.ts"
+      "./extensions/pi-claude-marketplace/index.ts"
     ],
     "video": "https://github.com/acolomba/pi-claude-marketplace/raw/main/demos/marketplace-add-plugin-install.gif"
   },

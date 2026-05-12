@@ -16,7 +16,7 @@ Landed `marketplace list` end-to-end as a read-only orchestrator. Honors SC-6 (b
 
 ### Task 1: list.ts orchestrator
 
-Created `extensions/claude-marketplace/orchestrators/marketplace/list.ts` (60 LOC). The orchestrator:
+Created `extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts` (60 LOC). The orchestrator:
 
 1. Resolves scopes per SC-6 (`opts.scope` -> single, else `["user", "project"]`).
 2. For each scope: `loadState(locationsFor(scope, cwd).extensionRoot)` and collects every `state.marketplaces[name]` into a `MarketplaceListEntry[]`.
@@ -54,7 +54,7 @@ Commit: `test(04-07): add list orchestrator tests (8 tests)`
 
 ## Key files created/modified
 
-- `extensions/claude-marketplace/orchestrators/marketplace/list.ts` -- created (60 LOC)
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts` -- created (60 LOC)
 - `tests/orchestrators/marketplace/list.test.ts` -- created (8 tests, 215 lines)
 
 ## Verification

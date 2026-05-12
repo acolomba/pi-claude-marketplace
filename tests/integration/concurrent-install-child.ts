@@ -1,9 +1,9 @@
-import { installPlugin } from "../../extensions/claude-marketplace/orchestrators/plugin/install.ts";
+import { installPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 
 import type {
   ExtensionAPI,
   ExtensionContext,
-} from "../../extensions/claude-marketplace/platform/pi-api.ts";
+} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 interface StartMessage {
   readonly plugin: string;

@@ -4,14 +4,14 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { CLAUDE_MARKETPLACE_MARKER_KEY } from "../../../extensions/claude-marketplace/bridges/mcp/marker.ts";
+import { CLAUDE_MARKETPLACE_MARKER_KEY } from "../../../extensions/pi-claude-marketplace/bridges/mcp/marker.ts";
 import {
   abortPreparedMcp,
   commitPreparedMcp,
   prepareStageMcpServers,
-} from "../../../extensions/claude-marketplace/bridges/mcp/stage.ts";
-import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
-import { McpServerCollisionError } from "../../../extensions/claude-marketplace/shared/errors-bridges.ts";
+} from "../../../extensions/pi-claude-marketplace/bridges/mcp/stage.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { McpServerCollisionError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 
 // MC-4 / MC-5 / MC-6 / AS-8 -- prepare/commit/abort.
 //
@@ -42,7 +42,7 @@ const PLUGIN = "acme";
 // MC-5 marker stamping
 // ---------------------------------------------------------------------------
 
-test("MC-5 prepareStageMcpServers stamps each new entry with _claudeMarketplace marker", async () => {
+test("MC-5 prepareStageMcpServers stamps each new entry with _piClaudeMarketplace marker", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     const prepared = await prepareStageMcpServers({
       locations,

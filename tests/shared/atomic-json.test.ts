@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { atomicWriteJson } from "../../extensions/claude-marketplace/shared/atomic-json.ts";
+import { atomicWriteJson } from "../../extensions/pi-claude-marketplace/shared/atomic-json.ts";
 
 /**
  * NFR-1, AS-1, D-03 -- atomicWriteJson via write-file-atomic@^8.

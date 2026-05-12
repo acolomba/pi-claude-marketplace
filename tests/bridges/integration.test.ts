@@ -31,24 +31,24 @@ import { fileURLToPath } from "node:url";
 import {
   commitPreparedAgents,
   prepareStagePluginAgents,
-} from "../../extensions/claude-marketplace/bridges/agents/index.ts";
+} from "../../extensions/pi-claude-marketplace/bridges/agents/index.ts";
 import {
   commitPreparedCommands,
   prepareStageCommands,
-} from "../../extensions/claude-marketplace/bridges/commands/index.ts";
+} from "../../extensions/pi-claude-marketplace/bridges/commands/index.ts";
 import {
   commitPreparedMcp,
   prepareStageMcpServers,
   resolvePluginMcpServers,
-} from "../../extensions/claude-marketplace/bridges/mcp/index.ts";
+} from "../../extensions/pi-claude-marketplace/bridges/mcp/index.ts";
 import {
   commitPreparedSkills,
   prepareStageSkills,
-} from "../../extensions/claude-marketplace/bridges/skills/index.ts";
-import { loadAgentsIndex } from "../../extensions/claude-marketplace/persistence/agents-index-io.ts";
-import { locationsFor } from "../../extensions/claude-marketplace/persistence/locations.ts";
+} from "../../extensions/pi-claude-marketplace/bridges/skills/index.ts";
+import { loadAgentsIndex } from "../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
+import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
-import type { ResolvedPluginInstallable } from "../../extensions/claude-marketplace/domain/resolver.ts";
+import type { ResolvedPluginInstallable } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE_PLUGIN = path.resolve(HERE, "_fixtures", "test-plugin");
@@ -198,14 +198,14 @@ describe("integration: full-plugin staging", () => {
     assert.equal(prep.kind, "staged", "agents discovered -> staged variant");
     await commitPreparedAgents(prep);
 
-    // AG-1: every staged file basename starts with claude-marketplace-.
+    // AG-1: every staged file basename starts with pi-claude-marketplace-.
     const agentsDirContents = await readdir(locations.agentsDir);
     assert.ok(agentsDirContents.length > 0, "AG-1: at least one agent file landed");
     for (const name of agentsDirContents) {
       assert.match(
         name,
-        /^claude-marketplace-/,
-        `AG-1: agent file basename "${name}" starts with claude-marketplace-`,
+        /^pi-claude-marketplace-/,
+        `AG-1: agent file basename "${name}" starts with pi-claude-marketplace-`,
       );
     }
 
@@ -237,16 +237,16 @@ describe("integration: full-plugin staging", () => {
       "AG-2: recorded[] matches index for our (mp,plugin)",
     );
 
-    // AG-1 elision: bot -> claude-marketplace-acme-bot (prefix added);
-    // acme-helper -> claude-marketplace-acme-helper (no double-prefix).
+    // AG-1 elision: bot -> pi-claude-marketplace-acme-bot (prefix added);
+    // acme-helper -> pi-claude-marketplace-acme-helper (no double-prefix).
     assert.deepEqual(
       recordedNames,
-      ["claude-marketplace-acme-bot", "claude-marketplace-acme-helper"],
+      ["pi-claude-marketplace-acme-bot", "pi-claude-marketplace-acme-helper"],
       "AG-1: prefix added with no double-prefix",
     );
   });
 
-  test("MC-5/MC-6: mcp bridge merges declared servers into mcp.json with _claudeMarketplace marker", async () => {
+  test("MC-5/MC-6: mcp bridge merges declared servers into mcp.json with _piClaudeMarketplace marker", async () => {
     const resolved = await resolvePluginMcpServers({
       entry: {},
       manifest: {},
@@ -266,15 +266,18 @@ describe("integration: full-plugin staging", () => {
     assert.equal(prep.kind, "staged", "MC-6: servers present -> staged variant");
     const result = await commitPreparedMcp(prep);
 
-    // MC-5: each entry carries _claudeMarketplace marker.
+    // MC-5: each entry carries _piClaudeMarketplace marker.
     const mcpJson = JSON.parse(await readFile(locations.mcpJsonPath, "utf8")) as {
-      mcpServers: Record<string, { _claudeMarketplace?: { plugin: string; marketplace: string } }>;
+      mcpServers: Record<
+        string,
+        { _piClaudeMarketplace?: { plugin: string; marketplace: string } }
+      >;
     };
     for (const [name, entry] of Object.entries(mcpJson.mcpServers)) {
       assert.deepEqual(
-        entry._claudeMarketplace,
+        entry._piClaudeMarketplace,
         { plugin: PLUGIN_NAME, marketplace: MARKETPLACE_NAME },
-        `MC-5: server "${name}" carries _claudeMarketplace marker`,
+        `MC-5: server "${name}" carries _piClaudeMarketplace marker`,
       );
     }
 

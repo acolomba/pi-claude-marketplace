@@ -115,7 +115,7 @@ ______________________________________________________________________
 - **Plugin** -- a Claude plugin, identified by `<plugin>@<marketplace>`.
 - **Component** -- one of skills, commands, agents (supported), or hooks, lspServers, monitors, themes, outputStyles, channels, userConfig, bin, settings (unsupported), plus mcpServers (supported, with soft dep).
 - **Strict marketplace** -- `marketplace.json` `strict: true` (default) → resolver takes the union of four declaration sources: the marketplace-entry component fields, the plugin-manifest component fields, implicit-by-convention directories (`skills/`, `commands/`, `agents/`), and standalone files at the plugin root (`hooks/hooks.json`, `.mcp.json`). `strict: false` → resolver uses the marketplace-entry declarations only and treats any of the other three sources declaring unsupported components (or declaring `mcpServers` without a matching entry-level declaration) as conflicts.
-- **Generated name** -- the deterministic name produced for a Pi-side artefact: `<plugin>:<skill>` for skills, `<plugin>:<command>` for commands, `claude-marketplace-<plugin>-<agent>` for agents.
+- **Generated name** -- the deterministic name produced for a Pi-side artefact: `<plugin>:<skill>` for skills, `<plugin>:<command>` for commands, `pi-claude-marketplace-<plugin>-<agent>` for agents.
 - **Reload hint** -- the trailing `Run /reload to <verb> ...` line appended to messages whenever generated resources changed.
 - **Soft dependency** -- a runtime dependency probed via tool registration, not via a manifest field. `pi-subagents` (probed by the `subagent` tool) and `pi-mcp-adapter` (probed by tool name `mcp` or `sourceInfo.source` containing `pi-mcp-adapter`).
 - **State guard** -- a transactional helper that re-reads state on entry, applies a closure, and atomically saves; throws and skips save on closure throw.
@@ -155,11 +155,11 @@ flowchart LR
 
 The extension owns three persistence surfaces:
 
-1. **`<scope>/claude-marketplace/state.json`** -- single source of truth for which marketplaces are configured, source kinds, plugin install records (skills, prompts, agents, mcpServers), versions, autoupdate flags, etc.
-2. **`<scope>/claude-marketplace/resources/{skills,prompts}/`** -- generated Pi skill directories and prompt template files, exposed back to Pi via `resources_discover`.
+1. **`<scope>/pi-claude-marketplace/state.json`** -- single source of truth for which marketplaces are configured, source kinds, plugin install records (skills, prompts, agents, mcpServers), versions, autoupdate flags, etc.
+2. **`<scope>/pi-claude-marketplace/resources/{skills,prompts}/`** -- generated Pi skill directories and prompt template files, exposed back to Pi via `resources_discover`.
 3. **Out-of-extension bridge files** for soft deps:
-   - `<scope>/agents/claude-marketplace-*.md` (with a separate `<extension>/agents-index.json`).
-   - `<scope>/mcp.json` (entries marked with `_claudeMarketplace: { plugin, marketplace }`).
+   - `<scope>/agents/pi-claude-marketplace-*.md` (with a separate `<extension>/agents-index.json`).
+   - `<scope>/mcp.json` (entries marked with `_piClaudeMarketplace: { plugin, marketplace }`).
 
 ______________________________________________________________________
 
@@ -175,7 +175,7 @@ ______________________________________________________________________
 | **MA-2**  | When `--scope` is omitted, the default for `marketplace add` MUST be `user`.                                                                                                                                                                          |
 | **MA-3**  | For local paths, the system MUST accept either a directory containing `.claude-plugin/marketplace.json` or a direct path to a `marketplace.json` file.                                                                                                |
 | **MA-4**  | The system MUST store paths in their portable form: a leading `~` or `~/...` is preserved verbatim and expanded at access time.                                                                                                                       |
-| **MA-5**  | For GitHub sources, the system MUST `git clone` into `<staging>/<uuid>/`, read the manifest, and only after a successful read rename into `<scope>/claude-marketplace/sources/<marketplace-name>/`.                                                   |
+| **MA-5**  | For GitHub sources, the system MUST `git clone` into `<staging>/<uuid>/`, read the manifest, and only after a successful read rename into `<scope>/pi-claude-marketplace/sources/<marketplace-name>/`.                                                |
 | **MA-6**  | A non-empty target directory at `sourceCloneDir(name)` from a prior failed add MUST cause the add to fail with a clear "stale source clone" message -- the system MUST NOT clobber it.                                                                |
 | **MA-7**  | If `git` is not on PATH, GitHub sources MUST fail with `"git" not found on PATH. Install git to use GitHub-source marketplaces.`                                                                                                                      |
 | **MA-8**  | If a marketplace with the same name already exists in the chosen scope, the add MUST fail with a "remove it first or use a different source" message.                                                                                                 |
@@ -262,16 +262,16 @@ stateDiagram-v2
 
 #### 5.2.2 `uninstall <plugin>@<marketplace> [--scope user|project]`
 
-| ID       | Requirement                                                                                                                                                                                                                                                       |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **PU-1** | Order of operations: remove recorded skills/prompts → unstage agents → unstage MCP servers → state-guard commit → clean per-plugin data dir.                                                                                                                      |
-| **PU-2** | Per-plugin data dir cleanup happens AFTER state commit so an `EACCES` there cannot strand state in `installed=true`.                                                                                                                                              |
-| **PU-3** | Failures earlier than data-dir cleanup MUST cause the uninstall to abort with the marketplace record intact (retryable).                                                                                                                                          |
-| **PU-4** | Data-dir cleanup leaks MUST surface at `warning` severity, with the leaked path named in the body.                                                                                                                                                                |
-| **PU-5** | Uninstall MUST tolerate concurrent uninstall by another process (silent converge if the record is already gone at commit time).                                                                                                                                   |
-| **PU-6** | Legacy state records missing `resources.agents` or `resources.mcpServers` MUST be load-time-migrated to `[]`; uninstall MUST NOT crash on them.                                                                                                                   |
-| **PU-7** | Foreign content at an agent target file (basename does not start with `claude-marketplace-` or file is missing the generated marker) MUST cause that entry to be retained in the index with `failed[]` rather than silently kept. The uninstall MUST fail loudly. |
-| **PU-8** | Uninstall MUST emit a reload hint (`Run /reload to drop "<plugin>"`) when any resource was removed.                                                                                                                                                               |
+| ID       | Requirement                                                                                                                                                                                                                                                          |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **PU-1** | Order of operations: remove recorded skills/prompts → unstage agents → unstage MCP servers → state-guard commit → clean per-plugin data dir.                                                                                                                         |
+| **PU-2** | Per-plugin data dir cleanup happens AFTER state commit so an `EACCES` there cannot strand state in `installed=true`.                                                                                                                                                 |
+| **PU-3** | Failures earlier than data-dir cleanup MUST cause the uninstall to abort with the marketplace record intact (retryable).                                                                                                                                             |
+| **PU-4** | Data-dir cleanup leaks MUST surface at `warning` severity, with the leaked path named in the body.                                                                                                                                                                   |
+| **PU-5** | Uninstall MUST tolerate concurrent uninstall by another process (silent converge if the record is already gone at commit time).                                                                                                                                      |
+| **PU-6** | Legacy state records missing `resources.agents` or `resources.mcpServers` MUST be load-time-migrated to `[]`; uninstall MUST NOT crash on them.                                                                                                                      |
+| **PU-7** | Foreign content at an agent target file (basename does not start with `pi-claude-marketplace-` or file is missing the generated marker) MUST cause that entry to be retained in the index with `failed[]` rather than silently kept. The uninstall MUST fail loudly. |
+| **PU-8** | Uninstall MUST emit a reload hint (`Run /reload to drop "<plugin>"`) when any resource was removed.                                                                                                                                                                  |
 
 #### 5.2.3 `update [<plugin>@<marketplace> | @<marketplace>]`
 
@@ -376,7 +376,7 @@ flowchart LR
 
 | ID       | Requirement                                                                                                                                                                                            |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **SK-1** | Skills MUST be staged as Pi skills under `<scope>/claude-marketplace/resources/skills/<plugin>:<skill>/SKILL.md` (with the entire skill directory copied recursively).                                 |
+| **SK-1** | Skills MUST be staged as Pi skills under `<scope>/pi-claude-marketplace/resources/skills/<plugin>:<skill>/SKILL.md` (with the entire skill directory copied recursively).                              |
 | **SK-2** | The generated skill name MUST be `<plugin>:<skill>`, with the `<plugin>-` prefix stripped from the source name when present. A source skill name equal to the plugin name becomes `<plugin>:<plugin>`. |
 | **SK-3** | The generated `SKILL.md` frontmatter MUST have its `name` field rewritten to the generated name (or added if missing). Other frontmatter MUST be preserved.                                            |
 | **SK-4** | `${CLAUDE_PLUGIN_ROOT}` and `${CLAUDE_PLUGIN_DATA}` MUST be substituted inside `SKILL.md`.                                                                                                             |
@@ -386,27 +386,27 @@ flowchart LR
 
 | ID       | Requirement                                                                                                                  |
 | -------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| **CM-1** | Commands MUST be staged as `<scope>/claude-marketplace/resources/prompts/<plugin>:<command>.md`.                             |
+| **CM-1** | Commands MUST be staged as `<scope>/pi-claude-marketplace/resources/prompts/<plugin>:<command>.md`.                          |
 | **CM-2** | Generated command name MUST be `<plugin>:<command>`, with the `<plugin>-` prefix stripped from the source name when present. |
 | **CM-3** | Variable substitution (`${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`) MUST apply to command bodies.                       |
 | **CM-4** | Discovery MUST treat flat `*.md` files only (non-recursive, ignore non-md).                                                  |
 
 ### 5.7 Agents Bridge (pi-subagents soft dependency)
 
-| ID        | Requirement                                                                                                                                                                                                                                                                                                                            |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **AG-1**  | Agent files MUST be staged at `<scope>/agents/claude-marketplace-<plugin>-<agent>.md` (deliberately outside the extension's `resources/` because pi-subagents reads from a fixed convention path).                                                                                                                                     |
-| **AG-2**  | An on-disk agent index `<extensionRoot>/agents-index.json` (schemaVersion 1) MUST track `(plugin, marketplace, sourceAgent, generatedName, sourcePath, targetPath, sourceHash, originalModel?, droppedFields, droppedTools, warnings)`.                                                                                                |
-| **AG-3**  | The index MUST be partitioned by `(marketplace, plugin)` so re-staging affects only entries owned by the current operation.                                                                                                                                                                                                            |
-| **AG-4**  | Per-row index validation failures MUST soft-fail (drop the row, surface a "agent index corruption (entry dropped)" warning); file-level corruption MUST throw.                                                                                                                                                                         |
-| **AG-5**  | Generated agent files MUST start with `claude-marketplace-` (basename) AND contain the literal marker string `generated by pi-claude-marketplace` inside an HTML-comment provenance block placed immediately after the closing `---` of the frontmatter. Removal MUST refuse to touch any file failing either check (foreign content). |
-| **AG-6**  | Source frontmatter MUST be parsed (line-based YAML; supports tolerating `:` in description values). Body is everything after the closing `---`.                                                                                                                                                                                        |
-| **AG-7**  | Field mappings (see AG-7 detail below the table). Each frontmatter field MUST be translated according to the rules in §5.7 AG-7 detail.                                                                                                                                                                                                |
-| **AG-8**  | YAML emitter MUST be parser-safe (single quotes flipped if value already double-quoted; embedded newlines normalized to spaces; HTML-comment-style `-->` escaped).                                                                                                                                                                     |
-| **AG-9**  | Cross-plugin name guard MUST refuse to overwrite agents owned by a different `(marketplace, plugin)` and report `"<name>" already owned by <other-mp>/<other-plugin>"`.                                                                                                                                                                |
-| **AG-10** | Staging is two-phase: write to a tmp dir under the extension's `agents-staging/`, then atomic rename + index save. The "noop" branch (no agents declared and no previous entries) MUST not materialize any directory.                                                                                                                  |
-| **AG-11** | `convertAgent` MUST throw when the mapped tool list is empty (pi-subagents has no representation for "no tools"). The error message MUST list the source `tools:` and `disallowedTools:`.                                                                                                                                              |
-| **AG-12** | Source-name collisions within a single plugin MUST throw with both source names listed.                                                                                                                                                                                                                                                |
+| ID        | Requirement                                                                                                                                                                                                                                                                                                                               |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **AG-1**  | Agent files MUST be staged at `<scope>/agents/pi-claude-marketplace-<plugin>-<agent>.md` (deliberately outside the extension's `resources/` because pi-subagents reads from a fixed convention path).                                                                                                                                     |
+| **AG-2**  | An on-disk agent index `<extensionRoot>/agents-index.json` (schemaVersion 1) MUST track `(plugin, marketplace, sourceAgent, generatedName, sourcePath, targetPath, sourceHash, originalModel?, droppedFields, droppedTools, warnings)`.                                                                                                   |
+| **AG-3**  | The index MUST be partitioned by `(marketplace, plugin)` so re-staging affects only entries owned by the current operation.                                                                                                                                                                                                               |
+| **AG-4**  | Per-row index validation failures MUST soft-fail (drop the row, surface a "agent index corruption (entry dropped)" warning); file-level corruption MUST throw.                                                                                                                                                                            |
+| **AG-5**  | Generated agent files MUST start with `pi-claude-marketplace-` (basename) AND contain the literal marker string `generated by pi-claude-marketplace` inside an HTML-comment provenance block placed immediately after the closing `---` of the frontmatter. Removal MUST refuse to touch any file failing either check (foreign content). |
+| **AG-6**  | Source frontmatter MUST be parsed (line-based YAML; supports tolerating `:` in description values). Body is everything after the closing `---`.                                                                                                                                                                                           |
+| **AG-7**  | Field mappings (see AG-7 detail below the table). Each frontmatter field MUST be translated according to the rules in §5.7 AG-7 detail.                                                                                                                                                                                                   |
+| **AG-8**  | YAML emitter MUST be parser-safe (single quotes flipped if value already double-quoted; embedded newlines normalized to spaces; HTML-comment-style `-->` escaped).                                                                                                                                                                        |
+| **AG-9**  | Cross-plugin name guard MUST refuse to overwrite agents owned by a different `(marketplace, plugin)` and report `"<name>" already owned by <other-mp>/<other-plugin>"`.                                                                                                                                                                   |
+| **AG-10** | Staging is two-phase: write to a tmp dir under the extension's `agents-staging/`, then atomic rename + index save. The "noop" branch (no agents declared and no previous entries) MUST not materialize any directory.                                                                                                                     |
+| **AG-11** | `convertAgent` MUST throw when the mapped tool list is empty (pi-subagents has no representation for "no tools"). The error message MUST list the source `tools:` and `disallowedTools:`.                                                                                                                                                 |
+| **AG-12** | Source-name collisions within a single plugin MUST throw with both source names listed.                                                                                                                                                                                                                                                   |
 
 #### AG-7 detail -- frontmatter field mappings
 
@@ -432,7 +432,7 @@ flowchart LR
 | **MC-2** | A `.mcp.json` may use either the canonical unwrapped form (top-level entries) or the legacy wrapped form (`{ "mcpServers": { ... } }`). Both MUST parse.                                                                                                                                                                                                                                                                                                        |
 | **MC-3** | A plugin whose only declaration is a malformed `mcpServers` MUST surface as **unavailable** with `malformed mcpServers: <reason>` -- silent fallthrough is not allowed.                                                                                                                                                                                                                                                                                         |
 | **MC-4** | Server-name collisions MUST be checked across all four pi-mcp-adapter slots: `~/.config/mcp/mcp.json`, `~/.pi/agent/mcp.json`, `<cwd>/.mcp.json`, `<cwd>/.pi/mcp.json`. Self-replace within the same scope's mcp.json is allowed; foreign collisions MUST refuse stage.                                                                                                                                                                                         |
-| **MC-5** | Each staged entry MUST carry a `_claudeMarketplace: { plugin, marketplace }` marker so uninstall/update drops only its own entries.                                                                                                                                                                                                                                                                                                                             |
+| **MC-5** | Each staged entry MUST carry a `_piClaudeMarketplace: { plugin, marketplace }` marker so uninstall/update drops only its own entries.                                                                                                                                                                                                                                                                                                                           |
 | **MC-6** | Staging MUST be two-phase (compute next doc in memory; commit via atomic JSON write). The "noop" branch (no new servers AND no previous ours) MUST not materialize the file.                                                                                                                                                                                                                                                                                    |
 | **MC-7** | Unstage MUST tolerate a missing `mcpServers` field (null/missing) without crashing.                                                                                                                                                                                                                                                                                                                                                                             |
 | **MC-8** | An unloaded `pi-mcp-adapter` MUST NOT block install/update; the user-facing message MUST include the standard pi-mcp-adapter warning when servers were staged.                                                                                                                                                                                                                                                                                                  |
@@ -482,7 +482,7 @@ ______________________________________________________________________
 | ID       | Requirement                                                                                                                                                                                                                                                                                       |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **SC-1** | The system MUST support exactly two scopes: `user` (`~/.pi/agent/`) and `project` (`<cwd>/.pi/`). Claude Code's `local` scope MUST NOT be introduced unless Pi adds an equivalent.                                                                                                                |
-| **SC-2** | All extension data lives at `<scopeRoot>/claude-marketplace/`. Bridge files live at `<scopeRoot>/agents/` and `<scopeRoot>/mcp.json` (deliberately outside the extension's resources/).                                                                                                           |
+| **SC-2** | All extension data lives at `<scopeRoot>/pi-claude-marketplace/`. Bridge files live at `<scopeRoot>/agents/` and `<scopeRoot>/mcp.json` (deliberately outside the extension's resources/).                                                                                                        |
 | **SC-3** | A `ScopedLocations` object MUST be a typed bundle that's the only way to derive on-disk paths for an operation; hand-crafted shapes that mix scopes MUST not type-check (brand symbol).                                                                                                           |
 | **SC-4** | Scope resolution rules for name-targeted commands. When `--scope` is provided, use that scope and error if the name is not found there. When `--scope` is omitted, search both scopes; error if found in both ("Use --scope user or --scope project to disambiguate"); error if found in neither. |
 | **SC-5** | `marketplace add` defaults to `user` when scope is omitted.                                                                                                                                                                                                                                       |
@@ -516,7 +516,7 @@ ______________________________________________________________________
 
 | ID       | Requirement                                                                                                                                                                                                                                                                                                                                           |
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **RN-1** | Generated names MUST be deterministic functions of `(plugin, source-name)`. Skill: `<plugin>:<skill>` (prefix elided). Command: `<plugin>:<command>` (prefix elided). Agent: `claude-marketplace-<plugin>-<agent>` (with `<plugin>-` prefix on source elided).                                                                                        |
+| **RN-1** | Generated names MUST be deterministic functions of `(plugin, source-name)`. Skill: `<plugin>:<skill>` (prefix elided). Command: `<plugin>:<command>` (prefix elided). Agent: `pi-claude-marketplace-<plugin>-<agent>` (with `<plugin>-` prefix on source elided).                                                                                     |
 | **RN-2** | All names -- marketplace, plugin, skill, command, agent, MCP server -- MUST be `assertSafeName`: non-empty, trimmed, not `.`/`..`, no path separators, no control chars.                                                                                                                                                                              |
 | **RN-3** | Cross-plugin install conflict guard MUST run BEFORE any disk write and MUST list every conflicting name in one message.                                                                                                                                                                                                                               |
 | **RN-4** | Cross-marketplace agent ownership: re-staging an agent name owned by a different `(marketplace, plugin)` MUST throw with the conflicting owner identified.                                                                                                                                                                                            |
@@ -932,7 +932,7 @@ flowchart TB
 
 ```text
 <scopeRoot>/                          # ~/.pi/agent (user) or <cwd>/.pi (project)
-├── claude-marketplace/               # extensionRoot
+├── pi-claude-marketplace/               # extensionRoot
 │   ├── state.json                    # marketplaces + plugins
 │   ├── agents-index.json             # generated-agent index
 │   ├── agents-staging/               # tmp dir for in-flight agent staging
@@ -943,7 +943,7 @@ flowchart TB
 │       ├── skills/<plugin>:<skill>/SKILL.md
 │       └── prompts/<plugin>:<command>.md
 ├── agents/                           # pi-subagents reads here (NOT extensionRoot)
-│   └── claude-marketplace-<plugin>-<agent>.md
+│   └── pi-claude-marketplace-<plugin>-<agent>.md
 └── mcp.json                          # pi-mcp-adapter reads here (NOT extensionRoot)
 ```
 
@@ -973,7 +973,7 @@ ______________________________________________________________________
 | **NFR-7**  | The TypeScript surface MUST use `strictly typed` resolved-plugin variants -- installable consumers do not get to read `pluginRoot` from a non-installable plugin.                                                                                                                                                                     |
 | **NFR-8**  | The successor SHOULD cache marketplace manifests with mtime invalidation to remove the per-`list` re-read cost (BACKLOG performance item).                                                                                                                                                                                            |
 | **NFR-9**  | The system MUST never print sensitive paths beyond what's already in the user's terminal session.                                                                                                                                                                                                                                     |
-| **NFR-10** | The system MUST refuse to write outside `<scopeRoot>/claude-marketplace/`, `<scopeRoot>/agents/`, or `<scopeRoot>/mcp.json` for any reason.                                                                                                                                                                                           |
+| **NFR-10** | The system MUST refuse to write outside `<scopeRoot>/pi-claude-marketplace/`, `<scopeRoot>/agents/`, or `<scopeRoot>/mcp.json` for any reason.                                                                                                                                                                                        |
 | **NFR-11** | The Pi extension API dependency is declared as `@mariozechner/pi-coding-agent` peer dependency with no version pin (`*`); the extension is developed against `^0.70.6`. The successor SHOULD pin a minimum supported Pi API version once the surface stabilizes.                                                                      |
 | **NFR-12** | The Claude `marketplace.json` parser is forward-compatible: it does not check or assume any schema version field. Unknown plugin source kinds parse to `{ kind: "unknown", reason }` rather than failing. The parser targets the de-facto schema observable in `anthropics/claude-plugins-official` as of the V1 implementation date. |
 
@@ -1046,12 +1046,12 @@ ______________________________________________________________________
 
 ### Appendix B: Generated-name conventions
 
-| Artefact   | Generated form                        | Stripping rule                           |
-| ---------- | ------------------------------------- | ---------------------------------------- |
-| Skill      | `<plugin>:<skill>`                    | drop leading `<plugin>-` from source     |
-| Command    | `<plugin>:<command>`                  | drop leading `<plugin>-` from source     |
-| Agent      | `claude-marketplace-<plugin>-<agent>` | drop leading `<plugin>-` from source     |
-| MCP server | server name verbatim from declaration | none (`_claudeMarketplace` marker added) |
+| Artefact   | Generated form                           | Stripping rule                             |
+| ---------- | ---------------------------------------- | ------------------------------------------ |
+| Skill      | `<plugin>:<skill>`                       | drop leading `<plugin>-` from source       |
+| Command    | `<plugin>:<command>`                     | drop leading `<plugin>-` from source       |
+| Agent      | `pi-claude-marketplace-<plugin>-<agent>` | drop leading `<plugin>-` from source       |
+| MCP server | server name verbatim from declaration    | none (`_piClaudeMarketplace` marker added) |
 
 ### Appendix C: Reload-hint verbs
 

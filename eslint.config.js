@@ -81,7 +81,7 @@ export default tseslint.config(
     // in `migrateLegacyMarketplaceRecords` (IL-3) -- disabled inline at the
     // single callsite with `// eslint-disable-next-line no-restricted-syntax
     // -- IL-3: ...`. The `--` justification is required (Pitfall #5).
-    files: ["extensions/claude-marketplace/**/*.ts"],
+    files: ["extensions/pi-claude-marketplace/**/*.ts"],
     rules: {
       "no-restricted-syntax": [
         "error",
@@ -132,7 +132,7 @@ export default tseslint.config(
   {
     // BLOCK B: Per-file override -- shared/notify.ts IS the sanctioned
     // ctx.ui.notify call site, so its body must be allowed to call it.
-    files: ["extensions/claude-marketplace/shared/notify.ts"],
+    files: ["extensions/pi-claude-marketplace/shared/notify.ts"],
     rules: {
       "no-restricted-syntax": "off",
       "no-console": "off",
@@ -142,7 +142,7 @@ export default tseslint.config(
     // BLOCK C (D-11): Import-direction enforcement. 9-zone no-restricted-paths
     // mapping: each folder declares which sibling folders MUST NOT import from
     // it (i.e. enforces the upward/inward direction of the dep graph).
-    files: ["extensions/claude-marketplace/**/*.ts"],
+    files: ["extensions/pi-claude-marketplace/**/*.ts"],
     rules: {
       "import-x/no-restricted-paths": [
         "error",
@@ -150,102 +150,102 @@ export default tseslint.config(
           basePath: import.meta.dirname,
           zones: [
             {
-              target: "./extensions/claude-marketplace/edge",
+              target: "./extensions/pi-claude-marketplace/edge",
               from: [
-                "./extensions/claude-marketplace/bridges",
-                "./extensions/claude-marketplace/domain",
-                "./extensions/claude-marketplace/transaction",
-                "./extensions/claude-marketplace/persistence",
+                "./extensions/pi-claude-marketplace/bridges",
+                "./extensions/pi-claude-marketplace/domain",
+                "./extensions/pi-claude-marketplace/transaction",
+                "./extensions/pi-claude-marketplace/persistence",
               ],
               message:
                 "edge/ may only import from orchestrators/, presentation/, shared/, platform/.",
             },
             {
-              target: "./extensions/claude-marketplace/orchestrators",
-              from: ["./extensions/claude-marketplace/edge"],
+              target: "./extensions/pi-claude-marketplace/orchestrators",
+              from: ["./extensions/pi-claude-marketplace/edge"],
               message: "orchestrators/ MUST NOT import from edge/.",
             },
             {
-              target: "./extensions/claude-marketplace/bridges",
+              target: "./extensions/pi-claude-marketplace/bridges",
               from: [
-                "./extensions/claude-marketplace/edge",
-                "./extensions/claude-marketplace/orchestrators",
-                "./extensions/claude-marketplace/transaction",
-                "./extensions/claude-marketplace/presentation",
+                "./extensions/pi-claude-marketplace/edge",
+                "./extensions/pi-claude-marketplace/orchestrators",
+                "./extensions/pi-claude-marketplace/transaction",
+                "./extensions/pi-claude-marketplace/presentation",
               ],
               message:
                 "bridges/ may only import from domain/, persistence/, shared/, platform/. Cross-bridge imports are also forbidden.",
             },
             {
-              target: "./extensions/claude-marketplace/domain",
+              target: "./extensions/pi-claude-marketplace/domain",
               from: [
-                "./extensions/claude-marketplace/edge",
-                "./extensions/claude-marketplace/orchestrators",
-                "./extensions/claude-marketplace/bridges",
-                "./extensions/claude-marketplace/transaction",
-                "./extensions/claude-marketplace/persistence",
-                "./extensions/claude-marketplace/presentation",
+                "./extensions/pi-claude-marketplace/edge",
+                "./extensions/pi-claude-marketplace/orchestrators",
+                "./extensions/pi-claude-marketplace/bridges",
+                "./extensions/pi-claude-marketplace/transaction",
+                "./extensions/pi-claude-marketplace/persistence",
+                "./extensions/pi-claude-marketplace/presentation",
               ],
               message:
                 "domain/ MUST NOT import upward -- pure logic only. shared/ and platform/ are the only sibling imports allowed.",
             },
             {
-              target: "./extensions/claude-marketplace/transaction",
+              target: "./extensions/pi-claude-marketplace/transaction",
               from: [
-                "./extensions/claude-marketplace/edge",
-                "./extensions/claude-marketplace/orchestrators",
-                "./extensions/claude-marketplace/bridges",
-                "./extensions/claude-marketplace/domain",
-                "./extensions/claude-marketplace/presentation",
+                "./extensions/pi-claude-marketplace/edge",
+                "./extensions/pi-claude-marketplace/orchestrators",
+                "./extensions/pi-claude-marketplace/bridges",
+                "./extensions/pi-claude-marketplace/domain",
+                "./extensions/pi-claude-marketplace/presentation",
               ],
               message: "transaction/ may only import from persistence/, shared/, platform/.",
             },
             {
-              target: "./extensions/claude-marketplace/persistence",
+              target: "./extensions/pi-claude-marketplace/persistence",
               from: [
-                "./extensions/claude-marketplace/edge",
-                "./extensions/claude-marketplace/orchestrators",
-                "./extensions/claude-marketplace/bridges",
-                "./extensions/claude-marketplace/transaction",
-                "./extensions/claude-marketplace/presentation",
+                "./extensions/pi-claude-marketplace/edge",
+                "./extensions/pi-claude-marketplace/orchestrators",
+                "./extensions/pi-claude-marketplace/bridges",
+                "./extensions/pi-claude-marketplace/transaction",
+                "./extensions/pi-claude-marketplace/presentation",
               ],
               message: "persistence/ may only import from domain/, shared/, platform/.",
             },
             {
-              target: "./extensions/claude-marketplace/presentation",
+              target: "./extensions/pi-claude-marketplace/presentation",
               from: [
-                "./extensions/claude-marketplace/edge",
-                "./extensions/claude-marketplace/orchestrators",
-                "./extensions/claude-marketplace/bridges",
-                "./extensions/claude-marketplace/transaction",
-                "./extensions/claude-marketplace/persistence",
+                "./extensions/pi-claude-marketplace/edge",
+                "./extensions/pi-claude-marketplace/orchestrators",
+                "./extensions/pi-claude-marketplace/bridges",
+                "./extensions/pi-claude-marketplace/transaction",
+                "./extensions/pi-claude-marketplace/persistence",
               ],
               message: "presentation/ may only import from domain/, shared/, platform/.",
             },
             {
-              target: "./extensions/claude-marketplace/platform",
+              target: "./extensions/pi-claude-marketplace/platform",
               from: [
-                "./extensions/claude-marketplace/edge",
-                "./extensions/claude-marketplace/orchestrators",
-                "./extensions/claude-marketplace/bridges",
-                "./extensions/claude-marketplace/domain",
-                "./extensions/claude-marketplace/transaction",
-                "./extensions/claude-marketplace/persistence",
-                "./extensions/claude-marketplace/presentation",
+                "./extensions/pi-claude-marketplace/edge",
+                "./extensions/pi-claude-marketplace/orchestrators",
+                "./extensions/pi-claude-marketplace/bridges",
+                "./extensions/pi-claude-marketplace/domain",
+                "./extensions/pi-claude-marketplace/transaction",
+                "./extensions/pi-claude-marketplace/persistence",
+                "./extensions/pi-claude-marketplace/presentation",
               ],
               message:
                 "platform/ may only import from shared/. It's the external-system boundary (git, Pi API surface).",
             },
             {
-              target: "./extensions/claude-marketplace/shared",
+              target: "./extensions/pi-claude-marketplace/shared",
               from: [
-                "./extensions/claude-marketplace/edge",
-                "./extensions/claude-marketplace/orchestrators",
-                "./extensions/claude-marketplace/bridges",
-                "./extensions/claude-marketplace/domain",
-                "./extensions/claude-marketplace/transaction",
-                "./extensions/claude-marketplace/persistence",
-                "./extensions/claude-marketplace/presentation",
+                "./extensions/pi-claude-marketplace/edge",
+                "./extensions/pi-claude-marketplace/orchestrators",
+                "./extensions/pi-claude-marketplace/bridges",
+                "./extensions/pi-claude-marketplace/domain",
+                "./extensions/pi-claude-marketplace/transaction",
+                "./extensions/pi-claude-marketplace/persistence",
+                "./extensions/pi-claude-marketplace/presentation",
               ],
               message: "shared/ may only import from platform/ for Pi API types.",
             },
@@ -258,8 +258,8 @@ export default tseslint.config(
     // BLOCK E (Phase 7 D-04): Direct Pi peer imports are allowed only in
     // platform/pi-api.ts. All other extension code imports Pi API types from
     // the wrapper so peer-dependency version bumps have a single audit point.
-    files: ["extensions/claude-marketplace/**/*.ts"],
-    ignores: ["extensions/claude-marketplace/platform/pi-api.ts"],
+    files: ["extensions/pi-claude-marketplace/**/*.ts"],
+    ignores: ["extensions/pi-claude-marketplace/platform/pi-api.ts"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -268,7 +268,7 @@ export default tseslint.config(
             {
               name: "@mariozechner/pi-coding-agent",
               message:
-                "Import Pi API types from extensions/claude-marketplace/platform/pi-api.ts instead.",
+                "Import Pi API types from extensions/pi-claude-marketplace/platform/pi-api.ts instead.",
             },
           ],
         },

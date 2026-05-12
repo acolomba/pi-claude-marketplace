@@ -186,4 +186,4 @@ After each plan: `npm run check` green, ROADMAP.md checkbox updated.
 - **`null` vs `[]` for no-match:** return `null` (Pi-tui contract for "no suggestions at this position"); `[]` means "I have suggestions but none match the current prefix" (different semantics).
 - **D-03 install-mode includes `unavailable`:** future --force will install the available components of an unavailable plugin; keeping `unavailable` rows in install completion is intentional and locked.
 - **TC-8 vs TC-9 discrimination:** the cache layer uses `ManifestSoftFailError` (named error class exported from `shared/completion-cache.ts`) to differentiate. The rebuild closure for plugin-index wraps manifest failures in this class; state-load failures rethrow bare.
-- **Cache as optimization:** users can `rm -rf <scopeRoot>/claude-marketplace/cache/` safely at any time; the cache rebuilds lazily.
+- **Cache as optimization:** users can `rm -rf <scopeRoot>/pi-claude-marketplace/cache/` safely at any time; the cache rebuilds lazily.

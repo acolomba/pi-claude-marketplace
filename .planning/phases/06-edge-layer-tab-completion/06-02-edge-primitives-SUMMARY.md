@@ -30,13 +30,13 @@ tech-stack:
 
 key-files:
   created:
-    - "extensions/claude-marketplace/edge/args.ts"
-    - "extensions/claude-marketplace/edge/args-schema.ts"
-    - "extensions/claude-marketplace/edge/router.ts"
-    - "extensions/claude-marketplace/edge/types.ts"
-    - "extensions/claude-marketplace/edge/completions/normalize.ts"
+    - "extensions/pi-claude-marketplace/edge/args.ts"
+    - "extensions/pi-claude-marketplace/edge/args-schema.ts"
+    - "extensions/pi-claude-marketplace/edge/router.ts"
+    - "extensions/pi-claude-marketplace/edge/types.ts"
+    - "extensions/pi-claude-marketplace/edge/completions/normalize.ts"
   modified:
-    - "extensions/claude-marketplace/persistence/locations.ts"
+    - "extensions/pi-claude-marketplace/persistence/locations.ts"
     - "tests/edge/args.test.ts"
     - "tests/edge/args-schema.test.ts"
     - "tests/edge/router.test.ts"
@@ -111,8 +111,8 @@ Each task was committed atomically:
 
 The Phase 6 router must surface AP-3 Usage blocks via the canonical `notifyUsageError` wrapper; direct calls to the Pi-context `ui.notify` are forbidden in `edge/`. Two checkpoints enforce this:
 
-1. **Plan-level grep gate (Task 2 verify):** `grep -v '^#' extensions/claude-marketplace/edge/router.ts | grep -c 'ctx\.ui\.notify' | grep -qx 0`. Counts substring occurrences (not call-expressions) so it is conservative -- ANY mention of the literal, including in docstrings, trips the gate. Result: **0 occurrences after the docstring rewrite (see Deviation 1).**
-2. **ESLint BLOCK A (`eslint.config.js`):** `no-restricted-syntax` AST selector `CallExpression[callee.property.name='notify'][callee.object.property.name='ui']` makes any actual call-expression on `*.ui.notify` an ESLint error in `extensions/claude-marketplace/**/*.ts` outside the per-file BLOCK B override for `shared/notify.ts`. Result: **`npx eslint extensions/claude-marketplace/edge/router.ts` reports 0 errors.**
+1. **Plan-level grep gate (Task 2 verify):** `grep -v '^#' extensions/pi-claude-marketplace/edge/router.ts | grep -c 'ctx\.ui\.notify' | grep -qx 0`. Counts substring occurrences (not call-expressions) so it is conservative -- ANY mention of the literal, including in docstrings, trips the gate. Result: **0 occurrences after the docstring rewrite (see Deviation 1).**
+2. **ESLint BLOCK A (`eslint.config.js`):** `no-restricted-syntax` AST selector `CallExpression[callee.property.name='notify'][callee.object.property.name='ui']` makes any actual call-expression on `*.ui.notify` an ESLint error in `extensions/pi-claude-marketplace/**/*.ts` outside the per-file BLOCK B override for `shared/notify.ts`. Result: **`npx eslint extensions/pi-claude-marketplace/edge/router.ts` reports 0 errors.**
 
 Both gates pass.
 
@@ -166,15 +166,15 @@ Plan claimed "roughly 36+ tests transitioned from skipped to passing." Actual un
 
 **Created (5):**
 
-- `extensions/claude-marketplace/edge/args.ts`
-- `extensions/claude-marketplace/edge/args-schema.ts`
-- `extensions/claude-marketplace/edge/router.ts`
-- `extensions/claude-marketplace/edge/types.ts`
-- `extensions/claude-marketplace/edge/completions/normalize.ts`
+- `extensions/pi-claude-marketplace/edge/args.ts`
+- `extensions/pi-claude-marketplace/edge/args-schema.ts`
+- `extensions/pi-claude-marketplace/edge/router.ts`
+- `extensions/pi-claude-marketplace/edge/types.ts`
+- `extensions/pi-claude-marketplace/edge/completions/normalize.ts`
 
 **Modified (6):**
 
-- `extensions/claude-marketplace/persistence/locations.ts` (cacheDir, marketplaceNamesCacheFile, pluginCacheFile additions)
+- `extensions/pi-claude-marketplace/persistence/locations.ts` (cacheDir, marketplaceNamesCacheFile, pluginCacheFile additions)
 - `tests/edge/args.test.ts` (Wave 0 stub -> Wave 1 implementation)
 - `tests/edge/args-schema.test.ts` (Wave 0 stub -> Wave 1 implementation)
 - `tests/edge/router.test.ts` (Wave 0 stub -> Wave 1 implementation)
@@ -196,10 +196,10 @@ Plan claimed "roughly 36+ tests transitioned from skipped to passing." Actual un
 **1. [Rule 3 - Blocking] Router docstring contains literal `ctx.ui.notify` substring, tripping notify-discipline grep gate**
 
 - **Found during:** Task 2 verification.
-- **Issue:** Plan's Task 2 grep gate (`grep -v '^#' extensions/claude-marketplace/edge/router.ts | grep -c 'ctx\.ui\.notify' | grep -qx 0`) reported 2 matches even though the file contains zero call expressions. The matches are in the file-level docstring at lines 6 and 9, which mention the forbidden expression to document the rule. The plan's filter only excludes shell-style `#` comments, not TypeScript `//` comments.
+- **Issue:** Plan's Task 2 grep gate (`grep -v '^#' extensions/pi-claude-marketplace/edge/router.ts | grep -c 'ctx\.ui\.notify' | grep -qx 0`) reported 2 matches even though the file contains zero call expressions. The matches are in the file-level docstring at lines 6 and 9, which mention the forbidden expression to document the rule. The plan's filter only excludes shell-style `#` comments, not TypeScript `//` comments.
 - **Fix:** Rewrote the docstring to paraphrase the rule without using the literal `ctx.ui.notify` substring. The exact wording: `"Direct Pi notify calls are replaced with notifyUsageError(...)..."` and `"ESLint BLOCK A ... forbids direct notify on the Pi context"`. ESLint BLOCK A is the load-bearing enforcement; this preserves the plan's grep invariant verbatim. Self-removing once the verifier learns to skip TS comments.
-- **Files affected:** `extensions/claude-marketplace/edge/router.ts` only.
-- **Verification:** `grep -v '^#' extensions/claude-marketplace/edge/router.ts | grep -c 'ctx\.ui\.notify'` -> 0; `npx eslint .../router.ts` -> 0 errors.
+- **Files affected:** `extensions/pi-claude-marketplace/edge/router.ts` only.
+- **Verification:** `grep -v '^#' extensions/pi-claude-marketplace/edge/router.ts | grep -c 'ctx\.ui\.notify'` -> 0; `npx eslint .../router.ts` -> 0 errors.
 - **Committed in:** `a8179d4` (Task 2).
 
 **2. [Rule 1 - Bug] Initial test handler factory `async (args: string) => {}` tripped @typescript-eslint/require-await**
@@ -255,19 +255,19 @@ None - no new threat surface introduced beyond the plan's `<threat_model>` (T-ED
 
 All 5 created files verified present:
 
-- extensions/claude-marketplace/edge/args.ts -- FOUND
-- extensions/claude-marketplace/edge/args-schema.ts -- FOUND
-- extensions/claude-marketplace/edge/router.ts -- FOUND
-- extensions/claude-marketplace/edge/types.ts -- FOUND
-- extensions/claude-marketplace/edge/completions/normalize.ts -- FOUND
+- extensions/pi-claude-marketplace/edge/args.ts -- FOUND
+- extensions/pi-claude-marketplace/edge/args-schema.ts -- FOUND
+- extensions/pi-claude-marketplace/edge/router.ts -- FOUND
+- extensions/pi-claude-marketplace/edge/types.ts -- FOUND
+- extensions/pi-claude-marketplace/edge/completions/normalize.ts -- FOUND
 
 Modified file extends ScopedLocations:
 
-- extensions/claude-marketplace/persistence/locations.ts: contains `cacheDir` (8 refs), `pluginCacheFile` (4 refs), `marketplaceNamesCacheFile` (3 refs) -- FOUND
+- extensions/pi-claude-marketplace/persistence/locations.ts: contains `cacheDir` (8 refs), `pluginCacheFile` (4 refs), `marketplaceNamesCacheFile` (3 refs) -- FOUND
 
 Notify-discipline gate:
 
-- `grep -v '^#' extensions/claude-marketplace/edge/router.ts | grep -c 'ctx\.ui\.notify'` -> 0 -- PASS
+- `grep -v '^#' extensions/pi-claude-marketplace/edge/router.ts | grep -c 'ctx\.ui\.notify'` -> 0 -- PASS
 
 All three task commits verified in git log:
 

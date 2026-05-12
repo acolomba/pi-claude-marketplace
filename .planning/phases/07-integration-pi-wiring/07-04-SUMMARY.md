@@ -26,10 +26,10 @@ key-files:
   modified:
     - package.json
     - package-lock.json
-    - extensions/claude-marketplace/persistence/locations.ts
-    - extensions/claude-marketplace/transaction/with-state-guard.ts
-    - extensions/claude-marketplace/shared/errors.ts
-    - extensions/claude-marketplace/shared/markers.ts
+    - extensions/pi-claude-marketplace/persistence/locations.ts
+    - extensions/pi-claude-marketplace/transaction/with-state-guard.ts
+    - extensions/pi-claude-marketplace/shared/errors.ts
+    - extensions/pi-claude-marketplace/shared/markers.ts
     - tests/transaction/with-state-guard.test.ts
     - tests/architecture/markers-snapshot.test.ts
 
@@ -83,10 +83,10 @@ Each TDD task was committed atomically:
 ## Files Created/Modified
 
 - `package.json` / `package-lock.json` - Add `proper-lockfile` and its type package.
-- `extensions/claude-marketplace/persistence/locations.ts` - Adds the per-scope `.state-lock` sentinel path.
-- `extensions/claude-marketplace/shared/markers.ts` - Adds the Phase 7 lock-held marker prefix.
-- `extensions/claude-marketplace/shared/errors.ts` - Adds `StateLockHeldError` with scope and lock-path details.
-- `extensions/claude-marketplace/transaction/with-state-guard.ts` - Acquires and releases the cross-process lock around state mutation.
+- `extensions/pi-claude-marketplace/persistence/locations.ts` - Adds the per-scope `.state-lock` sentinel path.
+- `extensions/pi-claude-marketplace/shared/markers.ts` - Adds the Phase 7 lock-held marker prefix.
+- `extensions/pi-claude-marketplace/shared/errors.ts` - Adds `StateLockHeldError` with scope and lock-path details.
+- `extensions/pi-claude-marketplace/transaction/with-state-guard.ts` - Acquires and releases the cross-process lock around state mutation.
 - `tests/architecture/markers-snapshot.test.ts` - Snapshots the new marker and state-lock path.
 - `tests/transaction/with-state-guard.test.ts` - Covers held lock, lock contention, and release after mutate/save failures.
 - `tests/integration/concurrent-install.test.ts` - Verifies same-plugin and different-plugin same-scope install races.
@@ -104,9 +104,9 @@ Each TDD task was committed atomically:
 
 **1. [Rule 2 - Missing Critical] Ensure extension root exists before locking**
 - **Found during:** Task 2 (locked `withStateGuard` implementation)
-- **Issue:** `proper-lockfile.lock(locations.extensionRoot, ...)` requires the lock target directory to exist. A fresh scope might not have `<scopeRoot>/claude-marketplace/` yet.
+- **Issue:** `proper-lockfile.lock(locations.extensionRoot, ...)` requires the lock target directory to exist. A fresh scope might not have `<scopeRoot>/pi-claude-marketplace/` yet.
 - **Fix:** Added `mkdir(locations.extensionRoot, { recursive: true })` before lock acquisition.
-- **Files modified:** `extensions/claude-marketplace/transaction/with-state-guard.ts`
+- **Files modified:** `extensions/pi-claude-marketplace/transaction/with-state-guard.ts`
 - **Verification:** `node --test tests/transaction/with-state-guard.test.ts` and `npm run typecheck` passed.
 - **Committed in:** `ab82046`
 
@@ -160,7 +160,7 @@ Plan 07-05 can build on retry-safe same-scope installs. Mutating operations rout
 
 - Found `tests/integration/concurrent-install.test.ts`.
 - Found `tests/integration/concurrent-install-child.ts`.
-- Found `extensions/claude-marketplace/transaction/with-state-guard.ts`.
+- Found `extensions/pi-claude-marketplace/transaction/with-state-guard.ts`.
 - Found commits `8ee11e3`, `d9f33e3`, `9b25bee`, `ab82046`, `6f0fec2`, and `3835ff2`.
 - Verified plan-level transaction, marker, integration, and typecheck commands completed successfully.
 

@@ -21,13 +21,13 @@ key-files:
   created:
     - tests/architecture/manifest-read-seam.test.ts
   modified:
-    - extensions/claude-marketplace/domain/manifest.ts
-    - extensions/claude-marketplace/orchestrators/marketplace/add.ts
-    - extensions/claude-marketplace/orchestrators/marketplace/update.ts
-    - extensions/claude-marketplace/orchestrators/plugin/install.ts
-    - extensions/claude-marketplace/orchestrators/plugin/list.ts
-    - extensions/claude-marketplace/orchestrators/plugin/update.ts
-    - extensions/claude-marketplace/orchestrators/edge-deps.ts
+    - extensions/pi-claude-marketplace/domain/manifest.ts
+    - extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts
+    - extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts
+    - extensions/pi-claude-marketplace/orchestrators/plugin/install.ts
+    - extensions/pi-claude-marketplace/orchestrators/plugin/list.ts
+    - extensions/pi-claude-marketplace/orchestrators/plugin/update.ts
+    - extensions/pi-claude-marketplace/orchestrators/edge-deps.ts
     - tests/domain/manifest.test.ts
 
 key-decisions:
@@ -73,13 +73,13 @@ Each task was committed atomically:
 
 ## Files Created/Modified
 
-- `extensions/claude-marketplace/domain/manifest.ts` - owns the manifest read and validation seam.
-- `extensions/claude-marketplace/orchestrators/marketplace/add.ts` - uses the seam for cloned and local path-source marketplace manifests.
-- `extensions/claude-marketplace/orchestrators/marketplace/update.ts` - validates refreshed manifests through the seam.
-- `extensions/claude-marketplace/orchestrators/plugin/install.ts` - loads cached marketplace manifests through the seam.
-- `extensions/claude-marketplace/orchestrators/plugin/list.ts` - soft-fail manifest loading now delegates to the seam.
-- `extensions/claude-marketplace/orchestrators/plugin/update.ts` - update manifest loading now delegates to the seam.
-- `extensions/claude-marketplace/orchestrators/edge-deps.ts` - completion cache resolver now delegates manifest reads to the seam.
+- `extensions/pi-claude-marketplace/domain/manifest.ts` - owns the manifest read and validation seam.
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts` - uses the seam for cloned and local path-source marketplace manifests.
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts` - validates refreshed manifests through the seam.
+- `extensions/pi-claude-marketplace/orchestrators/plugin/install.ts` - loads cached marketplace manifests through the seam.
+- `extensions/pi-claude-marketplace/orchestrators/plugin/list.ts` - soft-fail manifest loading now delegates to the seam.
+- `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts` - update manifest loading now delegates to the seam.
+- `extensions/pi-claude-marketplace/orchestrators/edge-deps.ts` - completion cache resolver now delegates manifest reads to the seam.
 - `tests/domain/manifest.test.ts` - covers seam success and schema-invalid rejection.
 - `tests/architecture/manifest-read-seam.test.ts` - enforces NFR-8 single-reader architecture.
 
@@ -96,7 +96,7 @@ Each task was committed atomically:
 - **Found during:** Task 2 (Migrate all direct marketplace.json readers to the seam)
 - **Issue:** `orchestrators/edge-deps.ts` still read and parsed `mp.manifestPath` directly, which would leave a production manifest-path reader outside the NFR-8 seam.
 - **Fix:** Replaced the direct `readFile` / `JSON.parse` / validator block with `loadMarketplaceManifest(mp.manifestPath)`.
-- **Files modified:** `extensions/claude-marketplace/orchestrators/edge-deps.ts`
+- **Files modified:** `extensions/pi-claude-marketplace/orchestrators/edge-deps.ts`
 - **Verification:** `npm test -- tests/orchestrators/marketplace/add.test.ts tests/orchestrators/marketplace/update.test.ts tests/orchestrators/plugin/install.test.ts tests/orchestrators/plugin/list.test.ts tests/orchestrators/plugin/update.test.ts tests/edge/completions/data.test.ts`; `node --test tests/architecture/manifest-read-seam.test.ts`
 - **Committed in:** `6ad96ce`
 
@@ -140,7 +140,7 @@ Ready for Plan 07-03. Future manifest mtime caching can wrap `loadMarketplaceMan
 
 ## Self-Check: PASSED
 
-- Found `extensions/claude-marketplace/domain/manifest.ts`
+- Found `extensions/pi-claude-marketplace/domain/manifest.ts`
 - Found `tests/architecture/manifest-read-seam.test.ts`
 - Found commit `bfa0aca`
 - Found commit `3245237`

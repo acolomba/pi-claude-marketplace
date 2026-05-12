@@ -4,9 +4,9 @@ import test from "node:test";
 import {
   findOwnershipConflicts,
   partitionByOwner,
-} from "../../../extensions/claude-marketplace/bridges/agents/index-mutation.ts";
+} from "../../../extensions/pi-claude-marketplace/bridges/agents/index-mutation.ts";
 
-import type { AgentsIndexEntry } from "../../../extensions/claude-marketplace/persistence/agents-index-schema.ts";
+import type { AgentsIndexEntry } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 
 // AG-3 partition + AG-9 cross-owner conflict detection. Pure in-memory.
 
@@ -15,7 +15,7 @@ function makeEntry(overrides: Partial<AgentsIndexEntry> = {}): AgentsIndexEntry 
     plugin: overrides.plugin ?? "acme",
     marketplace: overrides.marketplace ?? "mp1",
     sourceAgent: overrides.sourceAgent ?? "bot",
-    generatedName: overrides.generatedName ?? "claude-marketplace-acme-bot",
+    generatedName: overrides.generatedName ?? "pi-claude-marketplace-acme-bot",
     sourcePath: overrides.sourcePath ?? "/abs/source.md",
     targetPath: overrides.targetPath ?? "/abs/target.md",
     sourceHash: overrides.sourceHash ?? "abc",
@@ -66,11 +66,11 @@ test("AG-9 findOwnershipConflicts returns single-name conflict", () => {
   const owner = makeEntry({
     marketplace: "mp2",
     plugin: "rival",
-    generatedName: "claude-marketplace-acme-bot",
+    generatedName: "pi-claude-marketplace-acme-bot",
   });
-  const conflicts = findOwnershipConflicts([owner], ["claude-marketplace-acme-bot"]);
+  const conflicts = findOwnershipConflicts([owner], ["pi-claude-marketplace-acme-bot"]);
   assert.equal(conflicts.length, 1);
-  assert.equal(conflicts[0]?.generatedName, "claude-marketplace-acme-bot");
+  assert.equal(conflicts[0]?.generatedName, "pi-claude-marketplace-acme-bot");
   assert.equal(conflicts[0]?.owner.plugin, "rival");
 });
 

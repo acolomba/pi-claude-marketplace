@@ -11,7 +11,7 @@ import { test } from "node:test";
 import {
   parseCommandArgs,
   type PositionalSpec,
-} from "../../extensions/claude-marketplace/edge/args-schema.ts";
+} from "../../extensions/pi-claude-marketplace/edge/args-schema.ts";
 
 function makeNotifyErrorSpy(): {
   notifyError: (message: string) => void;

@@ -9,13 +9,13 @@ import {
   assertNoCommandCollisions,
   commitPreparedCommands,
   prepareStageCommands,
-} from "../../../extensions/claude-marketplace/bridges/commands/stage.ts";
-import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
-import { pathExists } from "../../../extensions/claude-marketplace/shared/fs-utils.ts";
+} from "../../../extensions/pi-claude-marketplace/bridges/commands/stage.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
-import type { DiscoveredCommand } from "../../../extensions/claude-marketplace/bridges/commands/types.ts";
-import type { ResolvedPluginInstallable } from "../../../extensions/claude-marketplace/domain/resolver.ts";
-import type { ScopedLocations } from "../../../extensions/claude-marketplace/persistence/locations.ts";
+import type { DiscoveredCommand } from "../../../extensions/pi-claude-marketplace/bridges/commands/types.ts";
+import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 // Helpers ---------------------------------------------------------------
 

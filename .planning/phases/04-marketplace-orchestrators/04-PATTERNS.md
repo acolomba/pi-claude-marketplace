@@ -24,23 +24,23 @@ ______________________________________________________________________
 
 ## File Classification
 
-### Source Files (new under `extensions/claude-marketplace/`)
+### Source Files (new under `extensions/pi-claude-marketplace/`)
 
 | New File | Role | Data Flow | Closest Analog | Match Quality |
 |---|---|---|---|---|
-| `orchestrators/types.ts` | types-only module | n/a (static types) | `extensions/claude-marketplace/bridges/agents/types.ts` | role-match |
-| `orchestrators/marketplace/shared.ts` | shared utility module (cross-orchestrator) | request-response (sync state mutation + async cascade) | `extensions/claude-marketplace/shared/errors.ts` + `bridges/agents/unstage.ts` (cascade composition) | role-match |
+| `orchestrators/types.ts` | types-only module | n/a (static types) | `extensions/pi-claude-marketplace/bridges/agents/types.ts` | role-match |
+| `orchestrators/marketplace/shared.ts` | shared utility module (cross-orchestrator) | request-response (sync state mutation + async cascade) | `extensions/pi-claude-marketplace/shared/errors.ts` + `bridges/agents/unstage.ts` (cascade composition) | role-match |
 | `orchestrators/marketplace/add.ts` | orchestrator (mutating) | request-response with network IO + atomic-rename | `bridges/agents/stage.ts` (closest staging+commit shape) + `transaction/with-state-guard.ts` (guard envelope) | role-match |
 | `orchestrators/marketplace/remove.ts` | orchestrator (mutating) | request-response with cascade | `bridges/agents/unstage.ts` (per-entry try/catch loop + outcome partitioning) | exact-shape |
-| `orchestrators/marketplace/list.ts` | orchestrator (read-only) | request-response (state read + format) | `tests/persistence/state-io.test.ts` (state-read pattern) + `extensions/claude-marketplace/persistence/state-io.ts::loadState` | role-match |
+| `orchestrators/marketplace/list.ts` | orchestrator (read-only) | request-response (state read + format) | `tests/persistence/state-io.test.ts` (state-read pattern) + `extensions/pi-claude-marketplace/persistence/state-io.ts::loadState` | role-match |
 | `orchestrators/marketplace/update.ts` | orchestrator (mutating + cascade fan-out) | request-response with network IO + injected fn | `bridges/agents/stage.ts` (prepare-then-commit) + `transaction/with-state-guard.ts` | role-match |
 | `orchestrators/marketplace/autoupdate.ts` | orchestrator (mutating, no IO beyond state) | request-response (state mutation only) | `bridges/skills/unstage.ts` (simplest mutator) + `transaction/with-state-guard.ts` | role-match |
-| `presentation/reload-hint.ts` | presentation helper (pure string composition) | transform (function-only) | `extensions/claude-marketplace/shared/markers.ts` (constants source) + `bridges/agents/marker.ts` (composer pattern) | role-match |
-| `presentation/soft-dep.ts` | presentation helper (capability probe + string composition) | request-response (probe + transform) | `extensions/claude-marketplace/shared/notify.ts` (ctx parameter shape) | role-match |
+| `presentation/reload-hint.ts` | presentation helper (pure string composition) | transform (function-only) | `extensions/pi-claude-marketplace/shared/markers.ts` (constants source) + `bridges/agents/marker.ts` (composer pattern) | role-match |
+| `presentation/soft-dep.ts` | presentation helper (capability probe + string composition) | request-response (probe + transform) | `extensions/pi-claude-marketplace/shared/notify.ts` (ctx parameter shape) | role-match |
 | `presentation/marketplace-list.ts` | presentation helper (pure formatter) | transform | `presentation/reload-hint.ts` (Phase 4 sibling) | role-match (sibling) |
-| `persistence/locations.ts` (extension) | locations helper extension (existing file) | n/a (path-string compute) | EXISTING: `extensions/claude-marketplace/persistence/locations.ts` -- add a method to the `ScopedLocations` interface following the `sourceCloneDir(mp)` pattern | EXACT (extending existing) |
-| `domain/source.ts` (extension) | helper export extension (existing file) | n/a (pure) | EXISTING: `extensions/claude-marketplace/domain/source.ts` -- add `sourceLogical(source: ParsedSource): string` discriminated-union switch | EXACT (extending existing) |
-| `shared/errors.ts` (extension) | error class additions (existing file) | n/a (types) | EXISTING: `extensions/claude-marketplace/shared/errors.ts` -- add 4 new error classes following the `Error` extension pattern at the bottom of the file | EXACT (extending existing) |
+| `persistence/locations.ts` (extension) | locations helper extension (existing file) | n/a (path-string compute) | EXISTING: `extensions/pi-claude-marketplace/persistence/locations.ts` -- add a method to the `ScopedLocations` interface following the `sourceCloneDir(mp)` pattern | EXACT (extending existing) |
+| `domain/source.ts` (extension) | helper export extension (existing file) | n/a (pure) | EXISTING: `extensions/pi-claude-marketplace/domain/source.ts` -- add `sourceLogical(source: ParsedSource): string` discriminated-union switch | EXACT (extending existing) |
+| `shared/errors.ts` (extension) | error class additions (existing file) | n/a (types) | EXISTING: `extensions/pi-claude-marketplace/shared/errors.ts` -- add 4 new error classes following the `Error` extension pattern at the bottom of the file | EXACT (extending existing) |
 
 ### Test Files (new under `tests/`)
 
@@ -64,7 +64,7 @@ ______________________________________________________________________
 
 ### `orchestrators/types.ts` (types-only module)
 
-**Analog:** `extensions/claude-marketplace/bridges/agents/types.ts` (types-only module shape) and `extensions/claude-marketplace/shared/types.ts` (the `Scope` definition Phase 4 reuses).
+**Analog:** `extensions/pi-claude-marketplace/bridges/agents/types.ts` (types-only module shape) and `extensions/pi-claude-marketplace/shared/types.ts` (the `Scope` definition Phase 4 reuses).
 
 **Imports pattern** (one type-only import for `Scope`; no value imports):
 
@@ -118,7 +118,7 @@ export type PluginUpdateFn = (
 
 ### `orchestrators/marketplace/shared.ts` (shared utility module)
 
-**Analog (cascade primitive shape):** `extensions/claude-marketplace/bridges/agents/unstage.ts:50-123` (per-entry outcome partitioning with `Outcome` discriminated union -- the exact shape `cascadeUnstagePlugin` adapts to 4 bridges).
+**Analog (cascade primitive shape):** `extensions/pi-claude-marketplace/bridges/agents/unstage.ts:50-123` (per-entry outcome partitioning with `Outcome` discriminated union -- the exact shape `cascadeUnstagePlugin` adapts to 4 bridges).
 
 **Analog (GitOps interface placement):** Self-contained interface at file top, default const at file middle. Mirrors `platform/git.ts` shape but at orchestrator layer (D-12: GitOps is local to marketplace orchestrators, not shared).
 
@@ -153,7 +153,7 @@ export type PluginUpdateFn = (
 // (no runPhases). Code review enforces; ESLint does not.
 ```
 
-**Imports pattern** (mirrors `bridges/agents/unstage.ts:17-26` -- group node built-ins, then `extensions/claude-marketplace/*` siblings, then types last):
+**Imports pattern** (mirrors `bridges/agents/unstage.ts:17-26` -- group node built-ins, then `extensions/pi-claude-marketplace/*` siblings, then types last):
 
 ```typescript
 import { unstagePluginAgents } from "../../bridges/agents/index.ts";
@@ -317,7 +317,7 @@ export class MarketplaceDuplicateNameError extends Error { /* ... */ }
 //   notifySuccess(ctx, `Added marketplace "<name>" in <scope> scope.`);
 //   // MA-11: NO reload hint here -- add never stages resources.
 //
-// V1 carry-forward: features/initial:extensions/claude-marketplace/
+// V1 carry-forward: features/initial:extensions/pi-claude-marketplace/
 //   marketplace/add.ts (shape only; D-09 staging location supersedes V1;
 //   D-12 GitOps injection supersedes V1's direct execFile).
 ```
@@ -491,7 +491,7 @@ if (realLeaks.length > 0) {
 
 ### `orchestrators/marketplace/list.ts` (orchestrator -- read-only)
 
-**Analog:** `extensions/claude-marketplace/persistence/state-io.ts::loadState` (the canonical state-read entry point; `list` calls it directly without a guard) + `presentation/marketplace-list.ts` (Phase 4 sibling for the rendering).
+**Analog:** `extensions/pi-claude-marketplace/persistence/state-io.ts::loadState` (the canonical state-read entry point; `list` calls it directly without a guard) + `presentation/marketplace-list.ts` (Phase 4 sibling for the rendering).
 
 **Imports pattern** (read-only orchestrator -- NO `transaction/` import):
 
@@ -640,7 +640,7 @@ export async function setMarketplaceAutoupdate(opts: {
 
 ### `presentation/reload-hint.ts`
 
-**Analog:** `extensions/claude-marketplace/shared/markers.ts` (constants source) + `bridges/agents/marker.ts` (composer pattern -- pure string functions, no IO, no ctx).
+**Analog:** `extensions/pi-claude-marketplace/shared/markers.ts` (constants source) + `bridges/agents/marker.ts` (composer pattern -- pure string functions, no IO, no ctx).
 
 **Imports pattern** (NO ExtensionContext -- pure formatter):
 
@@ -678,7 +678,7 @@ export function appendReloadHint(body: string, hint: string): string {
 
 ### `presentation/soft-dep.ts`
 
-**Analog:** `extensions/claude-marketplace/shared/notify.ts` (ExtensionContext parameter shape; pure ctx-consuming function with try/catch graceful-degrade discipline).
+**Analog:** `extensions/pi-claude-marketplace/shared/notify.ts` (ExtensionContext parameter shape; pure ctx-consuming function with try/catch graceful-degrade discipline).
 
 **Imports pattern**:
 
@@ -763,7 +763,7 @@ export function renderMarketplaceList(records: readonly MarketplaceRecord[]): st
 
 ### `persistence/locations.ts` (extension)
 
-**Analog:** EXISTING -- `extensions/claude-marketplace/persistence/locations.ts:142-146` (`sourceCloneDir` method as the prototype for the new `sourcesStagingDir`).
+**Analog:** EXISTING -- `extensions/pi-claude-marketplace/persistence/locations.ts:142-146` (`sourceCloneDir` method as the prototype for the new `sourcesStagingDir`).
 
 **Pattern to copy** (lines 142-146 of the existing file):
 
@@ -798,7 +798,7 @@ async sourcesStagingDir(uuid: string): Promise<string> {
 
 ### `domain/source.ts` (extension)
 
-**Analog:** EXISTING -- the `ParsedSource` discriminated union at `extensions/claude-marketplace/domain/source.ts:24-44` and the factory functions at lines 169-188 (`pathSource`, `githubSource`). The new `sourceLogical` helper switches on `source.kind`.
+**Analog:** EXISTING -- the `ParsedSource` discriminated union at `extensions/pi-claude-marketplace/domain/source.ts:24-44` and the factory functions at lines 169-188 (`pathSource`, `githubSource`). The new `sourceLogical` helper switches on `source.kind`.
 
 **Pattern to copy** (the discriminated-union switch idiom from `parsePluginSource`):
 
@@ -831,7 +831,7 @@ export function sourceLogical(source: ParsedSource): string {
 
 ### `shared/errors.ts` (extension)
 
-**Analog:** EXISTING -- `extensions/claude-marketplace/shared/errors.ts:1-33` (existing `errorMessage`, `appendLeakToError`, `appendLeaks` exports). Add 4 new exported error classes at the bottom.
+**Analog:** EXISTING -- `extensions/pi-claude-marketplace/shared/errors.ts:1-33` (existing `errorMessage`, `appendLeakToError`, `appendLeaks` exports). Add 4 new exported error classes at the bottom.
 
 **Pattern to copy** (Error-subclass idiom verified at `shared/path-safety.ts::PathContainmentError` and `shared/path-safety.ts::SymlinkRefusedError`):
 
@@ -892,9 +892,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, test } from "node:test";
 
-import { addMarketplace } from "../../../extensions/claude-marketplace/orchestrators/marketplace/add.ts";
-import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
-import { loadState } from "../../../extensions/claude-marketplace/persistence/state-io.ts";
+import { addMarketplace } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import { makeMockGitOps } from "../../helpers/git-mock.ts";
 ```
@@ -968,8 +968,8 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { reloadHint, appendReloadHint } from "../../extensions/claude-marketplace/presentation/reload-hint.ts";
-import * as markers from "../../extensions/claude-marketplace/shared/markers.ts";
+import { reloadHint, appendReloadHint } from "../../extensions/pi-claude-marketplace/presentation/reload-hint.ts";
+import * as markers from "../../extensions/pi-claude-marketplace/shared/markers.ts";
 import { extractEs5MarkerLiterals } from "../helpers/prd-extract.ts";
 ```
 
@@ -1091,7 +1091,7 @@ ______________________________________________________________________
 
 ### Path Containment (NFR-10)
 
-**Source:** `extensions/claude-marketplace/shared/path-safety.ts::assertPathInside` + `extensions/claude-marketplace/persistence/locations.ts:142-146` (the `sourceCloneDir` method demonstrating the integrated chokepoint pattern).
+**Source:** `extensions/pi-claude-marketplace/shared/path-safety.ts::assertPathInside` + `extensions/pi-claude-marketplace/persistence/locations.ts:142-146` (the `sourceCloneDir` method demonstrating the integrated chokepoint pattern).
 
 **Apply to:** Every Phase 4 path computation that joins a name-derived component onto a base dir -- ESPECIALLY the new `sourcesStagingDir(uuid)` method and the `addMarketplace` final-dir resolution.
 
@@ -1103,7 +1103,7 @@ await assertPathInside(sourcesStagingRoot, candidate, `sourcesStagingDir(${uuid}
 
 ### Error Handling / Notifications (IL-2)
 
-**Source:** `extensions/claude-marketplace/shared/notify.ts` -- the SOLE sanctioned `ctx.ui.notify` call site.
+**Source:** `extensions/pi-claude-marketplace/shared/notify.ts` -- the SOLE sanctioned `ctx.ui.notify` call site.
 
 **Apply to:** Every Phase 4 user-visible message. NO direct `ctx.ui.notify` calls in orchestrator/presentation files; NO direct `process.stdout` writes.
 
@@ -1120,7 +1120,7 @@ notifyError(ctx, message, cause);
 
 ### Marker Constants (ES-5)
 
-**Source:** `extensions/claude-marketplace/shared/markers.ts:9-13` (`PI_SUBAGENTS_NOT_LOADED`, `PI_MCP_ADAPTER_NOT_LOADED`, `RELOAD_HINT_PREFIX`).
+**Source:** `extensions/pi-claude-marketplace/shared/markers.ts:9-13` (`PI_SUBAGENTS_NOT_LOADED`, `PI_MCP_ADAPTER_NOT_LOADED`, `RELOAD_HINT_PREFIX`).
 
 **Apply to:** `presentation/reload-hint.ts` (consumes `RELOAD_HINT_PREFIX`) and `presentation/soft-dep.ts` (consumes both `PI_SUBAGENTS_NOT_LOADED` and `PI_MCP_ADAPTER_NOT_LOADED`). Orchestrators NEVER inline the literal strings.
 
@@ -1128,7 +1128,7 @@ Tested by `tests/architecture/markers-snapshot.test.ts` -- if reload-hint.ts inl
 
 ### State-Guard Envelope (D-04)
 
-**Source:** `extensions/claude-marketplace/transaction/with-state-guard.ts:52-60` (the canonical guard signature).
+**Source:** `extensions/pi-claude-marketplace/transaction/with-state-guard.ts:52-60` (the canonical guard signature).
 
 **Apply to:** Every mutating Phase 4 orchestrator (`add.ts`, `remove.ts`, `update.ts`, `autoupdate.ts`). `list.ts` does NOT use the guard (D-04 corollary: read-only).
 
@@ -1143,13 +1143,13 @@ await withStateGuard(locations, async (state) => {
 
 ### Atomic JSON Writes (NFR-1)
 
-**Source:** `extensions/claude-marketplace/shared/atomic-json.ts::atomicWriteJson` (called transitively via `saveState` inside `withStateGuard`).
+**Source:** `extensions/pi-claude-marketplace/shared/atomic-json.ts::atomicWriteJson` (called transitively via `saveState` inside `withStateGuard`).
 
 **Apply to:** Phase 4 does NOT call `atomicWriteJson` directly. `state.json` writes happen through the guard's `saveState` call. Phase 4 just wraps the guard.
 
 ### Cleanup-With-Leak-Tracking (D-10)
 
-**Source:** `extensions/claude-marketplace/shared/fs-utils.ts::cleanupStaging` + `extensions/claude-marketplace/shared/errors.ts::appendLeakToError`.
+**Source:** `extensions/pi-claude-marketplace/shared/fs-utils.ts::cleanupStaging` + `extensions/pi-claude-marketplace/shared/errors.ts::appendLeakToError`.
 
 **Apply to:** Every Phase 4 site that creates a staging directory (`add.ts` for the MA-9 cleanup; `update.ts` if a future staging path is added) AND every post-state cleanup site (`remove.ts` for the MR-5/MR-6 aggregation).
 
@@ -1170,7 +1170,7 @@ if (realLeaks.length > 0) {
 
 ### Frozen-Result Discipline
 
-**Source:** `extensions/claude-marketplace/bridges/skills/unstage.ts:55-58` (`Object.freeze` on `removedNames` and `warnings`).
+**Source:** `extensions/pi-claude-marketplace/bridges/skills/unstage.ts:55-58` (`Object.freeze` on `removedNames` and `warnings`).
 
 **Apply to:** All public-surface result types returned by Phase 4 orchestrators and the cascade primitive. Mirrors the bridge surface so consumers cannot mutate names arrays in place.
 
@@ -1212,9 +1212,9 @@ ______________________________________________________________________
 ## Metadata
 
 **Analog search scope:**
-- `extensions/claude-marketplace/{orchestrators,bridges,transaction,persistence,domain,platform,presentation,shared}/`
+- `extensions/pi-claude-marketplace/{orchestrators,bridges,transaction,persistence,domain,platform,presentation,shared}/`
 - `tests/{bridges,transaction,persistence,domain,shared,architecture,helpers,fixtures}/`
-- `git show features/initial:extensions/claude-marketplace/marketplace/*.ts` (V1 reference; not copy-target)
+- `git show features/initial:extensions/pi-claude-marketplace/marketplace/*.ts` (V1 reference; not copy-target)
 
 **Files scanned in detail:**
 - `bridges/{skills,commands,agents,mcp}/{unstage,index}.ts` (4 unstage primitives + 4 barrel re-exports)

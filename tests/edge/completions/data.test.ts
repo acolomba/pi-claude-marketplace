@@ -10,12 +10,12 @@ import {
   getMarketplaceNamesAcrossScopes,
   getPluginToMarketplacesMap,
   splitCompletionInput,
-} from "../../../extensions/claude-marketplace/edge/completions/data.ts";
-import { __resetCacheForTests } from "../../../extensions/claude-marketplace/shared/completion-cache.ts";
+} from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
+import { __resetCacheForTests } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
-import type { LocationsResolver } from "../../../extensions/claude-marketplace/edge/completions/data.ts";
-import type { PluginIndexRow } from "../../../extensions/claude-marketplace/shared/completion-cache.ts";
-import type { Scope } from "../../../extensions/claude-marketplace/shared/types.ts";
+import type { LocationsResolver } from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
+import type { PluginIndexRow } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 /**
  * Wave 2 / Plan 06-03 tests for edge/completions/data.ts.

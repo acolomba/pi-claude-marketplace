@@ -16,7 +16,7 @@ Landed `marketplace add` end-to-end as a state-mutating orchestrator with hermet
 
 ### Task 1: add.ts orchestrator
 
-Created `extensions/claude-marketplace/orchestrators/marketplace/add.ts` (251 LOC).
+Created `extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts` (251 LOC).
 
 Public surface:
 
@@ -91,7 +91,7 @@ ESLint's `@typescript-eslint/no-non-null-assertion` (already enforced project-wi
 
 ## Key files created/modified
 
-- `extensions/claude-marketplace/orchestrators/marketplace/add.ts` -- created (251 LOC)
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts` -- created (251 LOC)
 - `tests/orchestrators/marketplace/add.test.ts` -- created (307 lines, 9 tests)
 
 `orchestrators/marketplace/index.ts` was NOT modified (Plan 04-10 Task 3 finalizes the barrel exhaustively; concurrent Wave 4 writes would race).

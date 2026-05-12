@@ -24,9 +24,9 @@ import test from "node:test";
 import {
   type ResolveContext,
   resolveStrict,
-} from "../../extensions/claude-marketplace/domain/resolver.ts";
+} from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
 
-import type { PluginEntry } from "../../extensions/claude-marketplace/domain/components/plugin.ts";
+import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 
 /**
  * Hermetic ResolveContext factory. Mirrors the `mockCtx` pattern used in

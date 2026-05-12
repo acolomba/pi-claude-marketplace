@@ -5,7 +5,7 @@ import test from "node:test";
 import {
   type ScopedLocations,
   locationsFor,
-} from "../../extensions/claude-marketplace/persistence/locations.ts";
+} from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 /**
  * SC-1, SC-2, SC-3, SC-7 -- ScopedLocations brand bundle behavior.
@@ -19,7 +19,7 @@ test("SC-1 / SC-2 locationsFor('user') returns ~/.pi/agent/ paths", () => {
   const loc = locationsFor("user", "/anywhere");
   assert.equal(loc.scope, "user");
   assert.ok(loc.scopeRoot.endsWith(path.join(".pi", "agent")));
-  assert.ok(loc.extensionRoot.endsWith(path.join(".pi", "agent", "claude-marketplace")));
+  assert.ok(loc.extensionRoot.endsWith(path.join(".pi", "agent", "pi-claude-marketplace")));
   assert.ok(loc.stateJsonPath.endsWith("state.json"));
   assert.ok(loc.agentsDir.endsWith(path.join(".pi", "agent", "agents")));
   assert.ok(loc.mcpJsonPath.endsWith(path.join(".pi", "agent", "mcp.json")));
@@ -29,8 +29,11 @@ test("SC-1 / SC-2 locationsFor('project', cwd) returns <cwd>/.pi/ paths", () => 
   const loc = locationsFor("project", "/my/proj");
   assert.equal(loc.scope, "project");
   assert.equal(loc.scopeRoot, path.join("/my/proj", ".pi"));
-  assert.equal(loc.extensionRoot, path.join("/my/proj", ".pi", "claude-marketplace"));
-  assert.equal(loc.stateJsonPath, path.join("/my/proj", ".pi", "claude-marketplace", "state.json"));
+  assert.equal(loc.extensionRoot, path.join("/my/proj", ".pi", "pi-claude-marketplace"));
+  assert.equal(
+    loc.stateJsonPath,
+    path.join("/my/proj", ".pi", "pi-claude-marketplace", "state.json"),
+  );
   assert.equal(loc.agentsDir, path.join("/my/proj", ".pi", "agents"));
   assert.equal(loc.mcpJsonPath, path.join("/my/proj", ".pi", "mcp.json"));
 });
@@ -177,7 +180,7 @@ test("D-07 locationsFor('project') sets agentsIndexPath under <extensionRoot>", 
   const loc = locationsFor("project", "/my/proj");
   assert.equal(
     loc.agentsIndexPath,
-    path.join("/my/proj", ".pi", "claude-marketplace", "agents-index.json"),
+    path.join("/my/proj", ".pi", "pi-claude-marketplace", "agents-index.json"),
   );
 });
 
@@ -185,7 +188,7 @@ test("D-04 locationsFor('project') sets skillsStagingDir to <extensionRoot>/skil
   const loc = locationsFor("project", "/my/proj");
   assert.equal(
     loc.skillsStagingDir,
-    path.join("/my/proj", ".pi", "claude-marketplace", "skills-staging"),
+    path.join("/my/proj", ".pi", "pi-claude-marketplace", "skills-staging"),
   );
 });
 
@@ -193,7 +196,7 @@ test("D-04 locationsFor('project') sets commandsStagingDir to <extensionRoot>/co
   const loc = locationsFor("project", "/my/proj");
   assert.equal(
     loc.commandsStagingDir,
-    path.join("/my/proj", ".pi", "claude-marketplace", "commands-staging"),
+    path.join("/my/proj", ".pi", "pi-claude-marketplace", "commands-staging"),
   );
 });
 
@@ -201,7 +204,7 @@ test("SK-1 locationsFor('project') sets skillsTargetDir to <extensionRoot>/resou
   const loc = locationsFor("project", "/my/proj");
   assert.equal(
     loc.skillsTargetDir,
-    path.join("/my/proj", ".pi", "claude-marketplace", "resources", "skills"),
+    path.join("/my/proj", ".pi", "pi-claude-marketplace", "resources", "skills"),
   );
 });
 
@@ -209,7 +212,7 @@ test("CM-1 locationsFor('project') sets promptsTargetDir to <extensionRoot>/reso
   const loc = locationsFor("project", "/my/proj");
   assert.equal(
     loc.promptsTargetDir,
-    path.join("/my/proj", ".pi", "claude-marketplace", "resources", "prompts"),
+    path.join("/my/proj", ".pi", "pi-claude-marketplace", "resources", "prompts"),
   );
 });
 
@@ -257,13 +260,13 @@ test("Phase 3 bridge-target dirs are all under extensionRoot (defense-in-depth)"
 
 test("D-03 locationsFor('project') sets cacheDir to <extensionRoot>/cache", () => {
   const loc = locationsFor("project", "/my/proj");
-  assert.equal(loc.cacheDir, path.join("/my/proj", ".pi", "claude-marketplace", "cache"));
+  assert.equal(loc.cacheDir, path.join("/my/proj", ".pi", "pi-claude-marketplace", "cache"));
   assert.ok(loc.cacheDir.startsWith(loc.extensionRoot));
 });
 
 test("D-03 locationsFor('user') sets cacheDir under user extensionRoot", () => {
   const loc = locationsFor("user", "/anywhere");
-  assert.ok(loc.cacheDir.endsWith(path.join(".pi", "agent", "claude-marketplace", "cache")));
+  assert.ok(loc.cacheDir.endsWith(path.join(".pi", "agent", "pi-claude-marketplace", "cache")));
   assert.ok(loc.cacheDir.startsWith(loc.extensionRoot));
 });
 
@@ -271,7 +274,7 @@ test("D-03 locationsFor('project') sets marketplaceNamesCacheFile to <cacheDir>/
   const loc = locationsFor("project", "/my/proj");
   assert.equal(
     loc.marketplaceNamesCacheFile,
-    path.join("/my/proj", ".pi", "claude-marketplace", "cache", "marketplace-names.json"),
+    path.join("/my/proj", ".pi", "pi-claude-marketplace", "cache", "marketplace-names.json"),
   );
   assert.ok(loc.marketplaceNamesCacheFile.startsWith(loc.cacheDir));
 });

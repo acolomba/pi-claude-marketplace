@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { substituteClaudeVars } from "../../extensions/claude-marketplace/shared/vars.ts";
+import { substituteClaudeVars } from "../../extensions/pi-claude-marketplace/shared/vars.ts";
 
 // SK-4 / CM-3 / PI-10 -- pure-string substitution helper for
 // ${CLAUDE_PLUGIN_ROOT} and ${CLAUDE_PLUGIN_DATA}.

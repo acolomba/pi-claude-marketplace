@@ -11,10 +11,10 @@ requires:
   - phase: 02-domain-core-persistence-primitives/01
     provides: "shared/types.ts Scope union + domain/source.ts pathSource/githubSource ST-6 funnel"
 provides:
-  - "extensions/claude-marketplace/persistence/locations.ts -- ScopedLocations brand bundle + locationsFor factory + 3 path-method helpers"
-  - "extensions/claude-marketplace/persistence/state-io.ts -- STATE_SCHEMA (TypeBox) + loadState + saveState + DEFAULT_STATE + STATE_VALIDATOR"
-  - "extensions/claude-marketplace/persistence/migrate.ts -- migrateLegacyMarketplaceRecords + persistMigratedState (IL-3 single sanctioned console.warn callsite)"
-  - "extensions/claude-marketplace/persistence/index.ts -- public surface barrel"
+  - "extensions/pi-claude-marketplace/persistence/locations.ts -- ScopedLocations brand bundle + locationsFor factory + 3 path-method helpers"
+  - "extensions/pi-claude-marketplace/persistence/state-io.ts -- STATE_SCHEMA (TypeBox) + loadState + saveState + DEFAULT_STATE + STATE_VALIDATOR"
+  - "extensions/pi-claude-marketplace/persistence/migrate.ts -- migrateLegacyMarketplaceRecords + persistMigratedState (IL-3 single sanctioned console.warn callsite)"
+  - "extensions/pi-claude-marketplace/persistence/index.ts -- public surface barrel"
   - "tests/persistence/locations.test.ts (11 tests) + state-io.test.ts (9 tests) + migrate.test.ts (10 tests)"
   - "tests/persistence/fixtures/legacy/{v0-no-schemaversion,v1-missing-manifestpath,v1-missing-resources}.json"
 affects:
@@ -36,9 +36,9 @@ tech-stack:
 
 key-files:
   created:
-    - extensions/claude-marketplace/persistence/locations.ts (120 lines, 3 method-helpers + brand)
-    - extensions/claude-marketplace/persistence/state-io.ts (220 lines, schema + loadState + saveState)
-    - extensions/claude-marketplace/persistence/migrate.ts (166 lines, migration + IL-3 sanctioned warn)
+    - extensions/pi-claude-marketplace/persistence/locations.ts (120 lines, 3 method-helpers + brand)
+    - extensions/pi-claude-marketplace/persistence/state-io.ts (220 lines, schema + loadState + saveState)
+    - extensions/pi-claude-marketplace/persistence/migrate.ts (166 lines, migration + IL-3 sanctioned warn)
     - tests/persistence/locations.test.ts (105 lines, 11 tests)
     - tests/persistence/state-io.test.ts (216 lines, 9 tests)
     - tests/persistence/migrate.test.ts (163 lines, 10 tests)
@@ -46,10 +46,10 @@ key-files:
     - tests/persistence/fixtures/legacy/v1-missing-manifestpath.json
     - tests/persistence/fixtures/legacy/v1-missing-resources.json
   modified:
-    - extensions/claude-marketplace/persistence/index.ts (was placeholder, now exports public surface)
+    - extensions/pi-claude-marketplace/persistence/index.ts (was placeholder, now exports public surface)
 
 key-decisions:
-  - "IL-3 sanctioned callsite location: extensions/claude-marketplace/persistence/migrate.ts:persistMigratedState. The exact disable-comment incantation is `// eslint-disable-next-line no-restricted-syntax, no-console -- IL-3: load-time migrate save fail` per Phase 1 SUMMARY handoff item #2."
+  - "IL-3 sanctioned callsite location: extensions/pi-claude-marketplace/persistence/migrate.ts:persistMigratedState. The exact disable-comment incantation is `// eslint-disable-next-line no-restricted-syntax, no-console -- IL-3: load-time migrate save fail` per Phase 1 SUMMARY handoff item #2."
   - "ST-6 funnel implementation: loadState revalidates each stored source through pathSource/githubSource. Three legal storage shapes: (1) raw string -> parsePluginSource classify, (2) ParsedSource object -> revalidate via factory, (3) {kind:'unknown'} forward-compat tail -> accept verbatim per NFR-12."
   - "STATE_SCHEMA uses Type.Unknown() for the source field. Structural validation lives in the schema; semantic validation lives in domain/source.ts. This avoids duplicating the discriminated-union shape in TypeBox."
   - "Migration is a pure function (no I/O). persistMigratedState is the separate best-effort save. This split lets tests of migrateLegacyMarketplaceRecords run against in-memory inputs without touching disk."
@@ -81,7 +81,7 @@ completed: 2026-05-10
 
 ## What Shipped
 
-### Source code (`extensions/claude-marketplace/persistence/`)
+### Source code (`extensions/pi-claude-marketplace/persistence/`)
 
 - **`locations.ts`** -- `ScopedLocations` interface with a unique-symbol brand field plus `locationsFor(scope, cwd)` factory. Returns a frozen object with `scope`, `scopeRoot`, `extensionRoot`, `stateJsonPath`, `agentsDir`, `agentsStagingDir`, `mcpJsonPath`, `dataRoot`, `sourcesDir`, plus three method-helpers (`pluginDataDir`, `marketplaceDataDir`, `sourceCloneDir`) that route through `assertPathInside` for SC-7 / NFR-10 containment. The brand symbol is module-private so consumers cannot construct a `ScopedLocations` literal without going through the factory.
 
@@ -133,9 +133,9 @@ completed: 2026-05-10
 ## Files Created/Modified
 
 ### Created
-- `extensions/claude-marketplace/persistence/locations.ts` (120 lines)
-- `extensions/claude-marketplace/persistence/state-io.ts` (220 lines)
-- `extensions/claude-marketplace/persistence/migrate.ts` (166 lines)
+- `extensions/pi-claude-marketplace/persistence/locations.ts` (120 lines)
+- `extensions/pi-claude-marketplace/persistence/state-io.ts` (220 lines)
+- `extensions/pi-claude-marketplace/persistence/migrate.ts` (166 lines)
 - `tests/persistence/locations.test.ts` (105 lines)
 - `tests/persistence/state-io.test.ts` (216 lines)
 - `tests/persistence/migrate.test.ts` (163 lines)
@@ -144,11 +144,11 @@ completed: 2026-05-10
 - `tests/persistence/fixtures/legacy/v1-missing-resources.json`
 
 ### Modified
-- `extensions/claude-marketplace/persistence/index.ts` -- replaced the Phase-1 placeholder `export {}` with the public-API barrel.
+- `extensions/pi-claude-marketplace/persistence/index.ts` -- replaced the Phase-1 placeholder `export {}` with the public-API barrel.
 
 ## Decisions Made
 
-- **IL-3 sanctioned callsite lives at `extensions/claude-marketplace/persistence/migrate.ts:persistMigratedState`** with the exact disable-comment incantation `// eslint-disable-next-line no-restricted-syntax, no-console -- IL-3: load-time migrate save fail`. Future audits can `grep -nE "no-restricted-syntax, no-console -- IL-3"` to find the single site.
+- **IL-3 sanctioned callsite lives at `extensions/pi-claude-marketplace/persistence/migrate.ts:persistMigratedState`** with the exact disable-comment incantation `// eslint-disable-next-line no-restricted-syntax, no-console -- IL-3: load-time migrate save fail`. Future audits can `grep -nE "no-restricted-syntax, no-console -- IL-3"` to find the single site.
 
 - **STATE_SCHEMA `source` is `Type.Unknown()`**, with structural validation deferred to domain/source.ts factories. The schema validates the envelope; the ST-6 funnel validates content. Two-stage validation lets us avoid duplicating the discriminated-union shape in TypeBox.
 
@@ -186,7 +186,7 @@ completed: 2026-05-10
 **4. [Rule 1 - Bug] Comments containing the literal string `console.warn` triggered grep-based acceptance criteria false positives**
 
 - **Found during:** Task 2 acceptance check
-- **Issue:** Plan acceptance criterion `grep -c "console.warn" extensions/claude-marketplace/persistence/migrate.ts` should return exactly `1` (the single CALL site). The original doc-comment narrative used `console.warn` literally, returning 4. The verification block also says `grep -c "console" extensions/claude-marketplace/persistence/state-io.ts` should return 0, which my initial doc-comment violated.
+- **Issue:** Plan acceptance criterion `grep -c "console.warn" extensions/pi-claude-marketplace/persistence/migrate.ts` should return exactly `1` (the single CALL site). The original doc-comment narrative used `console.warn` literally, returning 4. The verification block also says `grep -c "console" extensions/pi-claude-marketplace/persistence/state-io.ts` should return 0, which my initial doc-comment violated.
 - **Fix:** Rewrote the doc-comments to use ``console-warn`` (with hyphen) when narrating the concept; the only literal `console.warn` token in either file is the actual call expression. Verified `grep -c "console.warn"` returns `1` in migrate.ts and `0` in state-io.ts and locations.ts.
 - **Commit:** `5a3a0f1` (initial), reinforced in `2a4b2c8`
 
@@ -219,10 +219,10 @@ None.
 
 ## Self-Check: PASSED
 
-- `extensions/claude-marketplace/persistence/locations.ts` exists -- FOUND
-- `extensions/claude-marketplace/persistence/state-io.ts` exists -- FOUND
-- `extensions/claude-marketplace/persistence/migrate.ts` exists -- FOUND
-- `extensions/claude-marketplace/persistence/index.ts` modified to re-export public surface -- VERIFIED
+- `extensions/pi-claude-marketplace/persistence/locations.ts` exists -- FOUND
+- `extensions/pi-claude-marketplace/persistence/state-io.ts` exists -- FOUND
+- `extensions/pi-claude-marketplace/persistence/migrate.ts` exists -- FOUND
+- `extensions/pi-claude-marketplace/persistence/index.ts` modified to re-export public surface -- VERIFIED
 - `tests/persistence/locations.test.ts` exists -- FOUND
 - `tests/persistence/state-io.test.ts` exists -- FOUND
 - `tests/persistence/migrate.test.ts` exists -- FOUND
@@ -233,10 +233,10 @@ None.
 - Task 4 commit `090ace0` -- FOUND
 - Task 5 commit `2bdd2e4` -- FOUND
 - `npm run check` exits 0 (typecheck + lint + format + 142 tests) -- VERIFIED
-- `grep -c "console.warn" extensions/claude-marketplace/persistence/migrate.ts` returns `1` -- VERIFIED (single sanctioned site)
-- `grep -c "console" extensions/claude-marketplace/persistence/state-io.ts` returns `0` -- VERIFIED
-- `grep -c "console" extensions/claude-marketplace/persistence/locations.ts` returns `0` -- VERIFIED
-- IL-3 disable-comment incantation present at exact line: `extensions/claude-marketplace/persistence/migrate.ts:161` -- VERIFIED
+- `grep -c "console.warn" extensions/pi-claude-marketplace/persistence/migrate.ts` returns `1` -- VERIFIED (single sanctioned site)
+- `grep -c "console" extensions/pi-claude-marketplace/persistence/state-io.ts` returns `0` -- VERIFIED
+- `grep -c "console" extensions/pi-claude-marketplace/persistence/locations.ts` returns `0` -- VERIFIED
+- IL-3 disable-comment incantation present at exact line: `extensions/pi-claude-marketplace/persistence/migrate.ts:161` -- VERIFIED
 
 ## Phase 2 Plan 04 Status: COMPLETE
 

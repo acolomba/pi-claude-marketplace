@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { renderPluginList } from "../../extensions/claude-marketplace/presentation/plugin-list.ts";
+import { renderPluginList } from "../../extensions/pi-claude-marketplace/presentation/plugin-list.ts";
 
-import type { PluginListPayload } from "../../extensions/claude-marketplace/presentation/plugin-list.ts";
+import type { PluginListPayload } from "../../extensions/pi-claude-marketplace/presentation/plugin-list.ts";
 
 test("PL-1 empty payload returns the empty-marker sentinel", () => {
   const out = renderPluginList({ marketplaces: [] });

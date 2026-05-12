@@ -10,7 +10,7 @@ import { emitGeneratedAgentFile, parseFrontmatter } from "./frontmatter.ts";
 export interface DiscoveredAgent {
   /** Source agent name from frontmatter `name:` (or filename stem if missing). */
   sourceName: string;
-  /** Generated pi-subagent name -- claude-marketplace-<plugin>-<stripped> */
+  /** Generated pi-subagent name -- pi-claude-marketplace-<plugin>-<stripped> */
   generatedName: string;
   /** Absolute path to the source .md file. */
   sourcePath: string;
@@ -77,7 +77,7 @@ const TOOL_MAP: Record<string, string> = {
 const THINKING_VALUES = new Set(["off", "minimal", "low", "medium", "high", "xhigh"]);
 
 /** Pure name generator with prefix stripping.
- *  Format: `claude-marketplace-<plugin>-<suffix>` where `<suffix>` strips
+ *  Format: `pi-claude-marketplace-<plugin>-<suffix>` where `<suffix>` strips
  *  a leading `<plugin>-` from the source agent name if present. */
 export function generateAgentName(pluginName: string, sourceAgentName: string): string {
   assertSafeName(pluginName, "plugin name");
@@ -85,7 +85,7 @@ export function generateAgentName(pluginName: string, sourceAgentName: string): 
   const suffix = sourceAgentName.startsWith(pluginName + "-")
     ? sourceAgentName.slice(pluginName.length + 1)
     : sourceAgentName;
-  const generatedName = `claude-marketplace-${pluginName}-${suffix}`;
+  const generatedName = `pi-claude-marketplace-${pluginName}-${suffix}`;
   assertSafeName(generatedName, "generated agent name");
   return generatedName;
 }

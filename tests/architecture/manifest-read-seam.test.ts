@@ -5,7 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const EXTENSION_ROOT = path.join(REPO_ROOT, "extensions/claude-marketplace");
+const EXTENSION_ROOT = path.join(REPO_ROOT, "extensions/pi-claude-marketplace");
 const ALLOWED_RELATIVE_PATH = "domain/manifest.ts";
 
 async function collectTypeScriptFiles(dir: string): Promise<readonly string[]> {
@@ -45,7 +45,7 @@ test("NFR-8 manifest read seam: only domain/manifest.ts reads marketplace.json",
 
     const stripped = stripComments(await readFile(filePath, "utf8"));
     if (hasMarketplaceManifestRead(stripped)) {
-      offenders.push(`extensions/claude-marketplace/${rel}`);
+      offenders.push(`extensions/pi-claude-marketplace/${rel}`);
     }
   }
 

@@ -4,24 +4,27 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { githubSource, pathSource } from "../../../extensions/claude-marketplace/domain/source.ts";
+import {
+  githubSource,
+  pathSource,
+} from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   updateAllMarketplaces,
   updateMarketplace,
-} from "../../../extensions/claude-marketplace/orchestrators/marketplace/update.ts";
-import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
-import { saveState } from "../../../extensions/claude-marketplace/persistence/state-io.ts";
+} from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
   __resetCacheForTests,
   getPluginIndex,
-} from "../../../extensions/claude-marketplace/shared/completion-cache.ts";
+} from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { fixtureMarketplaceDir, makeMockGitOps } from "../../helpers/git-mock.ts";
 
 import type {
   PluginUpdateFn,
   PluginUpdateOutcome,
-} from "../../../extensions/claude-marketplace/orchestrators/types.ts";
-import type { ExtensionState } from "../../../extensions/claude-marketplace/persistence/state-io.ts";
+} from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
+import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 interface NotifyRecord {

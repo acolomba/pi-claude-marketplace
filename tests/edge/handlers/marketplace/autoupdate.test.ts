@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { makeAutoupdateHandler } from "../../../../extensions/claude-marketplace/edge/handlers/marketplace/autoupdate.ts";
+import { makeAutoupdateHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/autoupdate.ts";
 
 import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 

@@ -7,20 +7,20 @@ import test from "node:test";
 import {
   GENERATED_AGENT_MARKER,
   GENERATED_AGENT_PREFIX,
-} from "../../../extensions/claude-marketplace/bridges/agents/marker.ts";
-import { pathSource } from "../../../extensions/claude-marketplace/domain/source.ts";
-import { installPlugin } from "../../../extensions/claude-marketplace/orchestrators/plugin/install.ts";
-import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
+} from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
+import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { installPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
   saveState,
-} from "../../../extensions/claude-marketplace/persistence/state-io.ts";
+} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
   __resetCacheForTests,
   getPluginIndex,
-} from "../../../extensions/claude-marketplace/shared/completion-cache.ts";
+} from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
-import type { ExtensionState } from "../../../extensions/claude-marketplace/persistence/state-io.ts";
+import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 // PI-1..15 + AS-6 + AS-7 + COMP-01 + NFR-5.
@@ -1060,7 +1060,7 @@ test("AS-7: pre-existing foreign agent file under target name -> warning surface
 
 test("PI-2 / NFR-5: install.ts has zero git surface (no platform-git import, no DEFAULT_GIT_OPS, no gitOps field)", async () => {
   const src = await readFile(
-    "extensions/claude-marketplace/orchestrators/plugin/install.ts",
+    "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts",
     "utf8",
   );
   // Header docstring legitimately mentions platform-git / DEFAULT_GIT_OPS /

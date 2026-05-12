@@ -11,7 +11,7 @@ import {
   type ExtensionState,
   loadState,
   saveState,
-} from "../../extensions/claude-marketplace/persistence/state-io.ts";
+} from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 /**
  * ST-1, ST-6, Pitfall 9 -- state.json load/save behavior.
@@ -27,7 +27,7 @@ const FIXTURES = path.join(HERE, "fixtures/legacy");
 
 async function tmpExtensionRoot(): Promise<{ root: string; cleanup: () => Promise<void> }> {
   const dir = await mkdtemp(path.join(tmpdir(), "pi-cm-state-test-"));
-  const root = path.join(dir, "claude-marketplace");
+  const root = path.join(dir, "pi-claude-marketplace");
   await mkdir(root, { recursive: true });
   // Cleanup retries with a short sleep -- ST-4 fire-and-forget persists
   // can land between our `rm`'s readdir and rmdir, raising ENOTEMPTY.

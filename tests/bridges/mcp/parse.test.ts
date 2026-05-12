@@ -7,7 +7,7 @@ import test from "node:test";
 import {
   parseMcpServers,
   resolvePluginMcpServers,
-} from "../../../extensions/claude-marketplace/bridges/mcp/parse.ts";
+} from "../../../extensions/pi-claude-marketplace/bridges/mcp/parse.ts";
 
 // MC-1 / MC-2 / MC-3 -- precedence chain, wrapped vs unwrapped, shape validation.
 

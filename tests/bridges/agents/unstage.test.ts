@@ -7,17 +7,17 @@ import test from "node:test";
 import {
   GENERATED_AGENT_MARKER,
   GENERATED_AGENT_PREFIX,
-} from "../../../extensions/claude-marketplace/bridges/agents/marker.ts";
-import { unstagePluginAgents } from "../../../extensions/claude-marketplace/bridges/agents/unstage.ts";
-import { loadAgentsIndex } from "../../../extensions/claude-marketplace/persistence/agents-index-io.ts";
-import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
-import { atomicWriteJson } from "../../../extensions/claude-marketplace/shared/atomic-json.ts";
+} from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
+import { unstagePluginAgents } from "../../../extensions/pi-claude-marketplace/bridges/agents/unstage.ts";
+import { loadAgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { atomicWriteJson } from "../../../extensions/pi-claude-marketplace/shared/atomic-json.ts";
 import {
   cleanupStaging,
   pathExists,
-} from "../../../extensions/claude-marketplace/shared/fs-utils.ts";
+} from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
-import type { AgentsIndex } from "../../../extensions/claude-marketplace/persistence/agents-index-schema.ts";
+import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 
 // AG-3 / AG-5 unstage: foreign-content soft-fail preserves index row;
 // happy path removes file + drops row; ENOENT-tolerant (idempotent retry).
@@ -35,7 +35,7 @@ async function withTmpScope<T>(
 }
 
 function makeOwnedFileContent(name: string): string {
-  // Minimum viable owned file: basename starts with claude-marketplace- (we
+  // Minimum viable owned file: basename starts with pi-claude-marketplace- (we
   // place at the right path), body contains the marker substring.
   return (
     "---\n" +
@@ -51,8 +51,8 @@ test("unstagePluginAgents removes owned files and updates index (happy path)", a
     await mkdir(locations.agentsDir, { recursive: true });
     const a = path.join(locations.agentsDir, GENERATED_AGENT_PREFIX + "acme-bot.md");
     const b = path.join(locations.agentsDir, GENERATED_AGENT_PREFIX + "acme-helper.md");
-    await writeFile(a, makeOwnedFileContent("claude-marketplace-acme-bot"));
-    await writeFile(b, makeOwnedFileContent("claude-marketplace-acme-helper"));
+    await writeFile(a, makeOwnedFileContent("pi-claude-marketplace-acme-bot"));
+    await writeFile(b, makeOwnedFileContent("pi-claude-marketplace-acme-helper"));
 
     const seed: AgentsIndex = {
       schemaVersion: 1,
@@ -61,7 +61,7 @@ test("unstagePluginAgents removes owned files and updates index (happy path)", a
           plugin: "acme",
           marketplace: "mp1",
           sourceAgent: "bot",
-          generatedName: "claude-marketplace-acme-bot",
+          generatedName: "pi-claude-marketplace-acme-bot",
           sourcePath: "/orig/bot.md",
           targetPath: a,
           sourceHash: "abc",
@@ -73,7 +73,7 @@ test("unstagePluginAgents removes owned files and updates index (happy path)", a
           plugin: "acme",
           marketplace: "mp1",
           sourceAgent: "helper",
-          generatedName: "claude-marketplace-acme-helper",
+          generatedName: "pi-claude-marketplace-acme-helper",
           sourcePath: "/orig/helper.md",
           targetPath: b,
           sourceHash: "def",
@@ -92,8 +92,8 @@ test("unstagePluginAgents removes owned files and updates index (happy path)", a
       pluginName: "acme",
     });
     assert.deepEqual([...result.removedNames].sort(), [
-      "claude-marketplace-acme-bot",
-      "claude-marketplace-acme-helper",
+      "pi-claude-marketplace-acme-bot",
+      "pi-claude-marketplace-acme-helper",
     ]);
     assert.equal(result.failed.length, 0);
 
@@ -110,8 +110,8 @@ test("AG-3 unstage of plugin X in mp1 leaves plugin X in mp2 rows untouched", as
     await mkdir(locations.agentsDir, { recursive: true });
     const mp1Target = path.join(locations.agentsDir, GENERATED_AGENT_PREFIX + "acme-bot.md");
     const mp2Target = path.join(locations.agentsDir, GENERATED_AGENT_PREFIX + "acme-mp2only.md");
-    await writeFile(mp1Target, makeOwnedFileContent("claude-marketplace-acme-bot"));
-    await writeFile(mp2Target, makeOwnedFileContent("claude-marketplace-acme-mp2only"));
+    await writeFile(mp1Target, makeOwnedFileContent("pi-claude-marketplace-acme-bot"));
+    await writeFile(mp2Target, makeOwnedFileContent("pi-claude-marketplace-acme-mp2only"));
 
     const seed: AgentsIndex = {
       schemaVersion: 1,
@@ -120,7 +120,7 @@ test("AG-3 unstage of plugin X in mp1 leaves plugin X in mp2 rows untouched", as
           plugin: "acme",
           marketplace: "mp1",
           sourceAgent: "bot",
-          generatedName: "claude-marketplace-acme-bot",
+          generatedName: "pi-claude-marketplace-acme-bot",
           sourcePath: "/orig/bot.md",
           targetPath: mp1Target,
           sourceHash: "abc",
@@ -132,7 +132,7 @@ test("AG-3 unstage of plugin X in mp1 leaves plugin X in mp2 rows untouched", as
           plugin: "acme",
           marketplace: "mp2",
           sourceAgent: "mp2only",
-          generatedName: "claude-marketplace-acme-mp2only",
+          generatedName: "pi-claude-marketplace-acme-mp2only",
           sourcePath: "/orig/mp2only.md",
           targetPath: mp2Target,
           sourceHash: "def",
@@ -163,7 +163,7 @@ test("AG-3 unstage of plugin X in mp1 leaves plugin X in mp2 rows untouched", as
 test("AG-5 unstage SOFT-FAILS on foreign content (basename mismatch)", async () => {
   await withTmpScope(async ({ locations }) => {
     await mkdir(locations.agentsDir, { recursive: true });
-    // Index points at a foreign path (no claude-marketplace- prefix).
+    // Index points at a foreign path (no pi-claude-marketplace- prefix).
     const foreignTarget = path.join(locations.agentsDir, "foreign.md");
     await writeFile(foreignTarget, "---\nname: foreign\n---\nbody\n");
 
@@ -174,7 +174,7 @@ test("AG-5 unstage SOFT-FAILS on foreign content (basename mismatch)", async () 
           plugin: "acme",
           marketplace: "mp1",
           sourceAgent: "ghost",
-          generatedName: "claude-marketplace-acme-ghost",
+          generatedName: "pi-claude-marketplace-acme-ghost",
           sourcePath: "/orig/ghost.md",
           targetPath: foreignTarget,
           sourceHash: "abc",
@@ -203,7 +203,7 @@ test("AG-5 unstage SOFT-FAILS on foreign content (basename mismatch)", async () 
     // Index row PRESERVED.
     const after = await loadAgentsIndex(locations);
     assert.equal(after.agents.length, 1);
-    assert.equal(after.agents[0]?.generatedName, "claude-marketplace-acme-ghost");
+    assert.equal(after.agents[0]?.generatedName, "pi-claude-marketplace-acme-ghost");
   });
 });
 
@@ -221,7 +221,7 @@ test("AG-5 unstage SOFT-FAILS on foreign content (marker missing)", async () => 
           plugin: "acme",
           marketplace: "mp1",
           sourceAgent: "ghost",
-          generatedName: "claude-marketplace-acme-ghost",
+          generatedName: "pi-claude-marketplace-acme-ghost",
           sourcePath: "/orig/ghost.md",
           targetPath: target,
           sourceHash: "abc",
@@ -261,7 +261,7 @@ test("unstagePluginAgents tolerates ENOENT on target file (treats as removed)", 
           plugin: "acme",
           marketplace: "mp1",
           sourceAgent: "phantom",
-          generatedName: "claude-marketplace-acme-phantom",
+          generatedName: "pi-claude-marketplace-acme-phantom",
           sourcePath: "/orig/phantom.md",
           targetPath: phantom,
           sourceHash: "abc",
@@ -279,7 +279,7 @@ test("unstagePluginAgents tolerates ENOENT on target file (treats as removed)", 
       marketplaceName: "mp1",
       pluginName: "acme",
     });
-    assert.deepEqual([...result.removedNames], ["claude-marketplace-acme-phantom"]);
+    assert.deepEqual([...result.removedNames], ["pi-claude-marketplace-acme-phantom"]);
     assert.equal(result.failed.length, 0);
 
     const after = await loadAgentsIndex(locations);
@@ -297,9 +297,9 @@ test("unstagePluginAgents returns empty arrays when no matching entries", async 
           plugin: "other",
           marketplace: "mp2",
           sourceAgent: "x",
-          generatedName: "claude-marketplace-other-x",
+          generatedName: "pi-claude-marketplace-other-x",
           sourcePath: "/orig/x.md",
-          targetPath: path.join(locations.agentsDir, "claude-marketplace-other-x.md"),
+          targetPath: path.join(locations.agentsDir, "pi-claude-marketplace-other-x.md"),
           sourceHash: "abc",
           droppedFields: [],
           droppedTools: [],
@@ -332,7 +332,7 @@ test("unstagePluginAgents returns corruptions in warnings[] when index has per-r
     // dropped at load time and surfaces in corruptions[].
     await mkdir(locations.agentsDir, { recursive: true });
     const validTarget = path.join(locations.agentsDir, GENERATED_AGENT_PREFIX + "acme-bot.md");
-    await writeFile(validTarget, makeOwnedFileContent("claude-marketplace-acme-bot"));
+    await writeFile(validTarget, makeOwnedFileContent("pi-claude-marketplace-acme-bot"));
 
     const onDisk = {
       schemaVersion: 1,
@@ -341,7 +341,7 @@ test("unstagePluginAgents returns corruptions in warnings[] when index has per-r
           plugin: "acme",
           marketplace: "mp1",
           sourceAgent: "bot",
-          generatedName: "claude-marketplace-acme-bot",
+          generatedName: "pi-claude-marketplace-acme-bot",
           sourcePath: "/orig/bot.md",
           targetPath: validTarget,
           sourceHash: "abc",
@@ -354,7 +354,7 @@ test("unstagePluginAgents returns corruptions in warnings[] when index has per-r
           plugin: "acme",
           marketplace: "mp1",
           sourceAgent: "broken",
-          generatedName: "claude-marketplace-acme-broken",
+          generatedName: "pi-claude-marketplace-acme-broken",
           sourcePath: "/orig/broken.md",
           sourceHash: "def",
           droppedFields: [],

@@ -83,12 +83,12 @@ must_haves:
       provides: "registerClaudePluginCommand + registerClaudeMarketplaceTools wiring stubs (D-04)"
   key_links:
     - from: tests/edge/args.test.ts
-      to: extensions/claude-marketplace/edge/args.ts
-      via: "import { parseArgs } from \"../../extensions/claude-marketplace/edge/args.ts\""
+      to: extensions/pi-claude-marketplace/edge/args.ts
+      via: "import { parseArgs } from \"../../extensions/pi-claude-marketplace/edge/args.ts\""
       pattern: "import.*edge/args"
     - from: tests/shared/completion-cache.test.ts
-      to: extensions/claude-marketplace/shared/completion-cache.ts
-      via: "import * as cache from \"../../extensions/claude-marketplace/shared/completion-cache.ts\""
+      to: extensions/pi-claude-marketplace/shared/completion-cache.ts
+      via: "import * as cache from \"../../extensions/pi-claude-marketplace/shared/completion-cache.ts\""
       pattern: "import.*shared/completion-cache"
 ---
 
@@ -122,7 +122,7 @@ Output: 18 new test files under `tests/edge/**` and `tests/shared/completion-cac
 import { test } from "node:test";
 
 // @ts-expect-error -- module created in a later Phase 6 wave.
-import * as _target from "../../extensions/claude-marketplace/edge/args.ts";
+import * as _target from "../../extensions/pi-claude-marketplace/edge/args.ts";
 
 void _target;  // silence "imported but unused" lint
 
@@ -153,7 +153,7 @@ Create FOUR test files. Each file:
 2. Includes `void _target;` to satisfy the no-unused-import rule
 3. Uses `test.skip(name, () => {})` for every behavior
 
-**tests/edge/args.test.ts** -- target `extensions/claude-marketplace/edge/args.ts`. One `test.skip` per case (use these exact names):
+**tests/edge/args.test.ts** -- target `extensions/pi-claude-marketplace/edge/args.ts`. One `test.skip` per case (use these exact names):
 - "AP-1 :: tokenize bare string"
 - "AP-1 :: tokenize single-quoted spaced argument"
 - "AP-1 :: tokenize double-quoted spaced argument"
@@ -168,13 +168,13 @@ Create FOUR test files. Each file:
 - "AP-4 :: --scope accepted at end position"
 - "AP-4 :: positionals extracted in order regardless of --scope position"
 
-**tests/edge/args-schema.test.ts** -- target `extensions/claude-marketplace/edge/args-schema.ts`. Cases:
+**tests/edge/args-schema.test.ts** -- target `extensions/pi-claude-marketplace/edge/args-schema.ts`. Cases:
 - "parseCommandArgs :: required positional missing emits usage via notifyError and returns undefined"
 - "parseCommandArgs :: optional positional missing returns parsed with property undefined"
 - "parseCommandArgs :: tokenizer throw routes through notifyError + returns undefined"
 - "parseCommandArgs :: typed return shape (compile-time check)"
 
-**tests/edge/router.test.ts** -- target `extensions/claude-marketplace/edge/router.ts`. Cases:
+**tests/edge/router.test.ts** -- target `extensions/pi-claude-marketplace/edge/router.ts`. Cases:
 - "AP-3 :: empty input emits TOP_LEVEL_USAGE at error severity"
 - "AP-3 :: unknown subcommand emits Unknown subcommand: + TOP_LEVEL_USAGE at error severity"
 - "AP-3 :: marketplace with empty rest emits MARKETPLACE_USAGE at error severity"
@@ -191,7 +191,7 @@ Create FOUR test files. Each file:
 - "routeMarketplace :: dispatches autoupdate to handlers.marketplaceAutoupdate"
 - "routeMarketplace :: dispatches noautoupdate to handlers.marketplaceNoautoupdate"
 
-**tests/edge/completions/normalize.test.ts** -- target `extensions/claude-marketplace/edge/completions/normalize.ts`. Cases:
+**tests/edge/completions/normalize.test.ts** -- target `extensions/pi-claude-marketplace/edge/completions/normalize.ts`. Cases:
 - "TC-7 :: normalize collapses two spaces at cursor to one"
 - "TC-7 :: normalize is a no-op when no doubled space at cursor"
 - "TC-7 :: normalize is a no-op at end-of-line trailing space"
@@ -217,7 +217,7 @@ Create parent directories as needed via `mkdir -p tests/edge/completions`.
   <action>
 Create THREE test files with skipped stubs.
 
-**tests/edge/completions/provider.test.ts** -- target `extensions/claude-marketplace/edge/completions/provider.ts`. One `test.skip` per case:
+**tests/edge/completions/provider.test.ts** -- target `extensions/pi-claude-marketplace/edge/completions/provider.ts`. One `test.skip` per case:
 - "TC-1 :: first positional surfaces top-level keywords (install/uninstall/update/list/marketplace)"
 - "TC-1 :: top-level keyword filtering by prefix (\"ins\" -> install only)"
 - "TC-2 :: after marketplace surfaces nested keywords (add/remove/list/update/autoupdate/noautoupdate)"
@@ -243,7 +243,7 @@ Create THREE test files with skipped stubs.
 - "TC-9 :: state.json error propagates (throw escapes getArgumentCompletions)"
 - "no-match position returns null (Pi-tui sentinel; not [])"
 
-**tests/edge/completions/data.test.ts** -- target `extensions/claude-marketplace/edge/completions/data.ts`. Cases:
+**tests/edge/completions/data.test.ts** -- target `extensions/pi-claude-marketplace/edge/completions/data.ts`. Cases:
 - "getMarketplaceNamesAcrossScopes :: dedupes overlapping names from user and project"
 - "getPluginToMarketplacesMap :: install mode filters status === installed out, keeps available + unavailable"
 - "getPluginToMarketplacesMap :: uninstall mode keeps only installed"
@@ -254,7 +254,7 @@ Create THREE test files with skipped stubs.
 - "splitCompletionInput :: no trailing space yields last token as current"
 - "extractPositionals :: skips --scope <value> pairs"
 
-**tests/shared/completion-cache.test.ts** -- target `extensions/claude-marketplace/shared/completion-cache.ts`. Cases:
+**tests/shared/completion-cache.test.ts** -- target `extensions/pi-claude-marketplace/shared/completion-cache.ts`. Cases:
 - "schemaVersion snapshot :: MARKETPLACE_NAMES_CACHE_SCHEMA.schemaVersion === 1"
 - "schemaVersion snapshot :: PLUGIN_INDEX_CACHE_SCHEMA.schemaVersion === 1"
 - "getMarketplaceNames :: lazy load on first call; cache hit on second (no rebuild call)"
@@ -289,7 +289,7 @@ Create `tests/shared/` parent if needed (it already exists per the codebase scan
   <action>
 Create ELEVEN test files. Standard shim test cases for each handler (use these exact names per handler):
 
-**tests/edge/handlers/plugin/install.test.ts** -- target `extensions/claude-marketplace/edge/handlers/plugin/install.ts`. Cases:
+**tests/edge/handlers/plugin/install.test.ts** -- target `extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts`. Cases:
 - "shim :: missing positional emits USAGE via notifyError; no orchestrator call"
 - "shim :: invalid ref (no @) emits USAGE + format error; no orchestrator call"
 - "shim :: invalid ref (leading @) emits USAGE + format error"
@@ -299,14 +299,14 @@ Create ELEVEN test files. Standard shim test cases for each handler (use these e
 
 **tests/edge/handlers/plugin/uninstall.test.ts** -- same six cases s/install/uninstall/ s/installPlugin/uninstallPlugin/.
 
-**tests/edge/handlers/plugin/update.test.ts** -- target `extensions/claude-marketplace/edge/handlers/plugin/update.ts`. Cases:
+**tests/edge/handlers/plugin/update.test.ts** -- target `extensions/pi-claude-marketplace/edge/handlers/plugin/update.ts`. Cases:
 - "shim :: bare /update with no positional calls updatePlugins with target = all-plugins-all-marketplaces"
 - "shim :: <plugin>@<marketplace> form calls updatePlugins with single-plugin target"
 - "shim :: bare @<marketplace> form calls updatePlugins with all-plugins-one-marketplace target"
 - "shim :: --scope user/project propagated to updatePlugins"
 - "shim :: invalid ref (no @, not bare) emits USAGE"
 
-**tests/edge/handlers/plugin/list.test.ts** -- target `extensions/claude-marketplace/edge/handlers/plugin/list.ts`. Cases:
+**tests/edge/handlers/plugin/list.test.ts** -- target `extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts`. Cases:
 - "shim :: bare /list calls listPlugins with no marketplace, no scope, no filter flags"
 - "shim :: list <marketplace> calls listPlugins with marketplace argument"
 - "shim :: --installed flag calls listPlugins with installed: true"
@@ -314,52 +314,52 @@ Create ELEVEN test files. Standard shim test cases for each handler (use these e
 - "shim :: --unavailable flag calls listPlugins with unavailable: true"
 - "shim :: --installed --available union flags both propagated"
 
-**tests/edge/handlers/marketplace/add.test.ts** -- target `extensions/claude-marketplace/edge/handlers/marketplace/add.ts`. Cases:
+**tests/edge/handlers/marketplace/add.test.ts** -- target `extensions/pi-claude-marketplace/edge/handlers/marketplace/add.ts`. Cases:
 - "shim :: missing source positional emits USAGE; no orchestrator call"
 - "shim :: valid source calls addMarketplace with { ctx, scope: \"user\", cwd, rawSource, gitOps: deps.gitOps }"
 - "shim :: --scope project propagated to addMarketplace"
 - "shim :: deps.gitOps is passed through from EdgeDeps"
 
-**tests/edge/handlers/marketplace/remove.test.ts** -- target `extensions/claude-marketplace/edge/handlers/marketplace/remove.ts`. Cases:
+**tests/edge/handlers/marketplace/remove.test.ts** -- target `extensions/pi-claude-marketplace/edge/handlers/marketplace/remove.ts`. Cases:
 - "shim :: missing name positional emits USAGE"
 - "shim :: valid name calls removeMarketplace with { ctx, scope?, cwd, name }"
 - "shim :: --scope user/project propagated"
 
-**tests/edge/handlers/marketplace/list.test.ts** -- target `extensions/claude-marketplace/edge/handlers/marketplace/list.ts`. Cases:
+**tests/edge/handlers/marketplace/list.test.ts** -- target `extensions/pi-claude-marketplace/edge/handlers/marketplace/list.ts`. Cases:
 - "shim :: no positional calls listMarketplaces with scope: undefined"
 - "shim :: --scope user calls listMarketplaces with scope: \"user\""
 - "shim :: --scope project calls listMarketplaces with scope: \"project\""
 
-**tests/edge/handlers/marketplace/update.test.ts** -- target `extensions/claude-marketplace/edge/handlers/marketplace/update.ts`. Cases:
+**tests/edge/handlers/marketplace/update.test.ts** -- target `extensions/pi-claude-marketplace/edge/handlers/marketplace/update.ts`. Cases:
 - "shim :: bare /marketplace update calls updateAllMarketplaces"
 - "shim :: named /marketplace update <name> calls updateMarketplace with name"
 - "shim :: --scope user/project propagated"
 - "shim :: deps.pluginUpdate passed through to orchestrator for cascade"
 
-**tests/edge/handlers/marketplace/autoupdate.test.ts** -- target `extensions/claude-marketplace/edge/handlers/marketplace/autoupdate.ts`. Cases:
+**tests/edge/handlers/marketplace/autoupdate.test.ts** -- target `extensions/pi-claude-marketplace/edge/handlers/marketplace/autoupdate.ts`. Cases:
 - "dual-form :: makeAutoupdateHandler(true) calls setMarketplaceAutoupdate with enabled: true"
 - "dual-form :: makeAutoupdateHandler(false) calls setMarketplaceAutoupdate with enabled: false"
 - "shim :: bare form (no name) propagates name: undefined"
 - "shim :: named form propagates name"
 - "shim :: --scope user/project propagated"
 
-**tests/edge/handlers/tools.test.ts** -- target `extensions/claude-marketplace/edge/handlers/tools.ts`. Cases:
-- "D-02 :: registerListMarketplacesTool registers tool name claude_marketplace_list with empty params schema"
-- "D-02 :: registerListPluginsTool registers tool name claude_marketplace_plugin_list with extended params"
-- "claude_marketplace_list :: empty state returns content text \"No marketplaces configured.\" + details.marketplaces == []"
-- "claude_marketplace_list :: populated state returns one line per marketplace formatted [<scope>] <name> -- <N> plugin(s) -- <source.logical>"
-- "claude_marketplace_plugin_list :: marketplace set, marketplace exists -> plugins from that marketplace"
-- "claude_marketplace_plugin_list :: marketplace set, marketplace not found -> error text + details.plugins == []"
-- "claude_marketplace_plugin_list :: marketplace omitted -> enumerate across all marketplaces"
-- "claude_marketplace_plugin_list :: installed: true filter -> only installed bucket"
-- "claude_marketplace_plugin_list :: available: true filter -> only available bucket"
-- "claude_marketplace_plugin_list :: unavailable: true filter -> only unavailable bucket"
-- "claude_marketplace_plugin_list :: available: true + unavailable: true -> union of both (PL-1)"
-- "claude_marketplace_plugin_list :: no filters -> all three buckets (PL-1 default)"
-- "claude_marketplace_plugin_list :: scope: \"user\" filters to user scope only"
-- "claude_marketplace_plugin_list :: scope: \"project\" filters to project scope only"
+**tests/edge/handlers/tools.test.ts** -- target `extensions/pi-claude-marketplace/edge/handlers/tools.ts`. Cases:
+- "D-02 :: registerListMarketplacesTool registers tool name pi_claude_marketplace_list with empty params schema"
+- "D-02 :: registerListPluginsTool registers tool name pi_claude_marketplace_plugin_list with extended params"
+- "pi_claude_marketplace_list :: empty state returns content text \"No marketplaces configured.\" + details.marketplaces == []"
+- "pi_claude_marketplace_list :: populated state returns one line per marketplace formatted [<scope>] <name> -- <N> plugin(s) -- <source.logical>"
+- "pi_claude_marketplace_plugin_list :: marketplace set, marketplace exists -> plugins from that marketplace"
+- "pi_claude_marketplace_plugin_list :: marketplace set, marketplace not found -> error text + details.plugins == []"
+- "pi_claude_marketplace_plugin_list :: marketplace omitted -> enumerate across all marketplaces"
+- "pi_claude_marketplace_plugin_list :: installed: true filter -> only installed bucket"
+- "pi_claude_marketplace_plugin_list :: available: true filter -> only available bucket"
+- "pi_claude_marketplace_plugin_list :: unavailable: true filter -> only unavailable bucket"
+- "pi_claude_marketplace_plugin_list :: available: true + unavailable: true -> union of both (PL-1)"
+- "pi_claude_marketplace_plugin_list :: no filters -> all three buckets (PL-1 default)"
+- "pi_claude_marketplace_plugin_list :: scope: \"user\" filters to user scope only"
+- "pi_claude_marketplace_plugin_list :: scope: \"project\" filters to project scope only"
 
-**tests/edge/register.test.ts** -- target `extensions/claude-marketplace/edge/register.ts`. Cases:
+**tests/edge/register.test.ts** -- target `extensions/pi-claude-marketplace/edge/register.ts`. Cases:
 - "D-04 :: registerClaudePluginCommand registers claude:plugin command on pi"
 - "D-04 :: registered command has a handler that routes through routeClaudePlugin"
 - "D-04 :: registered command has getArgumentCompletions returning AutocompleteItem[] | null"
@@ -368,8 +368,8 @@ Create ELEVEN test files. Standard shim test cases for each handler (use these e
 - "D-04 :: the installed wrapper applies normalizeCompletionWhitespace only to lines matching isClaudePluginCommandLine"
 - "D-04 :: the installed wrapper is a no-op for non-/claude:plugin lines"
 - "D-04 :: registerClaudeMarketplaceTools calls pi.registerTool exactly twice"
-- "D-04 :: registerClaudeMarketplaceTools registers claude_marketplace_list"
-- "D-04 :: registerClaudeMarketplaceTools registers claude_marketplace_plugin_list"
+- "D-04 :: registerClaudeMarketplaceTools registers pi_claude_marketplace_list"
+- "D-04 :: registerClaudeMarketplaceTools registers pi_claude_marketplace_plugin_list"
 
 Create parent directories as needed.
   </action>

@@ -5,10 +5,10 @@ subsystem: shared-infrastructure
 tags: [vars, errors-bridges, fs-utils, scoped-locations, fixtures, wave-1]
 dependency_graph:
   requires:
-    - extensions/claude-marketplace/shared/path-safety.ts (PathContainmentError, assertPathInside)
-    - extensions/claude-marketplace/shared/errors.ts (errorMessage)
-    - extensions/claude-marketplace/persistence/locations.ts (Phase 2 ScopedLocations base)
-    - extensions/claude-marketplace/domain/name.ts (Phase 2 assertSafeName + generators)
+    - extensions/pi-claude-marketplace/shared/path-safety.ts (PathContainmentError, assertPathInside)
+    - extensions/pi-claude-marketplace/shared/errors.ts (errorMessage)
+    - extensions/pi-claude-marketplace/persistence/locations.ts (Phase 2 ScopedLocations base)
+    - extensions/pi-claude-marketplace/domain/name.ts (Phase 2 assertSafeName + generators)
   provides:
     - shared/vars.ts (substituteClaudeVars + ClaudePluginVars)
     - shared/errors-bridges.ts (4 typed error subclasses)
@@ -29,9 +29,9 @@ tech-stack:
     - "ScopedLocations const-suffix path construction defers async assertPathInside to bridge consumers (T-03-04)"
 key-files:
   created:
-    - extensions/claude-marketplace/shared/vars.ts
-    - extensions/claude-marketplace/shared/errors-bridges.ts
-    - extensions/claude-marketplace/shared/fs-utils.ts
+    - extensions/pi-claude-marketplace/shared/vars.ts
+    - extensions/pi-claude-marketplace/shared/errors-bridges.ts
+    - extensions/pi-claude-marketplace/shared/fs-utils.ts
     - tests/shared/vars.test.ts
     - tests/shared/errors-bridges.test.ts
     - tests/shared/fs-utils.test.ts
@@ -51,8 +51,8 @@ key-files:
     - tests/bridges/_fixtures/foreign-agents/wrong-basename.md
     - tests/bridges/_fixtures/foreign-agents/legit-with-marker.md
   modified:
-    - extensions/claude-marketplace/domain/name.ts (assertSafeName label arg, B-02)
-    - extensions/claude-marketplace/persistence/locations.ts (5 new bridge-target fields)
+    - extensions/pi-claude-marketplace/domain/name.ts (assertSafeName label arg, B-02)
+    - extensions/pi-claude-marketplace/persistence/locations.ts (5 new bridge-target fields)
     - tests/domain/name.test.ts (B-02 label tests)
     - tests/persistence/locations.test.ts (Phase 3 bridge-target tests)
     - eslint.config.js (ignore .planning/, Rule 3 unblock)
@@ -80,27 +80,27 @@ Wave 1 / shared-infra pass for Phase 3. Lands the four primitives every Wave 2 b
 
 ### Source Modules
 
-**`extensions/claude-marketplace/shared/vars.ts`** (new)
+**`extensions/pi-claude-marketplace/shared/vars.ts`** (new)
 
 - Exports: `substituteClaudeVars(content, vars)`, `ClaudePluginVars` interface.
 - Pure-string sequential `replaceAll` for `${CLAUDE_PLUGIN_ROOT}` and `${CLAUDE_PLUGIN_DATA}`. No recursion, no eval (T-03-01 mitigation).
 - Lives in `shared/` (D-08) so all three component-type bridges share one implementation.
 
-**`extensions/claude-marketplace/shared/errors-bridges.ts`** (new)
+**`extensions/pi-claude-marketplace/shared/errors-bridges.ts`** (new)
 
 Four typed error subclasses:
 
-- `AgentForeignContentError` -- extends `PathContainmentError` (D-17). Carries `targetPath` and `reason`. AG-5 refusal when target file basename doesn't start with `claude-marketplace-` or body lacks the marker.
+- `AgentForeignContentError` -- extends `PathContainmentError` (D-17). Carries `targetPath` and `reason`. AG-5 refusal when target file basename doesn't start with `pi-claude-marketplace-` or body lacks the marker.
 - `AgentOwnershipConflictError` -- extends `Error`. Carries frozen `conflicts: AgentOwnershipConflict[]` and `stagingFor`. AG-9/RN-4 refusal when generated agent names collide across (marketplace, plugin) tuples. Multi-conflict messages join with `; `.
 - `McpServerCollisionError` -- extends `Error`. Carries `serverName` and `owningPath`. MC-4/RN-5 refusal when an MCP server name collides with an existing entry.
 - `BridgeStagingError` -- extends `Error`. Generic wrapper for prepare-time staging tmp failures; carries `cause` via `Error.cause`.
 
-**`extensions/claude-marketplace/shared/fs-utils.ts`** (new)
+**`extensions/pi-claude-marketplace/shared/fs-utils.ts`** (new)
 
 - `cleanupStaging(dir, label): Promise<string | undefined>` -- best-effort recursive `rm`. Returns `undefined` on success or ENOENT, leak message string otherwise. Never throws (T-03-03 mitigation).
 - `pathExists(p): Promise<boolean>` -- `lstat`-based predicate, ENOENT/ENOTDIR → false; non-symlink-following (B-06).
 
-**`extensions/claude-marketplace/persistence/locations.ts`** (extended)
+**`extensions/pi-claude-marketplace/persistence/locations.ts`** (extended)
 
 Five new fields on `ScopedLocations` (constructed from `extensionRoot` + hard-coded suffix):
 
@@ -114,7 +114,7 @@ Five new fields on `ScopedLocations` (constructed from `extensionRoot` + hard-co
 
 Existing fields/methods unchanged. The frozen-object discipline is preserved; the unique-symbol brand still type-gates external construction. T-03-04 mitigation is by-construction: every new path joins `extensionRoot` with a hard-coded suffix, no untrusted name components participate at this layer.
 
-**`extensions/claude-marketplace/domain/name.ts`** (extended)
+**`extensions/pi-claude-marketplace/domain/name.ts`** (extended)
 
 `assertSafeName(name, label?)` -- adds an optional `label` argument used as a prefix in error messages (B-02 fix). Single-arg call sites stay back-compat: when `label` is omitted, the legacy "Name " prefix is used. Past-tense generator helpers (`generatedSkillName`, `generatedCommandName`, `generatedAgentName`) are unchanged.
 

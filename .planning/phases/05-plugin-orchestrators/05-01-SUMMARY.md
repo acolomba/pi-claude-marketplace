@@ -33,8 +33,8 @@ key-files:
   created:
     - .planning/phases/05-plugin-orchestrators/05-01-SUMMARY.md
   modified:
-    - extensions/claude-marketplace/shared/markers.ts (added RECOVERY_PLUGIN_REINSTALL_PREFIX)
-    - extensions/claude-marketplace/shared/errors.ts (added 4 error classes + Phase3Failure interface)
+    - extensions/pi-claude-marketplace/shared/markers.ts (added RECOVERY_PLUGIN_REINSTALL_PREFIX)
+    - extensions/pi-claude-marketplace/shared/errors.ts (added 4 error classes + Phase3Failure interface)
     - tests/architecture/markers-snapshot.test.ts (added PUP-6 byte-for-byte test block)
     - tests/shared/errors.test.ts (added 4 per-class smoke tests)
 
@@ -89,8 +89,8 @@ Each task was committed atomically:
 
 ## Files Created/Modified
 
-- `extensions/claude-marketplace/shared/markers.ts` -- Added `RECOVERY_PLUGIN_REINSTALL_PREFIX` constant with JSDoc noting Phase 5 extension beyond ES-5.
-- `extensions/claude-marketplace/shared/errors.ts` -- Added 4 error classes (`CrossPluginConflictError`, `ConcurrentInstallError`, `ConcurrentUninstallError`, `PluginUpdatePhase3Error`) and `Phase3Failure` interface; appended after the existing `MarketplaceUpdateError` block.
+- `extensions/pi-claude-marketplace/shared/markers.ts` -- Added `RECOVERY_PLUGIN_REINSTALL_PREFIX` constant with JSDoc noting Phase 5 extension beyond ES-5.
+- `extensions/pi-claude-marketplace/shared/errors.ts` -- Added 4 error classes (`CrossPluginConflictError`, `ConcurrentInstallError`, `ConcurrentUninstallError`, `PluginUpdatePhase3Error`) and `Phase3Failure` interface; appended after the existing `MarketplaceUpdateError` block.
 - `tests/architecture/markers-snapshot.test.ts` -- Added new top-level test block asserting byte-for-byte equality of `RECOVERY_PLUGIN_REINSTALL_PREFIX` against the PRD §5.2.3 PUP-6 literal. Existing 5-row literals assertion unchanged.
 - `tests/shared/errors.test.ts` -- Added 4 per-class smoke tests + updated named-import list.
 
@@ -144,8 +144,8 @@ None -- this plan only adds source files and tests; no external service configur
 
 ## Self-Check: PASSED
 
-- `extensions/claude-marketplace/shared/markers.ts` -- FOUND, contains `RECOVERY_PLUGIN_REINSTALL_PREFIX = "plugin-uninstall + plugin-install for"`.
-- `extensions/claude-marketplace/shared/errors.ts` -- FOUND, exports `CrossPluginConflictError`, `ConcurrentInstallError`, `ConcurrentUninstallError`, `PluginUpdatePhase3Error`, `Phase3Failure`.
+- `extensions/pi-claude-marketplace/shared/markers.ts` -- FOUND, contains `RECOVERY_PLUGIN_REINSTALL_PREFIX = "plugin-uninstall + plugin-install for"`.
+- `extensions/pi-claude-marketplace/shared/errors.ts` -- FOUND, exports `CrossPluginConflictError`, `ConcurrentInstallError`, `ConcurrentUninstallError`, `PluginUpdatePhase3Error`, `Phase3Failure`.
 - `tests/architecture/markers-snapshot.test.ts` -- FOUND, contains PUP-6 byte-for-byte assertion block AND preserved `literals.length === 5` assertion.
 - `tests/shared/errors.test.ts` -- FOUND, contains 4 new per-class smoke tests.
 - Commit `73868e3` (Task 1) -- FOUND in `git log`.

@@ -6,11 +6,11 @@ import {
   hasLoadedPiSubagents,
   mcpAdapterWarningIfNeeded,
   subagentWarningIfNeeded,
-} from "../../extensions/claude-marketplace/platform/pi-api.ts";
+} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import {
   PI_MCP_ADAPTER_NOT_LOADED,
   PI_SUBAGENTS_NOT_LOADED,
-} from "../../extensions/claude-marketplace/shared/markers.ts";
+} from "../../extensions/pi-claude-marketplace/shared/markers.ts";
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
@@ -55,10 +55,10 @@ test("platform pi-api warning composers preserve marker text", () => {
 
   assert.equal(
     subagentWarningIfNeeded(makePi([]), ["agent"]),
-    `${PI_SUBAGENTS_NOT_LOADED}install/load it (e.g. via /pi:packages add npm:pi-subagents) and run /reload.`,
+    `${PI_SUBAGENTS_NOT_LOADED}install it with \`pi install npm:pi-subagents\`, then run \`/reload\`.`,
   );
   assert.equal(
     mcpAdapterWarningIfNeeded(makePi([]), ["server"]),
-    `${PI_MCP_ADAPTER_NOT_LOADED}install/load it (e.g. via /pi:packages add npm:pi-mcp-adapter) and run /reload.`,
+    `${PI_MCP_ADAPTER_NOT_LOADED}install it with \`pi install npm:pi-mcp-adapter\`, then run \`/reload\`.`,
   );
 });

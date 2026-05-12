@@ -27,9 +27,9 @@ tech-stack:
 
 key-files:
   created:
-    - "extensions/claude-marketplace/shared/completion-cache.ts"
-    - "extensions/claude-marketplace/edge/completions/data.ts"
-    - "extensions/claude-marketplace/edge/completions/provider.ts"
+    - "extensions/pi-claude-marketplace/shared/completion-cache.ts"
+    - "extensions/pi-claude-marketplace/edge/completions/data.ts"
+    - "extensions/pi-claude-marketplace/edge/completions/provider.ts"
   modified:
     - "tests/shared/completion-cache.test.ts"
     - "tests/edge/completions/data.test.ts"
@@ -172,9 +172,9 @@ None of the three new modules emit user-visible messages. They are pure data-acc
 
 **Created (3):**
 
-- `extensions/claude-marketplace/shared/completion-cache.ts`
-- `extensions/claude-marketplace/edge/completions/data.ts`
-- `extensions/claude-marketplace/edge/completions/provider.ts`
+- `extensions/pi-claude-marketplace/shared/completion-cache.ts`
+- `extensions/pi-claude-marketplace/edge/completions/data.ts`
+- `extensions/pi-claude-marketplace/edge/completions/provider.ts`
 
 **Modified (3):**
 
@@ -201,7 +201,7 @@ None of the three new modules emit user-visible messages. They are pure data-acc
 - **Found during:** Task 2 typecheck after writing `data.ts`.
 - **Issue:** Plan's `<interfaces>` block specified `import type { AutocompleteItem } from "@mariozechner/pi-coding-agent"`. The pi-coding-agent type surface internally uses `AutocompleteItem` from `@mariozechner/pi-tui` but does NOT re-export it (`grep -E "^export.*AutocompleteItem" node_modules/@mariozechner/pi-coding-agent/dist/index.d.ts` -> no match). The TypeScript error was `TS2305: Module '"@mariozechner/pi-coding-agent"' has no exported member 'AutocompleteItem'`.
 - **Fix:** Switched to `import type { AutocompleteItem } from "@mariozechner/pi-tui"` (V1's actual import path; confirmed by `git show features/initial:.../completions.ts`). Type-only import is fully erased at runtime; no package.json change is necessary because pi-tui is a transitive dep of pi-coding-agent (the peer dep declares the latter). The 06-RESEARCH document at line 475 also correctly states "AutocompleteItem (re-exported from @mariozechner/pi-tui, verified in node_modules/@mariozechner/pi-tui/dist/autocomplete.d.ts)". The plan's `<interfaces>` block was slightly inaccurate; the research was right.
-- **Files affected:** `extensions/claude-marketplace/edge/completions/data.ts`, `extensions/claude-marketplace/edge/completions/provider.ts`.
+- **Files affected:** `extensions/pi-claude-marketplace/edge/completions/data.ts`, `extensions/pi-claude-marketplace/edge/completions/provider.ts`.
 - **Verification:** `npx tsc --noEmit` -> 0 errors.
 - **Committed in:** `f9cd5c8` (Task 2 commit, same patch as the rest of `data.ts`).
 
@@ -210,7 +210,7 @@ None of the three new modules emit user-visible messages. They are pure data-acc
 - **Found during:** Task 1 typecheck.
 - **Issue:** `class ManifestSoftFailError extends Error { readonly cause: unknown }` -- TypeScript's strict mode (`@typescript-eslint/strictTypeChecked` extends this) requires `override` on members that exist on the base class. Node's `Error.cause` (since ES2022) is defined as `unknown`. Without `override`, `tsc` emits `TS4114: This member must have an 'override' modifier...`.
 - **Fix:** Changed declaration to `override readonly cause: unknown`. No behavior change.
-- **Files affected:** `extensions/claude-marketplace/shared/completion-cache.ts`.
+- **Files affected:** `extensions/pi-claude-marketplace/shared/completion-cache.ts`.
 - **Verification:** `npx tsc --noEmit` -> 0 errors.
 - **Committed in:** `8ed3f27` (Task 1 commit).
 
@@ -272,9 +272,9 @@ T-EDGE-4 (giant marketplace.json) remains `accept` per the plan's `<threat_model
 
 All 3 created files verified present:
 
-- extensions/claude-marketplace/shared/completion-cache.ts -- FOUND
-- extensions/claude-marketplace/edge/completions/data.ts -- FOUND
-- extensions/claude-marketplace/edge/completions/provider.ts -- FOUND
+- extensions/pi-claude-marketplace/shared/completion-cache.ts -- FOUND
+- extensions/pi-claude-marketplace/edge/completions/data.ts -- FOUND
+- extensions/pi-claude-marketplace/edge/completions/provider.ts -- FOUND
 
 All 3 modified test files verified unskipped + green:
 

@@ -17,22 +17,22 @@ ______________________________________________________________________
 - **D-01:** CI tests against **Node 24 only** (single-version matrix). Earlier Node ranges out of scope.
 - **D-02:** **Drop tsx**; tests run as `node --test "tests/**/*.test.ts"` directly.
 - **D-03:** **Adopt `write-file-atomic@^8`** as a runtime dependency, used **only for JSON files** (`state.json`, `mcp.json`, `agents-index.json`). Hand-rolled tmp+rename remains for staging directories.
-- **D-04:** Phase 1 fully rewires `package.json`: update `pi.extensions` to `./extensions/claude-marketplace/index.ts`, update test globs, bump `typebox` 1.1.34→1.1.38, `prettier` 3.6.2→3.8.3, `globals` 17.5.0→17.6.0. Phase 1 ends with `npm run check` actually green.
+- **D-04:** Phase 1 fully rewires `package.json`: update `pi.extensions` to `./extensions/pi-claude-marketplace/index.ts`, update test globs, bump `typebox` 1.1.34→1.1.38, `prettier` 3.6.2→3.8.3, `globals` 17.5.0→17.6.0. Phase 1 ends with `npm run check` actually green.
 - **D-05:** Pin `@mariozechner/pi-coding-agent` peer-dep floor to a defensible version. Final pinned version set in Phase 7; Phase 1 chooses an interim floor matching the dev version.
 
 #### Output Discipline
 
-- **D-06:** ESLint `no-restricted-syntax` blocks `process.stdout.write`, `process.stderr.write`, `console.log/warn/error/info` calls in `extensions/claude-marketplace/`. Sanctioned `eslint-disable-next-line` at the single `migrateLegacyMarketplaceRecords` callsite (per IL-3).
+- **D-06:** ESLint `no-restricted-syntax` blocks `process.stdout.write`, `process.stderr.write`, `console.log/warn/error/info` calls in `extensions/pi-claude-marketplace/`. Sanctioned `eslint-disable-next-line` at the single `migrateLegacyMarketplaceRecords` callsite (per IL-3).
 - **D-07:** `ctx.ui.notify` wrapper uses severity-named helpers: `notifySuccess`, `notifyWarning`, `notifyError(ctx, msg, cause?)`. Direct `ctx.ui.notify` allowed only inside the wrapper file.
 - **D-08:** Single `shared/markers.ts` exports the 5 ES-5 strings as named consts: `PI_SUBAGENTS_NOT_LOADED`, `PI_MCP_ADAPTER_NOT_LOADED`, `RELOAD_HINT_PREFIX`, `MANUAL_RECOVERY_REQUIRED`, `ROLLBACK_PARTIAL`.
 - **D-09:** MARKERS snapshot test parses PRD §6.12 at runtime; PRD is ground truth.
 
 #### Module Layout
 
-- **D-10:** **9-folder split** under `extensions/claude-marketplace/`: `edge/`, `orchestrators/`, `bridges/`, `domain/`, `transaction/`, `persistence/`, `presentation/`, `platform/`, `shared/`. Direct children of the extension dir (no `src/` wrapper).
+- **D-10:** **9-folder split** under `extensions/pi-claude-marketplace/`: `edge/`, `orchestrators/`, `bridges/`, `domain/`, `transaction/`, `persistence/`, `presentation/`, `platform/`, `shared/`. Direct children of the extension dir (no `src/` wrapper).
 - **D-11:** Strict ESLint `import-x/no-restricted-paths` rules enforce layering. Violations fail CI.
 - **D-12:** Phase 1 scaffolds all 9 folders with placeholder READMEs; boundary rules wired up for all 9.
-- **D-13:** Replace `extensions/claude-marketplace.ts` (current stub) with `extensions/claude-marketplace/index.ts`.
+- **D-13:** Replace `extensions/pi-claude-marketplace.ts` (current stub) with `extensions/pi-claude-marketplace/index.ts`.
 
 #### Path Safety (Symlink Handling)
 
@@ -78,7 +78,7 @@ ______________________________________________________________________
 | **NFR-4**  | Extension MUST work with Node ≥ 22                                                                                      | Node 24 LTS chosen per D-01; `write-file-atomic@8` engines `^22.22.2 \|\| ^24.15.0 \|\| >=26.0.0` |
 | **NFR-6**  | `npm run check` = typecheck + ESLint + Prettier + tests; gates stay green                                               | Verified pipeline shape in current `package.json`; D-04 keeps it green at phase end               |
 | **NFR-9**  | System MUST never print sensitive paths beyond what's already in the user's terminal                                    | `notify*` wrappers (D-07) + IL-2 enforcement (D-06) prevent leaks                                 |
-| **NFR-10** | System MUST refuse to write outside `<scopeRoot>/claude-marketplace/`, `<scopeRoot>/agents/`, or `<scopeRoot>/mcp.json` | `assertPathInside` chokepoint (D-15); symlink-walk (D-14/D-16/D-17)                               |
+| **NFR-10** | System MUST refuse to write outside `<scopeRoot>/pi-claude-marketplace/`, `<scopeRoot>/agents/`, or `<scopeRoot>/mcp.json` | `assertPathInside` chokepoint (D-15); symlink-walk (D-14/D-16/D-17)                               |
 | **IL-1**   | English-only V1; no message catalog, no locale negotiation                                                              | No i18n libs -- explicit anti-pattern in research                                                 |
 | **IL-2**   | Every user-visible message via `ctx.ui.notify`; no direct stdout/stderr writes                                          | `no-restricted-syntax` AST selectors (D-06)                                                       |
 | **IL-3**   | Single sanctioned `console.warn`: load-time `migrateLegacyMarketplaceRecords` save failure                              | `eslint-disable-next-line` comment is the sanctioned exception                                    |
@@ -155,7 +155,7 @@ Phase 1 is foundational -- it does not own use-case logic. Capabilities here are
 | `notify*` severity-named wrappers | `shared/notify.ts` (NEW)                 | --             | Same import-everywhere reasoning as markers; `ctx.ui.notify` is the only sanctioned escape hatch                |
 | ESLint output-discipline rules    | `eslint.config.js`                       | --             | Project-wide config; not a runtime module                                                                       |
 | Import-direction enforcement      | `eslint.config.js` (`import-x`)          | --             | Same                                                                                                            |
-| Pi extension entrypoint           | `extensions/claude-marketplace/index.ts` | `edge/`        | Stub for now; Phase 6 fills it; Phase 1 wires the `pi.registerCommand` + `pi.on("resources_discover")` skeleton |
+| Pi extension entrypoint           | `extensions/pi-claude-marketplace/index.ts` | `edge/`        | Stub for now; Phase 6 fills it; Phase 1 wires the `pi.registerCommand` + `pi.on("resources_discover")` skeleton |
 | Git wrapper                       | `platform/git.ts`                        | --             | External system surface, per D-20 -- only `orchestrators/marketplace/*` may import it (Phase 4)                 |
 | Folder scaffolding (9 READMEs)    | All 9 folders                            | --             | One README per folder; READMEs document allowed imports + planned contents                                      |
 
@@ -252,7 +252,7 @@ ______________________________________________________________________
                                │ loads via package.json `pi.extensions`
                                ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│  extensions/claude-marketplace/index.ts                          │
+│  extensions/pi-claude-marketplace/index.ts                          │
 │  (default-export factory: (pi: ExtensionAPI) => void)            │
 │  Registers: pi.registerCommand("claude:plugin", ...)             │
 │             pi.on("resources_discover", ...)                     │
@@ -291,7 +291,7 @@ The diagram traces the primary use-case: `pi-coding-agent` loads `index.ts`, whi
 ### Recommended Project Structure (after Phase 1)
 
 ```text
-extensions/claude-marketplace/
+extensions/pi-claude-marketplace/
 ├── index.ts                              # Pi entrypoint (D-13)
 ├── edge/                                 # EMPTY in P1 (Phase 6)
 │   └── README.md
@@ -512,7 +512,7 @@ export async function assertPathInside(
 
 ### Pattern 3: ESLint `no-restricted-syntax` for output discipline (D-06)
 
-**What:** AST-selector-based bans on direct stdout/stderr/console writes inside `extensions/claude-marketplace/`.
+**What:** AST-selector-based bans on direct stdout/stderr/console writes inside `extensions/pi-claude-marketplace/`.
 
 **Verified selector grammar** (from ESLint docs + selector-syntax verification on 2026-05-09):
 
@@ -529,13 +529,13 @@ identifier obj  property
 
 That maps to `callee.object.object.name === "process"`, `callee.object.property.name === "stdout"`, `callee.property.name === "write"`.
 
-**Concrete `eslint.config.js` block (planner: copy-paste this into the existing flat config, scoped to `extensions/claude-marketplace/`):**
+**Concrete `eslint.config.js` block (planner: copy-paste this into the existing flat config, scoped to `extensions/pi-claude-marketplace/`):**
 
 ```javascript
 // eslint.config.js -- append to the existing flat-config array
 
 {
-  files: ["extensions/claude-marketplace/**/*.ts"],
+  files: ["extensions/pi-claude-marketplace/**/*.ts"],
   rules: {
     // D-06: Output discipline (IL-2, IL-3).
     // Direct stdout/stderr writes and console.* calls are forbidden in the
@@ -616,7 +616,7 @@ That maps to `callee.object.object.name === "process"`, `callee.object.property.
     // IL-3: load-time migration save is the SINGLE sanctioned console.warn site.
     // Throwing would block reads; warn-and-continue lets users keep working.
     // eslint-disable-next-line no-restricted-syntax, no-console
-    console.warn(`claude-marketplace: failed to persist migrated state.json: ${errorMessage(err)}`);
+    console.warn(`pi-claude-marketplace: failed to persist migrated state.json: ${errorMessage(err)}`);
   }
   ```
 
@@ -644,7 +644,7 @@ interface Options {
 // eslint.config.js -- append to the same flat-config array
 
 {
-  files: ["extensions/claude-marketplace/**/*.ts"],
+  files: ["extensions/pi-claude-marketplace/**/*.ts"],
   plugins: { "import-x": importX }, // already in repo
   rules: {
     "import-x/no-restricted-paths": [
@@ -655,13 +655,13 @@ interface Options {
           // edge/ may import from: orchestrators/, presentation/, shared/.
           // Forbid imports from everything else.
           {
-            target: "./extensions/claude-marketplace/edge",
+            target: "./extensions/pi-claude-marketplace/edge",
             from: [
-              "./extensions/claude-marketplace/bridges",
-              "./extensions/claude-marketplace/domain",
-              "./extensions/claude-marketplace/transaction",
-              "./extensions/claude-marketplace/persistence",
-              "./extensions/claude-marketplace/platform",
+              "./extensions/pi-claude-marketplace/bridges",
+              "./extensions/pi-claude-marketplace/domain",
+              "./extensions/pi-claude-marketplace/transaction",
+              "./extensions/pi-claude-marketplace/persistence",
+              "./extensions/pi-claude-marketplace/platform",
             ],
             message: "edge/ may only import from orchestrators/, presentation/, shared/.",
           },
@@ -669,104 +669,104 @@ interface Options {
           // persistence/, presentation/, platform/, shared/.
           // Forbid imports from edge/.
           {
-            target: "./extensions/claude-marketplace/orchestrators",
-            from: ["./extensions/claude-marketplace/edge"],
+            target: "./extensions/pi-claude-marketplace/orchestrators",
+            from: ["./extensions/pi-claude-marketplace/edge"],
             message: "orchestrators/ MUST NOT import from edge/.",
           },
           // bridges/ may import from: domain/, persistence/, shared/.
           // Forbid imports from edge/, orchestrators/, transaction/, presentation/, platform/.
           {
-            target: "./extensions/claude-marketplace/bridges",
+            target: "./extensions/pi-claude-marketplace/bridges",
             from: [
-              "./extensions/claude-marketplace/edge",
-              "./extensions/claude-marketplace/orchestrators",
-              "./extensions/claude-marketplace/transaction",
-              "./extensions/claude-marketplace/presentation",
-              "./extensions/claude-marketplace/platform",
+              "./extensions/pi-claude-marketplace/edge",
+              "./extensions/pi-claude-marketplace/orchestrators",
+              "./extensions/pi-claude-marketplace/transaction",
+              "./extensions/pi-claude-marketplace/presentation",
+              "./extensions/pi-claude-marketplace/platform",
             ],
             message:
               "bridges/ may only import from domain/, persistence/, shared/. Cross-bridge imports are also forbidden -- bridges/skills cannot import bridges/agents (use a domain-level abstraction).",
           },
           // domain/ has no upward imports -- pure logic.
           {
-            target: "./extensions/claude-marketplace/domain",
+            target: "./extensions/pi-claude-marketplace/domain",
             from: [
-              "./extensions/claude-marketplace/edge",
-              "./extensions/claude-marketplace/orchestrators",
-              "./extensions/claude-marketplace/bridges",
-              "./extensions/claude-marketplace/transaction",
-              "./extensions/claude-marketplace/persistence",
-              "./extensions/claude-marketplace/presentation",
-              "./extensions/claude-marketplace/platform",
+              "./extensions/pi-claude-marketplace/edge",
+              "./extensions/pi-claude-marketplace/orchestrators",
+              "./extensions/pi-claude-marketplace/bridges",
+              "./extensions/pi-claude-marketplace/transaction",
+              "./extensions/pi-claude-marketplace/persistence",
+              "./extensions/pi-claude-marketplace/presentation",
+              "./extensions/pi-claude-marketplace/platform",
             ],
             message: "domain/ MUST NOT import upward -- pure logic only. shared/ is the only sibling import allowed.",
           },
           // transaction/ may import from: persistence/, shared/.
           {
-            target: "./extensions/claude-marketplace/transaction",
+            target: "./extensions/pi-claude-marketplace/transaction",
             from: [
-              "./extensions/claude-marketplace/edge",
-              "./extensions/claude-marketplace/orchestrators",
-              "./extensions/claude-marketplace/bridges",
-              "./extensions/claude-marketplace/domain",
-              "./extensions/claude-marketplace/presentation",
-              "./extensions/claude-marketplace/platform",
+              "./extensions/pi-claude-marketplace/edge",
+              "./extensions/pi-claude-marketplace/orchestrators",
+              "./extensions/pi-claude-marketplace/bridges",
+              "./extensions/pi-claude-marketplace/domain",
+              "./extensions/pi-claude-marketplace/presentation",
+              "./extensions/pi-claude-marketplace/platform",
             ],
             message: "transaction/ may only import from persistence/, shared/.",
           },
           // persistence/ may import from: domain/, shared/.
           {
-            target: "./extensions/claude-marketplace/persistence",
+            target: "./extensions/pi-claude-marketplace/persistence",
             from: [
-              "./extensions/claude-marketplace/edge",
-              "./extensions/claude-marketplace/orchestrators",
-              "./extensions/claude-marketplace/bridges",
-              "./extensions/claude-marketplace/transaction",
-              "./extensions/claude-marketplace/presentation",
-              "./extensions/claude-marketplace/platform",
+              "./extensions/pi-claude-marketplace/edge",
+              "./extensions/pi-claude-marketplace/orchestrators",
+              "./extensions/pi-claude-marketplace/bridges",
+              "./extensions/pi-claude-marketplace/transaction",
+              "./extensions/pi-claude-marketplace/presentation",
+              "./extensions/pi-claude-marketplace/platform",
             ],
             message: "persistence/ may only import from domain/, shared/.",
           },
           // presentation/ may import from: domain/, shared/.
           {
-            target: "./extensions/claude-marketplace/presentation",
+            target: "./extensions/pi-claude-marketplace/presentation",
             from: [
-              "./extensions/claude-marketplace/edge",
-              "./extensions/claude-marketplace/orchestrators",
-              "./extensions/claude-marketplace/bridges",
-              "./extensions/claude-marketplace/transaction",
-              "./extensions/claude-marketplace/persistence",
-              "./extensions/claude-marketplace/platform",
+              "./extensions/pi-claude-marketplace/edge",
+              "./extensions/pi-claude-marketplace/orchestrators",
+              "./extensions/pi-claude-marketplace/bridges",
+              "./extensions/pi-claude-marketplace/transaction",
+              "./extensions/pi-claude-marketplace/persistence",
+              "./extensions/pi-claude-marketplace/platform",
             ],
             message: "presentation/ may only import from domain/, shared/.",
           },
           // platform/ may import from: shared/. Strictly external-system facade.
           {
-            target: "./extensions/claude-marketplace/platform",
+            target: "./extensions/pi-claude-marketplace/platform",
             from: [
-              "./extensions/claude-marketplace/edge",
-              "./extensions/claude-marketplace/orchestrators",
-              "./extensions/claude-marketplace/bridges",
-              "./extensions/claude-marketplace/domain",
-              "./extensions/claude-marketplace/transaction",
-              "./extensions/claude-marketplace/persistence",
-              "./extensions/claude-marketplace/presentation",
+              "./extensions/pi-claude-marketplace/edge",
+              "./extensions/pi-claude-marketplace/orchestrators",
+              "./extensions/pi-claude-marketplace/bridges",
+              "./extensions/pi-claude-marketplace/domain",
+              "./extensions/pi-claude-marketplace/transaction",
+              "./extensions/pi-claude-marketplace/persistence",
+              "./extensions/pi-claude-marketplace/presentation",
             ],
             message:
               "platform/ may only import from shared/. It's the external-system boundary (git, Pi API surface).",
           },
           // shared/ may import from: nothing in the extension. Pure leaves.
           {
-            target: "./extensions/claude-marketplace/shared",
+            target: "./extensions/pi-claude-marketplace/shared",
             from: [
-              "./extensions/claude-marketplace/edge",
-              "./extensions/claude-marketplace/orchestrators",
-              "./extensions/claude-marketplace/bridges",
-              "./extensions/claude-marketplace/domain",
-              "./extensions/claude-marketplace/transaction",
-              "./extensions/claude-marketplace/persistence",
-              "./extensions/claude-marketplace/presentation",
-              "./extensions/claude-marketplace/platform",
+              "./extensions/pi-claude-marketplace/edge",
+              "./extensions/pi-claude-marketplace/orchestrators",
+              "./extensions/pi-claude-marketplace/bridges",
+              "./extensions/pi-claude-marketplace/domain",
+              "./extensions/pi-claude-marketplace/transaction",
+              "./extensions/pi-claude-marketplace/persistence",
+              "./extensions/pi-claude-marketplace/presentation",
+              "./extensions/pi-claude-marketplace/platform",
             ],
             message: "shared/ MUST NOT import from any extension folder. Pure leaves only.",
           },
@@ -935,7 +935,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import * as markers from "../../extensions/claude-marketplace/shared/markers.ts";
+import * as markers from "../../extensions/pi-claude-marketplace/shared/markers.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const PRD_PATH = path.join(REPO_ROOT, "docs/prd/pi-claude-marketplace-prd.md");
@@ -1046,7 +1046,7 @@ Then `shared/notify.ts` gets a per-file override that turns the rule off:
 
 ```javascript
 {
-  files: ["extensions/claude-marketplace/shared/notify.ts"],
+  files: ["extensions/pi-claude-marketplace/shared/notify.ts"],
   rules: {
     "no-restricted-syntax": "off",
   },
@@ -1055,19 +1055,19 @@ Then `shared/notify.ts` gets a per-file override that turns the rule off:
 
 ### Pattern 8: `index.ts` Pi entrypoint skeleton (D-13)
 
-**What:** Phase 1's `extensions/claude-marketplace/index.ts` replaces the current stub. At Phase-1-end, it registers the `claude:plugin` command + `resources_discover` event handler, but both delegate to (currently empty) edge handlers. Goal is to have **a real Pi extension** that loads cleanly and notifies "not implemented yet" -- exactly mirroring what the current stub does, but in the new layout.
+**What:** Phase 1's `extensions/pi-claude-marketplace/index.ts` replaces the current stub. At Phase-1-end, it registers the `claude:plugin` command + `resources_discover` event handler, but both delegate to (currently empty) edge handlers. Goal is to have **a real Pi extension** that loads cleanly and notifies "not implemented yet" -- exactly mirroring what the current stub does, but in the new layout.
 
 **Verified Pi API surface** (from `@mariozechner/pi-coding-agent@0.73.1`'s `dist/core/extensions/types.d.ts`, read from local `node_modules` on 2026-05-09):
 
 - `ExtensionAPI.registerCommand(name, options)` -- options shape: `{ description?, getArgumentCompletions?, handler }`. `handler` signature: `(args: string, ctx: ExtensionCommandContext) => Promise<void>`.
-- `ExtensionAPI.registerTool(tool: ToolDefinition<TParams, TDetails, TState>)` -- used by Phase 6 for the LLM-callable list tools. **NOT used in Phase 1's index.ts** -- the current stub registers `claude_marketplace_list` but Phase 1 dropping it is fine (Phase 6 will re-register from `edge/handlers/list.ts`).
+- `ExtensionAPI.registerTool(tool: ToolDefinition<TParams, TDetails, TState>)` -- used by Phase 6 for the LLM-callable list tools. **NOT used in Phase 1's index.ts** -- the current stub registers `pi_claude_marketplace_list` but Phase 1 dropping it is fine (Phase 6 will re-register from `edge/handlers/list.ts`).
 - `ExtensionAPI.on("resources_discover", handler)` -- handler returns `{ skillPaths?, promptPaths?, themePaths? }`. V1's `index.ts` already does this; Phase 1 should keep the V1 shape.
 - `ExtensionContext.ui.notify(message, type?)` -- the only output channel. `type` is the optional `"info" | "warning" | "error"`.
 
 **Concrete `index.ts` skeleton:**
 
 ```typescript
-// extensions/claude-marketplace/index.ts
+// extensions/pi-claude-marketplace/index.ts
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { notifyWarning } from "./shared/notify.ts";
 
@@ -1095,7 +1095,7 @@ export default function claudeMarketplaceExtension(pi: ExtensionAPI): void {
   });
 
   // Phase 6 will additionally re-register the LLM-callable list tools (the
-  // current stub's claude_marketplace_list). Phase 1's index.ts deliberately
+  // current stub's pi_claude_marketplace_list). Phase 1's index.ts deliberately
   // does NOT register tools -- they belong to edge/, which is empty in P1.
 }
 ```
@@ -1136,7 +1136,7 @@ ______________________________________________________________________
 | Category                                 | Items Found                                                                                                                                                                                      | Action Required                                                                                                                    |
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
 | **Stored data**                          | None -- V1 source on `features/initial` exists in git history; current branch's stub does not produce any persisted data (no state.json, no clones).                                             | None.                                                                                                                              |
-| **Live service config**                  | `package.json` `pi.extensions` array currently points at `./extensions/claude-marketplace/index.ts` (which doesn't exist yet -- it points at the future location).                               | Phase 1 makes the pointer correct by creating `extensions/claude-marketplace/index.ts`. **Net: pointer moves from broken → live.** |
+| **Live service config**                  | `package.json` `pi.extensions` array currently points at `./extensions/pi-claude-marketplace/index.ts` (which doesn't exist yet -- it points at the future location).                               | Phase 1 makes the pointer correct by creating `extensions/pi-claude-marketplace/index.ts`. **Net: pointer moves from broken → live.** |
 | **OS-registered state**                  | None -- no Task Scheduler, launchd, systemd, pm2 entries reference this extension's name.                                                                                                        | None.                                                                                                                              |
 | **Secrets/env vars**                     | None. The extension reads only `process.env` indirectly via `os.homedir()` in `locationsFor`. No secret keys, no API tokens.                                                                     | None.                                                                                                                              |
 | **Build artifacts / installed packages** | `node_modules/tsx` is currently installed but D-02 removes it. `node_modules/typebox`, `prettier`, `globals` are pinned to old versions per `package.json` and need re-install after D-04 bumps. | Run `npm install` after the package.json edits land. Verify `node_modules/.package-lock.json` records the new versions.            |
@@ -1219,7 +1219,7 @@ Code review rejects bare `eslint-disable-next-line` without a `--` justification
 
 ### Pitfall 7: `package.json` `pi.extensions` pointer left dangling
 
-**What goes wrong:** Current `package.json` `pi.extensions` already points at `./extensions/claude-marketplace/index.ts` -- but that file does NOT exist on this branch. The current stub is `./extensions/claude-marketplace.ts` (without the dir). Pi loads, fails to find the indicated file, and fails the extension-load step. **D-04 fixes this**, but if Phase 1 is split into multiple waves and the package.json edit lands BEFORE the directory + index.ts are created, `npm run check`'s test step will fail at extension-load.
+**What goes wrong:** Current `package.json` `pi.extensions` already points at `./extensions/pi-claude-marketplace/index.ts` -- but that file does NOT exist on this branch. The current stub is `./extensions/pi-claude-marketplace.ts` (without the dir). Pi loads, fails to find the indicated file, and fails the extension-load step. **D-04 fixes this**, but if Phase 1 is split into multiple waves and the package.json edit lands BEFORE the directory + index.ts are created, `npm run check`'s test step will fail at extension-load.
 
 **How to avoid:**
 
@@ -1351,10 +1351,10 @@ ______________________________________________________________________
    - What's unclear: A PRD edit that changes `Run /reload to <verb> …` to `Run /reload to <action> …` (rewording the placeholder name from `<verb>` to `<action>`) does NOT change the user-visible string at runtime -- but the snapshot test as written above WOULD pass (we strip from the first `<` onward).
    - Recommendation: This is the desired behavior. The prefix is the user contract; the placeholder name is internal to the PRD. Document in the test file's header.
 
-3. **Does `index.ts` need to register `claude_marketplace_list` LLM tool in Phase 1?**
+3. **Does `index.ts` need to register `pi_claude_marketplace_list` LLM tool in Phase 1?**
 
    - What we know: D-13 says the stub's two registered surfaces "get re-implemented inside the new layout in later phases; Phase 1's index.ts is a thin entrypoint that sets up the `pi.registerCommand`/`pi.registerTool` surface and delegates to `edge/` modules (which will be empty at end of Phase 1, populated by Phase 6)".
-   - What's unclear: Does "thin entrypoint that sets up `pi.registerTool`" mean Phase 1 registers a stub `claude_marketplace_list` (mirroring the current stub), or does Phase 1 register NO tools and Phase 6 introduces them?
+   - What's unclear: Does "thin entrypoint that sets up `pi.registerTool`" mean Phase 1 registers a stub `pi_claude_marketplace_list` (mirroring the current stub), or does Phase 1 register NO tools and Phase 6 introduces them?
    - Recommendation: Register NO tools in Phase 1's `index.ts`. The current stub registers the tool only because there was no edge/ layer. With the new layout, tool registration belongs to `edge/handlers/list.ts` per the architecture diagram. The Phase 1 index.ts comment block will explicitly note "Phase 6: register tools from edge/handlers/list.ts." If the planner wants to be safer (e.g., to avoid breaking any user who has the marketplace tool in their `setActiveTools` list), Phase 1 can register a placeholder tool that returns "not implemented yet" -- but this couples Phase 1's index.ts to TypeBox + ToolDefinition types it otherwise doesn't need.
 
 4. **Where does `shared/errors.ts` (port of V1's `errorMessage`/`appendLeaks`/`appendLeakToError`) actually live?**

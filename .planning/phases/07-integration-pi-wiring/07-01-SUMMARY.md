@@ -8,7 +8,7 @@ requires:
   - phase: 06-edge-layer-tab-completion
     provides: [edge registration helpers, LLM tools, command handlers]
 provides:
-  - Single Pi API wrapper at extensions/claude-marketplace/platform/pi-api.ts
+  - Single Pi API wrapper at extensions/pi-claude-marketplace/platform/pi-api.ts
   - Soft-dependency helpers owned by the platform wrapper with presentation shim compatibility
   - ESLint guard forbidding direct @mariozechner/pi-coding-agent imports outside the wrapper
   - Peer dependency floor @mariozechner/pi-coding-agent >=0.73.1
@@ -22,17 +22,17 @@ tech-stack:
 
 key-files:
   created:
-    - extensions/claude-marketplace/platform/pi-api.ts
+    - extensions/pi-claude-marketplace/platform/pi-api.ts
     - tests/platform/pi-api.test.ts
   modified:
-    - extensions/claude-marketplace/presentation/soft-dep.ts
+    - extensions/pi-claude-marketplace/presentation/soft-dep.ts
     - eslint.config.js
     - .prettierignore
     - package.json
     - tests/architecture/import-boundaries.test.ts
-    - extensions/claude-marketplace/**/handlers and orchestrator type imports
-    - extensions/claude-marketplace/index.ts
-    - extensions/claude-marketplace/shared/notify.ts
+    - extensions/pi-claude-marketplace/**/handlers and orchestrator type imports
+    - extensions/pi-claude-marketplace/index.ts
+    - extensions/pi-claude-marketplace/shared/notify.ts
 
 key-decisions:
   - "Pi API imports now flow through platform/pi-api.ts; the wrapper exports only the currently needed surface."
@@ -64,7 +64,7 @@ completed: 2026-05-11
 
 ## Accomplishments
 
-- Created the sole production Pi API import surface at `extensions/claude-marketplace/platform/pi-api.ts`.
+- Created the sole production Pi API import surface at `extensions/pi-claude-marketplace/platform/pi-api.ts`.
 - Moved soft-dependency probes and warning composers into the wrapper while preserving `presentation/soft-dep.ts` imports through a shim.
 - Migrated production Pi peer imports across the extension tree and added an ESLint guard to prevent drift.
 - Raised `@mariozechner/pi-coding-agent` peer dependency floor to `>=0.73.1` and validated package dry-run output.
@@ -78,14 +78,14 @@ completed: 2026-05-11
 
 ## Files Created/Modified
 
-- `extensions/claude-marketplace/platform/pi-api.ts` - Thin Pi API type wrapper plus soft-dependency helpers.
-- `extensions/claude-marketplace/presentation/soft-dep.ts` - Compatibility shim re-exporting platform helpers.
+- `extensions/pi-claude-marketplace/platform/pi-api.ts` - Thin Pi API type wrapper plus soft-dependency helpers.
+- `extensions/pi-claude-marketplace/presentation/soft-dep.ts` - Compatibility shim re-exporting platform helpers.
 - `tests/platform/pi-api.test.ts` - Wrapper behavior tests for soft-dependency probing and warning text.
 - `eslint.config.js` - Allows platform type imports where needed and forbids direct peer imports outside the wrapper.
 - `.prettierignore` - Excludes generated harness files from global format checks.
 - `tests/architecture/import-boundaries.test.ts` - Updates the import-boundary matrix for the new platform wrapper dependency direction.
 - `package.json` - Pins `@mariozechner/pi-coding-agent` peer dependency floor to `>=0.73.1`.
-- `extensions/claude-marketplace/**` - Migrated direct Pi peer type imports to relative `platform/pi-api.ts` imports.
+- `extensions/pi-claude-marketplace/**` - Migrated direct Pi peer type imports to relative `platform/pi-api.ts` imports.
 
 ## Decisions Made
 
@@ -109,7 +109,7 @@ completed: 2026-05-11
 - **Found during:** Task 1 (Pi API wrapper implementation)
 - **Issue:** `AutocompleteItem`, `ResourcesDiscoverEvent`, `ResourcesDiscoverResult`, and `Tool` are not all available as top-level exports from `@mariozechner/pi-coding-agent@0.73.1`.
 - **Fix:** Removed unused `Tool`, re-exported `AutocompleteItem` from `@mariozechner/pi-tui`, and defined structural resources-discover event/result types matching the package declarations.
-- **Files modified:** `extensions/claude-marketplace/platform/pi-api.ts`
+- **Files modified:** `extensions/pi-claude-marketplace/platform/pi-api.ts`
 - **Verification:** `npm run typecheck`, wrapper tests, and soft-dep tests passed.
 - **Committed in:** `79d3499`
 
@@ -148,7 +148,7 @@ Plan 07-02 can build on a stable Pi API import boundary and peer floor. Future P
 
 ## Self-Check: PASSED
 
-- Found `extensions/claude-marketplace/platform/pi-api.ts`.
+- Found `extensions/pi-claude-marketplace/platform/pi-api.ts`.
 - Found `tests/platform/pi-api.test.ts`.
 - Found commits `d366c58`, `79d3499`, `36abb7c`, and `facc804`.
 - Verified `npm run lint`, `npm run typecheck`, and `npm pack --dry-run` completed successfully.

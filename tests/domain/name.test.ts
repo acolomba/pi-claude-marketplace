@@ -6,7 +6,7 @@ import {
   generatedAgentName,
   generatedCommandName,
   generatedSkillName,
-} from "../../extensions/claude-marketplace/domain/name.ts";
+} from "../../extensions/pi-claude-marketplace/domain/name.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // RN-2: assertSafeName
@@ -32,7 +32,7 @@ test("RN-2 assertSafeName accepts colon (used by command names)", () => {
 
 test("RN-2 assertSafeName accepts long pi-namespaced agent name", () => {
   assert.doesNotThrow(() => {
-    assertSafeName("claude-marketplace-acme-bot");
+    assertSafeName("pi-claude-marketplace-acme-bot");
   });
 });
 
@@ -144,20 +144,20 @@ test("CM-2 generatedCommandName throws when elision yields empty string", () => 
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// RN-1 / AG-1: generatedAgentName -- "claude-marketplace-<plugin>-<agent>"
+// RN-1 / AG-1: generatedAgentName -- "pi-claude-marketplace-<plugin>-<agent>"
 // ──────────────────────────────────────────────────────────────────────────
 
 test("AG-1 generatedAgentName basic case", () => {
-  assert.equal(generatedAgentName("acme", "bot"), "claude-marketplace-acme-bot");
+  assert.equal(generatedAgentName("acme", "bot"), "pi-claude-marketplace-acme-bot");
 });
 
 test("AG-1 generatedAgentName elides plugin- prefix from source (Pitfall 8)", () => {
-  assert.equal(generatedAgentName("acme", "acme-bot"), "claude-marketplace-acme-bot");
+  assert.equal(generatedAgentName("acme", "acme-bot"), "pi-claude-marketplace-acme-bot");
 });
 
-test("AG-1 generatedAgentName always starts with claude-marketplace- (AG-5 marker discipline)", () => {
+test("AG-1 generatedAgentName always starts with pi-claude-marketplace- (AG-5 marker discipline)", () => {
   const result = generatedAgentName("acme", "bot");
-  assert.ok(result.startsWith("claude-marketplace-"));
+  assert.ok(result.startsWith("pi-claude-marketplace-"));
 });
 
 // ──────────────────────────────────────────────────────────────────────────

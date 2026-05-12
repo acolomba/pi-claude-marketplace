@@ -6,11 +6,11 @@ import {
   hasLoadedPiSubagents,
   mcpAdapterWarningIfNeeded,
   subagentWarningIfNeeded,
-} from "../../extensions/claude-marketplace/presentation/soft-dep.ts";
+} from "../../extensions/pi-claude-marketplace/presentation/soft-dep.ts";
 import {
   PI_MCP_ADAPTER_NOT_LOADED,
   PI_SUBAGENTS_NOT_LOADED,
-} from "../../extensions/claude-marketplace/shared/markers.ts";
+} from "../../extensions/pi-claude-marketplace/shared/markers.ts";
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
@@ -89,7 +89,7 @@ test("RH-5: subagentWarningIfNeeded returns canonical warning when staged + unlo
   const out = subagentWarningIfNeeded(makePi([]), ["a"]);
   assert.equal(
     out,
-    `${PI_SUBAGENTS_NOT_LOADED}install/load it (e.g. via /pi:packages add npm:pi-subagents) and run /reload.`,
+    `${PI_SUBAGENTS_NOT_LOADED}install it with \`pi install npm:pi-subagents\`, then run \`/reload\`.`,
   );
   // Sanity: the marker prefix is the locked PRD §6.12 ES-5 contract.
   assert.ok(out.startsWith(PI_SUBAGENTS_NOT_LOADED));
@@ -99,7 +99,7 @@ test("RH-5: mcpAdapterWarningIfNeeded returns canonical warning when staged + un
   const out = mcpAdapterWarningIfNeeded(makePi([]), ["server-1"]);
   assert.equal(
     out,
-    `${PI_MCP_ADAPTER_NOT_LOADED}install/load it (e.g. via /pi:packages add npm:pi-mcp-adapter) and run /reload.`,
+    `${PI_MCP_ADAPTER_NOT_LOADED}install it with \`pi install npm:pi-mcp-adapter\`, then run \`/reload\`.`,
   );
   assert.ok(out.startsWith(PI_MCP_ADAPTER_NOT_LOADED));
 });

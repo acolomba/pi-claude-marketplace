@@ -1,4 +1,4 @@
-// Plan 06-04 Task 2: claude_marketplace_list + claude_marketplace_plugin_list
+// Plan 06-04 Task 2: pi_claude_marketplace_list + pi_claude_marketplace_plugin_list
 // LLM-tool tests.
 //
 // The tools are registered via `pi.registerTool({...})`. We build a mock pi
@@ -12,13 +12,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { pathSource } from "../../../extensions/claude-marketplace/domain/source.ts";
+import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   registerListMarketplacesTool,
   registerListPluginsTool,
-} from "../../../extensions/claude-marketplace/edge/handlers/tools.ts";
-import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
-import { saveState } from "../../../extensions/claude-marketplace/persistence/state-io.ts";
+} from "../../../extensions/pi-claude-marketplace/edge/handlers/tools.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 
@@ -162,13 +162,13 @@ async function seedMarketplace(opts: {
   });
 }
 
-// ─── claude_marketplace_list ─────────────────────────────────────────────
+// ─── pi_claude_marketplace_list ─────────────────────────────────────────────
 
-test("D-02 :: registerListMarketplacesTool registers tool name claude_marketplace_list with empty params schema", () => {
+test("D-02 :: registerListMarketplacesTool registers tool name pi_claude_marketplace_list with empty params schema", () => {
   const { pi, registered } = makeMockPi();
   registerListMarketplacesTool(pi);
   assert.equal(registered.size, 1);
-  const tool = registered.get("claude_marketplace_list");
+  const tool = registered.get("pi_claude_marketplace_list");
   assert.notEqual(tool, undefined);
   // Params is Type.Object({}) -- structurally an object with no required
   // properties. We don't need to introspect the schema deeply; identity is
@@ -176,11 +176,11 @@ test("D-02 :: registerListMarketplacesTool registers tool name claude_marketplac
   assert.notEqual(tool!.parameters, undefined);
 });
 
-test('claude_marketplace_list :: empty state returns content text "No marketplaces configured." + details.marketplaces == []', async () => {
+test('pi_claude_marketplace_list :: empty state returns content text "No marketplaces configured." + details.marketplaces == []', async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { pi, registered } = makeMockPi();
     registerListMarketplacesTool(pi);
-    const tool = registered.get("claude_marketplace_list")!;
+    const tool = registered.get("pi_claude_marketplace_list")!;
     const ctx = makeCtx(cwd);
     const out = await tool.execute("call-1", {}, undefined, undefined, ctx);
     assert.equal(out.content[0]!.text, "No marketplaces configured.");
@@ -189,7 +189,7 @@ test('claude_marketplace_list :: empty state returns content text "No marketplac
   });
 });
 
-test("claude_marketplace_list :: populated state returns one line per marketplace formatted [<scope>] <name> -- <N> plugin(s) -- <source.logical>", async () => {
+test("pi_claude_marketplace_list :: populated state returns one line per marketplace formatted [<scope>] <name> -- <N> plugin(s) -- <source.logical>", async () => {
   await withHermeticHome(async ({ cwd }) => {
     await seedMarketplace({
       cwd,
@@ -199,7 +199,7 @@ test("claude_marketplace_list :: populated state returns one line per marketplac
     });
     const { pi, registered } = makeMockPi();
     registerListMarketplacesTool(pi);
-    const tool = registered.get("claude_marketplace_list")!;
+    const tool = registered.get("pi_claude_marketplace_list")!;
     const ctx = makeCtx(cwd);
     const out = await tool.execute("call-1", {}, undefined, undefined, ctx);
     assert.match(out.content[0]!.text, /\[project\] mymkt -- 1 plugin\(s\) -- \.\/mp-mymkt/);
@@ -210,18 +210,18 @@ test("claude_marketplace_list :: populated state returns one line per marketplac
   });
 });
 
-// ─── claude_marketplace_plugin_list ──────────────────────────────────────
+// ─── pi_claude_marketplace_plugin_list ──────────────────────────────────────
 
-test("D-02 :: registerListPluginsTool registers tool name claude_marketplace_plugin_list with extended params", () => {
+test("D-02 :: registerListPluginsTool registers tool name pi_claude_marketplace_plugin_list with extended params", () => {
   const { pi, registered } = makeMockPi();
   registerListPluginsTool(pi);
   assert.equal(registered.size, 1);
-  const tool = registered.get("claude_marketplace_plugin_list");
+  const tool = registered.get("pi_claude_marketplace_plugin_list");
   assert.notEqual(tool, undefined);
   assert.notEqual(tool!.parameters, undefined);
 });
 
-test("claude_marketplace_plugin_list :: marketplace set, marketplace exists -> plugins from that marketplace", async () => {
+test("pi_claude_marketplace_plugin_list :: marketplace set, marketplace exists -> plugins from that marketplace", async () => {
   await withHermeticHome(async ({ cwd }) => {
     await seedMarketplace({
       cwd,
@@ -231,7 +231,7 @@ test("claude_marketplace_plugin_list :: marketplace set, marketplace exists -> p
     });
     const { pi, registered } = makeMockPi();
     registerListPluginsTool(pi);
-    const tool = registered.get("claude_marketplace_plugin_list")!;
+    const tool = registered.get("pi_claude_marketplace_plugin_list")!;
     const ctx = makeCtx(cwd);
     const out = await tool.execute("call-1", { marketplace: "mymkt" }, undefined, undefined, ctx);
     assert.match(out.content[0]!.text, /Marketplace mymkt \(project\)/);
@@ -243,11 +243,11 @@ test("claude_marketplace_plugin_list :: marketplace set, marketplace exists -> p
   });
 });
 
-test("claude_marketplace_plugin_list :: marketplace set, marketplace not found -> error text + details.plugins == []", async () => {
+test("pi_claude_marketplace_plugin_list :: marketplace set, marketplace not found -> error text + details.plugins == []", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { pi, registered } = makeMockPi();
     registerListPluginsTool(pi);
-    const tool = registered.get("claude_marketplace_plugin_list")!;
+    const tool = registered.get("pi_claude_marketplace_plugin_list")!;
     const ctx = makeCtx(cwd);
     const out = await tool.execute("call-1", { marketplace: "ghost" }, undefined, undefined, ctx);
     assert.equal(out.content[0]!.text, 'Marketplace "ghost" not found.');
@@ -256,7 +256,7 @@ test("claude_marketplace_plugin_list :: marketplace set, marketplace not found -
   });
 });
 
-test("claude_marketplace_plugin_list :: marketplace omitted -> enumerate across all marketplaces", async () => {
+test("pi_claude_marketplace_plugin_list :: marketplace omitted -> enumerate across all marketplaces", async () => {
   await withHermeticHome(async ({ cwd }) => {
     await seedMarketplace({
       cwd,
@@ -272,7 +272,7 @@ test("claude_marketplace_plugin_list :: marketplace omitted -> enumerate across 
     });
     const { pi, registered } = makeMockPi();
     registerListPluginsTool(pi);
-    const tool = registered.get("claude_marketplace_plugin_list")!;
+    const tool = registered.get("pi_claude_marketplace_plugin_list")!;
     const ctx = makeCtx(cwd);
     const out = await tool.execute("call-1", {}, undefined, undefined, ctx);
     assert.match(out.content[0]!.text, /Marketplace mkt-a/);
@@ -284,7 +284,7 @@ test("claude_marketplace_plugin_list :: marketplace omitted -> enumerate across 
   });
 });
 
-test("claude_marketplace_plugin_list :: installed: true filter -> only installed bucket", async () => {
+test("pi_claude_marketplace_plugin_list :: installed: true filter -> only installed bucket", async () => {
   await withHermeticHome(async ({ cwd }) => {
     await seedMarketplace({
       cwd,
@@ -296,7 +296,7 @@ test("claude_marketplace_plugin_list :: installed: true filter -> only installed
     });
     const { pi, registered } = makeMockPi();
     registerListPluginsTool(pi);
-    const tool = registered.get("claude_marketplace_plugin_list")!;
+    const tool = registered.get("pi_claude_marketplace_plugin_list")!;
     const ctx = makeCtx(cwd);
     const out = await tool.execute("call-1", { installed: true }, undefined, undefined, ctx);
     const details = out.details as { plugins: { name: string; status: string }[] };
@@ -305,7 +305,7 @@ test("claude_marketplace_plugin_list :: installed: true filter -> only installed
   });
 });
 
-test("claude_marketplace_plugin_list :: available: true filter -> only available bucket", async () => {
+test("pi_claude_marketplace_plugin_list :: available: true filter -> only available bucket", async () => {
   await withHermeticHome(async ({ cwd }) => {
     await seedMarketplace({
       cwd,
@@ -318,7 +318,7 @@ test("claude_marketplace_plugin_list :: available: true filter -> only available
     });
     const { pi, registered } = makeMockPi();
     registerListPluginsTool(pi);
-    const tool = registered.get("claude_marketplace_plugin_list")!;
+    const tool = registered.get("pi_claude_marketplace_plugin_list")!;
     const ctx = makeCtx(cwd);
     const out = await tool.execute("call-1", { available: true }, undefined, undefined, ctx);
     const details = out.details as { plugins: unknown[] };
@@ -326,7 +326,7 @@ test("claude_marketplace_plugin_list :: available: true filter -> only available
   });
 });
 
-test("claude_marketplace_plugin_list :: unavailable: true filter -> only unavailable bucket", async () => {
+test("pi_claude_marketplace_plugin_list :: unavailable: true filter -> only unavailable bucket", async () => {
   await withHermeticHome(async ({ cwd }) => {
     await seedMarketplace({
       cwd,
@@ -336,7 +336,7 @@ test("claude_marketplace_plugin_list :: unavailable: true filter -> only unavail
     });
     const { pi, registered } = makeMockPi();
     registerListPluginsTool(pi);
-    const tool = registered.get("claude_marketplace_plugin_list")!;
+    const tool = registered.get("pi_claude_marketplace_plugin_list")!;
     const ctx = makeCtx(cwd);
     const out = await tool.execute("call-1", { unavailable: true }, undefined, undefined, ctx);
     const details = out.details as { plugins: unknown[] };
@@ -344,7 +344,7 @@ test("claude_marketplace_plugin_list :: unavailable: true filter -> only unavail
   });
 });
 
-test("claude_marketplace_plugin_list :: available: true + unavailable: true -> union of both (PL-1)", async () => {
+test("pi_claude_marketplace_plugin_list :: available: true + unavailable: true -> union of both (PL-1)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     await seedMarketplace({
       cwd,
@@ -354,7 +354,7 @@ test("claude_marketplace_plugin_list :: available: true + unavailable: true -> u
     });
     const { pi, registered } = makeMockPi();
     registerListPluginsTool(pi);
-    const tool = registered.get("claude_marketplace_plugin_list")!;
+    const tool = registered.get("pi_claude_marketplace_plugin_list")!;
     const ctx = makeCtx(cwd);
     const out = await tool.execute(
       "call-1",
@@ -372,7 +372,7 @@ test("claude_marketplace_plugin_list :: available: true + unavailable: true -> u
   });
 });
 
-test("claude_marketplace_plugin_list :: no filters -> all three buckets (PL-1 default)", async () => {
+test("pi_claude_marketplace_plugin_list :: no filters -> all three buckets (PL-1 default)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     await seedMarketplace({
       cwd,
@@ -382,7 +382,7 @@ test("claude_marketplace_plugin_list :: no filters -> all three buckets (PL-1 de
     });
     const { pi, registered } = makeMockPi();
     registerListPluginsTool(pi);
-    const tool = registered.get("claude_marketplace_plugin_list")!;
+    const tool = registered.get("pi_claude_marketplace_plugin_list")!;
     const ctx = makeCtx(cwd);
     const out = await tool.execute("call-1", {}, undefined, undefined, ctx);
     const details = out.details as { plugins: { name: string; status: string }[] };
@@ -392,7 +392,7 @@ test("claude_marketplace_plugin_list :: no filters -> all three buckets (PL-1 de
   });
 });
 
-test('claude_marketplace_plugin_list :: scope: "user" filters to user scope only', async () => {
+test('pi_claude_marketplace_plugin_list :: scope: "user" filters to user scope only', async () => {
   await withHermeticHome(async ({ cwd }) => {
     await seedMarketplace({
       cwd,
@@ -408,7 +408,7 @@ test('claude_marketplace_plugin_list :: scope: "user" filters to user scope only
     });
     const { pi, registered } = makeMockPi();
     registerListPluginsTool(pi);
-    const tool = registered.get("claude_marketplace_plugin_list")!;
+    const tool = registered.get("pi_claude_marketplace_plugin_list")!;
     const ctx = makeCtx(cwd);
     const out = await tool.execute("call-1", { scope: "user" }, undefined, undefined, ctx);
     const details = out.details as { plugins: { name: string; scope: string }[] };
@@ -417,7 +417,7 @@ test('claude_marketplace_plugin_list :: scope: "user" filters to user scope only
   });
 });
 
-test('claude_marketplace_plugin_list :: scope: "project" filters to project scope only', async () => {
+test('pi_claude_marketplace_plugin_list :: scope: "project" filters to project scope only', async () => {
   await withHermeticHome(async ({ cwd }) => {
     await seedMarketplace({
       cwd,
@@ -433,7 +433,7 @@ test('claude_marketplace_plugin_list :: scope: "project" filters to project scop
     });
     const { pi, registered } = makeMockPi();
     registerListPluginsTool(pi);
-    const tool = registered.get("claude_marketplace_plugin_list")!;
+    const tool = registered.get("pi_claude_marketplace_plugin_list")!;
     const ctx = makeCtx(cwd);
     const out = await tool.execute("call-1", { scope: "project" }, undefined, undefined, ctx);
     const details = out.details as { plugins: { name: string; scope: string }[] };

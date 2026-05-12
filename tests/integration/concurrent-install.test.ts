@@ -6,13 +6,13 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { pathSource } from "../../extensions/claude-marketplace/domain/source.ts";
-import { locationsFor } from "../../extensions/claude-marketplace/persistence/locations.ts";
+import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
+import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   saveState,
   type ExtensionState,
-} from "../../extensions/claude-marketplace/persistence/state-io.ts";
-import { STATE_LOCK_HELD_PREFIX } from "../../extensions/claude-marketplace/shared/markers.ts";
+} from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { STATE_LOCK_HELD_PREFIX } from "../../extensions/pi-claude-marketplace/shared/markers.ts";
 
 interface ChildResult {
   readonly ok: boolean;

@@ -109,7 +109,7 @@ The supersession trail per CONTEXT.md D-07 supersession effect creates 5 indepen
 2. **`.planning/PROJECT.md`** Key Decisions row D-24 + last-updated footer
 3. **`CHANGELOG.md`** `[Unreleased]` -> `### Changed` entry
 4. **`.planning/phases/05-plugin-orchestrators/05-03-SUMMARY.md`** (landed in earlier wave -- the behavior-change commit history)
-5. **`extensions/claude-marketplace/domain/resolver.ts`** source comments + `tests/domain/resolver-comp01.test.ts` fixture-c assertion (landed in Plan 05-03)
+5. **`extensions/pi-claude-marketplace/domain/resolver.ts`** source comments + `tests/domain/resolver-comp01.test.ts` fixture-c assertion (landed in Plan 05-03)
 
 Future regressions to V1 behavior would be detected at test-time by the COMP-01 fixture-c assertion.
 

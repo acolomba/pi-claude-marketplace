@@ -7,7 +7,7 @@ import {
   GENERATED_AGENT_MARKER,
   parseFrontmatter,
   sanitizeProvenance,
-} from "../../../extensions/claude-marketplace/bridges/agents/frontmatter.ts";
+} from "../../../extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts";
 
 // AG-6 / AG-8 line-based frontmatter parser + emitter contract.
 
@@ -85,7 +85,7 @@ test("AG-8 sanitizeProvenance is no-op when no --> substring present", () => {
 test("AG-8 emitGeneratedAgentFile emits fields in deterministic order: name, description, model, tools, thinking, skills, then systemPromptMode/inheritProjectContext/inheritSkills", () => {
   const out = emitGeneratedAgentFile({
     frontmatter: {
-      name: "claude-marketplace-acme-bot",
+      name: "pi-claude-marketplace-acme-bot",
       description: "An agent.",
       model: "anthropic/claude-sonnet-4-6",
       tools: ["read", "bash"],
@@ -125,7 +125,7 @@ test("AG-8 emitGeneratedAgentFile emits fields in deterministic order: name, des
 test("AG-8 emitGeneratedAgentFile omits model when undefined", () => {
   const out = emitGeneratedAgentFile({
     frontmatter: {
-      name: "claude-marketplace-acme-bot",
+      name: "pi-claude-marketplace-acme-bot",
       description: "An agent.",
       tools: ["read"],
       skills: [],
@@ -149,7 +149,7 @@ test("AG-8 emitGeneratedAgentFile omits model when undefined", () => {
 test("AG-8 emitGeneratedAgentFile omits skills line when skills array is empty", () => {
   const out = emitGeneratedAgentFile({
     frontmatter: {
-      name: "claude-marketplace-acme-bot",
+      name: "pi-claude-marketplace-acme-bot",
       description: "An agent.",
       tools: ["read"],
       skills: [],
@@ -172,7 +172,7 @@ test("AG-8 emitGeneratedAgentFile omits skills line when skills array is empty",
 test("AG-5 emitGeneratedAgentFile body contains GENERATED_AGENT_MARKER substring", () => {
   const out = emitGeneratedAgentFile({
     frontmatter: {
-      name: "claude-marketplace-acme-bot",
+      name: "pi-claude-marketplace-acme-bot",
       description: "A.",
       tools: ["read"],
       skills: [],
@@ -194,7 +194,7 @@ test("AG-5 emitGeneratedAgentFile body contains GENERATED_AGENT_MARKER substring
 test("AG-8 emitGeneratedAgentFile sanitizes --> in sourcePath", () => {
   const out = emitGeneratedAgentFile({
     frontmatter: {
-      name: "claude-marketplace-acme-bot",
+      name: "pi-claude-marketplace-acme-bot",
       description: "A.",
       tools: ["read"],
       skills: [],
@@ -220,7 +220,7 @@ test("AG-8 emitGeneratedAgentFile sanitizes --> in sourcePath", () => {
 test("AG-8 emitGeneratedAgentFile renders (none) for empty droppedFields/droppedTools/warnings", () => {
   const out = emitGeneratedAgentFile({
     frontmatter: {
-      name: "claude-marketplace-acme-bot",
+      name: "pi-claude-marketplace-acme-bot",
       description: "A.",
       tools: ["read"],
       skills: [],

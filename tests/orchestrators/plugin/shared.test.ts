@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
 
-import { pathSource } from "../../../extensions/claude-marketplace/domain/source.ts";
+import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   assertNoCrossPluginConflicts,
   type CrossPluginGeneratedNames,
-} from "../../../extensions/claude-marketplace/orchestrators/plugin/shared.ts";
-import { CrossPluginConflictError } from "../../../extensions/claude-marketplace/shared/errors.ts";
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
+import { CrossPluginConflictError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
-import type { ExtensionState } from "../../../extensions/claude-marketplace/persistence/state-io.ts";
+import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 // Test-local typing aliases that mirror the structural shape of the
 // records this pure helper actually reads. Using the published
@@ -89,7 +89,7 @@ test("PI-6 / D-05 case A: no conflicts -> returns void", () => {
   const names: CrossPluginGeneratedNames = {
     skills: ["new-skill"],
     commands: ["new:cmd"],
-    agents: ["claude-marketplace-new-agent"],
+    agents: ["pi-claude-marketplace-new-agent"],
   };
   assert.doesNotThrow(() => {
     assertNoCrossPluginConflicts("user", names, state);
@@ -133,7 +133,7 @@ test("PI-6 / D-05 case C: skill + command + agent collisions -> deterministic or
           resources: {
             skills: ["b-skill", "a-skill"],
             prompts: ["plugin:b-cmd", "plugin:a-cmd"],
-            agents: ["claude-marketplace-x-agent", "claude-marketplace-y-agent"],
+            agents: ["pi-claude-marketplace-x-agent", "pi-claude-marketplace-y-agent"],
             mcpServers: [],
           },
         }),
@@ -144,7 +144,7 @@ test("PI-6 / D-05 case C: skill + command + agent collisions -> deterministic or
     // intentionally provided out-of-order to verify the helper sorts
     skills: ["b-skill", "a-skill"],
     commands: ["plugin:b-cmd", "plugin:a-cmd"],
-    agents: ["claude-marketplace-y-agent", "claude-marketplace-x-agent"],
+    agents: ["pi-claude-marketplace-y-agent", "pi-claude-marketplace-x-agent"],
   };
   let captured: unknown;
   try {
@@ -160,8 +160,8 @@ test("PI-6 / D-05 case C: skill + command + agent collisions -> deterministic or
     `skill "b-skill" already owned by plugin "owner"`,
     `command "plugin:a-cmd" already owned by plugin "owner"`,
     `command "plugin:b-cmd" already owned by plugin "owner"`,
-    `agent "claude-marketplace-x-agent" already owned by plugin "owner"`,
-    `agent "claude-marketplace-y-agent" already owned by plugin "owner"`,
+    `agent "pi-claude-marketplace-x-agent" already owned by plugin "owner"`,
+    `agent "pi-claude-marketplace-y-agent" already owned by plugin "owner"`,
   ]);
 });
 

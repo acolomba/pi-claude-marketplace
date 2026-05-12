@@ -1,6 +1,6 @@
 import { assertSafeName } from "../validation.ts";
 
-export const CLAUDE_MARKETPLACE_MARKER_KEY = "_claudeMarketplace";
+export const CLAUDE_MARKETPLACE_MARKER_KEY = "_piClaudeMarketplace";
 
 export interface ClaudeMarketplaceMarker {
   plugin: string;
@@ -8,7 +8,7 @@ export interface ClaudeMarketplaceMarker {
 }
 
 /** Returns the parsed marker subobject if `value` is an object with a
- *  well-formed `_claudeMarketplace: { plugin: string; marketplace: string }`
+ *  well-formed `_piClaudeMarketplace: { plugin: string; marketplace: string }`
  *  entry; otherwise null. */
 export function readMarker(value: unknown): ClaudeMarketplaceMarker | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {

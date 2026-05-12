@@ -6,15 +6,15 @@ import test from "node:test";
 
 import lockfile from "proper-lockfile";
 
-import { pathSource } from "../../../extensions/claude-marketplace/domain/source.ts";
-import { setMarketplaceAutoupdate } from "../../../extensions/claude-marketplace/orchestrators/marketplace/autoupdate.ts";
-import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
+import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { setMarketplaceAutoupdate } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
   saveState,
-} from "../../../extensions/claude-marketplace/persistence/state-io.ts";
+} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
-import type { ExtensionState } from "../../../extensions/claude-marketplace/persistence/state-io.ts";
+import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 interface NotifyRecord {
@@ -243,7 +243,7 @@ test("single-name cross-scope flip surfaces state lock failures instead of repor
       assert.equal(notifications[0]!.severity, "error");
       assert.match(
         notifications[0]!.message,
-        /Another claude-marketplace operation is in progress/,
+        /Another pi-claude-marketplace operation is in progress/,
       );
     } finally {
       await release();
@@ -268,7 +268,7 @@ function stripComments(src: string): string {
 
 test("NFR-5: autoupdate source has zero references to platform/git, gitOps, or DEFAULT_GIT_OPS", async () => {
   const src = await readFile(
-    "extensions/claude-marketplace/orchestrators/marketplace/autoupdate.ts",
+    "extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts",
     "utf8",
   );
   const code = stripComments(src);

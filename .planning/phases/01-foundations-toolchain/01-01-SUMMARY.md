@@ -39,7 +39,7 @@ key-decisions:
   - "engines.node left at >=22 (NOT bumped to >=22.22.2 despite write-file-atomic engine constraint) -- intentional per the plan; install fails loudly on incompatible Node, not silently. Current dev runs on Node 26 satisfying ^22.22.2 || ^24.15.0 || >=26.0.0"
 
 patterns-established:
-  - "Pattern A: Output discipline via flat-config files-glob + no-restricted-syntax + no-console=error scoped to extensions/claude-marketplace/**/*.ts"
+  - "Pattern A: Output discipline via flat-config files-glob + no-restricted-syntax + no-console=error scoped to extensions/pi-claude-marketplace/**/*.ts"
   - "Pattern B: Import-direction enforcement via import-x/no-restricted-paths basePath=import.meta.dirname with 9-zone target/from matrix"
   - "Pattern C: Tests directory relaxes both new rule families (no-restricted-syntax: off, no-console: off) by extending the existing tests/**/*.ts override block"
 
@@ -110,7 +110,7 @@ The Task 2 plan's `<verify>` automated check `grep -c 'no-restricted-syntax' esl
 - ✓ AST selector form for `process.{stdout,stderr}.write` (1 each)
 - ✓ ≥4 console method bans (4: log, warn, error, info)
 - ✓ ≥1 `callee.property.name='notify'` ban (1)
-- ✓ exactly 9 `target: "./extensions/claude-marketplace/...` zones (9)
+- ✓ exactly 9 `target: "./extensions/pi-claude-marketplace/...` zones (9)
 - ✓ shared/notify.ts override present (1)
 - ✓ tests/fixtures/bad-imports ignore present (1)
 
@@ -132,7 +132,7 @@ None - no external service configuration required.
 ## Next Phase Readiness
 
 - **Ready for Wave 1 plans (02-shared-primitives, 03-tooling-infrastructure, 04-extension-skeleton, 06-typebox-types):** every Wave 1 plan now inherits a working `npm install`, a green lint pipeline (no extension source to violate the new rules yet, canary fixture ignored), a clean typecheck, and a Node 24-native test runner.
-- **No blockers.** The `pi.extensions` pointer at `./extensions/claude-marketplace/index.ts` is currently dangling -- the file does not exist on this branch yet. This is by design: Plan 04 creates it. Until Plan 04 lands, Pi load of this package will fail at runtime, but `npm install` / `npm run check` succeed and that is the contract this plan owns. Pitfall #7 (dangling extension pointer breaking npm scripts) is closed because the package-load is only triggered by Pi runtime extension discovery, not by npm scripts.
+- **No blockers.** The `pi.extensions` pointer at `./extensions/pi-claude-marketplace/index.ts` is currently dangling -- the file does not exist on this branch yet. This is by design: Plan 04 creates it. Until Plan 04 lands, Pi load of this package will fail at runtime, but `npm install` / `npm run check` succeed and that is the contract this plan owns. Pitfall #7 (dangling extension pointer breaking npm scripts) is closed because the package-load is only triggered by Pi runtime extension discovery, not by npm scripts.
 - **Threat surface:** No new threat surface introduced beyond the package.json transitive dep tree (T-01-01 mitigated via caret-major bounds + committed package-lock.json). No new endpoints, auth paths, file access patterns, or schema changes at trust boundaries.
 
 ## Self-Check: PASSED

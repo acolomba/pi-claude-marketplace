@@ -30,7 +30,7 @@ tech-stack:
 
 key-files:
   created:
-    - "extensions/claude-marketplace/orchestrators/plugin/list.ts"
+    - "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts"
     - "tests/orchestrators/plugin/list.test.ts"
   modified: []
 
@@ -78,7 +78,7 @@ completed: 2026-05-11
 
 ## Accomplishments
 
-- **D-06 orchestrator half shipped.** `extensions/claude-marketplace/orchestrators/plugin/list.ts` (262 lines) exports `listPlugins(opts: ListPluginsOptions): Promise<void>`. The orchestrator enumerates scopes (single via `opts.scope` or both per SC-6), walks each marketplace record from `loadState`, loads each `marketplace.json` softly (PL-6), classifies plugins into installed / available / uninstallable buckets, composes a `PluginListPayload`, and hands it to `renderPluginList(payload, warnings)` from Plan 05-05.
+- **D-06 orchestrator half shipped.** `extensions/pi-claude-marketplace/orchestrators/plugin/list.ts` (262 lines) exports `listPlugins(opts: ListPluginsOptions): Promise<void>`. The orchestrator enumerates scopes (single via `opts.scope` or both per SC-6), walks each marketplace record from `loadState`, loads each `marketplace.json` softly (PL-6), classifies plugins into installed / available / uninstallable buckets, composes a `PluginListPayload`, and hands it to `renderPluginList(payload, warnings)` from Plan 05-05.
 - **PL-1 union filter semantics encoded.** Two predicates: `filtersPassive()` returns true when ALL three flags are absent/false, in which case `shouldShow()` accepts every bucket. When any flag is true, `shouldShow()` accepts only the selected buckets. Six dedicated tests pin the default-shows-all-three plus each single-flag-isolates-bucket case.
 - **PL-3 marketplace narrowing.** A single `if (opts.marketplace !== undefined && opts.marketplace !== mpName) continue;` inside the per-marketplace loop filters the walk. Tested with a two-marketplace seed.
 - **PL-5 STRING compare for upgradable.** `manifestEntry?.version !== undefined && manifestEntry.version !== record.version`. Differing versions (`1.0.0` vs `1.0.1`) yield upgradable=true; identical versions yield false; differing hash-`<hex>` strings (`hash-abcdef012345` vs `hash-fedcba543210`) yield true -- explicitly NOT semver. Three dedicated tests.
@@ -97,7 +97,7 @@ Each task was committed atomically:
 
 ## Files Created/Modified
 
-- `extensions/claude-marketplace/orchestrators/plugin/list.ts` (created, 262 lines) -- D-06 read-only orchestrator. Exports `listPlugins` + `ListPluginsOptions`. Imports: `MARKETPLACE_VALIDATOR` + `MarketplaceManifest` from `domain/manifest.ts`, `resolveStrict` from `domain/resolver.ts`, `locationsFor` from `persistence/locations.ts`, `loadState` from `persistence/state-io.ts`, `renderPluginList` + payload types from `presentation/plugin-list.ts`, `errorMessage` from `shared/errors.ts`, `notifyError` + `notifySuccess` from `shared/notify.ts`. No `transaction/`, no `bridges/`, no `platform/git` imports.
+- `extensions/pi-claude-marketplace/orchestrators/plugin/list.ts` (created, 262 lines) -- D-06 read-only orchestrator. Exports `listPlugins` + `ListPluginsOptions`. Imports: `MARKETPLACE_VALIDATOR` + `MarketplaceManifest` from `domain/manifest.ts`, `resolveStrict` from `domain/resolver.ts`, `locationsFor` from `persistence/locations.ts`, `loadState` from `persistence/state-io.ts`, `renderPluginList` + payload types from `presentation/plugin-list.ts`, `errorMessage` from `shared/errors.ts`, `notifyError` + `notifySuccess` from `shared/notify.ts`. No `transaction/`, no `bridges/`, no `platform/git` imports.
 - `tests/orchestrators/plugin/list.test.ts` (created, 577 lines) -- 17 orchestrator-level tests covering PL-1..7 + the redundant in-test source-grep guards. Hermetic via `withHermeticHome` + a `seedMarketplace` fixture builder that writes state.json (via `saveState`) and the marketplace.json on disk plus optional plugin source dirs so `resolveStrict` probes hit real files.
 
 ## Decisions Made
@@ -118,7 +118,7 @@ Each task was committed atomically:
 - **Found during:** Task 1 `npx eslint` after first write
 - **Issue:** Imports placed `import type { ExtensionContext } from "@mariozechner/pi-coding-agent";` BEFORE `import type { Scope } from "../../shared/types.ts";`. `import-x/order` with `alphabetize: caseInsensitive` flagged the violation -- internal scoped paths must come before the npm-scoped `@mariozechner/...` in the type group.
 - **Fix:** Swapped to put `Scope` import first, mirroring `orchestrators/marketplace/list.ts:24-27`.
-- **Files modified:** `extensions/claude-marketplace/orchestrators/plugin/list.ts`
+- **Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/list.ts`
 - **Verification:** `npx eslint` green after fix.
 - **Committed in:** a241cd3 (Task 1 commit -- fix applied before staging)
 
@@ -127,7 +127,7 @@ Each task was committed atomically:
 - **Found during:** Task 1 `npx eslint` after first write
 - **Issue:** `manifestEntry !== undefined && manifestEntry.version !== undefined && manifestEntry.version !== record.version` triggered `@typescript-eslint/prefer-optional-chain`.
 - **Fix:** Replaced with `manifestEntry?.version !== undefined && manifestEntry.version !== record.version`. Semantics are identical: optional-chain yields `undefined` when manifestEntry is absent, which then `!== undefined` evaluates to false.
-- **Files modified:** `extensions/claude-marketplace/orchestrators/plugin/list.ts`
+- **Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/list.ts`
 - **Verification:** `npx eslint` green after fix.
 - **Committed in:** a241cd3 (Task 1 commit -- fix applied before staging)
 
@@ -160,11 +160,11 @@ Each task was committed atomically:
 
 ## Threat Flags
 
-None. No new network endpoints, auth paths, file-access patterns, or trust-boundary surface introduced. The orchestrator is read-only, and all paths it touches (state.json under `<scopeRoot>/.pi[/agent]/claude-marketplace/`, and the cached `manifestPath` stored on each marketplace record) are existing controlled surfaces from Phase 1 (locations.ts) and Phase 4 (marketplace add/update). The eager `resolveStrict` probe relies on `domain/resolver.ts`'s existing `assertPathInside` chokepoints (NFR-10) -- no new path-traversal surface introduced. T-5-05 + T-5-05b + T-5-06 from the plan's threat model are all `mitigate`d as specified.
+None. No new network endpoints, auth paths, file-access patterns, or trust-boundary surface introduced. The orchestrator is read-only, and all paths it touches (state.json under `<scopeRoot>/.pi[/agent]/pi-claude-marketplace/`, and the cached `manifestPath` stored on each marketplace record) are existing controlled surfaces from Phase 1 (locations.ts) and Phase 4 (marketplace add/update). The eager `resolveStrict` probe relies on `domain/resolver.ts`'s existing `assertPathInside` chokepoints (NFR-10) -- no new path-traversal surface introduced. T-5-05 + T-5-05b + T-5-06 from the plan's threat model are all `mitigate`d as specified.
 
 ## Self-Check: PASSED
 
-- `extensions/claude-marketplace/orchestrators/plugin/list.ts` -- FOUND, contains `listPlugins` (262 lines, exceeds min_lines:100)
+- `extensions/pi-claude-marketplace/orchestrators/plugin/list.ts` -- FOUND, contains `listPlugins` (262 lines, exceeds min_lines:100)
 - `tests/orchestrators/plugin/list.test.ts` -- FOUND, contains `listPlugins` reference (577 lines, exceeds min_lines:250)
 - Commit `a241cd3` -- FOUND in git log
 - Commit `a8e0cff` -- FOUND in git log

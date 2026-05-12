@@ -18,10 +18,10 @@ human_verification_required: false
 
 | Success Criterion | Status | Evidence |
 |------------------|--------|----------|
-| Pi API boundary and peer floor established | Passed | `extensions/claude-marketplace/platform/pi-api.ts`; direct peer imports are guarded by ESLint; `package.json` pins `@mariozechner/pi-coding-agent >=0.73.1`. |
-| Real Pi entrypoint wires command, tools, completions, and resources discovery | Passed | `extensions/claude-marketplace/index.ts` registers `/claude:plugin`, read-only marketplace tools, `session_start`, and `resources_discover`; `tests/shared/index-smoke.test.ts` covers event-cwd project discovery. |
-| Manifest reads route through the NFR-8 seam | Passed | `extensions/claude-marketplace/domain/manifest.ts::loadMarketplaceManifest`; `tests/architecture/manifest-read-seam.test.ts` enforces the seam. |
-| Cross-process state locking protects mutating state operations | Passed | `extensions/claude-marketplace/transaction/with-state-guard.ts` takes per-scope `.state-lock`; `tests/integration/concurrent-install.test.ts` verifies concurrent install behavior. |
+| Pi API boundary and peer floor established | Passed | `extensions/pi-claude-marketplace/platform/pi-api.ts`; direct peer imports are guarded by ESLint; `package.json` pins `@mariozechner/pi-coding-agent >=0.73.1`. |
+| Real Pi entrypoint wires command, tools, completions, and resources discovery | Passed | `extensions/pi-claude-marketplace/index.ts` registers `/claude:plugin`, read-only marketplace tools, `session_start`, and `resources_discover`; `tests/shared/index-smoke.test.ts` covers event-cwd project discovery. |
+| Manifest reads route through the NFR-8 seam | Passed | `extensions/pi-claude-marketplace/domain/manifest.ts::loadMarketplaceManifest`; `tests/architecture/manifest-read-seam.test.ts` enforces the seam. |
+| Cross-process state locking protects mutating state operations | Passed | `extensions/pi-claude-marketplace/transaction/with-state-guard.ts` takes per-scope `.state-lock`; `tests/integration/concurrent-install.test.ts` verifies concurrent install behavior. |
 | E2E/CI validation and traceability are complete | Passed | `tests/e2e/*`, `.github/workflows/ci.yml`, `.github/workflows/e2e-nightly.yml`, `07-VALIDATION.md`, `REQUIREMENTS.md`, `PROJECT.md`, and `CHANGELOG.md`. |
 
 ## Review Follow-Up

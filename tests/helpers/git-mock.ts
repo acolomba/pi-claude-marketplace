@@ -21,7 +21,7 @@
 import { cp, mkdir } from "node:fs/promises";
 import path from "node:path";
 
-import type { GitOps } from "../../extensions/claude-marketplace/orchestrators/marketplace/shared.ts";
+import type { GitOps } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 
 export interface MockGitState {
   /** Map: 'refs/remotes/origin/<branch>' -> SHA. Mutate to simulate force-push. */

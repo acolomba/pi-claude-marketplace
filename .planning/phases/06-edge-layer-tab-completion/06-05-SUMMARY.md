@@ -14,8 +14,8 @@ requires:
     plan: 04
     provides: "9 thin-shim handler factories + handleMarketplaceList + 2 LLM-tool registration helpers."
 provides:
-  - "extensions/claude-marketplace/orchestrators/edge-deps.ts: makeLocationsResolver(cwd) constructor that closes over persistence/state-io + persistence/locations + domain/manifest + domain/resolver. Returns LocationsResolverLike (a structural mirror of edge/completions/data.ts::LocationsResolver, kept locally because orchestrators/ MUST NOT import edge/ per BLOCK C). This resolves the planner's option (c) for the edge -> persistence indirection."
-  - "extensions/claude-marketplace/edge/register.ts: registerClaudePluginCommand(pi, deps) wires pi.registerCommand + pi.on(session_start). registerClaudeMarketplaceTools(pi) delegates to the two read-only LLM tools. Pitfall 3: process.cwd() at the registration glue layer is sanctioned exactly once."
+  - "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts: makeLocationsResolver(cwd) constructor that closes over persistence/state-io + persistence/locations + domain/manifest + domain/resolver. Returns LocationsResolverLike (a structural mirror of edge/completions/data.ts::LocationsResolver, kept locally because orchestrators/ MUST NOT import edge/ per BLOCK C). This resolves the planner's option (c) for the edge -> persistence indirection."
+  - "extensions/pi-claude-marketplace/edge/register.ts: registerClaudePluginCommand(pi, deps) wires pi.registerCommand + pi.on(session_start). registerClaudeMarketplaceTools(pi) delegates to the two read-only LLM tools. Pitfall 3: process.cwd() at the registration glue layer is sanctioned exactly once."
   - "Cache-invalidation call sites in 5 mutating orchestrators (marketplace/{add,remove,update}, plugin/{install,uninstall}). Each call is wrapped in try/catch + notifyWarning per the 06-PATTERNS.md standard failure envelope; failure never rolls back the primary operation."
 
 affects: [phase-07-pi-wiring]
@@ -31,15 +31,15 @@ tech-stack:
 
 key-files:
   created:
-    - "extensions/claude-marketplace/edge/register.ts"
-    - "extensions/claude-marketplace/orchestrators/edge-deps.ts"
+    - "extensions/pi-claude-marketplace/edge/register.ts"
+    - "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts"
     - "tests/edge/register.test.ts (unskipped from Wave 0 stub)"
   modified:
-    - "extensions/claude-marketplace/orchestrators/marketplace/add.ts"
-    - "extensions/claude-marketplace/orchestrators/marketplace/remove.ts"
-    - "extensions/claude-marketplace/orchestrators/marketplace/update.ts"
-    - "extensions/claude-marketplace/orchestrators/plugin/install.ts"
-    - "extensions/claude-marketplace/orchestrators/plugin/uninstall.ts"
+    - "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+    - "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts"
+    - "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts"
+    - "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts"
+    - "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts"
     - "tests/orchestrators/marketplace/add.test.ts (+1 D-03-INV test)"
     - "tests/orchestrators/marketplace/remove.test.ts (+1 D-03-INV test)"
     - "tests/orchestrators/marketplace/update.test.ts (+1 D-03-INV test)"
@@ -47,7 +47,7 @@ key-files:
     - "tests/orchestrators/plugin/uninstall.test.ts (+1 D-03-INV test)"
 
 key-decisions:
-  - "Task 3 (ESLint process.stdout/stderr block in edge/**) is a NO-OP. The existing BLOCK A rule in eslint.config.js already targets `extensions/claude-marketplace/**/*.ts` -- a superset of `extensions/claude-marketplace/edge/**/*.ts` -- and enumerates `process.stdout.write` + `process.stderr.write` as no-restricted-syntax errors. ROADMAP Phase 6 SC5 is already satisfied; the plan's Task 3 anticipated this outcome and authorized noting it in the SUMMARY rather than re-adding the rule."
+  - "Task 3 (ESLint process.stdout/stderr block in edge/**) is a NO-OP. The existing BLOCK A rule in eslint.config.js already targets `extensions/pi-claude-marketplace/**/*.ts` -- a superset of `extensions/pi-claude-marketplace/edge/**/*.ts` -- and enumerates `process.stdout.write` + `process.stderr.write` as no-restricted-syntax errors. ROADMAP Phase 6 SC5 is already satisfied; the plan's Task 3 anticipated this outcome and authorized noting it in the SUMMARY rather than re-adding the rule."
   - "LocationsResolverLike is exported from orchestrators/edge-deps.ts as a public type. It is structurally identical to edge/completions/data.ts::LocationsResolver. Phase 7 callers (index.ts) consume the constructor; tests can also mock against either interface. Coupling is intentional -- the interface is the seam, and the structural mirror documents that the two declarations MUST stay shape-compatible."
   - "loadStateForScope in edge-deps.ts re-projects the persistence-level marketplaces record into a MarketplaceStateRecordLike shape (manifestPath + plugins only). The projection is structurally compatible with the broader state shape but explicitly documents the resolver's surface (only the two fields the cache rebuild path needs). State.json read errors propagate verbatim -- TC-9 routes them through getMarketplaceNames."
   - "loadManifestForMarketplace defensively wraps every thrown error in ManifestSoftFailError before re-throwing. The cache layer's rebuildPluginIndex (in data.ts) ALSO wraps, so the proactive wrap here is redundant but defense-in-depth. State.json errors during plugin-index rebuild are caught at this layer and surfaced as soft-fail (TC-8 poison cache); the TC-9 surface for plugin-index path is intentionally suppressed by the cache architecture (see data.ts header note)."
@@ -97,8 +97,8 @@ Each task was committed atomically:
 
 | File | Role | Notable exports |
 |------|------|-----------------|
-| `extensions/claude-marketplace/orchestrators/edge-deps.ts` | LocationsResolver constructor closing over persistence + domain | `makeLocationsResolver(cwd)`, `LocationsResolverLike` |
-| `extensions/claude-marketplace/edge/register.ts` | D-04 registration glue | `registerClaudePluginCommand(pi, deps)`, `registerClaudeMarketplaceTools(pi)` |
+| `extensions/pi-claude-marketplace/orchestrators/edge-deps.ts` | LocationsResolver constructor closing over persistence + domain | `makeLocationsResolver(cwd)`, `LocationsResolverLike` |
+| `extensions/pi-claude-marketplace/edge/register.ts` | D-04 registration glue | `registerClaudePluginCommand(pi, deps)`, `registerClaudeMarketplaceTools(pi)` |
 
 ### Five Cache-Invalidation Insertion Points
 
@@ -151,7 +151,7 @@ from Plan 06-04's `handlers/tools.ts`. Two `pi.registerTool` calls total.
 | TC-7 (whitespace normalization) | `edge/register.ts` session_start wrapper | Scoped to `isClaudePluginCommandLine`-matching lines; passes other lines through verbatim. |
 | TC-5 + TC-6 (completion data path) | `orchestrators/edge-deps.ts::makeLocationsResolver` | The resolver constructor is the seam that lets the dispatcher consume persistence/domain without an edge-side import. |
 | BLOCK C resolution (option (c)) | `orchestrators/edge-deps.ts` placement | The constructor lives in orchestrators/ which CAN import persistence/ + domain/; edge/register.ts imports the constructor from orchestrators/ which is also legal. |
-| ROADMAP Phase 6 SC5 (process.stdout/stderr in edge/) | `eslint.config.js` (unchanged) | Existing BLOCK A rule already targets `extensions/claude-marketplace/**` (superset); no diff needed. |
+| ROADMAP Phase 6 SC5 (process.stdout/stderr in edge/) | `eslint.config.js` (unchanged) | Existing BLOCK A rule already targets `extensions/pi-claude-marketplace/**` (superset); no diff needed. |
 
 ### Test Counts
 
@@ -189,8 +189,8 @@ Breakdown:
 
 | Module | Forbidden imports | Result |
 |--------|-------------------|--------|
-| `extensions/claude-marketplace/edge/register.ts` | persistence/, domain/, bridges/, transaction/, platform/ | `grep -nE` -> 0 matches |
-| `extensions/claude-marketplace/orchestrators/edge-deps.ts` | edge/, bridges/, transaction/, platform/ | `grep -nE` -> 0 matches |
+| `extensions/pi-claude-marketplace/edge/register.ts` | persistence/, domain/, bridges/, transaction/, platform/ | `grep -nE` -> 0 matches |
+| `extensions/pi-claude-marketplace/orchestrators/edge-deps.ts` | edge/, bridges/, transaction/, platform/ | `grep -nE` -> 0 matches |
 
 Both files pass `import-x/no-restricted-paths` (BLOCK C).
 
@@ -206,15 +206,15 @@ The 5 modified orchestrators all use `notifyWarning` (Plan 04/05 carry-forward);
 ## Decisions Made
 
 1. **Task 3 is a no-op.** The existing ESLint BLOCK A rule
-   (`extensions/claude-marketplace/**/*.ts`) already enumerates
+   (`extensions/pi-claude-marketplace/**/*.ts`) already enumerates
    `process.stdout.write` and `process.stderr.write` as
    `no-restricted-syntax` errors. The plan's Task 3 prescription was
    "extend the rule to edge/", but since BLOCK A is a superset, no diff
    is needed. The probe-file verification confirms the rule is active:
 
    ```text
-   $ echo 'process.stdout.write("x");' > extensions/claude-marketplace/edge/probe.ts
-   $ npx eslint extensions/claude-marketplace/edge/probe.ts
+   $ echo 'process.stdout.write("x");' > extensions/pi-claude-marketplace/edge/probe.ts
+   $ npx eslint extensions/pi-claude-marketplace/edge/probe.ts
    1:1  error  Direct process.stdout.write is forbidden in the extension (IL-2). ...
    ```
 
@@ -289,7 +289,7 @@ The 5 modified orchestrators all use `notifyWarning` (Plan 04/05 carry-forward);
   TypeScript structural typing carries the assignability through to
   `edge/register.ts`'s call site without crossing the boundary at
   compile or runtime.
-- **Files affected:** `extensions/claude-marketplace/orchestrators/edge-deps.ts`.
+- **Files affected:** `extensions/pi-claude-marketplace/orchestrators/edge-deps.ts`.
 - **Verification:** `npx eslint` -> 0 errors; `npx tsc --noEmit` -> 0 errors.
 - **Committed in:** `048c649` (Task 2 commit, same patch as the original).
 
@@ -306,7 +306,7 @@ The 5 modified orchestrators all use `notifyWarning` (Plan 04/05 carry-forward);
   notify calls") without using the literal `ctx.ui.notify` substring.
   The actual enforcement is the ESLint BLOCK A rule (`no-restricted-syntax`);
   the grep gate is a fast-feedback canary.
-- **Files affected:** `extensions/claude-marketplace/edge/register.ts`.
+- **Files affected:** `extensions/pi-claude-marketplace/edge/register.ts`.
 - **Verification:** `grep -nE "ctx\.ui\.notify" edge/register.ts` -> 0 matches.
 - **Committed in:** `048c649` (Task 2 commit, in the original patch).
 
@@ -393,16 +393,16 @@ The three documented mitigations are honored:
 
 All 2 created files verified present:
 
-- extensions/claude-marketplace/edge/register.ts -- FOUND
-- extensions/claude-marketplace/orchestrators/edge-deps.ts -- FOUND
+- extensions/pi-claude-marketplace/edge/register.ts -- FOUND
+- extensions/pi-claude-marketplace/orchestrators/edge-deps.ts -- FOUND
 
 All 10 modified files verified present (5 orchestrators + 5 test files):
 
-- extensions/claude-marketplace/orchestrators/marketplace/add.ts -- FOUND
-- extensions/claude-marketplace/orchestrators/marketplace/remove.ts -- FOUND
-- extensions/claude-marketplace/orchestrators/marketplace/update.ts -- FOUND
-- extensions/claude-marketplace/orchestrators/plugin/install.ts -- FOUND
-- extensions/claude-marketplace/orchestrators/plugin/uninstall.ts -- FOUND
+- extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts -- FOUND
+- extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts -- FOUND
+- extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts -- FOUND
+- extensions/pi-claude-marketplace/orchestrators/plugin/install.ts -- FOUND
+- extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts -- FOUND
 - tests/orchestrators/marketplace/add.test.ts -- FOUND
 - tests/orchestrators/marketplace/remove.test.ts -- FOUND
 - tests/orchestrators/marketplace/update.test.ts -- FOUND

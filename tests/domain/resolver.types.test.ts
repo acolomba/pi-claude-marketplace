@@ -20,7 +20,7 @@ import type {
   ResolvedPlugin,
   ResolvedPluginInstallable,
   ResolvedPluginNotInstallable,
-} from "../../extensions/claude-marketplace/domain/resolver.ts";
+} from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
 
 declare const r: ResolvedPlugin;
 declare const inst: ResolvedPluginInstallable;

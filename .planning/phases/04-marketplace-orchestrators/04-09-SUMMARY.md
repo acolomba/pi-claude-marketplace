@@ -16,7 +16,7 @@ Landed `marketplace autoupdate` and `marketplace noautoupdate` end-to-end as a s
 
 ### Task 1: autoupdate.ts orchestrator
 
-Created `extensions/claude-marketplace/orchestrators/marketplace/autoupdate.ts` (118 LOC).
+Created `extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts` (118 LOC).
 
 Flow:
 1. Resolve scopes per SC-6: `[opts.scope]` or `["user", "project"]`.
@@ -70,7 +70,7 @@ All four present in `autoupdate.ts`:
 
 ## Key files created/modified
 
-- `extensions/claude-marketplace/orchestrators/marketplace/autoupdate.ts` -- created (118 LOC)
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts` -- created (118 LOC)
 - `tests/orchestrators/marketplace/autoupdate.test.ts` -- created (10 tests, ~240 LOC)
 
 ## Verification

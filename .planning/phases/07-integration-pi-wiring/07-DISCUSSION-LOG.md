@@ -250,7 +250,7 @@
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| Per-scope lock | Lockfile at `<scopeRoot>/claude-marketplace/.state-lock`. User and project scope locks independent. | ✓ |
+| Per-scope lock | Lockfile at `<scopeRoot>/pi-claude-marketplace/.state-lock`. User and project scope locks independent. | ✓ |
 | Single global lock | One lockfile at ~/.pi/agent/. Over-restrictive. | |
 | Per-marketplace lock | Finer-grained but more complex. | |
 

@@ -7,9 +7,9 @@ tags: [pi-extension, entrypoint, registerCommand, resources_discover, isomorphic
 # Dependency graph
 requires:
   - phase: 01-foundations-toolchain
-    provides: shared/notify.ts (Plan 02 -- notifyWarning wrapper); package.json pi.extensions pointer (Plan 01 -- "./extensions/claude-marketplace/index.ts")
+    provides: shared/notify.ts (Plan 02 -- notifyWarning wrapper); package.json pi.extensions pointer (Plan 01 -- "./extensions/pi-claude-marketplace/index.ts")
 provides:
-  - "Working Pi extension entrypoint at extensions/claude-marketplace/index.ts (1 command + 1 event + 0 LLM tools)"
+  - "Working Pi extension entrypoint at extensions/pi-claude-marketplace/index.ts (1 command + 1 event + 0 LLM tools)"
   - "Legacy single-file stub deleted; module-resolution ambiguity closed (Pitfall #7)"
   - "REQUIREMENTS.md MA-7 marked superseded by D-18/D-21 with strikethrough + supersession note"
   - "PROJECT.md Key Decisions records D-21 (isomorphic-git supersession of MA-7)"
@@ -29,13 +29,13 @@ tech-stack:
 
 key-files:
   created:
-    - "extensions/claude-marketplace/index.ts (Pi entrypoint; 43 lines, 1 cmd + 1 event + 0 tools)"
+    - "extensions/pi-claude-marketplace/index.ts (Pi entrypoint; 43 lines, 1 cmd + 1 event + 0 tools)"
     - ".planning/phases/01-foundations-toolchain/01-04-SUMMARY.md (this file)"
   modified:
     - ".planning/REQUIREMENTS.md (MA-7 marked superseded; Traceability + Coverage + per-phase counts updated)"
     - ".planning/PROJECT.md (Key Decisions table gains D-21 row)"
   deleted:
-    - "extensions/claude-marketplace.ts (legacy single-file stub; intentional; closes module-resolution ambiguity)"
+    - "extensions/pi-claude-marketplace.ts (legacy single-file stub; intentional; closes module-resolution ambiguity)"
 
 key-decisions:
   - "D-21 captured in PROJECT.md Key Decisions: isomorphic-git supersedes MA-7 (git-CLI-not-found failure mode no longer reachable)"
@@ -68,8 +68,8 @@ completed: 2026-05-09
 
 ## Accomplishments
 
-- Created `extensions/claude-marketplace/index.ts` as the directory entrypoint Pi resolves from `package.json` `pi.extensions` (closes Pitfall #7 dangling-pointer concern; the pointer was set by Plan 01 to a file that didn't exist yet -- this plan creates that file).
-- Deleted `extensions/claude-marketplace.ts` legacy single-file stub. With both files present, ESLint would lint two surfaces and the legacy stub still imported `Type` from `typebox` and registered `claude_marketplace_list` (a tool we don't want in Phase 1); deleting the stub eliminates module-resolution ambiguity.
+- Created `extensions/pi-claude-marketplace/index.ts` as the directory entrypoint Pi resolves from `package.json` `pi.extensions` (closes Pitfall #7 dangling-pointer concern; the pointer was set by Plan 01 to a file that didn't exist yet -- this plan creates that file).
+- Deleted `extensions/pi-claude-marketplace.ts` legacy single-file stub. With both files present, ESLint would lint two surfaces and the legacy stub still imported `Type` from `typebox` and registered `pi_claude_marketplace_list` (a tool we don't want in Phase 1); deleting the stub eliminates module-resolution ambiguity.
 - Phase 1 `index.ts` registers exactly 1 slash command (`/claude:plugin`, stub warning handler) + 1 event handler (`resources_discover`, returns empty arrays) + 0 LLM tools. Tool registration is deliberately deferred to Phase 6 / `edge/handlers/list.ts` per the 9-folder layout (D-10) and per RESEARCH.md Open Question 3 resolution.
 - Slash command handler routes user-visible output through `notifyWarning` from `shared/notify.ts` (the sole sanctioned `ctx.ui.notify` call site per D-07). Direct `ctx.ui.notify` is blocked at lint time by `no-restricted-syntax` everywhere except `shared/notify.ts`.
 - REQUIREMENTS.md now records MA-7 as `[x]`-checked, strikethrough, with an inline supersession marker (`superseded by D-18/D-21`). The original PRD §5.1.1 text is preserved verbatim under the strikethrough so the contract delta stays visible to anyone reading the file. Traceability table row, Coverage section, and Phase 4 per-phase REQ count all updated to reflect the supersession.
@@ -79,15 +79,15 @@ completed: 2026-05-09
 
 Each task was committed atomically:
 
-1. **Task 1: Create extensions/claude-marketplace/index.ts and delete extensions/claude-marketplace.ts** -- `2941f7a` (`feat(01-04)`)
+1. **Task 1: Create extensions/pi-claude-marketplace/index.ts and delete extensions/pi-claude-marketplace.ts** -- `2941f7a` (`feat(01-04)`)
 2. **Task 2: Update REQUIREMENTS.md (MA-7 superseded) and PROJECT.md (D-21 entry)** -- `dbf8a4c` (`docs(01-04)`)
 
 _Note: This plan is not a TDD plan (`type: execute`); only the per-task commits exist; no separate test/feat/refactor split._
 
 ## Files Created/Modified
 
-- `extensions/claude-marketplace/index.ts` (created) -- Thin Pi extension entrypoint; default-export factory `claudeMarketplaceExtension(pi: ExtensionAPI)` registering `/claude:plugin` slash command (stub warning handler) and `resources_discover` event handler (returns empty arrays). Imports `notifyWarning` from `./shared/notify.ts`; `import type` for `ExtensionAPI` ensures it's erased under Node native TS strip.
-- `extensions/claude-marketplace.ts` (deleted) -- Legacy single-file stub registered `claude_marketplace_list` LLM tool + `claude-marketplace:list` command; both replaced by the new directory entrypoint (with tool registration deferred to Phase 6).
+- `extensions/pi-claude-marketplace/index.ts` (created) -- Thin Pi extension entrypoint; default-export factory `claudeMarketplaceExtension(pi: ExtensionAPI)` registering `/claude:plugin` slash command (stub warning handler) and `resources_discover` event handler (returns empty arrays). Imports `notifyWarning` from `./shared/notify.ts`; `import type` for `ExtensionAPI` ensures it's erased under Node native TS strip.
+- `extensions/pi-claude-marketplace.ts` (deleted) -- Legacy single-file stub registered `pi_claude_marketplace_list` LLM tool + `pi-claude-marketplace:list` command; both replaced by the new directory entrypoint (with tool registration deferred to Phase 6).
 - `.planning/REQUIREMENTS.md` (modified) -- MA-7 entry strikethrough + supersession note; Traceability row `MA-7 | -- | Superseded by D-18/D-21`; Coverage section recount (199 mapped, 99.5%); Phase 4 per-phase count adjusted from 44 to 43.
 - `.planning/PROJECT.md` (modified) -- Appended D-21 row to Key Decisions table.
 
@@ -113,7 +113,7 @@ None -- no external service configuration required.
 
 ## Next Phase Readiness
 
-- Plan 06 (Smoke Tests) is now unblocked; it will ship a `node:test` test that imports `./extensions/claude-marketplace/index.ts`, confirms the default export is a function, calls it with a mock `pi` object, and asserts exactly 1 `registerCommand("claude:plugin", ...)` + 1 `on("resources_discover", ...)` + 0 `registerTool(...)` -- which mirrors the inline smoke test executed during Task 1 verification of this plan.
+- Plan 06 (Smoke Tests) is now unblocked; it will ship a `node:test` test that imports `./extensions/pi-claude-marketplace/index.ts`, confirms the default export is a function, calls it with a mock `pi` object, and asserts exactly 1 `registerCommand("claude:plugin", ...)` + 1 `on("resources_discover", ...)` + 0 `registerTool(...)` -- which mirrors the inline smoke test executed during Task 1 verification of this plan.
 - `pi.extensions` pointer in `package.json` now resolves to a real file; Pi can load the extension cleanly with no ENOENT.
 - `edge/` directory remains intentionally empty in Phase 1 (the new `index.ts` imports only from `shared/`); Phase 6 will populate `edge/handlers/list.ts` and friends.
 - Phase 4 (Marketplace Orchestrators) is freed of the MA-7 obligation; `platform/git.ts` (Phase 1 D-18/D-19/D-20 territory) will be built on `isomorphic-git`, making the "git CLI not found on PATH" failure mode unreachable.
@@ -121,10 +121,10 @@ None -- no external service configuration required.
 ## Self-Check
 
 - **Created files exist:**
-  - `extensions/claude-marketplace/index.ts` -- FOUND
+  - `extensions/pi-claude-marketplace/index.ts` -- FOUND
   - `.planning/phases/01-foundations-toolchain/01-04-SUMMARY.md` -- FOUND (this file, written by Task 2's follow-up)
 - **Legacy file deleted:**
-  - `extensions/claude-marketplace.ts` -- CONFIRMED ABSENT
+  - `extensions/pi-claude-marketplace.ts` -- CONFIRMED ABSENT
 - **Commits exist:**
   - `2941f7a` (feat 01-04) -- FOUND in `git log`
   - `dbf8a4c` (docs 01-04) -- FOUND in `git log`

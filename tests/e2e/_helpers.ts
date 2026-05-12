@@ -4,18 +4,18 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import claudeMarketplaceExtension from "../../extensions/claude-marketplace/index.ts";
-import { locationsFor } from "../../extensions/claude-marketplace/persistence/locations.ts";
-import { loadState } from "../../extensions/claude-marketplace/persistence/state-io.ts";
+import claudeMarketplaceExtension from "../../extensions/pi-claude-marketplace/index.ts";
+import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import { PINNED_SHA } from "./_pinned-sha.ts";
 import { targetByPlugin } from "./_targets.ts";
 
-import type { ExtensionState } from "../../extensions/claude-marketplace/persistence/state-io.ts";
+import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   ExtensionAPI,
   ExtensionContext,
-} from "../../extensions/claude-marketplace/platform/pi-api.ts";
+} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -187,8 +187,10 @@ export async function runPiRuntimeSmoke(): Promise<{
   const root = await mkdtemp(path.join(tmpdir(), "pi-cm-runtime-smoke-"));
   const home = path.join(root, "home");
   const cwd = path.join(root, "project");
+  const agentDir = path.join(home, ".pi", "agent");
+  const sessionDir = path.join(agentDir, "sessions");
   const bin = path.join(REPO_ROOT, "node_modules", ".bin", "pi");
-  const extension = path.join(REPO_ROOT, "extensions", "claude-marketplace", "index.ts");
+  const extension = path.join(REPO_ROOT, "extensions", "pi-claude-marketplace", "index.ts");
 
   try {
     await mkdir(home, { recursive: true });
@@ -196,7 +198,17 @@ export async function runPiRuntimeSmoke(): Promise<{
     const { stdout, stderr } = await execFileAsync(
       bin,
       ["--offline", "--no-extensions", "--extension", extension, "--help"],
-      { cwd, env: { ...process.env, HOME: home, PI_OFFLINE: "1" }, timeout: 30_000 },
+      {
+        cwd,
+        env: {
+          ...process.env,
+          HOME: home,
+          PI_CODING_AGENT_DIR: agentDir,
+          PI_CODING_AGENT_SESSION_DIR: sessionDir,
+          PI_OFFLINE: "1",
+        },
+        timeout: 30_000,
+      },
     );
     const output = `${stdout}\n${stderr}`;
     return { ok: !/failed to load|error loading/i.test(output), output };

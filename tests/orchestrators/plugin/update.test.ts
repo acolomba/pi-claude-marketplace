@@ -4,20 +4,23 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { GENERATED_AGENT_PREFIX } from "../../../extensions/claude-marketplace/bridges/agents/marker.ts";
-import { githubSource, pathSource } from "../../../extensions/claude-marketplace/domain/source.ts";
+import { GENERATED_AGENT_PREFIX } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
+import {
+  githubSource,
+  pathSource,
+} from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   updatePlugins,
   updateSinglePlugin,
-} from "../../../extensions/claude-marketplace/orchestrators/plugin/update.ts";
-import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
   saveState,
-} from "../../../extensions/claude-marketplace/persistence/state-io.ts";
+} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { fixtureMarketplaceDir, makeMockGitOps } from "../../helpers/git-mock.ts";
 
-import type { ExtensionState } from "../../../extensions/claude-marketplace/persistence/state-io.ts";
+import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 // PUP-1..9 + AS-3 (3-phase) + AS-7 + WR-04 + NFR-2 + NFR-3 coverage:

@@ -49,7 +49,7 @@ tech-stack:
 
 key-files:
   created:
-    - "extensions/claude-marketplace/orchestrators/plugin/uninstall.ts"
+    - "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts"
     - "tests/orchestrators/plugin/uninstall.test.ts"
     - ".planning/phases/05-plugin-orchestrators/05-07-SUMMARY.md"
   modified: []
@@ -92,7 +92,7 @@ completed: 2026-05-10
 
 ## Accomplishments
 
-- **`uninstallPlugin(opts)`** shipped at `extensions/claude-marketplace/orchestrators/plugin/uninstall.ts` (~199 lines): reuses `cascadeUnstagePlugin` inside `withStateGuard`, runs the per-plugin `pluginDataDir` rm-rf OUTSIDE the guard post-state-commit (PU-2 / D-08), tolerates concurrent uninstall via silent converge (PU-5), and emits the reload hint (verb `drop`) only when at least one resource was actually dropped (PU-8).
+- **`uninstallPlugin(opts)`** shipped at `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts` (~199 lines): reuses `cascadeUnstagePlugin` inside `withStateGuard`, runs the per-plugin `pluginDataDir` rm-rf OUTSIDE the guard post-state-commit (PU-2 / D-08), tolerates concurrent uninstall via silent converge (PU-5), and emits the reload hint (verb `drop`) only when at least one resource was actually dropped (PU-8).
 - **PU-7 foreign-content propagation**: cascade ok=false (`AgentsUnstageFailureError` chaining the agents bridge's `failed[]`) is re-thrown inside the guard so the state record stays intact for retry; the outer catch surfaces via `notifyError` + `formatErrorWithCauses` (Pattern S-6, depth-5 `Error.cause` walk).
 - **PU-5 silent converge** implemented via the plan-verbatim `alreadyGone` boolean pattern: when the marketplace record OR the plugin record is absent at re-load, return success with literal silence (no notification) per PRD §5.2.2.
 - **PU-4 cleanup-leak surfacing**: when the post-commit `rm` of `pluginDataDir` fails, the leaked path is named in a warning-severity notification via `appendLeaks` + `notifyWarning`. State is already committed at this point.
@@ -110,7 +110,7 @@ Each task was committed atomically:
 
 ## Files Created/Modified
 
-- `extensions/claude-marketplace/orchestrators/plugin/uninstall.ts` (created) -- `uninstallPlugin(opts)` entrypoint reusing `cascadeUnstagePlugin` + `withStateGuard`; PU-1..8 composition + PU-7 propagation + PU-2/PU-4 post-commit cleanup discipline.
+- `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts` (created) -- `uninstallPlugin(opts)` entrypoint reusing `cascadeUnstagePlugin` + `withStateGuard`; PU-1..8 composition + PU-7 propagation + PU-2/PU-4 post-commit cleanup discipline.
 - `tests/orchestrators/plugin/uninstall.test.ts` (created) -- 10 tests: PU-1 (end-state assertion), PU-2+PU-4 (chmod 0o555 leak path), PU-3+PU-7 (foreign-content state + index retention), PU-5 (record absent x2: plugin gone, marketplace gone), PU-6 (V1-legacy state migration), PU-8(a) (>=1 dropped -> hint), PU-8(b) (zero dropped via injection stub -> NO hint), RH-5 (companion-extension warning), NFR-5 (source-grep).
 
 ## Decisions Made
@@ -130,7 +130,7 @@ Each task was committed atomically:
 - **Found during:** Task 1 (`npx tsc --noEmit`)
 - **Issue:** The plan's verbatim interface declared `pi?: ExtensionAPI`, but the soft-dep helpers `subagentWarningIfNeeded(pi, ...)` / `mcpAdapterWarningIfNeeded(pi, ...)` accept `pi: ExtensionAPI` (required) -- passing `undefined` fails type-checking.
 - **Fix:** Changed `readonly pi?: ExtensionAPI` to `readonly pi: ExtensionAPI` in `UninstallPluginOptions`. Documented inline in the file header (same Rule 1 deviation that remove.ts already documents in its own header).
-- **Files modified:** `extensions/claude-marketplace/orchestrators/plugin/uninstall.ts`
+- **Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts`
 - **Verification:** `npx tsc --noEmit` green; tests pass; behavior unchanged at runtime.
 - **Committed in:** `71c21da` (Task 1 commit)
 
@@ -139,7 +139,7 @@ Each task was committed atomically:
 - **Found during:** Task 1 (`npx eslint`)
 - **Issue:** `@typescript-eslint/no-unnecessary-condition` flagged `if (alreadyGone)` as "always falsy". TypeScript's flow analysis cannot prove the `withStateGuard` closure executed and mutated the variable.
 - **Fix:** Added `// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- ...` with a justification naming the closure-mutation pattern. The check is required at runtime.
-- **Files modified:** `extensions/claude-marketplace/orchestrators/plugin/uninstall.ts`
+- **Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts`
 - **Verification:** `npx eslint` clean.
 - **Committed in:** `71c21da` (Task 1 commit)
 
@@ -148,14 +148,14 @@ Each task was committed atomically:
 - **Found during:** Task 1 (`npx eslint`)
 - **Issue:** Initial draft had an empty line between `withStateGuard` (last `../../`) and `cascadeUnstagePlugin` from `../marketplace/shared.ts`. The import-x/order rule sees both as "parent" group and requires no blank line within.
 - **Fix:** Removed the empty line between the two parent-group imports.
-- **Files modified:** `extensions/claude-marketplace/orchestrators/plugin/uninstall.ts`
+- **Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts`
 - **Verification:** `npx eslint` clean.
 - **Committed in:** `71c21da` (Task 1 commit)
 
 **4. [Rule 1 - Prettier auto-format] Long imports split across lines**
 
 - **Found during:** Task 2 (`npx prettier --check`)
-- **Issue:** `import { loadState, saveState } from "..."` exceeded the print width when the path was the full relative `tests/orchestrators/plugin/...` -> `extensions/claude-marketplace/persistence/state-io.ts`.
+- **Issue:** `import { loadState, saveState } from "..."` exceeded the print width when the path was the full relative `tests/orchestrators/plugin/...` -> `extensions/pi-claude-marketplace/persistence/state-io.ts`.
 - **Fix:** `npx prettier --write` auto-formatted to the wrapped form.
 - **Files modified:** `tests/orchestrators/plugin/uninstall.test.ts`
 - **Verification:** `npx prettier --check` clean; tests still pass.
@@ -172,7 +172,7 @@ Each task was committed atomically:
 
 ## Self-Check
 
-- File `extensions/claude-marketplace/orchestrators/plugin/uninstall.ts` exists: **FOUND**
+- File `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts` exists: **FOUND**
 - File `tests/orchestrators/plugin/uninstall.test.ts` exists: **FOUND**
 - Commit `71c21da` (Task 1, feat): **FOUND**
 - Commit `8acbfad` (Task 2, test): **FOUND**

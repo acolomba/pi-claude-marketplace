@@ -4,11 +4,11 @@ plan: 01
 subsystem: foundations
 tags: [phase-04, foundations, errors, locations, source, types]
 requires:
-  - extensions/claude-marketplace/shared/errors.ts (Phase 1 existing exports)
-  - extensions/claude-marketplace/shared/path-safety.ts::assertPathInside (Phase 1 D-15)
-  - extensions/claude-marketplace/persistence/locations.ts::ScopedLocations (Phase 2)
-  - extensions/claude-marketplace/domain/source.ts::ParsedSource (Phase 2)
-  - extensions/claude-marketplace/shared/types.ts::Scope (Phase 2)
+  - extensions/pi-claude-marketplace/shared/errors.ts (Phase 1 existing exports)
+  - extensions/pi-claude-marketplace/shared/path-safety.ts::assertPathInside (Phase 1 D-15)
+  - extensions/pi-claude-marketplace/persistence/locations.ts::ScopedLocations (Phase 2)
+  - extensions/pi-claude-marketplace/domain/source.ts::ParsedSource (Phase 2)
+  - extensions/pi-claude-marketplace/shared/types.ts::Scope (Phase 2)
 provides:
   - "MarketplaceUpdateError + 4 sibling error classes (StaleSourceCloneError, MarketplaceDuplicateNameError, MarketplaceNotFoundError, MarketplaceAmbiguousScopeError)"
   - "sourcesStagingDir(uuid) helper on ScopedLocations + locationsFor() bundle"
@@ -25,11 +25,11 @@ tech-stack:
     - "assertPathInside chokepoint on every name-derived path (Phase 1 D-15 / SC-7 / NFR-10)"
 key-files:
   created:
-    - extensions/claude-marketplace/orchestrators/types.ts
+    - extensions/pi-claude-marketplace/orchestrators/types.ts
   modified:
-    - extensions/claude-marketplace/shared/errors.ts
-    - extensions/claude-marketplace/persistence/locations.ts
-    - extensions/claude-marketplace/domain/source.ts
+    - extensions/pi-claude-marketplace/shared/errors.ts
+    - extensions/pi-claude-marketplace/persistence/locations.ts
+    - extensions/pi-claude-marketplace/domain/source.ts
     - tests/domain/source.test.ts
 decisions:
   - "Bundle MarketplaceAmbiguousScopeError alongside MarketplaceNotFoundError (both surface from the MR-1 cross-scope resolution path; shared contract; shared test file)"
@@ -61,7 +61,7 @@ One-liner: Landed the four Wave-1 foundation primitives (5 marketplace error cla
 
 ## What was built
 
-- **Five marketplace error classes** appended to `extensions/claude-marketplace/shared/errors.ts` below the existing `errorMessage` / `appendLeakToError` / `appendLeaks` exports (no existing exports modified):
+- **Five marketplace error classes** appended to `extensions/pi-claude-marketplace/shared/errors.ts` below the existing `errorMessage` / `appendLeakToError` / `appendLeaks` exports (no existing exports modified):
   - `StaleSourceCloneError(absPath)` -- MA-6 stale source clone refusal
   - `MarketplaceDuplicateNameError(mpName, scope)` -- MA-8 duplicate marketplace name in chosen scope
   - `MarketplaceNotFoundError(mpName, scopes)` -- MR-1 missing in given scope(s)
@@ -72,7 +72,7 @@ One-liner: Landed the four Wave-1 foundation primitives (5 marketplace error cla
   - `path` → `source.logical` (verbatim, tilde preserved per ST-6 / MA-4)
   - `github` → `https://github.com/<owner>/<repo>[#<ref>]` (canonical URL synthesis)
   - `unknown` → `source.raw` (NFR-12 forward-compat tail)
-- **`extensions/claude-marketplace/orchestrators/types.ts`** created with exactly three exports -- `PluginUpdatePartition` (string literal union), `PluginUpdateOutcome` (interface discriminated by partition), `PluginUpdateFn` (function type signature). Single `import type { Scope }` from `shared/types.ts`; zero value imports; no imports from sibling orchestrator subdirs. File lives at the orchestrators/ root precisely to prevent the Phase 4 (marketplace/update.ts) ↔ Phase 5 (plugin/update.ts) cycle.
+- **`extensions/pi-claude-marketplace/orchestrators/types.ts`** created with exactly three exports -- `PluginUpdatePartition` (string literal union), `PluginUpdateOutcome` (interface discriminated by partition), `PluginUpdateFn` (function type signature). Single `import type { Scope }` from `shared/types.ts`; zero value imports; no imports from sibling orchestrator subdirs. File lives at the orchestrators/ root precisely to prevent the Phase 4 (marketplace/update.ts) ↔ Phase 5 (plugin/update.ts) cycle.
 - **Four new `sourceLogical` tests** appended to `tests/domain/source.test.ts` covering all three kind branches (path, github-no-ref, github-with-ref, unknown).
 
 ## Confirmation of plan must_haves
@@ -94,8 +94,8 @@ One-liner: Landed the four Wave-1 foundation primitives (5 marketplace error cla
 
 ## Confirmation that no existing exports were modified
 
-- `shared/errors.ts`: the three pre-existing exports (`errorMessage`, `appendLeakToError`, `appendLeaks`) are untouched; the five new classes are appended at the bottom of the file. `git diff a3a7f84^ a3a7f84 -- extensions/claude-marketplace/shared/errors.ts` shows pure additions, zero deletions to pre-existing code.
-- `domain/source.ts`: all eight pre-existing exports (`PathSource`, `GitHubSource`, `UnknownSource`, `ParsedSource`, `parsePluginSource`, `pathSource`, `githubSource`, plus the internal helpers) are untouched; `sourceLogical` is appended at the bottom. `git show b6975cb -- extensions/claude-marketplace/domain/source.ts` shows the new function appended below `githubSource`, with one blank-line fix between switch cases (cosmetic, required by `@stylistic/padding-line-between-statements`).
+- `shared/errors.ts`: the three pre-existing exports (`errorMessage`, `appendLeakToError`, `appendLeaks`) are untouched; the five new classes are appended at the bottom of the file. `git diff a3a7f84^ a3a7f84 -- extensions/pi-claude-marketplace/shared/errors.ts` shows pure additions, zero deletions to pre-existing code.
+- `domain/source.ts`: all eight pre-existing exports (`PathSource`, `GitHubSource`, `UnknownSource`, `ParsedSource`, `parsePluginSource`, `pathSource`, `githubSource`, plus the internal helpers) are untouched; `sourceLogical` is appended at the bottom. `git show b6975cb -- extensions/pi-claude-marketplace/domain/source.ts` shows the new function appended below `githubSource`, with one blank-line fix between switch cases (cosmetic, required by `@stylistic/padding-line-between-statements`).
 - `persistence/locations.ts`: the `ScopedLocations` interface gains one new method-helper line (`sourcesStagingDir`); the `locationsFor` factory's returned object gains one new method `async sourcesStagingDir(uuid)`. All pre-existing fields (`scope`, `scopeRoot`, `extensionRoot`, ..., `sourceCloneDir`) are untouched.
 - `tests/domain/source.test.ts`: the existing 28 test cases (12 ACCEPT + 9 REJECT + 7 standalone) are untouched; `sourceLogical` added to the import line and 4 new `test()` blocks appended at the bottom.
 
@@ -121,7 +121,7 @@ One-liner: Landed the four Wave-1 foundation primitives (5 marketplace error cla
 - **Found during:** Task 2 verification
 - **Issue:** Plan-prescribed `sourceLogical` body produced one padding-line ESLint error; plan-prescribed test `if (parsed.kind !== "...") throw ...` produced two `curly` errors (project rule mandates braces on `if`).
 - **Fix:** Added blank lines between switch cases in `sourceLogical`; wrapped the test `if`/`throw` pairs in `{ ... }` braces. Identical behavior; zero semantic change.
-- **Files modified:** `extensions/claude-marketplace/domain/source.ts`, `tests/domain/source.test.ts`
+- **Files modified:** `extensions/pi-claude-marketplace/domain/source.ts`, `tests/domain/source.test.ts`
 - **Commit:** `b6975cb` (single-commit fix applied before initial commit)
 
 ### Authentication gates
@@ -140,13 +140,13 @@ None -- no network or auth steps required for this plan.
 ## Self-Check: PASSED
 
 Created files:
-- `extensions/claude-marketplace/orchestrators/types.ts` -- FOUND
+- `extensions/pi-claude-marketplace/orchestrators/types.ts` -- FOUND
 - `.planning/phases/04-marketplace-orchestrators/04-01-SUMMARY.md` -- FOUND (this file)
 
 Modified files (all exist on HEAD):
-- `extensions/claude-marketplace/shared/errors.ts` -- FOUND, +58 lines (commit `a3a7f84`)
-- `extensions/claude-marketplace/persistence/locations.ts` -- FOUND (commit `b6975cb`)
-- `extensions/claude-marketplace/domain/source.ts` -- FOUND (commit `b6975cb`)
+- `extensions/pi-claude-marketplace/shared/errors.ts` -- FOUND, +58 lines (commit `a3a7f84`)
+- `extensions/pi-claude-marketplace/persistence/locations.ts` -- FOUND (commit `b6975cb`)
+- `extensions/pi-claude-marketplace/domain/source.ts` -- FOUND (commit `b6975cb`)
 - `tests/domain/source.test.ts` -- FOUND (commit `b6975cb`)
 
 Commits (`git log --oneline`):

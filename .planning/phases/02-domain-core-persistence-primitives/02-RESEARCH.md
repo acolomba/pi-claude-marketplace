@@ -6,7 +6,7 @@
 
 ## Summary
 
-Phase 2 is a foundation phase: every deliverable is either a TypeScript type, a TypeBox schema, a pure function, or an in-memory primitive that **wraps** Phase 1's I/O. No new disk-write paths are introduced; `withStateGuard` and `runPhases` will be wired to `atomicWriteJson` (Phase 1 D-03) at install time in Phase 3+. The bulk of the work is a careful translation of V1's hand-rolled validators (`features/initial:extensions/claude-marketplace/state/io.ts`, `sources.ts`, `plugin/resolve.ts`, `validation.ts`) into the new 9-folder layout, with three substantive deltas: TypeBox schemas replace V1's hand-rolled `validateState` / `validatePluginManifest` (D-05/D-07), `runPhases` replaces V1's nested try/catch rollback chain in `plugin/install.ts` (D-01), and the Gap-1/4/7 resolutions (D-09/D-10/D-11) lock previously-ambiguous behavior.
+Phase 2 is a foundation phase: every deliverable is either a TypeScript type, a TypeBox schema, a pure function, or an in-memory primitive that **wraps** Phase 1's I/O. No new disk-write paths are introduced; `withStateGuard` and `runPhases` will be wired to `atomicWriteJson` (Phase 1 D-03) at install time in Phase 3+. The bulk of the work is a careful translation of V1's hand-rolled validators (`features/initial:extensions/pi-claude-marketplace/state/io.ts`, `sources.ts`, `plugin/resolve.ts`, `validation.ts`) into the new 9-folder layout, with three substantive deltas: TypeBox schemas replace V1's hand-rolled `validateState` / `validatePluginManifest` (D-05/D-07), `runPhases` replaces V1's nested try/catch rollback chain in `plugin/install.ts` (D-01), and the Gap-1/4/7 resolutions (D-09/D-10/D-11) lock previously-ambiguous behavior.
 
 V1 already implements the entire surface area of this phase in working code; the V1 modules are not "the model" (architecture and import-direction are different) but they are the **decisive reference** for edge-case behavior -- every V1 line-of-code that throws a particular error or routes a particular input is the answer to "what should Phase 2 do here?"
 
@@ -55,7 +55,7 @@ Phase 2 introduces no new tier -- every capability is internal to the extension 
 | Instead of | Could Use | Tradeoff |
 |------------|-----------|----------|
 | TypeBox `Type.Union` of literal-tagged objects | Hand-written discriminated union (V1's pattern; pure TS interfaces + manual validators) | Rejected by D-04/D-07: TypeBox at the schema boundary is the entire reason it's a peerDep; eliminates V1's hand-rolled `validatePluginManifest` (~40 lines of error-prone branching) |
-| Hand-written `parsePluginSource` (D-06 LOCKED) | TypeBox-driven source parsing | Rejected by D-06; V1's `sources.ts` has 80 lines of character-level work (slash count, hash split, trailing-slash strip, browser-paste reject) that TypeBox cannot express -- see V1 `extensions/claude-marketplace/sources.ts` lines 1-200 |
+| Hand-written `parsePluginSource` (D-06 LOCKED) | TypeBox-driven source parsing | Rejected by D-06; V1's `sources.ts` has 80 lines of character-level work (slash count, hash split, trailing-slash strip, browser-paste reject) that TypeBox cannot express -- see V1 `extensions/pi-claude-marketplace/sources.ts` lines 1-200 |
 | `runPhases` pure async function (D-01 LOCKED) | Coordinator class with `add()` / `run()` | Rejected by D-01: implicit phase ordering is Architecture-research's #1 pitfall for transaction coordinators; literal-array call sites at every orchestrator are the strongest mitigation |
 | `Type.Cyclic` (TypeBox 1.x) for self-referential manifest types | `Type.Module` with named `Type.Ref('Plugin')` | Both are valid in 1.x; `Type.Cyclic` is the direct replacement for the now-removed `Type.Recursive` [CITED: github.com/sinclairzx81/typebox/blob/main/changelog/1.0.0-migration.md]. Use whichever reads cleaner; neither breaks JIT compilation |
 | `JSON.parse` on `state.json` followed by TypeBox `Compile().Check()` | `Validator.Parse(value)` (throws on invalid) | The latter combines parse-or-throw with type narrowing; matches V1's `validateState` semantics |
@@ -154,7 +154,7 @@ Phase 2 introduces no new tier -- every capability is internal to the extension 
 The 9-folder skeleton already exists (Phase 1 D-12). Phase 2 fills **`domain/`, `persistence/`, `transaction/`** and adds **`shared/types.ts`** (Phase 1 SUMMARY handoff item #1):
 
 ```text
-extensions/claude-marketplace/
+extensions/pi-claude-marketplace/
 ├── shared/
 │   ├── types.ts                  # NEW Phase 2: Scope + cross-tier types
 │   ├── markers.ts                # Phase 1 (consume)
@@ -299,7 +299,7 @@ export const MARKETPLACE_VALIDATOR = Compile(MARKETPLACE_SCHEMA);
 
 **Example:**
 ```typescript
-// Source: V1 features/initial:extensions/claude-marketplace/plugin/install.ts +
+// Source: V1 features/initial:extensions/pi-claude-marketplace/plugin/install.ts +
 //         lifecycle.ts demonstrates the SAME ordering and rollback semantics
 //         using nested try/catch. Phase 2's runPhases extracts the pattern
 //         into a primitive. CONTEXT.md D-01 locks the API shape.
@@ -382,10 +382,10 @@ await withStateGuard(locations, async (state) => {
 
 **When to use:** Every `marketplace.json`'s plugin `source` field; every state-load record (ST-6); every `marketplace add` user input.
 
-**Example:** see V1 `features/initial:extensions/claude-marketplace/sources.ts` lines 1-200 -- particularly the `parseGitHubUrl` branch which handles `.git`, `#<ref>`, trailing-slash, and `/tree/<ref>` rejection. Phase 2 should mirror these branches verbatim, just emitting the new `ParsedSource` discriminated union instead of V1's `MarketplaceSource`. Per MM-3/MM-4/D-08, the `unknown` branch is enriched with a `reason: string` field.
+**Example:** see V1 `features/initial:extensions/pi-claude-marketplace/sources.ts` lines 1-200 -- particularly the `parseGitHubUrl` branch which handles `.git`, `#<ref>`, trailing-slash, and `/tree/<ref>` rejection. Phase 2 should mirror these branches verbatim, just emitting the new `ParsedSource` discriminated union instead of V1's `MarketplaceSource`. Per MM-3/MM-4/D-08, the `unknown` branch is enriched with a `reason: string` field.
 
 ```typescript
-// Source: V1 features/initial:extensions/claude-marketplace/sources.ts (verbatim
+// Source: V1 features/initial:extensions/pi-claude-marketplace/sources.ts (verbatim
 // behavioral reference) + CONTEXT.md D-06/D-08.
 export interface PathSource   { kind: 'path';    raw: string; logical: string; }
 export interface GitHubSource { kind: 'github';  raw: string; owner: string; repo: string; ref?: string; }
@@ -502,7 +502,7 @@ async function walkAndHash(hash: crypto.Hash, root: string, rel: string): Promis
 
 **Example:**
 ```typescript
-// Source: V1 features/initial:extensions/claude-marketplace/transaction/state-guard.ts
+// Source: V1 features/initial:extensions/pi-claude-marketplace/transaction/state-guard.ts
 // (verbatim behavioral reference) + CONTEXT.md D-02 + ST-7..9.
 import { loadState, saveState } from '../persistence/state-io.ts';
 import type { ScopedLocations } from '../persistence/locations.ts';
@@ -574,7 +574,7 @@ ST-8 soft-converge (uninstall side): orchestrator checks `state.marketplaces[mpN
 
 | Category | Items Found | Action Required |
 |----------|-------------|------------------|
-| Stored data | A user upgrading from V1 to the successor will have a `<scopeRoot>/claude-marketplace/state.json` written by V1's `state/io.ts:saveState`. The shape matches V1's `ExtensionState` interface -- see V1 `extensions/claude-marketplace/types.ts`. Phase 2's `loadState` MUST normalize legacy shapes (missing `manifestPath` / `marketplaceRoot`, missing `resources.agents` / `resources.mcpServers`, schemaVersion may be absent on pre-1 records) per PR-1..PR-6, ST-4, ST-5. | Code addition: `persistence/migrate.ts` with `migrateLegacyMarketplaceRecords(parsed, extensionRoot)` (verbatim port of V1's same-named function in `state/io.ts`). Best-effort async re-save via `atomicWriteJson`; failure → IL-3 `console.warn` with eslint-disable comment per Phase 1 SUMMARY handoff #2. |
+| Stored data | A user upgrading from V1 to the successor will have a `<scopeRoot>/pi-claude-marketplace/state.json` written by V1's `state/io.ts:saveState`. The shape matches V1's `ExtensionState` interface -- see V1 `extensions/pi-claude-marketplace/types.ts`. Phase 2's `loadState` MUST normalize legacy shapes (missing `manifestPath` / `marketplaceRoot`, missing `resources.agents` / `resources.mcpServers`, schemaVersion may be absent on pre-1 records) per PR-1..PR-6, ST-4, ST-5. | Code addition: `persistence/migrate.ts` with `migrateLegacyMarketplaceRecords(parsed, extensionRoot)` (verbatim port of V1's same-named function in `state/io.ts`). Best-effort async re-save via `atomicWriteJson`; failure → IL-3 `console.warn` with eslint-disable comment per Phase 1 SUMMARY handoff #2. |
 | Live service config | None -- Phase 2 has no services, no daemons, no scheduled tasks, no external service registrations. | None -- verified by grepping V1 source for `setInterval`, `setTimeout`, `child_process` (V1 uses none for state); the `no-shell-out.test.ts` from Phase 1 enforces. |
 | OS-registered state | None -- Phase 2 introduces no OS-registered names, no Windows Task Scheduler entries, no launchd plists, no systemd unit names, no pm2 process names. | None -- this extension is a Pi-loaded module, not a standalone OS service. |
 | Secrets/env vars | None -- Phase 2 reads no environment variables (the extension's `expandTildePath` reads `os.homedir()` at access time per SP-7, but this is not a secret). | None -- verified against V1 source: no `process.env.*` reads in `state/io.ts`, `sources.ts`, `plugin/resolve.ts`, or `transaction/state-guard.ts`. |
@@ -640,7 +640,7 @@ Place ONLY at the `migrateLegacyMarketplaceRecords` save-failure callsite. Any o
 **What goes wrong:** A naive `generatedSkillName(plugin, source)` that does `${plugin}-${source}` produces `acme-acme-foo` when the source already starts with `acme-`. PRD RN-1 explicitly says "prefix elided" but the implementation requires three slightly different rules per resource type:
 - **Skills:** `<plugin>-<skill>`, with `<plugin>-` prefix elided when source starts with `<plugin>-`
 - **Commands:** `<plugin>:<command>`, with `<plugin>-` prefix (note: the **dash** prefix is elided, but the **colon** is the separator)
-- **Agents:** `claude-marketplace-<plugin>-<agent>`, with `<plugin>-` prefix on source elided
+- **Agents:** `pi-claude-marketplace-<plugin>-<agent>`, with `<plugin>-` prefix on source elided
 **Why it happens:** Three resource types, three slightly different separators (`-`, `:`, double-prefix), one elision rule. Easy to write a single helper that gets one case wrong.
 **How to avoid:** Three separate functions, one per resource type. Test each with both prefix-present and prefix-absent source names. V1's `agent/stage.ts`, `resource/stage.ts` have the canonical V1 implementations -- port verbatim.
 **Warning signs:** Test expecting `acme-foo` but getting `acme-acme-foo` (or vice versa); test expecting `acme:foo` but getting `acme:acme-foo`.
@@ -667,7 +667,7 @@ Place ONLY at the `migrateLegacyMarketplaceRecords` save-failure callsite. Any o
 ```typescript
 // tests/domain/resolver.types.test.ts
 // Source: PR-1 + NFR-7 + Phase 2 success criterion 1; CONTEXT.md "Specific Ideas" item 4.
-import type { ResolvedPlugin } from '../../extensions/claude-marketplace/domain/resolver.ts';
+import type { ResolvedPlugin } from '../../extensions/pi-claude-marketplace/domain/resolver.ts';
 
 declare const r: ResolvedPlugin;
 
@@ -690,8 +690,8 @@ if (r.installable) {
 // tests/transaction/rollback.test.ts
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatRollbackError } from '../../extensions/claude-marketplace/transaction/rollback.ts';
-import { ROLLBACK_PARTIAL } from '../../extensions/claude-marketplace/shared/markers.ts';
+import { formatRollbackError } from '../../extensions/pi-claude-marketplace/transaction/rollback.ts';
+import { ROLLBACK_PARTIAL } from '../../extensions/pi-claude-marketplace/shared/markers.ts';
 
 test('formatRollbackError emits ES-5 marker exactly (AS-4)', () => {
   const result = {
@@ -718,7 +718,7 @@ test('formatRollbackError emits ES-5 marker exactly (AS-4)', () => {
 // tests/transaction/phase-ledger.test.ts
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { runPhases, type Phase } from '../../extensions/claude-marketplace/transaction/phase-ledger.ts';
+import { runPhases, type Phase } from '../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts';
 
 test('runPhases: phase 3 throws → undo of phases 1+2 in reverse order', async () => {
   const order: string[] = [];
@@ -756,7 +756,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { computeHashVersion, HASH_WALK_SKIP } from '../../extensions/claude-marketplace/domain/version.ts';
+import { computeHashVersion, HASH_WALK_SKIP } from '../../extensions/pi-claude-marketplace/domain/version.ts';
 
 const FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)),
   'fixtures/hash-stability/sample-plugin');
@@ -810,7 +810,7 @@ test('computeHashVersion ignores HASH_WALK_SKIP entries (D-12)', async () => {
 - **File operations:** All disk mutations atomic (tmp + rename or atomic JSON write) -- NFR-1. Phase 2's `state-io.ts` MUST route through `shared/atomic-json.ts` (Phase 1 D-03), never call `fs.writeFile` for `state.json`.
 - **Recovery model:** No fix may require a Pi process restart; `Run /reload` must suffice (NFR-2). All operations must be safe to retry -- idempotent or fail-clean (NFR-3). Phase 2 deliverables are all retry-safe by construction (pure functions + `withStateGuard`'s load-fresh semantics).
 - **Network policy:** Phase 2 does NOT touch the network (NFR-5). Verified -- no imports from `node:https`, `node:http`, `isomorphic-git/http/*`.
-- **Containment:** Refuse to write outside `<scopeRoot>/claude-marketplace/`, `<scopeRoot>/agents/`, or `<scopeRoot>/mcp.json` (NFR-10). `persistence/locations.ts` SC-3 brand symbol is the chokepoint; every name-derived path inside the bundle calls `assertPathInside` from Phase 1's `shared/path-safety.ts`.
+- **Containment:** Refuse to write outside `<scopeRoot>/pi-claude-marketplace/`, `<scopeRoot>/agents/`, or `<scopeRoot>/mcp.json` (NFR-10). `persistence/locations.ts` SC-3 brand symbol is the chokepoint; every name-derived path inside the bundle calls `assertPathInside` from Phase 1's `shared/path-safety.ts`.
 - **Quality bar:** `npm run check` must stay green -- typecheck + ESLint + Prettier + tests (NFR-6). Phase 2 adds `tests/{domain,persistence,transaction}/` and must keep this green at the end of every plan.
 - **Output channel:** All user-visible messages MUST go through `ctx.ui.notify(message, severity)` (IL-2). The single sanctioned `console.warn` is `migrateLegacyMarketplaceRecords` (IL-3) -- see Pitfall 5 for the disable-comment incantation.
 - **No telemetry V1:** No metrics, no event sink, no analytics endpoint (IL-4). `tests/architecture/no-telemetry-deps.test.ts` from Phase 1 enforces; Phase 2 must not introduce any vendor SDK.
@@ -831,7 +831,7 @@ test('computeHashVersion ignores HASH_WALK_SKIP entries (D-12)', async () => {
 | **SP-6** | Source factory functions (`pathSource`, `githubSource`) validate at every boundary including state-load | Pattern 4 (factories wrap parse + validate-or-throw); ST-6 funnels state-load through same factories |
 | **SP-7** | Tilde paths stored unchanged in `state.json`; `expandTildePath` applied at access time | `raw` field in PathSource preserves verbatim; `expandTildePath` is V1 `location/index.ts` helper, not Phase 2 scope (Phase 4 marketplace orchestrator owns) |
 | **SC-1** | Two scopes: `user`, `project`; no `local` | `Scope = 'user' \| 'project'` in `shared/types.ts` per handoff #1 |
-| **SC-2** | Extension data at `<scopeRoot>/claude-marketplace/`; bridge files at `<scopeRoot>/agents/` and `<scopeRoot>/mcp.json` | `persistence/locations.ts` ScopedLocations fields -- V1 `location/index.ts` verbatim port |
+| **SC-2** | Extension data at `<scopeRoot>/pi-claude-marketplace/`; bridge files at `<scopeRoot>/agents/` and `<scopeRoot>/mcp.json` | `persistence/locations.ts` ScopedLocations fields -- V1 `location/index.ts` verbatim port |
 | **SC-3** | `ScopedLocations` is typed bundle (brand symbol); hand-crafted shapes mixing scopes MUST not type-check | `unique symbol` brand pattern -- V1 `location/index.ts:33` verbatim port |
 | **SC-4** | With `--scope`, error if name not found there; without `--scope`, search both, error on dual-found or not-found | Phase 4 owns the orchestrator; Phase 2 provides `loadState` for both scopes (the type bundle exists per SC-3) |
 | **SC-7** | Path containment enforced for every name-derived path | `pluginDataDir` / `marketplaceDataDir` / `sourceCloneDir` methods on ScopedLocations call `assertPathInside` per V1 `location/index.ts:97-118` |
@@ -983,7 +983,7 @@ No new framework install needed -- `node:test` already wired.
 ## Sources
 
 ### Primary (HIGH confidence)
-- **V1 source on `features/initial`** -- `extensions/claude-marketplace/{state/io.ts, sources.ts, plugin/resolve.ts, plugin/install.ts, plugin/lifecycle.ts, transaction/state-guard.ts, location/index.ts, validation.ts, types.ts}`. Inspected directly via `git show features/initial:...`. These are the canonical behavioral references for every Phase 2 module.
+- **V1 source on `features/initial`** -- `extensions/pi-claude-marketplace/{state/io.ts, sources.ts, plugin/resolve.ts, plugin/install.ts, plugin/lifecycle.ts, transaction/state-guard.ts, location/index.ts, validation.ts, types.ts}`. Inspected directly via `git show features/initial:...`. These are the canonical behavioral references for every Phase 2 module.
 - **Installed `typebox@1.1.38`** -- `node_modules/typebox/{package.json, build/type/types/{cyclic,union,literal,_optional}.d.mts, build/compile/{index,validator}.d.mts, build/value/shared/union_score_select.mjs}`. Inspected directly to verify API surface.
 - **TypeBox docs via Context7 CLI** (`npx ctx7 docs /sinclairzx81/typebox ...`):
   - [github.com/sinclairzx81/typebox/blob/main/changelog/1.0.0-migration.md](https://github.com/sinclairzx81/typebox/blob/main/changelog/1.0.0-migration.md) -- `Type.Recursive` → `Type.Cyclic`, `TypeCompiler.Compile` → `Compile`, ESM-only migration
@@ -993,7 +993,7 @@ No new framework install needed -- `node:test` already wired.
   - [github.com/sinclairzx81/typebox/blob/main/design/website/docs/compile/0_compile.md](https://github.com/sinclairzx81/typebox/blob/main/design/website/docs/compile/0_compile.md) -- Compile API
 - **PRD** -- `docs/prd/pi-claude-marketplace-prd.md` §5.2.1 (PI-7 hash spec), §6.1 (SP-1..7), §6.3 (MM-1..7), §6.4 (PR-1..6), §6.5 (RN-1..6), §6.9 (ST-1..9), §6.10 (PS-1..5), §6.11 (AS-1..9), §6.12 (ES-1..5), §6.13 (IL-1..5), §10 (NFR-7, NFR-12)
 - **Phase 1 SUMMARY** -- `.planning/phases/01-foundations-toolchain/01-07-SUMMARY.md` (handoff items #1-9, especially #1 [Scope in shared/types.ts], #2 [IL-3 incantation], #3 [atomic JSON], #6 [Phase ledger naming], #7 [TypeBox 1.x discriminated union])
-- **Phase 1 source** -- `extensions/claude-marketplace/shared/{markers,errors,notify,atomic-json,path-safety}.ts` and `index.ts` -- inspected directly
+- **Phase 1 source** -- `extensions/pi-claude-marketplace/shared/{markers,errors,notify,atomic-json,path-safety}.ts` and `index.ts` -- inspected directly
 - **`npm view`** -- typebox version 1.1.38; write-file-atomic version 8.0.0 + engines
 
 ### Secondary (MEDIUM confidence)

@@ -7,25 +7,25 @@ import test from "node:test";
 import {
   GENERATED_AGENT_MARKER,
   GENERATED_AGENT_PREFIX,
-} from "../../../extensions/claude-marketplace/bridges/agents/marker.ts";
-import { pathSource } from "../../../extensions/claude-marketplace/domain/source.ts";
-import { cascadeUnstagePlugin } from "../../../extensions/claude-marketplace/orchestrators/marketplace/shared.ts";
-import { uninstallPlugin } from "../../../extensions/claude-marketplace/orchestrators/plugin/uninstall.ts";
-import { loadAgentsIndex } from "../../../extensions/claude-marketplace/persistence/agents-index-io.ts";
-import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
+} from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
+import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { cascadeUnstagePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import { uninstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
+import { loadAgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
   saveState,
-} from "../../../extensions/claude-marketplace/persistence/state-io.ts";
-import { atomicWriteJson } from "../../../extensions/claude-marketplace/shared/atomic-json.ts";
+} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { atomicWriteJson } from "../../../extensions/pi-claude-marketplace/shared/atomic-json.ts";
 import {
   __resetCacheForTests,
   getPluginIndex,
-} from "../../../extensions/claude-marketplace/shared/completion-cache.ts";
-import { pathExists } from "../../../extensions/claude-marketplace/shared/fs-utils.ts";
+} from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
-import type { AgentsIndex } from "../../../extensions/claude-marketplace/persistence/agents-index-schema.ts";
-import type { ExtensionState } from "../../../extensions/claude-marketplace/persistence/state-io.ts";
+import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
+import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 // PU-1..8 + AS-6 (post-commit cleanup leaks warning-severity) + NFR-5 (no network).
@@ -170,7 +170,7 @@ async function seedFullPlugin(
         [mcpServerName]: {
           command: "node",
           args: ["server.js"],
-          _claudeMarketplace: { plugin, marketplace },
+          _piClaudeMarketplace: { plugin, marketplace },
         },
       },
     }),
@@ -674,7 +674,7 @@ test("RH-5: dropped agents while pi-subagents unloaded -> subagent warning appen
 
 test("NFR-5: uninstall.ts has zero git surface (no platform/git, no DEFAULT_GIT_OPS, no gitOps)", async () => {
   const src = await readFile(
-    "extensions/claude-marketplace/orchestrators/plugin/uninstall.ts",
+    "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts",
     "utf8",
   );
   // Header docstring legitimately mentions "platform/git" in prose; strip

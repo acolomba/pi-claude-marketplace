@@ -4,15 +4,15 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { MCP_SERVERS_VALIDATOR } from "../../extensions/claude-marketplace/domain/components/mcp.ts";
+import { MCP_SERVERS_VALIDATOR } from "../../extensions/pi-claude-marketplace/domain/components/mcp.ts";
 import {
   PLUGIN_ENTRY_VALIDATOR,
   PLUGIN_MANIFEST_VALIDATOR,
-} from "../../extensions/claude-marketplace/domain/components/plugin.ts";
+} from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 import {
   loadMarketplaceManifest,
   MARKETPLACE_VALIDATOR,
-} from "../../extensions/claude-marketplace/domain/manifest.ts";
+} from "../../extensions/pi-claude-marketplace/domain/manifest.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // MM-1: MARKETPLACE_SCHEMA accept matrix

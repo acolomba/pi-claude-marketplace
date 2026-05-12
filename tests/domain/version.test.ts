@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 import {
   computeHashVersion,
   HASH_WALK_SKIP,
-} from "../../extensions/claude-marketplace/domain/version.ts";
+} from "../../extensions/pi-claude-marketplace/domain/version.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE_ROOT = path.join(HERE, "fixtures/hash-stability");

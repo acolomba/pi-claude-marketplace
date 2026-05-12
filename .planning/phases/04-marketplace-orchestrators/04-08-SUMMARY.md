@@ -28,7 +28,7 @@ tech-stack:
 
 key-files:
   created:
-    - "extensions/claude-marketplace/orchestrators/marketplace/update.ts (437 lines) -- the orchestrator"
+    - "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts (437 lines) -- the orchestrator"
     - "tests/orchestrators/marketplace/update.test.ts (470 lines) -- 11 tests covering MU-1, MU-4, MU-5, MU-6, MU-7, MU-8, MU-9, RH-1/RH-2/RH-5, NFR-5, D-14"
   modified: []
 
@@ -85,12 +85,12 @@ Each task was committed atomically:
 
 ### Created
 
-- `extensions/claude-marketplace/orchestrators/marketplace/update.ts` (437 lines) -- the orchestrator. Public surface: `updateMarketplace`, `updateAllMarketplaces`, `UpdateMarketplaceOptions`, `UpdateAllMarketplacesOptions`. Private helpers: `refreshOneMarketplace`, `refreshGitHubClone`, `refreshManifestPointer`, `renderPartition`.
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts` (437 lines) -- the orchestrator. Public surface: `updateMarketplace`, `updateAllMarketplaces`, `UpdateMarketplaceOptions`, `UpdateAllMarketplacesOptions`. Private helpers: `refreshOneMarketplace`, `refreshGitHubClone`, `refreshManifestPointer`, `renderPartition`.
 - `tests/orchestrators/marketplace/update.test.ts` (470 lines) -- 11 tests. All passing.
 
 ### Intentionally NOT modified
 
-- `extensions/claude-marketplace/orchestrators/marketplace/index.ts` -- Plan 04-10 Task 3 finalizes the barrel exhaustively; parallel Wave 2 writes would race (B2 deviation note in plan body).
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/index.ts` -- Plan 04-10 Task 3 finalizes the barrel exhaustively; parallel Wave 2 writes would race (B2 deviation note in plan body).
 - `.planning/STATE.md` and `.planning/ROADMAP.md` -- worktree-mode constraint; orchestrator updates them centrally after the wave merges.
 
 ## Test Results
@@ -134,7 +134,7 @@ All 11 tests pass (full suite: 500 / 500):
 - **Found during:** Task 1
 - **Issue:** Plan body shows `subagentWarningIfNeeded(ctx, dummyAgentsHint)` and `mcpAdapterWarningIfNeeded(ctx, dummyMcpHint)`, but the actual signatures (Plan 04-03 outputs) take `pi: ExtensionAPI`, not `ctx: ExtensionContext`. `ExtensionContext` has no `pi` member in `@mariozechner/pi-coding-agent@0.73.1`.
 - **Fix:** Added optional `readonly pi?: ExtensionAPI` to `UpdateMarketplaceOptions`, `UpdateAllMarketplacesOptions`, and the internal `RefreshOneArgs`. The composer call site short-circuits when `pi === undefined`.
-- **Files modified:** `extensions/claude-marketplace/orchestrators/marketplace/update.ts`
+- **Files modified:** `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts`
 - **Verification:** `npx tsc --noEmit` exits 0. The Plan-snippet variant would have surfaced as `Property 'pi' does not exist on type 'ExtensionContext'` at compile time.
 - **Committed in:** `436e64b`
 
@@ -196,7 +196,7 @@ This plan is `type: execute`, not `type: tdd`. The TDD gate sequence (test befor
 
 Created files (verified on disk):
 
-- `extensions/claude-marketplace/orchestrators/marketplace/update.ts` -- FOUND (437 lines, commit `436e64b`)
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts` -- FOUND (437 lines, commit `436e64b`)
 - `tests/orchestrators/marketplace/update.test.ts` -- FOUND (470 lines, commit `8394831`)
 - `.planning/phases/04-marketplace-orchestrators/04-08-SUMMARY.md` -- FOUND (this file, to be committed by the metadata step)
 

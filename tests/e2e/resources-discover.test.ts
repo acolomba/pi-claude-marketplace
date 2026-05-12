@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import claudeMarketplaceExtension from "../../extensions/claude-marketplace/index.ts";
+import claudeMarketplaceExtension from "../../extensions/pi-claude-marketplace/index.ts";
 
 import { installTargetWithMockPi, withE2EEnvironment } from "./_helpers.ts";
 

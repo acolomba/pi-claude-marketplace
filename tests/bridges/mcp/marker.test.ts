@@ -6,14 +6,14 @@ import {
   buildMarker,
   isOwnedBy,
   readMarker,
-} from "../../../extensions/claude-marketplace/bridges/mcp/marker.ts";
+} from "../../../extensions/pi-claude-marketplace/bridges/mcp/marker.ts";
 
-// MC-5 -- per-server `_claudeMarketplace` marker shape and ownership.
+// MC-5 -- per-server `_piClaudeMarketplace` marker shape and ownership.
 
-test("MC-5 CLAUDE_MARKETPLACE_MARKER_KEY === '_claudeMarketplace' (user contract snapshot)", () => {
+test("MC-5 CLAUDE_MARKETPLACE_MARKER_KEY === '_piClaudeMarketplace' (user contract snapshot)", () => {
   // This is byte-for-byte user contract -- a V1 mcp.json must remain
   // readable by the successor. Snapshot the literal.
-  assert.equal(CLAUDE_MARKETPLACE_MARKER_KEY, "_claudeMarketplace");
+  assert.equal(CLAUDE_MARKETPLACE_MARKER_KEY, "_piClaudeMarketplace");
 });
 
 test("MC-5 readMarker returns null for non-object input", () => {

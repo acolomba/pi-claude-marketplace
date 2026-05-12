@@ -6,9 +6,9 @@ wave: 2
 depends_on:
   - 06-02
 files_modified:
-  - extensions/claude-marketplace/shared/completion-cache.ts
-  - extensions/claude-marketplace/edge/completions/provider.ts
-  - extensions/claude-marketplace/edge/completions/data.ts
+  - extensions/pi-claude-marketplace/shared/completion-cache.ts
+  - extensions/pi-claude-marketplace/edge/completions/provider.ts
+  - extensions/pi-claude-marketplace/edge/completions/data.ts
   - tests/shared/completion-cache.test.ts
   - tests/edge/completions/provider.test.ts
   - tests/edge/completions/data.test.ts
@@ -36,26 +36,26 @@ must_haves:
     - "Unique plugin token completes to `name@mp ` (trailing space); multi-marketplace to `name@` (no trailing space)"
     - "All previously-skipped TC-1..TC-9 + cache primitives tests are unskipped and green"
   artifacts:
-    - path: extensions/claude-marketplace/shared/completion-cache.ts
+    - path: extensions/pi-claude-marketplace/shared/completion-cache.ts
       provides: "Two-tier (memory + file) cache; D-03 invalidation API; TC-8/TC-9 semantics"
       exports: ["getMarketplaceNames", "getPluginIndex", "invalidateMarketplaceNames", "invalidateMarketplaceCache", "dropMarketplaceCache", "PluginIndexRow", "MARKETPLACE_NAMES_CACHE_SCHEMA", "PLUGIN_INDEX_CACHE_SCHEMA"]
-    - path: extensions/claude-marketplace/edge/completions/data.ts
+    - path: extensions/pi-claude-marketplace/edge/completions/data.ts
       provides: "Cache-backed read-through helpers; pure helpers (buildItem, splitCompletionInput, extractPositionals); status-aware getPluginToMarketplacesMap (D-03)"
       exports: ["getMarketplaceNamesAcrossScopes", "getPluginToMarketplacesMap", "buildItem", "splitCompletionInput", "extractPositionals", "getScopeCompletions", "getMarketplaceCompletions", "getPluginRefCompletions"]
-    - path: extensions/claude-marketplace/edge/completions/provider.ts
+    - path: extensions/pi-claude-marketplace/edge/completions/provider.ts
       provides: "getArgumentCompletions dispatcher (TC-1..TC-6)"
       exports: ["getArgumentCompletions", "TOP_LEVEL_SUBCOMMANDS", "MARKETPLACE_SUBCOMMANDS"]
   key_links:
-    - from: extensions/claude-marketplace/edge/completions/data.ts
-      to: extensions/claude-marketplace/shared/completion-cache.ts
+    - from: extensions/pi-claude-marketplace/edge/completions/data.ts
+      to: extensions/pi-claude-marketplace/shared/completion-cache.ts
       via: "import { getMarketplaceNames, getPluginIndex } from \"../../shared/completion-cache.ts\""
       pattern: "from \".*shared/completion-cache"
-    - from: extensions/claude-marketplace/edge/completions/data.ts
-      to: extensions/claude-marketplace/persistence/locations.ts
+    - from: extensions/pi-claude-marketplace/edge/completions/data.ts
+      to: extensions/pi-claude-marketplace/persistence/locations.ts
       via: "ESLint BLOCK C forbids edge -> persistence; data.ts uses locations indirectly via the callback chain -- locations must be passed in by register.ts. Verify: data.ts MUST NOT import from persistence."
       pattern: "(no import) from \".*persistence"
-    - from: extensions/claude-marketplace/shared/completion-cache.ts
-      to: extensions/claude-marketplace/shared/atomic-json.ts
+    - from: extensions/pi-claude-marketplace/shared/completion-cache.ts
+      to: extensions/pi-claude-marketplace/shared/atomic-json.ts
       via: "import { atomicWriteJson } from \"./atomic-json.ts\""
       pattern: "atomicWriteJson"
 ---
@@ -85,12 +85,12 @@ Output:
 @.planning/phases/06-edge-layer-tab-completion/06-02-SUMMARY.md
 
 <!-- Phase 1-2 deps -->
-@extensions/claude-marketplace/shared/atomic-json.ts
-@extensions/claude-marketplace/shared/path-safety.ts
-@extensions/claude-marketplace/shared/types.ts
-@extensions/claude-marketplace/shared/errors.ts
-@extensions/claude-marketplace/shared/fs-utils.ts
-@extensions/claude-marketplace/edge/completions/normalize.ts
+@extensions/pi-claude-marketplace/shared/atomic-json.ts
+@extensions/pi-claude-marketplace/shared/path-safety.ts
+@extensions/pi-claude-marketplace/shared/types.ts
+@extensions/pi-claude-marketplace/shared/errors.ts
+@extensions/pi-claude-marketplace/shared/fs-utils.ts
+@extensions/pi-claude-marketplace/edge/completions/normalize.ts
 
 <!-- Test scaffolding to mirror -->
 @tests/shared/atomic-json.test.ts
@@ -250,7 +250,7 @@ export async function getArgumentCompletions(
 
 <task type="auto" tdd="true">
   <name>Task 1: Implement shared/completion-cache.ts with TC-8/TC-9 semantics and 10-min TTL clock seam</name>
-  <files>extensions/claude-marketplace/shared/completion-cache.ts, tests/shared/completion-cache.test.ts</files>
+  <files>extensions/pi-claude-marketplace/shared/completion-cache.ts, tests/shared/completion-cache.test.ts</files>
   <behavior>
 - ENOENT or schema mismatch on read -> call `rebuild()`, atomicWriteJson the result, return it.
 - Memory hit returns instantly (no file read, no rebuild).
@@ -265,7 +265,7 @@ export async function getArgumentCompletions(
 - Schema constants `MARKETPLACE_NAMES_CACHE_SCHEMA` and `PLUGIN_INDEX_CACHE_SCHEMA` are exported so tests can snapshot `schemaVersion === 1`.
   </behavior>
   <action>
-1. Implement `extensions/claude-marketplace/shared/completion-cache.ts` per the public surface above.
+1. Implement `extensions/pi-claude-marketplace/shared/completion-cache.ts` per the public surface above.
 
 2. **TC-8 vs TC-9 disambiguation:** The cache can't tell from the throw alone whether it's a state-load (propagate) or manifest-load (swallow). The cleanest contract: define two named error classes in the cache module OR rely on a typed rebuild result:
 
@@ -329,14 +329,14 @@ export async function getArgumentCompletions(
 8. **ESLint check:** `shared/completion-cache.ts` MUST NOT import from `persistence/` or `domain/` (BLOCK C / shared-is-leaf rule). Verify with `grep`.
   </action>
   <verify>
-    <automated>node --test tests/shared/completion-cache.test.ts &amp;&amp; grep -v '^#' extensions/claude-marketplace/shared/completion-cache.ts | grep -c "from \".*\\(persistence\\|domain\\|orchestrators\\|edge\\|bridges\\|presentation\\|transaction\\|platform\\)/" | grep -qx 0 &amp;&amp; npx tsc --noEmit &amp;&amp; npx eslint extensions/claude-marketplace/shared/completion-cache.ts tests/shared/completion-cache.test.ts</automated>
+    <automated>node --test tests/shared/completion-cache.test.ts &amp;&amp; grep -v '^#' extensions/pi-claude-marketplace/shared/completion-cache.ts | grep -c "from \".*\\(persistence\\|domain\\|orchestrators\\|edge\\|bridges\\|presentation\\|transaction\\|platform\\)/" | grep -qx 0 &amp;&amp; npx tsc --noEmit &amp;&amp; npx eslint extensions/pi-claude-marketplace/shared/completion-cache.ts tests/shared/completion-cache.test.ts</automated>
   </verify>
   <done>shared/completion-cache.ts exists, is shared-leaf-clean (zero imports from other extension folders -- self-invariant grep gate passes), all skipped tests are unskipped + green, TC-8 caches `_loadError` and returns [], TC-9 propagates, 10-min TTL re-reads via injected clock.</done>
 </task>
 
 <task type="auto" tdd="true">
   <name>Task 2: Implement edge/completions/data.ts and unskip data.test.ts</name>
-  <files>extensions/claude-marketplace/edge/completions/data.ts, tests/edge/completions/data.test.ts</files>
+  <files>extensions/pi-claude-marketplace/edge/completions/data.ts, tests/edge/completions/data.test.ts</files>
   <behavior>
 - Pure helpers `buildItem`, `splitCompletionInput`, `extractPositionals`, `getScopeCompletions`, `getMarketplaceCompletions` ported verbatim from V1.
 - `getMarketplaceNamesAcrossScopes(resolver)` returns union of names from user + project scopes (dedupes).
@@ -348,7 +348,7 @@ export async function getArgumentCompletions(
 - TC-6 + D-03: install mode INCLUDES status `unavailable` rows (future --force).
   </behavior>
   <action>
-1. Port V1 pure helpers from `git show features/initial:extensions/claude-marketplace/completions.ts` (the `buildItem`, `splitCompletionInput`, `extractPositionals`, `getScopeCompletions`, `getMarketplaceCompletions`, `getPluginCompletions` functions). They go in `data.ts` (per 06-PATTERNS.md, planner choice).
+1. Port V1 pure helpers from `git show features/initial:extensions/pi-claude-marketplace/completions.ts` (the `buildItem`, `splitCompletionInput`, `extractPositionals`, `getScopeCompletions`, `getMarketplaceCompletions`, `getPluginCompletions` functions). They go in `data.ts` (per 06-PATTERNS.md, planner choice).
 
 2. Define `LocationsResolver` interface per the `<interfaces>` block above. Document with a JSDoc that says "constructed by edge/register.ts from persistence/locations.ts; passed through getArgumentCompletions to keep edge/ -> persistence/ import boundary clean".
 
@@ -403,14 +403,14 @@ export async function getArgumentCompletions(
 7. ESLint check: `edge/completions/data.ts` MUST NOT import from `persistence/`, `domain/`, `bridges/`, `transaction/`, `platform/`. ALLOWED: `shared/`, `orchestrators/` (but data.ts shouldn't need orchestrators either). Verify with grep.
   </action>
   <verify>
-    <automated>node --test tests/edge/completions/data.test.ts &amp;&amp; grep -v '^#' extensions/claude-marketplace/edge/completions/data.ts | grep -c "from \".*\\(persistence\\|domain\\|bridges\\|transaction\\|platform\\)/" | grep -qx 0 &amp;&amp; npx tsc --noEmit &amp;&amp; npx eslint extensions/claude-marketplace/edge/completions/data.ts tests/edge/completions/data.test.ts</automated>
+    <automated>node --test tests/edge/completions/data.test.ts &amp;&amp; grep -v '^#' extensions/pi-claude-marketplace/edge/completions/data.ts | grep -c "from \".*\\(persistence\\|domain\\|bridges\\|transaction\\|platform\\)/" | grep -qx 0 &amp;&amp; npx tsc --noEmit &amp;&amp; npx eslint extensions/pi-claude-marketplace/edge/completions/data.ts tests/edge/completions/data.test.ts</automated>
   </verify>
   <done>data.ts exists with cache-backed accessors + V1 pure helpers; data.test.ts is fully unskipped and green; status filtering matches D-03 (install includes unavailable; uninstall/update show only installed); import-boundary grep gate passes (self-invariant excludes comment lines).</done>
 </task>
 
 <task type="auto" tdd="true">
   <name>Task 3: Implement edge/completions/provider.ts dispatcher and unskip provider.test.ts (TC-1..TC-6, TC-8, TC-9 integration)</name>
-  <files>extensions/claude-marketplace/edge/completions/provider.ts, tests/edge/completions/provider.test.ts</files>
+  <files>extensions/pi-claude-marketplace/edge/completions/provider.ts, tests/edge/completions/provider.test.ts</files>
   <behavior>
 - `getArgumentCompletions(prefix, resolver)` returns:
   - TC-1: top-level keywords on first positional (`install/uninstall/update/list/marketplace`).
@@ -425,7 +425,7 @@ export async function getArgumentCompletions(
 - TC-9: state.json error propagates from this function (handled by cache).
   </behavior>
   <action>
-1. Create `extensions/claude-marketplace/edge/completions/provider.ts` implementing the dispatcher per 06-PATTERNS.md lines 188-247 and 06-RESEARCH.md lines 680-765:
+1. Create `extensions/pi-claude-marketplace/edge/completions/provider.ts` implementing the dispatcher per 06-PATTERNS.md lines 188-247 and 06-RESEARCH.md lines 680-765:
 
    - Exported constants `TOP_LEVEL_SUBCOMMANDS` and `MARKETPLACE_SUBCOMMANDS`.
    - `getArgumentCompletions(prefix, resolver)`:
@@ -452,7 +452,7 @@ export async function getArgumentCompletions(
    - FORBIDDEN: `persistence/`, `domain/`, `bridges/`, `transaction/`, `platform/`.
   </action>
   <verify>
-    <automated>node --test tests/edge/completions/provider.test.ts &amp;&amp; grep -v '^#' extensions/claude-marketplace/edge/completions/provider.ts | grep -c "from \".*\\(persistence\\|domain\\|bridges\\|transaction\\|platform\\)/" | grep -qx 0 &amp;&amp; grep -n 'return null' extensions/claude-marketplace/edge/completions/provider.ts | head -1 | grep -q 'return null' &amp;&amp; npx tsc --noEmit &amp;&amp; npx eslint extensions/claude-marketplace/edge/completions/provider.ts tests/edge/completions/provider.test.ts</automated>
+    <automated>node --test tests/edge/completions/provider.test.ts &amp;&amp; grep -v '^#' extensions/pi-claude-marketplace/edge/completions/provider.ts | grep -c "from \".*\\(persistence\\|domain\\|bridges\\|transaction\\|platform\\)/" | grep -qx 0 &amp;&amp; grep -n 'return null' extensions/pi-claude-marketplace/edge/completions/provider.ts | head -1 | grep -q 'return null' &amp;&amp; npx tsc --noEmit &amp;&amp; npx eslint extensions/pi-claude-marketplace/edge/completions/provider.ts tests/edge/completions/provider.test.ts</automated>
   </verify>
   <done>provider.ts exists with the 5-branch dispatcher; explicit `return null` for no-match (grep-verified); all skipped provider tests unskipped + green; TC-8 yields empty plugin list, TC-9 propagates state.json error; import-boundary gate passes.</done>
 </task>

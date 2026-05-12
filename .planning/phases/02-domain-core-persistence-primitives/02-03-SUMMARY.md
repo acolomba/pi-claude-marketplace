@@ -31,8 +31,8 @@ tech-stack:
 
 key-files:
   created:
-    - extensions/claude-marketplace/domain/name.ts
-    - extensions/claude-marketplace/domain/version.ts
+    - extensions/pi-claude-marketplace/domain/name.ts
+    - extensions/pi-claude-marketplace/domain/version.ts
     - tests/domain/name.test.ts
     - tests/domain/version.test.ts
     - tests/domain/fixtures/hash-stability/sample-plugin/plugin.json
@@ -100,8 +100,8 @@ completed: 2026-05-10
 
 ### Created
 
-- `extensions/claude-marketplace/domain/name.ts` -- `assertSafeName` (RN-2) + `generatedSkillName` / `generatedCommandName` / `generatedAgentName` (RN-1).
-- `extensions/claude-marketplace/domain/version.ts` -- `computeHashVersion` (PI-7) + `HASH_WALK_SKIP` (D-12) + private `walkAndHash` + `normalizeBytes` (D-11).
+- `extensions/pi-claude-marketplace/domain/name.ts` -- `assertSafeName` (RN-2) + `generatedSkillName` / `generatedCommandName` / `generatedAgentName` (RN-1).
+- `extensions/pi-claude-marketplace/domain/version.ts` -- `computeHashVersion` (PI-7) + `HASH_WALK_SKIP` (D-12) + private `walkAndHash` + `normalizeBytes` (D-11).
 - `tests/domain/name.test.ts` -- table-driven RN-2 + RN-1 coverage.
 - `tests/domain/version.test.ts` -- 5 PI-7 / D-11 / D-12 contract tests; `before()` hook materializes `.git/HEAD` decoy.
 - `tests/domain/fixtures/hash-stability/sample-plugin/plugin.json`
@@ -168,8 +168,8 @@ None - no external service configuration required.
 
 ## Self-Check
 
-- [x] `extensions/claude-marketplace/domain/name.ts` exists (commit 0b68fd7)
-- [x] `extensions/claude-marketplace/domain/version.ts` exists (commit 45fd1d7)
+- [x] `extensions/pi-claude-marketplace/domain/name.ts` exists (commit 0b68fd7)
+- [x] `extensions/pi-claude-marketplace/domain/version.ts` exists (commit 45fd1d7)
 - [x] `tests/domain/name.test.ts` exists (commit 95568c9)
 - [x] `tests/domain/version.test.ts` exists (commit 15d303e)
 - [x] `tests/domain/fixtures/hash-stability/sample-plugin/plugin.json` exists (commit 15d303e)
@@ -190,7 +190,7 @@ None - no external service configuration required.
 
 ## Next Phase Readiness
 
-- Plan 02-05 (resolver) can now consume `assertSafeName` from `extensions/claude-marketplace/domain/name.ts` and the three RN-1 generators.
+- Plan 02-05 (resolver) can now consume `assertSafeName` from `extensions/pi-claude-marketplace/domain/name.ts` and the three RN-1 generators.
 - Phase 3 bridges can consume the RN-1 generators for staged-file paths.
 - Phase 5 install/update can consume `computeHashVersion` for PI-7 fallback when a plugin lacks a `plugin.json` version.
 - The PI-7 snapshot is now a regression gate. Future plans that touch `computeHashVersion` MUST update the pinned hash AND add a CHANGELOG entry.

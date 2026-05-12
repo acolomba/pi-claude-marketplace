@@ -13,7 +13,7 @@ requires:
   - phase: 01-foundations-toolchain/03
     provides: "9-folder skeleton + READMEs + platform/git.ts that ESLint import-x boundary rules check"
   - phase: 01-foundations-toolchain/04
-    provides: "extensions/claude-marketplace/index.ts entrypoint that index-smoke test imports"
+    provides: "extensions/pi-claude-marketplace/index.ts entrypoint that index-smoke test imports"
   - phase: 01-foundations-toolchain/05
     provides: "tests/architecture/* + helpers/prd-extract.ts + canary fixture that npm test runs"
   - phase: 01-foundations-toolchain/06
@@ -82,7 +82,7 @@ completed: 2026-05-09
 
 ## What Shipped
 
-### Source code (`extensions/claude-marketplace/`)
+### Source code (`extensions/pi-claude-marketplace/`)
 
 - `index.ts` -- thin Pi entrypoint (1 command + 1 event handler + 0 tools)
 - `shared/markers.ts` -- 5 PRD §6.12 ES-5 prefix constants (D-08)
@@ -171,7 +171,7 @@ All 23 Phase 1 REQ-IDs verified:
 
 7. **TypeBox 1.x ESM-only** -- already a peer dep; Phase 2 schemas use `Type.Object`, `Type.Union(..., { discriminator: "kind" })` for the `installable: true | false` discriminated union (NFR-7).
 
-8. **`extensions/claude-marketplace.ts` legacy stub is GONE.** Pi loads `extensions/claude-marketplace/index.ts` via the directory entrypoint pattern. If you ever see references to the old single-file shape, they're stale.
+8. **`extensions/pi-claude-marketplace.ts` legacy stub is GONE.** Pi loads `extensions/pi-claude-marketplace/index.ts` via the directory entrypoint pattern. If you ever see references to the old single-file shape, they're stale.
 
 9. **D-21 MA-7 supersession** is recorded in REQUIREMENTS.md and PROJECT.md. Phase 4's marketplace orchestrators do NOT need to handle "git not found on PATH" -- isomorphic-git eliminates that failure mode.
 

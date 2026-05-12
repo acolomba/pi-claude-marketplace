@@ -70,7 +70,7 @@ ______________________________________________________________________
 All four gray areas were Claude's call. CONTEXT.md captures each decision as a numbered D-NN entry with escalation paths so downstream agents (researcher, planner, executor) can reopen any of them if implementation reality reveals a wrong call. Additional Claude's-Discretion items captured in CONTEXT.md but not surfaced as gray areas in this discussion (because they are mechanical rather than open):
 
 - **D-05** -- per-bridge collision detection placement (PI-6 cross-bridge guard is Phase 5)
-- **D-06** -- marker discipline per bridge (skills/commands have no marker; agents have two-part marker; MCP has `_claudeMarketplace` field)
+- **D-06** -- marker discipline per bridge (skills/commands have no marker; agents have two-part marker; MCP has `_piClaudeMarketplace` field)
 - **D-07** -- agents-index.json schema location (`persistence/agents-index-schema.ts`)
 - **D-08** -- variable substitution helper (`shared/vars.ts` for skills + commands; agents excluded)
 - **D-09** -- naming reuses Phase 2 `domain/name.ts`; SK-2 + CM-2 elision verified or added

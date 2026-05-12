@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { PathContainmentError } from "../../extensions/claude-marketplace/shared/path-safety.ts";
+import { PathContainmentError } from "../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import {
   runPhases,
   type Phase,
-} from "../../extensions/claude-marketplace/transaction/phase-ledger.ts";
+} from "../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
 
 /**
  * D-01 / AS-4 / PI-14 -- runPhases ledger semantics.

@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
   migrateLegacyMarketplaceRecords,
   persistMigratedState,
-} from "../../extensions/claude-marketplace/persistence/migrate.ts";
+} from "../../extensions/pi-claude-marketplace/persistence/migrate.ts";
 
 /**
  * ST-4, ST-5, IL-3 -- legacy migration + sanctioned console-warn.

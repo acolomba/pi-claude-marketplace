@@ -4,9 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { CLAUDE_MARKETPLACE_MARKER_KEY } from "../../../extensions/claude-marketplace/bridges/mcp/marker.ts";
-import { unstageMcpServers } from "../../../extensions/claude-marketplace/bridges/mcp/unstage.ts";
-import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
+import { CLAUDE_MARKETPLACE_MARKER_KEY } from "../../../extensions/pi-claude-marketplace/bridges/mcp/marker.ts";
+import { unstageMcpServers } from "../../../extensions/pi-claude-marketplace/bridges/mcp/unstage.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 // MC-6 / MC-7 -- unstage: drop ours, tolerate missing fields, no-rewrite on noop.
 

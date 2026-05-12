@@ -16,7 +16,7 @@ Phase 5 produces:
 - `presentation/plugin-list.ts` -- pure renderer for top-level `list` (PL-1..7); column-66 truncation helper kept private
 - `shared/markers.ts` extension -- new `RECOVERY_PLUGIN_REINSTALL_PREFIX` constant + markers-snapshot.test.ts case (Phase 1 B-4 prefix-equivalence pattern)
 - `shared/errors.ts` extensions -- `CrossPluginConflictError`, `ConcurrentInstallError`, `ConcurrentUninstallError` (silent-converge sentinel), `PluginUpdatePhase3Error` (wraps the recovery hint)
-- `persistence/locations.ts` extension -- new helper `pluginDataDir(loc, marketplace, plugin)` returning `<scopeRoot>/claude-marketplace/data/<marketplace>/<plugin>/`
+- `persistence/locations.ts` extension -- new helper `pluginDataDir(loc, marketplace, plugin)` returning `<scopeRoot>/pi-claude-marketplace/data/<marketplace>/<plugin>/`
 - `domain/resolver.ts` change -- `ComponentPathsSchema` from optional-string-per-kind to readonly-string-array-per-kind; strict + loose resolvers updated to union declared + implicit-by-convention; PR-4 superseded
 - `bridges/{skills,commands,agents}/discover.ts` updates -- iterate over the array of component paths instead of a single string
 
@@ -62,7 +62,7 @@ This phase ends with `npm run check` green, every Phase 5 subcommand callable in
 
 ### Per-Plugin Data Directory (D-08)
 
-- **D-08 (`pluginDataDir` helper in `persistence/locations.ts`; created eagerly post-state-commit on install; cleaned post-state-commit on uninstall):** New helper `pluginDataDir(loc: ScopedLocations, marketplace: string, plugin: string): string` returns `<scopeRoot>/claude-marketplace/data/<marketplace>/<plugin>/` and routes through `assertPathInside`. Install creates the directory (`fs.mkdir({ recursive: true })`) AFTER the state-commit phase succeeds -- failure to create the dir at this point is a `warning`-severity post-commit leak (state already says installed=true) but does NOT roll back the install per AS-6. Uninstall deletes the directory AFTER state-commit per PU-2 (cleanup leaks are `warning`-severity with the leaked path named per PU-4). Update PRESERVES the data dir across versions -- it's user data, not staged code. The `${CLAUDE_PLUGIN_DATA}` substitution in bridge bodies (PI-10) resolves to this path; the dir doesn't need to exist for substitution to be byte-correct (Phase 3 D-08 corollary already documents this).
+- **D-08 (`pluginDataDir` helper in `persistence/locations.ts`; created eagerly post-state-commit on install; cleaned post-state-commit on uninstall):** New helper `pluginDataDir(loc: ScopedLocations, marketplace: string, plugin: string): string` returns `<scopeRoot>/pi-claude-marketplace/data/<marketplace>/<plugin>/` and routes through `assertPathInside`. Install creates the directory (`fs.mkdir({ recursive: true })`) AFTER the state-commit phase succeeds -- failure to create the dir at this point is a `warning`-severity post-commit leak (state already says installed=true) but does NOT roll back the install per AS-6. Uninstall deletes the directory AFTER state-commit per PU-2 (cleanup leaks are `warning`-severity with the leaked path named per PU-4). Update PRESERVES the data dir across versions -- it's user data, not staged code. The `${CLAUDE_PLUGIN_DATA}` substitution in bridge bodies (PI-10) resolves to this path; the dir doesn't need to exist for substitution to be byte-correct (Phase 3 D-08 corollary already documents this).
 
 ### Cascade Reuse & PluginUpdateFn Export (D-09)
 
@@ -115,45 +115,45 @@ The user signed off on every recommended option presented:
 ### Phase 1 carry-forward (consumed by Phase 5)
 
 - `.planning/phases/01-foundations-toolchain/01-CONTEXT.md` -- D-03 (`write-file-atomic@^8`), D-06/D-07 (notify wrappers + ESLint output discipline), D-08 (markers.ts as the single chokepoint for ES-5 strings; Phase 5 extends with `RECOVERY_PLUGIN_REINSTALL_PREFIX`), B-4 (prefix-equivalence pattern for the new marker), D-11 (import boundaries: `orchestrators/` may import from `bridges/`, `domain/`, `transaction/`, `persistence/`, `presentation/`, `platform/`, `shared/`), D-14..17 (`assertPathInside` with symlink refusal → `PathContainmentError` is the type detected by D-02)
-- `extensions/claude-marketplace/shared/notify.ts` -- `notifySuccess`, `notifyWarning`, `notifyError(ctx, msg, cause?)`. Every Phase 5 user-visible message routes through these.
-- `extensions/claude-marketplace/shared/markers.ts` -- ES-5 strings + `RELOAD_HINT_PREFIX`. Phase 5 ADDS `RECOVERY_PLUGIN_REINSTALL_PREFIX` here.
-- `extensions/claude-marketplace/shared/path-safety.ts` -- `assertPathInside` + `SymlinkRefusedError`; called on every name-derived path (data dir, staging dir, bridge target paths).
-- `extensions/claude-marketplace/shared/atomic-json.ts` -- `atomicWriteJson` consumed indirectly via state-io and agents-index-io.
-- `extensions/claude-marketplace/shared/errors.ts` -- `PathContainmentError`, `appendLeakToError`, `appendLeaks`, `errorMessage`. Phase 5 ADDS `CrossPluginConflictError`, `ConcurrentInstallError`, `ConcurrentUninstallError`, `PluginUpdatePhase3Error`.
-- `extensions/claude-marketplace/shared/fs-utils.ts` -- `cleanupStaging`, `pathExists`. Phase 5 install + update prepare-rollback paths consume both.
+- `extensions/pi-claude-marketplace/shared/notify.ts` -- `notifySuccess`, `notifyWarning`, `notifyError(ctx, msg, cause?)`. Every Phase 5 user-visible message routes through these.
+- `extensions/pi-claude-marketplace/shared/markers.ts` -- ES-5 strings + `RELOAD_HINT_PREFIX`. Phase 5 ADDS `RECOVERY_PLUGIN_REINSTALL_PREFIX` here.
+- `extensions/pi-claude-marketplace/shared/path-safety.ts` -- `assertPathInside` + `SymlinkRefusedError`; called on every name-derived path (data dir, staging dir, bridge target paths).
+- `extensions/pi-claude-marketplace/shared/atomic-json.ts` -- `atomicWriteJson` consumed indirectly via state-io and agents-index-io.
+- `extensions/pi-claude-marketplace/shared/errors.ts` -- `PathContainmentError`, `appendLeakToError`, `appendLeaks`, `errorMessage`. Phase 5 ADDS `CrossPluginConflictError`, `ConcurrentInstallError`, `ConcurrentUninstallError`, `PluginUpdatePhase3Error`.
+- `extensions/pi-claude-marketplace/shared/fs-utils.ts` -- `cleanupStaging`, `pathExists`. Phase 5 install + update prepare-rollback paths consume both.
 
 ### Phase 2 carry-forward (consumed by Phase 5)
 
 - `.planning/phases/02-domain-core-persistence-primitives/02-CONTEXT.md` -- D-01 (`runPhases<C>` literal-array ledger discipline; install.ts is the FIRST production consumer), D-02 (`withStateGuard` × `runPhases` composition pattern -- install.ts and uninstall.ts follow verbatim), D-03 (`formatRollbackError` is THE single chokepoint for the `(rollback partial: …)` marker -- Phase 5 D-02 extends it with the PI-14 bypass), D-04 (`resolveStrict`/`resolveLoose`), D-05 (`assertSafeName` + name generators), D-06 (`parsePluginSource` factories), D-07 (TypeBox JIT at module load), D-09 (state shape `{marketplaces: {<mp>: {plugins: {<plugin>: {…}}}}}`), D-10 (cross-scope independence), D-11 (CRLF/BOM normalization for hash version)
-- `extensions/claude-marketplace/domain/resolver.ts` -- `resolveStrict`, `resolveLoose`, `requireInstallable`; Phase 5 D-07 CHANGES `ComponentPathsSchema` to readonly-string-array; supersedes PR-4
-- `extensions/claude-marketplace/domain/manifest.ts` -- `MARKETPLACE_VALIDATOR`, `PLUGIN_MANIFEST_VALIDATOR`; install reads cached manifest only (PI-2)
-- `extensions/claude-marketplace/domain/name.ts` -- `assertSafeName` + skill/command/agent generators; consumed by D-05 PI-6 guard for input computation
-- `extensions/claude-marketplace/domain/version.ts` -- `computeHashVersion` + `HASH_WALK_SKIP`; install's PI-7 version resolution and update's PUP-3 unchanged-detection both use this
-- `extensions/claude-marketplace/persistence/locations.ts` -- `ScopedLocations` brand + `locationsFor(scope, cwd)`; Phase 5 ADDS `pluginDataDir(loc, marketplace, plugin)` helper (D-08)
-- `extensions/claude-marketplace/persistence/state-io.ts` -- `loadState`, `saveState`, `STATE_VALIDATOR`; install/uninstall/update mutate state via `withStateGuard` closures
-- `extensions/claude-marketplace/persistence/migrate.ts` -- `migrateLegacyMarketplaceRecords`; ST-4/ST-5 + PU-6 legacy-state-load handling
-- `extensions/claude-marketplace/transaction/phase-ledger.ts` -- `runPhases<C>`, `Phase<C>`; install.ts consumes
-- `extensions/claude-marketplace/transaction/rollback.ts` -- `formatRollbackError`; Phase 5 D-02 EXTENDS with PI-14 bypass logic
-- `extensions/claude-marketplace/transaction/with-state-guard.ts` -- `withStateGuard`; every Phase 5 mutating orchestrator wraps in this
+- `extensions/pi-claude-marketplace/domain/resolver.ts` -- `resolveStrict`, `resolveLoose`, `requireInstallable`; Phase 5 D-07 CHANGES `ComponentPathsSchema` to readonly-string-array; supersedes PR-4
+- `extensions/pi-claude-marketplace/domain/manifest.ts` -- `MARKETPLACE_VALIDATOR`, `PLUGIN_MANIFEST_VALIDATOR`; install reads cached manifest only (PI-2)
+- `extensions/pi-claude-marketplace/domain/name.ts` -- `assertSafeName` + skill/command/agent generators; consumed by D-05 PI-6 guard for input computation
+- `extensions/pi-claude-marketplace/domain/version.ts` -- `computeHashVersion` + `HASH_WALK_SKIP`; install's PI-7 version resolution and update's PUP-3 unchanged-detection both use this
+- `extensions/pi-claude-marketplace/persistence/locations.ts` -- `ScopedLocations` brand + `locationsFor(scope, cwd)`; Phase 5 ADDS `pluginDataDir(loc, marketplace, plugin)` helper (D-08)
+- `extensions/pi-claude-marketplace/persistence/state-io.ts` -- `loadState`, `saveState`, `STATE_VALIDATOR`; install/uninstall/update mutate state via `withStateGuard` closures
+- `extensions/pi-claude-marketplace/persistence/migrate.ts` -- `migrateLegacyMarketplaceRecords`; ST-4/ST-5 + PU-6 legacy-state-load handling
+- `extensions/pi-claude-marketplace/transaction/phase-ledger.ts` -- `runPhases<C>`, `Phase<C>`; install.ts consumes
+- `extensions/pi-claude-marketplace/transaction/rollback.ts` -- `formatRollbackError`; Phase 5 D-02 EXTENDS with PI-14 bypass logic
+- `extensions/pi-claude-marketplace/transaction/with-state-guard.ts` -- `withStateGuard`; every Phase 5 mutating orchestrator wraps in this
 
 ### Phase 3 carry-forward (consumed by Phase 5)
 
 - `.planning/phases/03-resource-bridges/03-CONTEXT.md` -- D-01 (per-bridge concrete signatures with opaque `Prepared<bridge>` handles), D-02 (bridge-as-Phase composition documented for Phase 5; D-01 install ledger implements verbatim), D-04 (compute-target-then-atomic-apply per bridge), D-05 corollary (cross-bridge PI-6 guard is Phase 5's job -- D-05 implements), D-06 (marker discipline: agents bridge fails loudly on foreign content; PU-7 propagates), D-08 (PI-10 `${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PLUGIN_DATA}` substitution; D-08 of THIS context confirms data dir resolution)
-- `extensions/claude-marketplace/bridges/skills/index.ts` -- `prepareStageSkills`, `commitPreparedSkills`, `abortPreparedSkills`, `unstagePluginSkills`, `assertNoSkillCollisions`, `discoverPluginSkills`. Phase 5 D-07 CHANGES `discoverPluginSkills` to iterate array of component paths.
-- `extensions/claude-marketplace/bridges/commands/index.ts` -- same family. Phase 5 D-07 CHANGES `discoverPluginCommands` to iterate array.
-- `extensions/claude-marketplace/bridges/agents/index.ts` -- `prepareStagePluginAgents`, `commitPreparedAgents`, `abortPreparedAgents`, `unstagePluginAgents`, `findOwnershipConflicts`, `discoverPluginAgents`. RN-4 cross-marketplace ownership stays bridge-enforced (D-05 corollary). Phase 5 D-07 CHANGES `discoverPluginAgents` to iterate array.
-- `extensions/claude-marketplace/bridges/mcp/index.ts` -- `prepareStageMcpServers`, `commitPreparedMcp`, `abortPreparedMcp`, `unstageMcpServers`, `MCP_COLLISION_SLOTS`. MC-4 same-kind collision stays bridge-enforced (excluded from PI-6 per D-05).
-- `extensions/claude-marketplace/persistence/agents-index-io.ts` -- agents-index round-trip; uninstall's PU-7 foreign-content refusal surfaces through the index
+- `extensions/pi-claude-marketplace/bridges/skills/index.ts` -- `prepareStageSkills`, `commitPreparedSkills`, `abortPreparedSkills`, `unstagePluginSkills`, `assertNoSkillCollisions`, `discoverPluginSkills`. Phase 5 D-07 CHANGES `discoverPluginSkills` to iterate array of component paths.
+- `extensions/pi-claude-marketplace/bridges/commands/index.ts` -- same family. Phase 5 D-07 CHANGES `discoverPluginCommands` to iterate array.
+- `extensions/pi-claude-marketplace/bridges/agents/index.ts` -- `prepareStagePluginAgents`, `commitPreparedAgents`, `abortPreparedAgents`, `unstagePluginAgents`, `findOwnershipConflicts`, `discoverPluginAgents`. RN-4 cross-marketplace ownership stays bridge-enforced (D-05 corollary). Phase 5 D-07 CHANGES `discoverPluginAgents` to iterate array.
+- `extensions/pi-claude-marketplace/bridges/mcp/index.ts` -- `prepareStageMcpServers`, `commitPreparedMcp`, `abortPreparedMcp`, `unstageMcpServers`, `MCP_COLLISION_SLOTS`. MC-4 same-kind collision stays bridge-enforced (excluded from PI-6 per D-05).
+- `extensions/pi-claude-marketplace/persistence/agents-index-io.ts` -- agents-index round-trip; uninstall's PU-7 foreign-content refusal surfaces through the index
 
 ### Phase 4 carry-forward (consumed by Phase 5)
 
 - `.planning/phases/04-marketplace-orchestrators/04-CONTEXT.md` -- D-01 (subcommand 1:1 file mapping -- Phase 5 mirrors with `orchestrators/plugin/{install,uninstall,update,list,shared}.ts`), D-02 corollary (`cascadeUnstagePlugin` reserved for Phase 5 reuse -- D-09 implements), D-03 (PU-1 order matches cascade order), D-05/D-06 (`PluginUpdateFn` + `PluginUpdateOutcome` in `orchestrators/types.ts` -- Phase 5 D-09 corollary ships the real implementation), D-14 (follow-upstream-blindly for `marketplace update`'s clone refresh -- Phase 5's `syncClone` via PUP-2 reuses Phase 4's `gitOps.fetch + forceUpdateRef + checkout` chain)
-- `extensions/claude-marketplace/orchestrators/marketplace/shared.ts` -- `cascadeUnstagePlugin(plugin, marketplace, locations)`, `GitOps` interface, `DEFAULT_GIT_OPS`, `resolveScopeFromState`, `formatErrorWithCauses`. Phase 5's `uninstall.ts` imports `cascadeUnstagePlugin` directly; `update.ts` imports `GitOps` + `DEFAULT_GIT_OPS` for the PUP-2 syncClone.
-- `extensions/claude-marketplace/orchestrators/types.ts` -- `PluginUpdateFn`, `PluginUpdateOutcome`, `PluginUpdatePartition`. Phase 5 D-09 corollary exports the real `updateSinglePlugin: PluginUpdateFn` from `orchestrators/plugin/update.ts`.
-- `extensions/claude-marketplace/presentation/reload-hint.ts` -- `composeReloadHint(changedNames, verb)`. Install/uninstall/update emit PU-8/PUP-8 hints via this.
-- `extensions/claude-marketplace/presentation/soft-dep.ts` -- `softDepStatus(ctx)` returning `{ subagentsLoaded, mcpAdapterLoaded }`; PI-11/PI-12 (install) and RH-5 (update phase-3b) consume.
-- `extensions/claude-marketplace/presentation/marketplace-list.ts` -- PRESENTATION LAYER pattern that Phase 5 D-06 mirrors with `presentation/plugin-list.ts`.
-- `extensions/claude-marketplace/orchestrators/marketplace/list.ts` -- ORCHESTRATOR LAYER pattern that Phase 5 D-06 mirrors with `orchestrators/plugin/list.ts`.
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts` -- `cascadeUnstagePlugin(plugin, marketplace, locations)`, `GitOps` interface, `DEFAULT_GIT_OPS`, `resolveScopeFromState`, `formatErrorWithCauses`. Phase 5's `uninstall.ts` imports `cascadeUnstagePlugin` directly; `update.ts` imports `GitOps` + `DEFAULT_GIT_OPS` for the PUP-2 syncClone.
+- `extensions/pi-claude-marketplace/orchestrators/types.ts` -- `PluginUpdateFn`, `PluginUpdateOutcome`, `PluginUpdatePartition`. Phase 5 D-09 corollary exports the real `updateSinglePlugin: PluginUpdateFn` from `orchestrators/plugin/update.ts`.
+- `extensions/pi-claude-marketplace/presentation/reload-hint.ts` -- `composeReloadHint(changedNames, verb)`. Install/uninstall/update emit PU-8/PUP-8 hints via this.
+- `extensions/pi-claude-marketplace/presentation/soft-dep.ts` -- `softDepStatus(ctx)` returning `{ subagentsLoaded, mcpAdapterLoaded }`; PI-11/PI-12 (install) and RH-5 (update phase-3b) consume.
+- `extensions/pi-claude-marketplace/presentation/marketplace-list.ts` -- PRESENTATION LAYER pattern that Phase 5 D-06 mirrors with `presentation/plugin-list.ts`.
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts` -- ORCHESTRATOR LAYER pattern that Phase 5 D-06 mirrors with `orchestrators/plugin/list.ts`.
 
 ### Research foundation (already produced)
 
@@ -172,11 +172,11 @@ The user signed off on every recommended option presented:
 
 ### V1 reference (read selectively when implementing the same concern)
 
-- `git show features/initial:extensions/claude-marketplace/plugin/install.ts` -- V1 install orchestrator; 4-phase ordering pattern. NOTE: V1 has the COMP-01 BUG (component-path replacement rather than supplement) -- Phase 5 D-07 corrects.
-- `git show features/initial:extensions/claude-marketplace/plugin/uninstall.ts` -- V1 uninstall; PU-1 ordering reference
-- `git show features/initial:extensions/claude-marketplace/plugin/update.ts` -- V1 update three-phase; PUP-6 recovery hint phrasing reference
-- `git show features/initial:extensions/claude-marketplace/plugin/list.ts` -- V1 list; PL-4 icon table + column-66 truncation reference
-- `git show features/initial:extensions/claude-marketplace/resolver/*` -- V1 resolver; PR-4 short-circuit behavior (the bug Phase 5 D-07 corrects)
+- `git show features/initial:extensions/pi-claude-marketplace/plugin/install.ts` -- V1 install orchestrator; 4-phase ordering pattern. NOTE: V1 has the COMP-01 BUG (component-path replacement rather than supplement) -- Phase 5 D-07 corrects.
+- `git show features/initial:extensions/pi-claude-marketplace/plugin/uninstall.ts` -- V1 uninstall; PU-1 ordering reference
+- `git show features/initial:extensions/pi-claude-marketplace/plugin/update.ts` -- V1 update three-phase; PUP-6 recovery hint phrasing reference
+- `git show features/initial:extensions/pi-claude-marketplace/plugin/list.ts` -- V1 list; PL-4 icon table + column-66 truncation reference
+- `git show features/initial:extensions/pi-claude-marketplace/resolver/*` -- V1 resolver; PR-4 short-circuit behavior (the bug Phase 5 D-07 corrects)
 
 </canonical_refs>
 
@@ -185,23 +185,23 @@ The user signed off on every recommended option presented:
 
 ### Reusable Assets (Phase 1, 2, 3, 4 outputs)
 
-- **`extensions/claude-marketplace/shared/markers.ts`** -- Phase 5 ADDS `RECOVERY_PLUGIN_REINSTALL_PREFIX = "plugin-uninstall + plugin-install for"` here. Existing 5 ES-5 prefix constants stay unchanged; the snapshot test (`tests/architecture/markers-snapshot.test.ts`) gains one new prefix-equivalence case asserting against PRD §5.2.3 PUP-6.
-- **`extensions/claude-marketplace/shared/errors.ts`** -- Phase 5 ADDS four new error classes:
+- **`extensions/pi-claude-marketplace/shared/markers.ts`** -- Phase 5 ADDS `RECOVERY_PLUGIN_REINSTALL_PREFIX = "plugin-uninstall + plugin-install for"` here. Existing 5 ES-5 prefix constants stay unchanged; the snapshot test (`tests/architecture/markers-snapshot.test.ts`) gains one new prefix-equivalence case asserting against PRD §5.2.3 PUP-6.
+- **`extensions/pi-claude-marketplace/shared/errors.ts`** -- Phase 5 ADDS four new error classes:
   - `CrossPluginConflictError extends Error` (PI-6 cross-bridge name guard; message lists every conflicting name in deterministic order)
   - `ConcurrentInstallError extends Error` (PI-15; surfaces the "was installed concurrently" string at the state-guard save boundary; rollback runs)
   - `ConcurrentUninstallError extends Error` (PU-5; sentinel for the silent-converge path -- uninstall.ts catches this and returns `{ ok: true, alreadyGone: true }` per PRD §5.2.2)
   - `PluginUpdatePhase3Error extends Error` (PUP-6 wrapper that carries the aggregated phase-3a `Phase3Failure[]` plus the original error chain via `Error.cause`; surfaces with the `RECOVERY_PLUGIN_REINSTALL_PREFIX` hint composed in update.ts's catch)
-- **`extensions/claude-marketplace/transaction/rollback.ts`** -- Phase 5 D-02 EXTENDS `formatRollbackError(result, originalError)` with an `instanceof PathContainmentError` short-circuit (covers `SymlinkRefusedError`). On match: return originalError verbatim, suppress the `(rollback partial: …)` summary. Import: `import { PathContainmentError } from "../shared/errors.ts"`.
-- **`extensions/claude-marketplace/transaction/phase-ledger.ts`** -- `runPhases<C>` + `Phase<C>`. Install.ts is the first production consumer. The literal-array discipline (Phase 2 D-01) is binding -- `const phases: readonly Phase<InstallCtx>[] = [...]` at the install.ts callsite.
-- **`extensions/claude-marketplace/transaction/with-state-guard.ts`** -- Install, uninstall, update each wrap their flow in one. Update's swap phase is the closure body (PUP-6 phase-2); install's closure body is the entire `runPhases` call (Phase 2 D-02 verbatim composition); uninstall's closure body is the cascade + state-record-removal.
-- **`extensions/claude-marketplace/persistence/locations.ts`** -- Phase 5 ADDS `pluginDataDir(loc: ScopedLocations, marketplace: string, plugin: string): string` returning `<scopeRoot>/claude-marketplace/data/<marketplace>/<plugin>/`. Goes through `assertPathInside` against the scope root. Used by install (eager mkdir post-state-commit) and uninstall (rm-rf post-state-commit per PU-2/PU-4) and by the PI-10 `${CLAUDE_PLUGIN_DATA}` substitution input (bridges already accept the resolved path from the orchestrator).
-- **`extensions/claude-marketplace/domain/resolver.ts`** -- Phase 5 D-07 CHANGES `ComponentPathsSchema` to readonly-string-array-per-kind; strict and loose resolver Step 7 logic changes accordingly. Supersedes PR-4.
-- **`extensions/claude-marketplace/domain/name.ts`** -- `assertSafeName` + the three generators; D-05's PI-6 guard input computation reuses these.
-- **`extensions/claude-marketplace/domain/version.ts`** -- `computeHashVersion` + `HASH_WALK_SKIP`. Install's PI-7 fallback uses this; update's PUP-3 uses string equality on either `manifest.version` or `hash-<12hex>` (precedent: Phase 2 hash-stability snapshot test).
-- **`extensions/claude-marketplace/bridges/{skills,commands,agents,mcp}/index.ts`** -- `prepare*`, `commit*`, `abort*`, `unstage*` primitives. Install ledger phases call these directly; update three-phase calls them across the three explicit steps; uninstall reuses `cascadeUnstagePlugin` from Phase 4 (which itself calls these).
-- **`extensions/claude-marketplace/orchestrators/marketplace/shared.ts`** -- `cascadeUnstagePlugin`, `GitOps`, `DEFAULT_GIT_OPS`, `resolveScopeFromState`, `formatErrorWithCauses`. Phase 5 uninstall imports `cascadeUnstagePlugin` directly; update imports `GitOps` + `DEFAULT_GIT_OPS` for PUP-2 syncClone.
-- **`extensions/claude-marketplace/orchestrators/types.ts`** -- `PluginUpdateFn`, `PluginUpdateOutcome`, `PluginUpdatePartition`. Phase 5 ships the implementation matching `PluginUpdateFn`; threading `stagedAgents`/`stagedMcpServers` (WR-04 fields already in place) into RH-5 soft-dep warning composition.
-- **`extensions/claude-marketplace/presentation/{reload-hint,soft-dep,marketplace-list}.ts`** -- Phase 5 install/uninstall/update consume `composeReloadHint` + `softDepStatus`. `marketplace-list.ts` is the orchestrator+presentation split PRECEDENT that Phase 5 D-06 mirrors.
+- **`extensions/pi-claude-marketplace/transaction/rollback.ts`** -- Phase 5 D-02 EXTENDS `formatRollbackError(result, originalError)` with an `instanceof PathContainmentError` short-circuit (covers `SymlinkRefusedError`). On match: return originalError verbatim, suppress the `(rollback partial: …)` summary. Import: `import { PathContainmentError } from "../shared/errors.ts"`.
+- **`extensions/pi-claude-marketplace/transaction/phase-ledger.ts`** -- `runPhases<C>` + `Phase<C>`. Install.ts is the first production consumer. The literal-array discipline (Phase 2 D-01) is binding -- `const phases: readonly Phase<InstallCtx>[] = [...]` at the install.ts callsite.
+- **`extensions/pi-claude-marketplace/transaction/with-state-guard.ts`** -- Install, uninstall, update each wrap their flow in one. Update's swap phase is the closure body (PUP-6 phase-2); install's closure body is the entire `runPhases` call (Phase 2 D-02 verbatim composition); uninstall's closure body is the cascade + state-record-removal.
+- **`extensions/pi-claude-marketplace/persistence/locations.ts`** -- Phase 5 ADDS `pluginDataDir(loc: ScopedLocations, marketplace: string, plugin: string): string` returning `<scopeRoot>/pi-claude-marketplace/data/<marketplace>/<plugin>/`. Goes through `assertPathInside` against the scope root. Used by install (eager mkdir post-state-commit) and uninstall (rm-rf post-state-commit per PU-2/PU-4) and by the PI-10 `${CLAUDE_PLUGIN_DATA}` substitution input (bridges already accept the resolved path from the orchestrator).
+- **`extensions/pi-claude-marketplace/domain/resolver.ts`** -- Phase 5 D-07 CHANGES `ComponentPathsSchema` to readonly-string-array-per-kind; strict and loose resolver Step 7 logic changes accordingly. Supersedes PR-4.
+- **`extensions/pi-claude-marketplace/domain/name.ts`** -- `assertSafeName` + the three generators; D-05's PI-6 guard input computation reuses these.
+- **`extensions/pi-claude-marketplace/domain/version.ts`** -- `computeHashVersion` + `HASH_WALK_SKIP`. Install's PI-7 fallback uses this; update's PUP-3 uses string equality on either `manifest.version` or `hash-<12hex>` (precedent: Phase 2 hash-stability snapshot test).
+- **`extensions/pi-claude-marketplace/bridges/{skills,commands,agents,mcp}/index.ts`** -- `prepare*`, `commit*`, `abort*`, `unstage*` primitives. Install ledger phases call these directly; update three-phase calls them across the three explicit steps; uninstall reuses `cascadeUnstagePlugin` from Phase 4 (which itself calls these).
+- **`extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts`** -- `cascadeUnstagePlugin`, `GitOps`, `DEFAULT_GIT_OPS`, `resolveScopeFromState`, `formatErrorWithCauses`. Phase 5 uninstall imports `cascadeUnstagePlugin` directly; update imports `GitOps` + `DEFAULT_GIT_OPS` for PUP-2 syncClone.
+- **`extensions/pi-claude-marketplace/orchestrators/types.ts`** -- `PluginUpdateFn`, `PluginUpdateOutcome`, `PluginUpdatePartition`. Phase 5 ships the implementation matching `PluginUpdateFn`; threading `stagedAgents`/`stagedMcpServers` (WR-04 fields already in place) into RH-5 soft-dep warning composition.
+- **`extensions/pi-claude-marketplace/presentation/{reload-hint,soft-dep,marketplace-list}.ts`** -- Phase 5 install/uninstall/update consume `composeReloadHint` + `softDepStatus`. `marketplace-list.ts` is the orchestrator+presentation split PRECEDENT that Phase 5 D-06 mirrors.
 
 ### Established Patterns (carry forward unchanged)
 

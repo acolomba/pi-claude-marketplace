@@ -5,7 +5,7 @@ import {
   notifyError,
   notifySuccess,
   notifyWarning,
-} from "../../extensions/claude-marketplace/shared/notify.ts";
+} from "../../extensions/pi-claude-marketplace/shared/notify.ts";
 
 /**
  * ES-1, ES-2, ES-4, NFR-9, D-07 -- severity-named notify wrappers.

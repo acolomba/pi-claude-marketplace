@@ -35,7 +35,7 @@ key-files:
   modified:
     - package.json
     - .github/workflows/ci.yml
-    - extensions/claude-marketplace/platform/pi-api.ts
+    - extensions/pi-claude-marketplace/platform/pi-api.ts
     - tests/integration/concurrent-install-child.ts
     - tests/integration/concurrent-install.test.ts
 
@@ -98,7 +98,7 @@ Each task was committed atomically:
 - `package.json` - Splits unit, integration, pinned e2e, and nightly e2e scripts.
 - `.github/workflows/ci.yml` - Adds integration, pinned e2e, and package dry-run gates.
 - `.github/workflows/e2e-nightly.yml` - Adds scheduled and manual floating-main e2e runs.
-- `extensions/claude-marketplace/platform/pi-api.ts` - Hardens MCP soft-dep probing for mixed tool lists.
+- `extensions/pi-claude-marketplace/platform/pi-api.ts` - Hardens MCP soft-dep probing for mixed tool lists.
 - `tests/integration/concurrent-install-child.ts` and `tests/integration/concurrent-install.test.ts` - Lint-only cleanup required by the commit hook.
 
 ## Decisions Made
@@ -115,7 +115,7 @@ Each task was committed atomically:
 - **Found during:** Task 2 (soft-dep matrix e2e)
 - **Issue:** `hasLoadedPiMcpAdapter` could throw when a non-MCP tool lacked `sourceInfo`, causing the whole probe to report unloaded even when a later `mcp` tool was present.
 - **Fix:** Treat `getAllTools()` entries structurally and optional-chain only after casting to a partial shape.
-- **Files modified:** `extensions/claude-marketplace/platform/pi-api.ts`
+- **Files modified:** `extensions/pi-claude-marketplace/platform/pi-api.ts`
 - **Verification:** `PI_CM_E2E_REF=pinned node --test tests/e2e/resources-discover.test.ts tests/e2e/install-soft-deps.test.ts tests/e2e/pi-runtime-smoke.test.ts` passed.
 - **Committed in:** `1031170`
 

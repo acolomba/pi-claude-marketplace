@@ -15,7 +15,7 @@ provides:
   - "edge/handlers/marketplace/{add,remove,list,update,autoupdate}.ts: 4 thin-shim handler factories + 1 plain function. Same Pattern 1 shape; deps.gitOps / deps.pluginUpdate threaded through where the orchestrator requires them."
   - "edge/handlers/tools.ts: registerListMarketplacesTool + registerListPluginsTool (D-02 two LLM tools). Inline TypeBox param schemas. V1-verbatim line format for marketplace list; PL-1 union filter semantics for plugin list."
   - "orchestrators/marketplace/shared.ts: NEW export loadVisibleMarketplaces({cwd, scope?}) -- structural cross-scope state loader. Used by tools.ts to read state without crossing the edge -> persistence import boundary (BLOCK C)."
-  - "orchestrators/plugin/list.ts: NEW export loadPluginListPayload(opts) -- pure payload builder extracted from listPlugins; listPlugins now delegates to it and only handles notify side-effects. tools.ts consumes this for claude_marketplace_plugin_list execute body."
+  - "orchestrators/plugin/list.ts: NEW export loadPluginListPayload(opts) -- pure payload builder extracted from listPlugins; listPlugins now delegates to it and only handles notify side-effects. tools.ts consumes this for pi_claude_marketplace_plugin_list execute body."
   - "presentation/marketplace-list.ts: re-exports sourceLogical + ParsedSource from domain/source.ts so edge/handlers/tools.ts can format `<source.logical>` without crossing the edge -> domain boundary."
 affects: [06-05-register-wiring]
 
@@ -31,20 +31,20 @@ tech-stack:
 
 key-files:
   created:
-    - "extensions/claude-marketplace/edge/handlers/plugin/install.ts"
-    - "extensions/claude-marketplace/edge/handlers/plugin/uninstall.ts"
-    - "extensions/claude-marketplace/edge/handlers/plugin/update.ts"
-    - "extensions/claude-marketplace/edge/handlers/plugin/list.ts"
-    - "extensions/claude-marketplace/edge/handlers/marketplace/add.ts"
-    - "extensions/claude-marketplace/edge/handlers/marketplace/remove.ts"
-    - "extensions/claude-marketplace/edge/handlers/marketplace/list.ts"
-    - "extensions/claude-marketplace/edge/handlers/marketplace/update.ts"
-    - "extensions/claude-marketplace/edge/handlers/marketplace/autoupdate.ts"
-    - "extensions/claude-marketplace/edge/handlers/tools.ts"
+    - "extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts"
+    - "extensions/pi-claude-marketplace/edge/handlers/plugin/uninstall.ts"
+    - "extensions/pi-claude-marketplace/edge/handlers/plugin/update.ts"
+    - "extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts"
+    - "extensions/pi-claude-marketplace/edge/handlers/marketplace/add.ts"
+    - "extensions/pi-claude-marketplace/edge/handlers/marketplace/remove.ts"
+    - "extensions/pi-claude-marketplace/edge/handlers/marketplace/list.ts"
+    - "extensions/pi-claude-marketplace/edge/handlers/marketplace/update.ts"
+    - "extensions/pi-claude-marketplace/edge/handlers/marketplace/autoupdate.ts"
+    - "extensions/pi-claude-marketplace/edge/handlers/tools.ts"
   modified:
-    - "extensions/claude-marketplace/orchestrators/marketplace/shared.ts"
-    - "extensions/claude-marketplace/orchestrators/plugin/list.ts"
-    - "extensions/claude-marketplace/presentation/marketplace-list.ts"
+    - "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts"
+    - "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts"
+    - "extensions/pi-claude-marketplace/presentation/marketplace-list.ts"
     - "tests/edge/handlers/plugin/install.test.ts"
     - "tests/edge/handlers/plugin/uninstall.test.ts"
     - "tests/edge/handlers/plugin/update.test.ts"
@@ -76,7 +76,7 @@ completed: 2026-05-11
 
 # Phase 6 Plan 04: Handlers and LLM Tools Summary
 
-**10 thin-shim subcommand handler files (9 factory handlers + 1 plain handleMarketplaceList) plus 2 read-only LLM tools (claude_marketplace_list + claude_marketplace_plugin_list with D-02 extended params), unskipping 56 wave-0 test stubs across 10 files. BLOCK A + BLOCK C discipline gates pass on all 10 handler files. `npm run check` exits 0: 794 tests / 732 pass / 62 skip / 0 fail.**
+**10 thin-shim subcommand handler files (9 factory handlers + 1 plain handleMarketplaceList) plus 2 read-only LLM tools (pi_claude_marketplace_list + pi_claude_marketplace_plugin_list with D-02 extended params), unskipping 56 wave-0 test stubs across 10 files. BLOCK A + BLOCK C discipline gates pass on all 10 handler files. `npm run check` exits 0: 794 tests / 732 pass / 62 skip / 0 fail.**
 
 ## Performance
 
@@ -92,7 +92,7 @@ completed: 2026-05-11
 Each task was committed atomically:
 
 1. **Task 1: 9 thin-shim handlers + unskip shim tests** -- `6a8accd` (feat)
-2. **Task 2: 2 LLM tools (claude_marketplace_list + plugin_list) + tools tests** -- `d5d00c3` (feat)
+2. **Task 2: 2 LLM tools (pi_claude_marketplace_list + plugin_list) + tools tests** -- `d5d00c3` (feat)
 
 ## Accomplishments
 
@@ -121,13 +121,13 @@ Each task was committed atomically:
 
 | Helper | Module | Purpose |
 |--------|--------|---------|
-| `loadVisibleMarketplaces({ cwd, scope? })` | `orchestrators/marketplace/shared.ts` | Returns `readonly { scope: Scope; record: MarketplaceRecord }[]` across the requested scope set (both scopes when undefined). Read-only; no notifications. Used by `claude_marketplace_list` and the marketplace-existence check in `claude_marketplace_plugin_list`. |
-| `loadPluginListPayload(opts: ListPluginsOptions)` | `orchestrators/plugin/list.ts` | Returns `{ payload: PluginListPayload, warnings: readonly string[] }` for the same data `listPlugins` displays. Used by `claude_marketplace_plugin_list` to project plugin rows for the LLM tool surface. `listPlugins` now delegates to it (no behavior change for the slash-command path). |
+| `loadVisibleMarketplaces({ cwd, scope? })` | `orchestrators/marketplace/shared.ts` | Returns `readonly { scope: Scope; record: MarketplaceRecord }[]` across the requested scope set (both scopes when undefined). Read-only; no notifications. Used by `pi_claude_marketplace_list` and the marketplace-existence check in `pi_claude_marketplace_plugin_list`. |
+| `loadPluginListPayload(opts: ListPluginsOptions)` | `orchestrators/plugin/list.ts` | Returns `{ payload: PluginListPayload, warnings: readonly string[] }` for the same data `listPlugins` displays. Used by `pi_claude_marketplace_plugin_list` to project plugin rows for the LLM tool surface. `listPlugins` now delegates to it (no behavior change for the slash-command path). |
 | `sourceLogical` + `ParsedSource` re-export | `presentation/marketplace-list.ts` | Edge cannot import from `domain/`; presentation can. The renderer already imported both, so adding two `export` statements bridges the boundary without code duplication. |
 
 ### Discipline Gates: Notify + Import Boundary
 
-Comment-stripped grep gate over `extensions/claude-marketplace/edge/handlers/**/*.ts` (10 files):
+Comment-stripped grep gate over `extensions/pi-claude-marketplace/edge/handlers/**/*.ts` (10 files):
 
 | Gate | Pattern | Result |
 |------|---------|--------|
@@ -191,7 +191,7 @@ Breakdown of the +56 passing delta (10 unskipped files):
 
 4. **`presentation/marketplace-list.ts` re-exports** `sourceLogical` + `ParsedSource` from `domain/source.ts`. Edge cannot cross to domain directly; presentation can; the re-export bridges via the architecturally-legal path with two `export` lines.
 
-5. **`isError: true` only for TC-9 propagation** in `claude_marketplace_plugin_list`. The marketplace-not-found surface (PL-1) returns plain text + empty `details.plugins` without `isError` to match V1 verbatim. Only an actual state.json load throw produces an `isError: true` response.
+5. **`isError: true` only for TC-9 propagation** in `pi_claude_marketplace_plugin_list`. The marketplace-not-found surface (PL-1) returns plain text + empty `details.plugins` without `isError` to match V1 verbatim. Only an actual state.json load throw produces an `isError: true` response.
 
 ## Deviations from Plan
 
@@ -208,13 +208,13 @@ Breakdown of the +56 passing delta (10 unskipped files):
 
 **2. [Rule 3 - Blocking] Orchestrator refactor for `loadPluginListPayload`**
 
-- **Found during:** Task 2, designing the `claude_marketplace_plugin_list` execute body.
+- **Found during:** Task 2, designing the `pi_claude_marketplace_plugin_list` execute body.
 - **Issue:** Plan's §objective Tactical Decisions said "Do NOT refactor orchestrators/plugin/list.ts to return a payload. Rationale: V1 parity, minimum disruption." But Plan §action item 7 acknowledged the conflict ("orchestrators do NOT expose a clean loader function") and authorized the refactor: "Implementers MAY add these exports in this plan since they're small, additive, and orchestrator-internal." BLOCK C forces the orchestrator to be the bridge -- edge/ cannot reach state.json directly.
 - **Fix:** Refactored `listPlugins` into two halves:
   - `loadPluginListPayload(opts)` -- pure payload builder, returns `{ payload, warnings }`, throws on TC-9 state.json error.
   - `listPlugins(opts)` -- thin notify wrapper around `loadPluginListPayload`, catches throws via `notifyError`, emits success via `notifySuccess(ctx, renderPluginList(payload, warnings))`.
   The split preserves the slash-command contract verbatim (all 17 listPlugins tests pass unchanged) and exposes the payload to the LLM-tool surface.
-- **Files affected:** `extensions/claude-marketplace/orchestrators/plugin/list.ts` only.
+- **Files affected:** `extensions/pi-claude-marketplace/orchestrators/plugin/list.ts` only.
 - **Verification:** `node --test tests/orchestrators/plugin/list.test.ts` -- 17 tests pass.
 - **Committed in:** `d5d00c3` (Task 2).
 
@@ -227,7 +227,7 @@ Breakdown of the +56 passing delta (10 unskipped files):
   export { sourceLogical };
   export type { ParsedSource };
   ```
-- **Files affected:** `extensions/claude-marketplace/presentation/marketplace-list.ts` only.
+- **Files affected:** `extensions/pi-claude-marketplace/presentation/marketplace-list.ts` only.
 - **Verification:** ESLint BLOCK C passes; existing marketplace-list tests pass unchanged.
 - **Committed in:** `d5d00c3` (Task 2).
 
@@ -287,16 +287,16 @@ None - no new threat surface introduced beyond the plan's `<threat_model>`. The 
 
 All 10 created handler files verified present:
 
-- extensions/claude-marketplace/edge/handlers/plugin/install.ts -- FOUND
-- extensions/claude-marketplace/edge/handlers/plugin/uninstall.ts -- FOUND
-- extensions/claude-marketplace/edge/handlers/plugin/update.ts -- FOUND
-- extensions/claude-marketplace/edge/handlers/plugin/list.ts -- FOUND
-- extensions/claude-marketplace/edge/handlers/marketplace/add.ts -- FOUND
-- extensions/claude-marketplace/edge/handlers/marketplace/remove.ts -- FOUND
-- extensions/claude-marketplace/edge/handlers/marketplace/list.ts -- FOUND
-- extensions/claude-marketplace/edge/handlers/marketplace/update.ts -- FOUND
-- extensions/claude-marketplace/edge/handlers/marketplace/autoupdate.ts -- FOUND
-- extensions/claude-marketplace/edge/handlers/tools.ts -- FOUND
+- extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts -- FOUND
+- extensions/pi-claude-marketplace/edge/handlers/plugin/uninstall.ts -- FOUND
+- extensions/pi-claude-marketplace/edge/handlers/plugin/update.ts -- FOUND
+- extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts -- FOUND
+- extensions/pi-claude-marketplace/edge/handlers/marketplace/add.ts -- FOUND
+- extensions/pi-claude-marketplace/edge/handlers/marketplace/remove.ts -- FOUND
+- extensions/pi-claude-marketplace/edge/handlers/marketplace/list.ts -- FOUND
+- extensions/pi-claude-marketplace/edge/handlers/marketplace/update.ts -- FOUND
+- extensions/pi-claude-marketplace/edge/handlers/marketplace/autoupdate.ts -- FOUND
+- extensions/pi-claude-marketplace/edge/handlers/tools.ts -- FOUND
 
 Both task commits verified in git log:
 

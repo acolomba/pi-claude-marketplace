@@ -7,7 +7,7 @@ import {
   pathSource,
   sourceLogical,
   type ParsedSource,
-} from "../../extensions/claude-marketplace/domain/source.ts";
+} from "../../extensions/pi-claude-marketplace/domain/source.ts";
 
 /**
  * PRD §6.1 SP-1..7 + MM-4 + NFR-12 -- table-driven accept/reject coverage

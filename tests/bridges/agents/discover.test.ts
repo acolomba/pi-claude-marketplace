@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { discoverPluginAgents } from "../../../extensions/claude-marketplace/bridges/agents/discover.ts";
+import { discoverPluginAgents } from "../../../extensions/pi-claude-marketplace/bridges/agents/discover.ts";
 
 // AG-1 / AG-6: discoverPluginAgents -- frontmatter parse, sourceHash, AG-1
 // elision, dotfile + non-md + symlink skip.
@@ -34,17 +34,17 @@ test("AG-6 discoverPluginAgents parses frontmatter from real fixtures (test-plug
   assert.equal(got[1]?.sourceName, "bot");
 });
 
-test("AG-1 generatedName for source 'bot' under plugin 'acme' is 'claude-marketplace-acme-bot'", async () => {
+test("AG-1 generatedName for source 'bot' under plugin 'acme' is 'pi-claude-marketplace-acme-bot'", async () => {
   const { discovered: got } = await discoverPluginAgents({
     pluginName: "acme",
     agentsDirs: [TEST_PLUGIN_FIXTURE],
   });
   const bot = got.find((d) => d.sourceName === "bot");
   assert.ok(bot);
-  assert.equal(bot.generatedName, "claude-marketplace-acme-bot");
+  assert.equal(bot.generatedName, "pi-claude-marketplace-acme-bot");
 });
 
-test("AG-1 generatedName elides plugin prefix: source 'acme-helper' under plugin 'acme' is 'claude-marketplace-acme-helper'", async () => {
+test("AG-1 generatedName elides plugin prefix: source 'acme-helper' under plugin 'acme' is 'pi-claude-marketplace-acme-helper'", async () => {
   const { discovered: got } = await discoverPluginAgents({
     pluginName: "acme",
     agentsDirs: [TEST_PLUGIN_FIXTURE],
@@ -52,8 +52,8 @@ test("AG-1 generatedName elides plugin prefix: source 'acme-helper' under plugin
   const helper = got.find((d) => d.sourceName === "acme-helper");
   assert.ok(helper);
   // AG-1 elision: 'acme-helper' starts with 'acme-', so suffix = 'helper'.
-  // Result: 'claude-marketplace-acme-helper' (NOT 'claude-marketplace-acme-acme-helper').
-  assert.equal(helper.generatedName, "claude-marketplace-acme-helper");
+  // Result: 'pi-claude-marketplace-acme-helper' (NOT 'pi-claude-marketplace-acme-acme-helper').
+  assert.equal(helper.generatedName, "pi-claude-marketplace-acme-helper");
 });
 
 test("discoverPluginAgents computes sourceHash over raw bytes (BOM-tolerant)", async () => {
@@ -177,7 +177,7 @@ test("D-07 discoverPluginAgents first-wins dedup across array elements (collisio
   const { dir, cleanup } = await makeTmpDir();
   try {
     // Both dirs declare an agent with frontmatter name 'shared'. Generated
-    // name is `claude-marketplace-p-shared`; first-wins keeps dir `a`.
+    // name is `pi-claude-marketplace-p-shared`; first-wins keeps dir `a`.
     const a = path.join(dir, "a");
     const b = path.join(dir, "b");
     await mkdir(a, { recursive: true });
@@ -192,7 +192,7 @@ test("D-07 discoverPluginAgents first-wins dedup across array elements (collisio
     assert.equal(got.length, 1, "first-wins keeps only one");
     assert.equal(got[0]!.sourcePath, path.join(a, "shared.md"), "dir 'a' wins");
     assert.equal(warnings.length, 1);
-    assert.match(warnings[0]!, /elides to generated name "claude-marketplace-p-shared"/);
+    assert.match(warnings[0]!, /elides to generated name "pi-claude-marketplace-p-shared"/);
     assert.match(warnings[0]!, /ignoring duplicate/);
   } finally {
     await cleanup();

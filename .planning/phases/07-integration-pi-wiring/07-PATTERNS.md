@@ -8,15 +8,15 @@
 
 | New/Modified File | Role | Data Flow | Closest Analog | Match Quality |
 |-------------------|------|-----------|----------------|---------------|
-| `extensions/claude-marketplace/index.ts` | route / entrypoint | event-driven + request-response | `extensions/claude-marketplace/edge/register.ts` | role-match |
-| `extensions/claude-marketplace/platform/pi-api.ts` | platform wrapper | request-response | `extensions/claude-marketplace/platform/git.ts` + `presentation/soft-dep.ts` | role-match |
-| `extensions/claude-marketplace/presentation/soft-dep.ts` | presentation shim | transform | `extensions/claude-marketplace/presentation/index.ts` pattern: barrel/shim export | partial |
-| `extensions/claude-marketplace/orchestrators/discover.ts` | orchestrator | file-I/O transform | `extensions/claude-marketplace/bridges/skills/discover.ts` + `bridges/commands/discover.ts` | data-flow-match |
-| `extensions/claude-marketplace/transaction/with-state-guard.ts` | transaction | CRUD + file-I/O | existing same file | exact |
-| `extensions/claude-marketplace/persistence/locations.ts` | persistence utility | transform / file-I/O path construction | existing same file | exact |
-| `extensions/claude-marketplace/shared/markers.ts` | shared constants | transform | existing same file | exact |
-| `extensions/claude-marketplace/shared/errors.ts` | shared errors | error propagation | existing same file | exact |
-| `extensions/claude-marketplace/domain/manifest.ts` | domain model / utility | file-I/O seam + validation | existing same file | role-match |
+| `extensions/pi-claude-marketplace/index.ts` | route / entrypoint | event-driven + request-response | `extensions/pi-claude-marketplace/edge/register.ts` | role-match |
+| `extensions/pi-claude-marketplace/platform/pi-api.ts` | platform wrapper | request-response | `extensions/pi-claude-marketplace/platform/git.ts` + `presentation/soft-dep.ts` | role-match |
+| `extensions/pi-claude-marketplace/presentation/soft-dep.ts` | presentation shim | transform | `extensions/pi-claude-marketplace/presentation/index.ts` pattern: barrel/shim export | partial |
+| `extensions/pi-claude-marketplace/orchestrators/discover.ts` | orchestrator | file-I/O transform | `extensions/pi-claude-marketplace/bridges/skills/discover.ts` + `bridges/commands/discover.ts` | data-flow-match |
+| `extensions/pi-claude-marketplace/transaction/with-state-guard.ts` | transaction | CRUD + file-I/O | existing same file | exact |
+| `extensions/pi-claude-marketplace/persistence/locations.ts` | persistence utility | transform / file-I/O path construction | existing same file | exact |
+| `extensions/pi-claude-marketplace/shared/markers.ts` | shared constants | transform | existing same file | exact |
+| `extensions/pi-claude-marketplace/shared/errors.ts` | shared errors | error propagation | existing same file | exact |
+| `extensions/pi-claude-marketplace/domain/manifest.ts` | domain model / utility | file-I/O seam + validation | existing same file | role-match |
 | `eslint.config.js` | config | transform / static analysis | existing same file | exact |
 | `package.json` | config | dependency + script config | existing same file | exact |
 | `.github/workflows/ci.yml` | CI config | batch | existing same file | exact |
@@ -34,9 +34,9 @@
 
 ## Pattern Assignments
 
-### `extensions/claude-marketplace/index.ts` (route / entrypoint, event-driven + request-response)
+### `extensions/pi-claude-marketplace/index.ts` (route / entrypoint, event-driven + request-response)
 
-**Analog:** `extensions/claude-marketplace/edge/register.ts`
+**Analog:** `extensions/pi-claude-marketplace/edge/register.ts`
 
 **Imports pattern** (lines 35-56):
 ```typescript
@@ -103,7 +103,7 @@ pi.on("session_start", (_event, ctx) => {
 
 ---
 
-### `extensions/claude-marketplace/platform/pi-api.ts` (platform wrapper, request-response)
+### `extensions/pi-claude-marketplace/platform/pi-api.ts` (platform wrapper, request-response)
 
 **Analogs:** `platform/git.ts`, `presentation/soft-dep.ts`
 
@@ -167,7 +167,7 @@ export function hasLoadedPiMcpAdapter(pi: ExtensionAPI): boolean {
 
 ---
 
-### `extensions/claude-marketplace/presentation/soft-dep.ts` (presentation shim, transform)
+### `extensions/pi-claude-marketplace/presentation/soft-dep.ts` (presentation shim, transform)
 
 **Analog:** one-line re-export shim required by D-03.
 
@@ -188,7 +188,7 @@ Keep only the exports that exist after the wrapper move. This preserves existing
 
 ---
 
-### `extensions/claude-marketplace/orchestrators/discover.ts` (orchestrator, file-I/O transform)
+### `extensions/pi-claude-marketplace/orchestrators/discover.ts` (orchestrator, file-I/O transform)
 
 **Analogs:** `bridges/skills/discover.ts`, `bridges/commands/discover.ts`
 
@@ -252,7 +252,7 @@ return {
 
 ---
 
-### `extensions/claude-marketplace/transaction/with-state-guard.ts` (transaction, CRUD + file-I/O)
+### `extensions/pi-claude-marketplace/transaction/with-state-guard.ts` (transaction, CRUD + file-I/O)
 
 **Analog:** existing same file.
 
@@ -273,13 +273,13 @@ export async function withStateGuard<T>(
 
 ---
 
-### `extensions/claude-marketplace/persistence/locations.ts` (persistence utility, path construction)
+### `extensions/pi-claude-marketplace/persistence/locations.ts` (persistence utility, path construction)
 
 **Analog:** existing same file.
 
 **Path field pattern** (lines 117-132):
 ```typescript
-const extensionRoot = path.join(scopeRoot, "claude-marketplace");
+const extensionRoot = path.join(scopeRoot, "pi-claude-marketplace");
 const stateJsonPath = path.join(extensionRoot, "state.json");
 const agentsDir = path.join(scopeRoot, "agents");
 const agentsStagingDir = path.join(extensionRoot, "agents-staging");
@@ -301,11 +301,11 @@ async pluginCacheFile(marketplace: string): Promise<string> {
 },
 ```
 
-**Apply to Phase 7:** add a `readonly stateLockFile: string` or `stateLockFile(loc): string` helper for `<scopeRoot>/claude-marketplace/.state-lock`. If helper is async, use `assertPathInside(extensionRoot, candidate, ...)`; if field is sync, follow existing hard-coded suffix rationale.
+**Apply to Phase 7:** add a `readonly stateLockFile: string` or `stateLockFile(loc): string` helper for `<scopeRoot>/pi-claude-marketplace/.state-lock`. If helper is async, use `assertPathInside(extensionRoot, candidate, ...)`; if field is sync, follow existing hard-coded suffix rationale.
 
 ---
 
-### `extensions/claude-marketplace/shared/markers.ts` and `shared/errors.ts` (shared constants/errors)
+### `extensions/pi-claude-marketplace/shared/markers.ts` and `shared/errors.ts` (shared constants/errors)
 
 **Analog:** existing same files.
 
@@ -347,11 +347,11 @@ export class PluginUpdatePhase3Error extends Error {
 }
 ```
 
-**Apply to Phase 7:** add `STATE_LOCK_HELD_PREFIX = "Another claude-marketplace operation is in progress for"`; add `StateLockHeldError` carrying scope/path; add `AggregateResourcesDiscoverError` carrying per-scope failures and `cause` chain.
+**Apply to Phase 7:** add `STATE_LOCK_HELD_PREFIX = "Another pi-claude-marketplace operation is in progress for"`; add `StateLockHeldError` carrying scope/path; add `AggregateResourcesDiscoverError` carrying per-scope failures and `cause` chain.
 
 ---
 
-### `extensions/claude-marketplace/domain/manifest.ts` (domain model / file-I/O seam)
+### `extensions/pi-claude-marketplace/domain/manifest.ts` (domain model / file-I/O seam)
 
 **Analog:** existing same file plus architecture test pattern.
 
@@ -617,7 +617,7 @@ for (const { name, pattern } of FORBIDDEN_PATTERNS) {
 assert.deepEqual(offenders, [], `...${offenders.join("\n  ")}...`);
 ```
 
-**Apply to Phase 7:** scan `extensions/claude-marketplace/**/*.ts` excluding `domain/manifest.ts`; assert no stripped source has `readFile`/`fs.readFile` call context containing `marketplace.json`. Reuse explicit offender messages.
+**Apply to Phase 7:** scan `extensions/pi-claude-marketplace/**/*.ts` excluding `domain/manifest.ts`; assert no stripped source has `readFile`/`fs.readFile` call context containing `marketplace.json`. Reuse explicit offender messages.
 
 ---
 
@@ -652,7 +652,7 @@ test("PUP-6 recovery-hint prefix is byte-for-byte 'plugin-uninstall + plugin-ins
 ```javascript
 {
   // BLOCK C (D-11): Import-direction enforcement.
-  files: ["extensions/claude-marketplace/**/*.ts"],
+  files: ["extensions/pi-claude-marketplace/**/*.ts"],
   rules: {
     "import-x/no-restricted-paths": [
       "error",
@@ -660,13 +660,13 @@ test("PUP-6 recovery-hint prefix is byte-for-byte 'plugin-uninstall + plugin-ins
         basePath: import.meta.dirname,
         zones: [
           {
-            target: "./extensions/claude-marketplace/edge",
+            target: "./extensions/pi-claude-marketplace/edge",
             from: [
-              "./extensions/claude-marketplace/bridges",
-              "./extensions/claude-marketplace/domain",
-              "./extensions/claude-marketplace/transaction",
-              "./extensions/claude-marketplace/persistence",
-              "./extensions/claude-marketplace/platform",
+              "./extensions/pi-claude-marketplace/bridges",
+              "./extensions/pi-claude-marketplace/domain",
+              "./extensions/pi-claude-marketplace/transaction",
+              "./extensions/pi-claude-marketplace/persistence",
+              "./extensions/pi-claude-marketplace/platform",
             ],
             message: "edge/ may only import from orchestrators/, presentation/, shared/.",
           },
@@ -692,7 +692,7 @@ test("PUP-6 recovery-hint prefix is byte-for-byte 'plugin-uninstall + plugin-ins
 }
 ```
 
-**Apply to Phase 7:** add `no-restricted-imports` for `@mariozechner/pi-coding-agent` in extension files. Exempt `extensions/claude-marketplace/platform/pi-api.ts` and tests. Keep direct peer imports in tests allowed.
+**Apply to Phase 7:** add `no-restricted-imports` for `@mariozechner/pi-coding-agent` in extension files. Exempt `extensions/pi-claude-marketplace/platform/pi-api.ts` and tests. Keep direct peer imports in tests allowed.
 
 ---
 
@@ -858,6 +858,6 @@ assert.deepEqual(offenders, [], `NFR violation:\n  ${offenders.join("\n  ")}`);
 
 ## Metadata
 
-**Analog search scope:** `extensions/claude-marketplace/**/*.ts`, `tests/**/*.test.ts`, `.github/workflows/*.yml`, `eslint.config.js`, `package.json`
+**Analog search scope:** `extensions/pi-claude-marketplace/**/*.ts`, `tests/**/*.test.ts`, `.github/workflows/*.yml`, `eslint.config.js`, `package.json`
 **Files scanned:** 200+ via glob; 21 source/test/config analogs read
 **Pattern extraction date:** 2026-05-11

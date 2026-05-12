@@ -16,7 +16,7 @@ Landed `orchestrators/marketplace/shared.ts` -- the cross-orchestrator helpers (
 
 ### Task 1: GitOps + cascadeUnstagePlugin (Wave 2 git surface + cascade)
 
-Created `extensions/claude-marketplace/orchestrators/marketplace/shared.ts` with:
+Created `extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts` with:
 
 - **`GitOps` interface (D-12, D-13)** -- exactly 5 primitives: `clone`, `fetch`, `forceUpdateRef`, `checkout`, `resolveRef`. NO `pull` (D-14 follow-upstream-blindly requires three-step force-overwrite, which `pull --ff-only` cannot express).
 - **`DEFAULT_GIT_OPS` constant (D-13)** -- wraps `platform/git.ts` for 4 of 5 primitives; `forceUpdateRef` uses isomorphic-git's `writeRef({ force: true })` directly via dynamic import (keeps `platform/git.ts` authoritative).
@@ -33,7 +33,7 @@ Appended three functions to `shared.ts` (below `cascadeUnstagePlugin`, no Task 1
 - **`resolveScopeFromState` (MR-1, MU-1)** -- cross-scope resolver. Parallel `loadState` across user/project (D-04 read-only; caller re-loads under `withStateGuard` before mutating). Throws `MarketplaceAmbiguousScopeError` on dual-found, `MarketplaceNotFoundError` on absent.
 - **`formatErrorWithCauses` (ES-4 / Pitfall 10)** -- depth-5 `Error.cause` walker joined with ` -- caused by: `. Phase 4-local; Phase 6 may promote to `shared/errors.ts` without changing the signature.
 
-Created `extensions/claude-marketplace/orchestrators/marketplace/index.ts` barrel re-exporting 5 value symbols (`DEFAULT_GIT_OPS`, `applyAutoupdateFlip`, `cascadeUnstagePlugin`, `formatErrorWithCauses`, `resolveScopeFromState`) and 3 type symbols (`AutoupdateFlipResult`, `GitOps`, `UnstageOutcome`). Wave 2 per-orchestrator entry-points (`add`, `remove`, `list`, `update`, `autoupdate`) will append to this barrel in their respective plans.
+Created `extensions/pi-claude-marketplace/orchestrators/marketplace/index.ts` barrel re-exporting 5 value symbols (`DEFAULT_GIT_OPS`, `applyAutoupdateFlip`, `cascadeUnstagePlugin`, `formatErrorWithCauses`, `resolveScopeFromState`) and 3 type symbols (`AutoupdateFlipResult`, `GitOps`, `UnstageOutcome`). Wave 2 per-orchestrator entry-points (`add`, `remove`, `list`, `update`, `autoupdate`) will append to this barrel in their respective plans.
 
 Commit: `feat(04-02): add scope/autoupdate/error-cause helpers + barrel index.ts`
 
@@ -43,8 +43,8 @@ Commit: `feat(04-02): add scope/autoupdate/error-cause helpers + barrel index.ts
 
 ## Key files created/modified
 
-- `extensions/claude-marketplace/orchestrators/marketplace/shared.ts` -- created (327 LOC, just under D-01 ~300 cap; subsequent orchestrators must use this file's helpers without bloating it further)
-- `extensions/claude-marketplace/orchestrators/marketplace/index.ts` -- created (barrel, 16 lines)
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts` -- created (327 LOC, just under D-01 ~300 cap; subsequent orchestrators must use this file's helpers without bloating it further)
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/index.ts` -- created (barrel, 16 lines)
 
 ## Verification
 

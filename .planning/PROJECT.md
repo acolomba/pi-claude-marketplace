@@ -28,10 +28,10 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 - [ ] Plugin lifecycle: `install / uninstall / update`
 - [ ] Listing & inspection: top-level `list` with `--installed / --available / --unavailable / --scope` filters
 - [ ] Autoupdate & update cascade -- semantics that distinguish `marketplace update` (manifest refresh, optional cascade) from `update` (no syncClone)
-- [ ] Skills bridge -- staged at `<scope>/claude-marketplace/resources/skills/<plugin>-<skill>/SKILL.md`, surfaced via `resources_discover`
-- [ ] Commands bridge -- staged at `<scope>/claude-marketplace/resources/prompts/<plugin>:<command>.md`
-- [ ] Agents bridge -- `<scope>/agents/claude-marketplace-<plugin>-<agent>.md` with on-disk index, generated marker, and field-mapped frontmatter; soft dep on `pi-subagents`
-- [ ] MCP servers bridge -- entries merged into `<scope>/mcp.json` with `_claudeMarketplace` marker; soft dep on `pi-mcp-adapter`
+- [ ] Skills bridge -- staged at `<scope>/pi-claude-marketplace/resources/skills/<plugin>-<skill>/SKILL.md`, surfaced via `resources_discover`
+- [ ] Commands bridge -- staged at `<scope>/pi-claude-marketplace/resources/prompts/<plugin>:<command>.md`
+- [ ] Agents bridge -- `<scope>/agents/pi-claude-marketplace-<plugin>-<agent>.md` with on-disk index, generated marker, and field-mapped frontmatter; soft dep on `pi-subagents`
+- [ ] MCP servers bridge -- entries merged into `<scope>/mcp.json` with `_piClaudeMarketplace` marker; soft dep on `pi-mcp-adapter`
 
 **Horizontal cross-cutting concerns (per PRD §6):**
 
@@ -75,7 +75,7 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 - **Personas served:** Pi end user (developer), project lead curating per-project marketplaces, plugin author verifying resolution, operator/power user diagnosing drift.
 - **Soft-dependency model is load-bearing:** `pi-subagents` (probed via `subagent` tool) and `pi-mcp-adapter` (probed via `mcp` tool name OR `sourceInfo.source` substring match for `pi-mcp-adapter`) MUST never block installs; absent soft deps degrade with explicit guidance and a reload hint.
 - **Stable user-contract strings (PRD §6.12 ES-5):** `pi-subagents is not loaded; …`, `pi-mcp-adapter is not loaded; …`, `Run /reload to <verb> …`, `MANUAL RECOVERY REQUIRED: …`, `(rollback partial: [<phase>] <msg>; …)`. These cannot drift without a contract break.
-- **State persistence surfaces (PRD §4):** `<scope>/claude-marketplace/state.json`, `<scope>/claude-marketplace/resources/{skills,prompts}/`, `<scope>/agents/claude-marketplace-*.md`, `<scope>/mcp.json` -- plus `<scope>/claude-marketplace/agents-index.json` for agent provenance.
+- **State persistence surfaces (PRD §4):** `<scope>/pi-claude-marketplace/state.json`, `<scope>/pi-claude-marketplace/resources/{skills,prompts}/`, `<scope>/agents/pi-claude-marketplace-*.md`, `<scope>/mcp.json` -- plus `<scope>/pi-claude-marketplace/agents-index.json` for agent provenance.
 - **Tooling baseline already on `main`:** TypeScript strict, ESLint flat config, Prettier, `npm run check` = typecheck + lint + format + tests. Pre-commit hooks exclude `.claude/` (committed in `8cb247d` / `33aaaaa` series).
 
 ## Constraints
@@ -86,7 +86,7 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 - **File operations:** All disk mutations atomic (tmp + rename or atomic JSON write) -- NFR-1
 - **Recovery model:** No fix may require a Pi process restart; `Run /reload` must suffice (NFR-2). All operations must be safe to retry -- idempotent or fail-clean (NFR-3)
 - **Network policy:** Network is required only for GitHub-source `marketplace add` and for `update`/`marketplace update` against GitHub-source marketplaces; `install`, `list`, `uninstall`, `marketplace remove`, and path-source `marketplace add` MUST NOT touch the network (NFR-5)
-- **Containment:** Refuse to write outside `<scopeRoot>/claude-marketplace/`, `<scopeRoot>/agents/`, or `<scopeRoot>/mcp.json` (NFR-10)
+- **Containment:** Refuse to write outside `<scopeRoot>/pi-claude-marketplace/`, `<scopeRoot>/agents/`, or `<scopeRoot>/mcp.json` (NFR-10)
 - **Quality bar:** `npm run check` must stay green -- typecheck + ESLint + Prettier + tests (NFR-6)
 - **Output channel:** All user-visible messages MUST go through `ctx.ui.notify(message, severity)`; direct `process.stdout`/`process.stderr` writes forbidden in command/bridge code (IL-2). Single sanctioned `console.warn` is the load-time legacy migration save failure (IL-3)
 - **No telemetry V1:** No metrics, no event sink, no analytics endpoint (IL-4)
@@ -110,7 +110,7 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 | **D-22 (2026-05-09):** Zero `pi.registerTool` calls in Phase 1; LLM tool surface deferred to Phase 6 (`edge/handlers/list.ts`) | Phase 1 ships only the `/claude:plugin` slash command + `resources_discover` event handler. The LLM tool surface (`claude_plugin_list`/`install`/`uninstall`/etc.) is a Phase 6 deliverable. Regression-guarded by `tests/shared/index-smoke.test.ts` (asserts `tools.length === 0`). Resolved at the Plan 01-07 checkpoint (`approved-zero-tools`). | -- Locked  |
 | **D-23 (2026-05-10):** Adopt follow-upstream-blindly semantics for `marketplace update`; supersede PRD MU-2 and MU-3                | The local marketplace clone is read-only by contract -- the extension only clones, fetches, and checks out; it never commits, pushes, or modifies the working tree. Local-vs-upstream divergence cannot occur, so `pull --ff-only` and "non-fast-forward divergence as error" are no longer applicable. `marketplace update` therefore overrides the local branch ref to the remote SHA via `gitOps.forceUpdateRef` + `gitOps.checkout` (or checks out a detached SHA directly). Phase 4 implements this in `orchestrators/marketplace/update.ts` per CONTEXT.md D-14. Recorded by Plan 04-10. | -- Locked  |
 | **D-24 (2026-05-10):** Adopt COMP-01 (Gap 3) supplement-not-replace for plugin component-path arrays; supersede PRD PR-4 | The V1 resolver short-circuited implicit-by-convention detection whenever a manifest declared a `componentPaths.{skills,commands,agents}` value, making custom paths *replace* defaults rather than supplement them. Phase 5 D-07 corrects this vs upstream Claude Code behavior: `domain/resolver.ts`'s `ComponentPathsSchema` migrates from optional-string-per-kind to readonly-string-array-per-kind; strict resolver Step 7 computes a UNION of declared (entry > manifest) + implicit-by-convention (when the conventional dir exists), deduplicated by path with first-wins on collisions; loose resolver stays entry-only. Bridge `discover.ts` files iterate the array. Behavior corrected vs V1 per COMP-01 / Gap 3 -- see `.planning/phases/05-plugin-orchestrators/05-CONTEXT.md` D-07. Recorded by Plan 05-10; behavior change landed in Plan 05-03. | -- Locked  |
-| **D-25 (2026-05-11):** Adopt Phase 7 lock-held marker semantics; supersede PRD PI-15's old concurrent-install commit marker | Phase 7 D-08 moves cross-process conflict detection ahead of `withStateGuard` mutation by taking the per-scope `.state-lock` first. The loser now fails fast with `STATE_LOCK_HELD_PREFIX` (`Another claude-marketplace operation is in progress for`) and retry guidance, so it never reaches the old `was installed concurrently` state-guard commit rollback path. This preserves retry safety while making the user-visible contract match the actual lock boundary. Recorded by Plan 07-06; behavior landed in Plan 07-04. | -- Locked  |
+| **D-25 (2026-05-11):** Adopt Phase 7 lock-held marker semantics; supersede PRD PI-15's old concurrent-install commit marker | Phase 7 D-08 moves cross-process conflict detection ahead of `withStateGuard` mutation by taking the per-scope `.state-lock` first. The loser now fails fast with `STATE_LOCK_HELD_PREFIX` (`Another pi-claude-marketplace operation is in progress for`) and retry guidance, so it never reaches the old `was installed concurrently` state-guard commit rollback path. This preserves retry safety while making the user-visible contract match the actual lock boundary. Recorded by Plan 07-06; behavior landed in Plan 07-04. | -- Locked  |
 
 ## Evolution
 
@@ -133,7 +133,7 @@ This document evolves at phase transitions and milestone boundaries.
 
 ______________________________________________________________________
 
-*Last updated: 2026-05-11 -- D-25 added: Phase 7 D-08 supersedes PRD PI-15's old concurrent-install marker. Concurrent operation losers now fail at per-scope lock acquisition with `STATE_LOCK_HELD_PREFIX` (`Another claude-marketplace operation is in progress for`) plus retry guidance, rather than reaching the old `was installed concurrently` state-guard commit path.*
+*Last updated: 2026-05-11 -- D-25 added: Phase 7 D-08 supersedes PRD PI-15's old concurrent-install marker. Concurrent operation losers now fail at per-scope lock acquisition with `STATE_LOCK_HELD_PREFIX` (`Another pi-claude-marketplace operation is in progress for`) plus retry guidance, rather than reaching the old `was installed concurrently` state-guard commit path.*
 
 *Last updated: 2026-05-10 -- D-24 added: Phase 5 D-07 supersedes PRD PR-4 (COMP-01 / Gap 3 supplement-not-replace; custom componentPath arrays now SUPPLEMENT defaults rather than replace them). Behavior change landed in Plan 05-03; documentation supersession trail landed in Plan 05-10 (REQUIREMENTS.md PR-4 strikethrough + PROJECT.md D-24 row + CHANGELOG.md entry). PRD §6.4 PR-4 intentionally retained as historical baseline; supersession lives in `.planning/` artifacts only.*
 

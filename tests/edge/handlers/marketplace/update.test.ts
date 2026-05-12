@@ -11,11 +11,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { makeMarketplaceUpdateHandler } from "../../../../extensions/claude-marketplace/edge/handlers/marketplace/update.ts";
+import { makeMarketplaceUpdateHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/update.ts";
 import { makeMockGitOps } from "../../../helpers/git-mock.ts";
 
-import type { EdgeDeps } from "../../../../extensions/claude-marketplace/edge/types.ts";
-import type { PluginUpdateOutcome } from "../../../../extensions/claude-marketplace/orchestrators/types.ts";
+import type { EdgeDeps } from "../../../../extensions/pi-claude-marketplace/edge/types.ts";
+import type { PluginUpdateOutcome } from "../../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 
 interface NotifyRecord {

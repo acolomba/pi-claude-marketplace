@@ -6,16 +6,16 @@ wave: 1
 depends_on:
   - 06-01
 files_modified:
-  - extensions/claude-marketplace/edge/args.ts
-  - extensions/claude-marketplace/edge/args-schema.ts
-  - extensions/claude-marketplace/edge/router.ts
-  - extensions/claude-marketplace/edge/types.ts
-  - extensions/claude-marketplace/persistence/locations.ts
+  - extensions/pi-claude-marketplace/edge/args.ts
+  - extensions/pi-claude-marketplace/edge/args-schema.ts
+  - extensions/pi-claude-marketplace/edge/router.ts
+  - extensions/pi-claude-marketplace/edge/types.ts
+  - extensions/pi-claude-marketplace/persistence/locations.ts
   - tests/edge/args.test.ts
   - tests/edge/args-schema.test.ts
   - tests/edge/router.test.ts
   - tests/edge/completions/normalize.test.ts
-  - extensions/claude-marketplace/edge/completions/normalize.ts
+  - extensions/pi-claude-marketplace/edge/completions/normalize.ts
 autonomous: true
 requirements:
   - AP-1
@@ -38,35 +38,35 @@ must_haves:
     - "`ScopedLocations` exposes `cacheDir`, `marketplaceNamesCacheFile`, and `pluginCacheFile(marketplace)`"
     - "Skipped tests for AP-1, AP-2, AP-3, AP-4, TC-2 router/dispatch, and TC-7 are now unskipped and green"
   artifacts:
-    - path: extensions/claude-marketplace/edge/args.ts
+    - path: extensions/pi-claude-marketplace/edge/args.ts
       provides: "AP-1 tokenizer + AP-2/AP-4 --scope validation"
       exports: ["parseArgs", "ParsedArgs"]
-    - path: extensions/claude-marketplace/edge/args-schema.ts
+    - path: extensions/pi-claude-marketplace/edge/args-schema.ts
       provides: "Schema-driven positional validator"
       exports: ["parseCommandArgs", "PositionalSpec", "ParsedCommandArgs"]
-    - path: extensions/claude-marketplace/edge/router.ts
+    - path: extensions/pi-claude-marketplace/edge/router.ts
       provides: "routeClaudePlugin + routeMarketplace + Usage consts (AP-3)"
       exports: ["routeClaudePlugin", "routeMarketplace", "TOP_LEVEL_USAGE", "MARKETPLACE_USAGE", "SubcommandHandlers"]
-    - path: extensions/claude-marketplace/edge/types.ts
+    - path: extensions/pi-claude-marketplace/edge/types.ts
       provides: "EdgeDeps interface (D-04)"
       exports: ["EdgeDeps"]
-    - path: extensions/claude-marketplace/edge/completions/normalize.ts
+    - path: extensions/pi-claude-marketplace/edge/completions/normalize.ts
       provides: "TC-7 fish-style whitespace normalizer + isClaudePluginCommandLine regex"
       exports: ["normalizeCompletionWhitespace", "isClaudePluginCommandLine"]
-    - path: extensions/claude-marketplace/persistence/locations.ts
+    - path: extensions/pi-claude-marketplace/persistence/locations.ts
       provides: "Cache path helpers (cacheDir, marketplaceNamesCacheFile, pluginCacheFile)"
       contains: "pluginCacheFile"
   key_links:
-    - from: extensions/claude-marketplace/edge/router.ts
-      to: extensions/claude-marketplace/shared/notify.ts
+    - from: extensions/pi-claude-marketplace/edge/router.ts
+      to: extensions/pi-claude-marketplace/shared/notify.ts
       via: "import { notifyUsageError } from \"../shared/notify.ts\""
       pattern: "notifyUsageError"
-    - from: extensions/claude-marketplace/edge/args-schema.ts
-      to: extensions/claude-marketplace/edge/args.ts
+    - from: extensions/pi-claude-marketplace/edge/args-schema.ts
+      to: extensions/pi-claude-marketplace/edge/args.ts
       via: "import { parseArgs } from \"./args.ts\""
       pattern: "from \"./args"
-    - from: extensions/claude-marketplace/persistence/locations.ts
-      to: extensions/claude-marketplace/shared/path-safety.ts
+    - from: extensions/pi-claude-marketplace/persistence/locations.ts
+      to: extensions/pi-claude-marketplace/shared/path-safety.ts
       via: "assertPathInside for cache path containment"
       pattern: "assertPathInside.*cacheDir"
 ---
@@ -77,7 +77,7 @@ Land the edge-layer parser, router, types, and TC-7 normalizer primitives, plus 
 Purpose: Plans 03 (cache + completions) and 04 (handlers + LLM tools) depend on these primitives. Landing them in a single small plan keeps Wave 1 atomic.
 
 Output:
-- 5 new files under `extensions/claude-marketplace/edge/`
+- 5 new files under `extensions/pi-claude-marketplace/edge/`
 - 1 modified file (`persistence/locations.ts`)
 - 4 unskipped + green tests (args, args-schema, router, normalize)
 </objective>
@@ -94,25 +94,25 @@ Output:
 @.planning/phases/06-edge-layer-tab-completion/06-01-SUMMARY.md
 
 <!-- Phase 1 carry-forward consumed here -->
-@extensions/claude-marketplace/shared/notify.ts
-@extensions/claude-marketplace/shared/errors.ts
-@extensions/claude-marketplace/shared/types.ts
-@extensions/claude-marketplace/shared/path-safety.ts
-@extensions/claude-marketplace/persistence/locations.ts
+@extensions/pi-claude-marketplace/shared/notify.ts
+@extensions/pi-claude-marketplace/shared/errors.ts
+@extensions/pi-claude-marketplace/shared/types.ts
+@extensions/pi-claude-marketplace/shared/path-safety.ts
+@extensions/pi-claude-marketplace/persistence/locations.ts
 
 <!-- Orchestrator types that EdgeDeps imports -->
-@extensions/claude-marketplace/orchestrators/marketplace/shared.ts
-@extensions/claude-marketplace/orchestrators/types.ts
+@extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts
+@extensions/pi-claude-marketplace/orchestrators/types.ts
 
 <interfaces>
 <!-- Key V1 source to port verbatim. Run these commands to retrieve full content; do NOT re-read 06-PATTERNS.md, the snippets there are abridged. -->
 
 Run:
 ```bash
-git show features/initial:extensions/claude-marketplace/args.ts
-git show features/initial:extensions/claude-marketplace/commands/_args.ts
-git show features/initial:extensions/claude-marketplace/commands/router.ts
-git show features/initial:extensions/claude-marketplace/completions.ts | sed -n '1,310p'
+git show features/initial:extensions/pi-claude-marketplace/args.ts
+git show features/initial:extensions/pi-claude-marketplace/commands/_args.ts
+git show features/initial:extensions/pi-claude-marketplace/commands/router.ts
+git show features/initial:extensions/pi-claude-marketplace/completions.ts | sed -n '1,310p'
 ```
 
 `shared/notify.ts` exports (verified):
@@ -166,11 +166,11 @@ export interface EdgeDeps {
 
 <task type="auto">
   <name>Task 1: Port edge/args.ts + edge/args-schema.ts; unskip and pass args + args-schema tests</name>
-  <files>extensions/claude-marketplace/edge/args.ts, extensions/claude-marketplace/edge/args-schema.ts, tests/edge/args.test.ts, tests/edge/args-schema.test.ts</files>
+  <files>extensions/pi-claude-marketplace/edge/args.ts, extensions/pi-claude-marketplace/edge/args-schema.ts, tests/edge/args.test.ts, tests/edge/args-schema.test.ts</files>
   <action>
-1. Run `git show features/initial:extensions/claude-marketplace/args.ts` and create `extensions/claude-marketplace/edge/args.ts` with the V1 content verbatim, modulo the import: change `import type { Scope } from "./types.ts"` to `import type { Scope } from "../shared/types.ts"`.
+1. Run `git show features/initial:extensions/pi-claude-marketplace/args.ts` and create `extensions/pi-claude-marketplace/edge/args.ts` with the V1 content verbatim, modulo the import: change `import type { Scope } from "./types.ts"` to `import type { Scope } from "../shared/types.ts"`.
 
-2. Run `git show features/initial:extensions/claude-marketplace/commands/_args.ts` and create `extensions/claude-marketplace/edge/args-schema.ts` with the V1 content verbatim, modulo imports:
+2. Run `git show features/initial:extensions/pi-claude-marketplace/commands/_args.ts` and create `extensions/pi-claude-marketplace/edge/args-schema.ts` with the V1 content verbatim, modulo imports:
    - `./args.ts` for `parseArgs` (V1 imported from `../args.ts`)
    - `../shared/errors.ts` for `errorMessage`
    - `../shared/types.ts` for `Scope`
@@ -190,23 +190,23 @@ export interface EdgeDeps {
 Use `notify` callbacks (the function injected as a parameter to `parseCommandArgs`) -- args-schema.ts itself does NOT import `notifySuccess`/`notifyError` from `shared/notify.ts`; the caller (handler) passes a closure that wraps `notifyError(ctx, ...)`.
   </action>
   <verify>
-    <automated>node --test tests/edge/args.test.ts tests/edge/args-schema.test.ts && npx tsc --noEmit && npx eslint extensions/claude-marketplace/edge/args.ts extensions/claude-marketplace/edge/args-schema.ts tests/edge/args.test.ts tests/edge/args-schema.test.ts</automated>
+    <automated>node --test tests/edge/args.test.ts tests/edge/args-schema.test.ts && npx tsc --noEmit && npx eslint extensions/pi-claude-marketplace/edge/args.ts extensions/pi-claude-marketplace/edge/args-schema.ts tests/edge/args.test.ts tests/edge/args-schema.test.ts</automated>
   </verify>
   <done>Both files exist. All previously-skipped args/args-schema tests are unskipped, green, and assert the named behaviors. Typecheck clean. ESLint clean.</done>
 </task>
 
 <task type="auto">
   <name>Task 2: Port edge/router.ts + edge/types.ts + edge/completions/normalize.ts; unskip router + normalize tests</name>
-  <files>extensions/claude-marketplace/edge/router.ts, extensions/claude-marketplace/edge/types.ts, extensions/claude-marketplace/edge/completions/normalize.ts, tests/edge/router.test.ts, tests/edge/completions/normalize.test.ts</files>
+  <files>extensions/pi-claude-marketplace/edge/router.ts, extensions/pi-claude-marketplace/edge/types.ts, extensions/pi-claude-marketplace/edge/completions/normalize.ts, tests/edge/router.test.ts, tests/edge/completions/normalize.test.ts</files>
   <action>
-1. Run `git show features/initial:extensions/claude-marketplace/commands/router.ts` and create `extensions/claude-marketplace/edge/router.ts` with two refinements:
+1. Run `git show features/initial:extensions/pi-claude-marketplace/commands/router.ts` and create `extensions/pi-claude-marketplace/edge/router.ts` with two refinements:
    - Replace every `ctx.ui.notify(message, "error")` direct call with `notifyUsageError(ctx, message, usageBlock)` (or `notifyUsageError(ctx, "Usage error.", TOP_LEVEL_USAGE)` for the empty-args case where V1 had no leading message).
    - Import path: `import { notifyUsageError } from "../shared/notify.ts"` and `import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent"`.
    - Export: `routeClaudePlugin`, `routeMarketplace`, `TOP_LEVEL_USAGE`, `MARKETPLACE_USAGE`, `SubcommandHandlers`.
    - `routeMarketplace` MUST accept `case "remove": case "rm":` (TC-2 alias carry-forward).
    - The unknown-subcommand path uses the form: `notifyUsageError(ctx, \`Unknown subcommand: "${head}".\`, TOP_LEVEL_USAGE)`. For empty input use `notifyUsageError(ctx, "Usage error.", TOP_LEVEL_USAGE)`.
 
-2. Create `extensions/claude-marketplace/edge/types.ts` with the `EdgeDeps` interface (and re-export `SubcommandHandlers` from `./router.ts` so consumers can `import type { EdgeDeps, SubcommandHandlers } from "./types.ts"` -- single import surface):
+2. Create `extensions/pi-claude-marketplace/edge/types.ts` with the `EdgeDeps` interface (and re-export `SubcommandHandlers` from `./router.ts` so consumers can `import type { EdgeDeps, SubcommandHandlers } from "./types.ts"` -- single import surface):
    ```typescript
    export type { SubcommandHandlers } from "./router.ts";
 
@@ -219,7 +219,7 @@ Use `notify` callbacks (the function injected as a parameter to `parseCommandArg
    }
    ```
 
-3. Create `extensions/claude-marketplace/edge/completions/normalize.ts` containing:
+3. Create `extensions/pi-claude-marketplace/edge/completions/normalize.ts` containing:
    - `normalizeCompletionWhitespace` (V1 verbatim, see 06-PATTERNS.md lines 326-340)
    - `isClaudePluginCommandLine` (V1 verbatim)
    - `CLAUDE_PLUGIN_LINE` regex (V1 verbatim: `/^\/claude:plugin(?::\d+)?(?:\s|$)/`)
@@ -233,19 +233,19 @@ Use `notify` callbacks (the function injected as a parameter to `parseCommandArg
 
 5. Unskip every test in `tests/edge/completions/normalize.test.ts` and implement the 10 cases against the concrete functions.
 
-6. CRITICAL: Verify (via `grep -n 'ctx.ui.notify' extensions/claude-marketplace/edge/router.ts`) that the router does NOT call `ctx.ui.notify` directly. Only `notifyUsageError`/`notifyError`/`notifyWarning`/`notifySuccess` are allowed. ESLint BLOCK A will block direct notify anyway, but the grep is faster feedback.
+6. CRITICAL: Verify (via `grep -n 'ctx.ui.notify' extensions/pi-claude-marketplace/edge/router.ts`) that the router does NOT call `ctx.ui.notify` directly. Only `notifyUsageError`/`notifyError`/`notifyWarning`/`notifySuccess` are allowed. ESLint BLOCK A will block direct notify anyway, but the grep is faster feedback.
   </action>
   <verify>
-    <automated>grep -v '^#' extensions/claude-marketplace/edge/router.ts | grep -c 'ctx\.ui\.notify' | grep -qx 0 &amp;&amp; node --test tests/edge/router.test.ts tests/edge/completions/normalize.test.ts &amp;&amp; npx tsc --noEmit &amp;&amp; npx eslint extensions/claude-marketplace/edge/router.ts extensions/claude-marketplace/edge/types.ts extensions/claude-marketplace/edge/completions/normalize.ts tests/edge/router.test.ts tests/edge/completions/normalize.test.ts</automated>
+    <automated>grep -v '^#' extensions/pi-claude-marketplace/edge/router.ts | grep -c 'ctx\.ui\.notify' | grep -qx 0 &amp;&amp; node --test tests/edge/router.test.ts tests/edge/completions/normalize.test.ts &amp;&amp; npx tsc --noEmit &amp;&amp; npx eslint extensions/pi-claude-marketplace/edge/router.ts extensions/pi-claude-marketplace/edge/types.ts extensions/pi-claude-marketplace/edge/completions/normalize.ts tests/edge/router.test.ts tests/edge/completions/normalize.test.ts</automated>
   </verify>
   <done>router.ts, types.ts, normalize.ts exist. Router contains zero direct `ctx.ui.notify` calls (notify-discipline gate). All router and normalize tests green. Typecheck + ESLint clean.</done>
 </task>
 
 <task type="auto">
   <name>Task 3: Extend persistence/locations.ts with cache path helpers; verify path containment</name>
-  <files>extensions/claude-marketplace/persistence/locations.ts</files>
+  <files>extensions/pi-claude-marketplace/persistence/locations.ts</files>
   <action>
-1. Read the existing `extensions/claude-marketplace/persistence/locations.ts` to confirm the `ScopedLocations` interface and `locationsFor` function shape.
+1. Read the existing `extensions/pi-claude-marketplace/persistence/locations.ts` to confirm the `ScopedLocations` interface and `locationsFor` function shape.
 
 2. Add three additions per 06-PATTERNS.md lines 810-831:
 
@@ -284,7 +284,7 @@ Use `notify` callbacks (the function injected as a parameter to `parseCommandArg
    If no such test file exists, defer this check to Plan 03 (the completion-cache tests will exercise the helper).
   </action>
   <verify>
-    <automated>npx tsc --noEmit &amp;&amp; npx eslint extensions/claude-marketplace/persistence/locations.ts &amp;&amp; node -e 'import("./extensions/claude-marketplace/persistence/locations.ts").then(m => { const l = m.locationsFor("user", "/tmp/cwd"); if (!l.cacheDir.endsWith("/cache")) process.exit(1); if (!l.marketplaceNamesCacheFile.endsWith("/cache/marketplace-names.json")) process.exit(2); l.pluginCacheFile("safe-name").then(p => { if (!p.endsWith("/cache/plugins/safe-name.json")) process.exit(3); l.pluginCacheFile("../../etc").then(() => process.exit(4), () => process.exit(0)); }); }).catch(() => process.exit(99))'</automated>
+    <automated>npx tsc --noEmit &amp;&amp; npx eslint extensions/pi-claude-marketplace/persistence/locations.ts &amp;&amp; node -e 'import("./extensions/pi-claude-marketplace/persistence/locations.ts").then(m => { const l = m.locationsFor("user", "/tmp/cwd"); if (!l.cacheDir.endsWith("/cache")) process.exit(1); if (!l.marketplaceNamesCacheFile.endsWith("/cache/marketplace-names.json")) process.exit(2); l.pluginCacheFile("safe-name").then(p => { if (!p.endsWith("/cache/plugins/safe-name.json")) process.exit(3); l.pluginCacheFile("../../etc").then(() => process.exit(4), () => process.exit(0)); }); }).catch(() => process.exit(99))'</automated>
   </verify>
   <done>locations.ts exports cacheDir + marketplaceNamesCacheFile properties on ScopedLocations and pluginCacheFile method. Typecheck clean. ESLint clean. The smoke verify above exits 0 (safe-name path is correct, traversal name rejected).</done>
 </task>
@@ -315,7 +315,7 @@ All threats classified LOW; none block the plan (`security_block_on` default `hi
 - 1 modified file (`persistence/locations.ts`) exposes `cacheDir`, `marketplaceNamesCacheFile`, `pluginCacheFile`.
 - 4 test files (args, args-schema, router, normalize) have all stubs unskipped and passing.
 - `npm run check` exits 0 (full typecheck + lint + format + tests).
-- `grep -v '^#' extensions/claude-marketplace/edge/router.ts | grep -c 'ctx\.ui\.notify' | grep -qx 0` confirms zero direct notify calls (notify-discipline self-invariant).
+- `grep -v '^#' extensions/pi-claude-marketplace/edge/router.ts | grep -c 'ctx\.ui\.notify' | grep -qx 0` confirms zero direct notify calls (notify-discipline self-invariant).
 - Total test count increase: roughly 36+ tests transitioned from skipped to passing.
 </verification>
 

@@ -37,13 +37,13 @@
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| Ship V1's two verbatim (Recommended) | `claude_marketplace_list` + `claude_marketplace_plugin_list` as-is. | |
+| Ship V1's two verbatim (Recommended) | `pi_claude_marketplace_list` + `pi_claude_marketplace_plugin_list` as-is. | |
 | V1's two + top-level `claude_plugin_list` | Adds a third tool mirroring `/claude:plugin list` with filters. | |
-| Just `claude_marketplace_list` | Smallest surface; drops V1's plugin list tool. | |
+| Just `pi_claude_marketplace_list` | Smallest surface; drops V1's plugin list tool. | |
 | Drop LLM tools from Phase 6 | Defer all tool registration to Phase 7. | |
-| **Other (selected)** | Ship V1's two BUT extend `claude_marketplace_plugin_list`: when marketplace name is omitted, list plugins in all marketplaces, filtered by `available/unavailable/installed` and `scope`. Unavailable plugins remain listable for install because a future `--force` flag will install their available components. | ✓ |
+| **Other (selected)** | Ship V1's two BUT extend `pi_claude_marketplace_plugin_list`: when marketplace name is omitted, list plugins in all marketplaces, filtered by `available/unavailable/installed` and `scope`. Unavailable plugins remain listable for install because a future `--force` flag will install their available components. | ✓ |
 
-**User's choice:** Free-text -- V1's two tools, but `claude_marketplace_plugin_list` becomes a hybrid: optional marketplace + filter booleans (installed/available/unavailable). PL-1 union semantics.
+**User's choice:** Free-text -- V1's two tools, but `pi_claude_marketplace_plugin_list` becomes a hybrid: optional marketplace + filter booleans (installed/available/unavailable). PL-1 union semantics.
 **Notes:** Locked as D-02. The extended tool subsumes the third option's use case (top-level cross-marketplace listing) without adding a new tool. The "keep unavailable visible because of future `--force`" rationale also drives D-03 corollary (install completion includes unavailable plugins).
 
 ---
@@ -59,7 +59,7 @@
 | **Other (selected)** | Two-tier file-backed cache: (1) marketplace-name cache (one file, lazy load, no TTL, invalidated on marketplace add/remove); (2) per-marketplace plugin cache (one file per marketplace, lazy load, 10-min TTL, invalidated on marketplace add/remove/update + plugin install/uninstall, dropped on marketplace remove). Plugin cache knows each plugin's status so completion filters are status-aware (install hides installed, uninstall/update show only installed). Unavailable plugins remain in install completions for future `--force`. | ✓ |
 
 **User's choice:** Free-text -- full two-tier (file + in-memory) cache with status awareness.
-**Notes:** Locked as D-03. Cache module lives in `shared/completion-cache.ts` because `edge/` cannot import `persistence/` and `orchestrators/` cannot import `edge/` -- `shared/` is the only architecturally legal placement reachable from both. Cache files live at `<scopeRoot>/claude-marketplace/cache/{marketplace-names.json, plugins/<marketplace>.json}`. The cache is optimization-only -- state.json and marketplace.json remain authoritative; corrupted cache rebuilds lazily.
+**Notes:** Locked as D-03. Cache module lives in `shared/completion-cache.ts` because `edge/` cannot import `persistence/` and `orchestrators/` cannot import `edge/` -- `shared/` is the only architecturally legal placement reachable from both. Cache files live at `<scopeRoot>/pi-claude-marketplace/cache/{marketplace-names.json, plugins/<marketplace>.json}`. The cache is optimization-only -- state.json and marketplace.json remain authoritative; corrupted cache rebuilds lazily.
 
 ### Follow-up: cache home / invalidation mechanism
 
@@ -92,7 +92,7 @@
 
 User said "you decide" or did not specify:
 - Cache schema versioning (Claude chose: single `schemaVersion: 1` field; drop+rebuild on mismatch since cache is optimization-only)
-- Cache file naming and directory layout (Claude chose: `<scopeRoot>/claude-marketplace/cache/marketplace-names.json` and `<scopeRoot>/claude-marketplace/cache/plugins/<marketplace>.json`)
+- Cache file naming and directory layout (Claude chose: `<scopeRoot>/pi-claude-marketplace/cache/marketplace-names.json` and `<scopeRoot>/pi-claude-marketplace/cache/plugins/<marketplace>.json`)
 - In-memory map keys (Claude chose: string keys `${scope}::${marketplace}`)
 - Atomic-JSON contract for cache writes (Claude chose: `shared/atomic-json.atomicWriteJson`, same primitive Phase 1 D-03 adopted)
 - Cross-marketplace plugin disambiguation (Claude chose: per-(marketplace, plugin) row in cache; consumer dedupes for `<plugin>@<marketplace>` completion as in V1)
@@ -102,15 +102,15 @@ User said "you decide" or did not specify:
 
 - `--force` install flag (PRD §11 deferral; informs keep-unavailable-in-install-completions decision)
 - Tokenizer escape support (`\"`, `\\`, `\n`)
-- Top-level `claude_plugin_list` LLM tool (subsumed by extended `claude_marketplace_plugin_list`)
-- `claude_marketplace_info`, `claude_plugin_info` tools (PRD §11 info-subcommand deferral)
+- Top-level `claude_plugin_list` LLM tool (subsumed by extended `pi_claude_marketplace_plugin_list`)
+- `pi_claude_marketplace_info`, `claude_plugin_info` tools (PRD §11 info-subcommand deferral)
 - mtime-based cache invalidation safety net
 - NFR-8 manifest-mtime caching layer (separate concern from D-03 completion cache)
 - i18n / locale negotiation for Usage strings + tool descriptions
 - Rich interactive selectors in completions
 - Cache inspection / invalidation slash command
 - JSON output / dry-run modes
-- `claude_marketplace_plugin_list` returning version for available plugins
+- `pi_claude_marketplace_plugin_list` returning version for available plugins
 - Telemetry on completion latency (IL-4 forbids V1 telemetry)
 - `marketplace info <name>`
 - `--scope=user` (equals-separator) form support

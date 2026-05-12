@@ -4,10 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import claudeMarketplaceExtension from "../../extensions/claude-marketplace/index.ts";
-import { cleanupStaging } from "../../extensions/claude-marketplace/shared/fs-utils.ts";
+import claudeMarketplaceExtension from "../../extensions/pi-claude-marketplace/index.ts";
+import { cleanupStaging } from "../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
-import type { ExtensionAPI } from "../../extensions/claude-marketplace/platform/pi-api.ts";
+import type { ExtensionAPI } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 /**
  * Plan 04 regression guard: index.ts loads cleanly, exports a default
@@ -80,8 +80,8 @@ test("registers command, read-only tools, session_start, and resources_discover 
     `Phase 7 must register 2 read-only LLM tools; got ${JSON.stringify(tools)}`,
   );
   assert.deepEqual(tools.map((e) => e.name).sort(), [
-    "claude_marketplace_list",
-    "claude_marketplace_plugin_list",
+    "pi_claude_marketplace_list",
+    "pi_claude_marketplace_plugin_list",
   ]);
 });
 
@@ -99,7 +99,7 @@ test("resources_discover handler resolves project cwd at invocation time", async
     const projectPromptDir = path.join(
       eventCwd,
       ".pi",
-      "claude-marketplace",
+      "pi-claude-marketplace",
       "resources",
       "prompts",
     );
@@ -110,7 +110,7 @@ test("resources_discover handler resolves project cwd at invocation time", async
     const wrongPromptDir = path.join(
       processCwd,
       ".pi",
-      "claude-marketplace",
+      "pi-claude-marketplace",
       "resources",
       "prompts",
     );
@@ -133,7 +133,7 @@ test("resources_discover handler resolves project cwd at invocation time", async
     assert.ok(
       promptPaths.some((promptPath) =>
         promptPath.endsWith(
-          path.join(".pi", "claude-marketplace", "resources", "prompts", "cwd-captured.md"),
+          path.join(".pi", "pi-claude-marketplace", "resources", "prompts", "cwd-captured.md"),
         ),
       ),
       `expected invocation-time cwd prompt in ${JSON.stringify(result.promptPaths)}`,

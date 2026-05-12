@@ -4,7 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { cleanupStaging, pathExists } from "../../extensions/claude-marketplace/shared/fs-utils.ts";
+import {
+  cleanupStaging,
+  pathExists,
+} from "../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
 // shared/fs-utils.ts -- cleanupStaging + pathExists.
 

@@ -25,9 +25,9 @@ tech-stack:
 
 key-files:
   created:
-    - extensions/claude-marketplace/domain/components/mcp.ts
-    - extensions/claude-marketplace/domain/components/plugin.ts
-    - extensions/claude-marketplace/domain/manifest.ts
+    - extensions/pi-claude-marketplace/domain/components/mcp.ts
+    - extensions/pi-claude-marketplace/domain/components/plugin.ts
+    - extensions/pi-claude-marketplace/domain/manifest.ts
     - tests/domain/manifest.test.ts
   modified: []
 
@@ -82,9 +82,9 @@ Each task was committed atomically:
 
 ## Files Created/Modified
 
-- `extensions/claude-marketplace/domain/components/mcp.ts` (20 lines) -- `MCP_SERVERS_SCHEMA` = `Type.Record(Type.String(), Type.Unknown())`, `MCP_SERVERS_VALIDATOR` = `Compile(MCP_SERVERS_SCHEMA)`, `MCPServers` Static<> alias
-- `extensions/claude-marketplace/domain/components/plugin.ts` (95 lines) -- `PLUGIN_ENTRY_SCHEMA` (15 fields), `PLUGIN_MANIFEST_SCHEMA` (14 fields), both validators, both Static<> aliases, single intra-domain import of `MCP_SERVERS_SCHEMA`
-- `extensions/claude-marketplace/domain/manifest.ts` (37 lines) -- `MARKETPLACE_SCHEMA` referencing `PLUGIN_ENTRY_SCHEMA`, `MARKETPLACE_VALIDATOR`, `MarketplaceManifest` Static<> alias
+- `extensions/pi-claude-marketplace/domain/components/mcp.ts` (20 lines) -- `MCP_SERVERS_SCHEMA` = `Type.Record(Type.String(), Type.Unknown())`, `MCP_SERVERS_VALIDATOR` = `Compile(MCP_SERVERS_SCHEMA)`, `MCPServers` Static<> alias
+- `extensions/pi-claude-marketplace/domain/components/plugin.ts` (95 lines) -- `PLUGIN_ENTRY_SCHEMA` (15 fields), `PLUGIN_MANIFEST_SCHEMA` (14 fields), both validators, both Static<> aliases, single intra-domain import of `MCP_SERVERS_SCHEMA`
+- `extensions/pi-claude-marketplace/domain/manifest.ts` (37 lines) -- `MARKETPLACE_SCHEMA` referencing `PLUGIN_ENTRY_SCHEMA`, `MARKETPLACE_VALIDATOR`, `MarketplaceManifest` Static<> alias
 - `tests/domain/manifest.test.ts` (192 lines, 25 tests) -- accept/reject coverage for all four validators
 
 ## Decisions Made
@@ -110,10 +110,10 @@ Plan was followed exactly -- every D-05/D-07 directive translated 1:1. Two micro
 **2. [Rule 1 -- Bug] Plan action vs. acceptance-criteria contradiction in `domain/manifest.ts` comment**
 
 - **Found during:** Task 3 (post-write verification)
-- **Issue:** The plan's `<action>` block for Task 3 included a comment containing `@sinclair/typebox/compiler` (warning developers about the deprecated 0.34 LTS path). The Task 3 acceptance criterion `grep -c "@sinclair/typebox" extensions/claude-marketplace/domain/manifest.ts` returns `0` is incompatible with the literal action text -- `grep` matches inside comments. This is a self-contradiction in the plan.
+- **Issue:** The plan's `<action>` block for Task 3 included a comment containing `@sinclair/typebox/compiler` (warning developers about the deprecated 0.34 LTS path). The Task 3 acceptance criterion `grep -c "@sinclair/typebox" extensions/pi-claude-marketplace/domain/manifest.ts` returns `0` is incompatible with the literal action text -- `grep` matches inside comments. This is a self-contradiction in the plan.
 - **Fix:** Rephrased the manifest.ts comment to convey the same warning ("the 1.x package is `typebox` with no scope; the 0.34 LTS path used the scoped name plus `/compiler`, which is NOT what we want here") without the literal `@sinclair/typebox` substring. The intent -- Pitfall 3 -- is preserved.
-- **Files modified:** `extensions/claude-marketplace/domain/manifest.ts` (one comment block)
-- **Verification:** `grep -c "@sinclair/typebox" extensions/claude-marketplace/domain/manifest.ts` returns `0`; `npm run typecheck` exits 0
+- **Files modified:** `extensions/pi-claude-marketplace/domain/manifest.ts` (one comment block)
+- **Verification:** `grep -c "@sinclair/typebox" extensions/pi-claude-marketplace/domain/manifest.ts` returns `0`; `npm run typecheck` exits 0
 - **Committed in:** `768e645` (Task 3 commit, before the file ever touched HEAD)
 
 ---
@@ -131,7 +131,7 @@ Plan was followed exactly -- every D-05/D-07 directive translated 1:1. Two micro
 The plan's `<verification>` block lists three Pitfalls 1-3 grep-based checks. All pass on the final tree:
 
 ```bash
-grep -RE "Type\\.Recursive|@sinclair/typebox|discriminator:" extensions/claude-marketplace/domain/
+grep -RE "Type\\.Recursive|@sinclair/typebox|discriminator:" extensions/pi-claude-marketplace/domain/
 # → no matches
 ```
 
@@ -156,9 +156,9 @@ Type-level surface (`Type.Static`, `Type.Object`, `Type.Array`, `Type.Optional`,
 All artefacts verified present:
 
 ```text
-FOUND: extensions/claude-marketplace/domain/components/mcp.ts
-FOUND: extensions/claude-marketplace/domain/components/plugin.ts
-FOUND: extensions/claude-marketplace/domain/manifest.ts
+FOUND: extensions/pi-claude-marketplace/domain/components/mcp.ts
+FOUND: extensions/pi-claude-marketplace/domain/components/plugin.ts
+FOUND: extensions/pi-claude-marketplace/domain/manifest.ts
 FOUND: tests/domain/manifest.test.ts
 FOUND: 6de4f61 (Task 1 commit)
 FOUND: 7412962 (Task 2 commit)

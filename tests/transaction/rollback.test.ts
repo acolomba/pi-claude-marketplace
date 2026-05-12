@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ROLLBACK_PARTIAL } from "../../extensions/claude-marketplace/shared/markers.ts";
+import { ROLLBACK_PARTIAL } from "../../extensions/pi-claude-marketplace/shared/markers.ts";
 import {
   PathContainmentError,
   SymlinkRefusedError,
-} from "../../extensions/claude-marketplace/shared/path-safety.ts";
-import { formatRollbackError } from "../../extensions/claude-marketplace/transaction/rollback.ts";
+} from "../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { formatRollbackError } from "../../extensions/pi-claude-marketplace/transaction/rollback.ts";
 
-import type { RunPhasesResult } from "../../extensions/claude-marketplace/transaction/phase-ledger.ts";
+import type { RunPhasesResult } from "../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
 
 /**
  * D-03 / AS-4 / ES-4 -- formatRollbackError marker assembly.

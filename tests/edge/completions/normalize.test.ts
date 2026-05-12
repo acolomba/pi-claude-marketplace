@@ -9,7 +9,7 @@ import { test } from "node:test";
 import {
   isClaudePluginCommandLine,
   normalizeCompletionWhitespace,
-} from "../../../extensions/claude-marketplace/edge/completions/normalize.ts";
+} from "../../../extensions/pi-claude-marketplace/edge/completions/normalize.ts";
 
 test("TC-7 :: normalize collapses two spaces at cursor to one", () => {
   // Layout: "list  --installed"; cursor between the two spaces (col 5).

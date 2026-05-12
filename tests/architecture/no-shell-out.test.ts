@@ -5,14 +5,14 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const EXTENSION_ROOT = path.join(REPO_ROOT, "extensions/claude-marketplace");
+const EXTENSION_ROOT = path.join(REPO_ROOT, "extensions/pi-claude-marketplace");
 
 /**
  * D-21 supersession defense (W-8). MA-7 (PRD §5.1.1) required the extension
  * to handle "git not found on PATH" gracefully. D-21 supersedes that by
  * adopting `isomorphic-git` -- a pure-JS implementation that eliminates the
  * shell-out entirely. This test asserts the supersession holds: no file
- * under `extensions/claude-marketplace/` may import `node:child_process`,
+ * under `extensions/pi-claude-marketplace/` may import `node:child_process`,
  * `child_process`, or its named members.
  *
  * Mirrors the no-telemetry-deps test's structure -- read every .ts under the
@@ -44,7 +44,7 @@ const FORBIDDEN_PATTERNS: ReadonlyArray<RegExp> = [
   /require\(\s*["']node:child_process["']\s*\)/,
 ];
 
-test("no child_process imports anywhere in extensions/claude-marketplace/ (D-21)", async () => {
+test("no child_process imports anywhere in extensions/pi-claude-marketplace/ (D-21)", async () => {
   const offenders: string[] = [];
   for await (const file of walkTsFiles(EXTENSION_ROOT)) {
     const source = await readFile(file, "utf8");

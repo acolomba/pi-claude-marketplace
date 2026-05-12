@@ -41,7 +41,7 @@ async function loadZones(): Promise<RestrictedPathsZone[] | null> {
   return null;
 }
 
-const EXTENSION_ROOT = "./extensions/claude-marketplace";
+const EXTENSION_ROOT = "./extensions/pi-claude-marketplace";
 const FOLDERS = [
   "edge",
   "orchestrators",
@@ -165,7 +165,7 @@ test(
     // import target was missing rather than the boundary being violated).
     //
     // Why an overrideConfig: the project's eslint.config.js scopes the
-    // import-x/no-restricted-paths rule to `extensions/claude-marketplace/**`
+    // import-x/no-restricted-paths rule to `extensions/pi-claude-marketplace/**`
     // via a `files` glob, so the rule does NOT apply when ESLint loads
     // tests/fixtures/bad-imports/edge-imports-bridges.ts directly. This is
     // intentional -- the project rule guards the extension tree, not test
@@ -227,7 +227,7 @@ test(
                 zones: [
                   {
                     target: FIXTURE_DIR_REL,
-                    from: ["./extensions/claude-marketplace/bridges"],
+                    from: ["./extensions/pi-claude-marketplace/bridges"],
                     message: "canary fixture: this import deliberately violates the D-11 boundary.",
                   },
                 ],

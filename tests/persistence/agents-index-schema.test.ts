@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   AGENTS_INDEX_ENTRY_VALIDATOR,
   AGENTS_INDEX_VALIDATOR,
-} from "../../extensions/claude-marketplace/persistence/agents-index-schema.ts";
+} from "../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 
 /**
  * AG-2 -- agents-index.json schema acceptance/rejection cases.
@@ -18,9 +18,9 @@ const VALID_ROW = {
   plugin: "acme",
   marketplace: "test-mp",
   sourceAgent: "bot",
-  generatedName: "claude-marketplace-acme-bot",
+  generatedName: "pi-claude-marketplace-acme-bot",
   sourcePath: "/abs/path/to/source/agents/bot.md",
-  targetPath: "/abs/path/to/scope/agents/claude-marketplace-acme-bot.md",
+  targetPath: "/abs/path/to/scope/agents/pi-claude-marketplace-acme-bot.md",
   sourceHash: "deadbeef",
   originalModel: "sonnet",
   droppedFields: [],

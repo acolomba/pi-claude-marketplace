@@ -4,9 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { unstagePluginSkills } from "../../../extensions/claude-marketplace/bridges/skills/unstage.ts";
-import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
-import { cleanupStaging } from "../../../extensions/claude-marketplace/shared/fs-utils.ts";
+import { unstagePluginSkills } from "../../../extensions/pi-claude-marketplace/bridges/skills/unstage.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { cleanupStaging } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
 async function withTmpScope<T>(
   fn: (ctx: { scopeRoot: string; locations: ReturnType<typeof locationsFor> }) => Promise<T>,

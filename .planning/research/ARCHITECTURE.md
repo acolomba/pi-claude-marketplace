@@ -89,7 +89,7 @@
 V1 already uses a mode that mixes feature-vertical (`marketplace/`, `plugin/`, `agent/`, `mcp/`) with shared layers (`commands/`, `state/`, `transaction/`, `presentation/`, `validation.ts`, etc.). The successor should keep the spirit and tighten the seams. The recommendation is **feature-vertical for use cases, layered for cross-cutting concerns** -- i.e. ports-and-adapters around a vertical-slice core.
 
 ```text
-extensions/claude-marketplace/
+extensions/pi-claude-marketplace/
 ├── index.ts                     # Pi entrypoint: registers command + resources_discover
 │
 ├── edge/                        # Thin transport layer (NEW: pulled out of root + commands/)
@@ -127,7 +127,7 @@ extensions/claude-marketplace/
 │   ├── prompts/                 # → resources/prompts/<plugin>:<command>.md
 │   │   ├── stage.ts
 │   │   └── discover.ts
-│   ├── agents/                  # → <scope>/agents/claude-marketplace-<...>.md
+│   ├── agents/                  # → <scope>/agents/pi-claude-marketplace-<...>.md
 │   │   ├── stage.ts             # prepare/commit/abort
 │   │   ├── convert.ts           # Claude → pi-subagents frontmatter
 │   │   ├── frontmatter.ts       # GENERATED_AGENT_MARKER, parse/serialize
@@ -135,7 +135,7 @@ extensions/claude-marketplace/
 │   └── mcp/                     # → <scope>/mcp.json
 │       ├── stage.ts             # prepare/commit/abort
 │       ├── parse.ts             # plugin mcpServers map normalization
-│       ├── marker.ts            # _claudeMarketplace ownership marker
+│       ├── marker.ts            # _piClaudeMarketplace ownership marker
 │       └── effective-config.ts  # cross-slot collision check
 │
 ├── domain/                      # Pure logic (NEW: pulled out of plugin/ + sources.ts)
@@ -484,8 +484,8 @@ saveState(extensionRoot, s)   loadState(extensionRoot)
 | ------------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Git (GitHub source clone) | Shell out via `node:child_process` in `bridges/marketplace/git.ts` (V1 already isolated this) | Network access only on `marketplace add` / `marketplace update` to GitHub source (NFR-5). Path sources never touch the network.     |
 | Filesystem                | `node:fs/promises` everywhere; all writes through `atomicWriteJson` or tmp+rename helpers     | NFR-1 (atomicity) + PS-1 (containment) checked at every name-derived path.                                                          |
-| pi-subagents (soft dep)   | Out-of-band file drop into `<scope>/agents/`; capability detected via `pi.getAllTools()`      | Stable filename prefix `claude-marketplace-` + GENERATED_AGENT_MARKER in frontmatter. Foreign agents in the same dir are untouched. |
-| pi-mcp-adapter (soft dep) | Merge into `<scope>/mcp.json` with `_claudeMarketplace` ownership marker                      | Cross-slot collision check via `effective-config.ts` -- refuses to overwrite entries in any of pi-mcp-adapter's four config slots.  |
+| pi-subagents (soft dep)   | Out-of-band file drop into `<scope>/agents/`; capability detected via `pi.getAllTools()`      | Stable filename prefix `pi-claude-marketplace-` + GENERATED_AGENT_MARKER in frontmatter. Foreign agents in the same dir are untouched. |
+| pi-mcp-adapter (soft dep) | Merge into `<scope>/mcp.json` with `_piClaudeMarketplace` ownership marker                      | Cross-slot collision check via `effective-config.ts` -- refuses to overwrite entries in any of pi-mcp-adapter's four config slots.  |
 | Pi runtime                | `pi.registerCommand`, `pi.on("resources_discover", ...)`, `pi.getAllTools()`, `ctx.ui.notify` | Wrap behind `platform/pi-api.ts` for testability. Verified surface against `pi-coding-agent` types.d.ts.                            |
 
 ### Internal Boundaries
@@ -514,7 +514,7 @@ This ordering means phases 1-3 can ship without any Pi runtime dependency -- use
 
 ## Sources
 
-- V1 source (read directly): `git -C ... show features/initial:extensions/claude-marketplace/<file>` for index.ts, commands/router.ts, transaction/state-guard.ts, plugin/install.ts, plugin/update.ts, plugin/lifecycle.ts, plugin/resolve.ts, types.ts, state/io.ts, agent/stage.ts, mcp/stage.ts, location/index.ts, errors.ts, marketplace/remove.ts, presentation/reload-hint.ts (HIGH confidence).
+- V1 source (read directly): `git -C ... show features/initial:extensions/pi-claude-marketplace/<file>` for index.ts, commands/router.ts, transaction/state-guard.ts, plugin/install.ts, plugin/update.ts, plugin/lifecycle.ts, plugin/resolve.ts, types.ts, state/io.ts, agent/stage.ts, mcp/stage.ts, location/index.ts, errors.ts, marketplace/remove.ts, presentation/reload-hint.ts (HIGH confidence).
 - PRD §4 system context, §6.9 state persistence, §6.10 path safety, §6.11 atomic staging, §6.12 error surfaces, §8.3/8.4 install + update transaction state machines, §9.1-9.3 architecture diagrams (HIGH confidence -- this is the spec).
 - Pi `ExtensionAPI` surface: `node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/types.d.ts` (verified `getAllTools()`, `on(event, ...)` events list -- HIGH confidence that no push event for extension/tool load exists in the API surface as of the current pinned version).
 - [proper-lockfile (npm)](https://www.npmjs.com/package/proper-lockfile) -- inter-process lockfile primitive; mkdir-based atomic acquire (MEDIUM confidence on "right escalation choice"; widely used in npm CLI tools).

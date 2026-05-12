@@ -4,11 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { unstagePluginCommands } from "../../../extensions/claude-marketplace/bridges/commands/unstage.ts";
-import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
-import { pathExists } from "../../../extensions/claude-marketplace/shared/fs-utils.ts";
+import { unstagePluginCommands } from "../../../extensions/pi-claude-marketplace/bridges/commands/unstage.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
-import type { ScopedLocations } from "../../../extensions/claude-marketplace/persistence/locations.ts";
+import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 interface TmpScope {
   loc: ScopedLocations;

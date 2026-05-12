@@ -24,15 +24,15 @@ import { fileURLToPath } from "node:url";
 import {
   commitPreparedAgents,
   prepareStagePluginAgents,
-} from "../../extensions/claude-marketplace/bridges/agents/index.ts";
+} from "../../extensions/pi-claude-marketplace/bridges/agents/index.ts";
 import {
   commitPreparedMcp,
   prepareStageMcpServers,
   resolvePluginMcpServers,
-} from "../../extensions/claude-marketplace/bridges/mcp/index.ts";
-import { locationsFor } from "../../extensions/claude-marketplace/persistence/locations.ts";
+} from "../../extensions/pi-claude-marketplace/bridges/mcp/index.ts";
+import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
-import type { ResolvedPluginInstallable } from "../../extensions/claude-marketplace/domain/resolver.ts";
+import type { ResolvedPluginInstallable } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE_EMPTY_MCP = path.resolve(HERE, "_fixtures", "empty-mcp");

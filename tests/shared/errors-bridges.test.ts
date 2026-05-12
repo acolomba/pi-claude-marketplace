@@ -6,8 +6,8 @@ import {
   AgentOwnershipConflictError,
   BridgeStagingError,
   McpServerCollisionError,
-} from "../../extensions/claude-marketplace/shared/errors-bridges.ts";
-import { PathContainmentError } from "../../extensions/claude-marketplace/shared/path-safety.ts";
+} from "../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
+import { PathContainmentError } from "../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
 // AG-5 / AG-9 / RN-4 / RN-5 -- typed bridge error subclasses.
 
@@ -29,13 +29,13 @@ test("AG-5 AgentForeignContentError carries targetPath and reason", () => {
 test("AG-9/RN-4 AgentOwnershipConflictError formats single-conflict message", () => {
   const err = new AgentOwnershipConflictError({ marketplace: "official", plugin: "acme" }, [
     {
-      generatedName: "claude-marketplace-acme-bot",
+      generatedName: "pi-claude-marketplace-acme-bot",
       owner: { marketplace: "official", plugin: "old-acme" },
     },
   ]);
   assert.equal(err.name, "AgentOwnershipConflictError");
   assert.match(err.message, /Refusing to stage agents for official\/acme/);
-  assert.match(err.message, /"claude-marketplace-acme-bot" already owned by official\/old-acme/);
+  assert.match(err.message, /"pi-claude-marketplace-acme-bot" already owned by official\/old-acme/);
   assert.equal(err.conflicts.length, 1);
   assert.equal(err.stagingFor.marketplace, "official");
   assert.equal(err.stagingFor.plugin, "acme");

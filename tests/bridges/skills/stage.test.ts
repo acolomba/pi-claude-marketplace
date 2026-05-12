@@ -10,12 +10,12 @@ import {
   assertNoSkillCollisions,
   commitPreparedSkills,
   prepareStageSkills,
-} from "../../../extensions/claude-marketplace/bridges/skills/stage.ts";
-import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
-import { cleanupStaging } from "../../../extensions/claude-marketplace/shared/fs-utils.ts";
+} from "../../../extensions/pi-claude-marketplace/bridges/skills/stage.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { cleanupStaging } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
-import type { DiscoveredSkill } from "../../../extensions/claude-marketplace/bridges/skills/types.ts";
-import type { ResolvedPluginInstallable } from "../../../extensions/claude-marketplace/domain/resolver.ts";
+import type { DiscoveredSkill } from "../../../extensions/pi-claude-marketplace/bridges/skills/types.ts";
+import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
 
 // Resolve fixture root relative to THIS file (worktree-safe; do NOT use cwd).
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

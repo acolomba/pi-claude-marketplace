@@ -9,7 +9,7 @@ import {
   CrossPluginConflictError,
   errorMessage,
   PluginUpdatePhase3Error,
-} from "../../extensions/claude-marketplace/shared/errors.ts";
+} from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 /**
  * AS-5 -- error helpers. Verbatim V1 port (Plan 02). Tests verify the

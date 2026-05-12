@@ -5,10 +5,10 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { discoverPluginSkills } from "../../../extensions/claude-marketplace/bridges/skills/discover.ts";
-import { cleanupStaging } from "../../../extensions/claude-marketplace/shared/fs-utils.ts";
+import { discoverPluginSkills } from "../../../extensions/pi-claude-marketplace/bridges/skills/discover.ts";
+import { cleanupStaging } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
-import type { ResolvedPluginInstallable } from "../../../extensions/claude-marketplace/domain/resolver.ts";
+import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
 
 // Resolve fixture root relative to THIS file (worktree-safe; do NOT use cwd).
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

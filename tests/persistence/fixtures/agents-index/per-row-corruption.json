@@ -5,7 +5,7 @@
       "plugin": "acme",
       "marketplace": "mp",
       "sourceAgent": "bot",
-      "generatedName": "claude-marketplace-acme-bot",
+      "generatedName": "pi-claude-marketplace-acme-bot",
       "sourcePath": "/x",
       "targetPath": "/y",
       "sourceHash": "h",

@@ -4,10 +4,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { cascadeUnstagePlugin } from "../../../extensions/claude-marketplace/orchestrators/marketplace/shared.ts";
-import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
+import { cascadeUnstagePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
-import type { ExtensionState } from "../../../extensions/claude-marketplace/persistence/state-io.ts";
+import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
 
@@ -107,7 +107,7 @@ test("cascadeUnstagePlugin (c): bogus locations -- agents-index.json IO surface 
         resources: {
           skills: [],
           prompts: [],
-          agents: ["claude-marketplace-hello-greet-agent"],
+          agents: ["pi-claude-marketplace-hello-greet-agent"],
           mcpServers: [],
         },
       }),

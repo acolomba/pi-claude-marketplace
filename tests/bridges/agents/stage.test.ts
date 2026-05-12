@@ -9,18 +9,18 @@ import {
   abortPreparedAgents,
   commitPreparedAgents,
   prepareStagePluginAgents,
-} from "../../../extensions/claude-marketplace/bridges/agents/stage.ts";
-import { loadAgentsIndex } from "../../../extensions/claude-marketplace/persistence/agents-index-io.ts";
-import { locationsFor } from "../../../extensions/claude-marketplace/persistence/locations.ts";
-import { atomicWriteJson } from "../../../extensions/claude-marketplace/shared/atomic-json.ts";
-import { AgentOwnershipConflictError } from "../../../extensions/claude-marketplace/shared/errors-bridges.ts";
+} from "../../../extensions/pi-claude-marketplace/bridges/agents/stage.ts";
+import { loadAgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { atomicWriteJson } from "../../../extensions/pi-claude-marketplace/shared/atomic-json.ts";
+import { AgentOwnershipConflictError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
   cleanupStaging,
   pathExists,
-} from "../../../extensions/claude-marketplace/shared/fs-utils.ts";
+} from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
-import type { ResolvedPluginInstallable } from "../../../extensions/claude-marketplace/domain/resolver.ts";
-import type { AgentsIndex } from "../../../extensions/claude-marketplace/persistence/agents-index-schema.ts";
+import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 
 // AG-1 / AG-2 / AG-3 / AG-5 / AG-7 / AG-9 / AS-9: end-to-end prepare +
 // commit + abort tests. tmpScope pattern from skills/stage.test.ts.
@@ -54,7 +54,7 @@ async function withTmpScope<T>(
   }
 }
 
-test("AG-1 commitPreparedAgents lands files at <scopeRoot>/agents/claude-marketplace-<plugin>-<agent>.md (happy path)", async () => {
+test("AG-1 commitPreparedAgents lands files at <scopeRoot>/agents/pi-claude-marketplace-<plugin>-<agent>.md (happy path)", async () => {
   await withTmpScope(async ({ locations }) => {
     const pluginRoot = path.join(FIXTURES, "test-plugin");
     const agentsDir = path.join(pluginRoot, "agents");
@@ -72,18 +72,18 @@ test("AG-1 commitPreparedAgents lands files at <scopeRoot>/agents/claude-marketp
 
     assert.equal(prepared.kind, "staged");
     assert.deepEqual([...prepared.result.stagedNames].sort(), [
-      "claude-marketplace-acme-bot",
-      "claude-marketplace-acme-helper",
+      "pi-claude-marketplace-acme-bot",
+      "pi-claude-marketplace-acme-helper",
     ]);
     // recorded[] populated for Phase 5 state.json.installs.
     assert.equal(prepared.result.recorded.length, 2);
 
     await commitPreparedAgents(prepared);
 
-    const botStat = await stat(path.join(locations.agentsDir, "claude-marketplace-acme-bot.md"));
+    const botStat = await stat(path.join(locations.agentsDir, "pi-claude-marketplace-acme-bot.md"));
     assert.ok(botStat.isFile());
     const helperStat = await stat(
-      path.join(locations.agentsDir, "claude-marketplace-acme-helper.md"),
+      path.join(locations.agentsDir, "pi-claude-marketplace-acme-helper.md"),
     );
     assert.ok(helperStat.isFile());
   });
@@ -109,7 +109,10 @@ test("AG-2 saveAgentsIndex called with schemaVersion:1 and 2 rows (happy path)",
     assert.equal(loaded.schemaVersion, 1);
     assert.equal(loaded.agents.length, 2);
     const names = loaded.agents.map((a) => a.generatedName).sort();
-    assert.deepEqual(names, ["claude-marketplace-acme-bot", "claude-marketplace-acme-helper"]);
+    assert.deepEqual(names, [
+      "pi-claude-marketplace-acme-bot",
+      "pi-claude-marketplace-acme-helper",
+    ]);
   });
 });
 
@@ -120,9 +123,9 @@ test("AG-3 re-staging plugin X in mp1 leaves plugin X in mp2 rows untouched", as
 
     // Pre-seed the index with a row for mp2/acme. The targetPath uses a
     // generatedName that does NOT collide with mp1's set so AG-9 doesn't
-    // fire. We use "claude-marketplace-acme-mp2only" -- a name that mp1's
+    // fire. We use "pi-claude-marketplace-acme-mp2only" -- a name that mp1's
     // staging will not produce.
-    const seedTarget = path.join(locations.agentsDir, "claude-marketplace-acme-mp2only.md");
+    const seedTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-mp2only.md");
     const seed: AgentsIndex = {
       schemaVersion: 1,
       agents: [
@@ -130,7 +133,7 @@ test("AG-3 re-staging plugin X in mp1 leaves plugin X in mp2 rows untouched", as
           plugin: "acme",
           marketplace: "mp2",
           sourceAgent: "mp2only",
-          generatedName: "claude-marketplace-acme-mp2only",
+          generatedName: "pi-claude-marketplace-acme-mp2only",
           sourcePath: "/orig/source.md",
           targetPath: seedTarget,
           sourceHash: "deadbeef",
@@ -159,7 +162,7 @@ test("AG-3 re-staging plugin X in mp1 leaves plugin X in mp2 rows untouched", as
     assert.equal(loaded.agents.length, 3);
     const mp2Row = loaded.agents.find((a) => a.marketplace === "mp2");
     assert.ok(mp2Row);
-    assert.equal(mp2Row.generatedName, "claude-marketplace-acme-mp2only");
+    assert.equal(mp2Row.generatedName, "pi-claude-marketplace-acme-mp2only");
   });
 });
 
@@ -169,7 +172,7 @@ test("AG-5 prepare SURFACES foreign content via result.failed[] when previous ta
     const resolved = makeResolved("acme", pluginRoot);
 
     // Pre-seed: index claims a row whose targetPath has a wrong basename
-    // (no claude-marketplace- prefix). The file exists on disk.
+    // (no pi-claude-marketplace- prefix). The file exists on disk.
     await mkdir(locations.agentsDir, { recursive: true });
     const foreignTarget = path.join(locations.agentsDir, "foreign-thing.md");
     await writeFile(foreignTarget, "---\nname: foreign\n---\nbody\n", "utf8");
@@ -181,7 +184,7 @@ test("AG-5 prepare SURFACES foreign content via result.failed[] when previous ta
           plugin: "acme",
           marketplace: "mp1",
           sourceAgent: "ghost",
-          generatedName: "claude-marketplace-acme-ghost",
+          generatedName: "pi-claude-marketplace-acme-ghost",
           sourcePath: "/orig/ghost.md",
           targetPath: foreignTarget,
           sourceHash: "abc",
@@ -220,7 +223,7 @@ test("AG-5 prepare SURFACES foreign content via result.failed[] when previous ta
     // Pre-seed: the targetPath has the right basename but the body lacks
     // the marker -- foreign file masquerading as ours.
     await mkdir(locations.agentsDir, { recursive: true });
-    const fakeMineTarget = path.join(locations.agentsDir, "claude-marketplace-acme-ghost.md");
+    const fakeMineTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-ghost.md");
     await writeFile(fakeMineTarget, "---\nname: ghost\n---\nbody without marker\n", "utf8");
 
     const seed: AgentsIndex = {
@@ -230,7 +233,7 @@ test("AG-5 prepare SURFACES foreign content via result.failed[] when previous ta
           plugin: "acme",
           marketplace: "mp1",
           sourceAgent: "ghost",
-          generatedName: "claude-marketplace-acme-ghost",
+          generatedName: "pi-claude-marketplace-acme-ghost",
           sourcePath: "/orig/ghost.md",
           targetPath: fakeMineTarget,
           sourceHash: "abc",
@@ -266,7 +269,7 @@ test("AG-5 commit preserves foreign target on disk byte-identical when previous 
     const resolved = makeResolved("acme", pluginRoot);
 
     await mkdir(locations.agentsDir, { recursive: true });
-    const foreignTarget = path.join(locations.agentsDir, "claude-marketplace-acme-foreign.md");
+    const foreignTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-foreign.md");
     const foreignBytes = "---\nname: foreign\n---\nthis is not ours\n";
     await writeFile(foreignTarget, foreignBytes, "utf8");
 
@@ -277,7 +280,7 @@ test("AG-5 commit preserves foreign target on disk byte-identical when previous 
           plugin: "acme",
           marketplace: "mp1",
           sourceAgent: "foreign",
-          generatedName: "claude-marketplace-acme-foreign",
+          generatedName: "pi-claude-marketplace-acme-foreign",
           sourcePath: "/orig/foreign.md",
           targetPath: foreignTarget,
           sourceHash: "abc",
@@ -312,7 +315,7 @@ test("AG-5 commit preserves foreign-content index row in agents:", async () => {
     const resolved = makeResolved("acme", pluginRoot);
 
     await mkdir(locations.agentsDir, { recursive: true });
-    const foreignTarget = path.join(locations.agentsDir, "claude-marketplace-acme-foreign.md");
+    const foreignTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-foreign.md");
     await writeFile(foreignTarget, "---\nname: foreign\n---\nbody\n", "utf8");
 
     const seed: AgentsIndex = {
@@ -322,7 +325,7 @@ test("AG-5 commit preserves foreign-content index row in agents:", async () => {
           plugin: "acme",
           marketplace: "mp1",
           sourceAgent: "foreign",
-          generatedName: "claude-marketplace-acme-foreign",
+          generatedName: "pi-claude-marketplace-acme-foreign",
           sourcePath: "/orig/foreign.md",
           targetPath: foreignTarget,
           sourceHash: "abc",
@@ -348,7 +351,7 @@ test("AG-5 commit preserves foreign-content index row in agents:", async () => {
 
     const loaded = await loadAgentsIndex(locations);
     const preserved = loaded.agents.find(
-      (a) => a.generatedName === "claude-marketplace-acme-foreign",
+      (a) => a.generatedName === "pi-claude-marketplace-acme-foreign",
     );
     assert.ok(preserved, "expected foreign-content row preserved in index");
     // Plus the 2 new rows.
@@ -361,7 +364,7 @@ test("AG-9/RN-4 prepare throws AgentOwnershipConflictError on cross-(mp,plugin) 
     const pluginRoot = path.join(FIXTURES, "test-plugin");
     const resolved = makeResolved("acme", pluginRoot);
 
-    // Pre-seed: another (mp2, rival) ALREADY owns "claude-marketplace-acme-bot".
+    // Pre-seed: another (mp2, rival) ALREADY owns "pi-claude-marketplace-acme-bot".
     const seed: AgentsIndex = {
       schemaVersion: 1,
       agents: [
@@ -369,9 +372,9 @@ test("AG-9/RN-4 prepare throws AgentOwnershipConflictError on cross-(mp,plugin) 
           plugin: "rival",
           marketplace: "mp2",
           sourceAgent: "acme-bot",
-          generatedName: "claude-marketplace-acme-bot",
+          generatedName: "pi-claude-marketplace-acme-bot",
           sourcePath: "/orig/rival.md",
-          targetPath: path.join(locations.agentsDir, "claude-marketplace-acme-bot.md"),
+          targetPath: path.join(locations.agentsDir, "pi-claude-marketplace-acme-bot.md"),
           sourceHash: "abc",
           droppedFields: [],
           droppedTools: [],
@@ -396,7 +399,7 @@ test("AG-9/RN-4 prepare throws AgentOwnershipConflictError on cross-(mp,plugin) 
       (err: unknown) => {
         assert.ok(err instanceof AgentOwnershipConflictError);
         assert.equal(err.conflicts.length, 1);
-        assert.equal(err.conflicts[0]?.generatedName, "claude-marketplace-acme-bot");
+        assert.equal(err.conflicts[0]?.generatedName, "pi-claude-marketplace-acme-bot");
         assert.equal(err.conflicts[0]?.owner.marketplace, "mp2");
         assert.equal(err.conflicts[0]?.owner.plugin, "rival");
         return true;
@@ -486,7 +489,7 @@ test("AG-7 staged file content includes substituted ${CLAUDE_PLUGIN_ROOT}", asyn
 
     // bot.md has body "Read from ${CLAUDE_PLUGIN_ROOT}/data."
     const botContent = await readFile(
-      path.join(locations.agentsDir, "claude-marketplace-acme-bot.md"),
+      path.join(locations.agentsDir, "pi-claude-marketplace-acme-bot.md"),
       "utf8",
     );
     assert.ok(botContent.includes(`${pluginRoot}/data`));
@@ -494,7 +497,7 @@ test("AG-7 staged file content includes substituted ${CLAUDE_PLUGIN_ROOT}", asyn
   });
 });
 
-test("AG-5 staged file basename starts with claude-marketplace-", async () => {
+test("AG-5 staged file basename starts with pi-claude-marketplace-", async () => {
   await withTmpScope(async ({ locations }) => {
     const pluginRoot = path.join(FIXTURES, "test-plugin");
     const resolved = makeResolved("acme", pluginRoot);
@@ -511,7 +514,7 @@ test("AG-5 staged file basename starts with claude-marketplace-", async () => {
     await commitPreparedAgents(prepared);
 
     for (const name of prepared.result.stagedNames) {
-      assert.ok(name.startsWith("claude-marketplace-"), `name ${name} missing prefix`);
+      assert.ok(name.startsWith("pi-claude-marketplace-"), `name ${name} missing prefix`);
     }
   });
 });
@@ -556,7 +559,7 @@ test("commit re-stage path: rm previous targets first, then rename staged", asyn
     });
     await commitPreparedAgents(first);
 
-    const targetPath = path.join(locations.agentsDir, "claude-marketplace-acme-bot.md");
+    const targetPath = path.join(locations.agentsDir, "pi-claude-marketplace-acme-bot.md");
     const firstContent = await readFile(targetPath, "utf8");
     assert.ok(firstContent.includes("generated by pi-claude-marketplace"));
 

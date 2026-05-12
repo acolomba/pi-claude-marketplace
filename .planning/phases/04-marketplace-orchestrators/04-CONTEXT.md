@@ -16,7 +16,7 @@ Phase 4 produces:
 - `orchestrators/types.ts` -- cross-orchestrator types (`PluginUpdateFn`, `PluginUpdateOutcome`) used by the Phase 4 → Phase 5 cascade hand-off
 - `presentation/reload-hint.ts` -- compose `Run /reload to <verb> "n1", "n2", ...".` from MARKERS + verb selection (RH-1, RH-2)
 - `presentation/soft-dep.ts` -- `pi-subagents` / `pi-mcp-adapter` warning composition via `pi.getAllTools()` probe (RH-3, RH-4, RH-5)
-- `persistence/locations.ts` extension -- new helper `sourcesStagingDir(loc, uuid)` returning a path under `<scopeRoot>/claude-marketplace/sources-staging/<uuid>/`
+- `persistence/locations.ts` extension -- new helper `sourcesStagingDir(loc, uuid)` returning a path under `<scopeRoot>/pi-claude-marketplace/sources-staging/<uuid>/`
 
 This phase ends with `npm run check` green, every Phase 4 subcommand callable in isolation (with `gitOps` and `PluginUpdateFn` injection points testable via mocks), and a unit-test corpus that exercises (a) `add` happy path + stale-clone refusal + MA-9 cleanup, (b) `remove` cascade with mixed per-plugin success/failure, (c) `list` empty-state, (d) `update` manifest-pointer refresh + autoupdate cascade gating, (e) `autoupdate`/`noautoupdate` idempotent flips, (f) reload-hint suppression on no-op operations, (g) soft-dep warning composition with mocked `pi.getAllTools()`.
 
@@ -55,9 +55,9 @@ This phase ends with `npm run check` green, every Phase 4 subcommand callable in
 
 ### Clone-Then-Rename Staging (D-09 through D-11)
 
-- **D-09 (Staging at `<scopeRoot>/claude-marketplace/sources-staging/<uuid>/`):** Same-FS guarantee by construction -- the staging dir is a sibling of the final `sources/` dir, both under `<scopeRoot>/claude-marketplace/`. The atomic-rename target `<scopeRoot>/claude-marketplace/sources/<name>/` is on the same filesystem regardless of how Pi's scope roots are mounted. New helper `sourcesStagingDir(loc: ScopedLocations, uuid: string): string` added to `persistence/locations.ts` (returns the absolute path; goes through `assertPathInside` against `<scopeRoot>/claude-marketplace/` to satisfy PS-1 + SC-7). UUID generated via `node:crypto.randomUUID()` (Phase 3 precedent for agent-staging UUIDs).
+- **D-09 (Staging at `<scopeRoot>/pi-claude-marketplace/sources-staging/<uuid>/`):** Same-FS guarantee by construction -- the staging dir is a sibling of the final `sources/` dir, both under `<scopeRoot>/pi-claude-marketplace/`. The atomic-rename target `<scopeRoot>/pi-claude-marketplace/sources/<name>/` is on the same filesystem regardless of how Pi's scope roots are mounted. New helper `sourcesStagingDir(loc: ScopedLocations, uuid: string): string` added to `persistence/locations.ts` (returns the absolute path; goes through `assertPathInside` against `<scopeRoot>/pi-claude-marketplace/` to satisfy PS-1 + SC-7). UUID generated via `node:crypto.randomUUID()` (Phase 3 precedent for agent-staging UUIDs).
 - **D-10 (Reuse `shared/fs-utils.cleanupStaging` + `shared/errors.appendLeakToError`):** MA-9's "clone succeeds but manifest read or state save fails" path delegates cleanup to the existing `cleanupStaging(dir, label)` function shipped in Phase 3. Cleanup failures return a leak descriptor string; `appendLeakToError(originalError, leakDescriptor)` from `shared/errors.ts` chains it. No new error infrastructure -- one consistent surface across Phase 3 bridges and Phase 4 orchestrators.
-- **D-11 (MA-6 stale-clone check happens BEFORE clone, on final `sources/<name>/`):** Before `gitOps.clone(stagingDir)`, check whether `<scopeRoot>/claude-marketplace/sources/<name>/` exists AND is non-empty. If yes, throw with `"stale source clone at <path>"` (MA-6 canonical message). Single check at flow start; no race window between check and rename; user-visible failure surfaces before any network IO is wasted. MA-8 (same name in state) is a separate check on `state.marketplaces[<name>]` -- both checks run before clone.
+- **D-11 (MA-6 stale-clone check happens BEFORE clone, on final `sources/<name>/`):** Before `gitOps.clone(stagingDir)`, check whether `<scopeRoot>/pi-claude-marketplace/sources/<name>/` exists AND is non-empty. If yes, throw with `"stale source clone at <path>"` (MA-6 canonical message). Single check at flow start; no race window between check and rename; user-visible failure surfaces before any network IO is wasted. MA-8 (same name in state) is a separate check on `state.marketplaces[<name>]` -- both checks run before clone.
 
 ### Network Seam (D-12, D-13)
 
@@ -117,31 +117,31 @@ The user signed off on recommended options for layout (D-01), cascade compositio
 ### Phase 1 carry-forward (consumed by Phase 4)
 
 - `.planning/phases/01-foundations-toolchain/01-CONTEXT.md` -- D-03 (`write-file-atomic@^8` for JSON), D-06/D-07 (notify wrappers + ESLint output discipline), D-08 (markers), D-11 (import boundaries: `orchestrators/` may import from `bridges/`, `domain/`, `transaction/`, `persistence/`, `presentation/`, `platform/`, `shared/`), D-14..17 (`assertPathInside` with symlink refusal -- every staging-dir computation goes through it), D-18..20 (isomorphic-git wrapper at `platform/git.ts` -- Phase 4 is its first caller), D-21 (MA-7 supersession; precedent for Phase 4 D-14)
-- `extensions/claude-marketplace/platform/git.ts` -- isomorphic-git wrapper; exports `clone`, `fetch`, `pull`, `checkout`, `resolveRef`, `listBranches`, `listRemotes`. Phase 4 consumes `clone`/`fetch`/`checkout`/`resolveRef` plus a new `forceUpdateRef` helper (D-13)
-- `extensions/claude-marketplace/shared/notify.ts` -- `notifySuccess`, `notifyWarning`, `notifyError`, `notifyUsageError`. Every Phase 4 user-visible message routes through these
-- `extensions/claude-marketplace/shared/markers.ts` -- ES-5 strings; `RELOAD_HINT_PREFIX` consumed by `presentation/reload-hint.ts`; `PI_SUBAGENTS_NOT_LOADED`/`PI_MCP_ADAPTER_NOT_LOADED` consumed by `presentation/soft-dep.ts`
-- `extensions/claude-marketplace/shared/path-safety.ts` -- `assertPathInside` + `SymlinkRefusedError`; called on every staging dir path
-- `extensions/claude-marketplace/shared/atomic-json.ts` -- `atomicWriteJson`; consumed indirectly via `persistence/state-io.ts` (Phase 4 doesn't call it directly)
-- `extensions/claude-marketplace/shared/errors.ts` -- `appendLeakToError`, `appendLeaks`, `errorMessage`; Phase 4 adds `MarketplaceUpdateError` and `StaleSourceCloneError` here
-- `extensions/claude-marketplace/shared/fs-utils.ts` -- `cleanupStaging`, `pathExists`; Phase 4's MA-9 cleanup path consumes both
+- `extensions/pi-claude-marketplace/platform/git.ts` -- isomorphic-git wrapper; exports `clone`, `fetch`, `pull`, `checkout`, `resolveRef`, `listBranches`, `listRemotes`. Phase 4 consumes `clone`/`fetch`/`checkout`/`resolveRef` plus a new `forceUpdateRef` helper (D-13)
+- `extensions/pi-claude-marketplace/shared/notify.ts` -- `notifySuccess`, `notifyWarning`, `notifyError`, `notifyUsageError`. Every Phase 4 user-visible message routes through these
+- `extensions/pi-claude-marketplace/shared/markers.ts` -- ES-5 strings; `RELOAD_HINT_PREFIX` consumed by `presentation/reload-hint.ts`; `PI_SUBAGENTS_NOT_LOADED`/`PI_MCP_ADAPTER_NOT_LOADED` consumed by `presentation/soft-dep.ts`
+- `extensions/pi-claude-marketplace/shared/path-safety.ts` -- `assertPathInside` + `SymlinkRefusedError`; called on every staging dir path
+- `extensions/pi-claude-marketplace/shared/atomic-json.ts` -- `atomicWriteJson`; consumed indirectly via `persistence/state-io.ts` (Phase 4 doesn't call it directly)
+- `extensions/pi-claude-marketplace/shared/errors.ts` -- `appendLeakToError`, `appendLeaks`, `errorMessage`; Phase 4 adds `MarketplaceUpdateError` and `StaleSourceCloneError` here
+- `extensions/pi-claude-marketplace/shared/fs-utils.ts` -- `cleanupStaging`, `pathExists`; Phase 4's MA-9 cleanup path consumes both
 
 ### Phase 2 carry-forward (consumed by Phase 4)
 
 - `.planning/phases/02-domain-core-persistence-primitives/02-CONTEXT.md` -- D-01 (`runPhases<C>` available but NOT used by Phase 4 per D-02), D-02 (`withStateGuard`), D-06 (source parser factories `pathSource`/`githubSource`), D-09 (state shape `{marketplaces: {<mp>: {plugins: {…}}}}`), D-10 (independent per-scope state)
-- `extensions/claude-marketplace/domain/source.ts` -- `parsePluginSource` + `pathSource` + `githubSource` factories; Phase 4's `add.ts` calls these for MA-1/MA-10 source validation
-- `extensions/claude-marketplace/domain/manifest.ts` -- `MARKETPLACE_VALIDATOR` (JIT-compiled TypeBox); `add.ts` and `update.ts` call it after reading the cloned `marketplace.json`
-- `extensions/claude-marketplace/persistence/locations.ts` -- `ScopedLocations` brand + `locationsFor(scope, cwd)`; new `sourcesStagingDir(loc, uuid)` helper added in Phase 4 per D-09
-- `extensions/claude-marketplace/persistence/state-io.ts` -- `STATE_SCHEMA`, `STATE_VALIDATOR`, `DEFAULT_STATE`, `loadState`, `saveState`; Phase 4 mutates state via `withStateGuard` closures
-- `extensions/claude-marketplace/persistence/migrate.ts` -- `migrateLegacyMarketplaceRecords`, `persistMigratedState`; Phase 4 doesn't call directly (loadState handles it) but ST-4/ST-5 legacy migration semantics affect what Phase 4 reads
-- `extensions/claude-marketplace/transaction/with-state-guard.ts` -- `withStateGuard`; Phase 4 wraps every mutating subcommand in this per D-04
+- `extensions/pi-claude-marketplace/domain/source.ts` -- `parsePluginSource` + `pathSource` + `githubSource` factories; Phase 4's `add.ts` calls these for MA-1/MA-10 source validation
+- `extensions/pi-claude-marketplace/domain/manifest.ts` -- `MARKETPLACE_VALIDATOR` (JIT-compiled TypeBox); `add.ts` and `update.ts` call it after reading the cloned `marketplace.json`
+- `extensions/pi-claude-marketplace/persistence/locations.ts` -- `ScopedLocations` brand + `locationsFor(scope, cwd)`; new `sourcesStagingDir(loc, uuid)` helper added in Phase 4 per D-09
+- `extensions/pi-claude-marketplace/persistence/state-io.ts` -- `STATE_SCHEMA`, `STATE_VALIDATOR`, `DEFAULT_STATE`, `loadState`, `saveState`; Phase 4 mutates state via `withStateGuard` closures
+- `extensions/pi-claude-marketplace/persistence/migrate.ts` -- `migrateLegacyMarketplaceRecords`, `persistMigratedState`; Phase 4 doesn't call directly (loadState handles it) but ST-4/ST-5 legacy migration semantics affect what Phase 4 reads
+- `extensions/pi-claude-marketplace/transaction/with-state-guard.ts` -- `withStateGuard`; Phase 4 wraps every mutating subcommand in this per D-04
 
 ### Phase 3 carry-forward (consumed by Phase 4)
 
 - `.planning/phases/03-resource-bridges/03-CONTEXT.md` -- D-01 (per-bridge concrete signatures with opaque handles), D-02 (bridge-as-Phase composition planned for Phase 5, NOT Phase 4 -- Phase 4 uses unstage primitives directly), D-04 (compute-target-then-atomic-apply), D-06 (marker discipline -- agents bridge fails loudly on foreign content; Phase 4 cascade propagates this as a per-plugin failure)
-- `extensions/claude-marketplace/bridges/skills/index.ts` -- `unstagePluginSkills` consumed by `cascadeUnstagePlugin`
-- `extensions/claude-marketplace/bridges/commands/index.ts` -- `unstagePluginCommands` consumed by `cascadeUnstagePlugin`
-- `extensions/claude-marketplace/bridges/agents/index.ts` -- `unstagePluginAgents` consumed by `cascadeUnstagePlugin`; AG-5 foreign-content refusals propagate as per-plugin cause
-- `extensions/claude-marketplace/bridges/mcp/index.ts` -- `unstageMcpServers` consumed by `cascadeUnstagePlugin`; MC-5 marker-owned filtering already enforced inside the bridge
+- `extensions/pi-claude-marketplace/bridges/skills/index.ts` -- `unstagePluginSkills` consumed by `cascadeUnstagePlugin`
+- `extensions/pi-claude-marketplace/bridges/commands/index.ts` -- `unstagePluginCommands` consumed by `cascadeUnstagePlugin`
+- `extensions/pi-claude-marketplace/bridges/agents/index.ts` -- `unstagePluginAgents` consumed by `cascadeUnstagePlugin`; AG-5 foreign-content refusals propagate as per-plugin cause
+- `extensions/pi-claude-marketplace/bridges/mcp/index.ts` -- `unstageMcpServers` consumed by `cascadeUnstagePlugin`; MC-5 marker-owned filtering already enforced inside the bridge
 
 ### Research foundation (already produced)
 
@@ -160,8 +160,8 @@ The user signed off on recommended options for layout (D-01), cascade compositio
 
 ### V1 reference (read selectively when implementing the same concern)
 
-- `git show features/initial:extensions/claude-marketplace/marketplace/{add,remove,list,update,autoupdate}.ts` -- V1 marketplace orchestrators; pattern reference but NOT a wholesale model. V1 uses `pull --ff-only` (now superseded by D-14); V1's staging location differs from D-09
-- `git show features/initial:extensions/claude-marketplace/presentation/{reload-hint,soft-dep}.ts` -- V1 reload-hint + soft-dep composition
+- `git show features/initial:extensions/pi-claude-marketplace/marketplace/{add,remove,list,update,autoupdate}.ts` -- V1 marketplace orchestrators; pattern reference but NOT a wholesale model. V1 uses `pull --ff-only` (now superseded by D-14); V1's staging location differs from D-09
+- `git show features/initial:extensions/pi-claude-marketplace/presentation/{reload-hint,soft-dep}.ts` -- V1 reload-hint + soft-dep composition
 
 </canonical_refs>
 
@@ -170,18 +170,18 @@ The user signed off on recommended options for layout (D-01), cascade compositio
 
 ### Reusable Assets (Phase 1, 2, 3 outputs)
 
-- **`extensions/claude-marketplace/platform/git.ts`** -- isomorphic-git wrapper with the full clone/fetch/pull/checkout/resolveRef/listBranches/listRemotes surface (Phase 1 D-18..20). Phase 4 consumes a narrower subset (D-13) via the `GitOps` injection seam.
-- **`extensions/claude-marketplace/shared/notify.ts`** -- `notifySuccess`, `notifyWarning`, `notifyError(ctx, message, cause?)`, `notifyUsageError`. The `cause?` parameter is how Phase 4 chains `Error.cause` per ES-4. `notifyUsageError` is reserved for Phase 6 (argument parsing); Phase 4 uses the other three.
-- **`extensions/claude-marketplace/shared/markers.ts`** -- `RELOAD_HINT_PREFIX`, `PI_SUBAGENTS_NOT_LOADED`, `PI_MCP_ADAPTER_NOT_LOADED`. `presentation/reload-hint.ts` and `presentation/soft-dep.ts` compose from these constants; orchestrators never inline the literal strings.
-- **`extensions/claude-marketplace/shared/path-safety.ts`** -- `assertPathInside(parent, child)` with `SymlinkRefusedError`. Every staging-dir computation (D-09's `sourcesStagingDir`) and every final `sources/<name>/` write goes through this.
-- **`extensions/claude-marketplace/shared/fs-utils.ts`** -- `cleanupStaging(dir, label)`, `pathExists(p)`. Phase 4's MA-9 cleanup and MA-6 stale-clone check consume these directly.
-- **`extensions/claude-marketplace/shared/errors.ts`** -- `appendLeakToError`, `appendLeaks`, `errorMessage`. Phase 4 ADDS new error types here: `MarketplaceUpdateError` (D-14 update failures), `StaleSourceCloneError` (MA-6 stale-clone refusal), `MarketplaceNotFoundError` (MR-1 cross-scope ambiguity; `marketplace update <name>` when name doesn't exist), `MarketplaceDuplicateNameError` (MA-8 same-name refusal).
-- **`extensions/claude-marketplace/domain/source.ts`** -- `parsePluginSource`, `pathSource`, `githubSource` factories. `add.ts` calls these for source kind detection and MA-1/MA-10 validation; `update.ts` reads `state.marketplaces[mp].source` (already a validated `ParsedSource`) and dispatches on `source.kind`.
-- **`extensions/claude-marketplace/domain/manifest.ts`** -- `MARKETPLACE_VALIDATOR` (JIT-compiled TypeBox). `add.ts` and `update.ts` read `<marketplaceRoot>/.claude-plugin/marketplace.json` and validate via this; failures surface as `error`-severity with the parse cause chained.
-- **`extensions/claude-marketplace/persistence/locations.ts`** -- `ScopedLocations` brand. Phase 4 adds `sourcesStagingDir(loc, uuid)` and `sourcesFinalDir(loc, marketplaceName)` helpers here. Existing helpers cover `marketplaceJsonPath`, etc.
-- **`extensions/claude-marketplace/persistence/state-io.ts`** -- `loadState`, `saveState`, `STATE_VALIDATOR`. `withStateGuard` calls these internally; Phase 4 doesn't call them directly.
-- **`extensions/claude-marketplace/transaction/with-state-guard.ts`** -- `withStateGuard(scope, fn)`. Every Phase 4 mutating orchestrator wraps its flow in one of these per D-04.
-- **`extensions/claude-marketplace/bridges/{skills,commands,agents,mcp}/index.ts`** -- per-bridge `unstage*` exports. `cascadeUnstagePlugin` in `orchestrators/marketplace/shared.ts` calls all four in PU-1 order.
+- **`extensions/pi-claude-marketplace/platform/git.ts`** -- isomorphic-git wrapper with the full clone/fetch/pull/checkout/resolveRef/listBranches/listRemotes surface (Phase 1 D-18..20). Phase 4 consumes a narrower subset (D-13) via the `GitOps` injection seam.
+- **`extensions/pi-claude-marketplace/shared/notify.ts`** -- `notifySuccess`, `notifyWarning`, `notifyError(ctx, message, cause?)`, `notifyUsageError`. The `cause?` parameter is how Phase 4 chains `Error.cause` per ES-4. `notifyUsageError` is reserved for Phase 6 (argument parsing); Phase 4 uses the other three.
+- **`extensions/pi-claude-marketplace/shared/markers.ts`** -- `RELOAD_HINT_PREFIX`, `PI_SUBAGENTS_NOT_LOADED`, `PI_MCP_ADAPTER_NOT_LOADED`. `presentation/reload-hint.ts` and `presentation/soft-dep.ts` compose from these constants; orchestrators never inline the literal strings.
+- **`extensions/pi-claude-marketplace/shared/path-safety.ts`** -- `assertPathInside(parent, child)` with `SymlinkRefusedError`. Every staging-dir computation (D-09's `sourcesStagingDir`) and every final `sources/<name>/` write goes through this.
+- **`extensions/pi-claude-marketplace/shared/fs-utils.ts`** -- `cleanupStaging(dir, label)`, `pathExists(p)`. Phase 4's MA-9 cleanup and MA-6 stale-clone check consume these directly.
+- **`extensions/pi-claude-marketplace/shared/errors.ts`** -- `appendLeakToError`, `appendLeaks`, `errorMessage`. Phase 4 ADDS new error types here: `MarketplaceUpdateError` (D-14 update failures), `StaleSourceCloneError` (MA-6 stale-clone refusal), `MarketplaceNotFoundError` (MR-1 cross-scope ambiguity; `marketplace update <name>` when name doesn't exist), `MarketplaceDuplicateNameError` (MA-8 same-name refusal).
+- **`extensions/pi-claude-marketplace/domain/source.ts`** -- `parsePluginSource`, `pathSource`, `githubSource` factories. `add.ts` calls these for source kind detection and MA-1/MA-10 validation; `update.ts` reads `state.marketplaces[mp].source` (already a validated `ParsedSource`) and dispatches on `source.kind`.
+- **`extensions/pi-claude-marketplace/domain/manifest.ts`** -- `MARKETPLACE_VALIDATOR` (JIT-compiled TypeBox). `add.ts` and `update.ts` read `<marketplaceRoot>/.claude-plugin/marketplace.json` and validate via this; failures surface as `error`-severity with the parse cause chained.
+- **`extensions/pi-claude-marketplace/persistence/locations.ts`** -- `ScopedLocations` brand. Phase 4 adds `sourcesStagingDir(loc, uuid)` and `sourcesFinalDir(loc, marketplaceName)` helpers here. Existing helpers cover `marketplaceJsonPath`, etc.
+- **`extensions/pi-claude-marketplace/persistence/state-io.ts`** -- `loadState`, `saveState`, `STATE_VALIDATOR`. `withStateGuard` calls these internally; Phase 4 doesn't call them directly.
+- **`extensions/pi-claude-marketplace/transaction/with-state-guard.ts`** -- `withStateGuard(scope, fn)`. Every Phase 4 mutating orchestrator wraps its flow in one of these per D-04.
+- **`extensions/pi-claude-marketplace/bridges/{skills,commands,agents,mcp}/index.ts`** -- per-bridge `unstage*` exports. `cascadeUnstagePlugin` in `orchestrators/marketplace/shared.ts` calls all four in PU-1 order.
 
 ### Established Patterns (carry forward unchanged)
 

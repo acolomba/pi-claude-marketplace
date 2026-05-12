@@ -58,14 +58,14 @@ key-files:
   created:
     - "tests/domain/resolver-comp01.test.ts"
   modified:
-    - "extensions/claude-marketplace/domain/resolver.ts"
-    - "extensions/claude-marketplace/bridges/skills/discover.ts"
-    - "extensions/claude-marketplace/bridges/commands/discover.ts"
-    - "extensions/claude-marketplace/bridges/agents/discover.ts"
-    - "extensions/claude-marketplace/bridges/skills/stage.ts"
-    - "extensions/claude-marketplace/bridges/commands/stage.ts"
-    - "extensions/claude-marketplace/bridges/agents/stage.ts"
-    - "extensions/claude-marketplace/persistence/locations.ts"
+    - "extensions/pi-claude-marketplace/domain/resolver.ts"
+    - "extensions/pi-claude-marketplace/bridges/skills/discover.ts"
+    - "extensions/pi-claude-marketplace/bridges/commands/discover.ts"
+    - "extensions/pi-claude-marketplace/bridges/agents/discover.ts"
+    - "extensions/pi-claude-marketplace/bridges/skills/stage.ts"
+    - "extensions/pi-claude-marketplace/bridges/commands/stage.ts"
+    - "extensions/pi-claude-marketplace/bridges/agents/stage.ts"
+    - "extensions/pi-claude-marketplace/persistence/locations.ts"
     - "tests/domain/resolver-strict.test.ts"
     - "tests/domain/resolver-loose.test.ts"
     - "tests/bridges/skills/discover.test.ts"
@@ -137,7 +137,7 @@ All three bridges now iterate arrays and return `{ discovered, warnings }`. The 
 
 - **`bridges/skills/discover.ts`** -- Wraps the existing per-dir SKILL.md scanner in `for (const skillsRel of skillsDirs)`. Path resolution: absolute elements used verbatim, relative elements joined against `resolved.pluginRoot` (Phase 3 invariant preserved). First-wins dedup by `generatedSkillName`. Second occurrence pushes warning, does NOT throw.
 - **`bridges/commands/discover.ts`** -- Same shape; the inner CM-4 (non-recursive `*.md` only) semantics are unchanged. Dedup by `generatedCommandName` (`<plugin>:<command>`).
-- **`bridges/agents/discover.ts`** -- Signature flip: `agentsDir: string` -> `agentsDirs: readonly string[]`. The frontmatter parse + `sourceHash` over raw bytes path is unchanged. Dedup by `generatedAgentName` (`claude-marketplace-<plugin>-<agent>`).
+- **`bridges/agents/discover.ts`** -- Signature flip: `agentsDir: string` -> `agentsDirs: readonly string[]`. The frontmatter parse + `sourceHash` over raw bytes path is unchanged. Dedup by `generatedAgentName` (`pi-claude-marketplace-<plugin>-<agent>`).
 
 RN-6 within-plugin source-name collisions (`assertNoSkillCollisions` / `assertNoCommandCollisions` / `assertNoAgentCollisions`) remain HARD errors. They fire on the per-bridge `assertNo*Collisions` call inside `prepareStage*`, AFTER the cross-dir dedup. The two mechanisms are complementary, not redundant.
 
@@ -156,9 +156,9 @@ The agents bridge's `StageAgentsInput.agentsSourceDir: string` external interfac
 This was a Rule 2 auto-fix discovered during Task 3 execution. The plan's threat-model T-5-09 (information disclosure via `pluginDataDir` returning a path outside scope root) names `assertPathInside` as the chokepoint. But an empirical probe confirmed:
 
 ```
-pluginDataDir("ok", "p/sub") -> /tmp/proj/.pi/claude-marketplace/data/ok/p/sub
-pluginDataDir("ok", "p\\sub") -> /tmp/proj/.pi/claude-marketplace/data/ok/p\sub
-pluginDataDir("a", "b/../escape") -> /tmp/proj/.pi/claude-marketplace/data/a/escape
+pluginDataDir("ok", "p/sub") -> /tmp/proj/.pi/pi-claude-marketplace/data/ok/p/sub
+pluginDataDir("ok", "p\\sub") -> /tmp/proj/.pi/pi-claude-marketplace/data/ok/p\sub
+pluginDataDir("a", "b/../escape") -> /tmp/proj/.pi/pi-claude-marketplace/data/a/escape
 ```
 
 All THREE inputs silently pass -- `path.join` collapses `..` and `assertPathInside` sees a path that IS inside `dataRoot`, just nested at the wrong depth. This is the exact T-5-09 disposition the threat model says must be mitigated. The plan's threat-register reads:
@@ -196,7 +196,7 @@ The expectation that `assertPathInside` fires for `/` and `\` inputs is empirica
 - **Found during:** Task 3 (path-containment-escape coverage probe)
 - **Issue:** `pluginDataDir` / `marketplaceDataDir` / `sourceCloneDir` accepted separator-bearing names that silently nested under `dataRoot` / `sourcesDir`. `assertPathInside` did not fire because the joined path stayed inside the boundary. The plan's threat-model T-5-09 explicitly says these inputs should be rejected (disposition = `mitigate`).
 - **Fix:** Added `assertSafeName(name, label)` calls upstream of `path.join` + `assertPathInside` in all three helpers. `assertSafeName` rejects "/" / "\\" separators, "." / ".." traversal, ASCII control chars, empty / non-string names.
-- **Files modified:** `extensions/claude-marketplace/persistence/locations.ts`, `tests/persistence/locations.test.ts`
+- **Files modified:** `extensions/pi-claude-marketplace/persistence/locations.ts`, `tests/persistence/locations.test.ts`
 - **Commit:** `8fdd32c`
 
 **2. [Rule 3 - Blocking] Pre-commit `trufflehog` hook fails in worktrees**
@@ -229,11 +229,11 @@ None. No new network endpoints, auth paths, file access patterns, or trust bound
 
 **Files modified exist:** (sampled)
 
-- `[FOUND]` `extensions/claude-marketplace/domain/resolver.ts`
-- `[FOUND]` `extensions/claude-marketplace/persistence/locations.ts`
-- `[FOUND]` `extensions/claude-marketplace/bridges/skills/discover.ts`
-- `[FOUND]` `extensions/claude-marketplace/bridges/commands/discover.ts`
-- `[FOUND]` `extensions/claude-marketplace/bridges/agents/discover.ts`
+- `[FOUND]` `extensions/pi-claude-marketplace/domain/resolver.ts`
+- `[FOUND]` `extensions/pi-claude-marketplace/persistence/locations.ts`
+- `[FOUND]` `extensions/pi-claude-marketplace/bridges/skills/discover.ts`
+- `[FOUND]` `extensions/pi-claude-marketplace/bridges/commands/discover.ts`
+- `[FOUND]` `extensions/pi-claude-marketplace/bridges/agents/discover.ts`
 - `[FOUND]` `tests/persistence/locations.test.ts`
 
 **Commits exist:**

@@ -7,12 +7,12 @@ depends_on:
   - 06-03
   - 06-04
 files_modified:
-  - extensions/claude-marketplace/edge/register.ts
-  - extensions/claude-marketplace/orchestrators/marketplace/add.ts
-  - extensions/claude-marketplace/orchestrators/marketplace/remove.ts
-  - extensions/claude-marketplace/orchestrators/marketplace/update.ts
-  - extensions/claude-marketplace/orchestrators/plugin/install.ts
-  - extensions/claude-marketplace/orchestrators/plugin/uninstall.ts
+  - extensions/pi-claude-marketplace/edge/register.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts
   - eslint.config.js
   - tests/edge/register.test.ts
   - tests/orchestrators/marketplace/add.test.ts
@@ -38,27 +38,27 @@ must_haves:
     - "Cache invalidation failure inside any of the 5 orchestrators is caught and routed through notifyWarning (does NOT roll back the primary operation)"
     - "ESLint adds a no-restricted-syntax rule blocking process.stdout / process.stderr writes inside src/edge/ (ROADMAP SC5)"
   artifacts:
-    - path: extensions/claude-marketplace/edge/register.ts
+    - path: extensions/pi-claude-marketplace/edge/register.ts
       provides: "registerClaudePluginCommand + registerClaudeMarketplaceTools (D-04)"
       exports: ["registerClaudePluginCommand", "registerClaudeMarketplaceTools"]
     - path: eslint.config.js
-      provides: "no-restricted-syntax rule blocking direct process.stdout/stderr writes inside extensions/claude-marketplace/edge/**"
+      provides: "no-restricted-syntax rule blocking direct process.stdout/stderr writes inside extensions/pi-claude-marketplace/edge/**"
       contains: "no-restricted-syntax"
   key_links:
-    - from: extensions/claude-marketplace/edge/register.ts
-      to: extensions/claude-marketplace/edge/handlers/plugin/install.ts
+    - from: extensions/pi-claude-marketplace/edge/register.ts
+      to: extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts
       via: "makeInstallHandler factory call"
       pattern: "makeInstallHandler"
-    - from: extensions/claude-marketplace/edge/register.ts
-      to: extensions/claude-marketplace/edge/completions/provider.ts
+    - from: extensions/pi-claude-marketplace/edge/register.ts
+      to: extensions/pi-claude-marketplace/edge/completions/provider.ts
       via: "getArgumentCompletions wiring via LocationsResolver"
       pattern: "getArgumentCompletions"
-    - from: extensions/claude-marketplace/orchestrators/marketplace/add.ts
-      to: extensions/claude-marketplace/shared/completion-cache.ts
+    - from: extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts
+      to: extensions/pi-claude-marketplace/shared/completion-cache.ts
       via: "invalidateMarketplaceNames + invalidateMarketplaceCache (post-state-commit)"
       pattern: "invalidateMarketplace"
-    - from: extensions/claude-marketplace/orchestrators/plugin/install.ts
-      to: extensions/claude-marketplace/shared/completion-cache.ts
+    - from: extensions/pi-claude-marketplace/orchestrators/plugin/install.ts
+      to: extensions/pi-claude-marketplace/shared/completion-cache.ts
       via: "invalidateMarketplaceCache (post-state-commit)"
       pattern: "invalidateMarketplaceCache"
 ---
@@ -73,7 +73,7 @@ Land the final wiring for Phase 6:
 
 2. Cache-invalidation call-sites inserted in 5 mutating orchestrators (`marketplace/{add,remove,update}.ts`, `plugin/{install,uninstall}.ts`) at the post-state-commit window. `plugin/update.ts` is a no-op per D-03 corollary.
 
-3. ESLint rule update: add a `no-restricted-syntax` (or per-file `no-restricted-imports`) rule blocking `process.stdout`/`process.stderr` direct writes inside `extensions/claude-marketplace/edge/**` (ROADMAP Phase 6 SC5; the existing BLOCK A already covers `console.*` and direct `ctx.ui.notify`; this extends to the two `process.*` write surfaces).
+3. ESLint rule update: add a `no-restricted-syntax` (or per-file `no-restricted-imports`) rule blocking `process.stdout`/`process.stderr` direct writes inside `extensions/pi-claude-marketplace/edge/**` (ROADMAP Phase 6 SC5; the existing BLOCK A already covers `console.*` and direct `ctx.ui.notify`; this extends to the two `process.*` write surfaces).
 
 4. The 5 existing orchestrator tests gain one "cache invalidated" assertion each.
 
@@ -91,7 +91,7 @@ Land the final wiring for Phase 6:
 
 **Neither (a) nor (b) is clean.** The actual resolution is **option (c)**: the LocationsResolver is constructed in `orchestrators/edge-deps.ts` (or any orchestrators-level file), and `edge/register.ts` imports that constructor. `orchestrators/` CAN import from `persistence/` and `domain/`, and `edge/` CAN import from `orchestrators/`. This honors BLOCK C verbatim.
 
-**PLANNER DECISION: option (c).** Add a new file `extensions/claude-marketplace/orchestrators/edge-deps.ts` exporting `makeLocationsResolver(cwd: string): LocationsResolver` (signature defined by Plan 03's `data.ts`). This stays in orchestrators/ because it imports from `persistence/locations`, `persistence/state-io`, `domain/manifest`, `domain/resolver`.
+**PLANNER DECISION: option (c).** Add a new file `extensions/pi-claude-marketplace/orchestrators/edge-deps.ts` exporting `makeLocationsResolver(cwd: string): LocationsResolver` (signature defined by Plan 03's `data.ts`). This stays in orchestrators/ because it imports from `persistence/locations`, `persistence/state-io`, `domain/manifest`, `domain/resolver`.
 
 Output:
 - 1 new file (`edge/register.ts`)
@@ -115,28 +115,28 @@ Output:
 @.planning/phases/06-edge-layer-tab-completion/06-04-SUMMARY.md
 
 <!-- Files this plan modifies in place -->
-@extensions/claude-marketplace/orchestrators/marketplace/add.ts
-@extensions/claude-marketplace/orchestrators/marketplace/remove.ts
-@extensions/claude-marketplace/orchestrators/marketplace/update.ts
-@extensions/claude-marketplace/orchestrators/plugin/install.ts
-@extensions/claude-marketplace/orchestrators/plugin/uninstall.ts
+@extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts
+@extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts
+@extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts
+@extensions/pi-claude-marketplace/orchestrators/plugin/install.ts
+@extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts
 @eslint.config.js
 
 <!-- Plan 03 & 04 outputs this plan wires together -->
-@extensions/claude-marketplace/shared/completion-cache.ts
-@extensions/claude-marketplace/edge/completions/provider.ts
-@extensions/claude-marketplace/edge/completions/data.ts
-@extensions/claude-marketplace/edge/completions/normalize.ts
-@extensions/claude-marketplace/edge/router.ts
-@extensions/claude-marketplace/edge/types.ts
-@extensions/claude-marketplace/edge/handlers/plugin/install.ts
-@extensions/claude-marketplace/edge/handlers/tools.ts
+@extensions/pi-claude-marketplace/shared/completion-cache.ts
+@extensions/pi-claude-marketplace/edge/completions/provider.ts
+@extensions/pi-claude-marketplace/edge/completions/data.ts
+@extensions/pi-claude-marketplace/edge/completions/normalize.ts
+@extensions/pi-claude-marketplace/edge/router.ts
+@extensions/pi-claude-marketplace/edge/types.ts
+@extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts
+@extensions/pi-claude-marketplace/edge/handlers/tools.ts
 
 <!-- Phase 5 reference for the post-state-commit window pattern -->
 @.planning/phases/05-plugin-orchestrators/05-06-plugin-install-SUMMARY.md
 
 V1 register.ts reference:
-- Run: git show features/initial:extensions/claude-marketplace/index.ts
+- Run: git show features/initial:extensions/pi-claude-marketplace/index.ts
 
 Cache-invalidation insertion points (verified in 06-RESEARCH.md lines 843-866):
 - orchestrators/marketplace/add.ts: between line 113 (after defensive check after withStateGuard) and line 116 (before notifySuccess).
@@ -214,7 +214,7 @@ This file imports from persistence and domain -- legal for `orchestrators/`. `ed
 
 <task type="auto" tdd="true">
   <name>Task 1: Add cache-invalidation call-sites to 5 mutating orchestrators; extend their existing tests</name>
-  <files>extensions/claude-marketplace/orchestrators/marketplace/add.ts, extensions/claude-marketplace/orchestrators/marketplace/remove.ts, extensions/claude-marketplace/orchestrators/marketplace/update.ts, extensions/claude-marketplace/orchestrators/plugin/install.ts, extensions/claude-marketplace/orchestrators/plugin/uninstall.ts, tests/orchestrators/marketplace/add.test.ts, tests/orchestrators/marketplace/remove.test.ts, tests/orchestrators/marketplace/update.test.ts, tests/orchestrators/plugin/install.test.ts, tests/orchestrators/plugin/uninstall.test.ts</files>
+  <files>extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts, extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts, extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts, extensions/pi-claude-marketplace/orchestrators/plugin/install.ts, extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts, tests/orchestrators/marketplace/add.test.ts, tests/orchestrators/marketplace/remove.test.ts, tests/orchestrators/marketplace/update.test.ts, tests/orchestrators/plugin/install.test.ts, tests/orchestrators/plugin/uninstall.test.ts</files>
   <behavior>
 - Each mutating orchestrator, AFTER its withStateGuard closes successfully and BEFORE any user-visible notification fires, calls the appropriate cache-invalidation function from shared/completion-cache.ts.
 - The invalidation call is wrapped in try/catch; failure routes through notifyWarning and never rolls back the orchestrator's primary operation.
@@ -297,14 +297,14 @@ This file imports from persistence and domain -- legal for `orchestrators/`. `ed
 5. **Notify discipline:** the orchestrator files already use `notifyWarning` (Phase 4/5 carry-forward). No new direct `ctx.ui.notify` calls. Verify with grep on each modified orchestrator.
   </action>
   <verify>
-    <automated>node --test "tests/orchestrators/marketplace/add.test.ts" "tests/orchestrators/marketplace/remove.test.ts" "tests/orchestrators/marketplace/update.test.ts" "tests/orchestrators/plugin/install.test.ts" "tests/orchestrators/plugin/uninstall.test.ts" &amp;&amp; node -e 'const {execSync}=require("child_process"); const files=["extensions/claude-marketplace/orchestrators/marketplace/add.ts","extensions/claude-marketplace/orchestrators/marketplace/remove.ts","extensions/claude-marketplace/orchestrators/marketplace/update.ts","extensions/claude-marketplace/orchestrators/plugin/install.ts","extensions/claude-marketplace/orchestrators/plugin/uninstall.ts"]; for(const f of files){const c=execSync(`grep -nE "invalidateMarketplaceCache\\\\|invalidateMarketplaceNames\\\\|dropMarketplaceCache" ${f} || true`).toString(); if(!c.trim()){console.error(`missing cache-invalidation call in ${f}`);process.exit(1)}} console.log("ok")' &amp;&amp; npx tsc --noEmit &amp;&amp; npx eslint extensions/claude-marketplace/orchestrators/marketplace/add.ts extensions/claude-marketplace/orchestrators/marketplace/remove.ts extensions/claude-marketplace/orchestrators/marketplace/update.ts extensions/claude-marketplace/orchestrators/plugin/install.ts extensions/claude-marketplace/orchestrators/plugin/uninstall.ts</automated>
+    <automated>node --test "tests/orchestrators/marketplace/add.test.ts" "tests/orchestrators/marketplace/remove.test.ts" "tests/orchestrators/marketplace/update.test.ts" "tests/orchestrators/plugin/install.test.ts" "tests/orchestrators/plugin/uninstall.test.ts" &amp;&amp; node -e 'const {execSync}=require("child_process"); const files=["extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts","extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts","extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts","extensions/pi-claude-marketplace/orchestrators/plugin/install.ts","extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts"]; for(const f of files){const c=execSync(`grep -nE "invalidateMarketplaceCache\\\\|invalidateMarketplaceNames\\\\|dropMarketplaceCache" ${f} || true`).toString(); if(!c.trim()){console.error(`missing cache-invalidation call in ${f}`);process.exit(1)}} console.log("ok")' &amp;&amp; npx tsc --noEmit &amp;&amp; npx eslint extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts extensions/pi-claude-marketplace/orchestrators/plugin/install.ts extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts</automated>
   </verify>
   <done>All 5 orchestrators have the cache-invalidation call wrapped in try/catch + notifyWarning. All 5 orchestrator test files gain exactly one new D-03-INV assertion. Existing orchestrator tests still green. Grep gate confirms each orchestrator imports and calls at least one cache-invalidation function.</done>
 </task>
 
 <task type="auto" tdd="true">
   <name>Task 2: Create orchestrators/edge-deps.ts (LocationsResolver constructor) + edge/register.ts (D-04); unskip register.test.ts</name>
-  <files>extensions/claude-marketplace/orchestrators/edge-deps.ts, extensions/claude-marketplace/edge/register.ts, tests/edge/register.test.ts</files>
+  <files>extensions/pi-claude-marketplace/orchestrators/edge-deps.ts, extensions/pi-claude-marketplace/edge/register.ts, tests/edge/register.test.ts</files>
   <behavior>
 - `orchestrators/edge-deps.ts` exports `makeLocationsResolver(cwd)` returning a `LocationsResolver` (interface from edge/completions/data.ts). The resolver constructs paths via persistence/locations and rebuild closures via persistence/state-io and domain/manifest, wrapping manifest failures in ManifestSoftFailError so the cache layer applies TC-8.
 - `edge/register.ts` exports `registerClaudePluginCommand(pi, deps)` and `registerClaudeMarketplaceTools(pi)`. The first calls pi.registerCommand and pi.on(session_start); the second calls pi.registerTool twice.
@@ -313,7 +313,7 @@ This file imports from persistence and domain -- legal for `orchestrators/`. `ed
 - The wrapper applies normalizeCompletionWhitespace only when isClaudePluginCommandLine(originalLine) is true.
   </behavior>
   <action>
-1. Create `extensions/claude-marketplace/orchestrators/edge-deps.ts` per the `<context>` shape. Verify the actual signatures of `locationsFor`, `loadState`, `loadMarketplaceManifest`, `resolveStrict` by reading them; adapt the closure bodies. The shape sketched in `<context>` may need adjustment based on Phase 2's actual exports.
+1. Create `extensions/pi-claude-marketplace/orchestrators/edge-deps.ts` per the `<context>` shape. Verify the actual signatures of `locationsFor`, `loadState`, `loadMarketplaceManifest`, `resolveStrict` by reading them; adapt the closure bodies. The shape sketched in `<context>` may need adjustment based on Phase 2's actual exports.
 
    Specifically for `loadManifestForMarketplace(scope, marketplace)`:
    - Load state for scope; look up `state.marketplaces[marketplace]`.
@@ -326,7 +326,7 @@ This file imports from persistence and domain -- legal for `orchestrators/`. `ed
 
    Refactor `LocationsResolver` if needed to add `loadStateForScope` (already in Plan 03 spec) and `loadManifestForMarketplace` (already in Plan 03 spec). Plan 03 sketched the interface; this task confirms the actual implementation matches.
 
-2. Create `extensions/claude-marketplace/edge/register.ts` per 06-PATTERNS.md lines 642-696:
+2. Create `extensions/pi-claude-marketplace/edge/register.ts` per 06-PATTERNS.md lines 642-696:
 
    - Import all handler factories from `./handlers/plugin/*.ts` and `./handlers/marketplace/*.ts`.
    - Import `handleMarketplaceList` from `./handlers/marketplace/list.ts`.
@@ -398,7 +398,7 @@ This file imports from persistence and domain -- legal for `orchestrators/`. `ed
    - FORBIDDEN: persistence/*, domain/* directly. Confirm `register.ts` does NOT import from `persistence` or `domain` directly (it goes through `orchestrators/edge-deps.ts`).
   </action>
   <verify>
-    <automated>node --test tests/edge/register.test.ts &amp;&amp; node -e 'const {execSync}=require("child_process"); const out=execSync("grep -nE \"from \\\".*(persistence|domain|bridges|transaction|platform)/\" extensions/claude-marketplace/edge/register.ts || true").toString(); if(out.trim()){console.error(`register.ts has forbidden imports:\\n${out}`);process.exit(1)} const out2=execSync("grep -nE \"ctx\\\\.ui\\\\.notify\" extensions/claude-marketplace/edge/register.ts || true").toString(); if(out2.trim()){console.error(`direct notify in register.ts:\\n${out2}`);process.exit(2)} console.log("ok")' &amp;&amp; npx tsc --noEmit &amp;&amp; npx eslint extensions/claude-marketplace/orchestrators/edge-deps.ts extensions/claude-marketplace/edge/register.ts tests/edge/register.test.ts</automated>
+    <automated>node --test tests/edge/register.test.ts &amp;&amp; node -e 'const {execSync}=require("child_process"); const out=execSync("grep -nE \"from \\\".*(persistence|domain|bridges|transaction|platform)/\" extensions/pi-claude-marketplace/edge/register.ts || true").toString(); if(out.trim()){console.error(`register.ts has forbidden imports:\\n${out}`);process.exit(1)} const out2=execSync("grep -nE \"ctx\\\\.ui\\\\.notify\" extensions/pi-claude-marketplace/edge/register.ts || true").toString(); if(out2.trim()){console.error(`direct notify in register.ts:\\n${out2}`);process.exit(2)} console.log("ok")' &amp;&amp; npx tsc --noEmit &amp;&amp; npx eslint extensions/pi-claude-marketplace/orchestrators/edge-deps.ts extensions/pi-claude-marketplace/edge/register.ts tests/edge/register.test.ts</automated>
   </verify>
   <done>register.ts and orchestrators/edge-deps.ts exist; all 10 register tests are unskipped and green; register.ts has zero imports from persistence/domain/bridges/transaction/platform (BLOCK C honored via the orchestrators/edge-deps.ts indirection); zero direct ctx.ui.notify calls.</done>
 </task>
@@ -409,7 +409,7 @@ This file imports from persistence and domain -- legal for `orchestrators/`. `ed
   <action>
 1. Read `eslint.config.js` to confirm the existing BLOCK A rule (no-restricted-syntax for `console.*` and direct `ctx.ui.notify`) and BLOCK C rule (import-x/no-restricted-paths).
 
-2. Add a new rule targeting `extensions/claude-marketplace/edge/**/*.ts` that blocks the following `MemberExpression` patterns:
+2. Add a new rule targeting `extensions/pi-claude-marketplace/edge/**/*.ts` that blocks the following `MemberExpression` patterns:
    - `process.stdout.write(...)`
    - `process.stderr.write(...)`
 
@@ -432,7 +432,7 @@ This file imports from persistence and domain -- legal for `orchestrators/`. `ed
 4. Run `npm run check` to confirm no existing edge/ file regresses on this rule.
   </action>
   <verify>
-    <automated>npx eslint "extensions/claude-marketplace/edge/**/*.ts" &amp;&amp; bash -c 'TMP=$(mktemp -d); echo "process.stdout.write(\"x\");" > $TMP/probe.ts; cp eslint.config.js $TMP/; cd $TMP &amp;&amp; npx eslint --no-eslintrc --config eslint.config.js probe.ts 2>&amp;1 | grep -q "process\\.stdout\\.write" &amp;&amp; echo "probe-blocked: ok" || echo "probe-blocked: missing rule -- check eslint.config.js"; rm -rf $TMP' &amp;&amp; npm run check</automated>
+    <automated>npx eslint "extensions/pi-claude-marketplace/edge/**/*.ts" &amp;&amp; bash -c 'TMP=$(mktemp -d); echo "process.stdout.write(\"x\");" > $TMP/probe.ts; cp eslint.config.js $TMP/; cd $TMP &amp;&amp; npx eslint --no-eslintrc --config eslint.config.js probe.ts 2>&amp;1 | grep -q "process\\.stdout\\.write" &amp;&amp; echo "probe-blocked: ok" || echo "probe-blocked: missing rule -- check eslint.config.js"; rm -rf $TMP' &amp;&amp; npm run check</automated>
   </verify>
   <done>eslint.config.js adds the process.stdout/stderr block for edge/**. ESLint blocks the probe file. `npm run check` exits 0 (no existing edge/ file violates the new rule).</done>
 </task>
@@ -460,8 +460,8 @@ All threats LOW; no blockers.
 </threat_model>
 
 <verification>
-- 1 new file: `extensions/claude-marketplace/edge/register.ts`.
-- 1 new file: `extensions/claude-marketplace/orchestrators/edge-deps.ts`.
+- 1 new file: `extensions/pi-claude-marketplace/edge/register.ts`.
+- 1 new file: `extensions/pi-claude-marketplace/orchestrators/edge-deps.ts`.
 - 5 modified orchestrator files have a cache-invalidation call wrapped in try/catch + notifyWarning.
 - 1 modified ESLint config blocks process.stdout/stderr in edge/.
 - 5 modified orchestrator test files each have one new "D-03-INV" test.

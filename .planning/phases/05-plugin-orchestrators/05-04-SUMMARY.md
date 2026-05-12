@@ -32,7 +32,7 @@ tech-stack:
 
 key-files:
   created:
-    - extensions/claude-marketplace/orchestrators/plugin/shared.ts
+    - extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts
     - tests/orchestrators/plugin/shared.test.ts
     - .planning/phases/05-plugin-orchestrators/05-04-SUMMARY.md
   modified: []
@@ -68,7 +68,7 @@ completed: 2026-05-11
 
 ## Accomplishments
 
-- **Pure helper `assertNoCrossPluginConflicts(scope, generatedNames, state): void`** lives in `extensions/claude-marketplace/orchestrators/plugin/shared.ts`. The function walks the caller-supplied state snapshot (`state.marketplaces[*].plugins[*].resources` for the SAME SCOPE) and throws `CrossPluginConflictError` listing every conflict in fixed order: skills first (alpha), then commands -- mapped to the state field `prompts` -- (alpha), then agents (alpha). MCP server names are excluded by construction per PRD §6.5.
+- **Pure helper `assertNoCrossPluginConflicts(scope, generatedNames, state): void`** lives in `extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts`. The function walks the caller-supplied state snapshot (`state.marketplaces[*].plugins[*].resources` for the SAME SCOPE) and throws `CrossPluginConflictError` listing every conflict in fixed order: skills first (alpha), then commands -- mapped to the state field `prompts` -- (alpha), then agents (alpha). MCP server names are excluded by construction per PRD §6.5.
 - **`CrossPluginGeneratedNames` interface** exported alongside the helper for Wave 2 `install.ts` (Plan 05-06) and Wave 3 `update.ts` (Plan 05-09) callsites. The shape has no `mcpServers` field -- MCP cross-slot collision is the MC-4 bridge concern, not the orchestrator's.
 - **5-case unit-test fixture at `tests/orchestrators/plugin/shared.test.ts`** validates: (A) no conflicts -> void; (B) single skill collision -> single-entry `CrossPluginConflictError`; (C) skill + command + agent collisions emitted in deterministic order, asserted byte-for-byte; (D) MCP server collision NOT detected (PRD §6.5 exclusion); (E) cross-scope independence -- empty state representing this scope + the same-named skill living in the other scope (NOT passed) does not throw (Phase 2 D-10 by-construction).
 - **`npm run check` is green** end-to-end (typecheck + ESLint + Prettier + 565 tests pass, including the 5 new cases).
@@ -100,7 +100,7 @@ Each task was committed atomically:
 
 ## Files Created/Modified
 
-- `extensions/claude-marketplace/orchestrators/plugin/shared.ts` -- new file. Exports `CrossPluginGeneratedNames` interface and `assertNoCrossPluginConflicts(scope, generatedNames, state): void`. 118 lines including header banner + JSDoc.
+- `extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts` -- new file. Exports `CrossPluginGeneratedNames` interface and `assertNoCrossPluginConflicts(scope, generatedNames, state): void`. 118 lines including header banner + JSDoc.
 - `tests/orchestrators/plugin/shared.test.ts` -- new file. Local `makeState` / `makeMarketplaceRecord` / `makePluginRecord` builders + 5 named test cases. 204 lines.
 
 ## Decisions Made
@@ -127,7 +127,7 @@ Each task was committed atomically:
 - **Found during:** Task 1 (and again Task 2 during `npm run check`)
 - **Issue:** The plan's source sketch had no blank lines between block-like `for` loops; the project's flat ESLint config enforces `padding-line-between-statements` with `{ blankLine: "always", prev: "block-like", next: "*" }` (eslint.config.js line ~56).
 - **Fix:** Ran `npx eslint --fix` which inserted the required blank lines between the consecutive `for` loops. Followed by `npx prettier --write` for the test file. Cosmetic; no logic change.
-- **Files modified:** extensions/claude-marketplace/orchestrators/plugin/shared.ts; tests/orchestrators/plugin/shared.test.ts
+- **Files modified:** extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts; tests/orchestrators/plugin/shared.test.ts
 - **Verification:** `npm run check` green (typecheck + ESLint + Prettier + 565 tests).
 - **Committed in:** a987e1d (Task 1) and de32ae6 (Task 2)
 

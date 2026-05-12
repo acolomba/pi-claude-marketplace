@@ -15,7 +15,7 @@ requires:
   - phase: 04-marketplace-orchestrators
     provides: shared error types (MarketplaceNotFoundError, MarketplaceAmbiguousScopeError, appendLeaks) (Plan 04-01)
 provides:
-  - removeMarketplace orchestrator (extensions/claude-marketplace/orchestrators/marketplace/remove.ts)
+  - removeMarketplace orchestrator (extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts)
   - RemoveMarketplaceOptions with optional `cascade?: typeof cascadeUnstagePlugin` DI seam
   - cascadeUnstagePlugin in-isolation tests (3 cases, real Phase 3 bridges, no mocks)
   - Orchestrator-level tests for removeMarketplace (9 cases) covering MR-1..8 + RH-1/RH-5
@@ -32,7 +32,7 @@ tech-stack:
 
 key-files:
   created:
-    - extensions/claude-marketplace/orchestrators/marketplace/remove.ts
+    - extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts
     - tests/orchestrators/marketplace/cascade.test.ts
     - tests/orchestrators/marketplace/remove.test.ts
   modified: []
@@ -99,7 +99,7 @@ Each task was committed atomically:
 
 ## Files Created/Modified
 
-- `extensions/claude-marketplace/orchestrators/marketplace/remove.ts` -- `removeMarketplace` orchestrator + `RemoveMarketplaceOptions` (with `cascade` DI seam + `pi: ExtensionAPI`); cascade fan-out, post-state cleanup, MR-4 single-warning composition, RH-5 soft-dep warnings before reload-hint, NFR-5 no-network by construction.
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts` -- `removeMarketplace` orchestrator + `RemoveMarketplaceOptions` (with `cascade` DI seam + `pi: ExtensionAPI`); cascade fan-out, post-state cleanup, MR-4 single-warning composition, RH-5 soft-dep warnings before reload-hint, NFR-5 no-network by construction.
 - `tests/orchestrators/marketplace/cascade.test.ts` -- 3 tests for `cascadeUnstagePlugin` in isolation (empty resources, real skill drop, bogus locations shape).
 - `tests/orchestrators/marketplace/remove.test.ts` -- 9 tests for `removeMarketplace` (MR-1 not-found / ambiguous / ambiguous-resolved, MR-2/MR-8 empty success, MR-8/RH-2 reload-hint composition, NFR-5 source-grep, MR-4 single-warning trailer, MR-7 retention + inverse).
 
@@ -112,7 +112,7 @@ Each task was committed atomically:
 - Source-grep: MR-4 canonical trailer string appears EXACTLY ONCE in `remove.ts` (in the body of the aggregated warning composition)
 - Source-grep: `reloadHint("drop"` appears once (RH-2 verb gate)
 - Source-grep: `cascade?: typeof cascadeUnstagePlugin` declaration + `opts.cascade ?? cascadeUnstagePlugin` resolution both present (DI seam landed)
-- `extensions/claude-marketplace/orchestrators/marketplace/index.ts` is byte-for-byte unchanged (Plan 04-10 owns the barrel)
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/index.ts` is byte-for-byte unchanged (Plan 04-10 owns the barrel)
 
 ## Deviations from Plan
 
@@ -121,7 +121,7 @@ Each task was committed atomically:
 - **Found during:** Task 1
 - **Issue:** The plan's verbatim snippet for `remove.ts` passed `opts.ctx` to `subagentWarningIfNeeded` / `mcpAdapterWarningIfNeeded`. These helpers actually accept `pi: ExtensionAPI`, not `ctx: ExtensionContext`, per the soft-dep.ts header note: `getAllTools()` lives on `ExtensionAPI` (the factory `pi` parameter), not on `ExtensionContext` (the slash-command/handler ctx). The plan's snippet does not type-check.
 - **Fix:** Added `readonly pi: ExtensionAPI` to `RemoveMarketplaceOptions` and pass `opts.pi` to the soft-dep helpers. Test `makeCtx()` returns `{ ctx, pi, notifications }` and tests pass `pi` alongside `ctx` to `removeMarketplace`.
-- **Files modified:** `extensions/claude-marketplace/orchestrators/marketplace/remove.ts`, `tests/orchestrators/marketplace/remove.test.ts`
+- **Files modified:** `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts`, `tests/orchestrators/marketplace/remove.test.ts`
 - **Commit:** `abf912e` (production), `141d06d` (tests)
 
 ### Rule 1 (auto-fixed bug): outcome.cause non-null-assertion ban under strictTypeChecked
@@ -129,7 +129,7 @@ Each task was committed atomically:
 - **Found during:** Task 1
 - **Issue:** The plan's snippet wrote `outcome.cause!` to push a failure into `failedPlugins`. ESLint's `strictTypeChecked` preset disallows non-null-assertions in production code (the rule is OFF only for tests/).
 - **Fix:** Replaced with explicit guard: `const cause = outcome.cause ?? new Error('unknown cascade failure for ' + pluginName)`. Behavior is unchanged because `cascadeUnstagePlugin` always sets `cause` when `ok===false`, so the fallback Error never executes in practice.
-- **Files modified:** `extensions/claude-marketplace/orchestrators/marketplace/remove.ts`
+- **Files modified:** `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts`
 - **Commit:** `abf912e`
 
 ### Rule 1 (auto-fixed bug): sourceKindAtRecord narrowing
@@ -137,7 +137,7 @@ Each task was committed atomically:
 - **Found during:** Task 1
 - **Issue:** `record.source` is typed as `unknown` in the schema (state-io stores `source` as `Type.Unknown()`). Direct access to `record.source.kind` doesn't compile.
 - **Fix:** Cast to `{ kind?: unknown }` and check the literal value before assignment to the typed `"github" | "path" | "unknown" | undefined` accumulator.
-- **Files modified:** `extensions/claude-marketplace/orchestrators/marketplace/remove.ts`
+- **Files modified:** `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts`
 - **Commit:** `abf912e`
 
 ### Rule 1 (auto-fixed bug): boolean-literal compare in cascade.test.ts
@@ -153,7 +153,7 @@ Each task was committed atomically:
 - **Found during:** Task 1 verification
 - **Issue:** Two grep gates in the plan's verify step required `! grep -q "runPhases"` and `grep -q "Fix the underlying issue and retry"` exactly once. The header docstring originally referenced both verbatim, tripping the gates.
 - **Fix:** (a) Replaced "NOT runPhases" with "NOT the phase-ledger runner" in two header-comment locations. (b) Replaced the literal MR-4 trailer in the header docstring with "the canonical retry trailer" so the only occurrence is in the body.
-- **Files modified:** `extensions/claude-marketplace/orchestrators/marketplace/remove.ts`
+- **Files modified:** `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts`
 - **Commits:** `abf912e` (initial phase-ledger rephrase), `6958901` (trailer-once refactor)
 
 ### Environmental: TruffleHog hook + worktree limitation
@@ -171,7 +171,7 @@ Each task was committed atomically:
 
 ## Self-Check: PASSED
 
-- File exists: `extensions/claude-marketplace/orchestrators/marketplace/remove.ts` -- FOUND
+- File exists: `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts` -- FOUND
 - File exists: `tests/orchestrators/marketplace/cascade.test.ts` -- FOUND
 - File exists: `tests/orchestrators/marketplace/remove.test.ts` -- FOUND
 - Commit `abf912e` (Task 1 feat) -- FOUND

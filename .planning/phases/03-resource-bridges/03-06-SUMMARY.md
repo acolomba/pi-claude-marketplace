@@ -5,11 +5,11 @@ subsystem: mcp-bridge
 tags: [mcp, bridge, atomic-json, collision-detection, marker, wave-2]
 dependency_graph:
   requires:
-    - extensions/claude-marketplace/persistence/locations.ts (ScopedLocations.mcpJsonPath)
-    - extensions/claude-marketplace/shared/atomic-json.ts (atomicWriteJson)
-    - extensions/claude-marketplace/shared/errors-bridges.ts (McpServerCollisionError)
-    - extensions/claude-marketplace/shared/errors.ts (errorMessage)
-    - extensions/claude-marketplace/domain/name.ts (assertSafeName)
+    - extensions/pi-claude-marketplace/persistence/locations.ts (ScopedLocations.mcpJsonPath)
+    - extensions/pi-claude-marketplace/shared/atomic-json.ts (atomicWriteJson)
+    - extensions/pi-claude-marketplace/shared/errors-bridges.ts (McpServerCollisionError)
+    - extensions/pi-claude-marketplace/shared/errors.ts (errorMessage)
+    - extensions/pi-claude-marketplace/domain/name.ts (assertSafeName)
   provides:
     - bridges/mcp/types.ts (discriminated PreparedMcpStaging + StagedMcpRecord)
     - bridges/mcp/marker.ts (CLAUDE_MARKETPLACE_MARKER_KEY user contract)
@@ -28,16 +28,16 @@ tech-stack:
     - "Discriminated noop | staged union with embedded StageMcpCommitResult on both branches (uniform Phase 5 hand-off)"
     - "MC-4 cross-slot collision check via MCP_COLLISION_SLOTS named constant (testable + snapshot-able)"
     - "Typed McpServerCollisionError replaces V1 plain Error (instanceof discrimination at install path)"
-    - "Per-server _claudeMarketplace marker is byte-for-byte V1-compatible user contract"
+    - "Per-server _piClaudeMarketplace marker is byte-for-byte V1-compatible user contract"
 key-files:
   created:
-    - extensions/claude-marketplace/bridges/mcp/types.ts
-    - extensions/claude-marketplace/bridges/mcp/marker.ts
-    - extensions/claude-marketplace/bridges/mcp/parse.ts
-    - extensions/claude-marketplace/bridges/mcp/collision-slots.ts
-    - extensions/claude-marketplace/bridges/mcp/stage.ts
-    - extensions/claude-marketplace/bridges/mcp/unstage.ts
-    - extensions/claude-marketplace/bridges/mcp/index.ts
+    - extensions/pi-claude-marketplace/bridges/mcp/types.ts
+    - extensions/pi-claude-marketplace/bridges/mcp/marker.ts
+    - extensions/pi-claude-marketplace/bridges/mcp/parse.ts
+    - extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts
+    - extensions/pi-claude-marketplace/bridges/mcp/stage.ts
+    - extensions/pi-claude-marketplace/bridges/mcp/unstage.ts
+    - extensions/pi-claude-marketplace/bridges/mcp/index.ts
     - tests/bridges/mcp/marker.test.ts
     - tests/bridges/mcp/parse.test.ts
     - tests/bridges/mcp/collision-slots.test.ts
@@ -64,7 +64,7 @@ metrics:
 
 # Phase 3 Plan 06: MCP Bridge Summary
 
-Wave 2 / parallel-bridge pass for the MCP component type. Lands the seven `bridges/mcp/*.ts` modules (six source + one barrel) and five unit-test files (51 tests total) implementing the prepare/commit/abort/unstage triplet for `mcp.json` server entries with `_claudeMarketplace` markers.
+Wave 2 / parallel-bridge pass for the MCP component type. Lands the seven `bridges/mcp/*.ts` modules (six source + one barrel) and five unit-test files (51 tests total) implementing the prepare/commit/abort/unstage triplet for `mcp.json` server entries with `_piClaudeMarketplace` markers.
 
 The MCP bridge has the simplest atomicity story among the four Phase 3 bridges: a single `atomicWriteJson` commits the staged doc, prepare wrote nothing to disk, abort is a synchronous no-op. No staging dir, no per-file rename loop, no EXDEV risk.
 
@@ -91,7 +91,7 @@ A prior T-02 attempt was interrupted mid-flight by an API usage cap; that sessio
 
 **`bridges/mcp/marker.ts`** -- V1 byte-for-byte carry-forward (41 lines).
 
-- `CLAUDE_MARKETPLACE_MARKER_KEY = "_claudeMarketplace"` -- user contract per MC-5; existing V1-installed `mcp.json` documents must remain readable by the successor.
+- `CLAUDE_MARKETPLACE_MARKER_KEY = "_piClaudeMarketplace"` -- user contract per MC-5; existing V1-installed `mcp.json` documents must remain readable by the successor.
 - `readMarker(value)` -- robust against arrays, primitives, partial shapes; never throws.
 - `buildMarker(plugin, marketplace)` -- returns `{ plugin, marketplace }`.
 - `isOwnedBy(value, plugin, marketplace)` -- convenience predicate.
@@ -207,7 +207,7 @@ Unique among the four Phase 3 bridges. Skills, commands, and agents all have asy
 - **Found during:** T-02 lint phase.
 - **Issue:** ESLint reported `@typescript-eslint/no-unnecessary-condition` because `RawMcpDoc.mcpServers` is typed as `Record<string, unknown> | undefined` (no `null` overlap, no primitive overlap). The defensive `typeof m !== "object" || m === null || Array.isArray(m)` triplet was over-broad.
 - **Fix:** Simplified to `m === undefined || Array.isArray(m)` -- TypeScript's type narrowing covers the rest. Same shape applied in `stage.ts::getMcpServers` and `unstage.ts` mid-function check.
-- **Files modified:** `extensions/claude-marketplace/bridges/mcp/stage.ts`, `extensions/claude-marketplace/bridges/mcp/unstage.ts`.
+- **Files modified:** `extensions/pi-claude-marketplace/bridges/mcp/stage.ts`, `extensions/pi-claude-marketplace/bridges/mcp/unstage.ts`.
 - **Commit:** `f73512b`.
 
 **2. [Rule 3 -- blocking] Test file lint failures (import order, void-in-expression, type assertion style)**
@@ -226,7 +226,7 @@ Unique among the four Phase 3 bridges. Skills, commands, and agents all have asy
 - **Found during:** T-02 format-check phase.
 - **Issue:** Prettier preferred a more compact one-line shape for two of the test setup statements.
 - **Fix:** `npx prettier --write` on the two affected files.
-- **Files modified:** `tests/bridges/mcp/unstage.test.ts`, `extensions/claude-marketplace/bridges/mcp/index.ts`.
+- **Files modified:** `tests/bridges/mcp/unstage.test.ts`, `extensions/pi-claude-marketplace/bridges/mcp/index.ts`.
 - **Commit:** `f73512b`.
 
 ### Auth Gates
