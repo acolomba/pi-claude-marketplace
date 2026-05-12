@@ -77,19 +77,21 @@ Plugins are automatically updated when the marketplace is updated:
 
 Command and skill names are prefixed with the plugin name. If the command or skill is already prefixed with the plugin name plus `-`, that common part is elided.
 
+Commands use Pi's prompt-command colon form:
+
 | Plugin name | Command or skill name | Pi name    |
 | ----------- | --------------------- | ---------- |
 | `foo`       | `bar`                 | `/foo:bar` |
 | `foo`       | `foo-bar`             | `/foo:bar` |
 | `foo`       | `foo`                 | `/foo:foo` |
 
-Skills can additionally be invoked through Pi's `/skill` command:
+Skills use hyphenated generated names because Pi skill names may contain only lowercase letters, numbers, and hyphens. They can be invoked through Pi's `/skill` command:
 
 | Plugin name | Skill name | Pi name          |
 | ----------- | ---------- | ---------------- |
-| `foo`       | `bar`      | `/skill:foo:bar` |
-| `foo`       | `foo-bar`  | `/skill:foo:bar` |
-| `foo`       | `foo`      | `/skill:foo:foo` |
+| `foo`       | `bar`      | `/skill:foo-bar` |
+| `foo`       | `foo-bar`  | `/skill:foo-bar` |
+| `foo`       | `foo`      | `/skill:foo`     |
 
 MCP server names are not prefixed or rewritten. The server name is the key from the plugin's `mcpServers` object. If another MCP config already uses that name, the plugin install or update fails.
 

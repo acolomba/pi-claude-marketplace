@@ -394,13 +394,13 @@ test("PUP-6 happy: version bump triggers 3-phase swap; state reflects new versio
       const record = after.marketplaces["mp"]?.plugins["hello"];
       assert.ok(record !== undefined);
       assert.equal(record.version, "1.0.1");
-      assert.deepEqual([...record.resources.skills], ["hello:tool"]);
+      assert.deepEqual([...record.resources.skills], ["hello-tool"]);
       assert.deepEqual([...record.resources.prompts], ["hello:deploy"]);
       assert.deepEqual([...record.resources.agents], [`${GENERATED_AGENT_PREFIX}hello-bot`]);
       assert.deepEqual([...record.resources.mcpServers], ["server1"]);
 
       // Disk state: skill SKILL.md exists at target.
-      const skillTarget = path.join(locations.skillsTargetDir, "hello:tool", "SKILL.md");
+      const skillTarget = path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md");
       assert.ok((await readFile(skillTarget, "utf8")).length > 0, "skill must exist on disk");
 
       // RH-1 + RH-2 reload hint with verb 'refresh'.
@@ -693,9 +693,9 @@ test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'pl
       // at rename time: a *FILE* at the path the bridge wants to rename
       // *into*. The bridge skills target shape is
       // `<skillsTargetDir>/<generatedName>/` -- so we pre-create
-      // `<skillsTargetDir>/hello:tool` as a FILE.
+      // `<skillsTargetDir>/hello-tool` as a FILE.
       await mkdir(locations.skillsTargetDir, { recursive: true });
-      await writeFile(path.join(locations.skillsTargetDir, "hello:tool"), "obstacle");
+      await writeFile(path.join(locations.skillsTargetDir, "hello-tool"), "obstacle");
 
       const { ctx, pi, notifications } = makeCtx();
       await updatePlugins({

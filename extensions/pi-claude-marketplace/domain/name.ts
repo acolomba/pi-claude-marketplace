@@ -55,12 +55,27 @@ export function assertSafeName(name: string, label?: string): void {
 /**
  * Skill name generator (RN-1 / SK-2).
  *
- * Format: `<plugin>:<skill>` -- the `<plugin>-` prefix is elided from
- * `source` (acme + acme-foo -> acme:foo, NOT acme:acme-foo). A source
- * equal to the plugin name does not elide and becomes acme:acme.
+ * Format: `<plugin>-<skill>` -- the `<plugin>-` prefix is elided from
+ * `source` (acme + acme-foo -> acme-foo, NOT acme-acme-foo). A source
+ * equal to the plugin name becomes the plugin name itself (acme + acme ->
+ * acme), matching Pi's `/skill:<name>` invocation surface.
+ *
+ * Pi validates skill names as lowercase a-z, 0-9, and hyphens only, so skills
+ * cannot use the colon separator that command prompt filenames use.
  */
 export function generatedSkillName(plugin: string, source: string): string {
-  return generatedColonName(plugin, source);
+  assertSafeName(plugin);
+  assertSafeName(source);
+  if (source === plugin) {
+    return plugin;
+  }
+
+  const prefix = `${plugin}-`;
+  const elided = source.startsWith(prefix) ? source.slice(prefix.length) : source;
+  assertSafeName(elided);
+  const generated = `${plugin}-${elided}`;
+  assertSafeName(generated);
+  return generated;
 }
 
 /**

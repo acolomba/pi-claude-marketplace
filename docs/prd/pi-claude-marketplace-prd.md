@@ -115,7 +115,7 @@ ______________________________________________________________________
 - **Plugin** -- a Claude plugin, identified by `<plugin>@<marketplace>`.
 - **Component** -- one of skills, commands, agents (supported), or hooks, lspServers, monitors, themes, outputStyles, channels, userConfig, bin, settings (unsupported), plus mcpServers (supported, with soft dep).
 - **Strict marketplace** -- `marketplace.json` `strict: true` (default) → resolver takes the union of four declaration sources: the marketplace-entry component fields, the plugin-manifest component fields, implicit-by-convention directories (`skills/`, `commands/`, `agents/`), and standalone files at the plugin root (`hooks/hooks.json`, `.mcp.json`). `strict: false` → resolver uses the marketplace-entry declarations only and treats any of the other three sources declaring unsupported components (or declaring `mcpServers` without a matching entry-level declaration) as conflicts.
-- **Generated name** -- the deterministic name produced for a Pi-side artefact: `<plugin>:<skill>` for skills, `<plugin>:<command>` for commands, `pi-claude-marketplace-<plugin>-<agent>` for agents.
+- **Generated name** -- the deterministic name produced for a Pi-side artefact: `<plugin>-<skill>` for skills, `<plugin>:<command>` for commands, `pi-claude-marketplace-<plugin>-<agent>` for agents.
 - **Reload hint** -- the trailing `Run /reload to <verb> ...` line appended to messages whenever generated resources changed.
 - **Soft dependency** -- a runtime dependency probed via tool registration, not via a manifest field. `pi-subagents` (probed by the `subagent` tool) and `pi-mcp-adapter` (probed by tool name `mcp` or `sourceInfo.source` containing `pi-mcp-adapter`).
 - **State guard** -- a transactional helper that re-reads state on entry, applies a closure, and atomically saves; throws and skips save on closure throw.
@@ -374,13 +374,13 @@ flowchart LR
 
 ### 5.5 Skills Bridge (Pi resources)
 
-| ID       | Requirement                                                                                                                                                                                            |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **SK-1** | Skills MUST be staged as Pi skills under `<scope>/pi-claude-marketplace/resources/skills/<plugin>:<skill>/SKILL.md` (with the entire skill directory copied recursively).                              |
-| **SK-2** | The generated skill name MUST be `<plugin>:<skill>`, with the `<plugin>-` prefix stripped from the source name when present. A source skill name equal to the plugin name becomes `<plugin>:<plugin>`. |
-| **SK-3** | The generated `SKILL.md` frontmatter MUST have its `name` field rewritten to the generated name (or added if missing). Other frontmatter MUST be preserved.                                            |
-| **SK-4** | `${CLAUDE_PLUGIN_ROOT}` and `${CLAUDE_PLUGIN_DATA}` MUST be substituted inside `SKILL.md`.                                                                                                             |
-| **SK-5** | `resources_discover` MUST report `skills/` directories from both scopes; per-scope failures MUST aggregate into a single thrown error rather than silently dropping the working scope.                 |
+| ID       | Requirement                                                                                                                                                                                                                                                                                 |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **SK-1** | Skills MUST be staged as Pi skills under `<scope>/pi-claude-marketplace/resources/skills/<plugin>-<skill>/SKILL.md` (with the entire skill directory copied recursively).                                                                                                                   |
+| **SK-2** | The generated skill name MUST be `<plugin>-<skill>`, with the `<plugin>-` prefix stripped from the source name when present. A source skill name equal to the plugin name becomes `<plugin>`. Skill names MUST satisfy Pi's skill-name validator: lowercase `a-z`, `0-9`, and hyphens only. |
+| **SK-3** | The generated `SKILL.md` frontmatter MUST have its `name` field rewritten to the generated name (or added if missing). Other frontmatter MUST be preserved.                                                                                                                                 |
+| **SK-4** | `${CLAUDE_PLUGIN_ROOT}` and `${CLAUDE_PLUGIN_DATA}` MUST be substituted inside `SKILL.md`.                                                                                                                                                                                                  |
+| **SK-5** | `resources_discover` MUST report `skills/` directories from both scopes; per-scope failures MUST aggregate into a single thrown error rather than silently dropping the working scope.                                                                                                      |
 
 ### 5.6 Commands Bridge (Pi prompt templates)
 
@@ -421,7 +421,7 @@ flowchart LR
   - `LS` → `ls`
 - `disallowedTools:` -- Filtered out of the mapped list.
 - `thinking:` / `effort:` -- Allowlist `off,minimal,low,medium,high,xhigh`. `thinking` wins; invalid → fall back to `effort` if valid; otherwise omit + warn.
-- `skills:` -- Each token resolved as `<plugin>:<skill>`; unknown → drop + warn.
+- `skills:` -- Each token resolved as `<plugin>-<skill>`; unknown → drop + warn.
 - `description:` -- Missing/empty → fallback `Imported Claude Code plugin agent <agent> from plugin <plugin>.` + warning.
 
 ### 5.8 MCP Servers Bridge (pi-mcp-adapter soft dependency)
@@ -514,14 +514,14 @@ ______________________________________________________________________
 
 ### 6.5 Resource Naming, Generation & Conflicts
 
-| ID       | Requirement                                                                                                                                                                                                                                                                                                                                           |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **RN-1** | Generated names MUST be deterministic functions of `(plugin, source-name)`. Skill: `<plugin>:<skill>` (prefix elided). Command: `<plugin>:<command>` (prefix elided). Agent: `pi-claude-marketplace-<plugin>-<agent>` (with `<plugin>-` prefix on source elided).                                                                                     |
-| **RN-2** | All names -- marketplace, plugin, skill, command, agent, MCP server -- MUST be `assertSafeName`: non-empty, trimmed, not `.`/`..`, no path separators, no control chars.                                                                                                                                                                              |
-| **RN-3** | Cross-plugin install conflict guard MUST run BEFORE any disk write and MUST list every conflicting name in one message.                                                                                                                                                                                                                               |
-| **RN-4** | Cross-marketplace agent ownership: re-staging an agent name owned by a different `(marketplace, plugin)` MUST throw with the conflicting owner identified.                                                                                                                                                                                            |
-| **RN-5** | MCP server-name collisions MUST be checked against all four pi-mcp-adapter slots (see MC-4).                                                                                                                                                                                                                                                          |
-| **RN-6** | Within a single plugin, two distinct skill source names that elide to the same generated skill name (e.g., a plugin `foo` with sources `foo-bar` and `bar`) MUST throw with both source names listed. The same rule applies to commands. A source name equal to the plugin name does not elide (`foo` + `foo` -> `foo:foo`). (For agents, see AG-12.) |
+| ID       | Requirement                                                                                                                                                                                                                                                                                                                                         |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **RN-1** | Generated names MUST be deterministic functions of `(plugin, source-name)`. Skill: `<plugin>-<skill>` (prefix elided). Command: `<plugin>:<command>` (prefix elided). Agent: `pi-claude-marketplace-<plugin>-<agent>` (with `<plugin>-` prefix on source elided).                                                                                   |
+| **RN-2** | All names -- marketplace, plugin, skill, command, agent, MCP server -- MUST be `assertSafeName`: non-empty, trimmed, not `.`/`..`, no path separators, no control chars.                                                                                                                                                                            |
+| **RN-3** | Cross-plugin install conflict guard MUST run BEFORE any disk write and MUST list every conflicting name in one message.                                                                                                                                                                                                                             |
+| **RN-4** | Cross-marketplace agent ownership: re-staging an agent name owned by a different `(marketplace, plugin)` MUST throw with the conflicting owner identified.                                                                                                                                                                                          |
+| **RN-5** | MCP server-name collisions MUST be checked against all four pi-mcp-adapter slots (see MC-4).                                                                                                                                                                                                                                                        |
+| **RN-6** | Within a single plugin, two distinct skill source names that elide to the same generated skill name (e.g., a plugin `foo` with sources `foo-bar` and `bar`) MUST throw with both source names listed. The same rule applies to commands. A source name equal to the plugin name becomes skill `foo` and command `foo:foo`. (For agents, see AG-12.) |
 
 ### 6.6 Tab Completion
 
@@ -940,7 +940,7 @@ flowchart TB
 │   ├── data/<marketplace>/<plugin>/  # ${CLAUDE_PLUGIN_DATA}
 │   ├── sources/<marketplace>/        # github clones (path sources don't touch)
 │   └── resources/
-│       ├── skills/<plugin>:<skill>/SKILL.md
+│       ├── skills/<plugin>-<skill>/SKILL.md
 │       └── prompts/<plugin>:<command>.md
 ├── agents/                           # pi-subagents reads here (NOT extensionRoot)
 │   └── pi-claude-marketplace-<plugin>-<agent>.md
@@ -1048,7 +1048,7 @@ ______________________________________________________________________
 
 | Artefact   | Generated form                           | Stripping rule                             |
 | ---------- | ---------------------------------------- | ------------------------------------------ |
-| Skill      | `<plugin>:<skill>`                       | drop leading `<plugin>-` from source       |
+| Skill      | `<plugin>-<skill>`                       | drop leading `<plugin>-` from source       |
 | Command    | `<plugin>:<command>`                     | drop leading `<plugin>-` from source       |
 | Agent      | `pi-claude-marketplace-<plugin>-<agent>` | drop leading `<plugin>-` from source       |
 | MCP server | server name verbatim from declaration    | none (`_piClaudeMarketplace` marker added) |

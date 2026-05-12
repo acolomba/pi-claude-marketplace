@@ -431,9 +431,9 @@ test("PI-6: generated skill name collides with another plugin's existing skill -
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi6-"));
     try {
       // The plugin we're installing is "hello"; its skill is "shared-tool"
-      // which the generator maps to "hello:shared-tool".
+      // which the generator maps to "hello-shared-tool".
       // We seed a prior plugin "world" that already owns the same name
-      // "hello:shared-tool" -> conflict.
+      // "hello-shared-tool" -> conflict.
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -443,7 +443,7 @@ test("PI-6: generated skill name collides with another plugin's existing skill -
         conflictingPriorPlugin: {
           marketplace: "other-mp",
           plugin: "world",
-          skillName: "hello:shared-tool",
+          skillName: "hello-shared-tool",
         },
       });
 
@@ -462,7 +462,7 @@ test("PI-6: generated skill name collides with another plugin's existing skill -
       assert.match(notifications[0]?.message ?? "", /Cross-plugin name conflict/);
       assert.match(
         notifications[0]?.message ?? "",
-        /hello:shared-tool/,
+        /hello-shared-tool/,
         "must name the colliding skill",
       );
     } finally {
@@ -586,7 +586,7 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
       });
 
       // End-state: every bridge's target file exists.
-      const skillTarget = path.join(locations.skillsTargetDir, "hello:tool", "SKILL.md");
+      const skillTarget = path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md");
       assert.ok((await readFile(skillTarget, "utf8")).length > 0, "skill SKILL.md must exist");
 
       const commandTarget = path.join(locations.promptsTargetDir, "hello:deploy.md");
@@ -605,7 +605,7 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["hello"];
       assert.ok(record !== undefined);
-      assert.deepEqual([...record.resources.skills], ["hello:tool"]);
+      assert.deepEqual([...record.resources.skills], ["hello-tool"]);
       assert.deepEqual([...record.resources.prompts], ["hello:deploy"]);
       assert.deepEqual([...record.resources.agents], [`${GENERATED_AGENT_PREFIX}hello-bot`]);
       assert.deepEqual([...record.resources.mcpServers], ["server1"]);
@@ -660,7 +660,7 @@ test("PI-10: staged skill body has ${CLAUDE_PLUGIN_ROOT} replaced with absolute 
       assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
 
       const skillBody = await readFile(
-        path.join(locations.skillsTargetDir, "hello:tool", "SKILL.md"),
+        path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md"),
         "utf8",
       );
 
@@ -837,7 +837,7 @@ test("PI-14: PathContainmentError from a bridge prepare propagates verbatim with
       // refused via SymlinkRefusedError (subclass of PathContainmentError).
       await mkdir(locations.skillsTargetDir, { recursive: true });
       // Target of the symlink doesn't have to exist; readlink will report it.
-      await symlink("/tmp/decoy", path.join(locations.skillsTargetDir, "hello:tool"));
+      await symlink("/tmp/decoy", path.join(locations.skillsTargetDir, "hello-tool"));
 
       const { ctx, pi, notifications } = makeCtx();
       await installPlugin({

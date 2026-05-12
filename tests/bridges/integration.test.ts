@@ -111,15 +111,15 @@ describe("integration: full-plugin staging", () => {
     assert.equal(prep.kind, "staged", "SK-5: skills discovered -> staged variant");
     await commitPreparedSkills(prep);
 
-    // SK-2: helper -> "acme:helper"; acme-knowledge starts with "acme-"
-    // so the source prefix is elided to "acme:knowledge".
+    // SK-2: helper -> "acme-helper"; acme-knowledge starts with "acme-"
+    // so the source prefix is elided to "acme-knowledge".
     const recordedNames = [...prep.result.recorded.map((r) => r.generatedName)].sort();
-    assert.deepEqual(recordedNames, ["acme:helper", "acme:knowledge"], "SK-2: name elision rule");
+    assert.deepEqual(recordedNames, ["acme-helper", "acme-knowledge"], "SK-2: name elision rule");
 
     // SK-1: per-skill target dir created with full source-tree contents.
     const lookupPath = path.join(
       locations.skillsTargetDir,
-      "acme:knowledge",
+      "acme-knowledge",
       "resources",
       "lookup.json",
     );
@@ -127,10 +127,10 @@ describe("integration: full-plugin staging", () => {
 
     // SK-3: SKILL.md frontmatter `name:` rewritten to generated name.
     const skillMd = await readFile(
-      path.join(locations.skillsTargetDir, "acme:knowledge", "SKILL.md"),
+      path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md"),
       "utf8",
     );
-    assert.match(skillMd, /^name: acme:knowledge$/m, "SK-3: name field rewritten in frontmatter");
+    assert.match(skillMd, /^name: acme-knowledge$/m, "SK-3: name field rewritten in frontmatter");
 
     // SK-4: ${CLAUDE_PLUGIN_ROOT} substituted in body; placeholder absent post-substitution.
     assert.ok(
@@ -193,7 +193,7 @@ describe("integration: full-plugin staging", () => {
       pluginDataDir,
       resolved,
       agentsSourceDir: path.join(FIXTURE_PLUGIN, "agents"),
-      knownSkills: ["acme:helper", "acme:knowledge"],
+      knownSkills: ["acme-helper", "acme-knowledge"],
     });
     assert.equal(prep.kind, "staged", "agents discovered -> staged variant");
     await commitPreparedAgents(prep);
@@ -299,18 +299,18 @@ describe("integration: full-plugin staging", () => {
       pluginRoot: FIXTURE_PLUGIN,
       pluginDataDir,
       resolved,
-      previousSkillNames: ["acme:helper", "acme:knowledge"],
+      previousSkillNames: ["acme-helper", "acme-knowledge"],
     });
     assert.equal(prep2.kind, "staged", "idempotency: re-stage produces staged variant");
     await commitPreparedSkills(prep2);
 
     // Files still there, identical names; no exceptions thrown.
     const files = await readdir(locations.skillsTargetDir);
-    assert.deepEqual(files.sort(), ["acme:helper", "acme:knowledge"], "idempotency: same names");
+    assert.deepEqual(files.sort(), ["acme-helper", "acme-knowledge"], "idempotency: same names");
 
     // SKILL.md still has substituted body (re-stage path produces same content).
     const skillMd = await readFile(
-      path.join(locations.skillsTargetDir, "acme:knowledge", "SKILL.md"),
+      path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md"),
       "utf8",
     );
     assert.ok(

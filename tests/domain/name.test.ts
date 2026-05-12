@@ -91,29 +91,29 @@ test("RN-2 assertSafeName rejects DEL (0x7f)", () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// RN-1 / SK-2: generatedSkillName -- "<plugin>:<skill>" with prefix elision
+// RN-1 / SK-2: generatedSkillName -- "<plugin>-<skill>" with prefix elision
 // ──────────────────────────────────────────────────────────────────────────
 
 test("SK-2 generatedSkillName basic case", () => {
-  assert.equal(generatedSkillName("acme", "foo"), "acme:foo");
+  assert.equal(generatedSkillName("acme", "foo"), "acme-foo");
 });
 
 test("SK-2 generatedSkillName elides plugin prefix when source starts with it (Pitfall 8)", () => {
-  assert.equal(generatedSkillName("acme", "acme-foo"), "acme:foo");
+  assert.equal(generatedSkillName("acme", "acme-foo"), "acme-foo");
 });
 
 test("SK-2 generatedSkillName does NOT elide when source merely contains plugin substring", () => {
-  // 'ab' is a strict prefix of 'ab-' but 'ab' source doesn't start with 'ab-'
-  assert.equal(generatedSkillName("ab", "ab"), "ab:ab");
+  // 'ab' is a strict prefix of 'abc', but 'abc' source doesn't start with 'ab-'.
+  assert.equal(generatedSkillName("ab", "abc"), "ab-abc");
 });
 
 test("SK-2 generatedSkillName does NOT double-elide (Pitfall 8: only one layer of prefix removed)", () => {
   // Verifies that we don't strip TWO prefixes; only one.
-  assert.equal(generatedSkillName("acme", "acme-acme-foo"), "acme:acme-foo");
+  assert.equal(generatedSkillName("acme", "acme-acme-foo"), "acme-acme-foo");
 });
 
 test("SK-2 generatedSkillName keeps plugin-name source as skill name", () => {
-  assert.equal(generatedSkillName("foo", "foo"), "foo:foo");
+  assert.equal(generatedSkillName("foo", "foo"), "foo");
 });
 
 test("SK-2 generatedSkillName throws when elision yields empty string", () => {

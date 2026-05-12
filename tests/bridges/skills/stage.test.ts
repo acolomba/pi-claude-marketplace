@@ -71,23 +71,23 @@ test("SK-1 commitPreparedSkills lands skills at <extensionRoot>/resources/skills
     });
 
     assert.equal(prepared.kind, "staged");
-    assert.deepEqual([...prepared.result.stagedNames].sort(), ["acme:helper", "acme:knowledge"]);
+    assert.deepEqual([...prepared.result.stagedNames].sort(), ["acme-helper", "acme-knowledge"]);
 
     const leak = await commitPreparedSkills(prepared);
     assert.equal(leak, undefined);
 
     // Both target SKILL.md files exist after commit.
-    const knowledgeSkill = path.join(locations.skillsTargetDir, "acme:knowledge", "SKILL.md");
-    const helperSkill = path.join(locations.skillsTargetDir, "acme:helper", "SKILL.md");
+    const knowledgeSkill = path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md");
+    const helperSkill = path.join(locations.skillsTargetDir, "acme-helper", "SKILL.md");
     const knowledgeStat = await stat(knowledgeSkill);
     const helperStat = await stat(helperSkill);
     assert.ok(knowledgeStat.isFile());
     assert.ok(helperStat.isFile());
 
-    // Ancillary file inside acme:knowledge survived the cp.
+    // Ancillary file inside acme-knowledge survived the cp.
     const lookup = path.join(
       locations.skillsTargetDir,
-      "acme:knowledge",
+      "acme-knowledge",
       "resources",
       "lookup.json",
     );
@@ -96,7 +96,7 @@ test("SK-1 commitPreparedSkills lands skills at <extensionRoot>/resources/skills
   });
 });
 
-test("SK-3 prepared SKILL.md frontmatter has rewritten name (acme:knowledge / acme:helper)", async () => {
+test("SK-3 prepared SKILL.md frontmatter has rewritten name (acme-knowledge / acme-helper)", async () => {
   await withTmpScope(async ({ locations }) => {
     const pluginRoot = path.join(FIXTURES, "test-plugin");
     const skillsDir = path.join(pluginRoot, "skills");
@@ -113,17 +113,17 @@ test("SK-3 prepared SKILL.md frontmatter has rewritten name (acme:knowledge / ac
     await commitPreparedSkills(prepared);
 
     const knowledge = await readFile(
-      path.join(locations.skillsTargetDir, "acme:knowledge", "SKILL.md"),
+      path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md"),
       "utf8",
     );
-    assert.match(knowledge, /^---\nname: acme:knowledge\n/m);
+    assert.match(knowledge, /^---\nname: acme-knowledge\n/m);
 
     const helper = await readFile(
-      path.join(locations.skillsTargetDir, "acme:helper", "SKILL.md"),
+      path.join(locations.skillsTargetDir, "acme-helper", "SKILL.md"),
       "utf8",
     );
-    // Helper source had `name: helper` -- after rewrite it should be acme:helper.
-    assert.match(helper, /^name: acme:helper$/m);
+    // Helper source had `name: helper` -- after rewrite it should be acme-helper.
+    assert.match(helper, /^name: acme-helper$/m);
     // The original `name: helper` line must be gone.
     assert.ok(!/^name: helper$/m.test(helper), "original name line should be replaced");
   });
@@ -146,7 +146,7 @@ test("SK-3 prepared SKILL.md preserves description and license fields", async ()
     await commitPreparedSkills(prepared);
 
     const knowledge = await readFile(
-      path.join(locations.skillsTargetDir, "acme:knowledge", "SKILL.md"),
+      path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md"),
       "utf8",
     );
     assert.ok(knowledge.includes("description: Knowledge base lookups for acme"));
@@ -172,7 +172,7 @@ test("SK-4 substituted SKILL.md body has no remaining ${CLAUDE_PLUGIN_ROOT} or $
     await commitPreparedSkills(prepared);
 
     const knowledge = await readFile(
-      path.join(locations.skillsTargetDir, "acme:knowledge", "SKILL.md"),
+      path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md"),
       "utf8",
     );
     assert.ok(
@@ -204,7 +204,7 @@ test("SK-4 substituted SKILL.md contains the resolved pluginRoot path verbatim",
     await commitPreparedSkills(prepared);
 
     const knowledge = await readFile(
-      path.join(locations.skillsTargetDir, "acme:knowledge", "SKILL.md"),
+      path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md"),
       "utf8",
     );
     assert.ok(knowledge.includes(pluginRoot), "substituted body should contain pluginRoot path");
@@ -245,12 +245,12 @@ test("RN-6 assertNoSkillCollisions throws with both source names when two skills
   const synth: DiscoveredSkill[] = [
     {
       sourceName: "acme-foo",
-      generatedName: "acme:foo",
+      generatedName: "acme-foo",
       skillDir: "/tmp/x/acme-foo",
     },
     {
       sourceName: "foo",
-      generatedName: "acme:foo",
+      generatedName: "acme-foo",
       skillDir: "/tmp/x/foo",
     },
   ];
@@ -261,7 +261,7 @@ test("RN-6 assertNoSkillCollisions throws with both source names when two skills
     (err: unknown) => {
       assert.ok(err instanceof Error);
       assert.match(err.message, /collision/i);
-      assert.ok(err.message.includes(`"acme:foo"`), "must list generated name");
+      assert.ok(err.message.includes(`"acme-foo"`), "must list generated name");
       assert.ok(err.message.includes(`"foo"`), "must list other source name");
       // Both source names quoted in the bracketed list.
       assert.match(err.message, /\["acme-foo", "foo"\]|\["foo", "acme-foo"\]/);
@@ -298,7 +298,7 @@ test("commitPreparedSkills removes previous-named target dirs before rename (re-
     const oldStat = await stat(oldDir).catch(() => null);
     assert.equal(oldStat, null, "previous-named target dir should be removed");
     // New skills should exist.
-    const newStat = await stat(path.join(locations.skillsTargetDir, "acme:knowledge", "SKILL.md"));
+    const newStat = await stat(path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md"));
     assert.ok(newStat.isFile());
   });
 });
