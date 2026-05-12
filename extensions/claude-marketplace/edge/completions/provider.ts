@@ -107,8 +107,12 @@ function flagCompletions(
     .map((f) => ({
       label: f.name,
       value: `${headPrefix}${f.name} `,
-      ...(f.description !== undefined ? { description: f.description } : {}),
+      ...optionalDescription(f.description),
     }));
+}
+
+function optionalDescription(description: string | undefined): { description?: string } {
+  return description === undefined ? {} : { description };
 }
 
 function marketplaceSubcommandCompletions(current: string, headPrefix: string): AutocompleteItem[] {

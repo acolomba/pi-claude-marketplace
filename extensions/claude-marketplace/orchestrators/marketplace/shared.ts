@@ -343,7 +343,7 @@ export async function loadVisibleMarketplaces(opts: {
   /** When undefined, enumerate BOTH scopes (SC-6). */
   readonly scope?: Scope;
 }): Promise<readonly { scope: Scope; record: ExtensionState["marketplaces"][string] }[]> {
-  const scopes: readonly Scope[] = opts.scope !== undefined ? [opts.scope] : ["user", "project"];
+  const scopes: readonly Scope[] = opts.scope === undefined ? ["user", "project"] : [opts.scope];
   const out: { scope: Scope; record: ExtensionState["marketplaces"][string] }[] = [];
   for (const scope of scopes) {
     const locations = locationsFor(scope, opts.cwd);

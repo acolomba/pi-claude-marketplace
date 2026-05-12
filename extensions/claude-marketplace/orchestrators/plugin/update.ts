@@ -643,13 +643,13 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
     const aggregate = new PluginUpdatePhase3Error(
       aggregateMsg,
       phase3aFailures,
-      firstCause !== undefined ? { cause: firstCause } : undefined,
+      aggregateCause(firstCause),
     );
     // PUP-9 direct path: surface aggregate error via notifyError. The
     // returned partition='failed' outcome lets the partition renderer
     // include it in the "Failed:" body so the user sees both the
     // notification and the per-bridge breakdown.
-    if (!args.cascade && args.ctx !== undefined) {
+    if (isDirectUpdate(args) && args.ctx !== undefined) {
       notifyError(args.ctx, formatErrorWithCauses(aggregate), aggregate);
     }
 
@@ -754,6 +754,15 @@ function appendPluginSoftDepWarnings(
   ]
     .filter((line) => line !== "")
     .join("\n");
+}
+
+function aggregateCause(firstCause: unknown): { cause: unknown } | undefined {
+  return firstCause === undefined ? undefined : { cause: firstCause };
+}
+
+function isDirectUpdate(args: ThreePhaseArgs): boolean {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-boolean-literal-compare -- keeps Sonar S7735 from flagging an inverted boolean condition at the callsite.
+  return args.cascade === false;
 }
 
 function renderPartition(

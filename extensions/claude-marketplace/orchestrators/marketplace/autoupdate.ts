@@ -66,7 +66,7 @@ function missingEverywhere(
 }
 
 export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise<void> {
-  const scopes: readonly Scope[] = opts.scope !== undefined ? [opts.scope] : ["user", "project"];
+  const scopes: readonly Scope[] = opts.scope === undefined ? ["user", "project"] : [opts.scope];
 
   const overallChanged: string[] = [];
   const overallUnchanged: string[] = [];

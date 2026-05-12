@@ -36,6 +36,8 @@ import type { PluginIndexRow } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AutocompleteItem } from "@mariozechner/pi-tui";
 
+type PluginRefCompletionMode = "install" | "uninstall" | "update";
+
 // ---------------------------------------------------------------------------
 // LocationsResolver -- the edge/ -> persistence/ injection seam.
 // ---------------------------------------------------------------------------
@@ -223,7 +225,7 @@ export async function getMarketplaceNamesAcrossScopes(
  *   - update    -> keep status === "installed"
  */
 export async function getPluginToMarketplacesMap(
-  mode: "install" | "uninstall" | "update",
+  mode: PluginRefCompletionMode,
   resolver: LocationsResolver,
 ): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>();
@@ -254,7 +256,7 @@ export async function getPluginToMarketplacesMap(
   return result;
 }
 
-function statusMatchesMode(mode: "install" | "uninstall" | "update", row: PluginIndexRow): boolean {
+function statusMatchesMode(mode: PluginRefCompletionMode, row: PluginIndexRow): boolean {
   switch (mode) {
     case "install":
       return row.status !== "installed";
@@ -265,7 +267,7 @@ function statusMatchesMode(mode: "install" | "uninstall" | "update", row: Plugin
 }
 
 async function getPluginHalfCompletions(
-  mode: "install" | "uninstall" | "update",
+  mode: PluginRefCompletionMode,
   currentPrefix: string,
   argumentTextPrefix: string,
   resolver: LocationsResolver,
@@ -319,7 +321,7 @@ async function getMarketplaceOnlyCompletions(
  *     `name`.
  */
 export async function getPluginRefCompletions(
-  mode: "install" | "uninstall" | "update",
+  mode: PluginRefCompletionMode,
   currentPrefix: string,
   argumentTextPrefix: string,
   resolver: LocationsResolver,

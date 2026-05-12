@@ -113,12 +113,12 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
   const userLocations = locationsFor("user", opts.cwd);
   const projectLocations = locationsFor("project", opts.cwd);
   const resolved =
-    opts.scope !== undefined
-      ? {
+    opts.scope === undefined
+      ? await resolveScopeFromState(opts.name, userLocations, projectLocations)
+      : {
           scope: opts.scope,
           locations: opts.scope === "user" ? userLocations : projectLocations,
-        }
-      : await resolveScopeFromState(opts.name, userLocations, projectLocations);
+        };
   const { locations } = resolved;
 
   // Per-plugin tracking accumulators captured by the guard closure.

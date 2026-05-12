@@ -365,9 +365,9 @@ export function convertAgent(input: {
     frontmatter: {
       name: generatedName,
       description,
-      ...(modelResult.emit !== undefined ? { model: modelResult.emit } : {}),
+      ...optionalModel(modelResult.emit),
       tools: toolsResult.mapped,
-      ...(thinkingResult.emit !== undefined ? { thinking: thinkingResult.emit } : {}),
+      ...optionalThinking(thinkingResult.emit),
       skills: skillsResult.emit,
     },
     provenance: {
@@ -395,6 +395,14 @@ export function convertAgent(input: {
   };
 
   return result;
+}
+
+function optionalModel(model: string | undefined): { model?: string } {
+  return model === undefined ? {} : { model };
+}
+
+function optionalThinking(thinking: string | undefined): { thinking?: string } {
+  return thinking === undefined ? {} : { thinking };
 }
 
 /**

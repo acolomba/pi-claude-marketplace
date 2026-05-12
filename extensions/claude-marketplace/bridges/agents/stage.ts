@@ -208,7 +208,7 @@ export async function prepareStagePluginAgents(
         sourcePath: c.sourcePath,
         targetPath: targetFile,
         sourceHash: c.sourceHash,
-        ...(c.originalModel !== undefined ? { originalModel: c.originalModel } : {}),
+        ...optionalOriginalModel(c.originalModel),
         droppedFields: [...c.droppedFields],
         droppedTools: [...c.droppedTools],
         warnings: [...c.warnings],
@@ -245,6 +245,10 @@ export async function prepareStagePluginAgents(
     _newEntries: Object.freeze(newEntries),
     _stagedFilePaths: Object.freeze(stagedFilePaths),
   };
+}
+
+function optionalOriginalModel(originalModel: string | undefined): { originalModel?: string } {
+  return originalModel === undefined ? {} : { originalModel };
 }
 
 /**
