@@ -112,14 +112,7 @@ jobs:
         run: npm ci
 
       - name: Validate package manifest
-        run: npm pack
-
-      - name: Upload package artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: npm-package
-          path: pi-claude-marketplace-*.tgz
-          retention-days: 1
+        run: npm pack --dry-run
 
   publish:
     # Only publish on version tags after tests and package validation pass.
@@ -134,11 +127,8 @@ jobs:
       name: npm
       url: https://www.npmjs.com/package/pi-claude-marketplace
     steps:
-      - name: Download package artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: npm-package
-          path: .
+      - name: Checkout
+        uses: actions/checkout@v6
 
       - name: Setup Node 24
         uses: actions/setup-node@v6
@@ -148,4 +138,4 @@ jobs:
           package-manager-cache: false
 
       - name: Publish to npm
-        run: npm publish pi-claude-marketplace-*.tgz --access public --provenance
+        run: npm publish --access public --provenance
