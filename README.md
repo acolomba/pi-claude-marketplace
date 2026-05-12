@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/acolomba/pi-claude-marketplace/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/acolomba/pi-claude-marketplace/actions/workflows/ci.yml) [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=alert_status)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=coverage)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Bugs](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=bugs)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=code_smells)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=sqale_rating)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=reliability_rating)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=security_rating)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace)
 
-Access the Claude plugin marketplaces from Pi Coding Agent.
+Access Claude plugin marketplaces from Pi Coding Agent.
 
 <!-- markdownlint-disable MD033 -->
 
@@ -19,13 +19,13 @@ Installs plugins from the Claude plugin marketplace that contain these component
 - Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents).
 - MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter).
 
-Plugins that contain unsupported components are marked as "unavailable". The compatible parts may still be installed, but the plugin will not to work as originally intended.
+Plugins that contain unsupported components are marked as "unavailable". The compatible parts may still be installed, but the plugin will not work as originally intended.
 
 ## Prerequisites
 
 - [Pi Coding Agent](https://pi.dev)
-- [pi-subagents](https://pi.dev/packages/pi-subagents) extension (optional but recommended)
-- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) extension (optional but recommended)
+- [pi-subagents](https://pi.dev/packages/pi-subagents) (optional but recommended)
+- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) (optional but recommended)
 
 ## Usage
 

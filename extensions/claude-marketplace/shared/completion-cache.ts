@@ -283,11 +283,7 @@ export async function getPluginIndex(
 
   const fromFile = await readPluginIndexFile(pluginCachePath);
   if (fromFile !== undefined) {
-    if (!pluginIndexFileIsFresh(fromFile, now)) {
-      // File cache TTL catches status changes made by another Pi process or
-      // by older versions that only invalidated the in-memory entry.
-      memPluginIndex.delete(key);
-    } else {
+    if (pluginIndexFileIsFresh(fromFile, now)) {
       // Poison rows hydrate as [] without re-running rebuild (TC-8: stay
       // soft-failed until explicit invalidation; reads return [] forever).
       if (fromFile.isPoisoned) {
@@ -298,6 +294,10 @@ export async function getPluginIndex(
       memPluginIndex.set(key, { rows: fromFile.rows, loadedAt: now() });
       return fromFile.rows;
     }
+
+    // File cache TTL catches status changes made by another Pi process or
+    // by older versions that only invalidated the in-memory entry.
+    memPluginIndex.delete(key);
   }
 
   // Rebuild path: TC-8 discriminator vs. TC-9 propagation.
