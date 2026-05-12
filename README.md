@@ -10,16 +10,16 @@ Install plugins from the Claude plugin marketplace with these components:
 
 - Commands.
 - Skills.
-- Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents)
-- MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter)
+- Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents).
+- MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter).
 
 Plugins that contain unsupported components are marked as "unavailable". The compatible parts may still be installed, but the plugin will not to work as originally intended.
 
 ## Prerequisites
 
 - [Pi Coding Agent](https://pi.dev)
-- [pi-subagents](https://pi.dev/packages/pi-subagents) extension (optional but recommended).
-- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) extension (optional but recommended).
+- [pi-subagents](https://pi.dev/packages/pi-subagents) extension (optional but recommended)
+- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) extension (optional but recommended)
 
 ## Usage
 
@@ -75,31 +75,31 @@ Plugins are automatically updated when the marketplace is updated:
 
 Command and skill names are prefixed with the plugin name. If the command or skill is already prefixed with the plugin name plus `-`, that common part is elided.
 
-| Plugin | Command or skill name | Pi name    |
-| ------ | --------------------- | ---------- |
-| `foo`  | `bar`                 | `/foo:bar` |
-| `foo`  | `foo-bar`             | `/foo:bar` |
-| `foo`  | `foo`                 | `/foo:foo` |
+| Plugin name | Command or skill name | Pi name    |
+| ----------- | --------------------- | ---------- |
+| `foo`       | `bar`                 | `/foo:bar` |
+| `foo`       | `foo-bar`             | `/foo:bar` |
+| `foo`       | `foo`                 | `/foo:foo` |
 
 Skills can additionally be invoked through Pi's `/skill` command:
 
-| Plugin | Skill name | Pi name          |
-| ------ | ---------- | ---------------- |
-| `foo`  | `bar`      | `/skill:foo:bar` |
-| `foo`  | `foo-bar`  | `/skill:foo:bar` |
-| `foo`  | `foo`      | `/skill:foo:foo` |
+| Plugin name | Skill name | Pi name          |
+| ----------- | ---------- | ---------------- |
+| `foo`       | `bar`      | `/skill:foo:bar` |
+| `foo`       | `foo-bar`  | `/skill:foo:bar` |
+| `foo`       | `foo`      | `/skill:foo:foo` |
 
 MCP server names are not prefixed or rewritten. The server name is the key from the plugin's `mcpServers` object. If another MCP config already uses that name, the plugin install or update fails.
 
-| Plugin | `mcpServers` key | Pi MCP server name               |
-| ------ | ---------------- | -------------------------------- |
-| `foo`  | `api`            | `api`                            |
-| `foo`  | `foo-api`        | `foo-api`                        |
-| `bar`  | `api`            | conflict if `api` already exists |
+| Plugin name | `mcpServers` key | Pi MCP server name               |
+| ----------- | ---------------- | -------------------------------- |
+| `foo`       | `api`            | `api`                            |
+| `foo`       | `foo-api`        | `foo-api`                        |
+| `bar`       | `api`            | conflict if `api` already exists |
 
 ## `/claude:plugin` reference
 
-This extension mirrors Claude Code's `/plugin` command where Pi exposes the same underlying plugin concepts. Use `/claude:plugin` in Pi for marketplace and plugin operations, then run `/reload` after installing, uninstalling, or updating plugins so Pi discovers the changed resources.
+This extension mirrors Claude Code's `/plugin` command. Use `/claude:plugin` in Pi for marketplace and plugin operations, then run `/reload` after installing, uninstalling, or updating plugins so Pi discovers the changed resources.
 
 ### Marketplace
 

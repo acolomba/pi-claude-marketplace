@@ -125,64 +125,73 @@ function githubObjectSource(repo: string, obj: Record<string, unknown>): ParsedS
   return withOptionalSourceFields(parsed, obj);
 }
 
+function objectRaw(obj: Record<string, unknown>): string {
+  return JSON.stringify(obj);
+}
+
+function unknownObjectSource(obj: Record<string, unknown>, reason: string): UnknownSource {
+  return { kind: "unknown", raw: objectRaw(obj), reason };
+}
+
+function urlObjectSource(obj: Record<string, unknown>): ParsedSource {
+  const url = optionalString(obj, "url");
+  return url === undefined
+    ? unknownObjectSource(obj, "url source is missing url")
+    : withOptionalSourceFields({ kind: "url", raw: url, url }, obj);
+}
+
+function gitSubdirObjectSource(obj: Record<string, unknown>): ParsedSource {
+  const url = optionalString(obj, "url");
+  const subPath = optionalString(obj, "path");
+  if (url === undefined || subPath === undefined) {
+    return unknownObjectSource(obj, "git-subdir source is missing url or path");
+  }
+
+  return withOptionalSourceFields({ kind: "git-subdir", raw: url, url, path: subPath }, obj);
+}
+
+function npmObjectSource(obj: Record<string, unknown>): ParsedSource {
+  const pkg = optionalString(obj, "package");
+  if (pkg === undefined) {
+    return unknownObjectSource(obj, "npm source is missing package");
+  }
+
+  const version = optionalString(obj, "version");
+  const registry = optionalString(obj, "registry");
+  return {
+    kind: "npm",
+    raw: pkg,
+    package: pkg,
+    ...(version !== undefined && { version }),
+    ...(registry !== undefined && { registry }),
+  };
+}
+
 function parseObjectPluginSource(raw: Record<string, unknown>): ParsedSource {
   if (typeof raw.kind === "string") {
     switch (raw.kind) {
       case "path": {
         const value = optionalString(raw, "raw") ?? optionalString(raw, "logical");
         return value === undefined
-          ? { kind: "unknown", raw: JSON.stringify(raw), reason: "path source is missing raw" }
+          ? unknownObjectSource(raw, "path source is missing raw")
           : pathSource(value);
       }
 
       case "github": {
         const value = optionalString(raw, "raw");
         return value === undefined
-          ? { kind: "unknown", raw: JSON.stringify(raw), reason: "github source is missing raw" }
+          ? unknownObjectSource(raw, "github source is missing raw")
           : githubObjectSource(value, raw);
       }
 
-      case "url": {
-        const url = optionalString(raw, "url");
-        return url === undefined
-          ? { kind: "unknown", raw: JSON.stringify(raw), reason: "url source is missing url" }
-          : withOptionalSourceFields({ kind: "url", raw: url, url }, raw);
-      }
+      case "url":
+        return urlObjectSource(raw);
 
-      case "git-subdir": {
-        const url = optionalString(raw, "url");
-        const subPath = optionalString(raw, "path");
-        if (url === undefined || subPath === undefined) {
-          return {
-            kind: "unknown",
-            raw: JSON.stringify(raw),
-            reason: "git-subdir source is missing url or path",
-          };
-        }
+      case "git-subdir":
+        return gitSubdirObjectSource(raw);
 
-        return withOptionalSourceFields({ kind: "git-subdir", raw: url, url, path: subPath }, raw);
-      }
-
-      case "npm": {
-        const pkg = optionalString(raw, "package");
-        if (pkg === undefined) {
-          return {
-            kind: "unknown",
-            raw: JSON.stringify(raw),
-            reason: "npm source is missing package",
-          };
-        }
-
-        const version = optionalString(raw, "version");
-        const registry = optionalString(raw, "registry");
-        return {
-          kind: "npm",
-          raw: pkg,
-          package: pkg,
-          ...(version !== undefined && { version }),
-          ...(registry !== undefined && { registry }),
-        };
-      }
+      case "npm":
+        return npmObjectSource(raw);
 
       case "unknown":
         return {
@@ -192,79 +201,34 @@ function parseObjectPluginSource(raw: Record<string, unknown>): ParsedSource {
         };
 
       default:
-        return {
-          kind: "unknown",
-          raw: JSON.stringify(raw),
-          reason: `unrecognized source kind: ${raw.kind}`,
-        };
+        return unknownObjectSource(raw, `unrecognized source kind: ${raw.kind}`);
     }
   }
 
   const discriminator = raw.source;
   if (typeof discriminator !== "string") {
-    return {
-      kind: "unknown",
-      raw: JSON.stringify(raw),
-      reason: `object source is missing source discriminator`,
-    };
+    return unknownObjectSource(raw, "object source is missing source discriminator");
   }
 
   switch (discriminator) {
     case "github": {
       const repo = optionalString(raw, "repo");
       return repo === undefined
-        ? { kind: "unknown", raw: JSON.stringify(raw), reason: "github source is missing repo" }
+        ? unknownObjectSource(raw, "github source is missing repo")
         : githubObjectSource(repo, raw);
     }
 
-    case "url": {
-      const url = optionalString(raw, "url");
-      return url === undefined
-        ? { kind: "unknown", raw: JSON.stringify(raw), reason: "url source is missing url" }
-        : withOptionalSourceFields({ kind: "url", raw: url, url }, raw);
-    }
+    case "url":
+      return urlObjectSource(raw);
 
-    case "git-subdir": {
-      const url = optionalString(raw, "url");
-      const subPath = optionalString(raw, "path");
-      if (url === undefined || subPath === undefined) {
-        return {
-          kind: "unknown",
-          raw: JSON.stringify(raw),
-          reason: "git-subdir source is missing url or path",
-        };
-      }
+    case "git-subdir":
+      return gitSubdirObjectSource(raw);
 
-      return withOptionalSourceFields({ kind: "git-subdir", raw: url, url, path: subPath }, raw);
-    }
-
-    case "npm": {
-      const pkg = optionalString(raw, "package");
-      if (pkg === undefined) {
-        return {
-          kind: "unknown",
-          raw: JSON.stringify(raw),
-          reason: "npm source is missing package",
-        };
-      }
-
-      const version = optionalString(raw, "version");
-      const registry = optionalString(raw, "registry");
-      return {
-        kind: "npm",
-        raw: pkg,
-        package: pkg,
-        ...(version !== undefined && { version }),
-        ...(registry !== undefined && { registry }),
-      };
-    }
+    case "npm":
+      return npmObjectSource(raw);
 
     default:
-      return {
-        kind: "unknown",
-        raw: JSON.stringify(raw),
-        reason: `unrecognized source kind: ${discriminator}`,
-      };
+      return unknownObjectSource(raw, `unrecognized source kind: ${discriminator}`);
   }
 }
 
