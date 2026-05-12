@@ -92,6 +92,37 @@ test("MA-5 + MA-11: github source clones, validates, renames, mutates state, emi
   });
 });
 
+test("MA-5: github HTTPS source with #ref clones the canonical repo URL at that ref", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx } = makeCtx();
+    const { gitOps, state } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    await addMarketplace({
+      ctx,
+      scope: "project",
+      cwd,
+      rawSource: "https://github.com/anthropics/claude-plugins-official#main",
+      gitOps,
+    });
+
+    assert.equal(state.cloneCalls.length, 1);
+    assert.deepEqual(
+      {
+        url: state.cloneCalls[0]?.url,
+        ref: state.cloneCalls[0]?.ref,
+        singleBranch: state.cloneCalls[0]?.singleBranch,
+      },
+      {
+        url: "https://github.com/anthropics/claude-plugins-official.git",
+        ref: "main",
+        singleBranch: true,
+      },
+    );
+  });
+});
+
 test("MA-6: pre-existing non-empty sources/<name>/ throws StaleSourceCloneError", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     const { ctx } = makeCtx();

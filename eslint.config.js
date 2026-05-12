@@ -9,6 +9,7 @@ export default tseslint.config(
     ignores: [
       ".claude/",
       ".opencode/",
+      ".pi/",
       ".planning/",
       "build/",
       "coverage/",
