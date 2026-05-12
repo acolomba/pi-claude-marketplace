@@ -49,6 +49,10 @@
       "./extensions/claude-marketplace/index.ts"
     ]
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/acolomba/pi-claude-marketplace.git"
+  },
   "scripts": {
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test",
     "test": "node --test \"tests/{architecture,bridges,domain,edge,helpers,orchestrators,persistence,presentation,shared,transaction}/**/*.test.ts\"",
