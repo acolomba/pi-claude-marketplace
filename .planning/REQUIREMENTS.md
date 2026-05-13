@@ -56,28 +56,28 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 | ----------- | ----- | ------ |
-| PRL-01 | - | Pending |
-| PRL-02 | - | Pending |
-| PRL-03 | - | Pending |
-| PRL-04 | - | Pending |
-| PRL-05 | - | Pending |
-| PRL-06 | - | Pending |
-| PRL-07 | - | Pending |
-| PRL-08 | - | Pending |
-| PRL-09 | - | Pending |
-| PRL-10 | - | Pending |
-| PRL-11 | - | Pending |
-| PRL-12 | - | Pending |
-| PRL-13 | - | Pending |
-| PRL-14 | - | Pending |
-| PRL-15 | - | Pending |
-| PRL-16 | - | Pending |
+| PRL-01 | Phase 9 | Pending |
+| PRL-02 | Phase 8 | Pending |
+| PRL-03 | Phase 9 | Pending |
+| PRL-04 | Phase 9 | Pending |
+| PRL-05 | Phase 9 | Pending |
+| PRL-06 | Phase 8 | Pending |
+| PRL-07 | Phase 8 | Pending |
+| PRL-08 | Phase 8 | Pending |
+| PRL-09 | Phase 8 | Pending |
+| PRL-10 | Phase 8 | Pending |
+| PRL-11 | Phase 8 | Pending |
+| PRL-12 | Phase 8 | Pending |
+| PRL-13 | Phase 9 | Pending |
+| PRL-14 | Phase 9 | Pending |
+| PRL-15 | Phase 9 | Pending |
+| PRL-16 | Phase 9 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 16 total
-- Mapped to phases: 0
-- Unmapped: 16
+- Mapped to phases: 16
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-05-13 after v1.1 milestone requirements confirmation*
-*Last updated: 2026-05-13 after initial definition*
+*Last updated: 2026-05-13 after roadmap creation*
