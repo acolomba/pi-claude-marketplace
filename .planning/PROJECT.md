@@ -2,13 +2,27 @@
 
 ## What This Is
 
-`pi-claude-marketplace` is a Pi extension that gives Pi users access to Claude plugin marketplaces through a `/claude:plugin` command surface intentionally aligned with Claude Code's upstream `/plugin`. It translates Claude plugin artefacts (skills, commands, agents, MCP servers) into the equivalent Pi-native artefacts (Pi skills, Pi prompt templates, pi-subagents agents, pi-mcp-adapter MCP entries) and manages their lifecycle (install, update, uninstall, marketplace add/remove/list).
+`pi-claude-marketplace` is a Pi extension that gives Pi users access to Claude plugin marketplaces through a `/claude:plugin` command surface intentionally aligned with Claude Code's upstream `/plugin`. It translates Claude plugin artefacts (skills, commands, agents, MCP servers) into the equivalent Pi-native artefacts (Pi skills, Pi prompt templates, pi-subagents agents, pi-mcp-adapter MCP entries) and manages their lifecycle (install, update, uninstall, reinstall, marketplace add/remove/list).
 
-This GSD project plans a successor architecture for the V1 implementation already in this repository. The PRD at `docs/prd/pi-claude-marketplace-prd.md` (1068 lines, v1.0) is derived from the V1 source and is the authoritative specification of what the successor must deliver.
+The v1.0 successor architecture shipped the PRD-derived V1 surface. The current v1.1 milestone extends that surface with atomic plugin reinstall semantics while preserving the same lifecycle, scope, reload-hint, soft-dependency, and retry-safety contracts.
 
 ## Core Value
 
 A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
+
+## Current Milestone: v1.1 Reinstall Command
+
+**Goal:** Add a `reinstall` command that replaces installed plugins without leaving them absent if reinstall fails.
+
+**Target features:**
+
+- Reinstall one plugin via `reinstall <plugin>@<marketplace>`
+- Reinstall all installed plugins in one marketplace via `reinstall @<marketplace>`
+- Reinstall all installed plugins in scope via bare `reinstall`
+- Support `--scope user|project` filtering analogous to `update`
+- Reuse existing cached marketplace manifests and recorded versions; no network sync
+- Replace each plugin atomically so reinstall failure preserves the previous installed plugin and resources
+- Delete plugin data directories only after successful replacement
 
 ## Requirements
 
@@ -16,38 +30,20 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 
 <!-- Shipped and confirmed valuable via this GSD project. -->
 
-(None yet -- V1 predates this GSD project; deliverables will be tracked here as phases ship.)
+- ✓ v1.0 successor architecture: `/claude:plugin` command surface, marketplace lifecycle, plugin `install` / `uninstall` / `update`, top-level `list`, skills/commands/agents/MCP bridges, tab completion, real Pi wiring, live/runtime e2e coverage, and cross-process state locking.
 
 ### Active
 
-<!-- Successor scope. Detailed REQ-IDs in REQUIREMENTS.md. -->
+<!-- Current scope. Building toward these. Detailed REQ-IDs in REQUIREMENTS.md. -->
 
-**Vertical features (per PRD §5):**
+**v1.1 Reinstall Command:**
 
-- [ ] Marketplace lifecycle: `marketplace add / remove (rm) / list / update / autoupdate / noautoupdate`
-- [ ] Plugin lifecycle: `install / uninstall / update`
-- [ ] Listing & inspection: top-level `list` with `--installed / --available / --unavailable / --scope` filters
-- [ ] Autoupdate & update cascade -- semantics that distinguish `marketplace update` (manifest refresh, optional cascade) from `update` (no syncClone)
-- [ ] Skills bridge -- staged at `<scope>/pi-claude-marketplace/resources/skills/<plugin>-<skill>/SKILL.md`, surfaced via `resources_discover`
-- [ ] Commands bridge -- staged at `<scope>/pi-claude-marketplace/resources/prompts/<plugin>:<command>.md`
-- [ ] Agents bridge -- `<scope>/agents/pi-claude-marketplace-<plugin>-<agent>.md` with on-disk index, generated marker, and field-mapped frontmatter; soft dep on `pi-subagents`
-- [ ] MCP servers bridge -- entries merged into `<scope>/mcp.json` with `_piClaudeMarketplace` marker; soft dep on `pi-mcp-adapter`
-
-**Horizontal cross-cutting concerns (per PRD §6):**
-
-- [ ] Source parsing & validation -- `owner/repo`, `https://github.com/...[#<ref>]`, local paths (`/`, `./`, `../`, `~`)
-- [ ] Scopes & resolution -- exactly two scopes (`user`, `project`); typed `ScopedLocations` brand
-- [ ] Manifest schema & strict mode -- strict-true union resolver, strict-false entry-only resolver
-- [ ] Plugin compatibility resolver -- discriminated `installable: true | false` union
-- [ ] Resource naming, generation & conflicts -- deterministic generated names, `assertSafeName`, cross-plugin/cross-marketplace guards
-- [ ] Tab completion -- `/claude:plugin` subcommand surface, `--scope` value completion, fish-style space normalization
-- [ ] Argument parsing -- quoted args, `--scope` validation, `Usage:` blocks
-- [ ] Reload hint & soft-dependency probing -- emit only on actual resource change; probe `subagent` / `mcp` tools
-- [ ] State persistence, migration & concurrency -- `state.json` schemaVersion 1, atomic save, `withStateGuard`, legacy migration
-- [ ] Path safety & containment -- `assertPathInside` on every name-derived path; `PathContainmentError` propagates
-- [ ] Atomic staging, commit & rollback -- same-FS tmp + atomic rename; phased rollback with leak aggregation
-- [ ] Error surfaces & severity -- single `ctx.ui.notify` channel, severity discipline, `Error.cause` chains, stable marker strings (ES-5)
-- [ ] Internationalization, logging, telemetry -- English-only V1, no telemetry, single sanctioned `console.warn`
+- [ ] Plugin lifecycle: `reinstall` command routed through `/claude:plugin`, with syntax analogous to `update`
+- [ ] Target forms: one plugin (`<plugin>@<marketplace>`), all installed plugins in one marketplace (`@<marketplace>`), and all installed plugins in the selected scope (bare)
+- [ ] Scope filtering: `--scope user|project` accepted at any position, using the existing two-scope model
+- [ ] Manifest/version policy: reuse cached marketplace manifests and recorded installed versions; do not perform network sync
+- [ ] Atomic per-plugin replacement: prepare new resources before removing old resources, and preserve the previous install on reinstall failure
+- [ ] Post-success cleanup: delete the plugin data directory only after the replacement commits successfully
 
 ### Out of Scope
 
@@ -132,6 +128,8 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ______________________________________________________________________
+
+*Last updated: 2026-05-13 -- Milestone v1.1 started: Reinstall Command. Active scope now targets atomic per-plugin reinstall using cached manifests/recorded versions, update-analogous target forms, scope filtering, and post-success plugin data cleanup.*
 
 *Last updated: 2026-05-11 -- D-25 added: Phase 7 D-08 supersedes PRD PI-15's old concurrent-install marker. Concurrent operation losers now fail at per-scope lock acquisition with `STATE_LOCK_HELD_PREFIX` (`Another pi-claude-marketplace operation is in progress for`) plus retry guidance, rather than reaching the old `was installed concurrently` state-guard commit path.*
 
