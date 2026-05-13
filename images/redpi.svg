@@ -36,7 +36,7 @@
      inkscape:window-width="2193"
      inkscape:window-height="1413"
      inkscape:window-x="410"
-     inkscape:window-y="174"
+     inkscape:window-y="118"
      inkscape:window-maximized="0"
      inkscape:current-layer="g4"
      showgrid="true"
@@ -67,26 +67,26 @@
      style="shape-rendering:crispEdges">
     <path
        fill="#d40000"
-       d="m 460,440 h 360 60 v 60 h -60 v 60 H 760 V 790 H 680 V 560 H 620 V 790 H 540 V 560 h -60 v 30 h -70 v -70 h 50 z"
+       d="m 480,440 h 340 60 v 60 h -60 v 60 H 760 V 790 H 680 V 560 H 620 V 790 H 540 V 560 h -60 v 30 h -70 v -70 h 70 z"
        id="path1"
        style="fill:#d40000;fill-opacity:1"
        sodipodi:nodetypes="cccccccccccccccccccc" />
     <rect
        x="560"
-       y="490"
+       y="480"
        width="40"
-       height="20"
+       height="40"
        fill="#050403"
        id="rect2"
-       style="stroke-width:0.707106" />
+       style="fill:#ffffff;stroke-width:0.999998" />
     <rect
        x="700"
-       y="490"
+       y="480"
        width="40.056519"
-       height="20"
+       height="40"
        fill="#050403"
        id="rect3"
-       style="stroke-width:0.707106" />
+       style="fill:#ffffff;stroke-width:0.999998" />
   </g>
   <metadata
      id="metadata3">
