@@ -2,34 +2,83 @@
   "author": {
     "name": "Alessandro Colomba"
   },
+  "bugs": {
+    "url": "https://github.com/acolomba/pi-claude-marketplace/issues"
+  },
+  "dependencies": {
+    "isomorphic-git": "^1.37.6",
+    "proper-lockfile": "^4.1.2",
+    "write-file-atomic": "^8.0.0"
+  },
   "description": "Access Claude plugin marketplaces from Pi.",
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@mariozechner/pi-coding-agent": "^0.73.1",
-    "prettier": "^3.6.2",
+    "@mariozechner/pi-tui": "^0.73.1",
+    "@stylistic/eslint-plugin": "^5.10.0",
+    "@types/proper-lockfile": "^4.1.4",
+    "@types/write-file-atomic": "^4.0.3",
+    "eslint": "^10.2.1",
+    "eslint-plugin-import-x": "^4.16.2",
+    "eslint-plugin-sonarjs": "^4.0.3",
+    "globals": "^17.6.0",
+    "memfs": "^4.57.2",
+    "prettier": "^3.8.3",
     "typebox": "^1.1.38",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.59.1"
   },
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md",
+    "extensions/pi-claude-marketplace/**"
+  ],
+  "homepage": "https://github.com/acolomba/pi-claude-marketplace#readme",
   "keywords": [
-    "pi-package",
-    "pi-extension",
     "claude",
-    "marketplace"
+    "claude-code",
+    "marketplace",
+    "pi",
+    "pi-coding-agent",
+    "pi-extension",
+    "pi-package",
+    "plugins"
   ],
   "license": "MIT",
   "name": "pi-claude-marketplace",
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-coding-agent": ">=0.73.1",
+    "@mariozechner/pi-tui": "*",
     "typebox": "*"
   },
   "pi": {
     "extensions": [
-      "./extensions/claude-marketplace.ts"
-    ]
+      "./extensions/pi-claude-marketplace/index.ts"
+    ],
+    "image": "https://raw.githubusercontent.com/acolomba/pi-claude-marketplace/main/images/redpi.png"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/acolomba/pi-claude-marketplace.git"
   },
   "scripts": {
-    "check": "npm run typecheck && npm run format:check",
-    "format": "prettier --write \"**/*.{json,ts}\"",
-    "format:check": "prettier --check \"**/*.{json,ts}\"",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm test",
+    "format": "prettier --write \"**/*.{js,json,ts}\"",
+    "format:check": "prettier --check \"**/*.{js,json,ts}\"",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "node --test \"tests/{architecture,bridges,domain,edge,helpers,orchestrators,persistence,presentation,shared,transaction}/**/*.test.ts\"",
+    "test:coverage": "rm -rf coverage && mkdir -p coverage && npm run test:coverage:unit && npm run test:coverage:integration && npm run test:coverage:e2e",
+    "test:coverage:e2e": "PI_CM_E2E_REF=pinned node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/e2e.lcov \"tests/e2e/**/*.test.ts\"",
+    "test:coverage:integration": "node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/integration.lcov \"tests/integration/**/*.test.ts\"",
+    "test:coverage:unit": "node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/unit.lcov \"tests/{architecture,bridges,domain,edge,helpers,orchestrators,persistence,presentation,shared,transaction}/**/*.test.ts\"",
+    "test:e2e": "PI_CM_E2E_REF=pinned node --test \"tests/e2e/**/*.test.ts\"",
+    "test:e2e:nightly": "PI_CM_E2E_REF=main node --test \"tests/e2e/**/*.test.ts\"",
+    "test:integration": "node --test \"tests/integration/**/*.test.ts\"",
     "typecheck": "tsc --noEmit"
   },
   "type": "module",

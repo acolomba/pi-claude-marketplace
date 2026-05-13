@@ -1,0 +1,201 @@
+// tests/bridges/integration-foreign-content.test.ts
+//
+// Phase 3 capstone -- foreign-content preservation + CommitResult.failed[]
+// surfacing across the agents bridge end-to-end.
+//
+// Verifies ROADMAP success criterion 2: AG-5 foreign content (a previously-
+// indexed target file whose body has lost the verbatim marker, OR whose
+// basename no longer matches `pi-claude-marketplace-*`) is preserved BYTE-
+// IDENTICAL on commit and surfaced via the bridge's `result.failed[]` array
+// (D-06 corollary: prepare-time foreign content does NOT throw, it surfaces
+// softly so the install can still proceed for the agents that ARE owned).
+//
+// Detection model (matches stage.ts step 7): foreign content is detected by
+// walking each `previousEntries` row from the agents-index and stat'ing its
+// `targetPath`. A pre-seeded foreign file WITHOUT a corresponding index row
+// is undetectable to the bridge -- which is correct, because such a file
+// wasn't ours to track in the first place. The test therefore pre-seeds an
+// agents-index entry pointing at the fixture-supplied foreign content.
+
+import assert from "node:assert/strict";
+import { copyFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { after, before, describe, test } from "node:test";
+import { fileURLToPath } from "node:url";
+
+import {
+  commitPreparedAgents,
+  prepareStagePluginAgents,
+} from "../../extensions/pi-claude-marketplace/bridges/agents/index.ts";
+import { loadAgentsIndex } from "../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
+import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { atomicWriteJson } from "../../extensions/pi-claude-marketplace/shared/atomic-json.ts";
+
+import type { ResolvedPluginInstallable } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import type { AgentsIndex } from "../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const FIXTURE_PLUGIN = path.resolve(HERE, "_fixtures", "test-plugin");
+const FIXTURE_FOREIGN = path.resolve(HERE, "_fixtures", "foreign-agents");
+const PLUGIN_NAME = "acme";
+const MARKETPLACE_NAME = "test-mp";
+
+function makeResolved(): ResolvedPluginInstallable {
+  return {
+    installable: true,
+    name: PLUGIN_NAME,
+    pluginRoot: FIXTURE_PLUGIN,
+    supported: ["agents"],
+    unsupported: [],
+    notes: [],
+    // D-07: componentPaths.* are now `readonly string[]`.
+    componentPaths: { skills: [], commands: [], agents: ["agents"] },
+    mcpServers: {},
+  };
+}
+
+describe("integration: foreign content preservation", () => {
+  let scopeRoot: string;
+  let locations: ReturnType<typeof locationsFor>;
+  let pluginDataDir: string;
+
+  // Pre-seeded foreign-content target paths inside <scopeRoot>/agents/.
+  // The basename matches `pi-claude-marketplace-acme-orphan` so AG-5's basename
+  // gate passes; the body is the no-marker fixture, so AG-5's marker gate
+  // fails -- triggering the soft-fail path in stage.ts step 7.
+  let orphanTarget: string;
+
+  before(async () => {
+    scopeRoot = await mkdtemp(path.join(tmpdir(), "integration-foreign-"));
+    locations = locationsFor("project", scopeRoot);
+    pluginDataDir = await locations.pluginDataDir(MARKETPLACE_NAME, PLUGIN_NAME);
+
+    await mkdir(locations.agentsDir, { recursive: true });
+    await mkdir(locations.extensionRoot, { recursive: true });
+
+    // Pre-seed the foreign target file with byte-exact content from the
+    // fixture corpus.
+    orphanTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-orphan.md");
+    await copyFile(path.join(FIXTURE_FOREIGN, "no-marker.md"), orphanTarget);
+
+    // Pre-seed the agents-index with an entry pointing at the foreign file.
+    // From the bridge's POV this is a previous (mp, plugin) row that, once
+    // step 7 runs `isOwnedAgentFile()`, will fail the marker gate and be
+    // re-classified as foreign-preserved.
+    const seed: AgentsIndex = {
+      schemaVersion: 1,
+      agents: [
+        {
+          plugin: PLUGIN_NAME,
+          marketplace: MARKETPLACE_NAME,
+          sourceAgent: "orphan",
+          generatedName: "pi-claude-marketplace-acme-orphan",
+          sourcePath: "/orig/orphan.md",
+          targetPath: orphanTarget,
+          sourceHash: "deadbeef",
+          droppedFields: [],
+          droppedTools: [],
+          warnings: [],
+        },
+      ],
+    };
+    await atomicWriteJson(locations.agentsIndexPath, seed);
+  });
+
+  after(async () => {
+    await rm(scopeRoot, { recursive: true, force: true });
+  });
+
+  test("AG-5: foreign target with valid basename but missing marker is preserved byte-identical and surfaced via failed[]", async () => {
+    const beforeBytes = await readFile(orphanTarget, "utf8");
+    // Sanity-check the fixture really lacks the marker -- if Plan 03-01 ever
+    // changes the no-marker.md fixture this assertion fails loudly.
+    assert.ok(
+      !beforeBytes.includes("generated by pi-claude-marketplace"),
+      "AG-5 fixture invariant: no-marker.md must NOT contain the generated-marker substring",
+    );
+
+    const resolved = makeResolved();
+    const prepared = await prepareStagePluginAgents({
+      locations,
+      marketplaceName: MARKETPLACE_NAME,
+      pluginName: PLUGIN_NAME,
+      pluginRoot: FIXTURE_PLUGIN,
+      pluginDataDir,
+      resolved,
+      agentsSourceDir: path.join(FIXTURE_PLUGIN, "agents"),
+      knownSkills: [],
+    });
+
+    // Per D-06 corollary: prepare-time AG-5 foreign content does NOT throw;
+    // staged variant returned and result.failed[] surfaces the orphan.
+    assert.equal(prepared.kind, "staged", "D-06: foreign content surfaces via result, not throw");
+    assert.ok(
+      prepared.result.failed.length >= 1,
+      "AG-5: foreign target surfaced via CommitResult.failed[]",
+    );
+    const failure = prepared.result.failed.find((f) => f.targetPath === orphanTarget);
+    assert.ok(failure, "AG-5: failed[] contains orphan targetPath");
+    assert.equal(
+      failure.generatedName,
+      "pi-claude-marketplace-acme-orphan",
+      "AG-5: failed[] entry carries generatedName from index",
+    );
+
+    await commitPreparedAgents(prepared);
+
+    // After commit the foreign file must be byte-identical to before.
+    const afterBytes = await readFile(orphanTarget, "utf8");
+    assert.equal(afterBytes, beforeBytes, "AG-5: foreign content preserved byte-identical");
+
+    // The two new agents from test-plugin DID land alongside the preserved orphan.
+    const idx = await loadAgentsIndex(locations);
+    const ourEntries = idx.agents.filter(
+      (e) => e.marketplace === MARKETPLACE_NAME && e.plugin === PLUGIN_NAME,
+    );
+    // bot + acme-helper from test-plugin/agents/, plus the foreign-preserved orphan.
+    assert.equal(
+      ourEntries.length,
+      3,
+      "AG-5: foreign-preserved row kept in index alongside new rows",
+    );
+    const orphanRow = ourEntries.find(
+      (e) => e.generatedName === "pi-claude-marketplace-acme-orphan",
+    );
+    assert.ok(orphanRow, "AG-5: orphan row preserved in agents-index after commit");
+  });
+
+  test("AG-5 corollary: pre-seeded file without a corresponding index entry is invisible to the bridge", async () => {
+    // Drop a wrong-basename foreign file directly into <scopeRoot>/agents/.
+    // It has the marker but a basename that wouldn't match any owned file --
+    // the bridge can't see it (no index row points at it) and must not touch
+    // it. Byte-identical preservation is therefore the trivial property here.
+    const wrongBasename = path.join(locations.agentsDir, "wrong-basename.md");
+    await copyFile(path.join(FIXTURE_FOREIGN, "wrong-basename.md"), wrongBasename);
+    const beforeBytes = await readFile(wrongBasename, "utf8");
+
+    // Re-run prepare/commit. The bridge already committed once in the prior
+    // test; this is a second pass, so we pass previousNames implicitly via
+    // the index (which now has bot + acme-helper + orphan).
+    const resolved = makeResolved();
+    const prepared = await prepareStagePluginAgents({
+      locations,
+      marketplaceName: MARKETPLACE_NAME,
+      pluginName: PLUGIN_NAME,
+      pluginRoot: FIXTURE_PLUGIN,
+      pluginDataDir,
+      resolved,
+      agentsSourceDir: path.join(FIXTURE_PLUGIN, "agents"),
+      knownSkills: [],
+    });
+    await commitPreparedAgents(prepared);
+
+    const afterBytes = await readFile(wrongBasename, "utf8");
+    assert.equal(
+      afterBytes,
+      beforeBytes,
+      "AG-5 corollary: file without an index entry remains byte-identical after commit",
+    );
+  });
+});

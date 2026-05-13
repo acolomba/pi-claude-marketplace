@@ -15,6 +15,7 @@ The use of generative AI is welcome, provided these conditions are met:
 
 ```bash
 npm install
+git lfs install
 pre-commit install
 pre-commit install --hook-type commit-msg
 ```
@@ -22,6 +23,8 @@ pre-commit install --hook-type commit-msg
 ## Checks
 
 ```bash
-npm run check
+npm run check          # typecheck, lint, format check, and tests
+npm run lint:fix       # ESLint with autofixes
+npm run format         # Prettier autoformat
 pre-commit run --all-files
 ```

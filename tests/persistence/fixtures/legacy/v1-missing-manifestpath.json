@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "marketplaces": {
+    "beta": {
+      "name": "beta",
+      "scope": "user",
+      "source": { "kind": "path", "raw": "./beta-local", "logical": "./beta-local" },
+      "addedFromCwd": "/some/cwd",
+      "marketplaceRoot": "/abs/beta",
+      "plugins": {}
+    }
+  }
+}

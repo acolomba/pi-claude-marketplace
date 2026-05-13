@@ -1,13 +1,20 @@
-# dependencies
-node_modules/
+# ai harnesses
+/.claude/*
+!/.claude/settings.json
+/.codex
+/.opencode
+/.pi/
+/.pi-lens/
+/.ralph/
+/.serena
 
 # build output
 /dist/
 /build/
 /coverage/
 
-# package artifacts
-*.tgz
+# dependencies
+node_modules/
 
 # logs
 *.log
@@ -16,16 +23,11 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# ide
-/.idea/
-/.vscode/
+# mac
+.DS_Store
 
-# local pi state
-/.pi/
-/.pi-lens/
+# package artifacts
+*.tgz
 
 # worktrees
 /.worktrees/
-
-# mac
-.DS_Store
