@@ -31,7 +31,13 @@ The roadmap continues phase numbering from the completed v1.0 successor architec
 4. If preflight, resource preparation, bridge replacement, or state save fails, the old `state.json`, generated skills/prompts/agents/MCP entries, agents index, and plugin data directory remain available.
 5. Plugin data is deleted only after resource replacement and state commit both succeed; data cleanup failure emits a warning and does not turn the successful reinstall into failure.
 
-**Plans:** TBD during `/gsd-plan-phase 8`
+**Plans:** 4 plans
+
+Plans:
+- [ ] `08-01-PLAN.md` -- Lock-held manual-save transaction helper and no-network architecture guard
+- [ ] `08-02-PLAN.md` -- Backup-backed skills and commands replacement helpers
+- [ ] `08-03-PLAN.md` -- Backup-backed agents and MCP replacement helpers
+- [ ] `08-04-PLAN.md` -- Single-plugin atomic reinstall orchestrator core
 
 ### Phase 9: Reinstall Edge & Bulk UX
 
@@ -57,7 +63,7 @@ The roadmap continues phase numbering from the completed v1.0 successor architec
 
 | Phase | Goal | Requirements | Plans | Status | Completed |
 | ----- | ---- | ------------ | ----- | ------ | --------- |
-| 8. Atomic Reinstall Core | Atomic single-plugin reinstall with preserve-old-on-failure semantics | PRL-02, PRL-06, PRL-07, PRL-08, PRL-09, PRL-10, PRL-11, PRL-12 | TBD | Not started | - |
+| 8. Atomic Reinstall Core | Atomic single-plugin reinstall with preserve-old-on-failure semantics | PRL-02, PRL-06, PRL-07, PRL-08, PRL-09, PRL-10, PRL-11, PRL-12 | 4 plans | Planned | - |
 | 9. Reinstall Edge & Bulk UX | Command routing, batch forms, scope, completion, output, docs | PRL-01, PRL-03, PRL-04, PRL-05, PRL-13, PRL-14, PRL-15, PRL-16 | TBD | Not started | - |
 
 ## Coverage
