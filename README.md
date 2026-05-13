@@ -11,7 +11,7 @@
 
 Access Claude plugin marketplaces from Pi Coding Agent.
 
-![Marketplace install demo](https://github.com/acolomba/pi-claude-marketplace/raw/main/demos/marketplace-add-plugin-install.gif)
+![Marketplace install demo](https://media.githubusercontent.com/media/acolomba/pi-claude-marketplace/81a15453a0ec95dacfed71443ef8dcb59e3f0f69/demos/marketplace-add-plugin-install.gif)
 
 ## Features
 

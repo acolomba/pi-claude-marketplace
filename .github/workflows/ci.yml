@@ -115,8 +115,8 @@ jobs:
         run: npm pack --dry-run
 
   publish:
-    # Only publish on version tags after tests and package validation pass.
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    # TEMP: publish prerelease from PR as latest to verify Pi package gallery media.
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
     needs: [package]
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -138,4 +138,4 @@ jobs:
           package-manager-cache: false
 
       - name: Publish to npm
-        run: npm publish --access public --provenance
+        run: npm publish --access public --provenance --tag latest
