@@ -12,7 +12,7 @@ import { listMarketplaces } from "../../../extensions/pi-claude-marketplace/orch
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 interface NotifyRecord {
   message: string;

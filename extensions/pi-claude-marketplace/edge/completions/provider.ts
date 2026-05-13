@@ -38,7 +38,7 @@ import {
 } from "./data.ts";
 
 import type { LocationsResolver } from "./data.ts";
-import type { AutocompleteItem } from "@mariozechner/pi-tui";
+import type { AutocompleteItem } from "@earendil-works/pi-tui";
 
 export const TOP_LEVEL_SUBCOMMANDS = [
   "install",

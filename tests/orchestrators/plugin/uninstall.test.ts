@@ -26,7 +26,7 @@ import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-
 
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 // PU-1..8 + AS-6 (post-commit cleanup leaks warning-severity) + NFR-5 (no network).
 //

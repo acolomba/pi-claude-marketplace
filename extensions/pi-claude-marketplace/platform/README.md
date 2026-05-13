@@ -11,4 +11,4 @@ External system facades. Phase 1 lands `git.ts` (an `isomorphic-git` wrapper, re
 ## Planned Contents
 
 - [x] `git.ts` -- `isomorphic-git` wrapper exposing `clone`, `fetch`, `pull`, `checkout`, `resolveRef`, `listBranches`, `listRemotes` (Phase 1)
-- [ ] `pi-api.ts` -- thin wrapper around `@mariozechner/pi-coding-agent` for testability (Phase 7)
+- [ ] `pi-api.ts` -- thin wrapper around `@earendil-works/pi-coding-agent` for testability (Phase 7)

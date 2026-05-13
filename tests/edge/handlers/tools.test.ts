@@ -20,10 +20,10 @@ import {
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 // Reduced type for the bits of the tool definition we exercise. The real
-// type from `@mariozechner/pi-coding-agent` carries more fields than tests
+// type from `@earendil-works/pi-coding-agent` carries more fields than tests
 // need to read; we capture the `execute` callback verbatim plus a few
 // metadata fields for identity assertions.
 interface ToolDef {

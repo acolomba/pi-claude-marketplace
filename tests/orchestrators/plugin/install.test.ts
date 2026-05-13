@@ -21,7 +21,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 // PI-1..15 + AS-6 + AS-7 + COMP-01 + NFR-5.
 //

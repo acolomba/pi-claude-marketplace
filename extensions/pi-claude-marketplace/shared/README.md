@@ -8,7 +8,7 @@ Pure-leaves. The 5 ES-5 user-contract marker constants (`shared/markers.ts`), se
 
 ## Allowed Imports
 
-`shared/` MUST NOT import from any other extension folder. Pure leaves only. External imports (`node:*`, `write-file-atomic`, `@mariozechner/pi-coding-agent`) are fine.
+`shared/` MUST NOT import from any other extension folder. Pure leaves only. External imports (`node:*`, `write-file-atomic`, `@earendil-works/pi-coding-agent`) are fine.
 
 ## Planned Contents
 

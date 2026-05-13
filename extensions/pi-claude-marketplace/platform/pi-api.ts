@@ -1,7 +1,7 @@
 // platform/pi-api.ts
 //
 // Thin Pi extension API boundary. This is the only production file that
-// imports from `@mariozechner/pi-coding-agent`; all other extension modules
+// imports from `@earendil-works/pi-coding-agent`; all other extension modules
 // import Pi API types from here so peer-version bumps are auditable.
 //
 // The soft-dependency helpers live here because they probe `pi.getAllTools()`,
@@ -15,9 +15,9 @@ export type {
   ExtensionContext,
   ToolDefinition,
   ToolInfo,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 
-export type { AutocompleteItem } from "@mariozechner/pi-tui";
+export type { AutocompleteItem } from "@earendil-works/pi-tui";
 
 export interface ResourcesDiscoverEvent {
   type: "resources_discover";
@@ -31,7 +31,7 @@ export interface ResourcesDiscoverResult {
   themePaths?: string[];
 }
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export interface SoftDepStatus {
   piSubagentsLoaded: boolean;

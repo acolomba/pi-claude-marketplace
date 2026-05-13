@@ -32,8 +32,8 @@ Plugins that contain unsupported components are marked as "unavailable". The com
 ## Prerequisites
 
 - [Pi Coding Agent](https://pi.dev)
-- [pi-subagents](https://pi.dev/packages/pi-subagents) (optional but recommended)
-- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) (optional but recommended)
+- [pi-subagents](https://pi.dev/packages/pi-subagents) (optional but recommended, `pi install npm:pi-subagents`)
+- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) (optional but recommended, `pi install npm:pi-mcp-adapter`)
 
 ## Usage
 
@@ -89,7 +89,7 @@ Plugins are automatically updated when the marketplace is updated:
 
 Command and skill names are prefixed with the plugin name. If the command or skill is already prefixed with the plugin name plus `-`, that common part is elided.
 
-Commands use Pi's prompt-command colon form:
+Commands and skill names use Pi's colon form:
 
 | Plugin name | Command or skill name | Pi name    |
 | ----------- | --------------------- | ---------- |
@@ -97,7 +97,7 @@ Commands use Pi's prompt-command colon form:
 | `foo`       | `foo-bar`             | `/foo:bar` |
 | `foo`       | `foo`                 | `/foo:foo` |
 
-Skills use hyphenated generated names because Pi skill names may contain only lowercase letters, numbers, and hyphens. They can be invoked through Pi's `/skill` command:
+Skills additionally use hyphenated generated names after the `/skill:` prefix:
 
 | Plugin name | Skill name | Pi name          |
 | ----------- | ---------- | ---------------- |

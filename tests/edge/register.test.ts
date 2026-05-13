@@ -18,8 +18,8 @@ import type {
   PluginUpdateFn,
   PluginUpdateOutcome,
 } from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import type { AutocompleteItem, AutocompleteProvider } from "@mariozechner/pi-tui";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { AutocompleteItem, AutocompleteProvider } from "@earendil-works/pi-tui";
 
 // ---------------------------------------------------------------------------
 // Mock pi -- records command + tool + event registrations.

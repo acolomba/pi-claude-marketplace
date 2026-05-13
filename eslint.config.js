@@ -266,7 +266,7 @@ export default tseslint.config(
         {
           paths: [
             {
-              name: "@mariozechner/pi-coding-agent",
+              name: "@earendil-works/pi-coding-agent",
               message:
                 "Import Pi API types from extensions/pi-claude-marketplace/platform/pi-api.ts instead.",
             },

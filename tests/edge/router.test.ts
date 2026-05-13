@@ -16,7 +16,7 @@ import {
   type SubcommandHandlers,
 } from "../../extensions/pi-claude-marketplace/edge/router.ts";
 
-import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
 interface NotifyRecord {
   message: string;

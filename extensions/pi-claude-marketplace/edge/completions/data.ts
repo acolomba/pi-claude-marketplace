@@ -34,7 +34,7 @@ import { SCOPES } from "../../shared/types.ts";
 
 import type { PluginIndexRow } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { AutocompleteItem } from "@mariozechner/pi-tui";
+import type { AutocompleteItem } from "@earendil-works/pi-tui";
 
 type PluginRefCompletionMode = "install" | "uninstall" | "update";
 

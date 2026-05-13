@@ -24,7 +24,7 @@ import {
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 interface NotifyRecord {
   message: string;

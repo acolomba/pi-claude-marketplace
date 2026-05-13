@@ -12,7 +12,7 @@ import {
   PI_SUBAGENTS_NOT_LOADED,
 } from "../../extensions/pi-claude-marketplace/shared/markers.ts";
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 interface ToolStub {
   name: string;

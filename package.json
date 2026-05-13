@@ -13,8 +13,8 @@
   "description": "Access Claude plugin marketplaces from Pi.",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@mariozechner/pi-coding-agent": "^0.73.1",
-    "@mariozechner/pi-tui": "^0.73.1",
+    "@earendil-works/pi-coding-agent": "^0.74.0",
+    "@earendil-works/pi-tui": "^0.74.0",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/proper-lockfile": "^4.1.4",
     "@types/write-file-atomic": "^4.0.3",
@@ -51,8 +51,8 @@
   "license": "MIT",
   "name": "pi-claude-marketplace",
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": ">=0.73.1",
-    "@mariozechner/pi-tui": "*",
+    "@earendil-works/pi-coding-agent": ">=0.74.0",
+    "@earendil-works/pi-tui": "*",
     "typebox": "*"
   },
   "pi": {
@@ -82,5 +82,5 @@
     "typecheck": "tsc --noEmit"
   },
   "type": "module",
-  "version": "0.1.0"
+  "version": "0.1.1"
 }

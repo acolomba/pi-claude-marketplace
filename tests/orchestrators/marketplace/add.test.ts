@@ -19,7 +19,7 @@ import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-
 import { fixtureMarketplaceDir, makeMockGitOps } from "../../helpers/git-mock.ts";
 
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 interface NotifyRecord {
   message: string;
