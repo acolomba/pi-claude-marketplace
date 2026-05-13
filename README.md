@@ -1,7 +1,7 @@
 <!-- markdownlint-disable MD033 MD041 -->
 
 <p align="center">
-  <img src="images/redpi.png" alt="Pi Claude Marketplace" width="360">
+  <img src="https://raw.githubusercontent.com/acolomba/pi-claude-marketplace/main/images/redpi.png" alt="Pi Claude Marketplace logo" width="360">
 </p>
 <!-- markdownlint-enable MD033 MD041 -->
 
@@ -11,7 +11,12 @@
 
 Access Claude plugin marketplaces from Pi Coding Agent.
 
-![Marketplace install demo](https://media.githubusercontent.com/media/acolomba/pi-claude-marketplace/81a15453a0ec95dacfed71443ef8dcb59e3f0f69/demos/marketplace-add-plugin-install.gif)
+<!-- markdownlint-disable MD033 -->
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/acolomba/pi-claude-marketplace/main/demos/marketplace-add-plugin-install.gif" alt="Marketplace install demo" width="720">
+</p>
+<!-- markdownlint-enable MD033 -->
 
 ## Features
 
