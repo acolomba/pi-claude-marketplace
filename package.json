@@ -59,7 +59,7 @@
     "extensions": [
       "./extensions/pi-claude-marketplace/index.ts"
     ],
-    "image": "./images/redpi.png"
+    "image": "https://media.githubusercontent.com/media/acolomba/pi-claude-marketplace/265e06955d5f60b4df91ec5a3a347bd9c8ebb7c2/images/redpi.png"
   },
   "repository": {
     "type": "git",
@@ -82,5 +82,5 @@
     "typecheck": "tsc --noEmit"
   },
   "type": "module",
-  "version": "0.1.0-alpha.5"
+  "version": "0.1.0-alpha.6"
 }
