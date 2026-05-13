@@ -59,7 +59,7 @@
     "extensions": [
       "./extensions/pi-claude-marketplace/index.ts"
     ],
-    "image": "https://github.com/acolomba/pi-claude-marketplace/raw/main/demos/marketplace-add-plugin-install.gif"
+    "image": "./images/redpi.png"
   },
   "repository": {
     "type": "git",
