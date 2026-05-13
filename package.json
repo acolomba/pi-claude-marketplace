@@ -59,7 +59,7 @@
     "extensions": [
       "./extensions/pi-claude-marketplace/index.ts"
     ],
-    "image": "https://raw.githubusercontent.com/acolomba/pi-claude-marketplace/main/images/redpi.png"
+    "image": "https://media.githubusercontent.com/media/acolomba/pi-claude-marketplace/refs/heads/main/images/redpi.png"
   },
   "repository": {
     "type": "git",
