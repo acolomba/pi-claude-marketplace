@@ -8,7 +8,7 @@
   "dependencies": {
     "isomorphic-git": "^1.37.6",
     "proper-lockfile": "^4.1.2",
-    "write-file-atomic": "^8.0.0"
+    "write-file-atomic": "^7.0.1"
   },
   "description": "Access Claude plugin marketplaces from Pi.",
   "devDependencies": {
@@ -29,7 +29,7 @@
     "typescript-eslint": "^8.59.1"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=20.19.0"
   },
   "files": [
     "CHANGELOG.md",
@@ -82,5 +82,5 @@
     "typecheck": "tsc --noEmit"
   },
   "type": "module",
-  "version": "0.1.1"
+  "version": "0.1.2"
 }

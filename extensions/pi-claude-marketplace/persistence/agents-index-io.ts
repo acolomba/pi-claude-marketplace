@@ -154,7 +154,7 @@ export async function loadAgentsIndex(loc: ScopedLocations): Promise<LoadedAgent
  * write -- refuses on schema violation rather than persisting bad data
  * (mirrors Phase 2 saveState pre-write Check, state-io.ts line 212).
  * The atomic write itself goes through `atomicWriteJson`, which uses
- * write-file-atomic@^8 (tmp + fsync + rename + concurrent-write queue).
+ * write-file-atomic@^7 (tmp + fsync + rename + concurrent-write queue).
  */
 export async function saveAgentsIndex(loc: ScopedLocations, index: AgentsIndex): Promise<void> {
   if (!AGENTS_INDEX_VALIDATOR.Check(index)) {

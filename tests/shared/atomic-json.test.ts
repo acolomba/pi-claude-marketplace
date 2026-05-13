@@ -7,7 +7,7 @@ import test from "node:test";
 import { atomicWriteJson } from "../../extensions/pi-claude-marketplace/shared/atomic-json.ts";
 
 /**
- * NFR-1, AS-1, D-03 -- atomicWriteJson via write-file-atomic@^8.
+ * NFR-1, AS-1, D-03 -- atomicWriteJson via write-file-atomic@^7.
  *
  * The library handles tmp + fsync + rename internally; these tests verify
  * the wrapper produces the expected shape (2-space indent + trailing newline)

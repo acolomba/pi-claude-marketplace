@@ -7,7 +7,7 @@ import writeFileAtomic from "write-file-atomic";
  * Atomic JSON write (D-03 / NFR-1 / AS-1).
  *
  * Replaces V1's hand-rolled `atomicWriteJson` in `fs-utils.ts`. Uses
- * `write-file-atomic@^8` which:
+ * `write-file-atomic@^7` which:
  *   - serializes concurrent writes to the same path through an internal queue
  *   - generates a unique tmp filename in the destination directory
  *   - fsyncs the tmp file AND the parent directory before returning (default)
