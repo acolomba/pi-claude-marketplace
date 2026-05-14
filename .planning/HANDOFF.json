@@ -1,11 +1,11 @@
 {
   "version": "1.0",
-  "timestamp": "2026-05-14T00:35:22.972Z",
+  "timestamp": "2026-05-14T01:06:26.545Z",
   "phase": "08",
   "phase_name": "atomic-reinstall-core",
   "phase_dir": ".planning/phases/08-atomic-reinstall-core",
   "plan": 4,
-  "task": 1,
+  "task": 3,
   "total_tasks": 3,
   "status": "paused",
   "completed_tasks": [
@@ -28,28 +28,25 @@
       "commits": ["2cac16e", "74961b2", "f86e1ec"]
     },
     {
-      "id": 1,
-      "name": "Create reinstall orchestrator API and preflight",
-      "status": "in_progress",
-      "progress": "Started only: ReinstallPluginPartition and ReinstallPluginOutcome were added to extensions/pi-claude-marketplace/orchestrators/types.ts. No reinstall.ts or reinstall.test.ts has been created yet."
+      "id": "08-04",
+      "name": "Single-plugin atomic reinstall orchestrator core",
+      "status": "implementation_done",
+      "commit": "dcd726c",
+      "progress": "Production implementation and focused tests are complete and committed. The code exports reinstallPlugin and ReinstallPlugin outcome types, uses withLockedStateTransaction, prepares all bridge handles before replacement, rolls back physical replacements on replacement/save failure, preserves installed version/installedAt, deletes plugin data only after success, emits warning-only cleanup/cache failures, and passes focused plus full npm check verification."
     }
   ],
   "remaining_tasks": [
     {
-      "id": 1,
-      "name": "Create reinstall orchestrator API and preflight",
-      "status": "in_progress",
-      "remaining": "Create orchestrators/plugin/reinstall.ts, exports in plugin/top-level barrels, focused tests, cached-manifest installed-only preflight, self-exempt conflict guard, prepare-all-before-replace flow."
+      "id": "08-04-docs",
+      "name": "Create Plan 08-04 summary and close planning state",
+      "status": "not_started",
+      "remaining": "Write .planning/phases/08-atomic-reinstall-core/08-04-SUMMARY.md using the summary template, record commit dcd726c for implementation, include verification evidence, decisions, deviations, and self-check. Then update ROADMAP.md/REQUIREMENTS.md/STATE.md as appropriate for Phase 8 completion and commit docs if commit_docs remains true."
     },
     {
-      "id": 2,
-      "name": "Implement atomic replacement, state save, and rollback",
-      "status": "not_started"
-    },
-    {
-      "id": 3,
-      "name": "Add post-success cache, data cleanup, notifications, and final exports",
-      "status": "not_started"
+      "id": "phase-08-closeout",
+      "name": "Phase 8 transition or verification gate",
+      "status": "not_started",
+      "remaining": "After 08-04 summary/docs are committed, Phase 8 has 4/4 plans complete. Next likely action is phase verification/review or transition into Phase 9 planning, depending on GSD workflow."
     }
   ],
   "blockers": [],
@@ -57,23 +54,28 @@
   "background_processes": [],
   "decisions": [
     {
-      "decision": "Use withLockedStateTransaction for reinstall rather than withStateGuard.",
-      "rationale": "Reinstall must rollback physical bridge replacements if explicit state save fails; withStateGuard auto-saves after callback and cannot expose that boundary.",
+      "decision": "Implement reinstall as a dedicated single-plugin core rather than uninstall+install or update wrapper.",
+      "rationale": "Install rejects existing records, uninstall removes old resources first, and update imports Git/network refresh machinery plus weaker recovery semantics; Phase 8 requires cached-manifest, version-preserving, preserve-old-on-failure behavior.",
       "phase": "08"
     },
     {
-      "decision": "Bridge replacement handles are opaque and keep internals in bridge-private WeakMaps.",
-      "rationale": "Orchestrators can hold replacement handles without reading private prepared fields or backup paths.",
+      "decision": "Use withLockedStateTransaction and explicit tx.save() inside reinstallPlugin.",
+      "rationale": "The orchestrator must rollback already-swapped physical bridge resources if state persistence fails; withStateGuard auto-saves too late for that boundary.",
       "phase": "08"
     },
     {
-      "decision": "Agents replacement defaults to blocking foreign previous content; force only applies to this plugin's previous index rows.",
-      "rationale": "Protects manual/foreign agent content by default while supporting explicit reinstall force semantics with rollback protection.",
+      "decision": "Return ReinstallPluginOutcome for all paths, including failed outcomes after notifyError.",
+      "rationale": "Phase 9 needs deterministic batch partitions, while direct core usage still receives user-visible error notifications through notifyError.",
       "phase": "08"
     },
     {
-      "decision": "MCP rollback restores exact previous mcp.json text when possible.",
-      "rationale": "Preserves old user shape/format and satisfies old-resource preservation across reinstall failure.",
+      "decision": "Expose test-only __deps seams for state transaction, completion cache drop, and data-dir removal.",
+      "rationale": "Focused orchestrator tests need deterministic save/cache/data cleanup failure injection without adding production dependency complexity.",
+      "phase": "08"
+    },
+    {
+      "decision": "Keep force semantics bridge-owned for agent foreign previous content.",
+      "rationale": "replacePreparedAgents already constrains force to this plugin's previous index rows and rollback restores overwritten foreign/manual content on later failure.",
       "phase": "08"
     }
   ],
@@ -81,24 +83,24 @@
     {
       "path": ".planning/STATE.md",
       "status": "modified",
-      "note": "GSD timestamp/position drift; not part of Plan 08-04 implementation."
+      "note": "GSD timestamp drift only at time of handoff; not part of Plan 08-04 implementation."
     },
     {
       "path": ".planning/config.json",
       "status": "modified",
-      "note": "Only missing final newline according to diff; likely incidental."
+      "note": "Only missing final newline according to diff; incidental tooling drift."
     },
     {
-      "path": "extensions/pi-claude-marketplace/orchestrators/types.ts",
+      "path": "CLAUDE.md",
       "status": "modified",
-      "note": "Plan 08-04 Task 1 started: ReinstallPluginPartition and ReinstallPluginOutcome added."
+      "note": "Large unrelated profile/preferences overwrite detected; do not assume it belongs to Phase 8. Inspect/revert or preserve intentionally before committing any docs."
     },
     {
-      "path": "AGENTS.md",
+      "path": ".dev-preferences.md",
       "status": "untracked",
-      "note": "Pre-existing untracked memory/context file; do not assume it belongs to Phase 8 work."
+      "note": "Untracked developer-preferences file with placeholder content; not part of Phase 8 implementation."
     }
   ],
-  "next_action": "Resume Plan 08-04 Task 1 by creating tests/orchestrators/plugin/reinstall.test.ts and extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts. Keep the existing ReinstallPluginOutcome type change or move it as needed, then export reinstallPlugin from plugin/index.ts and orchestrators/index.ts. Run node --test tests/orchestrators/plugin/reinstall.test.ts tests/architecture/no-orchestrator-network.test.ts.",
-  "context_notes": "Phase 8 is 3/4 plans complete. Plans 08-01 through 08-03 are committed and summarized. Wave 3 / Plan 08-04 just began; only type scaffolding in orchestrators/types.ts exists. The orchestrator must use cached manifests only, preserve old installed version, prepare all bridge handles before replacement, use replace/rollback/finalize helpers from all four bridges, call tx.save() explicitly, rollback in reverse order on replacement/save failures, delete plugin data only after successful state commit, and surface cleanup/cache failures as warnings. No background processes are running. Current phase placeholder scan found no placeholder/TBD entries in Phase 08 docs. A broad grep across all phases reports historical placeholder/TBD strings in old docs/plans; not current-phase blockers."
+  "next_action": "Resume by writing .planning/phases/08-atomic-reinstall-core/08-04-SUMMARY.md for commit dcd726c, then update ROADMAP.md, REQUIREMENTS.md, and STATE.md for Plan 08-04/Phase 8 completion. Before docs commit, decide how to handle unrelated CLAUDE.md and .dev-preferences.md changes so they are not accidentally staged.",
+  "context_notes": "Implementation commit dcd726c is complete and verified. Focused command `node --test tests/orchestrators/plugin/reinstall.test.ts tests/architecture/no-orchestrator-network.test.ts` passed 9/9. Full `npm run check` passed with 867 tests. The only remaining planned work is GSD documentation/closure. Existing .planning/HANDOFF.json and .continue-here.md were overwritten for this pause. No background processes are running. Phase 8 placeholder scan found no current-phase placeholder/TBD files. Broad placeholder scan reports historical placeholder/TBD strings in older phase docs; do not treat as current Phase 8 blockers."
 }
