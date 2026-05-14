@@ -1,0 +1,4 @@
+{
+  "name": "github-marketplace",
+  "plugins": [{ "name": "github-plugin", "source": "./plugins/github-plugin", "version": "1.0.0" }]
+}

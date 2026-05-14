@@ -1,0 +1,12 @@
+{
+  "name": "directory-marketplace",
+  "plugins": [
+    { "name": "local-plugin", "source": "./plugins/local-plugin", "version": "1.0.0" },
+    {
+      "name": "preinstalled-plugin",
+      "source": "./plugins/preinstalled-plugin",
+      "version": "1.0.0"
+    },
+    { "name": "disabled-by-local", "source": "./plugins/disabled-by-local", "version": "1.0.0" }
+  ]
+}

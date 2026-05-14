@@ -1,0 +1,6 @@
+{
+  "name": "claude-plugins-official",
+  "plugins": [
+    { "name": "official-plugin", "source": "./plugins/official-plugin", "version": "1.0.0" }
+  ]
+}
