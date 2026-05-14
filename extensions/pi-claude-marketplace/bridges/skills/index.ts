@@ -12,7 +12,10 @@ export {
   abortPreparedSkills,
   assertNoSkillCollisions,
   commitPreparedSkills,
+  finalizeSkillsReplacement,
   prepareStageSkills,
+  replacePreparedSkills,
+  rollbackSkillsReplacement,
 } from "./stage.ts";
 export { unstagePluginSkills } from "./unstage.ts";
 export { discoverPluginSkills } from "./discover.ts";
@@ -21,6 +24,7 @@ export { rewriteFrontmatterName } from "./rewrite-frontmatter.ts";
 export type {
   DiscoveredSkill,
   PreparedSkillsStaging,
+  SkillsReplacement,
   StagedSkillRecord,
   StageSkillsCommitResult,
   StageSkillsInput,

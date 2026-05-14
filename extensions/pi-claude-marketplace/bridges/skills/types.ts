@@ -87,6 +87,19 @@ export interface PreparedSkillsStaged {
   readonly _renamePairs: readonly { from: string; to: string }[];
 }
 
+/** Opaque reinstall replacement handle for staged skills. */
+export type SkillsReplacement = SkillsReplacementNoop | SkillsReplacementReplaced;
+
+export interface SkillsReplacementNoop {
+  readonly kind: "noop";
+  readonly prepared: PreparedSkillsStaging;
+}
+
+export interface SkillsReplacementReplaced {
+  readonly kind: "replaced";
+  readonly prepared: PreparedSkillsStaged;
+}
+
 /** Input bundle for `unstagePluginSkills`. */
 export interface UnstageSkillsInput {
   readonly locations: ScopedLocations;

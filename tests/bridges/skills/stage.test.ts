@@ -9,7 +9,10 @@ import {
   abortPreparedSkills,
   assertNoSkillCollisions,
   commitPreparedSkills,
+  finalizeSkillsReplacement,
   prepareStageSkills,
+  replacePreparedSkills,
+  rollbackSkillsReplacement,
 } from "../../../extensions/pi-claude-marketplace/bridges/skills/stage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { cleanupStaging } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
@@ -300,6 +303,142 @@ test("commitPreparedSkills removes previous-named target dirs before rename (re-
     // New skills should exist.
     const newStat = await stat(path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md"));
     assert.ok(newStat.isFile());
+  });
+});
+
+test("Phase 8 / PRL-10 replacePreparedSkills can rollback to previous skill bytes", async () => {
+  await withTmpScope(async ({ locations }) => {
+    const oldDir = path.join(locations.skillsTargetDir, "acme-knowledge");
+    await mkdir(oldDir, { recursive: true });
+    await writeFile(path.join(oldDir, "SKILL.md"), "old skill bytes");
+
+    const pluginRoot = path.join(FIXTURES, "test-plugin");
+    const skillsDir = path.join(pluginRoot, "skills");
+    const resolved = makeResolved("acme", pluginRoot, skillsDir);
+
+    const prepared = await prepareStageSkills({
+      locations,
+      marketplaceName: "mp",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
+      resolved,
+      previousSkillNames: ["acme-knowledge"],
+    });
+
+    const replacement = await replacePreparedSkills(prepared);
+    const replaced = await readFile(
+      path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md"),
+      "utf8",
+    );
+    assert.notEqual(replaced, "old skill bytes");
+    assert.ok(replaced.includes(pluginRoot));
+    assert.ok(replaced.includes(path.join(locations.dataRoot, "mp", "acme")));
+
+    const leaks = await rollbackSkillsReplacement(replacement);
+    assert.deepEqual([...leaks], []);
+    assert.equal(
+      await readFile(path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md"), "utf8"),
+      "old skill bytes",
+    );
+    assert.equal(
+      await stat(path.join(locations.skillsTargetDir, "acme-helper")).catch(() => null),
+      null,
+    );
+  });
+});
+
+test("Phase 8 / PRL-10 finalizeSkillsReplacement removes backups and keeps staged content", async () => {
+  await withTmpScope(async ({ locations }) => {
+    const oldDir = path.join(locations.skillsTargetDir, "acme-knowledge");
+    await mkdir(oldDir, { recursive: true });
+    await writeFile(path.join(oldDir, "SKILL.md"), "old skill bytes");
+
+    const pluginRoot = path.join(FIXTURES, "test-plugin");
+    const skillsDir = path.join(pluginRoot, "skills");
+    const resolved = makeResolved("acme", pluginRoot, skillsDir);
+
+    const prepared = await prepareStageSkills({
+      locations,
+      marketplaceName: "mp",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
+      resolved,
+      previousSkillNames: ["acme-knowledge"],
+    });
+    assert.equal(prepared.kind, "staged");
+
+    const replacement = await replacePreparedSkills(prepared);
+    const leaks = await finalizeSkillsReplacement(replacement);
+    assert.deepEqual([...leaks], []);
+    assert.equal(await stat(prepared.stagingRoot).catch(() => null), null);
+
+    const restored = await readFile(
+      path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md"),
+      "utf8",
+    );
+    assert.notEqual(restored, "old skill bytes");
+    assert.ok(
+      (await stat(path.join(locations.skillsTargetDir, "acme-helper", "SKILL.md"))).isFile(),
+    );
+  });
+});
+
+test("Phase 8 / PRL-10 replacePreparedSkills restores backups if an unrelated target blocks rename", async () => {
+  await withTmpScope(async ({ locations }) => {
+    const oldDir = path.join(locations.skillsTargetDir, "acme-knowledge");
+    await mkdir(oldDir, { recursive: true });
+    await writeFile(path.join(oldDir, "SKILL.md"), "old skill bytes");
+    const unrelatedDir = path.join(locations.skillsTargetDir, "acme-helper");
+    await mkdir(unrelatedDir, { recursive: true });
+    await writeFile(path.join(unrelatedDir, "SKILL.md"), "manual helper bytes");
+
+    const pluginRoot = path.join(FIXTURES, "test-plugin");
+    const skillsDir = path.join(pluginRoot, "skills");
+    const resolved = makeResolved("acme", pluginRoot, skillsDir);
+
+    const prepared = await prepareStageSkills({
+      locations,
+      marketplaceName: "mp",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
+      resolved,
+      previousSkillNames: ["acme-knowledge"],
+    });
+
+    await assert.rejects(() => replacePreparedSkills(prepared), /non-previous content/);
+    assert.equal(
+      await readFile(path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md"), "utf8"),
+      "old skill bytes",
+    );
+    assert.equal(
+      await readFile(path.join(locations.skillsTargetDir, "acme-helper", "SKILL.md"), "utf8"),
+      "manual helper bytes",
+    );
+  });
+});
+
+test("Phase 8 / PRL-10 noop skills replacements rollback and finalize without leaks", async () => {
+  await withTmpScope(async ({ locations }) => {
+    const pluginRoot = path.join(FIXTURES, "empty-mcp");
+    const skillsDir = path.join(pluginRoot, "skills");
+    const resolved = makeResolved("acme", pluginRoot, skillsDir);
+
+    const prepared = await prepareStageSkills({
+      locations,
+      marketplaceName: "mp",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
+      resolved,
+    });
+
+    const replacement = await replacePreparedSkills(prepared);
+    assert.equal(replacement.kind, "noop");
+    assert.deepEqual([...(await rollbackSkillsReplacement(replacement))], []);
+    assert.deepEqual([...(await finalizeSkillsReplacement(replacement))], []);
   });
 });
 

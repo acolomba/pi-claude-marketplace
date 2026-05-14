@@ -23,8 +23,9 @@ import { cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
-import { appendLeakToError } from "../../shared/errors.ts";
-import { cleanupStaging } from "../../shared/fs-utils.ts";
+import { appendLeakToError, errorMessage } from "../../shared/errors.ts";
+import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
+import { MANUAL_RECOVERY_REQUIRED } from "../../shared/markers.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { substituteClaudeVars } from "../../shared/vars.ts";
 
@@ -34,9 +35,21 @@ import { rewriteFrontmatterName } from "./rewrite-frontmatter.ts";
 import type {
   DiscoveredSkill,
   PreparedSkillsStaging,
+  SkillsReplacement,
   StagedSkillRecord,
   StageSkillsInput,
 } from "./types.ts";
+
+type SkillsReplacementInternals = Readonly<{
+  backupRoot: string;
+  backups: readonly { name: string; from: string; to: string }[];
+  renamed: readonly { from: string; to: string }[];
+}>;
+
+const skillsReplacementInternals = new WeakMap<
+  Extract<SkillsReplacement, { kind: "replaced" }>,
+  SkillsReplacementInternals
+>();
 
 /**
  * RN-6: refuse two source skills that elide to the same generated name.
@@ -230,4 +243,151 @@ export async function abortPreparedSkills(prepared: PreparedSkillsStaging): Prom
   }
 
   await cleanupStaging(prepared.stagingRoot, "skills staging directory");
+}
+
+/**
+ * Reinstall-safe replacement helper. Unlike commitPreparedSkills, this moves
+ * previous plugin-owned target dirs to a backup root before staged renames so
+ * a later orchestrator failure can restore the old install.
+ */
+export async function replacePreparedSkills(
+  prepared: PreparedSkillsStaging,
+): Promise<SkillsReplacement> {
+  if (prepared.kind === "noop") {
+    return { kind: "noop", prepared };
+  }
+
+  const backupRoot = path.join(prepared.locations.skillsStagingDir, `backup-${randomUUID()}`);
+  await mkdir(backupRoot, { recursive: true });
+  await assertPathInside(prepared.locations.skillsStagingDir, backupRoot, "skills backup root");
+
+  const backups: { name: string; from: string; to: string }[] = [];
+  const renamed: { from: string; to: string }[] = [];
+
+  try {
+    for (const name of prepared._previousNames) {
+      assertSafeName(name, "previous skill name");
+      const target = path.join(prepared.locations.skillsTargetDir, name);
+      await assertPathInside(prepared.locations.skillsTargetDir, target, "previous skill dir");
+      if (!(await pathExists(target))) {
+        continue;
+      }
+
+      const backup = path.join(backupRoot, name);
+      await assertPathInside(backupRoot, backup, "skills backup dir");
+      await rename(target, backup);
+      backups.push({ name, from: target, to: backup });
+    }
+
+    await mkdir(prepared.locations.skillsTargetDir, { recursive: true });
+    for (const pair of prepared._renamePairs) {
+      if (await pathExists(pair.to)) {
+        throw new Error(`Cannot replace skill target with non-previous content at ${pair.to}`);
+      }
+
+      await rename(pair.from, pair.to);
+      renamed.push(pair);
+    }
+  } catch (err) {
+    const leaks = await rollbackSkillsReplacementInternal(prepared, renamed, backups, backupRoot);
+    if (leaks.length > 0) {
+      throw new Error(`${errorMessage(err)} ${MANUAL_RECOVERY_REQUIRED}${leaks.join("; ")}`, {
+        cause: err,
+      });
+    }
+
+    throw err;
+  }
+
+  const replacement: Extract<SkillsReplacement, { kind: "replaced" }> = {
+    kind: "replaced",
+    prepared,
+  };
+  skillsReplacementInternals.set(replacement, {
+    backupRoot,
+    backups: Object.freeze(backups),
+    renamed: Object.freeze(renamed),
+  });
+  return replacement;
+}
+
+export async function rollbackSkillsReplacement(
+  replacement: SkillsReplacement,
+): Promise<readonly string[]> {
+  if (replacement.kind === "noop") {
+    return Object.freeze([]);
+  }
+
+  const internals = requireSkillsReplacementInternals(replacement);
+  return rollbackSkillsReplacementInternal(
+    replacement.prepared,
+    internals.renamed,
+    internals.backups,
+    internals.backupRoot,
+  );
+}
+
+export async function finalizeSkillsReplacement(
+  replacement: SkillsReplacement,
+): Promise<readonly string[]> {
+  if (replacement.kind === "noop") {
+    return Object.freeze([]);
+  }
+
+  const internals = requireSkillsReplacementInternals(replacement);
+  const leaks = [
+    await cleanupStaging(internals.backupRoot, "skills replacement backup directory"),
+    await cleanupStaging(replacement.prepared.stagingRoot, "skills staging directory"),
+  ].filter((leak): leak is string => leak !== undefined);
+  return Object.freeze(leaks);
+}
+
+function requireSkillsReplacementInternals(
+  replacement: Extract<SkillsReplacement, { kind: "replaced" }>,
+): SkillsReplacementInternals {
+  const internals = skillsReplacementInternals.get(replacement);
+  if (internals === undefined) {
+    throw new Error("Unknown skills replacement handle.");
+  }
+
+  return internals;
+}
+
+async function rollbackSkillsReplacementInternal(
+  prepared: Extract<PreparedSkillsStaging, { kind: "staged" }>,
+  renamed: readonly { from: string; to: string }[],
+  backups: readonly { name: string; from: string; to: string }[],
+  backupRoot: string,
+): Promise<readonly string[]> {
+  const leaks: string[] = [];
+
+  for (const pair of [...renamed].reverse()) {
+    try {
+      await rm(pair.to, { recursive: true, force: true });
+    } catch (err) {
+      leaks.push(`failed to remove replacement skill dir at ${pair.to}: ${errorMessage(err)}`);
+    }
+  }
+
+  for (const backup of [...backups].reverse()) {
+    try {
+      await mkdir(path.dirname(backup.from), { recursive: true });
+      await rename(backup.to, backup.from);
+    } catch (err) {
+      leaks.push(
+        `failed to restore previous skill dir ${backup.name} from ${backup.to} to ${backup.from}: ${errorMessage(err)}`,
+      );
+    }
+  }
+
+  for (const leak of [
+    await cleanupStaging(prepared.stagingRoot, "skills staging directory"),
+    await cleanupStaging(backupRoot, "skills replacement backup directory"),
+  ]) {
+    if (leak !== undefined) {
+      leaks.push(leak);
+    }
+  }
+
+  return Object.freeze(leaks);
 }
