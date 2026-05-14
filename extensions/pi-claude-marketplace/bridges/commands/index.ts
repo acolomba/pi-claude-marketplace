@@ -11,11 +11,15 @@ export {
   abortPreparedCommands,
   assertNoCommandCollisions,
   commitPreparedCommands,
+  finalizeCommandsReplacement,
   prepareStageCommands,
+  replacePreparedCommands,
+  rollbackCommandsReplacement,
 } from "./stage.ts";
 export { unstagePluginCommands } from "./unstage.ts";
 
 export type {
+  CommandsReplacement,
   DiscoveredCommand,
   PreparedCommandsStaging,
   StageCommandsCommitResult,
