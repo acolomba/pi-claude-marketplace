@@ -1,7 +1,7 @@
 ---
 phase: 8
 slug: atomic-reinstall-core
-status: ready
+status: approved
 nyquist_compliant: true
 wave_0_complete: true
 created: 2026-05-13
@@ -38,15 +38,15 @@ created: 2026-05-13
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 | ------- | ---- | ---- | ----------- | --------- | ----------------- | ----------- | ------ |
-| 08-01-01 | 01 | 1 | PRL-07, PRL-10 | transaction unit | `node --test tests/transaction/with-state-guard.test.ts` | ✅ | ⬜ pending |
-| 08-01-02 | 01 | 1 | PRL-07 | architecture | `node --test tests/architecture/no-orchestrator-network.test.ts` | ✅ | ⬜ pending |
-| 08-02-01 | 02 | 2 | PRL-09, PRL-10 | bridge unit | `node --test tests/bridges/skills/stage.test.ts tests/bridges/commands/stage.test.ts` | ✅ | ⬜ pending |
-| 08-02-02 | 02 | 2 | PRL-09, PRL-10 | bridge unit | `node --test tests/bridges/skills/stage.test.ts tests/bridges/commands/stage.test.ts` | ✅ | ⬜ pending |
-| 08-03-01 | 03 | 2 | PRL-09, PRL-10 | bridge unit | `node --test tests/bridges/agents/stage.test.ts` | ✅ | ⬜ pending |
-| 08-03-02 | 03 | 2 | PRL-09, PRL-10 | bridge unit | `node --test tests/bridges/mcp/stage.test.ts` | ✅ | ⬜ pending |
-| 08-04-01 | 04 | 3 | PRL-02, PRL-06, PRL-07, PRL-08 | orchestrator unit | `node --test tests/orchestrators/plugin/reinstall.test.ts tests/architecture/no-orchestrator-network.test.ts` | ❌ created in Plan 04 | ⬜ pending |
-| 08-04-02 | 04 | 3 | PRL-09, PRL-10 | orchestrator unit | `node --test tests/orchestrators/plugin/reinstall.test.ts` | ❌ created in Plan 04 | ⬜ pending |
-| 08-04-03 | 04 | 3 | PRL-11, PRL-12 | orchestrator unit | `node --test tests/orchestrators/plugin/reinstall.test.ts` | ❌ created in Plan 04 | ⬜ pending |
+| 08-01-01 | 01 | 1 | PRL-07, PRL-10 | transaction unit | `node --test tests/transaction/with-state-guard.test.ts` | ✅ | ✅ green |
+| 08-01-02 | 01 | 1 | PRL-07 | architecture | `node --test tests/architecture/no-orchestrator-network.test.ts` | ✅ | ✅ green |
+| 08-02-01 | 02 | 2 | PRL-09, PRL-10 | bridge unit | `node --test tests/bridges/skills/stage.test.ts tests/bridges/commands/stage.test.ts` | ✅ | ✅ green |
+| 08-02-02 | 02 | 2 | PRL-09, PRL-10 | bridge unit | `node --test tests/bridges/skills/stage.test.ts tests/bridges/commands/stage.test.ts` | ✅ | ✅ green |
+| 08-03-01 | 03 | 2 | PRL-09, PRL-10 | bridge unit | `node --test tests/bridges/agents/stage.test.ts` | ✅ | ✅ green |
+| 08-03-02 | 03 | 2 | PRL-09, PRL-10 | bridge unit | `node --test tests/bridges/mcp/stage.test.ts` | ✅ | ✅ green |
+| 08-04-01 | 04 | 3 | PRL-02, PRL-06, PRL-07, PRL-08 | orchestrator unit | `node --test tests/orchestrators/plugin/reinstall.test.ts tests/architecture/no-orchestrator-network.test.ts` | ✅ | ✅ green |
+| 08-04-02 | 04 | 3 | PRL-09, PRL-10 | orchestrator unit | `node --test tests/orchestrators/plugin/reinstall.test.ts` | ✅ | ✅ green |
+| 08-04-03 | 04 | 3 | PRL-11, PRL-12 | orchestrator unit | `node --test tests/orchestrators/plugin/reinstall.test.ts` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -54,7 +54,7 @@ created: 2026-05-13
 
 ## Wave 0 Requirements
 
-Existing infrastructure covers all phase requirements. Plan 04 creates the new focused orchestrator test file before production assertions are considered complete.
+Existing infrastructure covers all phase requirements. Plan 04 created the focused orchestrator test file and all Phase 8 automated checks are green.
 
 ---
 
@@ -73,4 +73,4 @@ All Phase 8 behaviors have automated verification. Phase 9 will own user-facing 
 - [x] Feedback latency target documented.
 - [x] `nyquist_compliant: true` set in frontmatter.
 
-**Approval:** approved 2026-05-13
+**Approval:** complete - Plan 08-04 ran `node --test tests/orchestrators/plugin/reinstall.test.ts tests/architecture/no-orchestrator-network.test.ts`, `node --test "tests/{architecture,bridges,orchestrators,transaction}/**/*.test.ts"`, and `npm run check` successfully.

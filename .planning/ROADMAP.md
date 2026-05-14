@@ -10,7 +10,7 @@ The roadmap continues phase numbering from the completed v1.0 successor architec
 
 **Phase Numbering:** continued from previous milestone; v1.1 starts at Phase 8.
 
-- [ ] **Phase 8: Atomic Reinstall Core** - Dedicated reinstall orchestrator and replacement-safe transaction primitives for one plugin
+- [x] **Phase 8: Atomic Reinstall Core** - Dedicated reinstall orchestrator and replacement-safe transaction primitives for one plugin
 - [ ] **Phase 9: Reinstall Edge & Bulk UX** - `/claude:plugin reinstall` routing, batch forms, completions, docs, and user-facing output
 
 ## Phase Details
@@ -37,7 +37,7 @@ Plans:
 - [x] `08-01-PLAN.md` -- Lock-held manual-save transaction helper and no-network architecture guard
 - [x] `08-02-PLAN.md` -- Backup-backed skills and commands replacement helpers
 - [x] `08-03-PLAN.md` -- Backup-backed agents and MCP replacement helpers
-- [ ] `08-04-PLAN.md` -- Single-plugin atomic reinstall orchestrator core
+- [x] `08-04-PLAN.md` -- Single-plugin atomic reinstall orchestrator core
 
 ### Phase 9: Reinstall Edge & Bulk UX
 
@@ -63,7 +63,7 @@ Plans:
 
 | Phase | Goal | Requirements | Plans | Status | Completed |
 | ----- | ---- | ------------ | ----- | ------ | --------- |
-| 8. Atomic Reinstall Core | Atomic single-plugin reinstall with preserve-old-on-failure semantics | PRL-02, PRL-06, PRL-07, PRL-08, PRL-09, PRL-10, PRL-11, PRL-12 | 3/4 plans | Executing | - |
+| 8. Atomic Reinstall Core | Atomic single-plugin reinstall with preserve-old-on-failure semantics | PRL-02, PRL-06, PRL-07, PRL-08, PRL-09, PRL-10, PRL-11, PRL-12 | 4/4 plans | Complete | 2026-05-14 |
 | 9. Reinstall Edge & Bulk UX | Command routing, batch forms, scope, completion, output, docs | PRL-01, PRL-03, PRL-04, PRL-05, PRL-13, PRL-14, PRL-15, PRL-16 | TBD | Not started | - |
 
 ## Coverage
@@ -71,17 +71,17 @@ Plans:
 | Requirement | Phase | Status |
 | ----------- | ----- | ------ |
 | PRL-01 | Phase 9 | Pending |
-| PRL-02 | Phase 8 | Pending |
+| PRL-02 | Phase 8 | Complete |
 | PRL-03 | Phase 9 | Pending |
 | PRL-04 | Phase 9 | Pending |
 | PRL-05 | Phase 9 | Pending |
-| PRL-06 | Phase 8 | Pending |
-| PRL-07 | Phase 8 | Pending |
-| PRL-08 | Phase 8 | Pending |
-| PRL-09 | Phase 8 | Pending |
-| PRL-10 | Phase 8 | Pending |
-| PRL-11 | Phase 8 | Pending |
-| PRL-12 | Phase 8 | Pending |
+| PRL-06 | Phase 8 | Complete |
+| PRL-07 | Phase 8 | Complete |
+| PRL-08 | Phase 8 | Complete |
+| PRL-09 | Phase 8 | Complete |
+| PRL-10 | Phase 8 | Complete |
+| PRL-11 | Phase 8 | Complete |
+| PRL-12 | Phase 8 | Complete |
 | PRL-13 | Phase 9 | Pending |
 | PRL-14 | Phase 9 | Pending |
 | PRL-15 | Phase 9 | Pending |
@@ -99,3 +99,4 @@ Plans:
 
 ---
 *Roadmap created: 2026-05-13 for milestone v1.1 Reinstall Command*
+*Last updated: 2026-05-14 after Phase 8 completion*

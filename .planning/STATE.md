@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
-status: executing
-stopped_at: Plan 08-03 complete; executing Plan 08-04
-last_updated: "2026-05-14T00:29:14.715Z"
-last_activity: 2026-05-14 - Plan 08-03 complete; executing Plan 08-04
+status: completed
+stopped_at: Phase 08 complete; ready to plan Phase 09
+last_updated: "2026-05-14T01:30:54.352Z"
+last_activity: 2026-05-14 - Phase 08 complete; ready to plan Phase 09
 progress:
   total_phases: 2
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 3
-  percent: 75
+  completed_plans: 4
+  percent: 50
 ---
 
 # Project State
@@ -26,16 +26,16 @@ See: .planning/PROJECT.md (updated 2026-05-13)
 
 Phase: 08 of 1 (atomic reinstall core)
 Plan: 4 of 4
-Status: Executing Phase 08
-Last activity: 2026-05-14 - Plan 08-03 complete; executing Plan 08-04
+Status: Milestone complete
+Last activity: 2026-05-14 - Phase 08 complete; ready to plan Phase 09
 
-Progress: [████████░░] 75%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 39
+- Total plans completed: 40
 - Average duration: -
 - Total execution time: -
 
@@ -48,6 +48,7 @@ Progress: [████████░░] 75%
 | 04 | 10 | - | - |
 | 05 | 10 | - | - |
 | 07 | 6 | - | - |
+| 08 | 4 | - | - |
 
 **Recent Trend:**
 
@@ -64,6 +65,7 @@ Progress: [████████░░] 75%
 | Phase 08 P01 | 10 min | 2 tasks | 4 files |
 | Phase 08 P02 | 12 min | 2 tasks | 8 files |
 | Phase 08 P03 | 12 min | 2 tasks | 8 files |
+| Phase 08 P04 | 23 min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -93,6 +95,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 08]: reinstall.ts is architecture-gated before implementation against Git/network imports and refreshGitHubClone references. -- Plan 08-01 established the PRL-07 no-network guard.
 - [Phase 08]: skills and commands bridges now expose rollback-safe replace/rollback/finalize helpers with opaque WeakMap-backed handles. -- Plan 08-02 established the PRL-09/PRL-10 backup replacement pattern for file and directory resources.
 - [Phase 08]: agents and MCP bridges now expose rollback-safe replace/rollback/finalize helpers, including default foreign-agent blocking and force-mode restoration. -- Plan 08-03 completed the PRL-09/PRL-10 bridge replacement foundation.
+- [Phase 08]: reinstallPlugin is a dedicated cached-manifest, version-preserving single-plugin core that returns structured outcomes for Phase 9 batch partitioning. -- Plan 08-04 completed PRL-02/06/07/08 and avoided uninstall+install/update wrappers.
+- [Phase 08]: reinstallPlugin holds withLockedStateTransaction across prepare, bridge replacement, explicit state save, and rollback; data/cache cleanup failures are warning-only after commit. -- Plan 08-04 completed PRL-09/10/11/12.
 
 ### Pending Todos
 
@@ -100,8 +104,8 @@ None yet.
 
 ### Blockers/Concerns
 
-- Behavioral Gaps 1, 2, 4-10 (FEATURES Gap series) need explicit resolutions logged in PROJECT.md Key Decisions before Phase 4/5 planning. SUMMARY.md provides recommended resolutions.
-- `write-file-atomic@^8` Node engine constraint bumps effective floor from 22.0 to 22.22.2; confirm CI Node range before adopting in Phase 1.
+- Phase 9 still needs planning for command routing, batch target forms, scope filtering, tab completion, user-facing output, and docs.
+- Historical `write-file-atomic@^8` engine concern is resolved on main by v0.1.2: package engines now allow `>=20.19.0` and the dependency is `write-file-atomic@^7`.
 
 ## Deferred Items
 
@@ -113,6 +117,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-14T00:29:14.532Z
-Stopped At: Plan 08-03 complete; executing Plan 08-04
-Resume File: .planning/phases/08-atomic-reinstall-core/08-04-PLAN.md
+Last session: 2026-05-14T01:31:04.000Z
+Stopped At: Phase 08 complete; ready to plan Phase 09
+Resume File: .planning/ROADMAP.md
