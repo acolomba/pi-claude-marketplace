@@ -45,3 +45,44 @@ export interface EnabledPluginRefsResult {
   readonly refs: readonly EnabledPluginRef[];
   readonly diagnostics: readonly ImportDiagnostic[];
 }
+
+export interface PlannedMarketplaceSource {
+  readonly scope: Scope;
+  readonly marketplace: string;
+  readonly source: string;
+}
+
+export interface PlannedPluginImport {
+  readonly scope: Scope;
+  readonly ref: EnabledPluginRef;
+}
+
+export interface SkippedPluginImport {
+  readonly scope: Scope;
+  readonly ref: EnabledPluginRef;
+  readonly reason: string;
+}
+
+export interface MarketplaceSourcePlanResult {
+  readonly marketplacesToEnsure: readonly PlannedMarketplaceSource[];
+  readonly diagnostics: readonly ImportDiagnostic[];
+  readonly unmappableMarketplaces: readonly string[];
+}
+
+export interface ScopedClaudeImportPlanInput {
+  readonly scope: Scope;
+  readonly settings: MergedClaudeSettings;
+}
+
+export interface ScopedClaudeImportPlan {
+  readonly scope: Scope;
+  readonly marketplacesToEnsure: readonly PlannedMarketplaceSource[];
+  readonly pluginsToInstall: readonly PlannedPluginImport[];
+  readonly skippedPlugins: readonly SkippedPluginImport[];
+  readonly diagnostics: readonly ImportDiagnostic[];
+}
+
+export interface ClaudeImportPlan {
+  readonly scopes: readonly ScopedClaudeImportPlan[];
+  readonly diagnostics: readonly ImportDiagnostic[];
+}

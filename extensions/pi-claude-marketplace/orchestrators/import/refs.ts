@@ -15,8 +15,16 @@ export function parseEnabledPluginRef(raw: string): ParseEnabledPluginRefResult 
   }
 
   const [plugin, marketplace] = parts;
-  if (plugin === undefined || marketplace === undefined || plugin.trim() === "" || marketplace.trim() === "") {
-    return { ok: false, reason: "Expected non-empty plugin and marketplace in plugin@marketplace ref." };
+  if (
+    plugin === undefined ||
+    marketplace === undefined ||
+    plugin.trim() === "" ||
+    marketplace.trim() === ""
+  ) {
+    return {
+      ok: false,
+      reason: "Expected non-empty plugin and marketplace in plugin@marketplace ref.",
+    };
   }
 
   return { ok: true, ref: { plugin: plugin.trim(), marketplace: marketplace.trim(), raw } };

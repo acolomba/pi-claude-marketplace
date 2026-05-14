@@ -17,7 +17,14 @@ test("parseEnabledPluginRef accepts exactly one plugin@marketplace separator", (
   }
 });
 
-for (const raw of ["", "plugin", "@claude-plugins-official", "frontend-design@", "frontend-design@@mp", "frontend-design@mp@extra"]) {
+for (const raw of [
+  "",
+  "plugin",
+  "@claude-plugins-official",
+  "frontend-design@",
+  "frontend-design@@mp",
+  "frontend-design@mp@extra",
+]) {
   test(`parseEnabledPluginRef rejects malformed ref ${JSON.stringify(raw)}`, () => {
     const got = parseEnabledPluginRef(raw);
     assert.equal(got.ok, false);
@@ -73,10 +80,21 @@ test("extractEnabledPluginRefs diagnoses malformed refs and continues to valid r
 
 test("refs.ts stays pure and side-effect free", async () => {
   const source = await readFile(
-    new URL("../../../extensions/pi-claude-marketplace/orchestrators/import/refs.ts", import.meta.url),
+    new URL(
+      "../../../extensions/pi-claude-marketplace/orchestrators/import/refs.ts",
+      import.meta.url,
+    ),
     "utf8",
   );
-  for (const forbidden of ["ctx.ui.notify", "console.", "process.stdout", "process.stderr", "fetch", "readFile", "writeFile"]) {
+  for (const forbidden of [
+    "ctx.ui.notify",
+    "console.",
+    "process.stdout",
+    "process.stderr",
+    "fetch",
+    "readFile",
+    "writeFile",
+  ]) {
     assert.equal(source.includes(forbidden), false, `refs.ts must not contain ${forbidden}`);
   }
 });

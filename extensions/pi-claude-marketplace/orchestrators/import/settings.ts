@@ -28,7 +28,10 @@ export function resolveClaudeSettingsPaths(
   options: ClaudeSettingsReadOptions = {},
 ): ClaudeSettingsPaths {
   if (scope === "user") {
-    const claudeRoot = options.claudeConfigDir ?? process.env.CLAUDE_CONFIG_DIR ?? path.join(os.homedir(), ".claude");
+    const claudeRoot =
+      options.claudeConfigDir ??
+      process.env.CLAUDE_CONFIG_DIR ??
+      path.join(os.homedir(), ".claude");
     return {
       basePath: path.join(claudeRoot, "settings.json"),
       localPath: path.join(claudeRoot, "settings.local.json"),

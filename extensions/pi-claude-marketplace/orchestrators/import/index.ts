@@ -1,3 +1,4 @@
+export { buildClaudeImportPlan, planMarketplaceSourcesForRefs } from "./marketplaces.ts";
 export { extractEnabledPluginRefs, parseEnabledPluginRef } from "./refs.ts";
 export {
   loadMergedClaudeSettingsForScope,
@@ -8,10 +9,17 @@ export {
 export type {
   ClaudeSettingsPaths,
   ClaudeSettingsReadOptions,
+  ClaudeImportPlan,
   EnabledPluginRef,
   EnabledPluginRefsResult,
   ImportDiagnostic,
+  MarketplaceSourcePlanResult,
   MergedClaudeSettings,
   MergedClaudeSettingsResult,
   ParseEnabledPluginRefResult,
+  PlannedMarketplaceSource,
+  PlannedPluginImport,
+  ScopedClaudeImportPlan,
+  ScopedClaudeImportPlanInput,
+  SkippedPluginImport,
 } from "./types.ts";
