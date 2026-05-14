@@ -68,7 +68,7 @@ This phase does **not** mutate Pi state, add marketplaces, install plugins, wire
 
 - `.planning/PROJECT.md` - Current milestone v1.2 goal, target features, and project-wide decisions D-26/D-27 for import scope and official marketplace mapping.
 - `.planning/REQUIREMENTS.md` §"Milestone v1.2 Requirements" - IMP-04 through IMP-08 are the primary Phase 10 requirements; IMP-01 through IMP-03 and IMP-09 through IMP-11 frame Phase 11 consumers.
-- `.planning/ROADMAP.md` §"Phase 8: Claude Settings Import Foundation" - Existing roadmap text for this capability before renumbering to Phase 10; use as the phase-goal source until ROADMAP.md is updated to the v1.2 Phase 10/11 numbering.
+- `.planning/ROADMAP.md` §"Phase 10: Claude Settings Import Foundation" - Phase-goal source for the v1.2 Claude settings import foundation.
 - `.planning/STATE.md` - Current milestone state and accumulated v1.2 decisions.
 
 ### Existing v1 contracts that constrain Phase 10
