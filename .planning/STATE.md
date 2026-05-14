@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: executing
-stopped_at: Plan 08-02 complete; executing Plan 08-03
-last_updated: "2026-05-14T00:18:32.701Z"
-last_activity: 2026-05-14 - Plan 08-02 complete; executing Plan 08-03
+stopped_at: Plan 08-03 complete; executing Plan 08-04
+last_updated: "2026-05-14T00:29:14.715Z"
+last_activity: 2026-05-14 - Plan 08-03 complete; executing Plan 08-04
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
-  percent: 50
+  completed_plans: 3
+  percent: 75
 ---
 
 # Project State
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-05-13)
 ## Current Position
 
 Phase: 08 of 1 (atomic reinstall core)
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Executing Phase 08
-Last activity: 2026-05-14 - Plan 08-02 complete; executing Plan 08-03
+Last activity: 2026-05-14 - Plan 08-03 complete; executing Plan 08-04
 
-Progress: [█████░░░░░] 50%
+Progress: [████████░░] 75%
 
 ## Performance Metrics
 
@@ -63,6 +63,7 @@ Progress: [█████░░░░░] 50%
 | Phase 07 P06 | 2 min | 2 tasks | 4 files |
 | Phase 08 P01 | 10 min | 2 tasks | 4 files |
 | Phase 08 P02 | 12 min | 2 tasks | 8 files |
+| Phase 08 P03 | 12 min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 08]: withLockedStateTransaction now exposes a lock-held manual-save state transaction using the same per-scope `.state-lock` semantics as withStateGuard. -- Plan 08-01 established the PRL-10 rollback foundation.
 - [Phase 08]: reinstall.ts is architecture-gated before implementation against Git/network imports and refreshGitHubClone references. -- Plan 08-01 established the PRL-07 no-network guard.
 - [Phase 08]: skills and commands bridges now expose rollback-safe replace/rollback/finalize helpers with opaque WeakMap-backed handles. -- Plan 08-02 established the PRL-09/PRL-10 backup replacement pattern for file and directory resources.
+- [Phase 08]: agents and MCP bridges now expose rollback-safe replace/rollback/finalize helpers, including default foreign-agent blocking and force-mode restoration. -- Plan 08-03 completed the PRL-09/PRL-10 bridge replacement foundation.
 
 ### Pending Todos
 
@@ -111,6 +113,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-14T00:18:32.507Z
-Stopped At: Plan 08-02 complete; executing Plan 08-03
-Resume File: .planning/phases/08-atomic-reinstall-core/08-03-PLAN.md
+Last session: 2026-05-14T00:29:14.532Z
+Stopped At: Plan 08-03 complete; executing Plan 08-04
+Resume File: .planning/phases/08-atomic-reinstall-core/08-04-PLAN.md
