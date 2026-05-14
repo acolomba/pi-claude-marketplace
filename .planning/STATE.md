@@ -18,14 +18,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-09)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Milestone v1.2 -- Claude settings import (Phases 8 and 9)
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Milestone v1.2 -- Claude settings import (Phases 10 and 11)
 
 ## Current Position
 
-Phase: 08
+Phase: 10
 Plan: Not started
-Status: Defining requirements / ready for phase discussion
-Last activity: 2026-05-13 - Milestone v1.2 planned for Claude settings import
+Status: Context gathered / ready for phase planning
+Last activity: 2026-05-13 - Phase 10 context gathered for Claude settings import foundation
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -88,6 +88,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 07]: Validation sign-off is approved; NFR-2, NFR-3, NFR-8, and NFR-11 map to green automated gates including real Pi-runtime smoke. -- Plan 07-06 closed the phase gate evidence.
 - [Milestone v1.2]: Import follows existing scope convention: `--scope user|project`; omitted scope processes both scopes. Same marketplace/plugin enabled in both Claude scopes imports into both matching Pi scopes.
 - [Milestone v1.2]: Claude settings merge local-over-base; only `enabledPlugins["plugin@marketplace"] === true` imports. `claude-plugins-official` maps to `anthropics/claude-plugins-official`; other sources come from `extraKnownMarketplaces` directory/github entries.
+- [Phase 10]: Claude settings discovery uses standard paths and respects `CLAUDE_CONFIG_DIR` for the user settings home. Project settings remain `<cwd>/.claude/settings*.json`; missing files are empty.
+- [Phase 10]: Local settings shallow-merge known sections (`enabledPlugins`, `extraKnownMarketplaces`) over base by key; local `false` disables a base-enabled plugin.
+- [Phase 10]: Settings parsing is warn-and-continue: malformed refs, non-boolean enabled values, malformed JSON, and unmappable marketplace sources become diagnostics while valid refs continue.
+- [Phase 10]: Marketplace source mapping intentionally supports only existing Pi patterns: official built-in -> `anthropics/claude-plugins-official`, Claude `directory` -> path source, and `github.repo` -> GitHub source.
 
 ### Pending Todos
 
@@ -108,4 +112,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-13T00:00:00.000Z
+Last session: 2026-05-13T21:06:42-04:00
+Stopped at: Phase 10 context gathered
+Resume file: .planning/phases/10-claude-settings-import-foundation/10-CONTEXT.md
