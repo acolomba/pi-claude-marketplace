@@ -23,7 +23,7 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 - Read non-official marketplace sources from merged `extraKnownMarketplaces`, mapping Claude `directory` sources to Pi path-source marketplaces and Claude `github.repo` sources to Pi GitHub-source marketplaces.
 - Skip already-added marketplaces and already-installed plugins idempotently; continue with warning when an enabled plugin is unavailable/uninstallable.
 
-**Phase target:** v1.2 is expected to land as Phases 8 and 9 after the separately-developed v1.1 milestone is merged.
+**Phase target:** v1.2 is expected to land as Phases 10 and 11 after the separately-developed v1.1 milestone uses Phases 8 and 9.
 
 ## Requirements
 
@@ -158,7 +158,7 @@ This document evolves at phase transitions and milestone boundaries.
 
 ______________________________________________________________________
 
-*Last updated: 2026-05-13 -- Milestone v1.2 initialized for Claude settings import. Added current milestone scope, active import requirements, and D-26/D-27 decisions covering scope convention and official marketplace mapping.*
+*Last updated: 2026-05-13 -- Corrected milestone v1.2 phase target to Phases 10 and 11 because the separately-developed v1.1 milestone owns Phases 8 and 9. Earlier same-day update initialized Claude settings import scope and D-26/D-27 decisions.*
 
 *Last updated: 2026-05-11 -- D-25 added: Phase 7 D-08 supersedes PRD PI-15's old concurrent-install marker. Concurrent operation losers now fail at per-scope lock acquisition with `STATE_LOCK_HELD_PREFIX` (`Another pi-claude-marketplace operation is in progress for`) plus retry guidance, rather than reaching the old `was installed concurrently` state-guard commit path.*
 
