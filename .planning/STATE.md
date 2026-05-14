@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: executing
-stopped_at: Plan 08-01 complete; executing Plan 08-02
-last_updated: "2026-05-14T00:08:16.485Z"
-last_activity: 2026-05-14 - Plan 08-01 complete; executing Plan 08-02
+stopped_at: Plan 08-02 complete; executing Plan 08-03
+last_updated: "2026-05-14T00:18:32.701Z"
+last_activity: 2026-05-14 - Plan 08-02 complete; executing Plan 08-03
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
-  percent: 25
+  completed_plans: 2
+  percent: 50
 ---
 
 # Project State
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-05-13)
 ## Current Position
 
 Phase: 08 of 1 (atomic reinstall core)
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Executing Phase 08
-Last activity: 2026-05-14 - Plan 08-01 complete; executing Plan 08-02
+Last activity: 2026-05-14 - Plan 08-02 complete; executing Plan 08-03
 
-Progress: [███░░░░░░░] 25%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
@@ -62,6 +62,7 @@ Progress: [███░░░░░░░] 25%
 | Phase 07 P05 | 7 min | 3 tasks | 20 files |
 | Phase 07 P06 | 2 min | 2 tasks | 4 files |
 | Phase 08 P01 | 10 min | 2 tasks | 4 files |
+| Phase 08 P02 | 12 min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 07]: Validation sign-off is approved; NFR-2, NFR-3, NFR-8, and NFR-11 map to green automated gates including real Pi-runtime smoke. -- Plan 07-06 closed the phase gate evidence.
 - [Phase 08]: withLockedStateTransaction now exposes a lock-held manual-save state transaction using the same per-scope `.state-lock` semantics as withStateGuard. -- Plan 08-01 established the PRL-10 rollback foundation.
 - [Phase 08]: reinstall.ts is architecture-gated before implementation against Git/network imports and refreshGitHubClone references. -- Plan 08-01 established the PRL-07 no-network guard.
+- [Phase 08]: skills and commands bridges now expose rollback-safe replace/rollback/finalize helpers with opaque WeakMap-backed handles. -- Plan 08-02 established the PRL-09/PRL-10 backup replacement pattern for file and directory resources.
 
 ### Pending Todos
 
@@ -109,6 +111,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-14T00:08:16.305Z
-Stopped At: Plan 08-01 complete; executing Plan 08-02
-Resume File: .planning/phases/08-atomic-reinstall-core/08-02-PLAN.md
+Last session: 2026-05-14T00:18:32.507Z
+Stopped At: Plan 08-02 complete; executing Plan 08-03
+Resume File: .planning/phases/08-atomic-reinstall-core/08-03-PLAN.md
