@@ -1,0 +1,104 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-05-14T00:35:22.972Z",
+  "phase": "08",
+  "phase_name": "atomic-reinstall-core",
+  "phase_dir": ".planning/phases/08-atomic-reinstall-core",
+  "plan": 4,
+  "task": 1,
+  "total_tasks": 3,
+  "status": "paused",
+  "completed_tasks": [
+    {
+      "id": "08-01",
+      "name": "Lock-held manual-save transaction helper and no-network architecture guard",
+      "status": "done",
+      "commits": ["edf0487", "420cadc", "7b42f67"]
+    },
+    {
+      "id": "08-02",
+      "name": "Backup-backed skills and commands replacement helpers",
+      "status": "done",
+      "commits": ["fe34ddd", "3589ff1", "58fdd93"]
+    },
+    {
+      "id": "08-03",
+      "name": "Backup-backed agents and MCP replacement helpers",
+      "status": "done",
+      "commits": ["2cac16e", "74961b2", "f86e1ec"]
+    },
+    {
+      "id": 1,
+      "name": "Create reinstall orchestrator API and preflight",
+      "status": "in_progress",
+      "progress": "Started only: ReinstallPluginPartition and ReinstallPluginOutcome were added to extensions/pi-claude-marketplace/orchestrators/types.ts. No reinstall.ts or reinstall.test.ts has been created yet."
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "id": 1,
+      "name": "Create reinstall orchestrator API and preflight",
+      "status": "in_progress",
+      "remaining": "Create orchestrators/plugin/reinstall.ts, exports in plugin/top-level barrels, focused tests, cached-manifest installed-only preflight, self-exempt conflict guard, prepare-all-before-replace flow."
+    },
+    {
+      "id": 2,
+      "name": "Implement atomic replacement, state save, and rollback",
+      "status": "not_started"
+    },
+    {
+      "id": 3,
+      "name": "Add post-success cache, data cleanup, notifications, and final exports",
+      "status": "not_started"
+    }
+  ],
+  "blockers": [],
+  "human_actions_pending": [],
+  "background_processes": [],
+  "decisions": [
+    {
+      "decision": "Use withLockedStateTransaction for reinstall rather than withStateGuard.",
+      "rationale": "Reinstall must rollback physical bridge replacements if explicit state save fails; withStateGuard auto-saves after callback and cannot expose that boundary.",
+      "phase": "08"
+    },
+    {
+      "decision": "Bridge replacement handles are opaque and keep internals in bridge-private WeakMaps.",
+      "rationale": "Orchestrators can hold replacement handles without reading private prepared fields or backup paths.",
+      "phase": "08"
+    },
+    {
+      "decision": "Agents replacement defaults to blocking foreign previous content; force only applies to this plugin's previous index rows.",
+      "rationale": "Protects manual/foreign agent content by default while supporting explicit reinstall force semantics with rollback protection.",
+      "phase": "08"
+    },
+    {
+      "decision": "MCP rollback restores exact previous mcp.json text when possible.",
+      "rationale": "Preserves old user shape/format and satisfies old-resource preservation across reinstall failure.",
+      "phase": "08"
+    }
+  ],
+  "uncommitted_files": [
+    {
+      "path": ".planning/STATE.md",
+      "status": "modified",
+      "note": "GSD timestamp/position drift; not part of Plan 08-04 implementation."
+    },
+    {
+      "path": ".planning/config.json",
+      "status": "modified",
+      "note": "Only missing final newline according to diff; likely incidental."
+    },
+    {
+      "path": "extensions/pi-claude-marketplace/orchestrators/types.ts",
+      "status": "modified",
+      "note": "Plan 08-04 Task 1 started: ReinstallPluginPartition and ReinstallPluginOutcome added."
+    },
+    {
+      "path": "AGENTS.md",
+      "status": "untracked",
+      "note": "Pre-existing untracked memory/context file; do not assume it belongs to Phase 8 work."
+    }
+  ],
+  "next_action": "Resume Plan 08-04 Task 1 by creating tests/orchestrators/plugin/reinstall.test.ts and extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts. Keep the existing ReinstallPluginOutcome type change or move it as needed, then export reinstallPlugin from plugin/index.ts and orchestrators/index.ts. Run node --test tests/orchestrators/plugin/reinstall.test.ts tests/architecture/no-orchestrator-network.test.ts.",
+  "context_notes": "Phase 8 is 3/4 plans complete. Plans 08-01 through 08-03 are committed and summarized. Wave 3 / Plan 08-04 just began; only type scaffolding in orchestrators/types.ts exists. The orchestrator must use cached manifests only, preserve old installed version, prepare all bridge handles before replacement, use replace/rollback/finalize helpers from all four bridges, call tx.save() explicitly, rollback in reverse order on replacement/save failures, delete plugin data only after successful state commit, and surface cleanup/cache failures as warnings. No background processes are running. Current phase placeholder scan found no placeholder/TBD entries in Phase 08 docs. A broad grep across all phases reports historical placeholder/TBD strings in old docs/plans; not current-phase blockers."
+}
