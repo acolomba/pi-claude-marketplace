@@ -115,7 +115,7 @@ MCP server names are not prefixed or rewritten. The server name is the key from 
 
 ## `/claude:plugin` reference
 
-This extension mirrors Claude Code's `/plugin` command. Use `/claude:plugin` in Pi for marketplace and plugin operations, then run `/reload` after installing, uninstalling, or updating plugins so Pi discovers the changed resources.
+This extension mirrors Claude Code's `/plugin` command. Use `/claude:plugin` in Pi for marketplace and plugin operations, then run `/reload` after installing, uninstalling, updating, or reinstalling plugins so Pi discovers the changed resources.
 
 ### Marketplace
 
@@ -216,6 +216,29 @@ Update one installed plugin, every installed plugin from one marketplace, or all
 /claude:plugin update @claude-plugins-official
 /claude:plugin update
 ```
+
+Reinstall one installed plugin, every installed plugin from one marketplace, or all installed plugins. Reinstall uses the cached marketplace manifest and the installed record's existing version; it does not fetch, pull, or otherwise sync the marketplace from the network:
+
+```text
+/claude:plugin reinstall pr-review-toolkit@claude-plugins-official
+/claude:plugin reinstall @claude-plugins-official
+/claude:plugin reinstall
+```
+
+Limit reinstall to one scope with `--scope user` or `--scope project`. The flag can appear before or after the target:
+
+```text
+/claude:plugin reinstall --scope project
+/claude:plugin reinstall @claude-plugins-official --scope user
+```
+
+Use `--force` only when reinstalling a plugin whose own previous agent files were manually edited or otherwise look foreign. `--force` can overwrite that plugin's previous agent content, but it does not override other-plugin ownership conflicts, unsafe names, path-containment failures, or MCP server name collisions:
+
+```text
+/claude:plugin reinstall pr-review-toolkit@claude-plugins-official --force
+```
+
+Reinstall targets installed plugins only. If no installed plugins match the selected target set, the command reports `No plugins installed.` and does not emit a reload hint. Plugin data directories are deleted only after replacement resources and `state.json` commit successfully; if reinstall fails, the previous plugin state, resources, and data remain available.
 
 Uninstall a plugin:
 
