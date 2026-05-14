@@ -45,6 +45,7 @@ import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/component
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
+import { loadState } from "../../persistence/state-io.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../presentation/soft-dep.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
@@ -56,7 +57,7 @@ import {
   type LockedStateTransaction,
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
-import { formatErrorWithCauses } from "../marketplace/shared.ts";
+import { formatErrorWithCauses, resolveScopeFromState } from "../marketplace/shared.ts";
 
 import { assertNoCrossPluginConflicts, pickAgentsSourceDir } from "./shared.ts";
 
@@ -69,7 +70,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { ReinstallPluginOutcome } from "../types.ts";
+import type { ReinstallPluginOutcome, ReinstallPluginPartition } from "../types.ts";
 
 export type { ReinstallPluginOutcome, ReinstallPluginPartition } from "../types.ts";
 
@@ -86,6 +87,7 @@ export interface ReinstallPluginOptions {
   readonly marketplace: string;
   readonly plugin: string;
   readonly force?: boolean;
+  readonly render?: "default" | "none";
   /** @internal Test-only seams; production callers omit this. */
   readonly __deps?: ReinstallPluginDeps;
 }
@@ -94,6 +96,20 @@ export interface ReinstallPluginDeps {
   readonly stateTransaction?: LockedStateTransactionDeps;
   readonly dropMarketplaceCache?: DropMarketplaceCacheFn;
   readonly removeDataDir?: RemoveDataDirFn;
+}
+
+export type ReinstallPluginsTarget =
+  | { readonly kind: "all" }
+  | { readonly kind: "marketplace"; readonly marketplace: string }
+  | { readonly kind: "plugin"; readonly plugin: string; readonly marketplace: string };
+
+export interface ReinstallPluginsOptions {
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  readonly scope?: Scope;
+  readonly cwd: string;
+  readonly target: ReinstallPluginsTarget;
+  readonly force?: boolean;
 }
 
 interface GeneratedNames {
@@ -128,6 +144,12 @@ interface LockedSuccess {
   readonly bridgeWarnings: readonly string[];
 }
 
+interface ResolvedReinstallTarget {
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly scope: Scope;
+}
+
 const defaultRemoveDataDir: RemoveDataDirFn = async (dataDir) => {
   await rm(dataDir, { recursive: true, force: true });
 };
@@ -136,6 +158,7 @@ export async function reinstallPlugin(
   opts: ReinstallPluginOptions,
 ): Promise<ReinstallPluginOutcome> {
   const { ctx, pi, scope, cwd, marketplace, plugin } = opts;
+  const render = opts.render ?? "default";
   const locations = locationsFor(scope, cwd);
 
   let locked: LockedSuccess;
@@ -147,7 +170,10 @@ export async function reinstallPlugin(
     );
   } catch (err) {
     const message = formatErrorWithCauses(err);
-    notifyError(ctx, message, err);
+    if (render !== "none") {
+      notifyError(ctx, message, err);
+    }
+
     return { partition: "failed", name: plugin, marketplace, scope, notes: [message] };
   }
 
@@ -155,13 +181,246 @@ export async function reinstallPlugin(
     return locked.outcome;
   }
 
+  const maintenanceWarnings = await runPostSuccessMaintenance(opts, locations);
+  if (render === "none") {
+    const notes = [...locked.bridgeWarnings, ...maintenanceWarnings].map((w) => `warning: ${w}`);
+    return notes.length === 0 ? locked.outcome : { ...locked.outcome, notes };
+  }
+
   for (const warning of locked.bridgeWarnings) {
     notifyWarning(ctx, warning);
   }
 
-  await runPostSuccessMaintenance(opts, locations);
+  for (const warning of maintenanceWarnings) {
+    notifyWarning(ctx, warning);
+  }
+
   notifySuccess(ctx, renderSuccessBody(locked.outcome, pi));
   return locked.outcome;
+}
+
+export async function reinstallPlugins(
+  opts: ReinstallPluginsOptions,
+): Promise<readonly ReinstallPluginOutcome[]> {
+  const { ctx, pi, cwd } = opts;
+
+  let targets: readonly ResolvedReinstallTarget[];
+  try {
+    targets = await enumerateReinstallTargets(opts);
+  } catch (err) {
+    notifyError(ctx, formatErrorWithCauses(err), err);
+    return [];
+  }
+
+  if (targets.length === 0) {
+    notifySuccess(ctx, "No plugins installed.");
+    return [];
+  }
+
+  const outcomes: ReinstallPluginOutcome[] = [];
+  for (const target of targets) {
+    try {
+      outcomes.push(
+        await reinstallPlugin({
+          ctx,
+          pi,
+          scope: target.scope,
+          cwd,
+          marketplace: target.marketplace,
+          plugin: target.plugin,
+          render: "none",
+          ...(opts.force === undefined ? {} : { force: opts.force }),
+        }),
+      );
+    } catch (err) {
+      outcomes.push({
+        partition: "failed",
+        name: target.plugin,
+        marketplace: target.marketplace,
+        scope: target.scope,
+        notes: [formatErrorWithCauses(err)],
+      });
+    }
+  }
+
+  renderReinstallPartitionAndNotify(ctx, pi, outcomes);
+  return Object.freeze(outcomes);
+}
+
+async function enumerateReinstallTargets(
+  opts: ReinstallPluginsOptions,
+): Promise<readonly ResolvedReinstallTarget[]> {
+  const { cwd, target } = opts;
+  const explicitScope = opts.scope;
+
+  if (target.kind === "all") {
+    return enumerateAllReinstallTargets(cwd, explicitScope);
+  }
+
+  return enumerateMarketplaceReinstallTargets(cwd, explicitScope, target);
+}
+
+async function enumerateAllReinstallTargets(
+  cwd: string,
+  explicitScope: Scope | undefined,
+): Promise<readonly ResolvedReinstallTarget[]> {
+  const scopes: readonly Scope[] =
+    explicitScope === undefined ? ["user", "project"] : [explicitScope];
+  const out: ResolvedReinstallTarget[] = [];
+  for (const scope of scopes) {
+    out.push(...(await installedTargetsForScope(cwd, scope)));
+  }
+
+  return sortReinstallTargets(out);
+}
+
+async function installedTargetsForScope(
+  cwd: string,
+  scope: Scope,
+): Promise<readonly ResolvedReinstallTarget[]> {
+  const state = await loadState(locationsFor(scope, cwd).extensionRoot);
+  return Object.entries(state.marketplaces).flatMap(([marketplace, mp]) =>
+    Object.keys(mp.plugins).map((plugin) => ({ plugin, marketplace, scope })),
+  );
+}
+
+async function enumerateMarketplaceReinstallTargets(
+  cwd: string,
+  explicitScope: Scope | undefined,
+  target: Extract<ReinstallPluginsTarget, { kind: "marketplace" | "plugin" }>,
+): Promise<readonly ResolvedReinstallTarget[]> {
+  const marketplace = target.marketplace;
+  const resolved =
+    explicitScope === undefined
+      ? await resolveScopeFromState(
+          marketplace,
+          locationsFor("user", cwd),
+          locationsFor("project", cwd),
+        )
+      : { scope: explicitScope, locations: locationsFor(explicitScope, cwd) };
+  const state = await loadState(resolved.locations.extensionRoot);
+  const mp = state.marketplaces[marketplace];
+  if (mp === undefined) {
+    throw new Error(`Marketplace "${marketplace}" not found in ${resolved.scope} scope.`);
+  }
+
+  const plugins = target.kind === "plugin" ? [target.plugin] : Object.keys(mp.plugins);
+  return sortReinstallTargets(
+    plugins.map((plugin) => ({ plugin, marketplace, scope: resolved.scope })),
+  );
+}
+
+function sortReinstallTargets(
+  targets: readonly ResolvedReinstallTarget[],
+): readonly ResolvedReinstallTarget[] {
+  return Object.freeze(
+    [...targets].sort(
+      (a, b) =>
+        scopeOrder(a.scope) - scopeOrder(b.scope) ||
+        a.marketplace.localeCompare(b.marketplace) ||
+        a.plugin.localeCompare(b.plugin),
+    ),
+  );
+}
+
+function renderReinstallPartitionAndNotify(
+  ctx: ExtensionContext,
+  pi: ExtensionAPI,
+  outcomes: readonly ReinstallPluginOutcome[],
+): void {
+  const partitions = partitionReinstallOutcomes(outcomes);
+  const reinstalled = [...partitions.reinstalled].sort(compareReinstallOutcome);
+  const lines = [reinstallSummary(reinstalled.length, reinstalled[0]?.name)];
+
+  renderReinstallPartition(lines, "Reinstalled", partitions.reinstalled);
+  renderReinstallPartition(lines, "Skipped", partitions.skipped);
+  renderReinstallPartition(lines, "Failed", partitions.failed);
+
+  const changedNames = reinstalled.filter((o) => o.resourcesChanged === true).map((o) => o.name);
+  const body = appendReinstallSoftDepWarnings(lines.join("\n"), pi, reinstalled);
+  const hint = reloadHint("refresh", changedNames);
+  notifySuccess(ctx, appendReloadHint(body, hint));
+}
+
+function reinstallSummary(
+  reinstalledCount: number,
+  firstReinstalledName: string | undefined,
+): string {
+  if (reinstalledCount === 1) {
+    return `Reinstalled plugin "${firstReinstalledName ?? ""}".`;
+  }
+
+  if (reinstalledCount > 1) {
+    return `Reinstalled ${reinstalledCount.toString()} plugins.`;
+  }
+
+  return "Plugin reinstall complete.";
+}
+
+function partitionReinstallOutcomes(
+  outcomes: readonly ReinstallPluginOutcome[],
+): Record<ReinstallPluginPartition, ReinstallPluginOutcome[]> {
+  const partitions: Record<ReinstallPluginPartition, ReinstallPluginOutcome[]> = {
+    reinstalled: [],
+    skipped: [],
+    failed: [],
+  };
+  for (const outcome of outcomes) {
+    partitions[outcome.partition].push(outcome);
+  }
+
+  return partitions;
+}
+
+function renderReinstallPartition(
+  lines: string[],
+  label: "Reinstalled" | "Skipped" | "Failed",
+  outcomes: readonly ReinstallPluginOutcome[],
+): void {
+  if (outcomes.length === 0) {
+    return;
+  }
+
+  lines.push(`${label}:`);
+  for (const outcome of [...outcomes].sort(compareReinstallOutcome)) {
+    lines.push(formatReinstallOutcomeLine(outcome));
+  }
+}
+
+function formatReinstallOutcomeLine(outcome: ReinstallPluginOutcome): string {
+  const notes =
+    outcome.notes === undefined || outcome.notes.length === 0
+      ? ""
+      : `: ${outcome.notes.join("; ")}`;
+  return `  - [${outcome.scope}] ${outcome.name}@${outcome.marketplace}${notes}`;
+}
+
+function compareReinstallOutcome(a: ReinstallPluginOutcome, b: ReinstallPluginOutcome): number {
+  return (
+    scopeOrder(a.scope) - scopeOrder(b.scope) ||
+    a.marketplace.localeCompare(b.marketplace) ||
+    a.name.localeCompare(b.name)
+  );
+}
+
+function scopeOrder(scope: Scope): number {
+  return scope === "user" ? 0 : 1;
+}
+
+function appendReinstallSoftDepWarnings(
+  body: string,
+  pi: ExtensionAPI,
+  reinstalled: readonly ReinstallPluginOutcome[],
+): string {
+  const stagedAgents = reinstalled.flatMap((o) => o.stagedAgents ?? []);
+  const stagedMcpServers = reinstalled.flatMap((o) => o.stagedMcpServers ?? []);
+  return [
+    body,
+    subagentWarningIfNeeded(pi, stagedAgents),
+    mcpAdapterWarningIfNeeded(pi, stagedMcpServers),
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
 }
 
 async function runLockedReinstall(
@@ -546,14 +805,14 @@ function pushLeak(leaks: string[], phase: BridgePhase, leak: string | undefined)
 async function runPostSuccessMaintenance(
   opts: ReinstallPluginOptions,
   locations: ScopedLocations,
-): Promise<void> {
-  const { ctx, scope, marketplace, plugin } = opts;
+): Promise<readonly string[]> {
+  const { scope, marketplace, plugin } = opts;
+  const warnings: string[] = [];
   const cacheDrop = opts.__deps?.dropMarketplaceCache ?? dropMarketplaceCache;
   try {
     await cacheDrop(await locations.pluginCacheFile(marketplace), scope, marketplace);
   } catch (err) {
-    notifyWarning(
-      ctx,
+    warnings.push(
       `Plugin "${plugin}" reinstalled; completion cache refresh deferred: ${errorMessage(err)}`,
     );
   }
@@ -563,11 +822,12 @@ async function runPostSuccessMaintenance(
   try {
     await removeDataDir(dataDir, { recursive: true, force: true });
   } catch (err) {
-    notifyWarning(
-      ctx,
+    warnings.push(
       `Plugin "${plugin}" reinstalled; data cleanup deferred at ${dataDir}: ${errorMessage(err)}`,
     );
   }
+
+  return Object.freeze(warnings);
 }
 
 function renderSuccessBody(outcome: ReinstallPluginOutcome, pi: ExtensionAPI): string {

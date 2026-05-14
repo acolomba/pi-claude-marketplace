@@ -14,7 +14,7 @@ export type { CrossPluginGeneratedNames } from "./shared.ts";
 // Per-subcommand entry points.
 export { installPlugin } from "./install.ts";
 export { listPlugins } from "./list.ts";
-export { reinstallPlugin } from "./reinstall.ts";
+export { reinstallPlugin, reinstallPlugins } from "./reinstall.ts";
 export { uninstallPlugin } from "./uninstall.ts";
 export { updatePlugins, updateSinglePlugin } from "./update.ts";
 
@@ -22,6 +22,8 @@ export type { InstallPluginOptions } from "./install.ts";
 export type { ListPluginsOptions } from "./list.ts";
 export type {
   ReinstallPluginOptions,
+  ReinstallPluginsOptions,
+  ReinstallPluginsTarget,
   ReinstallPluginOutcome,
   ReinstallPluginPartition,
 } from "./reinstall.ts";

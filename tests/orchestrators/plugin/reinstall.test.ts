@@ -7,7 +7,10 @@ import test from "node:test";
 import { GENERATED_AGENT_PREFIX } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { installPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
-import { reinstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
+import {
+  reinstallPlugin,
+  reinstallPlugins,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -75,31 +78,39 @@ async function seedMarketplace(opts: {
   readonly version?: string;
   readonly resources?: ResourceSet;
   readonly install?: boolean;
+  readonly scope?: "user" | "project";
 }): Promise<{ readonly pluginRoot: string; readonly manifestPath: string }> {
   const marketplaceName = opts.marketplaceName ?? "mp";
   const pluginName = opts.pluginName ?? "hello";
   const version = opts.version ?? "1.0.0";
   const resources = opts.resources ?? { skill: "old skill", command: "old command" };
+  const scope = opts.scope ?? "project";
 
   const pluginRoot = path.join(opts.marketplaceRoot, "plugins", pluginName);
   await writePluginTree(pluginRoot, pluginName, resources);
-  const manifestPath = await writeManifest(opts.marketplaceRoot, marketplaceName, {
-    [pluginName]: version,
-  });
+  const manifestPath = await mergeManifestEntry(
+    opts.marketplaceRoot,
+    marketplaceName,
+    pluginName,
+    version,
+  );
 
-  const locations = locationsFor("project", opts.cwd);
+  const locations = locationsFor(scope, opts.cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
+  const state = await loadState(locations.extensionRoot);
+  const previousMarketplace = state.marketplaces[marketplaceName];
   await saveState(locations.extensionRoot, {
     schemaVersion: 1,
     marketplaces: {
+      ...state.marketplaces,
       [marketplaceName]: {
         name: marketplaceName,
-        scope: "project",
+        scope,
         source: pathSource(`./${path.basename(opts.marketplaceRoot)}`),
         addedFromCwd: opts.cwd,
         manifestPath,
         marketplaceRoot: opts.marketplaceRoot,
-        plugins: {},
+        plugins: previousMarketplace?.plugins ?? {},
       },
     },
   });
@@ -109,7 +120,7 @@ async function seedMarketplace(opts: {
     await installPlugin({
       ctx,
       pi,
-      scope: "project",
+      scope,
       cwd: opts.cwd,
       marketplace: marketplaceName,
       plugin: pluginName,
@@ -160,6 +171,33 @@ async function writePluginTree(
       JSON.stringify({ mcpServers: { server1: { command: "node", args: ["server.js"] } } }),
     );
   }
+}
+
+async function mergeManifestEntry(
+  marketplaceRoot: string,
+  marketplaceName: string,
+  pluginName: string,
+  version: string,
+): Promise<string> {
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  const plugins: Record<string, string> = {};
+  try {
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      readonly plugins?: readonly { readonly name?: unknown; readonly version?: unknown }[];
+    };
+    for (const entry of manifest.plugins ?? []) {
+      if (typeof entry.name === "string" && typeof entry.version === "string") {
+        plugins[entry.name] = entry.version;
+      }
+    }
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw err;
+    }
+  }
+
+  plugins[pluginName] = version;
+  return writeManifest(marketplaceRoot, marketplaceName, plugins);
 }
 
 async function writeManifest(
@@ -513,6 +551,379 @@ test("PRL-12/RH-5: no-resource reinstall suppresses reload hint; agents/MCP warn
       assert.match(body, /pi-mcp-adapter is not loaded/);
       assert.match(body, /Run \/reload to refresh it\./);
       await rm(cwd2, { recursive: true, force: true });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PRL-13 quiet render suppresses per-plugin notifications", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-quiet-"));
+    try {
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill" },
+        install: true,
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+      });
+
+      assert.equal(outcome.partition, "reinstalled");
+      assert.equal(notifications.length, 0);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PRL-13 quiet render returns warning notes after successful cleanup warnings", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-quiet-warnings-"));
+    try {
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill" },
+        install: true,
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+        __deps: {
+          dropMarketplaceCache: () => Promise.reject(new Error("cache drop failed")),
+          removeDataDir: () => Promise.reject(new Error("data cleanup failed")),
+        },
+      });
+
+      assert.equal(outcome.partition, "reinstalled");
+      assert.deepEqual(notifications, []);
+      assert.ok(
+        outcome.notes?.some((n) =>
+          n.includes(
+            'warning: Plugin "hello" reinstalled; completion cache refresh deferred: cache drop failed',
+          ),
+        ),
+      );
+      assert.ok(
+        outcome.notes?.some((n) =>
+          n.includes('warning: Plugin "hello" reinstalled; data cleanup deferred'),
+        ),
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PRL-04 bulk bare reinstall enumerates user and project scopes", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-all-"));
+    try {
+      await seedMarketplace({
+        cwd,
+        scope: "user",
+        marketplaceRoot: path.join(cwd, "user-mp-src"),
+        marketplaceName: "ump",
+        pluginName: "uplug",
+        resources: { skill: "user old" },
+        install: true,
+      });
+      await seedMarketplace({
+        cwd,
+        scope: "project",
+        marketplaceRoot: path.join(cwd, "project-mp-src"),
+        marketplaceName: "pmp",
+        pluginName: "pplug",
+        resources: { skill: "project old" },
+        install: true,
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      const outcomes = await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
+
+      assert.deepEqual(
+        outcomes.map((o) => `[${o.scope}] ${o.name}@${o.marketplace}`),
+        ["[user] uplug@ump", "[project] pplug@pmp"],
+      );
+      assert.match(notifications.at(-1)?.message ?? "", /Reinstalled 2 plugins\./);
+      assert.match(
+        notifications.at(-1)?.message ?? "",
+        /Reinstalled:\n {2}- \[user\] uplug@ump\n {2}- \[project\] pplug@pmp/,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PRL-03 bulk marketplace reinstall resolves implicit scope like update", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-scope-"));
+    try {
+      await seedMarketplace({
+        cwd,
+        scope: "project",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mymp",
+        pluginName: "plug",
+        resources: { skill: "old" },
+        install: true,
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      const outcomes = await reinstallPlugins({
+        ctx,
+        pi,
+        cwd,
+        target: { kind: "marketplace", marketplace: "mymp" },
+      });
+
+      assert.deepEqual(
+        outcomes.map((o) => o.scope),
+        ["project"],
+      );
+      assert.match(notifications.at(-1)?.message ?? "", /\[project\] plug@mymp/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PRL-05 bulk reinstall explicit scope filters targets", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-filter-"));
+    try {
+      await seedMarketplace({
+        cwd,
+        scope: "user",
+        marketplaceRoot: path.join(cwd, "user-mp-src"),
+        marketplaceName: "mp",
+        pluginName: "userplug",
+        resources: { skill: "user" },
+        install: true,
+      });
+      await seedMarketplace({
+        cwd,
+        scope: "project",
+        marketplaceRoot: path.join(cwd, "project-mp-src"),
+        marketplaceName: "mp",
+        pluginName: "projectplug",
+        resources: { skill: "project" },
+        install: true,
+      });
+      const { ctx, pi } = makeCtx();
+
+      const outcomes = await reinstallPlugins({
+        ctx,
+        pi,
+        cwd,
+        scope: "project",
+        target: { kind: "all" },
+      });
+
+      assert.deepEqual(
+        outcomes.map((o) => `[${o.scope}] ${o.name}@${o.marketplace}`),
+        ["[project] projectplug@mp"],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PRL-13 batch reinstall continues after failed plugin", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-continue-"));
+    try {
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "bad",
+        resources: { skill: "bad" },
+        install: true,
+      });
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "good",
+        resources: { skill: "good" },
+        install: true,
+      });
+      await writeFile(
+        path.join(cwd, "mp-src", ".claude-plugin", "marketplace.json"),
+        JSON.stringify({
+          name: "mp",
+          plugins: [{ name: "good", version: "1.0.0", source: "./plugins/good" }],
+        }),
+      );
+      const { ctx, pi, notifications } = makeCtx();
+
+      const outcomes = await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
+
+      assert.deepEqual(
+        outcomes.map((o) => `${o.name}:${o.partition}`),
+        ["bad:failed", "good:reinstalled"],
+      );
+      const body = notifications.at(-1)?.message ?? "";
+      assert.match(body, /Reinstalled plugin "good"\./);
+      assert.match(
+        body,
+        /Failed:\n {2}- \[project\] bad@mp: Plugin "bad" not found in cached manifest/,
+      );
+      assert.equal(
+        notifications.some((n) => n.severity === "error"),
+        false,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PRL-13 deterministic partition output sorts by scope marketplace plugin", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-sort-"));
+    try {
+      const aRoot = path.join(cwd, "a-src");
+      await seedMarketplace({
+        cwd,
+        scope: "project",
+        marketplaceRoot: path.join(cwd, "z-src"),
+        marketplaceName: "z",
+        pluginName: "b",
+        resources: { skill: "z b" },
+        install: true,
+      });
+      await seedMarketplace({
+        cwd,
+        scope: "project",
+        marketplaceRoot: aRoot,
+        marketplaceName: "a",
+        pluginName: "c",
+        resources: { skill: "a c" },
+        install: true,
+      });
+      await seedMarketplace({
+        cwd,
+        scope: "project",
+        marketplaceRoot: aRoot,
+        marketplaceName: "a",
+        pluginName: "a",
+        resources: { skill: "a a" },
+        install: true,
+      });
+      await seedMarketplace({
+        cwd,
+        scope: "user",
+        marketplaceRoot: path.join(cwd, "u-src"),
+        marketplaceName: "u",
+        pluginName: "z",
+        resources: { skill: "u z" },
+        install: true,
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
+
+      const body = notifications.at(-1)?.message ?? "";
+      assert.match(
+        body,
+        /Reinstalled:\n {2}- \[user\] z@u\n {2}- \[project\] a@a\n {2}- \[project\] c@a\n {2}- \[project\] b@z/,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PRL-14 batch reload hint uses only changed successful outcomes", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-reload-"));
+    try {
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "empty",
+        resources: {},
+        install: true,
+      });
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "withskill",
+        resources: { skill: "skill" },
+        install: true,
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
+
+      const body = notifications.at(-1)?.message ?? "";
+      assert.match(body, /Run \/reload to refresh it\./);
+      assert.doesNotMatch(body, /"empty"/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PRL-15 batch soft dependency warnings aggregate successful restaged resources only", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-soft-deps-"));
+    try {
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "bad",
+        resources: { agent: "bad agent" },
+        install: true,
+      });
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "good",
+        resources: { agent: "good agent", mcp: true },
+        install: true,
+      });
+      await writeFile(
+        path.join(cwd, "mp-src", ".claude-plugin", "marketplace.json"),
+        JSON.stringify({
+          name: "mp",
+          plugins: [{ name: "good", version: "1.0.0", source: "./plugins/good" }],
+        }),
+      );
+      const { ctx, pi, notifications } = makeCtx();
+
+      await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
+
+      const body = notifications.at(-1)?.message ?? "";
+      assert.match(body, /pi-subagents is not loaded/);
+      assert.match(body, /pi-mcp-adapter is not loaded/);
+      assert.match(body, /Failed:\n {2}- \[project\] bad@mp/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
