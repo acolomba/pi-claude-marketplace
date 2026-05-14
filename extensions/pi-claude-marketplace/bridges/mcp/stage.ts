@@ -20,21 +20,33 @@
 // so Phase 5 can populate state.json from the bridge return value
 // without re-deriving the per-server `targetPath`.
 
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
 import { McpServerCollisionError } from "../../shared/errors-bridges.ts";
+import { errorMessage } from "../../shared/errors.ts";
 
 import { loadEffectiveServerNames } from "./collision-slots.ts";
 import { CLAUDE_MARKETPLACE_MARKER_KEY, buildMarker, isOwnedBy } from "./marker.ts";
 
 import type {
+  McpReplacement,
   PreparedMcpStaging,
   RawMcpDoc,
   StageMcpCommitResult,
   StageMcpInput,
   StagedMcpRecord,
 } from "./types.ts";
+
+type McpReplacementInternals = Readonly<{
+  oldText: string | undefined;
+}>;
+
+const mcpReplacementInternals = new WeakMap<
+  Extract<McpReplacement, { kind: "replaced" }>,
+  McpReplacementInternals
+>();
 
 /**
  * Read the scoped `mcp.json` document. ENOENT/ENOTDIR -> empty doc.
@@ -250,4 +262,77 @@ export async function commitPreparedMcp(
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function abortPreparedMcp(_prepared: PreparedMcpStaging): void {
   // No-op: nothing was written outside memory pre-commit.
+}
+
+export async function replacePreparedMcp(prepared: PreparedMcpStaging): Promise<McpReplacement> {
+  if (prepared.kind === "noop") {
+    return { kind: "noop", prepared };
+  }
+
+  const oldText = await readOptionalText(prepared.locations.mcpJsonPath);
+  await commitPreparedMcp(prepared);
+
+  const replacement: Extract<McpReplacement, { kind: "replaced" }> = {
+    kind: "replaced",
+    prepared,
+  };
+  mcpReplacementInternals.set(replacement, { oldText });
+  return replacement;
+}
+
+export async function rollbackMcpReplacement(
+  replacement: McpReplacement,
+): Promise<readonly string[]> {
+  if (replacement.kind === "noop") {
+    return Object.freeze([]);
+  }
+
+  const internals = requireMcpReplacementInternals(replacement);
+  const leaks: string[] = [];
+  try {
+    if (internals.oldText === undefined) {
+      await rm(replacement.prepared.locations.mcpJsonPath, { force: true });
+    } else {
+      await mkdir(path.dirname(replacement.prepared.locations.mcpJsonPath), { recursive: true });
+      await writeFile(replacement.prepared.locations.mcpJsonPath, internals.oldText, "utf8");
+    }
+  } catch (err) {
+    leaks.push(
+      `failed to restore mcp.json at ${replacement.prepared.locations.mcpJsonPath}: ${errorMessage(err)}`,
+    );
+  }
+
+  return Object.freeze(leaks);
+}
+
+export function finalizeMcpReplacement(replacement: McpReplacement): readonly string[] {
+  if (replacement.kind === "noop") {
+    return Object.freeze([]);
+  }
+
+  requireMcpReplacementInternals(replacement);
+  return Object.freeze([]);
+}
+
+function requireMcpReplacementInternals(
+  replacement: Extract<McpReplacement, { kind: "replaced" }>,
+): McpReplacementInternals {
+  const internals = mcpReplacementInternals.get(replacement);
+  if (internals === undefined) {
+    throw new Error("Unknown MCP replacement handle.");
+  }
+
+  return internals;
+}
+
+async function readOptionalText(filePath: string): Promise<string | undefined> {
+  try {
+    return await readFile(filePath, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return undefined;
+    }
+
+    throw err;
+  }
 }

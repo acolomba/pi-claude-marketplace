@@ -112,6 +112,19 @@ export interface PreparedMcpStaged {
   readonly _nextDoc: RawMcpDoc;
 }
 
+/** Opaque reinstall replacement handle for staged MCP changes. */
+export type McpReplacement = McpReplacementNoop | McpReplacementReplaced;
+
+export interface McpReplacementNoop {
+  readonly kind: "noop";
+  readonly prepared: PreparedMcpStaging;
+}
+
+export interface McpReplacementReplaced {
+  readonly kind: "replaced";
+  readonly prepared: PreparedMcpStaged;
+}
+
 /** Input record for `unstageMcpServers`. */
 export interface UnstageMcpInput {
   readonly locations: ScopedLocations;

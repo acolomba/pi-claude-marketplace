@@ -7,13 +7,21 @@
 // either hand the prepared union back to `commitPreparedMcp`/
 // `abortPreparedMcp`, or read the user-facing `result` slot.
 
-export { prepareStageMcpServers, commitPreparedMcp, abortPreparedMcp } from "./stage.ts";
+export {
+  abortPreparedMcp,
+  commitPreparedMcp,
+  finalizeMcpReplacement,
+  prepareStageMcpServers,
+  replacePreparedMcp,
+  rollbackMcpReplacement,
+} from "./stage.ts";
 export { unstageMcpServers } from "./unstage.ts";
 export { resolvePluginMcpServers, parseMcpServers } from "./parse.ts";
 export { MCP_COLLISION_SLOTS, loadEffectiveServerNames } from "./collision-slots.ts";
 export { CLAUDE_MARKETPLACE_MARKER_KEY, buildMarker, readMarker, isOwnedBy } from "./marker.ts";
 export type { ClaudeMarketplaceMarker } from "./marker.ts";
 export type {
+  McpReplacement,
   McpServerEntry,
   McpServersSource,
   PreparedMcpNoop,
