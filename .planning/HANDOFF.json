@@ -1,98 +1,89 @@
 {
   "version": "1.0",
-  "timestamp": "2026-05-14T09:55:24.771Z",
+  "timestamp": "2026-05-14T10:20:55.739Z",
   "phase": "09",
-  "phase_name": "reinstall edge bulk ux",
+  "phase_name": "reinstall-edge-bulk-ux",
   "phase_dir": ".planning/phases/09-reinstall-edge-bulk-ux",
-  "plan": 3,
-  "task": 2,
-  "total_tasks": 3,
+  "plan": 4,
+  "task": 4,
+  "total_tasks": 4,
   "status": "paused",
   "completed_tasks": [
     {
       "id": 1,
-      "name": "Add reinstall completion mode and --force positional skipping",
-      "status": "in_progress",
-      "progress": "data.ts has reinstall mode, installed-only filtering, and booleanFlags positional skipping implemented; provider tests for installed-only and --force positional skipping were added but not validated yet.",
-      "commit": null
+      "name": "Update README reinstall command documentation",
+      "status": "done",
+      "commit": "5ab310f"
     },
     {
       "id": 2,
-      "name": "Add provider branches for reinstall refs and --force flags",
+      "name": "Add static README contract test for reinstall docs",
+      "status": "done",
+      "commit": "5ab310f"
+    },
+    {
+      "id": 3,
+      "name": "Run full Phase 9 validation and harden any missed coverage",
+      "status": "done",
+      "progress": "Focused Phase 9 suites, npm run typecheck, and npm run check passed; no additional coverage hardening was needed."
+    },
+    {
+      "id": 4,
+      "name": "Update planning traceability after green validation",
       "status": "in_progress",
-      "progress": "provider.ts has reinstall in TOP_LEVEL_SUBCOMMANDS, reinstall-only --force flag completion, boolean flag positional hookup, and reinstall ref branch with allowMarketplaceOnly; provider tests for top-level rei, @marketplace, multi-marketplace half, and --force-only-for-reinstall were added but not validated yet.",
-      "commit": null
+      "progress": "ROADMAP.md and REQUIREMENTS.md have Phase 9 completion edits. STATE.md has Phase 09 completion decisions and 100% progress text, but frontmatter/current position still need consistency review before committing final traceability."
     }
   ],
   "remaining_tasks": [
     {
-      "id": 2,
-      "name": "Finish and validate provider branch coverage",
+      "id": 4,
+      "name": "Finish planning traceability and commit Plan 09-04 metadata",
       "status": "in_progress"
     },
     {
-      "id": 3,
-      "name": "Harden completion failure-semantics regression coverage",
-      "status": "not_started"
-    },
-    {
-      "id": 4,
-      "name": "Run Plan 09-03 validation, write 09-03-SUMMARY.md, pre-commit, and commit",
-      "status": "not_started"
-    },
-    {
       "id": 5,
-      "name": "Execute Plan 09-04 docs, final validation, and traceability",
+      "name": "Create 09-04-SUMMARY.md and commit docs/state metadata",
+      "status": "not_started"
+    },
+    {
+      "id": 6,
+      "name": "Run phase-level verification or final transition/completion flow",
       "status": "not_started"
     }
   ],
-  "blockers": [],
+  "blockers": [
+    {
+      "description": "No technical blocker. There are unrelated pre-existing uncommitted files that should not be swept into Phase 09 commits unless intentionally handled.",
+      "type": "technical",
+      "workaround": "Stage only intended Phase 09 planning files and leave .gitignore, CLAUDE.md, and .planning/config.json alone unless separately deciding to commit or revert them."
+    }
+  ],
   "human_actions_pending": [],
   "decisions": [
     {
-      "decision": "Reinstall completions use the same installed-only plugin-ref mode as update and uninstall.",
-      "rationale": "Reinstall is installed-only and must not suggest absent or unavailable plugins.",
+      "decision": "Plan 09-04 docs test lives in tests/architecture/reinstall-docs.test.ts and asserts the README reinstall command contract under npm test.",
+      "rationale": "Keeps user-facing reinstall syntax and no-network/installed-only/data-cleanup semantics from drifting.",
       "phase": "09"
     },
     {
-      "decision": "extractPositionals now accepts explicit booleanFlags and only reinstall passes [\"--force\"].",
-      "rationale": "This lets reinstall --force <TAB> complete refs while preserving existing list/filter behavior for arbitrary flags.",
+      "decision": "README documents reinstall as cached-manifest and recorded-version preserving, not as a network refresh path.",
+      "rationale": "Avoids confusing reinstall with update/marketplace update and preserves PRL-07 semantics.",
       "phase": "09"
     },
     {
-      "decision": "Marketplace-only reinstall completions use allowMarketplaceOnly: true like update.",
-      "rationale": "Phase 09 D-16 requires @marketplace targets for marketplace-wide reinstall.",
+      "decision": "Traceability marks PRL-01/03/04/05/13/14/15/16 complete only after npm run check passed.",
+      "rationale": "Plan 09-04 requires green full validation before closing Phase 9 requirements.",
       "phase": "09"
     }
   ],
   "uncommitted_files": [
     ".gitignore",
+    ".planning/REQUIREMENTS.md",
+    ".planning/ROADMAP.md",
     ".planning/STATE.md",
     ".planning/config.json",
-    "CLAUDE.md",
-    "extensions/pi-claude-marketplace/edge/completions/data.ts",
-    "extensions/pi-claude-marketplace/edge/completions/provider.ts",
-    "tests/edge/completions/provider.test.ts"
+    "CLAUDE.md"
   ],
-  "validation": [
-    {
-      "command": "node --test tests/edge/completions/provider.test.ts",
-      "status": "not_run_after_partial_09_03_changes"
-    },
-    {
-      "command": "npm run typecheck",
-      "status": "not_run_after_partial_09_03_changes"
-    }
-  ],
-  "background_processes": [],
-  "notes": [
-    "Plan 09-01 committed as eb15d03 feat(09-01): add bulk reinstall orchestrator.",
-    "Plan 09-02 committed as 2f0a833 feat(09-02): wire reinstall edge command.",
-    "Plan 09-03 is partially implemented but unvalidated and uncommitted.",
-    "Task 3 failure-semantics tests still need to be added: soft-fail preserving healthy reinstall completions and state boom propagation.",
-    "Historical placeholder scan reports many old phase files with TBD/placeholder text, but no Phase 09 placeholder file was found.",
-    ".gitignore, CLAUDE.md, .planning/STATE.md, and .planning/config.json are unrelated/pre-existing or GSD-generated modifications; do not accidentally include them in the Plan 09-03 code commit unless intentionally committing docs/state separately."
-  ],
-  "next_action": "Resume Plan 09-03 by adding Task 3 failure-semantics tests to tests/edge/completions/provider.test.ts, then run node --test tests/edge/completions/provider.test.ts and npm run typecheck; fix any failures before writing 09-03-SUMMARY.md and committing only the Plan 09-03 files.",
-  "context_notes": "The implementation direction is straightforward: data.ts already supports reinstall mode and explicit boolean flag skipping; provider.ts already treats reinstall as a top-level command, ref-completion command, marketplace-only target command, and reinstall-only --force flag owner. The immediate uncertainty is test fallout from the partial provider.test.ts edits, especially sorted top-level expectations and exact completion value prefixes. Validate before doing more refactors."
+  "next_action": "Resume by reviewing .planning/STATE.md for consistency, fixing completed_phases/completed_plans/current position if needed, then commit Phase 09 traceability and create .planning/phases/09-reinstall-edge-bulk-ux/09-04-SUMMARY.md.",
+  "context_notes": "Phase 09 implementation and validation are effectively complete. Commits eb15d03, 2f0a833, eb2f12a, 00409b0, and 5ab310f cover Plans 09-01 through 09-04 docs/test work. The active work is cleanup/traceability: ROADMAP and REQUIREMENTS completion edits are present but uncommitted; STATE was being reconciled and should be checked carefully before final metadata commit. Full npm run check passed after README docs and reinstall-docs test landed."
 }
