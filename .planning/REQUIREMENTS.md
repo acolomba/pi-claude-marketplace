@@ -293,9 +293,9 @@ Requirements for the Claude settings import milestone. These are additive to the
 
 ### Import Command & Scope
 
-- [ ] **IMP-01**: User can run `/claude:plugin import [--scope user|project]` to import enabled Claude Code plugins into Pi.
-- [ ] **IMP-02**: When `--scope` is omitted, import processes both user and project Claude settings and writes to the matching Pi scopes.
-- [ ] **IMP-03**: When `--scope user` or `--scope project` is provided, import processes only that Claude settings scope and writes only to the matching Pi scope.
+- [x] **IMP-01**: User can run `/claude:plugin import [--scope user|project]` to import enabled Claude Code plugins into Pi.
+- [x] **IMP-02**: When `--scope` is omitted, import processes both user and project Claude settings and writes to the matching Pi scopes.
+- [x] **IMP-03**: When `--scope user` or `--scope project` is provided, import processes only that Claude settings scope and writes only to the matching Pi scope.
 
 ### Claude Settings Parsing
 
@@ -310,9 +310,9 @@ Requirements for the Claude settings import milestone. These are additive to the
 
 ### Plugin Import Orchestration
 
-- [ ] **IMP-09**: Import is idempotent: already-added marketplaces and already-installed plugins are skipped without error, while enabled plugins in both Claude scopes are imported into both matching Pi scopes unless `--scope` narrows the run.
-- [ ] **IMP-10**: Import continues after per-plugin unavailable/uninstallable results and reports those skipped plugins as warnings.
-- [ ] **IMP-11**: Import uses existing marketplace-add and plugin-install semantics for atomicity, state locking, network policy, output channel, soft-dependency warnings, and reload hints.
+- [x] **IMP-09**: Import is idempotent: already-added marketplaces and already-installed plugins are skipped without error, while enabled plugins in both Claude scopes are imported into both matching Pi scopes unless `--scope` narrows the run.
+- [x] **IMP-10**: Import continues after per-plugin unavailable/uninstallable results and reports those skipped plugins as warnings.
+- [x] **IMP-11**: Import uses existing marketplace-add and plugin-install semantics for atomicity, state locking, network policy, output channel, soft-dependency warnings, and reload hints.
 
 ## v2 Requirements
 
@@ -575,17 +575,17 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | NFR-10      | Phase 1 | Pending |
 | NFR-11      | Phase 7 | Complete |
 | NFR-12      | Phase 2 | Pending |
-| IMP-01      | Phase 9 | Pending |
-| IMP-02      | Phase 9 | Pending |
-| IMP-03      | Phase 9 | Pending |
+| IMP-01      | Phase 11 | Complete |
+| IMP-02      | Phase 11 | Complete |
+| IMP-03      | Phase 11 | Complete |
 | IMP-04      | Phase 10 | Complete |
 | IMP-05      | Phase 10 | Complete |
 | IMP-06      | Phase 10 | Complete |
 | IMP-07      | Phase 10 | Complete |
 | IMP-08      | Phase 10 | Complete |
-| IMP-09      | Phase 9 | Pending |
-| IMP-10      | Phase 9 | Pending |
-| IMP-11      | Phase 9 | Pending |
+| IMP-09      | Phase 11 | Complete |
+| IMP-10      | Phase 11 | Complete |
+| IMP-11      | Phase 11 | Complete |
 
 **Coverage:**
 
@@ -604,9 +604,11 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | Phase 5: Plugin Orchestrators                 | 46 (PI-1..14, PU-1..8, PUP-1..9, PL-1..7, RN-3, AS-2..3, AS-6..7, NFR-2..3) -- PI-15 superseded by Phase 7 D-08                           |
 | Phase 6: Edge Layer & Tab Completion          | 13 (TC-1..9, AP-1..4)                                                                                                                   |
 | Phase 7: Integration & Pi Wiring              | 4 (NFR-8, NFR-11) -- note: NFR-2/3 land in Phase 5 since they describe orchestrator behavior; Phase 7 verifies them in live environment |
+| Phase 10: Claude Settings Import Foundation   | 5 (IMP-04..8)                                                                                                                         |
+| Phase 11: Import Command Orchestration        | 6 (IMP-01..3, IMP-09..11)                                                                                                             |
 
 > **Phase 7 count clarification:** NFR-8 and NFR-11 are the two REQ-IDs uniquely owned by Phase 7. The "live e2e against `anthropics/claude-plugins-official`" work in Phase 7 verifies NFR-2/NFR-3/NFR-5 in production-like conditions but those REQ-IDs are owned by their primary phase (5 / 5 / 4).
 
 ______________________________________________________________________
 
-*Requirements defined: 2026-05-09 from `docs/prd/pi-claude-marketplace-prd.md` v1.0* *Last updated: 2026-05-14 -- Phase 10 completed IMP-04..IMP-08 for Claude settings import foundation and remapped those requirements to Phase 10. Previous update: 2026-05-13 -- Added milestone v1.2 import requirements IMP-01..IMP-11 and mapped them to Phases 8 and 9.*
+*Requirements defined: 2026-05-09 from `docs/prd/pi-claude-marketplace-prd.md` v1.0* *Last updated: 2026-05-14 -- Phase 11 completed IMP-01..IMP-03 and IMP-09..IMP-11 for import command orchestration; Phase 10 completed IMP-04..IMP-08 for Claude settings import foundation.*

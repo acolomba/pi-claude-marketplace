@@ -32,6 +32,7 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 <!-- Shipped and confirmed valuable via this GSD project. -->
 
 - Phase 10 validated IMP-04..IMP-08: Claude settings discovery/merge, exact-true enabled plugin extraction, malformed-entry diagnostics, official marketplace mapping, `extraKnownMarketplaces` directory/github mapping, and both-scope import-plan duplication.
+- Phase 11 validated IMP-01..IMP-03 and IMP-09..IMP-11: `/claude:plugin import [--scope user|project]` command routing, both-scope/default and explicit-scope behavior, idempotent marketplace/plugin import orchestration, unavailable-plugin warning aggregation, source-mismatch protection, reused marketplace/plugin atomic semantics, and command-level e2e coverage.
 
 ### Active
 
@@ -66,11 +67,11 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 
 **Milestone v1.2 import feature:**
 
-- [ ] Claude settings import command: `/claude:plugin import [--scope user|project]`
+- [x] Claude settings import command: `/claude:plugin import [--scope user|project]`
 - [x] Claude settings discovery and merge: base settings plus local override per selected scope
 - [x] Enabled-plugin extraction: import only `enabledPlugins["plugin@marketplace"] === true`
 - [x] Marketplace source import: official built-in mapping plus `extraKnownMarketplaces` directory/GitHub sources
-- [ ] Import orchestration: add missing marketplaces, install enabled plugins, skip existing records, warn and continue on unavailable plugins
+- [x] Import orchestration: add missing marketplaces, install enabled plugins, skip existing records, warn and continue on unavailable plugins
 
 ### Out of Scope
 
@@ -159,7 +160,7 @@ This document evolves at phase transitions and milestone boundaries.
 
 ______________________________________________________________________
 
-*Last updated: 2026-05-14 -- Phase 10 completed the pure Claude settings import foundation for IMP-04..IMP-08 and locked D-28 desired-state planning boundary for Phase 11 orchestration.*
+*Last updated: 2026-05-14 -- Phase 11 completed the Claude settings import command milestone for IMP-01..IMP-03 and IMP-09..IMP-11 with command-level e2e validation. Earlier same-day update: Phase 10 completed the pure Claude settings import foundation for IMP-04..IMP-08 and locked D-28 desired-state planning boundary for Phase 11 orchestration.*
 
 *Last updated: 2026-05-13 -- Corrected milestone v1.2 phase target to Phases 10 and 11 because the separately-developed v1.1 milestone owns Phases 8 and 9. Earlier same-day update initialized Claude settings import scope and D-26/D-27 decisions.*
 

@@ -51,3 +51,23 @@ The first grep must not find forbidden output-channel writes. The remaining grep
 - `npm run check` passes.
 - User-visible import messages are delivered through `ctx.ui.notify` helpers only.
 - Import remains retry-safe and idempotent for already-added marketplaces and already-installed plugins.
+
+## Final Execution Evidence
+
+Recorded 2026-05-14 during Plan 11-03 execution:
+
+```bash
+npm test -- tests/orchestrators/import/execute.test.ts tests/edge/handlers/import.test.ts tests/edge/router.test.ts tests/edge/completions/provider.test.ts tests/edge/register.test.ts tests/e2e/import-command.test.ts
+# exit 0; npm's configured unit-test glob plus listed files ran 884 tests, 884 passed
+
+npm run check
+# exit 0; typecheck, lint, format:check, and npm test all passed
+
+rg "IMP-01|IMP-02|IMP-03|IMP-09|IMP-10|IMP-11" .planning/phases/11-import-command-orchestration/11-0*-PLAN.md
+# exit 0; all Phase 11 requirement IDs are present in plan frontmatter
+
+rg "process\\.stdout|process\\.stderr|console\\.log|console\\.error" extensions/pi-claude-marketplace/orchestrators/import extensions/pi-claude-marketplace/edge
+# exit 1 with no matches; no forbidden output-channel writes in import/edge command code
+```
+
+Caveat: the targeted `npm test -- ...` command includes the repository's configured unit-test glob before the explicitly listed files, so it exercises more than just the Phase 11 files. A direct `node --test tests/e2e/import-command.test.ts` run also passed 3/3 e2e tests while iterating the fixture.

@@ -21,7 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Edge Layer & Tab Completion** - `/claude:plugin` router, argument parsing, tab completion, Usage blocks, error formatting
 - [ ] **Phase 7: Integration & Pi Wiring** - `index.ts` entrypoint, `platform/pi-api.ts` wrapper, live e2e tests with pinned-SHA strategy, peer-dep floor
 - [x] **Phase 10: Claude Settings Import Foundation** - Read/merge Claude settings, extract enabled plugin refs, map marketplace sources including official built-in marketplace
-- [ ] **Phase 11: Import Command Orchestration** - `/claude:plugin import [--scope user|project]` handler, idempotent marketplace/plugin orchestration, warnings and reload-hint integration
+- [x] **Phase 11: Import Command Orchestration** - `/claude:plugin import [--scope user|project]` handler, idempotent marketplace/plugin orchestration, warnings and reload-hint integration
 
 ## Phase Details
 
@@ -205,7 +205,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] `11-01-PLAN.md` -- Import orchestrator: action execution, idempotency, per-scope state locking, warning aggregation (Wave 1)
 - [x] `11-02-PLAN.md` -- Edge handler/router/completion updates for `/claude:plugin import [--scope user|project]` (Wave 2)
-- [ ] `11-03-PLAN.md` -- End-to-end import fixtures and validation sign-off (Wave 3)
+- [x] `11-03-PLAN.md` -- End-to-end import fixtures and validation sign-off (Wave 3)
 
 ## Progress
 
@@ -221,4 +221,4 @@ Decimal phases appear between their surrounding integers in numeric order.
 | 6. Edge Layer & Tab Completion          | 0/5            | Not started | -         |
 | 7. Integration & Pi Wiring              | 6/6            | Complete    | 2026-05-11 |
 | 10. Claude Settings Import Foundation   | 3/3            | Complete    | 2026-05-14 |
-| 11. Import Command Orchestration        | 2/3            | Complete | -         |
+| 11. Import Command Orchestration        | 3/3            | Complete    | 2026-05-14 |
