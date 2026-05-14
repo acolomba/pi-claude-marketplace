@@ -1,16 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.1
-milestone_name: Reinstall Command
-status: planning
-last_updated: "2026-05-13T23:55:56.300Z"
-last_activity: 2026-05-13 - Phase 8 planned
+milestone_name: milestone
+status: executing
+stopped_at: Plan 08-01 complete; executing Plan 08-02
+last_updated: "2026-05-14T00:08:16.485Z"
+last_activity: 2026-05-14 - Plan 08-01 complete; executing Plan 08-02
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 4
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 25
 ---
 
 # Project State
@@ -23,12 +24,12 @@ See: .planning/PROJECT.md (updated 2026-05-13)
 
 ## Current Position
 
-Phase: 8 (Atomic Reinstall Core)
-Plan: 08-01
-Status: Ready to execute Phase 8
-Last activity: 2026-05-13 - Phase 8 planned
+Phase: 08 of 1 (atomic reinstall core)
+Plan: 2 of 4
+Status: Executing Phase 08
+Last activity: 2026-05-14 - Plan 08-01 complete; executing Plan 08-02
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [███░░░░░░░] 25%
 
 ## Performance Metrics
 
@@ -60,6 +61,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 07 P04 | 11 min | 3 tasks | 10 files |
 | Phase 07 P05 | 7 min | 3 tasks | 20 files |
 | Phase 07 P06 | 2 min | 2 tasks | 4 files |
+| Phase 08 P01 | 10 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -85,6 +87,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 07]: [Phase 07]: Real Pi runtime smoke is automated through the installed pi package bin with isolated HOME/cwd, avoiding the blocked agent-core API path. -- Research found agent-core lacks extension-loading API, so the package-bin smoke is the automatable runtime gate.
 - [Phase 07]: D-25 supersedes PI-15 old concurrent-install marker; lock losers fail at per-scope acquisition with `STATE_LOCK_HELD_PREFIX` and retry guidance. -- Plan 07-06 recorded the REQUIREMENTS/PROJECT/CHANGELOG traceability trail.
 - [Phase 07]: Validation sign-off is approved; NFR-2, NFR-3, NFR-8, and NFR-11 map to green automated gates including real Pi-runtime smoke. -- Plan 07-06 closed the phase gate evidence.
+- [Phase 08]: withLockedStateTransaction now exposes a lock-held manual-save state transaction using the same per-scope `.state-lock` semantics as withStateGuard. -- Plan 08-01 established the PRL-10 rollback foundation.
+- [Phase 08]: reinstall.ts is architecture-gated before implementation against Git/network imports and refreshGitHubClone references. -- Plan 08-01 established the PRL-07 no-network guard.
 
 ### Pending Todos
 
@@ -105,6 +109,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-13T23:55:56.300Z
-Stopped At: Phase 8 planned
-Resume File: .planning/phases/08-atomic-reinstall-core/08-01-PLAN.md
+Last session: 2026-05-14T00:08:16.305Z
+Stopped At: Plan 08-01 complete; executing Plan 08-02
+Resume File: .planning/phases/08-atomic-reinstall-core/08-02-PLAN.md

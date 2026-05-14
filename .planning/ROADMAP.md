@@ -34,7 +34,7 @@ The roadmap continues phase numbering from the completed v1.0 successor architec
 **Plans:** 4 plans
 
 Plans:
-- [ ] `08-01-PLAN.md` -- Lock-held manual-save transaction helper and no-network architecture guard
+- [x] `08-01-PLAN.md` -- Lock-held manual-save transaction helper and no-network architecture guard
 - [ ] `08-02-PLAN.md` -- Backup-backed skills and commands replacement helpers
 - [ ] `08-03-PLAN.md` -- Backup-backed agents and MCP replacement helpers
 - [ ] `08-04-PLAN.md` -- Single-plugin atomic reinstall orchestrator core
@@ -63,7 +63,7 @@ Plans:
 
 | Phase | Goal | Requirements | Plans | Status | Completed |
 | ----- | ---- | ------------ | ----- | ------ | --------- |
-| 8. Atomic Reinstall Core | Atomic single-plugin reinstall with preserve-old-on-failure semantics | PRL-02, PRL-06, PRL-07, PRL-08, PRL-09, PRL-10, PRL-11, PRL-12 | 4 plans | Planned | - |
+| 8. Atomic Reinstall Core | Atomic single-plugin reinstall with preserve-old-on-failure semantics | PRL-02, PRL-06, PRL-07, PRL-08, PRL-09, PRL-10, PRL-11, PRL-12 | 1/4 plans | Executing | - |
 | 9. Reinstall Edge & Bulk UX | Command routing, batch forms, scope, completion, output, docs | PRL-01, PRL-03, PRL-04, PRL-05, PRL-13, PRL-14, PRL-15, PRL-16 | TBD | Not started | - |
 
 ## Coverage
