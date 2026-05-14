@@ -9,6 +9,20 @@
 
 import type { Scope } from "../shared/types.ts";
 
+export type ReinstallPluginPartition = "reinstalled" | "skipped" | "failed";
+
+export interface ReinstallPluginOutcome {
+  readonly partition: ReinstallPluginPartition;
+  readonly name: string;
+  readonly marketplace: string;
+  readonly scope: Scope;
+  readonly version?: string;
+  readonly notes?: readonly string[];
+  readonly stagedAgents?: readonly string[];
+  readonly stagedMcpServers?: readonly string[];
+  readonly resourcesChanged?: boolean;
+}
+
 /** MU-7 partition tag. Phase 5's plugin/update.ts returns one outcome per plugin. */
 export type PluginUpdatePartition = "updated" | "unchanged" | "skipped" | "failed";
 

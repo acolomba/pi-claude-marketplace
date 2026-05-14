@@ -42,6 +42,7 @@ export {
   assertNoCrossPluginConflicts,
   installPlugin,
   listPlugins,
+  reinstallPlugin,
   uninstallPlugin,
   updatePlugins,
   updateSinglePlugin,
@@ -51,9 +52,16 @@ export type {
   CrossPluginGeneratedNames,
   InstallPluginOptions,
   ListPluginsOptions,
+  ReinstallPluginOptions,
   UninstallPluginOptions,
   UpdatePluginsOptions,
   UpdatePluginsTarget,
 } from "./plugin/index.ts";
 
-export type { PluginUpdateFn, PluginUpdateOutcome, PluginUpdatePartition } from "./types.ts";
+export type {
+  PluginUpdateFn,
+  PluginUpdateOutcome,
+  PluginUpdatePartition,
+  ReinstallPluginOutcome,
+  ReinstallPluginPartition,
+} from "./types.ts";
