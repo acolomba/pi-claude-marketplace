@@ -24,6 +24,7 @@
 //                           "unavailable"; future --force will install them).
 //   - mode = "uninstall" -> keep status === "installed".
 //   - mode = "update"    -> keep status === "installed".
+//   - mode = "reinstall" -> keep status === "installed".
 
 import {
   getMarketplaceNames,
@@ -36,7 +37,7 @@ import type { PluginIndexRow } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 
-type PluginRefCompletionMode = "install" | "uninstall" | "update";
+type PluginRefCompletionMode = "install" | "uninstall" | "update" | "reinstall";
 
 // ---------------------------------------------------------------------------
 // LocationsResolver -- the edge/ -> persistence/ injection seam.
@@ -120,13 +121,21 @@ export function splitCompletionInput(input: string): { tokens: string[]; current
  * arguments in order. Used by completion handlers to know which positional
  * the cursor is currently typing.
  */
-export function extractPositionals(tokens: readonly string[]): string[] {
+export function extractPositionals(
+  tokens: readonly string[],
+  booleanFlags: readonly string[] = [],
+): string[] {
   const positionals: string[] = [];
   let i = 0;
   while (i < tokens.length) {
     const t = tokens[i];
     if (t === "--scope") {
       i += 2;
+      continue;
+    }
+
+    if (t !== undefined && booleanFlags.includes(t)) {
+      i += 1;
       continue;
     }
 
@@ -223,6 +232,7 @@ export async function getMarketplaceNamesAcrossScopes(
  *   - install   -> keep status !== "installed" (INCLUDES "unavailable")
  *   - uninstall -> keep status === "installed"
  *   - update    -> keep status === "installed"
+ *   - reinstall -> keep status === "installed"
  */
 export async function getPluginToMarketplacesMap(
   mode: PluginRefCompletionMode,
@@ -262,6 +272,7 @@ function statusMatchesMode(mode: PluginRefCompletionMode, row: PluginIndexRow): 
       return row.status !== "installed";
     case "uninstall":
     case "update":
+    case "reinstall":
       return row.status === "installed";
   }
 }

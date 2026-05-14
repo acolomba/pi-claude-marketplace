@@ -7,14 +7,14 @@
 // Branches in priority order:
 //
 //   1. TC-1 -- tokens.length === 0 -> top-level keywords
-//      (install / uninstall / update / list / ls / marketplace).
+//      (install / uninstall / update / reinstall / list / ls / marketplace).
 //   2. TC-4 -- prevToken === "--scope" -> user / project.
 //   2b. TC-3 -- current.startsWith("-") -> flag names (--scope
 //      always; --installed / --available / --unavailable when head ===
 //      "list").
 //   3. TC-2 -- head === "marketplace" && tokens.length === 1 -> nested
 //      marketplace subcommand keywords, including aliases (`rm`, `ls`).
-//   4. TC-6 -- head in {install, uninstall, update} && tokens.length === 1
+//   4. TC-6 -- head in {install, uninstall, update, reinstall} && tokens.length === 1
 //      -> `<plugin>@<marketplace>` via getPluginRefCompletions (status-
 //      aware filter per D-03).
 //   5. TC-5 -- (head in {list, ls} && tokens.length === 1) ||
@@ -44,6 +44,7 @@ export const TOP_LEVEL_SUBCOMMANDS = [
   "install",
   "uninstall",
   "update",
+  "reinstall",
   "list",
   "ls",
   "marketplace",
@@ -95,6 +96,13 @@ function flagCompletions(
   const flags: { name: string; description?: string }[] = [
     { name: "--scope", description: "Scope: user or project" },
   ];
+  if (positionalHead === "reinstall") {
+    flags.push({
+      name: "--force",
+      description: "Overwrite this plugin's previous foreign agent content",
+    });
+  }
+
   if (positionalHead === "list" || positionalHead === "ls") {
     flags.push(
       { name: "--installed", description: "Show installed plugins" },
@@ -158,6 +166,25 @@ function marketplaceNameWanted(positionals: readonly string[]): boolean {
   );
 }
 
+type PluginRefMode = "install" | "uninstall" | "update" | "reinstall";
+
+function pluginRefCompletionConfig(
+  positionalHead: string,
+): { mode: PluginRefMode; allowMarketplaceOnly: boolean } | null {
+  switch (positionalHead) {
+    case "install":
+      return { mode: "install", allowMarketplaceOnly: false };
+    case "uninstall":
+      return { mode: "uninstall", allowMarketplaceOnly: false };
+    case "update":
+      return { mode: "update", allowMarketplaceOnly: true };
+    case "reinstall":
+      return { mode: "reinstall", allowMarketplaceOnly: true };
+    default:
+      return null;
+  }
+}
+
 export async function getArgumentCompletions(
   prefix: string,
   resolver: LocationsResolver,
@@ -171,7 +198,8 @@ export async function getArgumentCompletions(
     return topLevelCompletions(current);
   }
 
-  const positionals = extractPositionals(tokens);
+  const rawHead = tokens.find((token) => token !== "--scope") ?? "";
+  const positionals = extractPositionals(tokens, rawHead === "reinstall" ? ["--force"] : []);
   const positionalHead = positionals[0] ?? "";
 
   // Branch 2a (TC-4): token immediately after `--scope`.
@@ -194,25 +222,14 @@ export async function getArgumentCompletions(
     return marketplaceSubcommandCompletions(current, headPrefix);
   }
 
-  // Branch 4 (TC-6): <plugin>@<marketplace> for install / uninstall / update.
-  // D-03 corollary: install hides `installed`; uninstall/update keep only
-  // `installed`. `allowMarketplaceOnly` is true only for `update` (V1 parity
-  // -- bare @<marketplace> means "update every installed plugin in this mp").
-  if (positionalHead === "install" && positionals.length === 1) {
-    return getPluginRefCompletions("install", current, argumentTextPrefix, resolver, {
-      allowMarketplaceOnly: false,
-    });
-  }
-
-  if (positionalHead === "uninstall" && positionals.length === 1) {
-    return getPluginRefCompletions("uninstall", current, argumentTextPrefix, resolver, {
-      allowMarketplaceOnly: false,
-    });
-  }
-
-  if (positionalHead === "update" && positionals.length === 1) {
-    return getPluginRefCompletions("update", current, argumentTextPrefix, resolver, {
-      allowMarketplaceOnly: true,
+  // Branch 4 (TC-6): <plugin>@<marketplace> for install / uninstall / update / reinstall.
+  // D-03 corollary: install hides `installed`; uninstall/update/reinstall keep only
+  // `installed`. `allowMarketplaceOnly` is true for `update` and `reinstall` (V1 parity
+  // -- bare @<marketplace> means "operate on every installed plugin in this mp").
+  const pluginRefConfig = pluginRefCompletionConfig(positionalHead);
+  if (pluginRefConfig !== null && positionals.length === 1) {
+    return getPluginRefCompletions(pluginRefConfig.mode, current, argumentTextPrefix, resolver, {
+      allowMarketplaceOnly: pluginRefConfig.allowMarketplaceOnly,
     });
   }
 
