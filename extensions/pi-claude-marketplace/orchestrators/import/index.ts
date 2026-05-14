@@ -1,3 +1,14 @@
+export {
+  formatClaudeImportSummary,
+  importClaudeSettings,
+  type ClaudeImportExecutionResult,
+  type ImportWarningOutcome,
+  type MarketplaceFailureOutcome,
+  type PluginInstalledOutcome,
+  type PluginSkipOutcome,
+  type SourceMismatchOutcome,
+  type UnexpectedPluginFailureOutcome,
+} from "./execute.ts";
 export { buildClaudeImportPlan, planMarketplaceSourcesForRefs } from "./marketplaces.ts";
 export { extractEnabledPluginRefs, parseEnabledPluginRef } from "./refs.ts";
 export {

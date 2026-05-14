@@ -95,6 +95,13 @@ import type { Scope } from "../../shared/types.ts";
  * non-optional `ExtensionAPI`; making it optional here would force a runtime
  * branch the type checker cannot reason about).
  */
+export type InstallPluginOutcome =
+  | { readonly status: "installed"; readonly resourcesChanged: boolean }
+  | { readonly status: "already-installed"; readonly cause: string }
+  | { readonly status: "unavailable"; readonly cause: string }
+  | { readonly status: "uninstallable"; readonly cause: string }
+  | { readonly status: "unexpected-failure"; readonly cause: string };
+
 export interface InstallPluginOptions {
   readonly ctx: ExtensionContext;
   /** Factory `pi` reference -- carries `getAllTools()` for RH-3/RH-4 soft-dep probes. */
@@ -104,6 +111,10 @@ export interface InstallPluginOptions {
   readonly cwd: string;
   readonly marketplace: string;
   readonly plugin: string;
+  readonly notifications?: {
+    readonly reloadHint?: "immediate" | "suppress";
+    readonly returnOutcome?: true;
+  };
 }
 
 /**
@@ -168,7 +179,7 @@ async function loadCachedMarketplaceManifest(
  *   3. Post-state-commit pluginDataDir mkdir failure -> notifyWarning
  *      (AS-6 warning severity; the install itself succeeded).
  */
-export async function installPlugin(opts: InstallPluginOptions): Promise<void> {
+export async function installPlugin(opts: InstallPluginOptions): Promise<InstallPluginOutcome> {
   const { ctx, pi, scope, cwd, marketplace, plugin } = opts;
   const locations = locationsFor(scope, cwd);
 
@@ -512,18 +523,25 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<void> {
     // -- notifyError surfaces its `.message` (Pattern S-6 depth-5 cause walk
     // for non-PathContainment errors gives the chained Phase 2 / Phase 3
     // bridge cause text).
-    notifyError(ctx, formatErrorWithCauses(err), err);
-    return;
+    const cause = formatErrorWithCauses(err);
+    if (opts.notifications?.returnOutcome === true) {
+      return classifyInstallFailure(cause);
+    }
+
+    notifyError(ctx, cause, err);
+    return { status: "unexpected-failure", cause };
   }
 
   // Defensive: the success path always populates installCtx; if it did not,
   // surface the inconsistency rather than silently emit a missing message.
   if (installCtx === undefined) {
-    notifyError(
-      ctx,
-      `installPlugin: internal error -- guard returned cleanly without populating install context for plugin "${plugin}".`,
-    );
-    return;
+    const cause = `installPlugin: internal error -- guard returned cleanly without populating install context for plugin "${plugin}".`;
+    if (opts.notifications?.returnOutcome === true) {
+      return { status: "unexpected-failure", cause };
+    }
+
+    notifyError(ctx, cause);
+    return { status: "unexpected-failure", cause };
   }
 
   // POST-state-commit (AS-6 / D-08): eager per-plugin data dir mkdir.
@@ -606,5 +624,27 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<void> {
     installCtx.stagedAgentNames.length > 0 ||
     installCtx.stagedMcpServerNames.length > 0;
   const hint = reloadHint("load", stagedAny ? [plugin] : []);
-  notifySuccess(ctx, appendReloadHint(body, hint));
+  if (opts.notifications?.reloadHint === "suppress") {
+    notifySuccess(ctx, body);
+  } else {
+    notifySuccess(ctx, appendReloadHint(body, hint));
+  }
+
+  return { status: "installed", resourcesChanged: stagedAny };
+}
+
+function classifyInstallFailure(cause: string): InstallPluginOutcome {
+  if (cause.includes("already installed")) {
+    return { status: "already-installed", cause };
+  }
+
+  if (cause.includes("not found in marketplace") || cause.includes("not found in manifest")) {
+    return { status: "unavailable", cause };
+  }
+
+  if (cause.includes("not installable") || cause.includes("is not installable")) {
+    return { status: "uninstallable", cause };
+  }
+
+  return { status: "unexpected-failure", cause };
 }
