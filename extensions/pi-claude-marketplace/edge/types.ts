@@ -14,10 +14,17 @@
 
 export type { SubcommandHandlers } from "./router.ts";
 
+import type {
+  ClaudeImportExecutionResult,
+  ImportClaudeSettingsOptions,
+} from "../orchestrators/import/execute.ts";
 import type { GitOps } from "../orchestrators/marketplace/shared.ts";
 import type { PluginUpdateFn } from "../orchestrators/types.ts";
 
 export interface EdgeDeps {
   readonly gitOps: GitOps;
   readonly pluginUpdate: PluginUpdateFn;
+  readonly importClaudeSettings?: (
+    opts: ImportClaudeSettingsOptions,
+  ) => Promise<ClaudeImportExecutionResult>;
 }

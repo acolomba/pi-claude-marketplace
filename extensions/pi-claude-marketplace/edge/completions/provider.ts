@@ -46,6 +46,7 @@ export const TOP_LEVEL_SUBCOMMANDS = [
   "update",
   "list",
   "ls",
+  "import",
   "marketplace",
 ] as const;
 

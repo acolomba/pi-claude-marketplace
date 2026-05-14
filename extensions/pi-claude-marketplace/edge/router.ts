@@ -33,6 +33,7 @@ export interface SubcommandHandlers {
   uninstall: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   update: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   list: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
+  import: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   marketplaceAdd: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   marketplaceRemove: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   marketplaceList: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
@@ -42,11 +43,12 @@ export interface SubcommandHandlers {
 }
 
 export const TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <install|uninstall|update|list|ls|marketplace> ...\n" +
+  "Usage: /claude:plugin <install|uninstall|update|list|ls|import|marketplace> ...\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project]\n" +
   "  update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
   "  list [<marketplace>] [--scope user|project]   (alias: ls)\n" +
+  "  import [--scope user|project]\n" +
   "  marketplace <add|remove|rm|list|ls|update|autoupdate|noautoupdate> ...";
 
 export const MARKETPLACE_USAGE =
@@ -99,6 +101,8 @@ export async function routeClaudePlugin(
     case "list":
     case "ls":
       return handlers.list(rest, ctx);
+    case "import":
+      return handlers.import(rest, ctx);
     case "marketplace":
       return routeMarketplace(rest, handlers, ctx);
     default:

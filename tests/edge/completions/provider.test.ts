@@ -102,6 +102,7 @@ test("TC-1 :: first positional surfaces top-level keywords (install/uninstall/up
     assert.ok(items !== null);
     const labels = items.map((i) => i.label);
     assert.deepEqual([...labels].sort(), [
+      "import",
       "install",
       "list",
       "ls",
@@ -780,6 +781,49 @@ test("no-match position returns null (Pi-tui sentinel; not [])", async () => {
     // (not []) so Pi-tui can fall through to other providers.
     const items = await getArgumentCompletions("install foo@bar ", f.resolver);
     assert.equal(items, null);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("TC-1 :: first positional completion includes import", async () => {
+  __resetCacheForTests();
+  const f = await emptyFixture();
+  try {
+    const items = await getArgumentCompletions("", f.resolver);
+    assert.ok(items !== null);
+    assert.ok(items.some((item) => item.label === "import" && item.value === "import "));
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("import completions offer scope values and no plugin refs", async () => {
+  __resetCacheForTests();
+  const f = await makeFixture({
+    state: { user: { mp: { manifestPath: "/tmp/manifest" } } },
+    manifests: {
+      user: {
+        mp: [
+          { name: "plugin", status: "available", version: "1.0.0" },
+        ],
+      },
+    },
+  });
+  try {
+    const scopeItems = await getArgumentCompletions("import --scope ", f.resolver);
+    assert.ok(scopeItems !== null);
+    assert.deepEqual(
+      scopeItems.map((item) => item.label).sort(),
+      ["project", "user"],
+    );
+
+    const flagItems = await getArgumentCompletions("import -", f.resolver);
+    assert.ok(flagItems !== null);
+    assert.ok(flagItems.some((item) => item.label === "--scope"));
+
+    const positionalItems = await getArgumentCompletions("import foo", f.resolver);
+    assert.equal(positionalItems, null);
   } finally {
     await f.cleanup();
   }

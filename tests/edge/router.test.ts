@@ -54,6 +54,7 @@ function makeHandlers(): { handlers: SubcommandHandlers; calls: HandlerCall[] } 
     uninstall: mk("uninstall"),
     update: mk("update"),
     list: mk("list"),
+    import: mk("import"),
     marketplaceAdd: mk("marketplaceAdd"),
     marketplaceRemove: mk("marketplaceRemove"),
     marketplaceList: mk("marketplaceList"),
@@ -74,6 +75,7 @@ test("AP-3 :: empty input emits TOP_LEVEL_USAGE at error severity", async () => 
   // notifyUsageError emits `${message}\n\n${usageBlock}` -- assert the
   // Usage block is present in the surfaced message.
   assert.ok(notifications[0]?.message.includes(TOP_LEVEL_USAGE));
+  assert.ok(notifications[0]?.message.includes("import"));
 });
 
 test("AP-3 :: unknown subcommand emits Unknown subcommand: + TOP_LEVEL_USAGE at error severity", async () => {
@@ -137,6 +139,14 @@ test("routeClaudePlugin :: dispatches list to handlers.list", async () => {
   const { handlers, calls } = makeHandlers();
   await routeClaudePlugin("list bar", handlers, ctx);
   assert.deepEqual(calls, [{ name: "list", args: "bar" }]);
+  assert.deepEqual(notifications, []);
+});
+
+test("routeClaudePlugin :: dispatches import to handlers.import", async () => {
+  const { ctx, notifications } = makeCtx();
+  const { handlers, calls } = makeHandlers();
+  await routeClaudePlugin("import --scope user", handlers, ctx);
+  assert.deepEqual(calls, [{ name: "import", args: "--scope user" }]);
   assert.deepEqual(notifications, []);
 });
 
