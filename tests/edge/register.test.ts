@@ -6,6 +6,9 @@
 // firing the captured session_start handler exercises the TC-7 wrapper.
 
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { test } from "node:test";
 
 import {
@@ -89,6 +92,25 @@ function makeDeps(): EdgeDeps {
   return { gitOps, pluginUpdate };
 }
 
+async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Promise<T> {
+  const originalHome = process.env.HOME;
+  const home = await mkdtemp(path.join(tmpdir(), "register-reinstall-home-"));
+  const cwd = await mkdtemp(path.join(tmpdir(), "register-reinstall-cwd-"));
+  process.env.HOME = home;
+  try {
+    return await fn({ cwd });
+  } finally {
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+
+    await rm(home, { recursive: true, force: true });
+    await rm(cwd, { recursive: true, force: true });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Tests.
 // ---------------------------------------------------------------------------
@@ -136,6 +158,41 @@ test("D-04 :: registered command has a handler that routes through routeClaudePl
   assert.equal(notifications[0]?.severity, "error");
   assert.match(notifications[0]?.message ?? "", /Usage error\./);
   assert.match(notifications[0]?.message ?? "", /Usage: \/claude:plugin/);
+});
+
+test("D-04 :: registered command description mentions reinstall", () => {
+  const { pi, commands } = makeMockPi();
+  registerClaudePluginCommand(pi, makeDeps());
+
+  const cmd = commands.get("claude:plugin");
+  assert.ok(cmd !== undefined);
+  assert.equal(cmd.description?.includes("reinstall plugins"), true);
+});
+
+test("D-04 :: registered command routes reinstall through makeReinstallHandler", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { pi, commands } = makeMockPi();
+    registerClaudePluginCommand(pi, makeDeps());
+
+    const cmd = commands.get("claude:plugin");
+    assert.ok(cmd !== undefined);
+
+    const notifications: { message: string; severity?: string }[] = [];
+    const ctx = {
+      cwd,
+      ui: {
+        notify: (m: string, s?: string): void => {
+          notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
+        },
+      },
+    } as unknown as ExtensionContext;
+
+    await cmd.handler("reinstall", ctx);
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]?.severity, undefined);
+    assert.match(notifications[0]?.message ?? "", /No plugins installed\./);
+  });
 });
 
 test("D-04 :: registered command has getArgumentCompletions returning AutocompleteItem[] | null", async () => {

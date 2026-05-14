@@ -46,6 +46,7 @@ import { makeRemoveHandler } from "./handlers/marketplace/remove.ts";
 import { makeMarketplaceUpdateHandler } from "./handlers/marketplace/update.ts";
 import { makeInstallHandler } from "./handlers/plugin/install.ts";
 import { makeListHandler } from "./handlers/plugin/list.ts";
+import { makeReinstallHandler } from "./handlers/plugin/reinstall.ts";
 import { makeUninstallHandler } from "./handlers/plugin/uninstall.ts";
 import { makeUpdateHandler } from "./handlers/plugin/update.ts";
 import { registerListMarketplacesTool, registerListPluginsTool } from "./handlers/tools.ts";
@@ -57,7 +58,7 @@ import type { ExtensionAPI } from "../platform/pi-api.ts";
 
 const COMMAND_DESCRIPTION =
   "Manage Claude plugin marketplaces and plugins. Install, uninstall, list, " +
-  "update plugins from configured marketplaces.";
+  "update, and reinstall plugins from configured marketplaces.";
 
 /**
  * Wire the `/claude:plugin` slash command + the TC-7 autocomplete
@@ -74,6 +75,7 @@ export function registerClaudePluginCommand(pi: ExtensionAPI, deps: EdgeDeps): v
     install: makeInstallHandler(pi),
     uninstall: makeUninstallHandler(pi),
     update: makeUpdateHandler(pi),
+    reinstall: makeReinstallHandler(pi),
     list: makeListHandler(),
     marketplaceAdd: makeAddHandler(deps),
     marketplaceRemove: makeRemoveHandler(pi),
