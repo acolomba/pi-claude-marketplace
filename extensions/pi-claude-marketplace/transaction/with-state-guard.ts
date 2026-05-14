@@ -36,6 +36,16 @@ import { errorMessage, StateLockHeldError } from "../shared/errors.ts";
 
 import type { ScopedLocations } from "../persistence/locations.ts";
 
+export interface LockedStateTransaction {
+  readonly state: ExtensionState;
+  save(): Promise<void>;
+}
+
+export interface LockedStateTransactionDeps {
+  readonly loadState?: typeof loadState;
+  readonly saveState?: typeof saveState;
+}
+
 /**
  * ST-7: load fresh state, hand to closure, save only on no-throw.
  *
@@ -60,13 +70,7 @@ export async function withStateGuard<T>(
 
   let release: (() => Promise<void>) | undefined;
   try {
-    release = await lockfile.lock(locations.extensionRoot, {
-      lockfilePath: locations.stateLockFile,
-      realpath: false,
-      retries: 0,
-      stale: 10_000,
-      update: 2_000,
-    });
+    release = await acquireStateLock(locations);
   } catch (err) {
     if (isLockHeldError(err)) {
       throw new StateLockHeldError(locations.scope, locations.stateLockFile, { cause: err });
@@ -98,6 +102,69 @@ export async function withStateGuard<T>(
   }
 
   return result as T;
+}
+
+/**
+ * Phase 8 / PRL-10: hold the per-scope state lock while callers explicitly
+ * choose when to save. Reinstall uses this to rollback already-swapped
+ * physical resources if state persistence fails.
+ */
+export async function withLockedStateTransaction<T>(
+  locations: ScopedLocations,
+  run: (tx: LockedStateTransaction) => Promise<T> | T,
+  deps?: LockedStateTransactionDeps,
+): Promise<T> {
+  await mkdir(locations.extensionRoot, { recursive: true });
+
+  let release: (() => Promise<void>) | undefined;
+  try {
+    release = await acquireStateLock(locations);
+  } catch (err) {
+    if (isLockHeldError(err)) {
+      throw new StateLockHeldError(locations.scope, locations.stateLockFile, { cause: err });
+    }
+
+    throw toError(err);
+  }
+
+  let result: T | undefined;
+  let primaryError: unknown;
+  try {
+    const fresh = await (deps?.loadState ?? loadState)(locations.extensionRoot);
+    const tx: LockedStateTransaction = {
+      state: fresh,
+      save: async (): Promise<void> => {
+        await (deps?.saveState ?? saveState)(locations.extensionRoot, fresh);
+      },
+    };
+    result = await run(tx);
+  } catch (err) {
+    primaryError = err;
+  } finally {
+    try {
+      await release();
+    } catch (releaseErr) {
+      if (primaryError === undefined) {
+        primaryError = releaseErr;
+      }
+    }
+  }
+
+  if (primaryError !== undefined) {
+    throw toError(primaryError);
+  }
+
+  return result as T;
+}
+
+function acquireStateLock(locations: ScopedLocations): Promise<() => Promise<void>> {
+  return lockfile.lock(locations.extensionRoot, {
+    lockfilePath: locations.stateLockFile,
+    realpath: false,
+    retries: 0,
+    stale: 10_000,
+    update: 2_000,
+  });
 }
 
 function toError(err: unknown): Error {

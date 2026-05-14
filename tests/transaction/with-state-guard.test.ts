@@ -12,7 +12,10 @@ import {
   type ScopedLocations,
 } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { StateLockHeldError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { withStateGuard } from "../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
+import {
+  withLockedStateTransaction,
+  withStateGuard,
+} from "../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
@@ -236,6 +239,129 @@ test("D-06 save failure releases the lock for the next state guard call", async 
 
     const onDisk = await readOnDisk(loc.stateJsonPath);
     assert.equal(onDisk.marketplaces.mp1?.plugins.p1?.version, "1.0.0");
+  } finally {
+    await cleanup();
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// Phase 8 / PRL-10: manual-save transaction helper for reinstall rollback
+// ──────────────────────────────────────────────────────────────────────────
+
+test("Phase 8 / PRL-10 manual transaction saves only when tx.save is called", async () => {
+  const { loc, cleanup } = await setupTmpScope();
+  try {
+    await withStateGuard(loc, (state) => {
+      withInstalledPlugin(state, "mp1", "p1", "1.0.0");
+    });
+
+    await withLockedStateTransaction(loc, async (tx) => {
+      const record = tx.state.marketplaces.mp1?.plugins.p1;
+      assert.equal(record?.version, "1.0.0", "transaction receives freshly loaded state");
+      assert.ok(record, "expected pre-populated plugin record");
+
+      record.version = "2.0.0";
+
+      const beforeSave = await readOnDisk(loc.stateJsonPath);
+      assert.equal(
+        beforeSave.marketplaces.mp1?.plugins.p1?.version,
+        "1.0.0",
+        "mutating tx.state must not write state.json before tx.save()",
+      );
+
+      await tx.save();
+    });
+
+    const afterSave = await readOnDisk(loc.stateJsonPath);
+    assert.equal(afterSave.marketplaces.mp1?.plugins.p1?.version, "2.0.0");
+  } finally {
+    await cleanup();
+  }
+});
+
+test("Phase 8 / PRL-10 manual transaction holds the per-scope lock while callback runs", async () => {
+  const { loc, cleanup } = await setupTmpScope();
+  try {
+    await withLockedStateTransaction(loc, async () => {
+      assert.equal(
+        await lockfile.check(loc.extensionRoot, {
+          lockfilePath: loc.stateLockFile,
+          realpath: false,
+        }),
+        true,
+      );
+    });
+
+    assert.equal(
+      await lockfile.check(loc.extensionRoot, {
+        lockfilePath: loc.stateLockFile,
+        realpath: false,
+      }),
+      false,
+    );
+  } finally {
+    await cleanup();
+  }
+});
+
+test("Phase 8 / PRL-10 manual transaction save failure releases lock", async () => {
+  const { loc, cleanup } = await setupTmpScope();
+  try {
+    await assert.rejects(
+      () =>
+        withLockedStateTransaction(
+          loc,
+          async (tx) => {
+            withInstalledPlugin(tx.state, "mp1", "p1", "1.0.0");
+            await tx.save();
+          },
+          {
+            saveState: () => Promise.reject(new Error("simulated explicit save failure")),
+          },
+        ),
+      /simulated explicit save failure/,
+    );
+
+    await withStateGuard(loc, (state) => {
+      withInstalledPlugin(state, "mp1", "p1", "1.0.0");
+    });
+
+    const onDisk = await readOnDisk(loc.stateJsonPath);
+    assert.equal(onDisk.marketplaces.mp1?.plugins.p1?.version, "1.0.0");
+  } finally {
+    await cleanup();
+  }
+});
+
+test("Phase 8 / PRL-10 manual transaction callback failure does not save and releases lock", async () => {
+  const { loc, cleanup } = await setupTmpScope();
+  try {
+    await withStateGuard(loc, (state) => {
+      withInstalledPlugin(state, "mp1", "p1", "1.0.0");
+    });
+
+    await assert.rejects(
+      () =>
+        withLockedStateTransaction(loc, (tx) => {
+          const record = tx.state.marketplaces.mp1?.plugins.p1;
+          assert.ok(record, "expected pre-populated plugin record");
+          record.version = "2.0.0";
+          throw new Error("simulated callback failure before save");
+        }),
+      /simulated callback failure before save/,
+    );
+
+    const onDisk = await readOnDisk(loc.stateJsonPath);
+    assert.equal(onDisk.marketplaces.mp1?.plugins.p1?.version, "1.0.0");
+
+    await withStateGuard(loc, (state) => {
+      const record = state.marketplaces.mp1?.plugins.p1;
+      assert.ok(record, "expected plugin record after callback failure");
+      record.version = "1.0.1";
+    });
+
+    const afterRetry = await readOnDisk(loc.stateJsonPath);
+    assert.equal(afterRetry.marketplaces.mp1?.plugins.p1?.version, "1.0.1");
   } finally {
     await cleanup();
   }
