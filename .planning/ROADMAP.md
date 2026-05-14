@@ -20,7 +20,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Plugin Orchestrators** - `install/uninstall/update` using Phase ledger + all four bridges; top-level `list`; component-path supplement fix
 - [x] **Phase 6: Edge Layer & Tab Completion** - `/claude:plugin` router, argument parsing, tab completion, Usage blocks, error formatting
 - [ ] **Phase 7: Integration & Pi Wiring** - `index.ts` entrypoint, `platform/pi-api.ts` wrapper, live e2e tests with pinned-SHA strategy, peer-dep floor
-- [ ] **Phase 10: Claude Settings Import Foundation** - Read/merge Claude settings, extract enabled plugin refs, map marketplace sources including official built-in marketplace
+- [x] **Phase 10: Claude Settings Import Foundation** - Read/merge Claude settings, extract enabled plugin refs, map marketplace sources including official built-in marketplace
 - [ ] **Phase 11: Import Command Orchestration** - `/claude:plugin import [--scope user|project]` handler, idempotent marketplace/plugin orchestration, warnings and reload-hint integration
 
 ## Phase Details
@@ -187,9 +187,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Plans**: 3 plans
 
-- [ ] `10-01-PLAN.md` -- Settings file discovery and merge model for user/project scopes with local override tests (Wave 1)
-- [ ] `10-02-PLAN.md` -- Enabled-plugin ref extraction and malformed/non-true entry handling (Wave 1)
-- [ ] `10-03-PLAN.md` -- Marketplace source planning: official built-in mapping + extraKnownMarketplaces directory/github mapping (Wave 2)
+- [x] `10-01-PLAN.md` -- Settings file discovery and merge model for user/project scopes with local override tests (Wave 1)
+- [x] `10-02-PLAN.md` -- Enabled-plugin ref extraction and malformed/non-true entry handling (Wave 1)
+- [x] `10-03-PLAN.md` -- Marketplace source planning: official built-in mapping + extraKnownMarketplaces directory/github mapping (Wave 2)
 
 ### Phase 11: Import Command Orchestration
 
@@ -220,5 +220,5 @@ Decimal phases appear between their surrounding integers in numeric order.
 | 5. Plugin Orchestrators                 | 10/10          | Complete    | 2026-05-11 |
 | 6. Edge Layer & Tab Completion          | 0/5            | Not started | -         |
 | 7. Integration & Pi Wiring              | 6/6            | Complete    | 2026-05-11 |
-| 10. Claude Settings Import Foundation   | 0/3            | Not started | -         |
+| 10. Claude Settings Import Foundation   | 3/3            | Complete    | 2026-05-14 |
 | 11. Import Command Orchestration        | 0/3            | Not started | -         |

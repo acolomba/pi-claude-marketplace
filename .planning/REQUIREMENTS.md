@@ -299,14 +299,14 @@ Requirements for the Claude settings import milestone. These are additive to the
 
 ### Claude Settings Parsing
 
-- [ ] **IMP-04**: Import reads both `settings.json` and `settings.local.json` for each selected Claude scope, with local settings overriding base settings.
-- [ ] **IMP-05**: Import considers only merged `enabledPlugins` entries whose value is exactly `true`; false, null, missing, and non-boolean values are ignored.
-- [ ] **IMP-06**: Import parses enabled plugin keys as `plugin@marketplace` refs and reports malformed keys without aborting valid imports.
+- [x] **IMP-04**: Import reads both `settings.json` and `settings.local.json` for each selected Claude scope, with local settings overriding base settings.
+- [x] **IMP-05**: Import considers only merged `enabledPlugins` entries whose value is exactly `true`; false, null, missing, and non-boolean values are ignored.
+- [x] **IMP-06**: Import parses enabled plugin keys as `plugin@marketplace` refs and reports malformed keys without aborting valid imports.
 
 ### Marketplace Source Import
 
-- [ ] **IMP-07**: If an enabled plugin references `claude-plugins-official` and that marketplace is missing in the target Pi scope, import adds it from `anthropics/claude-plugins-official`.
-- [ ] **IMP-08**: For non-official marketplaces, import reads merged `extraKnownMarketplaces` and maps Claude `directory` sources to Pi path-source marketplace adds and Claude `github.repo` sources to Pi GitHub-source marketplace adds.
+- [x] **IMP-07**: If an enabled plugin references `claude-plugins-official` and that marketplace is missing in the target Pi scope, import adds it from `anthropics/claude-plugins-official`.
+- [x] **IMP-08**: For non-official marketplaces, import reads merged `extraKnownMarketplaces` and maps Claude `directory` sources to Pi path-source marketplace adds and Claude `github.repo` sources to Pi GitHub-source marketplace adds.
 
 ### Plugin Import Orchestration
 
@@ -578,11 +578,11 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | IMP-01      | Phase 9 | Pending |
 | IMP-02      | Phase 9 | Pending |
 | IMP-03      | Phase 9 | Pending |
-| IMP-04      | Phase 8 | Pending |
-| IMP-05      | Phase 8 | Pending |
-| IMP-06      | Phase 8 | Pending |
-| IMP-07      | Phase 8 | Pending |
-| IMP-08      | Phase 8 | Pending |
+| IMP-04      | Phase 10 | Complete |
+| IMP-05      | Phase 10 | Complete |
+| IMP-06      | Phase 10 | Complete |
+| IMP-07      | Phase 10 | Complete |
+| IMP-08      | Phase 10 | Complete |
 | IMP-09      | Phase 9 | Pending |
 | IMP-10      | Phase 9 | Pending |
 | IMP-11      | Phase 9 | Pending |
@@ -609,4 +609,4 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 
 ______________________________________________________________________
 
-*Requirements defined: 2026-05-09 from `docs/prd/pi-claude-marketplace-prd.md` v1.0* *Last updated: 2026-05-13 -- Added milestone v1.2 import requirements IMP-01..IMP-11 and mapped them to Phases 8 and 9. Previous update: 2026-05-11 -- Phase 7 D-08 supersedes PI-15: concurrent install losers now fail at per-scope lock acquisition with `STATE_LOCK_HELD_PREFIX` instead of reaching the old state-guard commit rollback marker.*
+*Requirements defined: 2026-05-09 from `docs/prd/pi-claude-marketplace-prd.md` v1.0* *Last updated: 2026-05-14 -- Phase 10 completed IMP-04..IMP-08 for Claude settings import foundation and remapped those requirements to Phase 10. Previous update: 2026-05-13 -- Added milestone v1.2 import requirements IMP-01..IMP-11 and mapped them to Phases 8 and 9.*

@@ -31,7 +31,7 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 
 <!-- Shipped and confirmed valuable via this GSD project. -->
 
-(None yet -- V1 predates this GSD project; deliverables will be tracked here as phases ship.)
+- Phase 10 validated IMP-04..IMP-08: Claude settings discovery/merge, exact-true enabled plugin extraction, malformed-entry diagnostics, official marketplace mapping, `extraKnownMarketplaces` directory/github mapping, and both-scope import-plan duplication.
 
 ### Active
 
@@ -67,9 +67,9 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 **Milestone v1.2 import feature:**
 
 - [ ] Claude settings import command: `/claude:plugin import [--scope user|project]`
-- [ ] Claude settings discovery and merge: base settings plus local override per selected scope
-- [ ] Enabled-plugin extraction: import only `enabledPlugins["plugin@marketplace"] === true`
-- [ ] Marketplace source import: official built-in mapping plus `extraKnownMarketplaces` directory/GitHub sources
+- [x] Claude settings discovery and merge: base settings plus local override per selected scope
+- [x] Enabled-plugin extraction: import only `enabledPlugins["plugin@marketplace"] === true`
+- [x] Marketplace source import: official built-in mapping plus `extraKnownMarketplaces` directory/GitHub sources
 - [ ] Import orchestration: add missing marketplaces, install enabled plugins, skip existing records, warn and continue on unavailable plugins
 
 ### Out of Scope
@@ -134,8 +134,9 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 | **D-23 (2026-05-10):** Adopt follow-upstream-blindly semantics for `marketplace update`; supersede PRD MU-2 and MU-3                | The local marketplace clone is read-only by contract -- the extension only clones, fetches, and checks out; it never commits, pushes, or modifies the working tree. Local-vs-upstream divergence cannot occur, so `pull --ff-only` and "non-fast-forward divergence as error" are no longer applicable. `marketplace update` therefore overrides the local branch ref to the remote SHA via `gitOps.forceUpdateRef` + `gitOps.checkout` (or checks out a detached SHA directly). Phase 4 implements this in `orchestrators/marketplace/update.ts` per CONTEXT.md D-14. Recorded by Plan 04-10. | -- Locked  |
 | **D-24 (2026-05-10):** Adopt COMP-01 (Gap 3) supplement-not-replace for plugin component-path arrays; supersede PRD PR-4 | The V1 resolver short-circuited implicit-by-convention detection whenever a manifest declared a `componentPaths.{skills,commands,agents}` value, making custom paths *replace* defaults rather than supplement them. Phase 5 D-07 corrects this vs upstream Claude Code behavior: `domain/resolver.ts`'s `ComponentPathsSchema` migrates from optional-string-per-kind to readonly-string-array-per-kind; strict resolver Step 7 computes a UNION of declared (entry > manifest) + implicit-by-convention (when the conventional dir exists), deduplicated by path with first-wins on collisions; loose resolver stays entry-only. Bridge `discover.ts` files iterate the array. Behavior corrected vs V1 per COMP-01 / Gap 3 -- see `.planning/phases/05-plugin-orchestrators/05-CONTEXT.md` D-07. Recorded by Plan 05-10; behavior change landed in Plan 05-03. | -- Locked  |
 | **D-25 (2026-05-11):** Adopt Phase 7 lock-held marker semantics; supersede PRD PI-15's old concurrent-install commit marker | Phase 7 D-08 moves cross-process conflict detection ahead of `withStateGuard` mutation by taking the per-scope `.state-lock` first. The loser now fails fast with `STATE_LOCK_HELD_PREFIX` (`Another pi-claude-marketplace operation is in progress for`) and retry guidance, so it never reaches the old `was installed concurrently` state-guard commit rollback path. This preserves retry safety while making the user-visible contract match the actual lock boundary. Recorded by Plan 07-06; behavior landed in Plan 07-04. | -- Locked  |
-| **D-26 (2026-05-13):** v1.2 import follows existing `--scope user|project` convention; omitted scope means both scopes | Keeps `/claude:plugin import` consistent with read/enumeration commands such as `list`: no new `all` value is introduced. User-scope Claude settings import to Pi user scope; project-scope Claude settings import to Pi project scope; if the same marketplace/plugin is enabled in both settings scopes, both Pi scopes receive it unless narrowed by `--scope`. | -- Pending |
-| **D-27 (2026-05-13):** Claude Code's built-in `claude-plugins-official` marketplace maps to `anthropics/claude-plugins-official` | Claude Code ships this marketplace implicitly, so an enabled `plugin@claude-plugins-official` must be importable even when `extraKnownMarketplaces` has no entry for it. Non-official marketplace sources come from merged `extraKnownMarketplaces`. | -- Pending |
+| **D-26 (2026-05-13):** v1.2 import follows existing `--scope user|project` convention; omitted scope means both scopes | Keeps `/claude:plugin import` consistent with read/enumeration commands such as `list`: no new `all` value is introduced. User-scope Claude settings import to Pi user scope; project-scope Claude settings import to Pi project scope; if the same marketplace/plugin is enabled in both settings scopes, both Pi scopes receive it unless narrowed by `--scope`. | -- Locked |
+| **D-27 (2026-05-13):** Claude Code's built-in `claude-plugins-official` marketplace maps to `anthropics/claude-plugins-official` | Claude Code ships this marketplace implicitly, so an enabled `plugin@claude-plugins-official` must be importable even when `extraKnownMarketplaces` has no entry for it. Non-official marketplace sources come from merged `extraKnownMarketplaces`. | -- Locked |
+| **D-28 (2026-05-14):** Phase 10 import foundation remains pure desired-state planning | `buildClaudeImportPlan` returns scoped marketplace/plugin/skipped actions and diagnostics only. It does not call marketplace add, plugin install, state mutation, network, or user notification APIs; Phase 11 owns orchestration and presentation. | -- Locked |
 
 ## Evolution
 
@@ -157,6 +158,8 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ______________________________________________________________________
+
+*Last updated: 2026-05-14 -- Phase 10 completed the pure Claude settings import foundation for IMP-04..IMP-08 and locked D-28 desired-state planning boundary for Phase 11 orchestration.*
 
 *Last updated: 2026-05-13 -- Corrected milestone v1.2 phase target to Phases 10 and 11 because the separately-developed v1.1 milestone owns Phases 8 and 9. Earlier same-day update initialized Claude settings import scope and D-26/D-27 decisions.*
 
