@@ -20,6 +20,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Plugin Orchestrators** - `install/uninstall/update` using Phase ledger + all four bridges; top-level `list`; component-path supplement fix
 - [x] **Phase 6: Edge Layer & Tab Completion** - `/claude:plugin` router, argument parsing, tab completion, Usage blocks, error formatting
 - [ ] **Phase 7: Integration & Pi Wiring** - `index.ts` entrypoint, `platform/pi-api.ts` wrapper, live e2e tests with pinned-SHA strategy, peer-dep floor
+- [ ] **Phase 8: Claude Settings Import Foundation** - Read/merge Claude settings, extract enabled plugin refs, map marketplace sources including official built-in marketplace
+- [ ] **Phase 9: Import Command Orchestration** - `/claude:plugin import [--scope user|project]` handler, idempotent marketplace/plugin orchestration, warnings and reload-hint integration
 
 ## Phase Details
 
@@ -173,9 +175,41 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] `07-05-PLAN.md` -- Pinned e2e fixtures, e2e tests, and CI/nightly workflows (Wave 4)
 - [x] `07-06-PLAN.md` -- PI-15 supersession docs and validation sign-off (Wave 5)
 
+### Phase 8: Claude Settings Import Foundation
+
+**Goal**: A pure, testable import-planning foundation can read Claude Code settings for user/project scopes, merge base plus local override correctly, extract only true-enabled plugin refs, and resolve marketplace sources for official and extra-known marketplaces without mutating Pi state **Depends on**: Phase 7 and the separately-developed v1.1 milestone merge **Requirements**: IMP-04, IMP-05, IMP-06, IMP-07, IMP-08 **Success Criteria** (what must be TRUE):
+
+1. Settings discovery reads the correct files per scope: user Claude settings and project `.claude/settings*.json`; missing files are treated as empty while malformed JSON reports a warning/error through the import result path rather than crashing the process.
+2. Merge semantics are deterministic: `settings.local.json` overrides `settings.json`, including disabling a base `enabledPlugins["plugin@marketplace"]: true` by setting the local value to `false`.
+3. Enabled-plugin extraction returns only refs whose merged value is exactly boolean `true`; malformed keys and non-true values are ignored or warned according to import policy without blocking valid refs.
+4. Marketplace source planning maps `claude-plugins-official` to `anthropics/claude-plugins-official` when missing, and maps `extraKnownMarketplaces` Claude `directory` and `github.repo` sources into existing Pi source parser inputs.
+5. Unit tests cover both-scope duplication: if the same plugin/marketplace is enabled in user and project Claude settings, the import plan contains one action per matching Pi scope.
+
+**Plans**: 3 plans
+
+- [ ] `08-01-PLAN.md` -- Settings file discovery and merge model for user/project scopes with local override tests (Wave 1)
+- [ ] `08-02-PLAN.md` -- Enabled-plugin ref extraction and malformed/non-true entry handling (Wave 1)
+- [ ] `08-03-PLAN.md` -- Marketplace source planning: official built-in mapping + extraKnownMarketplaces directory/github mapping (Wave 2)
+
+### Phase 9: Import Command Orchestration
+
+**Goal**: A Pi user can run `/claude:plugin import [--scope user|project]` and have enabled Claude Code plugins installed into the matching Pi scopes idempotently, with missing marketplaces added first and unavailable plugins reported as warnings while valid imports continue **Depends on**: Phase 8 **Requirements**: IMP-01, IMP-02, IMP-03, IMP-09, IMP-10, IMP-11 **Success Criteria** (what must be TRUE):
+
+1. `/claude:plugin import` is routed and documented consistently with existing commands; `--scope` accepts only `user` and `project`, may appear at any position, and omitted scope processes both scopes.
+2. Import adds missing marketplaces before installing enabled plugins, skips marketplaces/plugins already present in the target scope, and preserves same-name marketplace/plugin imports in both user and project scopes when both Claude scopes enable them.
+3. Import reuses existing marketplace-add and plugin-install semantics so network access, state locking, atomic staging, soft-dependency warnings, and reload hints match the underlying operations.
+4. Unavailable/uninstallable enabled plugins do not abort the whole import; they are aggregated and reported at warning severity with enough context to identify `plugin@marketplace` and target scope.
+5. Integration tests exercise a mixed import: official GitHub marketplace, extra-known directory marketplace, extra-known GitHub marketplace, local override disabling a base plugin, already-installed skip, and unavailable-plugin warning.
+
+**Plans**: 3 plans
+
+- [ ] `09-01-PLAN.md` -- Import orchestrator: action execution, idempotency, per-scope state locking, warning aggregation (Wave 1)
+- [ ] `09-02-PLAN.md` -- Edge handler/router/completion updates for `/claude:plugin import [--scope user|project]` (Wave 2)
+- [ ] `09-03-PLAN.md` -- End-to-end import fixtures and validation sign-off (Wave 3)
+
 ## Progress
 
-**Execution Order:** Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 (decimals slot in between if inserted)
+**Execution Order:** Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 (decimals slot in between if inserted). v1.2 owns Phases 8 and 9 and is expected to merge after the separately-developed v1.1 milestone.
 
 | Phase                                   | Plans Complete | Status      | Completed |
 | --------------------------------------- | -------------- | ----------- | --------- |
@@ -186,3 +220,5 @@ Decimal phases appear between their surrounding integers in numeric order.
 | 5. Plugin Orchestrators                 | 10/10          | Complete    | 2026-05-11 |
 | 6. Edge Layer & Tab Completion          | 0/5            | Not started | -         |
 | 7. Integration & Pi Wiring              | 6/6            | Complete    | 2026-05-11 |
+| 8. Claude Settings Import Foundation    | 0/3            | Not started | -         |
+| 9. Import Command Orchestration         | 0/3            | Not started | -         |

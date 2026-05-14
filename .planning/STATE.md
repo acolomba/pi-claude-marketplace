@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: milestone_complete
-last_updated: "2026-05-11T20:42:58.901Z"
+milestone: v1.2
+milestone_name: Claude settings import
+status: milestone_planned
+last_updated: "2026-05-13T00:00:00.000Z"
 progress:
-  total_phases: 7
-  completed_phases: 8
-  total_plans: 51
+  total_phases: 9
+  completed_phases: 7
+  total_plans: 57
   completed_plans: 51
-  percent: 114
+  percent: 89
 ---
 
 # Project State
@@ -18,14 +18,16 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-09)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 07 -- integration-pi-wiring
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Milestone v1.2 -- Claude settings import (Phases 8 and 9)
 
 ## Current Position
 
-Phase: 07
+Phase: 08
 Plan: Not started
+Status: Defining requirements / ready for phase discussion
+Last activity: 2026-05-13 - Milestone v1.2 planned for Claude settings import
 
-Progress: [██████████] 100%
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
@@ -44,6 +46,8 @@ Progress: [██████████] 100%
 | 04 | 10 | - | - |
 | 05 | 10 | - | - |
 | 07 | 6 | - | - |
+| 08 | 3 | - | - |
+| 09 | 3 | - | - |
 
 **Recent Trend:**
 
@@ -82,6 +86,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 07]: [Phase 07]: Real Pi runtime smoke is automated through the installed pi package bin with isolated HOME/cwd, avoiding the blocked agent-core API path. -- Research found agent-core lacks extension-loading API, so the package-bin smoke is the automatable runtime gate.
 - [Phase 07]: D-25 supersedes PI-15 old concurrent-install marker; lock losers fail at per-scope acquisition with `STATE_LOCK_HELD_PREFIX` and retry guidance. -- Plan 07-06 recorded the REQUIREMENTS/PROJECT/CHANGELOG traceability trail.
 - [Phase 07]: Validation sign-off is approved; NFR-2, NFR-3, NFR-8, and NFR-11 map to green automated gates including real Pi-runtime smoke. -- Plan 07-06 closed the phase gate evidence.
+- [Milestone v1.2]: Import follows existing scope convention: `--scope user|project`; omitted scope processes both scopes. Same marketplace/plugin enabled in both Claude scopes imports into both matching Pi scopes.
+- [Milestone v1.2]: Claude settings merge local-over-base; only `enabledPlugins["plugin@marketplace"] === true` imports. `claude-plugins-official` maps to `anthropics/claude-plugins-official`; other sources come from `extraKnownMarketplaces` directory/github entries.
 
 ### Pending Todos
 
@@ -102,4 +108,4 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-11T20:42:58.893Z
+Last session: 2026-05-13T00:00:00.000Z

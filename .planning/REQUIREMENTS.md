@@ -287,6 +287,33 @@
 - [x] **NFR-11**: Pi extension API declared as `@mariozechner/pi-coding-agent` peer dep; successor SHOULD pin a minimum version once API stabilizes
 - [ ] **NFR-12**: `marketplace.json` parser is forward-compatible (no schema-version check; unknown source kinds parse to `{ kind: "unknown", reason }`)
 
+## Milestone v1.2 Requirements
+
+Requirements for the Claude settings import milestone. These are additive to the original PRD-derived V1 requirement set and are expected to map to Phases 8 and 9 after v1.1 is merged.
+
+### Import Command & Scope
+
+- [ ] **IMP-01**: User can run `/claude:plugin import [--scope user|project]` to import enabled Claude Code plugins into Pi.
+- [ ] **IMP-02**: When `--scope` is omitted, import processes both user and project Claude settings and writes to the matching Pi scopes.
+- [ ] **IMP-03**: When `--scope user` or `--scope project` is provided, import processes only that Claude settings scope and writes only to the matching Pi scope.
+
+### Claude Settings Parsing
+
+- [ ] **IMP-04**: Import reads both `settings.json` and `settings.local.json` for each selected Claude scope, with local settings overriding base settings.
+- [ ] **IMP-05**: Import considers only merged `enabledPlugins` entries whose value is exactly `true`; false, null, missing, and non-boolean values are ignored.
+- [ ] **IMP-06**: Import parses enabled plugin keys as `plugin@marketplace` refs and reports malformed keys without aborting valid imports.
+
+### Marketplace Source Import
+
+- [ ] **IMP-07**: If an enabled plugin references `claude-plugins-official` and that marketplace is missing in the target Pi scope, import adds it from `anthropics/claude-plugins-official`.
+- [ ] **IMP-08**: For non-official marketplaces, import reads merged `extraKnownMarketplaces` and maps Claude `directory` sources to Pi path-source marketplace adds and Claude `github.repo` sources to Pi GitHub-source marketplace adds.
+
+### Plugin Import Orchestration
+
+- [ ] **IMP-09**: Import is idempotent: already-added marketplaces and already-installed plugins are skipped without error, while enabled plugins in both Claude scopes are imported into both matching Pi scopes unless `--scope` narrows the run.
+- [ ] **IMP-10**: Import continues after per-plugin unavailable/uninstallable results and reports those skipped plugins as warnings.
+- [ ] **IMP-11**: Import uses existing marketplace-add and plugin-install semantics for atomicity, state locking, network policy, output channel, soft-dependency warnings, and reload hints.
+
 ## v2 Requirements
 
 ### Listing & Inspection
@@ -548,6 +575,17 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | NFR-10      | Phase 1 | Pending |
 | NFR-11      | Phase 7 | Complete |
 | NFR-12      | Phase 2 | Pending |
+| IMP-01      | Phase 9 | Pending |
+| IMP-02      | Phase 9 | Pending |
+| IMP-03      | Phase 9 | Pending |
+| IMP-04      | Phase 8 | Pending |
+| IMP-05      | Phase 8 | Pending |
+| IMP-06      | Phase 8 | Pending |
+| IMP-07      | Phase 8 | Pending |
+| IMP-08      | Phase 8 | Pending |
+| IMP-09      | Phase 9 | Pending |
+| IMP-10      | Phase 9 | Pending |
+| IMP-11      | Phase 9 | Pending |
 
 **Coverage:**
 
@@ -571,4 +609,4 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 
 ______________________________________________________________________
 
-*Requirements defined: 2026-05-09 from `docs/prd/pi-claude-marketplace-prd.md` v1.0* *Last updated: 2026-05-11 -- Phase 7 D-08 supersedes PI-15: concurrent install losers now fail at per-scope lock acquisition with `STATE_LOCK_HELD_PREFIX` instead of reaching the old state-guard commit rollback marker.*
+*Requirements defined: 2026-05-09 from `docs/prd/pi-claude-marketplace-prd.md` v1.0* *Last updated: 2026-05-13 -- Added milestone v1.2 import requirements IMP-01..IMP-11 and mapped them to Phases 8 and 9. Previous update: 2026-05-11 -- Phase 7 D-08 supersedes PI-15: concurrent install losers now fail at per-scope lock acquisition with `STATE_LOCK_HELD_PREFIX` instead of reaching the old state-guard commit rollback marker.*

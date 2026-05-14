@@ -10,6 +10,21 @@ This GSD project plans a successor architecture for the V1 implementation alread
 
 A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
+## Current Milestone: v1.2 Claude settings import
+
+**Goal:** Import enabled Claude Code plugins from `.claude/settings.json` and `.claude/settings.local.json` into matching Pi marketplace/plugin scopes.
+
+**Target features:**
+
+- `/claude:plugin import [--scope user|project]` follows the existing scope convention: omitted `--scope` imports both user and project scopes; explicit `--scope` narrows to one scope.
+- Per selected scope, read Claude base settings and local settings override, with `.claude/settings.local.json` overriding `.claude/settings.json`.
+- Import only merged `enabledPlugins` entries whose value is exactly `true`, using `plugin@marketplace` keys.
+- Add missing marketplaces before installing plugins, including Claude Code's built-in `claude-plugins-official` marketplace mapped to `anthropics/claude-plugins-official`.
+- Read non-official marketplace sources from merged `extraKnownMarketplaces`, mapping Claude `directory` sources to Pi path-source marketplaces and Claude `github.repo` sources to Pi GitHub-source marketplaces.
+- Skip already-added marketplaces and already-installed plugins idempotently; continue with warning when an enabled plugin is unavailable/uninstallable.
+
+**Phase target:** v1.2 is expected to land as Phases 8 and 9 after the separately-developed v1.1 milestone is merged.
+
 ## Requirements
 
 ### Validated
@@ -48,6 +63,14 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 - [ ] Atomic staging, commit & rollback -- same-FS tmp + atomic rename; phased rollback with leak aggregation
 - [ ] Error surfaces & severity -- single `ctx.ui.notify` channel, severity discipline, `Error.cause` chains, stable marker strings (ES-5)
 - [ ] Internationalization, logging, telemetry -- English-only V1, no telemetry, single sanctioned `console.warn`
+
+**Milestone v1.2 import feature:**
+
+- [ ] Claude settings import command: `/claude:plugin import [--scope user|project]`
+- [ ] Claude settings discovery and merge: base settings plus local override per selected scope
+- [ ] Enabled-plugin extraction: import only `enabledPlugins["plugin@marketplace"] === true`
+- [ ] Marketplace source import: official built-in mapping plus `extraKnownMarketplaces` directory/GitHub sources
+- [ ] Import orchestration: add missing marketplaces, install enabled plugins, skip existing records, warn and continue on unavailable plugins
 
 ### Out of Scope
 
@@ -111,6 +134,8 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 | **D-23 (2026-05-10):** Adopt follow-upstream-blindly semantics for `marketplace update`; supersede PRD MU-2 and MU-3                | The local marketplace clone is read-only by contract -- the extension only clones, fetches, and checks out; it never commits, pushes, or modifies the working tree. Local-vs-upstream divergence cannot occur, so `pull --ff-only` and "non-fast-forward divergence as error" are no longer applicable. `marketplace update` therefore overrides the local branch ref to the remote SHA via `gitOps.forceUpdateRef` + `gitOps.checkout` (or checks out a detached SHA directly). Phase 4 implements this in `orchestrators/marketplace/update.ts` per CONTEXT.md D-14. Recorded by Plan 04-10. | -- Locked  |
 | **D-24 (2026-05-10):** Adopt COMP-01 (Gap 3) supplement-not-replace for plugin component-path arrays; supersede PRD PR-4 | The V1 resolver short-circuited implicit-by-convention detection whenever a manifest declared a `componentPaths.{skills,commands,agents}` value, making custom paths *replace* defaults rather than supplement them. Phase 5 D-07 corrects this vs upstream Claude Code behavior: `domain/resolver.ts`'s `ComponentPathsSchema` migrates from optional-string-per-kind to readonly-string-array-per-kind; strict resolver Step 7 computes a UNION of declared (entry > manifest) + implicit-by-convention (when the conventional dir exists), deduplicated by path with first-wins on collisions; loose resolver stays entry-only. Bridge `discover.ts` files iterate the array. Behavior corrected vs V1 per COMP-01 / Gap 3 -- see `.planning/phases/05-plugin-orchestrators/05-CONTEXT.md` D-07. Recorded by Plan 05-10; behavior change landed in Plan 05-03. | -- Locked  |
 | **D-25 (2026-05-11):** Adopt Phase 7 lock-held marker semantics; supersede PRD PI-15's old concurrent-install commit marker | Phase 7 D-08 moves cross-process conflict detection ahead of `withStateGuard` mutation by taking the per-scope `.state-lock` first. The loser now fails fast with `STATE_LOCK_HELD_PREFIX` (`Another pi-claude-marketplace operation is in progress for`) and retry guidance, so it never reaches the old `was installed concurrently` state-guard commit rollback path. This preserves retry safety while making the user-visible contract match the actual lock boundary. Recorded by Plan 07-06; behavior landed in Plan 07-04. | -- Locked  |
+| **D-26 (2026-05-13):** v1.2 import follows existing `--scope user|project` convention; omitted scope means both scopes | Keeps `/claude:plugin import` consistent with read/enumeration commands such as `list`: no new `all` value is introduced. User-scope Claude settings import to Pi user scope; project-scope Claude settings import to Pi project scope; if the same marketplace/plugin is enabled in both settings scopes, both Pi scopes receive it unless narrowed by `--scope`. | -- Pending |
+| **D-27 (2026-05-13):** Claude Code's built-in `claude-plugins-official` marketplace maps to `anthropics/claude-plugins-official` | Claude Code ships this marketplace implicitly, so an enabled `plugin@claude-plugins-official` must be importable even when `extraKnownMarketplaces` has no entry for it. Non-official marketplace sources come from merged `extraKnownMarketplaces`. | -- Pending |
 
 ## Evolution
 
@@ -132,6 +157,8 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ______________________________________________________________________
+
+*Last updated: 2026-05-13 -- Milestone v1.2 initialized for Claude settings import. Added current milestone scope, active import requirements, and D-26/D-27 decisions covering scope convention and official marketplace mapping.*
 
 *Last updated: 2026-05-11 -- D-25 added: Phase 7 D-08 supersedes PRD PI-15's old concurrent-install marker. Concurrent operation losers now fail at per-scope lock acquisition with `STATE_LOCK_HELD_PREFIX` (`Another pi-claude-marketplace operation is in progress for`) plus retry guidance, rather than reaching the old `was installed concurrently` state-guard commit path.*
 
