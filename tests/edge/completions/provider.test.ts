@@ -804,19 +804,14 @@ test("import completions offer scope values and no plugin refs", async () => {
     state: { user: { mp: { manifestPath: "/tmp/manifest" } } },
     manifests: {
       user: {
-        mp: [
-          { name: "plugin", status: "available", version: "1.0.0" },
-        ],
+        mp: [{ name: "plugin", status: "available", version: "1.0.0" }],
       },
     },
   });
   try {
     const scopeItems = await getArgumentCompletions("import --scope ", f.resolver);
     assert.ok(scopeItems !== null);
-    assert.deepEqual(
-      scopeItems.map((item) => item.label).sort(),
-      ["project", "user"],
-    );
+    assert.deepEqual(scopeItems.map((item) => item.label).sort(), ["project", "user"]);
 
     const flagItems = await getArgumentCompletions("import -", f.resolver);
     assert.ok(flagItems !== null);

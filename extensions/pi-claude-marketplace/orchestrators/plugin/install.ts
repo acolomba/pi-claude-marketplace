@@ -179,6 +179,9 @@ async function loadCachedMarketplaceManifest(
  *   3. Post-state-commit pluginDataDir mkdir failure -> notifyWarning
  *      (AS-6 warning severity; the install itself succeeded).
  */
+// Install sequencing intentionally keeps the state guard, bridge staging, rollback,
+// and notification logic in one audited flow matching PI-1..15.
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export async function installPlugin(opts: InstallPluginOptions): Promise<InstallPluginOutcome> {
   const { ctx, pi, scope, cwd, marketplace, plugin } = opts;
   const locations = locationsFor(scope, cwd);

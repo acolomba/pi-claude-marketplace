@@ -167,7 +167,10 @@ test("registered command handler routes import through the new handler", async (
 
   await cmd.handler("import --scope project", { cwd: "/tmp/project" } as ExtensionContext);
 
-  assert.deepEqual(calls.map((call) => call.selectedScopes), [["project"]]);
+  assert.deepEqual(
+    calls.map((call) => call.selectedScopes),
+    [["project"]],
+  );
 });
 
 test("D-04 :: registered command has getArgumentCompletions returning AutocompleteItem[] | null", async () => {

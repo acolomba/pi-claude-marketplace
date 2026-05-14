@@ -13,11 +13,7 @@ import { notifySuccess, notifyWarning } from "../../shared/notify.ts";
 import { buildClaudeImportPlan } from "./marketplaces.ts";
 import { loadMergedClaudeSettingsForScope as defaultLoadSettings } from "./settings.ts";
 
-import type {
-  ImportDiagnostic,
-  MergedClaudeSettingsResult,
-  PlannedPluginImport,
-} from "./types.ts";
+import type { ImportDiagnostic, MergedClaudeSettingsResult, PlannedPluginImport } from "./types.ts";
 import type { AddMarketplaceOptions } from "../../orchestrators/marketplace/add.ts";
 import type { InstallPluginOptions } from "../../orchestrators/plugin/install.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
@@ -62,7 +58,11 @@ export interface ImportWarningOutcome {
   readonly plugin: string;
   readonly marketplace: string;
   readonly ref: string;
-  readonly reason: "unmappable-marketplace-source" | "marketplace-failed" | "unavailable" | "uninstallable";
+  readonly reason:
+    | "unmappable-marketplace-source"
+    | "marketplace-failed"
+    | "unavailable"
+    | "uninstallable";
   readonly cause?: string;
 }
 
@@ -108,7 +108,10 @@ export interface ClaudeImportExecutionResult {
 }
 
 interface ImportDeps {
-  readonly loadSettings?: (scope: Scope, opts: { cwd: string }) => Promise<MergedClaudeSettingsResult>;
+  readonly loadSettings?: (
+    scope: Scope,
+    opts: { cwd: string },
+  ) => Promise<MergedClaudeSettingsResult>;
   readonly loadState?: (scope: Scope, cwd: string) => Promise<ExtensionState>;
   readonly addMarketplace?: (opts: AddMarketplaceOptions) => Promise<void>;
   readonly installPlugin?: (opts: InstallPluginOptions) => Promise<InstallPluginOutcome>;
@@ -168,7 +171,9 @@ function samePlannedSource(stored: unknown, plannedRaw: string): boolean {
   }
 }
 
-function stateLoader(deps: ImportDeps | undefined): (scope: Scope, cwd: string) => Promise<ExtensionState> {
+function stateLoader(
+  deps: ImportDeps | undefined,
+): (scope: Scope, cwd: string) => Promise<ExtensionState> {
   if (deps?.loadState !== undefined) {
     return deps.loadState;
   }
@@ -182,11 +187,15 @@ function settingsLoader(
   return deps?.loadSettings ?? defaultLoadSettings;
 }
 
-function addMarketplaceFn(deps: ImportDeps | undefined): (opts: AddMarketplaceOptions) => Promise<void> {
+function addMarketplaceFn(
+  deps: ImportDeps | undefined,
+): (opts: AddMarketplaceOptions) => Promise<void> {
   return deps?.addMarketplace ?? defaultAddMarketplace;
 }
 
-function installPluginFn(deps: ImportDeps | undefined): (opts: InstallPluginOptions) => Promise<InstallPluginOutcome> {
+function installPluginFn(
+  deps: ImportDeps | undefined,
+): (opts: InstallPluginOptions) => Promise<InstallPluginOutcome> {
   return deps?.installPlugin ?? (async (opts) => defaultInstallPlugin(opts));
 }
 
@@ -239,6 +248,10 @@ function appendOutcomeLines(lines: string[], title: string, items: readonly stri
   }
 }
 
+function causeSuffix(cause: string | undefined): string {
+  return cause === undefined ? "" : ` - ${cause}`;
+}
+
 export function formatClaudeImportSummary(result: ClaudeImportExecutionResult): string {
   const lines = ["Claude plugin import summary"];
 
@@ -256,39 +269,24 @@ export function formatClaudeImportSummary(result: ClaudeImportExecutionResult): 
     "Installed plugins",
     result.installedPlugins.map((o) => `${o.scope}: ${o.ref}`),
   );
-  appendOutcomeLines(
-    lines,
-    "Skipped existing items",
-    [
-      ...result.skippedExistingMarketplaces.map(
-        (o) => `${o.scope}: ${o.marketplace} (${o.reason})`,
-      ),
-      ...result.skippedExistingPlugins.map((o) => `${o.scope}: ${o.ref} (${o.reason})`),
-    ],
-  );
-  appendOutcomeLines(
-    lines,
-    "Warnings",
-    [
-      ...result.diagnostics.map((d) => {
-        const subject = d.ref ?? d.marketplace ?? d.path ?? d.code;
-        return `${d.scope}: ${subject} (${d.code}) - ${d.message}`;
-      }),
-      ...result.warnings.map(
-        (o) =>
-          `${o.scope}: ${o.ref} (${o.reason})${o.cause === undefined ? "" : ` - ${o.cause}`}`,
-      ),
-      ...result.marketplaceFailures.map(
-        (o) => `${o.scope}: ${o.marketplace} (${o.reason}) - ${o.cause}`,
-      ),
-      ...result.sourceMismatches.map(
-        (o) => `${o.scope}: ${o.ref} (${o.reason}) - ${o.cause}`,
-      ),
-      ...result.unexpectedPluginFailures.map(
-        (o) => `${o.scope}: ${o.ref} (${o.reason}) - ${o.cause}`,
-      ),
-    ],
-  );
+  appendOutcomeLines(lines, "Skipped existing items", [
+    ...result.skippedExistingMarketplaces.map((o) => `${o.scope}: ${o.marketplace} (${o.reason})`),
+    ...result.skippedExistingPlugins.map((o) => `${o.scope}: ${o.ref} (${o.reason})`),
+  ]);
+  appendOutcomeLines(lines, "Warnings", [
+    ...result.diagnostics.map((d) => {
+      const subject = d.ref ?? d.marketplace ?? d.path ?? d.code;
+      return `${d.scope}: ${subject} (${d.code}) - ${d.message}`;
+    }),
+    ...result.warnings.map((o) => `${o.scope}: ${o.ref} (${o.reason})${causeSuffix(o.cause)}`),
+    ...result.marketplaceFailures.map(
+      (o) => `${o.scope}: ${o.marketplace} (${o.reason}) - ${o.cause}`,
+    ),
+    ...result.sourceMismatches.map((o) => `${o.scope}: ${o.ref} (${o.reason}) - ${o.cause}`),
+    ...result.unexpectedPluginFailures.map(
+      (o) => `${o.scope}: ${o.ref} (${o.reason}) - ${o.cause}`,
+    ),
+  ]);
 
   const body = lines.join("\n");
   if (!result.changedResources) {
@@ -304,6 +302,9 @@ export function formatClaudeImportSummary(result: ClaudeImportExecutionResult): 
   );
 }
 
+// The import workflow is intentionally linear: ensure marketplaces, record diagnostics,
+// then install plugins while preserving per-item continuation semantics.
+// eslint-disable-next-line sonarjs/cognitive-complexity
 async function executeScopedPlan(
   opts: ImportClaudeSettingsOptions,
   result: ClaudeImportExecutionResult,
@@ -328,7 +329,10 @@ async function executeScopedPlan(
       } else {
         blockedMarketplaces.add(marketplace.marketplace);
         const cause = `Existing marketplace source ${sourceLogical(parsePluginSource(existing.source))} does not match Claude settings source ${marketplace.source}.`;
-        for (const plugin of pluginsForMarketplace(scopePlan.pluginsToInstall, marketplace.marketplace)) {
+        for (const plugin of pluginsForMarketplace(
+          scopePlan.pluginsToInstall,
+          marketplace.marketplace,
+        )) {
           result.sourceMismatches.push({
             kind: "source-mismatch",
             scope: plugin.scope,
@@ -340,6 +344,7 @@ async function executeScopedPlan(
           });
         }
       }
+
       continue;
     }
 
@@ -367,7 +372,10 @@ async function executeScopedPlan(
         reason: "add-failed",
         cause,
       });
-      for (const plugin of pluginsForMarketplace(scopePlan.pluginsToInstall, marketplace.marketplace)) {
+      for (const plugin of pluginsForMarketplace(
+        scopePlan.pluginsToInstall,
+        marketplace.marketplace,
+      )) {
         pushPluginWarning(result, plugin, "marketplace-failed", cause);
       }
     }
@@ -460,7 +468,10 @@ export async function importClaudeSettings(
   const result = emptyResult();
   const loadSettings = settingsLoader(opts.deps);
   const settingsResults = await Promise.all(
-    opts.selectedScopes.map(async (scope) => ({ scope, loaded: await loadSettings(scope, { cwd: opts.cwd }) })),
+    opts.selectedScopes.map(async (scope) => ({
+      scope,
+      loaded: await loadSettings(scope, { cwd: opts.cwd }),
+    })),
   );
 
   for (const loaded of settingsResults) {

@@ -55,11 +55,13 @@ async function withImportFixture<T>(
     } else {
       process.env.HOME = originalHome;
     }
+
     if (originalClaudeConfigDir === undefined) {
       delete process.env.CLAUDE_CONFIG_DIR;
     } else {
       process.env.CLAUDE_CONFIG_DIR = originalClaudeConfigDir;
     }
+
     await rm(root, { recursive: true, force: true });
   }
 }
@@ -82,6 +84,7 @@ function fixtureGitOps(): GitOps {
       if (source === undefined) {
         throw new Error(`unexpected clone url ${opts.url}`);
       }
+
       await cp(source, opts.dir, { recursive: true });
     },
     async fetch(): Promise<void> {
@@ -93,23 +96,23 @@ function fixtureGitOps(): GitOps {
     async checkout(): Promise<void> {
       await Promise.resolve();
     },
-    async resolveRef(): Promise<string> {
-      return "0000000000000000000000000000000000000001";
+    resolveRef(): Promise<string> {
+      return Promise.resolve("0000000000000000000000000000000000000001");
     },
-    async currentBranch(): Promise<string> {
-      return "main";
+    currentBranch(): Promise<string> {
+      return Promise.resolve("main");
     },
   };
 }
 
-async function registerImportCommand(cwd: string, gitOps: GitOps) {
+function registerImportCommand(cwd: string, gitOps: GitOps) {
   const mock = makeMockPi([
     { name: "subagent" },
     { name: "mcp", sourceInfo: { source: "pi-mcp-adapter" } },
   ]);
   registerClaudePluginCommand(mock.pi, {
     gitOps,
-    pluginUpdate: async () => ({ partition: "unchanged", name: "unused" }),
+    pluginUpdate: () => Promise.resolve({ partition: "unchanged", name: "unused" }),
   });
   const command = mock.commands.get("claude:plugin");
   assert.ok(command, "claude:plugin command should be registered");
@@ -120,7 +123,7 @@ async function registerImportCommand(cwd: string, gitOps: GitOps) {
 test("/claude:plugin import imports enabled Claude settings across both scopes", async () => {
   await withImportFixture(async ({ cwd }) => {
     const gitOps = fixtureGitOps();
-    const { command, ctx, notifications } = await registerImportCommand(cwd, gitOps);
+    const { command, ctx, notifications } = registerImportCommand(cwd, gitOps);
 
     await command.handler("marketplace add ./directory-marketplace --scope user", ctx);
     await command.handler("install preinstalled-plugin@directory-marketplace --scope user", ctx);
@@ -166,7 +169,7 @@ test("/claude:plugin import imports enabled Claude settings across both scopes",
 
 test("/claude:plugin import --scope project narrows writes to project scope", async () => {
   await withImportFixture(async ({ cwd }) => {
-    const { command, ctx, notifications } = await registerImportCommand(cwd, fixtureGitOps());
+    const { command, ctx, notifications } = registerImportCommand(cwd, fixtureGitOps());
 
     await command.handler("import --scope project", ctx);
 
@@ -183,7 +186,7 @@ test("/claude:plugin import --scope project narrows writes to project scope", as
 
 test("/claude:plugin import reports source mismatches and skips dependent plugins", async () => {
   await withImportFixture(async ({ cwd }) => {
-    const { command, ctx, notifications } = await registerImportCommand(cwd, fixtureGitOps());
+    const { command, ctx, notifications } = registerImportCommand(cwd, fixtureGitOps());
 
     await command.handler(
       "marketplace add ./mismatched-directory-marketplace --scope project",

@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/require-await */
+
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -221,7 +223,9 @@ test("importClaudeSettings marketplace add failure skips only dependent plugins"
       }),
       loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
       addMarketplace: async (opts) => {
-        if (opts.rawSource === "./a") throw new Error("clone failed");
+        if (opts.rawSource === "./a") {
+          throw new Error("clone failed");
+        }
       },
       installPlugin: async (opts) => {
         installed.push(`${opts.plugin}@${opts.marketplace}`);
@@ -270,8 +274,14 @@ test("importClaudeSettings classifies unavailable and unexpected plugin failures
       addMarketplace: async () => undefined,
       installPlugin: async (opts) => {
         attempted.push(opts.plugin);
-        if (opts.plugin === "missing") return { status: "unavailable", cause: "not found" };
-        if (opts.plugin === "boom") return { status: "unexpected-failure", cause: "disk full" };
+        if (opts.plugin === "missing") {
+          return { status: "unavailable", cause: "not found" };
+        }
+
+        if (opts.plugin === "boom") {
+          return { status: "unexpected-failure", cause: "disk full" };
+        }
+
         return { status: "installed", resourcesChanged: true };
       },
     },

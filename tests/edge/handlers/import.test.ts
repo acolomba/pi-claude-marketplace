@@ -59,7 +59,10 @@ test("import handler defaults omitted --scope to user and project scopes", async
 
   await handler("", ctx);
 
-  assert.deepEqual(calls.map((call) => call.selectedScopes), [["user", "project"]]);
+  assert.deepEqual(
+    calls.map((call) => call.selectedScopes),
+    [["user", "project"]],
+  );
   assert.equal(calls[0]?.cwd, "/tmp/project");
   assert.deepEqual(notifications, []);
 });
@@ -67,11 +70,17 @@ test("import handler defaults omitted --scope to user and project scopes", async
 test("import handler narrows explicit --scope project and --scope user", async () => {
   const project = makeHandler();
   await project.handler("--scope project", makeCtx().ctx);
-  assert.deepEqual(project.calls.map((call) => call.selectedScopes), [["project"]]);
+  assert.deepEqual(
+    project.calls.map((call) => call.selectedScopes),
+    [["project"]],
+  );
 
   const user = makeHandler();
   await user.handler("--scope user", makeCtx().ctx);
-  assert.deepEqual(user.calls.map((call) => call.selectedScopes), [["user"]]);
+  assert.deepEqual(
+    user.calls.map((call) => call.selectedScopes),
+    [["user"]],
+  );
 });
 
 test("import handler accepts --scope at any parseArgs-supported position", async () => {
@@ -92,5 +101,8 @@ test("import handler rejects positional input with usage and does not call orche
   assert.deepEqual(calls, []);
   assert.equal(notifications.length, 1);
   assert.equal(notifications[0]?.severity, "error");
-  assert.match(notifications[0]?.message ?? "", /Usage: \/claude:plugin import \[--scope user\|project\]/);
+  assert.match(
+    notifications[0]?.message ?? "",
+    /Usage: \/claude:plugin import \[--scope user\|project\]/,
+  );
 });
