@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Phase 10 complete; ready for Phase 11 import command orchestration
-last_updated: "2026-05-14T01:50:08.205Z"
-last_activity: 2026-05-14 - Phase 10 complete; Claude settings import foundation validated
+stopped_at: Phase 11 context gathered
+last_updated: "2026-05-14T02:10:00.000Z"
+last_activity: 2026-05-14 - Phase 11 import command orchestration context captured
 progress:
   total_phases: 9
   completed_phases: 8
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 
 ## Current Position
 
-Phase: 10 of 8 (claude settings import foundation)
-Plan: 3 of 3
-Status: Milestone complete
-Last activity: 2026-05-14 - Phase 10 complete; Claude settings import foundation validated
+Phase: 11 of 9 (import command orchestration)
+Plan: 0 of 3
+Status: Context captured; ready for planning
+Last activity: 2026-05-14 - Phase 11 import command orchestration context captured
 
 Progress: [█████████░] 89%
 
@@ -97,6 +97,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 10]: Local settings shallow-merge known sections (`enabledPlugins`, `extraKnownMarketplaces`) over base by key; local `false` disables a base-enabled plugin.
 - [Phase 10]: Settings parsing is warn-and-continue: malformed refs, non-boolean enabled values, malformed JSON, and unmappable marketplace sources become diagnostics while valid refs continue.
 - [Phase 10]: Marketplace source mapping intentionally supports only existing Pi patterns: official built-in -> `anthropics/claude-plugins-official`, Claude `directory` -> path source, and `github.repo` -> GitHub source.
+- [Phase 11]: Import should continue whenever safe, skipping only marketplace-dependent plugins when a marketplace add fails and classifying install outcomes into expected warning/skips vs unexpected per-plugin failures.
+- [Phase 11]: Import should aggregate reload guidance once at import end; planners should add a notification-control seam so internal plugin installs can avoid immediate reload messaging.
+- [Phase 11]: Existing marketplace/plugin records are silent idempotent skips, but source mismatch between Claude settings and an existing Pi marketplace must skip/fail dependent imports rather than silently installing from the mismatched marketplace.
 
 ### Pending Todos
 
@@ -117,6 +120,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-13T21:06:42-04:00
-Stopped at: Phase 10 complete; ready for Phase 11 import command orchestration
-Resume file: .planning/phases/10-claude-settings-import-foundation/10-03-SUMMARY.md
+Last session: 2026-05-14T02:10:00-04:00
+Stopped at: Phase 11 context gathered
+Resume file: .planning/phases/11-import-command-orchestration/11-CONTEXT.md
