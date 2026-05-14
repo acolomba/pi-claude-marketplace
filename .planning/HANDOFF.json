@@ -1,0 +1,124 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-05-14T02:46:30Z",
+  "phase": "11",
+  "phase_name": "import-command-orchestration",
+  "phase_dir": ".planning/phases/11-import-command-orchestration",
+  "plan": 2,
+  "task": 4,
+  "total_tasks": 4,
+  "status": "paused",
+  "completed_tasks": [
+    {
+      "id": 1,
+      "name": "Plan 11-01: import execution orchestrator",
+      "status": "done_uncommitted",
+      "progress": "Implemented execute.ts, outcome/result types, summary formatter, idempotency, source mismatch checks, marketplace failure isolation, classified install outcomes, single reload-hint aggregation, import barrel exports, and installPlugin notification/outcome seam. Tests passed: npm test -- tests/orchestrators/import/execute.test.ts; npm test -- tests/orchestrators/import/execute.test.ts tests/orchestrators/plugin/install.test.ts; npm run typecheck. SUMMARY.md not created yet and code not committed."
+    },
+    {
+      "id": 2,
+      "name": "Plan 11-02 Task 1: Add import edge handler with both-scope default",
+      "status": "done_uncommitted",
+      "progress": "Created edge/handlers/plugin/import.ts and tests/edge/handlers/import.test.ts. Handler uses parseArgs, rejects positionals with usage, defaults omitted scope to [user, project], narrows explicit scope, and delegates to importClaudeSettings with pi/cwd/gitOps."
+    },
+    {
+      "id": 3,
+      "name": "Plan 11-02 Task 2: Route and document top-level import command",
+      "status": "done_uncommitted",
+      "progress": "Extended SubcommandHandlers, TOP_LEVEL_USAGE, and routeClaudePlugin for import; updated router tests including usage coverage."
+    },
+    {
+      "id": 4,
+      "name": "Plan 11-02 Task 3: Update tab completion provider for import",
+      "status": "done_uncommitted",
+      "progress": "Added import to TOP_LEVEL_SUBCOMMANDS and completion tests for top-level import, --scope values, --scope flag, and no plugin-ref completions for import positionals."
+    },
+    {
+      "id": 5,
+      "name": "Plan 11-02 Task 4: Wire import handler in registration",
+      "status": "done_uncommitted",
+      "progress": "Wired makeImportHandler in register.ts, updated command description, extended EdgeDeps with optional test seam for importClaudeSettings, and added register test proving import routes through registered command. Edge targeted tests passed."
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "id": 1,
+      "name": "Re-run final validation for current uncommitted state",
+      "status": "not_started",
+      "details": "Run npm run typecheck after the latest edge changes, then targeted Plan 11 commands: npm test -- tests/orchestrators/import/execute.test.ts tests/orchestrators/import/settings.test.ts tests/orchestrators/import/refs.test.ts tests/orchestrators/import/marketplaces.test.ts and npm test -- tests/edge/handlers/import.test.ts tests/edge/router.test.ts tests/edge/completions/provider.test.ts tests/edge/register.test.ts."
+    },
+    {
+      "id": 2,
+      "name": "Review and commit Plan 11-01 implementation",
+      "status": "not_started",
+      "details": "Inspect implementation for rough edges, create .planning/phases/11-import-command-orchestration/11-01-SUMMARY.md, update STATE/ROADMAP/requirements if following execute-plan protocol, and commit Plan 11-01 code/docs."
+    },
+    {
+      "id": 3,
+      "name": "Review and commit Plan 11-02 implementation",
+      "status": "not_started",
+      "details": "Create .planning/phases/11-import-command-orchestration/11-02-SUMMARY.md and commit edge command wiring after validation."
+    },
+    {
+      "id": 4,
+      "name": "Plan 11-03: command-level e2e fixtures and final validation",
+      "status": "not_started",
+      "details": "Build rich import command fixtures, add e2e tests, update 11-VALIDATION.md, run targeted Phase 11 tests and npm run check."
+    }
+  ],
+  "blockers": [
+    {
+      "description": "No technical blocker. Work is intentionally paused with substantial uncommitted implementation. Plan summaries and commits have not been created yet.",
+      "type": "technical",
+      "workaround": "Resume by validating, reviewing, then creating summaries/commits before continuing to Plan 11-03."
+    }
+  ],
+  "human_actions_pending": [],
+  "decisions": [
+    {
+      "decision": "installPlugin now has an optional notifications seam with reloadHint suppress and returnOutcome true, preserving default immediate reload behavior for normal installs.",
+      "rationale": "Import needs to reuse install internals while aggregating reload guidance once at the end.",
+      "phase": "11"
+    },
+    {
+      "decision": "importClaudeSettings exposes injectable deps for tests while production defaults delegate to loadMergedClaudeSettingsForScope, loadState, addMarketplace, and installPlugin.",
+      "rationale": "Keeps orchestration testable without duplicating marketplace/plugin mutation logic.",
+      "phase": "11"
+    },
+    {
+      "decision": "EdgeDeps gained an optional importClaudeSettings test seam while retaining gitOps for marketplace add delegation.",
+      "rationale": "Registration tests can prove import routing without performing real disk/network mutations; production continues to use the real orchestrator.",
+      "phase": "11"
+    }
+  ],
+  "uncommitted_files": [
+    ".planning/STATE.md",
+    ".planning/config.json",
+    "extensions/pi-claude-marketplace/edge/completions/provider.ts",
+    "extensions/pi-claude-marketplace/edge/register.ts",
+    "extensions/pi-claude-marketplace/edge/router.ts",
+    "extensions/pi-claude-marketplace/edge/types.ts",
+    "extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts",
+    "extensions/pi-claude-marketplace/orchestrators/import/execute.ts",
+    "extensions/pi-claude-marketplace/orchestrators/import/index.ts",
+    "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts",
+    "tests/edge/completions/provider.test.ts",
+    "tests/edge/handlers/import.test.ts",
+    "tests/edge/register.test.ts",
+    "tests/edge/router.test.ts",
+    "tests/orchestrators/import/execute.test.ts"
+  ],
+  "background_processes": [],
+  "validation_evidence": [
+    "npm test -- tests/orchestrators/import/execute.test.ts: passed after initial implementation",
+    "npm test -- tests/orchestrators/import/execute.test.ts tests/orchestrators/plugin/install.test.ts: passed",
+    "npm run typecheck: passed before latest edge wiring changes",
+    "npm test -- tests/edge/handlers/import.test.ts tests/edge/router.test.ts tests/edge/completions/provider.test.ts tests/edge/register.test.ts: passed after latest completion-test fix"
+  ],
+  "placeholder_summary_scan": {
+    "status": "historical_matches_found",
+    "note": "grep for To be filled|placeholder|TBD found many historical planning files outside current Phase 11 summaries. Phase 11 has no SUMMARY.md files yet; treat 11-01 and 11-02 as incomplete until summaries are created."
+  },
+  "next_action": "Run npm run typecheck, then the targeted Phase 11 tests. If green, review the uncommitted diff, create 11-01-SUMMARY.md and 11-02-SUMMARY.md, commit Plan 11-01 and Plan 11-02 work, then start 11-03 e2e fixtures.",
+  "context_notes": "The session used TDD-style red/green for new import orchestration and edge tests. Plan 11-01 implementation is functionally present but may benefit from review for type/API polish before commit. Plan 11-02 edge wiring is also present and targeted edge tests are green. No e2e fixture work has started. Avoid assuming official completion because no GSD summaries/commits exist for Phase 11 yet."
+}
