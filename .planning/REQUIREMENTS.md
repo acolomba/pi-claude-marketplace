@@ -9,11 +9,11 @@ Requirements for the Reinstall Command milestone. Each maps to exactly one roadm
 
 ### Plugin Reinstall
 
-- [ ] **PRL-01**: User can run `/claude:plugin reinstall` as a top-level plugin lifecycle command with a clear `Usage:` block
+- [x] **PRL-01**: User can run `/claude:plugin reinstall` as a top-level plugin lifecycle command with a clear `Usage:` block
 - [x] **PRL-02**: User can reinstall one installed plugin with `reinstall <plugin>@<marketplace>`
-- [ ] **PRL-03**: User can reinstall every installed plugin in one marketplace with `reinstall @<marketplace>`
-- [ ] **PRL-04**: User can reinstall every installed plugin in the selected scope set with bare `reinstall`
-- [ ] **PRL-05**: User can pass `--scope user|project` at any argument position, with scope resolution matching `update`
+- [x] **PRL-03**: User can reinstall every installed plugin in one marketplace with `reinstall @<marketplace>`
+- [x] **PRL-04**: User can reinstall every installed plugin in the selected scope set with bare `reinstall`
+- [x] **PRL-05**: User can pass `--scope user|project` at any argument position, with scope resolution matching `update`
 - [x] **PRL-06**: Reinstall targets installed plugins only; empty target sets succeed with `No plugins installed.` and no reload hint
 - [x] **PRL-07**: Reinstall uses cached marketplace manifests only and never performs network sync or Git operations
 - [x] **PRL-08**: Reinstall preserves the installed record's existing version instead of recomputing or upgrading it
@@ -21,9 +21,9 @@ Requirements for the Reinstall Command milestone. Each maps to exactly one roadm
 - [x] **PRL-10**: If reinstall preflight, preparation, replacement, or state save fails, the previously installed plugin state, resources, and data directory remain available
 - [x] **PRL-11**: Reinstall deletes the plugin data directory only after replacement resources and state commit succeed
 - [x] **PRL-12**: Plugin data-directory cleanup failure is reported as a warning without turning a successful reinstall into a failed reinstall
-- [ ] **PRL-13**: Batch reinstall continues per plugin and reports deterministic success/skipped/failed partitions without corrupting other plugins
-- [ ] **PRL-14**: Successful reinstall emits the existing `refresh` reload hint only when generated resources changed
-- [ ] **PRL-15**: Successful reinstall includes existing soft-dependency warnings when agents or MCP servers are restaged and the relevant Pi companion plugin is unloaded
+- [x] **PRL-13**: Batch reinstall continues per plugin and reports deterministic success/skipped/failed partitions without corrupting other plugins
+- [x] **PRL-14**: Successful reinstall emits the existing `refresh` reload hint only when generated resources changed
+- [x] **PRL-15**: Successful reinstall includes existing soft-dependency warnings when agents or MCP servers are restaged and the relevant Pi companion plugin is unloaded
 - [x] **PRL-16**: Tab completion includes `reinstall`, completes installed plugin refs, supports `@<marketplace>` form, and preserves existing completion failure semantics
 
 ## Future Requirements
@@ -56,11 +56,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 | ----------- | ----- | ------ |
-| PRL-01 | Phase 9 | Pending |
+| PRL-01 | Phase 9 | Complete |
 | PRL-02 | Phase 8 | Complete |
-| PRL-03 | Phase 9 | Pending |
-| PRL-04 | Phase 9 | Pending |
-| PRL-05 | Phase 9 | Pending |
+| PRL-03 | Phase 9 | Complete |
+| PRL-04 | Phase 9 | Complete |
+| PRL-05 | Phase 9 | Complete |
 | PRL-06 | Phase 8 | Complete |
 | PRL-07 | Phase 8 | Complete |
 | PRL-08 | Phase 8 | Complete |
@@ -68,9 +68,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PRL-10 | Phase 8 | Complete |
 | PRL-11 | Phase 8 | Complete |
 | PRL-12 | Phase 8 | Complete |
-| PRL-13 | Phase 9 | Pending |
-| PRL-14 | Phase 9 | Pending |
-| PRL-15 | Phase 9 | Pending |
+| PRL-13 | Phase 9 | Complete |
+| PRL-14 | Phase 9 | Complete |
+| PRL-15 | Phase 9 | Complete |
 | PRL-16 | Phase 9 | Complete |
 
 **Coverage:**
@@ -82,3 +82,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 *Requirements defined: 2026-05-13 after v1.1 milestone requirements confirmation*
 *Last updated: 2026-05-13 after roadmap creation*
 *Last updated: 2026-05-14 after Phase 8 completion*
+*Last updated: 2026-05-14 after Phase 9 completion*

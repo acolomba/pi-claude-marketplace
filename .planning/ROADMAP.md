@@ -11,7 +11,7 @@ The roadmap continues phase numbering from the completed v1.0 successor architec
 **Phase Numbering:** continued from previous milestone; v1.1 starts at Phase 8.
 
 - [x] **Phase 8: Atomic Reinstall Core** - Dedicated reinstall orchestrator and replacement-safe transaction primitives for one plugin
-- [ ] **Phase 9: Reinstall Edge & Bulk UX** - `/claude:plugin reinstall` routing, batch forms, completions, docs, and user-facing output
+- [x] **Phase 9: Reinstall Edge & Bulk UX** - `/claude:plugin reinstall` routing, batch forms, completions, docs, and user-facing output
 
 ## Phase Details
 
@@ -55,7 +55,13 @@ Plans:
 4. Successful reinstall emits the existing `refresh` reload hint only when generated resources changed and includes existing pi-subagents/pi-mcp-adapter soft-dependency warnings when relevant.
 5. Tab completion surfaces `reinstall`, completes installed plugin refs, supports `@<marketplace>` form, includes trailing spaces, and preserves existing per-marketplace soft-fail and top-level state-error behavior.
 
-**Plans:** TBD during `/gsd-plan-phase 9`
+**Plans:** 4 plans
+
+Plans:
+- [x] `09-01-PLAN.md` -- Bulk reinstall orchestrator, quiet seam, deterministic summary output
+- [x] `09-02-PLAN.md` -- Reinstall edge handler, router, registration, --scope, and --force
+- [x] `09-03-PLAN.md` -- Reinstall tab completion and failure semantics
+- [x] `09-04-PLAN.md` -- README docs, static docs test, full validation, and traceability
 
 ## Progress
 
@@ -64,17 +70,17 @@ Plans:
 | Phase | Goal | Requirements | Plans | Status | Completed |
 | ----- | ---- | ------------ | ----- | ------ | --------- |
 | 8. Atomic Reinstall Core | Atomic single-plugin reinstall with preserve-old-on-failure semantics | PRL-02, PRL-06, PRL-07, PRL-08, PRL-09, PRL-10, PRL-11, PRL-12 | 4/4 plans | Complete | 2026-05-14 |
-| 9. Reinstall Edge & Bulk UX | Command routing, batch forms, scope, completion, output, docs | PRL-01, PRL-03, PRL-04, PRL-05, PRL-13, PRL-14, PRL-15, PRL-16 | TBD | Not started | - |
+| 9. Reinstall Edge & Bulk UX | Command routing, batch forms, scope, completion, output, docs | PRL-01, PRL-03, PRL-04, PRL-05, PRL-13, PRL-14, PRL-15, PRL-16 | 4/4 plans | Complete | 2026-05-14 |
 
 ## Coverage
 
 | Requirement | Phase | Status |
 | ----------- | ----- | ------ |
-| PRL-01 | Phase 9 | Pending |
+| PRL-01 | Phase 9 | Complete |
 | PRL-02 | Phase 8 | Complete |
-| PRL-03 | Phase 9 | Pending |
-| PRL-04 | Phase 9 | Pending |
-| PRL-05 | Phase 9 | Pending |
+| PRL-03 | Phase 9 | Complete |
+| PRL-04 | Phase 9 | Complete |
+| PRL-05 | Phase 9 | Complete |
 | PRL-06 | Phase 8 | Complete |
 | PRL-07 | Phase 8 | Complete |
 | PRL-08 | Phase 8 | Complete |
@@ -82,10 +88,10 @@ Plans:
 | PRL-10 | Phase 8 | Complete |
 | PRL-11 | Phase 8 | Complete |
 | PRL-12 | Phase 8 | Complete |
-| PRL-13 | Phase 9 | Pending |
-| PRL-14 | Phase 9 | Pending |
-| PRL-15 | Phase 9 | Pending |
-| PRL-16 | Phase 9 | Pending |
+| PRL-13 | Phase 9 | Complete |
+| PRL-14 | Phase 9 | Complete |
+| PRL-15 | Phase 9 | Complete |
+| PRL-16 | Phase 9 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 16 total
@@ -100,3 +106,4 @@ Plans:
 ---
 *Roadmap created: 2026-05-13 for milestone v1.1 Reinstall Command*
 *Last updated: 2026-05-14 after Phase 8 completion*
+*Last updated: 2026-05-14 after Phase 9 completion*
