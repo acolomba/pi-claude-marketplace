@@ -1,3 +1,4 @@
+export { extractEnabledPluginRefs, parseEnabledPluginRef } from "./refs.ts";
 export {
   loadMergedClaudeSettingsForScope,
   mergeClaudeSettings,
@@ -7,7 +8,10 @@ export {
 export type {
   ClaudeSettingsPaths,
   ClaudeSettingsReadOptions,
+  EnabledPluginRef,
+  EnabledPluginRefsResult,
   ImportDiagnostic,
   MergedClaudeSettings,
   MergedClaudeSettingsResult,
+  ParseEnabledPluginRefResult,
 } from "./types.ts";

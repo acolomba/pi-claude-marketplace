@@ -30,3 +30,18 @@ export interface MergedClaudeSettingsResult {
   readonly settings: MergedClaudeSettings;
   readonly diagnostics: readonly ImportDiagnostic[];
 }
+
+export interface EnabledPluginRef {
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly raw: string;
+}
+
+export type ParseEnabledPluginRefResult =
+  | { readonly ok: true; readonly ref: EnabledPluginRef }
+  | { readonly ok: false; readonly reason: string };
+
+export interface EnabledPluginRefsResult {
+  readonly refs: readonly EnabledPluginRef[];
+  readonly diagnostics: readonly ImportDiagnostic[];
+}
