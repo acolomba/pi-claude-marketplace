@@ -8,7 +8,14 @@
 // `kind` and pass the value to commitPreparedAgents / abortPreparedAgents
 // rather than reading the internal fields.
 
-export { abortPreparedAgents, commitPreparedAgents, prepareStagePluginAgents } from "./stage.ts";
+export {
+  abortPreparedAgents,
+  commitPreparedAgents,
+  finalizeAgentsReplacement,
+  prepareStagePluginAgents,
+  replacePreparedAgents,
+  rollbackAgentsReplacement,
+} from "./stage.ts";
 export { unstagePluginAgents } from "./unstage.ts";
 export { discoverPluginAgents } from "./discover.ts";
 export {
@@ -29,9 +36,11 @@ export { GENERATED_AGENT_MARKER, GENERATED_AGENT_PREFIX, isOwnedAgentFile } from
 export { findOwnershipConflicts, partitionByOwner } from "./index-mutation.ts";
 
 export type {
+  AgentsReplacement,
   ConvertedAgent,
   DiscoveredAgent,
   PreparedAgentsStaging,
+  ReplacePreparedAgentsOptions,
   RawAgentFrontmatter,
   StageAgentsCommitResult,
   StageAgentsInput,

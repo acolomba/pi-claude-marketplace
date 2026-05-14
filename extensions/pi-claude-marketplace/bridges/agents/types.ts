@@ -137,6 +137,23 @@ export interface PreparedAgentsStaged {
   readonly _stagedFilePaths: readonly { readonly from: string; readonly to: string }[];
 }
 
+export interface ReplacePreparedAgentsOptions {
+  readonly force?: boolean;
+}
+
+/** Opaque reinstall replacement handle for staged agents. */
+export type AgentsReplacement = AgentsReplacementNoop | AgentsReplacementReplaced;
+
+export interface AgentsReplacementNoop {
+  readonly kind: "noop";
+  readonly prepared: PreparedAgentsStaging;
+}
+
+export interface AgentsReplacementReplaced {
+  readonly kind: "replaced";
+  readonly prepared: PreparedAgentsStaged;
+}
+
 export interface UnstageAgentsInput {
   readonly locations: ScopedLocations;
   readonly marketplaceName: string;

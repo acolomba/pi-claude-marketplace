@@ -23,13 +23,15 @@
 //      without touching disk.
 
 import { randomUUID } from "node:crypto";
-import { mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { assertSafeName } from "../../domain/name.ts";
 import { loadAgentsIndex, saveAgentsIndex } from "../../persistence/agents-index-io.ts";
 import { AgentOwnershipConflictError } from "../../shared/errors-bridges.ts";
-import { appendLeakToError } from "../../shared/errors.ts";
-import { cleanupStaging } from "../../shared/fs-utils.ts";
+import { appendLeakToError, errorMessage } from "../../shared/errors.ts";
+import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
+import { MANUAL_RECOVERY_REQUIRED } from "../../shared/markers.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
 import { assertNoAgentCollisions, convertAgent } from "./convert.ts";
@@ -38,15 +40,29 @@ import { findOwnershipConflicts, partitionByOwner } from "./index-mutation.ts";
 import { isOwnedAgentFile } from "./marker.ts";
 
 import type {
+  AgentsReplacement,
   ConvertedAgent,
   DiscoveredAgent,
   PreparedAgentsStaging,
+  ReplacePreparedAgentsOptions,
   StageAgentsCommitResult,
   StageAgentsInput,
   StagedAgentRecord,
   UnstageAgentFailure,
 } from "./types.ts";
 import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
+
+type AgentsReplacementInternals = Readonly<{
+  backupRoot: string;
+  oldIndexText: string | undefined;
+  backups: readonly { name: string; from: string; to: string }[];
+  renamed: readonly { from: string; to: string }[];
+}>;
+
+const agentsReplacementInternals = new WeakMap<
+  Extract<AgentsReplacement, { kind: "replaced" }>,
+  AgentsReplacementInternals
+>();
 
 /**
  * 10-step prepare. NOTHING outside `<extensionRoot>/agents-staging/<uuid>/`
@@ -357,4 +373,203 @@ export async function abortPreparedAgents(
   }
 
   return cleanupStaging(prepared.stagingDir, "agents staging directory");
+}
+
+/**
+ * Reinstall-safe replacement helper. Unlike commitPreparedAgents, this
+ * backs up previous plugin-owned agent files and agents-index.json before
+ * staged renames so later orchestrator failures can restore the old install.
+ */
+export async function replacePreparedAgents(
+  prepared: PreparedAgentsStaging,
+  options?: ReplacePreparedAgentsOptions,
+): Promise<AgentsReplacement> {
+  if (prepared.kind === "noop") {
+    return { kind: "noop", prepared };
+  }
+
+  if (prepared.result.failed.length > 0 && options?.force !== true) {
+    throw new Error(
+      `Agent replacement blocked by foreign previous content:\n${prepared.result.failed
+        .map((f) => `  - ${f.generatedName} at ${f.targetPath}: ${f.reason}`)
+        .join("\n")}`,
+    );
+  }
+
+  const backupRoot = path.join(prepared.locations.agentsStagingDir, `backup-${randomUUID()}`);
+  await mkdir(backupRoot, { recursive: true });
+  await assertPathInside(prepared.locations.agentsStagingDir, backupRoot, "agents backup root");
+
+  const oldIndexText = await readOptionalText(prepared.locations.agentsIndexPath);
+  const backupEntries =
+    options?.force === true
+      ? [...prepared._previousEntries, ...prepared._foreignPreservedEntries]
+      : [...prepared._previousEntries];
+  const backups: { name: string; from: string; to: string }[] = [];
+  const renamed: { from: string; to: string }[] = [];
+
+  try {
+    for (const entry of backupEntries) {
+      assertSafeName(entry.generatedName, "previous agent name");
+      await assertPathInside(prepared.locations.agentsDir, entry.targetPath, "previous agent file");
+      if (!(await pathExists(entry.targetPath))) {
+        continue;
+      }
+
+      const backup = path.join(backupRoot, entry.generatedName + ".md");
+      await assertPathInside(backupRoot, backup, "agents backup file");
+      await rename(entry.targetPath, backup);
+      backups.push({ name: entry.generatedName, from: entry.targetPath, to: backup });
+    }
+
+    await mkdir(prepared.locations.agentsDir, { recursive: true });
+    for (const pair of prepared._stagedFilePaths) {
+      if (await pathExists(pair.to)) {
+        throw new Error(`Cannot replace agent target with non-previous content at ${pair.to}`);
+      }
+
+      await rename(pair.from, pair.to);
+      renamed.push(pair);
+    }
+
+    await saveAgentsIndex(prepared.locations, {
+      schemaVersion: 1,
+      agents: [...prepared._otherEntries, ...prepared._newEntries],
+    });
+  } catch (err) {
+    const leaks = await rollbackAgentsReplacementInternal(
+      prepared,
+      renamed,
+      backups,
+      backupRoot,
+      oldIndexText,
+    );
+    if (leaks.length > 0) {
+      throw new Error(`${errorMessage(err)} ${MANUAL_RECOVERY_REQUIRED}${leaks.join("; ")}`, {
+        cause: err,
+      });
+    }
+
+    throw err;
+  }
+
+  const replacement: Extract<AgentsReplacement, { kind: "replaced" }> = {
+    kind: "replaced",
+    prepared,
+  };
+  agentsReplacementInternals.set(replacement, {
+    backupRoot,
+    oldIndexText,
+    backups: Object.freeze(backups),
+    renamed: Object.freeze(renamed),
+  });
+  return replacement;
+}
+
+export async function rollbackAgentsReplacement(
+  replacement: AgentsReplacement,
+): Promise<readonly string[]> {
+  if (replacement.kind === "noop") {
+    return Object.freeze([]);
+  }
+
+  const internals = requireAgentsReplacementInternals(replacement);
+  return rollbackAgentsReplacementInternal(
+    replacement.prepared,
+    internals.renamed,
+    internals.backups,
+    internals.backupRoot,
+    internals.oldIndexText,
+  );
+}
+
+export async function finalizeAgentsReplacement(
+  replacement: AgentsReplacement,
+): Promise<readonly string[]> {
+  if (replacement.kind === "noop") {
+    return Object.freeze([]);
+  }
+
+  const internals = requireAgentsReplacementInternals(replacement);
+  const leaks = [
+    await cleanupStaging(internals.backupRoot, "agents replacement backup directory"),
+    await cleanupStaging(replacement.prepared.stagingDir, "agents staging directory"),
+  ].filter((leak): leak is string => leak !== undefined);
+  return Object.freeze(leaks);
+}
+
+function requireAgentsReplacementInternals(
+  replacement: Extract<AgentsReplacement, { kind: "replaced" }>,
+): AgentsReplacementInternals {
+  const internals = agentsReplacementInternals.get(replacement);
+  if (internals === undefined) {
+    throw new Error("Unknown agents replacement handle.");
+  }
+
+  return internals;
+}
+
+async function rollbackAgentsReplacementInternal(
+  prepared: Extract<PreparedAgentsStaging, { kind: "staged" }>,
+  renamed: readonly { from: string; to: string }[],
+  backups: readonly { name: string; from: string; to: string }[],
+  backupRoot: string,
+  oldIndexText: string | undefined,
+): Promise<readonly string[]> {
+  const leaks: string[] = [];
+
+  for (const pair of [...renamed].reverse()) {
+    try {
+      await rm(pair.to, { force: true });
+    } catch (err) {
+      leaks.push(`failed to remove replacement agent file at ${pair.to}: ${errorMessage(err)}`);
+    }
+  }
+
+  for (const backup of [...backups].reverse()) {
+    try {
+      await mkdir(path.dirname(backup.from), { recursive: true });
+      await rename(backup.to, backup.from);
+    } catch (err) {
+      leaks.push(
+        `failed to restore previous agent file ${backup.name} from ${backup.to} to ${backup.from}: ${errorMessage(err)}`,
+      );
+    }
+  }
+
+  try {
+    if (oldIndexText === undefined) {
+      await rm(prepared.locations.agentsIndexPath, { force: true });
+    } else {
+      await mkdir(path.dirname(prepared.locations.agentsIndexPath), { recursive: true });
+      await writeFile(prepared.locations.agentsIndexPath, oldIndexText, "utf8");
+    }
+  } catch (err) {
+    leaks.push(
+      `failed to restore agents index at ${prepared.locations.agentsIndexPath}: ${errorMessage(err)}`,
+    );
+  }
+
+  for (const leak of [
+    await cleanupStaging(prepared.stagingDir, "agents staging directory"),
+    await cleanupStaging(backupRoot, "agents replacement backup directory"),
+  ]) {
+    if (leak !== undefined) {
+      leaks.push(leak);
+    }
+  }
+
+  return Object.freeze(leaks);
+}
+
+async function readOptionalText(filePath: string): Promise<string | undefined> {
+  try {
+    return await readFile(filePath, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return undefined;
+    }
+
+    throw err;
+  }
 }
