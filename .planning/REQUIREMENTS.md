@@ -24,7 +24,7 @@ Requirements for the Reinstall Command milestone. Each maps to exactly one roadm
 - [ ] **PRL-13**: Batch reinstall continues per plugin and reports deterministic success/skipped/failed partitions without corrupting other plugins
 - [ ] **PRL-14**: Successful reinstall emits the existing `refresh` reload hint only when generated resources changed
 - [ ] **PRL-15**: Successful reinstall includes existing soft-dependency warnings when agents or MCP servers are restaged and the relevant Pi companion plugin is unloaded
-- [ ] **PRL-16**: Tab completion includes `reinstall`, completes installed plugin refs, supports `@<marketplace>` form, and preserves existing completion failure semantics
+- [x] **PRL-16**: Tab completion includes `reinstall`, completes installed plugin refs, supports `@<marketplace>` form, and preserves existing completion failure semantics
 
 ## Future Requirements
 
@@ -71,7 +71,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PRL-13 | Phase 9 | Pending |
 | PRL-14 | Phase 9 | Pending |
 | PRL-15 | Phase 9 | Pending |
-| PRL-16 | Phase 9 | Pending |
+| PRL-16 | Phase 9 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 16 total
