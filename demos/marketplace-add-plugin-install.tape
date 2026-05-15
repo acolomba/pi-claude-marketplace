@@ -66,4 +66,6 @@ Enter
 Sleep 5s
 
 Hide
+Type "/claude:plugin marketplace rm anthropics/claude-plugins-official"
+Sleep 500ms
 Ctrl+C

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.3] - 2026-05-15
+
+- Fixed user-scope path resolution to honor Pi's agent home override.
+- Updated the demo recording to use an isolated Pi home.
+
 ## [0.1.2] - 2026-05-13
 
 - Lowered Node.js engine requirement to `>=20.19.0` and downgraded `write-file-atomic` to v7 for broader compatibility.
