@@ -19,6 +19,8 @@ test("PRL-01/03/04/05/13/14/15/16: README documents reinstall command forms and 
     "does not fetch, pull, or otherwise sync the marketplace from the network",
     "installed record's existing version",
     "Reinstall targets installed plugins only.",
+    "the marketplace reference identifies the source marketplace",
+    "reports `not installed` in the selected scope instead of failing just because that marketplace is configured in another scope",
     "No plugins installed.",
     "does not emit a reload hint",
     "Plugin data directories are deleted only after replacement resources and `state.json` commit successfully",

@@ -749,6 +749,52 @@ test("PRL-05 bulk reinstall explicit scope filters targets", async () => {
   });
 });
 
+test("PRL-05 explicit plugin reinstall in another scope reports not-installed instead of marketplace-not-found", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-cross-scope-source-"));
+    try {
+      await seedMarketplace({
+        cwd,
+        scope: "user",
+        marketplaceRoot: path.join(cwd, "user-mp-src"),
+        marketplaceName: "mp",
+        pluginName: "plug",
+        resources: { skill: "user" },
+        install: true,
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      const outcomes = await reinstallPlugins({
+        ctx,
+        pi,
+        cwd,
+        scope: "project",
+        target: { kind: "plugin", plugin: "plug", marketplace: "mp" },
+      });
+
+      assert.deepEqual(outcomes, [
+        {
+          partition: "skipped",
+          name: "plug",
+          marketplace: "mp",
+          scope: "project",
+          notes: ["not installed"],
+        },
+      ]);
+      assert.equal(
+        notifications.some((n) => n.severity === "error"),
+        false,
+      );
+      assert.match(
+        notifications.at(-1)?.message ?? "",
+        /Skipped:\n {2}- \[project\] plug@mp: not installed/,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("PRL-13 batch reinstall continues after failed plugin", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-continue-"));

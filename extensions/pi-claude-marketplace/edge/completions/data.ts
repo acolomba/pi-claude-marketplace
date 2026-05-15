@@ -26,11 +26,7 @@
 //   - mode = "update"    -> keep status === "installed".
 //   - mode = "reinstall" -> keep status === "installed".
 
-import {
-  getMarketplaceNames,
-  getPluginIndex,
-  ManifestSoftFailError,
-} from "../../shared/completion-cache.ts";
+import { getPluginIndex, ManifestSoftFailError } from "../../shared/completion-cache.ts";
 import { SCOPES } from "../../shared/types.ts";
 
 import type { PluginIndexRow } from "../../shared/completion-cache.ts";
@@ -212,17 +208,15 @@ async function rebuildPluginIndex(
 /**
  * Union of marketplace names visible from user + project scopes (deduped).
  * State.json errors from either scope propagate (TC-9).
+ *
+ * Marketplace-name completion reads state directly instead of trusting the
+ * optimization cache. The cache has no TTL, and stale marketplace-name files
+ * from an older process/version should not hide valid command targets.
  */
 export async function getMarketplaceNamesAcrossScopes(
   resolver: LocationsResolver,
 ): Promise<readonly string[]> {
-  const perScope = await Promise.all(
-    SCOPES.map((scope) =>
-      getMarketplaceNames(resolver.marketplaceNamesCachePath(scope), scope, () =>
-        rebuildNamesForScope(resolver, scope),
-      ),
-    ),
-  );
+  const perScope = await Promise.all(SCOPES.map((scope) => rebuildNamesForScope(resolver, scope)));
   return Array.from(new Set(perScope.flat()));
 }
 
@@ -240,9 +234,7 @@ export async function getPluginToMarketplacesMap(
 ): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>();
   for (const scope of SCOPES) {
-    const names = await getMarketplaceNames(resolver.marketplaceNamesCachePath(scope), scope, () =>
-      rebuildNamesForScope(resolver, scope),
-    );
+    const names = await rebuildNamesForScope(resolver, scope);
     for (const mp of names) {
       const cachePath = await resolver.pluginCachePath(scope, mp);
       const rows = await getPluginIndex(cachePath, scope, mp, () =>

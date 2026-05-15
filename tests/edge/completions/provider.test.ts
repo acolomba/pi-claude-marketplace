@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -763,6 +763,32 @@ test("PRL-16 :: reinstall @ completes marketplace-only targets", async () => {
         `marketplace-only completion needs trailing space: ${item.value}`,
       );
     }
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("PRL-16 :: reinstall @m ignores stale marketplace-name cache", async () => {
+  __resetCacheForTests();
+  const f = await makeFixture({
+    state: { user: { "mp-a": {}, market: {} }, project: {} },
+    manifests: {
+      user: {
+        "mp-a": [{ name: "p", status: "installed" }],
+        market: [{ name: "p", status: "installed" }],
+      },
+      project: {},
+    },
+  });
+  try {
+    const staleUserCache = f.resolver.marketplaceNamesCachePath("user");
+    await mkdir(path.dirname(staleUserCache), { recursive: true });
+    await writeFile(staleUserCache, JSON.stringify({ schemaVersion: 2, names: [] }));
+
+    const items = await getArgumentCompletions("reinstall @m", f.resolver);
+
+    assert.ok(items !== null);
+    assert.deepEqual([...items.map((i) => i.label)].sort(), ["@market", "@mp-a"]);
   } finally {
     await f.cleanup();
   }

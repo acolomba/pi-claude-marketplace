@@ -301,6 +301,12 @@ async function enumerateMarketplaceReinstallTargets(
   const state = await loadState(resolved.locations.extensionRoot);
   const mp = state.marketplaces[marketplace];
   if (mp === undefined) {
+    if (explicitScope !== undefined) {
+      return target.kind === "plugin"
+        ? sortReinstallTargets([{ plugin: target.plugin, marketplace, scope: explicitScope }])
+        : [];
+    }
+
     throw new Error(`Marketplace "${marketplace}" not found in ${resolved.scope} scope.`);
   }
 

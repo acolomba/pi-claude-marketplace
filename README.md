@@ -232,6 +232,8 @@ Limit reinstall to one scope with `--scope user` or `--scope project`. The flag 
 /claude:plugin reinstall @claude-plugins-official --scope user
 ```
 
+The `--scope` flag selects which installed plugin records and generated resources are reinstalled; the marketplace reference identifies the source marketplace. For an explicit plugin target, reinstall reports `not installed` in the selected scope instead of failing just because that marketplace is configured in another scope.
+
 Use `--force` only when reinstalling a plugin whose own previous agent files were manually edited or otherwise look foreign. `--force` can overwrite that plugin's previous agent content, but it does not override other-plugin ownership conflicts, unsafe names, path-containment failures, or MCP server name collisions:
 
 ```text

@@ -187,10 +187,10 @@ test("shim :: --scope works before and after reinstall ref", async () => {
     const second = makeCtx(cwd);
     await handler("myplug@mymkt --scope project", second.ctx);
     assert.equal(second.notifications.length, 1);
-    assert.equal(second.notifications[0]?.severity, "error");
+    assert.equal(second.notifications[0]?.severity, undefined);
     assert.match(
       second.notifications[0]?.message ?? "",
-      /Marketplace "mymkt" not found in project scope\./,
+      /Skipped:\n {2}- \[project\] myplug@mymkt: not installed/,
     );
   });
 });
