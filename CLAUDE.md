@@ -23,7 +23,7 @@ This GSD project plans a successor architecture for the V1 implementation alread
 - **Output channel:** All user-visible messages MUST go through `ctx.ui.notify(message, severity)`; direct `process.stdout`/`process.stderr` writes forbidden in command/bridge code (IL-2). Single sanctioned `console.warn` is the load-time legacy migration save failure (IL-3)
 - **No telemetry V1:** No metrics, no event sink, no analytics endpoint (IL-4)
 - **English only V1:** No message catalog, no locale negotiation (IL-1)
-- **Scope model:** Exactly two scopes -- `user` (`~/.pi/agent/`) and `project` (`<cwd>/.pi/`). Claude Code's `local` scope is not introduced (SC-1)
+- **Scope model:** Exactly two scopes -- `user` (Pi agent dir; defaults to `~/.pi/agent/` and honors `PI_CODING_AGENT_DIR`) and `project` (`<cwd>/.pi/`). Claude Code's `local` scope is not introduced (SC-1)
 
 <!-- GSD:project-end -->
 

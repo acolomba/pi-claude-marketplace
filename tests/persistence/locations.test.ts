@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
@@ -15,14 +16,47 @@ import {
  * SC-7: name-derived path methods route through assertPathInside.
  */
 
-test("SC-1 / SC-2 locationsFor('user') returns ~/.pi/agent/ paths", () => {
-  const loc = locationsFor("user", "/anywhere");
-  assert.equal(loc.scope, "user");
-  assert.ok(loc.scopeRoot.endsWith(path.join(".pi", "agent")));
-  assert.ok(loc.extensionRoot.endsWith(path.join(".pi", "agent", "pi-claude-marketplace")));
-  assert.ok(loc.stateJsonPath.endsWith("state.json"));
-  assert.ok(loc.agentsDir.endsWith(path.join(".pi", "agent", "agents")));
-  assert.ok(loc.mcpJsonPath.endsWith(path.join(".pi", "agent", "mcp.json")));
+function withPiAgentDir<T>(value: string | undefined, fn: () => T): T {
+  const previous = process.env.PI_CODING_AGENT_DIR;
+
+  if (value === undefined) {
+    delete process.env.PI_CODING_AGENT_DIR;
+  } else {
+    process.env.PI_CODING_AGENT_DIR = value;
+  }
+
+  try {
+    return fn();
+  } finally {
+    if (previous === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = previous;
+    }
+  }
+}
+
+test("SC-1 / SC-2 locationsFor('user') returns Pi agent dir default paths", () => {
+  withPiAgentDir(undefined, () => {
+    const loc = locationsFor("user", "/anywhere");
+    assert.equal(loc.scope, "user");
+    assert.equal(loc.scopeRoot, path.join(os.homedir(), ".pi", "agent"));
+    assert.ok(loc.extensionRoot.endsWith(path.join(".pi", "agent", "pi-claude-marketplace")));
+    assert.ok(loc.stateJsonPath.endsWith("state.json"));
+    assert.ok(loc.agentsDir.endsWith(path.join(".pi", "agent", "agents")));
+    assert.ok(loc.mcpJsonPath.endsWith(path.join(".pi", "agent", "mcp.json")));
+  });
+});
+
+test("SC-1 / SC-2 locationsFor('user') honors PI_CODING_AGENT_DIR", () => {
+  withPiAgentDir(path.join("/tmp", "pi-home", "agent"), () => {
+    const loc = locationsFor("user", "/anywhere");
+    assert.equal(loc.scope, "user");
+    assert.equal(loc.scopeRoot, path.join("/tmp", "pi-home", "agent"));
+    assert.equal(loc.extensionRoot, path.join("/tmp", "pi-home", "agent", "pi-claude-marketplace"));
+    assert.equal(loc.agentsDir, path.join("/tmp", "pi-home", "agent", "agents"));
+    assert.equal(loc.mcpJsonPath, path.join("/tmp", "pi-home", "agent", "mcp.json"));
+  });
 });
 
 test("SC-1 / SC-2 locationsFor('project', cwd) returns <cwd>/.pi/ paths", () => {

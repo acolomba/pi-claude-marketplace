@@ -9,6 +9,8 @@
 
 import { PI_MCP_ADAPTER_NOT_LOADED, PI_SUBAGENTS_NOT_LOADED } from "../shared/markers.ts";
 
+export { getAgentDir } from "@earendil-works/pi-coding-agent";
+
 export type {
   ExtensionAPI,
   ExtensionCommandContext,
