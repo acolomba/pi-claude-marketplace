@@ -4,8 +4,8 @@ milestone: v1.1
 milestone_name: milestone
 status: completed
 stopped_at: Phase 09 complete; v1.1 milestone ready for completion
-last_updated: "2026-05-14T11:36:47.061Z"
-last_activity: 2026-05-14 - Phase 09 complete
+last_updated: "2026-05-15T22:43:18.131Z"
+last_activity: "2026-05-15 - Completed quick task 260515-tqx: fix these gaps"
 progress:
   total_phases: 2
   completed_phases: 2
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-13)
 Phase: 09 of 2 (reinstall edge bulk ux)
 Plan: 4 of 4
 Status: Milestone complete
-Last activity: 2026-05-14 - Phase 09 complete
+Last activity: 2026-05-15 - Completed quick task 260515-tqx: fix these gaps
 
 Progress: [██████████] 100%
 
@@ -118,6 +118,7 @@ None yet.
 | #          | Description                                                                                                      | Date       | Commit  | Status   | Directory                                                                 |
 | ---------- | ---------------------------------------------------------------------------------------------------------------- | ---------- | ------- | -------- | ------------------------------------------------------------------------- |
 | 260515-bkt | lets update the specs and the implementation to listen to PI_CODING_AGENT_DIR if set instead of hardcoding ~/.pi | 2026-05-14 | 0257577 | Verified | [260515-bkt-pi-coding-agent-dir](./quick/260515-bkt-pi-coding-agent-dir/) |
+| 260515-tqx | fix these gaps | 2026-05-15 | 5d8fd1d | Verified | [260515-tqx-fix-these-gaps](./quick/260515-tqx-fix-these-gaps/) |
 
 ## Deferred Items
 
