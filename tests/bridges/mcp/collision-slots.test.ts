@@ -11,26 +11,52 @@ import {
 
 // MC-4 / RN-5 -- four-slot enumeration + first-declarer-wins.
 
-test("MC-4 MCP_COLLISION_SLOTS returns 4 paths in user-contract order", () => {
-  const cwd = "/tmp/test-cwd-xyz";
-  const slots = MCP_COLLISION_SLOTS(cwd);
-  assert.equal(slots.length, 4, "exactly four slots");
+function withPiAgentDir<T>(value: string | undefined, fn: () => T): T {
+  const previous = process.env.PI_CODING_AGENT_DIR;
 
-  const [slot0, slot1, slot2, slot3] = slots;
-  // Slot 0: shared-global -- ~/.config/mcp/mcp.json
-  assert.ok(
-    slot0!.endsWith(path.join(".config", "mcp", "mcp.json")),
-    `slot[0] should end with .config/mcp/mcp.json, got ${String(slot0)}`,
-  );
-  // Slot 1: pi-user-scope -- ~/.pi/agent/mcp.json
-  assert.ok(
-    slot1!.endsWith(path.join(".pi", "agent", "mcp.json")),
-    `slot[1] should end with .pi/agent/mcp.json, got ${String(slot1)}`,
-  );
-  // Slot 2: shared-project -- <cwd>/.mcp.json
-  assert.equal(slot2, path.join(cwd, ".mcp.json"));
-  // Slot 3: pi-project-scope -- <cwd>/.pi/mcp.json
-  assert.equal(slot3, path.join(cwd, ".pi", "mcp.json"));
+  if (value === undefined) {
+    delete process.env.PI_CODING_AGENT_DIR;
+  } else {
+    process.env.PI_CODING_AGENT_DIR = value;
+  }
+
+  try {
+    return fn();
+  } finally {
+    if (previous === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = previous;
+    }
+  }
+}
+
+test("MC-4 MCP_COLLISION_SLOTS returns 4 paths in user-contract order", () => {
+  withPiAgentDir(undefined, () => {
+    const cwd = "/tmp/test-cwd-xyz";
+    const slots = MCP_COLLISION_SLOTS(cwd);
+    assert.equal(slots.length, 4, "exactly four slots");
+
+    const [slot0, slot1, slot2, slot3] = slots;
+    // Slot 0: shared-global -- ~/.config/mcp/mcp.json
+    assert.ok(
+      slot0!.endsWith(path.join(".config", "mcp", "mcp.json")),
+      `slot[0] should end with .config/mcp/mcp.json, got ${String(slot0)}`,
+    );
+    // Slot 1: pi-user-scope -- Pi agent dir mcp.json (default ~/.pi/agent/mcp.json)
+    assert.equal(slot1, path.join(os.homedir(), ".pi", "agent", "mcp.json"));
+    // Slot 2: shared-project -- <cwd>/.mcp.json
+    assert.equal(slot2, path.join(cwd, ".mcp.json"));
+    // Slot 3: pi-project-scope -- <cwd>/.pi/mcp.json
+    assert.equal(slot3, path.join(cwd, ".pi", "mcp.json"));
+  });
+});
+
+test("MC-4 MCP_COLLISION_SLOTS honors PI_CODING_AGENT_DIR for pi-user-scope slot", () => {
+  withPiAgentDir(path.join("/tmp", "pi-home", "agent"), () => {
+    const slots = MCP_COLLISION_SLOTS("/tmp/test-cwd-xyz");
+    assert.equal(slots[1], path.join("/tmp", "pi-home", "agent", "mcp.json"));
+  });
 });
 
 test("MC-4 MCP_COLLISION_SLOTS returns frozen array", () => {

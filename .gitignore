@@ -8,6 +8,9 @@
 /.ralph/
 /.serena
 
+# gsd
+/.agent/
+
 # build output
 /dist/
 /build/
@@ -28,6 +31,9 @@ pnpm-debug.log*
 
 # package artifacts
 *.tgz
+
+# tmp
+/tmp/
 
 # worktrees
 /.worktrees/
