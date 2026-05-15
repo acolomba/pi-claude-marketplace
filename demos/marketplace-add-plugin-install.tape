@@ -11,7 +11,7 @@ Set Height 1080
 Set TypingSpeed 55ms
 
 Hide
-Type "./scripts/pi.sh --home tmp/pihome --cd work --clear-screen"
+Type "./scripts/pi.sh --home $(pwd)/tmp/pihome --cd $(pwd)/tmp/work --clear-screen"
 Enter
 Sleep 3000ms
 Show
