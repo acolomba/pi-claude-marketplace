@@ -79,7 +79,7 @@ ______________________________________________________________________
 
 - **Reuse the Claude plugin ecosystem from inside Pi** -- every supported Claude plugin component should be installable through a single namespaced command (`/claude:plugin …`).
 - **Preserve familiar UX** -- subcommand names, syntax for plugin references (`<plugin>@<marketplace>`), and source forms (`owner/repo`, `https://github.com/...#<ref>`, local paths) match Claude Code parity within the V1 scope.
-- **Two scopes only** -- `user` (`~/.pi/agent/`) and `project` (`<cwd>/.pi/`), mirroring Pi's scope model rather than Claude Code's `local` scope.
+- **Two scopes only** -- `user` (Pi agent dir, default `~/.pi/agent/`, honoring `PI_CODING_AGENT_DIR`) and `project` (`<cwd>/.pi/`), mirroring Pi's scope model rather than Claude Code's `local` scope.
 - **Soft-degrade** -- features that require companion extensions (`pi-subagents`, `pi-mcp-adapter`) must not block installs; instead they degrade gracefully with explicit guidance.
 - **Atomic, recoverable operations** -- install, update, uninstall, and marketplace removal must never leave on-disk artefacts and persisted state in irrecoverable disagreement; failures must surface a recovery path.
 
@@ -109,7 +109,7 @@ ______________________________________________________________________
 
 - **Pi** -- the host coding agent (`@mariozechner/pi-coding-agent`).
 - **Extension** -- a Pi extension; this product registers the `claude:plugin` LLM tool family, one `resources_discover` listener (the bridge that exposes staged skills/prompts to Pi), and one `session_start` listener (the wrapper that adds `/claude:plugin`-scoped fish-style space normalization to the autocomplete provider; see §6.6 TC-7).
-- **Scope** -- `user` or `project`. User scope writes to `~/.pi/agent/`; project scope writes to `<cwd>/.pi/`.
+- **Scope** -- `user` or `project`. User scope writes to the Pi agent dir (default `~/.pi/agent/`, overridden by `PI_CODING_AGENT_DIR`); project scope writes to `<cwd>/.pi/`.
 - **Marketplace** -- a Claude marketplace, identified by a name from its `marketplace.json`.
 - **Marketplace source** -- how a marketplace is fetched: GitHub `owner/repo[#<ref>]`, GitHub HTTPS URL, or a local path.
 - **Plugin** -- a Claude plugin, identified by `<plugin>@<marketplace>`.
@@ -431,7 +431,7 @@ flowchart LR
 | **MC-1** | The `mcpServers` declaration MUST be resolved with precedence: marketplace entry > plugin manifest > standalone `.mcp.json` at plugin root. First match wins; malformed at the matched source MUST throw (no fallthrough). Under `strict=false`, this precedence chain applies only when the marketplace entry itself declares `mcpServers`; manifest- or standalone-only declarations under `strict=false` are conflicts (per MM-7), not precedence fallbacks. |
 | **MC-2** | A `.mcp.json` may use either the canonical unwrapped form (top-level entries) or the legacy wrapped form (`{ "mcpServers": { ... } }`). Both MUST parse.                                                                                                                                                                                                                                                                                                        |
 | **MC-3** | A plugin whose only declaration is a malformed `mcpServers` MUST surface as **unavailable** with `malformed mcpServers: <reason>` -- silent fallthrough is not allowed.                                                                                                                                                                                                                                                                                         |
-| **MC-4** | Server-name collisions MUST be checked across all four pi-mcp-adapter slots: `~/.config/mcp/mcp.json`, `~/.pi/agent/mcp.json`, `<cwd>/.mcp.json`, `<cwd>/.pi/mcp.json`. Self-replace within the same scope's mcp.json is allowed; foreign collisions MUST refuse stage.                                                                                                                                                                                         |
+| **MC-4** | Server-name collisions MUST be checked across all four pi-mcp-adapter slots: `~/.config/mcp/mcp.json`, `<Pi agent dir>/mcp.json` (default `~/.pi/agent/mcp.json`, honoring `PI_CODING_AGENT_DIR`), `<cwd>/.mcp.json`, `<cwd>/.pi/mcp.json`. Self-replace within the same scope's mcp.json is allowed; foreign collisions MUST refuse stage.                                                                                                                     |
 | **MC-5** | Each staged entry MUST carry a `_piClaudeMarketplace: { plugin, marketplace }` marker so uninstall/update drops only its own entries.                                                                                                                                                                                                                                                                                                                           |
 | **MC-6** | Staging MUST be two-phase (compute next doc in memory; commit via atomic JSON write). The "noop" branch (no new servers AND no previous ours) MUST not materialize the file.                                                                                                                                                                                                                                                                                    |
 | **MC-7** | Unstage MUST tolerate a missing `mcpServers` field (null/missing) without crashing.                                                                                                                                                                                                                                                                                                                                                                             |
@@ -481,7 +481,7 @@ ______________________________________________________________________
 
 | ID       | Requirement                                                                                                                                                                                                                                                                                       |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **SC-1** | The system MUST support exactly two scopes: `user` (`~/.pi/agent/`) and `project` (`<cwd>/.pi/`). Claude Code's `local` scope MUST NOT be introduced unless Pi adds an equivalent.                                                                                                                |
+| **SC-1** | The system MUST support exactly two scopes: `user` (Pi agent dir, default `~/.pi/agent/`, honoring `PI_CODING_AGENT_DIR`) and `project` (`<cwd>/.pi/`). Claude Code's `local` scope MUST NOT be introduced unless Pi adds an equivalent.                                                          |
 | **SC-2** | All extension data lives at `<scopeRoot>/pi-claude-marketplace/`. Bridge files live at `<scopeRoot>/agents/` and `<scopeRoot>/mcp.json` (deliberately outside the extension's resources/).                                                                                                        |
 | **SC-3** | A `ScopedLocations` object MUST be a typed bundle that's the only way to derive on-disk paths for an operation; hand-crafted shapes that mix scopes MUST not type-check (brand symbol).                                                                                                           |
 | **SC-4** | Scope resolution rules for name-targeted commands. When `--scope` is provided, use that scope and error if the name is not found there. When `--scope` is omitted, search both scopes; error if found in both ("Use --scope user or --scope project to disambiguate"); error if found in neither. |
@@ -931,7 +931,7 @@ flowchart TB
 ### 9.2 Persistence layout per scope
 
 ```text
-<scopeRoot>/                          # ~/.pi/agent (user) or <cwd>/.pi (project)
+<scopeRoot>/                          # Pi agent dir (user; defaults to ~/.pi/agent) or <cwd>/.pi (project)
 ├── pi-claude-marketplace/               # extensionRoot
 │   ├── state.json                    # marketplaces + plugins
 │   ├── agents-index.json             # generated-agent index

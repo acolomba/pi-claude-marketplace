@@ -154,7 +154,7 @@ export function getScopeCompletions(argumentTextPrefix: string): AutocompleteIte
   return [
     {
       ...buildItem(argumentTextPrefix, "--scope user", true),
-      description: "User scope (~/.pi/agent)",
+      description: "User scope (Pi agent dir; defaults to ~/.pi/agent)",
     },
     {
       ...buildItem(argumentTextPrefix, "--scope project", true),

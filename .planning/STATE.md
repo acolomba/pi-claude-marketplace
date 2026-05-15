@@ -4,7 +4,7 @@ milestone: v1.1
 milestone_name: milestone
 status: completed
 stopped_at: Phase 09 complete; v1.1 milestone ready for completion
-last_updated: "2026-05-14T10:34:00.976Z"
+last_updated: "2026-05-14T11:36:47.061Z"
 last_activity: 2026-05-14 - Phase 09 complete
 progress:
   total_phases: 2
@@ -43,12 +43,12 @@ Progress: [██████████] 100%
 
 | Phase | Plans | Total | Avg/Plan |
 | ----- | ----- | ----- | -------- |
-| 01 | 7 | - | - |
-| 02 | 6 | - | - |
-| 04 | 10 | - | - |
-| 05 | 10 | - | - |
-| 07 | 6 | - | - |
-| 08 | 4 | - | - |
+| 01    | 7     | -     | -        |
+| 02    | 6     | -     | -        |
+| 04    | 10    | -     | -        |
+| 05    | 10    | -     | -        |
+| 07    | 6     | -     | -        |
+| 08    | 4     | -     | -        |
 
 **Recent Trend:**
 
@@ -56,6 +56,7 @@ Progress: [██████████] 100%
 - Trend: -
 
 <!-- Updated after each plan completion -->
+
 | Phase 07 P01 | 9 min | 3 tasks | 29 files |
 | Phase 07 P02 | 4 min | 3 tasks | 9 files |
 | Phase 07 P03 | 6 min | 2 tasks | 5 files |
@@ -112,13 +113,19 @@ None yet.
 
 - Historical `write-file-atomic@^8` engine concern is resolved on main by v0.1.2: package engines now allow `>=20.19.0` and the dependency is `write-file-atomic@^7`.
 
+### Quick Tasks Completed
+
+| #          | Description                                                                                                      | Date       | Commit  | Status   | Directory                                                                 |
+| ---------- | ---------------------------------------------------------------------------------------------------------------- | ---------- | ------- | -------- | ------------------------------------------------------------------------- |
+| 260515-bkt | lets update the specs and the implementation to listen to PI_CODING_AGENT_DIR if set instead of hardcoding ~/.pi | 2026-05-14 | 0257577 | Verified | [260515-bkt-pi-coding-agent-dir](./quick/260515-bkt-pi-coding-agent-dir/) |
+
 ## Deferred Items
 
 Items acknowledged and carried forward from previous milestone close:
 
 | Category                    | Item | Status | Deferred At |
 | --------------------------- | ---- | ------ | ----------- |
-| *(none -- first milestone)* |      |        |             |
+| _(none -- first milestone)_ |      |        |             |
 
 ## Session Continuity
 

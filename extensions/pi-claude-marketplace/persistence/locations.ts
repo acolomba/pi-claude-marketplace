@@ -13,10 +13,10 @@
 // Per CONTEXT.md D-10, ScopedLocations is per-scope independent.
 // Cross-scope reads are explicitly not modeled here.
 
-import os from "node:os";
 import path from "node:path";
 
 import { assertSafeName } from "../domain/name.ts";
+import { getAgentDir } from "../platform/pi-api.ts";
 import { assertPathInside } from "../shared/path-safety.ts";
 
 import type { Scope } from "../shared/types.ts";
@@ -38,7 +38,7 @@ const SCOPED_LOCATIONS_BRAND: unique symbol = Symbol("ScopedLocations");
 export interface ScopedLocations {
   readonly [SCOPED_LOCATIONS_BRAND]: true;
   readonly scope: Scope;
-  /** `~/.pi/agent` for user scope, `<cwd>/.pi` for project scope. */
+  /** Pi agent dir for user scope, `<cwd>/.pi` for project scope. */
   readonly scopeRoot: string;
   /** `<scopeRoot>/pi-claude-marketplace/` -- the extension's writable root. */
   readonly extensionRoot: string;
@@ -104,8 +104,9 @@ export interface ScopedLocations {
 /**
  * SOLE factory for ScopedLocations (SC-3 brand discipline).
  *
- * `scope` selects between user (`~/.pi/agent/`) and project (`<cwd>/.pi/`)
- * roots per SC-1 / SC-2. `cwd` is used only for `scope === 'project'`; for
+ * `scope` selects between user (Pi agent dir; defaults to `~/.pi/agent/`
+ * and honors `PI_CODING_AGENT_DIR`) and project (`<cwd>/.pi/`) roots per
+ * SC-1 / SC-2. `cwd` is used only for `scope === 'project'`; for
  * user scope, `cwd` is ignored.
  *
  * The returned object is frozen so a caller cannot mutate `scope` or any
@@ -113,8 +114,7 @@ export interface ScopedLocations {
  * the brand-symbol type-level guarantee.
  */
 export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
-  const scopeRoot =
-    scope === "user" ? path.join(os.homedir(), ".pi", "agent") : path.join(cwd, ".pi");
+  const scopeRoot = scope === "user" ? getAgentDir() : path.join(cwd, ".pi");
 
   const extensionRoot = path.join(scopeRoot, "pi-claude-marketplace");
   const stateJsonPath = path.join(extensionRoot, "state.json");
