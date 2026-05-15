@@ -92,6 +92,12 @@ None yet.
 - Behavioral Gaps 1, 2, 4-10 (FEATURES Gap series) need explicit resolutions logged in PROJECT.md Key Decisions before Phase 4/5 planning. SUMMARY.md provides recommended resolutions.
 - `write-file-atomic@^8` Node engine constraint bumps effective floor from 22.0 to 22.22.2; confirm CI Node range before adopting in Phase 1.
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Status | Directory |
+| --- | --- | --- | --- | --- | --- |
+| 260515-bkt | lets update the specs and the implementation to listen to PI_CODING_AGENT_DIR if set instead of hardcoding ~/.pi | 2026-05-14 | 0257577 | Verified | [260515-bkt-pi-coding-agent-dir](./quick/260515-bkt-pi-coding-agent-dir/) |
+
 ## Deferred Items
 
 Items acknowledged and carried forward from previous milestone close:
@@ -101,5 +107,7 @@ Items acknowledged and carried forward from previous milestone close:
 | *(none -- first milestone)* |      |        |             |
 
 ## Session Continuity
+
+Last activity: 2026-05-14 - Completed quick task 260515-bkt: lets update the specs and the implementation to listen to PI_CODING_AGENT_DIR if set instead of hardcoding ~/.pi
 
 Last session: 2026-05-11T20:42:58.893Z
