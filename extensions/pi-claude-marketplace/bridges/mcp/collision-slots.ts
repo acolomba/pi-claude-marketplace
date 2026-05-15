@@ -13,13 +13,15 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
+import { getAgentDir } from "../../platform/pi-api.ts";
+
 /**
  * MC-4 / RN-5 user-contract slot list. The four pi-mcp-adapter
  * configuration paths checked for cross-slot collisions during stage.
  * Order is FIRST-DECLARER-WINS:
  *
  *   [0] shared-global  -- ~/.config/mcp/mcp.json
- *   [1] pi-user-scope  -- ~/.pi/agent/mcp.json
+ *   [1] pi-user-scope  -- <Pi agent dir>/mcp.json (defaults to ~/.pi/agent/mcp.json)
  *   [2] shared-project -- <cwd>/.mcp.json
  *   [3] pi-project-scope -- <cwd>/.pi/mcp.json
  *
@@ -29,7 +31,7 @@ import path from "node:path";
 export function MCP_COLLISION_SLOTS(cwd: string): readonly string[] {
   return Object.freeze([
     path.join(homedir(), ".config", "mcp", "mcp.json"),
-    path.join(homedir(), ".pi", "agent", "mcp.json"),
+    path.join(getAgentDir(), "mcp.json"),
     path.join(cwd, ".mcp.json"),
     path.join(cwd, ".pi", "mcp.json"),
   ]);

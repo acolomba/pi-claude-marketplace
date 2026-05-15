@@ -5,12 +5,13 @@
 // the D-11 import boundary (edge/ MUST NOT import from domain/).
 //
 // Per Phase 1 SUMMARY handoff item #1 + SC-1 (PRD §6.2): exactly two
-// scopes -- `user` (~/.pi/agent/) and `project` (<cwd>/.pi/). The Claude
-// Code `local` scope is intentionally NOT introduced.
+// scopes -- `user` (Pi agent dir; defaults to ~/.pi/agent and honors
+// PI_CODING_AGENT_DIR) and `project` (<cwd>/.pi). The Claude Code `local`
+// scope is intentionally NOT introduced.
 
 /**
  * The two extension scopes (SC-1).
- * - `user`:    `~/.pi/agent/pi-claude-marketplace/`
+ * - `user`:    `<Pi agent dir>/pi-claude-marketplace/`
  * - `project`: `<cwd>/.pi/pi-claude-marketplace/`
  */
 export type Scope = "user" | "project";
