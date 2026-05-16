@@ -1,9 +1,20 @@
 import type { Scope } from "../../shared/types.ts";
 
+export type ImportDiagnosticCode =
+  | "malformed-enabled-plugin-ref"
+  | "malformed-plugin-ref"
+  | "non-boolean-enabled-plugin"
+  | "unmappable-marketplace-source"
+  | "settings-read-error"
+  | "malformed-json"
+  | "invalid-claude-config-dir"
+  | "unrecognized-stored-source"
+  | "post-install-warning";
+
 export interface ImportDiagnostic {
   readonly severity: "warning" | "error";
   readonly scope: Scope;
-  readonly code: string;
+  readonly code: ImportDiagnosticCode;
   readonly message: string;
   readonly path?: string;
   readonly ref?: string;
@@ -60,7 +71,7 @@ export interface PlannedPluginImport {
 export interface SkippedPluginImport {
   readonly scope: Scope;
   readonly ref: EnabledPluginRef;
-  readonly reason: string;
+  readonly reason: "unmappable-marketplace-source";
 }
 
 export interface MarketplaceSourcePlanResult {

@@ -8,12 +8,17 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState as defaultLoadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { notifySuccess, notifyWarning } from "../../shared/notify.ts";
+import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
 
 import { buildClaudeImportPlan } from "./marketplaces.ts";
 import { loadMergedClaudeSettingsForScope as defaultLoadSettings } from "./settings.ts";
 
-import type { ImportDiagnostic, MergedClaudeSettingsResult, PlannedPluginImport } from "./types.ts";
+import type {
+  ImportDiagnostic,
+  ImportDiagnosticCode,
+  MergedClaudeSettingsResult,
+  PlannedPluginImport,
+} from "./types.ts";
 import type { AddMarketplaceOptions } from "../../orchestrators/marketplace/add.ts";
 import type { InstallPluginOptions } from "../../orchestrators/plugin/install.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
@@ -94,16 +99,31 @@ export interface UnexpectedPluginFailureOutcome {
   readonly cause: string;
 }
 
+// Public readonly result shape. Internal mutation uses MutableImportResult.
 export interface ClaudeImportExecutionResult {
-  readonly addedMarketplaces: MarketplaceAddedOutcome[];
-  readonly installedPlugins: PluginInstalledOutcome[];
-  readonly skippedExistingMarketplaces: MarketplaceSkipOutcome[];
-  readonly skippedExistingPlugins: PluginSkipOutcome[];
-  readonly warnings: ImportWarningOutcome[];
-  readonly marketplaceFailures: MarketplaceFailureOutcome[];
-  readonly sourceMismatches: SourceMismatchOutcome[];
-  readonly unexpectedPluginFailures: UnexpectedPluginFailureOutcome[];
-  readonly diagnostics: ImportDiagnostic[];
+  readonly addedMarketplaces: readonly MarketplaceAddedOutcome[];
+  readonly installedPlugins: readonly PluginInstalledOutcome[];
+  readonly skippedExistingMarketplaces: readonly MarketplaceSkipOutcome[];
+  readonly skippedExistingPlugins: readonly PluginSkipOutcome[];
+  readonly warnings: readonly ImportWarningOutcome[];
+  readonly marketplaceFailures: readonly MarketplaceFailureOutcome[];
+  readonly sourceMismatches: readonly SourceMismatchOutcome[];
+  readonly unexpectedPluginFailures: readonly UnexpectedPluginFailureOutcome[];
+  readonly diagnostics: readonly ImportDiagnostic[];
+  readonly changedResources: boolean;
+}
+
+// Module-private builder with mutable arrays for accumulation.
+interface MutableImportResult {
+  addedMarketplaces: MarketplaceAddedOutcome[];
+  installedPlugins: PluginInstalledOutcome[];
+  skippedExistingMarketplaces: MarketplaceSkipOutcome[];
+  skippedExistingPlugins: PluginSkipOutcome[];
+  warnings: ImportWarningOutcome[];
+  marketplaceFailures: MarketplaceFailureOutcome[];
+  sourceMismatches: SourceMismatchOutcome[];
+  unexpectedPluginFailures: UnexpectedPluginFailureOutcome[];
+  diagnostics: ImportDiagnostic[];
   changedResources: boolean;
 }
 
@@ -126,7 +146,7 @@ export interface ImportClaudeSettingsOptions {
   readonly deps?: ImportDeps;
 }
 
-function emptyResult(): ClaudeImportExecutionResult {
+function emptyResult(): MutableImportResult {
   return {
     addedMarketplaces: [],
     installedPlugins: [],
@@ -145,9 +165,16 @@ function refLabel(plugin: PlannedPluginImport): string {
   return plugin.ref.raw;
 }
 
-function samePlannedSource(stored: unknown, plannedRaw: string): boolean {
+function samePlannedSource(stored: unknown, plannedRaw: string): boolean | "unknown-stored" {
   const planned = parsePluginSource(plannedRaw);
   const current = parsePluginSource(stored);
+
+  // Treat unrecognized stored source as a special sentinel so callers can
+  // emit a meaningful diagnostic rather than a generic source-mismatch.
+  if (current.kind === "unknown") {
+    return "unknown-stored";
+  }
+
   if (planned.kind !== current.kind) {
     return false;
   }
@@ -162,8 +189,6 @@ function samePlannedSource(stored: unknown, plannedRaw: string): boolean {
       );
     case "path":
       return current.kind === "path" && planned.logical === current.logical;
-    case "unknown":
-      return false;
     case "url":
     case "git-subdir":
     case "npm":
@@ -221,7 +246,7 @@ function anyChanges(result: ClaudeImportExecutionResult): boolean {
 }
 
 function pushPluginWarning(
-  result: ClaudeImportExecutionResult,
+  result: MutableImportResult,
   plugin: PlannedPluginImport,
   reason: ImportWarningOutcome["reason"],
   cause?: string,
@@ -234,6 +259,22 @@ function pushPluginWarning(
     ref: refLabel(plugin),
     reason,
     ...(cause !== undefined && { cause }),
+  });
+}
+
+function pushDiagnostic(
+  result: MutableImportResult,
+  scope: Scope,
+  code: ImportDiagnosticCode,
+  message: string,
+  extra?: { ref?: string; marketplace?: string },
+): void {
+  result.diagnostics.push({
+    severity: "warning",
+    scope,
+    code,
+    message,
+    ...extra,
   });
 }
 
@@ -307,19 +348,45 @@ export function formatClaudeImportSummary(result: ClaudeImportExecutionResult): 
 // eslint-disable-next-line sonarjs/cognitive-complexity
 async function executeScopedPlan(
   opts: ImportClaudeSettingsOptions,
-  result: ClaudeImportExecutionResult,
+  result: MutableImportResult,
   scopePlan: ReturnType<typeof buildClaudeImportPlan>["scopes"][number],
 ): Promise<void> {
   const loadState = stateLoader(opts.deps);
   const addMarketplace = addMarketplaceFn(opts.deps);
   const installPlugin = installPluginFn(opts.deps);
-  const state = await loadState(scopePlan.scope, opts.cwd);
+
+  let state: ExtensionState;
+  try {
+    state = await loadState(scopePlan.scope, opts.cwd);
+  } catch (err) {
+    pushDiagnostic(
+      result,
+      scopePlan.scope,
+      "settings-read-error",
+      `Cannot read ${scopePlan.scope} scope state: ${errorMessage(err)}`,
+    );
+    return;
+  }
+
   const blockedMarketplaces = new Set<string>();
 
   for (const marketplace of scopePlan.marketplacesToEnsure) {
     const existing = state.marketplaces[marketplace.marketplace];
     if (existing !== undefined) {
-      if (samePlannedSource(existing.source, marketplace.source)) {
+      const sourceMatch = samePlannedSource(existing.source, marketplace.source);
+      if (sourceMatch === "unknown-stored") {
+        // The stored source record is in an unrecognized format (e.g. manually
+        // edited state.json). Block dependent plugins and emit a clear diagnostic
+        // rather than a misleading source-mismatch message.
+        blockedMarketplaces.add(marketplace.marketplace);
+        pushDiagnostic(
+          result,
+          marketplace.scope,
+          "unrecognized-stored-source",
+          `Marketplace "${marketplace.marketplace}" has an unrecognized stored source format. Verify state.json or remove and re-add the marketplace.`,
+          { marketplace: marketplace.marketplace },
+        );
+      } else if (sourceMatch) {
         result.skippedExistingMarketplaces.push({
           kind: "marketplace-skip",
           scope: marketplace.scope,
@@ -415,7 +482,7 @@ async function executeScopedPlan(
       cwd: opts.cwd,
       marketplace: plugin.ref.marketplace,
       plugin: plugin.ref.plugin,
-      notifications: { reloadHint: "suppress", returnOutcome: true },
+      notifications: { mode: "orchestrated" },
     });
 
     switch (outcome.status) {
@@ -430,6 +497,13 @@ async function executeScopedPlan(
           resourcesChanged: outcome.resourcesChanged,
         });
         result.changedResources ||= outcome.resourcesChanged;
+        // Surface any post-commit warnings collected in orchestrated mode.
+        for (const w of outcome.postCommitWarnings ?? []) {
+          pushDiagnostic(result, plugin.scope, "post-install-warning", w, {
+            ref: refLabel(plugin),
+          });
+        }
+
         break;
       case "already-installed":
         result.skippedExistingPlugins.push({
@@ -466,29 +540,36 @@ export async function importClaudeSettings(
   opts: ImportClaudeSettingsOptions,
 ): Promise<ClaudeImportExecutionResult> {
   const result = emptyResult();
-  const loadSettings = settingsLoader(opts.deps);
-  const settingsResults = await Promise.all(
-    opts.selectedScopes.map(async (scope) => ({
-      scope,
-      loaded: await loadSettings(scope, { cwd: opts.cwd }),
-    })),
-  );
+  try {
+    const loadSettings = settingsLoader(opts.deps);
+    const settingsResults = await Promise.all(
+      opts.selectedScopes.map(async (scope) => ({
+        scope,
+        loaded: await loadSettings(scope, { cwd: opts.cwd }),
+      })),
+    );
 
-  for (const loaded of settingsResults) {
-    result.diagnostics.push(...loaded.loaded.diagnostics);
-  }
+    for (const loaded of settingsResults) {
+      result.diagnostics.push(...loaded.loaded.diagnostics);
+    }
 
-  const plan = buildClaudeImportPlan(
-    settingsResults.map((entry) => ({ scope: entry.scope, settings: entry.loaded.settings })),
-  );
-  result.diagnostics.push(...plan.diagnostics);
+    const plan = buildClaudeImportPlan(
+      settingsResults.map((entry) => ({ scope: entry.scope, settings: entry.loaded.settings })),
+    );
+    result.diagnostics.push(...plan.diagnostics);
 
-  for (const scopePlan of plan.scopes) {
-    await executeScopedPlan(opts, result, scopePlan);
+    for (const scopePlan of plan.scopes) {
+      await executeScopedPlan(opts, result, scopePlan);
+    }
+  } catch (err) {
+    notifyError(opts.ctx, `Import failed: ${errorMessage(err)}`, err);
+    return result;
   }
 
   const summary = formatClaudeImportSummary(result);
-  if (hasWarnings(result)) {
+  if (result.unexpectedPluginFailures.length > 0) {
+    notifyError(opts.ctx, summary);
+  } else if (hasWarnings(result)) {
     notifyWarning(opts.ctx, summary);
   } else {
     notifySuccess(opts.ctx, summary);

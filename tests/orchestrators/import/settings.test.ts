@@ -101,6 +101,56 @@ test("mergeClaudeSettings shallow merges known sections with local override", ()
   });
 });
 
+test("loadMergedClaudeSettingsForScope treats absent settings.local.json as empty without diagnostics", async () => {
+  const { dir, cleanup } = await tempDir();
+  try {
+    await writeFile(
+      path.join(dir, "settings.json"),
+      JSON.stringify({ enabledPlugins: { "base@mp": true } }),
+    );
+    // settings.local.json intentionally absent
+
+    const got = await loadMergedClaudeSettingsForScope("user", { claudeConfigDir: dir });
+    assert.deepEqual(got.settings.enabledPlugins, { "base@mp": true });
+    assert.deepEqual(got.diagnostics, []);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("resolveClaudeSettingsPaths uses CLAUDE_CONFIG_DIR env var when absolute", () => {
+  const originalEnv = process.env.CLAUDE_CONFIG_DIR;
+  try {
+    process.env.CLAUDE_CONFIG_DIR = "/tmp/env-claude-config";
+    const got = resolveClaudeSettingsPaths("user", {});
+    assert.equal(got.basePath, path.join("/tmp/env-claude-config", "settings.json"));
+    assert.equal(got.localPath, path.join("/tmp/env-claude-config", "settings.local.json"));
+  } finally {
+    if (originalEnv === undefined) {
+      delete process.env.CLAUDE_CONFIG_DIR;
+    } else {
+      process.env.CLAUDE_CONFIG_DIR = originalEnv;
+    }
+  }
+});
+
+test("loadMergedClaudeSettingsForScope emits diagnostic when CLAUDE_CONFIG_DIR is not absolute", async () => {
+  const originalEnv = process.env.CLAUDE_CONFIG_DIR;
+  try {
+    process.env.CLAUDE_CONFIG_DIR = "relative/path";
+    const got = await loadMergedClaudeSettingsForScope("user", {});
+    assert.equal(got.diagnostics.length, 1);
+    assert.equal(got.diagnostics[0]?.code, "invalid-claude-config-dir");
+    assert.match(got.diagnostics[0]?.message ?? "", /relative\/path/);
+  } finally {
+    if (originalEnv === undefined) {
+      delete process.env.CLAUDE_CONFIG_DIR;
+    } else {
+      process.env.CLAUDE_CONFIG_DIR = originalEnv;
+    }
+  }
+});
+
 test("mergeClaudeSettings treats non-object known sections as empty", () => {
   const got = mergeClaudeSettings(
     { enabledPlugins: "bad", extraKnownMarketplaces: null },

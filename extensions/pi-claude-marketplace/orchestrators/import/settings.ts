@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import { errorMessage } from "../../shared/errors.ts";
+
 import type {
   ClaudeSettingsPaths,
   ClaudeSettingsReadOptions,
@@ -28,10 +30,12 @@ export function resolveClaudeSettingsPaths(
   options: ClaudeSettingsReadOptions = {},
 ): ClaudeSettingsPaths {
   if (scope === "user") {
-    const claudeRoot =
-      options.claudeConfigDir ??
-      process.env.CLAUDE_CONFIG_DIR ??
-      path.join(os.homedir(), ".claude");
+    const envDir = process.env.CLAUDE_CONFIG_DIR;
+    // Only use CLAUDE_CONFIG_DIR if it is an absolute path; a relative path or
+    // empty string would resolve against process.cwd(), which is wrong and
+    // could silently read from an unintended location.
+    const envDirValid = envDir !== undefined && path.isAbsolute(envDir) ? envDir : undefined;
+    const claudeRoot = options.claudeConfigDir ?? envDirValid ?? path.join(os.homedir(), ".claude");
     return {
       basePath: path.join(claudeRoot, "settings.json"),
       localPath: path.join(claudeRoot, "settings.local.json"),
@@ -66,7 +70,7 @@ async function readClaudeSettingsFile(
           scope,
           code: "settings-read-error",
           path: filePath,
-          message: `Unable to read Claude ${kind} settings file: ${(err as Error).message}`,
+          message: `Unable to read Claude ${kind} settings file: ${errorMessage(err)}`,
         },
       ],
     };
@@ -84,7 +88,7 @@ async function readClaudeSettingsFile(
           scope,
           code: "malformed-json",
           path: filePath,
-          message: `Ignoring malformed Claude ${kind} settings JSON: ${(err as Error).message}`,
+          message: `Ignoring malformed Claude ${kind} settings JSON: ${errorMessage(err)}`,
         },
       ],
     };
@@ -111,6 +115,21 @@ export async function loadMergedClaudeSettingsForScope(
   scope: Scope,
   options: ClaudeSettingsReadOptions = {},
 ): Promise<MergedClaudeSettingsResult> {
+  const diagnostics: ImportDiagnostic[] = [];
+
+  // Warn when CLAUDE_CONFIG_DIR is set but not usable as an absolute path.
+  if (scope === "user" && options.claudeConfigDir === undefined) {
+    const envDir = process.env.CLAUDE_CONFIG_DIR;
+    if (envDir !== undefined && !path.isAbsolute(envDir)) {
+      diagnostics.push({
+        severity: "warning",
+        scope,
+        code: "invalid-claude-config-dir",
+        message: `CLAUDE_CONFIG_DIR is not an absolute path ("${envDir}"); falling back to ~/.claude.`,
+      });
+    }
+  }
+
   const paths = resolveClaudeSettingsPaths(scope, options);
   const base = await readClaudeSettingsFile(scope, paths.basePath, "base");
   const local = await readClaudeSettingsFile(scope, paths.localPath, "local");
@@ -118,6 +137,6 @@ export async function loadMergedClaudeSettingsForScope(
   return {
     paths,
     settings: mergeClaudeSettings(base.settings, local.settings),
-    diagnostics: [...base.diagnostics, ...local.diagnostics],
+    diagnostics: [...diagnostics, ...base.diagnostics, ...local.diagnostics],
   };
 }

@@ -3,7 +3,8 @@ import {
   type ClaudeImportExecutionResult,
   type ImportClaudeSettingsOptions,
 } from "../../../orchestrators/import/execute.ts";
-import { notifyUsageError } from "../../../shared/notify.ts";
+import { errorMessage } from "../../../shared/errors.ts";
+import { notifyError, notifyUsageError } from "../../../shared/notify.ts";
 import { parseArgs } from "../../args.ts";
 
 import type { GitOps } from "../../../orchestrators/marketplace/shared.ts";
@@ -36,12 +37,16 @@ export function makeImportHandler(
       return;
     }
 
-    await (deps.importClaudeSettings ?? importClaudeSettings)({
-      ctx,
-      pi,
-      cwd: ctx.cwd,
-      selectedScopes: parsed.scope === undefined ? ["user", "project"] : [parsed.scope],
-      gitOps: deps.gitOps,
-    });
+    try {
+      await (deps.importClaudeSettings ?? importClaudeSettings)({
+        ctx,
+        pi,
+        cwd: ctx.cwd,
+        selectedScopes: parsed.scope === undefined ? ["user", "project"] : [parsed.scope],
+        gitOps: deps.gitOps,
+      });
+    } catch (err) {
+      notifyError(ctx, `Import encountered an unexpected error: ${errorMessage(err)}`, err);
+    }
   };
 }

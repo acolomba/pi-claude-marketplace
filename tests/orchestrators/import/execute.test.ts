@@ -290,8 +290,91 @@ test("importClaudeSettings classifies unavailable and unexpected plugin failures
   assert.deepEqual(attempted, ["missing", "boom", "ok"]);
   assert.equal(result.warnings.find((w) => w.ref === "missing@mp")?.cause, "not found");
   assert.equal(result.unexpectedPluginFailures[0]?.cause, "disk full");
-  assert.equal(notifications[0]?.severity, "warning");
+  // unexpected-failure outcomes escalate the summary notification to error severity.
+  assert.equal(notifications[0]?.severity, "error");
   assert.equal((notifications[0]?.message.match(/Run \/reload/g) ?? []).length, 1);
+});
+
+test("importClaudeSettings classifies uninstallable plugins as warnings without aborting others", async () => {
+  const { ctx, pi } = makeCtx();
+  const attempted: string[] = [];
+
+  const result = await importClaudeSettings({
+    ctx,
+    pi,
+    cwd: "/tmp/project",
+    selectedScopes: ["user"],
+    deps: {
+      loadSettings: async () => ({
+        paths: { basePath: "base", localPath: "local" },
+        settings: {
+          enabledPlugins: { "blocked@mp": true, "ok@mp": true },
+          extraKnownMarketplaces: { mp: { directory: "./mp" } },
+        },
+        diagnostics: [],
+      }),
+      loadState: async () => ({
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "user",
+            source: { kind: "path", raw: "./mp", logical: "./mp" },
+            addedFromCwd: "/tmp/project",
+            manifestPath: "/tmp/mp/.claude-plugin/marketplace.json",
+            marketplaceRoot: "/tmp/mp",
+            plugins: {},
+          },
+        },
+      }),
+      addMarketplace: async () => undefined,
+      installPlugin: async (opts) => {
+        attempted.push(opts.plugin);
+        if (opts.plugin === "blocked") {
+          return { status: "uninstallable", cause: "requires unsupported tool" };
+        }
+
+        return { status: "installed", resourcesChanged: false };
+      },
+    },
+  });
+
+  assert.deepEqual(attempted, ["blocked", "ok"]);
+  assert.equal(result.warnings.find((w) => w.ref === "blocked@mp")?.reason, "uninstallable");
+  assert.equal(
+    result.warnings.find((w) => w.ref === "blocked@mp")?.cause,
+    "requires unsupported tool",
+  );
+  assert.equal(result.installedPlugins[0]?.ref, "ok@mp");
+});
+
+test("formatClaudeImportSummary includes Run /reload when changedResources is true", () => {
+  const result: ClaudeImportExecutionResult = {
+    addedMarketplaces: [],
+    installedPlugins: [
+      {
+        kind: "plugin-installed",
+        scope: "user",
+        plugin: "my-plugin",
+        marketplace: "mp",
+        ref: "my-plugin@mp",
+        reason: "installed",
+        resourcesChanged: true,
+      },
+    ],
+    skippedExistingMarketplaces: [],
+    skippedExistingPlugins: [],
+    warnings: [],
+    marketplaceFailures: [],
+    sourceMismatches: [],
+    unexpectedPluginFailures: [],
+    diagnostics: [],
+    changedResources: true,
+  };
+
+  const summary = formatClaudeImportSummary(result);
+  assert.match(summary, /Run \/reload/);
+  assert.match(summary, /my-plugin@mp/);
 });
 
 test("importClaudeSettings keeps user and project operations independent", async () => {
