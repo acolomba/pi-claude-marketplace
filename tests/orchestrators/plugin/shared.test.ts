@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   assertNoCrossPluginConflicts,
+  resolveInstalledMarketplaceTarget,
+  resolveInstalledPluginTarget,
   type CrossPluginGeneratedNames,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { CrossPluginConflictError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -48,12 +54,13 @@ function makePluginRecord(over: { resources?: Partial<PluginRecord["resources"]>
 function makeMarketplaceRecord(
   name: string,
   plugins: Record<string, PluginRecord>,
+  scope: "user" | "project" = "user",
 ): MarketplaceRecord {
   const cwd = "/tmp/test-cwd";
 
   return {
     name,
-    scope: "user",
+    scope,
     source: pathSource("./src"),
     addedFromCwd: cwd,
     manifestPath: path.join(cwd, "marketplace.json"),
@@ -200,5 +207,74 @@ test("PI-6 / D-05 case E: cross-scope independence -- helper trusts caller passe
   };
   assert.doesNotThrow(() => {
     assertNoCrossPluginConflicts("user", names, thisScopeState);
+  });
+});
+
+async function withTmpCwd<T>(fn: (cwd: string) => Promise<T>): Promise<T> {
+  const cwd = await mkdtemp(path.join(tmpdir(), "plugin-shared-cmp-"));
+  try {
+    return await fn(cwd);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+}
+
+async function saveScopedState(
+  cwd: string,
+  scope: "user" | "project",
+  marketplaces: Record<string, Record<string, PluginRecord>>,
+): Promise<void> {
+  const locations = locationsFor(scope, cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 1,
+    marketplaces: Object.fromEntries(
+      Object.entries(marketplaces).map(([mpName, plugins]) => [
+        mpName,
+        makeMarketplaceRecord(mpName, plugins, scope),
+      ]),
+    ),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// CMP-5 -- unqualified installed-plugin target resolution.
+// ---------------------------------------------------------------------------
+
+test("CMP-5 :: unqualified plugin target prefers project install over user install", async () => {
+  await withTmpCwd(async (cwd) => {
+    await saveScopedState(cwd, "user", { mp: { plug: makePluginRecord({}) } });
+    await saveScopedState(cwd, "project", { mp: { plug: makePluginRecord({}) } });
+
+    const resolved = await resolveInstalledPluginTarget({ cwd, marketplace: "mp", plugin: "plug" });
+
+    assert.equal(resolved?.scope, "project");
+  });
+});
+
+test("CMP-5 :: explicit user scope overrides project-precedence for plugin target", async () => {
+  await withTmpCwd(async (cwd) => {
+    await saveScopedState(cwd, "user", { mp: { plug: makePluginRecord({}) } });
+    await saveScopedState(cwd, "project", { mp: { plug: makePluginRecord({}) } });
+
+    const resolved = await resolveInstalledPluginTarget({
+      cwd,
+      marketplace: "mp",
+      plugin: "plug",
+      explicitScope: "user",
+    });
+
+    assert.equal(resolved?.scope, "user");
+  });
+});
+
+test("CMP-5 :: unqualified marketplace target prefers project when both scopes have installs", async () => {
+  await withTmpCwd(async (cwd) => {
+    await saveScopedState(cwd, "user", { mp: { plug: makePluginRecord({}) } });
+    await saveScopedState(cwd, "project", { mp: { plug: makePluginRecord({}) } });
+
+    const resolved = await resolveInstalledMarketplaceTarget({ cwd, marketplace: "mp" });
+
+    assert.equal(resolved.scope, "project");
   });
 });

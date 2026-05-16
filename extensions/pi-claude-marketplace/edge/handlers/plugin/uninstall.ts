@@ -24,7 +24,7 @@ export function makeUninstallHandler(
     await uninstallPlugin({
       ctx,
       pi,
-      scope: parsed.scope,
+      ...(parsed.scope !== undefined && { scope: parsed.scope }),
       cwd: ctx.cwd,
       marketplace: parsed.marketplace,
       plugin: parsed.plugin,

@@ -32,7 +32,9 @@ interface ResolverFixture {
 }
 
 async function makeResolver(spec: {
-  readonly state: Partial<Record<Scope, Record<string, { manifestPath?: string }>>>;
+  readonly state: Partial<
+    Record<Scope, Record<string, { manifestPath?: string; plugins?: Record<string, unknown> }>>
+  >;
   readonly manifests: Partial<Record<Scope, Record<string, readonly PluginIndexRow[]>>>;
 }): Promise<ResolverFixture> {
   const dir = await mkdtemp(path.join(os.tmpdir(), "data-test-"));
@@ -46,7 +48,7 @@ async function makeResolver(spec: {
     },
 
     loadStateForScope(scope: Scope): Promise<{
-      marketplaces: Record<string, { manifestPath?: string }>;
+      marketplaces: Record<string, { manifestPath?: string; plugins?: Record<string, unknown> }>;
     }> {
       const scopeState = spec.state[scope];
       if (scopeState === undefined) {
@@ -139,7 +141,7 @@ test("getMarketplaceNamesAcrossScopes :: dedupes overlapping names from user and
   }
 });
 
-test("getPluginToMarketplacesMap :: install mode filters status === installed out, keeps available + unavailable", async () => {
+test("getPluginToMarketplacesMap :: install mode is available-only for target scope", async () => {
   __resetCacheForTests();
   const fixture = await makeResolver({
     state: { user: { mp: {} }, project: {} },
@@ -156,10 +158,9 @@ test("getPluginToMarketplacesMap :: install mode filters status === installed ou
   });
   try {
     const map = await getPluginToMarketplacesMap("install", fixture.resolver);
-    // p-installed must be excluded; p-avail + p-unavail (D-03 corollary) must remain.
     assert.equal(map.has("p-installed"), false);
     assert.deepEqual(map.get("p-avail"), ["mp"]);
-    assert.deepEqual(map.get("p-unavail"), ["mp"]);
+    assert.equal(map.has("p-unavail"), false);
   } finally {
     await fixture.cleanup();
   }
@@ -229,10 +230,78 @@ test("getPluginToMarketplacesMap :: cross-marketplace plugin appears with both m
     },
   });
   try {
-    const map = await getPluginToMarketplacesMap("uninstall", fixture.resolver);
+    const map = await getPluginToMarketplacesMap("uninstall", fixture.resolver, {
+      targetScope: "user",
+    });
     const mps = map.get("shared");
     assert.ok(mps !== undefined);
     assert.deepEqual([...mps].sort(), ["mp-a", "mp-b"]);
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// CMP-6..8 scope-aware install completion rules.
+// ---------------------------------------------------------------------------
+
+test("CMP-7 :: install completion excludes plugins already installed in the target scope", async () => {
+  __resetCacheForTests();
+  const fixture = await makeResolver({
+    state: { user: { mp: { plugins: { already: {} } } }, project: {} },
+    manifests: {
+      user: {
+        mp: [
+          { name: "already", status: "available" },
+          { name: "fresh", status: "available" },
+        ],
+      },
+      project: {},
+    },
+  });
+  try {
+    const map = await getPluginToMarketplacesMap("install", fixture.resolver);
+    assert.equal(map.has("already"), false);
+    assert.deepEqual(map.get("fresh"), ["mp"]);
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("CMP-8 :: project install completion falls back to user marketplace when project marketplace absent", async () => {
+  __resetCacheForTests();
+  const fixture = await makeResolver({
+    state: { user: { mp: {} }, project: {} },
+    manifests: {
+      user: { mp: [{ name: "fallback", status: "available" }] },
+      project: {},
+    },
+  });
+  try {
+    const map = await getPluginToMarketplacesMap("install", fixture.resolver, {
+      targetScope: "project",
+    });
+    assert.deepEqual(map.get("fallback"), ["mp"]);
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("CMP-8 :: project marketplace shadows same-named user marketplace for install completion", async () => {
+  __resetCacheForTests();
+  const fixture = await makeResolver({
+    state: { user: { mp: {} }, project: { mp: {} } },
+    manifests: {
+      user: { mp: [{ name: "user-only", status: "available" }] },
+      project: { mp: [{ name: "project-only", status: "available" }] },
+    },
+  });
+  try {
+    const map = await getPluginToMarketplacesMap("install", fixture.resolver, {
+      targetScope: "project",
+    });
+    assert.deepEqual(map.get("project-only"), ["mp"]);
+    assert.equal(map.has("user-only"), false);
   } finally {
     await fixture.cleanup();
   }

@@ -523,13 +523,16 @@ test("TC-6 :: install <here> -- status filter excludes installed plugins", async
   }
 });
 
-test("TC-6 :: install <here> -- status filter INCLUDES unavailable plugins (D-03 corollary, future --force)", async () => {
+test("TC-6 / CMP-7 :: install <here> excludes unavailable plugins", async () => {
   __resetCacheForTests();
   const f = await makeFixture({
     state: { user: { mp: {} }, project: {} },
     manifests: {
       user: {
-        mp: [{ name: "p-unavail", status: "unavailable" }],
+        mp: [
+          { name: "p-avail", status: "available" },
+          { name: "p-unavail", status: "unavailable" },
+        ],
       },
       project: {},
     },
@@ -538,7 +541,52 @@ test("TC-6 :: install <here> -- status filter INCLUDES unavailable plugins (D-03
     const items = await getArgumentCompletions("install ", f.resolver);
     assert.ok(items !== null);
     const labels = items.map((i) => i.label);
-    assert.ok(labels.some((l) => l.startsWith("p-unavail")));
+    assert.ok(labels.some((l) => l.startsWith("p-avail")));
+    assert.equal(
+      labels.some((l) => l.startsWith("p-unavail")),
+      false,
+    );
+  } finally {
+    await f.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// CMP-6..8 -- scope-aware install completion.
+// ---------------------------------------------------------------------------
+
+test("CMP-8 :: install --scope project completes from user marketplace fallback", async () => {
+  __resetCacheForTests();
+  const f = await makeFixture({
+    state: { user: { mp: {} }, project: {} },
+    manifests: { user: { mp: [{ name: "fallback", status: "available" }] }, project: {} },
+  });
+  try {
+    const items = await getArgumentCompletions("install --scope project fall", f.resolver);
+    assert.ok(items !== null);
+    assert.deepEqual(
+      items.map((i) => i.label),
+      ["fallback@mp"],
+    );
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("CMP-8 :: project marketplace shadows same-named user marketplace in install completion", async () => {
+  __resetCacheForTests();
+  const f = await makeFixture({
+    state: { user: { mp: {} }, project: { mp: {} } },
+    manifests: {
+      user: { mp: [{ name: "user-only", status: "available" }] },
+      project: { mp: [{ name: "project-only", status: "available" }] },
+    },
+  });
+  try {
+    const items = await getArgumentCompletions("install --scope project ", f.resolver);
+    assert.ok(items !== null);
+    const labels = items.map((i) => i.label);
+    assert.deepEqual(labels, ["project-only@mp"]);
   } finally {
     await f.cleanup();
   }

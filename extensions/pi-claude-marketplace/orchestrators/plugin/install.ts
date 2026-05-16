@@ -70,7 +70,9 @@ import { formatErrorWithCauses } from "../marketplace/shared.ts";
 
 import {
   assertNoCrossPluginConflicts,
+  cloneMarketplaceRecordForTargetScope,
   pickAgentsSourceDir,
+  resolveInstallMarketplaceSource,
   resolvePluginVersion,
 } from "./shared.ts";
 
@@ -178,17 +180,34 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<void> {
 
   try {
     await withStateGuard(locations, async (state) => {
-      // PI-3: marketplace lookup -- absent marketplace is a hard fail.
-      const mp = state.marketplaces[marketplace];
-      if (mp === undefined) {
+      // CMP-2..4 / PI-16: resolve the source marketplace separately from
+      // the target scope being mutated. Project-target installs can fall
+      // back to a user-scope marketplace; user-target installs cannot read
+      // project-only marketplaces.
+      const source = await resolveInstallMarketplaceSource({
+        targetScope: scope,
+        cwd,
+        marketplace,
+        targetState: state,
+      });
+      if (source === undefined) {
         throw new Error(`Plugin "${plugin}" not found in marketplace "${marketplace}".`);
       }
 
+      // Target container: same scope record when present, or a cloned
+      // project-scope container when CMP-3 fell back to user marketplace.
+      let targetMp = state.marketplaces[marketplace];
+      if (targetMp === undefined) {
+        targetMp = cloneMarketplaceRecordForTargetScope(source.sourceRecord, scope);
+        state.marketplaces[marketplace] = targetMp;
+      }
+
       // PI-15 early-sanity check (Pitfall 3 layer (a)): if the record already
-      // exists we throw ConcurrentInstallError BEFORE running the ledger,
-      // avoiding any disk write. Layer (b) re-checks inside the state-commit
-      // phase defensively in case of intra-process re-entry.
-      if (mp.plugins[plugin] !== undefined) {
+      // exists in the target scope we throw ConcurrentInstallError BEFORE
+      // running the ledger, avoiding any disk write. Layer (b) re-checks
+      // inside the state-commit phase defensively in case of intra-process
+      // re-entry. PI-17: other-scope installs do not block this target.
+      if (targetMp.plugins[plugin] !== undefined) {
         // PI-5: already-installed AND PI-15 early-sanity collapse onto the same
         // path here. Per CONTEXT.md "Open questions" researcher recommendation,
         // surface PI-5 wording at the early-sanity check (the user-visible
@@ -199,7 +218,8 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<void> {
 
       // PI-2 cached-manifest read -- NO network, no gitOps. PI-3: entry must
       // exist in the manifest plugins[] array.
-      const manifest = await loadCachedMarketplaceManifest(mp.manifestPath);
+      const sourceMp = source.sourceRecord;
+      const manifest = await loadCachedMarketplaceManifest(sourceMp.manifestPath);
       const entryRaw = manifest.plugins.find((p) => p.name === plugin);
       if (entryRaw === undefined) {
         throw new Error(`Plugin "${plugin}" not found in marketplace "${marketplace}".`);
@@ -222,7 +242,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<void> {
       // COMP-01) and either returns an installable variant or surfaces
       // disqualification notes. requireInstallable narrows the discriminated
       // union and throws on the not-installable variant.
-      const resolved = await resolveStrict(entry, { marketplaceRoot: mp.marketplaceRoot });
+      const resolved = await resolveStrict(entry, { marketplaceRoot: sourceMp.marketplaceRoot });
       requireInstallable(resolved, "install");
       // After requireInstallable, `resolved` is narrowed to the installable
       // variant; pluginRoot etc. are reachable.

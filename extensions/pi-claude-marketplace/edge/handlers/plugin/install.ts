@@ -35,7 +35,7 @@ export function makeInstallHandler(
     await installPlugin({
       ctx,
       pi,
-      scope: parsed.scope,
+      scope: parsed.scope ?? "user",
       cwd: ctx.cwd,
       marketplace: parsed.marketplace,
       plugin: parsed.plugin,

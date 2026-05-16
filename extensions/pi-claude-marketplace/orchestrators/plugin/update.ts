@@ -83,13 +83,14 @@ import {
   formatErrorWithCauses,
   refreshGitHubClone,
   renderPartition,
-  resolveScopeFromState,
   type GitOps,
 } from "../marketplace/shared.ts";
 
 import {
   assertNoCrossPluginConflicts,
   pickAgentsSourceDir,
+  resolveInstalledMarketplaceTarget,
+  resolveInstalledPluginTarget,
   resolvePluginVersion,
 } from "./shared.ts";
 
@@ -830,9 +831,23 @@ async function enumerateMarketplaceTarget(
 ): Promise<readonly ResolvedTarget[]> {
   const mpName = target.marketplace;
   const resolved =
-    explicitScope === undefined
-      ? await resolveScopeFromState(mpName, locationsFor("user", cwd), locationsFor("project", cwd))
-      : { scope: explicitScope, locations: locationsFor(explicitScope, cwd) };
+    target.kind === "plugin"
+      ? ((await resolveInstalledPluginTarget({
+          cwd,
+          marketplace: mpName,
+          plugin: target.plugin,
+          ...(explicitScope !== undefined && { explicitScope }),
+        })) ??
+        (await resolveInstalledMarketplaceTarget({
+          cwd,
+          marketplace: mpName,
+          ...(explicitScope !== undefined && { explicitScope }),
+        })))
+      : await resolveInstalledMarketplaceTarget({
+          cwd,
+          marketplace: mpName,
+          ...(explicitScope !== undefined && { explicitScope }),
+        });
   const state = await loadState(resolved.locations.extensionRoot);
   const mp = state.marketplaces[mpName];
   if (mp === undefined) {

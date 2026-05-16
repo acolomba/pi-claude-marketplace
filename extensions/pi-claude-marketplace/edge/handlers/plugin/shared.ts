@@ -12,7 +12,7 @@ export interface PluginMarketplaceRef {
 }
 
 export interface ParsedPluginMarketplaceRef extends PluginMarketplaceRef {
-  readonly scope: Scope;
+  readonly scope?: Scope;
 }
 
 export function splitPluginMarketplaceRef(ref: string): PluginMarketplaceRef | undefined {
@@ -54,6 +54,6 @@ export function parseRequiredPluginMarketplaceRef(
 
   return {
     ...ref,
-    scope: parsed.scope ?? "user",
+    ...(parsed.scope !== undefined && { scope: parsed.scope }),
   };
 }
