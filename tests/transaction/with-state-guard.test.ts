@@ -496,30 +496,73 @@ test("Phase 8 / PRL-10 manual transaction surfaces StateLockHeldError when scope
   }
 });
 
-test("Phase 8 / PRL-10 manual transaction surfaces release errors when callback succeeds", async () => {
+test("Phase 8 / PRL-10 manual transaction surfaces release errors when callback succeeds", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("POSIX-only chmod 0 failure path");
+    return;
+  }
+
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    t.skip("running as root -- chmod 0 does not block unlink");
+    return;
+  }
+
+  const { chmod: chmodFn } = await import("node:fs/promises");
   const { loc, cleanup } = await setupTmpScope();
+  const lockParent = path.dirname(loc.stateLockFile);
+
   try {
-    // Acquire the real scope lock first so the inner transaction observes
-    // a held lock. The transaction will then fail at acquireStateLock with
-    // an ELOCKED error that does NOT come back as StateLockHeldError because
-    // the inner code path treats anything not flagged as lock-held as a
-    // plain failure -- this covers the `throw toError(err)` branch for the
-    // non-lock-held error path.
-    //
-    // To trigger the lock-release-error path (lines 147-150) we need a
-    // successful run() but a release that fails. proper-lockfile's release
-    // throws if the lockfile no longer exists when we call release(); we
-    // achieve that by removing the lockfile from disk during the callback.
-    await withLockedStateTransaction(loc, async () => {
-      await rm(loc.stateLockFile, { recursive: true, force: true });
-    }).catch((err: unknown) => {
-      // The release call inside finally throws because the lockfile is
-      // gone; that throw becomes the primary error since the callback
-      // succeeded. Assert the surfaced error mentions the lock so we know
-      // we hit the right branch.
-      assert.match((err as Error).message, /Lock is not acquired|lock/i);
-    });
+    let releaseError: Error | undefined;
+    try {
+      await withLockedStateTransaction(loc, async () => {
+        // Chmod the lockfile's parent dir to read-only so proper-lockfile's
+        // release() cannot unlink the sentinel during finally. The release
+        // throw is surfaced as primaryError because the callback succeeded,
+        // exercising the `primaryError = releaseErr` branch.
+        await chmodFn(lockParent, 0o500);
+      });
+    } catch (err) {
+      releaseError = err as Error;
+    }
+
+    assert.ok(releaseError !== undefined, "release() should have failed and surfaced");
   } finally {
+    await chmodFn(lockParent, 0o755);
+    await cleanup();
+  }
+});
+
+test("ST-7 withStateGuard surfaces release errors when mutate succeeds", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("POSIX-only chmod 0 failure path");
+    return;
+  }
+
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    t.skip("running as root -- chmod 0 does not block unlink");
+    return;
+  }
+
+  const { chmod: chmodFn } = await import("node:fs/promises");
+  const { loc, cleanup } = await setupTmpScope();
+  const lockParent = path.dirname(loc.stateLockFile);
+
+  try {
+    let releaseError: Error | undefined;
+    try {
+      await withStateGuard(loc, async () => {
+        // Same chmod trick used for the locked-transaction variant: the
+        // unlink in finally fails, so the release error surfaces as the
+        // primary error since mutate succeeded.
+        await chmodFn(lockParent, 0o500);
+      });
+    } catch (err) {
+      releaseError = err as Error;
+    }
+
+    assert.ok(releaseError !== undefined, "release() should have failed and surfaced");
+  } finally {
+    await chmodFn(lockParent, 0o755);
     await cleanup();
   }
 });
