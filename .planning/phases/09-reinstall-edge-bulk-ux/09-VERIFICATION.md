@@ -2,6 +2,8 @@
 phase: 09-reinstall-edge-bulk-ux
 status: passed
 verified: 2026-05-15T22:57:13Z
+reverified: 2026-05-16T00:00:00Z
+post_merge_status: passed
 score: 5/5
 requirements_verified: [PRL-01, PRL-03, PRL-04, PRL-05, PRL-13, PRL-14, PRL-15, PRL-16]
 review_status: passed_after_uat_gap_fixes
@@ -92,3 +94,19 @@ Initial UAT found three major gaps: stale marketplace-name completion, explicit-
 ## Conclusion
 
 Phase 09 is complete and verified. The reinstall command is user-facing, bulk-capable, scope-aware, completion-backed, documented, UAT-tested, and covered by focused and full-suite automated validation.
+
+## Post-Merge Re-verification (2026-05-16)
+
+**Context:** Merge commit `bd26932` brought origin/main into this branch. Main added bootstrap and import commands, refactored `edge/completions/data.ts` (split into `getInstallPluginToMarketplacesMap`/`getInstalledPluginToMarketplacesMap`, added target-scope-awareness), introduced CMP-1..8 scope rules, and added the AG-7 omit-model agent mapping quick task. The merge resolution kept reinstall's edge surface and required two follow-ups: collapsing four plugin-ref dispatch branches behind `pluginRefBranchConfig` (cognitive-complexity cap) and re-inlining `marketplaceNamesForScope` to bypass the marketplace-name cache (keeping the PRL-16 stale-cache regression test green for both reinstall and update modes).
+
+**Verdict:** PASSED — Phase 09 success criteria still hold post-merge.
+
+| Concern | Result |
+|---------|--------|
+| Router/register wiring | Verified: `TOP_LEVEL_SUBCOMMANDS` includes `reinstall` (router.ts:56), `TOP_LEVEL_USAGE` carries `reinstall [<plugin>@<marketplace> \| @<marketplace>] [--scope user\|project] [--force]` (router.ts:84), `routeClaudePlugin` dispatches `case "reinstall"` (router.ts:138), `register.ts:81` wires `makeReinstallHandler(pi)`, and `COMMAND_DESCRIPTION` ends "...and reinstall plugins from configured marketplaces" (register.ts:63). |
+| Completion wiring | Verified: `provider.ts`'s `pluginRefBranchConfig` returns `{ mode: "reinstall", allowMarketplaceOnly: true, targetScope: explicitScope? }` for reinstall; reinstall flows through main's new `getInstalledPluginToMarketplacesMap` which filters for `row.status === "installed"`. PRL-16 contract preserved despite the structural refactor. |
+| CMP-1..8 interaction | Composes correctly: `resolveScopeFromState` (orchestrators/marketplace/shared.ts:393) checks project first then user, matching CMP-5 project-precedence; explicit `--scope` overrides; bare `reinstall` iterates both scopes when no `--scope`. PRL-04 and CMP-5 don't conflict (PRL-04 is multi-target enumeration, CMP-5 is single-target precedence). |
+| PRL-05 cross-scope path | Verified: `enumerateMarketplaceReinstallTargets` (reinstall.ts:287) still returns a selected-scope plugin target that becomes `not installed` when the marketplace lives only in another scope. Test `PRL-05 explicit plugin reinstall in another scope reports not-installed instead of marketplace-not-found` passes. |
+| Stale marketplace-name cache (PRL-16 UAT regression) | Initially regressed after the merge (`marketplaceNamesForScope` used cached `getMarketplaceNames`); refixed by inlining `rebuildNamesForScope` so all marketplace-name reads in the completion dispatch bypass the cache. Test `PRL-16 :: reinstall @m ignores stale marketplace-name cache` passes. |
+| Targeted edge suite | Passed: `node --test "tests/edge/**/*.test.ts"` -- 207/207 tests green, including all 10 reinstall-related PRL-16 tests (top-level "rei", `--force` flag, installed-only mode, `--force` reaches installed refs, `@` marketplace-only, `@m` stale cache, plugin half multi-marketplace, soft-fail, state-error propagation). |
+| Full `npm run check` | Passed: typecheck + lint + format + 1010 tests, 0 failures. |
