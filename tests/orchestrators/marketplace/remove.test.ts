@@ -17,10 +17,7 @@ import {
   __resetCacheForTests,
   getMarketplaceNames,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import {
-  MarketplaceAmbiguousScopeError,
-  MarketplaceNotFoundError,
-} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -115,13 +112,12 @@ test("MR-1: --scope omitted + name not in either scope throws MarketplaceNotFoun
 
 // MR-1 ambiguous (dual-scope seed) ----------------------------------
 
-test("MR-1: same name in both scopes without --scope throws MarketplaceAmbiguousScopeError", async () => {
+test("MR-1: same name in both scopes without --scope removes project-scope record (CMP-5 precedence)", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-mr1-"));
     try {
-      const { ctx, pi } = makeCtx();
+      const { ctx, pi, notifications } = makeCtx();
 
-      // Seed BOTH scopes with the same marketplace name.
       const userLoc = locationsFor("user", cwd);
       const projLoc = locationsFor("project", cwd);
 
@@ -141,24 +137,17 @@ test("MR-1: same name in both scopes without --scope throws MarketplaceAmbiguous
         marketplaces: { "dup-name": { name: "dup-name", scope: "project", ...seed } },
       });
 
-      // No --scope -> MarketplaceAmbiguousScopeError.
-      await assert.rejects(
-        removeMarketplace({ ctx, pi, name: "dup-name", cwd }),
-        (err: unknown) => {
-          assert.ok(
-            err instanceof MarketplaceAmbiguousScopeError,
-            "must be MarketplaceAmbiguousScopeError",
-          );
-          assert.match(err.message, /both scopes|user.+project|ambiguous/i);
-          return true;
-        },
-      );
+      // No --scope -> project-scope takes precedence (CMP-5).
+      await removeMarketplace({ ctx, pi, name: "dup-name", cwd });
 
-      // Both records untouched (no partial mutation).
       const userAfter = await loadState(userLoc.extensionRoot);
       const projAfter = await loadState(projLoc.extensionRoot);
       assert.ok("dup-name" in userAfter.marketplaces, "user-scope record untouched");
-      assert.ok("dup-name" in projAfter.marketplaces, "project-scope record untouched");
+      assert.ok(!("dup-name" in projAfter.marketplaces), "project-scope record removed");
+      assert.match(
+        notifications[0]?.message ?? "",
+        /Removed marketplace "dup-name" from project scope/,
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

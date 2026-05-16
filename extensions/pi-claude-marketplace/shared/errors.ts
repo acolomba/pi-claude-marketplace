@@ -68,18 +68,6 @@ export class MarketplaceNotFoundError extends Error {
   }
 }
 
-/** MR-1: same name resolves in both user and project scopes; --scope required. */
-export class MarketplaceAmbiguousScopeError extends Error {
-  readonly mpName: string;
-  constructor(mpName: string) {
-    super(
-      `Marketplace "${mpName}" exists in both user and project scopes. Use --scope user or --scope project to disambiguate.`,
-    );
-    this.name = "MarketplaceAmbiguousScopeError";
-    this.mpName = mpName;
-  }
-}
-
 /** D-14 / MU-5: marketplace update failure preserves the retry-hint slot per MU-5. */
 export class MarketplaceUpdateError extends Error {
   readonly retryHint: string;
