@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.6] - 2026-05-16
+
+- Added convenience `import` command to install marketplaces and plugins defined in the Claude Code configuration.
+
 ## [0.1.5] - 2026-05-16
 
 - Added `/claude:plugin bootstrap` command: one-shot setup of the official Anthropic marketplace (`anthropics/claude-plugins-official`) in user scope with autoupdate enabled. Idempotent -- safe to re-run.
