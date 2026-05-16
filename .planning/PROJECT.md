@@ -36,11 +36,11 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 **Horizontal cross-cutting concerns (per PRD §6):**
 
 - [ ] Source parsing & validation -- `owner/repo`, `https://github.com/...[#<ref>]`, local paths (`/`, `./`, `../`, `~`)
-- [ ] Scopes & resolution -- exactly two scopes (`user`, `project`); typed `ScopedLocations` brand
+- [ ] Scopes & resolution -- exactly two scopes (`user`, `project`); typed `ScopedLocations` brand; explicit marketplace-source vs plugin-target scope rules
 - [ ] Manifest schema & strict mode -- strict-true union resolver, strict-false entry-only resolver
 - [ ] Plugin compatibility resolver -- discriminated `installable: true | false` union
 - [ ] Resource naming, generation & conflicts -- deterministic generated names, `assertSafeName`, cross-plugin/cross-marketplace guards
-- [ ] Tab completion -- `/claude:plugin` subcommand surface, `--scope` value completion, fish-style space normalization
+- [ ] Tab completion -- `/claude:plugin` subcommand surface, `--scope` value completion, fish-style space normalization, available-only install completion aligned with scope rules
 - [ ] Argument parsing -- quoted args, `--scope` validation, `Usage:` blocks
 - [ ] Reload hint & soft-dependency probing -- emit only on actual resource change; probe `subagent` / `mcp` tools
 - [ ] State persistence, migration & concurrency -- `state.json` schemaVersion 1, atomic save, `withStateGuard`, legacy migration
@@ -74,6 +74,7 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 - **Existing V1 implementation** lives in this repository on branch `features/initial`. The PRD documents that V1's surface, behavior, and contracts. The successor architecture project (this branch, `features/initial-gsd`) reuses the PRD as the spec; whether a given module is preserved, refactored, or rewritten is a per-phase planning decision.
 - **Personas served:** Pi end user (developer), project lead curating per-project marketplaces, plugin author verifying resolution, operator/power user diagnosing drift.
 - **Soft-dependency model is load-bearing:** `pi-subagents` (probed via `subagent` tool) and `pi-mcp-adapter` (probed via `mcp` tool name OR `sourceInfo.source` substring match for `pi-mcp-adapter`) MUST never block installs; absent soft deps degrade with explicit guidance and a reload hint.
+- **Marketplace/plugin scope split is explicit:** marketplaces can be configured in user or project scope, while plugin operations target a scope for writes. Project-target installs can source from project marketplaces first and user marketplaces second; user-target installs can source only from user marketplaces. The same plugin may be installed in both scopes, with project scope taking precedence for unqualified single-target operations.
 - **Stable user-contract strings (PRD §6.12 ES-5):** `pi-subagents is not loaded; …`, `pi-mcp-adapter is not loaded; …`, `Run /reload to <verb> …`, `MANUAL RECOVERY REQUIRED: …`, `(rollback partial: [<phase>] <msg>; …)`. These cannot drift without a contract break.
 - **State persistence surfaces (PRD §4):** `<scope>/pi-claude-marketplace/state.json`, `<scope>/pi-claude-marketplace/resources/{skills,prompts}/`, `<scope>/agents/pi-claude-marketplace-*.md`, `<scope>/mcp.json` -- plus `<scope>/pi-claude-marketplace/agents-index.json` for agent provenance.
 - **Tooling baseline already on `main`:** TypeScript strict, ESLint flat config, Prettier, `npm run check` = typecheck + lint + format + tests. Pre-commit hooks exclude `.claude/` (committed in `8cb247d` / `33aaaaa` series).
@@ -91,7 +92,7 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 - **Output channel:** All user-visible messages MUST go through `ctx.ui.notify(message, severity)`; direct `process.stdout`/`process.stderr` writes forbidden in command/bridge code (IL-2). Single sanctioned `console.warn` is the load-time legacy migration save failure (IL-3)
 - **No telemetry V1:** No metrics, no event sink, no analytics endpoint (IL-4)
 - **English only V1:** No message catalog, no locale negotiation (IL-1)
-- **Scope model:** Exactly two scopes -- `user` (`~/.pi/agent/`) and `project` (`<cwd>/.pi/`). Claude Code's `local` scope is not introduced (SC-1)
+- **Scope model:** Exactly two scopes -- `user` (`~/.pi/agent/`) and `project` (`<cwd>/.pi/`). Claude Code's `local` scope is not introduced (SC-1). Marketplace records and plugin install records are scoped independently per D-26 / CMP-1..8.
 
 ## Key Decisions
 
@@ -111,6 +112,7 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 | **D-23 (2026-05-10):** Adopt follow-upstream-blindly semantics for `marketplace update`; supersede PRD MU-2 and MU-3                | The local marketplace clone is read-only by contract -- the extension only clones, fetches, and checks out; it never commits, pushes, or modifies the working tree. Local-vs-upstream divergence cannot occur, so `pull --ff-only` and "non-fast-forward divergence as error" are no longer applicable. `marketplace update` therefore overrides the local branch ref to the remote SHA via `gitOps.forceUpdateRef` + `gitOps.checkout` (or checks out a detached SHA directly). Phase 4 implements this in `orchestrators/marketplace/update.ts` per CONTEXT.md D-14. Recorded by Plan 04-10. | -- Locked  |
 | **D-24 (2026-05-10):** Adopt COMP-01 (Gap 3) supplement-not-replace for plugin component-path arrays; supersede PRD PR-4 | The V1 resolver short-circuited implicit-by-convention detection whenever a manifest declared a `componentPaths.{skills,commands,agents}` value, making custom paths *replace* defaults rather than supplement them. Phase 5 D-07 corrects this vs upstream Claude Code behavior: `domain/resolver.ts`'s `ComponentPathsSchema` migrates from optional-string-per-kind to readonly-string-array-per-kind; strict resolver Step 7 computes a UNION of declared (entry > manifest) + implicit-by-convention (when the conventional dir exists), deduplicated by path with first-wins on collisions; loose resolver stays entry-only. Bridge `discover.ts` files iterate the array. Behavior corrected vs V1 per COMP-01 / Gap 3 -- see `.planning/phases/05-plugin-orchestrators/05-CONTEXT.md` D-07. Recorded by Plan 05-10; behavior change landed in Plan 05-03. | -- Locked  |
 | **D-25 (2026-05-11):** Adopt Phase 7 lock-held marker semantics; supersede PRD PI-15's old concurrent-install commit marker | Phase 7 D-08 moves cross-process conflict detection ahead of `withStateGuard` mutation by taking the per-scope `.state-lock` first. The loser now fails fast with `STATE_LOCK_HELD_PREFIX` (`Another pi-claude-marketplace operation is in progress for`) and retry guidance, so it never reaches the old `was installed concurrently` state-guard commit rollback path. This preserves retry safety while making the user-visible contract match the actual lock boundary. Recorded by Plan 07-06; behavior landed in Plan 07-04. | -- Locked  |
+| **D-26 (2026-05-15):** Clarify marketplace/plugin scope rules and install completion | Marketplaces are scoped records, but plugin operations write to a target scope. A project-target install may source from project scope first and user scope as fallback; a user-target install may source only from user scope. The same plugin may be installed in both scopes. Project scope takes precedence for unqualified single-target remove/update/reinstall-style operations, while explicit `--scope` overrides. Completion follows the same visibility rules, and `install` completion suggests only plugins available in the current target scope (installable and not already installed), not unavailable plugins. Recorded by quick task 260515-wpe. | -- Locked  |
 
 ## Evolution
 
@@ -132,6 +134,8 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ______________________________________________________________________
+
+*Last updated: 2026-05-15 -- D-26 added: marketplace/plugin scope semantics are explicit, project-target installs may source user-scope marketplaces as fallback, dual-scope plugin installs are allowed, project scope takes precedence for unqualified single-target operations, and install completion is available-only for the current target scope.*
 
 *Last updated: 2026-05-11 -- D-25 added: Phase 7 D-08 supersedes PRD PI-15's old concurrent-install marker. Concurrent operation losers now fail at per-scope lock acquisition with `STATE_LOCK_HELD_PREFIX` (`Another pi-claude-marketplace operation is in progress for`) plus retry guidance, rather than reaching the old `was installed concurrently` state-guard commit path.*
 

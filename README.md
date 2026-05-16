@@ -209,6 +209,14 @@ Install into project scope instead of user scope:
 /claude:plugin install pr-review-toolkit@claude-plugins-official --scope project
 ```
 
+Scope rules for marketplaces and plugins:
+
+- Marketplaces can be added to user scope, project scope, or both.
+- A project-scope plugin install can use a project-scope marketplace, or fall back to a user-scope marketplace with the same name if no project marketplace exists.
+- A user-scope plugin install can only use a user-scope marketplace; project-only marketplaces do not source user installs.
+- The same plugin can be installed in both user and project scopes. When a single unqualified operation could refer to both, the project-scope install takes precedence; pass `--scope user` to target the user install.
+- Tab completion follows these rules. `install` completion suggests plugins available in the current target scope.
+
 Update one installed plugin, every installed plugin from one marketplace, or all installed plugins:
 
 ```text
