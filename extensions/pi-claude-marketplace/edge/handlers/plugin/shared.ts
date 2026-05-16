@@ -27,6 +27,37 @@ export function splitPluginMarketplaceRef(ref: string): PluginMarketplaceRef | u
   };
 }
 
+export interface ParsedPositionalsResult {
+  readonly nonFlagPositionals: readonly string[];
+  readonly mapModel: boolean;
+}
+
+/**
+ * Scans raw positional tokens for known boolean flags (currently --map-model)
+ * and separates them from non-flag positionals. Returns undefined and emits
+ * notifyError if an unrecognised long flag is encountered.
+ */
+export function parsePositionalsWithFlags(
+  tokens: readonly string[],
+  ctx: ExtensionCommandContext,
+  usage: string,
+): ParsedPositionalsResult | undefined {
+  let mapModel = false;
+  const nonFlagPositionals: string[] = [];
+  for (const token of tokens) {
+    if (token === "--map-model") {
+      mapModel = true;
+    } else if (token.startsWith("--")) {
+      notifyError(ctx, usage);
+      return undefined;
+    } else {
+      nonFlagPositionals.push(token);
+    }
+  }
+
+  return { nonFlagPositionals, mapModel };
+}
+
 export function parseRequiredPluginMarketplaceRef(
   args: string,
   ctx: ExtensionCommandContext,

@@ -7,13 +7,17 @@ import test from "node:test";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   assertNoCrossPluginConflicts,
+  resolveInstallMarketplaceSource,
   resolveInstalledMarketplaceTarget,
   resolveInstalledPluginTarget,
   type CrossPluginGeneratedNames,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { CrossPluginConflictError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  CrossPluginConflictError,
+  MarketplaceNotFoundError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
@@ -246,6 +250,64 @@ async function saveScopedState(
 }
 
 // ---------------------------------------------------------------------------
+// CMP-2..4 -- resolveInstallMarketplaceSource target/source scope split.
+// ---------------------------------------------------------------------------
+
+test("CMP-2 :: resolveInstallMarketplaceSource returns target-scope record when marketplace present in target state", async () => {
+  const mpRecord = makeMarketplaceRecord("mp", {}, "project");
+  await withTmpCwd(async (cwd) => {
+    const result = await resolveInstallMarketplaceSource({
+      targetScope: "project",
+      cwd,
+      marketplace: "mp",
+      targetState: { schemaVersion: 1, marketplaces: { mp: mpRecord } },
+    });
+    assert.ok(result !== undefined);
+    assert.equal(result.sourceScope, "project");
+    assert.equal(result.sourceRecord, mpRecord);
+  });
+});
+
+test("CMP-4 :: resolveInstallMarketplaceSource returns undefined when user-target marketplace absent from user state", async () => {
+  await withTmpCwd(async (cwd) => {
+    const result = await resolveInstallMarketplaceSource({
+      targetScope: "user",
+      cwd,
+      marketplace: "mp",
+      targetState: { schemaVersion: 1, marketplaces: {} },
+    });
+    assert.equal(result, undefined);
+  });
+});
+
+test("CMP-3 :: resolveInstallMarketplaceSource falls back to user-scope record when project-target marketplace absent from project state", async () => {
+  await withTmpCwd(async (cwd) => {
+    await saveScopedState(cwd, "user", { mp: {} });
+    const result = await resolveInstallMarketplaceSource({
+      targetScope: "project",
+      cwd,
+      marketplace: "mp",
+      targetState: { schemaVersion: 1, marketplaces: {} },
+    });
+    assert.ok(result !== undefined);
+    assert.equal(result.sourceScope, "user");
+    assert.equal(result.sourceRecord.name, "mp");
+  });
+});
+
+test("CMP-3 :: resolveInstallMarketplaceSource returns undefined when project-target marketplace absent from both scopes", async () => {
+  await withTmpCwd(async (cwd) => {
+    const result = await resolveInstallMarketplaceSource({
+      targetScope: "project",
+      cwd,
+      marketplace: "mp",
+      targetState: { schemaVersion: 1, marketplaces: {} },
+    });
+    assert.equal(result, undefined);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // CMP-5 -- unqualified installed-plugin target resolution.
 // ---------------------------------------------------------------------------
 
@@ -345,7 +407,7 @@ test("CMP-5 :: unqualified marketplace target throws when absent from both scope
   await withTmpCwd(async (cwd) => {
     await assert.rejects(
       resolveInstalledMarketplaceTarget({ cwd, marketplace: "mp" }),
-      /Marketplace "mp" not found in user, project scopes\./,
+      (err: unknown) => err instanceof MarketplaceNotFoundError,
     );
   });
 });
