@@ -104,6 +104,16 @@ function flagCompletions(
     );
   }
 
+  if (positionalHead === "install" || positionalHead === "update") {
+    // AG-7 opt-in (260516-08j): surface `--map-model` as a completion
+    // suggestion under the install and update positional heads, mirroring
+    // the existing list-flag pattern.
+    flags.push({
+      name: "--map-model",
+      description: "Enable model field mapping in generated agents (default: omit)",
+    });
+  }
+
   return flags
     .filter((f) => f.name.startsWith(current))
     .map((f) => ({

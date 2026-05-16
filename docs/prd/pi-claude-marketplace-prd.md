@@ -22,9 +22,9 @@ ______________________________________________________________________
       - [5.1.4 `marketplace update [<name>] [--scope user|project]`](#514-marketplace-update-name---scope-userproject)
       - [5.1.5 `marketplace autoupdate [<name>]` and `marketplace noautoupdate [<name>]`](#515-marketplace-autoupdate-name-and-marketplace-noautoupdate-name)
     - [5.2 Plugin Lifecycle](#52-plugin-lifecycle)
-      - [5.2.1 `install <plugin>@<marketplace> [--scope user|project]`](#521-install-pluginmarketplace---scope-userproject)
+      - [5.2.1 `install <plugin>@<marketplace> [--scope user|project] [--map-model]`](#521-install-pluginmarketplace---scope-userproject---map-model)
       - [5.2.2 `uninstall <plugin>@<marketplace> [--scope user|project]`](#522-uninstall-pluginmarketplace---scope-userproject)
-      - [5.2.3 `update [<plugin>@<marketplace> | @<marketplace>]`](#523-update-pluginmarketplace--marketplace)
+      - [5.2.3 `update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--map-model]`](#523-update-pluginmarketplace--marketplace---scope-userproject---map-model)
     - [5.3 Listing & Inspection](#53-listing--inspection)
       - [5.3.1 `list [<marketplace>] [--installed] [--available] [--unavailable] [--scope user|project]`](#531-list-marketplace---installed---available---unavailable---scope-userproject)
     - [5.4 Autoupdate & Update Cascade](#54-autoupdate--update-cascade)
@@ -242,7 +242,9 @@ stateDiagram-v2
 
 ### 5.2 Plugin Lifecycle
 
-#### 5.2.1 `install <plugin>@<marketplace> [--scope user|project]`
+#### 5.2.1 `install <plugin>@<marketplace> [--scope user|project] [--map-model]`
+
+The `--map-model` flag is an opt-in for AG-7 model mapping. By default (when the flag is absent) the generated Pi agent `.md` files MUST OMIT the `model:` field entirely; Pi picks its own default model. When the user supplies `--map-model`, the AG-7 mapping table (see §5.7 AG-7 detail) applies and the generated `model:` is emitted byte-for-byte as before.
 
 | ID        | Requirement                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -277,7 +279,9 @@ stateDiagram-v2
 | **PU-7** | Foreign content at an agent target file (basename does not start with `pi-claude-marketplace-` or file is missing the generated marker) MUST cause that entry to be retained in the index with `failed[]` rather than silently kept. The uninstall MUST fail loudly. |
 | **PU-8** | Uninstall MUST emit a reload hint (`Run /reload to drop "<plugin>"`) when any resource was removed.                                                                                                                                                                  |
 
-#### 5.2.3 `update [<plugin>@<marketplace> | @<marketplace>]`
+#### 5.2.3 `update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--map-model]`
+
+The `--map-model` flag is the same opt-in as on `install` (see §5.2.1). Without it, re-staged agents MUST OMIT the `model:` field. With it, the AG-7 mapping applies. The marketplace autoupdate cascade (`updateSinglePlugin`) does NOT accept this flag and always uses the omit-by-default behavior.
 
 | ID        | Requirement                                                                                                                                                                                                                                                                                                                                              |
 | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -414,7 +418,7 @@ flowchart LR
 
 #### AG-7 detail -- frontmatter field mappings
 
-- `model:` -- `sonnet` → `anthropic/claude-sonnet-4-6`, `opus` → `anthropic/claude-opus-4-7`, `haiku` → `anthropic/claude-haiku-4-5`. `inherit` → omit + record `originalModel`. Unknown → omit + warn.
+- `model:` -- OPT-IN via `--map-model` on `/claude:plugin install` and `/claude:plugin update`. **Default (no flag):** the generated agent frontmatter MUST OMIT `model:` entirely regardless of the source value; Pi picks its own default model and no `originalModel` provenance is recorded (absence is self-documenting). **With `--map-model`:** `sonnet` → `anthropic/claude-sonnet-4-6`, `opus` → `anthropic/claude-opus-4-7`, `haiku` → `anthropic/claude-haiku-4-5`. `inherit` → omit + record `originalModel`. Unknown → omit + warn. The marketplace autoupdate cascade (`updateSinglePlugin`) ALWAYS uses the omit-by-default behavior; the flag is install/update-only.
 - `tools:` -- Map known Claude tools to Pi names per the table below. Unknown tools (e.g., `WebFetch`, `NotebookEdit`) are silently dropped. Missing `tools:` → default `read,bash,edit` with a warning.
   - `Read` → `read`
   - `Bash` → `bash`
@@ -1050,10 +1054,10 @@ ______________________________________________________________________
 
 ```text
 /claude:plugin
-├── install      <plugin>@<marketplace>            [--scope user|project]
+├── install      <plugin>@<marketplace>            [--scope user|project] [--map-model]
 ├── uninstall    <plugin>@<marketplace>            [--scope user|project]
 ├── update       [<plugin>@<marketplace> | @<marketplace>]
-│                                                  [--scope user|project]
+│                                                  [--scope user|project] [--map-model]
 ├── list         [<marketplace>] [--installed] [--available] [--unavailable]
 │                                                  [--scope user|project]
 └── marketplace
