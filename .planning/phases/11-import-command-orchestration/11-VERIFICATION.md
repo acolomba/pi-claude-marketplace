@@ -10,7 +10,7 @@ requirements: [IMP-01, IMP-02, IMP-03, IMP-09, IMP-10, IMP-11]
 
 **Phase Goal:** A Pi user can run `/claude:plugin import [--scope user|project]` and have enabled Claude Code plugins installed into the matching Pi scopes idempotently, with missing marketplaces added first and unavailable plugins reported as warnings while valid imports continue.
 
-**Verified:** 2026-05-15T22:54:33Z  
+**Verified:** 2026-05-15T22:54:33Z
 **Status:** passed
 
 ## Goal Achievement
@@ -86,8 +86,8 @@ Scan notes:
 
 ## Automated Checks
 
-- `node --test tests/orchestrators/import/execute.test.ts tests/edge/handlers/import.test.ts tests/edge/router.test.ts tests/edge/completions/provider.test.ts tests/edge/register.test.ts tests/e2e/import-command.test.ts` — passed: 78 tests, 78 pass, 0 fail.
-- `npm run check` — passed after merge: typecheck, ESLint, Prettier check, and test suite; 883 tests passed, 0 failed.
+- `node --test tests/orchestrators/import/execute.test.ts tests/edge/handlers/import.test.ts tests/edge/router.test.ts tests/edge/completions/provider.test.ts tests/edge/register.test.ts tests/e2e/import-command.test.ts` -- passed: 78 tests, 78 pass, 0 fail.
+- `npm run check` -- passed after merge: typecheck, ESLint, Prettier check, and test suite; 883 tests passed, 0 failed.
 
 ## Human Verification Required
 
@@ -103,12 +103,12 @@ None.
 
 ## Verification Metadata
 
-**Verification approach:** Goal-backward verification from Phase 11 roadmap success criteria, supported by plan summaries, source inspection, artifact/wiring checks, output-channel scan, anti-pattern scan, targeted command/orchestrator/edge/e2e tests, and full post-merge check.  
-**Must-haves source:** ROADMAP.md success criteria plus Phase 11 PLAN frontmatter and summaries.  
-**Automated checks:** 4 passed, 0 failed.  
-**Human checks required:** 0.  
+**Verification approach:** Goal-backward verification from Phase 11 roadmap success criteria, supported by plan summaries, source inspection, artifact/wiring checks, output-channel scan, anti-pattern scan, targeted command/orchestrator/edge/e2e tests, and full post-merge check.
+**Must-haves source:** ROADMAP.md success criteria plus Phase 11 PLAN frontmatter and summaries.
+**Automated checks:** 4 passed, 0 failed.
+**Human checks required:** 0.
 **Total verification time:** ~18 minutes.
 
 ---
-*Verified: 2026-05-15T22:54:33Z*  
+*Verified: 2026-05-15T22:54:33Z*
 *Verifier: Claude (gsd-verifier workflow)*

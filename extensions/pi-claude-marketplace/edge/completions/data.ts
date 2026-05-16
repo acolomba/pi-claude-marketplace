@@ -254,9 +254,7 @@ async function marketplaceNamesForScope(
   resolver: LocationsResolver,
   scope: Scope,
 ): Promise<readonly string[]> {
-  return getMarketplaceNames(resolver.marketplaceNamesCachePath(scope), scope, () =>
-    rebuildNamesForScope(resolver, scope),
-  );
+  return rebuildNamesForScope(resolver, scope);
 }
 
 async function sourceMarketplacesForInstall(

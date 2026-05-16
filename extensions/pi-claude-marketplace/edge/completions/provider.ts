@@ -41,6 +41,7 @@ import {
 } from "./data.ts";
 
 import type { LocationsResolver } from "./data.ts";
+import type { Scope } from "../../shared/types.ts";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 
 /**
@@ -158,6 +159,44 @@ function marketplaceNameWanted(positionals: readonly string[]): boolean {
   );
 }
 
+type PluginRefMode = "install" | "uninstall" | "update" | "reinstall";
+
+interface PluginRefBranchConfig {
+  readonly mode: PluginRefMode;
+  readonly allowMarketplaceOnly: boolean;
+  readonly targetScope?: Scope;
+}
+
+function pluginRefBranchConfig(
+  positionalHead: string,
+  explicitScope: Scope | undefined,
+): PluginRefBranchConfig | null {
+  switch (positionalHead) {
+    case "install":
+      return { mode: "install", allowMarketplaceOnly: false, targetScope: explicitScope ?? "user" };
+    case "uninstall":
+      return {
+        mode: "uninstall",
+        allowMarketplaceOnly: false,
+        ...(explicitScope !== undefined && { targetScope: explicitScope }),
+      };
+    case "update":
+      return {
+        mode: "update",
+        allowMarketplaceOnly: true,
+        ...(explicitScope !== undefined && { targetScope: explicitScope }),
+      };
+    case "reinstall":
+      return {
+        mode: "reinstall",
+        allowMarketplaceOnly: true,
+        ...(explicitScope !== undefined && { targetScope: explicitScope }),
+      };
+    default:
+      return null;
+  }
+}
+
 export async function getArgumentCompletions(
   prefix: string,
   resolver: LocationsResolver,
@@ -202,32 +241,10 @@ export async function getArgumentCompletions(
   // plugins, with project precedence when --scope is omitted. `allowMarketplaceOnly`
   // is true for update and reinstall (bare `@<marketplace>` operates on every
   // installed plugin in that marketplace).
-  if (positionalHead === "install" && positionals.length === 1) {
-    return getPluginRefCompletions("install", current, argumentTextPrefix, resolver, {
-      allowMarketplaceOnly: false,
-      targetScope: explicitScope ?? "user",
-    });
-  }
-
-  if (positionalHead === "uninstall" && positionals.length === 1) {
-    return getPluginRefCompletions("uninstall", current, argumentTextPrefix, resolver, {
-      allowMarketplaceOnly: false,
-      ...(explicitScope !== undefined && { targetScope: explicitScope }),
-    });
-  }
-
-  if (positionalHead === "update" && positionals.length === 1) {
-    return getPluginRefCompletions("update", current, argumentTextPrefix, resolver, {
-      allowMarketplaceOnly: true,
-      ...(explicitScope !== undefined && { targetScope: explicitScope }),
-    });
-  }
-
-  if (positionalHead === "reinstall" && positionals.length === 1) {
-    return getPluginRefCompletions("reinstall", current, argumentTextPrefix, resolver, {
-      allowMarketplaceOnly: true,
-      ...(explicitScope !== undefined && { targetScope: explicitScope }),
-    });
+  const pluginRefConfig = pluginRefBranchConfig(positionalHead, explicitScope);
+  if (pluginRefConfig !== null && positionals.length === 1) {
+    const { mode, ...options } = pluginRefConfig;
+    return getPluginRefCompletions(mode, current, argumentTextPrefix, resolver, options);
   }
 
   // Branch 5 (TC-5): marketplace-name positional for `list <here>` / `ls <here>` and
