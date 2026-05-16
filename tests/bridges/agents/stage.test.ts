@@ -788,3 +788,107 @@ test("Phase 8 / PRL-10 finalizeAgentsReplacement throws on unknown replacement h
   const bogus = { kind: "replaced" } as Parameters<typeof finalizeAgentsReplacement>[0];
   await assert.rejects(() => finalizeAgentsReplacement(bogus), /Unknown agents replacement handle/);
 });
+
+test("Phase 8 / PRL-10 replacePreparedAgents internal rename failure rolls back and propagates with manual-recovery prefix when leaks", async (t) => {
+  // POSIX-only: chmod the agents target dir read-only after prepare but
+  // before the inner rename of staged files. The first staged rename fails
+  // with EACCES, triggering rollbackAgentsReplacementInternal. Because the
+  // backup dir is still writable, rollback runs cleanly (no leaks), so the
+  // original error rethrows verbatim (without MANUAL_RECOVERY_REQUIRED).
+  if (process.platform === "win32") {
+    t.skip("POSIX-only chmod 0 failure path");
+    return;
+  }
+
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    t.skip("running as root -- chmod 0 does not block rename");
+    return;
+  }
+
+  const { chmod } = await import("node:fs/promises");
+
+  await withTmpScope(async ({ locations }) => {
+    const pluginRoot = path.join(FIXTURES, "test-plugin");
+    const resolved = makeResolved("acme", pluginRoot);
+
+    const first = await prepareStagePluginAgents({
+      locations,
+      marketplaceName: "mp1",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp1", "acme"),
+      resolved,
+      agentsSourceDir: path.join(pluginRoot, "agents"),
+    });
+    await commitPreparedAgents(first);
+
+    const second = await prepareStagePluginAgents({
+      locations,
+      marketplaceName: "mp1",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp1", "acme"),
+      resolved,
+      agentsSourceDir: path.join(pluginRoot, "agents"),
+    });
+
+    // Lock the agents directory so the inner `rename(pair.from, pair.to)`
+    // throws EACCES on the first staged file.
+    await chmod(locations.agentsDir, 0o500);
+
+    try {
+      await assert.rejects(() => replacePreparedAgents(second), /EACCES|permission/i);
+    } finally {
+      await chmod(locations.agentsDir, 0o755);
+    }
+  });
+});
+
+test("AG-1 prepare/replace skips backup loop entries that vanish between prepare and replace", async (t) => {
+  // The replace path's backup loop has a "skip if target doesn't exist"
+  // branch (lines 420-421). To trigger it: stage agents, then between
+  // prepare and replace remove the target file out-of-band. The backup
+  // loop should `continue` past the missing entry without throwing.
+  if (process.platform === "win32") {
+    t.skip("POSIX-only file manipulation");
+    return;
+  }
+
+  const { rm } = await import("node:fs/promises");
+
+  await withTmpScope(async ({ locations }) => {
+    const pluginRoot = path.join(FIXTURES, "test-plugin");
+    const resolved = makeResolved("acme", pluginRoot);
+
+    const first = await prepareStagePluginAgents({
+      locations,
+      marketplaceName: "mp1",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp1", "acme"),
+      resolved,
+      agentsSourceDir: path.join(pluginRoot, "agents"),
+    });
+    await commitPreparedAgents(first);
+
+    const second = await prepareStagePluginAgents({
+      locations,
+      marketplaceName: "mp1",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp1", "acme"),
+      resolved,
+      agentsSourceDir: path.join(pluginRoot, "agents"),
+    });
+
+    // Remove the recorded previous target between prepare and replace.
+    const previousTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-bot.md");
+    await rm(previousTarget, { force: true });
+
+    // Replace should still succeed: the backup loop skips the missing
+    // target, then the staged file is renamed into place.
+    const replacement = await replacePreparedAgents(second);
+    assert.equal(replacement.kind, "replaced");
+    assert.equal(await pathExists(previousTarget), true);
+  });
+});
