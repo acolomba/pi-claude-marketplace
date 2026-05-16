@@ -299,8 +299,26 @@ export function convertAgent(input: {
   knownSkills: readonly string[];
   discovered: DiscoveredAgent;
   sourceHash: string;
+  /**
+   * AG-7 opt-in. When false (the default at the call sites), the AG-7
+   * model-mapping table is NOT consulted and the generated frontmatter
+   * omits `model:` entirely (Pi picks its own default). When true (only
+   * passed when the user supplies `--map-model` on install/update), the
+   * existing mapping applies byte-for-byte. The marketplace autoupdate
+   * cascade never passes this flag, so cascade-driven re-installs always
+   * omit `model:`.
+   */
+  mapModel: boolean;
 }): ConvertedAgent {
-  const { pluginName, pluginRoot, pluginDataDir, knownSkills, discovered, sourceHash } = input;
+  const {
+    pluginName,
+    pluginRoot,
+    pluginDataDir,
+    knownSkills,
+    discovered,
+    sourceHash,
+    mapModel: mapModelFlag,
+  } = input;
   const { raw, body, sourceName, generatedName, sourcePath } = discovered;
 
   const warnings: string[] = [];
@@ -312,8 +330,13 @@ export function convertAgent(input: {
     warnings.push("source description was missing or empty -- using fallback");
   }
 
-  // 2. Model mapping
-  const modelResult = mapModel(raw.model);
+  // 2. Model mapping. AG-7 is now opt-in: when `mapModel` is false the
+  //    generated frontmatter omits `model:` entirely (no mapping, no
+  //    originalModel provenance, no unknown-model warning -- absence is
+  //    self-documenting). When true the existing mapping table applies.
+  const modelResult = mapModelFlag
+    ? mapModel(raw.model)
+    : { emit: undefined, originalModel: undefined, warning: undefined };
   if (modelResult.warning !== undefined) {
     warnings.push(modelResult.warning);
   }

@@ -2,14 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: milestone_complete
-last_updated: "2026-05-11T20:42:58.901Z"
+status: Milestone complete
+last_updated: "2026-05-16T00:57:00.000Z"
+last_activity: "2026-05-15 - Completed quick task 260515-wpe: clarify marketplace/plugin scope rules in specifications"
 progress:
   total_phases: 7
-  completed_phases: 8
+  completed_phases: 7
   total_plans: 51
   completed_plans: 51
-  percent: 114
+  percent: 100
 ---
 
 # Project State
@@ -22,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 
 ## Current Position
 
-Phase: 07
-Plan: Not started
+Phase: 07 of 7 (integration pi wiring)
+Plan: 6 of 6
 
 Progress: [██████████] 100%
 
@@ -82,6 +83,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 07]: [Phase 07]: Real Pi runtime smoke is automated through the installed pi package bin with isolated HOME/cwd, avoiding the blocked agent-core API path. -- Research found agent-core lacks extension-loading API, so the package-bin smoke is the automatable runtime gate.
 - [Phase 07]: D-25 supersedes PI-15 old concurrent-install marker; lock losers fail at per-scope acquisition with `STATE_LOCK_HELD_PREFIX` and retry guidance. -- Plan 07-06 recorded the REQUIREMENTS/PROJECT/CHANGELOG traceability trail.
 - [Phase 07]: Validation sign-off is approved; NFR-2, NFR-3, NFR-8, and NFR-11 map to green automated gates including real Pi-runtime smoke. -- Plan 07-06 closed the phase gate evidence.
+- [Quick 260515-wpe]: D-26 clarifies marketplace/plugin scope rules: project-target installs can source project marketplaces first and user marketplaces second; user-target installs can source only user marketplaces; dual-scope plugin installs are allowed; project scope takes precedence for unqualified single-target operations; install completion is available-only for the current target scope.
 
 ### Pending Todos
 
@@ -89,7 +91,7 @@ None yet.
 
 ### Blockers/Concerns
 
-- Behavioral Gaps 1, 2, 4-10 (FEATURES Gap series) need explicit resolutions logged in PROJECT.md Key Decisions before Phase 4/5 planning. SUMMARY.md provides recommended resolutions.
+- Behavioral Gaps 1, 2, 5-10 (FEATURES Gap series) need explicit resolutions logged in PROJECT.md Key Decisions before Phase 4/5 planning. Gap 4 is resolved by PROJECT.md D-26 / PRD CMP-1..8.
 - `write-file-atomic@^8` Node engine constraint bumps effective floor from 22.0 to 22.22.2; confirm CI Node range before adopting in Phase 1.
 
 ### Quick Tasks Completed
@@ -97,6 +99,9 @@ None yet.
 | # | Description | Date | Commit | Status | Directory |
 | --- | --- | --- | --- | --- | --- |
 | 260515-bkt | lets update the specs and the implementation to listen to PI_CODING_AGENT_DIR if set instead of hardcoding ~/.pi | 2026-05-14 | 0257577 | Verified | [260515-bkt-pi-coding-agent-dir](./quick/260515-bkt-pi-coding-agent-dir/) |
+| 260515-wpe | clarify marketplace/plugin scope rules in specifications | 2026-05-15 | 0c271f8 | Complete | [260515-wpe-scope-rules](./quick/260515-wpe-scope-rules/) |
+| 260516-02r | implement /claude:plugin bootstrap command (features/bootstrap) | 2026-05-16 | 490172e | Complete | [260516-02r-implement-claude-plugin-bootstrap-comman](./quick/260516-02r-implement-claude-plugin-bootstrap-comman/) |
+| 260516-08j | modify agent mapping logic to omit model unless --map-model option is passed to plugin install command | 2026-05-16 | 6f22be1 | Verified | [260516-08j-modify-agent-mapping-logic-to-omit-model](./quick/260516-08j-modify-agent-mapping-logic-to-omit-model/) |
 
 ## Deferred Items
 
@@ -108,6 +113,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last activity: 2026-05-14 - Completed quick task 260515-bkt: lets update the specs and the implementation to listen to PI_CODING_AGENT_DIR if set instead of hardcoding ~/.pi
+Last activity: 2026-05-16 - Completed quick task 260516-08j: modify agent mapping logic to omit model unless --map-model option is passed to plugin install command
 
 Last session: 2026-05-11T20:42:58.893Z

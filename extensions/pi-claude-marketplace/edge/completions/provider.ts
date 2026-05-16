@@ -31,6 +31,7 @@
 
 import {
   extractPositionals,
+  extractScope,
   getMarketplaceCompletions,
   getMarketplaceNamesAcrossScopes,
   getPluginRefCompletions,
@@ -103,6 +104,16 @@ function flagCompletions(
     );
   }
 
+  if (positionalHead === "install" || positionalHead === "update") {
+    // AG-7 opt-in (260516-08j): surface `--map-model` as a completion
+    // suggestion under the install and update positional heads, mirroring
+    // the existing list-flag pattern.
+    flags.push({
+      name: "--map-model",
+      description: "Enable model field mapping in generated agents (default: omit)",
+    });
+  }
+
   return flags
     .filter((f) => f.name.startsWith(current))
     .map((f) => ({
@@ -173,6 +184,7 @@ export async function getArgumentCompletions(
 
   const positionals = extractPositionals(tokens);
   const positionalHead = positionals[0] ?? "";
+  const explicitScope = extractScope(tokens);
 
   // Branch 2a (TC-4): token immediately after `--scope`.
   const prevToken = tokens.at(-1);
@@ -195,24 +207,27 @@ export async function getArgumentCompletions(
   }
 
   // Branch 4 (TC-6): <plugin>@<marketplace> for install / uninstall / update.
-  // D-03 corollary: install hides `installed`; uninstall/update keep only
-  // `installed`. `allowMarketplaceOnly` is true only for `update` (V1 parity
-  // -- bare @<marketplace> means "update every installed plugin in this mp").
+  // CMP-6..8: install completion follows target-scope/source-marketplace
+  // visibility and is available-only. Uninstall/update consume installed
+  // plugins, with project precedence when --scope is omitted.
   if (positionalHead === "install" && positionals.length === 1) {
     return getPluginRefCompletions("install", current, argumentTextPrefix, resolver, {
       allowMarketplaceOnly: false,
+      targetScope: explicitScope ?? "user",
     });
   }
 
   if (positionalHead === "uninstall" && positionals.length === 1) {
     return getPluginRefCompletions("uninstall", current, argumentTextPrefix, resolver, {
       allowMarketplaceOnly: false,
+      ...(explicitScope !== undefined && { targetScope: explicitScope }),
     });
   }
 
   if (positionalHead === "update" && positionals.length === 1) {
     return getPluginRefCompletions("update", current, argumentTextPrefix, resolver, {
       allowMarketplaceOnly: true,
+      ...(explicitScope !== undefined && { targetScope: explicitScope }),
     });
   }
 

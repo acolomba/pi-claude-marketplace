@@ -74,6 +74,8 @@
 - [ ] **PI-13**: Plugins declaring `dependencies` install with manual-install warning
 - [ ] **PI-14**: Path-containment violations throw `PathContainmentError`; MUST NOT be folded into "rollback partial" line
 - [x] ~~**PI-15**: Concurrent install detected at state-guard commit rolls back staged resources with "was installed concurrently" error~~ (**superseded by Phase 7 D-08**: cross-process installs now fail before the state-guard commit by acquiring the per-scope `.state-lock` first. A loser surfaces `STATE_LOCK_HELD_PREFIX` (`Another pi-claude-marketplace operation is in progress for`) with retry as the recovery action instead of reaching the old `was installed concurrently` rollback path.)
+- [ ] **PI-16**: Install target scope and marketplace source scope are distinct; project installs can source from project-or-user marketplace, user installs only from user marketplace
+- [ ] **PI-17**: Same `<plugin>@<marketplace>` may be installed in both scopes; already-installed and conflict checks are target-scope-local
 
 ### Plugin Lifecycle: `uninstall` (PRD §5.2.2)
 
@@ -169,6 +171,17 @@
 - [ ] **SC-6**: `marketplace list/update/autoupdate/noautoupdate` (no name) enumerate both scopes when `--scope` omitted
 - [ ] **SC-7**: Path containment enforced for every name-derived path
 
+### Scope-aware Marketplace/Plugin Rules (PRD §6.2.1)
+
+- [ ] **CMP-1**: Marketplaces may be added independently to user scope, project scope, or both; duplicate-name failures are scoped
+- [ ] **CMP-2**: Plugin lifecycle operations distinguish target scope (writes) from source marketplace scope (manifest/source reads)
+- [ ] **CMP-3**: Project-target install sees project marketplace first, then user marketplace fallback
+- [ ] **CMP-4**: User-target install sees user marketplaces only; project-only marketplace cannot source a user install
+- [ ] **CMP-5**: Same plugin may be installed in both scopes; unqualified single-target operations prefer project install, explicit `--scope` overrides
+- [ ] **CMP-6**: Completion applies the same target-scope/source-marketplace visibility rules as execution
+- [ ] **CMP-7**: Install completion suggests only available plugins for the current target scope; installed/unavailable plugins are excluded
+- [ ] **CMP-8**: Project-target install completion uses project marketplace before user fallback and still emits `<plugin>@<marketplace>` tokens
+
 ### Manifest Schema & Strict Mode (PRD §6.3)
 
 - [ ] **MM-1**: `marketplace.json` MUST have string `name`, array `plugins`, optional boolean `strict`, optional `owner.name`
@@ -204,7 +217,7 @@
 - [ ] **TC-3**: Cursor on `-`-prefixed token surfaces `--scope` plus list-specific flags; single and double dash behave identically
 - [ ] **TC-4**: Token after `--scope` surfaces `user` and `project` only
 - [ ] **TC-5**: For `list <here>` and `marketplace <verb> <here>`, complete with union of marketplace names from both scopes
-- [ ] **TC-6**: For `install/uninstall/update <here>`, emit `<plugin>@<marketplace>` tokens per detail rules; `update` accepts `@<marketplace>` form
+- [ ] **TC-6**: For `install/uninstall/update <here>`, emit `<plugin>@<marketplace>` tokens per detail rules; `install` completion is available-only and scope-aware per CMP-6..8; `update` accepts `@<marketplace>` form
 - [ ] **TC-7**: All terminal completions include trailing space; double-space collapse via fish-style normalization scoped to `/claude:plugin`
 - [ ] **TC-8**: Per-marketplace manifest-load failures during plugin completion soft-fail to empty set
 - [ ] **TC-9**: Top-level `state.json` errors during completion propagate (no silent hide)
@@ -332,7 +345,7 @@ Surfaced by FEATURES research; these are spec ambiguities, not new requirements.
 01. **Cross-marketplace plugin name handling** -- when the same `<plugin>` exists in two marketplaces in the same scope, what does `install <plugin>@<mp1>` then `install <plugin>@<mp2>` produce? (PRD silent; FEATURES Gap 1)
 02. **Cascade abort vs continue on failure** -- when `marketplace update` cascade hits a per-plugin failure, MR-3/MU-7 say partition+continue, but is "abort entire cascade on first failure" ever the right call? (FEATURES Gap 2)
 03. **Custom component-path supplement vs replace** -- PRD §11 deferral may actually be a spec-compliance bug; decide whether to fix in V1 successor or document continued deferral (FEATURES Gap 3, COMP-01)
-04. **Simultaneous-scope install semantics** -- if a plugin is installable in both `user` and `project` scopes, does install in one scope shadow the other? (FEATURES Gap 4)
+04. ~~**Simultaneous-scope install semantics** -- if a plugin is installable in both `user` and `project` scopes, does install in one scope shadow the other?~~ **Resolved by D-26 / CMP-1..8:** same plugin may be installed in both scopes; project install takes precedence for unqualified single-target operations; explicit `--scope` selects the target.
 05. **Reload-hint-when-soft-dep-unloaded interaction** -- RH-5 says soft-dep warning before reload hint; what about when ONLY soft-dep resources changed and the dep is unloaded? (FEATURES Gap 5)
 06. **Empty-marketplace ergonomics** -- `marketplace add` to an empty marketplace succeeds without reload hint (MA-11); does `list` show it differently? (FEATURES Gap 6)
 07. **Hash version stability across encoding** -- PI-7 specifies SHA-256 over recursive walk; what about plugins with files that contain BOM or different line endings? (FEATURES Gap 7)
@@ -399,6 +412,8 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | PI-13       | Phase 5 | Pending |
 | PI-14       | Phase 5 | Pending |
 | PI-15       | --      | Superseded by Phase 7 D-08 |
+| PI-16       | Phase 5 | Pending |
+| PI-17       | Phase 5 | Pending |
 | PU-1        | Phase 5 | Pending |
 | PU-2        | Phase 5 | Pending |
 | PU-3        | Phase 5 | Pending |
@@ -466,6 +481,14 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | SC-5        | Phase 4 | Pending |
 | SC-6        | Phase 4 | Pending |
 | SC-7        | Phase 2 | Pending |
+| CMP-1       | Phase 4 | Pending |
+| CMP-2       | Phase 5 | Pending |
+| CMP-3       | Phase 5 | Pending |
+| CMP-4       | Phase 5 | Pending |
+| CMP-5       | Phase 5 | Pending |
+| CMP-6       | Phase 6 | Pending |
+| CMP-7       | Phase 6 | Pending |
+| CMP-8       | Phase 6 | Pending |
 | MM-1        | Phase 2 | Pending |
 | MM-2        | Phase 2 | Pending |
 | MM-3        | Phase 2 | Pending |
@@ -551,8 +574,8 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 
 **Coverage:**
 
-- v1 requirements: 200 total (file footer previously claimed 134; corrected here)
-- Mapped to phases: 195 (97.5%) -- MA-7 superseded by D-21 (Phase 1 adopted isomorphic-git, removing the "git CLI not found" failure mode); MU-2 and MU-3 superseded by Phase 4 D-14 (follow-upstream-blindly semantics; the local marketplace clone is read-only by contract, so non-fast-forward divergence cannot occur); PR-4 superseded by Phase 5 D-07 (custom componentPath arrays now SUPPLEMENT defaults rather than replace them; behavior corrected vs V1 per COMP-01 / Gap 3); PI-15 superseded by Phase 7 D-08 (per-scope lock acquisition fails losers with `STATE_LOCK_HELD_PREFIX` before state-guard commit)
+- v1 requirements: 210 total (200 original IDs + 10 scope-rule clarification IDs: PI-16, PI-17, CMP-1..8)
+- Mapped to phases: 205 (97.6%) -- MA-7 superseded by D-21 (Phase 1 adopted isomorphic-git, removing the "git CLI not found" failure mode); MU-2 and MU-3 superseded by Phase 4 D-14 (follow-upstream-blindly semantics; the local marketplace clone is read-only by contract, so non-fast-forward divergence cannot occur); PR-4 superseded by Phase 5 D-07 (custom componentPath arrays now SUPPLEMENT defaults rather than replace them; behavior corrected vs V1 per COMP-01 / Gap 3); PI-15 superseded by Phase 7 D-08 (per-scope lock acquisition fails losers with `STATE_LOCK_HELD_PREFIX` before state-guard commit)
 - Unmapped: 0 (MA-7, MU-2, MU-3, PR-4, PI-15 are superseded, not unmapped)
 
 **Per-phase counts:**
@@ -562,13 +585,13 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | Phase 1: Foundations & Toolchain              | 23 (NFR-1, NFR-4, NFR-6, NFR-9, NFR-10, IL-1..5, ES-1..5, PS-1..5, AS-1, AS-4, AS-5)                                                    |
 | Phase 2: Domain Core & Persistence Primitives | 38 (NFR-7, NFR-12, SP-1..7, SC-1..4, SC-7, MM-1..7, PR-1..3, PR-5, PR-6, RN-1..2, ST-1..9) -- PR-4 superseded by Phase 5 D-07            |
 | Phase 3: Resource Bridges                     | 34 (SK-1..5, CM-1..4, AG-1..12, MC-1..8, RN-4..6, AS-8..9)                                                                              |
-| Phase 4: Marketplace Orchestrators            | 41 (MA-1..6, MA-8..11 (MA-7 superseded by D-21), MR-1..8, ML-1..4, MU-1, MU-4..9 (MU-2, MU-3 superseded by Phase 4 D-14), MAU-1..4, SC-5..6, RH-1..5, NFR-5) |
-| Phase 5: Plugin Orchestrators                 | 46 (PI-1..14, PU-1..8, PUP-1..9, PL-1..7, RN-3, AS-2..3, AS-6..7, NFR-2..3) -- PI-15 superseded by Phase 7 D-08                           |
-| Phase 6: Edge Layer & Tab Completion          | 13 (TC-1..9, AP-1..4)                                                                                                                   |
+| Phase 4: Marketplace Orchestrators            | 42 (MA-1..6, MA-8..11 (MA-7 superseded by D-21), MR-1..8, ML-1..4, MU-1, MU-4..9 (MU-2, MU-3 superseded by Phase 4 D-14), MAU-1..4, SC-5..6, CMP-1, RH-1..5, NFR-5) |
+| Phase 5: Plugin Orchestrators                 | 52 (PI-1..14, PI-16..17, PU-1..8, PUP-1..9, PL-1..7, CMP-2..5, RN-3, AS-2..3, AS-6..7, NFR-2..3) -- PI-15 superseded by Phase 7 D-08                           |
+| Phase 6: Edge Layer & Tab Completion          | 16 (TC-1..9, CMP-6..8, AP-1..4)                                                                                                                   |
 | Phase 7: Integration & Pi Wiring              | 4 (NFR-8, NFR-11) -- note: NFR-2/3 land in Phase 5 since they describe orchestrator behavior; Phase 7 verifies them in live environment |
 
 > **Phase 7 count clarification:** NFR-8 and NFR-11 are the two REQ-IDs uniquely owned by Phase 7. The "live e2e against `anthropics/claude-plugins-official`" work in Phase 7 verifies NFR-2/NFR-3/NFR-5 in production-like conditions but those REQ-IDs are owned by their primary phase (5 / 5 / 4).
 
 ______________________________________________________________________
 
-*Requirements defined: 2026-05-09 from `docs/prd/pi-claude-marketplace-prd.md` v1.0* *Last updated: 2026-05-11 -- Phase 7 D-08 supersedes PI-15: concurrent install losers now fail at per-scope lock acquisition with `STATE_LOCK_HELD_PREFIX` instead of reaching the old state-guard commit rollback marker.*
+*Requirements defined: 2026-05-09 from `docs/prd/pi-claude-marketplace-prd.md` v1.0* *Last updated: 2026-05-15 -- D-26 / CMP-1..8 clarify marketplace-vs-plugin scope semantics and make install completion available-only for the current target scope.*

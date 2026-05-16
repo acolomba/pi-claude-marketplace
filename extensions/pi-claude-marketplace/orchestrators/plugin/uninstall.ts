@@ -36,7 +36,6 @@
 
 import { rm } from "node:fs/promises";
 
-import { locationsFor } from "../../persistence/locations.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../presentation/soft-dep.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
@@ -44,6 +43,8 @@ import { appendLeaks, errorMessage } from "../../shared/errors.ts";
 import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { cascadeUnstagePlugin, formatErrorWithCauses } from "../marketplace/shared.ts";
+
+import { resolveInstalledPluginTarget } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -62,7 +63,7 @@ export interface UninstallPluginOptions {
   readonly ctx: ExtensionContext;
   /** Factory `pi` reference -- carries `getAllTools()` for RH-5 soft-dep probes. */
   readonly pi: ExtensionAPI;
-  readonly scope: Scope;
+  readonly scope?: Scope;
   /** Project-scope cwd (ignored for user scope; see locationsFor). */
   readonly cwd: string;
   readonly marketplace: string;
@@ -90,9 +91,19 @@ export interface UninstallPluginOptions {
  * `notifyError` / `notifyWarning` per IL-2 (single ctx.ui.notify chokepoint).
  */
 export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<void> {
-  const { ctx, pi, scope, cwd, marketplace, plugin } = opts;
+  const { ctx, pi, cwd, marketplace, plugin } = opts;
   const cascade = opts.cascade ?? cascadeUnstagePlugin;
-  const locations = locationsFor(scope, cwd);
+  const resolved = await resolveInstalledPluginTarget({
+    cwd,
+    marketplace,
+    plugin,
+    ...(opts.scope !== undefined && { explicitScope: opts.scope }),
+  });
+  if (resolved === undefined) {
+    return;
+  }
+
+  const { scope, locations } = resolved;
 
   let alreadyGone = false;
   let outcome: UnstageOutcome | undefined;

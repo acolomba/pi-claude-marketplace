@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.4] - 2026-05-15
+
+- Clearer marketplace/plugin scoping rules.
+- Completion on `/claude:plugin install` is limited to available plugins.
+
 ## [0.1.3] - 2026-05-15
 
 - Fixed user-scope path resolution to honor Pi's agent home override.

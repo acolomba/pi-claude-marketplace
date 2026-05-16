@@ -814,3 +814,37 @@ test("PUP-1: targeting an unknown marketplace -> notifyError 'not found in <scop
     }
   });
 });
+
+// Covers the resolveInstalledPluginTarget → undefined → ?? resolveInstalledMarketplaceTarget
+// fallback in enumerateMarketplaceTarget. With no explicit scope, resolveInstalledPluginTarget
+// searches both scopes and finds nothing, so the fallback fires to locate the marketplace scope.
+test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback resolution; partition='skipped'", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-pup1-noscope-fallback-"));
+    try {
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.0", hasSkill: true } },
+        // No installedVersions: plugin absent from state, triggering the ?? fallback.
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        // scope omitted: resolveInstalledPluginTarget finds nothing → ?? fallback to
+        // resolveInstalledMarketplaceTarget which locates the marketplace scope.
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      const body = notifications[0]?.message ?? "";
+      assert.match(body, /Skipped:/);
+      assert.match(body, /not installed/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
