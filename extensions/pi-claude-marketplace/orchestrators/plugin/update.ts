@@ -841,7 +841,6 @@ async function enumerateMarketplaceTarget(
         (await resolveInstalledMarketplaceTarget({
           cwd,
           marketplace: mpName,
-          ...(explicitScope !== undefined && { explicitScope }),
         })))
       : await resolveInstalledMarketplaceTarget({
           cwd,
