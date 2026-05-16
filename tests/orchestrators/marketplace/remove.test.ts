@@ -154,6 +154,41 @@ test("MR-1: same name in both scopes without --scope removes project-scope recor
   });
 });
 
+test("MR-1: name only in user scope without --scope removes user-scope record", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-mr1-user-"));
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      const userLoc = locationsFor("user", cwd);
+      const projLoc = locationsFor("project", cwd);
+
+      const seed = {
+        source: pathSource("./src"),
+        addedFromCwd: cwd,
+        manifestPath: path.join(cwd, "marketplace.json"),
+        marketplaceRoot: cwd,
+        plugins: {},
+      };
+      await seedState(userLoc.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: { "user-only": { name: "user-only", scope: "user", ...seed } },
+      });
+      await seedState(projLoc.extensionRoot, { schemaVersion: 1, marketplaces: {} });
+
+      await removeMarketplace({ ctx, pi, name: "user-only", cwd });
+
+      const userAfter = await loadState(userLoc.extensionRoot);
+      assert.ok(!("user-only" in userAfter.marketplaces), "user-scope record removed");
+      assert.match(
+        notifications[0]?.message ?? "",
+        /Removed marketplace "user-only" from user scope/,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("MR-1: same name in both scopes WITH --scope=user removes only user-scope record", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-mr1b-"));
