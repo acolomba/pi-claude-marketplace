@@ -242,6 +242,59 @@ test("TC-3 :: - prefix on ls alias also surfaces --installed/--available/--unava
   }
 });
 
+test("TC-3 :: - prefix on install head surfaces --map-model (260516-08j)", async () => {
+  __resetCacheForTests();
+  const f = await emptyFixture();
+  try {
+    const items = await getArgumentCompletions("install -", f.resolver);
+    assert.ok(items !== null);
+    const labels = items.map((i) => i.label);
+    for (const expected of ["--scope", "--map-model"]) {
+      assert.ok(labels.includes(expected), `expected ${expected} in: ${labels.join(", ")}`);
+    }
+
+    // list-only flags MUST NOT leak into install completions.
+    for (const unexpected of ["--installed", "--available", "--unavailable"]) {
+      assert.ok(!labels.includes(unexpected), `unexpected ${unexpected} in: ${labels.join(", ")}`);
+    }
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("TC-3 :: - prefix on update head surfaces --map-model (260516-08j)", async () => {
+  __resetCacheForTests();
+  const f = await emptyFixture();
+  try {
+    const items = await getArgumentCompletions("update -", f.resolver);
+    assert.ok(items !== null);
+    const labels = items.map((i) => i.label);
+    for (const expected of ["--scope", "--map-model"]) {
+      assert.ok(labels.includes(expected), `expected ${expected} in: ${labels.join(", ")}`);
+    }
+
+    // list-only flags MUST NOT leak into update completions.
+    for (const unexpected of ["--installed", "--available", "--unavailable"]) {
+      assert.ok(!labels.includes(unexpected), `unexpected ${unexpected} in: ${labels.join(", ")}`);
+    }
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("TC-3 :: --map-model does NOT appear under list head (260516-08j)", async () => {
+  __resetCacheForTests();
+  const f = await emptyFixture();
+  try {
+    const items = await getArgumentCompletions("list -", f.resolver);
+    assert.ok(items !== null);
+    const labels = items.map((i) => i.label);
+    assert.ok(!labels.includes("--map-model"), `unexpected --map-model in: ${labels.join(", ")}`);
+  } finally {
+    await f.cleanup();
+  }
+});
+
 test("TC-3 :: -- and - prefixes behave identically", async () => {
   __resetCacheForTests();
   const f = await emptyFixture();

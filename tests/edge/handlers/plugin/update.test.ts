@@ -127,3 +127,69 @@ test("shim :: invalid ref (no @, not bare) emits USAGE", async () => {
     assert.match(notifications[0]!.message, /Usage: \/claude:plugin update/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 260516-08j: --map-model flag is accepted on all three positional forms;
+// unknown long flags rejected.
+// ---------------------------------------------------------------------------
+
+test("shim :: bare form + --map-model is accepted; control reaches updatePlugins", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeUpdateHandler(makePi());
+    await handler("--map-model", ctx);
+    // Bare form with --map-model: empty state -> PUP-1 silent success.
+    // Critically, no USAGE error.
+    assert.equal(notifications.length, 1);
+    assert.doesNotMatch(notifications[0]!.message, /Usage: \/claude:plugin update/);
+    assert.match(notifications[0]!.message, /No plugins installed\./);
+  });
+});
+
+test("shim :: @<mp> form + --map-model is accepted; control reaches updatePlugins", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeUpdateHandler(makePi());
+    await handler("@mymkt --map-model", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.doesNotMatch(notifications[0]!.message, /Usage: \/claude:plugin update/);
+    assert.match(notifications[0]!.message, /mymkt/);
+    assert.match(notifications[0]!.message, /not found/);
+  });
+});
+
+test("shim :: pl@<mp> form + --map-model is accepted; control reaches updatePlugins", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeUpdateHandler(makePi());
+    await handler("myplug@mymkt --map-model", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.doesNotMatch(notifications[0]!.message, /Usage: \/claude:plugin update/);
+    assert.match(notifications[0]!.message, /mymkt/);
+    assert.match(notifications[0]!.message, /not found/);
+  });
+});
+
+test("shim :: rejects unknown long flag with USAGE", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeUpdateHandler(makePi());
+    await handler("--bogus-flag", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.match(notifications[0]!.message, /Usage: \/claude:plugin update/);
+  });
+});
+
+test("shim :: rejects unknown long flag on pl@mp form with USAGE", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeUpdateHandler(makePi());
+    await handler("myplug@mymkt --bogus-flag", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.match(notifications[0]!.message, /Usage: \/claude:plugin update/);
+  });
+});
