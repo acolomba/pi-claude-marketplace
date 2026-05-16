@@ -586,3 +586,11 @@ test("StageCommandsCommitResult.recorded captures sourcePath + targetPath per co
     await scope.cleanup();
   }
 });
+
+test("Phase 8 / PRL-10 finalizeCommandsReplacement throws on unknown replacement handle (defensive)", async () => {
+  const bogus = { kind: "replaced" } as Parameters<typeof finalizeCommandsReplacement>[0];
+  await assert.rejects(
+    () => finalizeCommandsReplacement(bogus),
+    /Unknown commands replacement handle/,
+  );
+});

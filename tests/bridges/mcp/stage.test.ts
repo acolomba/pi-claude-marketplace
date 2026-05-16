@@ -508,3 +508,8 @@ test("stagedNames matches recorded.map(r=>r.generatedName)", async () => {
     );
   });
 });
+
+test("Phase 8 / PRL-10 finalizeMcpReplacement throws on unknown replacement handle (defensive)", () => {
+  const bogus = { kind: "replaced" } as Parameters<typeof finalizeMcpReplacement>[0];
+  assert.throws(() => finalizeMcpReplacement(bogus), /Unknown MCP replacement handle/);
+});

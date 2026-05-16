@@ -541,3 +541,8 @@ test("prepareStageSkills surfaces appendLeakToError when a skill source is unrea
     }
   });
 });
+
+test("Phase 8 / PRL-10 finalizeSkillsReplacement throws on unknown replacement handle (defensive)", async () => {
+  const bogus = { kind: "replaced" } as Parameters<typeof finalizeSkillsReplacement>[0];
+  await assert.rejects(() => finalizeSkillsReplacement(bogus), /Unknown skills replacement handle/);
+});

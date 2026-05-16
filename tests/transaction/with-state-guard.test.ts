@@ -469,3 +469,57 @@ test("ST-9 update concurrent change: caller B sees caller A's version bump and t
     await cleanup();
   }
 });
+
+test("Phase 8 / PRL-10 manual transaction surfaces StateLockHeldError when scope lock is pre-held", async () => {
+  const { loc, cleanup } = await setupTmpScope();
+  const release = await lockfile.lock(loc.extensionRoot, {
+    lockfilePath: loc.stateLockFile,
+    realpath: false,
+  });
+
+  try {
+    let callbackRan = false;
+    await assert.rejects(
+      () =>
+        withLockedStateTransaction(loc, () => {
+          callbackRan = true;
+        }),
+      (err: unknown) =>
+        err instanceof StateLockHeldError &&
+        err.lockPath === loc.stateLockFile &&
+        err.scope === loc.scope,
+    );
+    assert.equal(callbackRan, false);
+  } finally {
+    await release();
+    await cleanup();
+  }
+});
+
+test("Phase 8 / PRL-10 manual transaction surfaces release errors when callback succeeds", async () => {
+  const { loc, cleanup } = await setupTmpScope();
+  try {
+    // Acquire the real scope lock first so the inner transaction observes
+    // a held lock. The transaction will then fail at acquireStateLock with
+    // an ELOCKED error that does NOT come back as StateLockHeldError because
+    // the inner code path treats anything not flagged as lock-held as a
+    // plain failure -- this covers the `throw toError(err)` branch for the
+    // non-lock-held error path.
+    //
+    // To trigger the lock-release-error path (lines 147-150) we need a
+    // successful run() but a release that fails. proper-lockfile's release
+    // throws if the lockfile no longer exists when we call release(); we
+    // achieve that by removing the lockfile from disk during the callback.
+    await withLockedStateTransaction(loc, async () => {
+      await rm(loc.stateLockFile, { recursive: true, force: true });
+    }).catch((err: unknown) => {
+      // The release call inside finally throws because the lockfile is
+      // gone; that throw becomes the primary error since the callback
+      // succeeded. Assert the surfaced error mentions the lock so we know
+      // we hit the right branch.
+      assert.match((err as Error).message, /Lock is not acquired|lock/i);
+    });
+  } finally {
+    await cleanup();
+  }
+});

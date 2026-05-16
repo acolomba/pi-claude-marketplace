@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   cleanupStaging,
   pathExists,
+  rollbackReplacementCommon,
 } from "../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
 // shared/fs-utils.ts -- cleanupStaging + pathExists.
@@ -107,4 +108,183 @@ test("pathExists returns false for ENOTDIR (file-as-parent component)", async ()
   } finally {
     await cleanupStaging(tmp, "test-cleanup");
   }
+});
+
+const LABELS = {
+  replacement: "replacement test entry",
+  previous: "previous test entry",
+  stagingDir: "test staging dir",
+  backupDir: "test backup dir",
+};
+
+test("rollbackReplacementCommon removes renamed, restores backups, cleans up dirs (happy path)", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "rr-happy-"));
+  const stagingRoot = path.join(tmp, "staging");
+  const backupRoot = path.join(tmp, "backup");
+  await mkdir(stagingRoot, { recursive: true });
+  await mkdir(backupRoot, { recursive: true });
+
+  const replacementPath = path.join(tmp, "live.txt");
+  await writeFile(replacementPath, "new");
+  const backupSource = path.join(tmp, "live2.txt");
+  const backupCopy = path.join(backupRoot, "live2.txt.bak");
+  await writeFile(backupCopy, "old");
+
+  const leaks = await rollbackReplacementCommon({
+    renamed: [{ from: path.join(stagingRoot, "live.txt"), to: replacementPath }],
+    backups: [{ name: "live2", from: backupSource, to: backupCopy }],
+    stagingRoot,
+    backupRoot,
+    removeMode: "file",
+    labels: LABELS,
+  });
+
+  assert.deepEqual([...leaks], []);
+  assert.equal(await pathExists(replacementPath), false);
+  assert.equal(await pathExists(backupSource), true);
+  assert.equal(await pathExists(stagingRoot), false);
+  assert.equal(await pathExists(backupRoot), false);
+});
+
+test("rollbackReplacementCommon records leak when rm of replacement fails (POSIX chmod 0)", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("POSIX-only chmod 0 failure path");
+    return;
+  }
+
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    t.skip("running as root -- chmod 0 does not block rm");
+    return;
+  }
+
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "rr-rm-fail-"));
+  const locked = path.join(tmp, "locked");
+  await mkdir(locked);
+  const replacementPath = path.join(locked, "victim.txt");
+  await writeFile(replacementPath, "x");
+  const stagingRoot = path.join(tmp, "staging");
+  const backupRoot = path.join(tmp, "backup");
+  await mkdir(stagingRoot, { recursive: true });
+  await mkdir(backupRoot, { recursive: true });
+
+  try {
+    await chmod(locked, 0o000);
+
+    const leaks = await rollbackReplacementCommon({
+      renamed: [{ from: path.join(stagingRoot, "victim.txt"), to: replacementPath }],
+      backups: [],
+      stagingRoot,
+      backupRoot,
+      removeMode: "file",
+      labels: LABELS,
+    });
+
+    assert.ok(leaks.length >= 1, "expected a leak");
+    assert.match(leaks[0] ?? "", /failed to remove replacement test entry/);
+  } finally {
+    await chmod(locked, 0o755);
+    await cleanupStaging(tmp, "test-cleanup");
+  }
+});
+
+test("rollbackReplacementCommon records leak when rename of backup fails (target chmod 0)", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("POSIX-only chmod 0 failure path");
+    return;
+  }
+
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    t.skip("running as root -- chmod 0 does not block rename");
+    return;
+  }
+
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "rr-restore-fail-"));
+  const lockedParent = path.join(tmp, "locked");
+  await mkdir(lockedParent);
+  const backupDest = path.join(lockedParent, "where-it-should-go.txt");
+  const backupRoot = path.join(tmp, "backup");
+  const stagingRoot = path.join(tmp, "staging");
+  await mkdir(backupRoot, { recursive: true });
+  await mkdir(stagingRoot, { recursive: true });
+  const backupCopy = path.join(backupRoot, "saved.txt");
+  await writeFile(backupCopy, "old");
+
+  try {
+    await chmod(lockedParent, 0o000);
+
+    const leaks = await rollbackReplacementCommon({
+      renamed: [],
+      backups: [{ name: "saved", from: backupDest, to: backupCopy }],
+      stagingRoot,
+      backupRoot,
+      removeMode: "file",
+      labels: LABELS,
+    });
+
+    assert.ok(leaks.length >= 1, "expected a leak");
+    assert.match(leaks[0] ?? "", /failed to restore previous test entry/);
+  } finally {
+    await chmod(lockedParent, 0o755);
+    await cleanupStaging(tmp, "test-cleanup");
+  }
+});
+
+test("rollbackReplacementCommon surfaces cleanupStaging leak when staging dir cannot be removed", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("POSIX-only chmod 0 failure path");
+    return;
+  }
+
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    t.skip("running as root -- chmod 0 does not block rm");
+    return;
+  }
+
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "rr-cleanup-fail-"));
+  const stagingParent = path.join(tmp, "locked");
+  await mkdir(stagingParent);
+  const stagingRoot = path.join(stagingParent, "staging");
+  await mkdir(stagingRoot);
+  await writeFile(path.join(stagingRoot, "leftover.txt"), "x");
+  const backupRoot = path.join(tmp, "backup");
+  await mkdir(backupRoot, { recursive: true });
+
+  try {
+    await chmod(stagingParent, 0o000);
+
+    const leaks = await rollbackReplacementCommon({
+      renamed: [],
+      backups: [],
+      stagingRoot,
+      backupRoot,
+      removeMode: "file",
+      labels: LABELS,
+    });
+
+    assert.ok(leaks.length >= 1, "expected a cleanupStaging leak");
+    assert.match(leaks[0] ?? "", /failed to clean up test staging dir/);
+  } finally {
+    await chmod(stagingParent, 0o755);
+    await cleanupStaging(tmp, "test-cleanup");
+  }
+});
+
+test("rollbackReplacementCommon honors beforeCleanup hook output", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "rr-hook-"));
+  const stagingRoot = path.join(tmp, "staging");
+  const backupRoot = path.join(tmp, "backup");
+  await mkdir(stagingRoot, { recursive: true });
+  await mkdir(backupRoot, { recursive: true });
+
+  const leaks = await rollbackReplacementCommon({
+    renamed: [],
+    backups: [],
+    stagingRoot,
+    backupRoot,
+    removeMode: "tree",
+    labels: LABELS,
+    beforeCleanup: () => Promise.resolve(["hook leak 1", "hook leak 2"]),
+  });
+
+  assert.deepEqual([...leaks], ["hook leak 1", "hook leak 2"]);
 });

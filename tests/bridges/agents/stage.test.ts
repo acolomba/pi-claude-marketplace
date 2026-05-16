@@ -783,3 +783,8 @@ test("abort cleans up staging dir without touching target dir", async () => {
     assert.equal(await pathExists(locations.agentsDir), false);
   });
 });
+
+test("Phase 8 / PRL-10 finalizeAgentsReplacement throws on unknown replacement handle (defensive)", async () => {
+  const bogus = { kind: "replaced" } as Parameters<typeof finalizeAgentsReplacement>[0];
+  await assert.rejects(() => finalizeAgentsReplacement(bogus), /Unknown agents replacement handle/);
+});
