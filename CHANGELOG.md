@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.5] - 2026-05-16
+
+- Added `/claude:plugin bootstrap` command: one-shot setup of the official Anthropic marketplace (`anthropics/claude-plugins-official`) in user scope with autoupdate enabled. Idempotent -- safe to re-run.
+- Moved `TOP_LEVEL_SUBCOMMANDS` and `MARKETPLACE_SUBCOMMANDS` to `router.ts` so completion provider and router stay in sync automatically.
+
 ## [0.1.4] - 2026-05-15
 
 - Implemented marketplace/plugin scope rules (CMP-1..8) for user and project installs, updates, uninstalls, and completions.
