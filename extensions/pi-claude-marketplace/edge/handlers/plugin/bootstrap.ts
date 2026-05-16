@@ -34,7 +34,7 @@ export function makeBootstrapHandler(
     try {
       parsed = parseArgs(args);
     } catch (err) {
-      notifyError(ctx, errorMessage(err));
+      notifyError(ctx, `${errorMessage(err)}\n${USAGE}`);
       return;
     }
 
@@ -52,10 +52,14 @@ export function makeBootstrapHandler(
       return;
     }
 
-    await bootstrapClaudePlugin({
-      ctx,
-      cwd: ctx.cwd,
-      gitOps: deps.gitOps,
-    });
+    try {
+      await bootstrapClaudePlugin({
+        ctx,
+        cwd: ctx.cwd,
+        gitOps: deps.gitOps,
+      });
+    } catch (err) {
+      notifyError(ctx, errorMessage(err), err);
+    }
   };
 }
