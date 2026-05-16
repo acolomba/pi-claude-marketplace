@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.4] - 2026-05-15
+
+- Implemented marketplace/plugin scope rules for user and project installs, updates, uninstalls, and completions.
+- Added project-scope install fallback to user marketplaces and project-precedence resolution for unqualified installed-plugin operations.
+- Limited install completions to available plugins for the selected target scope.
+
 ## [0.1.3] - 2026-05-15
 
 - Fixed user-scope path resolution to honor Pi's agent home override.
