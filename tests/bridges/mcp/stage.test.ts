@@ -513,3 +513,49 @@ test("Phase 8 / PRL-10 finalizeMcpReplacement throws on unknown replacement hand
   const bogus = { kind: "replaced" } as Parameters<typeof finalizeMcpReplacement>[0];
   assert.throws(() => finalizeMcpReplacement(bogus), /Unknown MCP replacement handle/);
 });
+
+test("Phase 8 / PRL-10 replacePreparedMcp rollback records leak when restore fails", async (t) => {
+  // POSIX-only: chmod the mcp.json parent dir read-only so the rollback's
+  // writeFile fails. The catch block accumulates a leak message rather
+  // than throwing, exercising lines 300-303.
+  if (process.platform === "win32") {
+    t.skip("POSIX-only chmod 0 failure path");
+    return;
+  }
+
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    t.skip("running as root -- chmod 0 does not block writeFile");
+    return;
+  }
+
+  const { chmod } = await import("node:fs/promises");
+
+  await withTmpScope(async ({ cwd, locations }) => {
+    await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
+    const previous = '{"mcpServers":{"old":{"command":"old"}}}\n';
+    await writeFile(locations.mcpJsonPath, previous, "utf8");
+
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: MP,
+      pluginName: PLUGIN,
+      servers: { srv: { command: "new" } },
+    });
+
+    const replacement = await replacePreparedMcp(prepared);
+    // Remove mcp.json, then chmod its parent dir read-only so the rollback's
+    // `mkdir(recursive: true)` followed by `writeFile` fails on the create
+    // step (O_CREAT requires parent write).
+    await rm(locations.mcpJsonPath, { force: true });
+    await chmod(path.dirname(locations.mcpJsonPath), 0o500);
+
+    try {
+      const leaks = await rollbackMcpReplacement(replacement);
+      assert.ok(leaks.length >= 1, "expected a restore leak");
+      assert.match(leaks[0] ?? "", /failed to restore mcp\.json/);
+    } finally {
+      await chmod(path.dirname(locations.mcpJsonPath), 0o755);
+    }
+  });
+});

@@ -892,3 +892,82 @@ test("AG-1 prepare/replace skips backup loop entries that vanish between prepare
     assert.equal(await pathExists(previousTarget), true);
   });
 });
+
+test("Phase 8 / PRL-10 replacePreparedAgents rollback removes new agents-index when none existed before", async () => {
+  // First replace from a clean scope (no prior agents-index). rollback's
+  // restoreAgentsIndex hits the `oldIndexText === undefined` branch and
+  // rm's the freshly-written index file.
+  await withTmpScope(async ({ locations }) => {
+    const pluginRoot = path.join(FIXTURES, "test-plugin");
+    const resolved = makeResolved("acme", pluginRoot);
+
+    const prepared = await prepareStagePluginAgents({
+      locations,
+      marketplaceName: "mp1",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp1", "acme"),
+      resolved,
+      agentsSourceDir: path.join(pluginRoot, "agents"),
+    });
+
+    const replacement = await replacePreparedAgents(prepared);
+    assert.equal(await pathExists(locations.agentsIndexPath), true);
+
+    const leaks = await rollbackAgentsReplacement(replacement);
+    assert.deepEqual([...leaks], []);
+    assert.equal(await pathExists(locations.agentsIndexPath), false);
+  });
+});
+
+test("Phase 8 / PRL-10 readOptionalText (non-ENOENT) -> rethrows from inside replacePreparedAgents", async (t) => {
+  // POSIX-only: chmod a previous agents-index.json to 0 so the
+  // readOptionalText call inside replacePreparedAgents hits the
+  // non-ENOENT branch (lines 561-566), which rethrows.
+  if (process.platform === "win32") {
+    t.skip("POSIX-only chmod 0 failure path");
+    return;
+  }
+
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    t.skip("running as root -- chmod 0 does not block readFile");
+    return;
+  }
+
+  const { chmod } = await import("node:fs/promises");
+
+  await withTmpScope(async ({ locations }) => {
+    const pluginRoot = path.join(FIXTURES, "test-plugin");
+    const resolved = makeResolved("acme", pluginRoot);
+
+    const first = await prepareStagePluginAgents({
+      locations,
+      marketplaceName: "mp1",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp1", "acme"),
+      resolved,
+      agentsSourceDir: path.join(pluginRoot, "agents"),
+    });
+    await commitPreparedAgents(first);
+
+    const second = await prepareStagePluginAgents({
+      locations,
+      marketplaceName: "mp1",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp1", "acme"),
+      resolved,
+      agentsSourceDir: path.join(pluginRoot, "agents"),
+    });
+
+    // chmod the existing index file to 0 so readOptionalText throws EACCES.
+    await chmod(locations.agentsIndexPath, 0o000);
+
+    try {
+      await assert.rejects(() => replacePreparedAgents(second), /EACCES|permission/i);
+    } finally {
+      await chmod(locations.agentsIndexPath, 0o644);
+    }
+  });
+});

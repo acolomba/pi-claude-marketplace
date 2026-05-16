@@ -594,3 +594,26 @@ test("Phase 8 / PRL-10 finalizeCommandsReplacement throws on unknown replacement
     /Unknown commands replacement handle/,
   );
 });
+
+test("Phase 8 / PRL-10 replacePreparedCommands skips backup when previous command file vanished", async () => {
+  const scope = await tmpScope();
+
+  try {
+    const prepared = await prepareStageCommands({
+      locations: scope.loc,
+      marketplaceName: "test-mp",
+      pluginName: "acme",
+      pluginRoot: FIXTURE_PLUGIN_ROOT,
+      pluginDataDir: "/tmp/pi-data/test-mp/acme",
+      resolved: makeResolved(FIXTURE_PLUGIN_ROOT, "commands"),
+      previousCommandNames: ["acme:was-here-but-gone"], // never written to disk
+    });
+
+    const replacement = await replacePreparedCommands(prepared);
+    assert.equal(replacement.kind, "replaced");
+    const leaks = await rollbackCommandsReplacement(replacement);
+    assert.deepEqual([...leaks], []);
+  } finally {
+    await scope.cleanup();
+  }
+});

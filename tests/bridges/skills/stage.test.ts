@@ -546,3 +546,30 @@ test("Phase 8 / PRL-10 finalizeSkillsReplacement throws on unknown replacement h
   const bogus = { kind: "replaced" } as Parameters<typeof finalizeSkillsReplacement>[0];
   await assert.rejects(() => finalizeSkillsReplacement(bogus), /Unknown skills replacement handle/);
 });
+
+test("Phase 8 / PRL-10 replacePreparedSkills skips backup when previous skill dir vanished", async () => {
+  // The replace path's backup loop has a "skip if target doesn't exist"
+  // branch. Trigger: declare a previousSkillName whose target dir is not on
+  // disk; the backup loop should `continue` past it instead of attempting
+  // a rename that would throw ENOENT.
+  await withTmpScope(async ({ locations }) => {
+    const pluginRoot = path.join(FIXTURES, "test-plugin");
+    const skillsDir = path.join(pluginRoot, "skills");
+    const resolved = makeResolved("acme", pluginRoot, skillsDir);
+
+    const prepared = await prepareStageSkills({
+      locations,
+      marketplaceName: "mp",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
+      resolved,
+      previousSkillNames: ["was-here-but-gone"], // never written to disk
+    });
+
+    const replacement = await replacePreparedSkills(prepared);
+    assert.equal(replacement.kind, "replaced");
+    const leaks = await rollbackSkillsReplacement(replacement);
+    assert.deepEqual([...leaks], []);
+  });
+});
