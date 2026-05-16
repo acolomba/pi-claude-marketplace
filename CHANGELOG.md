@@ -7,13 +7,8 @@
 
 ## [0.1.4] - 2026-05-15
 
-- Implemented marketplace/plugin scope rules (CMP-1..8) for user and project installs, updates, uninstalls, and completions.
-- Added project-scope install fallback to user marketplaces when no same-named project marketplace exists.
-- Added project-precedence resolution for unqualified installed-plugin operations (uninstall, update).
-- Applied the same project-precedence rule to unqualified `marketplace remove` and `marketplace update` -- when a marketplace name exists in both scopes, the project-scope record is used instead of erroring with an ambiguity message.
-- Limited install completions to available (not already installed, not unavailable) plugins for the current target scope.
-- `tmp/` is now excluded from ESLint and Prettier so `npm run check` passes cleanly when Pi runtime artifacts are present.
-- Simplified `scripts/pi.sh`: removed `--clear-screen` alias, `--option=value` forms, redundant tilde expansion, and the `pushd`/`trap` dance.
+- Clearer marketplace/plugin scoping rules.
+- Completion on `/claude:plugin install` is limited to available plugins.
 
 ## [0.1.3] - 2026-05-15
 
