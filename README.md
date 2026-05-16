@@ -219,7 +219,7 @@ Update one installed plugin, every installed plugin from one marketplace, or all
 
 ```text
 /claude:plugin update context7-plugin@context7-marketplace
-/context7-plugin@context7-marketplace
+/claude:plugin update @context7-marketplace
 /claude:plugin update
 ```
 
