@@ -223,7 +223,8 @@ Update one installed plugin, every installed plugin from one marketplace, or all
 /claude:plugin update
 ```
 
-> [!NOTE] Agent definitions in plugins may include a preferred model for running the agent, e.g. "sonnet", "opus", etc. These are discarded by default, but the `--map-models` option for `install` can be used to make a best-effort attempt at mapping these models to Pi models.
+> [!NOTE]
+> Agent definitions in plugins may include a preferred model for running the agent, e.g. "sonnet", "opus", etc. These are discarded by default, but the `--map-model` option for `install` can be used to make a best-effort attempt at mapping these models to Pi models.
 
 Uninstall a plugin.
 
@@ -248,8 +249,8 @@ Bootstrap is a convenience one-shot setup of the official Anthropic marketplace 
 This is equivalent to running.
 
 ```text
-/claude:plugin marketplace add upstash/context7-marketplace
-/claude:plugin marketplace autoupdate context7-marketplace
+/claude:plugin marketplace add anthropics/claude-plugins-marketplace
+/claude:plugin marketplace autoupdate anthropics/claude-plugins-marketplace
 ```
 
 ### Import
