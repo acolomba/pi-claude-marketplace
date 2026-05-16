@@ -43,13 +43,22 @@ Install the Pi extension:
 pi install npm:pi-claude-marketplace
 ```
 
-In Pi, add the Anthropic marketplace:
+Bootstrap the Anthropic marketplace into user scope with autoupdate enabled:
+
+```text
+/claude:plugin bootstrap
+```
+
+This is equivalent to running:
 
 ```text
 /claude:plugin marketplace add anthropics/claude-plugins-official
+/claude:plugin marketplace autoupdate claude-plugins-official
 ```
 
-A marketplace may also be added local to a project:
+`/claude:plugin bootstrap` is idempotent: re-running it on a fully configured user scope makes no changes; if the marketplace is present but autoupdate is off, only autoupdate is enabled.
+
+To add a marketplace into project scope instead:
 
 ```text
 /claude:plugin marketplace add anthropics/claude-plugins-official --scope project
@@ -71,12 +80,6 @@ Then reload:
 
 ```text
 /reload
-```
-
-Set autoupdate:
-
-```text
-/claude:plugin marketplace autoupdate claude-plugins-official
 ```
 
 Plugins are automatically updated when the marketplace is updated:
@@ -116,6 +119,23 @@ MCP server names are not prefixed or rewritten. The server name is the key from 
 ## `/claude:plugin` reference
 
 This extension mirrors Claude Code's `/plugin` command. Use `/claude:plugin` in Pi for marketplace and plugin operations, then run `/reload` after installing, uninstalling, or updating plugins so Pi discovers the changed resources.
+
+### Bootstrap
+
+One-shot setup of the canonical Anthropic marketplace in user scope with autoupdate enabled:
+
+```text
+/claude:plugin bootstrap
+```
+
+The command is idempotent:
+
+- If the marketplace is not present, it is added to user scope (equivalent to `/claude:plugin marketplace add anthropics/claude-plugins-official`).
+- If the marketplace is already present, the add step is skipped and no duplicate "Added marketplace" notification is emitted.
+- If autoupdate is off, it is turned on (equivalent to `/claude:plugin marketplace autoupdate claude-plugins-official`).
+- If autoupdate is already on, the command reports `Already enabled: claude-plugins-official.` and exits.
+
+Bootstrap always targets user scope. It does not accept `--scope project`. To configure a project-scope marketplace, use `marketplace add` and `marketplace autoupdate` directly.
 
 ### Marketplace
 
