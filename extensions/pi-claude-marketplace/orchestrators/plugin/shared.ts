@@ -18,7 +18,8 @@ import path from "node:path";
 import { computeHashVersion } from "../../domain/version.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { CrossPluginConflictError, MarketplaceNotFoundError } from "../../shared/errors.ts";
+import { CrossPluginConflictError } from "../../shared/errors.ts";
+import { MarketplaceNotFoundError } from "../../shared/errors.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
