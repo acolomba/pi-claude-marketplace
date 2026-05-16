@@ -310,11 +310,10 @@ async function getInstallPluginToMarketplacesMap(
 }
 
 async function getInstalledPluginToMarketplacesMap(
-  mode: Exclude<PluginRefCompletionMode, "install">,
+  _mode: Exclude<PluginRefCompletionMode, "install">,
   resolver: LocationsResolver,
   explicitScope: Scope | undefined,
 ): Promise<Map<string, string[]>> {
-  void mode;
   const result = new Map<string, string[]>();
   const scopes: readonly Scope[] =
     explicitScope === undefined ? ["project", "user"] : [explicitScope];

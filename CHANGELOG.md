@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.5] - 2026-05-16
+
+- Added `/claude:plugin bootstrap` command: one-shot setup of the official Anthropic marketplace (`anthropics/claude-plugins-official`) in user scope with autoupdate enabled. Idempotent -- safe to re-run.
+- Model specifications in plugin agent manifests are ignored unless the `--map-models` option is used when installing or updatinga plugin.
+
 ## [0.1.4] - 2026-05-15
 
 - Clearer marketplace/plugin scoping rules.

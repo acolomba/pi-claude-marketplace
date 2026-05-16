@@ -94,7 +94,7 @@ async function emptyFixture(): Promise<Fixture> {
 // TC-1 -- top-level subcommand keywords.
 // ---------------------------------------------------------------------------
 
-test("TC-1 :: first positional surfaces top-level keywords (install/uninstall/update/list/ls/marketplace)", async () => {
+test("TC-1 :: first positional surfaces top-level keywords (bootstrap/install/uninstall/update/list/ls/marketplace)", async () => {
   __resetCacheForTests();
   const f = await emptyFixture();
   try {
@@ -102,6 +102,7 @@ test("TC-1 :: first positional surfaces top-level keywords (install/uninstall/up
     assert.ok(items !== null);
     const labels = items.map((i) => i.label);
     assert.deepEqual([...labels].sort(), [
+      "bootstrap",
       "install",
       "list",
       "ls",

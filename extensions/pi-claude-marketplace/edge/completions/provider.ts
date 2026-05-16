@@ -29,6 +29,8 @@
 // register.ts (Plan 06-05) from persistence/ + domain/ surfaces and threaded
 // through this dispatcher. Tests inject a hermetic mock resolver.
 
+import { MARKETPLACE_SUBCOMMANDS, TOP_LEVEL_SUBCOMMANDS } from "../router.ts";
+
 import {
   extractPositionals,
   extractScope,
@@ -40,26 +42,6 @@ import {
 
 import type { LocationsResolver } from "./data.ts";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
-
-export const TOP_LEVEL_SUBCOMMANDS = [
-  "install",
-  "uninstall",
-  "update",
-  "list",
-  "ls",
-  "marketplace",
-] as const;
-
-export const MARKETPLACE_SUBCOMMANDS = [
-  "add",
-  "remove",
-  "rm",
-  "list",
-  "ls",
-  "update",
-  "autoupdate",
-  "noautoupdate",
-] as const;
 
 /**
  * Verbs (after `marketplace`) that take a marketplace-name positional.

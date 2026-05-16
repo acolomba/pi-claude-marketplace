@@ -29,6 +29,7 @@ import { notifyUsageError } from "../shared/notify.ts";
 import type { ExtensionCommandContext } from "../platform/pi-api.ts";
 
 export interface SubcommandHandlers {
+  bootstrap: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   install: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   uninstall: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   update: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
@@ -41,8 +42,38 @@ export interface SubcommandHandlers {
   marketplaceNoautoupdate: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
 }
 
+/**
+ * All top-level subcommands accepted by routeClaudePlugin, including
+ * aliases. Imported by the completion provider so both systems stay in sync.
+ */
+export const TOP_LEVEL_SUBCOMMANDS = [
+  "bootstrap",
+  "install",
+  "uninstall",
+  "update",
+  "list",
+  "ls",
+  "marketplace",
+] as const;
+
+/**
+ * All subcommands accepted by routeMarketplace, including aliases.
+ * Imported by the completion provider so both systems stay in sync.
+ */
+export const MARKETPLACE_SUBCOMMANDS = [
+  "add",
+  "remove",
+  "rm",
+  "list",
+  "ls",
+  "update",
+  "autoupdate",
+  "noautoupdate",
+] as const;
+
 export const TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <install|uninstall|update|list|ls|marketplace> ...\n" +
+  "Usage: /claude:plugin <bootstrap|install|uninstall|update|list|ls|marketplace> ...\n" +
+  "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project]\n" +
   "  update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
@@ -90,6 +121,8 @@ export async function routeClaudePlugin(
   }
 
   switch (head) {
+    case "bootstrap":
+      return handlers.bootstrap(rest, ctx);
     case "install":
       return handlers.install(rest, ctx);
     case "uninstall":
