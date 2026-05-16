@@ -101,6 +101,7 @@ None yet.
 | 260515-bkt | lets update the specs and the implementation to listen to PI_CODING_AGENT_DIR if set instead of hardcoding ~/.pi | 2026-05-14 | 0257577 | Verified | [260515-bkt-pi-coding-agent-dir](./quick/260515-bkt-pi-coding-agent-dir/) |
 | 260515-wpe | clarify marketplace/plugin scope rules in specifications | 2026-05-15 | 0c271f8 | Complete | [260515-wpe-scope-rules](./quick/260515-wpe-scope-rules/) |
 | 260516-02r | implement /claude:plugin bootstrap command (features/bootstrap) | 2026-05-16 | 490172e | Complete | [260516-02r-implement-claude-plugin-bootstrap-comman](./quick/260516-02r-implement-claude-plugin-bootstrap-comman/) |
+| 260516-08j | modify agent mapping logic to omit model unless --map-model option is passed to plugin install command | 2026-05-16 | 6f22be1 | Verified | [260516-08j-modify-agent-mapping-logic-to-omit-model](./quick/260516-08j-modify-agent-mapping-logic-to-omit-model/) |
 
 ## Deferred Items
 
@@ -112,6 +113,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last activity: 2026-05-16 - Completed quick task 260516-02r: implement /claude:plugin bootstrap command (features/bootstrap)
+Last activity: 2026-05-16 - Completed quick task 260516-08j: modify agent mapping logic to omit model unless --map-model option is passed to plugin install command
 
 Last session: 2026-05-11T20:42:58.893Z
