@@ -971,3 +971,63 @@ test("Phase 8 / PRL-10 readOptionalText (non-ENOENT) -> rethrows from inside rep
     }
   });
 });
+
+test("Phase 8 / PRL-10 rollbackAgentsReplacement records leak when restoreAgentsIndex fails", async (t) => {
+  // POSIX-only: after replace, chmod the extension root read-only so the
+  // rollback's `writeFile` to the agents-index path fails. The catch block
+  // in restoreAgentsIndex records a leak.
+  if (process.platform === "win32") {
+    t.skip("POSIX-only chmod 0 failure path");
+    return;
+  }
+
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    t.skip("running as root -- chmod 0 does not block writeFile");
+    return;
+  }
+
+  const { chmod, rm } = await import("node:fs/promises");
+
+  await withTmpScope(async ({ locations }) => {
+    const pluginRoot = path.join(FIXTURES, "test-plugin");
+    const resolved = makeResolved("acme", pluginRoot);
+
+    const first = await prepareStagePluginAgents({
+      locations,
+      marketplaceName: "mp1",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp1", "acme"),
+      resolved,
+      agentsSourceDir: path.join(pluginRoot, "agents"),
+    });
+    await commitPreparedAgents(first);
+
+    const second = await prepareStagePluginAgents({
+      locations,
+      marketplaceName: "mp1",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp1", "acme"),
+      resolved,
+      agentsSourceDir: path.join(pluginRoot, "agents"),
+    });
+
+    const replacement = await replacePreparedAgents(second);
+    // Remove the freshly-written index file, then lock the parent dir so
+    // restoreAgentsIndex's writeFile-of-previous fails with EACCES.
+    await rm(locations.agentsIndexPath, { force: true });
+    await chmod(path.dirname(locations.agentsIndexPath), 0o500);
+
+    try {
+      const leaks = await rollbackAgentsReplacement(replacement);
+      assert.ok(leaks.length >= 1, "expected restoreAgentsIndex leak");
+      assert.ok(
+        leaks.some((l) => l.includes("failed to restore agents index")),
+        `expected agents-index restore leak in: ${JSON.stringify(leaks)}`,
+      );
+    } finally {
+      await chmod(path.dirname(locations.agentsIndexPath), 0o755);
+    }
+  });
+});
