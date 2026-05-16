@@ -75,6 +75,15 @@ export interface StageAgentsInput {
   readonly agentsSourceDir: string;
   /** Generated skill names for this plugin (used to validate `skills:` refs). */
   readonly knownSkills?: readonly string[];
+  /**
+   * AG-7 opt-in: when true, `convertAgent` runs the model-mapping table
+   * (sonnet/opus/haiku/inherit/unknown) and emits `model:` accordingly.
+   * When false (the default), the generated frontmatter omits `model:`
+   * entirely and Pi picks its own default model. Threaded only on the
+   * install/update direct paths -- the marketplace autoupdate cascade
+   * always leaves this unset, so cascade-driven re-installs omit `model:`.
+   */
+  readonly mapModel?: boolean;
 }
 
 /**
