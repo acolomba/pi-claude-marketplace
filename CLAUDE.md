@@ -241,4 +241,4 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
 
 ### Versioning
 
-- Before creating a PR, offer to bump the project version and record the change in CHANGELOG.md.
+- Before creating a PR, offer to bump the project version in `project.json` and `sonar.properties`, and to record the change in CHANGELOG.md. Be succint.
