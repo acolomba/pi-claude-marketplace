@@ -50,6 +50,7 @@ function makeHandlers(): { handlers: SubcommandHandlers; calls: HandlerCall[] } 
     };
 
   const handlers: SubcommandHandlers = {
+    bootstrap: mk("bootstrap"),
     install: mk("install"),
     uninstall: mk("uninstall"),
     update: mk("update"),
@@ -108,6 +109,14 @@ test("AP-3 :: marketplace with unknown verb emits Unknown subcommand: + MARKETPL
   assert.equal(notifications[0]?.severity, "error");
   assert.ok(notifications[0]?.message.startsWith('Unknown marketplace subcommand: "bogus".'));
   assert.ok(notifications[0]?.message.includes(MARKETPLACE_USAGE));
+});
+
+test("routeClaudePlugin :: dispatches bootstrap to handlers.bootstrap", async () => {
+  const { ctx, notifications } = makeCtx();
+  const { handlers, calls } = makeHandlers();
+  await routeClaudePlugin("bootstrap", handlers, ctx);
+  assert.deepEqual(calls, [{ name: "bootstrap", args: "" }]);
+  assert.deepEqual(notifications, []);
 });
 
 test("routeClaudePlugin :: dispatches install to handlers.install", async () => {

@@ -83,13 +83,14 @@ import {
   formatErrorWithCauses,
   refreshGitHubClone,
   renderPartition,
-  resolveScopeFromState,
   type GitOps,
 } from "../marketplace/shared.ts";
 
 import {
   assertNoCrossPluginConflicts,
   pickAgentsSourceDir,
+  resolveInstalledMarketplaceTarget,
+  resolveInstalledPluginTarget,
   resolvePluginVersion,
 } from "./shared.ts";
 
@@ -130,6 +131,14 @@ export interface UpdatePluginsOptions {
   readonly target: UpdatePluginsTarget;
   /** D-12 injection seam; defaults to DEFAULT_GIT_OPS. */
   readonly gitOps?: GitOps;
+  /**
+   * AG-7 opt-in flag. Default false: re-staged agents omit `model:` and
+   * Pi picks its own default. The edge handler sets this to `true` only
+   * when the user supplies `--map-model` on `/claude:plugin update`.
+   * The marketplace autoupdate cascade (`updateSinglePlugin`) does NOT
+   * accept this flag; cascade-driven re-installs always omit `model:`.
+   */
+  readonly mapModel?: boolean;
 }
 
 /**
@@ -216,6 +225,12 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
         locations: t.locations,
         cascade: false,
         ctx,
+        // AG-7 opt-in: thread `--map-model` from the user-facing options
+        // bag into the per-plugin 3-phase swap. The cascade entrypoint
+        // (`updateSinglePlugin`) intentionally never sets this -- it
+        // resolves to false at the bridge call site so cascade re-installs
+        // always omit `model:`.
+        mapModel: opts.mapModel ?? false,
       });
     } catch (err) {
       // PUP-9 direct path: phase-2-or-earlier throws (including PI-14
@@ -299,6 +314,17 @@ interface ThreePhaseArgs {
    * phase-3 aggregate-error step).
    */
   readonly ctx?: ExtensionContext;
+  /**
+   * AG-7 opt-in. Set by `updatePlugins` from `UpdatePluginsOptions.mapModel`
+   * (which the edge handler populates from `--map-model`). The cascade
+   * entrypoint `updateSinglePlugin` intentionally NEVER sets this -- the
+   * `PluginUpdateFn` cascade signature has no flag, and cascade-driven
+   * re-installs must always use the omit-by-default behavior so they
+   * don't override the user's Pi default model with whatever the
+   * upstream agent declares. Resolves to false at the bridge call site
+   * via `args.mapModel ?? false` in `prepareUpdateHandles`.
+   */
+  readonly mapModel?: boolean;
 }
 
 interface PrepHandles {
@@ -449,6 +475,10 @@ async function prepareUpdateHandles(
       pluginDataDir,
       resolved: installable,
       agentsSourceDir,
+      // AG-7 opt-in: forward the direct-path `--map-model` setting. The
+      // cascade entrypoint never sets `args.mapModel`, so cascade re-
+      // installs always resolve to false (omit `model:`).
+      mapModel: args.mapModel ?? false,
     });
     handles.mcp = await prepareStageMcpServers({
       locations,
@@ -830,9 +860,22 @@ async function enumerateMarketplaceTarget(
 ): Promise<readonly ResolvedTarget[]> {
   const mpName = target.marketplace;
   const resolved =
-    explicitScope === undefined
-      ? await resolveScopeFromState(mpName, locationsFor("user", cwd), locationsFor("project", cwd))
-      : { scope: explicitScope, locations: locationsFor(explicitScope, cwd) };
+    target.kind === "plugin"
+      ? ((await resolveInstalledPluginTarget({
+          cwd,
+          marketplace: mpName,
+          plugin: target.plugin,
+          ...(explicitScope !== undefined && { explicitScope }),
+        })) ??
+        (await resolveInstalledMarketplaceTarget({
+          cwd,
+          marketplace: mpName,
+        })))
+      : await resolveInstalledMarketplaceTarget({
+          cwd,
+          marketplace: mpName,
+          ...(explicitScope !== undefined && { explicitScope }),
+        });
   const state = await loadState(resolved.locations.extensionRoot);
   const mp = state.marketplaces[mpName];
   if (mp === undefined) {

@@ -451,3 +451,60 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
     assert.equal(rebuildCount, 2, "post-invalidation read re-invokes rebuild");
   });
 });
+
+// CMP-1: same marketplace name may exist independently in user and project scopes.
+// The duplicate-name guard (MA-8) is scope-local only.
+test("CMP-1: same marketplace name in user scope and project scope are independent (cross-scope add succeeds)", async () => {
+  const hermeticHome = await mkdtemp(path.join(tmpdir(), "mp-add-cmp1-home-"));
+  const prevHome = process.env.HOME;
+  process.env.HOME = hermeticHome;
+  try {
+    await withTmpScope(async ({ cwd }) => {
+      const { ctx: ctx1, notifications: n1 } = makeCtx();
+      const { gitOps: gitOps1 } = makeMockGitOps({
+        fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      });
+      await addMarketplace({
+        ctx: ctx1,
+        scope: "project",
+        cwd,
+        rawSource: "anthropics/claude-plugins-official",
+        gitOps: gitOps1,
+      });
+      assert.equal(n1[0]?.severity, undefined, "project-scope add emits no error");
+
+      const { ctx: ctx2, notifications: n2 } = makeCtx();
+      const { gitOps: gitOps2 } = makeMockGitOps({
+        fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      });
+      // Same marketplace name but user scope -- MUST NOT throw MarketplaceDuplicateNameError.
+      await addMarketplace({
+        ctx: ctx2,
+        scope: "user",
+        cwd,
+        rawSource: "anthropics/claude-plugins-official",
+        gitOps: gitOps2,
+      });
+      assert.equal(n2[0]?.severity, undefined, "user-scope add of same name emits no error");
+
+      const projectState = await loadState(locationsFor("project", cwd).extensionRoot);
+      const userState = await loadState(locationsFor("user", cwd).extensionRoot);
+      assert.ok(
+        projectState.marketplaces["valid-marketplace"] !== undefined,
+        "project scope has record",
+      );
+      assert.ok(
+        userState.marketplaces["valid-marketplace"] !== undefined,
+        "user scope has independent record",
+      );
+    });
+  } finally {
+    if (prevHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = prevHome;
+    }
+
+    await rm(hermeticHome, { recursive: true, force: true });
+  }
+});

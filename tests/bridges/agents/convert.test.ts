@@ -35,6 +35,7 @@ test("AG-7 convertAgent maps model 'sonnet' to 'anthropic/claude-sonnet-4-6'", (
     knownSkills: [],
     discovered: makeDiscovered({ raw: { model: "sonnet", tools: "Read" } }),
     sourceHash: "abc",
+    mapModel: true,
   });
   assert.match(out.fileContent, /model: anthropic\/claude-sonnet-4-6/);
   assert.equal(out.originalModel, "sonnet");
@@ -48,6 +49,7 @@ test("AG-7 convertAgent maps model 'opus' to 'anthropic/claude-opus-4-7'", () =>
     knownSkills: [],
     discovered: makeDiscovered({ raw: { model: "opus", tools: "Read" } }),
     sourceHash: "abc",
+    mapModel: true,
   });
   assert.match(out.fileContent, /model: anthropic\/claude-opus-4-7/);
 });
@@ -60,6 +62,7 @@ test("AG-7 convertAgent maps model 'haiku' to 'anthropic/claude-haiku-4-5'", () 
     knownSkills: [],
     discovered: makeDiscovered({ raw: { model: "haiku", tools: "Read" } }),
     sourceHash: "abc",
+    mapModel: true,
   });
   assert.match(out.fileContent, /model: anthropic\/claude-haiku-4-5/);
 });
@@ -72,6 +75,7 @@ test("AG-7 convertAgent maps tools 'Read,Bash,Edit' to 'read,bash,edit'", () => 
     knownSkills: [],
     discovered: makeDiscovered({ raw: { tools: "Read,Bash,Edit" } }),
     sourceHash: "abc",
+    mapModel: false,
   });
   assert.match(out.fileContent, /tools: read,bash,edit/);
 });
@@ -84,6 +88,7 @@ test("AG-7 convertAgent removes disallowed tools from mapped list", () => {
     knownSkills: [],
     discovered: makeDiscovered({ raw: { tools: "Read,Bash,Edit", disallowedTools: "Bash" } }),
     sourceHash: "abc",
+    mapModel: false,
   });
   assert.match(out.fileContent, /tools: read,edit/);
 });
@@ -97,6 +102,7 @@ test("AG-7 convertAgent thinking accepts valid values (off,minimal,low,medium,hi
       knownSkills: [],
       discovered: makeDiscovered({ raw: { tools: "Read", thinking: v } }),
       sourceHash: "abc",
+      mapModel: false,
     });
     assert.match(out.fileContent, new RegExp(`thinking: ${v}`));
   }
@@ -110,6 +116,7 @@ test("AG-7 convertAgent thinking with invalid value -- omits and warns when no f
     knownSkills: [],
     discovered: makeDiscovered({ raw: { tools: "Read", thinking: "ultra" } }),
     sourceHash: "abc",
+    mapModel: false,
   });
   assert.doesNotMatch(out.fileContent, /thinking:/);
   assert.ok(out.warnings.some((w) => w.includes('unknown thinking value "ultra"')));
@@ -123,6 +130,7 @@ test("AG-7 convertAgent description fallback: uses synthetic when frontmatter de
     knownSkills: [],
     discovered: makeDiscovered({ raw: { tools: "Read" } }),
     sourceHash: "abc",
+    mapModel: false,
   });
   assert.match(
     out.fileContent,
@@ -140,6 +148,7 @@ test("AG-7 convertAgent skills field preserved when matches knownSkills (after A
     knownSkills: ["acme-knowledge"],
     discovered: makeDiscovered({ raw: { tools: "Read", skills: "knowledge" } }),
     sourceHash: "abc",
+    mapModel: false,
   });
   assert.match(out.fileContent, /skills: acme-knowledge/);
 });
@@ -152,6 +161,7 @@ test("AG-7 convertAgent skills field warns when reference is unknown", () => {
     knownSkills: [],
     discovered: makeDiscovered({ raw: { tools: "Read", skills: "phantom" } }),
     sourceHash: "abc",
+    mapModel: false,
   });
   assert.ok(out.warnings.some((w) => w.includes('unknown skill reference "phantom"')));
 });
@@ -166,6 +176,7 @@ test("AG-11 convertAgent throws when mapped tool list is empty (only unknown too
         knownSkills: [],
         discovered: makeDiscovered({ raw: { tools: "WebFetch" } }),
         sourceHash: "abc",
+        mapModel: false,
       }),
     (err: unknown) => {
       assert.ok(err instanceof Error);
@@ -187,6 +198,7 @@ test("AG-11 convertAgent throws when disallowedTools strips everything", () => {
         knownSkills: [],
         discovered: makeDiscovered({ raw: { tools: "Read,Bash", disallowedTools: "Read,Bash" } }),
         sourceHash: "abc",
+        mapModel: false,
       }),
     (err: unknown) => err instanceof Error && err.message.includes("mapped tool list is empty"),
   );
@@ -230,6 +242,7 @@ test("AG-7 / PI-10 convertAgent passes ${CLAUDE_PLUGIN_ROOT} substitution throug
       body: "Use ${CLAUDE_PLUGIN_ROOT}/foo and ${CLAUDE_PLUGIN_DATA}/bar",
     }),
     sourceHash: "abc",
+    mapModel: false,
   });
   assert.match(out.fileContent, /\/abs\/plugin\/foo/);
   assert.match(out.fileContent, /\/abs\/data\/bar/);
@@ -283,6 +296,7 @@ test("AG-7 convertAgent records droppedFields when source has unsupported keys",
       raw: { tools: "Read", custom_field: "x", another: "y" },
     }),
     sourceHash: "abc",
+    mapModel: false,
   });
   assert.deepEqual([...out.droppedFields].sort(), ["another", "custom_field"]);
 });
@@ -295,6 +309,7 @@ test("AG-7 convertAgent records droppedTools when source mentions unknown tools"
     knownSkills: [],
     discovered: makeDiscovered({ raw: { tools: "Read,WebFetch,NotebookEdit" } }),
     sourceHash: "abc",
+    mapModel: false,
   });
   assert.deepEqual([...out.droppedTools], ["WebFetch", "NotebookEdit"]);
 });
@@ -307,6 +322,7 @@ test("AG-7 convertAgent omits model and warns when model is unknown", () => {
     knownSkills: [],
     discovered: makeDiscovered({ raw: { model: "future-model", tools: "Read" } }),
     sourceHash: "abc",
+    mapModel: true,
   });
   assert.equal(out.originalModel, "future-model");
   const fmEnd = out.fileContent.indexOf("\n---\n", 4);
@@ -322,6 +338,68 @@ test("AG-7 convertAgent treats inherit as 'no model emit' but records originalMo
     knownSkills: [],
     discovered: makeDiscovered({ raw: { model: "inherit", tools: "Read" } }),
     sourceHash: "abc",
+    mapModel: true,
   });
   assert.equal(out.originalModel, "inherit");
+});
+
+// ---------------------------------------------------------------------------
+// AG-7 mapModel opt-in default (260516-08j)
+// ---------------------------------------------------------------------------
+
+test("AG-7 convertAgent with mapModel: false omits model field entirely (source 'sonnet')", () => {
+  // Default behavior per 260516-08j: even when the source declares a known
+  // model, the generated frontmatter MUST NOT contain a `model:` line. Pi
+  // picks its own default.
+  const out = convertAgent({
+    pluginName: "acme",
+    pluginRoot: "/root",
+    pluginDataDir: "/data",
+    knownSkills: [],
+    discovered: makeDiscovered({ raw: { model: "sonnet", tools: "Read" } }),
+    sourceHash: "abc",
+    mapModel: false,
+  });
+  const fmEnd = out.fileContent.indexOf("\n---\n", 4);
+  const frontmatter = out.fileContent.slice(0, fmEnd);
+  assert.doesNotMatch(frontmatter, /^model:/m);
+  // No mapping was performed -- originalModel is NOT recorded.
+  assert.equal(out.originalModel, undefined);
+  // And no "unknown model" warning fires either.
+  assert.ok(!out.warnings.some((w) => w.includes("unknown model")));
+});
+
+test("AG-7 convertAgent with mapModel: false on source 'inherit' omits model and emits no originalModel provenance", () => {
+  // The inherit -> omit+originalModel rule is part of the AG-7 mapping
+  // table. When the flag is off, the mapping does not run, so even the
+  // 'inherit' provenance path is silent. Absence is self-documenting.
+  const out = convertAgent({
+    pluginName: "acme",
+    pluginRoot: "/r",
+    pluginDataDir: "/d",
+    knownSkills: [],
+    discovered: makeDiscovered({ raw: { model: "inherit", tools: "Read" } }),
+    sourceHash: "abc",
+    mapModel: false,
+  });
+  const fmEnd = out.fileContent.indexOf("\n---\n", 4);
+  const frontmatter = out.fileContent.slice(0, fmEnd);
+  assert.doesNotMatch(frontmatter, /^model:/m);
+  assert.equal(out.originalModel, undefined);
+  assert.doesNotMatch(out.fileContent, /originalModel:/);
+});
+
+test("AG-7 convertAgent with mapModel: true preserves byte-for-byte AG-7 mapping for 'sonnet'", () => {
+  // Sanity: when --map-model is on, the existing AG-7 contract holds.
+  const out = convertAgent({
+    pluginName: "acme",
+    pluginRoot: "/root",
+    pluginDataDir: "/data",
+    knownSkills: [],
+    discovered: makeDiscovered({ raw: { model: "sonnet", tools: "Read" } }),
+    sourceHash: "abc",
+    mapModel: true,
+  });
+  assert.match(out.fileContent, /model: anthropic\/claude-sonnet-4-6/);
+  assert.equal(out.originalModel, "sonnet");
 });

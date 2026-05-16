@@ -1,0 +1,65 @@
+Output demos/bootstrap.gif
+
+Require pi
+Require npm
+
+Set Shell "bash"
+Set FontFamily "Fira Code Retina"
+Set FontSize 24
+Set Width 1440
+Set Height 1080
+Set TypingSpeed 55ms
+
+Hide
+Type "./scripts/pi.sh --home $(pwd)/tmp/pihome --cd $(pwd)/tmp/work --clear"
+Enter
+Sleep 3000ms
+Show
+
+Sleep 1400ms
+Type "/claude:p"
+Sleep 170ms
+Tab
+Sleep 170ms
+Type "boot"
+Sleep 170ms
+Tab
+Sleep 1800ms
+Enter
+
+Sleep 1800ms
+
+Type "/claude:p"
+Sleep 170ms
+Tab
+Sleep 170ms
+Type "i"
+Sleep 170ms
+Tab
+Sleep 170ms
+Type "pr-"
+Sleep 170ms
+Tab
+Sleep 1800ms
+Enter
+
+Sleep 1400ms
+
+Type "/reload"
+Sleep 1800ms
+Enter
+
+Sleep 1400ms
+
+Type "/pr-"
+Sleep 170ms
+Tab
+Sleep 1800ms
+Enter
+
+Sleep 5s
+
+Hide
+Type "/claude:plugin marketplace rm anthropics/claude-plugins-official"
+Sleep 500ms
+Ctrl+C

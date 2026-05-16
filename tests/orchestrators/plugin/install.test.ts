@@ -114,6 +114,7 @@ async function seedPathMarketplaceWithPlugin(opts: {
   marketplaceRoot: string;
   marketplaceName: string;
   pluginName: string;
+  scope?: "user" | "project";
   /** Optional version stamp on the entry; absent -> hash-version fallback. */
   pluginVersion?: string;
   /** Skills to seed -- each `{ sourceName, body? }` becomes <pluginRoot>/skills/<sourceName>/SKILL.md. */
@@ -140,6 +141,7 @@ async function seedPathMarketplaceWithPlugin(opts: {
   rawSourceOverride?: unknown;
 }): Promise<SeededPlugin> {
   const { cwd, marketplaceRoot, marketplaceName, pluginName } = opts;
+  const scope = opts.scope ?? "project";
 
   await mkdir(marketplaceRoot, { recursive: true });
   await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
@@ -211,7 +213,7 @@ async function seedPathMarketplaceWithPlugin(opts: {
   await writeFile(manifestPath, JSON.stringify(manifest));
 
   // Seed state with the marketplace record.
-  const locations = locationsFor("project", cwd);
+  const locations = locationsFor(scope, cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
 
   const state: ExtensionState = {
@@ -219,7 +221,7 @@ async function seedPathMarketplaceWithPlugin(opts: {
     marketplaces: {
       [marketplaceName]: {
         name: marketplaceName,
-        scope: "project",
+        scope,
         source: pathSource(`./${path.basename(marketplaceRoot)}`),
         addedFromCwd: cwd,
         manifestPath,
@@ -250,7 +252,7 @@ async function seedPathMarketplaceWithPlugin(opts: {
     const cp = opts.conflictingPriorPlugin;
     state.marketplaces[cp.marketplace] = {
       name: cp.marketplace,
-      scope: "project",
+      scope,
       source: pathSource("./other-mp"),
       addedFromCwd: cwd,
       manifestPath: path.join(cwd, "other-mp.json"),
@@ -1048,6 +1050,123 @@ test("AS-7: pre-existing foreign agent file under target name -> warning surface
         true,
         `expected AS-7 warning naming the pre-existing agent file; got: ${JSON.stringify(notifications)}`,
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// CMP-2..4 / PI-16 and PI-17 -- source/target scope split
+// ───────────────────────────────────────────────────────────────────────────
+
+test("CMP-3 / PI-16: project-target install falls back to user-scope marketplace source", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-cmp3-"));
+    try {
+      const userLocations = locationsFor("user", cwd);
+      const projectLocations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "user-mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        scope: "user",
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      assert.equal(notifications[0]?.severity, undefined);
+      assert.match(notifications[0]?.message ?? "", /Installed plugin "hello"/);
+
+      const userAfter = await loadState(userLocations.extensionRoot);
+      const projectAfter = await loadState(projectLocations.extensionRoot);
+      assert.equal(userAfter.marketplaces["mp"]?.plugins["hello"], undefined);
+      assert.equal(projectAfter.marketplaces["mp"]?.scope, "project");
+      assert.ok(projectAfter.marketplaces["mp"]?.plugins["hello"] !== undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("CMP-4 / PI-16: user-target install cannot source a project-only marketplace", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-cmp4-"));
+    try {
+      const userLocations = locationsFor("user", cwd);
+      const projectLocations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "project-mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "user",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.match(notifications[0]?.message ?? "", /not found in marketplace "mp"/);
+
+      const userAfter = await loadState(userLocations.extensionRoot);
+      const projectAfter = await loadState(projectLocations.extensionRoot);
+      assert.equal(userAfter.marketplaces["mp"], undefined);
+      assert.equal(projectAfter.marketplaces["mp"]?.plugins["hello"], undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PI-17: same plugin may be installed in both user and project target scopes", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-pi17-"));
+    try {
+      const userLocations = locationsFor("user", cwd);
+      const projectLocations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "user-mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        scope: "user",
+        preInstall: true,
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      assert.equal(notifications[0]?.severity, undefined);
+      assert.match(notifications[0]?.message ?? "", /Installed plugin "hello"/);
+
+      const userAfter = await loadState(userLocations.extensionRoot);
+      const projectAfter = await loadState(projectLocations.extensionRoot);
+      assert.ok(userAfter.marketplaces["mp"]?.plugins["hello"] !== undefined);
+      assert.ok(projectAfter.marketplaces["mp"]?.plugins["hello"] !== undefined);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
