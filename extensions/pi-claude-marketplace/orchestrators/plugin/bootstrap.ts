@@ -52,8 +52,8 @@ const BOOTSTRAP_MARKETPLACE_NAME = "claude-plugins-official";
 export interface BootstrapOptions {
   readonly ctx: ExtensionContext;
   readonly cwd: string;
-  /** D-12 injection seam. Passed through to addMarketplace unchanged. */
-  readonly gitOps?: GitOps;
+  /** D-12 injection seam. Always provided by the edge handler via EdgeDeps. */
+  readonly gitOps: GitOps;
 }
 
 /**
@@ -87,7 +87,7 @@ export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<voi
       scope: "user",
       cwd: opts.cwd,
       rawSource: BOOTSTRAP_SOURCE,
-      ...(opts.gitOps !== undefined && { gitOps: opts.gitOps }),
+      gitOps: opts.gitOps,
     });
   } catch (err) {
     // The marketplace already exists in user scope -- idempotent path.
