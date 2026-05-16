@@ -42,6 +42,7 @@ import type { LocationsResolver } from "./data.ts";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 
 export const TOP_LEVEL_SUBCOMMANDS = [
+  "bootstrap",
   "install",
   "uninstall",
   "update",
