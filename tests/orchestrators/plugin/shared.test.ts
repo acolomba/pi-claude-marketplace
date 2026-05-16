@@ -14,7 +14,10 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { CrossPluginConflictError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  CrossPluginConflictError,
+  MarketplaceNotFoundError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
@@ -404,7 +407,7 @@ test("CMP-5 :: unqualified marketplace target throws when absent from both scope
   await withTmpCwd(async (cwd) => {
     await assert.rejects(
       resolveInstalledMarketplaceTarget({ cwd, marketplace: "mp" }),
-      /Marketplace "mp" not found in user, project scopes\./,
+      (err: unknown) => err instanceof MarketplaceNotFoundError,
     );
   });
 });
