@@ -223,6 +223,8 @@ Update one installed plugin, every installed plugin from one marketplace, or all
 /claude:plugin update
 ```
 
+[!NOTE] Agent definitions in plugins may include a preferred model for running the agent, e.g. "sonnet", "opus", etc. These are discarded by default, but the `--map-models` option for `install` can be used to make a best-effort attempt at mapping these models to Pi models.
+
 Uninstall a plugin.
 
 ```text
