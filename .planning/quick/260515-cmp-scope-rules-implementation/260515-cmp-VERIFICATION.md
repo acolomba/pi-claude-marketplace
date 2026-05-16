@@ -6,7 +6,7 @@
 ## Commands
 
 ```bash
-rm -rf tmp && npm run check
+npm run check
 ```
 
 ## Result
@@ -14,11 +14,10 @@ rm -rf tmp && npm run check
 Passed.
 
 - `npm run typecheck` passed.
-- `npm run lint` passed after removing generated ignored `tmp/` runtime artifacts.
+- `npm run lint` passed.
 - `npm run format:check` passed.
 - `npm test` passed: 852 tests, 0 failures.
 
 ## Notes
 
-- The generated `tmp/` directory contains Pi runtime/plugin artifacts and causes ESLint to inspect marketplace `.mjs` files outside this source tree's typed-linting setup. Removing `tmp/` before `npm run check` is required for a clean local verification run.
 - The accidental top-level `/claude:plugin add` alias was reverted before final verification. Plugin installation remains `/claude:plugin install <plugin>@<marketplace>`; marketplace source addition remains `/claude:plugin marketplace add <source>`.
