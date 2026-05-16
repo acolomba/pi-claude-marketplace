@@ -27,7 +27,7 @@ Installs plugins from the Claude plugin marketplace that contain these component
 - Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents).
 - MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter).
 
-Plugins that contain unsupported components are marked as "unavailable". The compatible parts may still be installed, but the plugin will not work as originally intended.
+Plugins that contain unsupported components are marked as "unavailable".
 
 ## Prerequisites
 
@@ -37,49 +37,49 @@ Plugins that contain unsupported components are marked as "unavailable". The com
 
 ## Usage
 
-Install the Pi extension:
+Install the Pi extension.
 
 ```bash
 pi install npm:pi-claude-marketplace
 ```
 
-Bootstrap the official Anthropic Claude plugin marketplace:
+Bootstrap the offical Claude plugin marketplace (`anthropics/claude-plugins-official`).
 
 ```text
 /claude:plugin bootstrap
 ```
 
-List plugins available for installation:
+List plugins available for installation.
 
 ```text
 /claude:plugin list --available
 ```
 
-Install a plugin:
+Install a plugin.
 
 ```text
 /claude:plugin install pr-review-toolkit@claude-plugins-official
 ```
 
-Add another marketplace:
+Add another marketplace.
 
 ```text
 /claude:plugin marketplace add upstash/context7
 ```
 
-List its plugins:
+List its plugins.
 
 ```text
 /claude:plugin list context7-marketplace --available
 ```
 
-Add another plugin:
+Add another plugin.
 
 ```text
-/claude:plugin install context7-plugin@context7-marketplace
+/claude:plugin context7-plugin@context7-marketplace
 ```
 
-Then reload:
+Then reload.
 
 ```text
 /reload
@@ -113,83 +113,89 @@ MCP server names are not prefixed or rewritten. The server name is the key from 
 | `foo`       | `foo-api`        | `foo-api`                        |
 | `bar`       | `api`            | conflict if `api` already exists |
 
+### Scoping
+
+Marketplaces and plugins can be installed in the user scope or in the current project's scope. The default is user scope.
+
+The user scope is inherited, so it is possible to install a plugin from a user-scope marketplace in the project scope.
+
+It is also possible to install the same plugin in both user and project scopes; the plugin in the user scope takes precedence.
+
 ## `/claude:plugin` reference
 
 This extension mirrors Claude Code's `/plugin` command. Use `/claude:plugin` in Pi for marketplace and plugin operations, then run `/reload` after installing, uninstalling, or updating plugins so Pi discovers the changed resources.
 
 ### Marketplace
 
-Add a marketplace from a GitHub repository shorthand, matching Claude Code's common `/plugin marketplace add owner/repo` form:
+Add a marketplace from a GitHub repository `owner/repo` shorthand.
 
 ```text
 /claude:plugin marketplace add upstash/context7
 ```
 
-Add the same marketplace from a GitHub URL:
+Add the same marketplace from a GitHub URL.
 
 ```text
 /claude:plugin marketplace add https://github.com/upstash/context7-marketplace
 ```
 
-Pin a GitHub marketplace to a branch, tag, or commit with a `#ref` suffix:
+Pin a GitHub marketplace to a branch, tag, or commit with a `#ref` suffix.
 
 ```text
 /claude:plugin marketplace add https://github.com/upstash/context7-marketplace#v1.0.30
 ```
 
-Add a marketplace from the local filesystem. The path may be a directory containing `.claude-plugin/marketplace.json` or a direct path to a `marketplace.json` file:
+Add a marketplace from the local filesystem. The path may be a directory containing `.claude-plugin/marketplace.json` or a direct path to a `marketplace.json` file.
 
 ```text
 /claude:plugin marketplace add ./my-marketplace
 /claude:plugin marketplace add ./my-marketplace/.claude-plugin/marketplace.json
 ```
 
-Add a marketplace local to the current project with `--scope project`. The default scope is `user`:
+Add a marketplace local to the current project with `--scope project`. The default scope is `user`.
 
 ```text
 /claude:plugin marketplace add upstash/context7-marketplace --scope project
 ```
 
-List configured marketplaces:
+List configured marketplaces.
 
 ```text
 /claude:plugin marketplace list
 /claude:plugin marketplace ls
 ```
 
-Refresh one marketplace, or all marketplaces when no name is provided:
+Refresh one marketplace, or all marketplaces when no name is provided.
 
 ```text
 /claude:plugin marketplace update context7-marketplace
 /claude:plugin marketplace update
 ```
 
-Remove a marketplace and all plugins installed from it:
+Remove a marketplace and all plugins installed from it.
 
 ```text
 /claude:plugin marketplace remove context7-marketplace
 /claude:plugin marketplace rm context7-marketplace
 ```
 
-Toggle marketplace plugin auto-updates. When the marketplace is updated manually, plugins are automatically updated:
+Toggle marketplace plugin auto-updates. When the marketplace is updated manually, installed plugins are automatically updated.
 
 ```text
 /claude:plugin marketplace autoupdate context7-marketplace
 /claude:plugin marketplace noautoupdate context7-marketplace
 ```
 
-`/claude:plugin marketplace add`, `remove`, `list`, and `update` intentionally follow Claude Code's `/plugin marketplace ...` command shape where this extension supports the same operation. Today this extension accepts GitHub shorthands such as `owner/repo`, GitHub HTTPS URLs, and filesystem paths; arbitrary Git hosts and remote `marketplace.json` URLs are not installable yet.
-
 ### Plugin
 
-List plugins available for installation. Omit the marketplace name to list across configured marketplaces:
+List plugins available for installation. Omit the marketplace name to list across configured marketplaces.
 
 ```text
 /claude:plugin list context7-marketplace --available
 /claude:plugin list --available
 ```
 
-Filter list output by status:
+Filter the list by plugin status, installed, available for installation, or unavailable to install.
 
 ```text
 /claude:plugin list --installed
@@ -197,57 +203,47 @@ Filter list output by status:
 /claude:plugin list --unavailable
 ```
 
-Install a plugin, using the same `<plugin>@<marketplace>` reference format as Claude Code's `/plugin install`:
+Install a plugin, using the `<plugin>@<marketplace>` format.
 
 ```text
-/claude:plugin install pr-review-toolkit@claude-plugins-official
+/claude:plugin install context7-plugin@context7-marketplace
 ```
 
-Install into project scope instead of user scope:
+Install in the project scope instead of the user scope.
 
 ```text
-/claude:plugin install pr-review-toolkit@claude-plugins-official --scope project
+/claude:plugin install context7-plugin@context7-marketplace --scope project
 ```
 
-Scope rules for marketplaces and plugins:
-
-- Marketplaces can be added to user scope, project scope, or both.
-- A project-scope plugin install can use a project-scope marketplace, or fall back to a user-scope marketplace with the same name if no project marketplace exists.
-- A user-scope plugin install can only use a user-scope marketplace; project-only marketplaces do not source user installs.
-- The same plugin can be installed in both user and project scopes. When a single unqualified operation could refer to both, the project-scope install takes precedence; pass `--scope user` to target the user install.
-- Tab completion follows these rules. `install` completion suggests plugins available in the current target scope.
-
-Update one installed plugin, every installed plugin from one marketplace, or all installed plugins:
+Update one installed plugin, every installed plugin from one marketplace, or all installed plugins.
 
 ```text
-/claude:plugin update pr-review-toolkit@claude-plugins-official
-/claude:plugin update @context7-marketplace
+/claude:plugin update context7-plugin@context7-marketplace
+/context7-plugin@context7-marketplace
 /claude:plugin update
 ```
 
-Uninstall a plugin:
+Uninstall a plugin.
 
 ```text
-/claude:plugin uninstall pr-review-toolkit@claude-plugins-official
+/claude:plugin uninstall context7-plugin@context7-marketplace
 ```
 
-Reload Pi after changes:
+Reload Pi after changes.
 
 ```text
 /reload
 ```
 
-Claude Code users may expect `/reload-plugins`; in Pi, use `/reload`. Claude Code's `/plugin` interactive tabs, plugin enable/disable commands, local scope, hooks, output styles, and LSP server activation are not provided by this extension.
-
 ### Bootstrap
 
-One-shot setup of the canonical Anthropic marketplace in user scope with autoupdate enabled:
+Bootstrap is a convenience one-shot setup of the official Anthropic marketplace in the user scope with autoupdate enabled.
 
 ```text
 /claude:plugin bootstrap
 ```
 
-This is equivalent to running:
+This is equivalent to running.
 
 ```text
 /claude:plugin marketplace add upstash/context7-marketplace
@@ -256,20 +252,20 @@ This is equivalent to running:
 
 ## Development
 
-Install pre-commit hooks:
+Install pre-commit hooks.
 
 ```bash
 pre-commit install
 pre-commit install --hook-type commit-msg
 ```
 
-Enable Git LFS for large binary assets such as images and videos:
+Enable Git LFS for large binary assets such as images and videos.
 
 ```bash
 git lfs install
 ```
 
-Build:
+Build.
 
 ```bash
 npm install
@@ -286,6 +282,6 @@ The PRD was then used to guide GSD through discussion, planning and implementati
 
 ## License
 
-This project is licensed under the MIT License - see the [COPYING](COPYING) file for details
+This project is licensed under the MIT License. See the [COPYING](COPYING) file for details.
 
 Copyright 2026 [Alessandro Colomba](https://github.com/acolomba)
