@@ -136,3 +136,44 @@ test('shim :: --scope project calls installPlugin with scope: "project"', async 
     assert.match(notifications[0]!.message, /not found in marketplace "mymkt"/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 260516-08j: --map-model flag is accepted; unknown long flags rejected.
+// ---------------------------------------------------------------------------
+
+test("shim :: --map-model flag is accepted and control reaches installPlugin", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeInstallHandler(makePi());
+    await handler("myplug@mymkt --map-model", ctx);
+    // The flag must NOT produce USAGE; control must reach installPlugin
+    // which then surfaces "not found in marketplace" against the empty
+    // hermetic state.
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.doesNotMatch(notifications[0]!.message, /Usage: \/claude:plugin install/);
+    assert.match(notifications[0]!.message, /not found in marketplace "mymkt"/);
+  });
+});
+
+test("shim :: --map-model + --scope project both accepted together", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeInstallHandler(makePi());
+    await handler("myplug@mymkt --map-model --scope project", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.match(notifications[0]!.message, /not found in marketplace "mymkt"/);
+  });
+});
+
+test("shim :: rejects unknown long flag with USAGE", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeInstallHandler(makePi());
+    await handler("myplug@mymkt --bogus-flag", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.match(notifications[0]!.message, /Usage: \/claude:plugin install/);
+  });
+});

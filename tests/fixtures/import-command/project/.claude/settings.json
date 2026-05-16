@@ -1,0 +1,12 @@
+{
+  "enabledPlugins": {
+    "official-plugin@claude-plugins-official": true,
+    "local-plugin@directory-marketplace": true,
+    "github-plugin@github-marketplace": true,
+    "disabled-by-local@directory-marketplace": true
+  },
+  "extraKnownMarketplaces": {
+    "directory-marketplace": { "directory": "./directory-marketplace" },
+    "github-marketplace": { "github": { "repo": "example/github-marketplace" } }
+  }
+}

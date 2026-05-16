@@ -1,56 +1,70 @@
 // edge/handlers/plugin/update.ts
 //
-// Thin-shim handler factory for `/claude:plugin update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]`.
+// Thin-shim handler factory for
+// `/claude:plugin update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--map-model]`.
+//
 // Three positional forms:
 //   - bare (no positional) -> target = { kind: "all" }
 //   - `@<marketplace>`     -> target = { kind: "marketplace", marketplace }
 //   - `<plugin>@<marketplace>` -> target = { kind: "plugin", plugin, marketplace }
+//
+// Plan 260516-08j: the boolean `--map-model` opt-in (AG-7) requires the
+// raw `parseArgs` + manual positional scan pattern from `list.ts`. The
+// previous `parseCommandArgs` wrapper only understood `--scope`.
 
 import { updatePlugins } from "../../../orchestrators/plugin/update.ts";
+import { errorMessage } from "../../../shared/errors.ts";
 import { notifyError } from "../../../shared/notify.ts";
-import { parseCommandArgs } from "../../args-schema.ts";
+import { parseArgs } from "../../args.ts";
 
-import { splitPluginMarketplaceRef } from "./shared.ts";
+import { parsePositionalsWithFlags, splitPluginMarketplaceRef } from "./shared.ts";
 
 import type { UpdatePluginsTarget } from "../../../orchestrators/plugin/update.ts";
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
 const USAGE =
-  "Usage: /claude:plugin update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]";
+  "Usage: /claude:plugin update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--map-model]";
 
 export function makeUpdateHandler(
   pi: ExtensionAPI,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
-    const parsed = parseCommandArgs(
-      args,
-      {
-        positional: [{ name: "ref", required: false }] as const,
-        usage: USAGE,
-      },
-      (message) => {
-        notifyError(ctx, message);
-      },
-    );
-    if (parsed === undefined) {
+    let parsed;
+    try {
+      parsed = parseArgs(args);
+    } catch (err) {
+      notifyError(ctx, errorMessage(err));
+      return;
+    }
+
+    const flagged = parsePositionalsWithFlags(parsed.positional, ctx, USAGE);
+    if (flagged === undefined) {
+      return;
+    }
+
+    const { nonFlagPositionals, mapModel } = flagged;
+
+    if (nonFlagPositionals.length > 1) {
+      notifyError(ctx, USAGE);
       return;
     }
 
     let target: UpdatePluginsTarget;
-    if (parsed.ref === undefined) {
+    const ref = nonFlagPositionals[0];
+    if (ref === undefined) {
       target = { kind: "all" };
-    } else if (parsed.ref.startsWith("@") && parsed.ref.length > 1) {
-      target = { kind: "marketplace", marketplace: parsed.ref.slice(1) };
+    } else if (ref.startsWith("@") && ref.length > 1) {
+      target = { kind: "marketplace", marketplace: ref.slice(1) };
     } else {
-      const ref = splitPluginMarketplaceRef(parsed.ref);
-      if (ref === undefined) {
+      const split = splitPluginMarketplaceRef(ref);
+      if (split === undefined) {
         notifyError(ctx, USAGE);
         return;
       }
 
       target = {
         kind: "plugin",
-        ...ref,
+        ...split,
       };
     }
 
@@ -60,6 +74,7 @@ export function makeUpdateHandler(
       cwd: ctx.cwd,
       target,
       ...(parsed.scope !== undefined && { scope: parsed.scope }),
+      ...(mapModel && { mapModel: true }),
     });
   };
 }

@@ -94,6 +94,7 @@ export async function prepareStagePluginAgents(
     pluginDataDir,
     agentsSourceDir,
     knownSkills,
+    mapModel,
   } = input;
 
   // Step 1: discover. D-07 signature: discoverPluginAgents now takes
@@ -117,6 +118,8 @@ export async function prepareStagePluginAgents(
   );
 
   // Step 3: convert (AG-7 + AG-11). AG-11 throws here if mapped tools is empty.
+  // `mapModel` defaults to false: the omit-by-default behavior is the new
+  // contract; only explicit `--map-model` on install/update flips it on.
   const converted: ConvertedAgent[] = discovered.map((d) =>
     convertAgent({
       pluginName,
@@ -125,6 +128,7 @@ export async function prepareStagePluginAgents(
       knownSkills: knownSkills ?? [],
       discovered: d,
       sourceHash: d.sourceHash,
+      mapModel: mapModel ?? false,
     }),
   );
 

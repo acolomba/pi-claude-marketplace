@@ -70,7 +70,9 @@ import { formatErrorWithCauses } from "../marketplace/shared.ts";
 
 import {
   assertNoCrossPluginConflicts,
+  cloneMarketplaceRecordForTargetScope,
   pickAgentsSourceDir,
+  resolveInstallMarketplaceSource,
   resolvePluginVersion,
 } from "./shared.ts";
 
@@ -95,6 +97,31 @@ import type { Scope } from "../../shared/types.ts";
  * non-optional `ExtensionAPI`; making it optional here would force a runtime
  * branch the type checker cannot reason about).
  */
+export type InstallPluginOutcome =
+  | {
+      readonly status: "installed";
+      readonly resourcesChanged: boolean;
+      /** Post-commit warnings collected in orchestrated mode instead of firing individually. */
+      readonly postCommitWarnings?: readonly string[];
+    }
+  | { readonly status: "already-installed"; readonly cause: string }
+  | { readonly status: "unavailable"; readonly cause: string }
+  | { readonly status: "uninstallable"; readonly cause: string }
+  | { readonly status: "unexpected-failure"; readonly cause: string };
+
+/**
+ * Controls how `installPlugin` surfaces notifications.
+ *
+ * - `"standalone"` (default): fires `notifyError`/`notifySuccess`/`notifyWarning`
+ *   directly and appends a reload hint. Use for direct `/claude:plugin install`.
+ * - `"orchestrated"`: suppresses all notifications, returns the typed outcome,
+ *   and collects post-commit warnings in `outcome.postCommitWarnings`. Use when
+ *   a parent orchestrator (e.g. import) owns the full notification surface.
+ */
+export type InstallPluginNotifications =
+  | { readonly mode: "standalone" }
+  | { readonly mode: "orchestrated" };
+
 export interface InstallPluginOptions {
   readonly ctx: ExtensionContext;
   /** Factory `pi` reference -- carries `getAllTools()` for RH-3/RH-4 soft-dep probes. */
@@ -104,6 +131,13 @@ export interface InstallPluginOptions {
   readonly cwd: string;
   readonly marketplace: string;
   readonly plugin: string;
+  readonly notifications?: InstallPluginNotifications;
+  /**
+   * AG-7 opt-in flag. Default false: generated agents omit `model:` and
+   * Pi picks its own default. The edge handler sets this to `true` only
+   * when the user supplies `--map-model` on `/claude:plugin install`.
+   */
+  readonly mapModel?: boolean;
 }
 
 /**
@@ -168,7 +202,10 @@ async function loadCachedMarketplaceManifest(
  *   3. Post-state-commit pluginDataDir mkdir failure -> notifyWarning
  *      (AS-6 warning severity; the install itself succeeded).
  */
-export async function installPlugin(opts: InstallPluginOptions): Promise<void> {
+// Install sequencing intentionally keeps the state guard, bridge staging, rollback,
+// and notification logic in one audited flow matching PI-1..15.
+// eslint-disable-next-line sonarjs/cognitive-complexity
+export async function installPlugin(opts: InstallPluginOptions): Promise<InstallPluginOutcome> {
   const { ctx, pi, scope, cwd, marketplace, plugin } = opts;
   const locations = locationsFor(scope, cwd);
 
@@ -178,17 +215,34 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<void> {
 
   try {
     await withStateGuard(locations, async (state) => {
-      // PI-3: marketplace lookup -- absent marketplace is a hard fail.
-      const mp = state.marketplaces[marketplace];
-      if (mp === undefined) {
+      // CMP-2..4 / PI-16: resolve the source marketplace separately from
+      // the target scope being mutated. Project-target installs can fall
+      // back to a user-scope marketplace; user-target installs cannot read
+      // project-only marketplaces.
+      const source = await resolveInstallMarketplaceSource({
+        targetScope: scope,
+        cwd,
+        marketplace,
+        targetState: state,
+      });
+      if (source === undefined) {
         throw new Error(`Plugin "${plugin}" not found in marketplace "${marketplace}".`);
       }
 
+      // Target container: same scope record when present, or a cloned
+      // project-scope container when CMP-3 fell back to user marketplace.
+      let targetMp = state.marketplaces[marketplace];
+      if (targetMp === undefined) {
+        targetMp = cloneMarketplaceRecordForTargetScope(source.sourceRecord, scope);
+        state.marketplaces[marketplace] = targetMp;
+      }
+
       // PI-15 early-sanity check (Pitfall 3 layer (a)): if the record already
-      // exists we throw ConcurrentInstallError BEFORE running the ledger,
-      // avoiding any disk write. Layer (b) re-checks inside the state-commit
-      // phase defensively in case of intra-process re-entry.
-      if (mp.plugins[plugin] !== undefined) {
+      // exists in the target scope we throw ConcurrentInstallError BEFORE
+      // running the ledger, avoiding any disk write. Layer (b) re-checks
+      // inside the state-commit phase defensively in case of intra-process
+      // re-entry. PI-17: other-scope installs do not block this target.
+      if (targetMp.plugins[plugin] !== undefined) {
         // PI-5: already-installed AND PI-15 early-sanity collapse onto the same
         // path here. Per CONTEXT.md "Open questions" researcher recommendation,
         // surface PI-5 wording at the early-sanity check (the user-visible
@@ -199,7 +253,8 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<void> {
 
       // PI-2 cached-manifest read -- NO network, no gitOps. PI-3: entry must
       // exist in the manifest plugins[] array.
-      const manifest = await loadCachedMarketplaceManifest(mp.manifestPath);
+      const sourceMp = source.sourceRecord;
+      const manifest = await loadCachedMarketplaceManifest(sourceMp.manifestPath);
       const entryRaw = manifest.plugins.find((p) => p.name === plugin);
       if (entryRaw === undefined) {
         throw new Error(`Plugin "${plugin}" not found in marketplace "${marketplace}".`);
@@ -222,7 +277,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<void> {
       // COMP-01) and either returns an installable variant or surfaces
       // disqualification notes. requireInstallable narrows the discriminated
       // union and throws on the not-installable variant.
-      const resolved = await resolveStrict(entry, { marketplaceRoot: mp.marketplaceRoot });
+      const resolved = await resolveStrict(entry, { marketplaceRoot: sourceMp.marketplaceRoot });
       requireInstallable(resolved, "install");
       // After requireInstallable, `resolved` is narrowed to the installable
       // variant; pluginRoot etc. are reachable.
@@ -367,6 +422,11 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<void> {
             resolved: c.resolved,
             agentsSourceDir: pickAgentsSourceDir(c.resolved),
             knownSkills: c.stagedSkillNames,
+            // AG-7 opt-in: `--map-model` on /claude:plugin install threads
+            // the flag down to here. When the user did not pass the flag
+            // we explicitly default to false so generated agents omit
+            // `model:` (the new default per 260516-08j).
+            mapModel: opts.mapModel ?? false,
           });
           c.agentsPrep = prep;
           const leak = await commitPreparedAgents(prep);
@@ -512,19 +572,29 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<void> {
     // -- notifyError surfaces its `.message` (Pattern S-6 depth-5 cause walk
     // for non-PathContainment errors gives the chained Phase 2 / Phase 3
     // bridge cause text).
-    notifyError(ctx, formatErrorWithCauses(err), err);
-    return;
+    const cause = formatErrorWithCauses(err);
+    if (opts.notifications?.mode === "orchestrated") {
+      return classifyInstallFailure(err, cause);
+    }
+
+    notifyError(ctx, cause, err);
+    return { status: "unexpected-failure", cause };
   }
 
   // Defensive: the success path always populates installCtx; if it did not,
   // surface the inconsistency rather than silently emit a missing message.
   if (installCtx === undefined) {
-    notifyError(
-      ctx,
-      `installPlugin: internal error -- guard returned cleanly without populating install context for plugin "${plugin}".`,
-    );
-    return;
+    const cause = `installPlugin: internal error -- guard returned cleanly without populating install context for plugin "${plugin}".`;
+    if (opts.notifications?.mode === "orchestrated") {
+      return { status: "unexpected-failure", cause };
+    }
+
+    notifyError(ctx, cause);
+    return { status: "unexpected-failure", cause };
   }
+
+  const orchestrated = opts.notifications?.mode === "orchestrated";
+  const postCommitWarnings: string[] = [];
 
   // POST-state-commit (AS-6 / D-08): eager per-plugin data dir mkdir.
   // Failure HERE is warning-severity -- the state record is already
@@ -533,10 +603,12 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<void> {
   try {
     await mkdir(installCtx.pluginDataDir, { recursive: true });
   } catch (mkdirErr) {
-    notifyWarning(
-      ctx,
-      `Plugin "${plugin}" installed; data dir creation deferred at ${installCtx.pluginDataDir}: ${errorMessage(mkdirErr)}`,
-    );
+    const msg = `Plugin "${plugin}" installed; data dir creation deferred at ${installCtx.pluginDataDir}: ${errorMessage(mkdirErr)}`;
+    if (orchestrated) {
+      postCommitWarnings.push(msg);
+    } else {
+      notifyWarning(ctx, msg);
+    }
   }
 
   // D-03-INV (Plan 06-05): post-state-commit completion-cache invalidation.
@@ -546,10 +618,12 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<void> {
   try {
     await dropMarketplaceCache(await locations.pluginCacheFile(marketplace), scope, marketplace);
   } catch (err) {
-    notifyWarning(
-      ctx,
-      `Plugin "${plugin}" installed; completion cache refresh deferred: ${errorMessage(err)}`,
-    );
+    const msg = `Plugin "${plugin}" installed; completion cache refresh deferred: ${errorMessage(err)}`;
+    if (orchestrated) {
+      postCommitWarnings.push(msg);
+    } else {
+      notifyWarning(ctx, msg);
+    }
   }
 
   // AS-7 / W-08 / B-08: route any AG-5 foreign-content rows the agents
@@ -561,41 +635,29 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<void> {
     const detail = installCtx.agentForeignFailures
       .map((f) => `${f.generatedName}: ${f.reason}`)
       .join("; ");
-    notifyWarning(
-      ctx,
-      `Plugin "${plugin}" installed; ${installCtx.agentForeignFailures.length.toString()} pre-existing agent file(s) preserved on disk: ${detail}`,
-    );
+    const msg = `Plugin "${plugin}" installed; ${installCtx.agentForeignFailures.length.toString()} pre-existing agent file(s) preserved on disk: ${detail}`;
+    if (orchestrated) {
+      postCommitWarnings.push(msg);
+    } else {
+      notifyWarning(ctx, msg);
+    }
   }
 
   // Bridge-side soft warnings (e.g. agents bridge cleanup-leak return values).
   // Each is surfaced via notifyWarning so the success notification stays
   // focused on the canonical "Installed" line + soft-dep + reload-hint.
   for (const w of installCtx.bridgeWarnings) {
-    notifyWarning(ctx, w);
+    if (orchestrated) {
+      postCommitWarnings.push(w);
+    } else {
+      notifyWarning(ctx, w);
+    }
   }
 
   // RH-5 soft-dep probes -- the staged agents/mcp will not actually load
   // until /reload, AND not at all if the companion extension is unloaded.
   const subagentWarn = subagentWarningIfNeeded(pi, installCtx.stagedAgentNames);
   const mcpWarn = mcpAdapterWarningIfNeeded(pi, installCtx.stagedMcpServerNames);
-
-  let body = `Installed plugin "${plugin}" from marketplace "${marketplace}".`;
-  if (subagentWarn !== "") {
-    body = `${body}\n${subagentWarn}`;
-  }
-
-  if (mcpWarn !== "") {
-    body = `${body}\n${mcpWarn}`;
-  }
-
-  // PI-13 dependencies declaration -- the resolver appends the canonical
-  // PR-5 phrase to `installable.notes`. Find and surface verbatim.
-  const depsNote = installCtx.resolved.notes.find((n) =>
-    n.includes("dependencies that must be installed manually"),
-  );
-  if (depsNote !== undefined) {
-    body = `${body}\n${depsNote}`;
-  }
 
   // RH-1 reload-hint gate: emit the hint only if at least one resource
   // was actually staged (the install would otherwise be a noop and the
@@ -605,6 +667,53 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<void> {
     installCtx.stagedCommandNames.length > 0 ||
     installCtx.stagedAgentNames.length > 0 ||
     installCtx.stagedMcpServerNames.length > 0;
-  const hint = reloadHint("load", stagedAny ? [plugin] : []);
-  notifySuccess(ctx, appendReloadHint(body, hint));
+
+  if (!orchestrated) {
+    let body = `Installed plugin "${plugin}" from marketplace "${marketplace}".`;
+    if (subagentWarn !== "") {
+      body = `${body}\n${subagentWarn}`;
+    }
+
+    if (mcpWarn !== "") {
+      body = `${body}\n${mcpWarn}`;
+    }
+
+    // PI-13 dependencies declaration -- the resolver appends the canonical
+    // PR-5 phrase to `installable.notes`. Find and surface verbatim.
+    const depsNote = installCtx.resolved.notes.find((n) =>
+      n.includes("dependencies that must be installed manually"),
+    );
+    if (depsNote !== undefined) {
+      body = `${body}\n${depsNote}`;
+    }
+
+    const hint = reloadHint("load", stagedAny ? [plugin] : []);
+    notifySuccess(ctx, appendReloadHint(body, hint));
+  }
+
+  return {
+    status: "installed",
+    resourcesChanged: stagedAny,
+    ...(postCommitWarnings.length > 0 && { postCommitWarnings }),
+  };
+}
+
+function classifyInstallFailure(err: unknown, formattedCause: string): InstallPluginOutcome {
+  // Check the direct error message only (not the full cause chain) to avoid
+  // accidental misclassification from chained errors that mention similar text.
+  const msg = err instanceof Error ? err.message : "";
+
+  if (err instanceof ConcurrentInstallError || msg.includes("already installed")) {
+    return { status: "already-installed", cause: formattedCause };
+  }
+
+  if (msg.includes("not found in marketplace") || msg.includes("not found in manifest")) {
+    return { status: "unavailable", cause: formattedCause };
+  }
+
+  if (msg.includes("not installable") || msg.includes("is not installable")) {
+    return { status: "uninstallable", cause: formattedCause };
+  }
+
+  return { status: "unexpected-failure", cause: formattedCause };
 }

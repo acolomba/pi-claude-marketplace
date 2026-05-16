@@ -29,11 +29,13 @@ import { notifyUsageError } from "../shared/notify.ts";
 import type { ExtensionCommandContext } from "../platform/pi-api.ts";
 
 export interface SubcommandHandlers {
+  bootstrap: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   install: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   uninstall: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   update: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   reinstall: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   list: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
+  import: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   marketplaceAdd: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   marketplaceRemove: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   marketplaceList: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
@@ -42,13 +44,46 @@ export interface SubcommandHandlers {
   marketplaceNoautoupdate: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
 }
 
+/**
+ * All top-level subcommands accepted by routeClaudePlugin, including
+ * aliases. Imported by the completion provider so both systems stay in sync.
+ */
+export const TOP_LEVEL_SUBCOMMANDS = [
+  "bootstrap",
+  "install",
+  "uninstall",
+  "update",
+  "reinstall",
+  "list",
+  "ls",
+  "import",
+  "marketplace",
+] as const;
+
+/**
+ * All subcommands accepted by routeMarketplace, including aliases.
+ * Imported by the completion provider so both systems stay in sync.
+ */
+export const MARKETPLACE_SUBCOMMANDS = [
+  "add",
+  "remove",
+  "rm",
+  "list",
+  "ls",
+  "update",
+  "autoupdate",
+  "noautoupdate",
+] as const;
+
 export const TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <install|uninstall|update|reinstall|list|ls|marketplace> ...\n" +
+  "Usage: /claude:plugin <bootstrap|install|uninstall|update|reinstall|list|ls|import|marketplace> ...\n" +
+  "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project]\n" +
   "  update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
   "  reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--force]\n" +
   "  list [<marketplace>] [--scope user|project]   (alias: ls)\n" +
+  "  import [--scope user|project]\n" +
   "  marketplace <add|remove|rm|list|ls|update|autoupdate|noautoupdate> ...";
 
 export const MARKETPLACE_USAGE =
@@ -92,6 +127,8 @@ export async function routeClaudePlugin(
   }
 
   switch (head) {
+    case "bootstrap":
+      return handlers.bootstrap(rest, ctx);
     case "install":
       return handlers.install(rest, ctx);
     case "uninstall":
@@ -103,6 +140,8 @@ export async function routeClaudePlugin(
     case "list":
     case "ls":
       return handlers.list(rest, ctx);
+    case "import":
+      return handlers.import(rest, ctx);
     case "marketplace":
       return routeMarketplace(rest, handlers, ctx);
     default:

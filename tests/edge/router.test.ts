@@ -50,11 +50,13 @@ function makeHandlers(): { handlers: SubcommandHandlers; calls: HandlerCall[] } 
     };
 
   const handlers: SubcommandHandlers = {
+    bootstrap: mk("bootstrap"),
     install: mk("install"),
     uninstall: mk("uninstall"),
     update: mk("update"),
     reinstall: mk("reinstall"),
     list: mk("list"),
+    import: mk("import"),
     marketplaceAdd: mk("marketplaceAdd"),
     marketplaceRemove: mk("marketplaceRemove"),
     marketplaceList: mk("marketplaceList"),
@@ -80,6 +82,7 @@ test("AP-3 :: empty input emits TOP_LEVEL_USAGE at error severity", async () => 
       "reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--force]",
     ),
   );
+  assert.ok(notifications[0]?.message.includes("import"));
 });
 
 test("AP-3 :: unknown subcommand emits Unknown subcommand: + TOP_LEVEL_USAGE at error severity", async () => {
@@ -112,6 +115,14 @@ test("AP-3 :: marketplace with unknown verb emits Unknown subcommand: + MARKETPL
   assert.equal(notifications[0]?.severity, "error");
   assert.ok(notifications[0]?.message.startsWith('Unknown marketplace subcommand: "bogus".'));
   assert.ok(notifications[0]?.message.includes(MARKETPLACE_USAGE));
+});
+
+test("routeClaudePlugin :: dispatches bootstrap to handlers.bootstrap", async () => {
+  const { ctx, notifications } = makeCtx();
+  const { handlers, calls } = makeHandlers();
+  await routeClaudePlugin("bootstrap", handlers, ctx);
+  assert.deepEqual(calls, [{ name: "bootstrap", args: "" }]);
+  assert.deepEqual(notifications, []);
 });
 
 test("routeClaudePlugin :: dispatches install to handlers.install", async () => {
@@ -151,6 +162,14 @@ test("routeClaudePlugin :: dispatches list to handlers.list", async () => {
   const { handlers, calls } = makeHandlers();
   await routeClaudePlugin("list bar", handlers, ctx);
   assert.deepEqual(calls, [{ name: "list", args: "bar" }]);
+  assert.deepEqual(notifications, []);
+});
+
+test("routeClaudePlugin :: dispatches import to handlers.import", async () => {
+  const { ctx, notifications } = makeCtx();
+  const { handlers, calls } = makeHandlers();
+  await routeClaudePlugin("import --scope user", handlers, ctx);
+  assert.deepEqual(calls, [{ name: "import", args: "--scope user" }]);
   assert.deepEqual(notifications, []);
 });
 

@@ -53,7 +53,7 @@ export interface RemoveMarketplaceOptions {
   /** Factory `pi` reference -- carries `getAllTools()` for RH-5 soft-dep probes. */
   readonly pi: ExtensionAPI;
   readonly name: string;
-  /** When omitted, resolveScopeFromState picks the scope; ambiguity throws. */
+  /** When omitted, resolveScopeFromState picks the scope; project takes precedence if found in both. */
   readonly scope?: Scope;
   /** Project-scope cwd (ignored for user scope). */
   readonly cwd: string;

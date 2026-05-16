@@ -19,9 +19,10 @@
 // `domain/manifest.ts` and threads it through `getArgumentCompletions`.
 // Tests construct mock resolvers inline.
 //
-// D-03 corollary status filtering:
-//   - mode = "install"   -> keep status !== "installed" (INCLUDES
-//                           "unavailable"; future --force will install them).
+// CMP-6..8 / D-26 status filtering:
+//   - mode = "install"   -> target-scope/source-scope visibility, keep only
+//                           status === "available" rows, and exclude plugins
+//                           already installed in the target scope.
 //   - mode = "uninstall" -> keep status === "installed".
 //   - mode = "update"    -> keep status === "installed".
 //   - mode = "reinstall" -> keep status === "installed".
@@ -145,6 +146,21 @@ export function extractPositionals(
   return positionals;
 }
 
+export function extractScope(tokens: readonly string[]): Scope | undefined {
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i] !== "--scope") {
+      continue;
+    }
+
+    const value = tokens[i + 1];
+    if (value === "user" || value === "project") {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
 /** V1 `getScopeCompletions` -- emits `--scope user` / `--scope project` suggestions. */
 export function getScopeCompletions(argumentTextPrefix: string): AutocompleteItem[] {
   return [
@@ -220,37 +236,103 @@ export async function getMarketplaceNamesAcrossScopes(
   return Array.from(new Set(perScope.flat()));
 }
 
-/**
- * Map plugin name -> [marketplaces] that carry the plugin under the given
- * `mode`'s status filter. D-03 corollary:
- *   - install   -> keep status !== "installed" (INCLUDES "unavailable")
- *   - uninstall -> keep status === "installed"
- *   - update    -> keep status === "installed"
- *   - reinstall -> keep status === "installed"
- */
-export async function getPluginToMarketplacesMap(
-  mode: PluginRefCompletionMode,
+interface PluginMapOptions {
+  /** Install target scope, or explicit uninstall/update scope. */
+  readonly targetScope?: Scope;
+}
+
+function addMapping(result: Map<string, string[]>, plugin: string, marketplace: string): void {
+  const existing = result.get(plugin) ?? [];
+  if (!existing.includes(marketplace)) {
+    existing.push(marketplace);
+  }
+
+  result.set(plugin, existing);
+}
+
+async function marketplaceNamesForScope(
   resolver: LocationsResolver,
+  scope: Scope,
+): Promise<readonly string[]> {
+  return getMarketplaceNames(resolver.marketplaceNamesCachePath(scope), scope, () =>
+    rebuildNamesForScope(resolver, scope),
+  );
+}
+
+async function sourceMarketplacesForInstall(
+  resolver: LocationsResolver,
+  targetScope: Scope,
+): Promise<readonly { scope: Scope; marketplace: string }[]> {
+  const userNames = await marketplaceNamesForScope(resolver, "user");
+  if (targetScope === "user") {
+    return userNames.map((marketplace) => ({ scope: "user" as const, marketplace }));
+  }
+
+  const projectNames = await marketplaceNamesForScope(resolver, "project");
+  const projectSet = new Set(projectNames);
+  return [
+    ...projectNames.map((marketplace) => ({ scope: "project" as const, marketplace })),
+    ...userNames
+      .filter((marketplace) => !projectSet.has(marketplace))
+      .map((marketplace) => ({ scope: "user" as const, marketplace })),
+  ];
+}
+
+async function installedNamesInTarget(
+  resolver: LocationsResolver,
+  targetScope: Scope,
+  marketplace: string,
+): Promise<ReadonlySet<string>> {
+  const state = await resolver.loadStateForScope(targetScope);
+  const plugins = state.marketplaces[marketplace]?.plugins ?? {};
+  return new Set(Object.keys(plugins));
+}
+
+async function getInstallPluginToMarketplacesMap(
+  resolver: LocationsResolver,
+  targetScope: Scope,
 ): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>();
-  for (const scope of SCOPES) {
-    const names = await rebuildNamesForScope(resolver, scope);
+  for (const source of await sourceMarketplacesForInstall(resolver, targetScope)) {
+    const targetInstalled = await installedNamesInTarget(resolver, targetScope, source.marketplace);
+    const cachePath = await resolver.pluginCachePath(source.scope, source.marketplace);
+    const rows = await getPluginIndex(cachePath, source.scope, source.marketplace, () =>
+      rebuildPluginIndex(resolver, source.scope, source.marketplace),
+    );
+
+    for (const row of rows) {
+      if (row.status !== "available" || targetInstalled.has(row.name)) {
+        continue;
+      }
+
+      addMapping(result, row.name, source.marketplace);
+    }
+  }
+
+  return result;
+}
+
+async function getInstalledPluginToMarketplacesMap(
+  _mode: Exclude<PluginRefCompletionMode, "install">,
+  resolver: LocationsResolver,
+  explicitScope: Scope | undefined,
+): Promise<Map<string, string[]>> {
+  const result = new Map<string, string[]>();
+  const scopes: readonly Scope[] =
+    explicitScope === undefined ? ["project", "user"] : [explicitScope];
+  for (const scope of scopes) {
+    const names = await marketplaceNamesForScope(resolver, scope);
     for (const mp of names) {
       const cachePath = await resolver.pluginCachePath(scope, mp);
       const rows = await getPluginIndex(cachePath, scope, mp, () =>
         rebuildPluginIndex(resolver, scope, mp),
       );
       for (const row of rows) {
-        if (!statusMatchesMode(mode, row)) {
+        if (row.status !== "installed") {
           continue;
         }
 
-        const existing = result.get(row.name) ?? [];
-        if (!existing.includes(mp)) {
-          existing.push(mp);
-        }
-
-        result.set(row.name, existing);
+        addMapping(result, row.name, mp);
       }
     }
   }
@@ -258,15 +340,21 @@ export async function getPluginToMarketplacesMap(
   return result;
 }
 
-function statusMatchesMode(mode: PluginRefCompletionMode, row: PluginIndexRow): boolean {
-  switch (mode) {
-    case "install":
-      return row.status !== "installed";
-    case "uninstall":
-    case "update":
-    case "reinstall":
-      return row.status === "installed";
+/**
+ * Map plugin name -> [marketplaces] that carry the plugin under the given
+ * mode's target-scope rules. CMP-7 makes install completion available-only.
+ * Reinstall mode flows through the installed-only path.
+ */
+export async function getPluginToMarketplacesMap(
+  mode: PluginRefCompletionMode,
+  resolver: LocationsResolver,
+  options: PluginMapOptions = {},
+): Promise<Map<string, string[]>> {
+  if (mode === "install") {
+    return getInstallPluginToMarketplacesMap(resolver, options.targetScope ?? "user");
   }
+
+  return getInstalledPluginToMarketplacesMap(mode, resolver, options.targetScope);
 }
 
 async function getPluginHalfCompletions(
@@ -274,8 +362,9 @@ async function getPluginHalfCompletions(
   currentPrefix: string,
   argumentTextPrefix: string,
   resolver: LocationsResolver,
+  options: PluginMapOptions,
 ): Promise<AutocompleteItem[]> {
-  const map = await getPluginToMarketplacesMap(mode, resolver);
+  const map = await getPluginToMarketplacesMap(mode, resolver, options);
   const items: AutocompleteItem[] = [];
   for (const [name, mps] of map) {
     if (!name.startsWith(currentPrefix)) {
@@ -298,19 +387,21 @@ async function getMarketplaceOnlyCompletions(
   argumentTextPrefix: string,
   resolver: LocationsResolver,
   allowMarketplaceOnly: boolean,
+  options: PluginMapOptions,
 ): Promise<AutocompleteItem[]> {
   if (!allowMarketplaceOnly) {
     return [];
   }
 
-  const all = await getMarketplaceNamesAcrossScopes(resolver);
+  const map = await getPluginToMarketplacesMap("update", resolver, options);
+  const all = Array.from(new Set(Array.from(map.values()).flat()));
   return all
     .filter((m) => m.startsWith(marketplacePart))
     .map((m) => buildItem(argumentTextPrefix, `@${m}`, true));
 }
 
 /**
- * `<plugin>@<marketplace>` token completion -- TC-6 + D-03 corollary.
+ * `<plugin>@<marketplace>` token completion -- TC-6 + CMP-6..8.
  *
  *   - `currentPrefix` has no `@`: complete the plugin half. Plugins unique
  *     to one marketplace -> `name@mp` (trailing space). Plugins in multiple
@@ -328,12 +419,12 @@ export async function getPluginRefCompletions(
   currentPrefix: string,
   argumentTextPrefix: string,
   resolver: LocationsResolver,
-  options: { allowMarketplaceOnly: boolean },
+  options: { allowMarketplaceOnly: boolean; targetScope?: Scope },
 ): Promise<AutocompleteItem[]> {
   const at = currentPrefix.indexOf("@");
 
   if (at === -1) {
-    return getPluginHalfCompletions(mode, currentPrefix, argumentTextPrefix, resolver);
+    return getPluginHalfCompletions(mode, currentPrefix, argumentTextPrefix, resolver, options);
   }
 
   const pluginPart = currentPrefix.slice(0, at);
@@ -345,10 +436,11 @@ export async function getPluginRefCompletions(
       argumentTextPrefix,
       resolver,
       options.allowMarketplaceOnly,
+      options,
     );
   }
 
-  const map = await getPluginToMarketplacesMap(mode, resolver);
+  const map = await getPluginToMarketplacesMap(mode, resolver, options);
   const mps = map.get(pluginPart) ?? [];
   return mps
     .filter((m) => m.startsWith(marketplacePart))

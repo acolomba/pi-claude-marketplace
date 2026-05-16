@@ -61,6 +61,8 @@ export type {
   UpdatePluginsTarget,
 } from "./plugin/index.ts";
 
+export * from "./import/index.ts";
+
 export type {
   PluginUpdateFn,
   PluginUpdateOutcome,

@@ -29,8 +29,11 @@
 // register.ts (Plan 06-05) from persistence/ + domain/ surfaces and threaded
 // through this dispatcher. Tests inject a hermetic mock resolver.
 
+import { MARKETPLACE_SUBCOMMANDS, TOP_LEVEL_SUBCOMMANDS } from "../router.ts";
+
 import {
   extractPositionals,
+  extractScope,
   getMarketplaceCompletions,
   getMarketplaceNamesAcrossScopes,
   getPluginRefCompletions,
@@ -39,27 +42,6 @@ import {
 
 import type { LocationsResolver } from "./data.ts";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
-
-export const TOP_LEVEL_SUBCOMMANDS = [
-  "install",
-  "uninstall",
-  "update",
-  "reinstall",
-  "list",
-  "ls",
-  "marketplace",
-] as const;
-
-export const MARKETPLACE_SUBCOMMANDS = [
-  "add",
-  "remove",
-  "rm",
-  "list",
-  "ls",
-  "update",
-  "autoupdate",
-  "noautoupdate",
-] as const;
 
 /**
  * Verbs (after `marketplace`) that take a marketplace-name positional.
@@ -109,6 +91,16 @@ function flagCompletions(
       { name: "--available", description: "Show available plugins" },
       { name: "--unavailable", description: "Show unavailable plugins" },
     );
+  }
+
+  if (positionalHead === "install" || positionalHead === "update") {
+    // AG-7 opt-in (260516-08j): surface `--map-model` as a completion
+    // suggestion under the install and update positional heads, mirroring
+    // the existing list-flag pattern.
+    flags.push({
+      name: "--map-model",
+      description: "Enable model field mapping in generated agents (default: omit)",
+    });
   }
 
   return flags
@@ -166,25 +158,6 @@ function marketplaceNameWanted(positionals: readonly string[]): boolean {
   );
 }
 
-type PluginRefMode = "install" | "uninstall" | "update" | "reinstall";
-
-function pluginRefCompletionConfig(
-  positionalHead: string,
-): { mode: PluginRefMode; allowMarketplaceOnly: boolean } | null {
-  switch (positionalHead) {
-    case "install":
-      return { mode: "install", allowMarketplaceOnly: false };
-    case "uninstall":
-      return { mode: "uninstall", allowMarketplaceOnly: false };
-    case "update":
-      return { mode: "update", allowMarketplaceOnly: true };
-    case "reinstall":
-      return { mode: "reinstall", allowMarketplaceOnly: true };
-    default:
-      return null;
-  }
-}
-
 export async function getArgumentCompletions(
   prefix: string,
   resolver: LocationsResolver,
@@ -201,6 +174,7 @@ export async function getArgumentCompletions(
   const rawHead = tokens.find((token) => token !== "--scope") ?? "";
   const positionals = extractPositionals(tokens, rawHead === "reinstall" ? ["--force"] : []);
   const positionalHead = positionals[0] ?? "";
+  const explicitScope = extractScope(tokens);
 
   // Branch 2a (TC-4): token immediately after `--scope`.
   const prevToken = tokens.at(-1);
@@ -223,13 +197,36 @@ export async function getArgumentCompletions(
   }
 
   // Branch 4 (TC-6): <plugin>@<marketplace> for install / uninstall / update / reinstall.
-  // D-03 corollary: install hides `installed`; uninstall/update/reinstall keep only
-  // `installed`. `allowMarketplaceOnly` is true for `update` and `reinstall` (V1 parity
-  // -- bare @<marketplace> means "operate on every installed plugin in this mp").
-  const pluginRefConfig = pluginRefCompletionConfig(positionalHead);
-  if (pluginRefConfig !== null && positionals.length === 1) {
-    return getPluginRefCompletions(pluginRefConfig.mode, current, argumentTextPrefix, resolver, {
-      allowMarketplaceOnly: pluginRefConfig.allowMarketplaceOnly,
+  // CMP-6..8: install completion follows target-scope/source-marketplace
+  // visibility and is available-only. Uninstall/update/reinstall consume installed
+  // plugins, with project precedence when --scope is omitted. `allowMarketplaceOnly`
+  // is true for update and reinstall (bare `@<marketplace>` operates on every
+  // installed plugin in that marketplace).
+  if (positionalHead === "install" && positionals.length === 1) {
+    return getPluginRefCompletions("install", current, argumentTextPrefix, resolver, {
+      allowMarketplaceOnly: false,
+      targetScope: explicitScope ?? "user",
+    });
+  }
+
+  if (positionalHead === "uninstall" && positionals.length === 1) {
+    return getPluginRefCompletions("uninstall", current, argumentTextPrefix, resolver, {
+      allowMarketplaceOnly: false,
+      ...(explicitScope !== undefined && { targetScope: explicitScope }),
+    });
+  }
+
+  if (positionalHead === "update" && positionals.length === 1) {
+    return getPluginRefCompletions("update", current, argumentTextPrefix, resolver, {
+      allowMarketplaceOnly: true,
+      ...(explicitScope !== undefined && { targetScope: explicitScope }),
+    });
+  }
+
+  if (positionalHead === "reinstall" && positionals.length === 1) {
+    return getPluginRefCompletions("reinstall", current, argumentTextPrefix, resolver, {
+      allowMarketplaceOnly: true,
+      ...(explicitScope !== undefined && { targetScope: explicitScope }),
     });
   }
 

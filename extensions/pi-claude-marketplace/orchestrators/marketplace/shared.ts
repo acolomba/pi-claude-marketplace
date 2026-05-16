@@ -39,7 +39,7 @@ import { unstagePluginSkills } from "../../bridges/skills/index.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import * as defaultGit from "../../platform/git.ts";
-import { MarketplaceAmbiguousScopeError, MarketplaceNotFoundError } from "../../shared/errors.ts";
+import { MarketplaceNotFoundError } from "../../shared/errors.ts";
 
 import type { UnstageAgentFailure } from "../../bridges/agents/types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -381,9 +381,10 @@ export function applyAutoupdateFlipInPlace(
 
 /**
  * MR-1 cross-scope resolution. Without --scope, search both scopes;
- * throw on dual-found (`MarketplaceAmbiguousScopeError`) or not-found
- * (`MarketplaceNotFoundError`). Used by `remove.ts` and `update.ts`
- * when --scope is omitted.
+ * project-scope takes precedence when found in both (CMP-5 applied to
+ * marketplace operations for consistent unqualified-command behavior).
+ * Throws `MarketplaceNotFoundError` when absent from both scopes.
+ * Used by `remove.ts` and `update.ts` when --scope is omitted.
  *
  * D-04 boundary: this helper performs READ-ONLY state loads. The
  * caller's withStateGuard wraps the state mutation that follows; an
@@ -398,18 +399,13 @@ export async function resolveScopeFromState(
     loadState(userLocations.extensionRoot),
     loadState(projectLocations.extensionRoot),
   ]);
-  const inUser = mpName in userState.marketplaces;
-  const inProject = mpName in projectState.marketplaces;
-  if (inUser && inProject) {
-    throw new MarketplaceAmbiguousScopeError(mpName);
-  }
 
-  if (inUser) {
-    return { scope: "user", locations: userLocations };
-  }
-
-  if (inProject) {
+  if (mpName in projectState.marketplaces) {
     return { scope: "project", locations: projectLocations };
+  }
+
+  if (mpName in userState.marketplaces) {
+    return { scope: "user", locations: userLocations };
   }
 
   throw new MarketplaceNotFoundError(mpName, ["user", "project"]);

@@ -16,6 +16,7 @@ export default tseslint.config(
       "coverage/",
       "dist/",
       "node_modules/",
+      "tmp/",
     ],
   },
   js.configs.recommended,

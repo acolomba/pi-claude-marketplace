@@ -4,6 +4,7 @@
 
 ### Git
 
+- NEVER commit to the main branch.
 - Branch names: `main`, `features/*`, `releases/*`. New feature branches use `features/<name>`.
 - Worktrees are preferred for new feature work; create them under `.worktrees/`.
 - Git commit messages: Follow the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/#specification). Titles must be at least 5 characters and no more than 72 characters. Body lines must be no more than 80 characters.
@@ -14,7 +15,7 @@
 
 ### Versioning
 
-- Before creating a PR, offer to bump the project version and record the change in CHANGELOG.md.
+- Before creating a PR, offer to bump the project version in `project.json` and `sonar.properties`, and to record the change in CHANGELOG.md. Be succint.
 
 <!-- GSD:project-start source:PROJECT.md -->
 

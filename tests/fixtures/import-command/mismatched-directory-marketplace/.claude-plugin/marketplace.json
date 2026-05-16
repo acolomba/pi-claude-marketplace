@@ -1,0 +1,10 @@
+{
+  "name": "directory-marketplace",
+  "plugins": [
+    {
+      "name": "mismatch-placeholder",
+      "source": "./plugins/mismatch-placeholder",
+      "version": "1.0.0"
+    }
+  ]
+}

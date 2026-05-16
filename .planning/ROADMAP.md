@@ -13,6 +13,13 @@ The roadmap continues phase numbering from the completed v1.0 successor architec
 - [x] **Phase 8: Atomic Reinstall Core** - Dedicated reinstall orchestrator and replacement-safe transaction primitives for one plugin
 - [x] **Phase 9: Reinstall Edge & Bulk UX** - `/claude:plugin reinstall` routing, batch forms, completions, docs, and user-facing output
 
+The merge from main also brings in the completed v1.2 phases:
+
+- [x] **Phase 10: Claude Settings Import Foundation** - Read/merge Claude settings, extract enabled plugin refs, map marketplace sources including official built-in marketplace
+- [x] **Phase 11: Import Command Orchestration** - `/claude:plugin import [--scope user|project]` handler, idempotent marketplace/plugin orchestration, warnings and reload-hint integration
+
+Phases 1-7 belong to the v1.0 successor architecture and are documented in `PROJECT.md` under Validated requirements.
+
 ## Phase Details
 
 ### Phase 8: Atomic Reinstall Core
@@ -63,14 +70,48 @@ Plans:
 - [x] `09-03-PLAN.md` -- Reinstall tab completion and failure semantics
 - [x] `09-04-PLAN.md` -- README docs, static docs test, full validation, and traceability
 
+### Phase 10: Claude Settings Import Foundation
+
+**Goal**: A pure, testable import-planning foundation can read Claude Code settings for user/project scopes, merge base plus local override correctly, extract only true-enabled plugin refs, and resolve marketplace sources for official and extra-known marketplaces without mutating Pi state **Depends on**: Phase 7 and the separately-developed v1.1 milestone merge **Requirements**: IMP-04, IMP-05, IMP-06, IMP-07, IMP-08 **Success Criteria** (what must be TRUE):
+
+1. Settings discovery reads the correct files per scope: user Claude settings and project `.claude/settings*.json`; missing files are treated as empty while malformed JSON reports a warning/error through the import result path rather than crashing the process.
+2. Merge semantics are deterministic: `settings.local.json` overrides `settings.json`, including disabling a base `enabledPlugins["plugin@marketplace"]: true` by setting the local value to `false`.
+3. Enabled-plugin extraction returns only refs whose merged value is exactly boolean `true`; malformed keys and non-true values are ignored or warned according to import policy without blocking valid refs.
+4. Marketplace source planning maps `claude-plugins-official` to `anthropics/claude-plugins-official` when missing, and maps `extraKnownMarketplaces` Claude `directory` and `github.repo` sources into existing Pi source parser inputs.
+5. Unit tests cover both-scope duplication: if the same plugin/marketplace is enabled in user and project Claude settings, the import plan contains one action per matching Pi scope.
+
+**Plans**: 3 plans
+
+- [x] `10-01-PLAN.md` -- Settings file discovery and merge model for user/project scopes with local override tests (Wave 1)
+- [x] `10-02-PLAN.md` -- Enabled-plugin ref extraction and malformed/non-true entry handling (Wave 1)
+- [x] `10-03-PLAN.md` -- Marketplace source planning: official built-in mapping + extraKnownMarketplaces directory/github mapping (Wave 2)
+
+### Phase 11: Import Command Orchestration
+
+**Goal**: A Pi user can run `/claude:plugin import [--scope user|project]` and have enabled Claude Code plugins installed into the matching Pi scopes idempotently, with missing marketplaces added first and unavailable plugins reported as warnings while valid imports continue **Depends on**: Phase 10 **Requirements**: IMP-01, IMP-02, IMP-03, IMP-09, IMP-10, IMP-11 **Success Criteria** (what must be TRUE):
+
+1. `/claude:plugin import` is routed and documented consistently with existing commands; `--scope` accepts only `user` and `project`, may appear at any position, and omitted scope processes both scopes.
+2. Import adds missing marketplaces before installing enabled plugins, skips marketplaces/plugins already present in the target scope, and preserves same-name marketplace/plugin imports in both user and project scopes when both Claude scopes enable them.
+3. Import reuses existing marketplace-add and plugin-install semantics so network access, state locking, atomic staging, soft-dependency warnings, and reload hints match the underlying operations.
+4. Unavailable/uninstallable enabled plugins do not abort the whole import; they are aggregated and reported at warning severity with enough context to identify `plugin@marketplace` and target scope.
+5. Integration tests exercise a mixed import: official GitHub marketplace, extra-known directory marketplace, extra-known GitHub marketplace, local override disabling a base plugin, already-installed skip, and unavailable-plugin warning.
+
+**Plans**: 3 plans
+
+- [x] `11-01-PLAN.md` -- Import orchestrator: action execution, idempotency, per-scope state locking, warning aggregation (Wave 1)
+- [x] `11-02-PLAN.md` -- Edge handler/router/completion updates for `/claude:plugin import [--scope user|project]` (Wave 2)
+- [x] `11-03-PLAN.md` -- End-to-end import fixtures and validation sign-off (Wave 3)
+
 ## Progress
 
-**Execution Order:** 8 → 9
+**Execution Order:** 8 → 9 (v1.1 milestone scope). v1.0 executed 1 → 2 → 3 → 4 → 5 → 6 → 7; v1.2 added 10 → 11.
 
 | Phase | Goal | Requirements | Plans | Status | Completed |
 | ----- | ---- | ------------ | ----- | ------ | --------- |
 | 8. Atomic Reinstall Core | Atomic single-plugin reinstall with preserve-old-on-failure semantics | PRL-02, PRL-06, PRL-07, PRL-08, PRL-09, PRL-10, PRL-11, PRL-12 | 4/4 plans | Complete | 2026-05-14 |
 | 9. Reinstall Edge & Bulk UX | Command routing, batch forms, scope, completion, output, docs | PRL-01, PRL-03, PRL-04, PRL-05, PRL-13, PRL-14, PRL-15, PRL-16 | 4/4 plans | Complete | 2026-05-14 |
+| 10. Claude Settings Import Foundation (v1.2) | Pure import-planning foundation | IMP-04..IMP-08 | 3/3 plans | Complete | 2026-05-14 |
+| 11. Import Command Orchestration (v1.2) | `/claude:plugin import` command | IMP-01..IMP-03, IMP-09..IMP-11 | 3/3 plans | Complete | 2026-05-14 |
 
 ## Coverage
 
@@ -107,3 +148,4 @@ Plans:
 *Roadmap created: 2026-05-13 for milestone v1.1 Reinstall Command*
 *Last updated: 2026-05-14 after Phase 8 completion*
 *Last updated: 2026-05-14 after Phase 9 completion*
+*Last updated: 2026-05-16 after merge from main brought in v1.2 phases 10 & 11.*

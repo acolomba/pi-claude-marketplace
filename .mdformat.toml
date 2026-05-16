@@ -2,4 +2,4 @@ wrap = "no"
 number = true
 end_of_line = "keep"
 
-extensions = ["gfm"]
+extensions = ["gfm", "gfm_alerts"]

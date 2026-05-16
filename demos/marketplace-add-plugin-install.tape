@@ -11,7 +11,7 @@ Set Height 1080
 Set TypingSpeed 55ms
 
 Hide
-Type "./scripts/pi.sh --home $(pwd)/tmp/pihome --cd $(pwd)/tmp/work --clear-screen"
+Type "./scripts/pi.sh --home $(pwd)/../../tmp/pihome --cd $(pwd)/../../tmp/work --clear"
 Enter
 Sleep 3000ms
 Show
@@ -29,7 +29,7 @@ Type "a"
 Sleep 170ms
 Tab
 Sleep 170ms
-Type "anthropics/claude-plugins-official"
+Type "upstash/context7"
 Sleep 1800ms
 Enter
 
@@ -43,10 +43,10 @@ Type "i"
 Sleep 170ms
 Tab
 Sleep 170ms
-Type "pr-"
+Type "context7"
 Sleep 170ms
 Tab
-Sleep 1800ms
+Sleep 3000ms
 Enter
 
 Sleep 1400ms
@@ -57,15 +57,13 @@ Enter
 
 Sleep 1400ms
 
-Type "/pr-"
-Sleep 170ms
-Tab
+Type "Show me the Supabase auth API for email/password sign-up."
 Sleep 1800ms
 Enter
 
-Sleep 5s
+Sleep 30s
 
 Hide
-Type "/claude:plugin marketplace rm anthropics/claude-plugins-official"
+Type "/claude:plugin marketplace rm upstash/context7"
 Sleep 500ms
 Ctrl+C

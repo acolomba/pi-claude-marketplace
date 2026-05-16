@@ -17,6 +17,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/edge/register.ts";
 
 import type { EdgeDeps } from "../../extensions/pi-claude-marketplace/edge/types.ts";
+import type { ImportClaudeSettingsOptions } from "../../extensions/pi-claude-marketplace/orchestrators/import/execute.ts";
 import type {
   PluginUpdateFn,
   PluginUpdateOutcome,
@@ -76,7 +77,7 @@ function makeMockPi(): MockPi {
 // Mock deps -- inert gitOps + pluginUpdate (tests do not exercise them).
 // ---------------------------------------------------------------------------
 
-function makeDeps(): EdgeDeps {
+function makeDeps(overrides: Partial<EdgeDeps> = {}): EdgeDeps {
   const pluginUpdate: PluginUpdateFn = (plugin) =>
     Promise.resolve<PluginUpdateOutcome>({ partition: "unchanged", name: plugin });
 
@@ -89,7 +90,7 @@ function makeDeps(): EdgeDeps {
     currentBranch: () => Promise.resolve(undefined),
   } as unknown as EdgeDeps["gitOps"];
 
-  return { gitOps, pluginUpdate };
+  return { gitOps, pluginUpdate, ...overrides };
 }
 
 async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Promise<T> {
@@ -193,6 +194,40 @@ test("D-04 :: registered command routes reinstall through makeReinstallHandler",
     assert.equal(notifications[0]?.severity, undefined);
     assert.match(notifications[0]?.message ?? "", /No plugins installed\./);
   });
+});
+
+test("registered command handler routes import through the new handler", async () => {
+  const calls: ImportClaudeSettingsOptions[] = [];
+  const { pi, commands } = makeMockPi();
+  registerClaudePluginCommand(
+    pi,
+    makeDeps({
+      importClaudeSettings: (opts) => {
+        calls.push(opts);
+        return Promise.resolve({
+          addedMarketplaces: [],
+          installedPlugins: [],
+          skippedExistingMarketplaces: [],
+          skippedExistingPlugins: [],
+          warnings: [],
+          marketplaceFailures: [],
+          sourceMismatches: [],
+          unexpectedPluginFailures: [],
+          diagnostics: [],
+          changedResources: false,
+        });
+      },
+    }),
+  );
+  const cmd = commands.get("claude:plugin");
+  assert.ok(cmd !== undefined);
+
+  await cmd.handler("import --scope project", { cwd: "/tmp/project" } as ExtensionContext);
+
+  assert.deepEqual(
+    calls.map((call) => call.selectedScopes),
+    [["project"]],
+  );
 });
 
 test("D-04 :: registered command has getArgumentCompletions returning AutocompleteItem[] | null", async () => {

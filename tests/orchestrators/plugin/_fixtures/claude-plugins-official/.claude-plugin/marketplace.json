@@ -1,0 +1,12 @@
+{
+  "name": "claude-plugins-official",
+  "owner": { "name": "Quick 260516-02r Tests" },
+  "plugins": [
+    {
+      "name": "stub",
+      "source": "./plugins/stub",
+      "description": "Stub plugin for bootstrap fixture",
+      "version": "1.0.0"
+    }
+  ]
+}
