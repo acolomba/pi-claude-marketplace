@@ -189,6 +189,7 @@ function samePlannedSource(stored: unknown, plannedRaw: string): boolean | "unkn
       );
     case "path":
       return current.kind === "path" && planned.logical === current.logical;
+    /* c8 ignore next 3 -- import planner only generates path/github sources */
     case "url":
     case "git-subdir":
     case "npm":
@@ -203,6 +204,7 @@ function stateLoader(
     return deps.loadState;
   }
 
+  /* c8 ignore next -- production path; unit tests always inject deps.loadState */
   return async (scope, cwd) => defaultLoadState(locationsFor(scope, cwd).extensionRoot);
 }
 

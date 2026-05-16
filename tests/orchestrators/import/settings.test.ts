@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
+import { test } from "node:test";
 
 import {
   loadMergedClaudeSettingsForScope,
@@ -148,6 +148,25 @@ test("loadMergedClaudeSettingsForScope emits diagnostic when CLAUDE_CONFIG_DIR i
     } else {
       process.env.CLAUDE_CONFIG_DIR = originalEnv;
     }
+  }
+});
+
+test("readClaudeSettingsFile emits settings-read-error diagnostic for non-ENOENT read failures (POSIX-only)", async () => {
+  if (process.platform === "win32") {
+    return;
+  }
+
+  const { dir, cleanup } = await tempDir();
+  try {
+    const filePath = path.join(dir, "settings.json");
+    await writeFile(filePath, JSON.stringify({ enabledPlugins: {} }));
+    await chmod(filePath, 0o000);
+    const got = await loadMergedClaudeSettingsForScope("user", { claudeConfigDir: dir });
+    assert.equal(got.diagnostics.length, 1);
+    assert.equal(got.diagnostics[0]?.code, "settings-read-error");
+    assert.equal(got.diagnostics[0]?.path, filePath);
+  } finally {
+    await cleanup();
   }
 });
 

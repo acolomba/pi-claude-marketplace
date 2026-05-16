@@ -92,6 +92,31 @@ test("import handler accepts --scope at any parseArgs-supported position", async
   assert.deepEqual(calls[0]?.selectedScopes, ["project"]);
 });
 
+test("import handler rejects invalid --scope value with usage error", async () => {
+  const { ctx, notifications } = makeCtx();
+  const { handler, calls } = makeHandler();
+
+  await handler("--scope bad", ctx);
+
+  assert.deepEqual(calls, []);
+  assert.equal(notifications[0]?.severity, "error");
+  assert.match(notifications[0]?.message ?? "", /Usage:/);
+});
+
+test("import handler catches unexpected orchestrator throws and surfaces as error", async () => {
+  const { ctx, notifications } = makeCtx();
+  const pi = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
+  const handler = makeImportHandler(pi, {
+    gitOps: {} as GitOps,
+    importClaudeSettings: () => Promise.reject(new Error("boom")),
+  });
+
+  await handler("", ctx);
+
+  assert.equal(notifications[0]?.severity, "error");
+  assert.match(notifications[0]?.message ?? "", /boom/);
+});
+
 test("import handler rejects positional input with usage and does not call orchestrator", async () => {
   const { ctx, notifications } = makeCtx();
   const { handler, calls } = makeHandler();
