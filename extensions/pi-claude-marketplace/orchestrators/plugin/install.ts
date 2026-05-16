@@ -106,6 +106,12 @@ export interface InstallPluginOptions {
   readonly cwd: string;
   readonly marketplace: string;
   readonly plugin: string;
+  /**
+   * AG-7 opt-in flag. Default false: generated agents omit `model:` and
+   * Pi picks its own default. The edge handler sets this to `true` only
+   * when the user supplies `--map-model` on `/claude:plugin install`.
+   */
+  readonly mapModel?: boolean;
 }
 
 /**
@@ -387,6 +393,11 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<void> {
             resolved: c.resolved,
             agentsSourceDir: pickAgentsSourceDir(c.resolved),
             knownSkills: c.stagedSkillNames,
+            // AG-7 opt-in: `--map-model` on /claude:plugin install threads
+            // the flag down to here. When the user did not pass the flag
+            // we explicitly default to false so generated agents omit
+            // `model:` (the new default per 260516-08j).
+            mapModel: opts.mapModel ?? false,
           });
           c.agentsPrep = prep;
           const leak = await commitPreparedAgents(prep);
