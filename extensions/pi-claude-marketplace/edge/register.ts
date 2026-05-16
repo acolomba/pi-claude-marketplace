@@ -44,6 +44,7 @@ import { makeAutoupdateHandler } from "./handlers/marketplace/autoupdate.ts";
 import { handleMarketplaceList } from "./handlers/marketplace/list.ts";
 import { makeRemoveHandler } from "./handlers/marketplace/remove.ts";
 import { makeMarketplaceUpdateHandler } from "./handlers/marketplace/update.ts";
+import { makeBootstrapHandler } from "./handlers/plugin/bootstrap.ts";
 import { makeInstallHandler } from "./handlers/plugin/install.ts";
 import { makeListHandler } from "./handlers/plugin/list.ts";
 import { makeUninstallHandler } from "./handlers/plugin/uninstall.ts";
@@ -71,6 +72,7 @@ const COMMAND_DESCRIPTION =
  */
 export function registerClaudePluginCommand(pi: ExtensionAPI, deps: EdgeDeps): void {
   const handlers: SubcommandHandlers = {
+    bootstrap: makeBootstrapHandler(deps),
     install: makeInstallHandler(pi),
     uninstall: makeUninstallHandler(pi),
     update: makeUpdateHandler(pi),

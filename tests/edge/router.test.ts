@@ -50,6 +50,7 @@ function makeHandlers(): { handlers: SubcommandHandlers; calls: HandlerCall[] } 
     };
 
   const handlers: SubcommandHandlers = {
+    bootstrap: mk("bootstrap"),
     install: mk("install"),
     uninstall: mk("uninstall"),
     update: mk("update"),
