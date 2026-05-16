@@ -2,6 +2,7 @@ import { parsePluginSource, sourceLogical } from "../../domain/source.ts";
 import { addMarketplace as defaultAddMarketplace } from "../../orchestrators/marketplace/add.ts";
 import {
   installPlugin as defaultInstallPlugin,
+  type InstallPluginOptions,
   type InstallPluginOutcome,
 } from "../../orchestrators/plugin/install.ts";
 import { locationsFor } from "../../persistence/locations.ts";
@@ -20,7 +21,6 @@ import type {
   PlannedPluginImport,
 } from "./types.ts";
 import type { AddMarketplaceOptions } from "../../orchestrators/marketplace/add.ts";
-import type { InstallPluginOptions } from "../../orchestrators/plugin/install.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
 
