@@ -19,7 +19,7 @@ import { errorMessage } from "../../../shared/errors.ts";
 import { notifyError } from "../../../shared/notify.ts";
 import { parseArgs } from "../../args.ts";
 
-import { splitPluginMarketplaceRef } from "./shared.ts";
+import { parsePositionalsWithFlags, splitPluginMarketplaceRef } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
@@ -43,19 +43,12 @@ export function makeInstallHandler(
       return;
     }
 
-    let mapModel = false;
-    const nonFlagPositionals: string[] = [];
-    for (const token of parsed.positional) {
-      if (token === "--map-model") {
-        mapModel = true;
-      } else if (token.startsWith("--")) {
-        // Unknown long flag -- surface USAGE.
-        notifyError(ctx, USAGE);
-        return;
-      } else {
-        nonFlagPositionals.push(token);
-      }
+    const flagged = parsePositionalsWithFlags(parsed.positional, ctx, USAGE);
+    if (flagged === undefined) {
+      return;
     }
+
+    const { nonFlagPositionals, mapModel } = flagged;
 
     const positional = nonFlagPositionals[0];
     if (nonFlagPositionals.length !== 1 || positional === undefined) {
