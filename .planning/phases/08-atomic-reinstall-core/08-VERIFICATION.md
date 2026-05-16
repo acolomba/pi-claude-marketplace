@@ -88,13 +88,13 @@ Phase 08 is complete and verified. The atomic single-plugin reinstall core is im
 
 **Context:** Merge commit `bd26932` brought origin/main into this branch (v1.2 import + bootstrap commands, CMP-1..8 scope rules, AG-7 agent-mapping omit-model quick task `260516-08j`).
 
-**Verdict:** PASSED — Phase 08 success criteria still hold.
+**Verdict:** PASSED -- Phase 08 success criteria still hold.
 
 | Concern | Result |
 |---------|--------|
 | Architecture guard (`tests/architecture/no-orchestrator-network.test.ts`) | Passed: `orchestrators/plugin/reinstall.ts` still in `FORBIDDEN_TARGETS`; all four forbidden patterns (`platform/git`, `DEFAULT_GIT_OPS`, `gitOps`, `refreshGitHubClone`) still asserted. Import orchestrators correctly not added (they may legitimately call marketplace add which uses git for GitHub sources). |
 | Reinstall orchestrator unchanged | Verified: `git log origin/main..HEAD -- orchestrators/plugin/reinstall.ts` shows only the branch-side `5d8fd1d fix(reinstall): close phase 9 UAT gaps`; main never touched the file. `withLockedStateTransaction`, `prepareAllHandles`, `replaceAll`, `runPostSuccessMaintenance`, `assertNoCrossPluginConflicts`, `loadCachedEntry` all still present at expected sites. |
 | Bridge replacement contract intact | Verified: `bridges/agents/types.ts` keeps `ReplacePreparedAgentsOptions` + `AgentsReplacement{Noop,Replaced}` from Phase 08-03; `replacePreparedAgents`/`rollbackAgentsReplacement`/`finalizeAgentsReplacement` symbols still exported. |
-| Agent `mapModel` semantics | Composes cleanly: `convertAgent` now requires `mapModel: boolean`; `stage.ts` forwards `StageAgentsInput.mapModel ?? false`; `reinstall.ts:571` calls `prepareStagePluginAgents` without `mapModel`, so reinstall generates frontmatter without `model:` (matches main's "cascade-driven re-installs always omit `model:`" comment in `types.ts`). PRL-08/09/11 are about version/ordering/cleanup, not agent fields — no PRL contract violated. |
+| Agent `mapModel` semantics | Composes cleanly: `convertAgent` now requires `mapModel: boolean`; `stage.ts` forwards `StageAgentsInput.mapModel ?? false`; `reinstall.ts:571` calls `prepareStagePluginAgents` without `mapModel`, so reinstall generates frontmatter without `model:` (matches main's "cascade-driven re-installs always omit `model:`" comment in `types.ts`). PRL-08/09/11 are about version/ordering/cleanup, not agent fields -- no PRL contract violated. |
 | Focused suite | Passed: `node --test tests/orchestrators/plugin/reinstall.test.ts tests/architecture/no-orchestrator-network.test.ts` -- 19/19 tests green (18 reinstall + 1 architecture). |
 | Full `npm run check` | Passed: typecheck + lint + format + 1010 tests, 0 failures. |

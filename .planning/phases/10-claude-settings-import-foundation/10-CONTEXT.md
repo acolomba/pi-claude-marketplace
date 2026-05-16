@@ -119,7 +119,7 @@ This phase does **not** mutate Pi state, add marketplaces, install plugins, wire
 ## Specific Ideas
 
 - Follow-up research found Claude Code 2.1.116 exposes `CLAUDE_CONFIG_DIR` in its binary strings and help-adjacent setting-source text confirms filesystem settings sources: `user` = global user settings, `project` = `.claude/settings.json`, `local` = `.claude/settings.local.json`. Phase 10 should respect `CLAUDE_CONFIG_DIR` for user-scope settings and use it as a convenient test seam.
-- The user specifically chose supported source mapping because “it's the same patterns we support.” Downstream agents should not add broad best-effort parsing for unsupported Claude marketplace source objects.
+- The user specifically chose supported source mapping because "it's the same patterns we support." Downstream agents should not add broad best-effort parsing for unsupported Claude marketplace source objects.
 - The local override case that must be tested: base enables `plugin@mp: true`, local sets `plugin@mp: false`, final extraction does not include that plugin.
 - Non-boolean enabled values such as `"true"`, `1`, `null`, or `{}` should be warnings; boolean `false` should not be noisy.
 

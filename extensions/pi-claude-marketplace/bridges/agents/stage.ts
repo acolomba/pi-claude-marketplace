@@ -30,7 +30,7 @@ import { assertSafeName } from "../../domain/name.ts";
 import { loadAgentsIndex, saveAgentsIndex } from "../../persistence/agents-index-io.ts";
 import { AgentOwnershipConflictError } from "../../shared/errors-bridges.ts";
 import { appendLeakToError, errorMessage } from "../../shared/errors.ts";
-import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
+import { cleanupStaging, pathExists, rollbackReplacementCommon } from "../../shared/fs-utils.ts";
 import { MANUAL_RECOVERY_REQUIRED } from "../../shared/markers.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
@@ -520,50 +520,38 @@ async function rollbackAgentsReplacementInternal(
   backupRoot: string,
   oldIndexText: string | undefined,
 ): Promise<readonly string[]> {
-  const leaks: string[] = [];
+  return rollbackReplacementCommon({
+    renamed,
+    backups,
+    stagingRoot: prepared.stagingDir,
+    backupRoot,
+    removeMode: "file",
+    labels: {
+      replacement: "replacement agent file",
+      previous: "previous agent file",
+      stagingDir: "agents staging directory",
+      backupDir: "agents replacement backup directory",
+    },
+    beforeCleanup: () => restoreAgentsIndex(prepared.locations.agentsIndexPath, oldIndexText),
+  });
+}
 
-  for (const pair of [...renamed].reverse()) {
-    try {
-      await rm(pair.to, { force: true });
-    } catch (err) {
-      leaks.push(`failed to remove replacement agent file at ${pair.to}: ${errorMessage(err)}`);
-    }
-  }
-
-  for (const backup of [...backups].reverse()) {
-    try {
-      await mkdir(path.dirname(backup.from), { recursive: true });
-      await rename(backup.to, backup.from);
-    } catch (err) {
-      leaks.push(
-        `failed to restore previous agent file ${backup.name} from ${backup.to} to ${backup.from}: ${errorMessage(err)}`,
-      );
-    }
-  }
-
+async function restoreAgentsIndex(
+  agentsIndexPath: string,
+  oldIndexText: string | undefined,
+): Promise<readonly string[]> {
   try {
     if (oldIndexText === undefined) {
-      await rm(prepared.locations.agentsIndexPath, { force: true });
+      await rm(agentsIndexPath, { force: true });
     } else {
-      await mkdir(path.dirname(prepared.locations.agentsIndexPath), { recursive: true });
-      await writeFile(prepared.locations.agentsIndexPath, oldIndexText, "utf8");
+      await mkdir(path.dirname(agentsIndexPath), { recursive: true });
+      await writeFile(agentsIndexPath, oldIndexText, "utf8");
     }
+
+    return [];
   } catch (err) {
-    leaks.push(
-      `failed to restore agents index at ${prepared.locations.agentsIndexPath}: ${errorMessage(err)}`,
-    );
+    return [`failed to restore agents index at ${agentsIndexPath}: ${errorMessage(err)}`];
   }
-
-  for (const leak of [
-    await cleanupStaging(prepared.stagingDir, "agents staging directory"),
-    await cleanupStaging(backupRoot, "agents replacement backup directory"),
-  ]) {
-    if (leak !== undefined) {
-      leaks.push(leak);
-    }
-  }
-
-  return Object.freeze(leaks);
 }
 
 async function readOptionalText(filePath: string): Promise<string | undefined> {

@@ -12,7 +12,6 @@ import { rm } from "node:fs/promises";
 
 import {
   abortPreparedAgents,
-  discoverPluginAgents,
   finalizeAgentsReplacement,
   prepareStagePluginAgents,
   replacePreparedAgents,
@@ -20,7 +19,6 @@ import {
 } from "../../bridges/agents/index.ts";
 import {
   abortPreparedCommands,
-  discoverPluginCommands,
   finalizeCommandsReplacement,
   prepareStageCommands,
   replacePreparedCommands,
@@ -35,7 +33,6 @@ import {
 } from "../../bridges/mcp/index.ts";
 import {
   abortPreparedSkills,
-  discoverPluginSkills,
   finalizeSkillsReplacement,
   prepareStageSkills,
   replacePreparedSkills,
@@ -59,7 +56,8 @@ import {
 } from "../../transaction/with-state-guard.ts";
 import { formatErrorWithCauses, resolveScopeFromState } from "../marketplace/shared.ts";
 
-import { assertNoCrossPluginConflicts, pickAgentsSourceDir } from "./shared.ts";
+import { discoverGeneratedNames } from "./discover-names.ts";
+import { assertNoCrossPluginConflicts } from "./shared.ts";
 
 import type { AgentsReplacement, PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { CommandsReplacement, PreparedCommandsStaging } from "../../bridges/commands/index.ts";
@@ -110,13 +108,6 @@ export interface ReinstallPluginsOptions {
   readonly cwd: string;
   readonly target: ReinstallPluginsTarget;
   readonly force?: boolean;
-}
-
-interface GeneratedNames {
-  readonly skills: readonly string[];
-  readonly commands: readonly string[];
-  readonly agents: readonly string[];
-  readonly agentsSourceDir: string;
 }
 
 interface PreparedHandles {
@@ -513,29 +504,6 @@ async function resolveInstallable(
   const resolved = await resolveStrict(entry, { marketplaceRoot });
   requireInstallable(resolved, "install");
   return resolved;
-}
-
-async function discoverGeneratedNames(
-  plugin: string,
-  installable: ResolvedPluginInstallable,
-): Promise<GeneratedNames> {
-  const skillsDiscovery = await discoverPluginSkills({ pluginName: plugin, resolved: installable });
-  const commandsDiscovery = await discoverPluginCommands({
-    pluginName: plugin,
-    resolved: installable,
-  });
-  const agentsSourceDir = pickAgentsSourceDir(installable);
-  const agentsDiscovery =
-    agentsSourceDir === ""
-      ? { discovered: [] as readonly { readonly generatedName: string }[] }
-      : await discoverPluginAgents({ pluginName: plugin, agentsDirs: [agentsSourceDir] });
-
-  return {
-    skills: skillsDiscovery.discovered.map((s) => s.generatedName),
-    commands: commandsDiscovery.discovered.map((c) => c.generatedName),
-    agents: agentsDiscovery.discovered.map((a) => a.generatedName),
-    agentsSourceDir,
-  };
 }
 
 async function prepareAllHandles(input: {

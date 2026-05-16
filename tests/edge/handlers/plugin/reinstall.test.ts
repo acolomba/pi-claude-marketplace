@@ -243,3 +243,14 @@ test("shim :: invalid ref unknown flag and extra positionals emit reinstall usag
     }
   });
 });
+
+test("shim :: parseArgs failure (invalid --scope value) surfaces error with reinstall usage", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const handler = makeReinstallHandler(makePi());
+    const { ctx, notifications } = makeCtx(cwd);
+    await handler("--scope bogus", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]?.severity, "error");
+    assert.match(notifications[0]?.message ?? "", /Usage: \/claude:plugin reinstall/);
+  });
+});

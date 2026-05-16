@@ -24,7 +24,7 @@ import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
 import { appendLeakToError, errorMessage } from "../../shared/errors.ts";
-import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
+import { cleanupStaging, pathExists, rollbackReplacementCommon } from "../../shared/fs-utils.ts";
 import { MANUAL_RECOVERY_REQUIRED } from "../../shared/markers.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { substituteClaudeVars } from "../../shared/vars.ts";
@@ -359,35 +359,17 @@ async function rollbackSkillsReplacementInternal(
   backups: readonly { name: string; from: string; to: string }[],
   backupRoot: string,
 ): Promise<readonly string[]> {
-  const leaks: string[] = [];
-
-  for (const pair of [...renamed].reverse()) {
-    try {
-      await rm(pair.to, { recursive: true, force: true });
-    } catch (err) {
-      leaks.push(`failed to remove replacement skill dir at ${pair.to}: ${errorMessage(err)}`);
-    }
-  }
-
-  for (const backup of [...backups].reverse()) {
-    try {
-      await mkdir(path.dirname(backup.from), { recursive: true });
-      await rename(backup.to, backup.from);
-    } catch (err) {
-      leaks.push(
-        `failed to restore previous skill dir ${backup.name} from ${backup.to} to ${backup.from}: ${errorMessage(err)}`,
-      );
-    }
-  }
-
-  for (const leak of [
-    await cleanupStaging(prepared.stagingRoot, "skills staging directory"),
-    await cleanupStaging(backupRoot, "skills replacement backup directory"),
-  ]) {
-    if (leak !== undefined) {
-      leaks.push(leak);
-    }
-  }
-
-  return Object.freeze(leaks);
+  return rollbackReplacementCommon({
+    renamed,
+    backups,
+    stagingRoot: prepared.stagingRoot,
+    backupRoot,
+    removeMode: "tree",
+    labels: {
+      replacement: "replacement skill dir",
+      previous: "previous skill dir",
+      stagingDir: "skills staging directory",
+      backupDir: "skills replacement backup directory",
+    },
+  });
 }

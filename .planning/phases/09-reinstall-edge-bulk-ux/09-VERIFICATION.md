@@ -99,7 +99,7 @@ Phase 09 is complete and verified. The reinstall command is user-facing, bulk-ca
 
 **Context:** Merge commit `bd26932` brought origin/main into this branch. Main added bootstrap and import commands, refactored `edge/completions/data.ts` (split into `getInstallPluginToMarketplacesMap`/`getInstalledPluginToMarketplacesMap`, added target-scope-awareness), introduced CMP-1..8 scope rules, and added the AG-7 omit-model agent mapping quick task. The merge resolution kept reinstall's edge surface and required two follow-ups: collapsing four plugin-ref dispatch branches behind `pluginRefBranchConfig` (cognitive-complexity cap) and re-inlining `marketplaceNamesForScope` to bypass the marketplace-name cache (keeping the PRL-16 stale-cache regression test green for both reinstall and update modes).
 
-**Verdict:** PASSED — Phase 09 success criteria still hold post-merge.
+**Verdict:** PASSED -- Phase 09 success criteria still hold post-merge.
 
 | Concern | Result |
 |---------|--------|
