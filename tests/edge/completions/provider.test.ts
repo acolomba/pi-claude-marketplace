@@ -650,6 +650,27 @@ test("TC-6 :: exact uninstall token without trailing space completes installed p
   }
 });
 
+test("TC-6 :: uninstall --scope user limits installed plugin refs to user scope", async () => {
+  __resetCacheForTests();
+  const f = await makeFixture({
+    state: { user: { mp: {} }, project: { mp: {} } },
+    manifests: {
+      user: { mp: [{ name: "user-installed", status: "installed" }] },
+      project: { mp: [{ name: "project-installed", status: "installed" }] },
+    },
+  });
+  try {
+    const items = await getArgumentCompletions("uninstall --scope user ", f.resolver);
+    assert.ok(items !== null);
+    assert.deepEqual(
+      items.map((i) => i.label),
+      ["user-installed@mp"],
+    );
+  } finally {
+    await f.cleanup();
+  }
+});
+
 test("TC-6 :: update <here> -- status filter shows only installed plugins", async () => {
   __resetCacheForTests();
   const f = await makeFixture({
@@ -696,6 +717,27 @@ test("TC-6 :: update accepts bare @<marketplace> form", async () => {
     const labels = items.map((i) => i.label);
     // Each marketplace surfaces as `@<name>`.
     assert.deepEqual([...labels].sort(), ["@mp-a", "@mp-b"]);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("TC-6 :: update --scope user limits installed plugin refs to user scope", async () => {
+  __resetCacheForTests();
+  const f = await makeFixture({
+    state: { user: { mp: {} }, project: { mp: {} } },
+    manifests: {
+      user: { mp: [{ name: "user-installed", status: "installed" }] },
+      project: { mp: [{ name: "project-installed", status: "installed" }] },
+    },
+  });
+  try {
+    const items = await getArgumentCompletions("update --scope user ", f.resolver);
+    assert.ok(items !== null);
+    assert.deepEqual(
+      items.map((i) => i.label),
+      ["user-installed@mp"],
+    );
   } finally {
     await f.cleanup();
   }

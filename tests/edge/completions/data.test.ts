@@ -8,6 +8,7 @@ import {
   buildItem,
   extractPositionals,
   getMarketplaceNamesAcrossScopes,
+  getPluginRefCompletions,
   getPluginToMarketplacesMap,
   splitCompletionInput,
 } from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
@@ -302,6 +303,31 @@ test("CMP-8 :: project marketplace shadows same-named user marketplace for insta
     });
     assert.deepEqual(map.get("project-only"), ["mp"]);
     assert.equal(map.has("user-only"), false);
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("getPluginRefCompletions :: plugin@ prefix completes matching marketplace suffixes", async () => {
+  __resetCacheForTests();
+  const fixture = await makeResolver({
+    state: { user: { "mp-a": {}, "mp-b": {}, other: {} }, project: {} },
+    manifests: {
+      user: {
+        "mp-a": [{ name: "plug", status: "installed" }],
+        "mp-b": [{ name: "plug", status: "installed" }],
+        other: [{ name: "plug", status: "installed" }],
+      },
+      project: {},
+    },
+  });
+  try {
+    const items = await getPluginRefCompletions("update", "plug@mp-", "update", fixture.resolver, {
+      allowMarketplaceOnly: true,
+    });
+
+    assert.deepEqual(items.map((i) => i.label).sort(), ["plug@mp-a", "plug@mp-b"]);
+    assert.deepEqual(items.map((i) => i.value).sort(), ["update plug@mp-a ", "update plug@mp-b "]);
   } finally {
     await fixture.cleanup();
   }
