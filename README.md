@@ -14,7 +14,7 @@ Access Claude plugin marketplaces from Pi Coding Agent.
 <!-- markdownlint-disable MD033 -->
 
 <p align="center">
-  <img src="https://media.githubusercontent.com/media/acolomba/pi-claude-marketplace/refs/heads/main/demos/marketplace-add-plugin-install.gif" alt="Marketplace install demo" width="720">
+  <img src="https://media.githubusercontent.com/media/acolomba/pi-claude-marketplace/refs/heads/main/demos/bootstrap.gif" alt="Bootstrap demo" width="720">
 </p>
 <!-- markdownlint-enable MD033 -->
 
@@ -43,31 +43,16 @@ Install the Pi extension:
 pi install npm:pi-claude-marketplace
 ```
 
-Bootstrap the Anthropic marketplace into user scope with autoupdate enabled:
+Bootstrap the official Anthropic Claude plugin marketplace:
 
 ```text
 /claude:plugin bootstrap
 ```
 
-This is equivalent to running:
-
-```text
-/claude:plugin marketplace add anthropics/claude-plugins-official
-/claude:plugin marketplace autoupdate claude-plugins-official
-```
-
-`/claude:plugin bootstrap` is idempotent: re-running it on a fully configured user scope makes no changes; if the marketplace is present but autoupdate is off, only autoupdate is enabled.
-
-To add a marketplace into project scope instead:
-
-```text
-/claude:plugin marketplace add anthropics/claude-plugins-official --scope project
-```
-
 List plugins available for installation:
 
 ```text
-/claude:plugin list claude-plugins-official --available
+/claude:plugin list --available
 ```
 
 Install a plugin:
@@ -76,16 +61,28 @@ Install a plugin:
 /claude:plugin install pr-review-toolkit@claude-plugins-official
 ```
 
+Add another marketplace:
+
+```text
+/claude:plugin marketplace add upstash/context7
+```
+
+List its plugins:
+
+```text
+/claude:plugin list context7-marketplace --available
+```
+
+Add another plugin:
+
+```text
+/claude:plugin install context7-plugin@context7-marketplace
+```
+
 Then reload:
 
 ```text
 /reload
-```
-
-Plugins are automatically updated when the marketplace is updated:
-
-```text
-/claude:plugin marketplace update
 ```
 
 ### Name mapping
@@ -120,41 +117,24 @@ MCP server names are not prefixed or rewritten. The server name is the key from 
 
 This extension mirrors Claude Code's `/plugin` command. Use `/claude:plugin` in Pi for marketplace and plugin operations, then run `/reload` after installing, uninstalling, or updating plugins so Pi discovers the changed resources.
 
-### Bootstrap
-
-One-shot setup of the canonical Anthropic marketplace in user scope with autoupdate enabled:
-
-```text
-/claude:plugin bootstrap
-```
-
-The command is idempotent:
-
-- If the marketplace is not present, it is added to user scope (equivalent to `/claude:plugin marketplace add anthropics/claude-plugins-official`).
-- If the marketplace is already present, the add step is skipped and no duplicate "Added marketplace" notification is emitted.
-- If autoupdate is off, it is turned on (equivalent to `/claude:plugin marketplace autoupdate claude-plugins-official`).
-- If autoupdate is already on, the command reports `Already enabled: claude-plugins-official.` and exits.
-
-Bootstrap always targets user scope. It does not accept `--scope project`. To configure a project-scope marketplace, use `marketplace add` and `marketplace autoupdate` directly.
-
 ### Marketplace
 
 Add a marketplace from a GitHub repository shorthand, matching Claude Code's common `/plugin marketplace add owner/repo` form:
 
 ```text
-/claude:plugin marketplace add anthropics/claude-plugins-official
+/claude:plugin marketplace add upstash/context7
 ```
 
 Add the same marketplace from a GitHub URL:
 
 ```text
-/claude:plugin marketplace add https://github.com/anthropics/claude-plugins-official
+/claude:plugin marketplace add https://github.com/upstash/context7-marketplace
 ```
 
 Pin a GitHub marketplace to a branch, tag, or commit with a `#ref` suffix:
 
 ```text
-/claude:plugin marketplace add https://github.com/anthropics/claude-plugins-official#main
+/claude:plugin marketplace add https://github.com/upstash/context7-marketplace#v1.0.30
 ```
 
 Add a marketplace from the local filesystem. The path may be a directory containing `.claude-plugin/marketplace.json` or a direct path to a `marketplace.json` file:
@@ -167,7 +147,7 @@ Add a marketplace from the local filesystem. The path may be a directory contain
 Add a marketplace local to the current project with `--scope project`. The default scope is `user`:
 
 ```text
-/claude:plugin marketplace add anthropics/claude-plugins-official --scope project
+/claude:plugin marketplace add upstash/context7-marketplace --scope project
 ```
 
 List configured marketplaces:
@@ -180,22 +160,22 @@ List configured marketplaces:
 Refresh one marketplace, or all marketplaces when no name is provided:
 
 ```text
-/claude:plugin marketplace update claude-plugins-official
+/claude:plugin marketplace update context7-marketplace
 /claude:plugin marketplace update
 ```
 
 Remove a marketplace and all plugins installed from it:
 
 ```text
-/claude:plugin marketplace remove claude-plugins-official
-/claude:plugin marketplace rm claude-plugins-official
+/claude:plugin marketplace remove context7-marketplace
+/claude:plugin marketplace rm context7-marketplace
 ```
 
 Toggle marketplace plugin auto-updates. When the marketplace is updated manually, plugins are automatically updated:
 
 ```text
-/claude:plugin marketplace autoupdate claude-plugins-official
-/claude:plugin marketplace noautoupdate claude-plugins-official
+/claude:plugin marketplace autoupdate context7-marketplace
+/claude:plugin marketplace noautoupdate context7-marketplace
 ```
 
 `/claude:plugin marketplace add`, `remove`, `list`, and `update` intentionally follow Claude Code's `/plugin marketplace ...` command shape where this extension supports the same operation. Today this extension accepts GitHub shorthands such as `owner/repo`, GitHub HTTPS URLs, and filesystem paths; arbitrary Git hosts and remote `marketplace.json` URLs are not installable yet.
@@ -205,7 +185,7 @@ Toggle marketplace plugin auto-updates. When the marketplace is updated manually
 List plugins available for installation. Omit the marketplace name to list across configured marketplaces:
 
 ```text
-/claude:plugin list claude-plugins-official --available
+/claude:plugin list context7-marketplace --available
 /claude:plugin list --available
 ```
 
@@ -241,7 +221,7 @@ Update one installed plugin, every installed plugin from one marketplace, or all
 
 ```text
 /claude:plugin update pr-review-toolkit@claude-plugins-official
-/claude:plugin update @claude-plugins-official
+/claude:plugin update @context7-marketplace
 /claude:plugin update
 ```
 
@@ -258,6 +238,21 @@ Reload Pi after changes:
 ```
 
 Claude Code users may expect `/reload-plugins`; in Pi, use `/reload`. Claude Code's `/plugin` interactive tabs, plugin enable/disable commands, local scope, hooks, output styles, and LSP server activation are not provided by this extension.
+
+### Bootstrap
+
+One-shot setup of the canonical Anthropic marketplace in user scope with autoupdate enabled:
+
+```text
+/claude:plugin bootstrap
+```
+
+This is equivalent to running:
+
+```text
+/claude:plugin marketplace add upstash/context7-marketplace
+/claude:plugin marketplace autoupdate context7-marketplace
+```
 
 ## Development
 

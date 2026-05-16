@@ -1,4 +1,4 @@
-Output demos/marketplace-add-plugin-install.gif
+Output demos/bootstrap.gif
 
 Require pi
 Require npm
@@ -21,15 +21,9 @@ Type "/claude:p"
 Sleep 170ms
 Tab
 Sleep 170ms
-Type "ma"
+Type "boot"
 Sleep 170ms
 Tab
-Sleep 170ms
-Type "a"
-Sleep 170ms
-Tab
-Sleep 170ms
-Type "upstash/context7"
 Sleep 1800ms
 Enter
 
@@ -43,7 +37,7 @@ Type "i"
 Sleep 170ms
 Tab
 Sleep 170ms
-Type "context7"
+Type "pr-"
 Sleep 170ms
 Tab
 Sleep 1800ms
@@ -57,13 +51,15 @@ Enter
 
 Sleep 1400ms
 
-Type "Show me the Supabase auth API for email/password sign-up."
+Type "/pr-"
+Sleep 170ms
+Tab
 Sleep 1800ms
 Enter
 
-Sleep 5000ms
+Sleep 5s
 
 Hide
-Type "/claude:plugin marketplace rm upstash/context7"
+Type "/claude:plugin marketplace rm anthropics/claude-plugins-official"
 Sleep 500ms
 Ctrl+C
