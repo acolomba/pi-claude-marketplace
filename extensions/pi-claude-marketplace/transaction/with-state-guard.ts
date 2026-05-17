@@ -67,49 +67,12 @@ export async function withStateGuard<T>(
   locations: ScopedLocations,
   mutate: (state: ExtensionState) => Promise<T> | T,
 ): Promise<T> {
-  await mkdir(locations.extensionRoot, { recursive: true });
-
-  let release: (() => Promise<void>) | undefined;
-  try {
-    release = await acquireStateLock(locations);
-  } catch (err) {
-    if (isLockHeldError(err)) {
-      throw new StateLockHeldError(locations.scope, locations.stateLockFile, { cause: err });
-    }
-
-    throw toError(err);
-  }
-
-  let result: T | undefined;
-  let primaryError: unknown;
-  try {
+  return withScopeLock(locations, async () => {
     const fresh = await loadState(locations.extensionRoot);
-    result = await mutate(fresh);
+    const result = await mutate(fresh);
     await saveState(locations.extensionRoot, fresh);
-  } catch (err) {
-    primaryError = err;
-  } finally {
-    try {
-      await release();
-    } catch (releaseErr) {
-      if (primaryError === undefined) {
-        primaryError = releaseErr;
-      } else {
-        const base =
-          primaryError instanceof Error ? primaryError : new Error(errorMessage(primaryError));
-        primaryError = new Error(
-          `${base.message} (lock release also failed: ${errorMessage(releaseErr)})`,
-          { cause: base },
-        );
-      }
-    }
-  }
-
-  if (primaryError !== undefined) {
-    throw toError(primaryError);
-  }
-
-  return result as T;
+    return result;
+  });
 }
 
 /**
@@ -122,22 +85,7 @@ export async function withLockedStateTransaction<T>(
   run: (tx: LockedStateTransaction) => Promise<T> | T,
   deps?: LockedStateTransactionDeps,
 ): Promise<T> {
-  await mkdir(locations.extensionRoot, { recursive: true });
-
-  let release: (() => Promise<void>) | undefined;
-  try {
-    release = await acquireStateLock(locations);
-  } catch (err) {
-    if (isLockHeldError(err)) {
-      throw new StateLockHeldError(locations.scope, locations.stateLockFile, { cause: err });
-    }
-
-    throw toError(err);
-  }
-
-  let result: T | undefined;
-  let primaryError: unknown;
-  try {
+  return withScopeLock(locations, async () => {
     const fresh = await (deps?.loadState ?? loadState)(locations.extensionRoot);
     let saved = false;
     const tx: LockedStateTransaction = {
@@ -151,7 +99,33 @@ export async function withLockedStateTransaction<T>(
         await (deps?.saveState ?? saveState)(locations.extensionRoot, fresh);
       },
     };
-    result = await run(tx);
+    return run(tx);
+  });
+}
+
+/**
+ * Per-scope proper-lockfile lifecycle. Acquires the lock (mapping ELOCKED
+ * to StateLockHeldError), runs the body, and releases the lock -- chaining
+ * release errors into the body error if both fail so neither is dropped.
+ */
+async function withScopeLock<T>(locations: ScopedLocations, body: () => Promise<T>): Promise<T> {
+  await mkdir(locations.extensionRoot, { recursive: true });
+
+  let release: () => Promise<void>;
+  try {
+    release = await acquireStateLock(locations);
+  } catch (err) {
+    if (isLockHeldError(err)) {
+      throw new StateLockHeldError(locations.scope, locations.stateLockFile, { cause: err });
+    }
+
+    throw toError(err);
+  }
+
+  let result: T | undefined;
+  let primaryError: unknown;
+  try {
+    result = await body();
   } catch (err) {
     primaryError = err;
   } finally {
