@@ -24,7 +24,7 @@ export interface DiscoveredGeneratedNames {
   readonly skills: readonly string[];
   readonly commands: readonly string[];
   readonly agents: readonly string[];
-  readonly agentsSourceDir: string;
+  readonly agentsSourceDir: string | null;
 }
 
 export async function discoverGeneratedNames(
@@ -38,7 +38,7 @@ export async function discoverGeneratedNames(
   });
   const agentsSourceDir = pickAgentsSourceDir(installable);
   const agentsDiscovery =
-    agentsSourceDir === ""
+    agentsSourceDir === null
       ? { discovered: [] as readonly { readonly generatedName: string }[] }
       : await discoverPluginAgents({ pluginName: plugin, agentsDirs: [agentsSourceDir] });
 

@@ -1,6 +1,7 @@
 // transaction/with-state-guard.ts
 //
-// Cross-process state lifecycle wrapper (ST-7 + Phase 7 D-06).
+// Cross-process state lifecycle wrapper (ST-7 + Phase 7 D-06). Phase 8 adds
+// withLockedStateTransaction for callers that need explicit save control.
 //
 // Concurrency scope:
 //   Phase 7 D-06 adds a per-scope proper-lockfile lock around the full
@@ -93,6 +94,13 @@ export async function withStateGuard<T>(
     } catch (releaseErr) {
       if (primaryError === undefined) {
         primaryError = releaseErr;
+      } else {
+        const base =
+          primaryError instanceof Error ? primaryError : new Error(errorMessage(primaryError));
+        primaryError = new Error(
+          `${base.message} (lock release also failed: ${errorMessage(releaseErr)})`,
+          { cause: base },
+        );
       }
     }
   }
@@ -131,9 +139,15 @@ export async function withLockedStateTransaction<T>(
   let primaryError: unknown;
   try {
     const fresh = await (deps?.loadState ?? loadState)(locations.extensionRoot);
+    let saved = false;
     const tx: LockedStateTransaction = {
       state: fresh,
       save: async (): Promise<void> => {
+        if (saved) {
+          throw new Error("LockedStateTransaction.save() called more than once.");
+        }
+
+        saved = true;
         await (deps?.saveState ?? saveState)(locations.extensionRoot, fresh);
       },
     };
@@ -146,6 +160,13 @@ export async function withLockedStateTransaction<T>(
     } catch (releaseErr) {
       if (primaryError === undefined) {
         primaryError = releaseErr;
+      } else {
+        const base =
+          primaryError instanceof Error ? primaryError : new Error(errorMessage(primaryError));
+        primaryError = new Error(
+          `${base.message} (lock release also failed: ${errorMessage(releaseErr)})`,
+          { cause: base },
+        );
       }
     }
   }

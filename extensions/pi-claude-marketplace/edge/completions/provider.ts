@@ -1,13 +1,14 @@
 // edge/completions/provider.ts
 //
 // `getArgumentCompletions(prefix, resolver)` dispatcher -- the single entry
-// point Pi calls per keystroke. Five branches mirror the V1 dispatcher
-// (PRD §6.7 TC-1..TC-6) with status-aware refinements per D-03 corollary.
+// point Pi calls per keystroke. Five branches implement PRD §6.7 TC-1..TC-6
+// with status-aware refinements per D-03 corollary.
 //
 // Branches in priority order:
 //
 //   1. TC-1 -- tokens.length === 0 -> top-level keywords
-//      (install / uninstall / update / reinstall / list / ls / marketplace).
+//      (install / uninstall / update / reinstall / list / ls / marketplace /
+//       bootstrap / import).
 //   2. TC-4 -- prevToken === "--scope" -> user / project.
 //   2b. TC-3 -- current.startsWith("-") -> flag names (--scope
 //      always; --installed / --available / --unavailable when head ===
@@ -82,7 +83,8 @@ function flagCompletions(
   if (positionalHead === "reinstall") {
     flags.push({
       name: "--force",
-      description: "Overwrite this plugin's previous foreign agent content",
+      description:
+        "Allow overwriting agents that previously had foreign content from this plugin's own install",
     });
   }
 
@@ -210,7 +212,7 @@ export async function getArgumentCompletions(
     return topLevelCompletions(current);
   }
 
-  const rawHead = tokens.find((token) => token !== "--scope") ?? "";
+  const rawHead = extractPositionals(tokens)[0] ?? "";
   const positionals = extractPositionals(tokens, rawHead === "reinstall" ? ["--force"] : []);
   const positionalHead = positionals[0] ?? "";
   const explicitScope = extractScope(tokens);

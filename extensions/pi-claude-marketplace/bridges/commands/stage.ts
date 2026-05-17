@@ -1,6 +1,8 @@
 // bridges/commands/stage.ts
 //
-// CommandsBridge: prepare/commit/abort + RN-6 collision detection.
+// CommandsBridge: prepare/commit/abort + RN-6 collision detection, plus Phase 8
+// replacement exports: replacePreparedCommands, rollbackCommandsReplacement,
+// finalizeCommandsReplacement.
 // Pattern carry-forward from V1 `resource/stage.ts` (commands branch of
 // `stagePluginResources`) for the body-substitute + per-file rename
 // logic; prepare/commit/abort discipline mirrors V1 `agent/stage.ts`.
@@ -226,12 +228,14 @@ export async function commitPreparedCommands(
  * Abort a prepared staging. Cleans up the staging dir; the noop branch
  * has nothing to clean.
  */
-export async function abortPreparedCommands(prepared: PreparedCommandsStaging): Promise<void> {
+export async function abortPreparedCommands(
+  prepared: PreparedCommandsStaging,
+): Promise<string | undefined> {
   if (prepared.kind === "noop") {
-    return;
+    return undefined;
   }
 
-  await cleanupStaging(prepared.stagingRoot, "commands staging directory");
+  return cleanupStaging(prepared.stagingRoot, "commands staging directory");
 }
 
 /**

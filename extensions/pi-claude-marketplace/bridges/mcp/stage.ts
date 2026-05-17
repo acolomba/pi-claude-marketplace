@@ -1,6 +1,7 @@
 // bridges/mcp/stage.ts
 //
-// MC-6 prepare/commit/abort for the MCP bridge. The prepare phase reads
+// MC-6 prepare/commit/abort for the MCP bridge, plus Phase 8 replacement
+// exports: replacePreparedMcp, rollbackMcpReplacement, finalizeMcpReplacement. The prepare phase reads
 // the scoped `mcp.json`, partitions existing entries into ours-vs-theirs
 // by `_piClaudeMarketplace` marker, runs the four-slot cross-slot collision
 // check (MC-4 / RN-5), short-circuits AS-8 noops, stamps the new entries
@@ -20,8 +21,10 @@
 // so Phase 5 can populate state.json from the bridge return value
 // without re-deriving the per-server `targetPath`.
 
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
+
+import writeFileAtomic from "write-file-atomic";
 
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
 import { McpServerCollisionError } from "../../shared/errors-bridges.ts";
@@ -294,7 +297,9 @@ export async function rollbackMcpReplacement(
       await rm(replacement.prepared.locations.mcpJsonPath, { force: true });
     } else {
       await mkdir(path.dirname(replacement.prepared.locations.mcpJsonPath), { recursive: true });
-      await writeFile(replacement.prepared.locations.mcpJsonPath, internals.oldText, "utf8");
+      await writeFileAtomic(replacement.prepared.locations.mcpJsonPath, internals.oldText, {
+        encoding: "utf8",
+      });
     }
   } catch (err) {
     leaks.push(

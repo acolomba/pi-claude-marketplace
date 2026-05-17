@@ -1,6 +1,8 @@
 // bridges/skills/stage.ts
 //
-// Skills bridge prepare/commit/abort with per-skill atomic dir rename.
+// Skills bridge prepare/commit/abort with per-skill atomic dir rename, plus
+// Phase 8 replacement exports: replacePreparedSkills, rollbackSkillsReplacement,
+// finalizeSkillsReplacement.
 //
 // Carry-forward from V1 `resource/stage.ts` (skills branch, lines 178-204) for
 // the per-skill cp+rewrite+substitute pipeline; from V1 `agent/stage.ts`
@@ -237,12 +239,14 @@ export async function commitPreparedSkills(
  * bridge in the same Phase 5 transaction failed). After commit succeeds,
  * abort is a no-op because the staging dir is already cleaned.
  */
-export async function abortPreparedSkills(prepared: PreparedSkillsStaging): Promise<void> {
+export async function abortPreparedSkills(
+  prepared: PreparedSkillsStaging,
+): Promise<string | undefined> {
   if (prepared.kind === "noop") {
-    return;
+    return undefined;
   }
 
-  await cleanupStaging(prepared.stagingRoot, "skills staging directory");
+  return cleanupStaging(prepared.stagingRoot, "skills staging directory");
 }
 
 /**

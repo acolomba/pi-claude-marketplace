@@ -71,8 +71,8 @@ export interface StageAgentsInput {
   readonly pluginRoot: string;
   readonly pluginDataDir: string;
   readonly resolved: ResolvedPluginInstallable;
-  /** Absolute path to plugin's agents/ dir, OR "" sentinel = no agents component. */
-  readonly agentsSourceDir: string;
+  /** Absolute path to plugin's agents/ dir, or null when the plugin has no agents component. */
+  readonly agentsSourceDir: string | null;
   /** Generated skill names for this plugin (used to validate `skills:` refs). */
   readonly knownSkills?: readonly string[];
   /**
@@ -155,7 +155,7 @@ export type AgentsReplacement = AgentsReplacementNoop | AgentsReplacementReplace
 
 export interface AgentsReplacementNoop {
   readonly kind: "noop";
-  readonly prepared: PreparedAgentsStaging;
+  readonly prepared: Extract<PreparedAgentsStaging, { kind: "noop" }>;
 }
 
 export interface AgentsReplacementReplaced {

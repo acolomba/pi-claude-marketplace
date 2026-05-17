@@ -86,7 +86,7 @@ export type CommandsReplacement = CommandsReplacementNoop | CommandsReplacementR
 
 export interface CommandsReplacementNoop {
   readonly kind: "noop";
-  readonly prepared: PreparedCommandsStaging;
+  readonly prepared: Extract<PreparedCommandsStaging, { kind: "noop" }>;
 }
 
 export interface CommandsReplacementReplaced {

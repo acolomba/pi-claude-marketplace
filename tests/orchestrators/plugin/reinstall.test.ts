@@ -795,7 +795,7 @@ test("PRL-05 explicit plugin reinstall in another scope reports not-installed in
   });
 });
 
-test("PRL-04 marketplace reinstall with explicit scope where marketplace lives in another scope returns empty", async () => {
+test("PRL-04 marketplace reinstall with explicit scope where marketplace not found emits error", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-mp-cross-scope-empty-"));
     try {
@@ -819,14 +819,15 @@ test("PRL-04 marketplace reinstall with explicit scope where marketplace lives i
       });
 
       // Marketplace target with explicit --scope project where mp lives only
-      // in user scope: enumerateMarketplaceReinstallTargets returns [], so the
-      // bulk path falls through to the "No plugins installed." outcome.
+      // in user scope: enumerateMarketplaceReinstallTargets throws
+      // MarketplaceNotFoundError; reinstallPlugins catches it, notifies error,
+      // and returns [].
       assert.deepEqual([...outcomes], []);
       assert.equal(
         notifications.some((n) => n.severity === "error"),
-        false,
+        true,
       );
-      assert.match(notifications.at(-1)?.message ?? "", /No plugins installed/);
+      assert.match(notifications.find((n) => n.severity === "error")?.message ?? "", /mp/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -927,8 +928,22 @@ test("PRL-13 deterministic partition output sorts by scope marketplace plugin", 
       });
       const { ctx, pi, notifications } = makeCtx();
 
-      await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
+      const outcomes = await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
 
+      assert.deepEqual(
+        outcomes.map((o) => ({
+          partition: o.partition,
+          scope: o.scope,
+          marketplace: o.marketplace,
+          name: o.name,
+        })),
+        [
+          { partition: "reinstalled", scope: "user", marketplace: "u", name: "z" },
+          { partition: "reinstalled", scope: "project", marketplace: "a", name: "a" },
+          { partition: "reinstalled", scope: "project", marketplace: "a", name: "c" },
+          { partition: "reinstalled", scope: "project", marketplace: "z", name: "b" },
+        ],
+      );
       const body = notifications.at(-1)?.message ?? "";
       assert.match(
         body,

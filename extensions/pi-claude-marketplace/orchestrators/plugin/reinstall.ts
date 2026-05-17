@@ -1,6 +1,8 @@
 // orchestrators/plugin/reinstall.ts
 //
-// PRL-02/06/07/08/09/10/11/12 single-plugin reinstall core.
+// PRL-02/03/04/05/06/07/08/09/10/11/12/13/14/15 reinstall core.
+// Single-plugin (PRL-02/06/07/08/09/10/11/12) and bulk reinstall
+// (PRL-03/04/05/13/14/15) are both implemented here.
 //
 // Reinstall is deliberately NOT uninstall+install and NOT update:
 // it targets an already-installed plugin, reads the cached marketplace
@@ -46,7 +48,7 @@ import { loadState } from "../../persistence/state-io.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../presentation/soft-dep.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
-import { errorMessage } from "../../shared/errors.ts";
+import { assertNever, errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
 import { MANUAL_RECOVERY_REQUIRED } from "../../shared/markers.ts";
 import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
 import {
@@ -57,7 +59,7 @@ import {
 import { formatErrorWithCauses, resolveScopeFromState } from "../marketplace/shared.ts";
 
 import { discoverGeneratedNames } from "./discover-names.ts";
-import { assertNoCrossPluginConflicts } from "./shared.ts";
+import { assertNoCrossPluginConflicts, resolveInstalledPluginTarget } from "./shared.ts";
 
 import type { AgentsReplacement, PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { CommandsReplacement, PreparedCommandsStaging } from "../../bridges/commands/index.ts";
@@ -68,9 +70,20 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { ReinstallPluginOutcome, ReinstallPluginPartition } from "../types.ts";
+import type {
+  ReinstallFailedOutcome,
+  ReinstallPluginOutcome,
+  ReinstallReinstalledOutcome,
+  ReinstallSkippedOutcome,
+} from "../types.ts";
 
-export type { ReinstallPluginOutcome, ReinstallPluginPartition } from "../types.ts";
+export type {
+  ReinstallFailedOutcome,
+  ReinstallPluginOutcome,
+  ReinstallPluginPartition,
+  ReinstallReinstalledOutcome,
+  ReinstallSkippedOutcome,
+} from "../types.ts";
 
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
 type BridgePhase = "skills" | "commands" | "agents" | "mcp";
@@ -275,27 +288,48 @@ async function installedTargetsForScope(
   );
 }
 
+async function resolveReinstallScope(
+  cwd: string,
+  marketplace: string,
+  target: Extract<ReinstallPluginsTarget, { kind: "marketplace" | "plugin" }>,
+  explicitScope: Scope | undefined,
+): Promise<{ scope: Scope; locations: ReturnType<typeof locationsFor> }> {
+  if (target.kind === "plugin" && explicitScope === undefined) {
+    return (
+      (await resolveInstalledPluginTarget({ cwd, marketplace, plugin: target.plugin })) ?? {
+        scope: "user" as const,
+        locations: locationsFor("user", cwd),
+      }
+    );
+  }
+
+  if (explicitScope !== undefined) {
+    return { scope: explicitScope, locations: locationsFor(explicitScope, cwd) };
+  }
+
+  return resolveScopeFromState(
+    marketplace,
+    locationsFor("user", cwd),
+    locationsFor("project", cwd),
+  );
+}
+
 async function enumerateMarketplaceReinstallTargets(
   cwd: string,
   explicitScope: Scope | undefined,
   target: Extract<ReinstallPluginsTarget, { kind: "marketplace" | "plugin" }>,
 ): Promise<readonly ResolvedReinstallTarget[]> {
   const marketplace = target.marketplace;
-  const resolved =
-    explicitScope === undefined
-      ? await resolveScopeFromState(
-          marketplace,
-          locationsFor("user", cwd),
-          locationsFor("project", cwd),
-        )
-      : { scope: explicitScope, locations: locationsFor(explicitScope, cwd) };
+  const resolved = await resolveReinstallScope(cwd, marketplace, target, explicitScope);
   const state = await loadState(resolved.locations.extensionRoot);
   const mp = state.marketplaces[marketplace];
   if (mp === undefined) {
     if (explicitScope !== undefined) {
-      return target.kind === "plugin"
-        ? sortReinstallTargets([{ plugin: target.plugin, marketplace, scope: explicitScope }])
-        : [];
+      if (target.kind === "plugin") {
+        return sortReinstallTargets([{ plugin: target.plugin, marketplace, scope: explicitScope }]);
+      }
+
+      throw new MarketplaceNotFoundError(marketplace, [explicitScope]);
     }
 
     throw new Error(`Marketplace "${marketplace}" not found in ${resolved.scope} scope.`);
@@ -333,7 +367,7 @@ function renderReinstallPartitionAndNotify(
   renderReinstallPartition(lines, "Skipped", partitions.skipped);
   renderReinstallPartition(lines, "Failed", partitions.failed);
 
-  const changedNames = reinstalled.filter((o) => o.resourcesChanged === true).map((o) => o.name);
+  const changedNames = reinstalled.filter((o) => o.resourcesChanged).map((o) => o.name);
   const body = appendReinstallSoftDepWarnings(lines.join("\n"), pi, reinstalled);
   const hint = reloadHint("refresh", changedNames);
   notifySuccess(ctx, appendReloadHint(body, hint));
@@ -354,16 +388,30 @@ function reinstallSummary(
   return "Plugin reinstall complete.";
 }
 
-function partitionReinstallOutcomes(
-  outcomes: readonly ReinstallPluginOutcome[],
-): Record<ReinstallPluginPartition, ReinstallPluginOutcome[]> {
-  const partitions: Record<ReinstallPluginPartition, ReinstallPluginOutcome[]> = {
-    reinstalled: [],
-    skipped: [],
-    failed: [],
-  };
+function partitionReinstallOutcomes(outcomes: readonly ReinstallPluginOutcome[]): {
+  reinstalled: ReinstallReinstalledOutcome[];
+  skipped: ReinstallSkippedOutcome[];
+  failed: ReinstallFailedOutcome[];
+} {
+  const partitions: {
+    reinstalled: ReinstallReinstalledOutcome[];
+    skipped: ReinstallSkippedOutcome[];
+    failed: ReinstallFailedOutcome[];
+  } = { reinstalled: [], skipped: [], failed: [] };
   for (const outcome of outcomes) {
-    partitions[outcome.partition].push(outcome);
+    switch (outcome.partition) {
+      case "reinstalled":
+        partitions.reinstalled.push(outcome);
+        break;
+      case "skipped":
+        partitions.skipped.push(outcome);
+        break;
+      case "failed":
+        partitions.failed.push(outcome);
+        break;
+      default:
+        assertNever(outcome);
+    }
   }
 
   return partitions;
@@ -407,10 +455,10 @@ function scopeOrder(scope: Scope): number {
 function appendReinstallSoftDepWarnings(
   body: string,
   pi: ExtensionAPI,
-  reinstalled: readonly ReinstallPluginOutcome[],
+  reinstalled: readonly ReinstallReinstalledOutcome[],
 ): string {
-  const stagedAgents = reinstalled.flatMap((o) => o.stagedAgents ?? []);
-  const stagedMcpServers = reinstalled.flatMap((o) => o.stagedMcpServers ?? []);
+  const stagedAgents = reinstalled.flatMap((o) => o.stagedAgents);
+  const stagedMcpServers = reinstalled.flatMap((o) => o.stagedMcpServers);
   return [
     body,
     subagentWarningIfNeeded(pi, stagedAgents),
@@ -514,7 +562,7 @@ async function prepareAllHandles(input: {
   readonly installable: ResolvedPluginInstallable;
   readonly pluginDataDir: string;
   readonly oldRecord: PluginRecord;
-  readonly agentsSourceDir: string;
+  readonly agentsSourceDir: string | null;
 }): Promise<PreparedHandles> {
   const handles: PartialPreparedHandles = {};
   try {
@@ -631,7 +679,7 @@ function successOutcome(
   plugin: string,
   oldRecord: PluginRecord,
   handles: PreparedHandles,
-): ReinstallPluginOutcome {
+): ReinstallReinstalledOutcome {
   const resources = resourcesFromHandles(handles);
   return {
     partition: "reinstalled",
@@ -685,11 +733,11 @@ async function abortPartialHandles(handles: PartialPreparedHandles): Promise<rea
   }
 
   if (handles.commands !== undefined) {
-    await abortPreparedCommands(handles.commands);
+    pushLeak(leaks, "commands", await abortPreparedCommands(handles.commands));
   }
 
   if (handles.skills !== undefined) {
-    await abortPreparedSkills(handles.skills);
+    pushLeak(leaks, "skills", await abortPreparedSkills(handles.skills));
   }
 
   return Object.freeze(leaks);
@@ -765,6 +813,10 @@ function errorWithManualRecovery(err: unknown, leaks: readonly string[]): Error 
     return base;
   }
 
+  if (base.message.includes(MANUAL_RECOVERY_REQUIRED)) {
+    return new Error(`${base.message}; ${leaks.join("; ")}`, { cause: base });
+  }
+
   return new Error(`${base.message} ${MANUAL_RECOVERY_REQUIRED}${leaks.join("; ")}`, {
     cause: base,
   });
@@ -804,10 +856,10 @@ async function runPostSuccessMaintenance(
   return Object.freeze(warnings);
 }
 
-function renderSuccessBody(outcome: ReinstallPluginOutcome, pi: ExtensionAPI): string {
+function renderSuccessBody(outcome: ReinstallReinstalledOutcome, pi: ExtensionAPI): string {
   let body = `Reinstalled plugin "${outcome.name}" from marketplace "${outcome.marketplace}".`;
-  const subagentWarn = subagentWarningIfNeeded(pi, outcome.stagedAgents ?? []);
-  const mcpWarn = mcpAdapterWarningIfNeeded(pi, outcome.stagedMcpServers ?? []);
+  const subagentWarn = subagentWarningIfNeeded(pi, outcome.stagedAgents);
+  const mcpWarn = mcpAdapterWarningIfNeeded(pi, outcome.stagedMcpServers);
   if (subagentWarn !== "") {
     body = `${body}\n${subagentWarn}`;
   }
@@ -816,7 +868,7 @@ function renderSuccessBody(outcome: ReinstallPluginOutcome, pi: ExtensionAPI): s
     body = `${body}\n${mcpWarn}`;
   }
 
-  const hint = reloadHint("refresh", outcome.resourcesChanged === true ? [outcome.name] : []);
+  const hint = reloadHint("refresh", outcome.resourcesChanged ? [outcome.name] : []);
   return appendReloadHint(body, hint);
 }
 

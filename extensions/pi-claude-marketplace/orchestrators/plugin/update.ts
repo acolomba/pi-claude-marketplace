@@ -410,7 +410,7 @@ function isOutcome(value: PluginPreflight | PluginUpdateOutcome): value is Plugi
 async function prepareUpdateHandles(
   args: ThreePhaseArgs,
   preflight: PluginPreflight,
-  agentsSourceDir: string,
+  agentsSourceDir: string | null,
 ): Promise<PrepHandles> {
   const { plugin, marketplace, cwd, locations } = args;
   const { installable, record } = preflight;

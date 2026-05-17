@@ -176,10 +176,10 @@ export async function resolvePluginVersion(
 }
 
 /** Bridge adapter for the resolver's `componentPaths.agents` array shape. */
-export function pickAgentsSourceDir(installable: ResolvedPluginInstallable): string {
+export function pickAgentsSourceDir(installable: ResolvedPluginInstallable): string | null {
   const first = installable.componentPaths.agents[0];
   if (first === undefined) {
-    return "";
+    return null;
   }
 
   return path.isAbsolute(first) ? first : path.join(installable.pluginRoot, first);

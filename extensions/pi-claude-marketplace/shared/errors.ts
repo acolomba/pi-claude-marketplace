@@ -5,6 +5,15 @@ export function errorMessage(err: unknown): string {
 }
 
 /**
+ * Exhaustiveness check helper for discriminated unions.
+ * Call in the `default` case of a switch to get a compile-time error if a new
+ * variant is added without updating the switch.
+ */
+export function assertNever(x: never): never {
+  throw new Error(`Unexpected value: ${String(x)}`);
+}
+
+/**
  * If `leak` is non-undefined, return a new Error that names both `err` and
  * the leak so the user sees the original cause AND the manual-cleanup hint
  * in the same notification.

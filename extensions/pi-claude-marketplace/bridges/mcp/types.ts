@@ -117,7 +117,7 @@ export type McpReplacement = McpReplacementNoop | McpReplacementReplaced;
 
 export interface McpReplacementNoop {
   readonly kind: "noop";
-  readonly prepared: PreparedMcpStaging;
+  readonly prepared: Extract<PreparedMcpStaging, { kind: "noop" }>;
 }
 
 export interface McpReplacementReplaced {

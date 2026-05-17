@@ -297,7 +297,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       });
       const agentsSourceDir = pickAgentsSourceDir(installable);
       const { discovered: discoveredAgents } =
-        agentsSourceDir === ""
+        agentsSourceDir === null
           ? { discovered: [] as readonly { readonly generatedName: string }[] }
           : await discoverPluginAgents({
               pluginName: plugin,

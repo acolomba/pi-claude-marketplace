@@ -1,6 +1,8 @@
 // bridges/agents/stage.ts
 //
 // Two-phase staging for the agents bridge: prepare / commit / abort.
+// Phase 8 adds three-phase replacement exports: replacePreparedAgents,
+// rollbackAgentsReplacement, finalizeAgentsReplacement.
 // Carry-forward of V1 agent/stage.ts (lines 280-525) with the Phase 3
 // successor deltas:
 //
@@ -25,6 +27,8 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+
+import writeFileAtomic from "write-file-atomic";
 
 import { assertSafeName } from "../../domain/name.ts";
 import { loadAgentsIndex, saveAgentsIndex } from "../../persistence/agents-index-io.ts";
@@ -72,7 +76,7 @@ const agentsReplacementInternals = new WeakMap<
  * failure during the staging-dir write.
  *
  * Steps:
- *   1. Discover (or [] if agentsSourceDir === "")
+ *   1. Discover (or [] if agentsSourceDir === null)
  *   2. AG-12 collision detection within this plugin
  *   3. Convert (AG-7 mapping pipeline)
  *   4. Load index, partition by (marketplace, plugin)
@@ -98,15 +102,15 @@ export async function prepareStagePluginAgents(
   } = input;
 
   // Step 1: discover. D-07 signature: discoverPluginAgents now takes
-  // `agentsDirs: readonly string[]`. The legacy `agentsSourceDir: ""`
-  // sentinel maps to an empty array; a non-empty string maps to a
+  // `agentsDirs: readonly string[]`. A null agentsSourceDir means the
+  // plugin has no agents component; a non-null string maps to a
   // single-element array. Phase 5 callers building over the new
   // `componentPaths.agents: readonly string[]` shape pass the array
   // directly (translation lives at the StageAgentsInput boundary).
   // D-07 warnings (duplicate generated names across array elements)
   // are folded into `aggregatedWarnings` below.
   const discoverResult =
-    agentsSourceDir === ""
+    agentsSourceDir === null
       ? { discovered: [] as readonly DiscoveredAgent[], warnings: [] as readonly string[] }
       : await discoverPluginAgents({ pluginName, agentsDirs: [agentsSourceDir] });
   const discovered: readonly DiscoveredAgent[] = discoverResult.discovered;
@@ -400,11 +404,10 @@ export async function replacePreparedAgents(
     );
   }
 
+  const oldIndexText = await readOptionalText(prepared.locations.agentsIndexPath);
   const backupRoot = path.join(prepared.locations.agentsStagingDir, `backup-${randomUUID()}`);
   await mkdir(backupRoot, { recursive: true });
   await assertPathInside(prepared.locations.agentsStagingDir, backupRoot, "agents backup root");
-
-  const oldIndexText = await readOptionalText(prepared.locations.agentsIndexPath);
   const backupEntries =
     options?.force === true
       ? [...prepared._previousEntries, ...prepared._foreignPreservedEntries]
@@ -545,7 +548,7 @@ async function restoreAgentsIndex(
       await rm(agentsIndexPath, { force: true });
     } else {
       await mkdir(path.dirname(agentsIndexPath), { recursive: true });
-      await writeFile(agentsIndexPath, oldIndexText, "utf8");
+      await writeFileAtomic(agentsIndexPath, oldIndexText, { encoding: "utf8" });
     }
 
     return [];

@@ -92,7 +92,7 @@ export type SkillsReplacement = SkillsReplacementNoop | SkillsReplacementReplace
 
 export interface SkillsReplacementNoop {
   readonly kind: "noop";
-  readonly prepared: PreparedSkillsStaging;
+  readonly prepared: Extract<PreparedSkillsStaging, { kind: "noop" }>;
 }
 
 export interface SkillsReplacementReplaced {
