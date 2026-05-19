@@ -8,7 +8,7 @@
   "dependencies": {
     "isomorphic-git": "^1.37.6",
     "proper-lockfile": "^4.1.2",
-    "write-file-atomic": "^7.0.1"
+    "write-file-atomic": "^8.0.0"
   },
   "description": "Access Claude plugin marketplaces from Pi.",
   "devDependencies": {
