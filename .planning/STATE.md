@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-21)
 Phase: Not started (planning complete; ready for `/gsd:plan-phase 12`)
 Plan: --
 Status: Planning -- roadmap landed
-Last activity: 2026-05-22 -- v1.3 roadmap created (Phases 12, 13, 14; 38/38 CMC mapped)
+Last activity: 2026-05-22 - Completed quick task 260522-c80: patch PROJECT.md to close requirements-section gaps surfaced during Phase 12 discuss-phase
 
 ## Performance Metrics
 
@@ -121,6 +121,7 @@ None yet.
 | ---------- | ---------------------------------------------------------------------------------------------------------------- | ---------- | ------- | -------- | ------------------------------------------------------------------------- |
 | 260515-bkt | lets update the specs and the implementation to listen to PI_CODING_AGENT_DIR if set instead of hardcoding ~/.pi | 2026-05-14 | 0257577 | Verified | [260515-bkt-pi-coding-agent-dir](./quick/260515-bkt-pi-coding-agent-dir/) |
 | 260515-tqx | fix these gaps | 2026-05-15 | 5d8fd1d | Verified | [260515-tqx-fix-these-gaps](./quick/260515-tqx-fix-these-gaps/) |
+| 260522-c80 | patch PROJECT.md to close requirements-section gaps surfaced during Phase 12 discuss-phase | 2026-05-22 | 39f6611 |  | [260522-c80-patch-project-md-to-close-requirements-s](./quick/260522-c80-patch-project-md-to-close-requirements-s/) |
 
 ## Deferred Items
 
