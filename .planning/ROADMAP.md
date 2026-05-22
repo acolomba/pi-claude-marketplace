@@ -20,7 +20,7 @@ The roadmap continues phase numbering from the completed v1.2 import milestone (
 - [x] **Phase 9: Reinstall Edge & Bulk UX** (v1.1) -- `/claude:plugin reinstall` routing, batch forms, completions, docs, and user-facing output
 - [x] **Phase 10: Claude Settings Import Foundation** (v1.2) -- Read/merge Claude settings, extract enabled plugin refs, map marketplace sources including official built-in marketplace
 - [x] **Phase 11: Import Command Orchestration** (v1.2) -- `/claude:plugin import [--scope user|project]` handler, idempotent marketplace/plugin orchestration, warnings and reload-hint integration
-- [ ] **Phase 12: Messaging Foundations & Renderer Primitives** (v1.3) -- Closed-set constants, renderer/notify primitives, reload-hint composer collapse, sentence-form `console.warn` rewording: the scaffolding the conformance refactor will consume
+- [x] **Phase 12: Messaging Foundations & Renderer Primitives** (v1.3) -- Closed-set constants, renderer/notify primitives, reload-hint composer collapse, sentence-form `console.warn` rewording: the scaffolding the conformance refactor will consume (completed 2026-05-22)
 - [ ] **Phase 13: Conformance Refactor & ES-5 Supersession** (v1.3) -- Mechanical rewrite of every user-visible callsite + ES-5 atomic three-file edit + per-command catalog conformance + display-semantics (per-scope rendering, plugin folding, adoption)
 - [ ] **Phase 14: Drift Guard & Test Alignment** (v1.3) -- Frontmatter-driven drift test suite that reads the style guide as the binding contract; `npm run check` fails on out-of-set tokens or MSG-* violations
 
@@ -152,7 +152,7 @@ Plans:
 4. `npm run check` is green: typecheck + ESLint + Prettier + the existing test suite all pass without regression. Phase 13's mechanical refactor has not yet started, so user-visible output is unchanged except for the single migrate.ts diagnostic.
 5. No second `console.warn` callsite exists; ESLint `no-restricted-syntax` + `no-console` rules remain enforced at config level with no new exceptions.
 
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 
