@@ -133,7 +133,7 @@ Plans:
 **Scope (what lands in this phase):**
 
 - Closed status-token constants matching `status_tokens:` in the style-guide frontmatter (CMC-08), with the `(upgradable)` membership and the folded `(skipped) {up-to-date}` representation in place (the legacy `unchanged` partition shape is defined here but its callsite rewrite is Phase 13's mechanical work).
-- Closed reasons enum constants matching `reasons:` in the style-guide frontmatter (CMC-11) -- all 24 reasons including the v1.3 additions (`{plugins remain}`, `{unparseable}`, `{unreadable manifest}`, `{not in manifest}`, `{not installed}`, `{invalid manifest}`, `{source mismatch}`, `{concurrently uninstalled}`, `{concurrently updated}`, `{stale clone}`, `{duplicate name}`, `{lock held}`).
+- Closed reasons enum constants matching `reasons:` in the style-guide frontmatter (CMC-11) -- all 23 reasons including the v1.3 additions (`{plugins remain}`, `{unparseable}`, `{unreadable manifest}`, `{not in manifest}`, `{not installed}`, `{invalid manifest}`, `{source mismatch}`, `{concurrently uninstalled}`, `{concurrently updated}`, `{stale clone}`, `{duplicate name}`, `{lock held}`) (frontmatter at `docs/messaging-style-guide.md` is the binding count; reconciled from 24 to 23 in Plan 12-01 per Phase 12 research §2.1).
 - `presentation/reload-hint.ts` composer collapses to the single canonical trailer `/reload to pick up changes` -- `reloadHint(names) → names.length > 0 ? "/reload to pick up changes" : ""` (CMC-14). The three-verb (`load` / `refresh` / `drop`) selector is retired internally; the new composer is available for Phase 13's callsite migrations.
 - Severity wrapper inventory affirms the four sanctioned wrappers (`notifySuccess`, `notifyWarning`, `notifyError`, `notifyUsageError`) and any signature evolution needed to carry the new compact-line / cascade / reload-hint payloads to Phase 13 callers (CMC-19). No `[error]` / `[warning]` prefix embedding -- structural severity preserved.
 - `persistence/migrate.ts` sanctioned `console.warn` is rewritten to the §14.1 sentence-form wording (terminal period, no compact-grammar tokens, no `MANUAL RECOVERY REQUIRED:` prefix) (CMC-36).
@@ -146,7 +146,7 @@ Plans:
 
 **Success Criteria** (what must be TRUE):
 
-1. Importing the closed status-tokens module yields exactly the set in the style-guide frontmatter `status_tokens:` block; importing the reasons enum module yields exactly the 24 entries in `reasons:` (programmatic equality test against the YAML).
+1. Importing the closed status-tokens module yields exactly the set in the style-guide frontmatter `status_tokens:` block; importing the reasons enum module yields exactly the 23 entries in `reasons:` (programmatic equality test against the YAML).
 2. `reloadHint(names)` returns the literal `/reload to pick up changes` when at least one name is non-empty and the empty string otherwise; the three-verb selector is gone from `presentation/reload-hint.ts` (AST or `grep` audit against legacy `load|refresh|drop` selectors returns no match in the composer source).
 3. The single sanctioned `console.warn` at `persistence/migrate.ts` emits the §14.1 sentence-form wording with terminal period and no compact-grammar tokens; the inline `eslint-disable-next-line -- IL-3` comment is present directly above the call.
 4. `npm run check` is green: typecheck + ESLint + Prettier + the existing test suite all pass without regression. Phase 13's mechanical refactor has not yet started, so user-visible output is unchanged except for the single migrate.ts diagnostic.
