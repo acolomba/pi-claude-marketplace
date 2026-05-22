@@ -1,35 +1,32 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: milestone
-status: completed
-stopped_at: Phase 09 complete; v1.1 milestone ready for completion
-last_updated: "2026-05-16T00:18:10.848Z"
-last_activity: "2026-05-15 - Completed quick task 260515-tqx: fix these gaps"
+milestone: v1.3
+milestone_name: Consistent Messaging
+status: planning
+last_updated: "2026-05-22T02:11:10.004Z"
+last_activity: 2026-05-22
 progress:
-  total_phases: 2
-  completed_phases: 2
-  total_plans: 8
-  completed_plans: 8
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-13)
+See: .planning/PROJECT.md (updated 2026-05-21)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.1 Reinstall Command
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.3 Consistent Messaging
 
 ## Current Position
 
-Phase: 09 of 2 (reinstall edge bulk ux)
-Plan: 4 of 4
-Status: Milestone complete
-Last activity: 2026-05-15 - Completed quick task 260515-tqx: fix these gaps
-
-Progress: [██████████] 100%
+Phase: Not started (defining requirements)
+Plan: --
+Status: Defining requirements
+Last activity: 2026-05-22 -- Milestone v1.3 started
 
 ## Performance Metrics
 
