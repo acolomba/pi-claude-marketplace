@@ -16,6 +16,32 @@ import type { ExtensionContext } from "../platform/pi-api.ts";
  * `reportUnusedDisableDirectives` warnings). The per-file override is the
  * single audit surface; this comment documents the sanctioned-use intent in
  * its place.
+ *
+ * SANCTIONED WRAPPERS (CMC-19 Phase 12 affirmation, governed by style guide
+ * §10 MSG-SR-1..7):
+ *
+ *   (§10 numbering: MSG-SR-1..3 govern single-shot severity routing -- one
+ *    rule per wrapper for the non-cascade case; MSG-SR-4..6 govern cascade
+ *    summary routing -- those rules pick BETWEEN notifySuccess and
+ *    notifyWarning for cascade summaries and never assign to notifyError or
+ *    notifyUsageError; MSG-SR-7 is the dedicated usage-error rule routing to
+ *    notifyUsageError.)
+ *
+ *   - notifySuccess(ctx, message)                -- default severity (MSG-SR-1; cascade variant MSG-SR-4)
+ *   - notifyWarning(ctx, message)                -- "warning" severity (MSG-SR-2; cascade variant MSG-SR-5; MSG-SR-6 forbids cascade notifyError)
+ *   - notifyError(ctx, message, cause?)          -- "error" severity (MSG-SR-3)
+ *   - notifyUsageError(ctx, message, usageBlock) -- "error" severity (MSG-SR-7)
+ *
+ * Phase 13 composers return strings that flow VERBATIM into these wrappers;
+ * no fifth wrapper, no structured-payload arg, no cascade-summary helper is
+ * added (D-CMC-11). Severity remains structural via the wrapper name --
+ * never embedded as a "[error]" / "[warning]" prefix in message text
+ * (PRD §6.12 ES-2, reaffirmed by MSG-SR-7).
+ *
+ * Import path (D-CMC-13): callers import the wrappers directly from this
+ * file (e.g., `import { notifySuccess } from "../../shared/notify.ts"`). No
+ * presentation/ barrel re-exports the wrappers in Phase 12; the existing
+ * direct-import path is the stable surface.
  */
 
 /** Default-severity notify -- success path. */
