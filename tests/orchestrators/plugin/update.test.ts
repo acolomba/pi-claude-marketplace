@@ -278,7 +278,11 @@ test("PUP-3: version equality -> outcome.partition='unchanged'; no bridge state 
       assert.equal(notifications[0]?.severity, undefined);
       const body = notifications[0]?.message ?? "";
       assert.match(body, /Unchanged:/);
-      assert.equal(body.includes("Run /reload to "), false, "no reload hint when 0 updated");
+      assert.equal(
+        body.includes("/reload to pick up changes"),
+        false,
+        "no reload hint when 0 updated",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -403,13 +407,13 @@ test("PUP-6 happy: version bump triggers 3-phase swap; state reflects new versio
       const skillTarget = path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md");
       assert.ok((await readFile(skillTarget, "utf8")).length > 0, "skill must exist on disk");
 
-      // RH-1 + RH-2 reload hint with verb 'refresh'.
+      // MSG-RH-1 reload hint -- the single canonical trailer.
       const errs = notifications.filter((n) => n.severity === "error");
       assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
       const body = notifications[0]?.message ?? "";
       assert.match(body, /Updated:/);
       assert.match(body, /hello \(1\.0\.0 → 1\.0\.1\)/);
-      assert.match(body, /Run \/reload to refresh it\.$/);
+      assert.match(body, /\/reload to pick up changes$/);
 
       // Ensure we referenced the seeded marketplaceRoot (compile-time use of `seeded`).
       assert.ok(seeded.marketplaceRoot.length > 0);
@@ -549,8 +553,8 @@ test("PUP-1 @mp form: enumerates all installed plugins in the marketplace, parti
       const idxUnchanged = body.indexOf("Unchanged:");
       assert.ok(idxUpdated >= 0 && idxUnchanged > idxUpdated, `partition order broken:\n${body}`);
       assert.match(body, /alpha \(1\.0\.0 → 1\.0\.1\)/);
-      // PUP-8: hint emitted for the one updated plugin.
-      assert.match(body, /Run \/reload to refresh it\.$/);
+      // PUP-8 / MSG-RH-1: hint emitted for the one updated plugin.
+      assert.match(body, /\/reload to pick up changes$/);
       assert.ok(seeded.marketplaceRoot.length > 0);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -582,7 +586,11 @@ test("PUP-8: no plugin updated -> no reload hint", async () => {
       });
 
       const body = notifications[0]?.message ?? "";
-      assert.equal(body.includes("Run /reload to "), false, "no reload hint when 0 updated");
+      assert.equal(
+        body.includes("/reload to pick up changes"),
+        false,
+        "no reload hint when 0 updated",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

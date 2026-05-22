@@ -619,7 +619,7 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
         notifications[0]?.message ?? "",
         /Installed plugin "hello" from marketplace "mp"\./,
       );
-      assert.match(notifications[0]?.message ?? "", /Run \/reload to load it\.$/);
+      assert.match(notifications[0]?.message ?? "", /\/reload to pick up changes$/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1226,13 +1226,13 @@ test("PI-9 corollary: empty plugin (no skills/commands/agents/mcp) still produce
       assert.deepEqual([...record.resources.agents], []);
       assert.deepEqual([...record.resources.mcpServers], []);
 
-      // RH-1: when nothing was staged, no reload hint is appended.
+      // MSG-RH-1: when nothing was staged, no reload hint is appended.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined);
       assert.equal(
-        (notifications[0]?.message ?? "").includes("Run /reload"),
+        (notifications[0]?.message ?? "").includes("/reload to pick up changes"),
         false,
-        "RH-1: no reload hint when nothing was staged",
+        "MSG-RH-1: no reload hint when nothing was staged",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });

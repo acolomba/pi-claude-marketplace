@@ -369,7 +369,7 @@ function renderReinstallPartitionAndNotify(
 
   const changedNames = reinstalled.filter((o) => o.resourcesChanged).map((o) => o.name);
   const body = appendReinstallSoftDepWarnings(lines.join("\n"), pi, reinstalled);
-  const hint = reloadHint("refresh", changedNames);
+  const hint = reloadHint(changedNames);
   notifySuccess(ctx, appendReloadHint(body, hint));
 }
 
@@ -868,7 +868,7 @@ function renderSuccessBody(outcome: ReinstallReinstalledOutcome, pi: ExtensionAP
     body = `${body}\n${mcpWarn}`;
   }
 
-  const hint = reloadHint("refresh", outcome.resourcesChanged ? [outcome.name] : []);
+  const hint = reloadHint(outcome.resourcesChanged ? [outcome.name] : []);
   return appendReloadHint(body, hint);
 }
 

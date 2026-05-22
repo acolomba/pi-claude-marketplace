@@ -254,7 +254,7 @@ test("MR-2 + MR-8 (RH-1): empty marketplace removed cleanly emits success WITHOU
       assert.equal("empty" in after.marketplaces, false);
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]!.severity, undefined); // success, default severity
-      assert.equal(notifications[0]!.message.includes("Run /reload to "), false);
+      assert.equal(notifications[0]!.message.includes("/reload to pick up changes"), false);
       assert.match(notifications[0]!.message, /Removed marketplace "empty" from project scope\./);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -262,9 +262,9 @@ test("MR-2 + MR-8 (RH-1): empty marketplace removed cleanly emits success WITHOU
   });
 });
 
-// MR-8 + RH-2 -------------------------------------------------------
+// MR-8 + MSG-RH-1 ---------------------------------------------------
 
-test("MR-8 + RH-2: plugin whose skill is staged emits reload hint with alphabetical names", async () => {
+test("MR-8 + MSG-RH-1: plugin whose skill is staged emits the canonical reload hint trailer", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-"));
     try {
@@ -300,8 +300,8 @@ test("MR-8 + RH-2: plugin whose skill is staged emits reload hint with alphabeti
       await removeMarketplace({ ctx, pi, name: "mp", scope: "project", cwd });
 
       assert.equal(notifications.length, 1);
-      // Alphabetical: alpha first, then hello.
-      assert.match(notifications[0]!.message, /Run \/reload to drop "alpha", "hello"\.$/);
+      // MSG-RH-1: the canonical trailer no longer interpolates names.
+      assert.match(notifications[0]!.message, /\/reload to pick up changes$/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

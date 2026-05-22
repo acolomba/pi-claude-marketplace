@@ -355,7 +355,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
 
   const body = appendSoftDepWarnings(baseLines.join("\n"), pi, partitions.updated);
 
-  const hint = reloadHint("refresh", updatedNames);
+  const hint = reloadHint(updatedNames);
   notifySuccess(ctx, appendReloadHint(body, hint));
 }
 

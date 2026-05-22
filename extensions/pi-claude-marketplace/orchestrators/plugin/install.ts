@@ -687,7 +687,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       body = `${body}\n${depsNote}`;
     }
 
-    const hint = reloadHint("load", stagedAny ? [plugin] : []);
+    const hint = reloadHint(stagedAny ? [plugin] : []);
     notifySuccess(ctx, appendReloadHint(body, hint));
   }
 

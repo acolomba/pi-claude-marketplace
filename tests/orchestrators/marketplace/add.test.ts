@@ -87,8 +87,8 @@ test("MA-5 + MA-11: github source clones, validates, renames, mutates state, emi
     assert.ok(note);
     assert.equal(note.message, 'Added marketplace "valid-marketplace" in project scope.');
     assert.equal(note.severity, undefined);
-    // RH-1: NO reload hint substring in any notification.
-    assert.equal(note.message.includes("Run /reload to "), false);
+    // MSG-RH-1: NO reload hint substring in any notification.
+    assert.equal(note.message.includes("/reload to pick up changes"), false);
   });
 });
 

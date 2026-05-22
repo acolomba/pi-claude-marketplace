@@ -163,7 +163,7 @@ test("/claude:plugin import imports enabled Claude settings across both scopes",
     assert.match(messages, /project: github-plugin@github-marketplace/);
     assert.match(messages, /user: preinstalled-plugin@directory-marketplace \(already-installed\)/);
     assert.match(messages, /user: unavailable-plugin@directory-marketplace \(unavailable\)/);
-    assert.equal((messages.match(/Run \/reload/g) ?? []).length, 1);
+    assert.equal((messages.match(/\/reload to pick up changes/g) ?? []).length, 1);
   });
 });
 

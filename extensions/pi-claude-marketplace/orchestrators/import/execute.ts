@@ -338,10 +338,7 @@ export function formatClaudeImportSummary(result: ClaudeImportExecutionResult): 
 
   return appendReloadHint(
     body,
-    reloadHint(
-      "load",
-      result.installedPlugins.filter((o) => o.resourcesChanged).map((o) => o.plugin),
-    ),
+    reloadHint(result.installedPlugins.filter((o) => o.resourcesChanged).map((o) => o.plugin)),
   );
 }
 
