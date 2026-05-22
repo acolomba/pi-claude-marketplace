@@ -152,7 +152,7 @@ Plans:
 4. `npm run check` is green: typecheck + ESLint + Prettier + the existing test suite all pass without regression. Phase 13's mechanical refactor has not yet started, so user-visible output is unchanged except for the single migrate.ts diagnostic.
 5. No second `console.warn` callsite exists; ESLint `no-restricted-syntax` + `no-console` rules remain enforced at config level with no new exceptions.
 
-**Plans:** 4 plans
+**Plans:** 3/4 plans executed
 
 Plans:
 
