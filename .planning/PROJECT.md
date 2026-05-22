@@ -53,18 +53,21 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 
 - [ ] Universal line grammar (MSG-GR-1) applied at every notify callsite and the sanctioned `console.warn`
 - [ ] Plugin-row icon rule (MSG-IC-1..3) enforced: ● installed / ○ uninstalled-no-error / ⊘ error or failure-cascade child
+- [ ] CMC-09 upgradable list-only discipline: `(upgradable)` is computed per PRD PL-5 string compare and rendered ONLY by `list`; never on install / update / uninstall / reinstall result rows (MSG-PL-4)
 - [ ] Marketplace icon rule (outcome class) applied uniformly across header and standalone-row forms
 - [ ] Status-token + reasons enums constrained to the catalog set; reasons rendered 1-3 words lowercase; manifest field names verbatim
-- [ ] Per-scope marketplace and plugin rendering (MSG-GR-3) with name-primary / scope-secondary sort and the plugin-list orphan fold rule
+- [ ] Per-scope marketplace and plugin rendering (MSG-GR-3) with name-primary / scope-secondary sort, the plugin-list orphan fold rule, and CMC-21 adoption: orphan project-scoped plugins fold under user-scope headers and are adopted when a project-scope marketplace is later added
 - [ ] Autoupdate marker grammar (MSG-GR-5) rendered in its own `<...>` slot, marketplace-only
 - [ ] Marketplace header form on multi-plugin commands; single-plugin commands stay inline; marketplace-only commands stay flat
-- [ ] Soft-dep markers (MSG-SD-1..2) emitted on installed / updated / reinstalled rows when companion extensions are unloaded; excluded from uninstalled rows
+- [ ] Soft-dep markers (MSG-SD-1..3, CMC-12/13) emitted per row -- on installed / updated / reinstalled rows, on `list`-rendering `(available)` and `(installed)` rows, and per-row inside `import` / `update` / `reinstall` cascades when companion extensions are unloaded; excluded from `(uninstalled)` rows. The aggregated single-trailer emission is replaced by per-row `{}` reasons (D-13 expansion)
 - [ ] Reload-hint policy (MSG-RH-1) emitted exactly once when any resource changed; omitted on all-failed cascades and manifest-only refreshes; coexists with partial-failure remove recovery anchor
 - [ ] Manual-recovery and rollback-partial canonical formatting; cause-chain rendering per section 9
 - [ ] Severity routing (section 10) applied per pattern class
 - [ ] Empty-result and legacy-migrate patterns; section 14.1 wording adopted for the single sanctioned `console.warn`
+- [ ] CMC-37 IL-3 inline disable comment preservation: the `eslint-disable-next-line no-restricted-syntax, no-console -- IL-3: <rationale>` comment stays inline directly above the sanctioned `console.warn`; no config-file rule widening; no second `console.warn` callsite introduced (MSG-LC-2)
 - [ ] ES-5 supersession (section 15 / MSG-04) applied throughout with marker constants and string-equality tests migrated
 - [ ] Per-command conformance: every rendered state in `docs/output-catalog.md` produces output matching the worked examples (success, mixed, all-failed, all-unchanged, empty, usage error)
+- [ ] CMC-38 drift guard test suite (Phase 14 milestone gate): a frontmatter-driven test suite reads `docs/messaging-style-guide.md` YAML frontmatter (`status_tokens:`, `reasons:`, `markers:`, `pattern_classes:`) plus the normative MSG-* IDs as the binding contract; `npm run check` fails when a callsite emits an out-of-set token or violates an MSG-* rule
 
 ### Out of Scope
 
@@ -92,7 +95,13 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 - **Personas served:** Pi end user (developer), project lead curating per-project marketplaces, plugin author verifying resolution, operator/power user diagnosing drift.
 - **Soft-dependency model is load-bearing:** `pi-subagents` (probed via `subagent` tool) and `pi-mcp-adapter` (probed via `mcp` tool name OR `sourceInfo.source` substring match for `pi-mcp-adapter`) MUST never block installs; absent soft deps degrade with explicit guidance and a reload hint.
 - **Marketplace/plugin scope split is explicit:** marketplaces can be configured in user or project scope, while plugin operations target a scope for writes. Project-target installs can source from project marketplaces first and user marketplaces second; user-target installs can source only from user marketplaces. The same plugin may be installed in both scopes, with project scope taking precedence for unqualified single-target operations.
-- **Stable user-contract strings (PRD §6.12 ES-5):** `pi-subagents is not loaded; …`, `pi-mcp-adapter is not loaded; …`, `Run /reload to <verb> …`, `MANUAL RECOVERY REQUIRED: …`, `(rollback partial: [<phase>] <msg>; …)`. These cannot drift without a contract break.
+- **Stable user-contract strings (superseded by D-30; v1.3 canonical contract is `docs/messaging-style-guide.md` §15 / MSG-04):** The five PRD §6.12 ES-5 strings have v1.3 replacements per style guide §15:
+  - `pi-subagents is not loaded; …` → `{requires pi-subagents}` reason on the affected line (§6 MSG-SD-1)
+  - `pi-mcp-adapter is not loaded; …` → `{requires pi-mcp}` reason on the affected line (§6 MSG-SD-1)
+  - `Run /reload to <verb> …` → `/reload to pick up changes` (single canonical trailer, blank line above) (§5 MSG-RH-1)
+  - `MANUAL RECOVERY REQUIRED: …` → `⊘ <resource> (manual recovery) {<reason>}` as a separate top-level line (§7 MSG-MR-1 / MSG-MR-2)
+  - `(rollback partial: [<phase>] <msg>; …)` → `{rollback partial}` reason on the failed line + per-phase indented children (§8 MSG-RP-1)
+  The legacy strings remain in PRD §6.12 as historical baseline but are no longer the canonical contract for these five user-facing surfaces -- the style guide is. ES-1..ES-4 from PRD §6.12 are unchanged; this supersession is scoped strictly to ES-5.
 - **State persistence surfaces (PRD §4):** `<scope>/pi-claude-marketplace/state.json`, `<scope>/pi-claude-marketplace/resources/{skills,prompts}/`, `<scope>/agents/pi-claude-marketplace-*.md`, `<scope>/mcp.json` -- plus `<scope>/pi-claude-marketplace/agents-index.json` for agent provenance.
 - **Tooling baseline already on `main`:** TypeScript strict, ESLint flat config, Prettier, `npm run check` = typecheck + lint + format + tests. Pre-commit hooks exclude `.claude/` (committed in `8cb247d` / `33aaaaa` series).
 
