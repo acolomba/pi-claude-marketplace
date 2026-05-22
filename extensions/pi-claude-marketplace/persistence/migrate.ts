@@ -176,7 +176,7 @@ export async function persistMigratedState(
     const errMsg = errorMessage(err);
     // eslint-disable-next-line no-restricted-syntax, no-console -- IL-3: load-time migrate save fail
     console.warn(
-      `pi-claude-marketplace: failed to persist migrated state to ${stateJsonPath} (${errMsg}); continuing with in-memory normalized state. Original state.json is unchanged.`,
+      `Legacy marketplace migration could not be persisted to ${stateJsonPath}; the in-memory normalized state is being used and the on-disk state.json is unchanged. Cause: ${errMsg}.`,
     );
   }
 }
