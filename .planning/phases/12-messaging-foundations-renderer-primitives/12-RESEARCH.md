@@ -895,21 +895,24 @@ No framework install needed; `node:test` is bundled and `npm test` already orche
 | A4 | The hand-rolled regex frontmatter parser handles all current frontmatter shapes (`status_tokens:` and `reasons:` are flat bullet lists) | §2.5 | If frontmatter gains a nested object or multi-line value in a later edit, the regex breaks; Phase 14's richer reader replaces it then |
 | A5 | No new `console.*` callsite is introduced in Phase 12; the eslint rule continues to enforce this without config widening | §5, §R6 | If a debugging line slips in, lint fails -- caught by `npm run check` |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **REASONS count: 23 or 24?**
    - What we know: frontmatter has 23 bullet items; REQUIREMENTS.md CMC-11 and ROADMAP Phase 12 scope both say "24."
    - What's unclear: whether a 24th reason was lost in a frontmatter edit, or whether "24" is a typo carried through the docs.
+   - RESOLVED: Treat frontmatter (23 reasons) as binding; reconcile REQUIREMENTS.md CMC-11 and ROADMAP Phase 12 scope to 23 in the same PR as the constants module (Plan 12-01, Task 3) per D-CMC-15. If a 24th reason surfaces during planning review, add it to the frontmatter FIRST and re-count.
    - Recommendation: treat frontmatter as binding; update docs to 23; reconcile in Plan 12-01. If user surfaces a missing reason during planning review, add it to the frontmatter FIRST.
 
 2. **Blank-line-above for the reload trailer: Phase 12 or Phase 13?**
    - What we know: style guide §5 MSG-RH-1 requires the trailer "preceded by one blank line." Current `appendReloadHint` joins with single newline.
    - What's unclear: roadmap criterion #2 ("verb selector gone") doesn't explicitly cover the separator.
+   - RESOLVED: Phase 12 keeps `appendReloadHint`'s single-newline join; Plan 12-02 (Task 2) adds a TODO comment in the function body citing MSG-RH-1; the blank-line-above conformance pass is Phase 13's mechanical refactor scope.
    - Recommendation: Phase 12 keeps single-newline join; add TODO comment for Phase 13. Confirms with the conservative reading of criteria #2 and #4.
 
 3. **REQUIREMENTS.md / ROADMAP edit policy: same PR as code, or planning-doc-only PR?**
    - What we know: CONTEXT.md `<deferred>` flags the CMC-08 reconciliation but doesn't dictate where the doc edit lands.
    - What's unclear: whether planning doc edits live in the code PR (D-CMC-15 precedent) or a separate doc PR.
+   - RESOLVED: Same PR as the constants module (Plan 12-01) -- Plan 12-03 owns the docs/messaging-style-guide.md §14.1 atomic edit and the related planning-doc reconciliation; splitting these into a doc-only PR would create the transient-incoherence window D-CMC-15 explicitly avoids.
    - Recommendation: same PR as the constants module (Plan 12-01). The doc edits ARE the reconciliation; splitting them creates the same transient incoherence D-CMC-15 explicitly avoids.
 
 ## Environment Availability

@@ -152,7 +152,14 @@ Plans:
 4. `npm run check` is green: typecheck + ESLint + Prettier + the existing test suite all pass without regression. Phase 13's mechanical refactor has not yet started, so user-visible output is unchanged except for the single migrate.ts diagnostic.
 5. No second `console.warn` callsite exists; ESLint `no-restricted-syntax` + `no-console` rules remain enforced at config level with no new exceptions.
 
-**Plans:** TBD
+**Plans:** 4 plans
+
+Plans:
+
+- [ ] `12-01-PLAN.md` -- Closed status-token + reasons constants under shared/grammar/ with frontmatter drift test; reconcile REQUIREMENTS.md CMC-08 (drop +reinstalled clause) and REQUIREMENTS/ROADMAP/CONTEXT 24-vs-23 reasons count (Wave 1)
+- [ ] `12-02-PLAN.md` -- Reload-hint composer collapse to single canonical trailer; 8 callsite migrations across orchestrators; reload-hint test rewrite; D-CMC-10 carve-out narrative (Wave 2)
+- [ ] `12-03-PLAN.md` -- persistence/migrate.ts:178 byte-exact §14.1 wording rewrite + IL-3 comment preservation + style guide §14.1 atomic doc edit (Wave 1)
+- [ ] `12-04-PLAN.md` -- Notify wrapper inventory affirmation as docs comment in shared/notify.ts; D-CMC-11/13 (Wave 1)
 
 ### Phase 13: Conformance Refactor & ES-5 Supersession
 
@@ -218,7 +225,7 @@ Plans:
 | 9. Reinstall Edge & Bulk UX                  | Command routing, batch forms, scope, completion, output, docs                     | PRL-01, PRL-03, PRL-04, PRL-05, PRL-13, PRL-14, PRL-15, PRL-16                                                                                            | 4/4 plans  | Complete    | 2026-05-14 |
 | 10. Claude Settings Import Foundation (v1.2) | Pure import-planning foundation                                                   | IMP-04..IMP-08                                                                                                                                            | 3/3 plans  | Complete    | 2026-05-14 |
 | 11. Import Command Orchestration (v1.2)      | `/claude:plugin import` command                                                   | IMP-01..IMP-03, IMP-09..IMP-11                                                                                                                            | 3/3 plans  | Complete    | 2026-05-14 |
-| 12. Messaging Foundations (v1.3)             | Closed-set constants, renderer/notify primitives, reload-hint collapse            | CMC-08, CMC-11, CMC-14, CMC-19, CMC-36, CMC-37                                                                                                            | 0/? plans  | Not started | --         |
+| 12. Messaging Foundations (v1.3)             | Closed-set constants, renderer/notify primitives, reload-hint collapse            | CMC-08, CMC-11, CMC-14, CMC-19, CMC-36, CMC-37                                                                                                            | 0/4 plans  | Not started | --         |
 | 13. Conformance Refactor & ES-5 (v1.3)       | Mechanical callsite rewrite + ES-5 atomic edit + per-command catalog conformance  | CMC-01..07, CMC-09, CMC-10, CMC-12, CMC-13, CMC-15..18, CMC-20, CMC-21, CMC-22..34, CMC-35                                                                | 0/? plans  | Not started | --         |
 | 14. Drift Guard & Test Alignment (v1.3)      | Frontmatter-driven drift test suite that fails `npm run check` on contract drift  | CMC-38                                                                                                                                                    | 0/? plans  | Not started | --         |
 
