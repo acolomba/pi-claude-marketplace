@@ -369,19 +369,19 @@ Requirements for the Claude settings import milestone. Additive to the v1.0 PRD 
 
 ### Status Tokens (closed set)
 
-- [ ] **CMC-08**: Status tokens are constrained to the closed enum in the style-guide §3 frontmatter (`installed`, `updated`, `uninstalled`, `added`, `removed`, `available`, `unavailable`, `upgradable`, `skipped`, `failed`, `rollback failed`, `manual recovery`, `no marketplaces`, `no plugins`). Per Phase 12 research §3.1, the cascade-partition discriminant at `orchestrators/types.ts:12` is an internal partition kind, never rendered as a user-visible parenthesised token; the closed set is the 14 frontmatter entries (drift-guarded by `tests/architecture/grammar-frontmatter.test.ts`). The legacy `unchanged` partition is folded into `(skipped) {up-to-date}` -- `unchanged` is not a distinct token (style guide §3.2).
+- [x] **CMC-08**: Status tokens are constrained to the closed enum in the style-guide §3 frontmatter (`installed`, `updated`, `uninstalled`, `added`, `removed`, `available`, `unavailable`, `upgradable`, `skipped`, `failed`, `rollback failed`, `manual recovery`, `no marketplaces`, `no plugins`). Per Phase 12 research §3.1, the cascade-partition discriminant at `orchestrators/types.ts:12` is an internal partition kind, never rendered as a user-visible parenthesised token; the closed set is the 14 frontmatter entries (drift-guarded by `tests/architecture/grammar-frontmatter.test.ts`). The legacy `unchanged` partition is folded into `(skipped) {up-to-date}` -- `unchanged` is not a distinct token (style guide §3.2).
 - [ ] **CMC-09**: `(upgradable)` is computed per PRD PL-5 string compare and rendered only by `list`; it MUST NOT appear on install / update / uninstall / reinstall result rows (MSG-PL-4).
 - [ ] **CMC-10**: Empty result tokens `(no marketplaces)` and `(no plugins)` render as a bare compact token (no icon, name, scope brackets, or reasons); routed via `notifySuccess`; legacy sentence forms `No marketplaces configured.` / `No plugins installed.` retired (MSG-ER-1).
 
 ### Reasons Enum (closed set, expanded)
 
-- [ ] **CMC-11**: Reasons render only from the closed enum in the style-guide §4 frontmatter (23 reasons; the binding count is the frontmatter, per Phase 12 research §2.1 -- previously written as 24 in this requirement and the roadmap; reconciled to match the style-guide frontmatter via the Phase 12 drift test at `tests/architecture/grammar-frontmatter.test.ts`). New v1.3 additions over the V1 set: `{plugins remain}`, `{unparseable}`, `{unreadable manifest}`, `{not in manifest}`, `{not installed}`, `{invalid manifest}`, `{source mismatch}`, `{concurrently uninstalled}`, `{concurrently updated}`, `{stale clone}`, `{duplicate name}`, `{lock held}`.
+- [x] **CMC-11**: Reasons render only from the closed enum in the style-guide §4 frontmatter (23 reasons; the binding count is the frontmatter, per Phase 12 research §2.1 -- previously written as 24 in this requirement and the roadmap; reconciled to match the style-guide frontmatter via the Phase 12 drift test at `tests/architecture/grammar-frontmatter.test.ts`). New v1.3 additions over the V1 set: `{plugins remain}`, `{unparseable}`, `{unreadable manifest}`, `{not in manifest}`, `{not installed}`, `{invalid manifest}`, `{source mismatch}`, `{concurrently uninstalled}`, `{concurrently updated}`, `{stale clone}`, `{duplicate name}`, `{lock held}`.
 - [ ] **CMC-12**: Soft-dependency reasons render as `{requires pi-subagents}` and `{requires pi-mcp}` (renamed from the legacy ES-5 sentences `pi-subagents is not loaded; …` and `pi-mcp-adapter is not loaded; …`).
 - [ ] **CMC-13**: Soft-dep markers fire on installed / updated / reinstalled rows, on `list`-rendering `(available)` and `(installed)` rows, and per-row inside `import` / `update` / `reinstall` cascades whenever (a) the plugin declares the corresponding resource AND (b) the companion extension is unloaded; markers MUST NOT appear on `(uninstalled)` rows (MSG-SD-1..3). Today's aggregated single-trailer emission is replaced by per-row `{}` reasons.
 
 ### Reload Hint
 
-- [ ] **CMC-14**: The reload-hint trailer is the single canonical string `/reload to pick up changes`, preceded by one blank line, appended after the parent body. The three-verb form (`load` / `refresh` / `drop`) is retired. The trailer fires exactly once per body and ONLY when at least one staged / advanced / removed resource changed on disk; it MUST be omitted on all-failed cascades and on bare manifest-only refreshes (MSG-RH-1).
+- [x] **CMC-14**: The reload-hint trailer is the single canonical string `/reload to pick up changes`, preceded by one blank line, appended after the parent body. The three-verb form (`load` / `refresh` / `drop`) is retired. The trailer fires exactly once per body and ONLY when at least one staged / advanced / removed resource changed on disk; it MUST be omitted on all-failed cascades and on bare manifest-only refreshes (MSG-RH-1).
 - [ ] **CMC-15**: On `notifyWarning` partial-failure recovery surfaces (e.g. `marketplace remove` with plugin-unstage failures), the reload trailer and the recovery anchor `Fix the underlying issue and retry.` both fire when applicable -- reload above retry, blank line between. When no resource changed, the reload trailer is omitted and the recovery anchor stands alone.
 
 ### Manual Recovery & Rollback
@@ -392,7 +392,7 @@ Requirements for the Claude settings import milestone. Additive to the v1.0 PRD 
 
 ### Severity Routing
 
-- [ ] **CMC-19**: Severity is delivered structurally via the four sanctioned wrappers (`notifySuccess`, `notifyWarning`, `notifyError`, `notifyUsageError`) per MSG-SR-1..7. No `[error]` / `[warning]` prefix is embedded in message text (reaffirms PRD §6.12 ES-2).
+- [x] **CMC-19**: Severity is delivered structurally via the four sanctioned wrappers (`notifySuccess`, `notifyWarning`, `notifyError`, `notifyUsageError`) per MSG-SR-1..7. No `[error]` / `[warning]` prefix is embedded in message text (reaffirms PRD §6.12 ES-2).
 - [ ] **CMC-20**: Cascade summaries route via `notifyWarning` (not `notifyError`) when any row is non-trivially `(skipped)` or `(failed)`; route via `notifySuccess` when every row is trivially-successful or trivially-`(skipped) {up-to-date}`. A cascade summary never uses `notifyError` (MSG-SR-4..6).
 
 ### Display Semantics (renderer + state mutation)
@@ -418,8 +418,8 @@ Requirements for the Claude settings import milestone. Additive to the v1.0 PRD 
 ### ES-5 Supersession & console.warn
 
 - [ ] **CMC-35**: Legacy ES-5 marker strings (`pi-subagents is not loaded; …`, `pi-mcp-adapter is not loaded; …`, `Run /reload to <verb> …`, `MANUAL RECOVERY REQUIRED: …`, `(rollback partial: [<phase>] <msg>; …)`) are retired throughout the codebase. The atomic three-file edit (`shared/markers.ts` + `tests/architecture/markers-snapshot.test.ts` + `docs/prd/pi-claude-marketplace-prd.md` §6.12) lands in a single commit per the style-guide §15 supersession contract.
-- [ ] **CMC-36**: The single sanctioned `console.warn` at `persistence/migrate.ts` adopts the proposed §14.1 wording (sentence form, terminal period, no compact-grammar tokens, no `MANUAL RECOVERY REQUIRED:` prefix); no second `console.warn` callsite is introduced (MSG-LC-1).
-- [ ] **CMC-37**: The eslint discipline at the IL-3 call site is preserved: inline `eslint-disable-next-line no-restricted-syntax, no-console -- IL-3: <rationale>` comment on the line directly above the `console.warn(...)`; no config-file override added. Other `console.*` calls remain forbidden by `no-restricted-syntax` + `no-console` (MSG-LC-2).
+- [x] **CMC-36**: The single sanctioned `console.warn` at `persistence/migrate.ts` adopts the proposed §14.1 wording (sentence form, terminal period, no compact-grammar tokens, no `MANUAL RECOVERY REQUIRED:` prefix); no second `console.warn` callsite is introduced (MSG-LC-1).
+- [x] **CMC-37**: The eslint discipline at the IL-3 call site is preserved: inline `eslint-disable-next-line no-restricted-syntax, no-console -- IL-3: <rationale>` comment on the line directly above the `console.warn(...)`; no config-file override added. Other `console.*` calls remain forbidden by `no-restricted-syntax` + `no-console` (MSG-LC-2).
 
 ### Drift Guard
 
@@ -734,18 +734,18 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | CMC-05      | Phase 13 | Pending  |
 | CMC-06      | Phase 13 | Pending  |
 | CMC-07      | Phase 13 | Pending  |
-| CMC-08      | Phase 12 | Pending  |
+| CMC-08      | Phase 12 | Complete |
 | CMC-09      | Phase 13 | Pending  |
 | CMC-10      | Phase 13 | Pending  |
-| CMC-11      | Phase 12 | Pending  |
+| CMC-11      | Phase 12 | Complete |
 | CMC-12      | Phase 13 | Pending  |
 | CMC-13      | Phase 13 | Pending  |
-| CMC-14      | Phase 12 | Pending  |
+| CMC-14      | Phase 12 | Complete |
 | CMC-15      | Phase 13 | Pending  |
 | CMC-16      | Phase 13 | Pending  |
 | CMC-17      | Phase 13 | Pending  |
 | CMC-18      | Phase 13 | Pending  |
-| CMC-19      | Phase 12 | Pending  |
+| CMC-19      | Phase 12 | Complete |
 | CMC-20      | Phase 13 | Pending  |
 | CMC-21      | Phase 13 | Pending  |
 | CMC-22      | Phase 13 | Pending  |
@@ -762,8 +762,8 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | CMC-33      | Phase 13 | Pending  |
 | CMC-34      | Phase 13 | Pending  |
 | CMC-35      | Phase 13 | Pending  |
-| CMC-36      | Phase 12 | Pending  |
-| CMC-37      | Phase 12 | Pending  |
+| CMC-36      | Phase 12 | Complete |
+| CMC-37      | Phase 12 | Complete |
 | CMC-38      | Phase 14 | Pending  |
 
 **Coverage:**
