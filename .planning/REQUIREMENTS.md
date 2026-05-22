@@ -350,6 +350,81 @@ Requirements for the Claude settings import milestone. Additive to the v1.0 PRD 
 - [x] **IMP-10**: Import continues after per-plugin unavailable/uninstallable results and reports those skipped plugins as warnings.
 - [x] **IMP-11**: Import uses existing marketplace-add and plugin-install semantics for atomicity, state locking, network policy, output channel, soft-dependency warnings, and reload hints.
 
+## Milestone v1.3 Requirements
+
+> **Source of truth:** `docs/messaging-style-guide.md` v1.0 (normative; supersedes PRD §6.12 ES-5) + `docs/output-catalog.md` (per-command rendered contract). MSG-* IDs cited below are the spec rules each requirement enforces.
+
+### Compact-Line Grammar
+
+- [ ] **CMC-01**: Every `ctx.ui.notify` compact line conforms to the universal shape `<icon> <name>[@marketplace] [scope(s)] [<marker>] [version] (status) {reason(s)}` with fixed token order; absent slots are omitted entirely; no placeholder text rendered (MSG-GR-1).
+- [ ] **CMC-02**: The `@<marketplace>` token renders only on standalone single-plugin mentions; it is omitted on marketplace-headed cascade rows where the marketplace is in the header (MSG-GR-2).
+- [ ] **CMC-03**: Scope rendering is per-scope on every surface for both marketplaces and plugins; lists are flat (no per-scope group-header lines); sort is name-primary case-insensitive `localeCompare` with `sensitivity: 'base'`, project-before-user as the tie-breaker (MSG-GR-3).
+- [ ] **CMC-04**: Reasons render inside a single `{}` block, comma-separated, 1-3 words lowercase, hyphenated where natural; manifest field names render verbatim as the sole carve-out (`{hooks}`, `{lspServers}`); the empty `{}` form is never emitted (MSG-GR-4).
+- [ ] **CMC-05**: Marketplace rows and headers carry a `<marker>` slot between scope and status: `<autoupdate>` whenever autoupdate is ON on every marketplace-rendering surface; omitted when OFF; `<no autoupdate>` appears in exactly one place -- the result row of `marketplace autoupdate disable` (MSG-GR-5).
+
+### Icon Discipline
+
+- [ ] **CMC-06**: Plugin rows use the effective-state icon set: `●` when the plugin is installed and in the requested state; `○` when not installed with no error (`(available)`, `(uninstalled)`); `⊘` for error or failure-cascade-child states regardless of install state (MSG-IC-1..3).
+- [ ] **CMC-07**: Marketplace rows and headers always carry a leading icon under the outcome-class rule: `●` for OK outcomes (including `(removed)`), `⊘` for failure outcomes (including manifest unparseable / source mismatch).
+
+### Status Tokens (closed set)
+
+- [ ] **CMC-08**: Status tokens are constrained to the closed enum in the style-guide §3 frontmatter (`installed`, `updated`, `uninstalled`, `added`, `removed`, `available`, `unavailable`, `upgradable`, `skipped`, `failed`, `rollback failed`, `manual recovery`, `no marketplaces`, `no plugins`, plus the `reinstalled` token used in reinstall cascades). The legacy `unchanged` partition is folded into `(skipped) {up-to-date}` -- `unchanged` is not a distinct token (style guide §3.2).
+- [ ] **CMC-09**: `(upgradable)` is computed per PRD PL-5 string compare and rendered only by `list`; it MUST NOT appear on install / update / uninstall / reinstall result rows (MSG-PL-4).
+- [ ] **CMC-10**: Empty result tokens `(no marketplaces)` and `(no plugins)` render as a bare compact token (no icon, name, scope brackets, or reasons); routed via `notifySuccess`; legacy sentence forms `No marketplaces configured.` / `No plugins installed.` retired (MSG-ER-1).
+
+### Reasons Enum (closed set, expanded)
+
+- [ ] **CMC-11**: Reasons render only from the closed enum in the style-guide §4 frontmatter (24 reasons). New v1.3 additions over the V1 set: `{plugins remain}`, `{unparseable}`, `{unreadable manifest}`, `{not in manifest}`, `{not installed}`, `{invalid manifest}`, `{source mismatch}`, `{concurrently uninstalled}`, `{concurrently updated}`, `{stale clone}`, `{duplicate name}`, `{lock held}`.
+- [ ] **CMC-12**: Soft-dependency reasons render as `{requires pi-subagents}` and `{requires pi-mcp}` (renamed from the legacy ES-5 sentences `pi-subagents is not loaded; …` and `pi-mcp-adapter is not loaded; …`).
+- [ ] **CMC-13**: Soft-dep markers fire on installed / updated / reinstalled rows, on `list`-rendering `(available)` and `(installed)` rows, and per-row inside `import` / `update` / `reinstall` cascades whenever (a) the plugin declares the corresponding resource AND (b) the companion extension is unloaded; markers MUST NOT appear on `(uninstalled)` rows (MSG-SD-1..3). Today's aggregated single-trailer emission is replaced by per-row `{}` reasons.
+
+### Reload Hint
+
+- [ ] **CMC-14**: The reload-hint trailer is the single canonical string `/reload to pick up changes`, preceded by one blank line, appended after the parent body. The three-verb form (`load` / `refresh` / `drop`) is retired. The trailer fires exactly once per body and ONLY when at least one staged / advanced / removed resource changed on disk; it MUST be omitted on all-failed cascades and on bare manifest-only refreshes (MSG-RH-1).
+- [ ] **CMC-15**: On `notifyWarning` partial-failure recovery surfaces (e.g. `marketplace remove` with plugin-unstage failures), the reload trailer and the recovery anchor `Fix the underlying issue and retry.` both fire when applicable -- reload above retry, blank line between. When no resource changed, the reload trailer is omitted and the recovery anchor stands alone.
+
+### Manual Recovery & Rollback
+
+- [ ] **CMC-16**: Manual recovery renders as a separate top-level compact line `⊘ <resource> (manual recovery) {<reason>}` preceded by a blank line, independent of the triggering operation. For system-level resources (agent index, `state.json`) the resource name goes directly in the name slot -- no `@<marketplace>`, no scope brackets. The legacy `MANUAL RECOVERY REQUIRED: <path> (<reason>)` sentence prefix is retired (MSG-MR-1..2).
+- [ ] **CMC-17**: Rollback-partial renders as `(failed) {rollback partial}` (multi-phase) or `(failed) {<phase>}` (single phase) on the parent line, with indented per-phase children at 2-space indent (each child a self-contained compact line with its own status token). The legacy parenthesised `(rollback partial: [<phase>] <msg>; …)` form is retired (MSG-RP-1).
+- [ ] **CMC-18**: Cause chains render as a single trailing line `cause: <link1> -> <link2> -> ...` (lowercase `cause:`, space-arrow-space joiner); chain traversal bounded to depth 5 per ES-4 with `(truncated)` suffix on the depth-5 link; emitted only when `Error.cause` is present (MSG-CC-1).
+
+### Severity Routing
+
+- [ ] **CMC-19**: Severity is delivered structurally via the four sanctioned wrappers (`notifySuccess`, `notifyWarning`, `notifyError`, `notifyUsageError`) per MSG-SR-1..7. No `[error]` / `[warning]` prefix is embedded in message text (reaffirms PRD §6.12 ES-2).
+- [ ] **CMC-20**: Cascade summaries route via `notifyWarning` (not `notifyError`) when any row is non-trivially `(skipped)` or `(failed)`; route via `notifySuccess` when every row is trivially-successful or trivially-`(skipped) {up-to-date}`. A cascade summary never uses `notifyError` (MSG-SR-4..6).
+
+### Display Semantics (renderer + state mutation)
+
+- [ ] **CMC-21**: Marketplaces render per scope on every surface (no collapse). On the plugin-list surface, orphan project-scoped plugins of a marketplace name fold under a `<marketplace> [user]` header when no `<marketplace> [project]` header exists; the plugin row's `[<scope>]` always reflects the plugin's actual install scope. When a project-scope marketplace is later added, previously-folded project-scoped plugins are ADOPTED by the new `<marketplace> [project]` header at adoption time.
+
+### Per-Command Conformance (each command matches the catalog)
+
+- [ ] **CMC-22**: `/claude:plugin list` renders the marketplace-header + indented-plugin-rows form (or `(no plugins)` empty form). PL-4 descriptions are list-only, second indented line, truncated at column 66 with `…` suffix. `(upgradable)` and `(available)` / `(unavailable)` rows follow the MSG-PL-2..6 version-slot and scope-bracket carve-outs.
+- [ ] **CMC-23**: `/claude:plugin install <plugin>@<marketplace>` renders single-plugin inline (`<plugin>@<marketplace>` kept inline; no marketplace header). Success rows route via `notifySuccess`; soft-dep reasons appear on the success row when applicable; rollback-partial failures use the section-8 child-row structure.
+- [ ] **CMC-24**: `/claude:plugin uninstall <plugin>@<marketplace>` renders single-plugin inline with the `○` icon (effective-state rule). Soft-dep markers are excluded from `(uninstalled)` rows.
+- [ ] **CMC-25**: `/claude:plugin reinstall` renders the marketplace-header + indented `(reinstalled)` / `(skipped)` / `(failed)` cascade rows; severity routes per MSG-SR-4..6; reload trailer per MSG-RH-1; the `Reinstalled:` / `Skipped:` / `Failed:` partition-header lines are retired.
+- [ ] **CMC-26**: `/claude:plugin update` renders the marketplace-header + indented cascade rows with version-transition arrows on `(updated)` rows per MSG-PL-3; all-trivial cascades route via `notifySuccess` with no reload trailer.
+- [ ] **CMC-27**: `/claude:plugin import` renders the `Claude plugin import summary` preamble + blank line + per-scope marketplace headers carrying `(added)` / `(skipped)` / `(failed)` outcomes + indented plugin rows. `--scope user|project` narrows the cascade; source-mismatch on an existing marketplace renders `(failed) {source mismatch}` with dependent plugins as `⊘ (skipped) {source mismatch}` cascade children.
+- [ ] **CMC-28**: `/claude:plugin bootstrap` renders single-marketplace `(added)` or `(skipped) {already installed}` with the explicit `<autoupdate>` marker (bootstrap forces autoupdate on).
+- [ ] **CMC-29**: `/claude:plugin marketplace list` renders flat marketplace rows (no header form), per-scope, sorted name-primary with project-before-user tie-breaker; empty case is `(no marketplaces)`.
+- [ ] **CMC-30**: `/claude:plugin marketplace add` renders single-marketplace `(added)` with the `<autoupdate>` marker per source kind (GitHub source defaults ON, path source defaults OFF -- omit the marker).
+- [ ] **CMC-31**: `/claude:plugin marketplace remove` is conditional: bare-row form on clean success; marketplace-header + indented children form on partial failure with `(failed) {plugins remain}`; reload trailer + retry anchor coexist per MSG-RH-1 and CMC-15.
+- [ ] **CMC-32**: `/claude:plugin marketplace update` renders the marketplace itself as the header (carrying `(updated)` / `(failed)`) with indented plugin cascade rows when autoupdate is on; manifest-only refresh (autoupdate off) renders the marketplace line alone. The `Updated marketplace "X" in <scope> scope.` summary line is retired.
+- [ ] **CMC-33**: `/claude:plugin marketplace autoupdate enable|disable` renders flat marketplace rows with the marker as the sole outcome indicator (no status token); already-matching marketplaces carry `{already enabled}` / `{already disabled}`; `<no autoupdate>` appears only here.
+- [ ] **CMC-34**: Entity-shaped non-cascade errors (install / uninstall / update against an unknown plugin or marketplace) render as a compact line `⊘ <name>[@<marketplace>] [scope] (failed) {<reason>}`; argument-parsing failures stay sentence-form via `notifyUsageError` with the Usage block after a blank line (MSG-NC-1..2 / MSG-SR-7).
+
+### ES-5 Supersession & console.warn
+
+- [ ] **CMC-35**: Legacy ES-5 marker strings (`pi-subagents is not loaded; …`, `pi-mcp-adapter is not loaded; …`, `Run /reload to <verb> …`, `MANUAL RECOVERY REQUIRED: …`, `(rollback partial: [<phase>] <msg>; …)`) are retired throughout the codebase. The atomic three-file edit (`shared/markers.ts` + `tests/architecture/markers-snapshot.test.ts` + `docs/prd/pi-claude-marketplace-prd.md` §6.12) lands in a single commit per the style-guide §15 supersession contract.
+- [ ] **CMC-36**: The single sanctioned `console.warn` at `persistence/migrate.ts` adopts the proposed §14.1 wording (sentence form, terminal period, no compact-grammar tokens, no `MANUAL RECOVERY REQUIRED:` prefix); no second `console.warn` callsite is introduced (MSG-LC-1).
+- [ ] **CMC-37**: The eslint discipline at the IL-3 call site is preserved: inline `eslint-disable-next-line no-restricted-syntax, no-console -- IL-3: <rationale>` comment on the line directly above the `console.warn(...)`; no config-file override added. Other `console.*` calls remain forbidden by `no-restricted-syntax` + `no-console` (MSG-LC-2).
+
+### Drift Guard
+
+- [ ] **CMC-38**: A test suite reads the style-guide frontmatter (`status_tokens:`, `reasons:`, `markers:`, `pattern_classes:`) plus the normative `MSG-*` IDs as the binding drift-guard contract; `npm run check` fails when a callsite emits a token outside the closed sets or violates an MSG-* rule.
+
 ## v2 Requirements
 
 ### Listing & Inspection
@@ -387,6 +462,10 @@ Requirements for the Claude settings import milestone. Additive to the v1.0 PRD 
 | `--force` install with `incomplete` state for partially-supported plugins                                                                     | Defer; correctness model favors block-and-explain over partial-with-flag (PRD §11)                                    |
 | Telemetry (metrics, event sinks, analytics endpoints)                                                                                         | V1 explicitly forbids (IL-4); successor concern only (IL-5)                                                           |
 | Message catalogs / locale negotiation                                                                                                         | English-only V1 (IL-1); successor concern only (IL-5)                                                                 |
+| Display abbreviation of `hash-<12hex>` plugin versions in list rendering                                                                      | Style guide MSG-PL-5: V1 contract is full-hash verbatim; abbreviation is a possible V1.4 enhancement                  |
+| Bulk uninstall cascade form (`uninstall @<marketplace>` / bare `uninstall`)                                                                   | Output catalog "Possible future features": v1.3 keeps uninstall as single-plugin single-shot                          |
+| Marketplace versions (`hash-<12hex>` for github-source marketplaces)                                                                          | Output catalog "Possible future features": would require schema migration; deferred                                   |
+| Tone-changing rewordings beyond the §14.1 console.warn and the §15 ES-5 supersession                                                          | Style guide §15 scopes the supersession to exactly the five ES-5 marker strings; other operator wording stays         |
 
 ## Behavioral Gaps Requiring Decision Before Phase Planning
 
@@ -648,6 +727,44 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | PRL-14      | Phase 9  | Complete |
 | PRL-15      | Phase 9  | Complete |
 | PRL-16      | Phase 9  | Complete |
+| CMC-01      | TBD      | Pending  |
+| CMC-02      | TBD      | Pending  |
+| CMC-03      | TBD      | Pending  |
+| CMC-04      | TBD      | Pending  |
+| CMC-05      | TBD      | Pending  |
+| CMC-06      | TBD      | Pending  |
+| CMC-07      | TBD      | Pending  |
+| CMC-08      | TBD      | Pending  |
+| CMC-09      | TBD      | Pending  |
+| CMC-10      | TBD      | Pending  |
+| CMC-11      | TBD      | Pending  |
+| CMC-12      | TBD      | Pending  |
+| CMC-13      | TBD      | Pending  |
+| CMC-14      | TBD      | Pending  |
+| CMC-15      | TBD      | Pending  |
+| CMC-16      | TBD      | Pending  |
+| CMC-17      | TBD      | Pending  |
+| CMC-18      | TBD      | Pending  |
+| CMC-19      | TBD      | Pending  |
+| CMC-20      | TBD      | Pending  |
+| CMC-21      | TBD      | Pending  |
+| CMC-22      | TBD      | Pending  |
+| CMC-23      | TBD      | Pending  |
+| CMC-24      | TBD      | Pending  |
+| CMC-25      | TBD      | Pending  |
+| CMC-26      | TBD      | Pending  |
+| CMC-27      | TBD      | Pending  |
+| CMC-28      | TBD      | Pending  |
+| CMC-29      | TBD      | Pending  |
+| CMC-30      | TBD      | Pending  |
+| CMC-31      | TBD      | Pending  |
+| CMC-32      | TBD      | Pending  |
+| CMC-33      | TBD      | Pending  |
+| CMC-34      | TBD      | Pending  |
+| CMC-35      | TBD      | Pending  |
+| CMC-36      | TBD      | Pending  |
+| CMC-37      | TBD      | Pending  |
+| CMC-38      | TBD      | Pending  |
 
 **Coverage:**
 
@@ -655,7 +772,8 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 - Mapped to phases: 205 (97.6%) -- MA-7 superseded by D-21 (Phase 1 adopted isomorphic-git, removing the "git CLI not found" failure mode); MU-2 and MU-3 superseded by Phase 4 D-14 (follow-upstream-blindly semantics; the local marketplace clone is read-only by contract, so non-fast-forward divergence cannot occur); PR-4 superseded by Phase 5 D-07 (custom componentPath arrays now SUPPLEMENT defaults rather than replace them; behavior corrected vs V1 per COMP-01 / Gap 3); PI-15 superseded by Phase 7 D-08 (per-scope lock acquisition fails losers with `STATE_LOCK_HELD_PREFIX` before state-guard commit)
 - v1.1 requirements: 16 total (PRL-01..16), all mapped to Phases 8/9.
 - v1.2 requirements: 11 total (IMP-01..11), all mapped to Phases 10/11.
-- Unmapped: 0 (MA-7, MU-2, MU-3, PR-4, PI-15 are superseded, not unmapped)
+- v1.3 requirements: 38 total (CMC-01..38), phase mapping TBD (filled by `/gsd:new-milestone` roadmapper run).
+- Unmapped: 0 (MA-7, MU-2, MU-3, PR-4, PI-15 are superseded, not unmapped; v1.3 CMC-01..38 are pending roadmap)
 
 **Per-phase counts:**
 
@@ -677,4 +795,8 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 
 ______________________________________________________________________
 
-*Requirements defined: 2026-05-09 from `docs/prd/pi-claude-marketplace-prd.md` v1.0* *Last updated: 2026-05-16 -- merged origin/main into v1.1 reinstall branch; added Milestone v1.1 (PRL-01..16) covered by Phases 8 and 9. Inherited from main: D-29 (renumbered from main's D-26) / CMP-1..8 clarify marketplace-vs-plugin scope semantics and make install completion available-only for the current target scope; Phase 11 completed IMP-01..IMP-03 and IMP-09..IMP-11 for import command orchestration; Phase 10 completed IMP-04..IMP-08 for Claude settings import foundation.*
+*Requirements defined: 2026-05-09 from `docs/prd/pi-claude-marketplace-prd.md` v1.0*
+
+*Last updated: 2026-05-21 -- Added Milestone v1.3 (CMC-01..38) sourced from `docs/messaging-style-guide.md` v1.0 (normative, supersedes PRD §6.12 ES-5) + `docs/output-catalog.md`. Phase mapping pending roadmap. Out of Scope extended with four v1.3-specific deferrals: hash-version display abbreviation, bulk uninstall cascade form, marketplace versions, and tone-changing rewordings beyond the §15 supersession.*
+
+*Last updated: 2026-05-16 -- merged origin/main into v1.1 reinstall branch; added Milestone v1.1 (PRL-01..16) covered by Phases 8 and 9. Inherited from main: D-29 (renumbered from main's D-26) / CMP-1..8 clarify marketplace-vs-plugin scope semantics and make install completion available-only for the current target scope; Phase 11 completed IMP-01..IMP-03 and IMP-09..IMP-11 for import command orchestration; Phase 10 completed IMP-04..IMP-08 for Claude settings import foundation.*
