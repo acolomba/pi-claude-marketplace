@@ -231,9 +231,9 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
     body = `${body}\n${mcpWarn}`;
   }
 
-  // PU-8: reload hint verb 'drop'; names = [plugin] iff anything was actually
-  // dropped. reloadHint() returns "" for empty names array; appendReloadHint
+  // PU-8 / MSG-RH-1: reload hint emitted iff anything was actually dropped.
+  // reloadHint() returns "" for empty names array; appendReloadHint
   // suppresses the trailing line in that case.
-  const hint = reloadHint("drop", droppedAny ? [plugin] : []);
+  const hint = reloadHint(droppedAny ? [plugin] : []);
   notifySuccess(ctx, appendReloadHint(body, hint));
 }

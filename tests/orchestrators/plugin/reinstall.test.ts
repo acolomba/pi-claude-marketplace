@@ -304,7 +304,7 @@ test("PRL-08/11 happy: success preserves installed version, restages resources, 
       assert.match(await readSkill(cwd), /new skill/);
       await assert.rejects(() => readFile(path.join(dataDir, "state.txt"), "utf8"), /ENOENT/);
       assert.equal(errorNotifications(notifications).length, 0);
-      assert.match(notifications.at(-1)?.message ?? "", /Run \/reload to refresh it\.$/);
+      assert.match(notifications.at(-1)?.message ?? "", /\/reload to pick up changes$/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -527,7 +527,10 @@ test("PRL-12/RH-5: no-resource reinstall suppresses reload hint; agents/MCP warn
       const { ctx, pi, notifications } = makeCtx();
       const noResource = await reinstallDefault(cwd, ctx, pi);
       assert.equal(noResource.partition, "reinstalled");
-      assert.equal((notifications.at(-1)?.message ?? "").includes("Run /reload"), false);
+      assert.equal(
+        (notifications.at(-1)?.message ?? "").includes("/reload to pick up changes"),
+        false,
+      );
 
       notifications.length = 0;
       const cwd2 = await mkdtemp(path.join(tmpdir(), "reinstall-output-deps-"));
@@ -549,7 +552,7 @@ test("PRL-12/RH-5: no-resource reinstall suppresses reload hint; agents/MCP warn
       const body = notifications.at(-1)?.message ?? "";
       assert.match(body, /pi-subagents is not loaded/);
       assert.match(body, /pi-mcp-adapter is not loaded/);
-      assert.match(body, /Run \/reload to refresh it\./);
+      assert.match(body, /\/reload to pick up changes/);
       await rm(cwd2, { recursive: true, force: true });
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -980,7 +983,7 @@ test("PRL-14 batch reload hint uses only changed successful outcomes", async () 
       await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
 
       const body = notifications.at(-1)?.message ?? "";
-      assert.match(body, /Run \/reload to refresh it\./);
+      assert.match(body, /\/reload to pick up changes/);
       assert.doesNotMatch(body, /"empty"/);
     } finally {
       await rm(cwd, { recursive: true, force: true });

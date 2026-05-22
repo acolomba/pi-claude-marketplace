@@ -4,7 +4,6 @@
 // populates this directory beyond the placeholder).
 
 export { appendReloadHint, reloadHint } from "./reload-hint.ts";
-export type { ReloadVerb } from "./reload-hint.ts";
 
 export {
   hasLoadedPiMcpAdapter,

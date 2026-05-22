@@ -727,8 +727,8 @@ function renderPartitionAndNotify(
 
   const body = appendPluginSoftDepWarnings(baseLines.join("\n"), pi, partitions.updated);
 
-  // PUP-8 / RH-1 / RH-2: reload hint with verb 'refresh' iff updated[].length > 0.
-  const hint = reloadHint("refresh", updatedNames);
+  // PUP-8 / MSG-RH-1: reload hint emitted iff updated[].length > 0.
+  const hint = reloadHint(updatedNames);
   notifySuccess(ctx, appendReloadHint(body, hint));
 }
 

@@ -1,48 +1,56 @@
 // presentation/reload-hint.ts
 //
-// RH-1, RH-2 reload-hint composition. Pure string functions -- no IO,
-// no ctx parameter. The orchestrator layer decides WHEN to call this
-// (RH-1 gate: only when generated resources changed); this file is
-// the WHAT (the format string).
+// CMC-14 / MSG-RH-1 (style-guide section 5): the reload hint collapses to a
+// single canonical trailer "/reload to pick up changes" -- the three-verb
+// selector ("load" / "refresh" / "drop") is retired per D-CMC-06.
 //
-// ES-5 stable contract: the prefix `Run /reload to ` is sourced from
-// shared/markers.ts (the markers-snapshot test enforces byte-equality
-// with PRD §6.12). Inlining the literal is forbidden; if the PRD
-// contract changes, the constant changes and this composer follows.
+// D-CMC-07: the trailer literal lives as a file-private const here, not as
+// a shared/markers.ts export or a shared/grammar/ member. This mirrors the
+// MAX_LINE_COLUMN private-constant idiom in presentation/plugin-list.ts:30
+// -- a one-consumer literal does not earn extraction.
+//
+// D-CMC-08: shared/markers.ts retains the legacy RELOAD_HINT_PREFIX export
+// as a snapshot-test-only constant through Phase 12; this composer no
+// longer imports it. Phase 13's atomic three-file edit (markers.ts +
+// markers-snapshot test + PRD §6.12 row) deletes the legacy constant.
+//
+// Pure string functions -- no IO, no ctx parameter. The orchestrator layer
+// decides WHEN to call this (MSG-RH-1 gate: only when generated resources
+// changed); this file is the WHAT (the trailer text and the body+hint
+// join helper).
 
-import { RELOAD_HINT_PREFIX } from "../shared/markers.ts";
-
-/** RH-2 verb table: the only three legal verbs. */
-export type ReloadVerb = "load" | "refresh" | "drop";
+/** MSG-RH-1 canonical trailer (D-CMC-07: file-private; see header above). */
+const RELOAD_HINT_TRAILER = "/reload to pick up changes";
 
 /**
- * RH-1 / RH-2: render the reload hint or "" when no hint is needed.
+ * MSG-RH-1: render the canonical reload-hint trailer or `""` when no hint
+ * is needed.
  *
- *   - 0 names: ""           (RH-1: no hint when no resources changed)
- *   - 1 name:  "Run /reload to <verb> it."
- *   - N names: 'Run /reload to <verb> "n1", "n2".'
+ *   - 0 names: ""                              (suppression)
+ *   - >=1 names: "/reload to pick up changes"  (single canonical trailer)
  *
- * Caller responsibility: pass non-empty names ONLY when generated
- * resources actually changed (RH-1 gate). This function trusts its
- * input and renders mechanically.
+ * Caller responsibility: pass non-empty `names` ONLY when generated
+ * resources actually changed (MSG-RH-1 gate). The `names` argument is
+ * checked for non-emptiness only -- the names themselves are NOT
+ * interpolated into the trailer (a deliberate regression in user-data
+ * exposure from the legacy verb-and-quoted-names form).
  */
-export function reloadHint(verb: ReloadVerb, names: readonly string[]): string {
-  if (names.length === 0) {
-    return "";
-  }
-
-  if (names.length === 1) {
-    return `${RELOAD_HINT_PREFIX}${verb} it.`;
-  }
-
-  const quotedNames = names.map((n) => `"${n}"`).join(", ");
-  return `${RELOAD_HINT_PREFIX}${verb} ${quotedNames}.`;
+export function reloadHint(names: readonly string[]): string {
+  return names.length > 0 ? RELOAD_HINT_TRAILER : "";
 }
 
 /**
  * Append `hint` to `body` on its own trailing line. When `hint === ""`
- * (RH-1 suppression), returns the bare body. Used by every orchestrator
+ * (MSG-RH-1 suppression), returns the bare body. Used by every orchestrator
  * that may emit a reload hint -- keeps the join logic centralized.
+ *
+ * TODO (Phase 13, MSG-RH-1): style-guide section 5 specifies the hint is
+ * "preceded by one blank line", i.e. a double-newline join. Phase 12
+ * intentionally retains the single-newline join to defer the conformance
+ * pass to Phase 13's mechanical refactor scope (see 12-RESEARCH.md R7 and
+ * Open Question 2). Updating the join shape here is a one-line change
+ * (`\n${hint}` → `\n\n${hint}`) and is the SOLE work that turns this
+ * composer's output fully conformant with MSG-RH-1.
  */
 export function appendReloadHint(body: string, hint: string): string {
   return hint === "" ? body : `${body}\n${hint}`;

@@ -398,7 +398,7 @@ test("importClaudeSettings classifies unavailable and unexpected plugin failures
   assert.equal(result.unexpectedPluginFailures[0]?.cause, "disk full");
   // unexpected-failure outcomes escalate the summary notification to error severity.
   assert.equal(notifications[0]?.severity, "error");
-  assert.equal((notifications[0]?.message.match(/Run \/reload/g) ?? []).length, 1);
+  assert.equal((notifications[0]?.message.match(/\/reload to pick up changes/g) ?? []).length, 1);
 });
 
 test("importClaudeSettings classifies uninstallable plugins as warnings without aborting others", async () => {
@@ -454,7 +454,7 @@ test("importClaudeSettings classifies uninstallable plugins as warnings without 
   assert.equal(result.installedPlugins[0]?.ref, "ok@mp");
 });
 
-test("formatClaudeImportSummary includes Run /reload when changedResources is true", () => {
+test("formatClaudeImportSummary includes the canonical reload-hint trailer when changedResources is true", () => {
   const result: ClaudeImportExecutionResult = {
     addedMarketplaces: [],
     installedPlugins: [
@@ -479,7 +479,7 @@ test("formatClaudeImportSummary includes Run /reload when changedResources is tr
   };
 
   const summary = formatClaudeImportSummary(result);
-  assert.match(summary, /Run \/reload/);
+  assert.match(summary, /\/reload to pick up changes/);
   assert.match(summary, /my-plugin@mp/);
 });
 

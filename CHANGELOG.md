@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased] - v1.3 Phase 12 messaging foundations
+
+- Reload-hint trailer collapsed to the single canonical form `/reload to pick up changes` (style guide MSG-RH-1). The legacy three-verb selector (`Run /reload to load|refresh|drop "..."`) is retired from `presentation/reload-hint.ts`. 8 reload-hint callsite trailers now emit `/reload to pick up changes`; Phase 12 carve-out per D-CMC-10; roadmap criterion #2 authorizes (the verb-selector removal is the WHAT, which structurally requires the trailer to change wherever the composer is called; roadmap criterion #4 "user-visible output unchanged except for migrate.ts" is read as authorized-by-criterion-#2 for this carve-out). The legacy `RELOAD_HINT_PREFIX` constant in `shared/markers.ts` is retained as a snapshot-test-only export through Phase 12 per D-CMC-08; Phase 13's atomic three-file edit deletes it together with the markers-snapshot row and the PRD §6.12 row.
+
 ## [0.1.7] - 2026-05-16
 
 - Added `/claude:plugin reinstall` command: re-stages an installed plugin from its cached marketplace manifest without touching the network or changing the recorded version. Supports `reinstall <plugin>@<marketplace>`, `reinstall @<marketplace>`, bare `reinstall`, `--scope user|project`, and `--force` for plugins whose previous agent files were manually edited. Failure preserves the previous installed plugin, resources, and data directory; the plugin data directory is cleaned up only after the replacement and state commit succeed.

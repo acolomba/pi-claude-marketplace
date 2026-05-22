@@ -130,7 +130,7 @@ test("MU-1: bare form against empty scope succeeds silently with marker string a
     const first = notifications[0];
     assert.ok(first !== undefined);
     assert.equal(first.message, "No marketplaces configured.");
-    assert.equal(first.message.includes("Run /reload to "), false);
+    assert.equal(first.message.includes("/reload to pick up changes"), false);
   });
 });
 
@@ -459,7 +459,7 @@ test("MU-7: partitions render in order updated -> unchanged -> skipped -> failed
   });
 });
 
-test("MU-9 + RH-1/RH-2: success emits 'Run /reload to refresh \"...\".' for updated plugins (alphabetical)", async () => {
+test("MU-9 + MSG-RH-1: success emits canonical reload hint trailer for updated plugins", async () => {
   await withHermeticHome(async ({ cwd }) => {
     await seedGithubMarketplace({
       cwd,
@@ -489,10 +489,10 @@ test("MU-9 + RH-1/RH-2: success emits 'Run /reload to refresh \"...\".' for upda
       pluginUpdate,
     });
 
-    // Reload hint trailing the body, alphabetical.
+    // MSG-RH-1 canonical reload-hint trailer (names no longer interpolated).
     const first = notifications[0];
     assert.ok(first !== undefined);
-    assert.match(first.message, /Run \/reload to refresh "a", "x"\.$/);
+    assert.match(first.message, /\/reload to pick up changes$/);
   });
 });
 
@@ -521,7 +521,7 @@ test("RH-1: NO reload hint when zero plugins updated", async () => {
     });
     const first = notifications[0];
     assert.ok(first !== undefined);
-    assert.equal(first.message.includes("Run /reload to "), false);
+    assert.equal(first.message.includes("/reload to pick up changes"), false);
   });
 });
 

@@ -237,7 +237,7 @@ test("PU-1: cascade order observable end-state -- all four bridges' resources re
         notifications[0]?.message ?? "",
         /Uninstalled plugin "hello" from marketplace "mp"\./,
       );
-      assert.match(notifications[0]?.message ?? "", /Run \/reload to drop it\.$/);
+      assert.match(notifications[0]?.message ?? "", /\/reload to pick up changes$/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -569,7 +569,7 @@ test("PU-8 (a): >=1 resource dropped -> reload hint present (verb 'drop', 'it' f
       });
 
       assert.equal(notifications.length, 1);
-      assert.match(notifications[0]?.message ?? "", /Run \/reload to drop it\.$/);
+      assert.match(notifications[0]?.message ?? "", /\/reload to pick up changes$/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -618,9 +618,9 @@ test("PU-8 (b): zero dropped resources -> NO reload hint (cascade injection seam
 
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined);
-      // PU-8 inverse: NO trailing "Run /reload" line.
+      // PU-8 inverse: NO trailing reload hint line.
       assert.equal(
-        (notifications[0]?.message ?? "").includes("Run /reload"),
+        (notifications[0]?.message ?? "").includes("/reload to pick up changes"),
         false,
         "reload hint must be suppressed when nothing dropped",
       );

@@ -273,8 +273,8 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
     body = `${body}\n${mcpWarn}`;
   }
 
-  // RH-1 / MR-8: reload hint with verb 'drop' iff at least one plugin's
+  // MSG-RH-1 / MR-8: reload hint emitted iff at least one plugin's
   // resources were actually removed.
-  const hint = reloadHint("drop", removedSorted);
+  const hint = reloadHint(removedSorted);
   notifySuccess(opts.ctx, appendReloadHint(body, hint));
 }
