@@ -1,22 +1,28 @@
-# Roadmap: pi-claude-marketplace v1.1 Reinstall Command
+# Roadmap: pi-claude-marketplace v1.3 Consistent Messaging
 
 ## Overview
 
-Milestone v1.1 adds a `reinstall` command to the existing `/claude:plugin` lifecycle surface. The command is intentionally analogous to `update` in syntax and scope handling, but semantically different: it uses cached marketplace manifests, preserves the installed record's existing version, performs no network sync, and forces replacement even when versions match.
+Milestone v1.3 brings every user-visible `ctx.ui.notify` callsite (and the single sanctioned `console.warn`) into conformance with `docs/messaging-style-guide.md` v1.0 (normative, supersedes PRD §6.12 ES-5) and the per-command rendered contract in `docs/output-catalog.md`. No new commands, no new dependencies, no new domain logic -- this is an internal refactor whose user-contract change boundary is the ES-5 supersession (D-30).
 
-The roadmap continues phase numbering from the completed v1.0 successor architecture. Because v1.0 ended at Phase 7, v1.1 begins at Phase 8. The work splits into two dependency-driven phases: first the atomic per-plugin replacement core, then the edge/bulk user experience that depends on that per-plugin guarantee.
+The roadmap continues phase numbering from the completed v1.2 import milestone (last phase: 11). v1.3 begins at Phase 12. The work splits into three dependency-driven phases: first the renderer / notify primitives the conformance refactor will consume; then the mechanical callsite rewrite plus the atomic ES-5 supersession commit and per-command catalog conformance; finally a frontmatter-driven drift guard that locks the contract structurally.
+
+**Cross-cutting constraints applied to every v1.3 phase:**
+
+- NFR-6: `npm run check` (typecheck + ESLint + Prettier + tests) stays green throughout.
+- IL-2 / IL-3: All user-visible messages go through `ctx.ui.notify` via the four sanctioned wrappers; the single sanctioned `console.warn` at `persistence/migrate.ts` stays inline-disabled at the call site (no config-file widening).
+- D-30: The style guide + catalog are the v1.3 user-contract; PRD §6.12 ES-5 marker strings are superseded by the §15 replacement table.
 
 ## Phases
 
-**Phase Numbering:** continued from previous milestone; v1.1 starts at Phase 8.
+**Phase Numbering:** continued from previous milestone; v1.3 starts at Phase 12.
 
-- [x] **Phase 8: Atomic Reinstall Core** - Dedicated reinstall orchestrator and replacement-safe transaction primitives for one plugin
-- [x] **Phase 9: Reinstall Edge & Bulk UX** - `/claude:plugin reinstall` routing, batch forms, completions, docs, and user-facing output
-
-The merge from main also brings in the completed v1.2 phases:
-
-- [x] **Phase 10: Claude Settings Import Foundation** - Read/merge Claude settings, extract enabled plugin refs, map marketplace sources including official built-in marketplace
-- [x] **Phase 11: Import Command Orchestration** - `/claude:plugin import [--scope user|project]` handler, idempotent marketplace/plugin orchestration, warnings and reload-hint integration
+- [x] **Phase 8: Atomic Reinstall Core** (v1.1) -- Dedicated reinstall orchestrator and replacement-safe transaction primitives for one plugin
+- [x] **Phase 9: Reinstall Edge & Bulk UX** (v1.1) -- `/claude:plugin reinstall` routing, batch forms, completions, docs, and user-facing output
+- [x] **Phase 10: Claude Settings Import Foundation** (v1.2) -- Read/merge Claude settings, extract enabled plugin refs, map marketplace sources including official built-in marketplace
+- [x] **Phase 11: Import Command Orchestration** (v1.2) -- `/claude:plugin import [--scope user|project]` handler, idempotent marketplace/plugin orchestration, warnings and reload-hint integration
+- [ ] **Phase 12: Messaging Foundations & Renderer Primitives** (v1.3) -- Closed-set constants, renderer/notify primitives, reload-hint composer collapse, sentence-form `console.warn` rewording: the scaffolding the conformance refactor will consume
+- [ ] **Phase 13: Conformance Refactor & ES-5 Supersession** (v1.3) -- Mechanical rewrite of every user-visible callsite + ES-5 atomic three-file edit + per-command catalog conformance + display-semantics (per-scope rendering, plugin folding, adoption)
+- [ ] **Phase 14: Drift Guard & Test Alignment** (v1.3) -- Frontmatter-driven drift test suite that reads the style guide as the binding contract; `npm run check` fails on out-of-set tokens or MSG-* violations
 
 Phases 1-7 belong to the v1.0 successor architecture and are documented in `PROJECT.md` under Validated requirements.
 
@@ -41,6 +47,7 @@ Phases 1-7 belong to the v1.0 successor architecture and are documented in `PROJ
 **Plans:** 4 plans
 
 Plans:
+
 - [x] `08-01-PLAN.md` -- Lock-held manual-save transaction helper and no-network architecture guard
 - [x] `08-02-PLAN.md` -- Backup-backed skills and commands replacement helpers
 - [x] `08-03-PLAN.md` -- Backup-backed agents and MCP replacement helpers
@@ -65,6 +72,7 @@ Plans:
 **Plans:** 4 plans
 
 Plans:
+
 - [x] `09-01-PLAN.md` -- Bulk reinstall orchestrator, quiet seam, deterministic summary output
 - [x] `09-02-PLAN.md` -- Reinstall edge handler, router, registration, --scope, and --force
 - [x] `09-03-PLAN.md` -- Reinstall tab completion and failure semantics
@@ -72,7 +80,13 @@ Plans:
 
 ### Phase 10: Claude Settings Import Foundation
 
-**Goal**: A pure, testable import-planning foundation can read Claude Code settings for user/project scopes, merge base plus local override correctly, extract only true-enabled plugin refs, and resolve marketplace sources for official and extra-known marketplaces without mutating Pi state **Depends on**: Phase 7 and the separately-developed v1.1 milestone merge **Requirements**: IMP-04, IMP-05, IMP-06, IMP-07, IMP-08 **Success Criteria** (what must be TRUE):
+**Goal:** A pure, testable import-planning foundation can read Claude Code settings for user/project scopes, merge base plus local override correctly, extract only true-enabled plugin refs, and resolve marketplace sources for official and extra-known marketplaces without mutating Pi state.
+
+**Depends on:** Phase 7 and the separately-developed v1.1 milestone merge
+
+**Requirements:** IMP-04, IMP-05, IMP-06, IMP-07, IMP-08
+
+**Success Criteria** (what must be TRUE):
 
 1. Settings discovery reads the correct files per scope: user Claude settings and project `.claude/settings*.json`; missing files are treated as empty while malformed JSON reports a warning/error through the import result path rather than crashing the process.
 2. Merge semantics are deterministic: `settings.local.json` overrides `settings.json`, including disabling a base `enabledPlugins["plugin@marketplace"]: true` by setting the local value to `false`.
@@ -80,7 +94,7 @@ Plans:
 4. Marketplace source planning maps `claude-plugins-official` to `anthropics/claude-plugins-official` when missing, and maps `extraKnownMarketplaces` Claude `directory` and `github.repo` sources into existing Pi source parser inputs.
 5. Unit tests cover both-scope duplication: if the same plugin/marketplace is enabled in user and project Claude settings, the import plan contains one action per matching Pi scope.
 
-**Plans**: 3 plans
+**Plans:** 3 plans
 
 - [x] `10-01-PLAN.md` -- Settings file discovery and merge model for user/project scopes with local override tests (Wave 1)
 - [x] `10-02-PLAN.md` -- Enabled-plugin ref extraction and malformed/non-true entry handling (Wave 1)
@@ -88,7 +102,13 @@ Plans:
 
 ### Phase 11: Import Command Orchestration
 
-**Goal**: A Pi user can run `/claude:plugin import [--scope user|project]` and have enabled Claude Code plugins installed into the matching Pi scopes idempotently, with missing marketplaces added first and unavailable plugins reported as warnings while valid imports continue **Depends on**: Phase 10 **Requirements**: IMP-01, IMP-02, IMP-03, IMP-09, IMP-10, IMP-11 **Success Criteria** (what must be TRUE):
+**Goal:** A Pi user can run `/claude:plugin import [--scope user|project]` and have enabled Claude Code plugins installed into the matching Pi scopes idempotently, with missing marketplaces added first and unavailable plugins reported as warnings while valid imports continue.
+
+**Depends on:** Phase 10
+
+**Requirements:** IMP-01, IMP-02, IMP-03, IMP-09, IMP-10, IMP-11
+
+**Success Criteria** (what must be TRUE):
 
 1. `/claude:plugin import` is routed and documented consistently with existing commands; `--scope` accepts only `user` and `project`, may appear at any position, and omitted scope processes both scopes.
 2. Import adds missing marketplaces before installing enabled plugins, skips marketplaces/plugins already present in the target scope, and preserves same-name marketplace/plugin imports in both user and project scopes when both Claude scopes enable them.
@@ -96,56 +116,195 @@ Plans:
 4. Unavailable/uninstallable enabled plugins do not abort the whole import; they are aggregated and reported at warning severity with enough context to identify `plugin@marketplace` and target scope.
 5. Integration tests exercise a mixed import: official GitHub marketplace, extra-known directory marketplace, extra-known GitHub marketplace, local override disabling a base plugin, already-installed skip, and unavailable-plugin warning.
 
-**Plans**: 3 plans
+**Plans:** 3 plans
 
 - [x] `11-01-PLAN.md` -- Import orchestrator: action execution, idempotency, per-scope state locking, warning aggregation (Wave 1)
 - [x] `11-02-PLAN.md` -- Edge handler/router/completion updates for `/claude:plugin import [--scope user|project]` (Wave 2)
 - [x] `11-03-PLAN.md` -- End-to-end import fixtures and validation sign-off (Wave 3)
 
+### Phase 12: Messaging Foundations & Renderer Primitives
+
+**Goal:** Land the closed-set constants, renderer primitives, notify-helper signatures, single-trailer reload-hint composer, and the rewritten sanctioned `console.warn` wording -- everything the Phase 13 mechanical refactor depends on but that can land without breaking the user contract.
+
+**Depends on:** Phase 11 (continues from the v1.2 close; baseline = green `main`).
+
+**Requirements:** CMC-08, CMC-11, CMC-14, CMC-19, CMC-36, CMC-37
+
+**Scope (what lands in this phase):**
+
+- Closed status-token constants matching `status_tokens:` in the style-guide frontmatter (CMC-08), with the `(upgradable)` membership and the folded `(skipped) {up-to-date}` representation in place (the legacy `unchanged` partition shape is defined here but its callsite rewrite is Phase 13's mechanical work).
+- Closed reasons enum constants matching `reasons:` in the style-guide frontmatter (CMC-11) -- all 24 reasons including the v1.3 additions (`{plugins remain}`, `{unparseable}`, `{unreadable manifest}`, `{not in manifest}`, `{not installed}`, `{invalid manifest}`, `{source mismatch}`, `{concurrently uninstalled}`, `{concurrently updated}`, `{stale clone}`, `{duplicate name}`, `{lock held}`).
+- `presentation/reload-hint.ts` composer collapses to the single canonical trailer `/reload to pick up changes` -- `reloadHint(names) → names.length > 0 ? "/reload to pick up changes" : ""` (CMC-14). The three-verb (`load` / `refresh` / `drop`) selector is retired internally; the new composer is available for Phase 13's callsite migrations.
+- Severity wrapper inventory affirms the four sanctioned wrappers (`notifySuccess`, `notifyWarning`, `notifyError`, `notifyUsageError`) and any signature evolution needed to carry the new compact-line / cascade / reload-hint payloads to Phase 13 callers (CMC-19). No `[error]` / `[warning]` prefix embedding -- structural severity preserved.
+- `persistence/migrate.ts` sanctioned `console.warn` is rewritten to the §14.1 sentence-form wording (terminal period, no compact-grammar tokens, no `MANUAL RECOVERY REQUIRED:` prefix) (CMC-36).
+- The IL-3 inline `eslint-disable-next-line no-restricted-syntax, no-console -- IL-3: <rationale>` comment is preserved directly above the rewritten `console.warn(...)`; no config-file rule widening (CMC-37).
+
+**Out of scope (deferred to Phase 13):**
+
+- The `<marker>` slot rendering, the marketplace-header form, per-row soft-dep emission, the new manual-recovery / rollback-partial line structure, per-scope rendering + folding + adoption, and every per-command callsite rewrite. Phase 12 ships the primitives the renderer needs; the renderer's use sites are Phase 13.
+- The ES-5 atomic three-file edit (`shared/markers.ts` + `tests/architecture/markers-snapshot.test.ts` + PRD §6.12) lands in Phase 13 per §15 supersession contract -- the snapshot test's prefix-extraction shape is structurally incompatible with the new tokenised forms, so the deferral is mandatory.
+
+**Success Criteria** (what must be TRUE):
+
+1. Importing the closed status-tokens module yields exactly the set in the style-guide frontmatter `status_tokens:` block; importing the reasons enum module yields exactly the 24 entries in `reasons:` (programmatic equality test against the YAML).
+2. `reloadHint(names)` returns the literal `/reload to pick up changes` when at least one name is non-empty and the empty string otherwise; the three-verb selector is gone from `presentation/reload-hint.ts` (AST or `grep` audit against legacy `load|refresh|drop` selectors returns no match in the composer source).
+3. The single sanctioned `console.warn` at `persistence/migrate.ts` emits the §14.1 sentence-form wording with terminal period and no compact-grammar tokens; the inline `eslint-disable-next-line -- IL-3` comment is present directly above the call.
+4. `npm run check` is green: typecheck + ESLint + Prettier + the existing test suite all pass without regression. Phase 13's mechanical refactor has not yet started, so user-visible output is unchanged except for the single migrate.ts diagnostic.
+5. No second `console.warn` callsite exists; ESLint `no-restricted-syntax` + `no-console` rules remain enforced at config level with no new exceptions.
+
+**Plans:** TBD
+
+### Phase 13: Conformance Refactor & ES-5 Supersession
+
+**Goal:** Mechanically rewrite every user-visible `ctx.ui.notify` callsite (and the rendered output composers behind them) to conform to the universal compact-line grammar, plugin-row icon discipline, marketplace-icon outcome-class rule, closed status-token + reasons enums, per-scope marketplace and plugin rendering, autoupdate marker grammar, marketplace-header form on multi-plugin commands, per-row soft-dep emission, single canonical reload-hint, manual-recovery / rollback-partial / cause-chain formatting, cascade-severity routing, and per-command catalog conformance. Land the ES-5 atomic three-file edit. After this phase, every command in `docs/output-catalog.md` renders the documented output for each state it covers.
+
+**Depends on:** Phase 12 (closed-set constants, reload-hint composer collapse, notify wrapper signatures, sanctioned `console.warn` wording).
+
+**Requirements:** CMC-01, CMC-02, CMC-03, CMC-04, CMC-05, CMC-06, CMC-07, CMC-09, CMC-10, CMC-12, CMC-13, CMC-15, CMC-16, CMC-17, CMC-18, CMC-20, CMC-21, CMC-22, CMC-23, CMC-24, CMC-25, CMC-26, CMC-27, CMC-28, CMC-29, CMC-30, CMC-31, CMC-32, CMC-33, CMC-34, CMC-35
+
+**Scope (logical groupings inside the phase -- exact plan decomposition is for `/gsd:plan-phase 13`):**
+
+- *Universal line grammar + icons:* token-order rewrite (CMC-01), `@<marketplace>` carve-out on cascade rows (CMC-02), reasons rendering inside single `{}` block (CMC-04), `<autoupdate>` / `<no autoupdate>` marker slot rendering (CMC-05), plugin-row effective-state icon set (CMC-06), marketplace-row outcome-class icon (CMC-07).
+- *Per-scope rendering, fold rule, and adoption (display semantics):* per-scope marketplace and plugin headers / rows with name-primary case-insensitive `localeCompare` sort and project-before-user tie-breaker (CMC-03); orphan plugin folding under user-scope marketplace headers + adoption when a project-scope marketplace is later added (CMC-21).
+- *Status tokens at the callsite:* `(upgradable)` rendered only by `list`, never on install / update / uninstall / reinstall result rows (CMC-09); empty-result bare-token form `(no marketplaces)` / `(no plugins)` routed via `notifySuccess` (CMC-10).
+- *Soft-dep markers (D-13 expansion):* `{requires pi-subagents}` / `{requires pi-mcp}` per-row emission on installed / updated / reinstalled rows, on `list`-rendering `(available)` / `(installed)` rows, and per-row inside `import` / `update` / `reinstall` cascades (CMC-12, CMC-13). Today's aggregated trailer goes away; `PluginListEntry` (or the orchestrator's pre-render payload) gains `declaresAgents` / `declaresMcp` predicates so the renderer can probe per-row.
+- *Reload hint, manual recovery, rollback-partial, cause chain:* reload hint coexists with the partial-failure recovery anchor (CMC-15); manual recovery emits as a separate top-level compact line with system-level resource name discipline (CMC-16); rollback-partial uses the `(failed) {rollback partial}` parent + indented per-phase children form (CMC-17); cause chains render as `cause: <link1> -> <link2> -> ...` bounded to depth 5 with `(truncated)` suffix (CMC-18).
+- *Severity routing:* cascade summaries route via `notifyWarning` when any row is non-trivially `(skipped)` or `(failed)`, via `notifySuccess` when every row is trivially-successful or trivially-`(skipped) {up-to-date}`, never via `notifyError` (CMC-20).
+- *Per-command conformance against the catalog:* `list` (CMC-22), single-plugin `install` (CMC-23), single-plugin `uninstall` (CMC-24), `reinstall` cascade (CMC-25), `update` cascade (CMC-26), `import` cascade (CMC-27), `bootstrap` (CMC-28), `marketplace list` (CMC-29), `marketplace add` (CMC-30), `marketplace remove` conditional form (CMC-31), `marketplace update` (CMC-32), `marketplace autoupdate enable|disable` (CMC-33), entity-shaped non-cascade errors as compact lines + sentence-form usage errors (CMC-34).
+- *ES-5 atomic three-file edit:* `shared/markers.ts` + `tests/architecture/markers-snapshot.test.ts` + `docs/prd/pi-claude-marketplace-prd.md` §6.12 in a single commit (CMC-35) per the style-guide §15 supersession contract. The snapshot test's prefix-extraction shape is structurally incompatible with the new tokenised forms; this is why the edit is atomic.
+
+**Success Criteria** (what must be TRUE):
+
+1. Every command listed in `docs/output-catalog.md` produces output byte-identical to the catalog's rendered example for each of its rendered states (success, mixed, all-failed, all-unchanged, empty, usage error). Per-command UAT against catalog examples passes for: `list`, `install`, `uninstall`, `reinstall`, `update`, `import`, `bootstrap`, `marketplace list`, `marketplace add`, `marketplace remove`, `marketplace update`, `marketplace autoupdate enable|disable`.
+2. The legacy ES-5 marker strings (`pi-subagents is not loaded; …`, `pi-mcp-adapter is not loaded; …`, `Run /reload to <verb> …`, `MANUAL RECOVERY REQUIRED: …`, `(rollback partial: [<phase>] <msg>; …)`) are gone from the codebase -- AST / `grep` audit returns zero matches in user-visible emission sites. The atomic three-file commit (`shared/markers.ts` + `tests/architecture/markers-snapshot.test.ts` + PRD §6.12) is present in git history as a single commit.
+3. Per-row soft-dep markers (`{requires pi-subagents}` / `{requires pi-mcp}`) fire correctly: emitted on installed / updated / reinstalled rows and on `list` `(available)` / `(installed)` rows when the predicate holds; absent from `(uninstalled)` rows; never aggregated into a single trailing sentence (the legacy aggregated emission is gone).
+4. Per-scope rendering works end-to-end: a marketplace that exists in both scopes renders as two separate headers (one per scope, each with its own marker / status / reasons); the plugin-list orphan fold rule and the marketplace-add adoption behavior round-trip correctly (orphan plugins fold under user-scope, get adopted when a project-scope marketplace is later added).
+5. Cascade severity routes per MSG-SR-4..6: an all-trivial cascade uses `notifySuccess`; a cascade with any non-trivial `(skipped)` or `(failed)` row uses `notifyWarning`; no cascade summary uses `notifyError`. The reload-hint trailer fires exactly once per body when any resource changed; omitted on all-failed cascades and bare manifest-only refreshes; coexists with the recovery anchor (reload above retry, blank line between) on partial-failure remove surfaces.
+
+**Plans:** TBD
+
+### Phase 14: Drift Guard & Test Alignment
+
+**Goal:** Lock the contract by adding a test suite that reads the style-guide YAML frontmatter (`status_tokens:`, `reasons:`, `markers:`, `pattern_classes:`) plus the normative `MSG-*` IDs as the binding contract. `npm run check` fails when a callsite emits a token outside the closed sets or violates an MSG-* rule. After this phase, the milestone's user-contract is enforced structurally -- no future commit can silently drift.
+
+**Depends on:** Phase 13 (every callsite must already conform; otherwise the drift guard would fail on landing).
+
+**Requirements:** CMC-38
+
+**Scope:**
+
+- Drift-guard test suite under `tests/architecture/` (or equivalent) that READS the style-guide YAML frontmatter at test time -- NOT a duplicated list in the test code. The frontmatter is the binding contract; the test asserts conformance.
+- Token-set assertions: every status token rendered anywhere in the codebase belongs to the frontmatter `status_tokens:` set; every reason belongs to `reasons:`; every marker belongs to `markers:`; every callsite's `pattern_class` (inventory-classified or AST-detected) belongs to `pattern_classes:`.
+- MSG-* rule assertions: token order per MSG-GR-1; `@<marketplace>` carve-out per MSG-GR-2; per-scope rendering and flat-list (no group headers) per MSG-GR-3; reasons-block formatting per MSG-GR-4; marker slot position per MSG-GR-5; effective-state icon predicate per MSG-IC-1..3; severity routing per MSG-SR-1..7; reload-hint emission predicate per MSG-RH-1; soft-dep predicate per MSG-SD-1..3; manual-recovery and rollback-partial formatting per MSG-MR-1..2 and MSG-RP-1; cause-chain trailer per MSG-CC-1; non-cascade vs usage error split per MSG-NC-1..2; empty-result bare token per MSG-ER-1; sanctioned `console.warn` discipline per MSG-LC-1..2.
+- Drift-guard suite is `npm run check`-gated: a failing assertion fails the check, blocking merge.
+
+**Success Criteria** (what must be TRUE):
+
+1. The drift-guard suite parses `docs/messaging-style-guide.md` YAML frontmatter at test time and asserts every closed-set token used by any callsite is a member of the corresponding frontmatter list. An intentional planted violation (in a test fixture or a removed-then-restored callsite) makes `npm run check` fail with a clear, locatable error.
+2. Each normative MSG-* ID has at least one assertion in the suite that, if violated, fails the test with the rule ID in the failure message (`MSG-GR-1`, `MSG-IC-3`, `MSG-SR-5`, etc.). A reviewer can map a failure back to the style-guide rule without code archaeology.
+3. The frontmatter is the SOLE source of truth for the closed sets; no test file duplicates the lists. Modifying the frontmatter (e.g. adding a reason in a future v1.4) requires no changes to the drift-guard test code -- only callsites consuming the new value need code changes, and the guard automatically accepts the new value.
+4. `npm run check` is green after Phase 13 + Phase 14 land together: typecheck + ESLint + Prettier + the existing test suite + the new drift-guard suite all pass on the v1.3 milestone close commit.
+5. The milestone is complete: every CMC-01..38 requirement has its traceability row marked `Complete` (Phase 12 / Phase 13 / Phase 14 as appropriate); the v1.3 line in REQUIREMENTS.md Coverage block shows 38/38 mapped and complete.
+
+**Plans:** TBD
+
 ## Progress
 
-**Execution Order:** 8 → 9 (v1.1 milestone scope). v1.0 executed 1 → 2 → 3 → 4 → 5 → 6 → 7; v1.2 added 10 → 11.
+**Execution Order:** 8 → 9 (v1.1 milestone); 10 → 11 (v1.2 milestone); 12 → 13 → 14 (v1.3 milestone). v1.0 executed 1 → 2 → 3 → 4 → 5 → 6 → 7.
 
-| Phase | Goal | Requirements | Plans | Status | Completed |
-| ----- | ---- | ------------ | ----- | ------ | --------- |
-| 8. Atomic Reinstall Core | Atomic single-plugin reinstall with preserve-old-on-failure semantics | PRL-02, PRL-06, PRL-07, PRL-08, PRL-09, PRL-10, PRL-11, PRL-12 | 4/4 plans | Complete | 2026-05-14 |
-| 9. Reinstall Edge & Bulk UX | Command routing, batch forms, scope, completion, output, docs | PRL-01, PRL-03, PRL-04, PRL-05, PRL-13, PRL-14, PRL-15, PRL-16 | 4/4 plans | Complete | 2026-05-14 |
-| 10. Claude Settings Import Foundation (v1.2) | Pure import-planning foundation | IMP-04..IMP-08 | 3/3 plans | Complete | 2026-05-14 |
-| 11. Import Command Orchestration (v1.2) | `/claude:plugin import` command | IMP-01..IMP-03, IMP-09..IMP-11 | 3/3 plans | Complete | 2026-05-14 |
+| Phase                                        | Goal                                                                              | Requirements                                                                                                                                              | Plans      | Status      | Completed  |
+| -------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ----------- | ---------- |
+| 8. Atomic Reinstall Core                     | Atomic single-plugin reinstall with preserve-old-on-failure semantics             | PRL-02, PRL-06, PRL-07, PRL-08, PRL-09, PRL-10, PRL-11, PRL-12                                                                                            | 4/4 plans  | Complete    | 2026-05-14 |
+| 9. Reinstall Edge & Bulk UX                  | Command routing, batch forms, scope, completion, output, docs                     | PRL-01, PRL-03, PRL-04, PRL-05, PRL-13, PRL-14, PRL-15, PRL-16                                                                                            | 4/4 plans  | Complete    | 2026-05-14 |
+| 10. Claude Settings Import Foundation (v1.2) | Pure import-planning foundation                                                   | IMP-04..IMP-08                                                                                                                                            | 3/3 plans  | Complete    | 2026-05-14 |
+| 11. Import Command Orchestration (v1.2)      | `/claude:plugin import` command                                                   | IMP-01..IMP-03, IMP-09..IMP-11                                                                                                                            | 3/3 plans  | Complete    | 2026-05-14 |
+| 12. Messaging Foundations (v1.3)             | Closed-set constants, renderer/notify primitives, reload-hint collapse            | CMC-08, CMC-11, CMC-14, CMC-19, CMC-36, CMC-37                                                                                                            | 0/? plans  | Not started | --         |
+| 13. Conformance Refactor & ES-5 (v1.3)       | Mechanical callsite rewrite + ES-5 atomic edit + per-command catalog conformance  | CMC-01..07, CMC-09, CMC-10, CMC-12, CMC-13, CMC-15..18, CMC-20, CMC-21, CMC-22..34, CMC-35                                                                | 0/? plans  | Not started | --         |
+| 14. Drift Guard & Test Alignment (v1.3)      | Frontmatter-driven drift test suite that fails `npm run check` on contract drift  | CMC-38                                                                                                                                                    | 0/? plans  | Not started | --         |
 
-## Coverage
+## Coverage (v1.3)
 
-| Requirement | Phase | Status |
-| ----------- | ----- | ------ |
-| PRL-01 | Phase 9 | Complete |
-| PRL-02 | Phase 8 | Complete |
-| PRL-03 | Phase 9 | Complete |
-| PRL-04 | Phase 9 | Complete |
-| PRL-05 | Phase 9 | Complete |
-| PRL-06 | Phase 8 | Complete |
-| PRL-07 | Phase 8 | Complete |
-| PRL-08 | Phase 8 | Complete |
-| PRL-09 | Phase 8 | Complete |
-| PRL-10 | Phase 8 | Complete |
-| PRL-11 | Phase 8 | Complete |
-| PRL-12 | Phase 8 | Complete |
-| PRL-13 | Phase 9 | Complete |
-| PRL-14 | Phase 9 | Complete |
-| PRL-15 | Phase 9 | Complete |
-| PRL-16 | Phase 9 | Complete |
+| Requirement | Phase    | Status  |
+| ----------- | -------- | ------- |
+| CMC-01      | Phase 13 | Pending |
+| CMC-02      | Phase 13 | Pending |
+| CMC-03      | Phase 13 | Pending |
+| CMC-04      | Phase 13 | Pending |
+| CMC-05      | Phase 13 | Pending |
+| CMC-06      | Phase 13 | Pending |
+| CMC-07      | Phase 13 | Pending |
+| CMC-08      | Phase 12 | Pending |
+| CMC-09      | Phase 13 | Pending |
+| CMC-10      | Phase 13 | Pending |
+| CMC-11      | Phase 12 | Pending |
+| CMC-12      | Phase 13 | Pending |
+| CMC-13      | Phase 13 | Pending |
+| CMC-14      | Phase 12 | Pending |
+| CMC-15      | Phase 13 | Pending |
+| CMC-16      | Phase 13 | Pending |
+| CMC-17      | Phase 13 | Pending |
+| CMC-18      | Phase 13 | Pending |
+| CMC-19      | Phase 12 | Pending |
+| CMC-20      | Phase 13 | Pending |
+| CMC-21      | Phase 13 | Pending |
+| CMC-22      | Phase 13 | Pending |
+| CMC-23      | Phase 13 | Pending |
+| CMC-24      | Phase 13 | Pending |
+| CMC-25      | Phase 13 | Pending |
+| CMC-26      | Phase 13 | Pending |
+| CMC-27      | Phase 13 | Pending |
+| CMC-28      | Phase 13 | Pending |
+| CMC-29      | Phase 13 | Pending |
+| CMC-30      | Phase 13 | Pending |
+| CMC-31      | Phase 13 | Pending |
+| CMC-32      | Phase 13 | Pending |
+| CMC-33      | Phase 13 | Pending |
+| CMC-34      | Phase 13 | Pending |
+| CMC-35      | Phase 13 | Pending |
+| CMC-36      | Phase 12 | Pending |
+| CMC-37      | Phase 12 | Pending |
+| CMC-38      | Phase 14 | Pending |
 
 **Coverage:**
-- v1.1 requirements: 16 total
-- Mapped to phases: 16
+
+- v1.3 requirements: 38 total (CMC-01..38)
+- Mapped to phases: 38 (100%)
 - Unmapped: 0 ✓
+- Orphans: 0
+- Duplicates: 0
+
+**Per-phase distribution (v1.3):**
+
+| Phase | REQ-IDs                                                                                                                                                                                                                            | Count |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| 12    | CMC-08, CMC-11, CMC-14, CMC-19, CMC-36, CMC-37                                                                                                                                                                                     | 6     |
+| 13    | CMC-01, CMC-02, CMC-03, CMC-04, CMC-05, CMC-06, CMC-07, CMC-09, CMC-10, CMC-12, CMC-13, CMC-15, CMC-16, CMC-17, CMC-18, CMC-20, CMC-21, CMC-22, CMC-23, CMC-24, CMC-25, CMC-26, CMC-27, CMC-28, CMC-29, CMC-30, CMC-31, CMC-32, CMC-33, CMC-34, CMC-35 | 31    |
+| 14    | CMC-38                                                                                                                                                                                                                             | 1     |
+
+## Phase Sequencing Rationale (v1.3)
+
+The style guide's §19 cross-references name two consumer phases by intent: a conformance refactor that consumes the guide as the input contract, and a drift-guard suite that consumes the guide's YAML frontmatter as the binding contract. A foundation phase precedes the conformance refactor because the renderer plumbing it consumes is non-trivial: the `<marker>` slot rendering, the per-row soft-dep predicate (requiring `PluginListEntry` to gain `declaresAgents` / `declaresMcp` fields), the `cascadeSummary({ marketplace, scope, rows })` API shape, and the single-canonical reload-hint composer collapse are all primitives that must exist before any callsite can adopt them. CMC-08 (status-token closed set) and CMC-11 (reasons closed set) also belong here because they define what the closed-set tokens *are* before Phase 13's mechanical rewrite consumes them.
+
+The ES-5 atomic three-file edit (CMC-35) lives in Phase 13 per the style-guide §15 supersession contract -- the `tests/architecture/markers-snapshot.test.ts` prefix-extraction shape is structurally incompatible with the new tokenised forms, so the snapshot, the markers source, and the PRD §6.12 row must change in one commit. Splitting that edit across phases would necessarily fail `npm run check` mid-phase.
+
+The display-semantics changes (CMC-21: per-scope marketplaces and plugins, plugin folding, adoption at marketplace-add time) live in Phase 13 because they are callsite-level changes -- the renderer reads per-scope state and folds orphan plugins under user-scope headers; the marketplace-add orchestrator's adoption behavior is a state-mutation change driven by the same per-scope rendering contract. Both are consumed by the same callsite rewrite pass.
+
+The drift-guard suite (CMC-38) lands LAST because it asserts conformance for every callsite; running it before Phase 13's mechanical refactor completes would fail on every still-legacy callsite. Phase 14 is the milestone gate: when Phase 14 lands green, the user-contract is enforced structurally and no future commit can silently drift.
+
+## Stable User-Contract Boundary (v1.3)
+
+D-30 locks the style guide + catalog as the v1.3 user-contract. The ES-5 supersession (the five marker strings in PRD §6.12 ES-5) is the ONLY user-contract change in this milestone -- everything else is an internal refactor that preserves observable lifecycle / scope / reload-hint / soft-dep / retry-safety contracts but normalizes how each surface renders. Phase 13's atomic three-file commit (CMC-35) is the boundary.
 
 ## Research Notes
 
-- Phase 8 should receive deeper design attention during planning for bridge backup/restore details and rollback-failure/manual-recovery semantics.
-- Phase 9 follows existing update/router/completion patterns and should not need external research unless Phase 8 changes the result model.
+- v1.3 has no separate research artifact. The style guide (`docs/messaging-style-guide.md` v1.0) and the per-command output catalog (`docs/output-catalog.md`) ARE the input contract. Phase 12 reads them as scaffolding requirements; Phase 13 reads them as the conformance target; Phase 14 reads the style guide's YAML frontmatter as the binding drift-guard contract.
+- Phase 8 should receive deeper design attention during planning for bridge backup/restore details and rollback-failure/manual-recovery semantics. (Historical note; Phase 8 complete.)
+- Phase 9 follows existing update/router/completion patterns and should not need external research unless Phase 8 changes the result model. (Historical note; Phase 9 complete.)
 
----
+______________________________________________________________________
+
 *Roadmap created: 2026-05-13 for milestone v1.1 Reinstall Command*
 *Last updated: 2026-05-14 after Phase 8 completion*
 *Last updated: 2026-05-14 after Phase 9 completion*
 *Last updated: 2026-05-16 after merge from main brought in v1.2 phases 10 & 11.*
+*Last updated: 2026-05-22 -- v1.3 Consistent Messaging milestone added: Phases 12 (Foundations), 13 (Conformance Refactor & ES-5), 14 (Drift Guard). 38/38 CMC requirements mapped (100% coverage). Continued phase numbering from 11; no reset.*

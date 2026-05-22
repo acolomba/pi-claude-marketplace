@@ -727,44 +727,44 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | PRL-14      | Phase 9  | Complete |
 | PRL-15      | Phase 9  | Complete |
 | PRL-16      | Phase 9  | Complete |
-| CMC-01      | TBD      | Pending  |
-| CMC-02      | TBD      | Pending  |
-| CMC-03      | TBD      | Pending  |
-| CMC-04      | TBD      | Pending  |
-| CMC-05      | TBD      | Pending  |
-| CMC-06      | TBD      | Pending  |
-| CMC-07      | TBD      | Pending  |
-| CMC-08      | TBD      | Pending  |
-| CMC-09      | TBD      | Pending  |
-| CMC-10      | TBD      | Pending  |
-| CMC-11      | TBD      | Pending  |
-| CMC-12      | TBD      | Pending  |
-| CMC-13      | TBD      | Pending  |
-| CMC-14      | TBD      | Pending  |
-| CMC-15      | TBD      | Pending  |
-| CMC-16      | TBD      | Pending  |
-| CMC-17      | TBD      | Pending  |
-| CMC-18      | TBD      | Pending  |
-| CMC-19      | TBD      | Pending  |
-| CMC-20      | TBD      | Pending  |
-| CMC-21      | TBD      | Pending  |
-| CMC-22      | TBD      | Pending  |
-| CMC-23      | TBD      | Pending  |
-| CMC-24      | TBD      | Pending  |
-| CMC-25      | TBD      | Pending  |
-| CMC-26      | TBD      | Pending  |
-| CMC-27      | TBD      | Pending  |
-| CMC-28      | TBD      | Pending  |
-| CMC-29      | TBD      | Pending  |
-| CMC-30      | TBD      | Pending  |
-| CMC-31      | TBD      | Pending  |
-| CMC-32      | TBD      | Pending  |
-| CMC-33      | TBD      | Pending  |
-| CMC-34      | TBD      | Pending  |
-| CMC-35      | TBD      | Pending  |
-| CMC-36      | TBD      | Pending  |
-| CMC-37      | TBD      | Pending  |
-| CMC-38      | TBD      | Pending  |
+| CMC-01      | Phase 13 | Pending  |
+| CMC-02      | Phase 13 | Pending  |
+| CMC-03      | Phase 13 | Pending  |
+| CMC-04      | Phase 13 | Pending  |
+| CMC-05      | Phase 13 | Pending  |
+| CMC-06      | Phase 13 | Pending  |
+| CMC-07      | Phase 13 | Pending  |
+| CMC-08      | Phase 12 | Pending  |
+| CMC-09      | Phase 13 | Pending  |
+| CMC-10      | Phase 13 | Pending  |
+| CMC-11      | Phase 12 | Pending  |
+| CMC-12      | Phase 13 | Pending  |
+| CMC-13      | Phase 13 | Pending  |
+| CMC-14      | Phase 12 | Pending  |
+| CMC-15      | Phase 13 | Pending  |
+| CMC-16      | Phase 13 | Pending  |
+| CMC-17      | Phase 13 | Pending  |
+| CMC-18      | Phase 13 | Pending  |
+| CMC-19      | Phase 12 | Pending  |
+| CMC-20      | Phase 13 | Pending  |
+| CMC-21      | Phase 13 | Pending  |
+| CMC-22      | Phase 13 | Pending  |
+| CMC-23      | Phase 13 | Pending  |
+| CMC-24      | Phase 13 | Pending  |
+| CMC-25      | Phase 13 | Pending  |
+| CMC-26      | Phase 13 | Pending  |
+| CMC-27      | Phase 13 | Pending  |
+| CMC-28      | Phase 13 | Pending  |
+| CMC-29      | Phase 13 | Pending  |
+| CMC-30      | Phase 13 | Pending  |
+| CMC-31      | Phase 13 | Pending  |
+| CMC-32      | Phase 13 | Pending  |
+| CMC-33      | Phase 13 | Pending  |
+| CMC-34      | Phase 13 | Pending  |
+| CMC-35      | Phase 13 | Pending  |
+| CMC-36      | Phase 12 | Pending  |
+| CMC-37      | Phase 12 | Pending  |
+| CMC-38      | Phase 14 | Pending  |
 
 **Coverage:**
 
@@ -772,8 +772,8 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 - Mapped to phases: 205 (97.6%) -- MA-7 superseded by D-21 (Phase 1 adopted isomorphic-git, removing the "git CLI not found" failure mode); MU-2 and MU-3 superseded by Phase 4 D-14 (follow-upstream-blindly semantics; the local marketplace clone is read-only by contract, so non-fast-forward divergence cannot occur); PR-4 superseded by Phase 5 D-07 (custom componentPath arrays now SUPPLEMENT defaults rather than replace them; behavior corrected vs V1 per COMP-01 / Gap 3); PI-15 superseded by Phase 7 D-08 (per-scope lock acquisition fails losers with `STATE_LOCK_HELD_PREFIX` before state-guard commit)
 - v1.1 requirements: 16 total (PRL-01..16), all mapped to Phases 8/9.
 - v1.2 requirements: 11 total (IMP-01..11), all mapped to Phases 10/11.
-- v1.3 requirements: 38 total (CMC-01..38), phase mapping TBD (filled by `/gsd:new-milestone` roadmapper run).
-- Unmapped: 0 (MA-7, MU-2, MU-3, PR-4, PI-15 are superseded, not unmapped; v1.3 CMC-01..38 are pending roadmap)
+- v1.3 requirements: 38 total (CMC-01..38), all mapped to Phases 12/13/14 (Phase 12: CMC-08, CMC-11, CMC-14, CMC-19, CMC-36, CMC-37; Phase 13: CMC-01..07, CMC-09, CMC-10, CMC-12, CMC-13, CMC-15..18, CMC-20, CMC-21, CMC-22..34, CMC-35; Phase 14: CMC-38).
+- Unmapped: 0 (MA-7, MU-2, MU-3, PR-4, PI-15 are superseded, not unmapped; v1.3 CMC-01..38 are mapped to Phases 12/13/14)
 
 **Per-phase counts:**
 

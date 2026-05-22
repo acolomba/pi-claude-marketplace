@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-05-22T02:11:10.004Z"
 last_activity: 2026-05-22
 progress:
-  total_phases: 0
+  total_phases: 3
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -23,10 +23,10 @@ See: .planning/PROJECT.md (updated 2026-05-21)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Not started (planning complete; ready for `/gsd:plan-phase 12`)
 Plan: --
-Status: Defining requirements
-Last activity: 2026-05-22 -- Milestone v1.3 started
+Status: Planning -- roadmap landed
+Last activity: 2026-05-22 -- v1.3 roadmap created (Phases 12, 13, 14; 38/38 CMC mapped)
 
 ## Performance Metrics
 
@@ -101,6 +101,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 08]: reinstallPlugin holds withLockedStateTransaction across prepare, bridge replacement, explicit state save, and rollback; data/cache cleanup failures are warning-only after commit. -- Plan 08-04 completed PRL-09/10/11/12.
 - [Phase 09]: reinstallPlugins provides update-analogous bulk target forms, deterministic partitions, reload-hint aggregation, soft-dependency aggregation, and quiet single-plugin rendering for batch UX. -- Plan 09-01 completed PRL-03/04/05/13/14/15.
 - [Phase 09]: /claude:plugin reinstall is routed, registered, documented, and completed with installed-only tab completion plus reinstall-specific --force. -- Plans 09-02/09-03/09-04 completed PRL-01/16 and final validation.
+- [Roadmap v1.3]: D-30 locks `docs/messaging-style-guide.md` v1.0 + `docs/output-catalog.md` as the v1.3 user-contract, superseding PRD §6.12 ES-5 marker strings.
+- [Roadmap v1.3]: v1.3 phases = 12 (Foundations) + 13 (Conformance Refactor & ES-5) + 14 (Drift Guard). 38/38 CMC requirements mapped (CMC-08/11/14/19/36/37 → Phase 12; CMC-01..07/09/10/12/13/15..18/20/21/22..34/35 → Phase 13; CMC-38 → Phase 14).
+- [Roadmap v1.3]: ES-5 atomic three-file edit (`shared/markers.ts` + `tests/architecture/markers-snapshot.test.ts` + PRD §6.12) lives in Phase 13 (CMC-35) per style guide §15 supersession contract -- snapshot test's prefix-extraction shape is structurally incompatible with new tokenised forms, so the deferral is mandatory.
+- [Roadmap v1.3]: Drift guard reads style-guide YAML frontmatter as binding contract (no duplicated lists in test code); placed last because it asserts conformance for every callsite.
 
 ### Pending Todos
 
@@ -127,6 +131,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-14T01:31:04.000Z
-Stopped At: Phase 09 complete; v1.1 milestone ready for completion
+Last session: 2026-05-22T02:11:10.004Z
+Stopped At: v1.3 roadmap landed; ready for `/gsd:plan-phase 12`
 Resume File: None
