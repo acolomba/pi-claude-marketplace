@@ -502,15 +502,14 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   };
 
   // CMC-32 binding: when autoupdate is OFF (manifest-only refresh)
-  // emit the bare marketplace row -- no cascade children.
+  // emit the bare marketplace row -- no cascade children, no
+  // reload-hint trailer (catalog lines 659-666: the autoupdate-off
+  // case shows just the marketplace row; no resources actually
+  // changed on the user's filesystem -- the manifest read is a
+  // bookkeeping refresh on the local clone, not a generated-resource
+  // update).
   if (!snapshot.autoupdate || pluginUpdate === undefined) {
-    const body = renderRow(headerRow, probe);
-    // RH-1: the manifest was refreshed (a `marketplace update` is
-    // implicitly a resource refresh from the operator's perspective);
-    // surface the reload-hint trailer so subsequent /reload picks up
-    // any manifest-driven differences.
-    const hint = reloadHint([name]);
-    notifySuccess(ctx, appendReloadHint(body, hint));
+    notifySuccess(ctx, renderRow(headerRow, probe));
     return;
   }
 
