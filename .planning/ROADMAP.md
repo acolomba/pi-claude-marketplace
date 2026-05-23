@@ -188,7 +188,7 @@ Plans:
 4. Per-scope rendering works end-to-end: a marketplace that exists in both scopes renders as two separate headers (one per scope, each with its own marker / status / reasons); the plugin-list orphan fold rule and the marketplace-add adoption behavior round-trip correctly (orphan plugins fold under user-scope, get adopted when a project-scope marketplace is later added).
 5. Cascade severity routes per MSG-SR-4..6: an all-trivial cascade uses `notifySuccess`; a cascade with any non-trivial `(skipped)` or `(failed)` row uses `notifyWarning`; no cascade summary uses `notifyError`. The reload-hint trailer fires exactly once per body when any resource changed; omitted on all-failed cascades and bare manifest-only refreshes; coexists with the recovery anchor (reload above retry, blank line between) on partial-failure remove surfaces.
 
-**Plans:** 8 plans
+**Plans:** 1/9 plans executed
 
 Plans:
 
