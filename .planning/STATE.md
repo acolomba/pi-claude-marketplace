@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Consistent Messaging
-status: executing
-stopped_at: Phase 13 context gathered
-last_updated: "2026-05-23T15:43:18.309Z"
-last_activity: 2026-05-23 -- Phase 13 execution started
+status: blocked
+stopped_at: Phase 13 wave 9 halted — 6 legacy ES-5 marker callsites need continuation plan before 13-03-02 can land (manual-recovery: 3 bridges/stage.ts + orchestrators/plugin/reinstall.ts errorWithManualRecovery; rollback-partial: transaction/rollback.ts D-03 chokepoint + tests/transaction/rollback.test.ts D-03 contract tests)
+last_updated: "2026-05-23T23:35:00.000Z"
+last_activity: 2026-05-23 -- Phase 13 wave 9 checkpoint: Option A selected (plan continuation sub-wave)
 progress:
   total_phases: 7
   completed_phases: 1
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-21)
 
 ## Current Position
 
-Phase: 13 (conformance-refactor-es-5-supersession) — EXECUTING
-Plan: 1 of 9
-Status: Executing Phase 13
-Last activity: 2026-05-23 -- Phase 13 execution started
+Phase: 13 (conformance-refactor-es-5-supersession) — BLOCKED at Wave 9
+Plan: 9 of 9 (8 complete; 13-03-02 blocked pending continuation sub-wave)
+Status: Phase 13 partial — 8/9 plans landed, Wave 9 checkpoint requires a continuation plan
+Last activity: 2026-05-23 -- Phase 13 wave 9 checkpoint: Option A selected (plan continuation sub-wave)
 
 ## Performance Metrics
 
