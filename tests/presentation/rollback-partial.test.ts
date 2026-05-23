@@ -38,16 +38,18 @@ test("MSG-RP-1: parent + 2 children render with 2-space-indented children below 
   };
   const children: readonly RollbackChild[] = [
     { kind: "rollback-child", phaseLabel: "agents", status: "failed", reasons: ["unparseable"] },
-    { kind: "rollback-child", phaseLabel: "mcp", status: "rollback failed", reasons: ["unparseable"] },
+    {
+      kind: "rollback-child",
+      phaseLabel: "mcp",
+      status: "rollback failed",
+      reasons: ["unparseable"],
+    },
   ];
   const out = renderRollbackPartial(parent, children, PROBE);
   const lines = out.split("\n");
   assert.equal(lines.length, 3);
   // Parent row first.
-  assert.equal(
-    lines[0],
-    "⊘ alpha@official [user] v1.0.0 (failed) {rollback partial}",
-  );
+  assert.equal(lines[0], "⊘ alpha@official [user] v1.0.0 (failed) {rollback partial}");
   // Children: bare compact level (no leading icon), 2-space indentation.
   assert.equal(lines[1], "  agents (failed) {unparseable}");
   assert.equal(lines[2], "  mcp (rollback failed) {unparseable}");
