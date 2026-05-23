@@ -58,6 +58,7 @@ import {
   type PluginListMarketplaceBlock,
   type PluginListPayload,
 } from "../../presentation/plugin-list.ts";
+import { compareByNameThenScope } from "../../presentation/sort.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { notifyError, notifySuccess } from "../../shared/notify.ts";
 
@@ -600,7 +601,44 @@ export async function loadPluginListPayload(opts: ListPluginsOptions): Promise<P
   const filtered =
     opts.scope === undefined ? blocks : blocks.filter((b) => b.emitScope === opts.scope);
 
-  return { marketplaceBlocks: filtered.map((b) => b.block) };
+  // MSG-GR-3 / CMC-03 sort: pre-sort the marketplace blocks AND the plugin
+  // rows within each block at the orchestrator boundary. The renderer
+  // applies a defensive secondary sort, but the canonical contract is that
+  // the orchestrator owns ordering (D-13-19 / sub-wave 2c precedent --
+  // `marketplace-list.ts` orchestrator likewise sorts before handing off).
+  // `compareByNameThenScope` is the single per-scope MSG-GR-3 comparator.
+  const sortedBlocks = [...filtered].sort((a, b) =>
+    compareByNameThenScope(a.block.header, b.block.header),
+  );
+  const marketplaceBlocks: PluginListMarketplaceBlock[] = sortedBlocks.map(({ block }) => {
+    // Within each block, sort plugin rows (not EmptyTokens) by the same
+    // comparator -- project-before-user tie-break per MSG-GR-3.
+    const sortedPlugins = sortPluginsInBlock(block.plugins);
+    return { ...block, plugins: sortedPlugins };
+  });
+
+  return { marketplaceBlocks };
+}
+
+/**
+ * MSG-GR-3 in-block plugin sort. EmptyTokens pass through unchanged (they
+ * only appear as the SOLE element of a block); all-PluginListRow blocks
+ * sort via `compareByNameThenScope`. Mirrors the renderer's defensive
+ * sort but happens at the orchestrator boundary per D-13-19 (CMC-03).
+ */
+function sortPluginsInBlock(
+  plugins: readonly (PluginListRow | EmptyToken)[],
+): readonly (PluginListRow | EmptyToken)[] {
+  if (plugins.length === 0) {
+    return plugins;
+  }
+
+  if (plugins.some((p) => p.kind === "empty")) {
+    return plugins;
+  }
+
+  const rows = plugins as readonly PluginListRow[];
+  return [...rows].sort((a, b) => compareByNameThenScope(a, b));
 }
 
 /**
