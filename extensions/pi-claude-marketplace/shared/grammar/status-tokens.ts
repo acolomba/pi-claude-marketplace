@@ -1,8 +1,8 @@
 // shared/grammar/status-tokens.ts
 //
-// CMC-08 closed status-token set. The 14 entries below are byte-equal to the
+// CMC-08 closed status-token set. The 15 entries below are byte-equal to the
 // `status_tokens:` block in the binding frontmatter at
-// `docs/messaging-style-guide.md` (lines 3-17). The drift test at
+// `docs/messaging-style-guide.md` (lines 3-18). The drift test at
 // `tests/architecture/grammar-frontmatter.test.ts` asserts set-equality on
 // every CI run, so the frontmatter is the binding contract -- this file is
 // downstream of it and must follow.
@@ -27,16 +27,24 @@
 //     not a replacement. `markers.ts` still owns the legacy ES-5 prefixes
 //     (including `RELOAD_HINT_PREFIX`) until Phase 13's atomic three-file
 //     edit; Phase 12 does not touch markers.ts.
-//
-// CMC-08 reconciliation note: there is NO 15th user-visible token for the
-// reinstall cascade. Phase 12 research (§3.1) confirmed that the cascade-kind
-// discriminant at `orchestrators/types.ts:12` (`ReinstallPluginPartition`) is
-// an internal partition kind never rendered as a parenthesised status token.
-// The 14-token closed set below is the complete status surface.
+//   - D-13-20 (Phase 13): extend the closed set to 15 entries by adding
+//     `"reinstalled"` immediately after `"updated"` (semantic grouping with
+//     the cascade-success tokens). Phase 13 research surfaced a contradiction
+//     between the catalog (which emits `(reinstalled)` on reinstall cascade
+//     rows at `docs/output-catalog.md:147` and §"/claude:plugin reinstall"
+//     lines 351-357) and Phase 12's 14-token closed set. The locked
+//     resolution extends the closed set rather than amending the catalog --
+//     amending the catalog to `(installed)` would lose observability of
+//     which rows the reinstall partition actually processed. Mirror change
+//     lands in the binding frontmatter `status_tokens:` block AND the §3
+//     status-tokens table in the same commit so the
+//     `tests/architecture/grammar-frontmatter.test.ts` byte-equality
+//     assertion stays green.
 
 export const STATUS_TOKENS = [
   "installed",
   "updated",
+  "reinstalled",
   "uninstalled",
   "added",
   "removed",

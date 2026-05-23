@@ -3,6 +3,7 @@ version: 1.0
 status_tokens:
   - installed
   - updated
+  - reinstalled
   - uninstalled
   - added
   - removed
@@ -157,12 +158,13 @@ ______________________________________________________________________
 
 ## 3. Status Tokens
 
-Status tokens are a closed set of 14 values. Every compact line carries exactly one status token in parentheses. The table below enumerates the closed set in canonical order; this order MUST be byte-identical to the `status_tokens:` list in the frontmatter (frontmatter entries are unquoted plain text with no parentheses; rendered examples in this table show the literal in-grammar form with parentheses).
+Status tokens are a closed set of 15 values. Every compact line carries exactly one status token in parentheses. The table below enumerates the closed set in canonical order; this order MUST be byte-identical to the `status_tokens:` list in the frontmatter (frontmatter entries are unquoted plain text with no parentheses; rendered examples in this table show the literal in-grammar form with parentheses).
 
 | Token               | Meaning                                                                                                                                                                                                                                                                                                           | Example render                                                                 |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | `(installed)`       | Plugin record is present in state and all staged resources are committed to disk.                                                                                                                                                                                                                                 | `● commit-commands [project] (installed)`                                      |
 | `(updated)`         | Plugin record advanced from one version to another; staged resources replaced atomically.                                                                                                                                                                                                                         | `● commit-commands [user] v1.2.3 → v1.4.0 (updated)`                           |
+| `(reinstalled)`     | Operation just ran: reinstall partition. Plugin record was atomically replaced in place (same version) on a reinstall cascade row; staged resources re-committed to disk.                                                                                                                                         | `● alpha [user] v1.0.0 (reinstalled)`                                          |
 | `(uninstalled)`     | Plugin record removed from state and all staged resources cleaned from disk. Icon is `○` -- plugin no longer installed, no error.                                                                                                                                                                                 | `○ commit-commands [user] (uninstalled)`                                       |
 | `(added)`           | Marketplace record added to state in the named scope; the source clone is present and the manifest validated.                                                                                                                                                                                                     | `● claude-plugins-official [user] <autoupdate> (added)`                        |
 | `(removed)`         | Marketplace record removed from state in the named scope; the source clone and all installed-plugin records under it are gone.                                                                                                                                                                                    | `● claude-plugins-official [user] (removed)`                                   |
