@@ -4,12 +4,18 @@ import path from "node:path";
 import { test } from "node:test";
 
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import {
-  PI_MCP_ADAPTER_NOT_LOADED,
-  PI_SUBAGENTS_NOT_LOADED,
-} from "../../extensions/pi-claude-marketplace/shared/markers.ts";
 
 import { installTargetWithMockPi, withE2EEnvironment } from "./_helpers.ts";
+
+// Per-row soft-dep marker contract strings (CMC-13 / MSG-SD-1..2). These
+// are NOT closed-set Reasons exported from `shared/grammar/reasons.ts`
+// (they are -- see `requires pi-subagents` / `requires pi-mcp`), but the
+// rendered form inside the `{}` block is what the user observes. The
+// legacy aggregated trailers (PI_SUBAGENTS_NOT_LOADED + PI_MCP_ADAPTER_NOT_LOADED)
+// were retired by Phase 13 sub-wave 2b (D-13-07); the per-row markers
+// inside the PluginInlineRow reasons block replace them.
+const REQUIRES_PI_SUBAGENTS_MARKER = "{requires pi-subagents";
+const REQUIRES_PI_MCP_MARKER = "{requires pi-mcp";
 
 const MATRIX = [
   { subagents: false, mcp: false },
@@ -33,8 +39,13 @@ for (const loaded of MATRIX) {
         .map((notification) => notification.message)
         .join("\n");
 
-      assert.equal(messages.includes(PI_SUBAGENTS_NOT_LOADED), !loaded.subagents);
-      assert.equal(messages.includes(PI_MCP_ADAPTER_NOT_LOADED), !loaded.mcp);
+      // CMC-13 / MSG-SD-1..2: per-row markers fire when (declares AND
+      // !companion_loaded). With subagents not loaded -> agent-installing
+      // plugin emits `{requires pi-subagents}`; with mcp not loaded ->
+      // mcp-installing plugin emits `{requires pi-mcp}`. The aggregated
+      // PI_*_NOT_LOADED trailer is RETIRED per D-13-07.
+      assert.equal(messages.includes(REQUIRES_PI_SUBAGENTS_MARKER), !loaded.subagents);
+      assert.equal(messages.includes(REQUIRES_PI_MCP_MARKER), !loaded.mcp);
 
       const locations = locationsFor("project", env.cwd);
       const agentRecord =

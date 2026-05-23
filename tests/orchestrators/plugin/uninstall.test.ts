@@ -231,12 +231,12 @@ test("PU-1: cascade order observable end-state -- all four bridges' resources re
       assert.equal("hello" in (after.marketplaces["mp"]?.plugins ?? {}), false);
 
       // PU-8: reload hint emitted (verb 'drop'); single dropped name -> "it" form.
+      // CMC-24 / D-13-05 compact-line shape via PluginInlineUninstalledRow +
+      // renderRow. Icon `○` reflects effective post-op state (not installed).
+      // The seed helper uses entry.version "0.0.0" implicitly (no override).
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined); // success
-      assert.match(
-        notifications[0]?.message ?? "",
-        /Uninstalled plugin "hello" from marketplace "mp"\./,
-      );
+      assert.match(notifications[0]?.message ?? "", /○ hello@mp \[project\] v\S+ \(uninstalled\)/);
       assert.match(notifications[0]?.message ?? "", /\/reload to pick up changes$/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -633,16 +633,21 @@ test("PU-8 (b): zero dropped resources -> NO reload hint (cascade injection seam
   });
 });
 
-// RH-5 soft-dep warnings (companion-extension unloaded) -------------
+// MSG-SD-3 -- soft-dep markers structurally absent from (uninstalled) rows
 
-test("RH-5: dropped agents while pi-subagents unloaded -> subagent warning appended", async () => {
+test("MSG-SD-3: uninstall NEVER emits soft-dep markers (structural via PluginInlineUninstalledRow)", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-rh5-"));
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-sd3-"));
     try {
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
 
-      // ctx + pi without the "subagent" tool -> hasLoadedPiSubagents=false.
+      // ctx + pi without the "subagent" or "mcp" tools -> companion deps
+      // both unloaded. In the install / reinstall / update path this would
+      // trigger per-row `{requires pi-subagents}` + `{requires pi-mcp}`
+      // markers; on the uninstall path the marker is structurally
+      // impossible because PluginInlineUninstalledRow has no
+      // declaresAgents/Mcp fields (MSG-SD-3 / D-13-07).
       const { ctx, pi, notifications } = makeCtx({ getAllTools: () => [] });
       await uninstallPlugin({
         ctx,
@@ -654,15 +659,16 @@ test("RH-5: dropped agents while pi-subagents unloaded -> subagent warning appen
       });
 
       assert.equal(notifications.length, 1);
-      assert.match(
-        notifications[0]?.message ?? "",
-        /pi-subagents is not loaded/,
-        "must include pi-subagents warning when agents dropped + companion unloaded",
+      const message = notifications[0]?.message ?? "";
+      assert.equal(
+        message.includes("{requires pi-subagents"),
+        false,
+        "MSG-SD-3: per-row {requires pi-subagents} marker must NOT appear on (uninstalled) rows",
       );
-      assert.match(
-        notifications[0]?.message ?? "",
-        /pi-mcp-adapter is not loaded/,
-        "must include pi-mcp-adapter warning when mcp servers dropped + companion unloaded",
+      assert.equal(
+        message.includes("{requires pi-mcp"),
+        false,
+        "MSG-SD-3: per-row {requires pi-mcp} marker must NOT appear on (uninstalled) rows",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
