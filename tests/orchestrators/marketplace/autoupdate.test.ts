@@ -74,7 +74,7 @@ function makeMarketplaceRecord(
   };
 }
 
-test("MAU-1: enable=true on a single marketplace flips flag from false -> true and emits 'Enabled autoupdate: <name>.'", async () => {
+test("MAU-1 / CMC-33: enable=true on a single marketplace flips false->true and emits `● <mp> [<scope>] <autoupdate>` (marker-as-outcome, no status token)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
@@ -89,11 +89,11 @@ test("MAU-1: enable=true on a single marketplace flips flag from false -> true a
     const after = await loadState(locations.extensionRoot);
     assert.equal(after.marketplaces["mp"]!.autoupdate, true);
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "Enabled autoupdate: mp.");
+    assert.equal(notifications[0]!.message, "● mp [project] <autoupdate>");
   });
 });
 
-test("MAU-1: enable=false flips flag from true -> false and emits 'Disabled autoupdate: <name>.'", async () => {
+test("MAU-1 / CMC-33: enable=false flips true->false and emits `● <mp> [<scope>] <no autoupdate>` (the only surface where `<no autoupdate>` appears)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
@@ -105,11 +105,11 @@ test("MAU-1: enable=false flips flag from true -> false and emits 'Disabled auto
     await setMarketplaceAutoupdate({ ctx, name: "mp", enable: false, scope: "project", cwd });
     const after = await loadState(locations.extensionRoot);
     assert.equal(after.marketplaces["mp"]!.autoupdate, false);
-    assert.equal(notifications[0]!.message, "Disabled autoupdate: mp.");
+    assert.equal(notifications[0]!.message, "● mp [project] <no autoupdate>");
   });
 });
 
-test("MAU-3: idempotent -- already-true + enable=true emits 'Already enabled: <name>.' and does NOT change state", async () => {
+test("MAU-3 / CMC-33: idempotent -- already-true + enable=true emits marker + `{already enabled}` reason; state unchanged", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
@@ -121,11 +121,11 @@ test("MAU-3: idempotent -- already-true + enable=true emits 'Already enabled: <n
     await setMarketplaceAutoupdate({ ctx, name: "mp", enable: true, scope: "project", cwd });
     const after = await loadState(locations.extensionRoot);
     assert.equal(after.marketplaces["mp"]!.autoupdate, true);
-    assert.equal(notifications[0]!.message, "Already enabled: mp.");
+    assert.equal(notifications[0]!.message, "● mp [project] <autoupdate> {already enabled}");
   });
 });
 
-test("MAU-3: idempotent -- already-false + enable=false emits 'Already disabled: <name>.'", async () => {
+test("MAU-3 / CMC-33: idempotent -- already-false + enable=false emits `<no autoupdate>` + `{already disabled}` reason", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
@@ -135,7 +135,7 @@ test("MAU-3: idempotent -- already-false + enable=false emits 'Already disabled:
     });
     const { ctx, notifications } = makeCtx();
     await setMarketplaceAutoupdate({ ctx, name: "mp", enable: false, scope: "project", cwd });
-    assert.equal(notifications[0]!.message, "Already disabled: mp.");
+    assert.equal(notifications[0]!.message, "● mp [project] <no autoupdate> {already disabled}");
   });
 });
 
@@ -152,11 +152,11 @@ test("MAU-4: missing autoupdate field treated as false; enable=true flips it to 
     await setMarketplaceAutoupdate({ ctx, name: "mp", enable: true, scope: "project", cwd });
     const after = await loadState(locations.extensionRoot);
     assert.equal(after.marketplaces["mp"]!.autoupdate, true);
-    assert.equal(notifications[0]!.message, "Enabled autoupdate: mp.");
+    assert.equal(notifications[0]!.message, "● mp [project] <autoupdate>");
   });
 });
 
-test("MAU-4: missing autoupdate field treated as false; enable=false reports 'Already disabled' (idempotent)", async () => {
+test("MAU-4: missing autoupdate field treated as false; enable=false reports `{already disabled}` idempotently", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
@@ -166,11 +166,11 @@ test("MAU-4: missing autoupdate field treated as false; enable=false reports 'Al
     });
     const { ctx, notifications } = makeCtx();
     await setMarketplaceAutoupdate({ ctx, name: "mp", enable: false, scope: "project", cwd });
-    assert.equal(notifications[0]!.message, "Already disabled: mp.");
+    assert.equal(notifications[0]!.message, "● mp [project] <no autoupdate> {already disabled}");
   });
 });
 
-test("MAU-2: bare form (no name) flips every marketplace in scope; mixed changed + unchanged emits both lines", async () => {
+test("MAU-2 / CMC-33: bare form flips every marketplace in scope; mixed changed + unchanged renders TWO row lines joined by newline", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
@@ -189,17 +189,20 @@ test("MAU-2: bare form (no name) flips every marketplace in scope; mixed changed
     assert.equal(after.marketplaces["already"]!.autoupdate, true);
     assert.equal(after.marketplaces["to-flip"]!.autoupdate, true);
 
-    // Both lines present.
-    assert.match(notifications[0]!.message, /Enabled autoupdate: to-flip\./);
-    assert.match(notifications[0]!.message, /Already enabled: already\./);
+    // Both lines present, marker-as-outcome form per CMC-33.
+    assert.match(
+      notifications[0]!.message,
+      /● already \[project\] <autoupdate> \{already enabled\}/,
+    );
+    assert.match(notifications[0]!.message, /● to-flip \[project\] <autoupdate>$/m);
   });
 });
 
-test("SC-6: bare form across both scopes -- explicit empty scopes succeeds with marker string", async () => {
+test("CMC-10 + SC-6: bare form across both empty scopes succeeds with `(no marketplaces)` EmptyToken", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx();
     await setMarketplaceAutoupdate({ ctx, enable: true, cwd }); // no name, no scope
-    assert.equal(notifications[0]!.message, "No marketplaces configured.");
+    assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });
 
@@ -215,7 +218,7 @@ test("Single-name flip across BOTH scopes when --scope omitted: flips in user sc
     await setMarketplaceAutoupdate({ ctx, name: "only", enable: true, cwd });
     // user-scope flip succeeded; project-scope MarketplaceNotFoundError was swallowed gracefully.
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "Enabled autoupdate: only.");
+    assert.equal(notifications[0]!.message, "● only [user] <autoupdate>");
     assert.notEqual(notifications[0]!.severity, "error");
   });
 });

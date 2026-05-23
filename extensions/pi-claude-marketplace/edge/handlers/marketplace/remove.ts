@@ -7,9 +7,15 @@
 //
 // `removeMarketplace` orchestrator requires a `pi: ExtensionAPI` reference
 // for the RH-5 soft-dep probes; the shim factory takes it as a dependency.
+//
+// Phase 13 sub-wave 2c (Plan 13-02c-01 / MSG-NC-2 / MSG-SR-7):
+// argument-parsing failures route through `notifyUsageError`. The
+// CMC-31 / CMC-15 conditional remove form is emitted by the
+// orchestrator -- this shim only delegates after validating the
+// positional/scope shape.
 
 import { removeMarketplace } from "../../../orchestrators/marketplace/remove.ts";
-import { notifyError } from "../../../shared/notify.ts";
+import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
@@ -27,7 +33,7 @@ export function makeRemoveHandler(
         usage: USAGE,
       },
       (message) => {
-        notifyError(ctx, message);
+        notifyUsageError(ctx, message === USAGE ? "Missing required argument." : message, USAGE);
       },
     );
     if (parsed === undefined) {

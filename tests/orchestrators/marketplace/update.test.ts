@@ -121,7 +121,7 @@ function makePluginRecord(): ExtensionState["marketplaces"][string]["plugins"][s
   };
 }
 
-test("MU-1: bare form against empty scope succeeds silently with marker string and NO reload hint", async () => {
+test("CMC-10 + MU-1: bare form against empty scope succeeds with `(no marketplaces)` EmptyToken and NO reload hint", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx();
     const { gitOps } = makeMockGitOps();
@@ -129,7 +129,9 @@ test("MU-1: bare form against empty scope succeeds silently with marker string a
     assert.equal(notifications.length, 1);
     const first = notifications[0];
     assert.ok(first !== undefined);
-    assert.equal(first.message, "No marketplaces configured.");
+    // CMC-10: bare `(no marketplaces)` EmptyToken (formerly the
+    // "No marketplaces configured." sentence; retired by Plan 13-02c-01).
+    assert.equal(first.message, "(no marketplaces)");
     assert.equal(first.message.includes("/reload to pick up changes"), false);
   });
 });
@@ -404,7 +406,13 @@ test("MU-6: cascade skipped when autoupdate=false (default)", async () => {
   });
 });
 
-test("MU-7: partitions render in order updated -> unchanged -> skipped -> failed", async () => {
+test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabetically (regardless of status)", async () => {
+  // Phase 13 / Plan 13-02c-01: the legacy MU-7 partition headers
+  // (`Updated:` / `Unchanged:` / `Skipped:` / `Failed:`) are RETIRED;
+  // cascade rows now interleave alphabetically by name per MSG-GR-3
+  // (`compareByNameThenScope`). The status / icon / reason on each row
+  // carries the partition signal -- the partition labels are no longer
+  // emitted as section headers.
   await withHermeticHome(async ({ cwd }) => {
     await seedGithubMarketplace({
       cwd,
@@ -443,19 +451,29 @@ test("MU-7: partitions render in order updated -> unchanged -> skipped -> failed
       pluginUpdate,
     });
 
-    // The body lists partitions in MU-7 order. Find each label's index
-    // and assert ordering.
     const first = notifications[0];
     assert.ok(first !== undefined);
     const body = first.message;
-    const idxUpdated = body.indexOf("Updated:");
-    const idxUnchanged = body.indexOf("Unchanged:");
-    const idxSkipped = body.indexOf("Skipped:");
-    const idxFailed = body.indexOf("Failed:");
+    // Rows interleave alphabetically: a (updated), b (skipped up-to-date),
+    // c (skipped {up-to-date} via the fallback narrowing), d (failed).
+    // Icons reflect MSG-IC-1..3 dispatch: updated -> ●; trivial skip
+    // {up-to-date} -> ● (plugin still installed); failed -> ⊘. The
+    // narrowSkipReason fallback maps an unmatched `skipped` outcome to
+    // `up-to-date` (the documented permissive default), so `c` also
+    // gets the trivial-skip ● treatment.
+    const idxA = body.indexOf("  ● a [project]");
+    const idxB = body.indexOf("  ● b [project]");
+    const idxC = body.indexOf("  ● c [project]");
+    const idxD = body.indexOf("  ⊘ d [project]");
     assert.ok(
-      idxUpdated < idxUnchanged && idxUnchanged < idxSkipped && idxSkipped < idxFailed,
-      `partition order broken in body:\n${body}`,
+      idxA >= 0 && idxB > idxA && idxC > idxB && idxD > idxC,
+      `row order broken in body:\n${body}`,
     );
+    // Legacy partition headers MUST NOT appear.
+    assert.equal(body.includes("Updated:"), false);
+    assert.equal(body.includes("Unchanged:"), false);
+    assert.equal(body.includes("Skipped:"), false);
+    assert.equal(body.includes("Failed:"), false);
   });
 });
 

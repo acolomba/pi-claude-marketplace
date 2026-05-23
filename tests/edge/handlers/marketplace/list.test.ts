@@ -2,7 +2,7 @@
 //
 // `handleMarketplaceList` is a plain (non-factory) function. It accepts
 // optional --scope and delegates to listMarketplaces. The orchestrator
-// emits the byte-stable "No marketplaces configured." string when state
+// emits the bare CMC-10 EmptyToken form `(no marketplaces)` when state
 // is empty.
 
 import assert from "node:assert/strict";
@@ -57,7 +57,9 @@ test("shim :: no positional calls listMarketplaces with scope: undefined", async
     const { ctx, notifications } = makeCtx(cwd);
     await handleMarketplaceList("", ctx);
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "No marketplaces configured.");
+    // CMC-10: bare `(no marketplaces)` EmptyToken (formerly the
+    // "No marketplaces configured." sentence; retired by Plan 13-02c-01).
+    assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });
 
@@ -66,7 +68,9 @@ test('shim :: --scope user calls listMarketplaces with scope: "user"', async () 
     const { ctx, notifications } = makeCtx(cwd);
     await handleMarketplaceList("--scope user", ctx);
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "No marketplaces configured.");
+    // CMC-10: bare `(no marketplaces)` EmptyToken (formerly the
+    // "No marketplaces configured." sentence; retired by Plan 13-02c-01).
+    assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });
 
@@ -75,6 +79,8 @@ test('shim :: --scope project calls listMarketplaces with scope: "project"', asy
     const { ctx, notifications } = makeCtx(cwd);
     await handleMarketplaceList("--scope project", ctx);
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "No marketplaces configured.");
+    // CMC-10: bare `(no marketplaces)` EmptyToken (formerly the
+    // "No marketplaces configured." sentence; retired by Plan 13-02c-01).
+    assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });

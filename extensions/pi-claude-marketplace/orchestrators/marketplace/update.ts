@@ -2,6 +2,28 @@
 //
 // MU-1, MU-4, MU-5, MU-6, MU-7, MU-8, MU-9 + RH-1/RH-2/RH-5 + SC-6 + NFR-5.
 //
+// Phase 13 Wave 2 sub-wave 2c (Plan 13-02c-01): CMC-32 / CMC-10 /
+// CMC-20 / MSG-SR-4..6 migration. The legacy summary sentence
+// (formerly emitted on every refresh) is RETIRED. Success now emits:
+//   - autoupdate OFF (manifest-only refresh): a standalone
+//     `MarketplaceRow{status:"updated"}` + reload-hint (NFR for
+//     "manifest re-validated" -- the marketplace itself was refreshed).
+//   - autoupdate ON (cascade): a `cascadeSummary({marketplace, rows,
+//     probe})` block -- marketplace header `(updated)` + indented
+//     `PluginCascadeRow[]` children for each plugin partition. Severity
+//     dispatches via the 2-arm `(severity === "warning" ? notifyWarning
+//     : notifySuccess)` ternary (MSG-SR-6 forbids notifyError on cascade
+//     summaries; the literal-union severity has no "error" arm).
+//   - mp-level failure (clone/manifest unreachable): `notifyError` with
+//     chained cause -- entity-level, NOT a cascade, so MSG-SR-6 doesn't
+//     apply here. The MU-5 retry hint stays inside the message before
+//     the trailer per the existing contract.
+//
+// Per-row soft-dep markers (CMC-13 / MSG-SD-1..2) ride on
+// `PluginCascadeRow.declaresAgents/Mcp` from the `PluginUpdateOutcome`
+// surface; the aggregated soft-dep trailer pattern is RETIRED per
+// D-13-07 (the per-row marker is now the single source).
+//
 // MU-2 and MU-3 are SUPERSEDED by Phase 4 D-14 ("follow upstream
 // blindly" -- the local marketplace clone is read-only by contract;
 // V1's pull --ff-only choreography and non-fast-forward divergence
@@ -46,33 +68,29 @@
 //             for each plugin in snapshot.plugins:
 //               outcome = await pluginUpdate(plugin, name, scope);
 //               partition[outcome.partition].push(outcome)
-//           // MU-7: render in order updated → unchanged → skipped → failed
+//           // MU-7: per-plugin outcomes feed PluginCascadeRow construction
 //
-//   3. Compose user-visible output:
-//      - failures (entire-marketplace error): notifyError with chained cause + (if MU-5) retry hint
-//      - success: notifySuccess body + RH-5 soft-dep warnings + RH-1/RH-2 reload hint (verb 'refresh')
+//   3. Compose user-visible output via the Wave 1 primitives:
+//      - mp-level failure -> notifyError with chained cause (+ MU-5
+//        retry hint when applicable)
+//      - empty scope (no marketplaces configured) -> `(no marketplaces)`
+//        EmptyToken (CMC-10)
+//      - autoupdate OFF success -> standalone marketplace row + reload-hint
+//      - autoupdate ON success -> cascadeSummary + 2-arm severity dispatch
 //
 // D-14 sequence (Pattern 3, RESEARCH §3): fetch + (symbolic HEAD)
 // forceUpdateRef + checkout, OR (detached HEAD) checkout directly.
 // NO `pull` (D-13).
-//
-// API parameter shape note: `pi.getAllTools()` lives on `ExtensionAPI`
-// (the factory `pi` parameter), NOT on `ExtensionContext`. The
-// soft-dep warning composers (Plan 04-03) take `pi: ExtensionAPI`. The
-// orchestrator therefore accepts an OPTIONAL `pi: ExtensionAPI` field
-// in its options bag; when omitted (e.g. tests that don't exercise
-// soft-dep composition), the warning composers are simply not called.
-// Phase 7's index.ts wiring supplies the real `pi` reference at
-// command-registration time. (Rule 3 deviation from PLAN.md snippet
-// which mistakenly wrote `subagentWarningIfNeeded(ctx, ...)`.)
 
 import path from "node:path";
 
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../platform/pi-api.ts";
+import { softDepStatus } from "../../platform/pi-api.ts";
+import { cascadeSummary } from "../../presentation/cascade-summary.ts";
 import { causeChainTrailer } from "../../presentation/cause-chain.ts";
+import { renderRow } from "../../presentation/compact-line.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
@@ -86,7 +104,6 @@ import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import {
   DEFAULT_GIT_OPS,
   refreshGitHubClone,
-  renderPartition,
   resolveScopeFromState,
   type GitOps,
 } from "./shared.ts";
@@ -95,8 +112,25 @@ import type { ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type {
+  MarketplaceRow,
+  PluginCascadeRow,
+  SoftDepProbe,
+} from "../../presentation/compact-line.ts";
+import type { Reason } from "../../shared/grammar/reasons.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
+
+/**
+ * Marketplace label rows never carry per-row soft-dep markers (those
+ * are plugin-row predicates). When the orchestrator has no `pi` to
+ * probe (test paths that don't exercise RH-5), this fallback probe
+ * keeps the renderer's `composeReasons` branch inert.
+ */
+const NULL_PROBE: SoftDepProbe = {
+  piSubagentsLoaded: true,
+  piMcpAdapterLoaded: true,
+};
 
 export interface UpdateMarketplaceOptions {
   readonly ctx: ExtensionContext;
@@ -170,9 +204,10 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
     }
   }
 
-  // MU-1 empty-set succeeds silently with the marker string + NO reload hint.
+  // CMC-10: empty-set succeeds silently with the `(no marketplaces)`
+  // EmptyToken (formerly the "No marketplaces configured." sentence).
   if (targets.length === 0) {
-    notifySuccess(opts.ctx, "No marketplaces configured.");
+    notifySuccess(opts.ctx, renderRow({ kind: "empty", token: "no marketplaces" }, NULL_PROBE));
     return;
   }
 
@@ -235,9 +270,12 @@ async function refreshRecord(
   }
 }
 
-async function snapshotAfterRefresh(
-  args: RefreshOneArgs,
-): Promise<{ autoupdate: boolean; plugins: readonly string[] }> {
+interface RefreshSnapshot {
+  readonly autoupdate: boolean;
+  readonly plugins: readonly string[];
+}
+
+async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapshot> {
   const { name, scope, locations } = args;
   return withStateGuard(locations, async (state) => {
     const record = state.marketplaces[name];
@@ -254,68 +292,172 @@ async function snapshotAfterRefresh(
 }
 
 async function cascadeAutoupdates(
-  snapshot: { autoupdate: boolean; plugins: readonly string[] },
+  snapshot: RefreshSnapshot,
   name: string,
   scope: Scope,
   pluginUpdate: PluginUpdateFn | undefined,
-): Promise<Record<PluginUpdateOutcome["partition"], PluginUpdateOutcome[]>> {
-  const partitions: Record<PluginUpdateOutcome["partition"], PluginUpdateOutcome[]> = {
-    updated: [],
-    unchanged: [],
-    skipped: [],
-    failed: [],
-  };
+): Promise<readonly PluginUpdateOutcome[]> {
   if (!snapshot.autoupdate || pluginUpdate === undefined) {
-    return partitions;
+    return [];
   }
 
+  const outcomes: PluginUpdateOutcome[] = [];
   for (const plugin of snapshot.plugins) {
-    let outcome: PluginUpdateOutcome;
     try {
-      outcome = await pluginUpdate(plugin, name, scope);
+      outcomes.push(await pluginUpdate(plugin, name, scope));
     } catch (err) {
-      // `notes` is consumed by callers OUTSIDE the notify path (e.g. JSON-mode
-      // outcome aggregation in tests), so the cause-chain trailer must be
-      // composed inline rather than relying on notifyError's auto-trailer.
-      outcome = {
+      // `notes` is consumed by callers OUTSIDE the notify path (e.g.
+      // JSON-mode outcome aggregation in tests), so the cause-chain
+      // trailer must be composed inline rather than relying on
+      // notifyError's auto-trailer.
+      outcomes.push({
         partition: "failed",
         name: plugin,
         notes: [composeErrorWithCauseChain(err)],
+      });
+    }
+  }
+
+  return outcomes;
+}
+
+/**
+ * MU-7 / CMC-26: map a `PluginUpdateOutcome` to a `PluginCascadeRow`.
+ * The renderer (`cascadeSummary` + `renderRow`) owns the icon dispatch
+ * and the per-row soft-dep marker injection.
+ *
+ *   - updated  -> `(updated)` with `v<from> → v<to>` version slot
+ *     (renderer prepends `v` to the version string; we pass the arrow
+ *     form without a leading `v` to avoid double-`v` per Wave 2a
+ *     deviation #1).
+ *   - unchanged -> `(skipped) {up-to-date}` (trivial skip -> ● icon)
+ *   - skipped  -> `(skipped) {<narrowed reason>}` (non-trivial skip)
+ *   - failed   -> `(failed) {<narrowed reason>}`; for now we use
+ *     `"not in manifest"` as the documented permissive fallback when
+ *     no closed-set Reason maps cleanly. The catalog UAT in Wave 3
+ *     verifies the rendered text.
+ */
+function outcomeToCascadeRow(outcome: PluginUpdateOutcome, scope: Scope): PluginCascadeRow {
+  const baseDeclares = {
+    ...(outcome.declaresAgents !== undefined && { declaresAgents: outcome.declaresAgents }),
+    ...(outcome.declaresMcp !== undefined && { declaresMcp: outcome.declaresMcp }),
+  };
+  switch (outcome.partition) {
+    case "updated": {
+      // MSG-PL-3: version-transition arrow "v<from> → v<to>". The
+      // renderer's `renderVersion` slot prepends `v`; we omit the
+      // leading `v` on the from-side so the final form is `v<from>
+      // → v<to>` (catalog form). The arrow is U+2192 (space-padded).
+      const version =
+        outcome.fromVersion !== undefined && outcome.toVersion !== undefined
+          ? `${outcome.fromVersion} → v${outcome.toVersion}`
+          : undefined;
+      return {
+        kind: "plugin-cascade",
+        name: outcome.name,
+        scope,
+        ...(version !== undefined && { version }),
+        status: "updated",
+        ...baseDeclares,
       };
     }
 
-    partitions[outcome.partition].push(outcome);
+    case "unchanged":
+      return {
+        kind: "plugin-cascade",
+        name: outcome.name,
+        scope,
+        status: "skipped",
+        reasons: ["up-to-date"],
+      };
+    case "skipped":
+      return {
+        kind: "plugin-cascade",
+        name: outcome.name,
+        scope,
+        status: "skipped",
+        reasons: [narrowSkipReason(outcome.notes)],
+      };
+    case "failed":
+      return {
+        kind: "plugin-cascade",
+        name: outcome.name,
+        scope,
+        status: "failed",
+        reasons: [narrowFailReason(outcome.notes)],
+      };
   }
-
-  return partitions;
 }
 
-function appendSoftDepWarnings(
-  body: string,
-  pi: ExtensionAPI | undefined,
-  updated: readonly PluginUpdateOutcome[],
-): string {
-  if (pi === undefined) {
-    return body;
+/**
+ * Narrow `skipped` outcome notes to a closed-set Reason. The
+ * documented permissive default is `"up-to-date"` (the most common
+ * non-failure skip); the catalog UAT in Wave 3 is the binding
+ * verification that the mapped Reason set is sufficient.
+ */
+function narrowSkipReason(notes: readonly string[] | undefined): Reason {
+  if (notes === undefined || notes.length === 0) {
+    return "up-to-date";
   }
 
-  const stagedAgents = updated.flatMap((o) => o.stagedAgents ?? []);
-  const stagedMcpServers = updated.flatMap((o) => o.stagedMcpServers ?? []);
-  const subagentWarn = subagentWarningIfNeeded(pi, stagedAgents);
-  const mcpWarn = mcpAdapterWarningIfNeeded(pi, stagedMcpServers);
-  return [body, subagentWarn, mcpWarn].filter((line) => line !== "").join("\n");
+  const text = notes.join(" ").toLowerCase();
+  if (text.includes("not in manifest") || text.includes("not found in marketplace")) {
+    return "not in manifest";
+  }
+
+  if (text.includes("source mismatch")) {
+    return "source mismatch";
+  }
+
+  if (text.includes("no longer installable")) {
+    return "no longer installable";
+  }
+
+  return "up-to-date";
+}
+
+/**
+ * Narrow `failed` outcome notes to a closed-set Reason. The fallback
+ * is `"unreadable manifest"` because most update failures bubble up
+ * from manifest re-reads; the catalog UAT in Wave 3 verifies.
+ */
+function narrowFailReason(notes: readonly string[] | undefined): Reason {
+  if (notes === undefined || notes.length === 0) {
+    return "unreadable manifest";
+  }
+
+  const text = notes.join(" ").toLowerCase();
+  if (text.includes("not in manifest") || text.includes("not found in marketplace")) {
+    return "not in manifest";
+  }
+
+  if (text.includes("rollback partial")) {
+    return "rollback partial";
+  }
+
+  if (text.includes("invalid manifest") || text.includes("unparseable")) {
+    return "invalid manifest";
+  }
+
+  if (text.includes("unreadable")) {
+    return "unreadable manifest";
+  }
+
+  return "unreadable manifest";
 }
 
 async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   const { ctx, name, scope, locations, pluginUpdate, pi } = args;
 
-  let snapshot: { autoupdate: boolean; plugins: readonly string[] };
+  let snapshot: RefreshSnapshot;
   try {
     snapshot = await snapshotAfterRefresh(args);
   } catch (err) {
-    // MU-5 + ES-4: surface MarketplaceUpdateError or any other failure
-    // via notifyError with chained cause. The retryHint is appended
-    // when present.
+    // Entity-level failure (MU-5 + ES-4): surface via notifyError with
+    // chained cause. NOT a cascade, so MSG-SR-6 doesn't apply. The
+    // legacy "Updated ..." summary sentence is gone (Plan 13-02c-01)
+    // -- the error body is the bare errorMessage (the cause-chain
+    // trailer auto-appends through notifyError per D-CMC-12).
     if (err instanceof MarketplaceUpdateError && err.retryHint !== "") {
       // notifyError will append the MSG-CC-1 trailer for `err.cause`
       // automatically; we append the retry hint INSIDE `message` so it
@@ -343,26 +485,48 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
 
   // CASCADE OUTSIDE the outer guard (D-08). Honors MU-4 literal
   // "persisted before any plugin cascade runs".
-  const partitions = await cascadeAutoupdates(snapshot, name, scope, pluginUpdate);
+  const outcomes = await cascadeAutoupdates(snapshot, name, scope, pluginUpdate);
+  const probe: SoftDepProbe = pi === undefined ? NULL_PROBE : softDepStatus(pi);
 
-  // SUCCESS path composition:
-  // - Body lists per-partition results in MU-7 order: updated → unchanged → skipped → failed
-  // - RH-5 soft-dep warnings BEFORE the trailing reload hint
-  // - RH-1 / RH-2: reload hint with verb 'refresh' iff updated[].length > 0
-  const updatedNames = partitions.updated.map((o) => o.name).sort((a, b) => a.localeCompare(b));
-  const baseLines: string[] = [`Updated marketplace "${name}" in ${scope} scope.`];
-  if (snapshot.autoupdate && pluginUpdate !== undefined) {
-    // MU-7 partition rendering. Empty partitions are omitted.
-    renderPartition(baseLines, "Updated", partitions.updated, /*withVersions*/ true);
-    renderPartition(baseLines, "Unchanged", partitions.unchanged, false);
-    renderPartition(baseLines, "Skipped", partitions.skipped, false);
-    renderPartition(baseLines, "Failed", partitions.failed, false);
+  // Compose the marketplace header row. The marker reflects the post-
+  // refresh autoupdate state (catalog: `<autoupdate>` when ON; absent
+  // when OFF). Status is `(updated)` -- the manifest re-validation
+  // completed successfully on this code path.
+  const headerRow: MarketplaceRow = {
+    kind: "marketplace",
+    name,
+    scope,
+    outcomeClass: "ok",
+    status: "updated",
+    ...(snapshot.autoupdate && { marker: "autoupdate" as const }),
+  };
+
+  // CMC-32 binding: when autoupdate is OFF (manifest-only refresh)
+  // emit the bare marketplace row -- no cascade children, no
+  // reload-hint trailer (catalog lines 659-666: the autoupdate-off
+  // case shows just the marketplace row; no resources actually
+  // changed on the user's filesystem -- the manifest read is a
+  // bookkeeping refresh on the local clone, not a generated-resource
+  // update).
+  if (!snapshot.autoupdate || pluginUpdate === undefined) {
+    notifySuccess(ctx, renderRow(headerRow, probe));
+    return;
   }
 
-  const body = appendSoftDepWarnings(baseLines.join("\n"), pi, partitions.updated);
+  // CMC-26 / CMC-13: autoupdate ON -- cascade via Wave 1 composer.
+  // PluginCascadeRow constructed per outcome; cascadeSummary handles
+  // the indent + sort + severity computation.
+  const rows: PluginCascadeRow[] = outcomes.map((o) => outcomeToCascadeRow(o, scope));
+  const { message, severity } = cascadeSummary({ marketplace: headerRow, rows, probe });
 
-  const hint = reloadHint(updatedNames);
-  notifySuccess(ctx, appendReloadHint(body, hint));
+  // RH-1 / MSG-RH-1: emit the reload-hint trailer iff at least one
+  // plugin's resources actually changed (the (updated) partition is
+  // non-empty).
+  const changedNames = outcomes.filter((o) => o.partition === "updated").map((o) => o.name);
+  const hint = reloadHint(changedNames);
+  const body = appendReloadHint(message, hint);
+  const dispatch = severity === "warning" ? notifyWarning : notifySuccess;
+  dispatch(ctx, body);
 }
 
 /**

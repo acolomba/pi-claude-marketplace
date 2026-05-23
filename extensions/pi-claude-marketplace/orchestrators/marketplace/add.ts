@@ -24,8 +24,11 @@
 //       state.marketplaces[derivedName] = { ... }            // NFR-5: NO gitOps calls
 //   })
 //
-//   notifySuccess(ctx, `Added marketplace "<name>" in <scope> scope.`)
-//   // MA-11: NO reload hint here (add never stages resources).
+//   // CMC-30 + CMC-05 / MSG-GR-5: success row via `renderRow(MarketplaceRow)`:
+//   //   github source -> `● <name> [<scope>] <autoupdate> (added)` (marker present)
+//   //   path source   -> `● <name> [<scope>] (added)` (marker omitted; autoupdate-off default)
+//   // MA-11 / RH-1: NO reload hint here (add never stages resources -- the
+//   // marketplace record is metadata, not user-visible per-plugin output).
 //
 // V1 carry-forward shape only (D-09 staging dir, D-12 GitOps injection,
 // D-14 follow-upstream-blindly all supersede V1 specifics).
@@ -47,6 +50,7 @@ import path from "node:path";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
+import { renderRow } from "../../presentation/compact-line.ts";
 import { dropMarketplaceCache, invalidateMarketplaceNames } from "../../shared/completion-cache.ts";
 import {
   MarketplaceDuplicateNameError,
@@ -64,7 +68,20 @@ import type { GitHubSource, PathSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionContext } from "../../platform/pi-api.ts";
+import type { MarketplaceRow, SoftDepProbe } from "../../presentation/compact-line.ts";
 import type { Scope } from "../../shared/types.ts";
+
+/**
+ * MarketplaceRow has no `declaresAgents/Mcp` fields, so the renderer's
+ * per-row soft-dep marker injection never fires on this surface. A
+ * fixed "loaded both" probe is safe -- the composer reads the probe
+ * only when those predicate fields are true. See
+ * `presentation/marketplace-list.ts` for the same rationale.
+ */
+const MARKETPLACE_LABEL_PROBE: SoftDepProbe = {
+  piSubagentsLoaded: true,
+  piMcpAdapterLoaded: true,
+};
 
 export interface AddMarketplaceOptions {
   readonly ctx: ExtensionContext;
@@ -138,8 +155,20 @@ export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void>
     );
   }
 
-  // MA-11: success -- exact stable string, NO reload hint.
-  notifySuccess(opts.ctx, `Added marketplace "${recordedName}" in ${opts.scope} scope.`);
+  // CMC-30 / CMC-05 / MSG-GR-5: compose `MarketplaceRow` for the success
+  // row. Marker dispatched by source kind:
+  //   github -> autoupdate=ON default (marker present)
+  //   path   -> autoupdate=OFF default (marker omitted)
+  // MA-11 / RH-1: NO reload hint trailer -- add does not stage resources.
+  const successRow: MarketplaceRow = {
+    kind: "marketplace",
+    name: recordedName,
+    scope: opts.scope,
+    status: "added",
+    outcomeClass: "ok",
+    ...(source.kind === "github" && { marker: "autoupdate" as const }),
+  };
+  notifySuccess(opts.ctx, renderRow(successRow, MARKETPLACE_LABEL_PROBE));
 }
 
 async function addGithubInGuard(args: {

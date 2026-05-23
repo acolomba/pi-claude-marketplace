@@ -1,6 +1,6 @@
 // orchestrators/marketplace/list.ts
 //
-// ML-1..4 + SC-6 + NFR-5.
+// ML-1..4 + SC-6 + NFR-5; Phase 13 CMC-03 / CMC-07 / CMC-10 / CMC-29.
 //
 // READ-ONLY: NO withStateGuard (D-04 corollary). NO manifest reads
 // (ML-3 -- `loadState` reads only state.json; `renderMarketplaceList`
@@ -13,8 +13,11 @@
 //   for each scope: loadState(locationsFor(scope, cwd).extensionRoot)
 //     -> collect every state.marketplaces[<name>]
 //   notifySuccess(ctx, renderMarketplaceList(allRecords));
-//   // ML-4: when allRecords is empty, renderMarketplaceList returns
-//   // "No marketplaces configured." verbatim.
+//   // CMC-10: when allRecords is empty, renderMarketplaceList returns the
+//   // bare `(no marketplaces)` EmptyToken form (formerly "No marketplaces
+//   // configured." sentence, retired by Phase 13 sub-wave 2c).
+//   // CMC-29 / MSG-GR-3: non-empty case renders flat, sorted by
+//   // compareByNameThenScope; no per-scope group headers.
 
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";

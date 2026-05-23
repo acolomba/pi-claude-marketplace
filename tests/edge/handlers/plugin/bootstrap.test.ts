@@ -96,11 +96,12 @@ test("bootstrap handler (no args, clean state): dispatches to orchestrator and e
 
     // Both composed orchestrators emitted their messages in order.
     assert.equal(notifications.length, 2);
+    // CMC-28 / CMC-30 / CMC-33 compact-line forms (Plan 13-02c-01).
     assert.equal(
       notifications[0]?.message,
-      'Added marketplace "claude-plugins-official" in user scope.',
+      "● claude-plugins-official [user] <autoupdate> (added)",
     );
-    assert.equal(notifications[1]?.message, "Enabled autoupdate: claude-plugins-official.");
+    assert.equal(notifications[1]?.message, "● claude-plugins-official [user] <autoupdate>");
 
     // Clone happened against the canonical Anthropic repo URL.
     assert.equal(gitState.cloneCalls.length, 1);
@@ -126,11 +127,12 @@ test("bootstrap handler (whitespace-only args): treated identically to empty arg
     await handler("   ", ctx);
 
     assert.equal(notifications.length, 2);
+    // CMC-28 / CMC-30 / CMC-33 compact-line forms (Plan 13-02c-01).
     assert.equal(
       notifications[0]?.message,
-      'Added marketplace "claude-plugins-official" in user scope.',
+      "● claude-plugins-official [user] <autoupdate> (added)",
     );
-    assert.equal(notifications[1]?.message, "Enabled autoupdate: claude-plugins-official.");
+    assert.equal(notifications[1]?.message, "● claude-plugins-official [user] <autoupdate>");
   });
 });
 

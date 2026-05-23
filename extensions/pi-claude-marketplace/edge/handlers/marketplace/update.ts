@@ -15,7 +15,7 @@ import {
   updateAllMarketplaces,
   updateMarketplace,
 } from "../../../orchestrators/marketplace/update.ts";
-import { notifyError } from "../../../shared/notify.ts";
+import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
 
 import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
@@ -34,7 +34,9 @@ export function makeMarketplaceUpdateHandler(
         usage: USAGE,
       },
       (message) => {
-        notifyError(ctx, message);
+        // Phase 13 Plan 13-02c-01 / MSG-NC-2: argument-parsing failure
+        // -> sentence + Usage block via notifyUsageError.
+        notifyUsageError(ctx, message === USAGE ? "Missing required argument." : message, USAGE);
       },
     );
     if (parsed === undefined) {

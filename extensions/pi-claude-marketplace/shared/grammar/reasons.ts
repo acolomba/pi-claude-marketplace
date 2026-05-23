@@ -19,11 +19,15 @@
 //     it; the derived literal union types Phase 13 callsites
 //     (e.g. `function renderRow(..., reason: Reason)`).
 //
-// Count reconciliation: the binding frontmatter has 23 entries. Earlier
-// drafts of REQUIREMENTS.md CMC-11, ROADMAP.md Phase 12 scope, and 12-CONTEXT
-// stated "24 reasons"; Plan 12-01 Task 3 reconciles those docs to 23 in the
-// same commit chain as this constants module. Phase 12 research §2.1
-// confirmed the frontmatter is the binding count.
+// Count reconciliation: Phase 12 originally locked the closed set at 23
+// entries (the frontmatter at messaging-style-guide.md is the binding
+// source). Phase 13 sub-wave 2c (Plan 13-02c-01) adds `"already enabled"`
+// and `"already disabled"` per the CMC-33 / catalog binding at
+// docs/output-catalog.md:700-709 -- the `marketplace autoupdate
+// enable|disable` idempotent-flip result row uses these reasons as the
+// `{<reason>}` block. Without them the catalog conformance fails. The
+// style-guide frontmatter is updated in the same commit to keep the
+// grammar-frontmatter drift test green.
 //
 // Brace convention: entries are stored WITHOUT surrounding `{}` braces. The
 // `{<reason>}` brace form is composed by the renderer at emission time
@@ -55,6 +59,8 @@ export const REASONS = [
   "stale clone",
   "duplicate name",
   "lock held",
+  "already enabled",
+  "already disabled",
 ] as const;
 
 export type Reason = (typeof REASONS)[number];
