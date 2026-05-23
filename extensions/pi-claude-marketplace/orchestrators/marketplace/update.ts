@@ -71,9 +71,9 @@ import path from "node:path";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
+import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../platform/pi-api.ts";
 import { causeChainTrailer } from "../../presentation/cause-chain.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
-import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../presentation/soft-dep.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   MarketplaceNotFoundError,

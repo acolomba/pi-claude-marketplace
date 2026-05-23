@@ -36,8 +36,8 @@
 
 import { rm } from "node:fs/promises";
 
+import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../platform/pi-api.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
-import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../presentation/soft-dep.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import { appendLeaks, errorMessage } from "../../shared/errors.ts";
 import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
