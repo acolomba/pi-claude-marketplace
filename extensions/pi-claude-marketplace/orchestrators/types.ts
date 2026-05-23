@@ -23,6 +23,23 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
   readonly resourcesChanged: boolean;
   readonly stagedAgents: readonly string[];
   readonly stagedMcpServers: readonly string[];
+  /**
+   * Plan 13-02a-01 / CMC-13: per-row soft-dep predicate inputs. `true` iff
+   * the plugin's resolved manifest declared the kind AND it was actually
+   * staged at reinstall time (the orchestrator already tracks
+   * `stagedAgents.length > 0` / `stagedMcpServers.length > 0` per-outcome;
+   * these flags surface them through the typed outcome so cascade rendering
+   * (`PluginCascadeRow.declaresAgents` / `.declaresMcp`) consumes the
+   * effective-state-at-render-time signal without re-deriving from the
+   * stagedAgents / stagedMcpServers arrays at the renderer site).
+   *
+   * MSG-SD-3 / D-13-07: per-row markers fire on `(reinstalled)` rows only;
+   * `(skipped)` and `(failed)` rows omit them (failed sets these to false
+   * to make the constraint explicit even though the renderer narrows on
+   * `status === "skipped"` / `"failed"` anyway).
+   */
+  readonly declaresAgents?: boolean;
+  readonly declaresMcp?: boolean;
   readonly notes?: readonly string[];
 }
 
@@ -70,6 +87,18 @@ export interface PluginUpdateOutcome {
   readonly stagedAgents?: readonly string[];
   /** WR-04: MCP servers staged by this plugin's update (RH-5 input). */
   readonly stagedMcpServers?: readonly string[];
+  /**
+   * Plan 13-02a-01 / CMC-13: per-row soft-dep predicate inputs (same
+   * semantics as `ReinstallReinstalledOutcome.declaresAgents/Mcp`). True
+   * iff the plugin's manifest declared the kind AND it was actually
+   * staged. The renderer probes companion-loaded state via SoftDepProbe
+   * and emits `{requires pi-subagents}` / `{requires pi-mcp}` iff
+   * (declares AND unloaded). Populated on `(updated)` outcomes; omitted
+   * on `(unchanged) / (skipped) / (failed)` because MSG-SD-3 forbids the
+   * marker on non-(updated) cascade rows.
+   */
+  readonly declaresAgents?: boolean;
+  readonly declaresMcp?: boolean;
 }
 
 /**

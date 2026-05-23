@@ -550,8 +550,13 @@ test("PRL-12/RH-5: no-resource reinstall suppresses reload hint; agents/MCP warn
       });
       assert.equal(withDeps.partition, "reinstalled");
       const body = notifications.at(-1)?.message ?? "";
-      assert.match(body, /pi-subagents is not loaded/);
-      assert.match(body, /pi-mcp-adapter is not loaded/);
+      // Plan 13-02a-01 / CMC-13 / MSG-SD-1..2: per-row soft-dep markers
+      // replace the legacy aggregated `pi-subagents is not loaded` / `pi-
+      // mcp-adapter is not loaded` trailer. The single-plugin reinstall
+      // renders as a 1-row cascade and the soft-dep markers appear on the
+      // (reinstalled) row when companion extensions are unloaded.
+      assert.match(body, /\{[^}]*requires pi-subagents[^}]*\}/);
+      assert.match(body, /\{[^}]*requires pi-mcp[^}]*\}/);
       assert.match(body, /\/reload to pick up changes/);
       await rm(cwd2, { recursive: true, force: true });
     } finally {
@@ -666,11 +671,18 @@ test("PRL-04 bulk bare reinstall enumerates user and project scopes", async () =
         outcomes.map((o) => `[${o.scope}] ${o.name}@${o.marketplace}`),
         ["[user] uplug@ump", "[project] pplug@pmp"],
       );
-      assert.match(notifications.at(-1)?.message ?? "", /Reinstalled 2 plugins\./);
-      assert.match(
-        notifications.at(-1)?.message ?? "",
-        /Reinstalled:\n {2}- \[user\] uplug@ump\n {2}- \[project\] pplug@pmp/,
-      );
+      // Plan 13-02a-01 / CMC-25: the legacy `Reinstalled N plugins.` summary
+      // line and `Reinstalled:\n  - [...]` partition body are RETIRED. The
+      // bulk reinstall now renders per-marketplace cascades with a label-
+      // header (`outcomeClass: ok`) and (reinstalled) status tokens on the
+      // indented plugin rows. Project-scoped marketplaces sort before user
+      // (compareByNameThenScope: project-before-user tie-breaker).
+      const body = notifications.at(-1)?.message ?? "";
+      assert.match(body, /● pmp \[project\]\n {2}● pplug \[project\] v\d/);
+      assert.match(body, /● ump \[user\]\n {2}● uplug \[user\] v\d/);
+      // The retired summary/partition forms must NOT appear.
+      assert.equal(body.includes("Reinstalled 2 plugins."), false);
+      assert.equal(body.includes("Reinstalled:"), false);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -703,7 +715,10 @@ test("PRL-03 bulk marketplace reinstall resolves implicit scope like update", as
         outcomes.map((o) => o.scope),
         ["project"],
       );
-      assert.match(notifications.at(-1)?.message ?? "", /\[project\] plug@mymp/);
+      // Plan 13-02a-01 / CMC-25: marketplace header + indented plugin row;
+      // the `@<marketplace>` token is OMITTED from cascade rows per CMC-02.
+      const body = notifications.at(-1)?.message ?? "";
+      assert.match(body, /● mymp \[project\]\n {2}● plug \[project\] v/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -788,10 +803,13 @@ test("PRL-05 explicit plugin reinstall in another scope reports not-installed in
         notifications.some((n) => n.severity === "error"),
         false,
       );
-      assert.match(
-        notifications.at(-1)?.message ?? "",
-        /Skipped:\n {2}- \[project\] plug@mp: not installed/,
-      );
+      // Plan 13-02a-01 / CMC-25: legacy `Skipped:\n  - [scope] plug@mp:`
+      // form retired. Cascade row carries `(skipped) {not installed}`; the
+      // `@<marketplace>` token is OMITTED per CMC-02. Severity routes via
+      // notifyWarning (non-trivial skip) per MSG-SR-5.
+      const body = notifications.at(-1)?.message ?? "";
+      assert.match(body, /● mp \[project\]\n {2}⊘ plug \[project\] \(skipped\) \{not installed\}/);
+      assert.equal(notifications.at(-1)?.severity, "warning");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -873,15 +891,22 @@ test("PRL-13 batch reinstall continues after failed plugin", async () => {
         ["bad:failed", "good:reinstalled"],
       );
       const body = notifications.at(-1)?.message ?? "";
-      assert.match(body, /Reinstalled plugin "good"\./);
-      assert.match(
-        body,
-        /Failed:\n {2}- \[project\] bad@mp: Plugin "bad" not found in cached manifest/,
-      );
+      // Plan 13-02a-01 / CMC-25: per-marketplace cascade with mixed rows;
+      // `(reinstalled)` on the success row, `(failed) {not in manifest}` on
+      // the failure row (narrowed from `Plugin "bad" not found in cached
+      // manifest`). Rows are alphabetical within the marketplace block.
+      // Severity routes via notifyWarning (any failed row).
+      assert.match(body, /● mp \[project\]\n {2}⊘ bad \[project\] \(failed\) \{not in manifest\}/);
+      assert.match(body, /● good \[project\] v1\.0\.0 \(reinstalled\)/);
+      // Legacy `Reinstalled plugin "good".` summary line + `Failed:` partition
+      // header retired.
+      assert.equal(body.includes('Reinstalled plugin "good".'), false);
+      assert.equal(body.includes("Failed:"), false);
       assert.equal(
         notifications.some((n) => n.severity === "error"),
         false,
       );
+      assert.equal(notifications.at(-1)?.severity, "warning");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -948,10 +973,18 @@ test("PRL-13 deterministic partition output sorts by scope marketplace plugin", 
         ],
       );
       const body = notifications.at(-1)?.message ?? "";
+      // Plan 13-02a-01 / CMC-25: per-marketplace cascade blocks ordered
+      // user-before-project (scope primary, name secondary). Plugin rows
+      // inside each marketplace block are sorted by name+scope via
+      // compareByNameThenScope. The legacy `Reinstalled:\n  - [scope]
+      // plug@mp` partition body is RETIRED.
+      assert.match(body, /● u \[user\]\n {2}● z \[user\] v1\.0\.0 \(reinstalled\)/);
       assert.match(
         body,
-        /Reinstalled:\n {2}- \[user\] z@u\n {2}- \[project\] a@a\n {2}- \[project\] c@a\n {2}- \[project\] b@z/,
+        /● a \[project\]\n {2}● a \[project\] v1\.0\.0 \(reinstalled\)\n {2}● c \[project\] v1\.0\.0 \(reinstalled\)/,
       );
+      assert.match(body, /● z \[project\]\n {2}● b \[project\] v1\.0\.0 \(reinstalled\)/);
+      assert.equal(body.includes("Reinstalled:"), false);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1023,9 +1056,18 @@ test("PRL-15 batch soft dependency warnings aggregate successful restaged resour
       await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
 
       const body = notifications.at(-1)?.message ?? "";
-      assert.match(body, /pi-subagents is not loaded/);
-      assert.match(body, /pi-mcp-adapter is not loaded/);
-      assert.match(body, /Failed:\n {2}- \[project\] bad@mp/);
+      // Plan 13-02a-01 / CMC-13 / MSG-SD-1..2: per-row soft-dep markers
+      // replace the aggregated trailer. The `good` plugin (reinstalled
+      // with agent+mcp) carries `{requires pi-subagents, requires
+      // pi-mcp}`; the `bad` plugin (failed) does NOT (effective state =
+      // not installed; MSG-SD-3 + Plan 13-01-01 narrowing). The
+      // `Failed:\n  - [scope] bad@mp` partition header is retired.
+      assert.match(
+        body,
+        /● good \[project\] v1\.0\.0 \(reinstalled\) \{requires pi-subagents, requires pi-mcp\}/,
+      );
+      assert.match(body, /⊘ bad \[project\] \(failed\) \{not in manifest\}/);
+      assert.equal(body.includes("Failed:"), false);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

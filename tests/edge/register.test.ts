@@ -192,7 +192,10 @@ test("D-04 :: registered command routes reinstall through makeReinstallHandler",
 
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]?.severity, undefined);
-    assert.match(notifications[0]?.message ?? "", /No plugins installed\./);
+    // Plan 13-02a-01 / CMC-10 / MSG-ER-1: legacy "No plugins installed."
+    // sentence form retired; bulk reinstall empty-set renders via
+    // EmptyToken -> bare "(no plugins)" compact line.
+    assert.equal(notifications[0]?.message ?? "", "(no plugins)");
   });
 });
 
