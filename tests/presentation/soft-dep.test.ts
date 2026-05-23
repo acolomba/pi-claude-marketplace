@@ -1,11 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+// Probes (hasLoadedPi*) come via the thin presentation/soft-dep.ts
+// re-export shim -- this test verifies the shim's surface after the
+// Plan 13-01-03 thinning (D-13-07: aggregated-trailer helpers retired
+// from the shim). The trailer helpers themselves
+// (subagentWarningIfNeeded / mcpAdapterWarningIfNeeded) source directly
+// from platform/pi-api.ts where they still live until sub-wave 2c
+// finalization may delete them.
+import {
+  mcpAdapterWarningIfNeeded,
+  subagentWarningIfNeeded,
+} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import {
   hasLoadedPiMcpAdapter,
   hasLoadedPiSubagents,
-  mcpAdapterWarningIfNeeded,
-  subagentWarningIfNeeded,
 } from "../../extensions/pi-claude-marketplace/presentation/soft-dep.ts";
 import {
   PI_MCP_ADAPTER_NOT_LOADED,

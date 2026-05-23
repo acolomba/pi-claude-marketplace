@@ -9,21 +9,18 @@
 //   - sort.ts: compareByNameThenScope, the single per-scope sort comparator
 //     (MSG-GR-3; D-13-15).
 //
-// Plan 13-01-02 will add cause-chain, cascade-summary, manual-recovery,
-// and rollback-partial composers; their barrel entries land with those
-// files. Plan 13-01-03 evaluates whether to delete or thin the
-// subagentWarningIfNeeded / mcpAdapterWarningIfNeeded re-exports below
-// (per-row markers in renderRow replace the aggregated trailer per
-// CMC-12 / CMC-13 / D-13-07).
+// Plan 13-01-02 adds cause-chain, cascade-summary, manual-recovery, and
+// rollback-partial composers; their barrel entries land with those files.
+//
+// Plan 13-01-03 thins the soft-dep re-exports per D-13-07: the aggregated
+// trailer helpers are no longer published via this barrel because per-row
+// markers in renderRow have replaced them (CMC-12 / CMC-13). Orchestrator
+// callers still using the aggregated trailer source it directly from
+// platform/pi-api.ts until Wave 2 sub-waves migrate to the per-row markers.
 
 export { appendReloadHint, reloadHint } from "./reload-hint.ts";
 
-export {
-  hasLoadedPiMcpAdapter,
-  hasLoadedPiSubagents,
-  mcpAdapterWarningIfNeeded,
-  subagentWarningIfNeeded,
-} from "./soft-dep.ts";
+export { hasLoadedPiMcpAdapter, hasLoadedPiSubagents } from "./soft-dep.ts";
 
 export { renderMarketplaceList } from "./marketplace-list.ts";
 
