@@ -3,9 +3,19 @@
 // Thin-shim handler factory for
 // `/claude:plugin marketplace add <source> [--scope user|project]`.
 // Delegates to `addMarketplace` orchestrator, threading deps.gitOps through.
+//
+// Phase 13 sub-wave 2c (Plan 13-02c-01 / MSG-NC-2 / MSG-SR-7):
+// argument-parsing failures route through `notifyUsageError` so the
+// rendered surface is `${message}\n\n${USAGE}` (sentence form +
+// blank-line + Usage block). Entity-shape errors
+// (MarketplaceDuplicateNameError / StaleSourceCloneError / unknown
+// source kind) surface from the orchestrator as standard
+// `notifyError`-routed messages -- the orchestrator layer keeps that
+// emission today; future revisions could promote them to
+// `EntityErrorRow` compact lines per CMC-34.
 
 import { addMarketplace } from "../../../orchestrators/marketplace/add.ts";
-import { notifyError } from "../../../shared/notify.ts";
+import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
 
 import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
@@ -24,7 +34,12 @@ export function makeAddHandler(
         usage: USAGE,
       },
       (message) => {
-        notifyError(ctx, message);
+        // MSG-NC-2: argument-parsing failure -> sentence form + Usage
+        // block (notifyUsageError contract: ${message}\n\n${usageBlock}).
+        // Substitute "Missing required argument." when the parser hands
+        // back the usage string verbatim (the duplicate-usage case --
+        // notifyUsageError would re-emit the Usage block otherwise).
+        notifyUsageError(ctx, message === USAGE ? "Missing required argument." : message, USAGE);
       },
     );
     if (parsed === undefined) {

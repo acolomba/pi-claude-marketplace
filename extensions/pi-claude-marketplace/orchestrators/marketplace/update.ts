@@ -21,8 +21,8 @@
 //
 // Per-row soft-dep markers (CMC-13 / MSG-SD-1..2) ride on
 // `PluginCascadeRow.declaresAgents/Mcp` from the `PluginUpdateOutcome`
-// surface; the aggregated `subagentWarningIfNeeded` /
-// `mcpAdapterWarningIfNeeded` trailer is RETIRED.
+// surface; the aggregated soft-dep trailer pattern is RETIRED per
+// D-13-07 (the per-row marker is now the single source).
 //
 // MU-2 and MU-3 are SUPERSEDED by Phase 4 D-14 ("follow upstream
 // blindly" -- the local marketplace clone is read-only by contract;

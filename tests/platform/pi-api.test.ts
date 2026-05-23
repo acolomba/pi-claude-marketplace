@@ -1,16 +1,20 @@
+// tests/platform/pi-api.test.ts
+//
+// Phase 13 sub-wave 2c (Plan 13-02c-01 / D-13-07 / RESEARCH.md Open
+// Question 3): the legacy aggregated soft-dep trailer helpers have
+// been DELETED from `platform/pi-api.ts` -- their tests are removed
+// alongside. The three surviving exports are the probe helpers
+// (`hasLoadedPiSubagents` / `hasLoadedPiMcpAdapter` / `softDepStatus`),
+// which feed the `SoftDepProbe` injected into `renderRow`.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
   hasLoadedPiMcpAdapter,
   hasLoadedPiSubagents,
-  mcpAdapterWarningIfNeeded,
-  subagentWarningIfNeeded,
+  softDepStatus,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import {
-  PI_MCP_ADAPTER_NOT_LOADED,
-  PI_SUBAGENTS_NOT_LOADED,
-} from "../../extensions/pi-claude-marketplace/shared/markers.ts";
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
@@ -31,7 +35,7 @@ function makeThrowingPi(): ExtensionAPI {
   } as unknown as ExtensionAPI;
 }
 
-test("platform pi-api owns soft-dep probes", () => {
+test("platform pi-api owns soft-dep probes (subagent)", () => {
   assert.equal(hasLoadedPiSubagents(makePi([{ name: "subagent" }])), true);
   assert.equal(hasLoadedPiSubagents(makePi([{ name: "other" }])), false);
   assert.equal(hasLoadedPiSubagents(makeThrowingPi()), false);
@@ -49,16 +53,10 @@ test("platform pi-api detects mcp adapter by name or source", () => {
   assert.equal(hasLoadedPiMcpAdapter(makeThrowingPi()), false);
 });
 
-test("platform pi-api warning composers preserve marker text", () => {
-  assert.equal(subagentWarningIfNeeded(makePi([{ name: "subagent" }]), ["agent"]), "");
-  assert.equal(mcpAdapterWarningIfNeeded(makePi([{ name: "mcp" }]), ["server"]), "");
+test("softDepStatus composes the SoftDepProbe shape from the two probes", () => {
+  const probe = softDepStatus(makePi([{ name: "subagent" }, { name: "mcp" }]));
+  assert.deepEqual(probe, { piSubagentsLoaded: true, piMcpAdapterLoaded: true });
 
-  assert.equal(
-    subagentWarningIfNeeded(makePi([]), ["agent"]),
-    `${PI_SUBAGENTS_NOT_LOADED}install it with \`pi install npm:pi-subagents\`, then run \`/reload\`.`,
-  );
-  assert.equal(
-    mcpAdapterWarningIfNeeded(makePi([]), ["server"]),
-    `${PI_MCP_ADAPTER_NOT_LOADED}install it with \`pi install npm:pi-mcp-adapter\`, then run \`/reload\`.`,
-  );
+  const empty = softDepStatus(makePi([]));
+  assert.deepEqual(empty, { piSubagentsLoaded: false, piMcpAdapterLoaded: false });
 });
