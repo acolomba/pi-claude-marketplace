@@ -295,6 +295,16 @@ function makePluginListRow(
  * `pluginScope` is the scope under which the plugins are installed (the
  * `[<scope>]` bracket on each plugin row reflects this -- D-13-18).
  *
+ * `excludeFromAvailable` is the set of plugin names that should NOT be
+ * emitted as `(available)` rows because they are already installed in
+ * the OTHER scope's CLONED record (and will fold under this header via
+ * the orphan-fold rule). Without this exclusion the catalog "orphan
+ * fold" form would emit a duplicate `○ alpha v1.0.0 (available)` row
+ * alongside the folded `● alpha [project] v1.0.0 (installed)` -- the
+ * manifest's `alpha` entry classifies as not-installed in this scope
+ * (true) AND installable (true), which would normally bucket as
+ * available. The exclusion preserves the catalog form at lines 205-213.
+ *
  * Returns the rows in stable (state-iteration + manifest-order) order; the
  * renderer applies the final MSG-GR-3 sort inside each block.
  */
@@ -303,6 +313,7 @@ async function enumerateMarketplacePlugins(
   mpRecord: ExtensionState["marketplaces"][string],
   pluginScope: Scope,
   manifest: MarketplaceManifest | undefined,
+  excludeFromAvailable: ReadonlySet<string> = new Set(),
 ): Promise<PluginListRow[]> {
   const rows: PluginListRow[] = [];
   const installedRecords = mpRecord.plugins;
@@ -324,6 +335,15 @@ async function enumerateMarketplacePlugins(
 
   for (const manifestEntry of manifest.plugins) {
     if (installedNames.has(manifestEntry.name)) {
+      continue;
+    }
+
+    if (excludeFromAvailable.has(manifestEntry.name)) {
+      // Already installed in the OTHER scope under a CLONED marketplace
+      // record (orphan-fold rule). The folded `(installed)` row carries
+      // the plugin's actual install scope (D-13-18); we suppress the
+      // duplicate `(available)` enumeration so the block matches the
+      // catalog form at lines 205-213.
       continue;
     }
 
@@ -440,8 +460,9 @@ async function buildMarketplaceBlock(args: {
   mpScope: Scope;
   mpRecord: ExtensionState["marketplaces"][string];
   extraPlugins: readonly PluginListRow[];
+  excludeFromAvailable?: ReadonlySet<string>;
 }): Promise<BuiltBlock> {
-  const { opts, mpName, mpScope, mpRecord, extraPlugins } = args;
+  const { opts, mpName, mpScope, mpRecord, extraPlugins, excludeFromAvailable } = args;
   const { manifest, loadError } = await loadMarketplaceManifestSoftly(mpRecord);
 
   // Unparseable manifest: failure header + cause trailer; no plugin rows
@@ -459,7 +480,16 @@ async function buildMarketplaceBlock(args: {
   }
 
   // Normal header + enumerated plugins (own scope) + folded extras.
-  const ownPlugins = await enumerateMarketplacePlugins(opts, mpRecord, mpScope, manifest);
+  // Pass `excludeFromAvailable` so the available-bucket enumeration skips
+  // names already installed in the OTHER scope under a CLONED marketplace
+  // (the orphan-fold rule -- catalog lines 205-213 form).
+  const ownPlugins = await enumerateMarketplacePlugins(
+    opts,
+    mpRecord,
+    mpScope,
+    manifest,
+    excludeFromAvailable,
+  );
   const merged = [...ownPlugins, ...extraPlugins];
 
   // Per-marketplace empty case (catalog lines 240-246): zero plugins.
@@ -536,10 +566,20 @@ export async function loadPluginListPayload(opts: ListPluginsOptions): Promise<P
     const projectMp = projectState.marketplaces[mpName];
     const isProjectMpClone = isCloneOfUserMarketplace(projectMp, mpRecord);
     let folded: readonly PluginListRow[] = [];
+    let foldedNames: ReadonlySet<string> = new Set();
     if (isProjectMpClone && projectMp !== undefined) {
       // Each folded row carries scope: "project" (D-13-18 actual install scope).
       const { manifest } = await loadMarketplaceManifestSoftly(projectMp);
       folded = await enumerateMarketplacePlugins(opts, projectMp, "project", manifest);
+      // Record the folded plugin names so the user-scope manifest's
+      // available-bucket enumeration skips them (catalog lines 205-213
+      // shows a single `● alpha [project] ... (installed)` row -- no
+      // duplicate `○ alpha (available)` row under the same header).
+      foldedNames = new Set(
+        folded
+          .filter((r) => r.status === "installed" || r.status === "upgradable")
+          .map((r) => r.name),
+      );
     }
 
     const built = await buildMarketplaceBlock({
@@ -548,6 +588,7 @@ export async function loadPluginListPayload(opts: ListPluginsOptions): Promise<P
       mpScope: "user",
       mpRecord,
       extraPlugins: folded,
+      excludeFromAvailable: foldedNames,
     });
     blocks.push(built);
   }
