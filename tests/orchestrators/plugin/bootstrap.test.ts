@@ -1,14 +1,21 @@
 // Quick 260516-02r: bootstrap orchestrator tests.
 //
+// Phase 13 Plan 13-02c-01 migration: the legacy sentence-form
+// assertions (`Added marketplace ...`, `Enabled autoupdate: ...`,
+// `Already enabled: ...`) have been migrated to the compact-line
+// MarketplaceRow forms per CMC-28 / CMC-30 / CMC-33.
+//
 // Covers:
 //   a. First run, clean state: addMarketplace + setMarketplaceAutoupdate
-//      compose into TWO notifications and a fully recorded marketplace.
+//      compose into TWO notifications: `● <mp> [user] <autoupdate>
+//      (added)` followed by the marker-as-outcome `● <mp> [user]
+//      <autoupdate>`.
 //   b. Second run, fully idempotent: marketplace already present AND
 //      autoupdate true. The duplicate-name path is swallowed so
 //      addMarketplace does NOT emit; setMarketplaceAutoupdate emits
-//      the single "Already enabled: ..." line.
+//      the single `● <mp> [user] <autoupdate> {already enabled}` row.
 //   c. Half-bootstrapped (autoupdate off): autoupdate flips to true,
-//      emits ONE "Enabled autoupdate: ..." notification.
+//      emits ONE marker-as-outcome row.
 //   d. User scope only: project-scope state file is never created.
 //   e. Non-duplicate error from clone propagates and the autoupdate
 //      step is NEVER reached.
@@ -131,13 +138,17 @@ test("bootstrap (clean state): adds marketplace + enables autoupdate; two notifi
     assert.equal(recorded.scope, "user");
     assert.equal(recorded.autoupdate, true);
 
-    // Exactly two notifications in order.
+    // Exactly two notifications in order. CMC-30 / CMC-33 compact-line
+    // forms (Plan 13-02c-01): add emits `● <mp> [user] <autoupdate>
+    // (added)` (github source -> autoupdate marker present); autoupdate
+    // enable emits the marker-as-outcome `● <mp> [user] <autoupdate>`
+    // (no status token).
     assert.equal(notifications.length, 2);
     assert.equal(
       notifications[0]?.message,
-      'Added marketplace "claude-plugins-official" in user scope.',
+      "● claude-plugins-official [user] <autoupdate> (added)",
     );
-    assert.equal(notifications[1]?.message, "Enabled autoupdate: claude-plugins-official.");
+    assert.equal(notifications[1]?.message, "● claude-plugins-official [user] <autoupdate>");
     // Clone happened exactly once on the clean path.
     assert.equal(gitState.cloneCalls.length, 1);
     assert.equal(
@@ -173,11 +184,15 @@ test("bootstrap (already bootstrapped): swallows duplicate-name, reports idempot
     const after = await loadState(userLocations.extensionRoot);
     assert.deepEqual(after, before);
     // Exactly one notification: the idempotent autoupdate report.
+    // CMC-33 compact form: marker + `{already enabled}` reason.
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]?.message, "Already enabled: claude-plugins-official.");
-    // No "Added marketplace" in this run.
     assert.equal(
-      notifications.some((n) => n.message.startsWith("Added marketplace")),
+      notifications[0]?.message,
+      "● claude-plugins-official [user] <autoupdate> {already enabled}",
+    );
+    // No `(added)` row in this run.
+    assert.equal(
+      notifications.some((n) => n.message.includes("(added)")),
       false,
     );
   });
@@ -204,10 +219,11 @@ test("bootstrap (half-configured: autoupdate off): swallows duplicate-name, flip
     const after = await loadState(userLocations.extensionRoot);
     assert.equal(after.marketplaces["claude-plugins-official"]?.autoupdate, true);
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]?.message, "Enabled autoupdate: claude-plugins-official.");
-    // No "Added marketplace" in this run.
+    // CMC-33: marker-as-outcome enable result.
+    assert.equal(notifications[0]?.message, "● claude-plugins-official [user] <autoupdate>");
+    // No `(added)` row in this run.
     assert.equal(
-      notifications.some((n) => n.message.startsWith("Added marketplace")),
+      notifications.some((n) => n.message.includes("(added)")),
       false,
     );
   });
@@ -252,9 +268,9 @@ test("bootstrap (non-duplicate clone error): propagates and autoupdate step is N
     // Clone was attempted exactly once.
     assert.equal(gitState.cloneCalls.length, 1);
 
-    // No "Added marketplace" emitted (add failed before its notify).
+    // No `(added)` row emitted (add failed before its notify).
     assert.equal(
-      notifications.some((n) => n.message.startsWith("Added marketplace")),
+      notifications.some((n) => n.message.includes("(added)")),
       false,
     );
 

@@ -5,8 +5,9 @@
 // setMarketplaceAutoupdate handles bare-form (flip every mp in scope)
 // and named-form (single-name flip).
 //
-// On empty state, the bare form lands in the "No marketplaces configured."
-// path; named form lands in the "name absent in every scope" error path.
+// On empty state, the bare form lands in the CMC-10 `(no marketplaces)`
+// EmptyToken path; named form lands in the "name absent in every
+// scope" error path.
 
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -62,7 +63,9 @@ test("dual-form :: makeAutoupdateHandler(true) calls setMarketplaceAutoupdate wi
     await handler("", ctx);
     // Bare form, empty state both scopes -> "No marketplaces configured."
     assert.equal(notifications.length, 1);
-    assert.match(notifications[0]!.message, /No marketplaces configured\./);
+    // CMC-10: bare `(no marketplaces)` EmptyToken (formerly the
+    // "No marketplaces configured." sentence; retired by Plan 13-02c-01).
+    assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });
 
@@ -72,7 +75,9 @@ test("dual-form :: makeAutoupdateHandler(false) calls setMarketplaceAutoupdate w
     const handler = makeAutoupdateHandler(false);
     await handler("", ctx);
     assert.equal(notifications.length, 1);
-    assert.match(notifications[0]!.message, /No marketplaces configured\./);
+    // CMC-10: bare `(no marketplaces)` EmptyToken (formerly the
+    // "No marketplaces configured." sentence; retired by Plan 13-02c-01).
+    assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });
 
@@ -82,7 +87,9 @@ test("shim :: bare form (no name) propagates name: undefined", async () => {
     const handler = makeAutoupdateHandler(true);
     await handler("", ctx);
     assert.equal(notifications.length, 1);
-    assert.match(notifications[0]!.message, /No marketplaces configured\./);
+    // CMC-10: bare `(no marketplaces)` EmptyToken (formerly the
+    // "No marketplaces configured." sentence; retired by Plan 13-02c-01).
+    assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });
 
@@ -104,6 +111,8 @@ test("shim :: --scope user/project propagated", async () => {
     await handler("--scope project", ctx);
     // Project-scope empty -> "No marketplaces configured."
     assert.equal(notifications.length, 1);
-    assert.match(notifications[0]!.message, /No marketplaces configured\./);
+    // CMC-10: bare `(no marketplaces)` EmptyToken (formerly the
+    // "No marketplaces configured." sentence; retired by Plan 13-02c-01).
+    assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });

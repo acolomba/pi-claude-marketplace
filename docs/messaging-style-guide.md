@@ -40,6 +40,8 @@ reasons:
   - stale clone
   - duplicate name
   - lock held
+  - already enabled
+  - already disabled
 markers:
   - autoupdate
   - no autoupdate

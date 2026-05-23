@@ -85,7 +85,10 @@ test("MA-5 + MA-11: github source clones, validates, renames, mutates state, emi
     assert.equal(notifications.length, 1);
     const note = notifications[0];
     assert.ok(note);
-    assert.equal(note.message, 'Added marketplace "valid-marketplace" in project scope.');
+    // CMC-30: success path renders `● <name> [<scope>] <autoupdate> (added)`
+    // for github source (default autoupdate=ON; marker present). Path source
+    // (NFR-5 branch below) omits the marker.
+    assert.equal(note.message, "● valid-marketplace [project] <autoupdate> (added)");
     assert.equal(note.severity, undefined);
     // MSG-RH-1: NO reload hint substring in any notification.
     assert.equal(note.message.includes("/reload to pick up changes"), false);
@@ -287,7 +290,9 @@ test("NFR-5: path-source add never calls gitOps", async () => {
       assert.ok("valid-marketplace" in persisted.marketplaces);
       const note = notifications[0];
       assert.ok(note);
-      assert.equal(note.message, 'Added marketplace "valid-marketplace" in project scope.');
+      // CMC-30: path-source defaults to autoupdate=OFF; the `<autoupdate>`
+      // marker is OMITTED per MSG-GR-5 (absence conveys autoupdate-off).
+      assert.equal(note.message, "● valid-marketplace [project] (added)");
     } finally {
       await rm(localMpDir, { recursive: true, force: true });
     }
@@ -364,7 +369,8 @@ test("CR-02 / MA-4: ~/path is expanded against $HOME for the on-disk probe; sour
 
       const note = notifications[0];
       assert.ok(note);
-      assert.equal(note.message, 'Added marketplace "valid-marketplace" in project scope.');
+      // CMC-30: path-source defaults to autoupdate=OFF; marker omitted.
+      assert.equal(note.message, "● valid-marketplace [project] (added)");
     } finally {
       if (originalHome === undefined) {
         delete process.env.HOME;
@@ -377,7 +383,7 @@ test("CR-02 / MA-4: ~/path is expanded against $HOME for the on-disk probe; sour
   });
 });
 
-test("MA-2 / SC-5: orchestrator accepts scope='project' (caller defaults; orchestrator does not invent)", async () => {
+test("MA-2 / SC-5 / CMC-30: orchestrator accepts scope='project'; success row carries `[project]` scope bracket", async () => {
   // The edge layer (Phase 6) defaults --scope to "user". This test
   // confirms the orchestrator threads the value through verbatim.
   await withTmpScope(async ({ cwd }) => {
@@ -386,11 +392,12 @@ test("MA-2 / SC-5: orchestrator accepts scope='project' (caller defaults; orches
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
     // Use project scope so we get a real tmp scope root; the assertion
-    // is just that the scope is reflected in the success message.
+    // is just that the scope is reflected in the success row's
+    // `[<scope>]` token per the compact-line grammar (MSG-GR-1).
     await addMarketplace({ ctx, scope: "project", cwd, rawSource: "owner/repo", gitOps });
     const note = notifications[0];
     assert.ok(note);
-    assert.ok(note.message.includes("in project scope"));
+    assert.ok(note.message.includes("[project]"));
   });
 });
 

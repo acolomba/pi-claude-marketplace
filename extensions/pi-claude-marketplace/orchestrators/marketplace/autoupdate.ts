@@ -2,6 +2,23 @@
 //
 // MAU-1, MAU-2, MAU-3, MAU-4 + SC-6 + NFR-5.
 //
+// Phase 13 Wave 2 sub-wave 2c (Plan 13-02c-01) -- CMC-33 / CMC-10 /
+// CMC-05 / MSG-GR-5 migration. The legacy "Enabled autoupdate:"
+// / "Disabled autoupdate:" / "Already enabled:" / "Already disabled:"
+// sentence forms and the legacy empty-state marker (formerly the
+// "No marketplaces" sentence) are RETIRED in favor of the
+// marker-as-outcome `MarketplaceRow` form
+// emitted via `renderRow`:
+//   - enable success      -> `● <mp> [<scope>] <autoupdate>`
+//   - enable already-on   -> `● <mp> [<scope>] <autoupdate> {already enabled}`
+//   - disable success     -> `● <mp> [<scope>] <no autoupdate>`
+//   - disable already-off -> `● <mp> [<scope>] <no autoupdate> {already disabled}`
+//   - empty scopes        -> `(no marketplaces)` (CMC-10 EmptyToken)
+// CMC-33 binding: the marker IS the outcome -- no `(<status>)` token on
+// the autoupdate result row. `<no autoupdate>` appears ONLY here (per
+// MSG-GR-5 / catalog §autoupdate); every other surface conveys
+// autoupdate-off by ABSENCE of the marker.
+//
 // Single orchestrator parameterized by `enable: boolean`. The edge
 // layer (Phase 6) maps `marketplace autoupdate` -> enable=true and
 // `marketplace noautoupdate` -> enable=false.
@@ -14,15 +31,16 @@
 //     })  // saves state.json on no-throw
 //     accumulate result.changed[] and result.unchanged[] across scopes
 //
-//   compose user-visible message:
-//     - changed   non-empty: "Enabled autoupdate: <names>." or "Disabled autoupdate: <names>."
-//     - unchanged non-empty: "Already enabled: <names>." or "Already disabled: <names>."   // MAU-3
-//     - both empty (single-name not found in any scope): MarketplaceNotFoundError surfaces from applyAutoupdateFlipInPlace
+//   compose user-visible message: build a `MarketplaceRow` per accumulated
+//   marketplace; join rows with `\n`; route via `notifySuccess` (flips
+//   are always successes -- entity-shape failures surface at the edge
+//   layer per CMC-34 / MSG-NC-1).
 //
 // NFR-5: zero git surface -- autoupdate never imports platform/git
 // or DEFAULT_GIT_OPS.
 
 import { locationsFor } from "../../persistence/locations.ts";
+import { renderRow } from "../../presentation/compact-line.ts";
 import { errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
 import { notifyError, notifySuccess } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
@@ -30,7 +48,19 @@ import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { applyAutoupdateFlipInPlace } from "./shared.ts";
 
 import type { ExtensionContext } from "../../platform/pi-api.ts";
+import type { MarketplaceRow, SoftDepProbe } from "../../presentation/compact-line.ts";
 import type { Scope } from "../../shared/types.ts";
+
+/**
+ * MarketplaceRow has no `declaresAgents/Mcp` fields, so the renderer's
+ * per-row soft-dep marker injection never fires on this surface. A
+ * fixed "loaded both" probe is safe -- the composer reads the probe
+ * only when those predicate fields are true.
+ */
+const MARKETPLACE_LABEL_PROBE: SoftDepProbe = {
+  piSubagentsLoaded: true,
+  piMcpAdapterLoaded: true,
+};
 
 export interface AutoupdateOptions {
   readonly ctx: ExtensionContext;
@@ -48,28 +78,52 @@ function shouldCollectNotFound(opts: AutoupdateOptions, err: unknown): boolean {
   return opts.name !== undefined && err instanceof MarketplaceNotFoundError;
 }
 
+interface AutoupdateRowInput {
+  readonly name: string;
+  readonly scope: Scope;
+  readonly alreadyMatching: boolean;
+}
+
 function missingEverywhere(
   opts: AutoupdateOptions,
   result: {
-    readonly changed: readonly string[];
-    readonly unchanged: readonly string[];
+    readonly rows: readonly AutoupdateRowInput[];
     readonly errors: readonly unknown[];
     readonly scopes: readonly Scope[];
   },
 ): boolean {
   return (
     opts.name !== undefined &&
-    result.changed.length === 0 &&
-    result.unchanged.length === 0 &&
+    result.rows.length === 0 &&
     result.errors.length === result.scopes.length
   );
+}
+
+/**
+ * CMC-33: build a `MarketplaceRow` for one autoupdate outcome. The
+ * marker IS the outcome (no `(<status>)` token); `{already enabled}`
+ * / `{already disabled}` reasons attach on idempotent flips per the
+ * catalog at docs/output-catalog.md:700-709.
+ */
+function buildAutoupdateRow(input: AutoupdateRowInput, enable: boolean): MarketplaceRow {
+  const marker: "autoupdate" | "no autoupdate" = enable ? "autoupdate" : "no autoupdate";
+  return {
+    kind: "marketplace",
+    name: input.name,
+    scope: input.scope,
+    outcomeClass: "ok",
+    marker,
+    // status intentionally omitted -- CMC-33 marker-as-outcome form.
+    ...(input.alreadyMatching && {
+      reasons: [enable ? ("already enabled" as const) : ("already disabled" as const)],
+    }),
+  };
 }
 
 export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise<void> {
   const scopes: readonly Scope[] = opts.scope === undefined ? ["user", "project"] : [opts.scope];
 
-  const overallChanged: string[] = [];
-  const overallUnchanged: string[] = [];
+  const rows: AutoupdateRowInput[] = [];
   const errors: { scope: Scope; cause: unknown }[] = [];
 
   for (const scope of scopes) {
@@ -80,8 +134,13 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
         // plain changed/unchanged arrays. The guard saves on no-throw.
         return applyAutoupdateFlipInPlace(state, opts.name, opts.enable);
       });
-      overallChanged.push(...result.changed);
-      overallUnchanged.push(...result.unchanged);
+      for (const name of result.changed) {
+        rows.push({ name, scope, alreadyMatching: false });
+      }
+
+      for (const name of result.unchanged) {
+        rows.push({ name, scope, alreadyMatching: true });
+      }
     } catch (err) {
       // For single-name flips: applyAutoupdateFlipInPlace throws
       // MarketplaceNotFoundError when the name is absent from THIS
@@ -98,16 +157,9 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
   }
 
   // If a single-name flip was requested but the name was missing
-  // from EVERY iterated scope (no changed/unchanged accumulated and
-  // every scope errored), surface as a single error.
-  if (
-    missingEverywhere(opts, {
-      changed: overallChanged,
-      unchanged: overallUnchanged,
-      errors,
-      scopes,
-    })
-  ) {
+  // from EVERY iterated scope (no row accumulated and every scope
+  // errored), surface as a single error.
+  if (missingEverywhere(opts, { rows, errors, scopes })) {
     const first = errors[0];
     if (first !== undefined) {
       notifyError(opts.ctx, errorMessage(first.cause), first.cause);
@@ -116,28 +168,26 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
     return;
   }
 
-  // Compose success message. MAU-3 idempotent reporting.
-  const verbDone = opts.enable ? "Enabled" : "Disabled";
-  const verbAlready = opts.enable ? "enabled" : "disabled";
-
-  const lines: string[] = [];
-  if (overallChanged.length > 0) {
-    // Sort for deterministic output (Open Question 2: alphabetical).
-    const sorted = [...overallChanged].sort((a, b) => a.localeCompare(b));
-    lines.push(`${verbDone} autoupdate: ${sorted.join(", ")}.`);
-  }
-
-  if (overallUnchanged.length > 0) {
-    const sorted = [...overallUnchanged].sort((a, b) => a.localeCompare(b));
-    lines.push(`Already ${verbAlready}: ${sorted.join(", ")}.`);
-  }
-
-  // Bare form across both empty scopes: parallel to MU-1 silent
-  // succeed semantics.
-  if (lines.length === 0) {
-    notifySuccess(opts.ctx, "No marketplaces configured.");
+  // CMC-10: bare form across both empty scopes -- EmptyToken row.
+  if (rows.length === 0) {
+    notifySuccess(
+      opts.ctx,
+      renderRow({ kind: "empty", token: "no marketplaces" }, MARKETPLACE_LABEL_PROBE),
+    );
     return;
   }
 
+  // CMC-33: compose per-marketplace rows. Sort alphabetical by name for
+  // deterministic output (Open Question 2 carry-forward); same-name
+  // entries across scopes tie-break by scope via the row construction
+  // order (project enumerated before user when both are iterated -- the
+  // outer `scopes` loop order). The renderer's MSG-GR-3 sort comparator
+  // is NOT applied here because the autoupdate result block is a
+  // per-call result list, not the marketplace-list surface; alphabetical
+  // by name is the established autoupdate-result ordering.
+  const sorted = [...rows].sort((a, b) => a.name.localeCompare(b.name));
+  const lines = sorted.map((row) =>
+    renderRow(buildAutoupdateRow(row, opts.enable), MARKETPLACE_LABEL_PROBE),
+  );
   notifySuccess(opts.ctx, lines.join("\n"));
 }
