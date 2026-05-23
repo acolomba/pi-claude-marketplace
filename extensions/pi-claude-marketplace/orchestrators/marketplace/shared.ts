@@ -22,10 +22,6 @@
 //     autoupdate.ts. Idempotent -- already-matching marketplaces land
 //     in `unchanged[]`.
 //
-//   - formatErrorWithCauses (ES-4 / Pitfall 10): depth-5 Error.cause
-//     walker. Local to Phase 4; Phase 6 may promote to shared/errors.ts
-//     without changing this file's public signature.
-//
 // Per D-02 ANTI-PATTERN: this file MUST NOT import from `transaction/`
 // (no phase-ledger runner). The cascade is the wrong shape for ledger
 // semantics (MR-3 requires continuation across plugin failures; the
@@ -440,39 +436,10 @@ export async function loadVisibleMarketplaces(opts: {
   return out;
 }
 
-/**
- * ES-4 / Pitfall 10: walk Error.cause up to depth 5 and join the
- * messages with ` -- caused by: `. Phase 4-local; Phase 6 may
- * promote to shared/errors.ts without changing this signature.
- *
- * The depth bound prevents pathological cycles (an Error whose
- * cause is itself or forms a loop). 5 levels matches V1's
- * reference (marketplace/update.ts::formatErrorWithCauses).
- */
-// eslint-disable-next-line @typescript-eslint/no-inferrable-types -- explicit `: number = 5` matches the plan's grep-gate done criterion (Plan 04-02 Task 2).
-export function formatErrorWithCauses(err: unknown, maxDepth: number = 5): string {
-  const parts: string[] = [];
-  let current: unknown = err;
-  for (let depth = 0; depth < maxDepth && current !== undefined; depth++) {
-    // Rule 1 deviation from verbatim: `String(current)` violates @typescript-eslint/no-base-to-string
-    // on unknown-with-toString. Equivalent semantics via instanceof / typeof / Object.prototype.toString.
-    const message = errorCauseMessage(current);
-
-    parts.push(message);
-    if (current instanceof Error && current.cause !== undefined && current.cause !== current) {
-      current = current.cause;
-    } else {
-      break;
-    }
-  }
-
-  return parts.join(" -- caused by: ");
-}
-
-function errorCauseMessage(current: unknown): string {
-  if (current instanceof Error) {
-    return current.message;
-  }
-
-  return typeof current === "string" ? current : Object.prototype.toString.call(current);
-}
+// Phase 13 / D-CMC-12: the depth-5 cause-chain walker relocated to
+// `shared/errors.ts::causeChainTrailer` with the MSG-CC-1 rendered shape
+// (`cause: <l1> -> <l2> -> ... [(truncated)]`). Callers that previously
+// wrapped errors before passing into `notifyError` now pass `errorMessage(err)`
+// and let `notifyError` append the trailer automatically; callers that need
+// the trailer outside the notify path compose it inline via
+// `causeChainTrailer(err)` imported from `presentation/cause-chain.ts`.

@@ -40,18 +40,15 @@ export function reloadHint(names: readonly string[]): string {
 }
 
 /**
- * Append `hint` to `body` on its own trailing line. When `hint === ""`
- * (MSG-RH-1 suppression), returns the bare body. Used by every orchestrator
- * that may emit a reload hint -- keeps the join logic centralized.
+ * Append `hint` to `body` with a blank-line separator (MSG-RH-1: "preceded
+ * by one blank line"). When `hint === ""` (MSG-RH-1 suppression), returns
+ * the bare body. Used by every orchestrator that may emit a reload hint --
+ * keeps the join logic centralized.
  *
- * TODO (Phase 13, MSG-RH-1): style-guide section 5 specifies the hint is
- * "preceded by one blank line", i.e. a double-newline join. Phase 12
- * intentionally retains the single-newline join to defer the conformance
- * pass to Phase 13's mechanical refactor scope (see 12-RESEARCH.md R7 and
- * Open Question 2). Updating the join shape here is a one-line change
- * (`\n${hint}` → `\n\n${hint}`) and is the SOLE work that turns this
- * composer's output fully conformant with MSG-RH-1.
+ * Phase 13 / D-CMC-06: the blank-line discipline (`\n\n${hint}`) lands here.
+ * Phase 12 intentionally retained the single-newline join to defer the
+ * conformance pass to this plan's mechanical refactor scope.
  */
 export function appendReloadHint(body: string, hint: string): string {
-  return hint === "" ? body : `${body}\n${hint}`;
+  return hint === "" ? body : `${body}\n\n${hint}`;
 }

@@ -43,25 +43,30 @@ test("notifyError without cause calls ctx.ui.notify with 'error' severity and ve
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, ["operation failed", "error"]);
 });
 
-test("notifyError with Error cause appends '\\nCause: <message>' (ES-4)", () => {
+test("notifyError with Error cause appends MSG-CC-1 trailer with blank-line separator (D-CMC-12)", () => {
   const ctx = makeCtx();
   notifyError(ctx as never, "outer fail", new Error("inner fail"));
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // Phase 13 / D-CMC-12: trailer is `cause: <msg>` lowercase per MSG-CC-1,
+  // joined with `\n\n` per the MSG-RH-1 blank-line discipline shared with
+  // the reload-hint composer.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    "outer fail\nCause: inner fail",
+    "outer fail\n\ncause: inner fail",
     "error",
   ]);
 });
 
-test("notifyError with non-Error cause coerces to String(cause) (ES-4 robustness)", () => {
+test("notifyError with non-Error string cause renders trailer verbatim (MSG-CC-1)", () => {
   const ctx = makeCtx();
   notifyError(ctx as never, "msg", "string cause");
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, ["msg\nCause: string cause", "error"]);
+  // Non-Error string cause renders verbatim in the MSG-CC-1 trailer.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, ["msg\n\ncause: string cause", "error"]);
 });
 
 test("notifyError NFR-9: stack traces / absolute paths from cause are not surfaced", () => {
-  // The wrapper exposes ONLY cause.message. cause.stack is NOT included.
+  // The wrapper's MSG-CC-1 trailer exposes ONLY cause.message via
+  // causeChainTrailer. cause.stack is NOT included.
   const ctx = makeCtx();
   const err = new Error("inner");
   err.stack = "Error: inner\n    at /Users/secret/path/file.ts:1:1";
@@ -71,5 +76,15 @@ test("notifyError NFR-9: stack traces / absolute paths from cause are not surfac
     !callArgs[0].includes("/Users/secret/path"),
     "NFR-9: notifyError must not surface absolute paths from cause.stack",
   );
-  assert.match(callArgs[0], /^outer\nCause: inner$/);
+  assert.match(callArgs[0], /^outer\n\ncause: inner$/);
+});
+
+test("notifyError walks the depth-5 cause chain (MSG-CC-1)", () => {
+  const ctx = makeCtx();
+  const inner = new Error("inner", { cause: new Error("root") });
+  notifyError(ctx as never, "outer", inner);
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "outer\n\ncause: inner -> root",
+    "error",
+  ]);
 });

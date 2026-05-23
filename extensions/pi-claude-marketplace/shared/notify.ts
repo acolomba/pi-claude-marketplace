@@ -1,4 +1,4 @@
-import { errorMessage } from "./errors.ts";
+import { causeChainTrailer } from "./errors.ts";
 
 import type { ExtensionContext } from "../platform/pi-api.ts";
 
@@ -55,21 +55,28 @@ export function notifyWarning(ctx: ExtensionContext, message: string): void {
 }
 
 /**
- * Error notify -- operation did not succeed; state unchanged or fully rolled back.
- * Optional `cause` feeds Error.cause for ES-4 chain traversal. The cause is
- * surfaced flat in the message tail (`\nCause: <message>`); Phase 6's
- * `formatErrorWithCauses` helper will replace this body when it lands.
+ * Error notify -- operation did not succeed; state unchanged or fully rolled
+ * back. Optional `cause` feeds Error.cause for the depth-5 MSG-CC-1 walk; the
+ * trailer is appended automatically with a blank-line separator
+ * (`${message}\n\n${trailer}`), matching the MSG-RH-1 blank-line discipline.
  *
- * NFR-9 note: `cause.message` is the only content we surface from the cause.
- * Stack traces and absolute paths are NOT included by this wrapper -- callers
- * that need to expose a path must put it in `message` deliberately. The cause
- * value is normalized via `errorMessage()` (the `Error`-or-`String(...)`
- * primitive in shared/errors.ts) so this site never falls through to
- * `[object Object]` on raw thrown objects.
+ * D-CMC-12 (Phase 13): this body replaces the Phase 6 placeholder that
+ * surfaced the cause as `\nCause: <message>`. The depth-5 walker lives in
+ * `shared/errors.ts::causeChainTrailer` (re-exported from
+ * `presentation/cause-chain.ts` for presentation-layer consumers); orchestrators
+ * pass bare `err` here and let `notifyError` compose the trailer once, retiring
+ * the legacy per-callsite pre-format-then-pass-as-message wrapping.
+ *
+ * NFR-9 / T-13-05 invariant: the trailer surfaces ONLY `Error.message` (or
+ * `string` verbatim or `Object.prototype.toString.call` fallback for non-Error
+ * causes). No `.stack`, no absolute paths. Callers that need to expose a path
+ * must put it in `message` deliberately. Depth bound 5 prevents cycle DoS
+ * (T-13-04) via the walker's cycle-detection inside `shared/errors.ts`.
  */
 export function notifyError(ctx: ExtensionContext, message: string, cause?: unknown): void {
-  const causeText = cause === undefined ? "" : `\nCause: ${errorMessage(cause)}`;
-  ctx.ui.notify(`${message}${causeText}`, "error");
+  const trailer = cause === undefined ? "" : causeChainTrailer(cause);
+  const body = trailer === "" ? message : `${message}\n\n${trailer}`;
+  ctx.ui.notify(body, "error");
 }
 
 /**

@@ -45,6 +45,7 @@ import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
+import { causeChainTrailer } from "../../presentation/cause-chain.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../presentation/soft-dep.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
@@ -56,7 +57,7 @@ import {
   type LockedStateTransaction,
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
-import { formatErrorWithCauses, resolveScopeFromState } from "../marketplace/shared.ts";
+import { resolveScopeFromState } from "../marketplace/shared.ts";
 
 import { discoverGeneratedNames } from "./discover-names.ts";
 import { assertNoCrossPluginConflicts, resolveInstalledPluginTarget } from "./shared.ts";
@@ -173,9 +174,12 @@ export async function reinstallPlugin(
       opts.__deps?.stateTransaction,
     );
   } catch (err) {
-    const message = formatErrorWithCauses(err);
+    // D-CMC-12: notifyError auto-appends the MSG-CC-1 cause-chain trailer.
+    // The outcome's `notes` field is consumed OUTSIDE the notify path so we
+    // compose the message + trailer inline once for both surfaces.
+    const message = composeErrorWithCauseChain(err);
     if (render !== "none") {
-      notifyError(ctx, message, err);
+      notifyError(ctx, errorMessage(err), err);
     }
 
     return { partition: "failed", name: plugin, marketplace, scope, notes: [message] };
@@ -212,7 +216,8 @@ export async function reinstallPlugins(
   try {
     targets = await enumerateReinstallTargets(opts);
   } catch (err) {
-    notifyError(ctx, formatErrorWithCauses(err), err);
+    // D-CMC-12: notifyError auto-appends the MSG-CC-1 cause-chain trailer.
+    notifyError(ctx, errorMessage(err), err);
     return [];
   }
 
@@ -237,12 +242,14 @@ export async function reinstallPlugins(
         }),
       );
     } catch (err) {
+      // `notes` is consumed outside the notify path; compose the trailer
+      // inline.
       outcomes.push({
         partition: "failed",
         name: target.plugin,
         marketplace: target.marketplace,
         scope: target.scope,
-        notes: [formatErrorWithCauses(err)],
+        notes: [composeErrorWithCauseChain(err)],
       });
     }
   }
@@ -912,4 +919,15 @@ function removePluginRecord(
   delete plugins[plugin];
   cloned.marketplaces[marketplace] = { ...mp, plugins };
   return cloned;
+}
+
+/**
+ * Compose `errorMessage(err) [\n\n${causeChainTrailer(err)}]` for outcome
+ * `notes` aggregated outside the notify path. `notifyError` does this
+ * automatically; this helper exists for outcome-aggregation callsites that
+ * need the same text without going through the notify channel.
+ */
+function composeErrorWithCauseChain(err: unknown): string {
+  const trailer = causeChainTrailer(err);
+  return trailer === "" ? errorMessage(err) : `${errorMessage(err)}\n\n${trailer}`;
 }

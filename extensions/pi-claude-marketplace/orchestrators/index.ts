@@ -17,7 +17,6 @@ export {
   applyAutoupdateFlipInPlace,
   cascadeUnstagePlugin,
   DEFAULT_GIT_OPS,
-  formatErrorWithCauses,
   listMarketplaces,
   removeMarketplace,
   resolveScopeFromState,

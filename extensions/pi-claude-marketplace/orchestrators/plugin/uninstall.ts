@@ -42,7 +42,7 @@ import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import { appendLeaks, errorMessage } from "../../shared/errors.ts";
 import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
-import { cascadeUnstagePlugin, formatErrorWithCauses } from "../marketplace/shared.ts";
+import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
 import { resolveInstalledPluginTarget } from "./shared.ts";
 
@@ -147,10 +147,10 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
     });
   } catch (err) {
     // PU-7 propagation: surface chained AgentsUnstageFailureError (or any
-    // other cascade failure) via notifyError + formatErrorWithCauses
-    // (Pattern S-6, depth-5 Error.cause walk). State was NOT saved (guard
-    // contract); the plugin record stays intact for retry.
-    notifyError(ctx, formatErrorWithCauses(err), err);
+    // other cascade failure) via notifyError. notifyError now auto-appends
+    // the MSG-CC-1 depth-5 cause-chain trailer (D-CMC-12). State was NOT
+    // saved (guard contract); the plugin record stays intact for retry.
+    notifyError(ctx, errorMessage(err), err);
     return;
   }
 

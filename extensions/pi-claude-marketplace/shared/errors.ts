@@ -20,7 +20,7 @@ export function assertNever(x: never): never {
  * "\n\n" + trailer)` without extra guards.
  *
  * Walker contract (relocated from orchestrators/marketplace/shared.ts's
- * `formatErrorWithCauses`):
+ * legacy depth-5 walker):
  *   - Depth bound 5 prevents pathological cycles (T-13-04 DoS mitigation).
  *   - Cycle detection: `current.cause !== current` -- an Error whose own
  *     `.cause` is itself terminates the walk at depth 1.
@@ -247,7 +247,7 @@ export class StateLockHeldError extends Error {
  * constructor's `message` argument typically embeds the
  * RECOVERY_PLUGIN_REINSTALL_PREFIX-composed recovery hint; the
  * `Error.cause` (passed via the options bag) carries the chained
- * originating error for `formatErrorWithCauses` depth-5 walk.
+ * originating error for the depth-5 `causeChainTrailer` walk.
  */
 export interface Phase3Failure {
   readonly phase: "skills" | "commands" | "agents" | "mcp";
