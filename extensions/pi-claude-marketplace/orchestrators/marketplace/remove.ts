@@ -36,6 +36,7 @@
 import { rm } from "node:fs/promises";
 
 import { locationsFor } from "../../persistence/locations.ts";
+import { causeChainTrailer } from "../../presentation/cause-chain.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../presentation/soft-dep.ts";
 import { dropMarketplaceCache, invalidateMarketplaceNames } from "../../shared/completion-cache.ts";
@@ -43,7 +44,7 @@ import { MarketplaceNotFoundError, appendLeaks, errorMessage } from "../../share
 import { notifySuccess, notifyWarning } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
-import { cascadeUnstagePlugin, formatErrorWithCauses, resolveScopeFromState } from "./shared.ts";
+import { cascadeUnstagePlugin, resolveScopeFromState } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -99,7 +100,14 @@ function failureWarning(
 ): string {
   const lines: string[] = [`Marketplace "${name}" not fully removed.`, "", "Failed plugins:"];
   for (const f of failedPlugins) {
-    lines.push(`  - ${f.name}: ${formatErrorWithCauses(f.cause)}`);
+    // Compose the cause-chain trailer inline because this string is embedded
+    // in a larger body (not passed through notifyError). The trailer prefix is
+    // `cause: ` per MSG-CC-1; we render the plugin failure as
+    // `  - <plugin>: <msg> (cause: <l1> -> <l2> ...)` so the existing
+    // "Failed plugins:" block stays human-scannable.
+    const trailer = causeChainTrailer(f.cause);
+    const causeSuffix = trailer === "" ? "" : ` (${trailer})`;
+    lines.push(`  - ${f.name}: ${errorMessage(f.cause)}${causeSuffix}`);
   }
 
   lines.push("", "Fix the underlying issue and retry.");
@@ -242,7 +250,13 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
       ),
       realLeaks,
     );
-    notifyWarning(opts.ctx, formatErrorWithCauses(aggregated));
+    // notifyWarning does NOT auto-append the cause-chain trailer (only
+    // notifyError does -- D-CMC-12). Compose inline so the user still sees
+    // the chained leaks per MR-6.
+    const trailer = causeChainTrailer(aggregated);
+    const body =
+      trailer === "" ? errorMessage(aggregated) : `${errorMessage(aggregated)}\n\n${trailer}`;
+    notifyWarning(opts.ctx, body);
     return;
   }
 

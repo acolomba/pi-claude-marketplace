@@ -22,9 +22,9 @@ test("appendReloadHint: empty hint returns bare body (suppression)", () => {
   assert.equal(appendReloadHint("Body content", ""), "Body content");
 });
 
-test("appendReloadHint: non-empty hint joins with single newline", () => {
+test("MSG-RH-1: non-empty hint joins with double newline (blank-line discipline)", () => {
   assert.equal(
     appendReloadHint("Body content", "/reload to pick up changes"),
-    "Body content\n/reload to pick up changes",
+    "Body content\n\n/reload to pick up changes",
   );
 });

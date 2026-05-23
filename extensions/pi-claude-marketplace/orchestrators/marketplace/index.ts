@@ -10,7 +10,6 @@ export {
   DEFAULT_GIT_OPS,
   applyAutoupdateFlipInPlace,
   cascadeUnstagePlugin,
-  formatErrorWithCauses,
   resolveScopeFromState,
 } from "./shared.ts";
 

@@ -58,6 +58,7 @@ import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
+import { causeChainTrailer } from "../../presentation/cause-chain.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../presentation/soft-dep.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
@@ -66,7 +67,6 @@ import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.t
 import { runPhases, type Phase } from "../../transaction/phase-ledger.ts";
 import { formatRollbackError } from "../../transaction/rollback.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
-import { formatErrorWithCauses } from "../marketplace/shared.ts";
 
 import {
   assertNoCrossPluginConflicts,
@@ -572,12 +572,19 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // -- notifyError surfaces its `.message` (Pattern S-6 depth-5 cause walk
     // for non-PathContainment errors gives the chained Phase 2 / Phase 3
     // bridge cause text).
-    const cause = formatErrorWithCauses(err);
+    //
+    // D-CMC-12: `cause` (the composed message + trailer text) is what the
+    // orchestrated outcome carries. The notify path passes `errorMessage(err)`
+    // as the message and lets `notifyError` append the MSG-CC-1 trailer
+    // automatically -- this avoids double-emitting when this orchestrator is
+    // wired into the notify path.
+    const trailer = causeChainTrailer(err);
+    const cause = trailer === "" ? errorMessage(err) : `${errorMessage(err)}\n\n${trailer}`;
     if (opts.notifications?.mode === "orchestrated") {
       return classifyInstallFailure(err, cause);
     }
 
-    notifyError(ctx, cause, err);
+    notifyError(ctx, errorMessage(err), err);
     return { status: "unexpected-failure", cause };
   }
 

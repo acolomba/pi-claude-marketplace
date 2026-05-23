@@ -45,3 +45,18 @@ export type {
 } from "./compact-line.ts";
 
 export { compareByNameThenScope } from "./sort.ts";
+
+// Plan 13-01-02 Wave 1 composers.
+export { cascadeSeverity, cascadeSummary } from "./cascade-summary.ts";
+
+export type {
+  CascadeSeverity,
+  CascadeSummaryInput,
+  CascadeSummaryOutput,
+} from "./cascade-summary.ts";
+
+export { renderManualRecovery } from "./manual-recovery.ts";
+
+export { renderRollbackPartial } from "./rollback-partial.ts";
+
+export { causeChainTrailer } from "./cause-chain.ts";

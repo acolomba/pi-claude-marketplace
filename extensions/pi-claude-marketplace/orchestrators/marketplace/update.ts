@@ -71,6 +71,7 @@ import path from "node:path";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
+import { causeChainTrailer } from "../../presentation/cause-chain.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../presentation/soft-dep.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
@@ -84,7 +85,6 @@ import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
 import {
   DEFAULT_GIT_OPS,
-  formatErrorWithCauses,
   refreshGitHubClone,
   renderPartition,
   resolveScopeFromState,
@@ -274,10 +274,13 @@ async function cascadeAutoupdates(
     try {
       outcome = await pluginUpdate(plugin, name, scope);
     } catch (err) {
+      // `notes` is consumed by callers OUTSIDE the notify path (e.g. JSON-mode
+      // outcome aggregation in tests), so the cause-chain trailer must be
+      // composed inline rather than relying on notifyError's auto-trailer.
       outcome = {
         partition: "failed",
         name: plugin,
-        notes: [formatErrorWithCauses(err)],
+        notes: [composeErrorWithCauseChain(err)],
       };
     }
 
@@ -314,9 +317,12 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     // via notifyError with chained cause. The retryHint is appended
     // when present.
     if (err instanceof MarketplaceUpdateError && err.retryHint !== "") {
-      notifyError(ctx, `${formatErrorWithCauses(err)}\n${err.retryHint}`, err.cause);
+      // notifyError will append the MSG-CC-1 trailer for `err.cause`
+      // automatically; we append the retry hint INSIDE `message` so it
+      // surfaces between the message and the cause-chain trailer.
+      notifyError(ctx, `${errorMessage(err)}\n${err.retryHint}`, err.cause);
     } else {
-      notifyError(ctx, formatErrorWithCauses(err), err);
+      notifyError(ctx, errorMessage(err), err);
     }
 
     return;
@@ -386,4 +392,15 @@ async function validateManifestAtRoot(
   if (record.marketplaceRoot !== marketplaceRoot) {
     record.marketplaceRoot = marketplaceRoot;
   }
+}
+
+/**
+ * Compose `errorMessage(err) [\n\n${causeChainTrailer(err)}]` for outcome
+ * `notes` aggregated outside the notify path. `notifyError` does this
+ * automatically; this helper exists for outcome-aggregation callsites that
+ * need the same text without going through the notify channel.
+ */
+function composeErrorWithCauseChain(err: unknown): string {
+  const trailer = causeChainTrailer(err);
+  return trailer === "" ? errorMessage(err) : `${errorMessage(err)}\n\n${trailer}`;
 }

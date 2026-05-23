@@ -35,7 +35,7 @@
 //
 // D-11 import boundaries: orchestrators/plugin/ may import named exports
 // from orchestrators/marketplace/shared.ts (GitOps, DEFAULT_GIT_OPS,
-// formatErrorWithCauses, resolveScopeFromState). MUST NOT import from
+// resolveScopeFromState). MUST NOT import from
 // orchestrators/marketplace/{add,remove,list,update,autoupdate}.ts.
 
 import {
@@ -63,6 +63,7 @@ import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
+import { causeChainTrailer } from "../../presentation/cause-chain.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../presentation/soft-dep.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
@@ -77,7 +78,6 @@ import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.t
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import {
   DEFAULT_GIT_OPS,
-  formatErrorWithCauses,
   refreshGitHubClone,
   renderPartition,
   type GitOps,
@@ -158,7 +158,8 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
   try {
     targets = await enumerateTargets(opts);
   } catch (err) {
-    notifyError(ctx, formatErrorWithCauses(err), err);
+    // D-CMC-12: notifyError auto-appends the MSG-CC-1 cause-chain trailer.
+    notifyError(ctx, errorMessage(err), err);
     return;
   }
 
@@ -208,7 +209,8 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
       // via notifyError per PUP-9 direct path. Abort the whole batch -- a
       // syncClone failure means we cannot read the refreshed manifest for
       // ANY plugin in that marketplace and the rest of the batch is suspect.
-      notifyError(ctx, formatErrorWithCauses(err), err);
+      // D-CMC-12: notifyError auto-appends the MSG-CC-1 cause-chain trailer.
+      notifyError(ctx, errorMessage(err), err);
       return;
     }
 
@@ -234,7 +236,8 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
       // PathContainmentError, ST-9 stale-version, prep-phase errors) surface
       // via notifyError. Abort the batch -- the plugin's resources may be
       // in an unknown state and continuing risks compounding the failure.
-      notifyError(ctx, formatErrorWithCauses(err), err);
+      // D-CMC-12: notifyError auto-appends the MSG-CC-1 cause-chain trailer.
+      notifyError(ctx, errorMessage(err), err);
       return;
     }
 
@@ -276,11 +279,12 @@ export const updateSinglePlugin: PluginUpdateFn = async (plugin, marketplace, sc
   } catch (err) {
     // Cascade-safe: capture throws into a partition='failed' outcome so the
     // marketplace cascade can continue aggregating outcomes across plugins
-    // without aborting the whole batch.
+    // without aborting the whole batch. `notes` is consumed outside the
+    // notify path so the MSG-CC-1 trailer is composed inline here.
     return {
       partition: "failed",
       name: plugin,
-      notes: [formatErrorWithCauses(err)],
+      notes: [composeErrorWithCauseChain(err)],
     };
   }
 };
@@ -651,9 +655,10 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
     // PUP-9 direct path: surface aggregate error via notifyError. The
     // returned partition='failed' outcome lets the partition renderer
     // include it in the "Failed:" body so the user sees both the
-    // notification and the per-bridge breakdown.
+    // notification and the per-bridge breakdown. D-CMC-12: notifyError
+    // auto-appends the MSG-CC-1 cause-chain trailer.
     if (isDirectUpdate(args) && args.ctx !== undefined) {
-      notifyError(args.ctx, formatErrorWithCauses(aggregate), aggregate);
+      notifyError(args.ctx, errorMessage(aggregate), aggregate);
     }
 
     return {
@@ -905,4 +910,15 @@ function removePluginRecord(
   delete newPlugins[plugin];
   cloned.marketplaces[marketplace] = { ...mp, plugins: newPlugins };
   return cloned;
+}
+
+/**
+ * Compose `errorMessage(err) [\n\n${causeChainTrailer(err)}]` for outcome
+ * `notes` aggregated outside the notify path. `notifyError` does this
+ * automatically; this helper exists for outcome-aggregation callsites that
+ * need the same text without going through the notify channel.
+ */
+function composeErrorWithCauseChain(err: unknown): string {
+  const trailer = causeChainTrailer(err);
+  return trailer === "" ? errorMessage(err) : `${errorMessage(err)}\n\n${trailer}`;
 }

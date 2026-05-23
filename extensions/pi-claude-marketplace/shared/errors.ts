@@ -14,6 +14,80 @@ export function assertNever(x: never): never {
 }
 
 /**
+ * MSG-CC-1 (CMC-18 / D-CMC-12): depth-5 Error.cause walker rendered as
+ * `cause: <l1> -> <l2> -> ... [(truncated)]`. Returns `""` when `err` is
+ * `undefined` or `null` so callers can compose `body + (trailer === "" ? "" :
+ * "\n\n" + trailer)` without extra guards.
+ *
+ * Walker contract (relocated from orchestrators/marketplace/shared.ts's
+ * legacy depth-5 walker):
+ *   - Depth bound 5 prevents pathological cycles (T-13-04 DoS mitigation).
+ *   - Cycle detection: `current.cause !== current` -- an Error whose own
+ *     `.cause` is itself terminates the walk at depth 1.
+ *   - Non-Error fallback: `string` causes render verbatim; any other
+ *     `unknown` cause renders via `Object.prototype.toString.call(c)` (so a
+ *     `{x: 1}` cause renders as `[object Object]`, never `[object Object]`
+ *     with `String()` coercion that the ESLint rule
+ *     `@typescript-eslint/no-base-to-string` forbids on unknown-with-toString).
+ *   - When the loop exits at the depth bound AND the chain continues
+ *     (`current` is still non-null/undefined and would have walked further),
+ *     append ` (truncated)` to the LAST link.
+ *
+ * NFR-9 (T-13-05): surfaces only `Error.message` (or `String`/
+ * `Object.prototype.toString` fallback for non-Error). No `.stack`, no
+ * absolute paths. The `shared/notify.ts::notifyError` body consumes this
+ * walker so the trailer lands automatically on every error notification.
+ *
+ * Located in `shared/errors.ts` because `shared/notify.ts` cannot import
+ * from `presentation/` (D-11 layering). `presentation/cause-chain.ts`
+ * re-exports this symbol so presentation-layer consumers reference it via
+ * `presentation/`.
+ */
+export function causeChainTrailer(err: unknown): string {
+  if (err === undefined || err === null) {
+    return "";
+  }
+
+  const PREFIX = "cause: ";
+  const JOINER = " -> ";
+  const MAX_DEPTH = 5;
+  const links: string[] = [];
+  let current: unknown = err;
+  let truncated = false;
+  for (let depth = 0; depth < MAX_DEPTH; depth++) {
+    links.push(linkMessage(current));
+    if (current instanceof Error && current.cause !== undefined && current.cause !== current) {
+      current = current.cause;
+      if (depth === MAX_DEPTH - 1) {
+        // We just consumed the depth-bound slot but `current` still has more
+        // chain to walk. Mark the rendered output truncated.
+        truncated = true;
+      }
+    } else {
+      break;
+    }
+  }
+
+  if (truncated) {
+    links[links.length - 1] = `${links[links.length - 1]} (truncated)`;
+  }
+
+  return `${PREFIX}${links.join(JOINER)}`;
+}
+
+function linkMessage(c: unknown): string {
+  if (c instanceof Error) {
+    return c.message;
+  }
+
+  if (typeof c === "string") {
+    return c;
+  }
+
+  return Object.prototype.toString.call(c);
+}
+
+/**
  * If `leak` is non-undefined, return a new Error that names both `err` and
  * the leak so the user sees the original cause AND the manual-cleanup hint
  * in the same notification.
@@ -173,7 +247,7 @@ export class StateLockHeldError extends Error {
  * constructor's `message` argument typically embeds the
  * RECOVERY_PLUGIN_REINSTALL_PREFIX-composed recovery hint; the
  * `Error.cause` (passed via the options bag) carries the chained
- * originating error for `formatErrorWithCauses` depth-5 walk.
+ * originating error for the depth-5 `causeChainTrailer` walk.
  */
 export interface Phase3Failure {
   readonly phase: "skills" | "commands" | "agents" | "mcp";
