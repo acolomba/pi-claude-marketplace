@@ -1,8 +1,9 @@
 // Plan 06-04 Task 1: marketplace update handler shim tests.
 //
 // Two forms via optional positional:
-//   - bare    -> updateAllMarketplaces (MU-1 empty-set silent success on
-//                  fresh state -> "No marketplaces configured.")
+//   - bare    -> updateAllMarketplaces (empty-set silent success on
+//                  fresh state -> `(no marketplaces)` EmptyToken per
+//                  CMC-10 / Plan 13-02c-01)
 //   - <name>  -> updateMarketplace (MarketplaceNotFoundError -> notifyError)
 
 import assert from "node:assert/strict";
@@ -75,7 +76,9 @@ test("shim :: bare /marketplace update calls updateAllMarketplaces", async () =>
     await handler("", ctx);
     // updateAllMarketplaces on fresh state -> "No marketplaces configured."
     assert.equal(notifications.length, 1);
-    assert.match(notifications[0]!.message, /No marketplaces configured\./);
+    // CMC-10: bare `(no marketplaces)` EmptyToken (formerly the
+    // "No marketplaces configured." sentence; retired by Plan 13-02c-01).
+    assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });
 
@@ -102,7 +105,9 @@ test("shim :: --scope user/project propagated", async () => {
     await handler("--scope project", ctx);
     // updateAllMarketplaces on project scope, empty -> "No marketplaces..."
     assert.equal(notifications.length, 1);
-    assert.match(notifications[0]!.message, /No marketplaces configured\./);
+    // CMC-10: bare `(no marketplaces)` EmptyToken (formerly the
+    // "No marketplaces configured." sentence; retired by Plan 13-02c-01).
+    assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });
 

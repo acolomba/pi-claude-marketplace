@@ -144,10 +144,8 @@ test("MR-1: same name in both scopes without --scope removes project-scope recor
       const projAfter = await loadState(projLoc.extensionRoot);
       assert.ok("dup-name" in userAfter.marketplaces, "user-scope record untouched");
       assert.ok(!("dup-name" in projAfter.marketplaces), "project-scope record removed");
-      assert.match(
-        notifications[0]?.message ?? "",
-        /Removed marketplace "dup-name" from project scope/,
-      );
+      // CMC-31 clean form: bare `● <mp> [<scope>] (removed)` row.
+      assert.equal(notifications[0]?.message, "● dup-name [project] (removed)");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -179,10 +177,8 @@ test("MR-1: name only in user scope without --scope removes user-scope record", 
 
       const userAfter = await loadState(userLoc.extensionRoot);
       assert.ok(!("user-only" in userAfter.marketplaces), "user-scope record removed");
-      assert.match(
-        notifications[0]?.message ?? "",
-        /Removed marketplace "user-only" from user scope/,
-      );
+      // CMC-31 clean form.
+      assert.equal(notifications[0]?.message, "● user-only [user] (removed)");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -255,7 +251,9 @@ test("MR-2 + MR-8 (RH-1): empty marketplace removed cleanly emits success WITHOU
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]!.severity, undefined); // success, default severity
       assert.equal(notifications[0]!.message.includes("/reload to pick up changes"), false);
-      assert.match(notifications[0]!.message, /Removed marketplace "empty" from project scope\./);
+      // CMC-31 clean form: bare row, no reload trailer because no
+      // resources changed (empty marketplace).
+      assert.equal(notifications[0]!.message, "● empty [project] (removed)");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
