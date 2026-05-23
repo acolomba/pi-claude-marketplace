@@ -26,17 +26,20 @@
 // missing `resources.agents` / `resources.mcpServers` is normalized to [] by
 // loadState BEFORE the withStateGuard closure observes it.
 //
-// API parameter shape note (Rule 1 deviation from PLAN.md prescribed pattern):
-// The plan's verbatim interface marks `pi?: ExtensionAPI`. However, the
-// soft-dep helpers `subagentWarningIfNeeded` / `mcpAdapterWarningIfNeeded`
-// take `pi: ExtensionAPI` (required, NOT optional) -- they cannot accept
-// `undefined`. Following the precedent established by remove.ts + update.ts,
-// we make `pi` required on UninstallPluginOptions; the edge layer (Phase 6)
-// has the factory `pi` in scope at call time.
+// API parameter shape note: `pi` was historically required because of the
+// retired `subagentWarningIfNeeded` / `mcpAdapterWarningIfNeeded` helpers
+// (Phase 6 precedent). Phase 13 sub-wave 2b structurally enforces MSG-SD-3
+// (no soft-dep markers on uninstalled rows) via the PluginInlineUninstalledRow
+// variant: that variant has NO `declaresAgents/Mcp` fields, so the renderer
+// cannot probe companion-loaded state for these rows. `pi` is still required
+// for `softDepStatus(pi)` (the probe is uniformly threaded through `renderRow`
+// for signature uniformity across variants, though it is unused for the
+// uninstalled variant).
 
 import { rm } from "node:fs/promises";
 
-import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../platform/pi-api.ts";
+import { softDepStatus } from "../../platform/pi-api.ts";
+import { renderRow } from "../../presentation/compact-line.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import { appendLeaks, errorMessage } from "../../shared/errors.ts";
@@ -47,6 +50,7 @@ import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 import { resolveInstalledPluginTarget } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { PluginInlineUninstalledRow } from "../../presentation/compact-line.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { UnstageOutcome } from "../marketplace/shared.ts";
 
@@ -107,6 +111,10 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
 
   let alreadyGone = false;
   let outcome: UnstageOutcome | undefined;
+  // Lifted from inside the guard closure so the post-guard success path can
+  // populate the PluginInlineUninstalledRow.version slot without re-reading
+  // state. Undefined when alreadyGone (no row to render in that case).
+  let removedVersion: string | undefined;
 
   try {
     await withStateGuard(locations, async (state) => {
@@ -126,6 +134,8 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
         alreadyGone = true;
         return;
       }
+
+      removedVersion = installed.version;
 
       // PU-1 ordering enforced INSIDE cascadeUnstagePlugin (Phase 4 D-03
       // corollary: skills -> commands -> agents -> mcp).
@@ -201,13 +211,28 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
   // is defined here because alreadyGone is false (early-returned above) AND
   // the catch returned on cascade failure.
   //
-  // The `outcome!` non-null assertion is safe: control reaches here ONLY
-  // when withStateGuard returned cleanly without `alreadyGone === true`,
-  // which means the cascade ran and outcome was assigned.
+  // CMC-24 / D-13-05 / D-13-06: emit via PluginInlineUninstalledRow + renderRow.
+  // The PluginInlineUninstalledRow variant has NO declaresAgents/declaresMcp
+  // fields by construction -- MSG-SD-3 is structurally enforced: the renderer
+  // CANNOT emit `{requires pi-subagents}` / `{requires pi-mcp}` markers on
+  // (uninstalled) rows. The legacy aggregated PI_*_NOT_LOADED trailers on
+  // uninstall success are RETIRED per D-13-07 + MSG-SD-3 (the soft-dep state
+  // is no-op for the operator after uninstall -- the content is gone, so no
+  // marker is useful).
   const cascadeResult = outcome;
+  const probe = softDepStatus(pi);
+  const uninstalledRow: PluginInlineUninstalledRow = {
+    kind: "plugin-inline-uninstalled",
+    name: plugin,
+    marketplace,
+    scope,
+    ...(removedVersion !== undefined && removedVersion !== "" && { version: removedVersion }),
+  };
+  const body = renderRow(uninstalledRow, probe);
+
   if (cascadeResult === undefined) {
     // Defensive guard -- should be unreachable per the contract above.
-    notifySuccess(ctx, `Uninstalled plugin "${plugin}" from marketplace "${marketplace}".`);
+    notifySuccess(ctx, body);
     return;
   }
 
@@ -216,20 +241,6 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
     cascadeResult.dropped.commands.length > 0 ||
     cascadeResult.dropped.agents.length > 0 ||
     cascadeResult.dropped.mcpServers.length > 0;
-
-  // RH-5 soft-dep warnings -- the dropped agents/mcp will not actually unload
-  // until /reload; warn if the companion extension is unloaded.
-  const subagentWarn = subagentWarningIfNeeded(pi, cascadeResult.dropped.agents);
-  const mcpWarn = mcpAdapterWarningIfNeeded(pi, cascadeResult.dropped.mcpServers);
-
-  let body = `Uninstalled plugin "${plugin}" from marketplace "${marketplace}".`;
-  if (subagentWarn !== "") {
-    body = `${body}\n${subagentWarn}`;
-  }
-
-  if (mcpWarn !== "") {
-    body = `${body}\n${mcpWarn}`;
-  }
 
   // PU-8 / MSG-RH-1: reload hint emitted iff anything was actually dropped.
   // reloadHint() returns "" for empty names array; appendReloadHint
