@@ -16,14 +16,22 @@ import { errorMessage } from "../../../shared/errors.ts";
 import { notifyError } from "../../../shared/notify.ts";
 import { parseArgs } from "../../args.ts";
 
-import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
 const USAGE =
   "Usage: /claude:plugin list [<marketplace>] [--installed] [--available] [--unavailable] [--scope user|project]";
 
 const BOOLEAN_FLAGS = new Set(["--installed", "--available", "--unavailable"]);
 
-export function makeListHandler(): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
+/**
+ * Factory: returns the async handler closed over `pi` (required by
+ * `listPlugins` for per-row soft-dep marker probes per CMC-13 / MSG-SD-1..3 --
+ * the orchestrator constructs a `SoftDepProbe` via `softDepStatus(pi)` and
+ * forwards it to the renderer).
+ */
+export function makeListHandler(
+  pi: ExtensionAPI,
+): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
     let parsed;
     try {
@@ -60,6 +68,7 @@ export function makeListHandler(): (args: string, ctx: ExtensionCommandContext) 
 
     await listPlugins({
       ctx,
+      pi,
       cwd: ctx.cwd,
       ...(nonFlagPositionals[0] !== undefined && { marketplace: nonFlagPositionals[0] }),
       ...(parsed.scope !== undefined && { scope: parsed.scope }),

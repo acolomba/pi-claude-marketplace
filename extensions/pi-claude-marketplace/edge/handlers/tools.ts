@@ -25,6 +25,13 @@
 // Status semantics (Phase 2 D-09): state.json has NO plugin.installed
 // boolean. Presence of `mp.plugins[name]` === installed. Per-marketplace
 // plugin count for the list tool is `Object.keys(mp.plugins).length`.
+//
+// Phase 13 Wave 2 sub-wave 2d migration: the plugin-list payload now uses
+// the Wave 1 RowSpec shape (`marketplaceBlocks` of `PluginListMarketplaceBlock`
+// with `PluginListRow` children). The LLM tool's structured surface
+// translates the new payload back into its V1-style flat-line projection;
+// the slash-command surface uses the catalog form via `renderPluginList`
+// directly (orchestrators/plugin/list.ts).
 
 import Type from "typebox";
 
@@ -33,8 +40,8 @@ import { loadPluginListPayload } from "../../orchestrators/plugin/list.ts";
 import { sourceLogical } from "../../presentation/marketplace-list.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { EmptyToken, PluginListRow } from "../../presentation/compact-line.ts";
 import type { ParsedSource } from "../../presentation/marketplace-list.ts";
-import type { PluginRenderStatus } from "../../presentation/plugin-list.ts";
 
 // ─── LLM tool parameter schemas (TypeBox) ─────────────────────────────────
 
@@ -115,13 +122,48 @@ export function registerListMarketplacesTool(pi: ExtensionAPI): void {
 
 // ─── Tool 2: pi_claude_marketplace_plugin_list ───────────────────────────────
 
+/**
+ * The flat-line projection of a single plugin row for the LLM-tool surface.
+ * The slash-command surface uses the catalog form via the renderer; the
+ * tool surface keeps a stable, machine-friendly line shape so the agent
+ * can pattern-match on `[installed]` / `[available]` / `[unavailable]`.
+ *
+ * The `(upgradable)` status maps to `[installed]` in this projection (the
+ * plugin IS installed; the upgrade status is internal to the slash-command
+ * surface per MSG-PL-4).
+ */
+type ToolPluginStatus = "installed" | "available" | "unavailable";
+
 interface PluginRow {
   marketplace: string;
   scope: "user" | "project";
   name: string;
-  status: PluginRenderStatus;
+  status: ToolPluginStatus;
   version?: string;
-  notes?: readonly string[];
+  reasons?: readonly string[];
+}
+
+function projectRowStatus(status: PluginListRow["status"]): ToolPluginStatus {
+  switch (status) {
+    case "installed":
+    case "upgradable":
+      return "installed";
+    case "available":
+      return "available";
+    case "unavailable":
+      return "unavailable";
+  }
+}
+
+function statusLabel(status: ToolPluginStatus): string {
+  switch (status) {
+    case "installed":
+      return "[installed]";
+    case "available":
+      return "[available]";
+    case "unavailable":
+      return "[unavailable]";
+  }
 }
 
 function renderPluginRow(row: PluginRow): string {
@@ -131,22 +173,11 @@ function renderPluginRow(row: PluginRow): string {
     parts.push(row.version);
   }
 
-  if (row.notes !== undefined && row.notes.length > 0) {
-    parts.push(`(${row.notes.join(", ")})`);
+  if (row.reasons !== undefined && row.reasons.length > 0) {
+    parts.push(`(${row.reasons.join(", ")})`);
   }
 
   return parts.join("  ");
-}
-
-function statusLabel(status: PluginRenderStatus): string {
-  switch (status) {
-    case "installed":
-      return "[installed]";
-    case "available":
-      return "[available]";
-    case "uninstallable":
-      return "[unavailable]";
-  }
 }
 
 function applyFilter(params: { installed?: boolean; available?: boolean; unavailable?: boolean }): {
@@ -167,13 +198,13 @@ function applyFilter(params: { installed?: boolean; available?: boolean; unavail
   };
 }
 
-function statusKey(status: PluginRenderStatus): "i" | "a" | "u" {
+function statusKey(status: ToolPluginStatus): "i" | "a" | "u" {
   switch (status) {
     case "installed":
       return "i";
     case "available":
       return "a";
-    case "uninstallable":
+    case "unavailable":
       return "u";
   }
 }
@@ -190,7 +221,17 @@ async function marketplaceExists(params: {
   return visible.some((m) => m.record.name === params.marketplace);
 }
 
+/**
+ * The tool's `pi` reference is required for the orchestrator's
+ * `SoftDepProbe` construction; we pass the ExtensionContext's pi seed at
+ * call time. The probe is only consulted when a PluginListRow carries
+ * `declares*` predicates, which never affects the orchestrator's
+ * bucketing -- so the probe choice does not change the structured tool
+ * output (it only suppresses the `{requires pi-*}` reason injection on
+ * the renderer side, which this tool does not call).
+ */
 async function loadToolPluginPayload(
+  pi: ExtensionAPI,
   params: {
     marketplace?: string;
     scope?: "user" | "project";
@@ -200,9 +241,10 @@ async function loadToolPluginPayload(
   },
   ctx: ExtensionContext,
   buckets: { i: boolean; a: boolean; u: boolean },
-): Promise<Awaited<ReturnType<typeof loadPluginListPayload>>["payload"]> {
-  const result = await loadPluginListPayload({
+): Promise<Awaited<ReturnType<typeof loadPluginListPayload>>> {
+  return loadPluginListPayload({
     ctx,
+    pi,
     cwd: ctx.cwd,
     ...(params.scope !== undefined && { scope: params.scope }),
     ...(params.marketplace !== undefined && { marketplace: params.marketplace }),
@@ -210,34 +252,41 @@ async function loadToolPluginPayload(
     ...(buckets.a && { available: true }),
     ...(buckets.u && { unavailable: true }),
   });
-  return result.payload;
+}
+
+function isPluginRow(child: PluginListRow | EmptyToken): child is PluginListRow {
+  return child.kind === "plugin-list";
 }
 
 function renderPluginPayload(
-  payload: Awaited<ReturnType<typeof loadPluginListPayload>>["payload"],
+  payload: Awaited<ReturnType<typeof loadPluginListPayload>>,
   buckets: { i: boolean; a: boolean; u: boolean },
 ): { lines: string[]; rows: PluginRow[] } {
   const lines: string[] = [];
   const rows: PluginRow[] = [];
-  for (const mp of payload.marketplaces) {
-    lines.push(`Marketplace ${mp.name} (${mp.scope})`);
-    if (mp.plugins.length === 0) {
+  for (const block of payload.marketplaceBlocks) {
+    const mpName = block.header.name;
+    const mpScope = block.header.scope;
+    lines.push(`Marketplace ${mpName} (${mpScope})`);
+    const pluginRows = block.plugins.filter(isPluginRow);
+    if (pluginRows.length === 0) {
       lines.push("  (no plugins)");
       continue;
     }
 
-    for (const p of mp.plugins) {
-      if (!buckets[statusKey(p.status)]) {
+    for (const p of pluginRows) {
+      const status = projectRowStatus(p.status);
+      if (!buckets[statusKey(status)]) {
         continue;
       }
 
       const row: PluginRow = {
-        marketplace: mp.name,
-        scope: mp.scope,
+        marketplace: mpName,
+        scope: p.scope,
         name: p.name,
-        status: p.status,
+        status,
         ...(p.version !== undefined && { version: p.version }),
-        ...(p.notes !== undefined && p.notes.length > 0 && { notes: p.notes }),
+        ...(p.reasons !== undefined && p.reasons.length > 0 && { reasons: p.reasons }),
       };
       lines.push(renderPluginRow(row));
       rows.push(row);
@@ -286,7 +335,7 @@ export function registerListPluginsTool(pi: ExtensionAPI): void {
       // line format AND `details.plugins`.
       let payload;
       try {
-        payload = await loadToolPluginPayload(params, ctx, buckets);
+        payload = await loadToolPluginPayload(pi, params, ctx, buckets);
       } catch (err) {
         // TC-9: state.json error propagates as a tool error surface (the
         // agent should see a clear failure rather than an empty list).
@@ -304,7 +353,7 @@ export function registerListPluginsTool(pi: ExtensionAPI): void {
 
       const { lines, rows } = renderPluginPayload(payload, buckets);
 
-      if (rows.length === 0 && payload.marketplaces.length === 0) {
+      if (rows.length === 0 && payload.marketplaceBlocks.length === 0) {
         return {
           content: [{ type: "text", text: "No marketplaces configured." }],
           details: { plugins: [] },
