@@ -79,7 +79,7 @@ export function registerClaudePluginCommand(pi: ExtensionAPI, deps: EdgeDeps): v
     uninstall: makeUninstallHandler(pi),
     update: makeUpdateHandler(pi),
     reinstall: makeReinstallHandler(pi),
-    list: makeListHandler(),
+    list: makeListHandler(pi),
     import: makeImportHandler(pi, deps),
     marketplaceAdd: makeAddHandler(deps),
     marketplaceRemove: makeRemoveHandler(pi),
