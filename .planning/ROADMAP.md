@@ -188,7 +188,19 @@ Plans:
 4. Per-scope rendering works end-to-end: a marketplace that exists in both scopes renders as two separate headers (one per scope, each with its own marker / status / reasons); the plugin-list orphan fold rule and the marketplace-add adoption behavior round-trip correctly (orphan plugins fold under user-scope, get adopted when a project-scope marketplace is later added).
 5. Cascade severity routes per MSG-SR-4..6: an all-trivial cascade uses `notifySuccess`; a cascade with any non-trivial `(skipped)` or `(failed)` row uses `notifyWarning`; no cascade summary uses `notifyError`. The reload-hint trailer fires exactly once per body when any resource changed; omitted on all-failed cascades and bare manifest-only refreshes; coexists with the recovery anchor (reload above retry, blank line between) on partial-failure remove surfaces.
 
-**Plans:** TBD
+**Plans:** 8 plans
+
+Plans:
+
+- [ ] `13-01-01-PLAN.md` -- Wave 1 keystone: RowSpec discriminated union + compact-line renderer + sort helper + STATUS_TOKENS extension to 15 entries (reinstalled per D-13-20) + presentation/index.ts barrel update + unit tests
+- [ ] `13-01-02-PLAN.md` -- Wave 1 composers: cause-chain depth-5 walker + cascade-summary + manual-recovery + rollback-partial + reload-hint MSG-RH-1 blank-line fix + notifyError body rewrite + formatErrorWithCauses deletion + caller migration
+- [ ] `13-01-03-PLAN.md` -- Wave 1 cutover gates: ESLint no-restricted-imports for the 5 legacy markers (D-13-09) + tests/architecture/no-legacy-markers.test.ts static-audit (D-13-12) + presentation/soft-dep.ts thinning
+- [ ] `13-02a-01-PLAN.md` -- Wave 2 sub-wave 2a (cascades): reinstall + update + import migration to cascadeSummary + PluginCascadeRow + per-row soft-dep + rollback-partial (CMC-25/26/27)
+- [ ] `13-02b-01-PLAN.md` -- Wave 2 sub-wave 2b (single-plugin): install + uninstall + bootstrap migration to PluginInlineRow + PluginInlineUninstalledRow + edge handler entity errors (CMC-23/24/28)
+- [ ] `13-02c-01-PLAN.md` -- Wave 2 sub-wave 2c (marketplace): list + add + remove + update + autoupdate migration + marketplace-list renderer rewrite + edge handler entity errors + platform/pi-api.ts trailer-helper deletion (CMC-29..34)
+- [ ] `13-02d-01-PLAN.md` -- Wave 2 sub-wave 2d (list): orchestrators/plugin/list.ts orphan-fold computation + presentation/plugin-list.ts rewrite + fold-adoption integration test (CMC-22, CMC-21)
+- [ ] `13-03-01-PLAN.md` -- Wave 3 plan #1 (catalog UAT pre-cutover gate): docs/output-catalog.md HTML-comment discriminators + tests/architecture/catalog-uat.test.ts byte-equality runner (CMC-22..34 verification)
+- [ ] `13-03-02-PLAN.md` -- Wave 3 plan #2 (ES-5 atomic commit): single git commit deleting 5 marker exports + 5 snapshot rows + rewriting PRD §6.12 + rolling back ESLint marker entries (CMC-35; milestone v1.3 user-contract boundary)
 
 ### Phase 14: Drift Guard & Test Alignment
 
@@ -226,7 +238,7 @@ Plans:
 | 10. Claude Settings Import Foundation (v1.2) | Pure import-planning foundation                                                   | IMP-04..IMP-08                                                                                                                                            | 3/3 plans  | Complete    | 2026-05-14 |
 | 11. Import Command Orchestration (v1.2)      | `/claude:plugin import` command                                                   | IMP-01..IMP-03, IMP-09..IMP-11                                                                                                                            | 3/3 plans  | Complete    | 2026-05-14 |
 | 12. Messaging Foundations (v1.3)             | Closed-set constants, renderer/notify primitives, reload-hint collapse            | CMC-08, CMC-11, CMC-14, CMC-19, CMC-36, CMC-37                                                                                                            | 0/4 plans  | Not started | --         |
-| 13. Conformance Refactor & ES-5 (v1.3)       | Mechanical callsite rewrite + ES-5 atomic edit + per-command catalog conformance  | CMC-01..07, CMC-09, CMC-10, CMC-12, CMC-13, CMC-15..18, CMC-20, CMC-21, CMC-22..34, CMC-35                                                                | 0/? plans  | Not started | --         |
+| 13. Conformance Refactor & ES-5 (v1.3)       | Mechanical callsite rewrite + ES-5 atomic edit + per-command catalog conformance  | CMC-01..07, CMC-09, CMC-10, CMC-12, CMC-13, CMC-15..18, CMC-20, CMC-21, CMC-22..34, CMC-35                                                                | 0/9 plans  | Not started | --         |
 | 14. Drift Guard & Test Alignment (v1.3)      | Frontmatter-driven drift test suite that fails `npm run check` on contract drift  | CMC-38                                                                                                                                                    | 0/? plans  | Not started | --         |
 
 ## Coverage (v1.3)
@@ -315,3 +327,4 @@ ______________________________________________________________________
 *Last updated: 2026-05-14 after Phase 9 completion*
 *Last updated: 2026-05-16 after merge from main brought in v1.2 phases 10 & 11.*
 *Last updated: 2026-05-22 -- v1.3 Consistent Messaging milestone added: Phases 12 (Foundations), 13 (Conformance Refactor & ES-5), 14 (Drift Guard). 38/38 CMC requirements mapped (100% coverage). Continued phase numbering from 11; no reset.*
+*Last updated: 2026-05-23 -- Phase 13 planned: 9 plans across 3 waves (Wave 1: 3 cross-cutting primitive plans; Wave 2: 4 sub-wave per-command plans 2a/2b/2c/2d; Wave 3: catalog UAT pre-commit gate + ES-5 atomic commit).*
