@@ -14,10 +14,14 @@
 //     PI-6:                assertNoCrossPluginConflicts(scope, names, state)
 //     PI-7:                resolveInstallVersion (entry.version > hash fallback)
 //     runPhases(phases, ctx)                               // D-01 5-phase ledger
-//     formatRollbackError on !ok                           // D-02 PI-14 bypass
+//     capture rollbackPartials, throw raw error            // D-02 PI-14 bypass
 //   })
 //   POST-state-commit (D-08 / AS-6):  mkdir(pluginDataDir) -> warning on failure
-//   Success notify w/ soft-dep warnings (PI-11/PI-12) + PI-13 deps note + reload hint
+//   Success notify via PluginInlineRow + renderRow (CMC-23) + reload hint;
+//   per-row soft-dep markers via declaresAgents/Mcp (CMC-13 / MSG-SD-1..3).
+//   Failure with rollback-partial routes through renderRollbackPartial
+//   (CMC-17 / MSG-RP-1) with parent PluginInlineRow + RollbackChild[] +
+//   auto-appended cause-chain trailer via notifyError (D-CMC-12).
 //
 // NFR-5 / PI-2 architectural guard: this file MUST NOT import platform-git
 // or the default git ops, and MUST NOT carry a gitOps field; the architectural
@@ -58,14 +62,16 @@ import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../platform/pi-api.ts";
+import { softDepStatus } from "../../platform/pi-api.ts";
 import { causeChainTrailer } from "../../presentation/cause-chain.ts";
+import { renderRow } from "../../presentation/compact-line.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
+import { renderRollbackPartial } from "../../presentation/rollback-partial.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import { ConcurrentInstallError, errorMessage } from "../../shared/errors.ts";
 import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
-import { runPhases, type Phase } from "../../transaction/phase-ledger.ts";
-import { formatRollbackError } from "../../transaction/rollback.ts";
+import { PathContainmentError } from "../../shared/path-safety.ts";
+import { runPhases, type Phase, type RollbackPartial } from "../../transaction/phase-ledger.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
 import {
@@ -85,6 +91,11 @@ import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type {
+  PluginInlineRow,
+  RollbackChild,
+  SoftDepProbe,
+} from "../../presentation/compact-line.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -212,6 +223,16 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   // Post-guard composition data. The guard closure populates this on
   // success; the catch block leaves it undefined and returns early.
   let installCtx: InstallCtx | undefined;
+  // Captured-on-throw context for the catch block. `failurePhaseResolvedVersion`
+  // is the version we know about when the ledger threw -- absent if the throw
+  // pre-dated resolvePluginVersion. `failureRollbackPartials` mirrors the
+  // ledger's RollbackPartial[] for the renderRollbackPartial child block;
+  // when empty, the catch routes through the bare PluginInlineRow form
+  // (no rollback children, per the catalog single-line failure shape).
+  let failureRollbackPartials: readonly RollbackPartial[] = [];
+  let failureVersion: string | undefined;
+  let failureDeclaresAgents = false;
+  let failureDeclaresMcp = false;
 
   try {
     await withStateGuard(locations, async (state) => {
@@ -554,12 +575,19 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
 
       const result = await runPhases(phases, ctxLocal);
       if (!result.ok) {
-        // PI-14 bypass is inherited via Plan 05-02's formatRollbackError
-        // chokepoint: if the original error IS a PathContainmentError, the
-        // formatter returns it verbatim. Otherwise, the rollback-partial
-        // marker is appended.
+        // Capture the rollbackPartials + best-known-version + declares-*
+        // predicates BEFORE re-throwing. The post-guard catch block uses
+        // these to compose a PluginInlineRow + RollbackChild[] for
+        // renderRollbackPartial (CMC-17 / MSG-RP-1). PathContainmentError
+        // bypasses the rollback-partial rendering verbatim per PI-14:
+        // the catch block detects the error class and surfaces .message
+        // unchanged.
+        failureRollbackPartials = result.rollbackPartials;
+        failureVersion = ctxLocal.version;
+        failureDeclaresAgents = ctxLocal.stagedAgentNames.length > 0;
+        failureDeclaresMcp = ctxLocal.stagedMcpServerNames.length > 0;
         // result.error is non-undefined on !ok per phase-ledger.ts contract.
-        throw formatRollbackError(result, result.error ?? new Error("phase ledger failed"));
+        throw result.error ?? new Error("phase ledger failed");
       }
 
       // Success: lift the install context up so the post-guard path can
@@ -567,24 +595,41 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       installCtx = ctxLocal;
     });
   } catch (err) {
-    // Pattern S-1 single chokepoint for user-visible errors. The PI-14
-    // PathContainmentError reaches here VERBATIM via formatRollbackError
-    // -- notifyError surfaces its `.message` (Pattern S-6 depth-5 cause walk
-    // for non-PathContainment errors gives the chained Phase 2 / Phase 3
-    // bridge cause text).
+    // Pattern S-1 single chokepoint for user-visible errors.
     //
-    // D-CMC-12: `cause` (the composed message + trailer text) is what the
-    // orchestrated outcome carries. The notify path passes `errorMessage(err)`
-    // as the message and lets `notifyError` append the MSG-CC-1 trailer
-    // automatically -- this avoids double-emitting when this orchestrator is
-    // wired into the notify path.
+    // D-CMC-12: the orchestrated outcome carries the composed message + the
+    // cause-chain trailer; the standalone notify path passes the rendered
+    // body and lets `notifyError` auto-append the MSG-CC-1 trailer once.
+    //
+    // CMC-17 / MSG-RP-1: when the ledger reported per-phase undo failures,
+    // emit the parent PluginInlineRow with `reasons: ["rollback partial"]`
+    // and an indented RollbackChild[] block via renderRollbackPartial.
+    //
+    // PI-14: PathContainmentError reaches here VERBATIM -- the rollback
+    // partial rendering is bypassed and the .message surfaces unchanged
+    // (the original symlink/escape diagnostic is the entire user surface).
+    const isPathContainment = err instanceof PathContainmentError;
+    const probe = softDepStatus(pi);
+    const rolledBackPartial = !isPathContainment && failureRollbackPartials.length > 0;
+    const body = rolledBackPartial
+      ? composeRollbackPartialBody({
+          plugin,
+          marketplace,
+          scope,
+          version: failureVersion,
+          declaresAgents: failureDeclaresAgents,
+          declaresMcp: failureDeclaresMcp,
+          partials: failureRollbackPartials,
+          probe,
+        })
+      : errorMessage(err);
     const trailer = causeChainTrailer(err);
-    const cause = trailer === "" ? errorMessage(err) : `${errorMessage(err)}\n\n${trailer}`;
+    const cause = trailer === "" ? body : `${body}\n\n${trailer}`;
     if (opts.notifications?.mode === "orchestrated") {
       return classifyInstallFailure(err, cause);
     }
 
-    notifyError(ctx, errorMessage(err), err);
+    notifyError(ctx, body, err);
     return { status: "unexpected-failure", cause };
   }
 
@@ -661,11 +706,6 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     }
   }
 
-  // RH-5 soft-dep probes -- the staged agents/mcp will not actually load
-  // until /reload, AND not at all if the companion extension is unloaded.
-  const subagentWarn = subagentWarningIfNeeded(pi, installCtx.stagedAgentNames);
-  const mcpWarn = mcpAdapterWarningIfNeeded(pi, installCtx.stagedMcpServerNames);
-
   // RH-1 reload-hint gate: emit the hint only if at least one resource
   // was actually staged (the install would otherwise be a noop and the
   // user has nothing to /reload).
@@ -676,26 +716,41 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     installCtx.stagedMcpServerNames.length > 0;
 
   if (!orchestrated) {
-    let body = `Installed plugin "${plugin}" from marketplace "${marketplace}".`;
-    if (subagentWarn !== "") {
-      body = `${body}\n${subagentWarn}`;
-    }
+    // CMC-23 / D-13-05 / D-13-06: emit via PluginInlineRow + renderRow.
+    // CMC-13 / MSG-SD-1..3: declaresAgents / declaresMcp predicates drive
+    // the per-row soft-dep marker injection inside renderRow's composeReasons
+    // (the renderer probes companion-loaded state via the injected
+    // SoftDepProbe and appends `{requires pi-subagents}` / `{requires pi-mcp}`
+    // iff (declares AND unloaded)). The legacy aggregated PI_*_NOT_LOADED
+    // trailer pattern is RETIRED per D-13-07; the per-row marker is the
+    // single source.
+    const probe: SoftDepProbe = softDepStatus(pi);
+    const successRow: PluginInlineRow = {
+      kind: "plugin-inline",
+      name: plugin,
+      marketplace,
+      scope,
+      ...(installCtx.version !== "" && { version: installCtx.version }),
+      status: "installed",
+      declaresAgents: installCtx.stagedAgentNames.length > 0,
+      declaresMcp: installCtx.stagedMcpServerNames.length > 0,
+    };
+    const body = renderRow(successRow, probe);
+    const hint = reloadHint(stagedAny ? [plugin] : []);
+    notifySuccess(ctx, appendReloadHint(body, hint));
 
-    if (mcpWarn !== "") {
-      body = `${body}\n${mcpWarn}`;
-    }
-
-    // PI-13 dependencies declaration -- the resolver appends the canonical
-    // PR-5 phrase to `installable.notes`. Find and surface verbatim.
+    // PI-13 dependencies declaration: the resolver appends the canonical
+    // PR-5 phrase to `installable.notes`. This is free-form prose (not a
+    // closed-set Reason) and does not fit the compact-line grammar -- emit
+    // it as a separate `notifyWarning` after the success row per the §18.2
+    // free-form trailer escape (the catalog does not list a per-row PI-13
+    // example; the planner's default is a follow-up notifyWarning).
     const depsNote = installCtx.resolved.notes.find((n) =>
       n.includes("dependencies that must be installed manually"),
     );
     if (depsNote !== undefined) {
-      body = `${body}\n${depsNote}`;
+      notifyWarning(ctx, depsNote);
     }
-
-    const hint = reloadHint(stagedAny ? [plugin] : []);
-    notifySuccess(ctx, appendReloadHint(body, hint));
   }
 
   return {
@@ -703,6 +758,68 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     resourcesChanged: stagedAny,
     ...(postCommitWarnings.length > 0 && { postCommitWarnings }),
   };
+}
+
+/**
+ * CMC-17 / MSG-RP-1 rollback-partial composer for the single-plugin install
+ * failure surface. Builds a PluginInlineRow parent + RollbackChild[] block
+ * via `renderRollbackPartial`.
+ *
+ * - Parent: `⊘ <plugin>@<marketplace> [<scope>] v<ver?> (failed) {rollback partial}`
+ *   (the renderer prepends the icon and the closed-set Reason `rollback partial`
+ *   is the canonical parent-row reason per Wave 1's narrowing -- bridge
+ *   phase names like `skills` / `agents` are not closed Reasons; the
+ *   per-phase failure name surfaces via the indented child's `phaseLabel`).
+ * - Children: one `[<phase>] (rollback failed) {rollback partial}` per
+ *   ledger RollbackPartial entry. The free-text `msg` is NOT a closed-set
+ *   Reason and would not survive narrowing; the phaseLabel + status pair
+ *   surfaces the failing bridge by name (matching the catalog form at
+ *   `docs/output-catalog.md` lines 304-310). The cause-chain trailer is
+ *   appended by `notifyError` (D-CMC-12) after this composer returns.
+ *
+ * The `declaresAgents` / `declaresMcp` predicates are still surfaced on
+ * the parent row so the renderer's per-row soft-dep injection (CMC-13 /
+ * MSG-SD-1..3) fires on failed installs that staged agents/mcp content
+ * before the rollback; structurally, the renderer treats them identically
+ * to a successful row's marker probe.
+ */
+function composeRollbackPartialBody(args: {
+  plugin: string;
+  marketplace: string;
+  scope: Scope;
+  version: string | undefined;
+  declaresAgents: boolean;
+  declaresMcp: boolean;
+  partials: readonly RollbackPartial[];
+  probe: SoftDepProbe;
+}): string {
+  const parent: PluginInlineRow = {
+    kind: "plugin-inline",
+    name: args.plugin,
+    marketplace: args.marketplace,
+    scope: args.scope,
+    ...(args.version !== undefined && args.version !== "" && { version: args.version }),
+    status: "failed",
+    reasons: ["rollback partial"] as const,
+    declaresAgents: args.declaresAgents,
+    declaresMcp: args.declaresMcp,
+  };
+  const children: readonly RollbackChild[] = args.partials.map((p) => ({
+    kind: "rollback-child",
+    // MSG-RP-1 catalog form: bracketed phase token; renders verbatim as the
+    // bare compact line's leading slot in `renderRollbackChild`.
+    phaseLabel: `[${p.phase}]`,
+    // The undo step threw; the swap was attempted and the post-commit
+    // recovery is the per-plugin reinstall hint. `rollback failed`
+    // captures that effective state. Mirrors the precedent established
+    // by orchestrators/plugin/update.ts (sub-wave 2a, Plan 13-02a-01).
+    status: "rollback failed",
+    // The free-text `p.msg` is not in the closed REASONS set; narrow to
+    // the canonical parent reason so the child stays inside CMC-11.
+    // The phaseLabel + status pair carries the user-visible failure shape.
+    reasons: ["rollback partial"] as const,
+  }));
+  return renderRollbackPartial(parent, children, args.probe);
 }
 
 function classifyInstallFailure(err: unknown, formattedCause: string): InstallPluginOutcome {

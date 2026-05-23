@@ -612,12 +612,14 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
       assert.deepEqual([...record.resources.agents], [`${GENERATED_AGENT_PREFIX}hello-bot`]);
       assert.deepEqual([...record.resources.mcpServers], ["server1"]);
 
-      // Single success notification with the canonical "Installed" line + reload hint.
+      // Single success notification with the canonical compact-line shape
+      // per CMC-23 / D-13-05 (PluginInlineRow + renderRow) + MSG-RH-1
+      // blank-line reload-hint trailer. The fixture seeds version 1.0.0.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined);
       assert.match(
         notifications[0]?.message ?? "",
-        /Installed plugin "hello" from marketplace "mp"\./,
+        /● hello@mp \[project\] v1\.0\.0 \(installed\)/,
       );
       assert.match(notifications[0]?.message ?? "", /\/reload to pick up changes$/);
     } finally {
@@ -722,12 +724,17 @@ test("PI-11 / RH-3: staged agents + pi.getAllTools has no 'subagent' -> success 
         plugin: "hello",
       });
 
+      // CMC-13 / MSG-SD-1: per-row soft-dep marker `{requires pi-subagents}`
+      // fires when (declaresAgents AND !piSubagentsLoaded). The renderer
+      // composes the marker into the reasons block of the PluginInlineRow,
+      // retiring the legacy aggregated PI_SUBAGENTS_NOT_LOADED trailer per
+      // D-13-07.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined);
       assert.match(
         notifications[0]?.message ?? "",
-        /pi-subagents is not loaded/,
-        "must include pi-subagents warning",
+        /\{requires pi-subagents\}/,
+        "must include per-row {requires pi-subagents} marker",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -761,12 +768,15 @@ test("PI-12 / RH-4: staged mcp + pi.getAllTools has no 'mcp' -> success message 
         plugin: "hello",
       });
 
+      // CMC-13 / MSG-SD-2: per-row soft-dep marker `{requires pi-mcp}`
+      // fires when (declaresMcp AND !piMcpAdapterLoaded). Legacy aggregated
+      // PI_MCP_ADAPTER_NOT_LOADED trailer retired per D-13-07.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined);
       assert.match(
         notifications[0]?.message ?? "",
-        /pi-mcp-adapter is not loaded/,
-        "must include pi-mcp-adapter warning",
+        /\{requires pi-mcp\}/,
+        "must include per-row {requires pi-mcp} marker",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -801,10 +811,18 @@ test("PI-13: entry declares dependencies -> success message includes the PR-5 ph
         plugin: "hello",
       });
 
-      assert.equal(notifications.length, 1);
+      // PI-13 deps note is free-form prose (not a closed-set Reason) and
+      // does not fit the compact-line grammar. Per Plan 13-02b-01 Task 1
+      // default + §18.2 free-form trailer escape, it is now emitted as a
+      // SEPARATE notifyWarning after the success compact line (two
+      // notifications total). The first is the canonical compact line; the
+      // second is the PR-5 manual-install phrase at warning severity.
+      assert.equal(notifications.length, 2);
       assert.equal(notifications[0]?.severity, undefined);
+      assert.match(notifications[0]?.message ?? "", /● hello@mp \[project\] .*\(installed\)/);
+      assert.equal(notifications[1]?.severity, "warning");
       assert.match(
-        notifications[0]?.message ?? "",
+        notifications[1]?.message ?? "",
         /dependencies that must be installed manually/,
         "must include the PR-5 manual-install phrase",
       );
@@ -1084,8 +1102,9 @@ test("CMP-3 / PI-16: project-target install falls back to user-scope marketplace
         plugin: "hello",
       });
 
+      // CMC-23 compact-line success shape (D-13-05 / D-13-06).
       assert.equal(notifications[0]?.severity, undefined);
-      assert.match(notifications[0]?.message ?? "", /Installed plugin "hello"/);
+      assert.match(notifications[0]?.message ?? "", /● hello@mp \[project\] .*\(installed\)/);
 
       const userAfter = await loadState(userLocations.extensionRoot);
       const projectAfter = await loadState(projectLocations.extensionRoot);
@@ -1160,8 +1179,9 @@ test("PI-17: same plugin may be installed in both user and project target scopes
         plugin: "hello",
       });
 
+      // CMC-23 compact-line success shape (D-13-05 / D-13-06).
       assert.equal(notifications[0]?.severity, undefined);
-      assert.match(notifications[0]?.message ?? "", /Installed plugin "hello"/);
+      assert.match(notifications[0]?.message ?? "", /● hello@mp \[project\] .*\(installed\)/);
 
       const userAfter = await loadState(userLocations.extensionRoot);
       const projectAfter = await loadState(projectLocations.extensionRoot);

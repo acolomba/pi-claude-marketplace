@@ -375,16 +375,19 @@ export default tseslint.config(
       // these contract-assertion tests still import legacy ES-5 markers today.
       // Wave 2 sub-waves migrate them; the Wave 3 atomic commit removes these
       // entries alongside the markers.ts export deletion.
-      //   - tests/e2e/install-soft-deps.test.ts: PI_*_NOT_LOADED contract
-      //     assertion (Wave 2 sub-wave 2b)
       //   - tests/platform/pi-api.test.ts: PI_*_NOT_LOADED contract assertion
       //     (Wave 2 sub-wave 2b finalization with platform/pi-api.ts deletion
-      //     of subagentWarningIfNeeded / mcpAdapterWarningIfNeeded)
+      //     of subagentWarningIfNeeded / mcpAdapterWarningIfNeeded -- entry
+      //     retained because the orchestrator allows the helpers to live on
+      //     until sub-wave 2c per Plan 13-01-03 Open Question 3)
       //   - tests/presentation/soft-dep.test.ts: PI_*_NOT_LOADED contract
-      //     assertion (Wave 2 sub-wave 2b)
+      //     assertion (Wave 2 sub-wave 2b finalization mirror of pi-api.test)
       //   - tests/transaction/rollback.test.ts: ROLLBACK_PARTIAL contract
       //     assertion (Wave 2 sub-wave 2a)
-      "tests/e2e/install-soft-deps.test.ts",
+      //
+      // Removed in sub-wave 2b (Plan 13-02b-01):
+      //   - tests/e2e/install-soft-deps.test.ts: migrated to per-row markers
+      //     `{requires pi-subagents}` / `{requires pi-mcp}` (CMC-13 / MSG-SD-1..2).
       "tests/platform/pi-api.test.ts",
       "tests/presentation/soft-dep.test.ts",
       "tests/transaction/rollback.test.ts",
