@@ -312,8 +312,15 @@ test("PI-3: plugin name not in marketplace plugins[] -> notifyError 'not found i
         plugin: "ghost-plugin",
       });
 
+      // CMC-34 / MSG-NC-1 compact entity-error row + D-CMC-12 cause-chain
+      // trailer that preserves the original message text. The compact form
+      // is the primary surface; the trailer aids machine-grep + debugging.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
+      assert.match(
+        notifications[0]?.message ?? "",
+        /⊘ ghost-plugin@mp \[project\] \(failed\) \{not in manifest\}/,
+      );
       assert.match(notifications[0]?.message ?? "", /not found in marketplace/);
 
       // State unchanged.
@@ -344,6 +351,11 @@ test("PI-3: marketplace itself absent -> notifyError 'not found in marketplace'"
 
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
+      // CMC-34 / MSG-NC-1 compact entity-error row.
+      assert.match(
+        notifications[0]?.message ?? "",
+        /⊘ anything@ghost-mp \[project\] \(failed\) \{not in manifest\}/,
+      );
       assert.match(notifications[0]?.message ?? "", /not found in marketplace/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -382,6 +394,14 @@ test("PI-4: non-path source -> notifyError 'is not installable'", async () => {
 
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
+      // CMC-34 / MSG-NC-1 compact entity-error row: status `(unavailable)`
+      // per catalog `### Failure -- unsupported features in manifest`.
+      // Reasons narrowed from the resolver's notes -- a non-path source
+      // becomes `{unsupported source}` in the closed REASONS set.
+      assert.match(
+        notifications[0]?.message ?? "",
+        /⊘ hello@mp \[project\] \(unavailable\) \{unsupported source\}/,
+      );
       assert.match(notifications[0]?.message ?? "", /is not installable/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -417,6 +437,11 @@ test("PI-5: state already has plugin record -> notifyError 'is already installed
 
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
+      // CMC-34 / MSG-NC-1 compact entity-error row.
+      assert.match(
+        notifications[0]?.message ?? "",
+        /⊘ hello@mp \[project\] \(failed\) \{already installed\}/,
+      );
       assert.match(notifications[0]?.message ?? "", /is already installed/);
     } finally {
       await rm(cwd, { recursive: true, force: true });

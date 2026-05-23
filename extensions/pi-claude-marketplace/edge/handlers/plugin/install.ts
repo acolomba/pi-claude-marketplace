@@ -9,14 +9,22 @@
 // boolean flag(s), then split the remaining single non-flag positional via
 // `splitPluginMarketplaceRef`.
 //
+// Phase 13 sub-wave 2b (Plan 13-02b-01 / D-13-05): argument-parsing failures
+// route through `notifyUsageError` per MSG-NC-2 / MSG-SR-7 (sentence form
+// preserved; Usage block appended after a blank line). Entity-shape errors
+// (PI-3 / PI-4 / PI-5) are emitted by the orchestrator (installPlugin) as
+// `EntityErrorRow` compact lines per CMC-34 / MSG-NC-1 -- the split between
+// "argument-parsing failure" (edge layer) and "entity-shape failure"
+// (orchestrator layer) is part of the user-contract surface.
+//
 // BLOCK A: zero direct ctx.ui.notify calls -- all user-visible messages route
-// through shared/notify.ts wrappers (notifyError).
+// through shared/notify.ts wrappers (notifyUsageError).
 // BLOCK C: no imports from persistence/, domain/, bridges/, transaction/,
 // platform/. Only orchestrators/, shared/, edge/ (sibling) imports.
 
 import { installPlugin } from "../../../orchestrators/plugin/install.ts";
 import { errorMessage } from "../../../shared/errors.ts";
-import { notifyError } from "../../../shared/notify.ts";
+import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseArgs } from "../../args.ts";
 
 import { parsePositionalsWithFlags, splitPluginMarketplaceRef } from "./shared.ts";
@@ -39,7 +47,9 @@ export function makeInstallHandler(
     try {
       parsed = parseArgs(args);
     } catch (err) {
-      notifyError(ctx, errorMessage(err));
+      // MSG-NC-2: argument-parsing failure (invalid --scope value) -- sentence
+      // form with Usage block appended after a blank line.
+      notifyUsageError(ctx, errorMessage(err), USAGE);
       return;
     }
 
@@ -52,13 +62,17 @@ export function makeInstallHandler(
 
     const positional = nonFlagPositionals[0];
     if (nonFlagPositionals.length !== 1 || positional === undefined) {
-      notifyError(ctx, USAGE);
+      notifyUsageError(ctx, "install requires exactly one <plugin>@<marketplace> argument.", USAGE);
       return;
     }
 
     const ref = splitPluginMarketplaceRef(positional);
     if (ref === undefined) {
-      notifyError(ctx, USAGE);
+      // PI-1 invalid `<plugin>@<marketplace>` token (no `@`, leading `@`,
+      // trailing `@`) -- per the plan's task 3 note this is a USAGE ERROR,
+      // not an entity-shape error: the ref string never anchored to a real
+      // plugin/marketplace pair.
+      notifyUsageError(ctx, `Invalid <plugin>@<marketplace> ref: "${positional}".`, USAGE);
       return;
     }
 

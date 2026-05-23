@@ -92,10 +92,12 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
+  EntityErrorRow,
   PluginInlineRow,
   RollbackChild,
   SoftDepProbe,
 } from "../../presentation/compact-line.ts";
+import type { Reason } from "../../shared/grammar/reasons.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -601,28 +603,42 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // cause-chain trailer; the standalone notify path passes the rendered
     // body and lets `notifyError` auto-append the MSG-CC-1 trailer once.
     //
-    // CMC-17 / MSG-RP-1: when the ledger reported per-phase undo failures,
-    // emit the parent PluginInlineRow with `reasons: ["rollback partial"]`
-    // and an indented RollbackChild[] block via renderRollbackPartial.
-    //
-    // PI-14: PathContainmentError reaches here VERBATIM -- the rollback
-    // partial rendering is bypassed and the .message surfaces unchanged
-    // (the original symlink/escape diagnostic is the entire user surface).
+    // Failure routing priority (highest first):
+    //   1. PI-14 PathContainmentError -- VERBATIM .message surface (no
+    //      compact-line wrapping; the symlink/escape diagnostic is the
+    //      entire user surface).
+    //   2. CMC-17 rollback-partial (failureRollbackPartials.length > 0) --
+    //      parent PluginInlineRow{status:"failed", reasons:["rollback partial"]}
+    //      + indented RollbackChild[] block via renderRollbackPartial.
+    //   3. CMC-34 / MSG-NC-1 entity-shape errors (PI-3 not-in-manifest,
+    //      PI-4 not-installable, PI-5 already-installed) -- compact
+    //      EntityErrorRow via renderRow. The orchestrator throws these
+    //      with specific message patterns that classifyEntityShapeError
+    //      narrows to closed-set Reasons.
+    //   4. Generic runtime errors -- bare errorMessage(err); notifyError
+    //      auto-appends the MSG-CC-1 cause-chain trailer per D-CMC-12.
     const isPathContainment = err instanceof PathContainmentError;
     const probe = softDepStatus(pi);
     const rolledBackPartial = !isPathContainment && failureRollbackPartials.length > 0;
-    const body = rolledBackPartial
-      ? composeRollbackPartialBody({
-          plugin,
-          marketplace,
-          scope,
-          version: failureVersion,
-          declaresAgents: failureDeclaresAgents,
-          declaresMcp: failureDeclaresMcp,
-          partials: failureRollbackPartials,
-          probe,
-        })
-      : errorMessage(err);
+    let body: string;
+    if (isPathContainment) {
+      body = errorMessage(err);
+    } else if (rolledBackPartial) {
+      body = composeRollbackPartialBody({
+        plugin,
+        marketplace,
+        scope,
+        version: failureVersion,
+        declaresAgents: failureDeclaresAgents,
+        declaresMcp: failureDeclaresMcp,
+        partials: failureRollbackPartials,
+        probe,
+      });
+    } else {
+      const entityRow = classifyEntityShapeError(err, { plugin, marketplace, scope });
+      body = entityRow === undefined ? errorMessage(err) : renderRow(entityRow, probe);
+    }
+
     const trailer = causeChainTrailer(err);
     const cause = trailer === "" ? body : `${body}\n\n${trailer}`;
     if (opts.notifications?.mode === "orchestrated") {
@@ -820,6 +836,106 @@ function composeRollbackPartialBody(args: {
     reasons: ["rollback partial"] as const,
   }));
   return renderRollbackPartial(parent, children, args.probe);
+}
+
+/**
+ * CMC-34 / MSG-NC-1 entity-shape error classifier for the single-plugin
+ * install failure surface. Returns an `EntityErrorRow` when the orchestrator's
+ * thrown error matches a recognised entity-shape pattern (PI-3 / PI-4 / PI-5);
+ * returns `undefined` for generic runtime errors which surface via
+ * bare `errorMessage(err)` + the cause-chain trailer.
+ *
+ * Pattern map (PRD §5.2.1 + catalog §"/claude:plugin install"):
+ *   - "not found in marketplace"       -> (failed)      {not in manifest}
+ *   - "is already installed"           -> (failed)      {already installed}
+ *   - "is not installable: <notes>"    -> (unavailable) {<narrowed reasons from notes>}
+ *
+ * The `is not installable` notes are split on `; ` and each segment narrowed
+ * to a closed `Reason`: manifest field names (`hooks` / `lspServers` etc.)
+ * pass verbatim per the MSG-GR-4 manifest-field carve-out; the catch-all
+ * is `unsupported source` (closed REASONS member). When no segment narrows
+ * cleanly the row carries a single `not installable` ... but that's not in
+ * the closed set; falls back to `unsupported source` which is the closest
+ * in-set Reason. Wave 3 catalog UAT verifies the user-visible shape.
+ */
+function classifyEntityShapeError(
+  err: unknown,
+  ctx: { plugin: string; marketplace: string; scope: Scope },
+): EntityErrorRow | undefined {
+  const msg = err instanceof Error ? err.message : "";
+
+  if (msg.includes("is already installed")) {
+    return {
+      kind: "entity-error",
+      name: ctx.plugin,
+      marketplace: ctx.marketplace,
+      scope: ctx.scope,
+      status: "failed",
+      reasons: ["already installed"] as const,
+    };
+  }
+
+  if (msg.includes("not found in marketplace") || msg.includes("not found in manifest")) {
+    return {
+      kind: "entity-error",
+      name: ctx.plugin,
+      marketplace: ctx.marketplace,
+      scope: ctx.scope,
+      status: "failed",
+      reasons: ["not in manifest"] as const,
+    };
+  }
+
+  const notInstallablePattern = /is not installable:\s*(.+)$/;
+  const notInstallableMatch = notInstallablePattern.exec(msg);
+  if (notInstallableMatch) {
+    const notes = (notInstallableMatch[1] ?? "").split(";").map((s) => s.trim());
+    const reasons = narrowNotInstallableReasons(notes);
+    return {
+      kind: "entity-error",
+      name: ctx.plugin,
+      marketplace: ctx.marketplace,
+      scope: ctx.scope,
+      status: "unavailable",
+      reasons,
+    };
+  }
+
+  return undefined;
+}
+
+// Manifest field names allowed through the MSG-GR-4 carve-out. Any segment
+// equal to one of these passes verbatim as a `Reason`. New tokens added here
+// MUST also be added to `shared/grammar/reasons.ts:34-58` so the renderer's
+// type-narrowing accepts them.
+const MANIFEST_FIELD_REASONS: ReadonlySet<string> = new Set(["hooks", "lspServers"]);
+
+function narrowNotInstallableReasons(notes: readonly string[]): readonly Reason[] {
+  const out: Reason[] = [];
+  for (const note of notes) {
+    if (note === "") {
+      continue;
+    }
+
+    if (MANIFEST_FIELD_REASONS.has(note)) {
+      out.push(note as Reason);
+      continue;
+    }
+
+    if (note.includes("source")) {
+      out.push("unsupported source");
+      continue;
+    }
+  }
+
+  if (out.length === 0) {
+    // Conservative fallback: at least one Reason is required for the
+    // EntityErrorRow `reasons` field. `unsupported source` is the closest
+    // in-set Reason for an unclassifiable PI-4 cause.
+    out.push("unsupported source");
+  }
+
+  return out;
 }
 
 function classifyInstallFailure(err: unknown, formattedCause: string): InstallPluginOutcome {
