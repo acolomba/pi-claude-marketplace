@@ -165,11 +165,15 @@ Multi-plugin command. Each marketplace renders as a header at column 0; plugins 
 
 ### Empty
 
+<!-- catalog-state: empty -->
+
 ```text
 (no plugins)
 ```
 
 ### Single marketplace, mixed plugin statuses (user scope)
+
+<!-- catalog-state: single-mp-mixed -->
 
 ```text
 ● official [user] <autoupdate>
@@ -193,6 +197,8 @@ Notes:
 
 ### Same plugin installed in BOTH scopes (per-scope marketplace headers, per-scope plugin rows)
 
+<!-- catalog-state: same-plugin-both-scopes -->
+
 ```text
 ● official [project] <autoupdate>
   ● alpha [project] v0.9.0 (installed)
@@ -204,6 +210,8 @@ Both marketplaces and plugins are per-scope. `official` renders twice -- once pe
 
 ### Project-scope plugins folded under user-scope marketplace (no project marketplace exists)
 
+<!-- catalog-state: project-orphan-folded -->
+
 ```text
 ● official [user] <autoupdate>
   ● alpha [project] v0.9.0 (installed)
@@ -213,6 +221,8 @@ Both marketplaces and plugins are per-scope. `official` renders twice -- once pe
 Here `official` exists in user scope only. The project-scoped `alpha` plugin (an orphan from the project-scope perspective -- no `official [project]` record) folds into the user-scope marketplace's plugin list. When the operator later adds `official` in project scope, the project-scoped `alpha` is ADOPTED by the new `official [project]` header.
 
 ### Soft-dep markers on installed rows when companion extensions are unloaded
+
+<!-- catalog-state: soft-dep-on-installed -->
 
 ```text
 ● official [user] <autoupdate>
@@ -224,6 +234,8 @@ Here `official` exists in user scope only. The project-scoped `alpha` plugin (an
 ### Marketplace whose manifest is UNPARSEABLE
 
 When a marketplace's manifest fails to parse, the marketplace renders as a failure-status header carrying `(failed) {unparseable}` with the parse error in the `cause:` trailer. The marketplace icon flips to `⊘` (the failure/warning glyph):
+
+<!-- catalog-state: unparseable-mp -->
 
 ```text
 ⊘ unparseable-mp [user] (failed) {unparseable}
@@ -238,6 +250,8 @@ The unparseable marketplace appears in the per-marketplace listing (alphabetical
 
 A marketplace with a valid manifest declaring no plugins renders with the `(no plugins)` body -- distinct from the unparseable-manifest case above:
 
+<!-- catalog-state: zero-plugin-mp-block -->
+
 ```text
 ● empty-mp [project]
   (no plugins)
@@ -246,6 +260,8 @@ A marketplace with a valid manifest declaring no plugins renders with the `(no p
 ```
 
 ### Multiple marketplaces
+
+<!-- catalog-state: multiple-mps -->
 
 ```text
 ● official [project] <autoupdate>
@@ -267,6 +283,8 @@ ______________________________________________________________________
 
 ### Success
 
+<!-- catalog-state: success -->
+
 ```text
 ● helper@official [user] v1.0.0 (installed)
 
@@ -274,6 +292,8 @@ ______________________________________________________________________
 ```
 
 ### Success with soft-dep reasons
+
+<!-- catalog-state: success-with-soft-dep -->
 
 ```text
 ● helper@official [user] v1.0.0 (installed) {requires pi-subagents, requires pi-mcp}
@@ -283,6 +303,8 @@ ______________________________________________________________________
 
 ### Failure -- unsupported features in manifest
 
+<!-- catalog-state: failure-unsupported-features -->
+
 ```text
 ⊘ helper@official [user] (unavailable) {hooks, lspServers}
 ```
@@ -290,6 +312,8 @@ ______________________________________________________________________
 The manifest declares Claude features Pi doesn't support; the reason names the offending fields by their manifest name. No `cause:` trailer -- the reason tells the whole story.
 
 ### Failure -- runtime error with Error.cause chain
+
+<!-- catalog-state: failure-runtime-with-cause -->
 
 ```text
 ⊘ helper@official [user] (failed)
@@ -299,6 +323,8 @@ The manifest declares Claude features Pi doesn't support; the reason names the o
 Multi-link cause chains use `->` between links per MSG-CC-1, chain bounded to depth 5 with `(truncated)` suffix on the last link if deeper.
 
 ### Failure with rollback-partial children
+
+<!-- catalog-state: failure-rollback-partial -->
 
 ```text
 ⊘ helper@official [user] (failed) {rollback partial}
@@ -315,6 +341,8 @@ ______________________________________________________________________
 
 ### Success
 
+<!-- catalog-state: success -->
+
 ```text
 ○ helper@official [user] v1.0.0 (uninstalled)
 
@@ -325,6 +353,8 @@ The `○` icon reflects the plugin's post-op state: it is no longer installed on
 
 ### Success when the plugin declared soft-dep resources
 
+<!-- catalog-state: success-soft-dep-omitted -->
+
 ```text
 ○ helper@official [user] v1.0.0 (uninstalled)
 
@@ -334,6 +364,8 @@ The `○` icon reflects the plugin's post-op state: it is no longer installed on
 Soft-dep reasons are NOT surfaced on uninstall rows. Install / update / reinstall ADD or REFRESH content that the soft-dep would activate, so the marker is useful there. Uninstall REMOVES the content; the soft-dep would only describe a no-op state for the operator (no agents/MCP left to need pi-subagents/pi-mcp), so the marker is omitted.
 
 ### Failure
+
+<!-- catalog-state: failure-permission-denied -->
 
 ```text
 ⊘ helper@official [user] (failed) {permission denied}
@@ -348,6 +380,8 @@ Renders one marketplace header per affected marketplace; plugin rows indent 2 sp
 
 ### Single marketplace, all reinstalled
 
+<!-- catalog-state: single-mp-all-reinstalled -->
+
 ```text
 ● official [user] <autoupdate>
   ● alpha [user] v1.0.0 (reinstalled)
@@ -358,6 +392,8 @@ Renders one marketplace header per affected marketplace; plugin rows indent 2 sp
 
 ### Success with soft-dep reasons
 
+<!-- catalog-state: success-with-soft-dep -->
+
 ```text
 ● official [user] <autoupdate>
   ● alpha [user] v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp}
@@ -366,6 +402,8 @@ Renders one marketplace header per affected marketplace; plugin rows indent 2 sp
 ```
 
 ### Single marketplace, mixed outcomes (reinstalled + skipped + failed)
+
+<!-- catalog-state: single-mp-mixed-outcomes -->
 
 ```text
 ● official [user] <autoupdate>
@@ -380,6 +418,8 @@ Rows within the marketplace block are alphabetical across all partition outcomes
 
 ### Single marketplace, all failed
 
+<!-- catalog-state: single-mp-all-failed -->
+
 ```text
 ● official [user] <autoupdate>
   ⊘ alpha [user] (failed) {source missing}
@@ -390,6 +430,8 @@ No `/reload` trailer -- nothing changed on disk, so MSG-RH-1's "any resource cha
 
 ### Single marketplace, plugin became unavailable after install (manifest now declares unsupported features)
 
+<!-- catalog-state: plugin-became-unavailable -->
+
 ```text
 ● official [user] <autoupdate>
   ● alpha [user] v1.0.0 (reinstalled)
@@ -399,6 +441,8 @@ No `/reload` trailer -- nothing changed on disk, so MSG-RH-1's "any resource cha
 ```
 
 ### Across multiple marketplaces (bare `reinstall` form)
+
+<!-- catalog-state: bare-multi-mp -->
 
 ```text
 ● local-mp [project]
@@ -422,6 +466,8 @@ Same shape as reinstall: marketplace header + indented plugin rows. Version tran
 
 ### Single marketplace, mixed
 
+<!-- catalog-state: single-mp-mixed -->
+
 ```text
 ● official [user] <autoupdate>
   ● alpha [user] v0.5.0 → v1.0.0 (updated)
@@ -432,6 +478,8 @@ Same shape as reinstall: marketplace header + indented plugin rows. Version tran
 ```
 
 ### Failed with rollback-partial cause chain
+
+<!-- catalog-state: failed-with-rollback-partial -->
 
 ```text
 ● official [user] <autoupdate>
@@ -445,6 +493,8 @@ The `cause:` trailer sits 2 spaces under the failure row it belongs to (here, th
 
 ### All up-to-date (no-op cascade)
 
+<!-- catalog-state: all-up-to-date-noop -->
+
 ```text
 ● official [user] <autoupdate>
   ● alpha [user] (skipped) {up-to-date}
@@ -454,6 +504,8 @@ The `cause:` trailer sits 2 spaces under the failure row it belongs to (here, th
 Trivial-only outcomes route via `notifySuccess` (Pitfall 4); no reload-hint trailer since nothing changed.
 
 ### Across multiple marketplaces (bare `update` form)
+
+<!-- catalog-state: bare-multi-mp -->
 
 ```text
 ● local-mp [project]
@@ -473,6 +525,8 @@ ______________________________________________________________________
 Multi-marketplace + multi-plugin cascade. Each marketplace carries its own status on the header line (the marketplace was just added, or skipped because already added); plugin rows indent underneath without `@<marketplace>`.
 
 ### Fresh import of Claude settings (mixed outcomes across both scopes)
+
+<!-- catalog-state: fresh-mixed-both-scopes -->
 
 ```text
 Claude plugin import summary
@@ -505,6 +559,8 @@ Notes:
 
 ### `import --scope project` (narrows writes to project scope only)
 
+<!-- catalog-state: scope-project-narrow -->
+
 ```text
 Claude plugin import summary
 
@@ -519,6 +575,8 @@ Claude plugin import summary
 ```
 
 ### `import` with source-mismatch on an existing marketplace
+
+<!-- catalog-state: source-mismatch -->
 
 ```text
 Claude plugin import summary
@@ -544,6 +602,8 @@ Single-shot setup of `anthropics/claude-plugins-official` in user scope with aut
 
 ### Fresh bootstrap
 
+<!-- catalog-state: fresh -->
+
 ```text
 ● claude-plugins-official [user] <autoupdate> (added)
 
@@ -553,6 +613,8 @@ Single-shot setup of `anthropics/claude-plugins-official` in user scope with aut
 Bootstrap explicitly enables autoupdate, so the `<autoupdate>` marker is present.
 
 ### Re-run when already bootstrapped
+
+<!-- catalog-state: already-bootstrapped -->
 
 ```text
 ● claude-plugins-official [user] <autoupdate> (skipped) {already installed}
@@ -566,21 +628,26 @@ Marketplace-only command -- no plugin children, so no header form.
 
 ### Empty
 
+<!-- catalog-state: empty -->
+
 ```text
 (no marketplaces)
 ```
 
 ### Mixed scopes -- pure alphabetical sort, per-scope rendering
 
+<!-- catalog-state: mixed-scopes -->
+
 ```text
-● alpha [project] <autoupdate> (added)
-● alpha [user] (added)
-● beta [user] (added)
-● zeta [project] <autoupdate> (added)
+● alpha [project] <autoupdate>
+● alpha [user]
+● beta [user]
+● zeta [project] <autoupdate>
 ```
 
 Notes:
 
+- List rows are pure label rows -- no status token. The marketplace's outcome on `add` is announced by `marketplace add`; the list surface just enumerates what is configured. The `<autoupdate>` marker (when present) is the sole per-row signal beyond name and scope.
 - Sort by name (case-insensitive `localeCompare`, `sensitivity: 'base'`); same-name rows tie-break by scope (project before user). This is a name-primary, scope-secondary sort -- NOT a lexicographic compare of the full `<name> [<scope>]` label.
 - Marketplaces are listed per scope -- a marketplace in both scopes renders as TWO rows. Each row carries its own autoupdate state independently (e.g. above, `alpha [project]` has autoupdate on while `alpha [user]` has autoupdate off).
 
@@ -592,6 +659,8 @@ Single-marketplace command -- no marketplace header form.
 
 ### Success -- path source
 
+<!-- catalog-state: path-source -->
+
 ```text
 ● local-mp [user] (added)
 
@@ -602,6 +671,8 @@ Path-source marketplaces default to autoupdate OFF -- no `<autoupdate>` marker e
 
 ### Success -- GitHub source
 
+<!-- catalog-state: github-source -->
+
 ```text
 ● claude-plugins-official [user] <autoupdate> (added)
 
@@ -611,6 +682,8 @@ Path-source marketplaces default to autoupdate OFF -- no `<autoupdate>` marker e
 GitHub-source marketplaces default to autoupdate ON -- the `<autoupdate>` marker is present.
 
 ### Failure
+
+<!-- catalog-state: failure-unreachable -->
 
 ```text
 ⊘ unreachable-mp [user] (failed)
@@ -625,6 +698,8 @@ Single-marketplace command that cascades plugin unstaging. The marketplace itsel
 
 ### Clean removal (no plugin-unstage failures)
 
+<!-- catalog-state: clean -->
+
 ```text
 ● local-mp [user] (removed)
 
@@ -632,6 +707,8 @@ Single-marketplace command that cascades plugin unstaging. The marketplace itsel
 ```
 
 ### Partial removal (some plugins unstaged, others failed)
+
+<!-- catalog-state: partial -->
 
 ```text
 ⊘ local-mp [user] (failed) {plugins remain}
@@ -658,6 +735,8 @@ Renders the marketplace as the header with `(updated)` status; plugin outcomes i
 
 ### Autoupdate off -- manifest refresh only (no plugins to evaluate)
 
+<!-- catalog-state: autoupdate-off-manifest-refresh -->
+
 ```text
 ● local-mp [user] (updated)
 ```
@@ -665,6 +744,8 @@ Renders the marketplace as the header with `(updated)` status; plugin outcomes i
 A `marketplace update` invocation runs whether or not autoupdate is on. When autoupdate is off (as here, on the path-source `local-mp`), no `<autoupdate>` marker is emitted; the operation is just a manual refresh.
 
 ### Mixed plugin outcomes
+
+<!-- catalog-state: mixed-outcomes -->
 
 ```text
 ● official [user] <autoupdate> (updated)
@@ -678,6 +759,8 @@ A `marketplace update` invocation runs whether or not autoupdate is on. When aut
 The marketplace header at column 0 doubles as the outcome row -- the marketplace WAS updated (manifest refresh completed). The command runs whether triggered manually or by autoupdate. Plugin rows indent 2 spaces underneath and are alphabetical across all partitions.
 
 ### Marketplace update failed (manifest unreachable)
+
+<!-- catalog-state: mp-failure-network -->
 
 ```text
 ⊘ official [user] <autoupdate> (failed) {network unreachable}
@@ -694,6 +777,8 @@ Multi-marketplace flag flip. Marketplaces are the only resources affected -- no 
 
 ### Enable across multiple marketplaces (one already enabled)
 
+<!-- catalog-state: enable-mixed -->
+
 ```text
 ● local-mp [user] <autoupdate>
 ● github-mp [project] <autoupdate>
@@ -704,6 +789,8 @@ The `<autoupdate>` marker is the outcome (no status token on these rows -- the m
 
 ### Disable
 
+<!-- catalog-state: disable-mixed -->
+
 ```text
 ● local-mp [user] <no autoupdate>
 ● some-mp [user] <no autoupdate> {already disabled}
@@ -712,6 +799,8 @@ The `<autoupdate>` marker is the outcome (no status token on these rows -- the m
 The `<no autoupdate>` marker only appears here -- as the outcome row of `marketplace autoupdate disable`. In every other surface, autoupdate-off is conveyed by the ABSENCE of the `<autoupdate>` marker.
 
 ### Failure (marketplace not found)
+
+<!-- catalog-state: failure-not-found -->
 
 ```text
 ⊘ missing-mp [user] (failed) {not found}
@@ -724,6 +813,8 @@ ______________________________________________________________________
 When state is unrecoverable mid-operation, a separate top-level `manual-recovery` line follows the triggering emission (§7 MSG-MR-1).
 
 Example (triggered by a failing `install`):
+
+<!-- catalog-state: install-failure-with-anchor -->
 
 ```text
 ⊘ official-plugin@official [user] (failed)
