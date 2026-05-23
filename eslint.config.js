@@ -256,20 +256,179 @@ export default tseslint.config(
     },
   },
   {
-    // BLOCK E (Phase 7 D-04): Direct Pi peer imports are allowed only in
+    // BLOCK E (Phase 7 D-04 + Phase 13 D-13-09): Two `no-restricted-imports`
+    // gates merged for extension files (split between two blocks to keep test
+    // files exempt from Gate 1 -- tests legitimately mock the Pi API via
+    // direct imports). Gate 1's extension-only scope is unchanged; Gate 2
+    // also covers tests via BLOCK E-2 below (this block).
+    //
+    // Per RESEARCH.md PITFALL 2: when two flat-config blocks target the same
+    // file with the same rule, the later block's paths[] REPLACES the earlier
+    // (not merges). BLOCK E (this) and BLOCK E-2 (below) have DISJOINT files
+    // patterns (extensions/** vs tests/**) so no overlap occurs.
+    //
+    // Gate 1 (Phase 7 D-04): direct Pi peer imports are allowed only in
     // platform/pi-api.ts. All other extension code imports Pi API types from
     // the wrapper so peer-dependency version bumps have a single audit point.
+    //
+    // Gate 2 (Phase 13 D-13-09): the 5 legacy ES-5 marker exports from
+    // shared/markers.ts cannot be imported from any callsite except the
+    // canonical allow-list. The Wave 3 atomic commit deletes those exports
+    // entirely (markers.ts + markers-snapshot.test.ts + PRD §6.12). Sub-waves
+    // 2a-2d migrate the legacy callsites listed in the per-file ignores;
+    // those file entries are removed alongside the Wave 3 export deletion.
     files: ["extensions/pi-claude-marketplace/**/*.ts"],
-    ignores: ["extensions/pi-claude-marketplace/platform/pi-api.ts"],
+    ignores: [
+      // Gate 1 allow-list (Phase 7 D-04): the Pi-API wrapper module.
+      "extensions/pi-claude-marketplace/platform/pi-api.ts",
+      // Gate 2 allow-list (Phase 13 D-13-09): canonical extension source.
+      "extensions/pi-claude-marketplace/shared/markers.ts",
+      // Gate 2 temporary allow-list (Phase 13 Wave 2 sub-wave migration TODO):
+      // these production callsites still import legacy ES-5 markers today.
+      // Wave 2 sub-waves migrate them to the new presentation/ composers; the
+      // Wave 3 atomic commit removes these entries alongside the markers.ts
+      // export deletion.
+      //   - bridges/{agents,skills,commands}/stage.ts: MANUAL_RECOVERY_REQUIRED
+      //     leaks-on-rollback Error message (Wave 2 sub-wave 2b)
+      //   - orchestrators/plugin/reinstall.ts: MANUAL_RECOVERY_REQUIRED
+      //     leak-aggregation wrapper (Wave 2 sub-wave 2a)
+      //   - transaction/rollback.ts: ROLLBACK_PARTIAL marker chokepoint
+      //     (Wave 2 sub-wave 2a uses presentation/rollback-partial.ts)
+      "extensions/pi-claude-marketplace/bridges/agents/stage.ts",
+      "extensions/pi-claude-marketplace/bridges/skills/stage.ts",
+      "extensions/pi-claude-marketplace/bridges/commands/stage.ts",
+      "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts",
+      "extensions/pi-claude-marketplace/transaction/rollback.ts",
+    ],
     rules: {
       "no-restricted-imports": [
         "error",
         {
           paths: [
+            // Gate 1 (Phase 7 D-04): Pi peer import chokepoint.
             {
               name: "@earendil-works/pi-coding-agent",
               message:
                 "Import Pi API types from extensions/pi-claude-marketplace/platform/pi-api.ts instead.",
+            },
+            // Gate 2 (Phase 13 D-13-09): the 5 legacy ES-5 marker names are
+            // import-forbidden during Wave 2; use the new presentation/
+            // composers (renderRow, renderManualRecovery, renderRollbackPartial,
+            // appendReloadHint). The Wave 3 atomic commit deletes these
+            // exports. Three relative-path variants cover every callsite in
+            // the codebase (paths[].name is exact-string match).
+            {
+              name: "../shared/markers.ts",
+              importNames: [
+                "PI_SUBAGENTS_NOT_LOADED",
+                "PI_MCP_ADAPTER_NOT_LOADED",
+                "RELOAD_HINT_PREFIX",
+                "MANUAL_RECOVERY_REQUIRED",
+                "ROLLBACK_PARTIAL",
+              ],
+              message:
+                "Legacy ES-5 marker strings are import-forbidden during Wave 2 (D-13-09); use the new presentation/ composers. The Wave 3 atomic commit deletes these exports.",
+            },
+            {
+              name: "../../shared/markers.ts",
+              importNames: [
+                "PI_SUBAGENTS_NOT_LOADED",
+                "PI_MCP_ADAPTER_NOT_LOADED",
+                "RELOAD_HINT_PREFIX",
+                "MANUAL_RECOVERY_REQUIRED",
+                "ROLLBACK_PARTIAL",
+              ],
+              message: "Legacy ES-5 markers (D-13-09); use the new presentation/ composers.",
+            },
+            {
+              name: "../../extensions/pi-claude-marketplace/shared/markers.ts",
+              importNames: [
+                "PI_SUBAGENTS_NOT_LOADED",
+                "PI_MCP_ADAPTER_NOT_LOADED",
+                "RELOAD_HINT_PREFIX",
+                "MANUAL_RECOVERY_REQUIRED",
+                "ROLLBACK_PARTIAL",
+              ],
+              message:
+                "Legacy ES-5 markers (D-13-09); allow-listed only in markers-snapshot.test.ts and no-legacy-markers.test.ts.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // BLOCK E-2 (Phase 13 D-13-09): Gate 2 (legacy ES-5 marker import
+    // restriction) applied to tests/**/*.ts. Tests do NOT inherit Gate 1
+    // (Pi peer-import restriction) because tests legitimately import
+    // @earendil-works/pi-coding-agent for mocking the Pi API surface.
+    //
+    // Per RESEARCH.md PITFALL 2: this block has DISJOINT files patterns from
+    // BLOCK E above (tests/** vs extensions/**) so the per-rule paths[]
+    // replacement-vs-merge concern does not apply.
+    files: ["tests/**/*.ts"],
+    ignores: [
+      // Gate 2 allow-list (Phase 13 D-13-09): canonical test sources.
+      "tests/architecture/markers-snapshot.test.ts",
+      "tests/architecture/no-legacy-markers.test.ts",
+      // Gate 2 temporary allow-list (Phase 13 Wave 2 sub-wave migration TODO):
+      // these contract-assertion tests still import legacy ES-5 markers today.
+      // Wave 2 sub-waves migrate them; the Wave 3 atomic commit removes these
+      // entries alongside the markers.ts export deletion.
+      //   - tests/e2e/install-soft-deps.test.ts: PI_*_NOT_LOADED contract
+      //     assertion (Wave 2 sub-wave 2b)
+      //   - tests/platform/pi-api.test.ts: PI_*_NOT_LOADED contract assertion
+      //     (Wave 2 sub-wave 2b finalization with platform/pi-api.ts deletion
+      //     of subagentWarningIfNeeded / mcpAdapterWarningIfNeeded)
+      //   - tests/presentation/soft-dep.test.ts: PI_*_NOT_LOADED contract
+      //     assertion (Wave 2 sub-wave 2b)
+      //   - tests/transaction/rollback.test.ts: ROLLBACK_PARTIAL contract
+      //     assertion (Wave 2 sub-wave 2a)
+      "tests/e2e/install-soft-deps.test.ts",
+      "tests/platform/pi-api.test.ts",
+      "tests/presentation/soft-dep.test.ts",
+      "tests/transaction/rollback.test.ts",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            // Gate 2 only (3 relative-path variants from tests/...).
+            {
+              name: "../shared/markers.ts",
+              importNames: [
+                "PI_SUBAGENTS_NOT_LOADED",
+                "PI_MCP_ADAPTER_NOT_LOADED",
+                "RELOAD_HINT_PREFIX",
+                "MANUAL_RECOVERY_REQUIRED",
+                "ROLLBACK_PARTIAL",
+              ],
+              message:
+                "Legacy ES-5 markers (D-13-09); allow-listed only in markers-snapshot.test.ts and no-legacy-markers.test.ts.",
+            },
+            {
+              name: "../../shared/markers.ts",
+              importNames: [
+                "PI_SUBAGENTS_NOT_LOADED",
+                "PI_MCP_ADAPTER_NOT_LOADED",
+                "RELOAD_HINT_PREFIX",
+                "MANUAL_RECOVERY_REQUIRED",
+                "ROLLBACK_PARTIAL",
+              ],
+              message: "Legacy ES-5 markers (D-13-09); use the new presentation/ composers.",
+            },
+            {
+              name: "../../extensions/pi-claude-marketplace/shared/markers.ts",
+              importNames: [
+                "PI_SUBAGENTS_NOT_LOADED",
+                "PI_MCP_ADAPTER_NOT_LOADED",
+                "RELOAD_HINT_PREFIX",
+                "MANUAL_RECOVERY_REQUIRED",
+                "ROLLBACK_PARTIAL",
+              ],
+              message:
+                "Legacy ES-5 markers (D-13-09); allow-listed only in markers-snapshot.test.ts and no-legacy-markers.test.ts.",
             },
           ],
         },
