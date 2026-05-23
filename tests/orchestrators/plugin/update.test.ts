@@ -227,7 +227,7 @@ async function rewriteManifest(
 
 // ─── PUP-1: empty target ───────────────────────────────────────────────────────
 
-test("PUP-1: bare form against empty state -> 'No plugins installed.' silent success", async () => {
+test("PUP-1: bare form against empty state -> '(no plugins)' silent success (CMC-10 / MSG-ER-1)", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-pup1-empty-"));
     try {
@@ -235,7 +235,10 @@ test("PUP-1: bare form against empty state -> 'No plugins installed.' silent suc
       await updatePlugins({ ctx, pi, scope: "project", cwd, target: { kind: "all" } });
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined);
-      assert.equal(notifications[0]?.message, "No plugins installed.");
+      // Plan 13-02a-01 / CMC-10 / MSG-ER-1: legacy "No plugins installed."
+      // sentence form retired; empty-set renders via EmptyToken -> bare
+      // "(no plugins)" compact line.
+      assert.equal(notifications[0]?.message, "(no plugins)");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -273,11 +276,16 @@ test("PUP-3: version equality -> outcome.partition='unchanged'; no bridge state 
       const after = await readFile(stateJsonPath, "utf8");
       assert.equal(before, after, "state.json must NOT be rewritten on unchanged path");
 
-      // No "Updated:" rendering; "Unchanged:" present.
+      // Plan 13-02a-01 / CMC-26: legacy "Updated:" / "Unchanged:" partition
+      // header forms RETIRED. `unchanged` partition renders as a
+      // (skipped) {up-to-date} cascade row (trivial skip -> ● icon ->
+      // notifySuccess severity per MSG-SR-4). No reload hint when no
+      // (updated) outcomes.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined);
       const body = notifications[0]?.message ?? "";
-      assert.match(body, /Unchanged:/);
+      assert.match(body, /● hello \[project\] \(skipped\) \{up-to-date\}/);
+      assert.equal(body.includes("Unchanged:"), false);
       assert.equal(
         body.includes("/reload to pick up changes"),
         false,
@@ -317,8 +325,12 @@ test("PUP-4: source overridden to github-flavored URL -> outcome.partition='skip
 
       assert.equal(notifications.length, 1);
       const body = notifications[0]?.message ?? "";
-      assert.match(body, /Skipped:/);
-      assert.match(body, /is no longer installable/);
+      // Plan 13-02a-01 / CMC-26: legacy "Skipped:" partition header
+      // retired; cascade row carries `(skipped) {no longer installable}`
+      // (narrowed from the legacy free-text "is no longer installable").
+      // Severity routes via notifyWarning (non-trivial skip per MSG-SR-5).
+      assert.match(body, /⊘ hello \[project\].+\(skipped\) \{no longer installable\}/);
+      assert.equal(notifications[0]?.severity, "warning");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -353,8 +365,10 @@ test("PUP-5: refreshed manifest no longer lists entry -> outcome.partition='skip
 
       assert.equal(notifications.length, 1);
       const body = notifications[0]?.message ?? "";
-      assert.match(body, /Skipped:/);
-      assert.match(body, /not in manifest/);
+      // Plan 13-02a-01 / CMC-26: legacy "Skipped:" header retired;
+      // cascade row carries `(skipped) {not in manifest}` per MSG-GR-1.
+      assert.match(body, /⊘ hello \[project\].+\(skipped\) \{not in manifest\}/);
+      assert.equal(notifications[0]?.severity, "warning");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -407,12 +421,14 @@ test("PUP-6 happy: version bump triggers 3-phase swap; state reflects new versio
       const skillTarget = path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md");
       assert.ok((await readFile(skillTarget, "utf8")).length > 0, "skill must exist on disk");
 
-      // MSG-RH-1 reload hint -- the single canonical trailer.
+      // Plan 13-02a-01 / CMC-26 / MSG-PL-3 / MSG-RH-1: legacy "Updated:"
+      // partition header retired; per-marketplace cascade with version-
+      // transition arrow `v<from> → v<to>` (U+2192 space-padded) on the
+      // (updated) cascade row. Single canonical reload trailer.
       const errs = notifications.filter((n) => n.severity === "error");
       assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
       const body = notifications[0]?.message ?? "";
-      assert.match(body, /Updated:/);
-      assert.match(body, /hello \(1\.0\.0 → 1\.0\.1\)/);
+      assert.match(body, /● hello \[project\] v1\.0\.0 → v1\.0\.1 \(updated\)/);
       assert.match(body, /\/reload to pick up changes$/);
 
       // Ensure we referenced the seeded marketplaceRoot (compile-time use of `seeded`).
@@ -548,11 +564,15 @@ test("PUP-1 @mp form: enumerates all installed plugins in the marketplace, parti
       });
 
       const body = notifications[0]?.message ?? "";
-      // MU-7 ordering: Updated first, then Unchanged.
-      const idxUpdated = body.indexOf("Updated:");
-      const idxUnchanged = body.indexOf("Unchanged:");
-      assert.ok(idxUpdated >= 0 && idxUnchanged > idxUpdated, `partition order broken:\n${body}`);
-      assert.match(body, /alpha \(1\.0\.0 → 1\.0\.1\)/);
+      // Plan 13-02a-01 / CMC-26: partition-header ordering retired; the
+      // cascade renders rows in alphabetical order within the marketplace
+      // block (compareByNameThenScope from Wave 1). alpha (updated) and
+      // beta (skipped {up-to-date}) coexist under the same marketplace
+      // header. Version-transition arrow on (updated) row per MSG-PL-3.
+      assert.match(
+        body,
+        /● mp \[project\]\n {2}● alpha \[project\] v1\.0\.0 → v1\.0\.1 \(updated\)\n {2}● beta \[project\] \(skipped\) \{up-to-date\}/,
+      );
       // PUP-8 / MSG-RH-1: hint emitted for the one updated plugin.
       assert.match(body, /\/reload to pick up changes$/);
       assert.ok(seeded.marketplaceRoot.length > 0);
@@ -791,8 +811,10 @@ test("PUP-1 pl@mp: targeting a plugin not in state -> partition='skipped' (not i
       });
 
       const body = notifications[0]?.message ?? "";
-      assert.match(body, /Skipped:/);
-      assert.match(body, /not installed/);
+      // Plan 13-02a-01 / CMC-26: legacy "Skipped:" header retired;
+      // cascade row carries `(skipped) {not installed}`.
+      assert.match(body, /⊘ hello \[project\] \(skipped\) \{not installed\}/);
+      assert.equal(notifications[0]?.severity, "warning");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -849,8 +871,11 @@ test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback res
       });
 
       const body = notifications[0]?.message ?? "";
-      assert.match(body, /Skipped:/);
-      assert.match(body, /not installed/);
+      // Plan 13-02a-01 / CMC-26: legacy "Skipped:" header retired;
+      // cascade row carries `(skipped) {not installed}` (CMC-02: no
+      // `@<marketplace>` token on cascade child rows).
+      assert.match(body, /⊘ hello \[project\] \(skipped\) \{not installed\}/);
+      assert.equal(notifications[0]?.severity, "warning");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

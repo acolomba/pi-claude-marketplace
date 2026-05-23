@@ -71,10 +71,11 @@ test("shim :: bare /update with no positional calls updatePlugins with target = 
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeUpdateHandler(makePi());
     await handler("", ctx);
-    // PUP-1 empty-set silent success: "No plugins installed."
+    // Plan 13-02a-01 / CMC-10: empty-set renders via EmptyToken ->
+    // "(no plugins)" (legacy "No plugins installed." sentence retired).
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
-    assert.match(notifications[0]!.message, /No plugins installed\./);
+    assert.equal(notifications[0]!.message, "(no plugins)");
   });
 });
 
@@ -111,9 +112,9 @@ test("shim :: --scope user/project propagated to updatePlugins", async () => {
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeUpdateHandler(makePi());
     await handler("--scope project", ctx);
-    // PUP-1 empty-set silent success on project scope.
+    // Plan 13-02a-01 / CMC-10: empty-set renders via EmptyToken.
     assert.equal(notifications.length, 1);
-    assert.match(notifications[0]!.message, /No plugins installed\./);
+    assert.equal(notifications[0]!.message, "(no plugins)");
   });
 });
 
@@ -138,11 +139,11 @@ test("shim :: bare form + --map-model is accepted; control reaches updatePlugins
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeUpdateHandler(makePi());
     await handler("--map-model", ctx);
-    // Bare form with --map-model: empty state -> PUP-1 silent success.
-    // Critically, no USAGE error.
+    // Plan 13-02a-01 / CMC-10: empty-set renders via EmptyToken; critically,
+    // no USAGE error fires.
     assert.equal(notifications.length, 1);
     assert.doesNotMatch(notifications[0]!.message, /Usage: \/claude:plugin update/);
-    assert.match(notifications[0]!.message, /No plugins installed\./);
+    assert.equal(notifications[0]!.message, "(no plugins)");
   });
 });
 

@@ -99,6 +99,28 @@ export interface PluginUpdateOutcome {
    */
   readonly declaresAgents?: boolean;
   readonly declaresMcp?: boolean;
+  /**
+   * Plan 13-02a-01 / CMC-17 / MSG-RP-1: per-phase rollback-partial
+   * children for the `(failed)` partition when phase-3a aggregation
+   * occurred. Each entry names one bridge (`skills` | `commands` |
+   * `agents` | `mcp`) whose `commit*` threw or leaked. The cascade
+   * renderer uses these to build the indented children block beneath
+   * the `(failed) {rollback partial}` parent row.
+   *
+   * Encoded as the bridge-name + cause-message pair so the rendering
+   * stays close to the catalog's `[phase3a] failed to remove staged
+   * agent: EACCES` form (the phaseLabel is the bridge name, prefixed
+   * by `[<phase>]` at render time; the reason embeds the cause text
+   * via the closed-set `"rollback partial"` Reason).
+   *
+   * Omitted on `(updated)` / `(unchanged)` / `(skipped)` outcomes and
+   * on `(failed)` outcomes that did not reach phase-3a (preflight
+   * failures, manifest errors, etc.).
+   */
+  readonly phaseFailures?: readonly {
+    readonly phase: "skills" | "commands" | "agents" | "mcp";
+    readonly msg: string;
+  }[];
 }
 
 /**

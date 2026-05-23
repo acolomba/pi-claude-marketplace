@@ -63,9 +63,12 @@ import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../platform/pi-api.ts";
+import { softDepStatus } from "../../platform/pi-api.ts";
+import { cascadeSummary } from "../../presentation/cascade-summary.ts";
 import { causeChainTrailer } from "../../presentation/cause-chain.ts";
+import { renderRow } from "../../presentation/compact-line.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
+import { renderRollbackPartial } from "../../presentation/rollback-partial.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   appendLeaks,
@@ -76,12 +79,7 @@ import {
 import { RECOVERY_PLUGIN_REINSTALL_PREFIX } from "../../shared/markers.ts";
 import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
-import {
-  DEFAULT_GIT_OPS,
-  refreshGitHubClone,
-  renderPartition,
-  type GitOps,
-} from "../marketplace/shared.ts";
+import { DEFAULT_GIT_OPS, refreshGitHubClone, type GitOps } from "../marketplace/shared.ts";
 
 import { discoverGeneratedNames } from "./discover-names.ts";
 import {
@@ -100,6 +98,12 @@ import type { ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type {
+  MarketplaceRow,
+  PluginCascadeRow,
+  RollbackChild,
+} from "../../presentation/compact-line.ts";
+import type { Reason } from "../../shared/grammar/reasons.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
 
@@ -164,8 +168,10 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
   }
 
   if (targets.length === 0) {
-    // PUP-1 empty-set: silent success per PRD "No plugins installed."
-    notifySuccess(ctx, "No plugins installed.");
+    // CMC-10 / MSG-ER-1: bare empty token rendered via the Wave 1 renderer
+    // (no icon, no scope brackets); supersedes the legacy PRD "No plugins
+    // installed." sentence form retired by Plan 13-02a-01.
+    notifySuccess(ctx, renderRow({ kind: "empty", token: "no plugins" }, softDepStatus(pi)));
     return;
   }
 
@@ -200,7 +206,11 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
     // path-source: NFR-5 noop. The manifest is re-read per-plugin below.
   };
 
-  const outcomes: PluginUpdateOutcome[] = [];
+  // Pair each outcome with its target so the cascade renderer can group
+  // by (scope, marketplace) per CMC-21 (per-scope rendering, no collapse).
+  // The bare update across multiple scopes / marketplaces becomes one
+  // cascade block per (scope, marketplace) pair.
+  const outcomes: { readonly target: ResolvedTarget; readonly outcome: PluginUpdateOutcome }[] = [];
   for (const t of targets) {
     try {
       await syncCloneOnce(t.scope, t.marketplace, t.locations);
@@ -241,10 +251,10 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
       return;
     }
 
-    outcomes.push(outcome);
+    outcomes.push({ target: t, outcome });
   }
 
-  renderPartitionAndNotify(ctx, pi, outcomes);
+  renderUpdateCascadeAndNotify(ctx, pi, outcomes);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -661,16 +671,27 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
       notifyError(args.ctx, errorMessage(aggregate), aggregate);
     }
 
+    // Plan 13-02a-01 / CMC-17 / MSG-RP-1: surface phaseFailures structurally
+    // so the cascade renderer can build the rollback-partial parent +
+    // indented children block. notes[] is retained for outcome-level text
+    // aggregation (consumed by outcomeOnly callers and the cascade
+    // post-render trailer).
     return {
       partition: "failed",
       name: plugin,
       fromVersion,
       toVersion,
       notes: [aggregateMsg, ...phase3aFailures.map((f) => `${f.phase}: ${f.msg}`)],
+      phaseFailures: phase3aFailures.map((f) => ({ phase: f.phase, msg: f.msg })),
     };
   }
 
   // Success: WR-04 fields populated for Phase 4 cascade-side RH-5 composition.
+  // Plan 13-02a-01 / CMC-13: declaresAgents / declaresMcp predicate inputs
+  // mirror reinstall's effective-state contract (declares iff actually
+  // staged this update). The renderer probes companion-loaded state via
+  // SoftDepProbe and emits `{requires pi-subagents}` / `{requires pi-mcp}`
+  // iff (declares AND unloaded).
   const stagedAgents = handles.agents.result.recorded.map((r) => r.generatedName);
   const stagedMcpServers = handles.mcp.result.recorded.map((r) => r.generatedName);
   await dropPluginCompletionCache(args);
@@ -681,6 +702,8 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
     toVersion,
     stagedAgents,
     stagedMcpServers,
+    declaresAgents: stagedAgents.length > 0,
+    declaresMcp: stagedMcpServers.length > 0,
   };
 }
 
@@ -702,84 +725,342 @@ async function dropPluginCompletionCache(args: ThreePhaseArgs): Promise<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Partition rendering + reload hint composition (mirror Phase 4 update.ts)
+// Plan 13-02a-01 / CMC-26: cascade rendering + MSG-RH-1 reload-hint dispatch.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function renderPartitionAndNotify(
+interface TargetedOutcome {
+  readonly target: ResolvedTarget;
+  readonly outcome: PluginUpdateOutcome;
+}
+
+/**
+ * Render the update cascade per MSG-GR-1 + MSG-IC-1..3 + MSG-PL-3 + MSG-SR-4..6.
+ *
+ *   ● <mp> [<scope>]
+ *     ● <plugin> [<scope>] v<from> → v<to> (updated) [{requires ...}]
+ *     ● <plugin> [<scope>] (skipped) {<reason>}
+ *     ⊘ <plugin> [<scope>] v<from> → v<to> (failed) {rollback partial}
+ *       [skills] (rollback failed) {rollback partial}
+ *       [agents] (rollback failed) {rollback partial}
+ *
+ *   /reload to pick up changes
+ *
+ * - Marketplace headers carry `status: undefined` (the marketplace itself
+ *   was NOT updated by plugin update; the header is a pure label).
+ * - Severity dispatch: all-trivial -> notifySuccess; any non-trivial (any
+ *   failed / non-trivial skipped) -> notifyWarning. MSG-SR-6 forbids
+ *   notifyError on cascade summaries.
+ * - Reload-hint trailer emitted iff at least one outcome is `(updated)`.
+ *   All-up-to-date / all-skipped cascades omit the trailer (MSG-RH-1).
+ * - Rollback-partial parents (phaseFailures non-empty) substitute their
+ *   row in the cascade body with `renderRollbackPartial(parentRow,
+ *   children, probe)` so the indented children block sits beneath the
+ *   parent line at the cascade-row indentation level.
+ */
+function renderUpdateCascadeAndNotify(
   ctx: ExtensionContext,
   pi: ExtensionAPI,
-  outcomes: readonly PluginUpdateOutcome[],
+  outcomes: readonly TargetedOutcome[],
 ): void {
-  const partitions: Record<PluginUpdateOutcome["partition"], PluginUpdateOutcome[]> = {
-    updated: [],
-    unchanged: [],
-    skipped: [],
-    failed: [],
-  };
-  for (const o of outcomes) {
-    partitions[o.partition].push(o);
+  const probe = softDepStatus(pi);
+  // Group by (scope, marketplace) per CMC-21.
+  interface Block {
+    marketplace: MarketplaceRow;
+    rows: { row: PluginCascadeRow; rollbackChildren?: readonly RollbackChild[] }[];
+  }
+  const byMp = new Map<string, Block>();
+  for (const { target, outcome } of outcomes) {
+    const key = `${target.scope}:${target.marketplace}`;
+    const existing = byMp.get(key);
+    const rowEntry = outcomeToCascadeRow(target, outcome);
+    if (rowEntry === undefined) {
+      continue;
+    }
+
+    if (existing === undefined) {
+      byMp.set(key, {
+        marketplace: {
+          kind: "marketplace",
+          name: target.marketplace,
+          scope: target.scope,
+          outcomeClass: "ok",
+        },
+        rows: [rowEntry],
+      });
+    } else {
+      existing.rows.push(rowEntry);
+    }
   }
 
-  const updatedNames = partitions.updated.map((o) => o.name).sort((a, b) => a.localeCompare(b));
+  // Sort marketplace blocks: scope (project before user via scopeOrder)
+  // then marketplace name.
+  const sortedBlocks = [...byMp.values()].sort((a, b) => {
+    const scopeDiff = scopeOrder(a.marketplace.scope) - scopeOrder(b.marketplace.scope);
+    if (scopeDiff !== 0) {
+      return scopeDiff;
+    }
 
-  // MU-7-equivalent body. The leading summary line is followed by the
-  // per-partition listings.
-  const baseLines: string[] = [partitionSummary(partitions, updatedNames)];
-  renderPartition(baseLines, "Updated", partitions.updated, /*withVersions*/ true);
-  renderPartition(baseLines, "Unchanged", partitions.unchanged, false);
-  renderPartition(baseLines, "Skipped", partitions.skipped, false);
-  renderPartition(baseLines, "Failed", partitions.failed, false);
+    return a.marketplace.name.localeCompare(b.marketplace.name);
+  });
 
-  const body = appendPluginSoftDepWarnings(baseLines.join("\n"), pi, partitions.updated);
+  const bodySegments: string[] = [];
+  let aggregatedSeverity: "success" | "warning" = "success";
+  for (const block of sortedBlocks) {
+    const { message, severity } = cascadeSummary({
+      marketplace: block.marketplace,
+      rows: block.rows.map((r) => r.row),
+      probe,
+    });
+    // MSG-RP-1: post-render splice the rollback-partial children block
+    // beneath each parent row that carries phase failures. cascadeSummary
+    // already rendered the parent row; we replace that line with the
+    // parent + indented children form from renderRollbackPartial.
+    const withRollback = spliceRollbackPartials(message, block.rows, probe);
+    bodySegments.push(withRollback);
+    if (severity === "warning") {
+      aggregatedSeverity = "warning";
+    }
+  }
 
-  // PUP-8 / MSG-RH-1: reload hint emitted iff updated[].length > 0.
+  const body = bodySegments.join("\n\n");
+  // PUP-8 / MSG-RH-1: reload hint emitted iff at least one outcome is
+  // (updated). All-trivial cascades suppress the trailer.
+  const updatedNames = outcomes
+    .filter((o) => o.outcome.partition === "updated")
+    .map((o) => o.outcome.name);
   const hint = reloadHint(updatedNames);
-  notifySuccess(ctx, appendReloadHint(body, hint));
+  const dispatch = aggregatedSeverity === "warning" ? notifyWarning : notifySuccess;
+  dispatch(ctx, appendReloadHint(body, hint));
 }
 
-function partitionSummary(
-  partitions: Record<PluginUpdateOutcome["partition"], PluginUpdateOutcome[]>,
-  updatedNames: readonly string[],
-): string {
-  if (partitions.updated.length > 0) {
-    return partitions.updated.length === 1
-      ? `Updated plugin "${updatedNames[0] ?? ""}."`
-      : `Updated ${partitions.updated.length.toString()} plugins.`;
-  }
+/**
+ * Map an outcome to its cascade-row representation. Returns `undefined`
+ * for `unchanged` outcomes -- they map to `(skipped) {up-to-date}` per
+ * the catalog (CMC-26: unchanged is an internal partition; the user
+ * sees `(skipped) {up-to-date}` in the cascade).
+ */
+function outcomeToCascadeRow(
+  target: ResolvedTarget,
+  outcome: PluginUpdateOutcome,
+): { row: PluginCascadeRow; rollbackChildren?: readonly RollbackChild[] } | undefined {
+  switch (outcome.partition) {
+    case "updated": {
+      // MSG-PL-3 version-transition arrow `v<from> → v<to>` (U+2192,
+      // space-padded). The renderer's renderVersion slot just emits
+      // whatever the orchestrator supplies in `version`, so we compose
+      // the arrow string here and pass it through verbatim.
+      const versionSlot = composeVersionArrow(outcome.fromVersion, outcome.toVersion);
+      return {
+        row: {
+          kind: "plugin-cascade",
+          name: outcome.name,
+          scope: target.scope,
+          ...(versionSlot !== undefined && { version: versionSlot }),
+          status: "updated",
+          declaresAgents: outcome.declaresAgents ?? false,
+          declaresMcp: outcome.declaresMcp ?? false,
+        },
+      };
+    }
 
-  if (
-    partitions.failed.length === 0 &&
-    partitions.skipped.length === 0 &&
-    partitions.unchanged.length > 0
-  ) {
-    return "All targeted plugins are already up to date.";
-  }
+    case "unchanged": {
+      // Catalog: `(skipped) {up-to-date}` -- the unchanged partition is
+      // an internal optimization; the user-visible token is `(skipped)`
+      // with `{up-to-date}` reason. The renderer treats `up-to-date` as
+      // a trivial skip (● icon, success severity).
+      return {
+        row: {
+          kind: "plugin-cascade",
+          name: outcome.name,
+          scope: target.scope,
+          status: "skipped",
+          reasons: ["up-to-date"],
+        },
+      };
+    }
 
-  if (
-    partitions.failed.length === 0 &&
-    partitions.unchanged.length === 0 &&
-    partitions.skipped.length > 0
-  ) {
-    return "No plugins were updated.";
-  }
+    case "skipped":
+      return {
+        row: {
+          kind: "plugin-cascade",
+          name: outcome.name,
+          scope: target.scope,
+          ...(outcome.fromVersion !== undefined && { version: outcome.fromVersion }),
+          status: "skipped",
+          reasons: narrowSkipReasons(outcome.notes),
+        },
+      };
+    case "failed": {
+      const hasPhaseFailures = (outcome.phaseFailures ?? []).length > 0;
+      const versionSlot = composeVersionArrow(outcome.fromVersion, outcome.toVersion);
+      const failedRow: PluginCascadeRow = {
+        kind: "plugin-cascade",
+        name: outcome.name,
+        scope: target.scope,
+        ...(versionSlot !== undefined && { version: versionSlot }),
+        status: "failed",
+        reasons: hasPhaseFailures
+          ? (["rollback partial"] as const)
+          : narrowFailReasons(outcome.notes),
+        declaresAgents: false,
+        declaresMcp: false,
+      };
 
-  return "Plugin update complete.";
+      if (!hasPhaseFailures) {
+        return { row: failedRow };
+      }
+
+      const children: readonly RollbackChild[] = (outcome.phaseFailures ?? []).map((f) => ({
+        kind: "rollback-child",
+        // MSG-RP-1: phaseLabel renders verbatim in the bare compact line.
+        // Bracketed form mirrors the catalog example.
+        phaseLabel: `[${f.phase}]`,
+        // Inner bridge commit failures are rollback-failed semantically:
+        // the swap was attempted, the bridge threw, and the post-commit
+        // recovery is the per-plugin reinstall hint. `rollback failed`
+        // captures that effective state.
+        status: "rollback failed",
+        // The free-text error message does NOT fit the closed Reason set;
+        // narrow to `"rollback partial"` (the parent's reason) and the
+        // phaseLabel + status carry the user-visible failure shape.
+        reasons: ["rollback partial"] as const,
+      }));
+      return { row: failedRow, rollbackChildren: children };
+    }
+
+    default:
+      return undefined;
+  }
 }
 
-function appendPluginSoftDepWarnings(
-  body: string,
-  pi: ExtensionAPI,
-  updated: readonly PluginUpdateOutcome[],
+/**
+ * Splice rollback-partial children into the cascade message. cascadeSummary
+ * already emits the parent row at indentation 2; for each row with
+ * rollbackChildren, append the children block at indentation 4
+ * (rollback-child indented 2 spaces beneath the cascade-child row).
+ */
+function spliceRollbackPartials(
+  cascadeMessage: string,
+  rows: readonly { row: PluginCascadeRow; rollbackChildren?: readonly RollbackChild[] }[],
+  probe: ReturnType<typeof softDepStatus>,
 ): string {
-  const stagedAgents = updated.flatMap((o) => o.stagedAgents ?? []);
-  const stagedMcpServers = updated.flatMap((o) => o.stagedMcpServers ?? []);
-  return [
-    body,
-    subagentWarningIfNeeded(pi, stagedAgents),
-    mcpAdapterWarningIfNeeded(pi, stagedMcpServers),
-  ]
-    .filter((line) => line !== "")
-    .join("\n");
+  const haveChildren = rows.filter((r) => r.rollbackChildren !== undefined);
+  if (haveChildren.length === 0) {
+    return cascadeMessage;
+  }
+
+  const lines = cascadeMessage.split("\n");
+  const out: string[] = [];
+  for (const line of lines) {
+    out.push(line);
+    // Look for an exact match against any rollback-parent row's rendered
+    // form (the line is `  ${renderRow(row, probe)}` per cascadeSummary).
+    for (const r of haveChildren) {
+      const renderedRow = `  ${renderRow(r.row, probe)}`;
+      if (line === renderedRow) {
+        // Children render at indent 4 (the inner block of renderRollbackPartial
+        // sits at +2 relative to the parent, which is already at +2 here).
+        const block = renderRollbackPartial(r.row, r.rollbackChildren ?? [], probe);
+        const blockLines = block.split("\n");
+        // blockLines[0] is the parent (already in `line`); skip it and
+        // append the indented children with an extra 2-space prefix.
+        for (let i = 1; i < blockLines.length; i++) {
+          out.push(`  ${blockLines[i]}`);
+        }
+
+        break;
+      }
+    }
+  }
+
+  return out.join("\n");
+}
+
+/**
+ * MSG-PL-3 version transition slot. Returns undefined when both sides
+ * absent. The renderer's `renderVersion(version)` always prepends a `v`
+ * to the supplied string, so the arrow form here is
+ * `<from> → v<to>` -- the renderer turns that into `v<from> → v<to>`
+ * matching catalog `/claude:plugin update` examples (output-catalog.md
+ * lines 419-470). Single-version (unchanged from→to OR only one side
+ * supplied) returns the bare version string for the renderer to prefix.
+ */
+function composeVersionArrow(from: string | undefined, to: string | undefined): string | undefined {
+  if (from === undefined && to === undefined) {
+    return undefined;
+  }
+
+  if (from !== undefined && to !== undefined && from !== to) {
+    return `${from} → v${to}`;
+  }
+
+  if (to !== undefined) {
+    return to;
+  }
+
+  return from;
+}
+
+function narrowSkipReasons(notes: readonly string[] | undefined): readonly Reason[] {
+  if (notes === undefined || notes.length === 0) {
+    return [];
+  }
+
+  return [narrowSkipReason(notes[0] ?? "")];
+}
+
+function narrowSkipReason(note: string): Reason {
+  if (note === "not installed") {
+    return "not installed";
+  }
+
+  if (note === "not in manifest") {
+    return "not in manifest";
+  }
+
+  if (note === "up-to-date") {
+    return "up-to-date";
+  }
+
+  // PUP-4 path: "Plugin "...." is no longer installable: <cause>" -> closed
+  // Reason "no longer installable".
+  if (note.includes("no longer installable") || note.includes("not installable")) {
+    return "no longer installable";
+  }
+
+  if (note.includes("entry failed schema validation")) {
+    return "invalid manifest";
+  }
+
+  return "not in manifest";
+}
+
+function narrowFailReasons(notes: readonly string[] | undefined): readonly Reason[] {
+  if (notes === undefined || notes.length === 0) {
+    return [];
+  }
+
+  return [narrowFailReason(notes[0] ?? "")];
+}
+
+function narrowFailReason(note: string): Reason {
+  if (note.includes("rollback")) {
+    return "rollback partial";
+  }
+
+  if (note.includes("concurrently uninstalled") || note.includes("concurrently removed")) {
+    return "concurrently uninstalled";
+  }
+
+  if (note.includes("concurrently updated")) {
+    return "concurrently updated";
+  }
+
+  return "not in manifest";
+}
+
+function scopeOrder(scope: Scope): number {
+  return scope === "user" ? 0 : 1;
 }
 
 function aggregateCause(firstCause: unknown): { cause: unknown } | undefined {
