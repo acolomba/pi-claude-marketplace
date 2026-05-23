@@ -21,12 +21,20 @@
 //
 // Count reconciliation: Phase 12 originally locked the closed set at 23
 // entries (the frontmatter at messaging-style-guide.md is the binding
-// source). Phase 13 sub-wave 2c (Plan 13-02c-01) adds `"already enabled"`
+// source). Phase 13 sub-wave 2c (Plan 13-02c-01) added `"already enabled"`
 // and `"already disabled"` per the CMC-33 / catalog binding at
-// docs/output-catalog.md:700-709 -- the `marketplace autoupdate
-// enable|disable` idempotent-flip result row uses these reasons as the
-// `{<reason>}` block. Without them the catalog conformance fails. The
-// style-guide frontmatter is updated in the same commit to keep the
+// docs/output-catalog.md -- the `marketplace autoupdate enable|disable`
+// idempotent-flip result row uses these reasons as the `{<reason>}`
+// block. Phase 13 Wave 3 plan 13-03-01 (catalog UAT) added
+// `"permission denied"`, `"source missing"`, and `"network unreachable"`
+// per the same precedent: the catalog at the uninstall failure,
+// marketplace-remove partial child, reinstall failure, and update /
+// marketplace-update network-failure rows uses these reasons as the
+// `{<reason>}` block, and the catalog UAT runner asserts byte equality
+// against the rendered output. Without them the renderer cannot emit
+// the catalog's compact-line shape (the `Reason` literal union rejects
+// any string outside the closed set). The style-guide frontmatter and
+// §4 reasons table are updated in the same commit to keep the
 // grammar-frontmatter drift test green.
 //
 // Brace convention: entries are stored WITHOUT surrounding `{}` braces. The
@@ -61,6 +69,9 @@ export const REASONS = [
   "lock held",
   "already enabled",
   "already disabled",
+  "permission denied",
+  "source missing",
+  "network unreachable",
 ] as const;
 
 export type Reason = (typeof REASONS)[number];

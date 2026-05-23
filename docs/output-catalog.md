@@ -238,10 +238,10 @@ When a marketplace's manifest fails to parse, the marketplace renders as a failu
 <!-- catalog-state: unparseable-mp -->
 
 ```text
-⊘ unparseable-mp [user] (failed) {unparseable}
-  cause: JSON parse error at line 3
 ● other-mp [user] <autoupdate>
   ● helper [user] v1.0.0 (installed)
+⊘ unparseable-mp [user] (failed) {unparseable}
+  cause: JSON parse error at line 3
 ```
 
 The unparseable marketplace appears in the per-marketplace listing (alphabetically among the other marketplaces); no separate `warning:` line at the top.
@@ -423,7 +423,7 @@ Rows within the marketplace block are alphabetical across all partition outcomes
 ```text
 ● official [user] <autoupdate>
   ⊘ alpha [user] (failed) {source missing}
-  ⊘ beta [user] (failed) {manifest unreadable}
+  ⊘ beta [user] (failed) {unreadable manifest}
 ```
 
 No `/reload` trailer -- nothing changed on disk, so MSG-RH-1's "any resource changed" condition does not fire. Severity is still `notifyWarning`, never `notifyError` per MSG-SR-6.

@@ -42,6 +42,9 @@ reasons:
   - lock held
   - already enabled
   - already disabled
+  - permission denied
+  - source missing
+  - network unreachable
 markers:
   - autoupdate
   - no autoupdate
@@ -221,6 +224,9 @@ Audit changes relative to the D-09 starter set: drop `existing` (no emitting cal
 | `{stale clone}`              | `marketplace add` refused because the target source-clone directory already exists from a previous failed add; operator must remove it manually.                                                                                            | `{stale clone}` at `orchestrators/marketplace/add.ts:184`                              |
 | `{duplicate name}`           | `marketplace add` refused because a marketplace with the derived name already exists in the named scope (MA-8).                                                                                                                             | `{duplicate name}` at `orchestrators/marketplace/add.ts:266`                           |
 | `{lock held}`                | Another `pi-claude-marketplace` operation in the same scope holds the per-scope `.state-lock` sentinel; this operation refused at preflight.                                                                                                | `{lock held}` at `shared/markers.ts:37` (`STATE_LOCK_HELD_PREFIX`)                     |
+| `{permission denied}`        | A filesystem operation (rm, rename, write) was refused by the OS -- canonical reason for EACCES / EPERM failures on uninstall + marketplace-remove cascades. Catalog binding at uninstall failure + marketplace-remove partial child rows.   | `{permission denied}` at uninstall + marketplace-remove failure surfaces (Plan 13-03)  |
+| `{source missing}`           | A plugin's marketplace source (clone directory or path-source root) is no longer present on disk -- canonical reason for reinstall partition failure rows when the source has been removed since the original install.                      | `{source missing}` at reinstall failure surfaces (Plan 13-03)                          |
+| `{network unreachable}`      | A network operation (clone, fetch, head) failed because the remote host could not be contacted -- canonical reason for github-source marketplace update + plugin update network failures.                                                    | `{network unreachable}` at update + marketplace-update failure surfaces (Plan 13-03)   |
 
 ______________________________________________________________________
 
