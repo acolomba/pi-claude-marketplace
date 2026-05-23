@@ -105,10 +105,10 @@ import type { Scope } from "../../shared/types.ts";
  * the edge layer's responsibility (Phase 6); this orchestrator entrypoint
  * accepts already-parsed strings + the resolved scope.
  *
- * `pi` is REQUIRED (matches the precedent set by uninstall.ts -- the soft-dep
- * helpers `subagentWarningIfNeeded` / `mcpAdapterWarningIfNeeded` take a
- * non-optional `ExtensionAPI`; making it optional here would force a runtime
- * branch the type checker cannot reason about).
+ * `pi` is REQUIRED -- `softDepStatus(pi)` constructs the SoftDepProbe that
+ * `renderRow` consumes for per-row soft-dep marker injection (CMC-13 /
+ * MSG-SD-1..3). Making `pi` optional would force a runtime branch the
+ * type checker cannot reason about.
  */
 export type InstallPluginOutcome =
   | {

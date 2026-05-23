@@ -26,15 +26,12 @@
 // missing `resources.agents` / `resources.mcpServers` is normalized to [] by
 // loadState BEFORE the withStateGuard closure observes it.
 //
-// API parameter shape note: `pi` was historically required because of the
-// retired `subagentWarningIfNeeded` / `mcpAdapterWarningIfNeeded` helpers
-// (Phase 6 precedent). Phase 13 sub-wave 2b structurally enforces MSG-SD-3
-// (no soft-dep markers on uninstalled rows) via the PluginInlineUninstalledRow
-// variant: that variant has NO `declaresAgents/Mcp` fields, so the renderer
-// cannot probe companion-loaded state for these rows. `pi` is still required
-// for `softDepStatus(pi)` (the probe is uniformly threaded through `renderRow`
-// for signature uniformity across variants, though it is unused for the
-// uninstalled variant).
+// API parameter shape note: `pi` is required for `softDepStatus(pi)` which
+// constructs the SoftDepProbe threaded through `renderRow`. Phase 13 sub-wave
+// 2b structurally enforces MSG-SD-3 (no soft-dep markers on uninstalled rows)
+// via the PluginInlineUninstalledRow variant: that variant has NO declares-*
+// fields, so the renderer cannot probe companion-loaded state for these rows
+// even though the probe is uniformly threaded.
 
 import { rm } from "node:fs/promises";
 
@@ -212,9 +209,9 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
   // the catch returned on cascade failure.
   //
   // CMC-24 / D-13-05 / D-13-06: emit via PluginInlineUninstalledRow + renderRow.
-  // The PluginInlineUninstalledRow variant has NO declaresAgents/declaresMcp
-  // fields by construction -- MSG-SD-3 is structurally enforced: the renderer
-  // CANNOT emit `{requires pi-subagents}` / `{requires pi-mcp}` markers on
+  // The uninstalled variant has NO per-row soft-dep predicate fields by
+  // construction -- MSG-SD-3 is structurally enforced: the renderer CANNOT
+  // emit `{requires pi-subagents}` / `{requires pi-mcp}` markers on
   // (uninstalled) rows. The legacy aggregated PI_*_NOT_LOADED trailers on
   // uninstall success are RETIRED per D-13-07 + MSG-SD-3 (the soft-dep state
   // is no-op for the operator after uninstall -- the content is gone, so no
