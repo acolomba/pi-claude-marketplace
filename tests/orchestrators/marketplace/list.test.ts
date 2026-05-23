@@ -57,17 +57,17 @@ async function withHermeticHome<T>(
   }
 }
 
-test("ML-4 + SC-6: bare form (no scope) emits 'No marketplaces configured.' when both scopes are empty", async () => {
+test("CMC-10 + SC-6: bare form emits `(no marketplaces)` EmptyToken when both scopes are empty", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx();
     await listMarketplaces({ ctx, cwd });
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "No marketplaces configured.");
+    assert.equal(notifications[0]!.message, "(no marketplaces)");
     assert.equal(notifications[0]!.severity, undefined);
   });
 });
 
-test("ML-1 + ML-2: project-scope marketplace renders one line under project heading with path source", async () => {
+test("CMC-29: project-scope marketplace renders flat row `● <name> [<scope>]` -- no group header, no source-label suffix", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const projectLocations = locationsFor("project", cwd);
     await mkdir(projectLocations.extensionRoot, { recursive: true });
@@ -89,14 +89,11 @@ test("ML-1 + ML-2: project-scope marketplace renders one line under project head
     const { ctx, notifications } = makeCtx();
     await listMarketplaces({ ctx, scope: "project", cwd });
     assert.equal(notifications.length, 1);
-    assert.match(
-      notifications[0]!.message,
-      /project scope marketplaces:\n\s+● local \(\.\/local-src\)/,
-    );
+    assert.equal(notifications[0]!.message, "● local [project]");
   });
 });
 
-test("ML-2: github source renders canonical URL", async () => {
+test("CMC-29: github source renders the same flat row form (no parenthesised URL suffix)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const projectLocations = locationsFor("project", cwd);
     await mkdir(projectLocations.extensionRoot, { recursive: true });
@@ -117,14 +114,15 @@ test("ML-2: github source renders canonical URL", async () => {
 
     const { ctx, notifications } = makeCtx();
     await listMarketplaces({ ctx, scope: "project", cwd });
-    assert.match(
-      notifications[0]!.message,
-      /● official \(https:\/\/github\.com\/anthropics\/claude-plugins-official\)/,
-    );
+    // CMC-29: row form is `<icon> <name> [<scope>] [<marker>]` -- no
+    // parenthesised source URL/path suffix per the new style guide. The
+    // source is only used to derive the marker default at `add` time;
+    // list rows show the marker, not the URL.
+    assert.equal(notifications[0]!.message, "● official [project]");
   });
 });
 
-test("ML-2: autoupdate flag appends ' [autoupdate]' suffix", async () => {
+test("CMC-05 / MSG-GR-5: autoupdate=true emits `<autoupdate>` marker", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const projectLocations = locationsFor("project", cwd);
     await mkdir(projectLocations.extensionRoot, { recursive: true });
@@ -146,11 +144,11 @@ test("ML-2: autoupdate flag appends ' [autoupdate]' suffix", async () => {
 
     const { ctx, notifications } = makeCtx();
     await listMarketplaces({ ctx, scope: "project", cwd });
-    assert.match(notifications[0]!.message, /● auto \(\.\/auto-src\) \[autoupdate\]/);
+    assert.equal(notifications[0]!.message, "● auto [project] <autoupdate>");
   });
 });
 
-test("SC-6: bare form enumerates BOTH user and project; user-only entry appears under user heading", async () => {
+test("SC-6: bare form enumerates BOTH user and project; user-only entry renders as a flat row", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const userLocations = locationsFor("user", cwd);
     await mkdir(userLocations.extensionRoot, { recursive: true });
@@ -162,8 +160,8 @@ test("SC-6: bare form enumerates BOTH user and project; user-only entry appears 
           scope: "user",
           source: pathSource("./u"),
           addedFromCwd: cwd,
-          manifestPath: path.join(cwd, "marketplace.json"),
           marketplaceRoot: cwd,
+          manifestPath: path.join(cwd, "marketplace.json"),
           plugins: {},
         },
       },
@@ -171,7 +169,7 @@ test("SC-6: bare form enumerates BOTH user and project; user-only entry appears 
 
     const { ctx, notifications } = makeCtx();
     await listMarketplaces({ ctx, cwd }); // bare form -- no scope
-    assert.match(notifications[0]!.message, /user scope marketplaces:\n\s+● user-only/);
+    assert.equal(notifications[0]!.message, "● user-only [user]");
   });
 });
 

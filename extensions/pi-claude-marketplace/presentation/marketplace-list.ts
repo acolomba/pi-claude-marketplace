@@ -1,19 +1,44 @@
 // presentation/marketplace-list.ts
 //
-// ML-1, ML-2, ML-4 list rendering. Pure formatter -- no IO, no ctx.
-// ML-3 (no manifest reads) is enforced at the orchestrator layer
-// (`list.ts` calls `loadState` only, never `loadMarketplaceManifest`)
-// -- this file does not touch IO at all.
+// Phase 13 Wave 2 sub-wave 2c (Plan 13-02c-01) -- rewritten renderer.
 //
-// Format per PRD §5.1.3 ML-2:
-//   <icon> <name> (<source.logical>)[ [autoupdate]]
+// Replaces V1's grouped-by-scope output with the flat CMC-29 / MSG-GR-3
+// form: rows sorted by `compareByNameThenScope` (name primary
+// case-insensitive, scope secondary project-before-user) with no per-scope
+// group headers. Each row is rendered via the Wave 1 keystone
+// `renderRow` composer on a `MarketplaceRow` payload; the empty case
+// goes through the `EmptyToken` variant (CMC-10 / MSG-ER-1).
 //
-// The icon is `●` (filled circle) per V1 reference. The optional
-// `[autoupdate]` suffix follows the parenthesized logical source
-// when `record.autoupdate === true`.
+// Per CMC-05 / MSG-GR-5 the `<autoupdate>` marker is emitted iff the
+// record's `autoupdate === true`; absence of the marker conveys
+// autoupdate-off in every surface except the `marketplace autoupdate
+// disable` result row (which is owned by autoupdate.ts, not this file).
+//
+// List rows are PURE LABEL rows: `outcomeClass: "ok"` (CMC-07 dispatches
+// to `●`); `status` is undefined (the list does not announce an outcome);
+// `reasons` is undefined. The renderer wires these constraints
+// structurally so a caller cannot accidentally promote a list row to a
+// status-bearing row.
+//
+// D-11 layering: this file does NOT import from `persistence/` -- it
+// defines a minimal structural shape (`MarketplaceListEntry`) that
+// `MarketplaceRecord` is a superset of, so the orchestrator passes
+// `MarketplaceRecord[]` without casts.
+//
+// MSG-MR-1 / D-13-15 / Plan 13-01-01 contract: `renderRow` requires a
+// `SoftDepProbe`, but marketplace label rows do not exercise per-row
+// soft-dep markers (those are plugin-row predicates per MSG-SD-1..3).
+// We pass a fixed `MARKETPLACE_LABEL_PROBE` that disables the marker
+// injection branch -- the composer reads the probe only when a row's
+// `declaresAgents` / `declaresMcp` field is true, which is never the
+// case on `MarketplaceRow`.
 
 import { sourceLogical } from "../domain/source.ts";
 
+import { renderRow } from "./compact-line.ts";
+import { compareByNameThenScope } from "./sort.ts";
+
+import type { MarketplaceRow, SoftDepProbe } from "./compact-line.ts";
 import type { ParsedSource } from "../domain/source.ts";
 
 // Plan 06-04 D-02 re-exports: edge/ cannot import from domain/ (D-11
@@ -37,46 +62,46 @@ export interface MarketplaceListEntry {
   readonly autoupdate?: boolean;
 }
 
-const ICON = "●";
+/**
+ * Marketplace label rows never carry per-row soft-dep markers (those are
+ * plugin-row predicates per MSG-SD-1..3). `composeReasons` inside
+ * `renderRow` reads the probe ONLY when `declaresAgents` / `declaresMcp`
+ * is true on the row, which is never the case for `MarketplaceRow` (the
+ * variant has no such fields). The "true/true" sentinel below is the
+ * intentional no-op shape -- if a caller were to mis-route a row with
+ * those predicate fields through here, the markers would be suppressed.
+ */
+const MARKETPLACE_LABEL_PROBE: SoftDepProbe = {
+  piSubagentsLoaded: true,
+  piMcpAdapterLoaded: true,
+};
 
 /**
- * ML-1, ML-2, ML-4: render the configured marketplaces grouped by
- * scope. ML-4 empty-case returns the byte-for-byte stable string
- * `No marketplaces configured.`
+ * CMC-03 / CMC-07 / CMC-10 / CMC-29 / MSG-GR-3 -- flat list rendering.
+ *
+ * Empty case (CMC-10): bare `(no marketplaces)` token via the
+ * `EmptyToken` variant of RowSpec.
+ *
+ * Non-empty case (CMC-29): every record becomes a `MarketplaceRow`
+ * (`outcomeClass: "ok"`, no `status`, optional `<autoupdate>` marker)
+ * and the array is sorted via `compareByNameThenScope` BEFORE rendering.
+ * Lines are joined with a single `\n`.
  */
 export function renderMarketplaceList(records: readonly MarketplaceListEntry[]): string {
   if (records.length === 0) {
-    return "No marketplaces configured.";
+    return renderRow({ kind: "empty", token: "no marketplaces" }, MARKETPLACE_LABEL_PROBE);
   }
 
-  const byScope: Record<"user" | "project", MarketplaceListEntry[]> = {
-    user: [],
-    project: [],
-  };
-  for (const m of records) {
-    byScope[m.scope].push(m);
-  }
+  const rows: MarketplaceRow[] = records.map((record) => ({
+    kind: "marketplace",
+    name: record.name,
+    scope: record.scope,
+    outcomeClass: "ok",
+    ...(record.autoupdate === true && { marker: "autoupdate" as const }),
+    // status and reasons intentionally omitted -- list rows are pure
+    // label rows (CMC-29). The MarketplaceRow type makes both optional.
+  }));
 
-  const lines: string[] = [];
-  for (const scope of ["user", "project"] as const) {
-    const entries = byScope[scope];
-    if (entries.length === 0) {
-      continue;
-    }
-
-    if (lines.length > 0) {
-      lines.push("");
-    }
-
-    lines.push(`${scope} scope marketplaces:`);
-    for (const m of entries) {
-      const auto = m.autoupdate === true ? " [autoupdate]" : "";
-      // ML-2: source.logical for path; canonical https URL for github;
-      // raw fallback for unknown (NFR-12 forward-compat).
-      const logical = sourceLogical(m.source);
-      lines.push(`  ${ICON} ${m.name} (${logical})${auto}`);
-    }
-  }
-
-  return lines.join("\n");
+  const sorted = [...rows].sort(compareByNameThenScope);
+  return sorted.map((row) => renderRow(row, MARKETPLACE_LABEL_PROBE)).join("\n");
 }
