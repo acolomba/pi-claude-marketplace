@@ -147,7 +147,10 @@ test("shim :: bare reinstall with no positional calls reinstallPlugins target al
     await handler("", ctx);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]?.severity, undefined);
-    assert.match(notifications[0]?.message ?? "", /No plugins installed\./);
+    // Plan 13-02a-01 / CMC-10 / MSG-ER-1: legacy "No plugins installed."
+    // sentence form retired; the bulk reinstall empty-set surface renders
+    // via EmptyToken -> bare "(no plugins)" compact line.
+    assert.equal(notifications[0]?.message ?? "", "(no plugins)");
   });
 });
 
@@ -181,16 +184,22 @@ test("shim :: --scope works before and after reinstall ref", async () => {
     const first = makeCtx(cwd);
     await handler("--scope project", first.ctx);
     assert.equal(first.notifications.length, 1);
-    assert.match(first.notifications[0]?.message ?? "", /No plugins installed\./);
+    // Plan 13-02a-01 / CMC-10: bare empty-set renders via EmptyToken.
+    assert.equal(first.notifications[0]?.message ?? "", "(no plugins)");
     assert.doesNotMatch(first.notifications[0]?.message ?? "", /Usage: \/claude:plugin reinstall/);
 
     const second = makeCtx(cwd);
     await handler("myplug@mymkt --scope project", second.ctx);
     assert.equal(second.notifications.length, 1);
-    assert.equal(second.notifications[0]?.severity, undefined);
+    // Plan 13-02a-01 / CMC-25 / MSG-SR-5: non-trivial skipped row routes
+    // via notifyWarning (was undefined under legacy partition format).
+    assert.equal(second.notifications[0]?.severity, "warning");
+    // Legacy `Skipped:\n  - [project] myplug@mymkt: not installed` retired;
+    // cascade row carries `(skipped) {not installed}` with `@<marketplace>`
+    // OMITTED per CMC-02.
     assert.match(
       second.notifications[0]?.message ?? "",
-      /Skipped:\n {2}- \[project\] myplug@mymkt: not installed/,
+      /● mymkt \[project\]\n {2}⊘ myplug \[project\] \(skipped\) \{not installed\}/,
     );
   });
 });
@@ -206,9 +215,14 @@ test("shim :: --force works before and after reinstall ref", async () => {
     const handler = makeReinstallHandler(makePi());
     const defaultAttempt = makeCtx(cwd);
     await handler("hello@mp --scope project", defaultAttempt.ctx);
-    assert.equal(defaultAttempt.notifications[0]?.severity, undefined);
-    assert.match(defaultAttempt.notifications[0]?.message ?? "", /Failed:/);
-    assert.match(defaultAttempt.notifications[0]?.message ?? "", /foreign previous content/);
+    // Plan 13-02a-01 / CMC-25 / MSG-SR-5..6: bulk reinstall cascade with a
+    // failed row routes via notifyWarning (never notifyError on cascade
+    // summaries per MSG-SR-6). The per-row reason is the closed-set
+    // narrowing of the underlying `foreign previous content` cause
+    // (mapped to `rollback partial` per outcomeToCascadeRow's
+    // MANUAL_RECOVERY_REQUIRED branch).
+    assert.equal(defaultAttempt.notifications[0]?.severity, "warning");
+    assert.match(defaultAttempt.notifications[0]?.message ?? "", /⊘ hello \[project\] \(failed\)/);
 
     const forceAfter = makeCtx(cwd);
     await handler("hello@mp --scope project --force", forceAfter.ctx);
@@ -216,7 +230,13 @@ test("shim :: --force works before and after reinstall ref", async () => {
       forceAfter.notifications.some((n) => n.severity === "error"),
       false,
     );
-    assert.match(forceAfter.notifications[0]?.message ?? "", /Reinstalled plugin "hello"\./);
+    // Plan 13-02a-01 / CMC-25 LOCKED I-01: single-plugin reinstall renders
+    // as a 1-row cascade; legacy `Reinstalled plugin "hello".` summary
+    // sentence retired.
+    assert.match(
+      forceAfter.notifications[0]?.message ?? "",
+      /● mp \[project\]\n {2}● hello \[project\] v\d.+\(reinstalled\)/,
+    );
 
     await writeFile(agentPath, "manual foreign bytes again", "utf8");
     await writeAgentPluginTree(pluginRoot, "hello", "newer agent");
@@ -226,7 +246,10 @@ test("shim :: --force works before and after reinstall ref", async () => {
       forceBefore.notifications.some((n) => n.severity === "error"),
       false,
     );
-    assert.match(forceBefore.notifications[0]?.message ?? "", /Reinstalled plugin "hello"\./);
+    assert.match(
+      forceBefore.notifications[0]?.message ?? "",
+      /● mp \[project\]\n {2}● hello \[project\] v\d.+\(reinstalled\)/,
+    );
   });
 });
 

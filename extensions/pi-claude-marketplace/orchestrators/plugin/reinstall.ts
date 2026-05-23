@@ -45,8 +45,10 @@ import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { mcpAdapterWarningIfNeeded, subagentWarningIfNeeded } from "../../platform/pi-api.ts";
+import { softDepStatus } from "../../platform/pi-api.ts";
+import { cascadeSummary } from "../../presentation/cascade-summary.ts";
 import { causeChainTrailer } from "../../presentation/cause-chain.ts";
+import { renderRow } from "../../presentation/compact-line.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import { assertNever, errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
@@ -70,13 +72,14 @@ import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { Scope } from "../../shared/types.ts";
 import type {
-  ReinstallFailedOutcome,
-  ReinstallPluginOutcome,
-  ReinstallReinstalledOutcome,
-  ReinstallSkippedOutcome,
-} from "../types.ts";
+  MarketplaceRow,
+  PluginCascadeRow,
+  SoftDepProbe,
+} from "../../presentation/compact-line.ts";
+import type { Reason } from "../../shared/grammar/reasons.ts";
+import type { Scope } from "../../shared/types.ts";
+import type { ReinstallPluginOutcome, ReinstallReinstalledOutcome } from "../types.ts";
 
 export type {
   ReinstallFailedOutcome,
@@ -203,7 +206,7 @@ export async function reinstallPlugin(
     notifyWarning(ctx, warning);
   }
 
-  notifySuccess(ctx, renderSuccessBody(locked.outcome, pi));
+  notifySuccess(ctx, renderSuccessBody(locked.outcome, softDepStatus(pi)));
   return locked.outcome;
 }
 
@@ -222,7 +225,11 @@ export async function reinstallPlugins(
   }
 
   if (targets.length === 0) {
-    notifySuccess(ctx, "No plugins installed.");
+    // CMC-10 / MSG-ER-1: bare empty token rendered via the Wave 1 renderer
+    // (no icon, no scope brackets); supersedes the legacy bulk-reinstall
+    // success-sentence form retired by Plan 13-02a-01 (the catalog now
+    // calls for `(no plugins)` per MSG-ER-1).
+    notifySuccess(ctx, renderRow({ kind: "empty", token: "no plugins" }, softDepStatus(pi)));
     return [];
   }
 
@@ -361,118 +368,229 @@ function sortReinstallTargets(
   );
 }
 
+/**
+ * Plan 13-02a-01 / CMC-25: render the bulk-reinstall outcome cascade per
+ * MSG-GR-1 + MSG-IC-1..3 + MSG-SR-4..6.
+ *
+ * Shape per marketplace (catalog `/claude:plugin reinstall` multi-plugin
+ * cascade, output-catalog.md §"`/claude:plugin reinstall`"):
+ *
+ *     ● <mp> [<scope>]
+ *       ● <plugin> [<scope>] v<version> (reinstalled) [{reasons...}]
+ *       ● <plugin> [<scope>] (skipped) {<reason>}
+ *       ⊘ <plugin> [<scope>] (failed) {<reason>}
+ *
+ *     /reload to pick up changes
+ *
+ * - Marketplace headers carry `status: undefined` (the marketplace itself
+ *   was NOT updated by reinstall; the header is a pure label).
+ * - Per-marketplace `cascadeSummary` returns `{message, severity}`;
+ *   severity aggregates via OR (any warning -> overall warning).
+ * - Reload-hint trailer emitted iff at least one row's resources changed
+ *   (per MSG-RH-1); omitted on all-failed cascades.
+ * - Severity dispatch: `notifySuccess` for all-trivial cascades,
+ *   `notifyWarning` for any non-trivial outcome. NEVER `notifyError`
+ *   (MSG-SR-6).
+ */
 function renderReinstallPartitionAndNotify(
   ctx: ExtensionContext,
   pi: ExtensionAPI,
   outcomes: readonly ReinstallPluginOutcome[],
 ): void {
-  const partitions = partitionReinstallOutcomes(outcomes);
-  const reinstalled = [...partitions.reinstalled].sort(compareReinstallOutcome);
-  const lines = [reinstallSummary(reinstalled.length, reinstalled[0]?.name)];
-
-  renderReinstallPartition(lines, "Reinstalled", partitions.reinstalled);
-  renderReinstallPartition(lines, "Skipped", partitions.skipped);
-  renderReinstallPartition(lines, "Failed", partitions.failed);
-
-  const changedNames = reinstalled.filter((o) => o.resourcesChanged).map((o) => o.name);
-  const body = appendReinstallSoftDepWarnings(lines.join("\n"), pi, reinstalled);
-  const hint = reloadHint(changedNames);
-  notifySuccess(ctx, appendReloadHint(body, hint));
-}
-
-function reinstallSummary(
-  reinstalledCount: number,
-  firstReinstalledName: string | undefined,
-): string {
-  if (reinstalledCount === 1) {
-    return `Reinstalled plugin "${firstReinstalledName ?? ""}".`;
-  }
-
-  if (reinstalledCount > 1) {
-    return `Reinstalled ${reinstalledCount.toString()} plugins.`;
-  }
-
-  return "Plugin reinstall complete.";
-}
-
-function partitionReinstallOutcomes(outcomes: readonly ReinstallPluginOutcome[]): {
-  reinstalled: ReinstallReinstalledOutcome[];
-  skipped: ReinstallSkippedOutcome[];
-  failed: ReinstallFailedOutcome[];
-} {
-  const partitions: {
-    reinstalled: ReinstallReinstalledOutcome[];
-    skipped: ReinstallSkippedOutcome[];
-    failed: ReinstallFailedOutcome[];
-  } = { reinstalled: [], skipped: [], failed: [] };
+  const probe = softDepStatus(pi);
+  // Group rows by marketplace + scope. Two different scopes for the same
+  // marketplace name render as two separate cascade blocks (CMC-21: per-
+  // scope rendering, no collapse).
+  const byMp = new Map<string, { marketplace: MarketplaceRow; rows: PluginCascadeRow[] }>();
   for (const outcome of outcomes) {
-    switch (outcome.partition) {
-      case "reinstalled":
-        partitions.reinstalled.push(outcome);
-        break;
-      case "skipped":
-        partitions.skipped.push(outcome);
-        break;
-      case "failed":
-        partitions.failed.push(outcome);
-        break;
-      default:
-        assertNever(outcome);
+    const key = `${outcome.scope}:${outcome.marketplace}`;
+    const existing = byMp.get(key);
+    const row = outcomeToCascadeRow(outcome);
+    if (existing === undefined) {
+      byMp.set(key, {
+        marketplace: {
+          kind: "marketplace",
+          name: outcome.marketplace,
+          scope: outcome.scope,
+          // Header is a pure label here -- reinstall does not modify the
+          // marketplace itself, so no `(status)` slot. `outcomeClass: "ok"`
+          // because the marketplace record itself is fine (per-row
+          // failures live in the children).
+          outcomeClass: "ok",
+        },
+        rows: [row],
+      });
+    } else {
+      existing.rows.push(row);
     }
   }
 
-  return partitions;
-}
+  // Order marketplace blocks by scope (project before user per
+  // compareByNameThenScope) then marketplace name.
+  const sortedBlocks = [...byMp.values()].sort((a, b) => {
+    const scopeDiff = scopeOrder(a.marketplace.scope) - scopeOrder(b.marketplace.scope);
+    if (scopeDiff !== 0) {
+      return scopeDiff;
+    }
 
-function renderReinstallPartition(
-  lines: string[],
-  label: "Reinstalled" | "Skipped" | "Failed",
-  outcomes: readonly ReinstallPluginOutcome[],
-): void {
-  if (outcomes.length === 0) {
-    return;
+    return a.marketplace.name.localeCompare(b.marketplace.name);
+  });
+
+  const bodySegments: string[] = [];
+  let aggregatedSeverity: "success" | "warning" = "success";
+  for (const block of sortedBlocks) {
+    const { message, severity } = cascadeSummary({
+      marketplace: block.marketplace,
+      rows: block.rows,
+      probe,
+    });
+    bodySegments.push(message);
+    if (severity === "warning") {
+      aggregatedSeverity = "warning";
+    }
   }
 
-  lines.push(`${label}:`);
-  for (const outcome of [...outcomes].sort(compareReinstallOutcome)) {
-    lines.push(formatReinstallOutcomeLine(outcome));
+  const body = bodySegments.join("\n\n");
+  const changedNames = outcomes
+    .filter(
+      (o): o is ReinstallReinstalledOutcome => o.partition === "reinstalled" && o.resourcesChanged,
+    )
+    .map((o) => o.name);
+  const hint = reloadHint(changedNames);
+  const dispatch = aggregatedSeverity === "warning" ? notifyWarning : notifySuccess;
+  dispatch(ctx, appendReloadHint(body, hint));
+}
+
+/**
+ * Maps a `ReinstallPluginOutcome` to its `PluginCascadeRow` representation
+ * (CMC-25 closed-set status mapping; D-13-05 typed-RowSpec discipline).
+ *
+ * Reason-token mapping:
+ *   - `"not installed"` -> Reason `"not installed"`
+ *   - `"not in manifest"` -> Reason `"not in manifest"`
+ *   - other free-form notes from skipped/failed outcomes pass through as
+ *     the closest matching closed-set Reason via `narrowReason`. The
+ *     `Reason` type is the binding contract; unmappable text degrades to
+ *     `"not in manifest"` as a documented fallback (Reasons is a closed
+ *     set per CMC-11; unknown free-form text cannot widen it).
+ */
+function outcomeToCascadeRow(outcome: ReinstallPluginOutcome): PluginCascadeRow {
+  switch (outcome.partition) {
+    case "reinstalled":
+      return {
+        kind: "plugin-cascade",
+        name: outcome.name,
+        scope: outcome.scope,
+        version: outcome.version,
+        status: "reinstalled",
+        declaresAgents: outcome.declaresAgents ?? false,
+        declaresMcp: outcome.declaresMcp ?? false,
+      };
+    case "skipped": {
+      const reasons = narrowReasons(outcome.notes);
+      return {
+        kind: "plugin-cascade",
+        name: outcome.name,
+        scope: outcome.scope,
+        status: "skipped",
+        reasons,
+      };
+    }
+
+    case "failed": {
+      const reasons = narrowReasons(outcome.notes);
+      // MSG-SD-3 / effective-state: soft-dep markers do NOT fire on
+      // (failed) rows (the plugin's effective state is "not installed");
+      // explicitly set false to keep the contract local-and-visible.
+      return {
+        kind: "plugin-cascade",
+        name: outcome.name,
+        scope: outcome.scope,
+        status: "failed",
+        reasons,
+        declaresAgents: false,
+        declaresMcp: false,
+      };
+    }
+
+    default:
+      return assertNever(outcome);
   }
 }
 
-function formatReinstallOutcomeLine(outcome: ReinstallPluginOutcome): string {
-  const notes =
-    outcome.notes === undefined || outcome.notes.length === 0
-      ? ""
-      : `: ${outcome.notes.join("; ")}`;
-  return `  - [${outcome.scope}] ${outcome.name}@${outcome.marketplace}${notes}`;
+/**
+ * Closed-set narrowing for skipped/failed outcome notes. Maps the legacy
+ * free-form notes to the closed `Reason` set (CMC-11). Unrecognized text
+ * falls back to `"not in manifest"` (the most permissive cascade reason
+ * matching the catalog's `(skipped) {not in manifest}` form when the
+ * underlying cause is opaque).
+ *
+ * The mapping is intentionally narrow -- production code paths that
+ * generate notes have known shapes (`"not installed"`, `"not in
+ * manifest"`, `MarketplaceNotFoundError.message`, raw `Error.message`
+ * from cached-manifest read). Wave 3 catalog UAT is the binding
+ * verification that the mapped reason set is sufficient.
+ */
+function narrowReasons(notes: readonly string[] | undefined): readonly Reason[] {
+  if (notes === undefined || notes.length === 0) {
+    return [];
+  }
+
+  const reasons: Reason[] = [];
+  for (const note of notes) {
+    reasons.push(narrowReason(note));
+  }
+
+  return Object.freeze(reasons);
 }
 
-function compareReinstallOutcome(a: ReinstallPluginOutcome, b: ReinstallPluginOutcome): number {
-  return (
-    scopeOrder(a.scope) - scopeOrder(b.scope) ||
-    a.marketplace.localeCompare(b.marketplace) ||
-    a.name.localeCompare(b.name)
-  );
+function narrowReason(note: string): Reason {
+  // Exact-match first. Order: cheapest predicate to most expensive.
+  if (note === "not installed") {
+    return "not installed";
+  }
+
+  if (note === "not in manifest") {
+    return "not in manifest";
+  }
+
+  if (note === "up-to-date") {
+    return "up-to-date";
+  }
+
+  if (note === "already installed") {
+    return "already installed";
+  }
+
+  // Substring matches for common synthetic messages.
+  if (note.includes("not found in cached manifest")) {
+    return "not in manifest";
+  }
+
+  if (note.includes("not found")) {
+    return "not found";
+  }
+
+  if (note.includes("MANUAL RECOVERY REQUIRED") || note.includes("manual recovery")) {
+    // Manual-recovery messages are themselves "failed" + recovery
+    // anchor; the cascade child reason narrows to "rollback partial"
+    // because the legacy `errorWithManualRecovery` helper composes the
+    // marker only when bridge replacements rolled back.
+    return "rollback partial";
+  }
+
+  if (note.includes("rollback")) {
+    return "rollback partial";
+  }
+
+  // Fallback: surface as "not in manifest" -- this is the catalog's
+  // most-permissive cascade skip reason and matches the operator mental
+  // model "we couldn't reconcile this row".
+  return "not in manifest";
 }
 
 function scopeOrder(scope: Scope): number {
   return scope === "user" ? 0 : 1;
-}
-
-function appendReinstallSoftDepWarnings(
-  body: string,
-  pi: ExtensionAPI,
-  reinstalled: readonly ReinstallReinstalledOutcome[],
-): string {
-  const stagedAgents = reinstalled.flatMap((o) => o.stagedAgents);
-  const stagedMcpServers = reinstalled.flatMap((o) => o.stagedMcpServers);
-  return [
-    body,
-    subagentWarningIfNeeded(pi, stagedAgents),
-    mcpAdapterWarningIfNeeded(pi, stagedMcpServers),
-  ]
-    .filter((line) => line !== "")
-    .join("\n");
 }
 
 async function runLockedReinstall(
@@ -688,6 +806,13 @@ function successOutcome(
   handles: PreparedHandles,
 ): ReinstallReinstalledOutcome {
   const resources = resourcesFromHandles(handles);
+  // Plan 13-02a-01 / CMC-13: surface effective-state per-row soft-dep
+  // predicates so cascade rendering can emit `{requires pi-subagents}` /
+  // `{requires pi-mcp}` iff (declares AND companion unloaded). The
+  // predicate is satisfied iff the plugin's reinstall actually staged
+  // resources of that kind (i.e. the resolved manifest declared them AND
+  // they materialized). D-13-07: probing companion-loaded state is the
+  // renderer's job via the injected SoftDepProbe.
   return {
     partition: "reinstalled",
     name: plugin,
@@ -696,6 +821,8 @@ function successOutcome(
     version: oldRecord.version,
     stagedAgents: resources.agents,
     stagedMcpServers: resources.mcpServers,
+    declaresAgents: resources.agents.length > 0,
+    declaresMcp: resources.mcpServers.length > 0,
     resourcesChanged: resourcesChanged(oldRecord.resources, resources),
   };
 }
@@ -863,20 +990,37 @@ async function runPostSuccessMaintenance(
   return Object.freeze(warnings);
 }
 
-function renderSuccessBody(outcome: ReinstallReinstalledOutcome, pi: ExtensionAPI): string {
-  let body = `Reinstalled plugin "${outcome.name}" from marketplace "${outcome.marketplace}".`;
-  const subagentWarn = subagentWarningIfNeeded(pi, outcome.stagedAgents);
-  const mcpWarn = mcpAdapterWarningIfNeeded(pi, outcome.stagedMcpServers);
-  if (subagentWarn !== "") {
-    body = `${body}\n${subagentWarn}`;
-  }
-
-  if (mcpWarn !== "") {
-    body = `${body}\n${mcpWarn}`;
-  }
-
+/**
+ * Plan 13-02a-01 / CMC-25 LOCKED I-01: single-plugin reinstall renders as
+ * a 1-marketplace 1-row cascade via the SAME `cascadeSummary` shape as the
+ * bulk path. `PluginCascadeRow` (NOT `PluginInlineRow`) -- Plan 13-01-01
+ * narrows `PluginInlineRow.status` to exclude `"reinstalled"`. Rationale:
+ * matches catalog `/claude:plugin reinstall` single-row-cascade shape at
+ * `docs/output-catalog.md` lines 351-358; avoids inline-vs-cascade
+ * duality; preserves CMC-08 reconciliation (the `reinstalled` token is
+ * rendered; the partition kind stays internal). Single-plugin success is
+ * always success severity -> `notifySuccess` dispatch is locked.
+ */
+function renderSuccessBody(outcome: ReinstallReinstalledOutcome, probe: SoftDepProbe): string {
+  const mpRow: MarketplaceRow = {
+    kind: "marketplace",
+    name: outcome.marketplace,
+    scope: outcome.scope,
+    // Header is a label here -- the marketplace itself was not modified.
+    outcomeClass: "ok",
+  };
+  const row: PluginCascadeRow = {
+    kind: "plugin-cascade",
+    name: outcome.name,
+    scope: outcome.scope,
+    version: outcome.version,
+    status: "reinstalled",
+    declaresAgents: outcome.declaresAgents ?? false,
+    declaresMcp: outcome.declaresMcp ?? false,
+  };
+  const { message } = cascadeSummary({ marketplace: mpRow, rows: [row], probe });
   const hint = reloadHint(outcome.resourcesChanged ? [outcome.name] : []);
-  return appendReloadHint(body, hint);
+  return appendReloadHint(message, hint);
 }
 
 function clonePluginRecord(record: PluginRecord): PluginRecord {

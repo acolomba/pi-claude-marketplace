@@ -23,6 +23,23 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
   readonly resourcesChanged: boolean;
   readonly stagedAgents: readonly string[];
   readonly stagedMcpServers: readonly string[];
+  /**
+   * Plan 13-02a-01 / CMC-13: per-row soft-dep predicate inputs. `true` iff
+   * the plugin's resolved manifest declared the kind AND it was actually
+   * staged at reinstall time (the orchestrator already tracks
+   * `stagedAgents.length > 0` / `stagedMcpServers.length > 0` per-outcome;
+   * these flags surface them through the typed outcome so cascade rendering
+   * (`PluginCascadeRow.declaresAgents` / `.declaresMcp`) consumes the
+   * effective-state-at-render-time signal without re-deriving from the
+   * stagedAgents / stagedMcpServers arrays at the renderer site).
+   *
+   * MSG-SD-3 / D-13-07: per-row markers fire on `(reinstalled)` rows only;
+   * `(skipped)` and `(failed)` rows omit them (failed sets these to false
+   * to make the constraint explicit even though the renderer narrows on
+   * `status === "skipped"` / `"failed"` anyway).
+   */
+  readonly declaresAgents?: boolean;
+  readonly declaresMcp?: boolean;
   readonly notes?: readonly string[];
 }
 
@@ -70,6 +87,40 @@ export interface PluginUpdateOutcome {
   readonly stagedAgents?: readonly string[];
   /** WR-04: MCP servers staged by this plugin's update (RH-5 input). */
   readonly stagedMcpServers?: readonly string[];
+  /**
+   * Plan 13-02a-01 / CMC-13: per-row soft-dep predicate inputs (same
+   * semantics as `ReinstallReinstalledOutcome.declaresAgents/Mcp`). True
+   * iff the plugin's manifest declared the kind AND it was actually
+   * staged. The renderer probes companion-loaded state via SoftDepProbe
+   * and emits `{requires pi-subagents}` / `{requires pi-mcp}` iff
+   * (declares AND unloaded). Populated on `(updated)` outcomes; omitted
+   * on `(unchanged) / (skipped) / (failed)` because MSG-SD-3 forbids the
+   * marker on non-(updated) cascade rows.
+   */
+  readonly declaresAgents?: boolean;
+  readonly declaresMcp?: boolean;
+  /**
+   * Plan 13-02a-01 / CMC-17 / MSG-RP-1: per-phase rollback-partial
+   * children for the `(failed)` partition when phase-3a aggregation
+   * occurred. Each entry names one bridge (`skills` | `commands` |
+   * `agents` | `mcp`) whose `commit*` threw or leaked. The cascade
+   * renderer uses these to build the indented children block beneath
+   * the `(failed) {rollback partial}` parent row.
+   *
+   * Encoded as the bridge-name + cause-message pair so the rendering
+   * stays close to the catalog's `[phase3a] failed to remove staged
+   * agent: EACCES` form (the phaseLabel is the bridge name, prefixed
+   * by `[<phase>]` at render time; the reason embeds the cause text
+   * via the closed-set `"rollback partial"` Reason).
+   *
+   * Omitted on `(updated)` / `(unchanged)` / `(skipped)` outcomes and
+   * on `(failed)` outcomes that did not reach phase-3a (preflight
+   * failures, manifest errors, etc.).
+   */
+  readonly phaseFailures?: readonly {
+    readonly phase: "skills" | "commands" | "agents" | "mcp";
+    readonly msg: string;
+  }[];
 }
 
 /**

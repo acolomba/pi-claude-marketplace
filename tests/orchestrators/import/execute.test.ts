@@ -92,10 +92,17 @@ test("formatClaudeImportSummary keeps warning records actionable by scope plugin
   };
 
   const summary = formatClaudeImportSummary(result);
+  // Plan 13-02a-01 / CMC-27 / CMC-02: cascade rendering omits the
+  // `@<marketplace>` token on plugin rows (the marketplace lives in
+  // the header). The cause text is retired as a per-row token because
+  // closed-set Reasons (CMC-11) supersede free-form cause text;
+  // unavailable plugins surface as `(unavailable) {no longer
+  // installable}`. Diagnostic refs not tied to a marketplace render as
+  // bare orphan lines under the preamble.
   assert.match(summary, /project/);
-  assert.match(summary, /missing@mp/);
-  assert.match(summary, /unavailable/);
-  assert.match(summary, /Plugin not found/);
+  assert.match(summary, /⊘ missing \[project\] \(unavailable\) \{no longer installable\}/);
+  // Bare diagnostic for the malformed-enabled-plugin-ref (no marketplace
+  // tie) renders as an orphan line under the preamble.
   assert.match(summary, /Bad ref bad/);
 });
 
@@ -396,8 +403,11 @@ test("importClaudeSettings classifies unavailable and unexpected plugin failures
   assert.deepEqual(attempted, ["missing", "boom", "ok"]);
   assert.equal(result.warnings.find((w) => w.ref === "missing@mp")?.cause, "not found");
   assert.equal(result.unexpectedPluginFailures[0]?.cause, "disk full");
-  // unexpected-failure outcomes escalate the summary notification to error severity.
-  assert.equal(notifications[0]?.severity, "error");
+  // Plan 13-02a-01 / CMC-27 / MSG-SR-6: notifyError is FORBIDDEN on
+  // cascade summaries. The legacy 3-arm severity branch (notifyError on
+  // unexpectedPluginFailures > 0) is retired; the user sees the failure
+  // structurally via the per-row `(failed)` token at warning severity.
+  assert.equal(notifications[0]?.severity, "warning");
   assert.equal((notifications[0]?.message.match(/\/reload to pick up changes/g) ?? []).length, 1);
 });
 
@@ -480,7 +490,11 @@ test("formatClaudeImportSummary includes the canonical reload-hint trailer when 
 
   const summary = formatClaudeImportSummary(result);
   assert.match(summary, /\/reload to pick up changes/);
-  assert.match(summary, /my-plugin@mp/);
+  // Plan 13-02a-01 / CMC-02: cascade rows OMIT the `@<marketplace>`
+  // token (the marketplace lives in the header). The plugin row
+  // renders as `● my-plugin [user] (installed)` under the synthesized
+  // bare-header `● mp [user]`.
+  assert.match(summary, /● my-plugin \[user\] \(installed\)/);
 });
 
 test("importClaudeSettings handles already-installed outcome from installPlugin (concurrent install race)", async () => {
@@ -524,7 +538,17 @@ test("importClaudeSettings handles already-installed outcome from installPlugin 
 
   assert.equal(result.skippedExistingPlugins[0]?.reason, "already-installed");
   assert.equal(result.skippedExistingPlugins[0]?.ref, "plugin@mp");
-  assert.match(notifications[0]?.message ?? "", /Skipped existing items/);
+  // Plan 13-02a-01 / CMC-27: legacy `Skipped existing items` partition
+  // header retired; the skipped plugin renders as a cascade row
+  // `● plugin [user] (skipped) {already installed}` (● icon because
+  // `already installed` is a trivial skip per renderRow's
+  // isTrivialSkip predicate; the plugin remains installed) under the
+  // synthesized marketplace header `● mp [user] (skipped) {already
+  // installed}` (the marketplace state record was already present).
+  assert.match(
+    notifications[0]?.message ?? "",
+    /● mp \[user\] \(skipped\) \{already installed\}\n {2}● plugin \[user\] \(skipped\) \{already installed\}/,
+  );
 });
 
 test("importClaudeSettings emits diagnostic and skips scope when loadState throws", async () => {
