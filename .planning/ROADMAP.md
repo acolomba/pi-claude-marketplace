@@ -188,7 +188,7 @@ Plans:
 4. Per-scope rendering works end-to-end: a marketplace that exists in both scopes renders as two separate headers (one per scope, each with its own marker / status / reasons); the plugin-list orphan fold rule and the marketplace-add adoption behavior round-trip correctly (orphan plugins fold under user-scope, get adopted when a project-scope marketplace is later added).
 5. Cascade severity routes per MSG-SR-4..6: an all-trivial cascade uses `notifySuccess`; a cascade with any non-trivial `(skipped)` or `(failed)` row uses `notifyWarning`; no cascade summary uses `notifyError`. The reload-hint trailer fires exactly once per body when any resource changed; omitted on all-failed cascades and bare manifest-only refreshes; coexists with the recovery anchor (reload above retry, blank line between) on partial-failure remove surfaces.
 
-**Plans:** 8/9 plans executed
+**Plans:** 8/10 plans executed
 
 Plans:
 
@@ -196,6 +196,7 @@ Plans:
 - [ ] `13-01-02-PLAN.md` -- Wave 1 composers: cause-chain depth-5 walker + cascade-summary + manual-recovery + rollback-partial + reload-hint MSG-RH-1 blank-line fix + notifyError body rewrite + formatErrorWithCauses deletion + caller migration
 - [ ] `13-01-03-PLAN.md` -- Wave 1 cutover gates: ESLint no-restricted-imports for the 5 legacy markers (D-13-09) + tests/architecture/no-legacy-markers.test.ts static-audit (D-13-12) + presentation/soft-dep.ts thinning
 - [ ] `13-02a-01-PLAN.md` -- Wave 2 sub-wave 2a (cascades): reinstall + update + import migration to cascadeSummary + PluginCascadeRow + per-row soft-dep + rollback-partial (CMC-25/26/27)
+- [ ] `13-02a-02-PLAN.md` -- Wave 2 sub-wave 2a continuation (manual-recovery + rollback-partial callsite migration): migrate the 6 remaining legacy ES-5 marker emission sites (4 manual-recovery: `bridges/skills/stage.ts`, `bridges/commands/stage.ts`, `bridges/agents/stage.ts`, `orchestrators/plugin/reinstall.ts::errorWithManualRecovery` helper; 2 rollback-partial: `transaction/rollback.ts::formatRollbackError` D-03 chokepoint + `tests/transaction/rollback.test.ts` D-03 contract tests) onto the Wave 1 composers (`renderManualRecovery`, `renderRollbackPartial`) and retire the `MANUAL_RECOVERY_REQUIRED` / `ROLLBACK_PARTIAL` marker imports at every callsite; unblocks 13-03-02 ES-5 atomic commit (CMC-16/CMC-17 mop-up)
 - [ ] `13-02b-01-PLAN.md` -- Wave 2 sub-wave 2b (single-plugin): install + uninstall + bootstrap migration to PluginInlineRow + PluginInlineUninstalledRow + edge handler entity errors (CMC-23/24/28)
 - [ ] `13-02c-01-PLAN.md` -- Wave 2 sub-wave 2c (marketplace): list + add + remove + update + autoupdate migration + marketplace-list renderer rewrite + edge handler entity errors + platform/pi-api.ts trailer-helper deletion (CMC-29..34)
 - [ ] `13-02d-01-PLAN.md` -- Wave 2 sub-wave 2d (list): orchestrators/plugin/list.ts orphan-fold computation + presentation/plugin-list.ts rewrite + fold-adoption integration test (CMC-22, CMC-21)
@@ -327,4 +328,4 @@ ______________________________________________________________________
 *Last updated: 2026-05-14 after Phase 9 completion*
 *Last updated: 2026-05-16 after merge from main brought in v1.2 phases 10 & 11.*
 *Last updated: 2026-05-22 -- v1.3 Consistent Messaging milestone added: Phases 12 (Foundations), 13 (Conformance Refactor & ES-5), 14 (Drift Guard). 38/38 CMC requirements mapped (100% coverage). Continued phase numbering from 11; no reset.*
-*Last updated: 2026-05-23 -- Phase 13 planned: 9 plans across 3 waves (Wave 1: 3 cross-cutting primitive plans; Wave 2: 4 sub-wave per-command plans 2a/2b/2c/2d; Wave 3: catalog UAT pre-commit gate + ES-5 atomic commit).*
+*Last updated: 2026-05-23 -- Phase 13 expanded to 10 plans (Wave 2 sub-wave 2a continuation `13-02a-02` inserted between `13-02a-01` and `13-02b-01`): migrate the 6 remaining legacy ES-5 marker emission sites (4 manual-recovery + 2 rollback-partial) onto the Wave 1 composers; unblocks 13-03-02 ES-5 atomic commit.*
