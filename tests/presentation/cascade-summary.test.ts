@@ -72,7 +72,13 @@ test("MSG-SR-4: single (available) row -> success", () => {
 
 test("MSG-SR-4: trivial skip {up-to-date} -> success", () => {
   const rows: readonly PluginCascadeRow[] = [
-    { kind: "plugin-cascade", name: "a", scope: "user", status: "skipped", reasons: ["up-to-date"] },
+    {
+      kind: "plugin-cascade",
+      name: "a",
+      scope: "user",
+      status: "skipped",
+      reasons: ["up-to-date"],
+    },
   ];
   assert.equal(cascadeSeverity(rows), "success");
 });
