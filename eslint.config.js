@@ -335,12 +335,22 @@ export default tseslint.config(
     // and the YAML loader is a plain ESM module consumed only by other
     // rule files. Aligns with the existing `tests/**/*.ts` override that
     // relaxes type-aware rules for test-suite code.
+    //
+    // Phase 14 (Plan 14-04 deviation -- Rule 3 auto-fix): the 16
+    // meta-assertion rules in this directory intentionally implement a
+    // no-op `Program: () => {}` visitor per RESEARCH.md Pitfall 8 (the
+    // rules cite a structural enforcement mechanism in `meta.docs`; the
+    // AST visitor exists only to silence the "rule has no selectors"
+    // typescript-eslint nag). `@typescript-eslint/no-empty-function`
+    // would otherwise flag every Program method, so disable it for this
+    // tree.
     files: ["tests/lint-rules/**/*.{js,ts}"],
     rules: {
       "@typescript-eslint/explicit-module-boundary-types": "off",
       "@typescript-eslint/no-floating-promises": "off",
       "@typescript-eslint/no-non-null-assertion": "off",
       "@typescript-eslint/no-unnecessary-condition": "off",
+      "@typescript-eslint/no-empty-function": "off",
       "no-restricted-syntax": "off",
       "no-console": "off",
     },
