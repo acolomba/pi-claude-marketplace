@@ -495,17 +495,6 @@ function renderReinstallPartitionAndNotify(
  *     `"not in manifest"` as a documented fallback (Reasons is a closed
  *     set per CMC-11; unknown free-form text cannot widen it).
  */
-/**
- * Plan 13-02a-02 / CMC-16 / F-2 binding seam: exported under the `__test_*`
- * prefix so the dedicated binding regression test in
- * tests/orchestrators/plugin/reinstall.test.ts can verify the structural
- * `failureClass: "manual-recovery"` -> `["rollback partial"]` mapping
- * end-to-end without forcing a complex fs-permission leak fixture through
- * the bridges. Production callsites import `outcomeToCascadeRow` via the
- * private (non-exported) name; the test seam aliases the same function.
- */
-export { outcomeToCascadeRow as __test_outcomeToCascadeRow };
-
 function outcomeToCascadeRow(outcome: ReinstallPluginOutcome): PluginCascadeRow {
   switch (outcome.partition) {
     case "reinstalled":
@@ -563,6 +552,23 @@ function outcomeToCascadeRow(outcome: ReinstallPluginOutcome): PluginCascadeRow 
       return assertNever(outcome);
   }
 }
+
+/**
+ * Plan 13-02a-02 / CMC-16 / F-2 binding seam: exported under the `__test_*`
+ * prefix so the dedicated binding regression test in
+ * tests/orchestrators/plugin/reinstall.test.ts can verify the structural
+ * `failureClass: "manual-recovery"` -> `["rollback partial"]` mapping
+ * end-to-end without forcing a complex fs-permission leak fixture through
+ * the bridges. Production callsites import `outcomeToCascadeRow` via the
+ * private (non-exported) name; the test seam aliases the same function.
+ *
+ * Placement note (WR-02): this re-export sits BELOW the function
+ * declaration so its JSDoc does not orphan the primary contract JSDoc on
+ * `outcomeToCascadeRow` from the IDE hover-doc binding. Most JSDoc tooling
+ * attaches a comment to the next declaration and treats intervening
+ * comments as separators.
+ */
+export { outcomeToCascadeRow as __test_outcomeToCascadeRow };
 
 /**
  * Closed-set narrowing for skipped/failed outcome notes. Maps the legacy
@@ -1004,15 +1010,6 @@ async function finalizeReplacement(entry: ReplacementEntry): Promise<readonly st
  * if a `rollbackReplacements` cascade re-reports a leak the inner bridge
  * already surfaced).
  */
-/**
- * Plan 13-02a-02 / CMC-16 / F-5 binding seam: exported under the `__test_*`
- * prefix so the dedicated F-5 dedup regression test in
- * tests/orchestrators/plugin/reinstall.test.ts can verify the
- * no-double-count invariant on the merged `.leaks` payload directly
- * without forcing a contrived bridge cascade.
- */
-export { errorWithManualRecovery as __test_errorWithManualRecovery };
-
 function errorWithManualRecovery(err: unknown, leaks: readonly string[]): Error {
   if (leaks.length === 0) {
     return err instanceof Error ? err : new Error(errorMessage(err));
@@ -1026,6 +1023,19 @@ function errorWithManualRecovery(err: unknown, leaks: readonly string[]): Error 
   const base = err instanceof Error ? err : new Error(errorMessage(err));
   return new ManualRecoveryError(base.message, leaks, { cause: base });
 }
+
+/**
+ * Plan 13-02a-02 / CMC-16 / F-5 binding seam: exported under the `__test_*`
+ * prefix so the dedicated F-5 dedup regression test in
+ * tests/orchestrators/plugin/reinstall.test.ts can verify the
+ * no-double-count invariant on the merged `.leaks` payload directly
+ * without forcing a contrived bridge cascade.
+ *
+ * Placement note (WR-02): this re-export sits BELOW the function
+ * declaration so its JSDoc does not orphan the primary contract JSDoc on
+ * `errorWithManualRecovery` from the IDE hover-doc binding.
+ */
+export { errorWithManualRecovery as __test_errorWithManualRecovery };
 
 /**
  * Plan 13-02a-02 / CMC-16 / WR-01: walk the `Error.cause` chain (bounded to
@@ -1069,6 +1079,9 @@ function findManualRecoveryError(err: unknown): ManualRecoveryError | undefined 
  * tests/orchestrators/plugin/reinstall.test.ts can directly exercise the
  * release-also-failed wrapping path without standing up a real
  * `withScopeLock` fixture.
+ *
+ * Placement note (WR-02): this re-export sits BELOW the function
+ * declaration so its JSDoc does not orphan the primary contract JSDoc.
  */
 export { findManualRecoveryError as __test_findManualRecoveryError };
 
