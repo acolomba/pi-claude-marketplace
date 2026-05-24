@@ -44,6 +44,7 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 - ✓ v1.0 successor architecture: `/claude:plugin` command surface, marketplace lifecycle, plugin `install` / `uninstall` / `update`, top-level `list`, skills/commands/agents/MCP bridges, tab completion, real Pi wiring, live/runtime e2e coverage, and cross-process state locking.
 - ✓ v1.1 Reinstall Command (Phases 8-9): `reinstall` command routed through `/claude:plugin` with `update`-analogous syntax (`reinstall <plugin>@<marketplace>`, `reinstall @<marketplace>`, bare `reinstall`); `--scope user|project` filtering; cached-manifest / recorded-version reuse with no network sync; atomic per-plugin replacement via `withLockedStateTransaction` (PRL-09/10/11/12); post-success plugin data cleanup; deterministic bulk-cascade partitioning + reload-hint and soft-dep aggregation; installed-only tab completion plus reinstall-specific `--force`.
 - ✓ v1.2 Claude Settings Import (Phases 10-11): `/claude:plugin import [--scope user|project]` command; Claude settings discovery and base/override merge per selected scope; enabled-plugin extraction (`enabledPlugins["plugin@marketplace"] === true`); official `claude-plugins-official` built-in mapping plus `extraKnownMarketplaces` directory/GitHub source mapping; idempotent orchestration with unavailable-plugin warning aggregation, source-mismatch protection, and reused marketplace/plugin atomic semantics; both-scope default with explicit-scope override (D-26); D-28 pure desired-state planning boundary.
+- ✓ v1.3 Consistent Messaging mechanical-refactor surface (Phases 12-13): closed-set grammar primitives (`STATUS_TOKENS`, `REASONS`, `MARKERS`) under `shared/grammar/` with frontmatter drift contract; Wave 1 composers (`compact-line`, `cascade-summary`, `manual-recovery`, `rollback-partial`, `cause-chain`, `reload-hint`, `sort`) under `presentation/` consumed by every user-visible orchestrator; per-scope rendering + orphan-fold + adoption (CMC-03, CMC-21); per-row soft-dep markers replacing the aggregated trailer (CMC-12, CMC-13); cascade severity routing via `(severity === "warning" ? notifyWarning : notifySuccess)` (CMC-20); per-command catalog conformance enforced by `tests/architecture/catalog-uat.test.ts` byte-equality runner; ES-5 atomic supersession commit (`c4d87d4`) deletes the 5 legacy markers, retires the snapshot byte-equality assertion, rewrites PRD §6.12 ES-5 to a pointer, and rolls back the temporary ESLint marker-restriction additions per D-13-03 / D-13-11 / D-30 (CMC-35); the static-audit at `tests/architecture/no-legacy-markers.test.ts` enforces zero re-introductions across the codebase's lifetime.
 
 ### Active
 
@@ -51,22 +52,6 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 
 **v1.3 Consistent Messaging:**
 
-- [ ] Universal line grammar (MSG-GR-1) applied at every notify callsite and the sanctioned `console.warn`
-- [ ] Plugin-row icon rule (MSG-IC-1..3) enforced: ● installed / ○ uninstalled-no-error / ⊘ error or failure-cascade child
-- [ ] CMC-09 upgradable list-only discipline: `(upgradable)` is computed per PRD PL-5 string compare and rendered ONLY by `list`; never on install / update / uninstall / reinstall result rows (MSG-PL-4)
-- [ ] Marketplace icon rule (outcome class) applied uniformly across header and standalone-row forms
-- [ ] Status-token + reasons enums constrained to the catalog set; reasons rendered 1-3 words lowercase; manifest field names verbatim
-- [ ] Per-scope marketplace and plugin rendering (MSG-GR-3) with name-primary / scope-secondary sort, the plugin-list orphan fold rule, and CMC-21 adoption: orphan project-scoped plugins fold under user-scope headers and are adopted when a project-scope marketplace is later added
-- [ ] Autoupdate marker grammar (MSG-GR-5) rendered in its own `<...>` slot, marketplace-only
-- [ ] Marketplace header form on multi-plugin commands; single-plugin commands stay inline; marketplace-only commands stay flat
-- [ ] Soft-dep markers (MSG-SD-1..3, CMC-12/13) emitted per row -- on installed / updated / reinstalled rows, on `list`-rendering `(available)` and `(installed)` rows, and per-row inside `import` / `update` / `reinstall` cascades when companion extensions are unloaded; excluded from `(uninstalled)` rows. The aggregated single-trailer emission is replaced by per-row `{}` reasons (D-13 expansion)
-- [ ] Reload-hint policy (MSG-RH-1) emitted exactly once when any resource changed; omitted on all-failed cascades and manifest-only refreshes; coexists with partial-failure remove recovery anchor
-- [ ] Manual-recovery and rollback-partial canonical formatting; cause-chain rendering per section 9
-- [ ] Severity routing (section 10) applied per pattern class
-- [ ] Empty-result and legacy-migrate patterns; section 14.1 wording adopted for the single sanctioned `console.warn`
-- [ ] CMC-37 IL-3 inline disable comment preservation: the `eslint-disable-next-line no-restricted-syntax, no-console -- IL-3: <rationale>` comment stays inline directly above the sanctioned `console.warn`; no config-file rule widening; no second `console.warn` callsite introduced (MSG-LC-2)
-- [ ] ES-5 supersession (section 15 / MSG-04) applied throughout with marker constants and string-equality tests migrated
-- [ ] Per-command conformance: every rendered state in `docs/output-catalog.md` produces output matching the worked examples (success, mixed, all-failed, all-unchanged, empty, usage error)
 - [ ] CMC-38 drift guard test suite (Phase 14 milestone gate): a frontmatter-driven test suite reads `docs/messaging-style-guide.md` YAML frontmatter (`status_tokens:`, `reasons:`, `markers:`, `pattern_classes:`) plus the normative MSG-* IDs as the binding contract; `npm run check` fails when a callsite emits an out-of-set token or violates an MSG-* rule
 
 ### Out of Scope
@@ -164,6 +149,8 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ______________________________________________________________________
+
+*Last updated: 2026-05-24 -- Phase 13 complete (Conformance Refactor & ES-5 Supersession). All 10 plans landed, 31 CMC-* requirements validated, `npm run check` green at 1142/1142. v1.3 mechanical-refactor surface moved to Validated; only CMC-38 drift-guard test suite (Phase 14 milestone gate) remains Active. ES-5 atomic supersession commit `c4d87d4` is the milestone v1.3 user-contract change boundary per D-30; rollback path is `git revert c4d87d4` per D-13-13.*
 
 *Last updated: 2026-05-22 -- Phase 12 complete (Messaging Foundations & Renderer Primitives). Landed the closed-set grammar primitives (`STATUS_TOKENS` 14 entries, `REASONS` 23 entries) under `shared/grammar/` with a frontmatter drift test (CMC-08, CMC-11); the single-trailer reload-hint composer at `presentation/reload-hint.ts` with all 8 callsites migrated atomically and `ReloadVerb` type purged (CMC-14); the byte-exact §14.1 IL-3 warn wording at `persistence/migrate.ts:178` with the inline `eslint-disable-next-line no-restricted-syntax, no-console -- IL-3:` directive preserved verbatim (CMC-36, CMC-37); and the `shared/notify.ts` header naming the four sanctioned wrappers (`notifySuccess`/`Warning`/`Error`/`UsageError`) with MSG-SR-1..7 governance citation (CMC-19). Style guide §14/§14.1 reframed past-tense per D-CMC-15. Active end-state items remain in Active because Phase 13 still owns the mechanical refactor at every user-visible callsite. `npm run check` green at 1038/1038.*
 
