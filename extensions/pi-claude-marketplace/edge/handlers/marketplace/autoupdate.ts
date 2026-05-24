@@ -11,7 +11,7 @@
 // `makeAutoupdateHandler(false)`.
 
 import { setMarketplaceAutoupdate } from "../../../orchestrators/marketplace/autoupdate.ts";
-import { notifyError } from "../../../shared/notify.ts";
+import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
 
 import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
@@ -34,7 +34,7 @@ export function makeAutoupdateHandler(
         usage,
       },
       (message) => {
-        notifyError(ctx, message);
+        notifyUsageError(ctx, message, usage);
       },
     );
     if (parsed === undefined) {
