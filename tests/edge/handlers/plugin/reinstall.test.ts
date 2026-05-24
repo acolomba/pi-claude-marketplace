@@ -217,10 +217,20 @@ test("shim :: --force works before and after reinstall ref", async () => {
     await handler("hello@mp --scope project", defaultAttempt.ctx);
     // Plan 13-02a-01 / CMC-25 / MSG-SR-5..6: bulk reinstall cascade with a
     // failed row routes via notifyWarning (never notifyError on cascade
-    // summaries per MSG-SR-6). The per-row reason is the closed-set
-    // narrowing of the underlying `foreign previous content` cause
-    // (mapped to `rollback partial` per outcomeToCascadeRow's
-    // MANUAL_RECOVERY_REQUIRED branch).
+    // summaries per MSG-SR-6). Plan 13-02a-02 / CMC-16: the per-row reason
+    // is derived structurally via the failed outcome's `failureClass`
+    // tag (set by the orchestrator catch when the bridge throws a
+    // ManualRecoveryError); the legacy substring branch on the retired
+    // marker-prefixed notes text is gone. In THIS scenario
+    // (`replacePreparedAgents` rejects foreign content before any backup
+    // commit, so no inner bridge rollback runs and the bridge never
+    // throws ManualRecoveryError), the failed outcome carries no
+    // `failureClass` tag and the renderer falls through to the closed-set
+    // narrowing fallback `{not in manifest}`. Structural F-2 binding for
+    // the ManualRecoveryError path is exercised by the dedicated
+    // outcomeToCascadeRow unit test in
+    // tests/orchestrators/plugin/reinstall.test.ts (Plan 13-02a-02 Task 2
+    // Step 7).
     assert.equal(defaultAttempt.notifications[0]?.severity, "warning");
     assert.match(defaultAttempt.notifications[0]?.message ?? "", /⊘ hello \[project\] \(failed\)/);
 

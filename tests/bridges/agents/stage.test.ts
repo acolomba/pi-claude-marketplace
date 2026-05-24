@@ -794,7 +794,7 @@ test("Phase 8 / PRL-10 replacePreparedAgents internal rename failure rolls back 
   // before the inner rename of staged files. The first staged rename fails
   // with EACCES, triggering rollbackAgentsReplacementInternal. Because the
   // backup dir is still writable, rollback runs cleanly (no leaks), so the
-  // original error rethrows verbatim (without MANUAL_RECOVERY_REQUIRED).
+  // original error rethrows verbatim (no ManualRecoveryError wrap).
   if (process.platform === "win32") {
     t.skip("POSIX-only chmod 0 failure path");
     return;

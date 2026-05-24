@@ -8,6 +8,8 @@ import { GENERATED_AGENT_PREFIX } from "../../../extensions/pi-claude-marketplac
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { installPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import {
+  __test_errorWithManualRecovery,
+  __test_outcomeToCascadeRow,
   reinstallPlugin,
   reinstallPlugins,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
@@ -17,7 +19,9 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { __resetCacheForTests } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { ManualRecoveryError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
+import type { ReinstallFailedOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 interface NotifyRecord {
@@ -1072,4 +1076,121 @@ test("PRL-15 batch soft dependency warnings aggregate successful restaged resour
       await rm(cwd, { recursive: true, force: true });
     }
   });
+});
+
+/**
+ * Plan 13-02a-02 / CMC-16 / F-2 binding regression guard.
+ *
+ * The structural pivot in `narrowReason` / `outcomeToCascadeRow` (Wave 2
+ * sub-wave 2a continuation Task 2) replaces the legacy substring branch
+ * on the retired manual-recovery marker prefix with a typed-tag check on
+ * `failureClass: "manual-recovery"`. Without this binding test, a silent
+ * Reason-drop in the structural pivot would pass the catalog UAT (which is
+ * fixture-driven on PluginInlineRow / PluginCascadeRow values directly,
+ * NOT through the reinstall.ts → outcomeToCascadeRow → renderRow path).
+ *
+ * The test exercises the `__test_outcomeToCascadeRow` seam exported from
+ * reinstall.ts with a fabricated `ReinstallFailedOutcome` carrying
+ * `failureClass: "manual-recovery"`. We assert the cascade row carries
+ * `reasons: ["rollback partial"]` BYTE-FOR-BYTE -- the same closed-set
+ * Reason that the legacy substring branch produced.
+ */
+test("Plan 13-02a-02 / CMC-16 / F-2: outcomeToCascadeRow maps failureClass=manual-recovery -> rollback partial", () => {
+  const outcome: ReinstallFailedOutcome = {
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    notes: ["staging failed"],
+    failureClass: "manual-recovery",
+  };
+  const row = __test_outcomeToCascadeRow(outcome);
+  assert.equal(row.kind, "plugin-cascade");
+  assert.equal(row.status, "failed");
+  // Closed-set CMC-11 Reason: "rollback partial" is the canonical mapping
+  // for the manual-recovery class; the structural tag pivot replaces the
+  // legacy substring branch that read the retired marker prefix out of
+  // the free-text notes.
+  assert.ok(row.status === "failed" && row.reasons !== undefined);
+  assert.deepEqual([...(row.reasons ?? [])], ["rollback partial"]);
+});
+
+test("Plan 13-02a-02 / CMC-16 / F-2: outcomeToCascadeRow without failureClass falls back to narrowReason", () => {
+  // Without the structural tag, the closed-set narrowing falls through to
+  // the `"not in manifest"` catch-all (the catalog's most permissive
+  // cascade skip reason; consistent with the pre-migration legacy fallback
+  // for opaque notes text).
+  const outcome: ReinstallFailedOutcome = {
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    notes: ["something opaque"],
+  };
+  const row = __test_outcomeToCascadeRow(outcome);
+  assert.ok(row.status === "failed" && row.reasons !== undefined);
+  assert.deepEqual([...(row.reasons ?? [])], ["not in manifest"]);
+});
+
+test("Plan 13-02a-02 / CMC-16 / F-2: outcomeToCascadeRow rollback substring still maps to rollback partial", () => {
+  // The `"rollback"` substring branch in `narrowReason` stays in place per
+  // Plan Task 2 Step 5 -- it covers non-manual-recovery rollback scenarios
+  // (the rollback-partial fallback path).
+  const outcome: ReinstallFailedOutcome = {
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    notes: ["rollback failed at phase X"],
+  };
+  const row = __test_outcomeToCascadeRow(outcome);
+  assert.ok(row.status === "failed" && row.reasons !== undefined);
+  assert.deepEqual([...(row.reasons ?? [])], ["rollback partial"]);
+});
+
+/**
+ * Plan 13-02a-02 / CMC-16 / F-5 dedup regression guard.
+ *
+ * `errorWithManualRecovery` MAY be called twice in the bridge cascade: once
+ * when a bridge throws ManualRecoveryError with its own `.leaks`, and again
+ * at the orchestrator-source rollback site with the merged leak set. The
+ * F-5 invariant: even if the same leak string appears in both sources, the
+ * final `.leaks` payload counts it ONCE. The implementation uses a
+ * `Set`-dedup on the merged array.
+ */
+test("Plan 13-02a-02 / CMC-16 / F-5: errorWithManualRecovery dedups overlapping leaks", () => {
+  const inner = new ManualRecoveryError("inner failed", ["agents: foo"]);
+  const wrapped = __test_errorWithManualRecovery(inner, ["agents: foo"]);
+  assert.ok(wrapped instanceof ManualRecoveryError);
+  assert.equal(
+    wrapped.leaks.length,
+    1,
+    `expected dedup; got: ${JSON.stringify([...wrapped.leaks])}`,
+  );
+  assert.equal(wrapped.leaks[0], "agents: foo");
+  // Cause-chain preserved so the depth-5 walker still surfaces the inner.
+  assert.equal((wrapped as ManualRecoveryError & { cause: unknown }).cause, inner);
+});
+
+test("Plan 13-02a-02 / CMC-16 / F-5: errorWithManualRecovery merges disjoint leaks without dedup", () => {
+  const inner = new ManualRecoveryError("inner failed", ["agents: foo"]);
+  const wrapped = __test_errorWithManualRecovery(inner, ["skills: bar"]);
+  assert.ok(wrapped instanceof ManualRecoveryError);
+  assert.deepEqual([...wrapped.leaks], ["agents: foo", "skills: bar"]);
+});
+
+test("Plan 13-02a-02 / CMC-16: errorWithManualRecovery wraps non-ManualRecoveryError with new ManualRecoveryError", () => {
+  const inner = new Error("raw error");
+  const wrapped = __test_errorWithManualRecovery(inner, ["x: leak"]);
+  assert.ok(wrapped instanceof ManualRecoveryError);
+  assert.equal(wrapped.message, "raw error");
+  assert.deepEqual([...wrapped.leaks], ["x: leak"]);
+  assert.equal((wrapped as ManualRecoveryError & { cause: unknown }).cause, inner);
+});
+
+test("Plan 13-02a-02 / CMC-16: errorWithManualRecovery short-circuits on zero leaks", () => {
+  const inner = new Error("raw error");
+  const wrapped = __test_errorWithManualRecovery(inner, []);
+  // Zero-leak fast path preserves the original Error reference verbatim.
+  assert.equal(wrapped, inner);
 });

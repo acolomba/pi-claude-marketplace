@@ -51,6 +51,17 @@ export interface ReinstallSkippedOutcome extends ReinstallOutcomeBase {
 export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
   readonly partition: "failed";
   readonly notes: readonly string[];
+  /**
+   * Plan 13-02a-02 / CMC-16 / CMC-11: structural failure-class tag
+   * consumed by `outcomeToCascadeRow`'s closed-set Reason mapping. When the
+   * orchestrator catches a `ManualRecoveryError` (thrown by the bridges'
+   * leak-on-rollback path), it sets `failureClass: "manual-recovery"` so
+   * the cascade row renders `(failed) {rollback partial}` without
+   * substring-matching the legacy ES-5 `notes` text. Omitted on
+   * non-manual-recovery failures; the cascade renderer falls back to
+   * `narrowReason` on `notes` for those.
+   */
+  readonly failureClass?: "manual-recovery";
 }
 
 export type ReinstallPluginOutcome =

@@ -51,8 +51,12 @@ import { causeChainTrailer } from "../../presentation/cause-chain.ts";
 import { renderRow } from "../../presentation/compact-line.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
-import { assertNever, errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
-import { MANUAL_RECOVERY_REQUIRED } from "../../shared/markers.ts";
+import {
+  assertNever,
+  errorMessage,
+  ManualRecoveryError,
+  MarketplaceNotFoundError,
+} from "../../shared/errors.ts";
 import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
 import {
   withLockedStateTransaction,
@@ -185,7 +189,17 @@ export async function reinstallPlugin(
       notifyError(ctx, errorMessage(err), err);
     }
 
-    return { partition: "failed", name: plugin, marketplace, scope, notes: [message] };
+    // Plan 13-02a-02 / CMC-16: structural failure-class tag so
+    // outcomeToCascadeRow maps to `(failed) {rollback partial}` without
+    // substring-matching the legacy ES-5 marker text in `notes`.
+    return {
+      partition: "failed",
+      name: plugin,
+      marketplace,
+      scope,
+      notes: [message],
+      ...(err instanceof ManualRecoveryError && { failureClass: "manual-recovery" as const }),
+    };
   }
 
   if (locked.outcome.partition !== "reinstalled") {
@@ -250,13 +264,16 @@ export async function reinstallPlugins(
       );
     } catch (err) {
       // `notes` is consumed outside the notify path; compose the trailer
-      // inline.
+      // inline. Plan 13-02a-02 / CMC-16: structural failure-class tag so
+      // outcomeToCascadeRow maps to `(failed) {rollback partial}` without
+      // substring-matching the legacy ES-5 marker text in `notes`.
       outcomes.push({
         partition: "failed",
         name: target.plugin,
         marketplace: target.marketplace,
         scope: target.scope,
         notes: [composeErrorWithCauseChain(err)],
+        ...(err instanceof ManualRecoveryError && { failureClass: "manual-recovery" as const }),
       });
     }
   }
@@ -474,6 +491,17 @@ function renderReinstallPartitionAndNotify(
  *     `"not in manifest"` as a documented fallback (Reasons is a closed
  *     set per CMC-11; unknown free-form text cannot widen it).
  */
+/**
+ * Plan 13-02a-02 / CMC-16 / F-2 binding seam: exported under the `__test_*`
+ * prefix so the dedicated binding regression test in
+ * tests/orchestrators/plugin/reinstall.test.ts can verify the structural
+ * `failureClass: "manual-recovery"` -> `["rollback partial"]` mapping
+ * end-to-end without forcing a complex fs-permission leak fixture through
+ * the bridges. Production callsites import `outcomeToCascadeRow` via the
+ * private (non-exported) name; the test seam aliases the same function.
+ */
+export { outcomeToCascadeRow as __test_outcomeToCascadeRow };
+
 function outcomeToCascadeRow(outcome: ReinstallPluginOutcome): PluginCascadeRow {
   switch (outcome.partition) {
     case "reinstalled":
@@ -498,7 +526,21 @@ function outcomeToCascadeRow(outcome: ReinstallPluginOutcome): PluginCascadeRow 
     }
 
     case "failed": {
-      const reasons = narrowReasons(outcome.notes);
+      // Plan 13-02a-02 / CMC-16: structural failure-class tag supersedes
+      // the legacy substring match on `notes` for the manual-recovery
+      // class. When the orchestrator caught a ManualRecoveryError, the
+      // row carries the canonical closed-set Reason `"rollback partial"`
+      // verbatim (byte-equivalent to the legacy substring branch's
+      // single-Reason output, per catalog form `(failed) {rollback
+      // partial}` at docs/output-catalog.md L330); the opaque `notes`
+      // text is NOT additionally narrowed because the cause-chain trailer
+      // at the notify boundary already surfaces the underlying error text
+      // via ES-4. Otherwise fall back to `narrowReason` substring
+      // matching for non-manual-recovery rollback / fallback scenarios.
+      const reasons: readonly Reason[] =
+        outcome.failureClass === "manual-recovery"
+          ? Object.freeze(["rollback partial" as const])
+          : narrowReasons(outcome.notes);
       // MSG-SD-3 / effective-state: soft-dep markers do NOT fire on
       // (failed) rows (the plugin's effective state is "not installed");
       // explicitly set false to keep the contract local-and-visible.
@@ -571,14 +613,13 @@ function narrowReason(note: string): Reason {
     return "not found";
   }
 
-  if (note.includes("MANUAL RECOVERY REQUIRED") || note.includes("manual recovery")) {
-    // Manual-recovery messages are themselves "failed" + recovery
-    // anchor; the cascade child reason narrows to "rollback partial"
-    // because the legacy `errorWithManualRecovery` helper composes the
-    // marker only when bridge replacements rolled back.
-    return "rollback partial";
-  }
-
+  // Plan 13-02a-02 / CMC-16: the legacy substring branches that mapped
+  // the retired manual-recovery marker text to `"rollback partial"` are
+  // RETIRED. The orchestrator's catch blocks now set the structural
+  // `failureClass: "manual-recovery"` tag on the failed outcome
+  // (consumed by `outcomeToCascadeRow`'s closed-set Reason mapping);
+  // see Plan 13-02a-02 Task 2 Step 5. This narrowing path remains for
+  // non-manual-recovery rollback scenarios.
   if (note.includes("rollback")) {
     return "rollback partial";
   }
@@ -941,19 +982,45 @@ async function finalizeReplacement(entry: ReplacementEntry): Promise<readonly st
   }
 }
 
+/**
+ * Plan 13-02a-02 / CMC-16: wrap an error with bridge-rollback leak data.
+ *
+ * Short-circuits to the original error when no leaks accumulated (preserves
+ * the pre-migration zero-leak fast path). Otherwise constructs a
+ * `ManualRecoveryError` carrying the merged leak set via `Error.cause` so
+ * the depth-5 `causeChainTrailer` walker surfaces the original error text
+ * at the notify boundary.
+ *
+ * Merge semantics: when the incoming `err` is already a
+ * `ManualRecoveryError` (e.g. a bridge threw and this helper is wrapping
+ * at the orchestrator level), the leaks arrays are merged via
+ * `Set`-dedup. This binds the F-5 no-double-count invariant for the
+ * counterexample case where the bridge-source leak set and the
+ * orchestrator-source leak set happen to overlap (structurally possible
+ * if a `rollbackReplacements` cascade re-reports a leak the inner bridge
+ * already surfaced).
+ */
+/**
+ * Plan 13-02a-02 / CMC-16 / F-5 binding seam: exported under the `__test_*`
+ * prefix so the dedicated F-5 dedup regression test in
+ * tests/orchestrators/plugin/reinstall.test.ts can verify the
+ * no-double-count invariant on the merged `.leaks` payload directly
+ * without forcing a contrived bridge cascade.
+ */
+export { errorWithManualRecovery as __test_errorWithManualRecovery };
+
 function errorWithManualRecovery(err: unknown, leaks: readonly string[]): Error {
-  const base = err instanceof Error ? err : new Error(errorMessage(err));
   if (leaks.length === 0) {
-    return base;
+    return err instanceof Error ? err : new Error(errorMessage(err));
   }
 
-  if (base.message.includes(MANUAL_RECOVERY_REQUIRED)) {
-    return new Error(`${base.message}; ${leaks.join("; ")}`, { cause: base });
+  if (err instanceof ManualRecoveryError) {
+    const merged = Object.freeze([...new Set([...err.leaks, ...leaks])]);
+    return new ManualRecoveryError(err.message, merged, { cause: err });
   }
 
-  return new Error(`${base.message} ${MANUAL_RECOVERY_REQUIRED}${leaks.join("; ")}`, {
-    cause: base,
-  });
+  const base = err instanceof Error ? err : new Error(errorMessage(err));
+  return new ManualRecoveryError(base.message, leaks, { cause: base });
 }
 
 function pushLeak(leaks: string[], phase: BridgePhase, leak: string | undefined): void {

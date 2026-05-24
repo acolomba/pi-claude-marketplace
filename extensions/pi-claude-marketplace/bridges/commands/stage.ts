@@ -28,9 +28,8 @@ import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
-import { appendLeakToError, errorMessage } from "../../shared/errors.ts";
+import { appendLeakToError, errorMessage, ManualRecoveryError } from "../../shared/errors.ts";
 import { cleanupStaging, pathExists, rollbackReplacementCommon } from "../../shared/fs-utils.ts";
-import { MANUAL_RECOVERY_REQUIRED } from "../../shared/markers.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { substituteClaudeVars } from "../../shared/vars.ts";
 
@@ -284,9 +283,7 @@ export async function replacePreparedCommands(
   } catch (err) {
     const leaks = await rollbackCommandsReplacementInternal(prepared, renamed, backups, backupRoot);
     if (leaks.length > 0) {
-      throw new Error(`${errorMessage(err)} ${MANUAL_RECOVERY_REQUIRED}${leaks.join("; ")}`, {
-        cause: err,
-      });
+      throw new ManualRecoveryError(errorMessage(err), leaks, { cause: err });
     }
 
     throw err;

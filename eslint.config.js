@@ -282,23 +282,16 @@ export default tseslint.config(
       // Gate 1 allow-list (Phase 7 D-04): the Pi-API wrapper module.
       "extensions/pi-claude-marketplace/platform/pi-api.ts",
       // Gate 2 allow-list (Phase 13 D-13-09): canonical extension source.
+      // Stays until the Plan 13-03-02 atomic commit deletes the 5 ES-5
+      // marker exports alongside the corresponding ESLint rule entries.
       "extensions/pi-claude-marketplace/shared/markers.ts",
-      // Gate 2 temporary allow-list (Phase 13 Wave 2 sub-wave migration TODO):
-      // these production callsites still import legacy ES-5 markers today.
-      // Wave 2 sub-waves migrate them to the new presentation/ composers; the
-      // Wave 3 atomic commit removes these entries alongside the markers.ts
-      // export deletion.
-      //   - bridges/{agents,skills,commands}/stage.ts: MANUAL_RECOVERY_REQUIRED
-      //     leaks-on-rollback Error message (Wave 2 sub-wave 2b)
-      //   - orchestrators/plugin/reinstall.ts: MANUAL_RECOVERY_REQUIRED
-      //     leak-aggregation wrapper (Wave 2 sub-wave 2a)
-      //   - transaction/rollback.ts: ROLLBACK_PARTIAL marker chokepoint
-      //     (Wave 2 sub-wave 2a uses presentation/rollback-partial.ts)
-      "extensions/pi-claude-marketplace/bridges/agents/stage.ts",
-      "extensions/pi-claude-marketplace/bridges/skills/stage.ts",
-      "extensions/pi-claude-marketplace/bridges/commands/stage.ts",
-      "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts",
-      "extensions/pi-claude-marketplace/transaction/rollback.ts",
+      // Wave 2 sub-wave 2a continuation (Plan 13-02a-02) completed: the 5
+      // production-callsite per-file allow-list entries (3 bridge stages
+      // plus the reinstall orchestrator plus the rollback transaction
+      // chokepoint) have been REMOVED. Those files no longer import the
+      // legacy ES-5 markers; the no-restricted-imports rule below now
+      // enforces the prohibition without per-file carveouts, providing
+      // forward protection against accidental re-introduction.
     ],
     rules: {
       "no-restricted-imports": [
@@ -369,27 +362,17 @@ export default tseslint.config(
     files: ["tests/**/*.ts"],
     ignores: [
       // Gate 2 allow-list (Phase 13 D-13-09): canonical test sources.
+      // Both stay until the Plan 13-03-02 atomic commit deletes the
+      // markers exports + the snapshot fixture together.
       "tests/architecture/markers-snapshot.test.ts",
       "tests/architecture/no-legacy-markers.test.ts",
-      // Gate 2 temporary allow-list (Phase 13 Wave 2 sub-wave migration TODO):
-      // these contract-assertion tests still import legacy ES-5 markers today.
-      // Wave 2 sub-waves migrate them; the Wave 3 atomic commit removes these
-      // entries alongside the markers.ts export deletion.
-      //   - tests/transaction/rollback.test.ts: ROLLBACK_PARTIAL contract
-      //     assertion (Wave 2 sub-wave 2a)
-      //
-      // Removed in sub-wave 2b (Plan 13-02b-01):
-      //   - tests/e2e/install-soft-deps.test.ts: migrated to per-row markers
-      //     `{requires pi-subagents}` / `{requires pi-mcp}` (CMC-13 / MSG-SD-1..2).
-      //
-      // Removed in sub-wave 2c (Plan 13-02c-01) -- the
-      // subagentWarningIfNeeded / mcpAdapterWarningIfNeeded helpers
-      // were deleted from platform/pi-api.ts per RESEARCH.md Open
-      // Question 3; the corresponding tests no longer import the
-      // legacy ES-5 marker constants:
-      //   - tests/platform/pi-api.test.ts
-      //   - tests/presentation/soft-dep.test.ts
-      "tests/transaction/rollback.test.ts",
+      // Wave 2 sub-wave 2a continuation (Plan 13-02a-02) completed: the
+      // test-callsite per-file allow-list entry for the rollback contract
+      // tests has been REMOVED. The 7 D-03 contract tests no longer
+      // import the legacy marker constant; they assert the new rendered
+      // shape via byte-equality against the closed-set CMC-11 tokens.
+      // The no-restricted-imports rule below now enforces the prohibition
+      // across tests/** without per-file carveouts.
     ],
     rules: {
       "no-restricted-imports": [
