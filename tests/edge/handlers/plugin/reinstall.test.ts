@@ -220,8 +220,8 @@ test("shim :: --force works before and after reinstall ref", async () => {
     // summaries per MSG-SR-6). Plan 13-02a-02 / CMC-16: the per-row reason
     // is derived structurally via the failed outcome's `failureClass`
     // tag (set by the orchestrator catch when the bridge throws a
-    // ManualRecoveryError); the legacy substring branch on
-    // `MANUAL RECOVERY REQUIRED` notes text is retired. In THIS scenario
+    // ManualRecoveryError); the legacy substring branch on the retired
+    // marker-prefixed notes text is gone. In THIS scenario
     // (`replacePreparedAgents` rejects foreign content before any backup
     // commit, so no inner bridge rollback runs and the bridge never
     // throws ManualRecoveryError), the failed outcome carries no

@@ -1082,8 +1082,8 @@ test("PRL-15 batch soft dependency warnings aggregate successful restaged resour
  * Plan 13-02a-02 / CMC-16 / F-2 binding regression guard.
  *
  * The structural pivot in `narrowReason` / `outcomeToCascadeRow` (Wave 2
- * sub-wave 2a continuation Task 2) replaces the legacy substring branch on
- * `MANUAL RECOVERY REQUIRED` with a typed-tag check on
+ * sub-wave 2a continuation Task 2) replaces the legacy substring branch
+ * on the retired manual-recovery marker prefix with a typed-tag check on
  * `failureClass: "manual-recovery"`. Without this binding test, a silent
  * Reason-drop in the structural pivot would pass the catalog UAT (which is
  * fixture-driven on PluginInlineRow / PluginCascadeRow values directly,
@@ -1109,7 +1109,7 @@ test("Plan 13-02a-02 / CMC-16 / F-2: outcomeToCascadeRow maps failureClass=manua
   assert.equal(row.status, "failed");
   // Closed-set CMC-11 Reason: "rollback partial" is the canonical mapping
   // for the manual-recovery class; the structural tag pivot replaces the
-  // legacy substring branch that read `MANUAL RECOVERY REQUIRED` out of
+  // legacy substring branch that read the retired marker prefix out of
   // the free-text notes.
   assert.ok(row.status === "failed" && row.reasons !== undefined);
   assert.deepEqual([...(row.reasons ?? [])], ["rollback partial"]);
