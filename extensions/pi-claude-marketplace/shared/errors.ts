@@ -187,7 +187,9 @@ export class CrossPluginConflictError extends Error {
  * orchestrators/plugin/install.ts when a re-read of state shows the plugin
  * record already exists (another process beat us to the commit). The outer
  * `runPhases` result unwinds the staged resources via the ledger's
- * `undo` chain; `formatRollbackError` composes the final user message.
+ * `undo` chain; `formatRollbackError` returns the structured rollback
+ * result and the orchestrator composes the final user message via
+ * `presentation/rollback-partial.ts` (Plan 14-06 / D-14-04).
  */
 export class ConcurrentInstallError extends Error {
   readonly plugin: string;

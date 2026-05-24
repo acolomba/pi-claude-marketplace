@@ -54,6 +54,8 @@ export type {
 
 export { renderManualRecovery } from "./manual-recovery.ts";
 
-export { renderRollbackPartial } from "./rollback-partial.ts";
+export { composeRollbackPartialChildren, renderRollbackPartial } from "./rollback-partial.ts";
+
+export type { RollbackPartialInput } from "./rollback-partial.ts";
 
 export { causeChainTrailer } from "./cause-chain.ts";
