@@ -1103,6 +1103,43 @@ const FIXTURES: FixtureMap = {
       return appendReloadHint(`Claude plugin import summary\n\n${bodies.join("\n")}`, RELOAD_HINT);
     },
 
+    "soft-dep-markers": () => {
+      const blocks: Array<{ mp: MarketplaceRow; rows: PluginCascadeRow[] }> = [
+        {
+          mp: {
+            kind: "marketplace",
+            name: "claude-plugins-official",
+            scope: "project",
+            outcomeClass: "ok",
+            status: "added",
+          },
+          rows: [
+            {
+              kind: "plugin-cascade",
+              name: "agent-only-plugin",
+              scope: "project",
+              status: "installed",
+              declaresAgents: true,
+              declaresMcp: false,
+            },
+            {
+              kind: "plugin-cascade",
+              name: "dual-plugin",
+              scope: "project",
+              status: "installed",
+              declaresAgents: true,
+              declaresMcp: true,
+            },
+          ],
+        },
+      ];
+      const bodies = blocks.map(
+        (b) =>
+          cascadeSummary({ marketplace: b.mp, rows: b.rows, probe: PROBE_BOTH_UNLOADED }).message,
+      );
+      return appendReloadHint(`Claude plugin import summary\n\n${bodies.join("\n")}`, RELOAD_HINT);
+    },
+
     "scope-project-narrow": () => {
       const blocks: Array<{ mp: MarketplaceRow; rows: PluginCascadeRow[] }> = [
         {
