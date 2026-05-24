@@ -26,8 +26,10 @@ const STYLE_GUIDE_PATH = path.join(REPO_ROOT, "docs/messaging-style-guide.md");
  * `pattern_classes:` lists); over-extracting now would force a redesign when
  * the broader drift guard lands. The extractor here is intentionally minimal:
  * a two-stage regex against the known-shape frontmatter, following the
- * precedent set by `tests/helpers/prd-extract.ts` (which also hand-rolls a
- * regex extractor for the PRD §6.12 ES-5 row).
+ * precedent originally set by `tests/helpers/prd-extract.ts` (a hand-rolled
+ * regex extractor for the PRD §6.12 ES-5 row, deleted in the IN-05 cleanup
+ * once its single negative-throw test was retired alongside the ES-5
+ * supersession).
  *
  * No `yaml` / `js-yaml` dependency is introduced. Adopting a YAML parser for
  * one test file would be over-extraction; the frontmatter shape is fixed at

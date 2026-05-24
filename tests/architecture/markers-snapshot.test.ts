@@ -8,7 +8,6 @@ import {
 } from "../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import * as markers from "../../extensions/pi-claude-marketplace/shared/markers.ts";
-import { extractEs5MarkerLiterals } from "../helpers/prd-extract.ts";
 
 /**
  * The original D-09 / ES-5 byte-equality assertions (extracting the 5
@@ -26,14 +25,14 @@ import { extractEs5MarkerLiterals } from "../helpers/prd-extract.ts";
  * the codebase are blocked by tests/architecture/no-legacy-markers.test.ts
  * (Plan 13-01-03 / D-13-12), which pins the literals in its own body and
  * runs under `npm run check` for the rest of the codebase's lifetime.
+ *
+ * IN-05 cleanup: the prior `extractEs5MarkerLiterals throws if PRD §6.12
+ * ES-5 row is missing` test was removed alongside its helper
+ * `tests/helpers/prd-extract.ts`. The helper had no production consumers
+ * and one test consumer (that single negative-throw test); the static-audit
+ * gate at `tests/architecture/no-legacy-markers.test.ts` is the actual
+ * defense against ES-5 marker re-introduction and remains untouched.
  */
-
-test("extractEs5MarkerLiterals throws if PRD §6.12 ES-5 row is missing", () => {
-  assert.throws(
-    () => extractEs5MarkerLiterals("# Something\n\nNo ES-5 here.\n"),
-    /ES-5 row not found/,
-  );
-});
 
 /**
  * AG-5 user contract: the agents-bridge marker constants. These ARE the
