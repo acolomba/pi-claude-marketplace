@@ -594,6 +594,26 @@ Claude plugin import summary
 
 The marketplace header carries `(failed) {source mismatch}` with an indented diagnostic line; dependent plugins under it are skipped with the same reason. (Note: the example shows `--scope project` only, so each marketplace touches a single scope -- the multi-scope split is illustrated in the "Fresh import" example above.)
 
+### Per-row soft-dep markers on import cascade rows
+
+<!-- catalog-state: soft-dep-markers -->
+
+```text
+Claude plugin import summary
+
+● claude-plugins-official [project] (added)
+  ● agent-only-plugin [project] (installed) {requires pi-subagents}
+  ● dual-plugin [project] (installed) {requires pi-subagents, requires pi-mcp}
+
+/reload to pick up changes
+```
+
+Notes:
+
+- Each `(installed)` cascade row carries its own `{requires pi-…}` reason when the plugin declares the corresponding resource AND the companion extension is unloaded (MSG-SD-1 / MSG-SD-2). The agents-only row fires `{requires pi-subagents}`; the dual-plugin row fires both reasons inside a single `{}` block.
+- Combined-row ordering is closed-set: `pi-subagents` precedes `pi-mcp`, joined by a literal comma-space inside the `{}` block (MSG-SD-1 closed grammar, mirrored on adjacent surfaces).
+- `(uninstalled)` rows never carry these markers -- uninstall removes the content that would have needed the companion, so the marker has no actionable meaning (MSG-SD-2 carve-out, MSG-SD-3).
+
 ______________________________________________________________________
 
 ## `/claude:plugin bootstrap`
