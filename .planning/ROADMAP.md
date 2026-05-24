@@ -346,12 +346,12 @@ SATISFIED on every cascade surface (install / reinstall / update / import).
 **Depends on:** Phase 13 (consumes the cascade-row schema and renderer wired
 there); sequenced BEFORE Phase 14 so the drift-guard suite landing in
 Phase 14 does not retroactively fail `npm run check` on the partial.
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 
 **Wave 1**
-- [ ] 14.1-01-PLAN.md — Plumbing: widen `InstallPluginOutcome.installed` and
+- [x] 14.1-01-PLAN.md — Plumbing: widen `InstallPluginOutcome.installed` and
   `PluginInstalledOutcome` with required `declaresAgents`/`declaresMcp`
   predicates, propagate through the case-`installed` switch arm, replace
   the hard-coded literals at `import/execute.ts:474-475`, widen the 12

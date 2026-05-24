@@ -4,8 +4,8 @@ milestone: v1.3
 milestone_name: Consistent Messaging
 status: executing
 stopped_at: Phase 13 context gathered
-last_updated: "2026-05-24T13:05:01.775Z"
-last_activity: 2026-05-24 -- Phase 14.1 planning complete
+last_updated: "2026-05-24T13:19:51.197Z"
+last_activity: 2026-05-24 -- Phase 14.1 execution started
 progress:
   total_phases: 8
   completed_phases: 2
@@ -20,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-21)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 14.1 — close gap CMC-13 (propagate declaresAgents/Mcp through import cascade rows)
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 14.1 — close-gap-cmc-13-propagate-declaresagents-mcp-through-import
 
 ## Current Position
 
-Phase: 14.1
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-24 -- Phase 14.1 planning complete
+Phase: 14.1 (close-gap-cmc-13-propagate-declaresagents-mcp-through-import) — EXECUTING
+Plan: 1 of 2
+Status: Executing Phase 14.1
+Last activity: 2026-05-24 -- Phase 14.1 execution started
 
 ## Performance Metrics
 
