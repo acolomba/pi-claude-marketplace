@@ -13,7 +13,7 @@
 
 import { listPlugins } from "../../../orchestrators/plugin/list.ts";
 import { errorMessage } from "../../../shared/errors.ts";
-import { notifyError } from "../../../shared/notify.ts";
+import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseArgs } from "../../args.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
@@ -37,7 +37,7 @@ export function makeListHandler(
     try {
       parsed = parseArgs(args);
     } catch (err) {
-      notifyError(ctx, errorMessage(err));
+      notifyUsageError(ctx, errorMessage(err), USAGE);
       return;
     }
 
@@ -54,7 +54,7 @@ export function makeListHandler(
         unavailable = true;
       } else if (token.startsWith("--")) {
         // Unknown long flag -- surface USAGE.
-        notifyError(ctx, USAGE);
+        notifyUsageError(ctx, `Unknown option: "${token}".`, USAGE);
         return;
       } else {
         nonFlagPositionals.push(token);
@@ -62,7 +62,7 @@ export function makeListHandler(
     }
 
     if (nonFlagPositionals.length > 1) {
-      notifyError(ctx, USAGE);
+      notifyUsageError(ctx, "Too many arguments.", USAGE);
       return;
     }
 

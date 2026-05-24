@@ -7,7 +7,7 @@
 // dependencies. Delegates with parsed scope (undefined = enumerate both).
 
 import { listMarketplaces } from "../../../orchestrators/marketplace/list.ts";
-import { notifyError } from "../../../shared/notify.ts";
+import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
 
 import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
@@ -25,7 +25,7 @@ export async function handleMarketplaceList(
       usage: USAGE,
     },
     (message) => {
-      notifyError(ctx, message);
+      notifyUsageError(ctx, message, USAGE);
     },
   );
   if (parsed === undefined) {
