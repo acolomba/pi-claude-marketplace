@@ -9,6 +9,7 @@ import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/sou
 import { installPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import {
   __test_errorWithManualRecovery,
+  __test_findManualRecoveryError,
   __test_outcomeToCascadeRow,
   reinstallPlugin,
   reinstallPlugins,
@@ -1193,4 +1194,88 @@ test("Plan 13-02a-02 / CMC-16: errorWithManualRecovery short-circuits on zero le
   const wrapped = __test_errorWithManualRecovery(inner, []);
   // Zero-leak fast path preserves the original Error reference verbatim.
   assert.equal(wrapped, inner);
+});
+
+/**
+ * Plan 13-02a-02 / CMC-16 / WR-01 regression guard.
+ *
+ * Pre-fix behavior: when `withScopeLock`'s body throw was a
+ * `ManualRecoveryError` AND `release()` also threw, the lock helper at
+ * `transaction/with-state-guard.ts:138-143` wraps the original in a plain
+ * `new Error(combinedMsg, { cause: base })`. The orchestrator's catch then
+ * saw a plain Error and `err instanceof ManualRecoveryError` was false,
+ * silently downgrading the cascade row's Reason from `{rollback partial}`
+ * to `{not in manifest}`. WR-01 swaps the direct `instanceof` check for a
+ * cause-chain walk so the class identity survives the wrapping.
+ *
+ * These tests pin both directions: positive (the walker finds the wrapped
+ * MRE) and negative (no MRE in the chain returns undefined; cycles and
+ * the depth bound terminate cleanly).
+ */
+test("WR-01: findManualRecoveryError returns the wrapped MRE when release-also-failed wrapper sits on top", () => {
+  const inner = new ManualRecoveryError("staging failed", ["agents: foo"]);
+  const wrapped = new Error("staging failed (lock release also failed: chmod denied)", {
+    cause: inner,
+  });
+  const found = __test_findManualRecoveryError(wrapped);
+  assert.equal(found, inner);
+});
+
+test("WR-01: findManualRecoveryError returns the MRE directly when it is the top-level error", () => {
+  const inner = new ManualRecoveryError("staging failed", ["agents: foo"]);
+  assert.equal(__test_findManualRecoveryError(inner), inner);
+});
+
+test("WR-01: findManualRecoveryError returns undefined when no MRE is in the chain", () => {
+  const inner = new Error("opaque inner");
+  const wrapped = new Error("opaque outer", { cause: inner });
+  assert.equal(__test_findManualRecoveryError(wrapped), undefined);
+});
+
+test("WR-01: findManualRecoveryError terminates cleanly on self-referencing cause cycles", () => {
+  const cyclic = new Error("cyclic") as Error & { cause: unknown };
+  cyclic.cause = cyclic;
+  assert.equal(__test_findManualRecoveryError(cyclic), undefined);
+});
+
+test("WR-01: findManualRecoveryError respects the depth-5 bound", () => {
+  // Build a 6-link chain with the MRE at the deepest position; the walker
+  // visits depth 0..4 inclusive, so a MRE at depth 5 is unreachable.
+  const mre = new ManualRecoveryError("deep", ["x"]);
+  const l5 = new Error("l5", { cause: mre });
+  const l4 = new Error("l4", { cause: l5 });
+  const l3 = new Error("l3", { cause: l4 });
+  const l2 = new Error("l2", { cause: l3 });
+  const l1 = new Error("l1", { cause: l2 });
+  const l0 = new Error("l0", { cause: l1 });
+  // l0 -> l1 -> l2 -> l3 -> l4 -> l5 -> mre (mre is at depth 6 from l0;
+  // 5 hops via .cause). The walker visits l0, l1, l2, l3, l4 (5 slots);
+  // mre is unreachable.
+  assert.equal(__test_findManualRecoveryError(l0), undefined);
+});
+
+test("WR-01: outcomeToCascadeRow path stays correct when the orchestrator catches a release-wrapped MRE", () => {
+  // End-to-end binding: simulate the catch block's behavior on a
+  // release-also-failed wrapper. The spread guard now uses
+  // findManualRecoveryError, so the failureClass tag IS set, and
+  // outcomeToCascadeRow maps to ["rollback partial"] (vs the pre-fix
+  // silent downgrade to ["not in manifest"]).
+  const inner = new ManualRecoveryError("staging failed", ["agents: foo"]);
+  const releaseWrapped = new Error("staging failed (lock release also failed: chmod denied)", {
+    cause: inner,
+  });
+  const mre = __test_findManualRecoveryError(releaseWrapped);
+  const outcome: ReinstallFailedOutcome = {
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    notes: ["staging failed (lock release also failed: chmod denied)"],
+    ...(mre !== undefined && { failureClass: "manual-recovery" as const }),
+  };
+  const row = __test_outcomeToCascadeRow(outcome);
+  assert.ok(row.status === "failed" && row.reasons !== undefined);
+  // The structural fix preserves the canonical CMC-11 Reason across the
+  // release-failure wrapping path; pre-fix this asserted ["not in manifest"].
+  assert.deepEqual([...(row.reasons ?? [])], ["rollback partial"]);
 });

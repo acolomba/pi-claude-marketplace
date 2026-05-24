@@ -198,7 +198,9 @@ export async function reinstallPlugin(
       marketplace,
       scope,
       notes: [message],
-      ...(err instanceof ManualRecoveryError && { failureClass: "manual-recovery" as const }),
+      ...(findManualRecoveryError(err) !== undefined && {
+        failureClass: "manual-recovery" as const,
+      }),
     };
   }
 
@@ -273,7 +275,9 @@ export async function reinstallPlugins(
         marketplace: target.marketplace,
         scope: target.scope,
         notes: [composeErrorWithCauseChain(err)],
-        ...(err instanceof ManualRecoveryError && { failureClass: "manual-recovery" as const }),
+        ...(findManualRecoveryError(err) !== undefined && {
+          failureClass: "manual-recovery" as const,
+        }),
       });
     }
   }
@@ -1022,6 +1026,51 @@ function errorWithManualRecovery(err: unknown, leaks: readonly string[]): Error 
   const base = err instanceof Error ? err : new Error(errorMessage(err));
   return new ManualRecoveryError(base.message, leaks, { cause: base });
 }
+
+/**
+ * Plan 13-02a-02 / CMC-16 / WR-01: walk the `Error.cause` chain (bounded to
+ * depth 5, mirroring `causeChainTrailer`'s DoS-mitigation budget at
+ * `shared/errors.ts::causeChainTrailer`) to find a `ManualRecoveryError`
+ * anywhere in the chain.
+ *
+ * Why this exists (regression context): `withScopeLock` (in
+ * `transaction/with-state-guard.ts:138-143`) wraps a body-thrown error with a
+ * plain `new Error(..., { cause: body })` when BOTH the body throw AND
+ * `release()` also throw. A bare `err instanceof ManualRecoveryError` at the
+ * orchestrator catch then sees the plain wrapper and silently downgrades the
+ * cascade row's Reason from `{rollback partial}` to `{not in manifest}`
+ * (`narrowReason` fallback). Walking `.cause` recovers the class identity
+ * the wrapping discarded, so the structural CMC-16 `failureClass:
+ * "manual-recovery"` tag survives the lock-release-also-failed path.
+ *
+ * Depth/cycle bounds match `causeChainTrailer`: stop at 5 hops, and bail if
+ * a link's `.cause` references itself.
+ */
+function findManualRecoveryError(err: unknown): ManualRecoveryError | undefined {
+  let current: unknown = err;
+  for (let depth = 0; depth < 5; depth++) {
+    if (current instanceof ManualRecoveryError) {
+      return current;
+    }
+
+    if (!(current instanceof Error) || current.cause === undefined || current.cause === current) {
+      return undefined;
+    }
+
+    current = current.cause;
+  }
+
+  return undefined;
+}
+
+/**
+ * Plan 13-02a-02 / CMC-16 / WR-01 binding seam: exported under the
+ * `__test_*` prefix so the regression guard in
+ * tests/orchestrators/plugin/reinstall.test.ts can directly exercise the
+ * release-also-failed wrapping path without standing up a real
+ * `withScopeLock` fixture.
+ */
+export { findManualRecoveryError as __test_findManualRecoveryError };
 
 function pushLeak(leaks: string[], phase: BridgePhase, leak: string | undefined): void {
   if (leak !== undefined) {
