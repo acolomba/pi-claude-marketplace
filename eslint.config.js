@@ -328,4 +328,21 @@ export default tseslint.config(
     files: ["tests/lint-rules/**/*.{js,ts}"],
     ...tseslint.configs.disableTypeChecked,
   },
+  {
+    // Phase 14 (Plan 14-03 Task 2): relax the project's explicit-boundary
+    // rule for the local plugin tree. ESLint plugin rule files use JSDoc
+    // type annotations for AST visitors rather than TS explicit boundaries,
+    // and the YAML loader is a plain ESM module consumed only by other
+    // rule files. Aligns with the existing `tests/**/*.ts` override that
+    // relaxes type-aware rules for test-suite code.
+    files: ["tests/lint-rules/**/*.{js,ts}"],
+    rules: {
+      "@typescript-eslint/explicit-module-boundary-types": "off",
+      "@typescript-eslint/no-floating-promises": "off",
+      "@typescript-eslint/no-non-null-assertion": "off",
+      "@typescript-eslint/no-unnecessary-condition": "off",
+      "no-restricted-syntax": "off",
+      "no-console": "off",
+    },
+  },
 );
