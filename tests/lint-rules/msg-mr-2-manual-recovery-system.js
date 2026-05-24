@@ -33,7 +33,16 @@ function literalText(node) {
     return node.value;
   }
 
-  if (node.type === "TemplateLiteral") {
+  // TemplateLiterals with interpolated expressions (`${expr}`) are NOT
+  // hand-composed literals -- the user-visible value depends on runtime
+  // data. The rule's intent is "defensive backstop for HAND-COMPOSED
+  // object literals" (see meta.docs); only fold an all-quasis template
+  // (no expressions) into a literal-equivalent string. This carves out
+  // the legitimate plugin-level manual-recovery construction
+  // `${o.name}@${o.marketplace}` used in reinstall.ts (MSG-MR-1 plugin-
+  // level form), which is NOT a system-level violation -- MSG-MR-1
+  // owns the plugin-level shape.
+  if (node.type === "TemplateLiteral" && node.expressions.length === 0) {
     return node.quasis.map((q) => q.value.cooked ?? q.value.raw ?? "").join("");
   }
 

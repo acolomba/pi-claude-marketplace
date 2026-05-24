@@ -24,8 +24,22 @@ const createRule = ESLintUtils.RuleCreator(
     `https://github.com/acolomba/pi-claude-marketplace/blob/main/docs/messaging-style-guide.md#${name.replace(/^msg-/, "msg-")}`,
 );
 
-const DISABLE_RE = /eslint-disable(?:-next-line|-line)?/;
+// Actual ESLint directive comments START with `eslint-disable...`
+// (optional leading whitespace). The rule must distinguish real
+// directives from documentation prose that merely MENTIONS the
+// directive form. Documentation comments (e.g. JSDoc explaining the
+// IL-3 incantation) reference the directive in body text rather than
+// as the leading token; those are not drift sites.
+const DISABLE_RE = /^\s*eslint-disable(?:-next-line|-line)?\b/;
 const RULE_RE = /(no-restricted-syntax|no-console)/;
+// IL-3 (Phase 1 D-17 / PRD §6.12) sanctioned-callsite marker. A disable
+// directive carrying `-- IL-3 ...` (or any text mentioning `IL-3`) is
+// the SINGLE sanctioned exception per docs/messaging-style-guide.md
+// §14.1. Header / JSDoc comments that DOCUMENT the incantation pattern
+// also carry the IL-3 marker and are accepted under the same
+// discriminator -- they describe the contract, they don't introduce a
+// new disable site.
+const SANCTIONED_RE = /\bIL-3\b/;
 
 export default createRule({
   name: "msg-lc-2-eslint-discipline",
@@ -49,7 +63,7 @@ export default createRule({
         const comments = sourceCode.getAllComments();
         for (const comment of comments) {
           const text = comment.value;
-          if (DISABLE_RE.test(text) && RULE_RE.test(text)) {
+          if (DISABLE_RE.test(text) && RULE_RE.test(text) && !SANCTIONED_RE.test(text)) {
             context.report({ node: comment, messageId: "extraEslintDisable" });
           }
         }

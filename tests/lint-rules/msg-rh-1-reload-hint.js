@@ -40,9 +40,32 @@ export default createRule({
   },
   defaultOptions: [],
   create(context) {
+    // Skip import/export source strings -- `presentation/reload-hint.ts`
+    // path segments match `/reload` substring but are NEVER user-visible
+    // strings. The rule targets emitted message literals, not module
+    // specifiers.
+    function isModuleSpecifier(node) {
+      const p = node.parent;
+      if (p === undefined || p === null) {
+        return false;
+      }
+
+      const t = p.type;
+      return (
+        t === "ImportDeclaration" ||
+        t === "ExportNamedDeclaration" ||
+        t === "ExportAllDeclaration" ||
+        t === "ImportExpression"
+      );
+    }
+
     return {
       Literal(node) {
         if (typeof node.value !== "string") {
+          return;
+        }
+
+        if (isModuleSpecifier(node)) {
           return;
         }
 
@@ -51,6 +74,10 @@ export default createRule({
         }
       },
       TemplateLiteral(node) {
+        if (isModuleSpecifier(node)) {
+          return;
+        }
+
         for (const quasi of node.quasis) {
           const text = quasi.value.cooked ?? quasi.value.raw ?? "";
           if (RELOAD_HINT_RE.test(text)) {
