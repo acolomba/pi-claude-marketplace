@@ -633,7 +633,7 @@ These rules clarify how marketplace records and plugin install records interact 
 | **ES-2** | `severity` choices. Default (success): operation fully succeeded. `warning`: operation succeeded but produced cleanup leaks, partial failures, soft-dep warnings, or cascade skips/fails. `error`: operation did not succeed; state unchanged or fully rolled back. |
 | **ES-3** | Usage errors (malformed args, unknown subcommand, missing required positional) MUST surface at `error` severity with the relevant Usage block appended.                                                                                                             |
 | **ES-4** | Errors MUST include the original cause via `Error.cause` chain; `formatErrorWithCauses` MUST flatten the chain (bounded depth 5) for cascade reporting.                                                                                                             |
-| **ES-5** | Specific marker strings MUST remain stable as user contract (gitlint-grade strings): `pi-subagents is not loaded; …`; `pi-mcp-adapter is not loaded; …`; `Run /reload to <verb> …`; `MANUAL RECOVERY REQUIRED: …`; `(rollback partial: [<phase>] <msg>; …)`.        |
+| **ES-5** | v1.3 supersedes the V1 ES-5 marker strings; see `docs/messaging-style-guide.md` §15 (Supersession of ES-5) for the replacement table.                                                                                                                               |
 
 ### 6.13 Internationalization, Logging & Telemetry
 
