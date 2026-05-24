@@ -227,7 +227,7 @@ Plans:
 4. `npm run check` is green after Phase 13 + Phase 14 land together: typecheck + ESLint + Prettier + the existing test suite + the new drift-guard suite all pass on the v1.3 milestone close commit.
 5. The milestone is complete: every CMC-01..38 requirement has its traceability row marked `Complete` (Phase 12 / Phase 13 / Phase 14 as appropriate); the v1.3 line in REQUIREMENTS.md Coverage block shows 38/38 mapped and complete.
 
-**Plans:** 3/6 plans executed
+**Plans:** 5/6 plans executed
 
 Plans:
 
