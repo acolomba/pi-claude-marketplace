@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 import {
   GENERATED_AGENT_MARKER,
@@ -12,63 +10,23 @@ import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence
 import * as markers from "../../extensions/pi-claude-marketplace/shared/markers.ts";
 import { extractEs5MarkerLiterals } from "../helpers/prd-extract.ts";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const PRD_PATH = path.join(REPO_ROOT, "docs/prd/pi-claude-marketplace-prd.md");
-
 /**
- * D-09 / ES-5 / AS-4 -- PRD §6.12 user-contract markers.
+ * The original D-09 / ES-5 byte-equality assertions (extracting the 5
+ * backtick-quoted literals from PRD §6.12 ES-5 and comparing against
+ * shared/markers.ts exports) have been retired in the v1.3 ES-5
+ * supersession (Plan 13-03-02 / D-13-03 / D-13-11). The legacy ES-5
+ * marker exports were deleted from shared/markers.ts in the same atomic
+ * commit that rewrote PRD §6.12 ES-5 to a brief pointer to
+ * docs/messaging-style-guide.md §15. The remaining AG-5 / PUP-6 / D-08
+ * snapshot assertions below are Phase 5/7 extensions outside the
+ * superseded ES-5 set and continue to enforce drift on the
+ * still-exported markers.
  *
- * The exported constants in `shared/markers.ts` must contain the STABLE
- * PREFIX of each PRD literal -- the part that's user contract -- without
- * the runtime-substituted suffix (`<verb>`, `<phase>`, `[...]`, `…`). The
- * test extracts the prefix from each PRD literal by stripping anything
- * from the first `<`, `[`, or `…` onward, then asserts byte-for-byte
- * equality with the exported constant.
- *
- * Note on `[`: the rollback partial literal embeds `[<phase>]` as a
- * runtime-substituted span. The brackets are part of the placeholder, not
- * part of the user-contract prefix, so they're stripped along with the
- * `<`-introduced placeholder.
- *
- * Per RESEARCH.md Open Question 2: a PRD edit that changes a placeholder
- * NAME (e.g., `<verb>` to `<action>`) does NOT change the user-visible
- * runtime string, so the prefix-stripping behavior is the desired
- * stability point.
+ * Re-introductions of any of the 5 superseded ES-5 literals anywhere in
+ * the codebase are blocked by tests/architecture/no-legacy-markers.test.ts
+ * (Plan 13-01-03 / D-13-12), which pins the literals in its own body and
+ * runs under `npm run check` for the rest of the codebase's lifetime.
  */
-test("ES-5 markers in shared/markers.ts match PRD §6.12 byte-for-byte (D-09)", async () => {
-  const prd = await readFile(PRD_PATH, "utf8");
-  const literals = extractEs5MarkerLiterals(prd);
-
-  assert.equal(
-    literals.length,
-    5,
-    `Expected 5 backtick-quoted ES-5 markers in PRD §6.12, found ${literals.length}: ${JSON.stringify(literals)}`,
-  );
-
-  // The 5 expected (PRD literal, exported constant) pairs.
-  const expected: ReadonlyArray<readonly [string, string]> = [
-    ["pi-subagents is not loaded; …", markers.PI_SUBAGENTS_NOT_LOADED],
-    ["pi-mcp-adapter is not loaded; …", markers.PI_MCP_ADAPTER_NOT_LOADED],
-    ["Run /reload to <verb> …", markers.RELOAD_HINT_PREFIX],
-    ["MANUAL RECOVERY REQUIRED: …", markers.MANUAL_RECOVERY_REQUIRED],
-    ["(rollback partial: [<phase>] <msg>; …)", markers.ROLLBACK_PARTIAL],
-  ];
-
-  for (const [prdLiteral, exportedConstant] of expected) {
-    assert.ok(
-      literals.includes(prdLiteral),
-      `Expected PRD literal ${JSON.stringify(prdLiteral)} not found in PRD §6.12 row. PRD literals were: ${JSON.stringify(literals)}`,
-    );
-    // Stable prefix = everything up to (but not including) the first `<`,
-    // `[`, or `…`. (The `[` covers `[<phase>]`-style placeholders.)
-    const expectedPrefix = prdLiteral.replace(/[<[…].*$/, "");
-    assert.equal(
-      exportedConstant,
-      expectedPrefix,
-      `shared/markers.ts export ${JSON.stringify(exportedConstant)} does not match PRD prefix ${JSON.stringify(expectedPrefix)}`,
-    );
-  }
-});
 
 test("extractEs5MarkerLiterals throws if PRD §6.12 ES-5 row is missing", () => {
   assert.throws(
@@ -97,14 +55,12 @@ test("AG-5 GENERATED_AGENT_PREFIX is byte-for-byte 'pi-claude-marketplace-'", ()
 /**
  * PUP-6 recovery-hint prefix (Phase 5 extension beyond ES-5).
  *
- * D-04: This constant is INTENTIONALLY excluded from the 5-row ES-5 literals
- * table above (its `literals.length === 5` assertion remains untouched).
- * The PUP-6 prefix is a Phase 5 extension to the markers surface; the PRD
- * §5.2.3 PUP-6 row specifies the user-visible composition as
- * `plugin-uninstall + plugin-install for "<plugin-name>".`. The runtime
- * callsite supplies the leading space + quoted name, so the exported
- * prefix is byte-for-byte the substring up to (but not including) the
- * space before the quote.
+ * D-04: This constant is INTENTIONALLY a Phase 5 extension beyond the
+ * (now-superseded) ES-5 marker set. The PRD §5.2.3 PUP-6 row specifies the
+ * user-visible composition as `plugin-uninstall + plugin-install for
+ * "<plugin-name>".`. The runtime callsite supplies the leading space +
+ * quoted name, so the exported prefix is byte-for-byte the substring up
+ * to (but not including) the space before the quote.
  */
 test("PUP-6 recovery-hint prefix is byte-for-byte 'plugin-uninstall + plugin-install for'", () => {
   assert.equal(markers.RECOVERY_PLUGIN_REINSTALL_PREFIX, "plugin-uninstall + plugin-install for");
@@ -113,9 +69,9 @@ test("PUP-6 recovery-hint prefix is byte-for-byte 'plugin-uninstall + plugin-ins
 /**
  * D-08 state-lock marker (Phase 7 extension beyond ES-5).
  *
- * This constant is intentionally excluded from the original ES-5 literals
- * table above. It is a Phase 7 user-contract prefix for fail-fast
- * cross-process lock contention.
+ * This constant is intentionally a Phase 7 extension beyond the
+ * (now-superseded) ES-5 marker set. It is a user-contract prefix for
+ * fail-fast cross-process lock contention.
  */
 test("D-08 state-lock-held prefix is byte-for-byte 'Another pi-claude-marketplace operation is in progress for'", () => {
   assert.equal(

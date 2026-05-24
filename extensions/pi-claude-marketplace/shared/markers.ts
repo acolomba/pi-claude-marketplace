@@ -1,16 +1,12 @@
 // shared/markers.ts
 //
-// PRD §6.12 ES-5 user-contract strings ("gitlint-grade"). DO NOT EDIT
-// without updating docs/prd/pi-claude-marketplace-prd.md §6.12 in the same
-// commit. The snapshot test at tests/architecture/markers-snapshot.test.ts
-// reads the PRD at runtime and asserts these constants are byte-for-byte
-// prefixes of the PRD literals (everything up to the first `<` or `…`).
-
-export const PI_SUBAGENTS_NOT_LOADED = "pi-subagents is not loaded; ";
-export const PI_MCP_ADAPTER_NOT_LOADED = "pi-mcp-adapter is not loaded; ";
-export const RELOAD_HINT_PREFIX = "Run /reload to ";
-export const MANUAL_RECOVERY_REQUIRED = "MANUAL RECOVERY REQUIRED: ";
-export const ROLLBACK_PARTIAL = "(rollback partial: ";
+// Phase-extension user-contract prefixes (PUP-6, D-08). The original V1
+// PRD §6.12 ES-5 marker strings have been superseded by the v1.3 universal
+// compact-line grammar; the supersession is documented in
+// docs/messaging-style-guide.md §15 (Supersession of ES-5) per D-13-11.
+// The Phase 5/7 extension markers below are NOT part of ES-5 and remain
+// the canonical user-contract prefixes for their respective surfaces.
+// They are drift-guarded by tests/architecture/markers-snapshot.test.ts.
 
 /**
  * PUP-6 recovery hint (Phase 5 extension beyond ES-5).
