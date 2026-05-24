@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Consistent Messaging
-status: ready_to_plan
-stopped_at: Phase 14 complete (6/6) — ready to discuss Phase 14.1
-last_updated: 2026-05-24T21:04:30.048Z
-last_activity: 2026-05-24 -- Phase 14 execution started
+status: planning
+stopped_at: Phase 14.2 context gathered
+last_updated: "2026-05-24T23:08:38.324Z"
+last_activity: 2026-05-24
 progress:
-  total_phases: 8
-  completed_phases: 3
+  total_phases: 9
+  completed_phases: 4
   total_plans: 22
   completed_plans: 22
-  percent: 38
+  percent: 44
 ---
 
 # Project State
@@ -20,7 +20,7 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-21)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 14.1 — close gap cmc 13 propagate declaresagents mcp through import
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 14.1 -- close gap cmc 13 propagate declaresagents mcp through import
 
 ## Current Position
 
@@ -79,6 +79,7 @@ Last activity: 2026-05-24
 ### Roadmap Evolution
 
 - Phase 14.1 inserted after Phase 14: Close gap: CMC-13 -- propagate declaresAgents/Mcp through import cascade rows (URGENT)
+- Phase 14.2 inserted after Phase 14: Address tech debt: CR-01 + retroactive Phase 12 / 14.1 gates (URGENT)
 
 ### Decisions
 
@@ -141,6 +142,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-24T15:02:54.356Z
-Stopped At: Phase 14 context gathered
-Resume File: .planning/phases/14-drift-guard-test-alignment/14-CONTEXT.md
+Last session: 2026-05-24T23:08:38.303Z
+Stopped At: Phase 14.2 context gathered
+Resume File: .planning/phases/14.2-address-tech-debt-cr-01-retroactive-phase-12-14-1-gates/14.2-CONTEXT.md
