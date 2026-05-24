@@ -52,6 +52,7 @@ import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { renderRow } from "../../presentation/compact-line.ts";
 import { dropMarketplaceCache, invalidateMarketplaceNames } from "../../shared/completion-cache.ts";
+import { MARKETPLACE_LABEL_PROBE } from "../../shared/constants/marketplace-label-probe.ts";
 import {
   MarketplaceDuplicateNameError,
   StaleSourceCloneError,
@@ -68,20 +69,8 @@ import type { GitHubSource, PathSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionContext } from "../../platform/pi-api.ts";
-import type { MarketplaceRow, SoftDepProbe } from "../../presentation/compact-line.ts";
+import type { MarketplaceRow } from "../../presentation/compact-line.ts";
 import type { Scope } from "../../shared/types.ts";
-
-/**
- * MarketplaceRow has no `declaresAgents/Mcp` fields, so the renderer's
- * per-row soft-dep marker injection never fires on this surface. A
- * fixed "loaded both" probe is safe -- the composer reads the probe
- * only when those predicate fields are true. See
- * `presentation/marketplace-list.ts` for the same rationale.
- */
-const MARKETPLACE_LABEL_PROBE: SoftDepProbe = {
-  piSubagentsLoaded: true,
-  piMcpAdapterLoaded: true,
-};
 
 export interface AddMarketplaceOptions {
   readonly ctx: ExtensionContext;

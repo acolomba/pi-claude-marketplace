@@ -28,17 +28,19 @@
 // MSG-MR-1 / D-13-15 / Plan 13-01-01 contract: `renderRow` requires a
 // `SoftDepProbe`, but marketplace label rows do not exercise per-row
 // soft-dep markers (those are plugin-row predicates per MSG-SD-1..3).
-// We pass a fixed `MARKETPLACE_LABEL_PROBE` that disables the marker
-// injection branch -- the composer reads the probe only when a row's
-// `declaresAgents` / `declaresMcp` field is true, which is never the
-// case on `MarketplaceRow`.
+// We pass a fixed `MARKETPLACE_LABEL_PROBE` (imported from
+// `shared/constants/marketplace-label-probe.ts` -- D-14-05 dedup) that
+// disables the marker injection branch -- the composer reads the probe
+// only when a row's `declaresAgents` / `declaresMcp` field is true,
+// which is never the case on `MarketplaceRow`.
 
 import { sourceLogical } from "../domain/source.ts";
+import { MARKETPLACE_LABEL_PROBE } from "../shared/constants/marketplace-label-probe.ts";
 
 import { renderRow } from "./compact-line.ts";
 import { compareByNameThenScope } from "./sort.ts";
 
-import type { MarketplaceRow, SoftDepProbe } from "./compact-line.ts";
+import type { MarketplaceRow } from "./compact-line.ts";
 import type { ParsedSource } from "../domain/source.ts";
 
 // Plan 06-04 D-02 re-exports: edge/ cannot import from domain/ (D-11
@@ -61,20 +63,6 @@ export interface MarketplaceListEntry {
   readonly source: ParsedSource;
   readonly autoupdate?: boolean;
 }
-
-/**
- * Marketplace label rows never carry per-row soft-dep markers (those are
- * plugin-row predicates per MSG-SD-1..3). `composeReasons` inside
- * `renderRow` reads the probe ONLY when `declaresAgents` / `declaresMcp`
- * is true on the row, which is never the case for `MarketplaceRow` (the
- * variant has no such fields). The "true/true" sentinel below is the
- * intentional no-op shape -- if a caller were to mis-route a row with
- * those predicate fields through here, the markers would be suppressed.
- */
-const MARKETPLACE_LABEL_PROBE: SoftDepProbe = {
-  piSubagentsLoaded: true,
-  piMcpAdapterLoaded: true,
-};
 
 /**
  * CMC-03 / CMC-07 / CMC-10 / CMC-29 / MSG-GR-3 -- flat list rendering.
