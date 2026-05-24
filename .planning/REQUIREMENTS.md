@@ -423,7 +423,7 @@ Requirements for the Claude settings import milestone. Additive to the v1.0 PRD 
 
 ### Drift Guard
 
-- [ ] **CMC-38**: A test suite reads the style-guide frontmatter (`status_tokens:`, `reasons:`, `markers:`, `pattern_classes:`) plus the normative `MSG-*` IDs as the binding drift-guard contract; `npm run check` fails when a callsite emits a token outside the closed sets or violates an MSG-* rule.
+- [x] **CMC-38**: A test suite reads the style-guide frontmatter (`status_tokens:`, `reasons:`, `markers:`, `pattern_classes:`) plus the normative `MSG-*` IDs as the binding drift-guard contract; `npm run check` fails when a callsite emits a token outside the closed sets or violates an MSG-* rule.
 
 ## v2 Requirements
 

@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Consistent Messaging
-status: executing
-stopped_at: Phase 14 context gathered
-last_updated: "2026-05-24T18:03:28.455Z"
+status: ready_to_plan
+stopped_at: Phase 14 complete (6/6) — ready to discuss Phase 14.1
+last_updated: 2026-05-24T21:04:30.048Z
 last_activity: 2026-05-24 -- Phase 14 execution started
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 22
-  completed_plans: 16
+  completed_plans: 22
   percent: 38
 ---
 
@@ -20,20 +20,20 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-21)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 14 -- drift-guard-test-alignment
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 14.1 — close gap cmc 13 propagate declaresagents mcp through import
 
 ## Current Position
 
-Phase: 14 (drift-guard-test-alignment) -- EXECUTING
-Plan: 1 of 6
-Status: Executing Phase 14
-Last activity: 2026-05-24 -- Phase 14 execution started
+Phase: 14.1
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-05-24
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 56
+- Total plans completed: 62
 - Average duration: -
 - Total execution time: -
 
@@ -50,6 +50,7 @@ Last activity: 2026-05-24 -- Phase 14 execution started
 | 12 | 4 | - | - |
 | 13 | 10 | - | - |
 | 14.1 | 2 | - | - |
+| 14 | 6 | - | - |
 
 **Recent Trend:**
 
