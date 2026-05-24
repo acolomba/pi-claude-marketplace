@@ -73,6 +73,16 @@ const ALLOW_LIST: ReadonlySet<string> = new Set([
   // refactor updates the phase-ledger header to match the closed-set
   // token form rollback.ts now produces.
   "extensions/pi-claude-marketplace/transaction/phase-ledger.ts",
+  // Plan 14-05 drift-guard rule files (D-14-09 LOCKED full-impl set):
+  // these files MUST contain the legacy literals as DETECTION FIXTURES
+  // -- the rule body / planted-violation `invalid:` test case literally
+  // is the string the rule fires on. The drift-guard rules and this
+  // legacy-markers gate are complementary: the legacy-markers gate is
+  // a static byte-grep; the MSG-* rules are AST-aware. Allow-listing
+  // these three files preserves both guards without overlap.
+  "tests/lint-rules/msg-mr-1-manual-recovery-anchor.test.js",
+  "tests/lint-rules/msg-rh-1-reload-hint.js",
+  "tests/lint-rules/msg-rh-1-reload-hint.test.js",
 ]);
 
 const SCAN_ROOTS: ReadonlyArray<string> = ["extensions/pi-claude-marketplace", "tests"];
