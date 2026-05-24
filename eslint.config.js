@@ -317,4 +317,32 @@ export default tseslint.config(
     files: ["eslint.config.js"],
     ...tseslint.configs.disableTypeChecked,
   },
+  {
+    // Phase 14 (D-14-10 / RESEARCH.md Pitfall 2): the local MSG-* ESLint
+    // plugin under `tests/lint-rules/` is test-infrastructure code -- it is
+    // consumed by ESLint at lint time, not by the TypeScript compiler, and
+    // is intentionally outside `tsconfig.json`'s include glob. The main
+    // config block (above) enables `parserOptions.projectService: true`,
+    // which would otherwise refuse these files with a "not in tsconfig"
+    // error. Mirror the existing `eslint.config.js` self-override.
+    files: ["tests/lint-rules/**/*.{js,ts}"],
+    ...tseslint.configs.disableTypeChecked,
+  },
+  {
+    // Phase 14 (Plan 14-03 Task 2): relax the project's explicit-boundary
+    // rule for the local plugin tree. ESLint plugin rule files use JSDoc
+    // type annotations for AST visitors rather than TS explicit boundaries,
+    // and the YAML loader is a plain ESM module consumed only by other
+    // rule files. Aligns with the existing `tests/**/*.ts` override that
+    // relaxes type-aware rules for test-suite code.
+    files: ["tests/lint-rules/**/*.{js,ts}"],
+    rules: {
+      "@typescript-eslint/explicit-module-boundary-types": "off",
+      "@typescript-eslint/no-floating-promises": "off",
+      "@typescript-eslint/no-non-null-assertion": "off",
+      "@typescript-eslint/no-unnecessary-condition": "off",
+      "no-restricted-syntax": "off",
+      "no-console": "off",
+    },
+  },
 );

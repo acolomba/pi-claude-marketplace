@@ -1,98 +1,91 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
+import { MARKERS } from "../../extensions/pi-claude-marketplace/shared/grammar/markers.ts";
+import { PATTERN_CLASSES } from "../../extensions/pi-claude-marketplace/shared/grammar/pattern-classes.ts";
 import { REASONS } from "../../extensions/pi-claude-marketplace/shared/grammar/reasons.ts";
 import { STATUS_TOKENS } from "../../extensions/pi-claude-marketplace/shared/grammar/status-tokens.ts";
-
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const STYLE_GUIDE_PATH = path.join(REPO_ROOT, "docs/messaging-style-guide.md");
+import {
+  MARKERS_FRONTMATTER,
+  parseStyleGuideFrontmatter,
+  PATTERN_CLASSES_FRONTMATTER,
+  REASONS_FRONTMATTER,
+  STATUS_TOKENS_FRONTMATTER,
+} from "../lint-rules/lib/frontmatter.js";
 
 /**
- * D-CMC-04 / CMC-08 / CMC-11 -- closed-set grammar drift guard.
+ * D-CMC-04 / D-14-10 / D-14-10b -- closed-set grammar drift guard.
  *
- * The constants in `shared/grammar/status-tokens.ts` and
- * `shared/grammar/reasons.ts` are downstream of the binding frontmatter at
- * `docs/messaging-style-guide.md`. This test reads the frontmatter at the
- * file head, pulls the `status_tokens:` and `reasons:` bullet lists, and
- * asserts set-equality against the in-code constants. If either side drifts,
- * CI fails -- the frontmatter is the binding contract and the constants must
- * follow.
+ * The constants in `shared/grammar/{status-tokens,reasons,markers,pattern-classes}.ts`
+ * are downstream of the binding frontmatter at
+ * `docs/messaging-style-guide.md`. This test imports the four frozen
+ * `string[]` named exports from the shared memoized loader at
+ * `tests/lint-rules/lib/frontmatter.js` (D-14-10: the loader uses
+ * `yaml.parse()` against the frontmatter block, supersedes the Phase 12
+ * hand-rolled `extractFrontmatterList` regex extractor) and asserts
+ * set-equality against the in-code constants for ALL FOUR closed sets. If
+ * either side drifts on any of the four sets, CI fails -- the frontmatter
+ * is the binding contract and the in-code constants must follow.
  *
- * D-CMC-04 keeps the YAML extractor LOCAL to this test in Phase 12. Phase 14
- * owns the richer reader (which will also need `markers:` and
- * `pattern_classes:` lists); over-extracting now would force a redesign when
- * the broader drift guard lands. The extractor here is intentionally minimal:
- * a two-stage regex against the known-shape frontmatter, following the
- * precedent originally set by `tests/helpers/prd-extract.ts` (a hand-rolled
- * regex extractor for the PRD §6.12 ES-5 row, deleted in the IN-05 cleanup
- * once its single negative-throw test was retired alongside the ES-5
- * supersession).
+ * Phase 12 D-CMC-04 deferred the richer YAML reader ("Phase 14 owns it")
+ * to here; the loader satisfies that deferral and the 4-key extension
+ * (status_tokens + reasons + markers + pattern_classes) honors D-14-10b's
+ * derived literal-union expansion. The Phase 12 negative tests
+ * (`extractFrontmatterList throws if frontmatter is missing` / `... key
+ * is missing`) carry forward as `parseStyleGuideFrontmatter`-level tests
+ * since the loader's module-load-time read can no longer be re-invoked
+ * with bad input.
  *
- * No `yaml` / `js-yaml` dependency is introduced. Adopting a YAML parser for
- * one test file would be over-extraction; the frontmatter shape is fixed at
- * the project level and the regex is linear-time on bounded input.
+ * Adding a new entry to any of the four frontmatter keys requires zero
+ * test-code changes (SC #3 in the Phase 14 ROADMAP). The MSG-* rules in
+ * Plans 14-04 / 14-05 consume the same loader exports.
  */
-function extractFrontmatterList(md: string, key: string): string[] {
-  const frontmatterMatch = /^---\n([\s\S]*?)\n---\n/.exec(md);
-  if (frontmatterMatch === null) {
-    throw new Error("messaging-style-guide.md: no YAML frontmatter found at file head");
-  }
 
-  const frontmatter = frontmatterMatch[1]!;
-
-  const keyBlockRe = new RegExp(`^${key}:\\n((?:  - .+\\n)+)`, "m");
-  const keyBlockMatch = keyBlockRe.exec(frontmatter);
-  if (keyBlockMatch === null) {
-    throw new Error(`messaging-style-guide.md frontmatter: key "${key}" not found`);
-  }
-
-  const items = keyBlockMatch[1]!
-    .split("\n")
-    .filter((line) => line.startsWith("  - "))
-    .map((line) => line.slice("  - ".length));
-
-  if (items.length === 0) {
-    throw new Error(`messaging-style-guide.md frontmatter: key "${key}" has no items`);
-  }
-
-  return items;
-}
-
-test("D-CMC-04: STATUS_TOKENS is set-equal to style-guide frontmatter status_tokens", async () => {
-  const md = await readFile(STYLE_GUIDE_PATH, "utf8");
-  const frontmatterTokens = extractFrontmatterList(md, "status_tokens");
-
+test("D-CMC-04 / D-14-10 / CMC-38: STATUS_TOKENS is set-equal to style-guide frontmatter status_tokens", () => {
   assert.deepEqual(
     [...STATUS_TOKENS].sort(),
-    [...frontmatterTokens].sort(),
-    `STATUS_TOKENS drift vs frontmatter -- code has ${STATUS_TOKENS.length}, frontmatter has ${frontmatterTokens.length}`,
+    [...STATUS_TOKENS_FRONTMATTER].sort(),
+    `STATUS_TOKENS drift vs frontmatter -- code has ${STATUS_TOKENS.length}, frontmatter has ${STATUS_TOKENS_FRONTMATTER.length}`,
   );
 });
 
-test("D-CMC-04: REASONS is set-equal to style-guide frontmatter reasons", async () => {
-  const md = await readFile(STYLE_GUIDE_PATH, "utf8");
-  const frontmatterReasons = extractFrontmatterList(md, "reasons");
-
+test("D-CMC-04 / D-14-10 / CMC-38: REASONS is set-equal to style-guide frontmatter reasons", () => {
   assert.deepEqual(
     [...REASONS].sort(),
-    [...frontmatterReasons].sort(),
-    `REASONS drift vs frontmatter -- code has ${REASONS.length}, frontmatter has ${frontmatterReasons.length}`,
+    [...REASONS_FRONTMATTER].sort(),
+    `REASONS drift vs frontmatter -- code has ${REASONS.length}, frontmatter has ${REASONS_FRONTMATTER.length}`,
   );
 });
 
-test("extractFrontmatterList throws if frontmatter is missing", () => {
+test("D-14-10b / CMC-38: MARKERS is set-equal to style-guide frontmatter markers", () => {
+  assert.deepEqual(
+    [...MARKERS].sort(),
+    [...MARKERS_FRONTMATTER].sort(),
+    `MARKERS drift vs frontmatter -- code has ${MARKERS.length}, frontmatter has ${MARKERS_FRONTMATTER.length}`,
+  );
+});
+
+test("D-14-10b / CMC-38: PATTERN_CLASSES is set-equal to style-guide frontmatter pattern_classes", () => {
+  assert.deepEqual(
+    [...PATTERN_CLASSES].sort(),
+    [...PATTERN_CLASSES_FRONTMATTER].sort(),
+    `PATTERN_CLASSES drift vs frontmatter -- code has ${PATTERN_CLASSES.length}, frontmatter has ${PATTERN_CLASSES_FRONTMATTER.length}`,
+  );
+});
+
+test("parseStyleGuideFrontmatter throws if frontmatter is missing", () => {
   assert.throws(
-    () => extractFrontmatterList("# No frontmatter here\n", "status_tokens"),
+    () => parseStyleGuideFrontmatter("# No frontmatter here\n"),
     /no YAML frontmatter found/,
   );
 });
 
-test("extractFrontmatterList throws if key is missing", () => {
+test("parseStyleGuideFrontmatter throws if a required key is missing or not a string[]", () => {
   assert.throws(
-    () => extractFrontmatterList("---\nversion: 1.0\nother:\n  - a\n---\n", "status_tokens"),
-    /key "status_tokens" not found/,
+    () =>
+      parseStyleGuideFrontmatter(
+        "---\nversion: 1.0\nstatus_tokens:\n  - installed\nreasons:\n  - up-to-date\nmarkers:\n  - autoupdate\n---\n",
+      ),
+    /key "pattern_classes" missing or not a string\[\]/,
   );
 });

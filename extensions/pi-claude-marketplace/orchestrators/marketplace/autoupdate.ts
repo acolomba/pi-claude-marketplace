@@ -41,6 +41,7 @@
 
 import { locationsFor } from "../../persistence/locations.ts";
 import { renderRow } from "../../presentation/compact-line.ts";
+import { MARKETPLACE_LABEL_PROBE } from "../../shared/constants/marketplace-label-probe.ts";
 import { errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
 import { notifyError, notifySuccess } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
@@ -48,19 +49,8 @@ import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { applyAutoupdateFlipInPlace } from "./shared.ts";
 
 import type { ExtensionContext } from "../../platform/pi-api.ts";
-import type { MarketplaceRow, SoftDepProbe } from "../../presentation/compact-line.ts";
+import type { MarketplaceRow } from "../../presentation/compact-line.ts";
 import type { Scope } from "../../shared/types.ts";
-
-/**
- * MarketplaceRow has no `declaresAgents/Mcp` fields, so the renderer's
- * per-row soft-dep marker injection never fires on this surface. A
- * fixed "loaded both" probe is safe -- the composer reads the probe
- * only when those predicate fields are true.
- */
-const MARKETPLACE_LABEL_PROBE: SoftDepProbe = {
-  piSubagentsLoaded: true,
-  piMcpAdapterLoaded: true,
-};
 
 export interface AutoupdateOptions {
   readonly ctx: ExtensionContext;
