@@ -26,9 +26,13 @@
 //     `notifyWarning` (sentence form; cleanup is an out-of-band hygienic
 //     concern, not a cascade outcome). Manual-recovery anchors are not
 //     currently emitted by mp remove because no system-level resource
-//     (agent index, state.json) participates in this code path; the
-//     `renderManualRecovery` import is wired so future deviations land
-//     cleanly without an additional Wave 2 commit.
+//     (agent index, state.json) participates in this code path. Phase 14
+//     D-14-02 centralized the CMC-16 emission in `orchestrators/plugin/
+//     reinstall.ts` (the only production surface that catches
+//     `ManualRecoveryError`); the historical dead-code import hedge this
+//     file carried is gone. If a future deviation surfaces a
+//     ManualRecoveryError on the marketplace-remove path, the import +
+//     emission can be added at that time.
 //
 // Severity routing: clean -> notifySuccess; partial -> notifyWarning
 // (via the `cascadeSummary` literal-union dispatch; MSG-SR-6 forbids
@@ -70,7 +74,6 @@ import { softDepStatus } from "../../platform/pi-api.ts";
 import { cascadeSummary } from "../../presentation/cascade-summary.ts";
 import { causeChainTrailer } from "../../presentation/cause-chain.ts";
 import { renderRow } from "../../presentation/compact-line.ts";
-import { renderManualRecovery } from "../../presentation/manual-recovery.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { dropMarketplaceCache, invalidateMarketplaceNames } from "../../shared/completion-cache.ts";
 import { MarketplaceNotFoundError, appendLeaks, errorMessage } from "../../shared/errors.ts";
@@ -87,13 +90,6 @@ import type {
 } from "../../presentation/compact-line.ts";
 import type { Reason } from "../../shared/grammar/reasons.ts";
 import type { Scope } from "../../shared/types.ts";
-
-// `renderManualRecovery` is imported above so manual-recovery emission
-// is reachable from this orchestrator if a future deviation surfaces
-// (e.g., agent-index becomes unreadable mid-cascade). Today the code
-// path does not produce manual-recovery cases on its own -- post-state
-// cleanup leaks route through `notifyWarning` instead.
-void renderManualRecovery;
 
 // CMC-15 (free-form §18.2): retry anchor literal. Pinned here because
 // it's the single source of the partial-failure retry trailer.

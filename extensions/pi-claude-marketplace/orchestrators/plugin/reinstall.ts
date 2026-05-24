@@ -49,6 +49,7 @@ import { softDepStatus } from "../../platform/pi-api.ts";
 import { cascadeSummary } from "../../presentation/cascade-summary.ts";
 import { causeChainTrailer } from "../../presentation/cause-chain.ts";
 import { renderRow } from "../../presentation/compact-line.ts";
+import { renderManualRecovery } from "../../presentation/manual-recovery.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
@@ -77,13 +78,18 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
+  ManualRecoveryLine,
   MarketplaceRow,
   PluginCascadeRow,
   SoftDepProbe,
 } from "../../presentation/compact-line.ts";
 import type { Reason } from "../../shared/grammar/reasons.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { ReinstallPluginOutcome, ReinstallReinstalledOutcome } from "../types.ts";
+import type {
+  ReinstallFailedOutcome,
+  ReinstallPluginOutcome,
+  ReinstallReinstalledOutcome,
+} from "../types.ts";
 
 export type {
   ReinstallFailedOutcome,
@@ -472,15 +478,72 @@ function renderReinstallPartitionAndNotify(
   }
 
   const body = bodySegments.join("\n\n");
+
+  // D-14-02 / CMC-16 / MSG-MR-1 + MSG-MR-2: emit a SEPARATE top-level
+  // manual-recovery anchor line for each outcome carrying the structural
+  // `failureClass: "manual-recovery"` tag. The cascade row's `(failed)
+  // {rollback partial}` shape (composed by outcomeToCascadeRow above) is
+  // PRESERVED unchanged (catalog byte-binding at docs/output-catalog.md
+  // L330); the anchor is an ADDITIONAL top-level line below the cascade
+  // body, separated by a blank line per MSG-MR-1.
+  //
+  // The anchor's `resource` slot collapses to `${name}@${marketplace}`
+  // (MSG-MR-2: ManualRecoveryLine has no marketplace/scope schema fields,
+  // so the entity composition lives inside the free-form `resource`
+  // string). Reasons pin to `["rollback partial"]` to match the per-row
+  // cascade Reason; cause-chain text surfaces separately via the notify
+  // boundary's cause-chain trailer (depth-bounded by notifyError).
+  const manualRecoveryAnchors = outcomes.filter(isManualRecoveryOutcome).map((o) => {
+    const line: ManualRecoveryLine = {
+      kind: "manual-recovery",
+      resource: `${o.name}@${o.marketplace}`,
+      reasons: Object.freeze(["rollback partial" as const]),
+    };
+    return renderManualRecovery(line, probe);
+  });
+  const composedBody =
+    manualRecoveryAnchors.length === 0 ? body : `${body}\n\n${manualRecoveryAnchors.join("\n\n")}`;
+
   const changedNames = outcomes
     .filter(
       (o): o is ReinstallReinstalledOutcome => o.partition === "reinstalled" && o.resourcesChanged,
     )
     .map((o) => o.name);
   const hint = reloadHint(changedNames);
+  // MSG-SR-6: cascade summaries never use notifyError. The manual-recovery
+  // anchor co-exists with the warning-severity cascade body (CMC-15 /
+  // MSG-RH-1 dual-trailer-style co-existence pattern).
   const dispatch = aggregatedSeverity === "warning" ? notifyWarning : notifySuccess;
-  dispatch(ctx, appendReloadHint(body, hint));
+  dispatch(ctx, appendReloadHint(composedBody, hint));
 }
+
+/**
+ * Type guard narrowing a `ReinstallPluginOutcome` to the `failed` variant
+ * tagged with `failureClass: "manual-recovery"`. Hoisted out of
+ * `renderReinstallPartitionAndNotify` so the filter callback's narrowing
+ * is named and reusable (D-14-02 / CMC-16).
+ */
+function isManualRecoveryOutcome(
+  outcome: ReinstallPluginOutcome,
+): outcome is ReinstallFailedOutcome & { readonly failureClass: "manual-recovery" } {
+  return outcome.partition === "failed" && outcome.failureClass === "manual-recovery";
+}
+
+/**
+ * Plan 14-01 / CMC-16 / D-14-02 binding seam: exported under the
+ * `__test_*` prefix so the dedicated MSG-MR-1 anchor-emission regression
+ * test in tests/orchestrators/plugin/reinstall.test.ts can verify the
+ * separate top-level manual-recovery line co-exists with the cascade body
+ * without forcing a real `ManualRecoveryError` through the bridges (which
+ * would require fs-permission / saveState dep injection plumbing through
+ * `reinstallPlugins`, which does not propagate `__deps`).
+ *
+ * Placement note (WR-02): mirrors the existing `__test_outcomeToCascadeRow`
+ * / `__test_errorWithManualRecovery` / `__test_findManualRecoveryError`
+ * seam pattern -- declared BELOW the primary function so its JSDoc does
+ * not orphan the function's contract docstring from the IDE hover binding.
+ */
+export { renderReinstallPartitionAndNotify as __test_renderReinstallPartitionAndNotify };
 
 /**
  * Maps a `ReinstallPluginOutcome` to its `PluginCascadeRow` representation
