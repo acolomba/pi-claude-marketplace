@@ -1,63 +1,81 @@
 // transaction/rollback.ts
 //
 // D-03 single chokepoint for the rollback-partial user-visible message
-// composition. Per Plan 13-02a-02 / CMC-17 / MSG-RP-1 the rendered shape
-// uses the closed-set CMC-11 tokens hand-composed inline: a `(failed)
-// {rollback partial}` parent line followed by 2-space-indented per-phase
-// children of the form `[<phase>] (rollback failed) {rollback partial}`.
+// PRESENTATION CONTEXT. Per Plan 14-06 / D-14-04 / RESEARCH.md Pitfall 6
+// (orchestrator-owns-rendering), this layer NO LONGER composes the
+// user-visible `(failed) {rollback partial}` body inline. The body
+// composition moves to the calling orchestrator, which can call the
+// canonical composer in `presentation/rollback-partial.ts` (BLOCK C
+// permits orchestrators/ -> presentation/ but not transaction/ ->
+// presentation/).
 //
-// Hand-composed inline (not delegated to `presentation/rollback-partial.ts`'s
-// `renderRollbackPartial` composer) because that composer requires a
-// PluginInlineRow / PluginCascadeRow parent the transaction layer cannot
-// own: this chokepoint has NO plugin name / scope / marketplace context
-// (it operates at the transaction primitive layer; the plugin context
-// lives in the orchestrator above). The token vocabulary is reused
-// verbatim and mirrors the `orchestrators/plugin/install.ts:802-839`
-// `composeRollbackPartialBody` precedent (which itself intentionally
-// drops `p.msg` from child rows because `msg` is not in the closed
-// REASONS set; the phaseLabel + status pair carries the user-visible
-// failure shape, free-text `msg` surfaces via Error.cause's depth-5
-// trailer at the notify boundary).
+// The audit's WARNING finding at the pre-Plan-14-06 line 56-62
+// hand-composed literal site is mitigated: the literal is gone here,
+// MSG-RP-1 (Plan 14-05) catches any re-introduction, and the catalog
+// UAT byte-binding is preserved at the orchestrator render site.
+//
+// `formatRollbackError` returns a structured `RollbackErrorResult`
+// carrying the original Error (wrapped with `cause: originalError` per
+// ES-4 when any rollback partial happened) plus the raw
+// `RollbackPartial[]` data so the orchestrator can compose the parent
+// + indented children block via `renderRollbackPartial` or the bare
+// children helper `composeRollbackPartialChildren`.
 //
 // AS-4 requires the per-phase aggregation; ES-4 requires the new
 // Error.cause chain.
 
 import { PathContainmentError } from "../shared/path-safety.ts";
 
-import type { RunPhasesResult } from "./phase-ledger.ts";
+import type { RollbackPartial, RunPhasesResult } from "./phase-ledger.ts";
 
 /**
- * Format a RunPhasesResult into a user-visible Error.
+ * Structured result from {@link formatRollbackError}. Orchestrators
+ * destructure this and compose the user-visible body via
+ * `presentation/rollback-partial.ts`.
  *
- * If no undo failures occurred, returns the original error unchanged
- * (no rollback-partial body is needed). Otherwise, composes the
- * hand-composed inline body (parent + 2-space-indented per-phase
- * children using the closed-set CMC-11 token vocabulary) and chains
- * `cause: originalError` for ES-4 traversal.
- *
- * D-02 / PI-14: PathContainmentError (and its SymlinkRefusedError
- * subclass per Phase 1 D-17) MUST NOT be folded into the rollback-
- * partial body. This single chokepoint inherits the bypass for every
- * mutating orchestrator (install, update, uninstall) so the violation
- * surfaces VERBATIM to the user without being masked by partial-rollback
- * framing. Mirrors the SAME bypass already present at
- * `transaction/phase-ledger.ts` for undo-time PathContainmentError; the
- * difference is the chokepoint -- ledger bypasses undo aggregation, here
- * we bypass body composition.
+ * `error` is either the original Error (zero-partial fast path and
+ * PathContainmentError bypass) or a new Error wrapping the original via
+ * `cause` (ES-4 cause-chain) when partials are present. `rollbackPartials`
+ * is the raw ledger data the orchestrator needs to build child rows.
  */
-export function formatRollbackError(result: RunPhasesResult, originalError: Error): Error {
+export interface RollbackErrorResult {
+  readonly error: Error;
+  readonly rollbackPartials: readonly RollbackPartial[];
+}
+
+/**
+ * Format a RunPhasesResult into a structured rollback-error result.
+ *
+ * The transaction layer does NOT compose the user-visible body -- that
+ * responsibility moves to the calling orchestrator (BLOCK C layering
+ * constraint prevents `transaction/` from importing `presentation/`).
+ *
+ * - PathContainmentError (and SymlinkRefusedError subclass, Phase 1 D-17):
+ *   `{ error: originalError, rollbackPartials: [] }` -- the bypass per
+ *   D-02 / PI-14; the original error surfaces VERBATIM and the
+ *   rollback-partial framing is suppressed.
+ * - Zero partials: `{ error: originalError, rollbackPartials: [] }` --
+ *   the original error needs no wrapping; no body composition required.
+ * - One or more partials: `{ error: new Error(originalError.message, {
+ *   cause: originalError }), rollbackPartials: result.rollbackPartials }`
+ *   -- ES-4 cause-chain preserved; the orchestrator composes the
+ *   `(failed) {rollback partial}` parent + indented per-phase children
+ *   via `renderRollbackPartial` (presentation/rollback-partial.ts).
+ */
+export function formatRollbackError(
+  result: RunPhasesResult,
+  originalError: Error,
+): RollbackErrorResult {
   if (originalError instanceof PathContainmentError) {
-    return originalError;
+    return { error: originalError, rollbackPartials: [] };
   }
 
   if (result.rollbackPartials.length === 0) {
-    return originalError;
+    return { error: originalError, rollbackPartials: [] };
   }
 
-  const parentLine = "(failed) {rollback partial}";
-  const childLines = result.rollbackPartials
-    .map((p) => `  [${p.phase}] (rollback failed) {rollback partial}`)
-    .join("\n");
-  const composed = `${originalError.message}\n\n${parentLine}\n${childLines}`;
-  return new Error(composed, { cause: originalError });
+  return {
+    error: new Error(originalError.message, { cause: originalError }),
+    rollbackPartials: result.rollbackPartials,
+  };
 }

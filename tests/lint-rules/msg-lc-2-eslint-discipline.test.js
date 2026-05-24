@@ -39,6 +39,13 @@ ruleTester.run("msg-lc-2-eslint-discipline", rule, {
     {
       code: `// note: avoid no-console in this module\nconst x = 1;`,
     },
+    // IL-3 sanctioned callsite: a disable directive whose justification
+    // text carries the `IL-3` marker is the single sanctioned exception
+    // per docs/messaging-style-guide.md §14.1. The marker discriminates
+    // the sanctioned pattern from accidental drift.
+    {
+      code: `// eslint-disable-next-line no-restricted-syntax, no-console -- IL-3: load-time save fail\nconsole.warn("legacy migrate save failed");`,
+    },
   ],
   invalid: [
     // Planted violation: extra eslint-disable touching no-restricted-syntax.

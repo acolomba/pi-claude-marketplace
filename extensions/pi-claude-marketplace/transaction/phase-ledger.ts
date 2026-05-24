@@ -88,7 +88,10 @@ async function rollbackExecuted<C>(
  *
  * NEVER throws on its own; callers inspect `result.ok` and (when false)
  * call `formatRollbackError(result, result.error!)` from
- * `transaction/rollback.ts` to produce the user-visible Error.
+ * `transaction/rollback.ts` to produce a structured `RollbackErrorResult`
+ * (`{ error, rollbackPartials }`); the orchestrator then composes the
+ * user-visible body via `presentation/rollback-partial.ts` per Plan 14-06
+ * (orchestrator-owns-rendering / D-14-04).
  *
  * Exception: PI-14 PathContainmentError thrown from an undo step is
  * re-thrown immediately (state corruption is loud). The caller observes

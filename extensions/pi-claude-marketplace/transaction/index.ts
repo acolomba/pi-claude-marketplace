@@ -11,4 +11,6 @@ export { runPhases } from "./phase-ledger.ts";
 
 export { formatRollbackError } from "./rollback.ts";
 
+export type { RollbackErrorResult } from "./rollback.ts";
+
 export { withStateGuard } from "./with-state-guard.ts";

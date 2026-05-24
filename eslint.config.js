@@ -5,6 +5,8 @@ import sonarjs from "eslint-plugin-sonarjs";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
+import msgPlugin from "./tests/lint-rules/index.js";
+
 export default tseslint.config(
   {
     ignores: [
@@ -137,6 +139,148 @@ export default tseslint.config(
     rules: {
       "no-restricted-syntax": "off",
       "no-console": "off",
+    },
+  },
+  // ----- Phase 14 MSG-* drift-guard rules (D-14-08 LOCKED per-rule scoping;
+  // RESEARCH.md Pattern 4 + Pitfall 9; Plan 14-06 wires the 34-rule plugin
+  // shipped by Plans 14-04 + 14-05 under `tests/lint-rules/`). Rule files are
+  // named `msg-<family>-<n>-<slug>.js`; the plugin exports them under the
+  // `msg/` namespace. Total: 6 + 2 + 2 + 5 + 3 + 16 = 34 (no duplicates;
+  // registry parity test in tests/architecture/msg-rule-registry.test.ts
+  // asserts 1:1 with tests/lint-rules/index.js's RULE_NAMES export).
+  {
+    // MSG-Block 1 (MSG-SR-1..6): cascade/severity routing -- orchestrators
+    // surface. Every notify* call site lives under orchestrators/ (edge/ has
+    // the separate MSG-SR-7 usage-error variant in Block 2).
+    files: ["extensions/pi-claude-marketplace/orchestrators/**/*.ts"],
+    plugins: { msg: msgPlugin },
+    rules: {
+      "msg/msg-sr-1-success-routing": "error",
+      "msg/msg-sr-2-warning-routing": "error",
+      "msg/msg-sr-3-error-routing": "error",
+      "msg/msg-sr-4-cascade-success": "error",
+      "msg/msg-sr-5-cascade-warning": "error",
+      "msg/msg-sr-6-no-cascade-error": "error",
+    },
+  },
+  {
+    // MSG-Block 2 (MSG-SR-7 + MSG-NC-2): argument-validation usage-error
+    // routing -- edge/handlers are the only surface that emits Usage blocks.
+    files: ["extensions/pi-claude-marketplace/edge/handlers/**/*.ts"],
+    plugins: { msg: msgPlugin },
+    rules: {
+      "msg/msg-sr-7-usage-error-routing": "error",
+      "msg/msg-nc-2-usage-separator": "error",
+    },
+  },
+  {
+    // MSG-Block 3 (MSG-LC-1..2): console.warn discipline (IL-3). The rule
+    // intent is to detect console.warn / eslint-disable-touching-no-console
+    // OUTSIDE the single sanctioned `persistence/migrate.ts` callsite (the
+    // sanctioned IL-3 load-time legacy migration save-failure). MSG-LC-1
+    // flags any `console.warn` CallExpression; MSG-LC-2 flags any
+    // eslint-disable directive touching `no-restricted-syntax` /
+    // `no-console`. The composer callsite is exempted via `ignores:`.
+    // (MSG-LC-2 also accepts IL-3-marked sanctioned directives via the
+    // rule's internal SANCTIONED_RE discriminator -- belt-and-braces.)
+    files: ["extensions/pi-claude-marketplace/**/*.ts"],
+    ignores: ["extensions/pi-claude-marketplace/persistence/migrate.ts"],
+    plugins: { msg: msgPlugin },
+    rules: {
+      "msg/msg-lc-1-console-warn-form": "error",
+      "msg/msg-lc-2-eslint-discipline": "error",
+    },
+  },
+  {
+    // MSG-Block 4a (MSG-MR-1..2, MSG-RP-1, MSG-RH-1): composer-chokepoint
+    // literal-detection rules (RESEARCH.md Pitfall 9). The composer files
+    // themselves legitimately contain the canonical literals they own --
+    // they MUST be ignored or the rules report false positives.
+    files: ["extensions/pi-claude-marketplace/**/*.ts"],
+    ignores: [
+      "extensions/pi-claude-marketplace/presentation/manual-recovery.ts",
+      "extensions/pi-claude-marketplace/presentation/rollback-partial.ts",
+      "extensions/pi-claude-marketplace/presentation/reload-hint.ts",
+    ],
+    plugins: { msg: msgPlugin },
+    rules: {
+      "msg/msg-mr-1-manual-recovery-anchor": "error",
+      "msg/msg-mr-2-manual-recovery-system": "error",
+      "msg/msg-rp-1-rollback-partial": "error",
+      "msg/msg-rh-1-reload-hint": "error",
+    },
+  },
+  {
+    // MSG-Block 4b (MSG-CC-1): cause-chain trailer chokepoint. The
+    // canonical composers live at presentation/cause-chain.ts and
+    // shared/errors.ts (causeChainTrailer). Two additional sites
+    // legitimately emit `cause:` / `Cause:` literals: the
+    // marketplace-block cause-trailer at presentation/plugin-list.ts
+    // (catalog line 230 -- a DIFFERENT surface from the error cause
+    // chain, owns its own per-line composition) and the IL-3 sanctioned
+    // load-time legacy-migration save-failure log at persistence/migrate.ts
+    // (the only sanctioned console.warn callsite -- its `Cause: ${msg}`
+    // suffix is part of the IL-3 sanctioned message form, not the
+    // user-facing notify trailer).
+    files: ["extensions/pi-claude-marketplace/**/*.ts"],
+    ignores: [
+      "extensions/pi-claude-marketplace/presentation/cause-chain.ts",
+      "extensions/pi-claude-marketplace/shared/errors.ts",
+      "extensions/pi-claude-marketplace/presentation/plugin-list.ts",
+      "extensions/pi-claude-marketplace/persistence/migrate.ts",
+    ],
+    plugins: { msg: msgPlugin },
+    rules: {
+      "msg/msg-cc-1-cause-chain": "error",
+    },
+  },
+  {
+    // MSG-Block 5 (MSG-NC-1, MSG-SD-1..2): renderer-chokepoint literal-
+    // detection rules. The canonical renderer lives in
+    // presentation/compact-line.ts; the soft-dep predicate plumbing also
+    // legitimately emits the marker literals there. The closed-set
+    // Reasons literal-union in shared/grammar/reasons.ts is the
+    // canonical declaration of the bare-predicate token values
+    // (`"requires pi-subagents"`, `"requires pi-mcp"`) consumed by the
+    // renderer -- it MUST be ignored or MSG-SD-2 reports false
+    // positives on the source-of-truth declaration.
+    files: ["extensions/pi-claude-marketplace/**/*.ts"],
+    ignores: [
+      "extensions/pi-claude-marketplace/presentation/compact-line.ts",
+      "extensions/pi-claude-marketplace/shared/grammar/reasons.ts",
+    ],
+    plugins: { msg: msgPlugin },
+    rules: {
+      "msg/msg-nc-1-entity-error": "error",
+      "msg/msg-sd-1-soft-dep-reason": "error",
+      "msg/msg-sd-2-soft-dep-predicate": "error",
+    },
+  },
+  {
+    // MSG-Block 6 (16 entries): structural meta-assertion rules. Each cites
+    // a structural enforcement mechanism in meta.docs and uses an empty
+    // `Program: () => {}` visitor (RESEARCH.md Pitfall 8). Zero runtime
+    // cost; satisfies the registry parity test (the rule names must appear
+    // in eslint.config.js for assertion (c) to pass).
+    files: ["extensions/pi-claude-marketplace/**/*.ts"],
+    plugins: { msg: msgPlugin },
+    rules: {
+      "msg/msg-gr-1-line-grammar": "error",
+      "msg/msg-gr-2-marketplace-token": "error",
+      "msg/msg-gr-3-per-scope": "error",
+      "msg/msg-gr-4-reasons-block": "error",
+      "msg/msg-gr-5-marker-slot": "error",
+      "msg/msg-ic-1-filled-icon": "error",
+      "msg/msg-ic-2-open-icon": "error",
+      "msg/msg-ic-3-blocked-icon": "error",
+      "msg/msg-sd-3-soft-dep-scope": "error",
+      "msg/msg-pl-1-description": "error",
+      "msg/msg-pl-2-version-slot": "error",
+      "msg/msg-pl-3-version-arrow": "error",
+      "msg/msg-pl-4-upgradable-listonly": "error",
+      "msg/msg-pl-5-hash-version": "error",
+      "msg/msg-pl-6-version-non-success": "error",
+      "msg/msg-er-1-empty-token": "error",
     },
   },
   {

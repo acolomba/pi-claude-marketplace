@@ -742,7 +742,7 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | CMC-13      | Phase 13 | Complete |
 | CMC-14      | Phase 12 | Complete |
 | CMC-15      | Phase 13 | Complete |
-| CMC-16      | Phase 13 | Complete |
+| CMC-16      | Phase 14 | Complete |
 | CMC-17      | Phase 13 | Complete |
 | CMC-18      | Phase 13 | Complete |
 | CMC-19      | Phase 12 | Complete |
@@ -760,11 +760,11 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | CMC-31      | Phase 13 | Complete |
 | CMC-32      | Phase 13 | Complete |
 | CMC-33      | Phase 13 | Complete |
-| CMC-34      | Phase 13 | Complete |
+| CMC-34      | Phase 14 | Complete |
 | CMC-35      | Phase 13 | Complete |
 | CMC-36      | Phase 12 | Complete |
 | CMC-37      | Phase 12 | Complete |
-| CMC-38      | Phase 14 | Pending  |
+| CMC-38      | Phase 14 | Complete |
 
 **Coverage:**
 
@@ -772,7 +772,7 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 - Mapped to phases: 205 (97.6%) -- MA-7 superseded by D-21 (Phase 1 adopted isomorphic-git, removing the "git CLI not found" failure mode); MU-2 and MU-3 superseded by Phase 4 D-14 (follow-upstream-blindly semantics; the local marketplace clone is read-only by contract, so non-fast-forward divergence cannot occur); PR-4 superseded by Phase 5 D-07 (custom componentPath arrays now SUPPLEMENT defaults rather than replace them; behavior corrected vs V1 per COMP-01 / Gap 3); PI-15 superseded by Phase 7 D-08 (per-scope lock acquisition fails losers with `STATE_LOCK_HELD_PREFIX` before state-guard commit)
 - v1.1 requirements: 16 total (PRL-01..16), all mapped to Phases 8/9.
 - v1.2 requirements: 11 total (IMP-01..11), all mapped to Phases 10/11.
-- v1.3 requirements: 38 total (CMC-01..38), all mapped to Phases 12/13/14 (Phase 12: CMC-08, CMC-11, CMC-14, CMC-19, CMC-36, CMC-37; Phase 13: CMC-01..07, CMC-09, CMC-10, CMC-12, CMC-13, CMC-15..18, CMC-20, CMC-21, CMC-22..34, CMC-35; Phase 14: CMC-38).
+- v1.3 requirements: 38 total (CMC-01..38), all mapped to Phases 12/13/14 (Phase 12: CMC-08, CMC-11, CMC-14, CMC-19, CMC-36, CMC-37; Phase 13: CMC-01..07, CMC-09, CMC-10, CMC-12, CMC-13, CMC-15, CMC-17, CMC-18, CMC-20, CMC-21, CMC-22..33, CMC-35; Phase 14: CMC-16, CMC-34, CMC-38 -- per D-14-02 LOCKED, Phase 14 absorbs the CMC-16 + CMC-34 audit-driven closures from Phase 13).
 - Unmapped: 0 (MA-7, MU-2, MU-3, PR-4, PI-15 are superseded, not unmapped; v1.3 CMC-01..38 are mapped to Phases 12/13/14)
 
 **Per-phase counts:**
@@ -796,6 +796,8 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 ______________________________________________________________________
 
 *Requirements defined: 2026-05-09 from `docs/prd/pi-claude-marketplace-prd.md` v1.0*
+
+*Last updated: 2026-05-24 -- Phase 14 Plan 06 v1.3 milestone close. CMC-16 + CMC-34 reattributed from Phase 13 to Phase 14 per D-14-02 LOCKED (Phase 14 absorbed the audit-driven closure work that the post-Phase-13 v1.3-MILESTONE-AUDIT.md flagged as partial). CMC-38 flipped from Pending to Complete with the drift-guard suite landing in Phase 14 Plans 03-06. v1.3 Coverage now shows 38/38 mapped and complete (SC #5 satisfied).*
 
 *Last updated: 2026-05-21 -- Added Milestone v1.3 (CMC-01..38) sourced from `docs/messaging-style-guide.md` v1.0 (normative, supersedes PRD §6.12 ES-5) + `docs/output-catalog.md`. Phase mapping pending roadmap. Out of Scope extended with four v1.3-specific deferrals: hash-version display abbreviation, bulk uninstall cascade form, marketplace versions, and tone-changing rewordings beyond the §15 supersession.*
 
