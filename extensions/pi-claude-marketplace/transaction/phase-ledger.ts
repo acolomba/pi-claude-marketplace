@@ -10,13 +10,19 @@
 // the order drift across refactors.
 //
 // Per PI-14: PathContainmentError MUST NEVER be folded into the
-// "(rollback partial: ...)" line. The undo path re-throws it
-// immediately so the original failing-phase error becomes its cause via
-// a higher-level wrapper.
+// rollback-partial body. The undo path re-throws it immediately so the
+// original failing-phase error becomes its cause via a higher-level
+// wrapper.
 //
-// Per AS-4: the user-visible "(rollback partial: [<phase>] <msg>; …)"
-// assembly happens in transaction/rollback.ts (D-03 single chokepoint).
-// This file ships RAW data (RollbackPartial[]); rollback.ts formats.
+// Per AS-4 / CMC-17 / MSG-RP-1 (post Plan 13-02a-02 / commit 64d823f):
+// the user-visible body assembly happens in transaction/rollback.ts
+// (D-03 single chokepoint) and uses the closed-set CMC-11 token
+// vocabulary -- a `(failed) {rollback partial}` parent line followed by
+// 2-space-indented per-phase children of the form
+// `[<phase>] (rollback failed) {rollback partial}`. The legacy
+// `(rollback partial: ...)` ES-5 marker form was retired in the same
+// commit. This file still ships RAW data (RollbackPartial[]);
+// rollback.ts formats.
 
 import { errorMessage } from "../shared/errors.ts";
 import { PathContainmentError } from "../shared/path-safety.ts";

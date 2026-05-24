@@ -25,11 +25,13 @@
 //   - tests/architecture/no-legacy-markers.test.ts
 //       This file. The 5 literals are pinned here as fixtures.
 //   - extensions/pi-claude-marketplace/transaction/phase-ledger.ts
-//       Header docstring per PI-14 + AS-4 referring to the rollback-
-//       partial line that rollback.ts USED to emit. Out of scope for
-//       Plan 13-02a-02; the docstring stays until a later refactor
-//       updates the phase-ledger header to match the closed-set token
-//       form rollback.ts now produces.
+//       Header docstring per PI-14 + AS-4: the legacy
+//       `(rollback partial: ...)` literal is now referenced INSIDE a
+//       "retired in commit 64d823f" historical note (IN-01 fix); the
+//       header is otherwise updated to document the closed-set CMC-11
+//       token form rollback.ts produces today. Keep the file
+//       allow-listed because the literal still appears as
+//       documentation-of-supersession.
 //
 // Removed in Plan 13-02a-02 (Wave 2 sub-wave 2a continuation):
 //   - extensions/pi-claude-marketplace/transaction/rollback.ts: chokepoint
