@@ -10,6 +10,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/import/index.ts";
 
 import type { ImportDiagnostic } from "../../../extensions/pi-claude-marketplace/orchestrators/import/index.ts";
+import type { SoftDepProbe } from "../../../extensions/pi-claude-marketplace/presentation/compact-line.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 interface NotifyRecord {
@@ -153,7 +154,12 @@ test("importClaudeSettings skips matching existing marketplaces and already-inst
       },
       installPlugin: async (opts) => {
         installed.push(`${opts.plugin}@${opts.marketplace}`);
-        return { status: "installed", resourcesChanged: true };
+        return {
+          status: "installed",
+          resourcesChanged: true,
+          declaresAgents: false,
+          declaresMcp: false,
+        };
       },
     },
   });
@@ -200,7 +206,12 @@ test("importClaudeSettings source mismatch skips dependent plugins without calli
       addMarketplace: async () => undefined,
       installPlugin: async (opts) => {
         installed.push(`${opts.plugin}@${opts.marketplace}`);
-        return { status: "installed", resourcesChanged: true };
+        return {
+          status: "installed",
+          resourcesChanged: true,
+          declaresAgents: false,
+          declaresMcp: false,
+        };
       },
     },
   });
@@ -245,7 +256,12 @@ test("importClaudeSettings treats cross-kind source as mismatch (github planned,
       addMarketplace: async () => undefined,
       installPlugin: async (opts) => {
         installed.push(opts.plugin);
-        return { status: "installed", resourcesChanged: false };
+        return {
+          status: "installed",
+          resourcesChanged: false,
+          declaresAgents: false,
+          declaresMcp: false,
+        };
       },
     },
   });
@@ -306,7 +322,12 @@ test("importClaudeSettings skips when github source matches owner and repo", asy
       addMarketplace: async () => undefined,
       installPlugin: async (opts) => {
         installed.push(opts.plugin);
-        return { status: "installed", resourcesChanged: false };
+        return {
+          status: "installed",
+          resourcesChanged: false,
+          declaresAgents: false,
+          declaresMcp: false,
+        };
       },
     },
   });
@@ -342,7 +363,12 @@ test("importClaudeSettings marketplace add failure skips only dependent plugins"
       },
       installPlugin: async (opts) => {
         installed.push(`${opts.plugin}@${opts.marketplace}`);
-        return { status: "installed", resourcesChanged: false };
+        return {
+          status: "installed",
+          resourcesChanged: false,
+          declaresAgents: false,
+          declaresMcp: false,
+        };
       },
     },
   });
@@ -395,7 +421,12 @@ test("importClaudeSettings classifies unavailable and unexpected plugin failures
           return { status: "unexpected-failure", cause: "disk full" };
         }
 
-        return { status: "installed", resourcesChanged: true };
+        return {
+          status: "installed",
+          resourcesChanged: true,
+          declaresAgents: false,
+          declaresMcp: false,
+        };
       },
     },
   });
@@ -450,7 +481,12 @@ test("importClaudeSettings classifies uninstallable plugins as warnings without 
           return { status: "uninstallable", cause: "requires unsupported tool" };
         }
 
-        return { status: "installed", resourcesChanged: false };
+        return {
+          status: "installed",
+          resourcesChanged: false,
+          declaresAgents: false,
+          declaresMcp: false,
+        };
       },
     },
   });
@@ -462,6 +498,161 @@ test("importClaudeSettings classifies uninstallable plugins as warnings without 
     "requires unsupported tool",
   );
   assert.equal(result.installedPlugins[0]?.ref, "ok@mp");
+});
+
+// CMC-13 / MSG-SD-1..3: predicates from `InstallPluginOutcome.installed`
+// propagate through `case "installed"` onto every `installedPlugins[]`
+// entry and through the cascade-row build onto every `PluginCascadeRow`.
+// The renderer fires `{requires pi-subagents}` / `{requires pi-mcp}` iff
+// `(declares && !companion-loaded)`; an unloaded probe is supplied so the
+// markers actually surface on the rendered cascade body. Cases A-D
+// exercise all four predicate combinations.
+const UNLOADED_PROBE: SoftDepProbe = {
+  piSubagentsLoaded: false,
+  piMcpAdapterLoaded: false,
+};
+
+test("importClaudeSettings propagates declaresAgents=true (agents-only) onto outcome and cascade row", async () => {
+  const { ctx, pi } = makeCtx();
+
+  const result = await importClaudeSettings({
+    ctx,
+    pi,
+    cwd: "/tmp/project",
+    selectedScopes: ["user"],
+    deps: {
+      loadSettings: async () => ({
+        paths: { basePath: "base", localPath: "local" },
+        settings: {
+          enabledPlugins: { "plugin@mp": true },
+          extraKnownMarketplaces: { mp: { directory: "./mp" } },
+        },
+        diagnostics: [],
+      }),
+      loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
+      addMarketplace: async () => undefined,
+      installPlugin: async () => ({
+        status: "installed",
+        resourcesChanged: true,
+        declaresAgents: true,
+        declaresMcp: false,
+      }),
+    },
+  });
+
+  assert.equal(result.installedPlugins[0]?.declaresAgents, true);
+  assert.equal(result.installedPlugins[0]?.declaresMcp, false);
+  const summary = formatClaudeImportSummary(result, UNLOADED_PROBE);
+  assert.match(summary, /● plugin \[user\] \(installed\) \{requires pi-subagents\}/);
+  assert.doesNotMatch(summary, /requires pi-mcp/);
+});
+
+test("importClaudeSettings propagates declaresMcp=true (mcp-only) onto outcome and cascade row", async () => {
+  const { ctx, pi } = makeCtx();
+
+  const result = await importClaudeSettings({
+    ctx,
+    pi,
+    cwd: "/tmp/project",
+    selectedScopes: ["user"],
+    deps: {
+      loadSettings: async () => ({
+        paths: { basePath: "base", localPath: "local" },
+        settings: {
+          enabledPlugins: { "plugin@mp": true },
+          extraKnownMarketplaces: { mp: { directory: "./mp" } },
+        },
+        diagnostics: [],
+      }),
+      loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
+      addMarketplace: async () => undefined,
+      installPlugin: async () => ({
+        status: "installed",
+        resourcesChanged: true,
+        declaresAgents: false,
+        declaresMcp: true,
+      }),
+    },
+  });
+
+  assert.equal(result.installedPlugins[0]?.declaresAgents, false);
+  assert.equal(result.installedPlugins[0]?.declaresMcp, true);
+  const summary = formatClaudeImportSummary(result, UNLOADED_PROBE);
+  assert.match(summary, /● plugin \[user\] \(installed\) \{requires pi-mcp\}/);
+  assert.doesNotMatch(summary, /requires pi-subagents/);
+});
+
+test("importClaudeSettings propagates declaresAgents+declaresMcp (both) onto outcome and cascade row", async () => {
+  const { ctx, pi } = makeCtx();
+
+  const result = await importClaudeSettings({
+    ctx,
+    pi,
+    cwd: "/tmp/project",
+    selectedScopes: ["user"],
+    deps: {
+      loadSettings: async () => ({
+        paths: { basePath: "base", localPath: "local" },
+        settings: {
+          enabledPlugins: { "plugin@mp": true },
+          extraKnownMarketplaces: { mp: { directory: "./mp" } },
+        },
+        diagnostics: [],
+      }),
+      loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
+      addMarketplace: async () => undefined,
+      installPlugin: async () => ({
+        status: "installed",
+        resourcesChanged: true,
+        declaresAgents: true,
+        declaresMcp: true,
+      }),
+    },
+  });
+
+  assert.equal(result.installedPlugins[0]?.declaresAgents, true);
+  assert.equal(result.installedPlugins[0]?.declaresMcp, true);
+  const summary = formatClaudeImportSummary(result, UNLOADED_PROBE);
+  assert.match(
+    summary,
+    /● plugin \[user\] \(installed\) \{requires pi-subagents, requires pi-mcp\}/,
+  );
+});
+
+test("importClaudeSettings propagates declaresAgents=false+declaresMcp=false (neither) onto outcome and cascade row", async () => {
+  const { ctx, pi } = makeCtx();
+
+  const result = await importClaudeSettings({
+    ctx,
+    pi,
+    cwd: "/tmp/project",
+    selectedScopes: ["user"],
+    deps: {
+      loadSettings: async () => ({
+        paths: { basePath: "base", localPath: "local" },
+        settings: {
+          enabledPlugins: { "plugin@mp": true },
+          extraKnownMarketplaces: { mp: { directory: "./mp" } },
+        },
+        diagnostics: [],
+      }),
+      loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
+      addMarketplace: async () => undefined,
+      installPlugin: async () => ({
+        status: "installed",
+        resourcesChanged: true,
+        declaresAgents: false,
+        declaresMcp: false,
+      }),
+    },
+  });
+
+  assert.equal(result.installedPlugins[0]?.declaresAgents, false);
+  assert.equal(result.installedPlugins[0]?.declaresMcp, false);
+  const summary = formatClaudeImportSummary(result, UNLOADED_PROBE);
+  assert.match(summary, /● plugin \[user\] \(installed\)/);
+  assert.doesNotMatch(summary, /requires pi-subagents/);
+  assert.doesNotMatch(summary, /requires pi-mcp/);
 });
 
 test("formatClaudeImportSummary includes the canonical reload-hint trailer when changedResources is true", () => {
@@ -476,6 +667,8 @@ test("formatClaudeImportSummary includes the canonical reload-hint trailer when 
         ref: "my-plugin@mp",
         reason: "installed",
         resourcesChanged: true,
+        declaresAgents: false,
+        declaresMcp: false,
       },
     ],
     skippedExistingMarketplaces: [],
@@ -575,7 +768,12 @@ test("importClaudeSettings emits diagnostic and skips scope when loadState throw
       addMarketplace: async () => undefined,
       installPlugin: async (opts) => {
         installed.push(opts.plugin);
-        return { status: "installed", resourcesChanged: false };
+        return {
+          status: "installed",
+          resourcesChanged: false,
+          declaresAgents: false,
+          declaresMcp: false,
+        };
       },
     },
   });
@@ -621,7 +819,12 @@ test("importClaudeSettings emits unrecognized-stored-source diagnostic and block
       addMarketplace: async () => undefined,
       installPlugin: async (opts) => {
         installed.push(opts.plugin);
-        return { status: "installed", resourcesChanged: false };
+        return {
+          status: "installed",
+          resourcesChanged: false,
+          declaresAgents: false,
+          declaresMcp: false,
+        };
       },
     },
   });
@@ -653,7 +856,12 @@ test("importClaudeSettings surfaces skippedPlugins from plan as unmappable-marke
       }),
       loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
       addMarketplace: async () => undefined,
-      installPlugin: async () => ({ status: "installed", resourcesChanged: false }),
+      installPlugin: async () => ({
+        status: "installed",
+        resourcesChanged: false,
+        declaresAgents: false,
+        declaresMcp: false,
+      }),
     },
   });
 
@@ -684,6 +892,8 @@ test("importClaudeSettings includes postCommitWarnings from installed outcome in
       installPlugin: async () => ({
         status: "installed",
         resourcesChanged: true,
+        declaresAgents: false,
+        declaresMcp: false,
         postCommitWarnings: ["data dir creation deferred at /tmp/x: ENOSPC"],
       }),
     },
@@ -738,7 +948,12 @@ test("importClaudeSettings keeps user and project operations independent", async
       addMarketplace: async () => undefined,
       installPlugin: async (opts) => {
         installed.push(`${opts.scope}:${opts.plugin}@${opts.marketplace}`);
-        return { status: "installed", resourcesChanged: false };
+        return {
+          status: "installed",
+          resourcesChanged: false,
+          declaresAgents: false,
+          declaresMcp: false,
+        };
       },
     },
   });

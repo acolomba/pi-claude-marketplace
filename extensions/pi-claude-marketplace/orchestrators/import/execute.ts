@@ -54,6 +54,14 @@ export interface PluginInstalledOutcome {
   readonly ref: string;
   readonly reason: "installed";
   readonly resourcesChanged: boolean;
+  /**
+   * CMC-13 / MSG-SD-1..3: per-row soft-dep predicate inputs propagated
+   * from `InstallPluginOutcome.installed`. REQUIRED (mirrors D-01) so the
+   * cascade-row build site cannot read `undefined` and silently render the
+   * marker as `false` (NFR-7).
+   */
+  readonly declaresAgents: boolean;
+  readonly declaresMcp: boolean;
 }
 
 export interface PluginSkipOutcome {
@@ -456,6 +464,7 @@ function enumerateMarketplaceBlocks(
   // for this plugin's marketplace (e.g. installed against an existing
   // marketplace whose header wasn't in addedMarketplaces), synthesize a
   // bare label header so the plugin still renders under its marketplace.
+  // CMC-13 / MSG-SD-1..3: predicates propagated from install outcome
   for (const o of result.installedPlugins) {
     const block = ensureBareHeader(byMp, o.scope, o.marketplace);
     block.rows.push({
@@ -463,16 +472,8 @@ function enumerateMarketplaceBlocks(
       name: o.plugin,
       scope: o.scope,
       status: "installed",
-      // resourcesChanged drives soft-dep eligibility -- the plugin's
-      // staged-resources outcome is the effective-state predicate. The
-      // ImportClaudeSettingsResult does not carry per-resource staged-
-      // names (the orchestrated install path returns only a summary), so
-      // we can't yet compute declaresAgents/Mcp precisely. Default false;
-      // a follow-up (sub-wave 2b finalization) can plumb the predicate
-      // through outcome.postCommitWarnings parsing or by widening
-      // PluginInstalledOutcome.
-      declaresAgents: false,
-      declaresMcp: false,
+      declaresAgents: o.declaresAgents,
+      declaresMcp: o.declaresMcp,
     });
   }
 
@@ -852,6 +853,8 @@ async function executeScopedPlan(
           ref: refLabel(plugin),
           reason: "installed",
           resourcesChanged: outcome.resourcesChanged,
+          declaresAgents: outcome.declaresAgents,
+          declaresMcp: outcome.declaresMcp,
         });
         result.changedResources ||= outcome.resourcesChanged;
         // Surface any post-commit warnings collected in orchestrated mode.
