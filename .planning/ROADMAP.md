@@ -22,7 +22,7 @@ The roadmap continues phase numbering from the completed v1.2 import milestone (
 - [x] **Phase 11: Import Command Orchestration** (v1.2) -- `/claude:plugin import [--scope user|project]` handler, idempotent marketplace/plugin orchestration, warnings and reload-hint integration
 - [x] **Phase 12: Messaging Foundations & Renderer Primitives** (v1.3) -- Closed-set constants, renderer/notify primitives, reload-hint composer collapse, sentence-form `console.warn` rewording: the scaffolding the conformance refactor will consume (completed 2026-05-22)
 - [x] **Phase 13: Conformance Refactor & ES-5 Supersession** (v1.3) -- Mechanical rewrite of every user-visible callsite + ES-5 atomic three-file edit + per-command catalog conformance + display-semantics (per-scope rendering, plugin folding, adoption) (completed 2026-05-24)
-- [ ] **Phase 14: Drift Guard & Test Alignment** (v1.3) -- Frontmatter-driven drift test suite that reads the style guide as the binding contract; `npm run check` fails on out-of-set tokens or MSG-* violations
+- [x] **Phase 14: Drift Guard & Test Alignment** (v1.3) -- Frontmatter-driven drift test suite that reads the style guide as the binding contract; `npm run check` fails on out-of-set tokens or MSG-* violations (completed 2026-05-24)
 
 Phases 1-7 belong to the v1.0 successor architecture and are documented in `PROJECT.md` under Validated requirements.
 
@@ -227,7 +227,7 @@ Plans:
 4. `npm run check` is green after Phase 13 + Phase 14 land together: typecheck + ESLint + Prettier + the existing test suite + the new drift-guard suite all pass on the v1.3 milestone close commit.
 5. The milestone is complete: every CMC-01..38 requirement has its traceability row marked `Complete` (Phase 12 / Phase 13 / Phase 14 as appropriate); the v1.3 line in REQUIREMENTS.md Coverage block shows 38/38 mapped and complete.
 
-**Plans:** 5/6 plans executed
+**Plans:** 6/6 plans complete
 
 Plans:
 
