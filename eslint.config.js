@@ -317,4 +317,15 @@ export default tseslint.config(
     files: ["eslint.config.js"],
     ...tseslint.configs.disableTypeChecked,
   },
+  {
+    // Phase 14 (D-14-10 / RESEARCH.md Pitfall 2): the local MSG-* ESLint
+    // plugin under `tests/lint-rules/` is test-infrastructure code -- it is
+    // consumed by ESLint at lint time, not by the TypeScript compiler, and
+    // is intentionally outside `tsconfig.json`'s include glob. The main
+    // config block (above) enables `parserOptions.projectService: true`,
+    // which would otherwise refuse these files with a "not in tsconfig"
+    // error. Mirror the existing `eslint.config.js` self-override.
+    files: ["tests/lint-rules/**/*.{js,ts}"],
+    ...tseslint.configs.disableTypeChecked,
+  },
 );

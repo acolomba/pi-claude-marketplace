@@ -12,12 +12,13 @@
   },
   "description": "Access Claude plugin marketplaces from Pi.",
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
     "@earendil-works/pi-coding-agent": "^0.74.0",
     "@earendil-works/pi-tui": "^0.74.0",
+    "@eslint/js": "^10.0.1",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/proper-lockfile": "^4.1.4",
     "@types/write-file-atomic": "^4.0.3",
+    "@typescript-eslint/rule-tester": "^8.59.4",
     "eslint": "^10.2.1",
     "eslint-plugin-import-x": "^4.16.2",
     "eslint-plugin-sonarjs": "^4.0.3",
@@ -26,7 +27,8 @@
     "prettier": "^3.8.3",
     "typebox": "^1.1.38",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.59.1"
+    "typescript-eslint": "^8.59.1",
+    "yaml": "^2.9.0"
   },
   "engines": {
     "node": ">=20.19.0"
@@ -71,7 +73,7 @@
     "format:check": "prettier --check \"**/*.{js,json,ts}\"",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "node --test \"tests/{architecture,bridges,domain,edge,helpers,orchestrators,persistence,presentation,shared,transaction}/**/*.test.ts\"",
+    "test": "node --test \"tests/{architecture,bridges,domain,edge,helpers,orchestrators,persistence,presentation,shared,transaction}/**/*.test.ts\" \"tests/lint-rules/**/*.test.{js,ts}\"",
     "test:coverage": "rm -rf coverage && mkdir -p coverage && npm run test:coverage:unit && npm run test:coverage:integration && npm run test:coverage:e2e",
     "test:coverage:e2e": "PI_CM_E2E_REF=pinned node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/e2e.lcov \"tests/e2e/**/*.test.ts\"",
     "test:coverage:integration": "node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/integration.lcov \"tests/integration/**/*.test.ts\"",
