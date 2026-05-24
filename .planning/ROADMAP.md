@@ -277,7 +277,7 @@ Plans:
 | CMC-13      | Phase 13 | Pending |
 | CMC-14      | Phase 12 | Pending |
 | CMC-15      | Phase 13 | Pending |
-| CMC-16      | Phase 13 | Pending |
+| CMC-16      | Phase 14 | Complete |
 | CMC-17      | Phase 13 | Pending |
 | CMC-18      | Phase 13 | Pending |
 | CMC-19      | Phase 12 | Pending |
@@ -295,11 +295,11 @@ Plans:
 | CMC-31      | Phase 13 | Pending |
 | CMC-32      | Phase 13 | Pending |
 | CMC-33      | Phase 13 | Pending |
-| CMC-34      | Phase 13 | Pending |
+| CMC-34      | Phase 14 | Complete |
 | CMC-35      | Phase 13 | Pending |
 | CMC-36      | Phase 12 | Pending |
 | CMC-37      | Phase 12 | Pending |
-| CMC-38      | Phase 14 | Pending |
+| CMC-38      | Phase 14 | Complete |
 
 **Coverage:**
 
@@ -314,8 +314,8 @@ Plans:
 | Phase | REQ-IDs                                                                                                                                                                                                                            | Count |
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
 | 12    | CMC-08, CMC-11, CMC-14, CMC-19, CMC-36, CMC-37                                                                                                                                                                                     | 6     |
-| 13    | CMC-01, CMC-02, CMC-03, CMC-04, CMC-05, CMC-06, CMC-07, CMC-09, CMC-10, CMC-12, CMC-13, CMC-15, CMC-16, CMC-17, CMC-18, CMC-20, CMC-21, CMC-22, CMC-23, CMC-24, CMC-25, CMC-26, CMC-27, CMC-28, CMC-29, CMC-30, CMC-31, CMC-32, CMC-33, CMC-34, CMC-35 | 31    |
-| 14    | CMC-38                                                                                                                                                                                                                             | 1     |
+| 13    | CMC-01, CMC-02, CMC-03, CMC-04, CMC-05, CMC-06, CMC-07, CMC-09, CMC-10, CMC-12, CMC-13, CMC-15, CMC-17, CMC-18, CMC-20, CMC-21, CMC-22, CMC-23, CMC-24, CMC-25, CMC-26, CMC-27, CMC-28, CMC-29, CMC-30, CMC-31, CMC-32, CMC-33, CMC-35 | 29    |
+| 14    | CMC-16, CMC-34, CMC-38                                                                                                                                                                                                             | 3     |
 
 ## Phase Sequencing Rationale (v1.3)
 
