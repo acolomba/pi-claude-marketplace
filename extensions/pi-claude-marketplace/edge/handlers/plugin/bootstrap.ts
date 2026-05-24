@@ -18,7 +18,7 @@
 
 import { bootstrapClaudePlugin } from "../../../orchestrators/plugin/bootstrap.ts";
 import { errorMessage } from "../../../shared/errors.ts";
-import { notifyError } from "../../../shared/notify.ts";
+import { notifyError, notifyUsageError } from "../../../shared/notify.ts";
 import { parseArgs } from "../../args.ts";
 
 import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
@@ -34,20 +34,21 @@ export function makeBootstrapHandler(
     try {
       parsed = parseArgs(args);
     } catch (err) {
-      notifyError(ctx, `${errorMessage(err)}\n${USAGE}`);
+      notifyUsageError(ctx, errorMessage(err), USAGE);
       return;
     }
 
     if (parsed.positional.length > 0) {
-      notifyError(ctx, USAGE);
+      notifyUsageError(ctx, "bootstrap takes no arguments.", USAGE);
       return;
     }
 
     // Reject --scope flag explicitly: bootstrap is user-scope only.
     if (parsed.scope !== undefined) {
-      notifyError(
+      notifyUsageError(
         ctx,
-        `${USAGE}\n  bootstrap does not accept --scope; it always targets user scope.`,
+        "bootstrap does not accept --scope; it always targets user scope.",
+        USAGE,
       );
       return;
     }

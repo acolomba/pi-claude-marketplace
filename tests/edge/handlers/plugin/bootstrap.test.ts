@@ -145,7 +145,14 @@ test("bootstrap handler (positional argument): rejected with usage error, orches
     await handler("foo", ctx);
 
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]?.message, "Usage: /claude:plugin bootstrap");
+    // CMC-34 closure (Phase 14, Plan 14-02): the positional-rejected case now
+    // routes via notifyUsageError, which emits `${message}\n\n${USAGE}`. The
+    // sentence head ("bootstrap takes no arguments.") + blank-line separator
+    // + Usage block is the on-the-wire byte shape (MSG-NC-2 / MSG-SR-7).
+    assert.equal(
+      notifications[0]?.message,
+      "bootstrap takes no arguments.\n\nUsage: /claude:plugin bootstrap",
+    );
     assert.equal(notifications[0]?.severity, "error");
     // Orchestrator never invoked -> clone never attempted.
     assert.equal(gitState.cloneCalls.length, 0);

@@ -14,7 +14,7 @@
 
 import { updatePlugins } from "../../../orchestrators/plugin/update.ts";
 import { errorMessage } from "../../../shared/errors.ts";
-import { notifyError } from "../../../shared/notify.ts";
+import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseArgs } from "../../args.ts";
 
 import { parsePositionalsWithFlags, splitPluginMarketplaceRef } from "./shared.ts";
@@ -33,7 +33,7 @@ export function makeUpdateHandler(
     try {
       parsed = parseArgs(args);
     } catch (err) {
-      notifyError(ctx, errorMessage(err));
+      notifyUsageError(ctx, errorMessage(err), USAGE);
       return;
     }
 
@@ -45,7 +45,7 @@ export function makeUpdateHandler(
     const { nonFlagPositionals, mapModel } = flagged;
 
     if (nonFlagPositionals.length > 1) {
-      notifyError(ctx, USAGE);
+      notifyUsageError(ctx, "Too many arguments.", USAGE);
       return;
     }
 
@@ -58,7 +58,7 @@ export function makeUpdateHandler(
     } else {
       const split = splitPluginMarketplaceRef(ref);
       if (split === undefined) {
-        notifyError(ctx, USAGE);
+        notifyUsageError(ctx, `Invalid <plugin>@<marketplace> ref: "${ref}".`, USAGE);
         return;
       }
 

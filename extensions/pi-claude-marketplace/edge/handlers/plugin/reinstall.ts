@@ -12,7 +12,7 @@
 
 import { reinstallPlugins } from "../../../orchestrators/plugin/reinstall.ts";
 import { errorMessage } from "../../../shared/errors.ts";
-import { notifyError } from "../../../shared/notify.ts";
+import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseArgs } from "../../args.ts";
 
 import { splitPluginMarketplaceRef } from "./shared.ts";
@@ -31,7 +31,7 @@ export function makeReinstallHandler(
     try {
       parsed = parseArgs(args);
     } catch (err) {
-      notifyError(ctx, `${errorMessage(err)}\n${USAGE}`);
+      notifyUsageError(ctx, errorMessage(err), USAGE);
       return;
     }
 
@@ -41,7 +41,7 @@ export function makeReinstallHandler(
       if (token === "--force") {
         force = true;
       } else if (token.startsWith("--")) {
-        notifyError(ctx, `Unknown option: "${token}".\n${USAGE}`);
+        notifyUsageError(ctx, `Unknown option: "${token}".`, USAGE);
         return;
       } else {
         refs.push(token);
@@ -49,7 +49,7 @@ export function makeReinstallHandler(
     }
 
     if (refs.length > 1) {
-      notifyError(ctx, `Too many arguments.\n${USAGE}`);
+      notifyUsageError(ctx, "Too many arguments.", USAGE);
       return;
     }
 
@@ -83,7 +83,7 @@ function parseTarget(
 
   const pluginRef = splitPluginMarketplaceRef(ref);
   if (pluginRef === undefined) {
-    notifyError(ctx, USAGE);
+    notifyUsageError(ctx, `Invalid <plugin>@<marketplace> ref: "${ref}".`, USAGE);
     return undefined;
   }
 
