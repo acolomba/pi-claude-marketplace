@@ -1,5 +1,17 @@
 exclude: ^(\.claude/|tests/domain/fixtures/hash-stability/)
 
+# IN-04 (commit `da8a566` had a 79-char title): the gitlint hook below
+# runs at the `commit-msg` stage, NOT at `pre-commit`. Without listing
+# `commit-msg` here, `pre-commit install` only installs the `pre-commit`
+# stage hook and gitlint silently does not run on `git commit`. With
+# this list, a single `pre-commit install` installs BOTH hook types.
+# Contributors who installed hooks before this change must re-run
+# `pre-commit install` to pick up the commit-msg hook (or run
+# `pre-commit install --hook-type commit-msg` explicitly).
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
