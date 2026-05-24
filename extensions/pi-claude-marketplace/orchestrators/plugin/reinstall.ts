@@ -530,6 +530,22 @@ function isManualRecoveryOutcome(
 }
 
 /**
+ * Plan 14-01 / CMC-16 / D-14-02 binding seam: exported under the
+ * `__test_*` prefix so the dedicated MSG-MR-1 anchor-emission regression
+ * test in tests/orchestrators/plugin/reinstall.test.ts can verify the
+ * separate top-level manual-recovery line co-exists with the cascade body
+ * without forcing a real `ManualRecoveryError` through the bridges (which
+ * would require fs-permission / saveState dep injection plumbing through
+ * `reinstallPlugins`, which does not propagate `__deps`).
+ *
+ * Placement note (WR-02): mirrors the existing `__test_outcomeToCascadeRow`
+ * / `__test_errorWithManualRecovery` / `__test_findManualRecoveryError`
+ * seam pattern -- declared BELOW the primary function so its JSDoc does
+ * not orphan the function's contract docstring from the IDE hover binding.
+ */
+export { renderReinstallPartitionAndNotify as __test_renderReinstallPartitionAndNotify };
+
+/**
  * Maps a `ReinstallPluginOutcome` to its `PluginCascadeRow` representation
  * (CMC-25 closed-set status mapping; D-13-05 typed-RowSpec discipline).
  *

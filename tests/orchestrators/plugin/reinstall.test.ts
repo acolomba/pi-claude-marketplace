@@ -11,6 +11,7 @@ import {
   __test_errorWithManualRecovery,
   __test_findManualRecoveryError,
   __test_outcomeToCascadeRow,
+  __test_renderReinstallPartitionAndNotify,
   reinstallPlugin,
   reinstallPlugins,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
@@ -19,10 +20,18 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { renderRow } from "../../../extensions/pi-claude-marketplace/presentation/compact-line.ts";
 import { __resetCacheForTests } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { ManualRecoveryError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
-import type { ReinstallFailedOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
+import type {
+  ReinstallFailedOutcome,
+  ReinstallPluginOutcome,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
+import type {
+  ManualRecoveryLine,
+  SoftDepProbe,
+} from "../../../extensions/pi-claude-marketplace/presentation/compact-line.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 interface NotifyRecord {
@@ -1252,6 +1261,107 @@ test("WR-01: findManualRecoveryError respects the depth-5 bound", () => {
   // 5 hops via .cause). The walker visits l0, l1, l2, l3, l4 (5 slots);
   // mre is unreachable.
   assert.equal(__test_findManualRecoveryError(l0), undefined);
+});
+
+/**
+ * D-14-02 / CMC-16 anchor-emission regression guard.
+ *
+ * Plan 14-01 wires `renderManualRecovery` from `presentation/manual-
+ * recovery.ts` into `orchestrators/plugin/reinstall.ts`'s
+ * `renderReinstallPartitionAndNotify` so that outcomes carrying the
+ * structural `failureClass: "manual-recovery"` tag emit a SEPARATE top-
+ * level compact line (MSG-MR-1) below the cascade body. The cascade row's
+ * `(failed) {rollback partial}` shape is preserved verbatim (catalog
+ * byte-binding at docs/output-catalog.md L330); the anchor is ADDITIONAL
+ * structure, not a replacement.
+ *
+ * This test exercises the `__test_renderReinstallPartitionAndNotify` seam
+ * with a synthetic outcome list containing one manual-recovery failure
+ * alongside one successful reinstall, and asserts the captured notify
+ * body contains:
+ *   (a) the cascade `(failed) {rollback partial}` row (preserved binding);
+ *   (b) the separate `⊘ <name>@<marketplace> (manual recovery) {rollback
+ *       partial}` anchor line composed via `renderRow` (preserves the
+ *       grammar contract through the renderer rather than hand-composing);
+ *   (c) a `\n\n` separator between the cascade body and the anchor line
+ *       (MSG-MR-1 blank-line discipline);
+ *   (d) the reload-hint trailer still composes correctly for the
+ *       successful reinstall row (existing trailer composition unaffected).
+ *
+ * The severity dispatch is asserted to be "warning" (any failed row routes
+ * to notifyWarning; MSG-SR-6 forbids notifyError on cascade summaries).
+ */
+test("D-14-02 / CMC-16: manual-recovery outcome emits separate top-level anchor line below cascade body", () => {
+  const { ctx, pi, notifications } = makeCtx();
+  // Mirror the probe shape that `softDepStatus(pi)` produces for our
+  // `makeCtx()` mock (getAllTools returns `[]` -- neither companion loaded).
+  const probe: SoftDepProbe = { piSubagentsLoaded: false, piMcpAdapterLoaded: false };
+  const outcomes: readonly ReinstallPluginOutcome[] = [
+    {
+      partition: "failed",
+      name: "broken",
+      marketplace: "mp",
+      scope: "project",
+      notes: ["staging failed (rollback partial)"],
+      failureClass: "manual-recovery",
+    } satisfies ReinstallFailedOutcome,
+    {
+      partition: "reinstalled",
+      name: "good",
+      marketplace: "mp",
+      scope: "project",
+      version: "1.0.0",
+      stagedAgents: [],
+      stagedMcpServers: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      resourcesChanged: true,
+    },
+  ];
+
+  __test_renderReinstallPartitionAndNotify(ctx, pi, outcomes);
+
+  // Exactly one notification was emitted; severity routes via notifyWarning
+  // because at least one row is (failed) -- MSG-SR-6 forbids notifyError.
+  assert.equal(notifications.length, 1);
+  assert.equal(notifications[0]?.severity, "warning");
+  const body = notifications[0]?.message ?? "";
+
+  // (a) Cascade row preserves the `(failed) {rollback partial}` byte-shape
+  // (catalog byte-binding at docs/output-catalog.md L330).
+  assert.match(body, /⊘ broken \[project\] \(failed\) \{rollback partial\}/);
+  // The successful reinstall row co-exists in the cascade body.
+  assert.match(body, /● good \[project\] v1\.0\.0 \(reinstalled\)/);
+
+  // (b) Separate top-level anchor line composed via renderRow so the
+  // assertion preserves the MSG-MR-1 / MSG-MR-2 grammar contract through
+  // the renderer rather than hand-composing the expected string. Per
+  // MSG-MR-2 the anchor has no `[<scope>]` slot; `resource` collapses to
+  // `<name>@<marketplace>`.
+  const expectedAnchorLine = renderRow(
+    {
+      kind: "manual-recovery",
+      resource: "broken@mp",
+      reasons: ["rollback partial"],
+    } satisfies ManualRecoveryLine,
+    probe,
+  );
+  assert.ok(
+    body.includes(expectedAnchorLine),
+    `expected body to include anchor line ${JSON.stringify(expectedAnchorLine)}; body was ${JSON.stringify(body)}`,
+  );
+
+  // (c) `\n\n` blank-line separator immediately precedes the anchor line
+  // (MSG-MR-1 blank-line discipline). Verify the anchor is preceded by a
+  // blank line rather than appended on the same line as the cascade body.
+  assert.ok(
+    body.includes(`\n\n${expectedAnchorLine}`),
+    `expected blank-line separator before anchor; body was ${JSON.stringify(body)}`,
+  );
+
+  // (d) Reload-hint trailer still composes for the successful reinstall
+  // row (existing trailer composition unaffected by the new emission).
+  assert.match(body, /\/reload to pick up changes/);
 });
 
 test("WR-01: outcomeToCascadeRow path stays correct when the orchestrator catches a release-wrapped MRE", () => {
