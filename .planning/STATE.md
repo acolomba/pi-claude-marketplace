@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Consistent Messaging
-status: ready_to_plan
-stopped_at: Phase 13 complete (10/10) — ready to discuss Phase 14
-last_updated: 2026-05-24T09:55:00.392Z
-last_activity: 2026-05-23 -- Phase 13 wave 9 unblocked by new plan 13-02a-02 (continuation sub-wave): 4 tasks, 3 TDD + 1 cutover; migrates the 6 remaining legacy ES-5 marker callsites onto Wave 1 composers
+status: executing
+stopped_at: Phase 13 context gathered
+last_updated: "2026-05-24T13:05:01.775Z"
+last_activity: 2026-05-24 -- Phase 14.1 planning complete
 progress:
-  total_phases: 7
-  completed_phases: 1
-  total_plans: 14
+  total_phases: 8
+  completed_phases: 2
+  total_plans: 16
   completed_plans: 14
-  percent: 14
+  percent: 25
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-21)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 14 — drift guard & test alignment
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 14.1 — close gap CMC-13 (propagate declaresAgents/Mcp through import cascade rows)
 
 ## Current Position
 
-Phase: 14
+Phase: 14.1
 Plan: Not started
-Status: Ready to plan
-Last activity: 2026-05-24
+Status: Ready to execute
+Last activity: 2026-05-24 -- Phase 14.1 planning complete
 
 ## Performance Metrics
 
@@ -73,6 +73,10 @@ Last activity: 2026-05-24
 | Phase 09 P04 | - | 4 tasks | 4 files |
 
 ## Accumulated Context
+
+### Roadmap Evolution
+
+- Phase 14.1 inserted after Phase 14: Close gap: CMC-13 — propagate declaresAgents/Mcp through import cascade rows (URGENT)
 
 ### Decisions
 

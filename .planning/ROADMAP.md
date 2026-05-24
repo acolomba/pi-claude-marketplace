@@ -230,7 +230,7 @@ Plans:
 
 ## Progress
 
-**Execution Order:** 8 → 9 (v1.1 milestone); 10 → 11 (v1.2 milestone); 12 → 13 → 14 (v1.3 milestone). v1.0 executed 1 → 2 → 3 → 4 → 5 → 6 → 7.
+**Execution Order:** 8 → 9 (v1.1 milestone); 10 → 11 (v1.2 milestone); 12 → 13 → 14.1 → 14 (v1.3 milestone — 14.1 is an audit-driven gap-closure phase, sequenced before Phase 14 so the drift guard doesn't fail on the CMC-13 partial). v1.0 executed 1 → 2 → 3 → 4 → 5 → 6 → 7.
 
 | Phase                                        | Goal                                                                              | Requirements                                                                                                                                              | Plans      | Status      | Completed  |
 | -------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ----------- | ---------- |
@@ -241,6 +241,7 @@ Plans:
 | 12. Messaging Foundations (v1.3)             | Closed-set constants, renderer/notify primitives, reload-hint collapse            | CMC-08, CMC-11, CMC-14, CMC-19, CMC-36, CMC-37                                                                                                            | 0/4 plans  | Not started | --         |
 | 13. Conformance Refactor & ES-5 (v1.3)       | Mechanical callsite rewrite + ES-5 atomic edit + per-command catalog conformance  | CMC-01..07, CMC-09, CMC-10, CMC-12, CMC-13, CMC-15..18, CMC-20, CMC-21, CMC-22..34, CMC-35                                                                | 0/9 plans  | Not started | --         |
 | 14. Drift Guard & Test Alignment (v1.3)      | Frontmatter-driven drift test suite that fails `npm run check` on contract drift  | CMC-38                                                                                                                                                    | 0/? plans  | Not started | --         |
+| 14.1. Close gap: CMC-13 import propagation   | Close v1.3 audit BLOCKER on `/claude:plugin import` cascade soft-dep markers       | CMC-13                                                                                                                                                    | 0/2 plans  | Planned     | --         |
 
 ## Coverage (v1.3)
 
@@ -329,3 +330,38 @@ ______________________________________________________________________
 *Last updated: 2026-05-16 after merge from main brought in v1.2 phases 10 & 11.*
 *Last updated: 2026-05-22 -- v1.3 Consistent Messaging milestone added: Phases 12 (Foundations), 13 (Conformance Refactor & ES-5), 14 (Drift Guard). 38/38 CMC requirements mapped (100% coverage). Continued phase numbering from 11; no reset.*
 *Last updated: 2026-05-23 -- Phase 13 expanded to 10 plans (Wave 2 sub-wave 2a continuation `13-02a-02` inserted between `13-02a-01` and `13-02b-01`): migrate the 6 remaining legacy ES-5 marker emission sites (4 manual-recovery + 2 rollback-partial) onto the Wave 1 composers; unblocks 13-03-02 ES-5 atomic commit.*
+
+### Phase 14.1: Close gap: CMC-13 — propagate declaresAgents/Mcp through import cascade rows (INSERTED)
+
+**Goal:** Propagate `declaresAgents` / `declaresMcp` predicates from the install
+path through the import-orchestrator cascade rows so per-row
+`{requires pi-subagents}` / `{requires pi-mcp}` soft-dep markers fire on
+`/claude:plugin import`. Replaces the hard-coded
+`declaresAgents=false`/`declaresMcp=false` literals at
+`extensions/pi-claude-marketplace/orchestrators/import/execute.ts:474-475`
+that the v1.3 milestone audit flagged as a BLOCKER integration-layer gap on
+CMC-13. After this phase, CMC-13 moves from PARTIAL (per audit) to
+SATISFIED on every cascade surface (install / reinstall / update / import).
+**Requirements:** CMC-13
+**Depends on:** Phase 13 (consumes the cascade-row schema and renderer wired
+there); sequenced BEFORE Phase 14 so the drift-guard suite landing in
+Phase 14 does not retroactively fail `npm run check` on the partial.
+**Plans:** 2 plans
+
+Plans:
+
+**Wave 1**
+- [ ] 14.1-01-PLAN.md — Plumbing: widen `InstallPluginOutcome.installed` and
+  `PluginInstalledOutcome` with required `declaresAgents`/`declaresMcp`
+  predicates, propagate through the case-`installed` switch arm, replace
+  the hard-coded literals at `import/execute.ts:474-475`, widen the 12
+  historical `installPlugin` test-doubles, add 4 predicate-coverage unit
+  tests.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 14.1-02-PLAN.md — Catalog + UAT round-trip: add a
+  `<!-- catalog-state: soft-dep-markers -->` fixture under
+  `## /claude:plugin import` in `docs/output-catalog.md`, paired with the
+  fixture function in `tests/architecture/catalog-uat.test.ts` using
+  `cascadeSummary` + `PROBE_BOTH_UNLOADED` (no hand-composed literals).
+  The byte-equal-pairing test proves the new wiring end-to-end.
