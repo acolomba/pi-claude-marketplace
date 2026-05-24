@@ -21,7 +21,7 @@ The roadmap continues phase numbering from the completed v1.2 import milestone (
 - [x] **Phase 10: Claude Settings Import Foundation** (v1.2) -- Read/merge Claude settings, extract enabled plugin refs, map marketplace sources including official built-in marketplace
 - [x] **Phase 11: Import Command Orchestration** (v1.2) -- `/claude:plugin import [--scope user|project]` handler, idempotent marketplace/plugin orchestration, warnings and reload-hint integration
 - [x] **Phase 12: Messaging Foundations & Renderer Primitives** (v1.3) -- Closed-set constants, renderer/notify primitives, reload-hint composer collapse, sentence-form `console.warn` rewording: the scaffolding the conformance refactor will consume (completed 2026-05-22)
-- [ ] **Phase 13: Conformance Refactor & ES-5 Supersession** (v1.3) -- Mechanical rewrite of every user-visible callsite + ES-5 atomic three-file edit + per-command catalog conformance + display-semantics (per-scope rendering, plugin folding, adoption)
+- [x] **Phase 13: Conformance Refactor & ES-5 Supersession** (v1.3) -- Mechanical rewrite of every user-visible callsite + ES-5 atomic three-file edit + per-command catalog conformance + display-semantics (per-scope rendering, plugin folding, adoption) (completed 2026-05-24)
 - [ ] **Phase 14: Drift Guard & Test Alignment** (v1.3) -- Frontmatter-driven drift test suite that reads the style guide as the binding contract; `npm run check` fails on out-of-set tokens or MSG-* violations
 
 Phases 1-7 belong to the v1.0 successor architecture and are documented in `PROJECT.md` under Validated requirements.
@@ -188,7 +188,7 @@ Plans:
 4. Per-scope rendering works end-to-end: a marketplace that exists in both scopes renders as two separate headers (one per scope, each with its own marker / status / reasons); the plugin-list orphan fold rule and the marketplace-add adoption behavior round-trip correctly (orphan plugins fold under user-scope, get adopted when a project-scope marketplace is later added).
 5. Cascade severity routes per MSG-SR-4..6: an all-trivial cascade uses `notifySuccess`; a cascade with any non-trivial `(skipped)` or `(failed)` row uses `notifyWarning`; no cascade summary uses `notifyError`. The reload-hint trailer fires exactly once per body when any resource changed; omitted on all-failed cascades and bare manifest-only refreshes; coexists with the recovery anchor (reload above retry, blank line between) on partial-failure remove surfaces.
 
-**Plans:** 9/10 plans executed
+**Plans:** 10/10 plans complete
 
 Plans:
 
