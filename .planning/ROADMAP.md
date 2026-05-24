@@ -346,6 +346,20 @@ ______________________________________________________________________
 *Last updated: 2026-05-22 -- v1.3 Consistent Messaging milestone added: Phases 12 (Foundations), 13 (Conformance Refactor & ES-5), 14 (Drift Guard). 38/38 CMC requirements mapped (100% coverage). Continued phase numbering from 11; no reset.*
 *Last updated: 2026-05-23 -- Phase 13 expanded to 10 plans (Wave 2 sub-wave 2a continuation `13-02a-02` inserted between `13-02a-01` and `13-02b-01`): migrate the 6 remaining legacy ES-5 marker emission sites (4 manual-recovery + 2 rollback-partial) onto the Wave 1 composers; unblocks 13-03-02 ES-5 atomic commit.*
 
+### Phase 14.2: Address tech debt: CR-01 + retroactive Phase 12 / 14.1 gates (INSERTED)
+
+**Goal:** Close v1.3 milestone tech debt so `/gsd:complete-milestone v1.3` archives cleanly with zero outstanding gates: replace 3 local user-first `scopeOrder` helpers with canonical `compareByNameThenScope` (CR-01, affecting CMC-03/25/26/27); tighten the MSG-GR-3 lint rule from no-op to active AST detector; run retroactive `/gsd:secure-phase` + `/gsd:validate-phase` against Phase 12 (existing draft VALIDATION.md) and Phase 14.1 (no prior artefacts); flip 29 Phase-13 CMC checkboxes in ROADMAP.md Coverage and update the 14.1 Phase Details row.
+**Requirements**: CMC-03, CMC-25, CMC-26, CMC-27 (observably-affected v1.3 requirements per CR-01; gate-running plans address no new requirements)
+**Depends on:** Phase 14
+**Plans:** 5 plans
+
+Plans:
+- [ ] `14.2-01-PLAN.md` -- CR-01 cascade-block-ordering fix: replace 3 local `scopeOrder` helpers with `compareByNameThenScope`; flip `autoupdate.ts:114` iteration order; extend `catalog-uat.test.ts` cross-scope fixture; update 3 orchestrator unit-test cross-scope fixtures (Wave 1)
+- [ ] `14.2-02-PLAN.md` -- MSG-GR-3 lint rule tightening: rewrite `tests/lint-rules/msg-gr-3-per-scope.js` from no-op to active two-axis AST detector; move to orchestrator-scoped ESLint block; PROJECT.md D-14-2-08 supersession entry (Wave 1, depends on 14.2-01)
+- [ ] `14.2-03-PLAN.md` -- Phase 12 retroactive gates: `/gsd:secure-phase 12` + `/gsd:validate-phase 12` (existing draft to validated) (Wave 2)
+- [ ] `14.2-04-PLAN.md` -- Phase 14.1 retroactive gates: `/gsd:secure-phase 14.1` + `/gsd:validate-phase 14.1` (fresh artefacts) (Wave 2)
+- [ ] `14.2-05-PLAN.md` -- ROADMAP cosmetic drift: flip 29 Phase-13 CMC checkboxes in Coverage table; update 14.1 Phase Details row; SUMMARY.md investigation note on GSD-plugin auto-flip gap (Wave 3)
+
 ### Phase 14.1: Close gap: CMC-13 -- propagate declaresAgents/Mcp through import cascade rows (INSERTED)
 
 **Goal:** Propagate `declaresAgents` / `declaresMcp` predicates from the install
