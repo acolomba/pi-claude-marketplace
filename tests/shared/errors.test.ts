@@ -8,6 +8,7 @@ import {
   ConcurrentUninstallError,
   CrossPluginConflictError,
   errorMessage,
+  ManualRecoveryError,
   PluginUpdatePhase3Error,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
@@ -113,4 +114,42 @@ test("PluginUpdatePhase3Error: PUP-6 aggregate with cause + failures payload", (
   assert.equal(first.msg, "oops");
   assert.equal(first.cause, inner);
   assert.equal(err.message, "plugin update phase 3 failed");
+});
+
+/**
+ * Plan 13-02a-02 / CMC-16 -- ManualRecoveryError shape contract.
+ *
+ * The bridges (`bridges/{skills,commands,agents}/stage.ts`) throw this when
+ * a rollback of a partially-completed replacement swap leaks files. The
+ * legacy MSG-MR-1 / ES-5 marker-prefixed message form (retired in Wave 2
+ * sub-wave 2a continuation) is NOT embedded in `.message`; the leak payload
+ * lives structurally on `.leaks` so the orchestrator can type-check the
+ * Error instead of substring-matching the message.
+ */
+
+test("ManualRecoveryError: message is the bare original text (no legacy ES-5 marker prefix)", () => {
+  const err = new ManualRecoveryError("staging failed", ["agents: leak A", "skills: leak B"]);
+  assert.equal(err.message, "staging failed");
+});
+
+test("ManualRecoveryError: ErrorOptions cause-chain wires through super()", () => {
+  const rootErr = new Error("root");
+  const err = new ManualRecoveryError("base", ["x"], { cause: rootErr });
+  assert.equal((err as Error & { cause: unknown }).cause, rootErr);
+});
+
+test("ManualRecoveryError: name is set so instanceof + structural type-tag checks work", () => {
+  const err = new ManualRecoveryError("m", ["x"]);
+  assert.equal(err.name, "ManualRecoveryError");
+});
+
+test("ManualRecoveryError: leaks payload is exposed verbatim on the readonly field", () => {
+  const err = new ManualRecoveryError("m", ["a", "b"]);
+  assert.deepEqual(err.leaks, ["a", "b"]);
+});
+
+test("ManualRecoveryError: instanceof both ManualRecoveryError and Error", () => {
+  const err = new ManualRecoveryError("m", ["x"]);
+  assert.ok(err instanceof ManualRecoveryError);
+  assert.ok(err instanceof Error);
 });

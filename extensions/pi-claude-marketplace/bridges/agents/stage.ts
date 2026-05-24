@@ -33,9 +33,8 @@ import writeFileAtomic from "write-file-atomic";
 import { assertSafeName } from "../../domain/name.ts";
 import { loadAgentsIndex, saveAgentsIndex } from "../../persistence/agents-index-io.ts";
 import { AgentOwnershipConflictError } from "../../shared/errors-bridges.ts";
-import { appendLeakToError, errorMessage } from "../../shared/errors.ts";
+import { appendLeakToError, errorMessage, ManualRecoveryError } from "../../shared/errors.ts";
 import { cleanupStaging, pathExists, rollbackReplacementCommon } from "../../shared/fs-utils.ts";
-import { MANUAL_RECOVERY_REQUIRED } from "../../shared/markers.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
 import { assertNoAgentCollisions, convertAgent } from "./convert.ts";
@@ -452,9 +451,7 @@ export async function replacePreparedAgents(
       oldIndexText,
     );
     if (leaks.length > 0) {
-      throw new Error(`${errorMessage(err)} ${MANUAL_RECOVERY_REQUIRED}${leaks.join("; ")}`, {
-        cause: err,
-      });
+      throw new ManualRecoveryError(errorMessage(err), leaks, { cause: err });
     }
 
     throw err;

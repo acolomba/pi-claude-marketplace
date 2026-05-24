@@ -264,6 +264,35 @@ export class PluginUpdatePhase3Error extends Error {
   }
 }
 
+/**
+ * Plan 13-02a-02 / CMC-16: structured manual-recovery signal for the
+ * bridge-replacement leak path.
+ *
+ * Bridges (`bridges/{skills,commands,agents}/stage.ts`) throw this when a
+ * rollback of a partially-completed `replace*Internal` swap leaks files /
+ * directories the caller must clean up by hand. The legacy MSG-MR-1 / ES-5
+ * marker-prefixed message form (retired in Wave 2 sub-wave 2a continuation)
+ * is NOT embedded in `.message` -- per CMC-16 / Plan 13-01-02 (MSG-MR-1 /
+ * MSG-MR-2) the manual-recovery anchor is composed at the notify boundary
+ * via `renderManualRecovery`. Bridges produce STRUCTURED data (`.leaks`);
+ * the orchestrator (`orchestrators/plugin/reinstall.ts::narrowReason` and
+ * the `outcomeToCascadeRow` mapper) type-checks the Error instead of
+ * substring-matching the message text.
+ *
+ * `Error.cause` is set via the standard `ErrorOptions` bag (mirrors the
+ * `PluginUpdatePhase3Error` precedent above) so the depth-5
+ * `causeChainTrailer` walker surfaces the originating bridge error to the
+ * user via the `notifyError` boundary.
+ */
+export class ManualRecoveryError extends Error {
+  readonly leaks: readonly string[];
+  constructor(message: string, leaks: readonly string[], options?: ErrorOptions) {
+    super(message, options);
+    this.name = "ManualRecoveryError";
+    this.leaks = leaks;
+  }
+}
+
 export interface ResourcesDiscoverFailure {
   readonly scope: "user" | "project";
   readonly kind: "skills" | "prompts";
