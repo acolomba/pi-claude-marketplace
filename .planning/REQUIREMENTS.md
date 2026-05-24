@@ -356,68 +356,68 @@ Requirements for the Claude settings import milestone. Additive to the v1.0 PRD 
 
 ### Compact-Line Grammar
 
-- [ ] **CMC-01**: Every `ctx.ui.notify` compact line conforms to the universal shape `<icon> <name>[@marketplace] [scope(s)] [<marker>] [version] (status) {reason(s)}` with fixed token order; absent slots are omitted entirely; no placeholder text rendered (MSG-GR-1).
-- [ ] **CMC-02**: The `@<marketplace>` token renders only on standalone single-plugin mentions; it is omitted on marketplace-headed cascade rows where the marketplace is in the header (MSG-GR-2).
-- [ ] **CMC-03**: Scope rendering is per-scope on every surface for both marketplaces and plugins; lists are flat (no per-scope group-header lines); sort is name-primary case-insensitive `localeCompare` with `sensitivity: 'base'`, project-before-user as the tie-breaker (MSG-GR-3).
-- [ ] **CMC-04**: Reasons render inside a single `{}` block, comma-separated, 1-3 words lowercase, hyphenated where natural; manifest field names render verbatim as the sole carve-out (`{hooks}`, `{lspServers}`); the empty `{}` form is never emitted (MSG-GR-4).
-- [ ] **CMC-05**: Marketplace rows and headers carry a `<marker>` slot between scope and status: `<autoupdate>` whenever autoupdate is ON on every marketplace-rendering surface; omitted when OFF; `<no autoupdate>` appears in exactly one place -- the result row of `marketplace autoupdate disable` (MSG-GR-5).
+- [x] **CMC-01**: Every `ctx.ui.notify` compact line conforms to the universal shape `<icon> <name>[@marketplace] [scope(s)] [<marker>] [version] (status) {reason(s)}` with fixed token order; absent slots are omitted entirely; no placeholder text rendered (MSG-GR-1).
+- [x] **CMC-02**: The `@<marketplace>` token renders only on standalone single-plugin mentions; it is omitted on marketplace-headed cascade rows where the marketplace is in the header (MSG-GR-2).
+- [x] **CMC-03**: Scope rendering is per-scope on every surface for both marketplaces and plugins; lists are flat (no per-scope group-header lines); sort is name-primary case-insensitive `localeCompare` with `sensitivity: 'base'`, project-before-user as the tie-breaker (MSG-GR-3).
+- [x] **CMC-04**: Reasons render inside a single `{}` block, comma-separated, 1-3 words lowercase, hyphenated where natural; manifest field names render verbatim as the sole carve-out (`{hooks}`, `{lspServers}`); the empty `{}` form is never emitted (MSG-GR-4).
+- [x] **CMC-05**: Marketplace rows and headers carry a `<marker>` slot between scope and status: `<autoupdate>` whenever autoupdate is ON on every marketplace-rendering surface; omitted when OFF; `<no autoupdate>` appears in exactly one place -- the result row of `marketplace autoupdate disable` (MSG-GR-5).
 
 ### Icon Discipline
 
-- [ ] **CMC-06**: Plugin rows use the effective-state icon set: `●` when the plugin is installed and in the requested state; `○` when not installed with no error (`(available)`, `(uninstalled)`); `⊘` for error or failure-cascade-child states regardless of install state (MSG-IC-1..3).
-- [ ] **CMC-07**: Marketplace rows and headers always carry a leading icon under the outcome-class rule: `●` for OK outcomes (including `(removed)`), `⊘` for failure outcomes (including manifest unparseable / source mismatch).
+- [x] **CMC-06**: Plugin rows use the effective-state icon set: `●` when the plugin is installed and in the requested state; `○` when not installed with no error (`(available)`, `(uninstalled)`); `⊘` for error or failure-cascade-child states regardless of install state (MSG-IC-1..3).
+- [x] **CMC-07**: Marketplace rows and headers always carry a leading icon under the outcome-class rule: `●` for OK outcomes (including `(removed)`), `⊘` for failure outcomes (including manifest unparseable / source mismatch).
 
 ### Status Tokens (closed set)
 
 - [x] **CMC-08**: Status tokens are constrained to the closed enum in the style-guide §3 frontmatter (`installed`, `updated`, `uninstalled`, `added`, `removed`, `available`, `unavailable`, `upgradable`, `skipped`, `failed`, `rollback failed`, `manual recovery`, `no marketplaces`, `no plugins`). Per Phase 12 research §3.1, the cascade-partition discriminant at `orchestrators/types.ts:12` is an internal partition kind, never rendered as a user-visible parenthesised token; the closed set is the 14 frontmatter entries (drift-guarded by `tests/architecture/grammar-frontmatter.test.ts`). The legacy `unchanged` partition is folded into `(skipped) {up-to-date}` -- `unchanged` is not a distinct token (style guide §3.2).
-- [ ] **CMC-09**: `(upgradable)` is computed per PRD PL-5 string compare and rendered only by `list`; it MUST NOT appear on install / update / uninstall / reinstall result rows (MSG-PL-4).
-- [ ] **CMC-10**: Empty result tokens `(no marketplaces)` and `(no plugins)` render as a bare compact token (no icon, name, scope brackets, or reasons); routed via `notifySuccess`; legacy sentence forms `No marketplaces configured.` / `No plugins installed.` retired (MSG-ER-1).
+- [x] **CMC-09**: `(upgradable)` is computed per PRD PL-5 string compare and rendered only by `list`; it MUST NOT appear on install / update / uninstall / reinstall result rows (MSG-PL-4).
+- [x] **CMC-10**: Empty result tokens `(no marketplaces)` and `(no plugins)` render as a bare compact token (no icon, name, scope brackets, or reasons); routed via `notifySuccess`; legacy sentence forms `No marketplaces configured.` / `No plugins installed.` retired (MSG-ER-1).
 
 ### Reasons Enum (closed set, expanded)
 
 - [x] **CMC-11**: Reasons render only from the closed enum in the style-guide §4 frontmatter (23 reasons; the binding count is the frontmatter, per Phase 12 research §2.1 -- previously written as 24 in this requirement and the roadmap; reconciled to match the style-guide frontmatter via the Phase 12 drift test at `tests/architecture/grammar-frontmatter.test.ts`). New v1.3 additions over the V1 set: `{plugins remain}`, `{unparseable}`, `{unreadable manifest}`, `{not in manifest}`, `{not installed}`, `{invalid manifest}`, `{source mismatch}`, `{concurrently uninstalled}`, `{concurrently updated}`, `{stale clone}`, `{duplicate name}`, `{lock held}`.
-- [ ] **CMC-12**: Soft-dependency reasons render as `{requires pi-subagents}` and `{requires pi-mcp}` (renamed from the legacy ES-5 sentences `pi-subagents is not loaded; …` and `pi-mcp-adapter is not loaded; …`).
-- [ ] **CMC-13**: Soft-dep markers fire on installed / updated / reinstalled rows, on `list`-rendering `(available)` and `(installed)` rows, and per-row inside `import` / `update` / `reinstall` cascades whenever (a) the plugin declares the corresponding resource AND (b) the companion extension is unloaded; markers MUST NOT appear on `(uninstalled)` rows (MSG-SD-1..3). Today's aggregated single-trailer emission is replaced by per-row `{}` reasons.
+- [x] **CMC-12**: Soft-dependency reasons render as `{requires pi-subagents}` and `{requires pi-mcp}` (renamed from the legacy ES-5 sentences `pi-subagents is not loaded; …` and `pi-mcp-adapter is not loaded; …`).
+- [x] **CMC-13**: Soft-dep markers fire on installed / updated / reinstalled rows, on `list`-rendering `(available)` and `(installed)` rows, and per-row inside `import` / `update` / `reinstall` cascades whenever (a) the plugin declares the corresponding resource AND (b) the companion extension is unloaded; markers MUST NOT appear on `(uninstalled)` rows (MSG-SD-1..3). Today's aggregated single-trailer emission is replaced by per-row `{}` reasons.
 
 ### Reload Hint
 
 - [x] **CMC-14**: The reload-hint trailer is the single canonical string `/reload to pick up changes`, preceded by one blank line, appended after the parent body. The three-verb form (`load` / `refresh` / `drop`) is retired. The trailer fires exactly once per body and ONLY when at least one staged / advanced / removed resource changed on disk; it MUST be omitted on all-failed cascades and on bare manifest-only refreshes (MSG-RH-1).
-- [ ] **CMC-15**: On `notifyWarning` partial-failure recovery surfaces (e.g. `marketplace remove` with plugin-unstage failures), the reload trailer and the recovery anchor `Fix the underlying issue and retry.` both fire when applicable -- reload above retry, blank line between. When no resource changed, the reload trailer is omitted and the recovery anchor stands alone.
+- [x] **CMC-15**: On `notifyWarning` partial-failure recovery surfaces (e.g. `marketplace remove` with plugin-unstage failures), the reload trailer and the recovery anchor `Fix the underlying issue and retry.` both fire when applicable -- reload above retry, blank line between. When no resource changed, the reload trailer is omitted and the recovery anchor stands alone.
 
 ### Manual Recovery & Rollback
 
-- [ ] **CMC-16**: Manual recovery renders as a separate top-level compact line `⊘ <resource> (manual recovery) {<reason>}` preceded by a blank line, independent of the triggering operation. For system-level resources (agent index, `state.json`) the resource name goes directly in the name slot -- no `@<marketplace>`, no scope brackets. The legacy `MANUAL RECOVERY REQUIRED: <path> (<reason>)` sentence prefix is retired (MSG-MR-1..2).
-- [ ] **CMC-17**: Rollback-partial renders as `(failed) {rollback partial}` (multi-phase) or `(failed) {<phase>}` (single phase) on the parent line, with indented per-phase children at 2-space indent (each child a self-contained compact line with its own status token). The legacy parenthesised `(rollback partial: [<phase>] <msg>; …)` form is retired (MSG-RP-1).
-- [ ] **CMC-18**: Cause chains render as a single trailing line `cause: <link1> -> <link2> -> ...` (lowercase `cause:`, space-arrow-space joiner); chain traversal bounded to depth 5 per ES-4 with `(truncated)` suffix on the depth-5 link; emitted only when `Error.cause` is present (MSG-CC-1).
+- [x] **CMC-16**: Manual recovery renders as a separate top-level compact line `⊘ <resource> (manual recovery) {<reason>}` preceded by a blank line, independent of the triggering operation. For system-level resources (agent index, `state.json`) the resource name goes directly in the name slot -- no `@<marketplace>`, no scope brackets. The legacy `MANUAL RECOVERY REQUIRED: <path> (<reason>)` sentence prefix is retired (MSG-MR-1..2).
+- [x] **CMC-17**: Rollback-partial renders as `(failed) {rollback partial}` (multi-phase) or `(failed) {<phase>}` (single phase) on the parent line, with indented per-phase children at 2-space indent (each child a self-contained compact line with its own status token). The legacy parenthesised `(rollback partial: [<phase>] <msg>; …)` form is retired (MSG-RP-1).
+- [x] **CMC-18**: Cause chains render as a single trailing line `cause: <link1> -> <link2> -> ...` (lowercase `cause:`, space-arrow-space joiner); chain traversal bounded to depth 5 per ES-4 with `(truncated)` suffix on the depth-5 link; emitted only when `Error.cause` is present (MSG-CC-1).
 
 ### Severity Routing
 
 - [x] **CMC-19**: Severity is delivered structurally via the four sanctioned wrappers (`notifySuccess`, `notifyWarning`, `notifyError`, `notifyUsageError`) per MSG-SR-1..7. No `[error]` / `[warning]` prefix is embedded in message text (reaffirms PRD §6.12 ES-2).
-- [ ] **CMC-20**: Cascade summaries route via `notifyWarning` (not `notifyError`) when any row is non-trivially `(skipped)` or `(failed)`; route via `notifySuccess` when every row is trivially-successful or trivially-`(skipped) {up-to-date}`. A cascade summary never uses `notifyError` (MSG-SR-4..6).
+- [x] **CMC-20**: Cascade summaries route via `notifyWarning` (not `notifyError`) when any row is non-trivially `(skipped)` or `(failed)`; route via `notifySuccess` when every row is trivially-successful or trivially-`(skipped) {up-to-date}`. A cascade summary never uses `notifyError` (MSG-SR-4..6).
 
 ### Display Semantics (renderer + state mutation)
 
-- [ ] **CMC-21**: Marketplaces render per scope on every surface (no collapse). On the plugin-list surface, orphan project-scoped plugins of a marketplace name fold under a `<marketplace> [user]` header when no `<marketplace> [project]` header exists; the plugin row's `[<scope>]` always reflects the plugin's actual install scope. When a project-scope marketplace is later added, previously-folded project-scoped plugins are ADOPTED by the new `<marketplace> [project]` header at adoption time.
+- [x] **CMC-21**: Marketplaces render per scope on every surface (no collapse). On the plugin-list surface, orphan project-scoped plugins of a marketplace name fold under a `<marketplace> [user]` header when no `<marketplace> [project]` header exists; the plugin row's `[<scope>]` always reflects the plugin's actual install scope. When a project-scope marketplace is later added, previously-folded project-scoped plugins are ADOPTED by the new `<marketplace> [project]` header at adoption time.
 
 ### Per-Command Conformance (each command matches the catalog)
 
-- [ ] **CMC-22**: `/claude:plugin list` renders the marketplace-header + indented-plugin-rows form (or `(no plugins)` empty form). PL-4 descriptions are list-only, second indented line, truncated at column 66 with `…` suffix. `(upgradable)` and `(available)` / `(unavailable)` rows follow the MSG-PL-2..6 version-slot and scope-bracket carve-outs.
-- [ ] **CMC-23**: `/claude:plugin install <plugin>@<marketplace>` renders single-plugin inline (`<plugin>@<marketplace>` kept inline; no marketplace header). Success rows route via `notifySuccess`; soft-dep reasons appear on the success row when applicable; rollback-partial failures use the section-8 child-row structure.
-- [ ] **CMC-24**: `/claude:plugin uninstall <plugin>@<marketplace>` renders single-plugin inline with the `○` icon (effective-state rule). Soft-dep markers are excluded from `(uninstalled)` rows.
-- [ ] **CMC-25**: `/claude:plugin reinstall` renders the marketplace-header + indented `(reinstalled)` / `(skipped)` / `(failed)` cascade rows; severity routes per MSG-SR-4..6; reload trailer per MSG-RH-1; the `Reinstalled:` / `Skipped:` / `Failed:` partition-header lines are retired.
-- [ ] **CMC-26**: `/claude:plugin update` renders the marketplace-header + indented cascade rows with version-transition arrows on `(updated)` rows per MSG-PL-3; all-trivial cascades route via `notifySuccess` with no reload trailer.
-- [ ] **CMC-27**: `/claude:plugin import` renders the `Claude plugin import summary` preamble + blank line + per-scope marketplace headers carrying `(added)` / `(skipped)` / `(failed)` outcomes + indented plugin rows. `--scope user|project` narrows the cascade; source-mismatch on an existing marketplace renders `(failed) {source mismatch}` with dependent plugins as `⊘ (skipped) {source mismatch}` cascade children.
-- [ ] **CMC-28**: `/claude:plugin bootstrap` renders single-marketplace `(added)` or `(skipped) {already installed}` with the explicit `<autoupdate>` marker (bootstrap forces autoupdate on).
-- [ ] **CMC-29**: `/claude:plugin marketplace list` renders flat marketplace rows (no header form), per-scope, sorted name-primary with project-before-user tie-breaker; empty case is `(no marketplaces)`.
-- [ ] **CMC-30**: `/claude:plugin marketplace add` renders single-marketplace `(added)` with the `<autoupdate>` marker per source kind (GitHub source defaults ON, path source defaults OFF -- omit the marker).
-- [ ] **CMC-31**: `/claude:plugin marketplace remove` is conditional: bare-row form on clean success; marketplace-header + indented children form on partial failure with `(failed) {plugins remain}`; reload trailer + retry anchor coexist per MSG-RH-1 and CMC-15.
-- [ ] **CMC-32**: `/claude:plugin marketplace update` renders the marketplace itself as the header (carrying `(updated)` / `(failed)`) with indented plugin cascade rows when autoupdate is on; manifest-only refresh (autoupdate off) renders the marketplace line alone. The `Updated marketplace "X" in <scope> scope.` summary line is retired.
-- [ ] **CMC-33**: `/claude:plugin marketplace autoupdate enable|disable` renders flat marketplace rows with the marker as the sole outcome indicator (no status token); already-matching marketplaces carry `{already enabled}` / `{already disabled}`; `<no autoupdate>` appears only here.
-- [ ] **CMC-34**: Entity-shaped non-cascade errors (install / uninstall / update against an unknown plugin or marketplace) render as a compact line `⊘ <name>[@<marketplace>] [scope] (failed) {<reason>}`; argument-parsing failures stay sentence-form via `notifyUsageError` with the Usage block after a blank line (MSG-NC-1..2 / MSG-SR-7).
+- [x] **CMC-22**: `/claude:plugin list` renders the marketplace-header + indented-plugin-rows form (or `(no plugins)` empty form). PL-4 descriptions are list-only, second indented line, truncated at column 66 with `…` suffix. `(upgradable)` and `(available)` / `(unavailable)` rows follow the MSG-PL-2..6 version-slot and scope-bracket carve-outs.
+- [x] **CMC-23**: `/claude:plugin install <plugin>@<marketplace>` renders single-plugin inline (`<plugin>@<marketplace>` kept inline; no marketplace header). Success rows route via `notifySuccess`; soft-dep reasons appear on the success row when applicable; rollback-partial failures use the section-8 child-row structure.
+- [x] **CMC-24**: `/claude:plugin uninstall <plugin>@<marketplace>` renders single-plugin inline with the `○` icon (effective-state rule). Soft-dep markers are excluded from `(uninstalled)` rows.
+- [x] **CMC-25**: `/claude:plugin reinstall` renders the marketplace-header + indented `(reinstalled)` / `(skipped)` / `(failed)` cascade rows; severity routes per MSG-SR-4..6; reload trailer per MSG-RH-1; the `Reinstalled:` / `Skipped:` / `Failed:` partition-header lines are retired.
+- [x] **CMC-26**: `/claude:plugin update` renders the marketplace-header + indented cascade rows with version-transition arrows on `(updated)` rows per MSG-PL-3; all-trivial cascades route via `notifySuccess` with no reload trailer.
+- [x] **CMC-27**: `/claude:plugin import` renders the `Claude plugin import summary` preamble + blank line + per-scope marketplace headers carrying `(added)` / `(skipped)` / `(failed)` outcomes + indented plugin rows. `--scope user|project` narrows the cascade; source-mismatch on an existing marketplace renders `(failed) {source mismatch}` with dependent plugins as `⊘ (skipped) {source mismatch}` cascade children.
+- [x] **CMC-28**: `/claude:plugin bootstrap` renders single-marketplace `(added)` or `(skipped) {already installed}` with the explicit `<autoupdate>` marker (bootstrap forces autoupdate on).
+- [x] **CMC-29**: `/claude:plugin marketplace list` renders flat marketplace rows (no header form), per-scope, sorted name-primary with project-before-user tie-breaker; empty case is `(no marketplaces)`.
+- [x] **CMC-30**: `/claude:plugin marketplace add` renders single-marketplace `(added)` with the `<autoupdate>` marker per source kind (GitHub source defaults ON, path source defaults OFF -- omit the marker).
+- [x] **CMC-31**: `/claude:plugin marketplace remove` is conditional: bare-row form on clean success; marketplace-header + indented children form on partial failure with `(failed) {plugins remain}`; reload trailer + retry anchor coexist per MSG-RH-1 and CMC-15.
+- [x] **CMC-32**: `/claude:plugin marketplace update` renders the marketplace itself as the header (carrying `(updated)` / `(failed)`) with indented plugin cascade rows when autoupdate is on; manifest-only refresh (autoupdate off) renders the marketplace line alone. The `Updated marketplace "X" in <scope> scope.` summary line is retired.
+- [x] **CMC-33**: `/claude:plugin marketplace autoupdate enable|disable` renders flat marketplace rows with the marker as the sole outcome indicator (no status token); already-matching marketplaces carry `{already enabled}` / `{already disabled}`; `<no autoupdate>` appears only here.
+- [x] **CMC-34**: Entity-shaped non-cascade errors (install / uninstall / update against an unknown plugin or marketplace) render as a compact line `⊘ <name>[@<marketplace>] [scope] (failed) {<reason>}`; argument-parsing failures stay sentence-form via `notifyUsageError` with the Usage block after a blank line (MSG-NC-1..2 / MSG-SR-7).
 
 ### ES-5 Supersession & console.warn
 
-- [ ] **CMC-35**: Legacy ES-5 marker strings (`pi-subagents is not loaded; …`, `pi-mcp-adapter is not loaded; …`, `Run /reload to <verb> …`, `MANUAL RECOVERY REQUIRED: …`, `(rollback partial: [<phase>] <msg>; …)`) are retired throughout the codebase. The atomic three-file edit (`shared/markers.ts` + `tests/architecture/markers-snapshot.test.ts` + `docs/prd/pi-claude-marketplace-prd.md` §6.12) lands in a single commit per the style-guide §15 supersession contract.
+- [x] **CMC-35**: Legacy ES-5 marker strings (`pi-subagents is not loaded; …`, `pi-mcp-adapter is not loaded; …`, `Run /reload to <verb> …`, `MANUAL RECOVERY REQUIRED: …`, `(rollback partial: [<phase>] <msg>; …)`) are retired throughout the codebase. The atomic three-file edit (`shared/markers.ts` + `tests/architecture/markers-snapshot.test.ts` + `docs/prd/pi-claude-marketplace-prd.md` §6.12) lands in a single commit per the style-guide §15 supersession contract.
 - [x] **CMC-36**: The single sanctioned `console.warn` at `persistence/migrate.ts` adopts the proposed §14.1 wording (sentence form, terminal period, no compact-grammar tokens, no `MANUAL RECOVERY REQUIRED:` prefix); no second `console.warn` callsite is introduced (MSG-LC-1).
 - [x] **CMC-37**: The eslint discipline at the IL-3 call site is preserved: inline `eslint-disable-next-line no-restricted-syntax, no-console -- IL-3: <rationale>` comment on the line directly above the `console.warn(...)`; no config-file override added. Other `console.*` calls remain forbidden by `no-restricted-syntax` + `no-console` (MSG-LC-2).
 
@@ -727,41 +727,41 @@ Every v1 REQ-ID maps to exactly one phase. Status `Pending` until execution upda
 | PRL-14      | Phase 9  | Complete |
 | PRL-15      | Phase 9  | Complete |
 | PRL-16      | Phase 9  | Complete |
-| CMC-01      | Phase 13 | Pending  |
-| CMC-02      | Phase 13 | Pending  |
-| CMC-03      | Phase 13 | Pending  |
-| CMC-04      | Phase 13 | Pending  |
-| CMC-05      | Phase 13 | Pending  |
-| CMC-06      | Phase 13 | Pending  |
-| CMC-07      | Phase 13 | Pending  |
+| CMC-01      | Phase 13 | Complete |
+| CMC-02      | Phase 13 | Complete |
+| CMC-03      | Phase 13 | Complete |
+| CMC-04      | Phase 13 | Complete |
+| CMC-05      | Phase 13 | Complete |
+| CMC-06      | Phase 13 | Complete |
+| CMC-07      | Phase 13 | Complete |
 | CMC-08      | Phase 12 | Complete |
-| CMC-09      | Phase 13 | Pending  |
-| CMC-10      | Phase 13 | Pending  |
+| CMC-09      | Phase 13 | Complete |
+| CMC-10      | Phase 13 | Complete |
 | CMC-11      | Phase 12 | Complete |
-| CMC-12      | Phase 13 | Pending  |
-| CMC-13      | Phase 13 | Pending  |
+| CMC-12      | Phase 13 | Complete |
+| CMC-13      | Phase 13 | Complete |
 | CMC-14      | Phase 12 | Complete |
-| CMC-15      | Phase 13 | Pending  |
-| CMC-16      | Phase 13 | Pending  |
-| CMC-17      | Phase 13 | Pending  |
-| CMC-18      | Phase 13 | Pending  |
+| CMC-15      | Phase 13 | Complete |
+| CMC-16      | Phase 13 | Complete |
+| CMC-17      | Phase 13 | Complete |
+| CMC-18      | Phase 13 | Complete |
 | CMC-19      | Phase 12 | Complete |
-| CMC-20      | Phase 13 | Pending  |
-| CMC-21      | Phase 13 | Pending  |
-| CMC-22      | Phase 13 | Pending  |
-| CMC-23      | Phase 13 | Pending  |
-| CMC-24      | Phase 13 | Pending  |
-| CMC-25      | Phase 13 | Pending  |
-| CMC-26      | Phase 13 | Pending  |
-| CMC-27      | Phase 13 | Pending  |
-| CMC-28      | Phase 13 | Pending  |
-| CMC-29      | Phase 13 | Pending  |
-| CMC-30      | Phase 13 | Pending  |
-| CMC-31      | Phase 13 | Pending  |
-| CMC-32      | Phase 13 | Pending  |
-| CMC-33      | Phase 13 | Pending  |
-| CMC-34      | Phase 13 | Pending  |
-| CMC-35      | Phase 13 | Pending  |
+| CMC-20      | Phase 13 | Complete |
+| CMC-21      | Phase 13 | Complete |
+| CMC-22      | Phase 13 | Complete |
+| CMC-23      | Phase 13 | Complete |
+| CMC-24      | Phase 13 | Complete |
+| CMC-25      | Phase 13 | Complete |
+| CMC-26      | Phase 13 | Complete |
+| CMC-27      | Phase 13 | Complete |
+| CMC-28      | Phase 13 | Complete |
+| CMC-29      | Phase 13 | Complete |
+| CMC-30      | Phase 13 | Complete |
+| CMC-31      | Phase 13 | Complete |
+| CMC-32      | Phase 13 | Complete |
+| CMC-33      | Phase 13 | Complete |
+| CMC-34      | Phase 13 | Complete |
+| CMC-35      | Phase 13 | Complete |
 | CMC-36      | Phase 12 | Complete |
 | CMC-37      | Phase 12 | Complete |
 | CMC-38      | Phase 14 | Pending  |

@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Consistent Messaging
-status: ready
-stopped_at: Phase 13 plan 13-02a-02 written and verified (revision 1 APPROVED) -- execution pending
-last_updated: "2026-05-24T00:30:00.000Z"
+status: ready_to_plan
+stopped_at: Phase 13 complete (10/10) — ready to discuss Phase 14
+last_updated: 2026-05-24T09:55:00.392Z
 last_activity: 2026-05-23 -- Phase 13 wave 9 unblocked by new plan 13-02a-02 (continuation sub-wave): 4 tasks, 3 TDD + 1 cutover; migrates the 6 remaining legacy ES-5 marker callsites onto Wave 1 composers
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 14
-  completed_plans: 4
+  completed_plans: 14
   percent: 14
 ---
 
@@ -20,20 +20,20 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-21)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 13 -- conformance-refactor-es-5-supersession
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 14 — drift guard & test alignment
 
 ## Current Position
 
-Phase: 13 (conformance-refactor-es-5-supersession) -- READY: new plan 13-02a-02 written and approved
-Plan: 8/10 executed; 13-02a-02 (continuation) ready to execute; 13-03-02 (ES-5 atomic commit) sequenced after
-Status: Phase 13 in progress -- sub-wave 2a continuation plan 13-02a-02 approved on revision 1 by gsd-plan-checker
-Last activity: 2026-05-23 -- Plan 13-02a-02 written and verified; ready to run /gsd:execute-phase 13 (single-plan)
+Phase: 14
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-05-24
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 44
+- Total plans completed: 54
 - Average duration: -
 - Total execution time: -
 
@@ -48,6 +48,7 @@ Last activity: 2026-05-23 -- Plan 13-02a-02 written and verified; ready to run /
 | 07    | 6     | -     | -        |
 | 08    | 4     | -     | -        |
 | 12 | 4 | - | - |
+| 13 | 10 | - | - |
 
 **Recent Trend:**
 
