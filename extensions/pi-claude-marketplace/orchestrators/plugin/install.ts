@@ -109,11 +109,22 @@ import type { Scope } from "../../shared/types.ts";
  * `renderRow` consumes for per-row soft-dep marker injection (CMC-13 /
  * MSG-SD-1..3). Making `pi` optional would force a runtime branch the
  * type checker cannot reason about.
+ *
+ * CMC-13 / MSG-SD-1..3: the `"installed"` variant carries REQUIRED
+ * `declaresAgents` / `declaresMcp` boolean predicates. They are derived
+ * once at the success-return site from `installCtx.stagedAgentNames.length
+ * > 0` / `installCtx.stagedMcpServerNames.length > 0` (the same expression
+ * form used by the standalone cascade-row site) and propagated through
+ * orchestrators that compose plugin rows (e.g. `import/execute.ts`).
+ * Making them REQUIRED rather than optional honors NFR-7: a discriminated
+ * outcome must not have a third undefined state at consumers.
  */
 export type InstallPluginOutcome =
   | {
       readonly status: "installed";
       readonly resourcesChanged: boolean;
+      readonly declaresAgents: boolean;
+      readonly declaresMcp: boolean;
       /** Post-commit warnings collected in orchestrated mode instead of firing individually. */
       readonly postCommitWarnings?: readonly string[];
     }
@@ -772,6 +783,8 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   return {
     status: "installed",
     resourcesChanged: stagedAny,
+    declaresAgents: installCtx.stagedAgentNames.length > 0,
+    declaresMcp: installCtx.stagedMcpServerNames.length > 0,
     ...(postCommitWarnings.length > 0 && { postCommitWarnings }),
   };
 }
