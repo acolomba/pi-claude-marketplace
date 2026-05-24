@@ -33,7 +33,9 @@ findings:
   warning: 2
   info: 5
   total: 7
-status: issues_found
+status: fixes_applied
+fixes_applied_at: 2026-05-24T00:00:00Z
+fixes_applied_summary: "WR-01 (walk .cause chain + 6 regression tests), WR-02 (move __test_* re-exports below declarations at 3 sites), IN-01 (refresh phase-ledger header for CMC-11 token form), IN-04 (install gitlint at commit-msg stage), IN-05 (delete vestigial prd-extract helper). IN-02 skipped: architectural decision documented in SUMMARY Deviation #1; WR-01's __test_findManualRecoveryError seam now covers the structural-pivot regression risk. IN-03 skipped: doc-only precision issue on historical PLAN.md/commit body; no runtime impact."
 ---
 
 # Phase 13: Code Review Report
