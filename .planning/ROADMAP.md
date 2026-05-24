@@ -346,7 +346,7 @@ SATISFIED on every cascade surface (install / reinstall / update / import).
 **Depends on:** Phase 13 (consumes the cascade-row schema and renderer wired
 there); sequenced BEFORE Phase 14 so the drift-guard suite landing in
 Phase 14 does not retroactively fail `npm run check` on the partial.
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 
@@ -359,7 +359,7 @@ Plans:
   tests.
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 14.1-02-PLAN.md — Catalog + UAT round-trip: add a
+- [x] 14.1-02-PLAN.md — Catalog + UAT round-trip: add a
   `<!-- catalog-state: soft-dep-markers -->` fixture under
   `## /claude:plugin import` in `docs/output-catalog.md`, paired with the
   fixture function in `tests/architecture/catalog-uat.test.ts` using
