@@ -24,17 +24,22 @@
 //       and rewrites PRD §6.12 to a pointer.
 //   - tests/architecture/no-legacy-markers.test.ts
 //       This file. The 5 literals are pinned here as fixtures.
-//   - extensions/pi-claude-marketplace/transaction/rollback.ts
-//       D-03 single-chokepoint header docstring mentions
-//       "(rollback partial: ...)" -- the chokepoint contract. File uses
-//       ROLLBACK_PARTIAL via import; Wave 2 sub-wave 2a migrates the
-//       chokepoint to presentation/rollback-partial.ts.
 //   - extensions/pi-claude-marketplace/transaction/phase-ledger.ts
-//       Header docstring per PI-14 + AS-4 referring to the
-//       "(rollback partial: ...)" line that rollback.ts emits.
-//   - tests/transaction/rollback.test.ts
-//       Header docstring referring to the "(rollback partial: ...)"
-//       marker; migrated alongside Wave 2 sub-wave 2a.
+//       Header docstring per PI-14 + AS-4 referring to the rollback-
+//       partial line that rollback.ts USED to emit. Out of scope for
+//       Plan 13-02a-02; the docstring stays until a later refactor
+//       updates the phase-ledger header to match the closed-set token
+//       form rollback.ts now produces.
+//
+// Removed in Plan 13-02a-02 (Wave 2 sub-wave 2a continuation):
+//   - extensions/pi-claude-marketplace/transaction/rollback.ts: chokepoint
+//     migrated to the closed-set CMC-11 token form (parent `(failed)
+//     {rollback partial}` + indented children `[<phase>] (rollback
+//     failed) {rollback partial}`); the legacy literal is no longer in
+//     the file's docstring or body.
+//   - tests/transaction/rollback.test.ts: contract tests migrated to
+//     assert the new rendered shape; the legacy literal is no longer in
+//     the file's docstring or assertions.
 
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
@@ -61,12 +66,11 @@ const ALLOW_LIST: ReadonlySet<string> = new Set([
   "extensions/pi-claude-marketplace/shared/markers.ts",
   "tests/architecture/markers-snapshot.test.ts",
   "tests/architecture/no-legacy-markers.test.ts",
-  // Legitimate header-docstring mentions (D-03 / PI-14 / AS-4 chokepoint
-  // contract). Wave 2 sub-wave 2a migrates the production chokepoint; the
-  // header docstrings get rewritten or moved at that time.
-  "extensions/pi-claude-marketplace/transaction/rollback.ts",
+  // Legitimate header-docstring mention (PI-14 + AS-4 chokepoint
+  // contract) -- out of scope for Plan 13-02a-02; stays until a later
+  // refactor updates the phase-ledger header to match the closed-set
+  // token form rollback.ts now produces.
   "extensions/pi-claude-marketplace/transaction/phase-ledger.ts",
-  "tests/transaction/rollback.test.ts",
 ]);
 
 const SCAN_ROOTS: ReadonlyArray<string> = ["extensions/pi-claude-marketplace", "tests"];
