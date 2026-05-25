@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-21)
 Phase: Milestone v1.3 complete
 Plan: --
 Status: Awaiting next milestone
-Last activity: 2026-05-25 -- Milestone v1.3 completed and archived
+Last activity: 2026-05-25 -- Completed quick task 260525-aub: typed PluginShapeError refactor
 
 ## Performance Metrics
 
@@ -132,6 +132,7 @@ None yet.
 | 260515-bkt | lets update the specs and the implementation to listen to PI_CODING_AGENT_DIR if set instead of hardcoding ~/.pi | 2026-05-14 | 0257577 | Verified | [260515-bkt-pi-coding-agent-dir](./quick/260515-bkt-pi-coding-agent-dir/) |
 | 260515-tqx | fix these gaps | 2026-05-15 | 5d8fd1d | Verified | [260515-tqx-fix-these-gaps](./quick/260515-tqx-fix-these-gaps/) |
 | 260522-c80 | patch PROJECT.md to close requirements-section gaps surfaced during Phase 12 discuss-phase | 2026-05-22 | 39f6611 |  | [260522-c80-patch-project-md-to-close-requirements-s](./quick/260522-c80-patch-project-md-to-close-requirements-s/) |
+| 260525-aub | Replace free-text Error.message parsing in install/update/remove orchestrators with typed PluginShapeError dispatch (eliminates SonarCloud S5852 ReDoS hotspot; closes v1.3 pattern hole) | 2026-05-25 | da04709 |  | [260525-aub-replace-free-text-error-message-parsing-](./quick/260525-aub-replace-free-text-error-message-parsing-/) |
 
 ## Deferred Items
 
