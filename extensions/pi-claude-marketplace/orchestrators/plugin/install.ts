@@ -68,7 +68,12 @@ import { renderRow } from "../../presentation/compact-line.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { renderRollbackPartial } from "../../presentation/rollback-partial.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
-import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
+import {
+  assertNever,
+  ConcurrentInstallError,
+  errorMessage,
+  PluginShapeError,
+} from "../../shared/errors.ts";
 import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
 import { runPhases, type Phase, type RollbackPartial } from "../../transaction/phase-ledger.ts";
@@ -875,67 +880,79 @@ function classifyEntityShapeError(
   err: unknown,
   ctx: { plugin: string; marketplace: string; scope: Scope },
 ): EntityErrorRow | undefined {
-  const msg = err instanceof Error ? err.message : "";
-
-  if (msg.includes("is already installed")) {
-    return {
-      kind: "entity-error",
-      name: ctx.plugin,
-      marketplace: ctx.marketplace,
-      scope: ctx.scope,
-      status: "failed",
-      reasons: ["already installed"] as const,
-    };
+  // Quick task 260525-aub: dispatch on `instanceof PluginShapeError` +
+  // `.kind` instead of `.message.includes(...)` and the deleted
+  // SonarCloud S5852 ReDoS regex (`/is not installable:\s*(.+)$/`).
+  // The resolver/install throw sites carry their structural classification
+  // verbatim, so the catch site no longer reparses the message string.
+  if (!(err instanceof PluginShapeError)) {
+    return undefined;
   }
 
-  if (msg.includes("not found in marketplace") || msg.includes("not found in manifest")) {
-    return {
-      kind: "entity-error",
-      name: ctx.plugin,
-      marketplace: ctx.marketplace,
-      scope: ctx.scope,
-      status: "failed",
-      reasons: ["not in manifest"] as const,
-    };
+  switch (err.kind) {
+    case "already-installed":
+      return {
+        kind: "entity-error",
+        name: ctx.plugin,
+        marketplace: ctx.marketplace,
+        scope: ctx.scope,
+        status: "failed",
+        reasons: ["already installed"] as const,
+      };
+    case "not-in-manifest":
+      return {
+        kind: "entity-error",
+        name: ctx.plugin,
+        marketplace: ctx.marketplace,
+        scope: ctx.scope,
+        status: "failed",
+        reasons: ["not in manifest"] as const,
+      };
+    case "not-installable":
+    case "no-longer-installable":
+      return {
+        kind: "entity-error",
+        name: ctx.plugin,
+        marketplace: ctx.marketplace,
+        scope: ctx.scope,
+        status: "unavailable",
+        // Resolver `r.notes` are free-form strings; narrow to closed
+        // `Reason` members for the renderer. The narrowing rules mirror
+        // the legacy `narrowNotInstallableReasons` helper but read the
+        // structural `err.reasons` field directly -- no message parse,
+        // no regex.
+        reasons: narrowResolverReasons(err.reasons ?? []),
+      };
+    default:
+      return assertNever(err.kind);
   }
-
-  const notInstallablePattern = /is not installable:\s*(.+)$/;
-  const notInstallableMatch = notInstallablePattern.exec(msg);
-  if (notInstallableMatch) {
-    const notes = (notInstallableMatch[1] ?? "").split(";").map((s) => s.trim());
-    const reasons = narrowNotInstallableReasons(notes);
-    return {
-      kind: "entity-error",
-      name: ctx.plugin,
-      marketplace: ctx.marketplace,
-      scope: ctx.scope,
-      status: "unavailable",
-      reasons,
-    };
-  }
-
-  return undefined;
 }
 
 // Manifest field names allowed through the MSG-GR-4 carve-out. Any segment
 // equal to one of these passes verbatim as a `Reason`. New tokens added here
-// MUST also be added to `shared/grammar/reasons.ts:34-58` so the renderer's
+// MUST also be added to `shared/grammar/reasons.ts` so the renderer's
 // type-narrowing accepts them.
 const MANIFEST_FIELD_REASONS: ReadonlySet<string> = new Set(["hooks", "lspServers"]);
 
-function narrowNotInstallableReasons(notes: readonly string[]): readonly Reason[] {
+/**
+ * Quick task 260525-aub: narrow resolver `r.notes` (free-form strings)
+ * to the closed `Reason` set for renderer consumption. Mirrors the legacy
+ * `narrowNotInstallableReasons` behavior but operates on the structural
+ * `PluginShapeError.reasons` field; no message-text re-parse.
+ */
+function narrowResolverReasons(reasons: readonly string[]): readonly Reason[] {
   const out: Reason[] = [];
-  for (const note of notes) {
-    if (note === "") {
+  for (const reason of reasons) {
+    if (reason === "") {
       continue;
     }
 
-    if (MANIFEST_FIELD_REASONS.has(note)) {
-      out.push(note as Reason);
+    if (MANIFEST_FIELD_REASONS.has(reason)) {
+      out.push(reason as Reason);
       continue;
     }
 
-    if (note.includes("source")) {
+    if (reason.includes("source")) {
       out.push("unsupported source");
       continue;
     }
@@ -952,21 +969,39 @@ function narrowNotInstallableReasons(notes: readonly string[]): readonly Reason[
 }
 
 function classifyInstallFailure(err: unknown, formattedCause: string): InstallPluginOutcome {
-  // Check the direct error message only (not the full cause chain) to avoid
-  // accidental misclassification from chained errors that mention similar text.
-  const msg = err instanceof Error ? err.message : "";
-
-  if (err instanceof ConcurrentInstallError || msg.includes("already installed")) {
+  // Quick task 260525-aub: dispatch on `instanceof PluginShapeError` +
+  // `.kind` so no `.message.includes(...)` substring matching remains
+  // on this code path. `ConcurrentInstallError` is kept as a separate
+  // typed branch (precedent: install.ts's existing typed catch surface
+  // for the PI-15 race).
+  if (err instanceof ConcurrentInstallError) {
     return { status: "already-installed", cause: formattedCause };
   }
 
-  if (msg.includes("not found in marketplace") || msg.includes("not found in manifest")) {
-    return { status: "unavailable", cause: formattedCause };
-  }
-
-  if (msg.includes("not installable") || msg.includes("is not installable")) {
-    return { status: "uninstallable", cause: formattedCause };
+  if (err instanceof PluginShapeError) {
+    switch (err.kind) {
+      case "already-installed":
+        return { status: "already-installed", cause: formattedCause };
+      case "not-in-manifest":
+        return { status: "unavailable", cause: formattedCause };
+      case "not-installable":
+      case "no-longer-installable":
+        return { status: "uninstallable", cause: formattedCause };
+      default:
+        return assertNever(err.kind);
+    }
   }
 
   return { status: "unexpected-failure", cause: formattedCause };
 }
+
+/**
+ * Quick task 260525-aub: test seam for the catch-site dispatch helpers.
+ * Mirrors the `__test_outcomeToCascadeRow` re-export precedent in
+ * `orchestrators/plugin/reinstall.ts`: the helpers stay private to the
+ * orchestrator while the tests still get a direct exercise surface for
+ * the discriminated `instanceof PluginShapeError` + `.kind` dispatch
+ * branches.
+ */
+export { classifyEntityShapeError as __test_classifyEntityShapeError };
+export { classifyInstallFailure as __test_classifyInstallFailure };

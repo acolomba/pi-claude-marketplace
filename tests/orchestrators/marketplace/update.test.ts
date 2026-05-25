@@ -9,6 +9,7 @@ import {
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
+  __test_outcomeToCascadeRow,
   updateAllMarketplaces,
   updateMarketplace,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
@@ -619,4 +620,65 @@ test("D-03-INV :: update invalidates plugin cache for that marketplace", async (
     });
     assert.equal(rebuildCount, 2, "post-invalidation read re-invokes rebuild");
   });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Quick task 260525-aub: outcomeToCascadeRow prefers typed `outcome.reasons`
+// over the legacy notes-parsing fallback. Locks in the producer-narrowed
+// contract per CR-06 so a future refactor cannot regress to substring
+// matching.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("outcomeToCascadeRow: skipped outcome with typed reasons reads them directly (no notes parse)", () => {
+  const outcome: PluginUpdateOutcome = {
+    partition: "skipped",
+    name: "p",
+    // Intentionally pick `notes` content that the legacy parser would
+    // narrow DIFFERENTLY than `reasons` so we can prove `reasons` is the
+    // primary path. Legacy `narrowSkipReason` would map this notes blob
+    // to `up-to-date` (default); `reasons` says `not installed`.
+    notes: ["irrelevant cause-chain text"],
+    reasons: ["not installed"] as const,
+  };
+  const row = __test_outcomeToCascadeRow(outcome, "project");
+  assert.equal(row.kind, "plugin-cascade");
+  assert.equal(row.status, "skipped");
+  assert.deepEqual(row.reasons, ["not installed"]);
+});
+
+test("outcomeToCascadeRow: failed outcome with typed reasons reads them directly (no notes parse)", () => {
+  const outcome: PluginUpdateOutcome = {
+    partition: "failed",
+    name: "p",
+    notes: ["arbitrary cause-chain text"],
+    reasons: ["rollback partial"] as const,
+  };
+  const row = __test_outcomeToCascadeRow(outcome, "project");
+  assert.equal(row.kind, "plugin-cascade");
+  assert.equal(row.status, "failed");
+  assert.deepEqual(row.reasons, ["rollback partial"]);
+});
+
+test("outcomeToCascadeRow: skipped outcome without typed reasons falls back to notes substring parse (back-compat)", () => {
+  const outcome: PluginUpdateOutcome = {
+    partition: "skipped",
+    name: "p",
+    notes: ["not in manifest"],
+    // No `reasons` -- exercises the transitional notes-fallback path.
+  };
+  const row = __test_outcomeToCascadeRow(outcome, "project");
+  assert.equal(row.status, "skipped");
+  assert.deepEqual(row.reasons, ["not in manifest"]);
+});
+
+test("outcomeToCascadeRow: failed outcome without typed reasons falls back to notes substring parse (back-compat)", () => {
+  const outcome: PluginUpdateOutcome = {
+    partition: "failed",
+    name: "p",
+    notes: ["rollback partial: skills"],
+    // No `reasons` -- exercises the transitional notes-fallback path.
+  };
+  const row = __test_outcomeToCascadeRow(outcome, "project");
+  assert.equal(row.status, "failed");
+  assert.deepEqual(row.reasons, ["rollback partial"]);
 });

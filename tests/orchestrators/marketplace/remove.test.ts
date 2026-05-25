@@ -5,8 +5,14 @@ import path from "node:path";
 import test from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { removeMarketplace } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts";
-import { cascadeUnstagePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import {
+  __test_narrowCascadeFailure,
+  removeMarketplace,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts";
+import {
+  AgentsUnstageFailureError,
+  cascadeUnstagePlugin,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -595,4 +601,46 @@ test("D-03-INV :: remove unlinks the plugin cache file and invalidates marketpla
       await rm(cwd, { recursive: true, force: true });
     }
   });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Quick task 260525-aub: discriminated-dispatch regression guards on the
+// per-plugin cascade-failure narrowing. Locks in the typed dispatch
+// (`instanceof AgentsUnstageFailureError` + `NodeJS.ErrnoException.code`)
+// so a future refactor cannot regress to message-text substring matching.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("narrowCascadeFailure: NodeJS.ErrnoException code=EACCES -> {permission denied}", () => {
+  // Phase 13 Wave 3 plan 13-03-01 added `permission denied` to the closed
+  // REASONS set; this typed dispatch produces it without substring matching
+  // English error text (which varies across Node versions per NFR-4).
+  const errnoLike = Object.assign(new Error("permission denied: /agents/foo.md"), {
+    code: "EACCES",
+  });
+  assert.equal(__test_narrowCascadeFailure(errnoLike), "permission denied");
+});
+
+test("narrowCascadeFailure: NodeJS.ErrnoException code=ENOENT -> {source missing}", () => {
+  const errnoLike = Object.assign(new Error("no such file"), { code: "ENOENT" });
+  assert.equal(__test_narrowCascadeFailure(errnoLike), "source missing");
+});
+
+test("narrowCascadeFailure: AgentsUnstageFailureError -> {not in manifest} (documented fallback)", () => {
+  const err = new AgentsUnstageFailureError("agents leak", [
+    { generatedName: "foo", targetPath: "/agents/foo.md", reason: "EACCES" },
+  ]);
+  assert.equal(__test_narrowCascadeFailure(err), "not in manifest");
+});
+
+test("narrowCascadeFailure: arbitrary bare Error with 'unreadable' substring -> {unreadable} (defensive textual fallback)", () => {
+  // The textual fallback is retained ONLY as a defense-in-depth last
+  // resort for bridges that throw bare `Error`. Documented as transitional
+  // in the implementation comment.
+  const err = new Error("manifest file is unreadable");
+  assert.equal(__test_narrowCascadeFailure(err), "unreadable");
+});
+
+test("narrowCascadeFailure: arbitrary bare Error with no recognizable text -> {not in manifest} (permissive default)", () => {
+  const err = new Error("something else");
+  assert.equal(__test_narrowCascadeFailure(err), "not in manifest");
 });

@@ -956,7 +956,9 @@ function outcomeToCascadeRow(
           scope: target.scope,
           ...(outcome.fromVersion !== undefined && { version: outcome.fromVersion }),
           status: "skipped",
-          reasons: narrowSkipReasons(outcome.notes),
+          // Quick task 260525-aub: prefer producer-narrowed
+          // `outcome.reasons` over the legacy notes-substring parse.
+          reasons: outcome.reasons ?? narrowSkipReasons(outcome.notes),
         },
       };
     case "failed": {
@@ -968,9 +970,13 @@ function outcomeToCascadeRow(
         scope: target.scope,
         ...(versionSlot !== undefined && { version: versionSlot }),
         status: "failed",
+        // Quick task 260525-aub: phase-3 aggregate failures take
+        // precedence (catalog `(failed) {rollback partial}`); otherwise
+        // prefer producer-narrowed `outcome.reasons` over the legacy
+        // notes-substring parse.
         reasons: hasPhaseFailures
           ? (["rollback partial"] as const)
-          : narrowFailReasons(outcome.notes),
+          : (outcome.reasons ?? narrowFailReasons(outcome.notes)),
         declaresAgents: false,
         declaresMcp: false,
       };
