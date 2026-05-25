@@ -6,20 +6,20 @@
     "url": "https://github.com/acolomba/pi-claude-marketplace/issues"
   },
   "dependencies": {
-    "isomorphic-git": "^1.37.6",
+    "isomorphic-git": "^1.38.1",
     "proper-lockfile": "^4.1.2",
-    "write-file-atomic": "^7.0.1"
+    "write-file-atomic": "^8.0.0"
   },
   "description": "Access Claude plugin marketplaces from Pi.",
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "^0.74.0",
+    "@earendil-works/pi-coding-agent": "^0.75.3",
     "@earendil-works/pi-tui": "^0.74.0",
     "@eslint/js": "^10.0.1",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/proper-lockfile": "^4.1.4",
     "@types/write-file-atomic": "^4.0.3",
     "@typescript-eslint/rule-tester": "^8.59.4",
-    "eslint": "^10.2.1",
+    "eslint": "^10.4.0",
     "eslint-plugin-import-x": "^4.16.2",
     "eslint-plugin-sonarjs": "^4.0.3",
     "globals": "^17.6.0",
@@ -27,7 +27,7 @@
     "prettier": "^3.8.3",
     "typebox": "^1.1.38",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.59.1",
+    "typescript-eslint": "^8.59.4",
     "yaml": "^2.9.0"
   },
   "engines": {
