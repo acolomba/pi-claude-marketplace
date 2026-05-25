@@ -37,9 +37,16 @@
 
 import { ESLintUtils } from "@typescript-eslint/utils";
 
+// The MSG-* rule names follow the `msg-<family>-<n>-<slug>` shape
+// (e.g. `msg-gr-3-per-scope`). The messaging-style-guide.md anchors are
+// family-level (`#msg-gr-3`), so strip the trailing slug before
+// composing the docs URL. Anchor resolution still leaves rule-name
+// drift undetected (a typo here will land on a non-existent anchor),
+// but it's a strict improvement over the prior no-op
+// `name.replace(/^msg-/, "msg-")` which produced `#msg-gr-3-per-scope`.
 const createRule = ESLintUtils.RuleCreator(
   (name) =>
-    `https://github.com/acolomba/pi-claude-marketplace/blob/main/docs/messaging-style-guide.md#${name.replace(/^msg-/, "msg-")}`,
+    `https://github.com/acolomba/pi-claude-marketplace/blob/main/docs/messaging-style-guide.md#${name.replace(/^msg-([a-z]+-\d+).*$/, "msg-$1")}`,
 );
 
 /**
