@@ -71,49 +71,57 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 
 ## Traceability
 
-Phase mapping populated by `gsd-roadmapper` after roadmap creation.
+Phase mapping populated by `gsd-roadmapper` on 2026-05-25.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SNM-01 | TBD | Pending |
-| SNM-02 | TBD | Pending |
-| SNM-03 | TBD | Pending |
-| SNM-04 | TBD | Pending |
-| SNM-05 | TBD | Pending |
-| SNM-06 | TBD | Pending |
-| SNM-07 | TBD | Pending |
-| SNM-08 | TBD | Pending |
-| SNM-09 | TBD | Pending |
-| SNM-10 | TBD | Pending |
-| SNM-11 | TBD | Pending |
-| SNM-12 | TBD | Pending |
-| SNM-13 | TBD | Pending |
-| SNM-14 | TBD | Pending |
-| SNM-15 | TBD | Pending |
-| SNM-16 | TBD | Pending |
-| SNM-17 | TBD | Pending |
-| SNM-18 | TBD | Pending |
-| SNM-19 | TBD | Pending |
-| SNM-20 | TBD | Pending |
-| SNM-21 | TBD | Pending |
-| SNM-22 | TBD | Pending |
-| SNM-23 | TBD | Pending |
-| SNM-24 | TBD | Pending |
-| SNM-25 | TBD | Pending |
-| SNM-26 | TBD | Pending |
-| SNM-27 | TBD | Pending |
-| SNM-28 | TBD | Pending |
-| SNM-29 | TBD | Pending |
-| SNM-30 | TBD | Pending |
-| SNM-31 | TBD | Pending |
-| SNM-32 | TBD | Pending |
+| SNM-01 | Phase 15 | Pending |
+| SNM-02 | Phase 15 | Pending |
+| SNM-03 | Phase 15 | Pending |
+| SNM-04 | Phase 15 | Pending |
+| SNM-05 | Phase 15 | Pending |
+| SNM-06 | Phase 15 | Pending |
+| SNM-07 | Phase 15 | Pending |
+| SNM-08 | Phase 15 | Pending |
+| SNM-09 | Phase 15 | Pending |
+| SNM-10 | Phase 15 | Pending |
+| SNM-11 | Phase 15 | Pending |
+| SNM-12 | Phase 16 | Pending |
+| SNM-13 | Phase 16 | Pending |
+| SNM-14 | Phase 16 | Pending |
+| SNM-15 | Phase 16 | Pending |
+| SNM-16 | Phase 16 | Pending |
+| SNM-17 | Phase 16 | Pending |
+| SNM-18 | Phase 16 | Pending |
+| SNM-19 | Phase 17 | Pending |
+| SNM-20 | Phase 17 | Pending |
+| SNM-21 | Phase 15 | Pending |
+| SNM-22 | Phase 21 | Pending |
+| SNM-23 | Phase 20 | Pending |
+| SNM-24 | Phase 21 | Pending |
+| SNM-25 | Phase 21 | Pending |
+| SNM-26 | Phase 21 | Pending |
+| SNM-27 | Phase 21 | Pending |
+| SNM-28 | Phase 21 | Pending |
+| SNM-29 | Phase 21 | Pending |
+| SNM-30 | Phase 16 | Pending |
+| SNM-31 | Phase 17 | Pending |
+| SNM-32 | Phase 21 | Pending |
 
 **Coverage:**
 - v1.4 requirements: 32 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 32 (will be 0 after roadmap)
+- Mapped to phases: 32
+- Unmapped: 0
+- Per-phase distribution: Phase 15 (12: SNM-01..11, SNM-21); Phase 16 (8: SNM-12..18, SNM-30); Phase 17 (3: SNM-19, SNM-20, SNM-31); Phase 18 (0: execution phase); Phase 19 (0: execution phase); Phase 20 (1: SNM-23); Phase 21 (8: SNM-22, SNM-24, SNM-25, SNM-26, SNM-27, SNM-28, SNM-29, SNM-32)
+
+**Mapping rationale:**
+
+- Phases 15-17 are foundation phases (types → renderer → spec/catalog). Each closes a clean set of requirements.
+- Phases 18, 19, 20 are execution waves migrating call sites by family. They have rich success criteria (zero V1 callers in the family, lint glob narrowed, catalog UAT GREEN for the family) but only Phase 20 owns a v1.4 requirement (SNM-23: edge-handler `notifyUsageError` migration completes in this wave).
+- SNM-22 ("all V1 callers migrated AND V1 wrappers deleted") closes in Phase 21 because the deletion half of the requirement requires the migration waves of 18-20 to have already landed. Phases 18-20 each prove their migration completeness through their own success criteria; SNM-22 records the final closure.
+- Phase 21 closes the teardown requirements (SNM-24..29) plus the GREEN gate (SNM-32) plus SNM-22's deletion half.
 
 ---
 
 *Requirements defined: 2026-05-25*
-*Last updated: 2026-05-25 -- initial v1.4 definition derived from `docs/adr/v2-001-structured-notify.md` and locked design discussion.*
+*Last updated: 2026-05-25 -- Traceability populated by `gsd-roadmapper` against the 7-phase v1.4 roadmap (Phases 15-21). All 32 SNM-* requirements mapped to exactly one phase; no orphans, no duplicates.*

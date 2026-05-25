@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Structured Notification Messages
 status: planning
-last_updated: "2026-05-25T20:05:32.654Z"
+last_updated: "2026-05-25T20:30:00.000Z"
 last_activity: 2026-05-25
 progress:
-  total_phases: 0
+  total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,16 +17,16 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-21)
+See: .planning/PROJECT.md (updated 2026-05-25)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Milestone complete
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.4 Structured Notification Messages -- Phase 15 (Type Model & ADR Refresh) is next up.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 15 -- Type Model & ADR Refresh (Not started)
 Plan: --
-Status: Defining requirements
-Last activity: 2026-05-25 -- Milestone v1.4 started
+Status: Roadmap complete; next step is `/gsd-plan-phase 15`
+Last activity: 2026-05-25 -- Roadmap created (7 phases: 15-21); 32/32 SNM-* requirements mapped
 
 ## Performance Metrics
 
@@ -80,6 +80,7 @@ Last activity: 2026-05-25 -- Milestone v1.4 started
 
 - Phase 14.1 inserted after Phase 14: Close gap: CMC-13 -- propagate declaresAgents/Mcp through import cascade rows (URGENT)
 - Phase 14.2 inserted after Phase 14: Address tech debt: CR-01 + retroactive Phase 12 / 14.1 gates (URGENT)
+- v1.4 roadmap (2026-05-25): 7 phases (15-21) created by `gsd-roadmapper`. All 32 SNM-* requirements mapped: SNM-01..11 + SNM-21 → Phase 15; SNM-12..18 + SNM-30 → Phase 16; SNM-19, SNM-20, SNM-31 → Phase 17; Phases 18 and 19 are execution-only migration waves (marketplace/* and plugin/* families) with no requirement closure; SNM-23 → Phase 20 (edge family wave + UsageError migration); SNM-22, SNM-24..29, SNM-32 → Phase 21 (final teardown + GREEN gate). SNM-22 maps to Phase 21 because its "wrappers deleted" half is the closure gate.
 
 ### Decisions
 
@@ -115,6 +116,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Roadmap v1.3]: v1.3 phases = 12 (Foundations) + 13 (Conformance Refactor & ES-5) + 14 (Drift Guard). 38/38 CMC requirements mapped (CMC-08/11/14/19/36/37 → Phase 12; CMC-01..07/09/10/12/13/15..18/20/21/22..34/35 → Phase 13; CMC-38 → Phase 14).
 - [Roadmap v1.3]: ES-5 atomic three-file edit (`shared/markers.ts` + `tests/architecture/markers-snapshot.test.ts` + PRD §6.12) lives in Phase 13 (CMC-35) per style guide §15 supersession contract -- snapshot test's prefix-extraction shape is structurally incompatible with new tokenised forms, so the deferral is mandatory.
 - [Roadmap v1.3]: Drift guard reads style-guide YAML frontmatter as binding contract (no duplicated lists in test code); placed last because it asserts conformance for every callsite.
+- [Roadmap v1.4]: 7-phase split (15-21): types → renderer → spec → 3 migration waves (marketplace, plugin, edge+UsageError) → final teardown. SNM-22 closure deferred to Phase 21 because the "V1 wrappers deleted" half cannot land until all migration waves complete. Phases 18 and 19 are execution phases without REQ closure -- their success criteria (zero V1 callers in family, narrowed lint glob, catalog UAT GREEN for family) prove incremental progress toward SNM-22 closure in Phase 21.
 
 ### Pending Todos
 
@@ -152,10 +154,10 @@ All seven quick tasks have a SUMMARY.md and are completed; the `audit-open` quer
 
 ## Session Continuity
 
-Last session: 2026-05-24T23:08:38.303Z
-Stopped At: Phase 14.2 context gathered
-Resume File: .planning/phases/14.2-address-tech-debt-cr-01-retroactive-phase-12-14-1-gates/14.2-CONTEXT.md
+Last session: 2026-05-25T20:30:00.000Z
+Stopped At: v1.4 roadmap created; Phase 15 is next up
+Resume File: .planning/ROADMAP.md (Phase 15 details)
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Run `/gsd-plan-phase 15` to plan Phase 15 (Type Model & ADR Refresh).
