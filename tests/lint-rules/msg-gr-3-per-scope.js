@@ -19,11 +19,17 @@
 //   ties produced user-first output. 14.2-01 cleaned the source; this
 //   rule prevents the drift from returning.
 //
-//   This rule visits orchestrator AST and flags:
+//   This rule visits orchestrator + edge-handler AST and flags:
 //
-//   (a) `FunctionDeclaration` named `scopeOrder` whose body is the
-//       structural pattern `return scope === "user" ? <low> : <high>`
-//       (i.e. user-first numeric encoding) -- `userFirstScopeOrder`.
+//   (a) ANY function (declaration, expression, or arrow) whose body
+//       (block-with-single-return OR arrow-expression) returns the
+//       structural pattern `<lhs> === "user" ? <low> : <high>` (i.e.
+//       user-first numeric encoding) -- `userFirstScopeOrder`. The
+//       function NAME is incidental (`scopeOrder`, `scopeRank`,
+//       `compareScope`, etc. all trip equivalently); the user-first
+//       numeric encoding is the smell. Widened in Phase 14.2-fix
+//       WR-06 from the historical `FunctionDeclaration`-named-
+//       `scopeOrder`-only shape.
 //
 //   (b) two-element `ArrayExpression` of literal `"user"` then literal
 //       `"project"` -- iteration order whose stable-sort ties yield
@@ -31,9 +37,11 @@
 //
 //   False-positive containment: the per-rule `files:` block in
 //   `eslint.config.js` scopes detection to
-//   `extensions/pi-claude-marketplace/orchestrators/**/*.ts`. The
-//   canonical comparator in `presentation/sort.ts` is outside that
-//   glob and cannot trip the rule.
+//   `extensions/pi-claude-marketplace/orchestrators/**/*.ts` AND
+//   `extensions/pi-claude-marketplace/edge/handlers/**/*.ts` (the
+//   latter added in Phase 14.2-fix CR-01). The canonical comparator
+//   in `presentation/sort.ts` is outside both globs and cannot trip
+//   the rule.
 
 import { ESLintUtils } from "@typescript-eslint/utils";
 
@@ -50,33 +58,62 @@ const createRule = ESLintUtils.RuleCreator(
 );
 
 /**
- * Detect the user-first `scopeOrder` body pattern:
+ * Detect the user-first scope-order body pattern (regardless of the
+ * containing function's name or syntactic form):
+ *
  *   { return scope === "user" ? <lowerNumeric> : <higherNumeric>; }
  *
- * Only the canonical user-first encoding trips; any structural
- * deviation (more than one statement, non-conditional return, swapped
- * comparison side, non-numeric branches, equal or project-first
- * numerics) is treated as "not the drift pattern" and left alone.
+ * The widened detection (Phase 14.2-fix WR-06) treats the user-first
+ * numeric encoding as the actual smell -- the function NAME (`scopeOrder`,
+ * `scopeRank`, `compareScope`, ...) is incidental. Visitors fire on
+ * `FunctionDeclaration`, `FunctionExpression`, and
+ * `ArrowFunctionExpression`. Arrow functions may have either an
+ * expression body (`(s) => s === "user" ? 0 : 1`) or a block body
+ * (`(s) => { return s === "user" ? 0 : 1; }`) -- this helper accepts
+ * either.
  *
- * @param {import("estree").Node} body
+ * Intentional limits (still NOT detected; document for future
+ * maintainers):
+ *   - Multi-statement bodies (`const u = "user"; return s === u ? 0 : 1`)
+ *   - Inverted comparator (`return s === "project" ? 1 : 0`)
+ *   - Symbol on the RHS (`return s === USER ? 0 : 1`)
+ *   - Comparison subject other than the parameter (`scope === "user"`
+ *     literal matching is by RHS-literal; LHS identifier is ignored)
+ *
+ * These all slip through because the rule is a structural quick-check,
+ * not full semantic analysis. The canonical defense is the
+ * `compareByNameThenScope` comparator in `presentation/sort.ts`;
+ * the rule exists to deter the most-likely drift shapes, not to
+ * enforce semantic equivalence.
+ *
+ * @param {import("estree").Node} body -- function body (block or expression)
  * @returns {boolean}
  */
-function isUserFirstScopeOrder(body) {
-  if (body.type !== "BlockStatement" || body.body.length !== 1) {
+function isUserFirstScopeOrderBody(body) {
+  // Accept either an arrow-function expression body or a single-return
+  // block body. Anything else is treated as "not the drift pattern".
+  let returned;
+  if (body.type === "BlockStatement") {
+    if (body.body.length !== 1) {
+      return false;
+    }
+
+    const ret = body.body[0];
+    if (ret.type !== "ReturnStatement" || ret.argument === null || ret.argument === undefined) {
+      return false;
+    }
+
+    returned = ret.argument;
+  } else {
+    // Arrow expression body -- the expression IS the returned value.
+    returned = body;
+  }
+
+  if (returned.type !== "ConditionalExpression") {
     return false;
   }
 
-  const ret = body.body[0];
-  if (ret.type !== "ReturnStatement" || ret.argument === null || ret.argument === undefined) {
-    return false;
-  }
-
-  const cond = ret.argument;
-  if (cond.type !== "ConditionalExpression") {
-    return false;
-  }
-
-  const test = cond.test;
+  const test = returned.test;
   if (
     test.type !== "BinaryExpression" ||
     test.operator !== "===" ||
@@ -86,8 +123,8 @@ function isUserFirstScopeOrder(body) {
     return false;
   }
 
-  const cons = cond.consequent;
-  const alt = cond.alternate;
+  const cons = returned.consequent;
+  const alt = returned.alternate;
   if (cons.type !== "Literal" || alt.type !== "Literal") {
     return false;
   }
@@ -101,35 +138,49 @@ export default createRule({
     type: "problem",
     docs: {
       description:
-        'MSG-GR-3: per-scope rendering on every surface; one row per scope, name-primary then project-before-user as tie-breaker. Active AST lint check detecting (a) local user-first `function scopeOrder` helpers and (b) `["user", "project"]` iteration literals in orchestrator files. The canonical comparator is `compareByNameThenScope` in `presentation/sort.ts`; use it directly for sort, and iterate `["project", "user"]` when scope-iteration order affects user-visible ties.',
+        'MSG-GR-3: per-scope rendering on every surface; one row per scope, name-primary then project-before-user as tie-breaker. Active AST lint check detecting (a) any local function (declaration, expression, or arrow) whose body returns the user-first numeric encoding `scope === "user" ? <low> : <high>` and (b) `["user", "project"]` iteration literals. The canonical comparator is `compareByNameThenScope` in `presentation/sort.ts`; use it directly for sort, and iterate `["project", "user"]` when scope-iteration order affects user-visible ties.',
     },
     messages: {
       userFirstScopeOrder:
-        "MSG-GR-3: local `scopeOrder` helper orders user-before-project; replace with `compareByNameThenScope` from presentation/sort.ts (project-first tie-break per docs/messaging-style-guide.md §1).",
+        'MSG-GR-3: function body returns the user-first numeric encoding (`scope === "user" ? <low> : <high>`); replace with `compareByNameThenScope` from presentation/sort.ts (project-first tie-break per docs/messaging-style-guide.md §1).',
       userFirstScopeIteration:
-        'MSG-GR-3: `["user", "project"]` iteration in an orchestrator yields user-first stable-sort ties; flip to `["project", "user"]` so same-name cross-scope output matches the canonical project-first ordering (docs/messaging-style-guide.md §1).',
+        'MSG-GR-3: `["user", "project"]` iteration in an orchestrator or edge handler yields user-first stable-sort ties; flip to `["project", "user"]` so same-name cross-scope output matches the canonical project-first ordering (docs/messaging-style-guide.md §1).',
     },
     schema: [],
   },
   defaultOptions: [],
   create(context) {
-    return {
-      // Pattern (a): local user-first comparator helper.
-      //   function scopeOrder(scope: Scope): number {
-      //     return scope === "user" ? 0 : 1;
-      //   }
-      FunctionDeclaration(node) {
-        if (node.id?.name !== "scopeOrder") {
-          return;
-        }
+    // Phase 14.2-fix WR-06: widened from `FunctionDeclaration` only to
+    // also cover `FunctionExpression` and `ArrowFunctionExpression`,
+    // and the rule no longer requires the function to be named
+    // `scopeOrder`. The user-first numeric encoding (returning a lower
+    // number on `scope === "user"`) is the smell regardless of the
+    // enclosing function's name or syntactic form. See
+    // `isUserFirstScopeOrderBody` JSDoc for the intentional limits
+    // (multi-statement bodies, inverted comparators, RHS-symbol
+    // comparisons, etc. still slip through -- canonical defense is
+    // `compareByNameThenScope` in `presentation/sort.ts`).
+    function checkFunctionBody(node) {
+      if (isUserFirstScopeOrderBody(node.body)) {
+        context.report({ node, messageId: "userFirstScopeOrder" });
+      }
+    }
 
-        if (isUserFirstScopeOrder(node.body)) {
-          context.report({ node, messageId: "userFirstScopeOrder" });
-        }
-      },
+    return {
+      // Pattern (a): local user-first comparator helper, in any
+      // function form. Matches:
+      //   function scopeOrder(s) { return s === "user" ? 0 : 1; }
+      //   function scopeRank(s)  { return s === "user" ? 0 : 1; }   // renamed
+      //   const f = function (s) { return s === "user" ? 0 : 1; };  // expression
+      //   const g = (s) => s === "user" ? 0 : 1;                    // arrow-expr body
+      //   const h = (s) => { return s === "user" ? 0 : 1; };        // arrow-block body
+      FunctionDeclaration: checkFunctionBody,
+      FunctionExpression: checkFunctionBody,
+      ArrowFunctionExpression: checkFunctionBody,
       // Pattern (b): ["user", "project"] iteration literal. The per-rule
       // `files:` block in eslint.config.js already scopes this visitor
-      // to orchestrators/, so the canonical comparator in
+      // to orchestrators/ and edge/handlers/ (the latter added by
+      // Phase 14.2-fix CR-01), so the canonical comparator in
       // presentation/sort.ts cannot trip.
       ArrayExpression(node) {
         if (node.elements.length !== 2) {
