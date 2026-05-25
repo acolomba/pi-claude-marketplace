@@ -42,7 +42,7 @@ export function makeImportHandler(
         ctx,
         pi,
         cwd: ctx.cwd,
-        selectedScopes: parsed.scope === undefined ? ["user", "project"] : [parsed.scope],
+        selectedScopes: parsed.scope === undefined ? ["project", "user"] : [parsed.scope],
         gitOps: deps.gitOps,
       });
     } catch (err) {

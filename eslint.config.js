@@ -149,16 +149,13 @@ export default tseslint.config(
   // registry parity test in tests/architecture/msg-rule-registry.test.ts
   // asserts 1:1 with tests/lint-rules/index.js's RULE_NAMES export).
   {
-    // MSG-Block 1 (MSG-SR-1..6 + MSG-GR-3): cascade/severity routing --
-    // orchestrators surface. Every notify* call site lives under
-    // orchestrators/ (edge/ has the separate MSG-SR-7 usage-error variant
-    // in Block 2). MSG-GR-3 was promoted here in Phase 14.2 (D-14-2-08
-    // supersedes D-14-09) from the whole-extension meta-assertion bag --
-    // it is now an active AST check that detects (a) local user-first
-    // `scopeOrder` helpers and (b) `["user", "project"]` iteration
-    // literals; scoping to orchestrators/ keeps the canonical
-    // compareByNameThenScope in presentation/sort.ts outside the
-    // detection glob.
+    // MSG-Block 1 (MSG-SR-1..6): cascade/severity routing -- orchestrators
+    // surface. Every notify* call site lives under orchestrators/ (edge/
+    // has the separate MSG-SR-7 usage-error variant in Block 2). MSG-GR-3
+    // is wired separately below across BOTH surfaces (orchestrators/ and
+    // edge/handlers/) since Phase 14.2-fix CR-01 surfaced a user-first
+    // iteration literal in `edge/handlers/plugin/import.ts:45` that the
+    // orchestrator-only glob missed.
     files: ["extensions/pi-claude-marketplace/orchestrators/**/*.ts"],
     plugins: { msg: msgPlugin },
     rules: {
@@ -168,6 +165,24 @@ export default tseslint.config(
       "msg/msg-sr-4-cascade-success": "error",
       "msg/msg-sr-5-cascade-warning": "error",
       "msg/msg-sr-6-no-cascade-error": "error",
+    },
+  },
+  {
+    // MSG-Block 1b (MSG-GR-3): per-scope rendering rule. Promoted out of
+    // the meta-assertion bag in Phase 14.2 (D-14-2-08 supersedes D-14-09)
+    // as an active AST check detecting (a) local user-first `scopeOrder`
+    // helpers and (b) `["user", "project"]` iteration literals. Phase
+    // 14.2-fix CR-01: glob widened to include `edge/handlers/` because
+    // the bare `import` handler still constructed `["user", "project"]`
+    // for its `selectedScopes` argument, contradicting the project-first
+    // contract enforced everywhere else. The canonical comparator in
+    // `presentation/sort.ts` remains outside the detection glob.
+    files: [
+      "extensions/pi-claude-marketplace/orchestrators/**/*.ts",
+      "extensions/pi-claude-marketplace/edge/handlers/**/*.ts",
+    ],
+    plugins: { msg: msgPlugin },
+    rules: {
       "msg/msg-gr-3-per-scope": "error",
     },
   },
