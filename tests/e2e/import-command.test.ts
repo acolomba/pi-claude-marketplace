@@ -159,10 +159,13 @@ test("/claude:plugin import imports enabled Claude settings across both scopes",
 
     const messages = notifications.map((notification) => notification.message).join("\n");
     assert.match(messages, /Claude plugin import summary/);
-    assert.match(messages, /user: official-plugin@claude-plugins-official/);
-    assert.match(messages, /project: github-plugin@github-marketplace/);
-    assert.match(messages, /user: preinstalled-plugin@directory-marketplace \(already-installed\)/);
-    assert.match(messages, /user: unavailable-plugin@directory-marketplace \(unavailable\)/);
+    assert.match(messages, /● official-plugin \[user\] \(installed\)/);
+    assert.match(messages, /● github-plugin \[project\] \(installed\)/);
+    assert.match(messages, /● preinstalled-plugin \[user\] \(skipped\) \{already installed\}/);
+    assert.match(
+      messages,
+      /⊘ unavailable-plugin \[user\] \(unavailable\) \{no longer installable\}/,
+    );
     assert.equal((messages.match(/\/reload to pick up changes/g) ?? []).length, 1);
   });
 });
@@ -179,8 +182,8 @@ test("/claude:plugin import --scope project narrows writes to project scope", as
     assert.ok(projectState.marketplaces["directory-marketplace"]?.plugins["local-plugin"]);
 
     const messages = notifications.map((notification) => notification.message).join("\n");
-    assert.match(messages, /project: local-plugin@directory-marketplace/);
-    assert.doesNotMatch(messages, /user: local-plugin@directory-marketplace/);
+    assert.match(messages, /● local-plugin \[project\] \(installed\)/);
+    assert.doesNotMatch(messages, /local-plugin \[user\]/);
   });
 });
 
@@ -203,8 +206,8 @@ test("/claude:plugin import reports source mismatches and skips dependent plugin
     );
 
     const messages = notifications.map((notification) => notification.message).join("\n");
-    assert.match(messages, /project: local-plugin@directory-marketplace \(source-mismatch\)/);
+    assert.match(messages, /⊘ directory-marketplace \[project\] \(failed\) \{source mismatch\}/);
+    assert.match(messages, /⊘ local-plugin \[project\] \(skipped\) \{source mismatch\}/);
     assert.match(messages, /Existing marketplace source/);
-    assert.match(messages, /directory-marketplace/);
   });
 });
