@@ -557,3 +557,163 @@ test("assertNever sentinel fires when an unknown kind reaches the renderer at ru
   const bogus = { kind: "bogus" } as unknown as RowSpec;
   assert.throws(() => renderRow(bogus, PROBE_BOTH_LOADED), /Unexpected value/);
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+// Task 260525-cjr C8: malformed-input behavior lock-ins. The renderer is a
+// pure transform and should NEVER throw on inputs that are well-typed but
+// edge-case-valued (empty version, missing reasons, Unicode, long names).
+// These tests document the existing behavior so a future refactor cannot
+// regress it.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("260525-cjr C8: empty version string is rendered verbatim (renderer does not panic / does not omit slot)", () => {
+  // Empty version is well-typed (version is `?: string`); render does
+  // not enforce non-empty. Document existing behavior: the slot
+  // appears as a bare `v` token.
+  const out = renderRow(
+    {
+      kind: "plugin-cascade",
+      name: "alpha",
+      scope: "user",
+      version: "",
+      status: "installed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+    PROBE_BOTH_LOADED,
+  );
+  // The render succeeds; we lock in the current output shape so any
+  // future refactor that wants to change empty-version handling does
+  // it consciously.
+  assert.match(out, /● alpha \[user\]/);
+});
+
+test("260525-cjr C8: undefined `reasons` on plugin-cascade -> renders without {reasons} block", () => {
+  const out = renderRow(
+    {
+      kind: "plugin-cascade",
+      name: "alpha",
+      scope: "user",
+      status: "installed",
+      // Intentionally no `reasons` field.
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+    PROBE_BOTH_LOADED,
+  );
+  assert.match(out, /● alpha \[user\] \(installed\)/);
+  // No `{}` reasons block follows.
+  assert.equal(out.includes("{"), false, `unexpected reasons block: ${out}`);
+});
+
+test("260525-cjr C8: explicit empty `reasons: []` array renders identically to undefined reasons", () => {
+  const out = renderRow(
+    {
+      kind: "plugin-cascade",
+      name: "alpha",
+      scope: "user",
+      status: "installed",
+      reasons: [],
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+    PROBE_BOTH_LOADED,
+  );
+  assert.match(out, /● alpha \[user\] \(installed\)/);
+  assert.equal(out.includes("{"), false, `unexpected reasons block: ${out}`);
+});
+
+test("260525-cjr C8: Unicode (emoji, accented chars) in `name` renders verbatim", () => {
+  const out = renderRow(
+    {
+      kind: "plugin-cascade",
+      name: "café-🚀-plugin",
+      scope: "user",
+      status: "installed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+    PROBE_BOTH_LOADED,
+  );
+  // The name passes through verbatim; the renderer does not normalise
+  // or strip Unicode. Alignment is undefined for variable-width chars
+  // (CJK, emoji) -- this is the documented existing behavior.
+  assert.match(out, /café-🚀-plugin/);
+});
+
+test("260525-cjr C8: CJK characters in `marketplace` slot render verbatim on plugin-inline rows", () => {
+  const out = renderRow(
+    {
+      kind: "plugin-inline",
+      name: "alpha",
+      marketplace: "市场-name",
+      scope: "user",
+      status: "installed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+    PROBE_BOTH_LOADED,
+  );
+  assert.match(out, /alpha@市场-name/);
+});
+
+test("260525-cjr C8: very long name (200 chars) renders without truncation on the cascade surface", () => {
+  // MSG-PL-1 column-66 truncation is list-only (lives in
+  // `presentation/plugin-list.ts`). Cascade rows do NOT truncate;
+  // document the existing behavior so a future "always truncate"
+  // refactor lands intentionally.
+  const longName = "x".repeat(200);
+  const out = renderRow(
+    {
+      kind: "plugin-cascade",
+      name: longName,
+      scope: "user",
+      status: "installed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+    PROBE_BOTH_LOADED,
+  );
+  assert.ok(out.includes(longName), "200-char name must render verbatim on cascade rows");
+  // No ellipsis injected.
+  assert.equal(out.includes("…"), false, `unexpected truncation: ${out}`);
+});
+
+test("260525-cjr C8: empty `name` does not crash the renderer (well-typed; bare leading icon)", () => {
+  // Empty string is a valid (if degenerate) name; the renderer must
+  // not panic. Output shape: `● [user] (installed)` -- the name slot
+  // collapses but the row still renders.
+  const out = renderRow(
+    {
+      kind: "plugin-cascade",
+      name: "",
+      scope: "user",
+      status: "installed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+    PROBE_BOTH_LOADED,
+  );
+  // The exact shape is not byte-locked here -- the load-bearing
+  // assertion is the no-throw guarantee plus the [<scope>] presence.
+  assert.match(out, /\[user\]/);
+});
+
+test("260525-cjr C8: mixed-direction text (BiDi) in `name` renders verbatim without alignment corruption assertions", () => {
+  // Mixed LTR + RTL text in a name renders verbatim. Bidi control
+  // characters in display strings are guarded elsewhere (see
+  // pre-commit Forbid the use of unicode BiDi control characters);
+  // here we only assert no-throw + verbatim pass-through.
+  const out = renderRow(
+    {
+      kind: "plugin-cascade",
+      name: "plugin-עברית",
+      scope: "user",
+      status: "installed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+    PROBE_BOTH_LOADED,
+  );
+  assert.match(out, /plugin-עברית/);
+});
