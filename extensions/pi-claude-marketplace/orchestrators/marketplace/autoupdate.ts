@@ -175,7 +175,9 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
   // is NOT applied here because the autoupdate result block is a
   // per-call result list, not the marketplace-list surface; alphabetical
   // by name is the established autoupdate-result ordering.
-  const sorted = [...rows].sort((a, b) => a.name.localeCompare(b.name));
+  const sorted = [...rows].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+  );
   const lines = sorted.map((row) =>
     renderRow(buildAutoupdateRow(row, opts.enable), MARKETPLACE_LABEL_PROBE),
   );
