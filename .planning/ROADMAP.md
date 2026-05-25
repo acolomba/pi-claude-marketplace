@@ -97,9 +97,16 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 4. `npm run check` stays GREEN; no runtime call site references the new types yet (types are unused outside their own declarations and the compile-check file).
 
 **Plans:** 3 plans
+**Wave 1**
 
 - [ ] 15-01-PLAN.md -- Append v1.4 structured type model + const tuples (PLUGIN_STATUSES, MARKETPLACE_STATUSES, DEPENDENCIES) to shared/notify.ts (SNM-01..SNM-11; D-15-01..D-15-11)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 15-02-PLAN.md -- Add tests/architecture/notify-types.test.ts compile-time proofs (closed-set + bidirectional SNM-04 round-trip + per-variant invariants per D-15-12)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 15-03-PLAN.md -- Refresh docs/adr/v2-001-structured-notify.md (Status Proposed -> Accepted; Decision/Consequences/Migration rewrite; Alt-2 flip; Open Questions deletion) (SNM-21)
 
 ### Phase 16: Renderer & Public API (Alongside V1)
