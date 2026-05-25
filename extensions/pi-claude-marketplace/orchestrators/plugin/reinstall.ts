@@ -51,6 +51,7 @@ import { causeChainTrailer } from "../../presentation/cause-chain.ts";
 import { renderRow } from "../../presentation/compact-line.ts";
 import { renderManualRecovery } from "../../presentation/manual-recovery.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
+import { compareByNameThenScope } from "../../presentation/sort.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   assertNever,
@@ -385,13 +386,24 @@ async function enumerateMarketplaceReinstallTargets(
 function sortReinstallTargets(
   targets: readonly ResolvedReinstallTarget[],
 ): readonly ResolvedReinstallTarget[] {
+  // CR-01 / D-01: route through the canonical comparator on marketplace
+  // (primary) then plugin (secondary). Both keys carry the row's scope so
+  // the project-before-user tie-break per MSG-GR-3 holds at every level.
   return Object.freeze(
-    [...targets].sort(
-      (a, b) =>
-        scopeOrder(a.scope) - scopeOrder(b.scope) ||
-        a.marketplace.localeCompare(b.marketplace) ||
-        a.plugin.localeCompare(b.plugin),
-    ),
+    [...targets].sort((a, b) => {
+      const mpDiff = compareByNameThenScope(
+        { name: a.marketplace, scope: a.scope },
+        { name: b.marketplace, scope: b.scope },
+      );
+      if (mpDiff !== 0) {
+        return mpDiff;
+      }
+
+      return compareByNameThenScope(
+        { name: a.plugin, scope: a.scope },
+        { name: b.plugin, scope: b.scope },
+      );
+    }),
   );
 }
 
@@ -452,16 +464,11 @@ function renderReinstallPartitionAndNotify(
     }
   }
 
-  // Order marketplace blocks by scope (project before user per
-  // compareByNameThenScope) then marketplace name.
-  const sortedBlocks = [...byMp.values()].sort((a, b) => {
-    const scopeDiff = scopeOrder(a.marketplace.scope) - scopeOrder(b.marketplace.scope);
-    if (scopeDiff !== 0) {
-      return scopeDiff;
-    }
-
-    return a.marketplace.name.localeCompare(b.marketplace.name);
-  });
+  // Order marketplace blocks via compareByNameThenScope (name primary
+  // case-insensitive, scope secondary project-before-user per MSG-GR-3).
+  const sortedBlocks = [...byMp.values()].sort((a, b) =>
+    compareByNameThenScope(a.marketplace, b.marketplace),
+  );
 
   const bodySegments: string[] = [];
   let aggregatedSeverity: "success" | "warning" = "success";
@@ -701,10 +708,6 @@ function narrowReason(note: string): Reason {
   // most-permissive cascade skip reason and matches the operator mental
   // model "we couldn't reconcile this row".
   return "not in manifest";
-}
-
-function scopeOrder(scope: Scope): number {
-  return scope === "user" ? 0 : 1;
 }
 
 async function runLockedReinstall(

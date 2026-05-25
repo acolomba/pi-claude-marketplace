@@ -819,6 +819,50 @@ const FIXTURES: FixtureMap = {
       }).message;
       return appendReloadHint(`${local}\n${official}`, RELOAD_HINT);
     },
+
+    // CR-01 / 14.2-01 D-03: same-marketplace-name-cross-scope fixture
+    // locks project-before-user cascade-block ordering by byte equality.
+    // Pair with `<!-- catalog-state: same-mp-both-scopes -->` annotation
+    // under `## /claude:plugin reinstall` in docs/output-catalog.md.
+    "same-mp-both-scopes": () => {
+      const project = cascadeSummary({
+        marketplace: {
+          kind: "marketplace",
+          name: "official",
+          scope: "project",
+          outcomeClass: "ok",
+        },
+        rows: [
+          {
+            kind: "plugin-cascade",
+            name: "alpha",
+            scope: "project",
+            version: "1.0.0",
+            status: "reinstalled",
+          },
+        ],
+        probe: PROBE_BOTH_LOADED,
+      }).message;
+      const user = cascadeSummary({
+        marketplace: {
+          kind: "marketplace",
+          name: "official",
+          scope: "user",
+          outcomeClass: "ok",
+        },
+        rows: [
+          {
+            kind: "plugin-cascade",
+            name: "beta",
+            scope: "user",
+            version: "1.0.0",
+            status: "reinstalled",
+          },
+        ],
+        probe: PROBE_BOTH_LOADED,
+      }).message;
+      return appendReloadHint(`${project}\n${user}`, RELOAD_HINT);
+    },
   },
 
   "/claude:plugin update": {
@@ -968,6 +1012,50 @@ const FIXTURES: FixtureMap = {
         probe: PROBE_BOTH_LOADED,
       }).message;
       return appendReloadHint(`${local}\n${official}`, RELOAD_HINT);
+    },
+
+    // CR-01 / 14.2-01 D-03: same-marketplace-name-cross-scope fixture
+    // locks project-before-user cascade-block ordering by byte equality.
+    // Pair with `<!-- catalog-state: same-mp-both-scopes -->` annotation
+    // under `## /claude:plugin update` in docs/output-catalog.md.
+    "same-mp-both-scopes": () => {
+      const project = cascadeSummary({
+        marketplace: {
+          kind: "marketplace",
+          name: "official",
+          scope: "project",
+          outcomeClass: "ok",
+        },
+        rows: [
+          {
+            kind: "plugin-cascade",
+            name: "alpha",
+            scope: "project",
+            version: "0.9.0 → v1.0.0",
+            status: "updated",
+          },
+        ],
+        probe: PROBE_BOTH_LOADED,
+      }).message;
+      const user = cascadeSummary({
+        marketplace: {
+          kind: "marketplace",
+          name: "official",
+          scope: "user",
+          outcomeClass: "ok",
+        },
+        rows: [
+          {
+            kind: "plugin-cascade",
+            name: "beta",
+            scope: "user",
+            version: "0.5.0 → v1.0.0",
+            status: "updated",
+          },
+        ],
+        probe: PROBE_BOTH_LOADED,
+      }).message;
+      return appendReloadHint(`${project}\n${user}`, RELOAD_HINT);
     },
   },
 
@@ -1273,6 +1361,50 @@ const FIXTURES: FixtureMap = {
         `Claude plugin import summary\n\n${officialBody}\n${mismatchBody}\n${githubBody}`,
         RELOAD_HINT,
       );
+    },
+
+    // CR-01 / 14.2-01 D-03: same-marketplace-name-cross-scope fixture
+    // locks project-before-user cascade-block ordering by byte equality.
+    // Pair with `<!-- catalog-state: same-mp-both-scopes -->` annotation
+    // under `## /claude:plugin import` in docs/output-catalog.md.
+    "same-mp-both-scopes": () => {
+      const project = cascadeSummary({
+        marketplace: {
+          kind: "marketplace",
+          name: "official",
+          scope: "project",
+          outcomeClass: "ok",
+          status: "added",
+        },
+        rows: [
+          {
+            kind: "plugin-cascade",
+            name: "alpha",
+            scope: "project",
+            status: "installed",
+          },
+        ],
+        probe: PROBE_BOTH_LOADED,
+      }).message;
+      const user = cascadeSummary({
+        marketplace: {
+          kind: "marketplace",
+          name: "official",
+          scope: "user",
+          outcomeClass: "ok",
+          status: "added",
+        },
+        rows: [
+          {
+            kind: "plugin-cascade",
+            name: "beta",
+            scope: "user",
+            status: "installed",
+          },
+        ],
+        probe: PROBE_BOTH_LOADED,
+      }).message;
+      return appendReloadHint(`Claude plugin import summary\n\n${project}\n${user}`, RELOAD_HINT);
     },
   },
 

@@ -24,7 +24,7 @@
 // `marketplace noautoupdate` -> enable=false.
 //
 // Flow:
-//   scopes = opts.scope !== undefined ? [opts.scope] : ["user", "project"]   // SC-6
+//   scopes = opts.scope !== undefined ? [opts.scope] : ["project", "user"]   // SC-6
 //   for each scope:
 //     withStateGuard(locations, async (state) => {
 //       result = applyAutoupdateFlipInPlace(state, opts.name, opts.enable)  // MAU-1, MAU-3, MAU-4
@@ -111,7 +111,7 @@ function buildAutoupdateRow(input: AutoupdateRowInput, enable: boolean): Marketp
 }
 
 export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise<void> {
-  const scopes: readonly Scope[] = opts.scope === undefined ? ["user", "project"] : [opts.scope];
+  const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
 
   const rows: AutoupdateRowInput[] = [];
   const errors: { scope: Scope; cause: unknown }[] = [];

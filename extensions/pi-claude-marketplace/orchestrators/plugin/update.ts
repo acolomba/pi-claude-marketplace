@@ -69,6 +69,7 @@ import { causeChainTrailer } from "../../presentation/cause-chain.ts";
 import { renderRow } from "../../presentation/compact-line.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { renderRollbackPartial } from "../../presentation/rollback-partial.ts";
+import { compareByNameThenScope } from "../../presentation/sort.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   appendLeaks,
@@ -792,16 +793,11 @@ function renderUpdateCascadeAndNotify(
     }
   }
 
-  // Sort marketplace blocks: scope (project before user via scopeOrder)
-  // then marketplace name.
-  const sortedBlocks = [...byMp.values()].sort((a, b) => {
-    const scopeDiff = scopeOrder(a.marketplace.scope) - scopeOrder(b.marketplace.scope);
-    if (scopeDiff !== 0) {
-      return scopeDiff;
-    }
-
-    return a.marketplace.name.localeCompare(b.marketplace.name);
-  });
+  // Sort marketplace blocks via compareByNameThenScope (name primary
+  // case-insensitive, scope secondary project-before-user per MSG-GR-3).
+  const sortedBlocks = [...byMp.values()].sort((a, b) =>
+    compareByNameThenScope(a.marketplace, b.marketplace),
+  );
 
   const bodySegments: string[] = [];
   let aggregatedSeverity: "success" | "warning" = "success";
@@ -1057,10 +1053,6 @@ function narrowFailReason(note: string): Reason {
   }
 
   return "not in manifest";
-}
-
-function scopeOrder(scope: Scope): number {
-  return scope === "user" ? 0 : 1;
 }
 
 function aggregateCause(firstCause: unknown): { cause: unknown } | undefined {

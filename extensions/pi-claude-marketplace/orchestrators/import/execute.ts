@@ -10,6 +10,7 @@ import { loadState as defaultLoadState, type ExtensionState } from "../../persis
 import { softDepStatus } from "../../platform/pi-api.ts";
 import { cascadeSummary } from "../../presentation/cascade-summary.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
+import { compareByNameThenScope } from "../../presentation/sort.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
 
@@ -344,8 +345,9 @@ function composeImportSummary(
   probe: SoftDepProbe,
 ): ComposedImport {
   // Build per-(scope, marketplace) cascade blocks from the result arrays.
-  // The marketplace blocks render in deterministic order: scope (project-
-  // before-user via scopeOrder) primary, marketplace-name secondary.
+  // The marketplace blocks render in deterministic order via
+  // compareByNameThenScope (name primary case-insensitive, scope secondary
+  // project-before-user per MSG-GR-3).
   const byMp = new Map<string, ImportCascadeInput>();
   enumerateMarketplaceBlocks(result, byMp);
 
@@ -364,14 +366,9 @@ function composeImportSummary(
   // preamble. Keeps the cascade body clean per CMC-27.
   const orphanLines = orphanDiagnosticLines(result);
 
-  const blocks = [...byMp.values()].sort((a, b) => {
-    const scopeDiff = scopeOrder(a.marketplace.scope) - scopeOrder(b.marketplace.scope);
-    if (scopeDiff !== 0) {
-      return scopeDiff;
-    }
-
-    return a.marketplace.name.localeCompare(b.marketplace.name);
-  });
+  const blocks = [...byMp.values()].sort((a, b) =>
+    compareByNameThenScope(a.marketplace, b.marketplace),
+  );
 
   const segments: string[] = [];
   let aggregatedSeverity: "success" | "warning" = "success";
@@ -695,10 +692,6 @@ function orphanDiagnosticLines(result: ClaudeImportExecutionResult): readonly st
   }
 
   return lines;
-}
-
-function scopeOrder(scope: Scope): number {
-  return scope === "user" ? 0 : 1;
 }
 
 // The import workflow is intentionally linear: ensure marketplaces, record diagnostics,
