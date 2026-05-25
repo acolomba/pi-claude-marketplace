@@ -9,7 +9,7 @@
 // or DEFAULT_GIT_OPS).
 //
 // Flow:
-//   const scopes: Scope[] = opts.scope !== undefined ? [opts.scope] : ["user", "project"];
+//   const scopes: Scope[] = opts.scope !== undefined ? [opts.scope] : ["project", "user"];
 //   for each scope: loadState(locationsFor(scope, cwd).extensionRoot)
 //     -> collect every state.marketplaces[<name>]
 //   notifySuccess(ctx, renderMarketplaceList(allRecords));
