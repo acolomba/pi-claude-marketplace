@@ -44,6 +44,16 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/gsd-graphify-update.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
         "matcher": "Write|Edit",
         "hooks": [
           {

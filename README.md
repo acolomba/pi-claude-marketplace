@@ -319,7 +319,7 @@ npm run check
 
 ## AI disclaimer
 
-This project is developed with AI agent engineering practices using the [GSD](https://github.com/gsd-build/get-shit-done) spec-driven development system.
+This project is developed with AI agent engineering practices using the [GSD redux](https://github.com/open-gsd/get-shit-done-redux) spec-driven development system.
 
 The author vibe-coded a prototype until it was feature-complete for a first release, then extracted and reviewed a PRD from the implementation.
 
