@@ -215,13 +215,23 @@ export function renderPartition(
 
   lines.push(`${label}:`);
   for (const o of [...outcomes].sort((a, b) => a.name.localeCompare(b.name))) {
-    if (withVersions && o.fromVersion !== undefined && o.toVersion !== undefined) {
+    // Task 260525-cjr C2: narrow on the discriminated partition before
+    // reading partition-specific fields. The renderer's `withVersions`
+    // gate maps to the (updated)/(unchanged) partitions that carry
+    // `fromVersion` + `toVersion`; the notes-bearing branch maps to
+    // (skipped)/(failed). The bare-row fallback is the (updated) +
+    // !withVersions case (typically the legacy unchanged-row form).
+    if (withVersions && (o.partition === "updated" || o.partition === "unchanged")) {
       lines.push(`  - ${o.name} (${o.fromVersion} → ${o.toVersion})`);
-    } else if (o.notes !== undefined && o.notes.length > 0) {
-      lines.push(`  - ${o.name}: ${o.notes.join("; ")}`);
-    } else {
-      lines.push(`  - ${o.name}`);
+      continue;
     }
+
+    if ((o.partition === "skipped" || o.partition === "failed") && o.notes.length > 0) {
+      lines.push(`  - ${o.name}: ${o.notes.join("; ")}`);
+      continue;
+    }
+
+    lines.push(`  - ${o.name}`);
   }
 }
 

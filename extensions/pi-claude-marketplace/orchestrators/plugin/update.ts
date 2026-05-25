@@ -73,6 +73,7 @@ import { compareByNameThenScope } from "../../presentation/sort.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   appendLeaks,
+  assertNever,
   errorMessage,
   PluginShapeError,
   PluginUpdatePhase3Error,
@@ -960,18 +961,21 @@ function outcomeToCascadeRow(
   outcome: PluginUpdateOutcome,
 ): { row: PluginCascadeRow; rollbackChildren?: readonly RollbackChild[] } | undefined {
   switch (outcome.partition) {
-    case "updated": {
+    case "updated":
       // MSG-PL-3 version-transition arrow `v<from> → v<to>` (U+2192,
       // space-padded). The renderer's renderVersion slot just emits
       // whatever the orchestrator supplies in `version`, so we compose
       // the arrow string here and pass it through verbatim.
-      const versionSlot = composeVersionArrow(outcome.fromVersion, outcome.toVersion);
+      //
+      // Task 260525-cjr C2: fromVersion / toVersion are REQUIRED on
+      // PluginUpdateUpdatedOutcome -- the optional-arg ternary in
+      // composeVersionArrow is now dead for this branch.
       return {
         row: {
           kind: "plugin-cascade",
           name: outcome.name,
           scope: target.scope,
-          ...(versionSlot !== undefined && { version: versionSlot }),
+          version: `${outcome.fromVersion} → v${outcome.toVersion}`,
           status: "updated",
           // Task 260525-cjr B1: required `boolean` on
           // `PluginUpdateOutcome`; the `?? false` coalesce is gone.
@@ -979,8 +983,6 @@ function outcomeToCascadeRow(
           declaresMcp: outcome.declaresMcp,
         },
       };
-    }
-
     case "unchanged": {
       // Catalog: `(skipped) {up-to-date}` -- the unchanged partition is
       // an internal optimization; the user-visible token is `(skipped)`
@@ -1007,9 +1009,13 @@ function outcomeToCascadeRow(
           scope: target.scope,
           ...(outcome.fromVersion !== undefined && { version: outcome.fromVersion }),
           status: "skipped",
-          // Quick task 260525-aub: prefer producer-narrowed
-          // `outcome.reasons` over the legacy notes-substring parse.
-          reasons: outcome.reasons ?? narrowSkipReasons(outcome.notes),
+          // Quick task 260525-aub / Task 260525-cjr C2: prefer the
+          // producer-narrowed `outcome.reasons` over the legacy
+          // notes-substring parse. `reasons` is now REQUIRED
+          // (PluginUpdateSkippedOutcome.reasons: readonly Reason[]) so
+          // an empty array opts into the consumer fallback path
+          // explicitly (back-compat with notes-only fixtures).
+          reasons: outcome.reasons.length > 0 ? outcome.reasons : narrowSkipReasons(outcome.notes),
           declaresAgents: false,
           declaresMcp: false,
         },
@@ -1057,7 +1063,11 @@ function outcomeToCascadeRow(
     }
 
     default:
-      return undefined;
+      // Task 260525-cjr C2: exhaustiveness guard for the new
+      // discriminated union; any future partition added to
+      // PluginUpdateOutcome must update this switch or the compiler
+      // refuses to assign `outcome` to `never`.
+      return assertNever(outcome);
   }
 }
 

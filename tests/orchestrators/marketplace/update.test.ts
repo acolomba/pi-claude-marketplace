@@ -351,6 +351,8 @@ test("MU-6 + MU-8: cascade runs ONLY when autoupdate=true; pluginUpdate called o
         name: plugin,
         fromVersion: "0.0.1",
         toVersion: "0.0.2",
+        stagedAgents: [],
+        stagedMcpServers: [],
         declaresAgents: false,
         declaresMcp: false,
       });
@@ -396,6 +398,10 @@ test("MU-6: cascade skipped when autoupdate=false (default)", async () => {
       return Promise.resolve({
         partition: "updated",
         name: "x",
+        fromVersion: "0.0.1",
+        toVersion: "0.0.2",
+        stagedAgents: [],
+        stagedMcpServers: [],
         declaresAgents: false,
         declaresMcp: false,
       });
@@ -438,18 +444,49 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
     const { gitOps } = makeMockGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000006" },
     });
-    const pluginUpdate: PluginUpdateFn = async (plugin) => {
-      const partition: PluginUpdateOutcome["partition"] =
-        plugin === "a"
-          ? "updated"
-          : plugin === "b"
-            ? "unchanged"
-            : plugin === "c"
-              ? "skipped"
-              : "failed";
-      return Promise.resolve({
-        partition,
+    // Task 260525-cjr C2: PluginUpdateOutcome is now a discriminated
+    // union; each partition variant has different required fields.
+    // Construct a fixture per branch.
+    const pluginUpdate: PluginUpdateFn = (plugin) => {
+      if (plugin === "a") {
+        return Promise.resolve<PluginUpdateOutcome>({
+          partition: "updated",
+          name: plugin,
+          fromVersion: "0.0.1",
+          toVersion: "0.0.2",
+          stagedAgents: [],
+          stagedMcpServers: [],
+          declaresAgents: false,
+          declaresMcp: false,
+        });
+      }
+
+      if (plugin === "b") {
+        return Promise.resolve<PluginUpdateOutcome>({
+          partition: "unchanged",
+          name: plugin,
+          fromVersion: "0.0.1",
+          toVersion: "0.0.1",
+          declaresAgents: false,
+          declaresMcp: false,
+        });
+      }
+
+      if (plugin === "c") {
+        return Promise.resolve<PluginUpdateOutcome>({
+          partition: "skipped",
+          name: plugin,
+          notes: [],
+          reasons: [],
+          declaresAgents: false,
+          declaresMcp: false,
+        });
+      }
+
+      return Promise.resolve<PluginUpdateOutcome>({
+        partition: "failed",
         name: plugin,
+        notes: [],
         declaresAgents: false,
         declaresMcp: false,
       });
@@ -509,6 +546,8 @@ test("MU-9 + MSG-RH-1: success emits canonical reload hint trailer for updated p
         name: plugin,
         fromVersion: "0.0.1",
         toVersion: "0.0.2",
+        stagedAgents: [],
+        stagedMcpServers: [],
         declaresAgents: false,
         declaresMcp: false,
       });
@@ -546,6 +585,8 @@ test("RH-1: NO reload hint when zero plugins updated", async () => {
       Promise.resolve({
         partition: "unchanged",
         name: plugin,
+        fromVersion: "0.0.1",
+        toVersion: "0.0.1",
         declaresAgents: false,
         declaresMcp: false,
       });
@@ -683,11 +724,16 @@ test("outcomeToCascadeRow: failed outcome with typed reasons reads them directly
 });
 
 test("outcomeToCascadeRow: skipped outcome without typed reasons falls back to notes substring parse (back-compat)", () => {
+  // Task 260525-cjr C2: `reasons` is required on PluginUpdateSkippedOutcome
+  // (the producer-narrowed contract). An empty `reasons: []` array
+  // exercises the consumer's notes-fallback substring narrow without
+  // populating a typed reason -- equivalent in behavior to the
+  // pre-C2 `reasons: undefined` fixture.
   const outcome: PluginUpdateOutcome = {
     partition: "skipped",
     name: "p",
     notes: ["not in manifest"],
-    // No `reasons` -- exercises the transitional notes-fallback path.,
+    reasons: [],
     declaresAgents: false,
     declaresMcp: false,
   };

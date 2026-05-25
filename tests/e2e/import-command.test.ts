@@ -116,6 +116,8 @@ function registerImportCommand(cwd: string, gitOps: GitOps) {
       Promise.resolve({
         partition: "unchanged",
         name: "unused",
+        fromVersion: "0.0.0",
+        toVersion: "0.0.0",
         declaresAgents: false,
         declaresMcp: false,
       }),

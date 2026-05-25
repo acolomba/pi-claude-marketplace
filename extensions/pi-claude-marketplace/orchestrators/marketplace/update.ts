@@ -97,6 +97,7 @@ import {
   MarketplaceNotFoundError,
   MarketplaceUpdateError,
   PluginShapeError,
+  assertNever,
   errorMessage,
 } from "../../shared/errors.ts";
 import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
@@ -120,7 +121,12 @@ import type {
 } from "../../presentation/compact-line.ts";
 import type { Reason } from "../../shared/grammar/reasons.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
+import type {
+  PluginUpdateFailedOutcome,
+  PluginUpdateFn,
+  PluginUpdateOutcome,
+  PluginUpdateSkippedOutcome,
+} from "../types.ts";
 
 /**
  * Marketplace label rows never carry per-row soft-dep markers (those
@@ -404,27 +410,28 @@ function outcomeToCascadeRow(outcome: PluginUpdateOutcome, scope: Scope): Plugin
   // forbids the marker (the renderer narrows on `status` anyway, but
   // explicit emission keeps the contract symmetrical with every
   // producer site).
+  //
+  // Task 260525-cjr C2: PluginUpdateOutcome is now a discriminated
+  // union; the switch exhausts all 4 partitions and ends with an
+  // `assertNever` so any future variant addition fails at compile
+  // time. The (updated) branch no longer needs a `fromVersion !==
+  // undefined` ternary -- both version fields are REQUIRED on
+  // PluginUpdateUpdatedOutcome.
   switch (outcome.partition) {
-    case "updated": {
+    case "updated":
       // MSG-PL-3: version-transition arrow "v<from> → v<to>". The
       // renderer's `renderVersion` slot prepends `v`; we omit the
       // leading `v` on the from-side so the final form is `v<from>
       // → v<to>` (catalog form). The arrow is U+2192 (space-padded).
-      const version =
-        outcome.fromVersion !== undefined && outcome.toVersion !== undefined
-          ? `${outcome.fromVersion} → v${outcome.toVersion}`
-          : undefined;
       return {
         kind: "plugin-cascade",
         name: outcome.name,
         scope,
-        ...(version !== undefined && { version }),
+        version: `${outcome.fromVersion} → v${outcome.toVersion}`,
         status: "updated",
         declaresAgents: outcome.declaresAgents,
         declaresMcp: outcome.declaresMcp,
       };
-    }
-
     case "unchanged":
       return {
         kind: "plugin-cascade",
@@ -455,6 +462,11 @@ function outcomeToCascadeRow(outcome: PluginUpdateOutcome, scope: Scope): Plugin
         declaresAgents: false,
         declaresMcp: false,
       };
+    default:
+      // Task 260525-cjr C2: exhaustiveness guard. A new partition
+      // added to PluginUpdateOutcome without updating this switch
+      // fails at compile time on `assertNever(outcome)`.
+      return assertNever(outcome);
   }
 }
 
@@ -471,8 +483,8 @@ function outcomeToCascadeRow(outcome: PluginUpdateOutcome, scope: Scope): Plugin
  * notes-only outcomes (e.g., the `narrowSkipReason fallback` test at
  * line 461) so the fallback stays as a transitional bridge.
  */
-function narrowSkipReason(outcome: PluginUpdateOutcome): Reason {
-  const firstReason = outcome.reasons?.[0];
+function narrowSkipReason(outcome: PluginUpdateSkippedOutcome): Reason {
+  const firstReason = outcome.reasons[0];
   if (firstReason !== undefined) {
     return firstReason;
   }
@@ -480,7 +492,7 @@ function narrowSkipReason(outcome: PluginUpdateOutcome): Reason {
   // Fallback: legacy substring parse of `notes`. Retained for backward
   // compatibility with notes-only outcome fixtures.
   const notes = outcome.notes;
-  if (notes === undefined || notes.length === 0) {
+  if (notes.length === 0) {
     return "up-to-date";
   }
 
@@ -509,7 +521,7 @@ function narrowSkipReason(outcome: PluginUpdateOutcome): Reason {
  * failures bubble up from manifest re-reads; the catalog UAT in Wave 3
  * verifies.
  */
-function narrowFailReason(outcome: PluginUpdateOutcome): Reason {
+function narrowFailReason(outcome: PluginUpdateFailedOutcome): Reason {
   const firstReason = outcome.reasons?.[0];
   if (firstReason !== undefined) {
     return firstReason;
@@ -518,7 +530,7 @@ function narrowFailReason(outcome: PluginUpdateOutcome): Reason {
   // Fallback: legacy substring parse of `notes`. Retained for backward
   // compatibility with notes-only outcome fixtures.
   const notes = outcome.notes;
-  if (notes === undefined || notes.length === 0) {
+  if (notes.length === 0) {
     return "unreadable manifest";
   }
 

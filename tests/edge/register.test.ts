@@ -82,6 +82,8 @@ function makeDeps(overrides: Partial<EdgeDeps> = {}): EdgeDeps {
     Promise.resolve<PluginUpdateOutcome>({
       partition: "unchanged",
       name: plugin,
+      fromVersion: "0.0.0",
+      toVersion: "0.0.0",
       declaresAgents: false,
       declaresMcp: false,
     });

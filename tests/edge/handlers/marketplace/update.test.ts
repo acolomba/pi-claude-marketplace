@@ -45,6 +45,8 @@ function makeDeps(): { deps: EdgeDeps; pluginUpdateCalls: string[] } {
     return Promise.resolve({
       partition: "unchanged",
       name: plugin,
+      fromVersion: "0.0.0",
+      toVersion: "0.0.0",
       declaresAgents: false,
       declaresMcp: false,
     });
