@@ -21,11 +21,11 @@ export { causeChainTrailer } from "../shared/errors.ts";
  * orchestrators/plugin/update.ts) that need the same text without going
  * through the notify channel.
  *
- * Phase 14.2-fix WR-03: extracted from three byte-identical private
- * copies in the orchestrator files above. The single canonical
- * implementation here is the source of truth -- if the cause-chain
- * trailer contract changes (depth bound, separator, trimming rule),
- * the change lands once.
+ * Extracted from three byte-identical private copies in the
+ * orchestrator files above. The single canonical implementation here
+ * is the source of truth -- if the cause-chain trailer contract
+ * changes (depth bound, separator, trimming rule), the change lands
+ * once.
  */
 export function composeErrorWithCauseChain(err: unknown): string {
   const trailer = causeChainTrailer(err);

@@ -1,54 +1,57 @@
 // presentation/compact-line.ts
 //
-// Wave 1 keystone: the typed `RowSpec` discriminated union AND the
-// grammar-aware `renderRow` composer that owns MSG-GR-1 token order,
-// MSG-GR-2 `@<marketplace>` carve-out, MSG-GR-4 reasons-block formatting,
-// MSG-GR-5 `<marker>` slot, MSG-IC-1..3 icon discipline, MSG-PL-4 / CMC-09
-// `(upgradable)` list-only constraint, MSG-PL-6 scope-bracket carve-out,
-// and MSG-SD-1..3 per-row soft-dep marker injection.
+// Typed `RowSpec` discriminated union plus the grammar-aware `renderRow`
+// composer that owns MSG-GR-1 token order, MSG-GR-2 `@<marketplace>`
+// carve-out, MSG-GR-4 reasons-block formatting, MSG-GR-5 `<marker>`
+// slot, MSG-IC-1..3 icon discipline, MSG-PL-4 / CMC-09 `(upgradable)`
+// list-only constraint, MSG-PL-6 scope-bracket carve-out, and
+// MSG-SD-1..3 per-row soft-dep marker injection.
 //
-// Per D-13-05 every Wave 2 sub-wave constructs `RowSpec` values from
-// validated orchestrator state and routes them through `renderRow`. The
-// renderer is a pure transform with no I/O; per D-13-07 it consumes the
+// The renderer is a pure transform with no I/O; it consumes the
 // soft-dep companion-loaded predicate as an INJECTED `SoftDepProbe`
-// dependency (structurally identical to `platform/pi-api.ts::SoftDepStatus`,
-// re-declared locally so this module imports nothing from `platform/`).
+// dependency (structurally identical to
+// `platform/pi-api.ts::SoftDepStatus`, re-declared locally so this
+// module imports nothing from `platform/`). Orchestrators construct
+// `RowSpec` values from validated state and route them through
+// `renderRow`; they never hand-format tokens.
 //
-// Discriminant choice: explicit `kind` literal field per RESEARCH.md A1.
-// Departs from the inferred-union codebase precedent at
-// `presentation/plugin-list.ts:45` because:
+// Discriminant choice: explicit `kind` literal field. Departs from
+// the inferred-union codebase precedent at `presentation/plugin-list.ts`
+// because:
 //   (a) the union has 9 variants and meaningful per-variant fields
-//       (only PluginInlineRow has `marketplace`, only MarketplaceRow has
-//       `outcomeClass`, only RollbackChild has `phaseLabel`);
-//   (b) Phase 14's drift guard greps for `kind: "<...>"` to map emission
+//       (only PluginInlineRow has `marketplace`, only MarketplaceRow
+//       has `outcomeClass`, only RollbackChild has `phaseLabel`);
+//   (b) the drift guard greps for `kind: "<...>"` to map emission
 //       sites back to the catalog rendered states;
 //   (c) the renderer's main switch narrows cleanly on `row.kind` and
-//       enforces exhaustiveness via `assertNever` (shared/errors.ts:12).
+//       enforces exhaustiveness via `assertNever`.
 //
 // Structural enforcement summary:
-//   - PluginInlineUninstalledRow has NO declaresAgents/Mcp fields, so the
-//     renderer cannot emit `{requires pi-subagents}` / `{requires pi-mcp}`
-//     on a `(uninstalled)` row (MSG-SD-3 / D-13-07).
+//   - PluginInlineUninstalledRow has NO declaresAgents/Mcp fields, so
+//     the renderer cannot emit `{requires pi-subagents}` /
+//     `{requires pi-mcp}` on an `(uninstalled)` row (MSG-SD-3).
 //   - PluginInlineRow.status / PluginCascadeRow.status exclude
 //     `"upgradable"` via `Extract<StatusToken, ...>`, so callers cannot
 //     route `(upgradable)` through any surface but `PluginListRow`
 //     (MSG-PL-4 / CMC-09).
 //   - EmptyToken.token is restricted to `"no marketplaces" | "no plugins"`;
-//     the renderer emits the bare token only (no icon, no scope brackets)
-//     per MSG-ER-1 / CMC-10.
+//     the renderer emits the bare token only (no icon, no scope
+//     brackets) per MSG-ER-1 / CMC-10.
 //
 // MSG-IC-1..3 icon discipline:
-//   - `ICON_INSTALLED = "●"` for (installed)/(updated)/(upgradable)/(reinstalled)
-//     plus trivial (skipped) {up-to-date} no-ops where the plugin remains
-//     installed.
+//   - `ICON_INSTALLED = "●"` for (installed)/(updated)/(upgradable)/
+//     (reinstalled) plus trivial (skipped) {up-to-date} no-ops where
+//     the plugin remains installed.
 //   - `ICON_AVAILABLE = "○"` for (available)/(uninstalled).
 //   - `ICON_UNINSTALLABLE = "⊘"` for (failed)/(rollback failed)/
 //     (manual recovery)/(unavailable) AND for (skipped) failure-cascade
-//     children where the plugin is NOT installed (e.g. {source mismatch}).
-//   - Marketplace rows dispatch on `outcomeClass`: "ok" -> ●; "failure" -> ⊘.
-// The three icon constants are file-private here -- they migrated from
-// `presentation/plugin-list.ts` because compact-line.ts is now the
-// second consumer (D-CMC-07 promotion criterion satisfied per D-13-15).
+//     children where the plugin is NOT installed (e.g.
+//     {source mismatch}).
+//   - Marketplace rows dispatch on `outcomeClass`: "ok" -> ●;
+//     "failure" -> ⊘.
+// The three icon constants are file-private here -- they were
+// promoted from `presentation/plugin-list.ts` once a second consumer
+// (this file) needed them.
 
 import { assertNever } from "../shared/errors.ts";
 
@@ -123,7 +126,7 @@ export interface PluginInlineUninstalledRow {
  * Plugin row inside a marketplace-headed cascade (update / reinstall /
  * import / mp remove children). NO `marketplace` field -- inherited from
  * the cascade header per MSG-GR-2 carve-out. `status` includes
- * `"reinstalled"` (D-13-20) but excludes `"upgradable"` (list-only).
+ * `"reinstalled"` but excludes `"upgradable"` (list-only).
  */
 export interface PluginCascadeRow {
   readonly kind: "plugin-cascade";
@@ -262,7 +265,7 @@ export type RowSpec =
 /**
  * Pure transform: a `RowSpec` value plus the injected `SoftDepProbe`
  * returns the rendered compact-line string. The renderer owns MSG-GR-1
- * token order; orchestrators never hand-format tokens (D-13-05).
+ * token order; orchestrators never hand-format tokens.
  */
 export function renderRow(row: RowSpec, probe: SoftDepProbe): string {
   switch (row.kind) {

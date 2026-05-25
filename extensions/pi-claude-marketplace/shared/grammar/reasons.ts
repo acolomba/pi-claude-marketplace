@@ -8,38 +8,33 @@
 // downstream of it and must follow.
 //
 // Locking decisions:
-//   - D-CMC-01: location is `extensions/pi-claude-marketplace/shared/grammar/`,
-//     a new sibling to `shared/markers.ts` and `shared/notify.ts`. Per D-11
-//     `shared/grammar/` sits BELOW `presentation/` and `persistence/`, so it
-//     is importable from anywhere without violating layer rules.
-//   - D-CMC-02: one file per closed set (this file owns reasons; status
+//   - Location is `extensions/pi-claude-marketplace/shared/grammar/`,
+//     a sibling to `shared/markers.ts` and `shared/notify.ts`. Per
+//     D-11 `shared/grammar/` sits BELOW `presentation/` and
+//     `persistence/`, so it is importable from anywhere without
+//     violating layer rules.
+//   - One file per closed set (this file owns reasons; status
 //     tokens live in `./status-tokens.ts`).
-//   - D-CMC-03: the shape is an `as const` array + derived literal union.
-//     The runtime array is required because Phase 14's drift test iterates
-//     it; the derived literal union types Phase 13 callsites
-//     (e.g. `function renderRow(..., reason: Reason)`).
+//   - Shape: `as const` array + derived literal union. The runtime
+//     array is required because the drift test iterates it; the
+//     derived literal union types renderer callsites (e.g.
+//     `function renderRow(..., reason: Reason)`).
 //
-// Count reconciliation: Phase 12 originally locked the closed set at 23
-// entries (the frontmatter at messaging-style-guide.md is the binding
-// source). Phase 13 sub-wave 2c (Plan 13-02c-01) added `"already enabled"`
-// and `"already disabled"` per the CMC-33 / catalog binding at
-// docs/output-catalog.md -- the `marketplace autoupdate enable|disable`
-// idempotent-flip result row uses these reasons as the `{<reason>}`
-// block. Phase 13 Wave 3 plan 13-03-01 (catalog UAT) added
-// `"permission denied"`, `"source missing"`, and `"network unreachable"`
-// per the same precedent: the catalog at the uninstall failure,
-// marketplace-remove partial child, reinstall failure, and update /
-// marketplace-update network-failure rows uses these reasons as the
-// `{<reason>}` block, and the catalog UAT runner asserts byte equality
-// against the rendered output. Without them the renderer cannot emit
-// the catalog's compact-line shape (the `Reason` literal union rejects
-// any string outside the closed set). The style-guide frontmatter and
-// §4 reasons table are updated in the same commit to keep the
-// grammar-frontmatter drift test green.
+// The current closed set was extended from the original 23 entries to
+// cover the autoupdate-enable/disable idempotent-flip rows
+// (`"already enabled"` / `"already disabled"`) and the failure-class
+// closed Reasons that the catalog UAT requires across uninstall /
+// marketplace-remove partial / reinstall / update / marketplace-update
+// rows (`"permission denied"` / `"source missing"` /
+// `"network unreachable"`). Without these the renderer cannot emit the
+// catalog's compact-line shape because the `Reason` literal union
+// rejects any string outside the closed set. The
+// `tests/architecture/grammar-frontmatter.test.ts` drift gate keeps
+// this file byte-equal to the frontmatter `reasons:` block.
 //
-// Brace convention: entries are stored WITHOUT surrounding `{}` braces. The
-// `{<reason>}` brace form is composed by the renderer at emission time
-// (Phase 13). Storing bare strings keeps this module a pure data surface and
+// Brace convention: entries are stored WITHOUT surrounding `{}` braces.
+// The `{<reason>}` brace form is composed by the renderer at emission
+// time. Storing bare strings keeps this module a pure data surface and
 // keeps the drift test's set-equality assertion against the frontmatter
 // (which also lists bare strings) symmetric.
 

@@ -8,29 +8,22 @@
 // downstream of it and must follow.
 //
 // Locking decisions:
-//   - D-CMC-01 (Phase 12 precedent): location is
-//     `extensions/pi-claude-marketplace/shared/grammar/`, sibling of
-//     `status-tokens.ts` and `reasons.ts`. Per D-11 `shared/grammar/` sits
-//     BELOW `presentation/` and `persistence/`, so it is importable from
-//     anywhere without violating layer rules.
-//   - D-CMC-02 (Phase 12 precedent): one file per closed set (this file
-//     owns pattern classes; status tokens live in `./status-tokens.ts`,
-//     reasons in `./reasons.ts`, markers in `./markers.ts`).
-//   - D-CMC-03 (Phase 12 precedent): the shape is an `as const` array +
-//     derived literal union. The runtime array is required because Phase
-//     14's drift test iterates it; the derived literal union is available
-//     to any future consumer that needs to discriminate on a pattern
-//     class identifier.
-//   - D-CMC-08 (Phase 12 precedent): one-closed-set-per-file under
-//     `shared/grammar/` -- Claude's Discretion #3 in CONTEXT.md selects
-//     this layout (new file rather than appending to an existing one).
-//   - D-14-10b (DERIVED -- Plan 14-03 Task 3): the 4-key frontmatter set
-//     (status_tokens, reasons, markers, pattern_classes) requires
-//     literal-union types for every entry. `PATTERN_CLASSES` is the
-//     pattern-class closed set; the test in
-//     `tests/architecture/grammar-frontmatter.test.ts` (extended in Plan
-//     14-03 Task 4) asserts set-equality against the frontmatter on every
-//     CI run.
+//   - Location is `extensions/pi-claude-marketplace/shared/grammar/`,
+//     sibling of `status-tokens.ts` and `reasons.ts`. Per D-11
+//     `shared/grammar/` sits BELOW `presentation/` and `persistence/`,
+//     so it is importable from anywhere without violating layer rules.
+//   - One file per closed set (this file owns pattern classes; status
+//     tokens live in `./status-tokens.ts`, reasons in `./reasons.ts`,
+//     markers in `./markers.ts`).
+//   - Shape: `as const` array + derived literal union. The runtime
+//     array is required because the drift test iterates it; the
+//     derived literal union is available to any future consumer that
+//     needs to discriminate on a pattern-class identifier.
+//   - `PATTERN_CLASSES` is one of the 4 closed-set frontmatter keys
+//     (status_tokens, reasons, markers, pattern_classes) byte-equal to
+//     the binding frontmatter; the test in
+//     `tests/architecture/grammar-frontmatter.test.ts` asserts
+//     set-equality against the frontmatter on every CI run.
 //
 // Semantic note: pattern classes label the SHAPES of compact-line
 // emissions (success / failure / cascade-row / etc.) for documentation

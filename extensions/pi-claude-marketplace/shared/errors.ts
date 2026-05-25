@@ -14,7 +14,7 @@ export function assertNever(x: never): never {
 }
 
 /**
- * MSG-CC-1 (CMC-18 / D-CMC-12): depth-5 Error.cause walker rendered as
+ * MSG-CC-1 (CMC-18): depth-5 Error.cause walker rendered as
  * `cause: <l1> -> <l2> -> ... [(truncated)]`. Returns `""` when `err` is
  * `undefined` or `null` so callers can compose `body + (trailer === "" ? "" :
  * "\n\n" + trailer)` without extra guards.
@@ -189,7 +189,7 @@ export class CrossPluginConflictError extends Error {
  * `runPhases` result unwinds the staged resources via the ledger's
  * `undo` chain; `formatRollbackError` returns the structured rollback
  * result and the orchestrator composes the final user message via
- * `presentation/rollback-partial.ts` (Plan 14-06 / D-14-04).
+ * `presentation/rollback-partial.ts`.
  */
 export class ConcurrentInstallError extends Error {
   readonly plugin: string;
@@ -267,16 +267,15 @@ export class PluginUpdatePhase3Error extends Error {
 }
 
 /**
- * Plan 13-02a-02 / CMC-16: structured manual-recovery signal for the
- * bridge-replacement leak path.
+ * CMC-16: structured manual-recovery signal for the bridge-replacement
+ * leak path.
  *
- * Bridges (`bridges/{skills,commands,agents}/stage.ts`) throw this when a
- * rollback of a partially-completed `replace*Internal` swap leaks files /
- * directories the caller must clean up by hand. The legacy MSG-MR-1 / ES-5
- * marker-prefixed message form (retired in Wave 2 sub-wave 2a continuation)
- * is NOT embedded in `.message` -- per CMC-16 / Plan 13-01-02 (MSG-MR-1 /
- * MSG-MR-2) the manual-recovery anchor is composed at the notify boundary
- * via `renderManualRecovery`. Bridges produce STRUCTURED data (`.leaks`);
+ * Bridges (`bridges/{skills,commands,agents}/stage.ts`) throw this
+ * when a rollback of a partially-completed `replace*Internal` swap
+ * leaks files / directories the caller must clean up by hand. The
+ * manual-recovery anchor is NOT embedded in `.message` -- per
+ * MSG-MR-1 / MSG-MR-2 it is composed at the notify boundary via
+ * `renderManualRecovery`. Bridges produce STRUCTURED data (`.leaks`);
  * the orchestrator (`orchestrators/plugin/reinstall.ts::narrowReason` and
  * the `outcomeToCascadeRow` mapper) type-checks the Error instead of
  * substring-matching the message text.

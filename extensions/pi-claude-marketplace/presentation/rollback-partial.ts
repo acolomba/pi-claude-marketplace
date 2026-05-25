@@ -16,12 +16,11 @@
 // per-phase failures exist; the absence of children means there was a
 // single-phase failure with no further detail to surface.
 //
-// Plan 14-06 / D-14-04: `composeRollbackPartialChildren` is the bare
-// children-block helper used by orchestrators that own their own parent
-// row context (e.g. the transaction-layer rollback chokepoint refactor
-// that moved presentation up to the orchestrator: the orchestrator
-// composes its own `(failed) {rollback partial}` parent line and stitches
-// the bare children block produced here under it).
+// `composeRollbackPartialChildren` is the bare children-block helper
+// used by orchestrators that own their own parent-row context (e.g.
+// the transaction-layer rollback chokepoint where the orchestrator
+// composes its own `(failed) {rollback partial}` parent line and
+// stitches the bare children block produced here under it).
 
 import { causeChainTrailer } from "./cause-chain.ts";
 import { renderRow } from "./compact-line.ts";
@@ -86,12 +85,12 @@ export function renderRollbackPartial(
  * `RollbackPartial[]` ledger array, suitable for stitching under a parent
  * line that the caller composes independently.
  *
- * Used by the transaction-layer rollback chokepoint refactor (Plan 14-06
- * / D-14-04 orchestrator-owns-rendering): the transaction layer cannot
- * import from presentation/ (BLOCK C), so it returns the raw
- * `RollbackPartial[]` and the orchestrator calls this helper to compose
- * the canonical `[<phase>] (rollback failed) {rollback partial}` per-row
- * shape under its own `(failed) {rollback partial}` parent line.
+ * Used by the orchestrator-owns-rendering rollback chokepoint: the
+ * transaction layer cannot import from presentation/ (BLOCK C), so it
+ * returns the raw `RollbackPartial[]` and the orchestrator calls this
+ * helper to compose the canonical
+ * `[<phase>] (rollback failed) {rollback partial}` per-row shape
+ * under its own `(failed) {rollback partial}` parent line.
  *
  * The free-text `msg` field of each `RollbackPartial` is intentionally
  * NOT embedded here: the closed-set CMC-11 token vocabulary requires the
