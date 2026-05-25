@@ -9,7 +9,11 @@ import {
   GENERATED_AGENT_PREFIX,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { installPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
+import {
+  __test_classifyEntityShapeError,
+  __test_classifyInstallFailure,
+  installPlugin,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -1379,4 +1383,135 @@ test("D-03-INV :: install invalidates plugin cache for the target marketplace", 
       await rm(cwd, { recursive: true, force: true });
     }
   });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Quick task 260525-aub: discriminated-dispatch regression guards on the
+// catch-site classifiers. Locks in the `instanceof PluginShapeError` +
+// `.kind` dispatch so a future refactor cannot regress to message-text
+// substring matching. The S5852 ReDoS regex previously at install.ts:902
+// is DELETED; these tests guarantee the typed dispatch produces the same
+// closed-set `Reason[]` output without re-parsing `.message`.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("classifyEntityShapeError dispatches on kind=already-installed -> failed/{already installed}", async () => {
+  const { PluginShapeError } =
+    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
+  const err = new PluginShapeError({
+    kind: "already-installed",
+    plugin: "p",
+    marketplace: "mp",
+  });
+  const row = __test_classifyEntityShapeError(err, {
+    plugin: "p",
+    marketplace: "mp",
+    scope: "project",
+  });
+  assert.ok(row);
+  assert.equal(row.status, "failed");
+  assert.deepEqual(row.reasons, ["already installed"]);
+});
+
+test("classifyEntityShapeError dispatches on kind=not-in-manifest -> failed/{not in manifest}", async () => {
+  const { PluginShapeError } =
+    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
+  const err = new PluginShapeError({
+    kind: "not-in-manifest",
+    plugin: "p",
+    marketplace: "mp",
+  });
+  const row = __test_classifyEntityShapeError(err, {
+    plugin: "p",
+    marketplace: "mp",
+    scope: "project",
+  });
+  assert.ok(row);
+  assert.equal(row.status, "failed");
+  assert.deepEqual(row.reasons, ["not in manifest"]);
+});
+
+test("classifyEntityShapeError dispatches on kind=not-installable -> unavailable + manifest-field reasons preserved verbatim", async () => {
+  const { PluginShapeError } =
+    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
+  const err = new PluginShapeError({
+    kind: "not-installable",
+    plugin: "p",
+    reasons: ["hooks", "lspServers"],
+  });
+  const row = __test_classifyEntityShapeError(err, {
+    plugin: "p",
+    marketplace: "mp",
+    scope: "project",
+  });
+  assert.ok(row);
+  assert.equal(row.status, "unavailable");
+  // MSG-GR-4 carve-out: manifest field names pass through verbatim as Reasons.
+  assert.deepEqual(row.reasons, ["hooks", "lspServers"]);
+});
+
+test("classifyEntityShapeError dispatches on kind=not-installable with source note -> {unsupported source}", async () => {
+  const { PluginShapeError } =
+    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
+  // The resolver's `r.notes` carry free-form strings like
+  // "source dir does not exist"; the narrow at the catch site maps any
+  // "source" substring to the closed Reason "unsupported source".
+  const err = new PluginShapeError({
+    kind: "not-installable",
+    plugin: "p",
+    reasons: ["source dir does not exist"],
+  });
+  const row = __test_classifyEntityShapeError(err, {
+    plugin: "p",
+    marketplace: "mp",
+    scope: "project",
+  });
+  assert.ok(row);
+  assert.equal(row.status, "unavailable");
+  assert.deepEqual(row.reasons, ["unsupported source"]);
+});
+
+test("classifyEntityShapeError returns undefined for non-PluginShapeError input (fallback to bare errorMessage)", () => {
+  const row = __test_classifyEntityShapeError(new Error("random failure"), {
+    plugin: "p",
+    marketplace: "mp",
+    scope: "project",
+  });
+  assert.equal(row, undefined);
+});
+
+test("classifyInstallFailure dispatches on PluginShapeError kinds (not-in-manifest -> unavailable, already-installed -> already-installed, not-installable -> uninstallable)", async () => {
+  const { PluginShapeError } =
+    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
+
+  const notInManifest = __test_classifyInstallFailure(
+    new PluginShapeError({ kind: "not-in-manifest", plugin: "p", marketplace: "mp" }),
+    "formatted",
+  );
+  assert.equal(notInManifest.status, "unavailable");
+
+  const alreadyInstalled = __test_classifyInstallFailure(
+    new PluginShapeError({ kind: "already-installed", plugin: "p", marketplace: "mp" }),
+    "formatted",
+  );
+  assert.equal(alreadyInstalled.status, "already-installed");
+
+  const notInstallable = __test_classifyInstallFailure(
+    new PluginShapeError({ kind: "not-installable", plugin: "p", reasons: ["hooks"] }),
+    "formatted",
+  );
+  assert.equal(notInstallable.status, "uninstallable");
+
+  const noLongerInstallable = __test_classifyInstallFailure(
+    new PluginShapeError({
+      kind: "no-longer-installable",
+      plugin: "p",
+      reasons: ["unsupported source"],
+    }),
+    "formatted",
+  );
+  assert.equal(noLongerInstallable.status, "uninstallable");
+
+  // Non-PluginShapeError input falls through to "unexpected-failure".
+  const unexpected = __test_classifyInstallFailure(new Error("random"), "formatted");
+  assert.equal(unexpected.status, "unexpected-failure");
 });

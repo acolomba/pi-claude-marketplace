@@ -80,7 +80,11 @@ import { MarketplaceNotFoundError, appendLeaks, errorMessage } from "../../share
 import { notifySuccess, notifyWarning } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
-import { cascadeUnstagePlugin, resolveScopeFromState } from "./shared.ts";
+import {
+  AgentsUnstageFailureError,
+  cascadeUnstagePlugin,
+  resolveScopeFromState,
+} from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
@@ -142,20 +146,52 @@ async function removePath(
 
 /**
  * Narrow a per-plugin cascade Error.cause to a closed-set Reason for
- * the failed-plugin children block. The fallback is
- * `"not in manifest"` as the documented permissive default; the
- * catalog UAT in Wave 3 is the binding verification.
+ * the failed-plugin children block.
+ *
+ * Quick task 260525-aub: dispatch on the typed cause (`AgentsUnstageFailureError`
+ * or `NodeJS.ErrnoException.code`) instead of substring-matching the
+ * `.message` text. The closed-set `"permission denied"` / `"source missing"`
+ * Reasons are members added in Phase 13 Wave 3 plan 13-03-01 per the
+ * catalog UAT precedent. The fallback is `"not in manifest"` as the
+ * documented permissive default. Bridges that throw bare `Error` with
+ * `unreadable`/`unparseable` substrings still surface via the legacy
+ * text fallback as a defensive last resort; if a future deviation shows
+ * those substring branches are dead code they can be deleted in a
+ * follow-up.
  */
 function narrowCascadeFailure(cause: Error): Reason {
-  const text = `${cause.name} ${cause.message}`.toLowerCase();
-  if (text.includes("eacces") || text.includes("permission denied")) {
-    // No closed-set Reason for permission errors today -- map to the
-    // most general failure reason. Wave 3 catalog UAT will surface if
-    // this needs a new REASONS member; per Phase 13 D-CMC-11 additions
-    // require a frontmatter + grammar drift sync.
+  if (cause instanceof AgentsUnstageFailureError) {
+    // No closed-set Reason captures the per-agent foreign-content
+    // failure mode today; map to the documented permissive fallback
+    // until the catalog UAT shows a new REASONS member is justified
+    // (per Phase 13 D-CMC-11 the addition requires a frontmatter +
+    // grammar drift sync).
     return "not in manifest";
   }
 
+  if (isErrnoException(cause)) {
+    switch (cause.code) {
+      case "EACCES":
+      case "EPERM":
+        return "permission denied";
+      case "ENOENT":
+        return "source missing";
+      default:
+        // Other errno codes fall through to the textual fallback so
+        // any future-classified error surface can still be picked up
+        // by the substring branches below before landing on the
+        // permissive default.
+        break;
+    }
+  }
+
+  // Defensive textual fallback: bridges may still throw bare `Error`
+  // with diagnostic messages for `unreadable` / `unparseable` /
+  // `not in manifest` conditions. These branches are retained as a
+  // defense-in-depth last resort -- never as the primary
+  // classification path. A future audit may show them dead and they
+  // can be deleted.
+  const text = `${cause.name} ${cause.message}`.toLowerCase();
   if (text.includes("unreadable")) {
     return "unreadable";
   }
@@ -169,6 +205,17 @@ function narrowCascadeFailure(cause: Error): Reason {
   }
 
   return "not in manifest";
+}
+
+/**
+ * Structural predicate for `NodeJS.ErrnoException`. The `.code` property
+ * is the locale-independent discriminator (NFR-4 floor `>= 22`). Avoids
+ * matching English-language error text that varies across Node versions.
+ */
+function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
+  return (
+    err instanceof Error && "code" in err && typeof (err as { code?: unknown }).code === "string"
+  );
 }
 
 export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise<void> {
@@ -366,3 +413,13 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
   const hint = reloadHint(removedSorted);
   notifySuccess(opts.ctx, appendReloadHint(renderRow(cleanRow, probe), hint));
 }
+
+/**
+ * Quick task 260525-aub: test seam for the typed-cause cascade-failure
+ * narrowing. Mirrors the `__test_outcomeToCascadeRow` re-export precedent
+ * in `orchestrators/plugin/reinstall.ts`: the helper stays private to the
+ * orchestrator while tests can exercise the `instanceof
+ * AgentsUnstageFailureError` / `NodeJS.ErrnoException.code` dispatch
+ * branches directly.
+ */
+export { narrowCascadeFailure as __test_narrowCascadeFailure };

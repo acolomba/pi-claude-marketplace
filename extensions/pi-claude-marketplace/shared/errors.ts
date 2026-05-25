@@ -295,6 +295,100 @@ export class ManualRecoveryError extends Error {
   }
 }
 
+/**
+ * Quick task 260525-aub: discriminated typed error replacing the free-text
+ * `Error.message` parsing previously used in install / update / remove /
+ * reinstall catch sites. Closes the systemic v1.3 pattern hole that Phase 13's
+ * `ManualRecoveryError` refactor missed in 4 additional catch sites beyond
+ * install, and eliminates the SonarCloud `typescript:S5852` ReDoS hotspot
+ * at the legacy `install.ts:902` regex (`/is not installable:\s*(.+)$/`).
+ *
+ * Discriminated by `kind`:
+ *   - `"not-in-manifest"`  -- PI-3 / install.ts:263, install.ts:294
+ *   - `"already-installed"` -- PI-5 / install.ts:285
+ *   - `"not-installable"`  -- PR-6 / resolver.ts:786 with op = "install"
+ *   - `"no-longer-installable"` -- PR-6 / resolver.ts:786 with op = "update"
+ *
+ * The constructor is the SINGLE SOURCE OF TRUTH for the `.message` text. The
+ * exact byte-equal forms (preserved so existing
+ * `err.message.includes("is not installable")` / regex assertions stay green):
+ *
+ *   not-in-manifest:        `Plugin "<plugin>" not found in marketplace "<marketplace>".`
+ *   already-installed:      `Plugin "<plugin>" is already installed in marketplace "<marketplace>".`
+ *   not-installable:        `Plugin "<plugin>" is not installable: <reasons.join("; ")>`
+ *   no-longer-installable:  `Plugin "<plugin>" is no longer installable: <reasons.join("; ")>`
+ *
+ * `reasons` on the (not-)installable variants is `readonly string[]` and
+ * NOT `readonly Reason[]`. The resolver populates `r.notes` with free-form
+ * strings (`"contains hooks"`, `"source dir does not exist"`,
+ * `"declares dependencies that must be installed manually"`, etc.) -- the
+ * closed `Reason` set lives one layer up at the renderer boundary. The
+ * `classifyEntityShapeError` consumer in `orchestrators/plugin/install.ts`
+ * narrows these strings to closed-set `Reason` members. Carrying the raw
+ * strings here preserves byte-equal `.message` text (the resolver's notes
+ * are joined verbatim) and removes the regex re-parse path entirely.
+ *
+ * `Error.cause` flows through `ErrorOptions` (mirrors `ManualRecoveryError`
+ * / `PluginUpdatePhase3Error` precedents) so the depth-5
+ * `causeChainTrailer` walker still surfaces the originating error.
+ */
+export type PluginShapeErrorShape =
+  | { readonly kind: "not-in-manifest"; readonly plugin: string; readonly marketplace: string }
+  | { readonly kind: "already-installed"; readonly plugin: string; readonly marketplace: string }
+  | {
+      readonly kind: "not-installable";
+      readonly plugin: string;
+      readonly reasons: readonly string[];
+    }
+  | {
+      readonly kind: "no-longer-installable";
+      readonly plugin: string;
+      readonly reasons: readonly string[];
+    };
+
+export type PluginShapeErrorKind = PluginShapeErrorShape["kind"];
+
+export class PluginShapeError extends Error {
+  readonly kind: PluginShapeErrorKind;
+  readonly plugin: string;
+  readonly marketplace?: string;
+  readonly reasons?: readonly string[];
+
+  constructor(shape: PluginShapeErrorShape, options?: ErrorOptions) {
+    super(buildPluginShapeMessage(shape), options);
+    this.name = "PluginShapeError";
+    this.kind = shape.kind;
+    this.plugin = shape.plugin;
+    switch (shape.kind) {
+      case "not-in-manifest":
+      case "already-installed":
+        this.marketplace = shape.marketplace;
+        break;
+      case "not-installable":
+      case "no-longer-installable":
+        this.reasons = shape.reasons;
+        break;
+      default:
+        assertNever(shape);
+    }
+  }
+}
+
+function buildPluginShapeMessage(shape: PluginShapeErrorShape): string {
+  switch (shape.kind) {
+    case "not-in-manifest":
+      return `Plugin "${shape.plugin}" not found in marketplace "${shape.marketplace}".`;
+    case "already-installed":
+      return `Plugin "${shape.plugin}" is already installed in marketplace "${shape.marketplace}".`;
+    case "not-installable":
+      return `Plugin "${shape.plugin}" is not installable: ${shape.reasons.join("; ")}`;
+    case "no-longer-installable":
+      return `Plugin "${shape.plugin}" is no longer installable: ${shape.reasons.join("; ")}`;
+    default:
+      return assertNever(shape);
+  }
+}
+
 export interface ResourcesDiscoverFailure {
   readonly scope: "user" | "project";
   readonly kind: "skills" | "prompts";

@@ -9,6 +9,7 @@ import {
   CrossPluginConflictError,
   errorMessage,
   ManualRecoveryError,
+  PluginShapeError,
   PluginUpdatePhase3Error,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
@@ -152,4 +153,101 @@ test("ManualRecoveryError: instanceof both ManualRecoveryError and Error", () =>
   const err = new ManualRecoveryError("m", ["x"]);
   assert.ok(err instanceof ManualRecoveryError);
   assert.ok(err instanceof Error);
+});
+
+/**
+ * Quick task 260525-aub: PluginShapeError discriminated typed error class
+ * replaces free-text `Error.message` parsing in install/update/remove
+ * orchestrators. Byte-equal `.message` text to the legacy
+ * `new Error("Plugin "X" ...")` throws is the contract that keeps the
+ * existing `.message.includes(...)` assertions in
+ * `tests/orchestrators/plugin/install.test.ts` and
+ * `tests/domain/resolver-strict.test.ts` green unchanged.
+ */
+
+test("PluginShapeError: kind=not-in-manifest -> byte-equal install.ts:263/294 message", () => {
+  const err = new PluginShapeError({ kind: "not-in-manifest", plugin: "p", marketplace: "mp" });
+  assert.equal(err.message, 'Plugin "p" not found in marketplace "mp".');
+  assert.equal(err.kind, "not-in-manifest");
+  assert.equal(err.plugin, "p");
+  assert.equal(err.marketplace, "mp");
+  assert.equal(err.name, "PluginShapeError");
+  assert.ok(err instanceof PluginShapeError);
+  assert.ok(err instanceof Error);
+});
+
+test("PluginShapeError: kind=already-installed -> byte-equal install.ts:285 message", () => {
+  const err = new PluginShapeError({ kind: "already-installed", plugin: "p", marketplace: "mp" });
+  assert.equal(err.message, 'Plugin "p" is already installed in marketplace "mp".');
+  assert.equal(err.kind, "already-installed");
+  assert.equal(err.plugin, "p");
+  assert.equal(err.marketplace, "mp");
+});
+
+test("PluginShapeError: kind=not-installable -> byte-equal resolver.ts:786 install-verb message", () => {
+  const err = new PluginShapeError({
+    kind: "not-installable",
+    plugin: "p1",
+    reasons: ["hooks", "lspServers"],
+  });
+  assert.equal(err.message, 'Plugin "p1" is not installable: hooks; lspServers');
+  assert.equal(err.kind, "not-installable");
+  assert.equal(err.plugin, "p1");
+  assert.deepEqual(err.reasons, ["hooks", "lspServers"]);
+});
+
+test("PluginShapeError: kind=no-longer-installable -> byte-equal resolver.ts:786 update-verb message", () => {
+  const err = new PluginShapeError({
+    kind: "no-longer-installable",
+    plugin: "p1",
+    reasons: ["unsupported source"],
+  });
+  assert.equal(err.message, 'Plugin "p1" is no longer installable: unsupported source');
+  assert.equal(err.kind, "no-longer-installable");
+  assert.equal(err.plugin, "p1");
+  assert.deepEqual(err.reasons, ["unsupported source"]);
+});
+
+test("PluginShapeError: reasons preserve arbitrary resolver.ts notes verbatim (byte-equal join)", () => {
+  // Resolver `r.notes` are NOT pre-narrowed to the closed Reason set --
+  // they are free-form strings like "source dir does not exist",
+  // "contains hooks", "malformed mcpServers: ...", "declares dependencies
+  // that must be installed manually". The byte-equal contract requires
+  // PluginShapeError to pass them through verbatim into the `.message`
+  // text. The `classifyEntityShapeError` consumer narrows them to closed
+  // `Reason` members at the catch site.
+  const err = new PluginShapeError({
+    kind: "not-installable",
+    plugin: "p1",
+    reasons: ["source dir does not exist", "contains hooks"],
+  });
+  assert.equal(
+    err.message,
+    'Plugin "p1" is not installable: source dir does not exist; contains hooks',
+  );
+});
+
+test("PluginShapeError: ErrorOptions cause-chain wires through super()", () => {
+  const rootErr = new Error("root");
+  const err = new PluginShapeError(
+    { kind: "not-in-manifest", plugin: "p", marketplace: "mp" },
+    { cause: rootErr },
+  );
+  assert.equal((err as Error & { cause: unknown }).cause, rootErr);
+});
+
+test("PluginShapeError: readonly fields survive cast to base Error", () => {
+  const err = new PluginShapeError({
+    kind: "not-installable",
+    plugin: "p1",
+    reasons: ["hooks"],
+  });
+  // The discriminated payload survives narrowing through the base Error
+  // ref because the fields are own enumerable properties on the instance.
+  const baseRef: Error = err;
+  assert.ok(baseRef instanceof PluginShapeError);
+  if (baseRef instanceof PluginShapeError) {
+    assert.equal(baseRef.kind, "not-installable");
+    assert.equal(baseRef.plugin, "p1");
+  }
 });

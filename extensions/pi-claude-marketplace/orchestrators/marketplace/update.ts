@@ -378,7 +378,7 @@ function outcomeToCascadeRow(outcome: PluginUpdateOutcome, scope: Scope): Plugin
         name: outcome.name,
         scope,
         status: "skipped",
-        reasons: [narrowSkipReason(outcome.notes)],
+        reasons: [narrowSkipReason(outcome)],
       };
     case "failed":
       return {
@@ -386,18 +386,33 @@ function outcomeToCascadeRow(outcome: PluginUpdateOutcome, scope: Scope): Plugin
         name: outcome.name,
         scope,
         status: "failed",
-        reasons: [narrowFailReason(outcome.notes)],
+        reasons: [narrowFailReason(outcome)],
       };
   }
 }
 
 /**
- * Narrow `skipped` outcome notes to a closed-set Reason. The
- * documented permissive default is `"up-to-date"` (the most common
- * non-failure skip); the catalog UAT in Wave 3 is the binding
- * verification that the mapped Reason set is sufficient.
+ * Narrow a `skipped` outcome to a closed-set Reason.
+ *
+ * Quick task 260525-aub: prefer the pre-narrowed `outcome.reasons[0]`
+ * (populated by `plugin/update.ts` producers per CR-06) over the legacy
+ * substring parse of `outcome.notes`. The notes-fallback is retained
+ * for backward compatibility with test fixtures that build outcomes
+ * without `reasons`. Once every producer populates `reasons`, the
+ * fallback can be deleted -- today fixtures in
+ * `tests/orchestrators/marketplace/update.test.ts` still construct
+ * notes-only outcomes (e.g., the `narrowSkipReason fallback` test at
+ * line 461) so the fallback stays as a transitional bridge.
  */
-function narrowSkipReason(notes: readonly string[] | undefined): Reason {
+function narrowSkipReason(outcome: PluginUpdateOutcome): Reason {
+  const firstReason = outcome.reasons?.[0];
+  if (firstReason !== undefined) {
+    return firstReason;
+  }
+
+  // Fallback: legacy substring parse of `notes`. Retained for backward
+  // compatibility with notes-only outcome fixtures.
+  const notes = outcome.notes;
   if (notes === undefined || notes.length === 0) {
     return "up-to-date";
   }
@@ -419,11 +434,23 @@ function narrowSkipReason(notes: readonly string[] | undefined): Reason {
 }
 
 /**
- * Narrow `failed` outcome notes to a closed-set Reason. The fallback
- * is `"unreadable manifest"` because most update failures bubble up
- * from manifest re-reads; the catalog UAT in Wave 3 verifies.
+ * Narrow a `failed` outcome to a closed-set Reason.
+ *
+ * Quick task 260525-aub: prefer pre-narrowed `outcome.reasons[0]` over
+ * legacy notes parsing (same rationale as `narrowSkipReason` above).
+ * The fallback is `"unreadable manifest"` because most legacy update
+ * failures bubble up from manifest re-reads; the catalog UAT in Wave 3
+ * verifies.
  */
-function narrowFailReason(notes: readonly string[] | undefined): Reason {
+function narrowFailReason(outcome: PluginUpdateOutcome): Reason {
+  const firstReason = outcome.reasons?.[0];
+  if (firstReason !== undefined) {
+    return firstReason;
+  }
+
+  // Fallback: legacy substring parse of `notes`. Retained for backward
+  // compatibility with notes-only outcome fixtures.
+  const notes = outcome.notes;
   if (notes === undefined || notes.length === 0) {
     return "unreadable manifest";
   }
@@ -559,3 +586,12 @@ async function validateManifestAtRoot(
     record.marketplaceRoot = marketplaceRoot;
   }
 }
+
+/**
+ * Quick task 260525-aub: test seam for the outcome -> cascade-row mapper.
+ * Mirrors the `__test_outcomeToCascadeRow` re-export precedent in
+ * `orchestrators/plugin/reinstall.ts`: the function stays private to the
+ * orchestrator while tests can verify the `outcome.reasons` typed-Reason
+ * preference over the legacy notes-parsing fallback.
+ */
+export { outcomeToCascadeRow as __test_outcomeToCascadeRow };

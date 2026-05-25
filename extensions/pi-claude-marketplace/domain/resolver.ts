@@ -22,6 +22,7 @@ import path from "node:path";
 
 import Type from "typebox";
 
+import { PluginShapeError } from "../shared/errors.ts";
 import { PathContainmentError, assertPathInside } from "../shared/path-safety.ts";
 
 import { MCP_SERVERS_VALIDATOR } from "./components/mcp.ts";
@@ -773,6 +774,15 @@ export async function resolveLoose(
 
 /**
  * PR-6: narrow to installable-or-throw. Used by Phase 5 install/update.
+ *
+ * Quick task 260525-aub: throws `PluginShapeError` (typed discriminated
+ * carrier) so the catch site dispatches on `instanceof PluginShapeError`
+ * + `.kind` instead of substring-matching `.message`. The `.message`
+ * text is byte-equal to the legacy `new Error("Plugin "X" is [no longer
+ * ]installable: <notes>")` form so existing `.message.includes(...)`
+ * assertions stay green unchanged. `r.notes` is passed through as the
+ * `reasons` array (free-form strings; the closed `Reason` narrowing
+ * happens at the renderer boundary in `classifyEntityShapeError`).
  */
 export function requireInstallable(
   r: ResolvedPlugin,
@@ -782,6 +792,9 @@ export function requireInstallable(
     return;
   }
 
-  const verb = op === "update" ? "is no longer installable" : "is not installable";
-  throw new Error(`Plugin "${r.name}" ${verb}: ${r.notes.join("; ")}`);
+  throw new PluginShapeError({
+    kind: op === "update" ? "no-longer-installable" : "not-installable",
+    plugin: r.name,
+    reasons: r.notes,
+  });
 }
