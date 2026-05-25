@@ -185,7 +185,16 @@ export function makeMockGitOps(initial?: Partial<MockGitState>): MockGitOpsHandl
         }
       }
 
-      throw new Error(`mock resolveRef: unknown ref "${opts.ref}"`);
+      // Mirror isomorphic-git's actual behavior: a missing ref throws
+      // `NotFoundError` (with both `name` and `code` set to that
+      // string). Orchestrator code at `refreshGitHubClone` distinguishes
+      // this from real failures (EACCES, corrupted git dir) via the
+      // `name` check, so the mock MUST tag this error correctly --
+      // otherwise the detached-HEAD fallback path stops working in
+      // tests that rely on resolveRef-throws-to-fall-back-to-checkout.
+      const nfe = new Error(`mock resolveRef: unknown ref "${opts.ref}"`);
+      nfe.name = "NotFoundError";
+      throw nfe;
     },
 
     async currentBranch(opts): Promise<string | undefined> {

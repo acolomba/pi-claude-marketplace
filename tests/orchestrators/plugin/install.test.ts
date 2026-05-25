@@ -12,6 +12,7 @@ import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/sou
 import {
   __test_classifyEntityShapeError,
   __test_classifyInstallFailure,
+  __test_narrowResolverReasons,
   installPlugin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -1433,10 +1434,18 @@ test("classifyEntityShapeError dispatches on kind=not-in-manifest -> failed/{not
 test("classifyEntityShapeError dispatches on kind=not-installable -> unavailable + manifest-field reasons preserved verbatim", async () => {
   const { PluginShapeError } =
     await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
+  // Task 260525-cjr C5: the resolver's `r.notes` carry the
+  // `"contains <kind>"` prefix (see resolver.ts:685
+  // `addUnsupportedKindNotes`); the carve-out in
+  // `narrowResolverReasons` strips the prefix and emits the bare
+  // token as the Reason. Pre-C5 the test built bare-token reasons
+  // directly because the dead predicate accepted them; after C5 the
+  // test matches the actual upstream form so we exercise the live
+  // code path.
   const err = new PluginShapeError({
     kind: "not-installable",
     plugin: "p",
-    reasons: ["hooks", "lspServers"],
+    reasons: ["contains hooks", "contains lspServers"],
   });
   const row = __test_classifyEntityShapeError(err, {
     plugin: "p",
@@ -1479,39 +1488,152 @@ test("classifyEntityShapeError returns undefined for non-PluginShapeError input 
   assert.equal(row, undefined);
 });
 
-test("classifyInstallFailure dispatches on PluginShapeError kinds (not-in-manifest -> unavailable, already-installed -> already-installed, not-installable -> uninstallable)", async () => {
+test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "failed"` shape carrying the typed Error', async () => {
   const { PluginShapeError } =
     await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
 
-  const notInManifest = __test_classifyInstallFailure(
-    new PluginShapeError({ kind: "not-in-manifest", plugin: "p", marketplace: "mp" }),
-    "formatted",
-  );
-  assert.equal(notInManifest.status, "unavailable");
+  // Task 260525-cjr C3: the four pre-C3 error variants
+  // (already-installed / unavailable / uninstallable /
+  // unexpected-failure) collapse into a single
+  // `{ status: "failed"; error; cause }` shape. The typed Error is
+  // the dispatch surface; consumers narrow on `instanceof
+  // PluginShapeError` and read `.kind` to recover the legacy
+  // semantic class.
+  const notInManifestErr = new PluginShapeError({
+    kind: "not-in-manifest",
+    plugin: "p",
+    marketplace: "mp",
+  });
+  const notInManifest = __test_classifyInstallFailure(notInManifestErr, "formatted");
+  assert.equal(notInManifest.status, "failed");
+  assert.ok(notInManifest.status === "failed");
+  assert.equal(notInManifest.error, notInManifestErr);
+  assert.equal(notInManifest.cause, "formatted");
 
-  const alreadyInstalled = __test_classifyInstallFailure(
-    new PluginShapeError({ kind: "already-installed", plugin: "p", marketplace: "mp" }),
-    "formatted",
-  );
-  assert.equal(alreadyInstalled.status, "already-installed");
+  const alreadyInstalledErr = new PluginShapeError({
+    kind: "already-installed",
+    plugin: "p",
+    marketplace: "mp",
+  });
+  const alreadyInstalled = __test_classifyInstallFailure(alreadyInstalledErr, "formatted");
+  assert.equal(alreadyInstalled.status, "failed");
+  assert.ok(alreadyInstalled.status === "failed");
+  assert.equal(alreadyInstalled.error, alreadyInstalledErr);
 
-  const notInstallable = __test_classifyInstallFailure(
-    new PluginShapeError({ kind: "not-installable", plugin: "p", reasons: ["hooks"] }),
-    "formatted",
-  );
-  assert.equal(notInstallable.status, "uninstallable");
+  const notInstallableErr = new PluginShapeError({
+    kind: "not-installable",
+    plugin: "p",
+    reasons: ["hooks"],
+  });
+  const notInstallable = __test_classifyInstallFailure(notInstallableErr, "formatted");
+  assert.equal(notInstallable.status, "failed");
+  assert.ok(notInstallable.status === "failed");
+  assert.equal(notInstallable.error, notInstallableErr);
 
-  const noLongerInstallable = __test_classifyInstallFailure(
-    new PluginShapeError({
-      kind: "no-longer-installable",
-      plugin: "p",
-      reasons: ["unsupported source"],
-    }),
-    "formatted",
-  );
-  assert.equal(noLongerInstallable.status, "uninstallable");
+  const noLongerInstallableErr = new PluginShapeError({
+    kind: "no-longer-installable",
+    plugin: "p",
+    reasons: ["unsupported source"],
+  });
+  const noLongerInstallable = __test_classifyInstallFailure(noLongerInstallableErr, "formatted");
+  assert.equal(noLongerInstallable.status, "failed");
+  assert.ok(noLongerInstallable.status === "failed");
+  assert.equal(noLongerInstallable.error, noLongerInstallableErr);
 
-  // Non-PluginShapeError input falls through to "unexpected-failure".
-  const unexpected = __test_classifyInstallFailure(new Error("random"), "formatted");
-  assert.equal(unexpected.status, "unexpected-failure");
+  // Non-PluginShapeError input is preserved verbatim on `error`.
+  const opaque = new Error("random");
+  const unexpected = __test_classifyInstallFailure(opaque, "formatted");
+  assert.equal(unexpected.status, "failed");
+  assert.ok(unexpected.status === "failed");
+  assert.equal(unexpected.error, opaque);
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Task 260525-cjr B2: narrowResolverReasons no longer silently degrades
+// non-resolver causes to `{unsupported source}`. EACCES / EPERM / ENOENT /
+// SyntaxError substrings now map to their precise closed Reasons; the
+// `unsupported source` fallback runs only when no classifier matched.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("260525-cjr B2 / C5: narrowResolverReasons -> `contains hooks` extracts the bare `hooks` Reason", () => {
+  // Pre-C5 the test passed a bare `"hooks"` string (matching the
+  // dead predicate); C5 aligned the predicate with the resolver's
+  // actual emission form (`"contains hooks"`). The user-visible
+  // catalog row shape (`(unavailable) {hooks}`) is unchanged.
+  assert.deepEqual([...__test_narrowResolverReasons(["contains hooks"])], ["hooks"]);
+});
+
+test("260525-cjr B2 / C5: narrowResolverReasons -> `contains lspServers` extracts the bare `lspServers` Reason", () => {
+  assert.deepEqual([...__test_narrowResolverReasons(["contains lspServers"])], ["lspServers"]);
+});
+
+test("260525-cjr C5: narrowResolverReasons recognises the resolver's `contains hooks` prefix and emits bare `hooks`", () => {
+  // The resolver's `addUnsupportedKindNotes` writes
+  // `partial.notes.push("contains " + kind)` (resolver.ts:685) for
+  // every UNSUPPORTED_COMPONENT_KINDS member. Before this fix the
+  // `MANIFEST_FIELD_REASONS.has(reason)` predicate compared the WHOLE
+  // string against the bare set, so `"contains hooks"` never matched
+  // and the row degraded to `{unsupported source}`. The fix strips
+  // the `contains ` prefix and re-checks; the bare token is emitted
+  // as the Reason, matching the catalog's `(unavailable) {hooks}` /
+  // `(unavailable) {lspServers}` forms.
+  assert.deepEqual([...__test_narrowResolverReasons(["contains hooks"])], ["hooks"]);
+  assert.deepEqual([...__test_narrowResolverReasons(["contains lspServers"])], ["lspServers"]);
+});
+
+test("260525-cjr C5: narrowResolverReasons ignores `contains <unknown-kind>` (kind not in MANIFEST_FIELD_REASONS)", () => {
+  // Resolver also emits `"contains monitors"`, `"contains themes"`,
+  // etc. for the other UNSUPPORTED_COMPONENT_KINDS members. Those
+  // are NOT in the bare-token carve-out -- the catalog renders them
+  // as `{unsupported source}` per the existing convention. The
+  // helper returns `undefined` for those, and the downstream
+  // `reason.includes("source")` check (or the final fallback) takes
+  // over.
+  const reasons = __test_narrowResolverReasons(["contains monitors"]);
+  // `contains monitors` does NOT contain "source"; falls through to
+  // the final `unsupported source` permissive default (empty-out
+  // guard runs).
+  assert.deepEqual([...reasons], ["unsupported source"]);
+});
+
+test("260525-cjr B2: narrowResolverReasons -> source-substring -> `unsupported source`", () => {
+  assert.deepEqual(
+    [...__test_narrowResolverReasons(["unsupported source kind: foo"])],
+    ["unsupported source"],
+  );
+});
+
+test("260525-cjr B2: narrowResolverReasons -> EACCES note surfaces as `permission denied` (NOT `unsupported source`)", () => {
+  const reasons = __test_narrowResolverReasons([
+    "EACCES: permission denied opening '/.pi/agent/...'",
+  ]);
+  assert.deepEqual([...reasons], ["permission denied"]);
+});
+
+test("260525-cjr B2: narrowResolverReasons -> EPERM also classifies as `permission denied`", () => {
+  const reasons = __test_narrowResolverReasons(["EPERM: operation not permitted"]);
+  assert.deepEqual([...reasons], ["permission denied"]);
+});
+
+test("260525-cjr B2: narrowResolverReasons -> ENOENT note surfaces as `source missing`", () => {
+  const reasons = __test_narrowResolverReasons(["ENOENT: no such file or directory"]);
+  assert.deepEqual([...reasons], ["source missing"]);
+});
+
+test("260525-cjr B2: narrowResolverReasons -> SyntaxError note surfaces as `unparseable`", () => {
+  const reasons = __test_narrowResolverReasons(["SyntaxError: Unexpected token } in JSON"]);
+  assert.deepEqual([...reasons], ["unparseable"]);
+});
+
+test("260525-cjr B2: narrowResolverReasons -> empty notes -> `unsupported source` (permissive fallback)", () => {
+  assert.deepEqual([...__test_narrowResolverReasons([])], ["unsupported source"]);
+});
+
+test("260525-cjr B2: narrowResolverReasons -> wholly unclassifiable note -> `unsupported source` (permissive fallback)", () => {
+  // No carve-out, no `source` substring, no errno substring -- the
+  // permissive `unsupported source` fallback runs only here.
+  assert.deepEqual(
+    [...__test_narrowResolverReasons(["something genuinely unclassifiable"])],
+    ["unsupported source"],
+  );
 });

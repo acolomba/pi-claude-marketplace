@@ -70,9 +70,11 @@ import { renderRow } from "../../presentation/compact-line.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { renderRollbackPartial } from "../../presentation/rollback-partial.ts";
 import { compareByNameThenScope } from "../../presentation/sort.ts";
+import { composeVersionArrow } from "../../presentation/version-arrow.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   appendLeaks,
+  assertNever,
   errorMessage,
   PluginShapeError,
   PluginUpdatePhase3Error,
@@ -306,6 +308,11 @@ export const updateSinglePlugin: PluginUpdateFn = async (plugin, marketplace, sc
       partition: "failed",
       name: plugin,
       notes: [composeErrorWithCauseChain(err)],
+      // CMC-13 / Task 260525-cjr B1: required booleans on every
+      // PluginUpdateOutcome partition. `(failed)` rows do NOT render
+      // the soft-dep marker (MSG-SD-3), so the value is `false`.
+      declaresAgents: false,
+      declaresMcp: false,
     };
     return typedReasons === undefined ? base : { ...base, reasons: typedReasons };
   }
@@ -321,7 +328,9 @@ export const updateSinglePlugin: PluginUpdateFn = async (plugin, marketplace, sc
  */
 function reasonsFromTypedError(err: unknown): readonly Reason[] | undefined {
   if (err instanceof PluginShapeError) {
-    switch (err.kind) {
+    // Task 260525-cjr C4: switch on `err.shape.kind` for compile-time
+    // exhaustiveness against the typed discriminated union.
+    switch (err.shape.kind) {
       case "no-longer-installable":
         return ["no longer installable"] as const;
       case "not-installable":
@@ -337,6 +346,22 @@ function reasonsFromTypedError(err: unknown): readonly Reason[] | undefined {
         // (the cascade walks installed plugins only); map to `"not in
         // manifest"` as the documented permissive fallback.
         return ["not in manifest"] as const;
+    }
+  }
+
+  // Task 260525-cjr B2: errno-bearing FS errors map to the matching
+  // closed Reason instead of falling through to the consumer's
+  // legacy notes-substring parse (which would land on the permissive
+  // `not in manifest` default for both narrowSkipReasons and
+  // narrowFailReasons).
+  if (err instanceof Error) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EACCES" || code === "EPERM") {
+      return ["permission denied"] as const;
+    }
+
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return ["source missing"] as const;
     }
   }
 
@@ -409,11 +434,17 @@ async function preflightUpdate(
     // so the cascade consumer reads it directly instead of regex-parsing
     // `notes`. Producer-side narrowing replaces the catch-site substring
     // dispatch in `marketplace/update.ts::narrowSkipReason`.
+    //
+    // Task 260525-cjr B1: required `boolean` predicates -- skipped
+    // outcomes do NOT render the soft-dep marker (MSG-SD-3), so the
+    // value is `false`. Repeated on every static-skipped return below.
     return {
       partition: "skipped",
       name: plugin,
       notes: [`marketplace "${marketplace}" not found in ${scope} scope`],
       reasons: ["not in manifest"] as const,
+      declaresAgents: false,
+      declaresMcp: false,
     };
   }
 
@@ -424,6 +455,8 @@ async function preflightUpdate(
       name: plugin,
       notes: ["not installed"],
       reasons: ["not installed"] as const,
+      declaresAgents: false,
+      declaresMcp: false,
     };
   }
 
@@ -436,6 +469,8 @@ async function preflightUpdate(
       fromVersion: record.version,
       notes: ["not in manifest"],
       reasons: ["not in manifest"] as const,
+      declaresAgents: false,
+      declaresMcp: false,
     };
   }
 
@@ -446,6 +481,8 @@ async function preflightUpdate(
       fromVersion: record.version,
       notes: ["entry failed schema validation"],
       reasons: ["invalid manifest"] as const,
+      declaresAgents: false,
+      declaresMcp: false,
     };
   }
 
@@ -470,13 +507,23 @@ async function preflightUpdate(
       fromVersion: record.version,
       notes: [errorMessage(err)],
       reasons: ["no longer installable"] as const,
+      declaresAgents: false,
+      declaresMcp: false,
     };
   }
 
   const fromVersion = record.version;
   const toVersion = await resolvePluginVersion(entry, installable);
   if (toVersion === fromVersion) {
-    return { partition: "unchanged", name: plugin, fromVersion, toVersion };
+    // `(unchanged)` rows do not render the soft-dep marker either.
+    return {
+      partition: "unchanged",
+      name: plugin,
+      fromVersion,
+      toVersion,
+      declaresAgents: false,
+      declaresMcp: false,
+    };
   }
 
   return { state, record, entry, installable, fromVersion, toVersion };
@@ -757,6 +804,10 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
       // reads `reasons[0]` directly.
       reasons: ["rollback partial"] as const,
       phaseFailures: phase3aFailures.map((f) => ({ phase: f.phase, msg: f.msg })),
+      // Task 260525-cjr B1: required `boolean`. `(failed)` rows do
+      // not render the soft-dep marker.
+      declaresAgents: false,
+      declaresMcp: false,
     };
   }
 
@@ -913,25 +964,28 @@ function outcomeToCascadeRow(
   outcome: PluginUpdateOutcome,
 ): { row: PluginCascadeRow; rollbackChildren?: readonly RollbackChild[] } | undefined {
   switch (outcome.partition) {
-    case "updated": {
+    case "updated":
       // MSG-PL-3 version-transition arrow `v<from> → v<to>` (U+2192,
       // space-padded). The renderer's renderVersion slot just emits
       // whatever the orchestrator supplies in `version`, so we compose
       // the arrow string here and pass it through verbatim.
-      const versionSlot = composeVersionArrow(outcome.fromVersion, outcome.toVersion);
+      //
+      // Task 260525-cjr C2: fromVersion / toVersion are REQUIRED on
+      // PluginUpdateUpdatedOutcome -- the optional-arg ternary in
+      // composeVersionArrow is now dead for this branch.
       return {
         row: {
           kind: "plugin-cascade",
           name: outcome.name,
           scope: target.scope,
-          ...(versionSlot !== undefined && { version: versionSlot }),
+          version: `${outcome.fromVersion} → v${outcome.toVersion}`,
           status: "updated",
-          declaresAgents: outcome.declaresAgents ?? false,
-          declaresMcp: outcome.declaresMcp ?? false,
+          // Task 260525-cjr B1: required `boolean` on
+          // `PluginUpdateOutcome`; the `?? false` coalesce is gone.
+          declaresAgents: outcome.declaresAgents,
+          declaresMcp: outcome.declaresMcp,
         },
       };
-    }
-
     case "unchanged": {
       // Catalog: `(skipped) {up-to-date}` -- the unchanged partition is
       // an internal optimization; the user-visible token is `(skipped)`
@@ -944,6 +998,8 @@ function outcomeToCascadeRow(
           scope: target.scope,
           status: "skipped",
           reasons: ["up-to-date"],
+          declaresAgents: false,
+          declaresMcp: false,
         },
       };
     }
@@ -956,9 +1012,15 @@ function outcomeToCascadeRow(
           scope: target.scope,
           ...(outcome.fromVersion !== undefined && { version: outcome.fromVersion }),
           status: "skipped",
-          // Quick task 260525-aub: prefer producer-narrowed
-          // `outcome.reasons` over the legacy notes-substring parse.
-          reasons: outcome.reasons ?? narrowSkipReasons(outcome.notes),
+          // Quick task 260525-aub / Task 260525-cjr C2: prefer the
+          // producer-narrowed `outcome.reasons` over the legacy
+          // notes-substring parse. `reasons` is now REQUIRED
+          // (PluginUpdateSkippedOutcome.reasons: readonly Reason[]) so
+          // an empty array opts into the consumer fallback path
+          // explicitly (back-compat with notes-only fixtures).
+          reasons: outcome.reasons.length > 0 ? outcome.reasons : narrowSkipReasons(outcome.notes),
+          declaresAgents: false,
+          declaresMcp: false,
         },
       };
     case "failed": {
@@ -1004,7 +1066,11 @@ function outcomeToCascadeRow(
     }
 
     default:
-      return undefined;
+      // Task 260525-cjr C2: exhaustiveness guard for the new
+      // discriminated union; any future partition added to
+      // PluginUpdateOutcome must update this switch or the compiler
+      // refuses to assign `outcome` to `never`.
+      return assertNever(outcome);
   }
 }
 
@@ -1051,30 +1117,9 @@ function spliceRollbackPartials(
   return out.join("\n");
 }
 
-/**
- * MSG-PL-3 version transition slot. Returns undefined when both sides
- * absent. The renderer's `renderVersion(version)` always prepends a `v`
- * to the supplied string, so the arrow form here is
- * `<from> → v<to>` -- the renderer turns that into `v<from> → v<to>`
- * matching catalog `/claude:plugin update` examples (output-catalog.md
- * lines 419-470). Single-version (unchanged from→to OR only one side
- * supplied) returns the bare version string for the renderer to prefix.
- */
-function composeVersionArrow(from: string | undefined, to: string | undefined): string | undefined {
-  if (from === undefined && to === undefined) {
-    return undefined;
-  }
-
-  if (from !== undefined && to !== undefined && from !== to) {
-    return `${from} → v${to}`;
-  }
-
-  if (to !== undefined) {
-    return to;
-  }
-
-  return from;
-}
+// Task 260525-cjr C6: `composeVersionArrow` lifted to
+// `presentation/version-arrow.ts` so the marketplace-side
+// `outcomeToCascadeRow` shares the same helper. Imported above.
 
 function narrowSkipReasons(notes: readonly string[] | undefined): readonly Reason[] {
   if (notes === undefined || notes.length === 0) {

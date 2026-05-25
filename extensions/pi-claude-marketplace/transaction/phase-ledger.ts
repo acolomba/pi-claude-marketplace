@@ -37,10 +37,26 @@ export interface Phase<C> {
   readonly undo?: (ctx: C) => Promise<void>;
 }
 
-/** AS-4: aggregated undo failure (one row per failed `undo` call). */
+/**
+ * AS-4: aggregated undo failure (one row per failed `undo` call).
+ *
+ * Task 260525-cjr C1: extended with `cause?: Error` to preserve the
+ * original undo throw's `Error.cause` chain. Previously only `msg`
+ * (the top-level `errorMessage(undoErr)` text) was recorded, dropping
+ * any deeper cause chain attached via `new Error(msg, { cause })`.
+ * The presentation layer (`presentation/rollback-partial.ts`) consumes
+ * this via the depth-5 `causeChainTrailer` walker to surface the
+ * underlying cause to the user.
+ *
+ * `cause` is the ORIGINAL Error instance (not the message text) so the
+ * walker can traverse its own `.cause` chain. Set to `undefined` when
+ * the undo throw was not an Error subclass (defensive -- bridges
+ * should always throw Errors but the ledger does not enforce).
+ */
 export interface RollbackPartial {
   readonly phase: string;
   readonly msg: string;
+  readonly cause?: Error;
 }
 
 /**
@@ -74,7 +90,17 @@ async function rollbackExecuted<C>(
         throw undoErr;
       }
 
-      partials.push({ phase: done.name, msg: errorMessage(undoErr) });
+      // Task 260525-cjr C1: preserve the Error instance (not just its
+      // message text) so the depth-5 `causeChainTrailer` walker at the
+      // presentation layer can surface the originating cause to the
+      // user. Falls back to `undefined` when the undo throw was not an
+      // Error subclass (defensive -- bridges should always throw
+      // Errors).
+      partials.push({
+        phase: done.name,
+        msg: errorMessage(undoErr),
+        ...(undoErr instanceof Error && { cause: undoErr }),
+      });
     }
   }
 

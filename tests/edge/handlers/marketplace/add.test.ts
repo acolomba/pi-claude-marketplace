@@ -47,7 +47,14 @@ function makeDeps(): {
 } {
   const gitMock = makeMockGitOps();
   const pluginUpdate = (plugin: string): Promise<PluginUpdateOutcome> =>
-    Promise.resolve({ partition: "unchanged", name: plugin });
+    Promise.resolve({
+      partition: "unchanged",
+      name: plugin,
+      fromVersion: "0.0.0",
+      toVersion: "0.0.0",
+      declaresAgents: false,
+      declaresMcp: false,
+    });
   const deps: EdgeDeps = { gitOps: gitMock.gitOps, pluginUpdate };
   return { deps, gitMock };
 }

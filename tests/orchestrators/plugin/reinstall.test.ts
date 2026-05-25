@@ -1016,6 +1016,81 @@ test("PRL-13 deterministic partition output sorts by scope marketplace plugin", 
   });
 });
 
+test("260525-cjr C9: same-name cross-scope reinstall -> project-scope row renders BEFORE user-scope row (MSG-GR-3 stable-sort tie-break)", async () => {
+  // The existing PRL-13 deterministic-sort test (above) uses DISTINCT
+  // marketplace names (a / u / z) so the marketplace-name primary key
+  // never produces same-name pairs -- the project-before-user secondary
+  // tie-break on `MarketplaceRow.scope` never fires. This test seeds
+  // the SAME marketplace name in BOTH scopes so the tie-break is
+  // exercised end-to-end through the cascade renderer (NOT just via
+  // the unit test on `compareByNameThenScope` in
+  // `tests/presentation/sort.test.ts`).
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-same-name-scopes-"));
+    try {
+      // Both scopes carry a marketplace named "mp" with a plugin named
+      // "p". The roots are deliberately distinct dirs so install
+      // succeeds independently in each scope.
+      await seedMarketplace({
+        cwd,
+        scope: "user",
+        marketplaceRoot: path.join(cwd, "mp-user-src"),
+        marketplaceName: "mp",
+        pluginName: "p",
+        resources: { skill: "user-scope skill" },
+        install: true,
+      });
+      await seedMarketplace({
+        cwd,
+        scope: "project",
+        marketplaceRoot: path.join(cwd, "mp-project-src"),
+        marketplaceName: "mp",
+        pluginName: "p",
+        resources: { skill: "project-scope skill" },
+        install: true,
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      const outcomes = await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
+
+      // Outcome order asserts the project-before-user tie-break at the
+      // orchestrator boundary -- both outcomes share `marketplace: "mp"`
+      // and `name: "p"`, so the scope secondary key decides.
+      assert.deepEqual(
+        outcomes.map((o) => ({
+          partition: o.partition,
+          scope: o.scope,
+          marketplace: o.marketplace,
+          name: o.name,
+        })),
+        [
+          { partition: "reinstalled", scope: "project", marketplace: "mp", name: "p" },
+          { partition: "reinstalled", scope: "user", marketplace: "mp", name: "p" },
+        ],
+      );
+
+      // Rendered cascade order: the two same-named marketplace blocks
+      // appear with project-scope FIRST. Locate both headers in the
+      // body and assert the project header's index is lower than the
+      // user header's.
+      const body = notifications.at(-1)?.message ?? "";
+      const projectHeaderIdx = body.indexOf("● mp [project]");
+      const userHeaderIdx = body.indexOf("● mp [user]");
+      assert.ok(
+        projectHeaderIdx >= 0,
+        `expected project-scope header '● mp [project]' in body:\n${body}`,
+      );
+      assert.ok(userHeaderIdx >= 0, `expected user-scope header '● mp [user]' in body:\n${body}`);
+      assert.ok(
+        projectHeaderIdx < userHeaderIdx,
+        `project-scope cascade row must render BEFORE user-scope (MSG-GR-3 stable-sort tie-break).\n  project idx=${String(projectHeaderIdx)}\n  user idx=${String(userHeaderIdx)}\n  body:\n${body}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("PRL-14 batch reload hint uses only changed successful outcomes", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-reload-"));
@@ -1166,6 +1241,81 @@ test("Plan 13-02a-02 / CMC-16 / F-2: outcomeToCascadeRow rollback substring stil
   };
   const row = __test_outcomeToCascadeRow(outcome);
   assert.ok(row.status === "failed" && row.reasons !== undefined);
+  assert.deepEqual([...(row.reasons ?? [])], ["rollback partial"]);
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Task 260525-cjr B2: outcomeToCascadeRow prefers `outcome.reasons` (set at
+// the catch site via `reasonsFromTypedError(err)`) over the legacy
+// notes-substring narrow. This locks in the new producer-narrowed contract:
+// EACCES / EPERM / ENOENT (and PluginShapeError shapes) surface as their
+// precise closed Reason instead of degrading to `not in manifest`.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("260525-cjr B2: outcomeToCascadeRow prefers typed `outcome.reasons` (`permission denied`) over notes-substring fallback", () => {
+  const outcome: ReinstallFailedOutcome = {
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    // Notes that the legacy substring path would map to the permissive
+    // `not in manifest` default. The presence of `reasons` MUST win.
+    notes: ["EACCES: permission denied at some/.pi/agent/file"],
+    reasons: ["permission denied"] as const,
+  };
+  const row = __test_outcomeToCascadeRow(outcome);
+  assert.ok(row.status === "failed" && row.reasons !== undefined);
+  assert.deepEqual([...(row.reasons ?? [])], ["permission denied"]);
+});
+
+test("260525-cjr B2: outcomeToCascadeRow `source missing` typed reason wins over notes fallback", () => {
+  const outcome: ReinstallFailedOutcome = {
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    notes: ["ENOENT: no such file or directory"],
+    reasons: ["source missing"] as const,
+  };
+  const row = __test_outcomeToCascadeRow(outcome);
+  assert.ok(row.status === "failed" && row.reasons !== undefined);
+  assert.deepEqual([...(row.reasons ?? [])], ["source missing"]);
+});
+
+test("260525-cjr B2: outcomeToCascadeRow without `reasons` falls back to substring narrow (back-compat preserved)", () => {
+  // No `reasons` field -- the legacy substring narrow on `notes` runs.
+  // The default for opaque text is `not in manifest`.
+  const outcome: ReinstallFailedOutcome = {
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    notes: ["something opaque without a matching substring"],
+  };
+  const row = __test_outcomeToCascadeRow(outcome);
+  assert.ok(row.status === "failed" && row.reasons !== undefined);
+  assert.deepEqual([...(row.reasons ?? [])], ["not in manifest"]);
+});
+
+test("260525-cjr B2: outcomeToCascadeRow `failureClass=manual-recovery` STILL wins over typed `reasons` (precedence locked)", () => {
+  // The precedence order in outcomeToCascadeRow:
+  //   (1) failureClass="manual-recovery"  -> "rollback partial"
+  //   (2) outcome.reasons (typed)         -> verbatim
+  //   (3) narrowReasons(outcome.notes)    -> substring fallback
+  // This test locks in (1) > (2) so a future refactor cannot accidentally
+  // demote the manual-recovery class.
+  const outcome: ReinstallFailedOutcome = {
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    notes: ["EACCES: permission denied"],
+    failureClass: "manual-recovery",
+    reasons: ["permission denied"] as const,
+  };
+  const row = __test_outcomeToCascadeRow(outcome);
+  assert.ok(row.status === "failed" && row.reasons !== undefined);
+  // (1) wins -- the manual-recovery structural tag is highest priority.
   assert.deepEqual([...(row.reasons ?? [])], ["rollback partial"]);
 });
 

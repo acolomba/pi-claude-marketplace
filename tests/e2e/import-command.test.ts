@@ -112,7 +112,15 @@ function registerImportCommand(cwd: string, gitOps: GitOps) {
   ]);
   registerClaudePluginCommand(mock.pi, {
     gitOps,
-    pluginUpdate: () => Promise.resolve({ partition: "unchanged", name: "unused" }),
+    pluginUpdate: () =>
+      Promise.resolve({
+        partition: "unchanged",
+        name: "unused",
+        fromVersion: "0.0.0",
+        toVersion: "0.0.0",
+        declaresAgents: false,
+        declaresMcp: false,
+      }),
   });
   const command = mock.commands.get("claude:plugin");
   assert.ok(command, "claude:plugin command should be registered");

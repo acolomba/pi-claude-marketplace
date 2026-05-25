@@ -14,7 +14,7 @@ export function assertNever(x: never): never {
 }
 
 /**
- * MSG-CC-1 (CMC-18 / D-CMC-12): depth-5 Error.cause walker rendered as
+ * MSG-CC-1 (CMC-18): depth-5 Error.cause walker rendered as
  * `cause: <l1> -> <l2> -> ... [(truncated)]`. Returns `""` when `err` is
  * `undefined` or `null` so callers can compose `body + (trailer === "" ? "" :
  * "\n\n" + trailer)` without extra guards.
@@ -189,7 +189,7 @@ export class CrossPluginConflictError extends Error {
  * `runPhases` result unwinds the staged resources via the ledger's
  * `undo` chain; `formatRollbackError` returns the structured rollback
  * result and the orchestrator composes the final user message via
- * `presentation/rollback-partial.ts` (Plan 14-06 / D-14-04).
+ * `presentation/rollback-partial.ts`.
  */
 export class ConcurrentInstallError extends Error {
   readonly plugin: string;
@@ -267,16 +267,15 @@ export class PluginUpdatePhase3Error extends Error {
 }
 
 /**
- * Plan 13-02a-02 / CMC-16: structured manual-recovery signal for the
- * bridge-replacement leak path.
+ * CMC-16: structured manual-recovery signal for the bridge-replacement
+ * leak path.
  *
- * Bridges (`bridges/{skills,commands,agents}/stage.ts`) throw this when a
- * rollback of a partially-completed `replace*Internal` swap leaks files /
- * directories the caller must clean up by hand. The legacy MSG-MR-1 / ES-5
- * marker-prefixed message form (retired in Wave 2 sub-wave 2a continuation)
- * is NOT embedded in `.message` -- per CMC-16 / Plan 13-01-02 (MSG-MR-1 /
- * MSG-MR-2) the manual-recovery anchor is composed at the notify boundary
- * via `renderManualRecovery`. Bridges produce STRUCTURED data (`.leaks`);
+ * Bridges (`bridges/{skills,commands,agents}/stage.ts`) throw this
+ * when a rollback of a partially-completed `replace*Internal` swap
+ * leaks files / directories the caller must clean up by hand. The
+ * manual-recovery anchor is NOT embedded in `.message` -- per
+ * MSG-MR-1 / MSG-MR-2 it is composed at the notify boundary via
+ * `renderManualRecovery`. Bridges produce STRUCTURED data (`.leaks`);
  * the orchestrator (`orchestrators/plugin/reinstall.ts::narrowReason` and
  * the `outcomeToCascadeRow` mapper) type-checks the Error instead of
  * substring-matching the message text.
@@ -296,18 +295,22 @@ export class ManualRecoveryError extends Error {
 }
 
 /**
- * Quick task 260525-aub: discriminated typed error replacing the free-text
- * `Error.message` parsing previously used in install / update / remove /
- * reinstall catch sites. Closes the systemic v1.3 pattern hole that Phase 13's
- * `ManualRecoveryError` refactor missed in 4 additional catch sites beyond
+ * Discriminated typed error replacing the free-text `Error.message`
+ * parsing previously used in install / update / remove / reinstall catch
+ * sites. Closes the systemic v1.3 pattern hole that the
+ * `ManualRecoveryError` refactor missed in additional catch sites beyond
  * install, and eliminates the SonarCloud `typescript:S5852` ReDoS hotspot
- * at the legacy `install.ts:902` regex (`/is not installable:\s*(.+)$/`).
+ * at the legacy regex (previously `/is not installable:\s*(.+)$/`) that
+ * has since been removed.
  *
  * Discriminated by `kind`:
- *   - `"not-in-manifest"`  -- PI-3 / install.ts:263, install.ts:294
- *   - `"already-installed"` -- PI-5 / install.ts:285
- *   - `"not-installable"`  -- PR-6 / resolver.ts:786 with op = "install"
- *   - `"no-longer-installable"` -- PR-6 / resolver.ts:786 with op = "update"
+ *   - `"not-in-manifest"`     -- PI-3, thrown from `installPlugin`
+ *   - `"already-installed"`   -- PI-5, thrown from `installPlugin`
+ *   - `"not-installable"`     -- PR-6, thrown from `requireInstallable`
+ *                                with `op = "install"`
+ *   - `"no-longer-installable"` -- PR-6, thrown from `requireInstallable`
+ *                                with `op = "update"`
+ * The downstream consumer is `classifyEntityShapeError` (install.ts).
  *
  * The constructor is the SINGLE SOURCE OF TRUTH for the `.message` text. The
  * exact byte-equal forms (preserved so existing
@@ -349,28 +352,32 @@ export type PluginShapeErrorShape =
 export type PluginShapeErrorKind = PluginShapeErrorShape["kind"];
 
 export class PluginShapeError extends Error {
+  /**
+   * Task 260525-cjr C4: the FULL discriminated shape is exposed as a
+   * single `readonly` field so consumers can narrow on `e.shape.kind`
+   * without non-null-asserting `e.marketplace!` / `e.reasons!` (those
+   * optional mirror fields existed ONLY because the constructor copied
+   * shape-specific data into top-level optional properties; the shape
+   * itself was discarded). The pre-C4 mirror fields are retired.
+   *
+   * Reading `e.shape` returns the same object the constructor received,
+   * including the discriminator and every shape-specific field
+   * (`marketplace` / `reasons`) without optionality. Consumers narrow
+   * on `e.shape.kind` to recover the variant.
+   */
+  readonly shape: PluginShapeErrorShape;
   readonly kind: PluginShapeErrorKind;
   readonly plugin: string;
-  readonly marketplace?: string;
-  readonly reasons?: readonly string[];
 
   constructor(shape: PluginShapeErrorShape, options?: ErrorOptions) {
     super(buildPluginShapeMessage(shape), options);
     this.name = "PluginShapeError";
+    this.shape = shape;
+    // `kind` and `plugin` are kept as convenience top-level shortcuts
+    // because they appear on EVERY shape variant; the
+    // shape-specific fields (marketplace / reasons) are NOT mirrored.
     this.kind = shape.kind;
     this.plugin = shape.plugin;
-    switch (shape.kind) {
-      case "not-in-manifest":
-      case "already-installed":
-        this.marketplace = shape.marketplace;
-        break;
-      case "not-installable":
-      case "no-longer-installable":
-        this.reasons = shape.reasons;
-        break;
-      default:
-        assertNever(shape);
-    }
   }
 }
 

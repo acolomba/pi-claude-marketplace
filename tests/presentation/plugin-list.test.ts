@@ -83,6 +83,8 @@ test("CMC-22 single marketplace, mixed plugin statuses match catalog form", () =
         version: "1.0.0",
         status: "installed",
         description: "Short description of alpha.",
+        declaresAgents: false,
+        declaresMcp: false,
       },
       {
         kind: "plugin-list",
@@ -91,6 +93,8 @@ test("CMC-22 single marketplace, mixed plugin statuses match catalog form", () =
         version: "2.0.0",
         status: "available",
         description: "Free-text description; renders verbatim under 66 cols.",
+        declaresAgents: false,
+        declaresMcp: false,
       },
     ],
   };
@@ -128,6 +132,8 @@ test("CMC-21 / D-13-18: same plugin both scopes -- per-scope marketplace headers
         scope: "project",
         version: "0.9.0",
         status: "installed",
+        declaresAgents: false,
+        declaresMcp: false,
       },
     ],
   };
@@ -146,6 +152,8 @@ test("CMC-21 / D-13-18: same plugin both scopes -- per-scope marketplace headers
         scope: "user",
         version: "1.0.0",
         status: "installed",
+        declaresAgents: false,
+        declaresMcp: false,
       },
     ],
   };
@@ -191,6 +199,7 @@ test("CMC-13 / MSG-SD-1..2 soft-dep markers emit per row when (declares AND comp
         version: "1.0.0",
         status: "installed",
         declaresAgents: true,
+        declaresMcp: false,
       },
       {
         kind: "plugin-list",
@@ -199,6 +208,7 @@ test("CMC-13 / MSG-SD-1..2 soft-dep markers emit per row when (declares AND comp
         version: "2.0.0",
         status: "installed",
         declaresMcp: true,
+        declaresAgents: false,
       },
     ],
   };
@@ -256,6 +266,8 @@ test("CMC-09 / MSG-PL-4: (upgradable) rows carry the ● effective-state icon", 
         scope: "user",
         version: "0.5.0",
         status: "upgradable",
+        declaresAgents: false,
+        declaresMcp: false,
       },
     ],
   };
@@ -287,6 +299,8 @@ test("MSG-PL-6 carve-out: (available) and (unavailable) rows OMIT the [<scope>] 
         scope: "user",
         status: "unavailable",
         reasons: ["hooks"] as const,
+        declaresAgents: false,
+        declaresMcp: false,
       },
       {
         kind: "plugin-list",
@@ -294,6 +308,8 @@ test("MSG-PL-6 carve-out: (available) and (unavailable) rows OMIT the [<scope>] 
         scope: "user",
         status: "unavailable",
         reasons: ["hooks", "lspServers"] as const,
+        declaresAgents: false,
+        declaresMcp: false,
       },
       {
         kind: "plugin-list",
@@ -301,6 +317,8 @@ test("MSG-PL-6 carve-out: (available) and (unavailable) rows OMIT the [<scope>] 
         scope: "user",
         version: "2.0.0",
         status: "available",
+        declaresAgents: false,
+        declaresMcp: false,
       },
     ],
   };
@@ -346,6 +364,8 @@ test("CMC-22 unparseable marketplace renders as failed header + indented cause t
         scope: "user",
         version: "1.0.0",
         status: "installed",
+        declaresAgents: false,
+        declaresMcp: false,
       },
     ],
   };
@@ -407,6 +427,8 @@ test("CMC-03 / MSG-GR-3 sort: marketplace blocks ordered by compareByNameThenSco
         scope: "project",
         version: "0.9.0",
         status: "installed",
+        declaresAgents: false,
+        declaresMcp: false,
       },
     ],
   };
@@ -425,6 +447,8 @@ test("CMC-03 / MSG-GR-3 sort: marketplace blocks ordered by compareByNameThenSco
         scope: "user",
         version: "1.0.0",
         status: "installed",
+        declaresAgents: false,
+        declaresMcp: false,
       },
       {
         kind: "plugin-list",
@@ -432,6 +456,8 @@ test("CMC-03 / MSG-GR-3 sort: marketplace blocks ordered by compareByNameThenSco
         scope: "user",
         version: "2.0.0",
         status: "available",
+        declaresAgents: false,
+        declaresMcp: false,
       },
     ],
   };
@@ -450,6 +476,7 @@ test("CMC-03 / MSG-GR-3 sort: marketplace blocks ordered by compareByNameThenSco
         version: "1.0.0",
         status: "installed",
         declaresAgents: true,
+        declaresMcp: false,
       },
     ],
   };
@@ -495,6 +522,8 @@ test("CMC-21 / D-13-17: orphan project plugin folds under user-scope marketplace
         scope: "project",
         version: "0.9.0",
         status: "installed",
+        declaresAgents: false,
+        declaresMcp: false,
       },
       {
         kind: "plugin-list",
@@ -502,6 +531,8 @@ test("CMC-21 / D-13-17: orphan project plugin folds under user-scope marketplace
         scope: "user",
         version: "1.0.0",
         status: "installed",
+        declaresAgents: false,
+        declaresMcp: false,
       },
     ],
   };
@@ -550,6 +581,8 @@ test("MSG-PL-1 description truncation renders in the second indented line per CM
         version: "1",
         status: "installed",
         description: "z".repeat(100),
+        declaresAgents: false,
+        declaresMcp: false,
       },
     ],
   };

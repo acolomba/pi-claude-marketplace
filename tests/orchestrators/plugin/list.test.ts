@@ -33,7 +33,10 @@ import path from "node:path";
 import test from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { listPlugins } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
+import {
+  __test_narrowProbeError,
+  listPlugins,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
@@ -589,6 +592,54 @@ test("PL-7 / CMC-05: marketplace with autoupdate=false (or undefined) does NOT r
     assert.equal(out.includes("<autoupdate>"), false);
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// Task 260525-cjr A3: probe-error classification + non-`{unsupported source}`
+// surface for unexpected `resolveStrict` throws inside `availableRowComputation`.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("260525-cjr A3: narrowProbeError -> EACCES classifies as `permission denied`", () => {
+  const err = new Error("EACCES: permission denied, open '/foo/bar/manifest.json'");
+  (err as NodeJS.ErrnoException).code = "EACCES";
+  assert.equal(__test_narrowProbeError(err), "permission denied");
+});
+
+test("260525-cjr A3: narrowProbeError -> EPERM also classifies as `permission denied`", () => {
+  const err = new Error("EPERM");
+  (err as NodeJS.ErrnoException).code = "EPERM";
+  assert.equal(__test_narrowProbeError(err), "permission denied");
+});
+
+test("260525-cjr A3: narrowProbeError -> ENOENT classifies as `source missing`", () => {
+  const err = new Error("ENOENT");
+  (err as NodeJS.ErrnoException).code = "ENOENT";
+  assert.equal(__test_narrowProbeError(err), "source missing");
+});
+
+test("260525-cjr A3: narrowProbeError -> SyntaxError classifies as `unparseable`", () => {
+  const err = new SyntaxError("Unexpected token } in JSON at position 7");
+  assert.equal(__test_narrowProbeError(err), "unparseable");
+});
+
+test("260525-cjr A3: narrowProbeError -> generic Error falls through to `unreadable` (NOT `unsupported source`)", () => {
+  // The pre-fix behavior was to substring-match the message through
+  // `narrowResolverNotes`, which would degrade ANY unrecognized throw
+  // to `unsupported source`. The fix routes it to `unreadable`.
+  const err = new Error("something went wrong probing this plugin");
+  const reason = __test_narrowProbeError(err);
+  assert.equal(reason, "unreadable");
+  assert.notEqual(reason, "unsupported source");
+});
+
+// Note on integration coverage: constructing a real fixture that drives
+// `resolveStrict` into THROWING (vs returning NotInstallable with notes)
+// requires FS-level fault injection that is brittle across platforms
+// (chmod 000 behaves differently as root, on tmpfs, on macOS APFS, etc.).
+// The unit tests above exercise every classifier branch directly through
+// the `__test_narrowProbeError` re-export; the orchestrator wiring is a
+// straightforward pass-through. The pre-fix call site is documented in
+// the commit message; the binding contract is that `narrowProbeError`
+// returns the closed-set Reason the user sees on the row.
 
 // ──────────────────────────────────────────────────────────────────────────
 // Source-grep self-tests (NFR-5 / PI-2 / PL-3 defense-in-depth)

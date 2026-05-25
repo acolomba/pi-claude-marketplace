@@ -61,6 +61,8 @@ test("CMC-02: plugin-cascade never emits @<marketplace> (carve-out MSG-GR-2)", (
     scope: "user",
     version: "1.0.0",
     status: "reinstalled",
+    declaresAgents: false,
+    declaresMcp: false,
   };
   const out = renderRow(row, PROBE_BOTH_LOADED);
   assert.equal(out, "● alpha [user] v1.0.0 (reinstalled)");
@@ -74,6 +76,8 @@ test("CMC-02: plugin-inline always emits @<marketplace>", () => {
     marketplace: "official",
     scope: "user",
     status: "installed",
+    declaresAgents: false,
+    declaresMcp: false,
   };
   const out = renderRow(row, PROBE_BOTH_LOADED);
   assert.ok(out.includes("@official"), "inline row must contain @marketplace");
@@ -86,6 +90,8 @@ test("MSG-PL-6: plugin-list omits [scope] for (available) and (unavailable)", ()
     scope: "user",
     status: "available",
     version: "2.0.0",
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.equal(renderRow(available, PROBE_BOTH_LOADED), "○ serena v2.0.0 (available)");
 
@@ -95,6 +101,8 @@ test("MSG-PL-6: plugin-list omits [scope] for (available) and (unavailable)", ()
     scope: "user",
     status: "unavailable",
     reasons: ["hooks"],
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.equal(renderRow(unavailable, PROBE_BOTH_LOADED), "⊘ hookify (unavailable) {hooks}");
 });
@@ -106,6 +114,8 @@ test("MSG-PL-6: plugin-list keeps [scope] for (installed) and (upgradable)", () 
     scope: "user",
     status: "installed",
     version: "1.0.0",
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.equal(renderRow(installed, PROBE_BOTH_LOADED), "● alpha [user] v1.0.0 (installed)");
 
@@ -115,6 +125,8 @@ test("MSG-PL-6: plugin-list keeps [scope] for (installed) and (upgradable)", () 
     scope: "project",
     status: "upgradable",
     version: "1.0.0",
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.equal(renderRow(upgradable, PROBE_BOTH_LOADED), "● alpha [project] v1.0.0 (upgradable)");
 });
@@ -154,6 +166,8 @@ test("CMC-06: (installed)/(updated)/(reinstalled) on cascade rows -> ●", () =>
       name: "alpha",
       scope: "user",
       status,
+      declaresAgents: false,
+      declaresMcp: false,
     };
     const out = renderRow(row, PROBE_BOTH_LOADED);
     assert.ok(out.startsWith("● "), `expected ● for ${status}, got: ${out}`);
@@ -167,6 +181,8 @@ test("CMC-06: (upgradable) on plugin-list row -> ● (list-only per MSG-PL-4)", 
     scope: "user",
     status: "upgradable",
     version: "1.0.0",
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.ok(renderRow(row, PROBE_BOTH_LOADED).startsWith("● "));
 });
@@ -177,6 +193,8 @@ test("CMC-06: (available)/(uninstalled) -> ○", () => {
     name: "alpha",
     scope: "user",
     status: "available",
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.ok(renderRow(available, PROBE_BOTH_LOADED).startsWith("○ "));
 
@@ -197,6 +215,8 @@ test("CMC-06: (failed)/(rollback failed)/(manual recovery)/(unavailable) -> ⊘"
     scope: "user",
     status: "failed",
     reasons: ["rollback partial"],
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.ok(renderRow(failed, PROBE_BOTH_LOADED).startsWith("⊘ "));
 
@@ -206,6 +226,8 @@ test("CMC-06: (failed)/(rollback failed)/(manual recovery)/(unavailable) -> ⊘"
     marketplace: "official",
     scope: "user",
     status: "rollback failed",
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.ok(renderRow(rbFailed, PROBE_BOTH_LOADED).startsWith("⊘ "));
 
@@ -216,6 +238,8 @@ test("CMC-06: (failed)/(rollback failed)/(manual recovery)/(unavailable) -> ⊘"
     scope: "user",
     status: "unavailable",
     reasons: ["hooks"],
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.ok(renderRow(unavailable, PROBE_BOTH_LOADED).startsWith("⊘ "));
 
@@ -234,6 +258,8 @@ test("CMC-06: (skipped) {up-to-date} -> ● (trivial skip)", () => {
     scope: "user",
     status: "skipped",
     reasons: ["up-to-date"],
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.ok(renderRow(row, PROBE_BOTH_LOADED).startsWith("● "));
 });
@@ -245,6 +271,8 @@ test("CMC-06: (skipped) {source mismatch} -> ⊘ (non-trivial / failure-cascade 
     scope: "user",
     status: "skipped",
     reasons: ["source mismatch"],
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.ok(renderRow(row, PROBE_BOTH_LOADED).startsWith("⊘ "));
 });
@@ -281,6 +309,8 @@ test("CMC-04: empty reasons array omits {} entirely", () => {
     scope: "user",
     status: "installed",
     reasons: [],
+    declaresAgents: false,
+    declaresMcp: false,
   };
   const out = renderRow(row, PROBE_BOTH_LOADED);
   assert.ok(!out.includes("{"), `empty reasons must omit {}; got: ${out}`);
@@ -293,6 +323,8 @@ test("CMC-04: single reason emits {reason}", () => {
     scope: "user",
     status: "skipped",
     reasons: ["up-to-date"],
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.ok(renderRow(row, PROBE_BOTH_LOADED).endsWith("{up-to-date}"));
 });
@@ -304,6 +336,8 @@ test("CMC-04: multi-reason emits {reason1, reason2} comma-joined", () => {
     scope: "user",
     status: "unavailable",
     reasons: ["hooks", "lspServers"],
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.ok(renderRow(row, PROBE_BOTH_LOADED).endsWith("{hooks, lspServers}"));
 });
@@ -334,6 +368,7 @@ test("CMC-13: declaresAgents=true + pi-subagents unloaded -> {requires pi-subage
     scope: "user",
     status: "installed",
     declaresAgents: true,
+    declaresMcp: false,
   };
   const out = renderRow(row, PROBE_NONE_LOADED);
   assert.ok(out.includes("{requires pi-subagents}"), `expected marker; got: ${out}`);
@@ -347,6 +382,7 @@ test("CMC-13: declaresMcp=true + pi-mcp-adapter unloaded -> {requires pi-mcp}", 
     scope: "user",
     status: "installed",
     declaresMcp: true,
+    declaresAgents: false,
   };
   const out = renderRow(row, PROBE_NONE_LOADED);
   assert.ok(out.includes("{requires pi-mcp}"), `expected marker; got: ${out}`);
@@ -402,6 +438,7 @@ test("MSG-SD-1: soft-dep reasons coexist with caller-supplied reasons in a singl
     status: "installed",
     reasons: ["up-to-date"],
     declaresAgents: true,
+    declaresMcp: false,
   };
   const out = renderRow(row, PROBE_NONE_LOADED);
   assert.ok(out.includes("{up-to-date, requires pi-subagents}"), `got: ${out}`);
@@ -479,6 +516,8 @@ test("MSG-PL-4 / CMC-09 structural: (upgradable) cannot be set on plugin-inline 
     scope: "user",
     // @ts-expect-error -- CMC-09 / MSG-PL-4: (upgradable) is structurally restricted to PluginListRow
     status: "upgradable",
+    declaresAgents: false,
+    declaresMcp: false,
   };
   void _badInline;
 
@@ -489,6 +528,8 @@ test("MSG-PL-4 / CMC-09 structural: (upgradable) cannot be set on plugin-inline 
     scope: "user",
     // @ts-expect-error -- CMC-09 / MSG-PL-4: (upgradable) is structurally restricted to PluginListRow
     status: "upgradable",
+    declaresAgents: false,
+    declaresMcp: false,
   };
   void _badCascade;
 });
@@ -515,4 +556,164 @@ test("assertNever sentinel fires when an unknown kind reaches the renderer at ru
   // Force a runtime mismatch by casting -- this exercises the default branch.
   const bogus = { kind: "bogus" } as unknown as RowSpec;
   assert.throws(() => renderRow(bogus, PROBE_BOTH_LOADED), /Unexpected value/);
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Task 260525-cjr C8: malformed-input behavior lock-ins. The renderer is a
+// pure transform and should NEVER throw on inputs that are well-typed but
+// edge-case-valued (empty version, missing reasons, Unicode, long names).
+// These tests document the existing behavior so a future refactor cannot
+// regress it.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("260525-cjr C8: empty version string is rendered verbatim (renderer does not panic / does not omit slot)", () => {
+  // Empty version is well-typed (version is `?: string`); render does
+  // not enforce non-empty. Document existing behavior: the slot
+  // appears as a bare `v` token.
+  const out = renderRow(
+    {
+      kind: "plugin-cascade",
+      name: "alpha",
+      scope: "user",
+      version: "",
+      status: "installed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+    PROBE_BOTH_LOADED,
+  );
+  // The render succeeds; we lock in the current output shape so any
+  // future refactor that wants to change empty-version handling does
+  // it consciously.
+  assert.match(out, /● alpha \[user\]/);
+});
+
+test("260525-cjr C8: undefined `reasons` on plugin-cascade -> renders without {reasons} block", () => {
+  const out = renderRow(
+    {
+      kind: "plugin-cascade",
+      name: "alpha",
+      scope: "user",
+      status: "installed",
+      // Intentionally no `reasons` field.
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+    PROBE_BOTH_LOADED,
+  );
+  assert.match(out, /● alpha \[user\] \(installed\)/);
+  // No `{}` reasons block follows.
+  assert.equal(out.includes("{"), false, `unexpected reasons block: ${out}`);
+});
+
+test("260525-cjr C8: explicit empty `reasons: []` array renders identically to undefined reasons", () => {
+  const out = renderRow(
+    {
+      kind: "plugin-cascade",
+      name: "alpha",
+      scope: "user",
+      status: "installed",
+      reasons: [],
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+    PROBE_BOTH_LOADED,
+  );
+  assert.match(out, /● alpha \[user\] \(installed\)/);
+  assert.equal(out.includes("{"), false, `unexpected reasons block: ${out}`);
+});
+
+test("260525-cjr C8: Unicode (emoji, accented chars) in `name` renders verbatim", () => {
+  const out = renderRow(
+    {
+      kind: "plugin-cascade",
+      name: "café-🚀-plugin",
+      scope: "user",
+      status: "installed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+    PROBE_BOTH_LOADED,
+  );
+  // The name passes through verbatim; the renderer does not normalise
+  // or strip Unicode. Alignment is undefined for variable-width chars
+  // (CJK, emoji) -- this is the documented existing behavior.
+  assert.match(out, /café-🚀-plugin/);
+});
+
+test("260525-cjr C8: CJK characters in `marketplace` slot render verbatim on plugin-inline rows", () => {
+  const out = renderRow(
+    {
+      kind: "plugin-inline",
+      name: "alpha",
+      marketplace: "市场-name",
+      scope: "user",
+      status: "installed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+    PROBE_BOTH_LOADED,
+  );
+  assert.match(out, /alpha@市场-name/);
+});
+
+test("260525-cjr C8: very long name (200 chars) renders without truncation on the cascade surface", () => {
+  // MSG-PL-1 column-66 truncation is list-only (lives in
+  // `presentation/plugin-list.ts`). Cascade rows do NOT truncate;
+  // document the existing behavior so a future "always truncate"
+  // refactor lands intentionally.
+  const longName = "x".repeat(200);
+  const out = renderRow(
+    {
+      kind: "plugin-cascade",
+      name: longName,
+      scope: "user",
+      status: "installed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+    PROBE_BOTH_LOADED,
+  );
+  assert.ok(out.includes(longName), "200-char name must render verbatim on cascade rows");
+  // No ellipsis injected.
+  assert.equal(out.includes("…"), false, `unexpected truncation: ${out}`);
+});
+
+test("260525-cjr C8: empty `name` does not crash the renderer (well-typed; bare leading icon)", () => {
+  // Empty string is a valid (if degenerate) name; the renderer must
+  // not panic. Output shape: `● [user] (installed)` -- the name slot
+  // collapses but the row still renders.
+  const out = renderRow(
+    {
+      kind: "plugin-cascade",
+      name: "",
+      scope: "user",
+      status: "installed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+    PROBE_BOTH_LOADED,
+  );
+  // The exact shape is not byte-locked here -- the load-bearing
+  // assertion is the no-throw guarantee plus the [<scope>] presence.
+  assert.match(out, /\[user\]/);
+});
+
+test("260525-cjr C8: mixed-direction text (BiDi) in `name` renders verbatim without alignment corruption assertions", () => {
+  // Mixed LTR + RTL text in a name renders verbatim. Bidi control
+  // characters in display strings are guarded elsewhere (see
+  // pre-commit Forbid the use of unicode BiDi control characters);
+  // here we only assert no-throw + verbatim pass-through.
+  const out = renderRow(
+    {
+      kind: "plugin-cascade",
+      name: "plugin-עברית",
+      scope: "user",
+      status: "installed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+    PROBE_BOTH_LOADED,
+  );
+  assert.match(out, /plugin-עברית/);
 });

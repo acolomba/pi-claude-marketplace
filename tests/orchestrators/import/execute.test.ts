@@ -8,6 +8,7 @@ import {
   importClaudeSettings,
   type ClaudeImportExecutionResult,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/import/index.ts";
+import { PluginShapeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type { ImportDiagnostic } from "../../../extensions/pi-claude-marketplace/orchestrators/import/index.ts";
 import type { SoftDepProbe } from "../../../extensions/pi-claude-marketplace/presentation/compact-line.ts";
@@ -414,11 +415,27 @@ test("importClaudeSettings classifies unavailable and unexpected plugin failures
       installPlugin: async (opts) => {
         attempted.push(opts.plugin);
         if (opts.plugin === "missing") {
-          return { status: "unavailable", cause: "not found" };
+          // Task 260525-cjr C3: collapsed failure shape -- the
+          // import consumer narrows on `error instanceof
+          // PluginShapeError` and reads `.kind` to recover the
+          // pre-C3 semantic dispatch.
+          return {
+            status: "failed",
+            error: new PluginShapeError({
+              kind: "not-in-manifest",
+              plugin: opts.plugin,
+              marketplace: opts.marketplace,
+            }),
+            cause: "not found",
+          };
         }
 
         if (opts.plugin === "boom") {
-          return { status: "unexpected-failure", cause: "disk full" };
+          return {
+            status: "failed",
+            error: new Error("disk full"),
+            cause: "disk full",
+          };
         }
 
         return {
@@ -478,7 +495,17 @@ test("importClaudeSettings classifies uninstallable plugins as warnings without 
       installPlugin: async (opts) => {
         attempted.push(opts.plugin);
         if (opts.plugin === "blocked") {
-          return { status: "uninstallable", cause: "requires unsupported tool" };
+          // Task 260525-cjr C3: collapsed failure shape -- uninstallable
+          // is recovered from `error.shape.kind === "not-installable"`.
+          return {
+            status: "failed",
+            error: new PluginShapeError({
+              kind: "not-installable",
+              plugin: opts.plugin,
+              reasons: ["requires unsupported tool"],
+            }),
+            cause: "requires unsupported tool",
+          };
         }
 
         return {
@@ -723,7 +750,15 @@ test("importClaudeSettings handles already-installed outcome from installPlugin 
       }),
       addMarketplace: async () => undefined,
       installPlugin: async () => ({
-        status: "already-installed",
+        // Task 260525-cjr C3: collapsed failure shape -- already-installed
+        // surfaces as `PluginShapeError({kind: "already-installed", ...})`
+        // which the import consumer routes to the skip bucket.
+        status: "failed",
+        error: new PluginShapeError({
+          kind: "already-installed",
+          plugin: "plugin",
+          marketplace: "mp",
+        }),
         cause: 'Plugin "plugin" is already installed in marketplace "mp".',
       }),
     },

@@ -8,10 +8,10 @@
 //
 // D-13-08 / D-07: this composer MUST NOT import the notify wrappers.
 // Calling `ctx.ui.notify` here would replicate the orphan-emission anti-
-// pattern that Phase 12 funnelled into the four sanctioned wrappers.
-// `tests/architecture/no-notify-from-presentation.test.ts` (and the
-// per-task grep gate that asserts zero notify-wrapper imports from this
-// file) enforces the negative import contract.
+// pattern that Phase 12 funnelled into the four sanctioned wrappers. The
+// rule is a convention here -- this file owns the composition and returns
+// the `{message, severity}` pair so the orchestrator dispatches to the
+// matching wrapper.
 //
 // Sort order: rows are sorted via `compareByNameThenScope` from
 // `./sort.ts` (MSG-GR-3: name primary case-insensitive, scope secondary

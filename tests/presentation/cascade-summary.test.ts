@@ -37,35 +37,70 @@ test("MSG-SR-4: empty cascade is vacuously trivial -> success", () => {
 
 test("MSG-SR-4: single (installed) row -> success", () => {
   const rows: readonly PluginCascadeRow[] = [
-    { kind: "plugin-cascade", name: "a", scope: "user", status: "installed" },
+    {
+      kind: "plugin-cascade",
+      name: "a",
+      scope: "user",
+      status: "installed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
   ];
   assert.equal(cascadeSeverity(rows), "success");
 });
 
 test("MSG-SR-4: single (updated) row -> success", () => {
   const rows: readonly PluginCascadeRow[] = [
-    { kind: "plugin-cascade", name: "a", scope: "user", status: "updated" },
+    {
+      kind: "plugin-cascade",
+      name: "a",
+      scope: "user",
+      status: "updated",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
   ];
   assert.equal(cascadeSeverity(rows), "success");
 });
 
 test("MSG-SR-4: single (reinstalled) row -> success", () => {
   const rows: readonly PluginCascadeRow[] = [
-    { kind: "plugin-cascade", name: "a", scope: "user", status: "reinstalled" },
+    {
+      kind: "plugin-cascade",
+      name: "a",
+      scope: "user",
+      status: "reinstalled",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
   ];
   assert.equal(cascadeSeverity(rows), "success");
 });
 
 test("MSG-SR-4: single (uninstalled) row -> success", () => {
   const rows: readonly PluginCascadeRow[] = [
-    { kind: "plugin-cascade", name: "a", scope: "user", status: "uninstalled" },
+    {
+      kind: "plugin-cascade",
+      name: "a",
+      scope: "user",
+      status: "uninstalled",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
   ];
   assert.equal(cascadeSeverity(rows), "success");
 });
 
 test("MSG-SR-4: single (available) row -> success", () => {
   const rows: readonly PluginCascadeRow[] = [
-    { kind: "plugin-cascade", name: "a", scope: "user", status: "available" },
+    {
+      kind: "plugin-cascade",
+      name: "a",
+      scope: "user",
+      status: "available",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
   ];
   assert.equal(cascadeSeverity(rows), "success");
 });
@@ -78,6 +113,8 @@ test("MSG-SR-4: trivial skip {up-to-date} -> success", () => {
       scope: "user",
       status: "skipped",
       reasons: ["up-to-date"],
+      declaresAgents: false,
+      declaresMcp: false,
     },
   ];
   assert.equal(cascadeSeverity(rows), "success");
@@ -91,6 +128,8 @@ test("MSG-SR-5: non-trivial skip {not in manifest} -> warning", () => {
       scope: "user",
       status: "skipped",
       reasons: ["not in manifest"],
+      declaresAgents: false,
+      declaresMcp: false,
     },
   ];
   assert.equal(cascadeSeverity(rows), "warning");
@@ -104,6 +143,8 @@ test("MSG-SR-5: non-trivial skip {source mismatch} -> warning", () => {
       scope: "user",
       status: "skipped",
       reasons: ["source mismatch"],
+      declaresAgents: false,
+      declaresMcp: false,
     },
   ];
   assert.equal(cascadeSeverity(rows), "warning");
@@ -111,21 +152,42 @@ test("MSG-SR-5: non-trivial skip {source mismatch} -> warning", () => {
 
 test("MSG-SR-5: failed row -> warning", () => {
   const rows: readonly PluginCascadeRow[] = [
-    { kind: "plugin-cascade", name: "a", scope: "user", status: "failed" },
+    {
+      kind: "plugin-cascade",
+      name: "a",
+      scope: "user",
+      status: "failed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
   ];
   assert.equal(cascadeSeverity(rows), "warning");
 });
 
 test("MSG-SR-5: rollback failed row -> warning", () => {
   const rows: readonly PluginCascadeRow[] = [
-    { kind: "plugin-cascade", name: "a", scope: "user", status: "rollback failed" },
+    {
+      kind: "plugin-cascade",
+      name: "a",
+      scope: "user",
+      status: "rollback failed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
   ];
   assert.equal(cascadeSeverity(rows), "warning");
 });
 
 test("MSG-SR-5: unavailable row -> warning", () => {
   const rows: readonly PluginCascadeRow[] = [
-    { kind: "plugin-cascade", name: "a", scope: "user", status: "unavailable" },
+    {
+      kind: "plugin-cascade",
+      name: "a",
+      scope: "user",
+      status: "unavailable",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
   ];
   assert.equal(cascadeSeverity(rows), "warning");
 });
@@ -136,8 +198,22 @@ test("CascadeSeverity literal union: function NEVER returns 'error' (MSG-SR-6)",
   // affirmation of the literal union shape; tsc would have failed first if
   // the return type widened to include "error".
   const rows: readonly PluginCascadeRow[] = [
-    { kind: "plugin-cascade", name: "a", scope: "user", status: "failed" },
-    { kind: "plugin-cascade", name: "b", scope: "user", status: "installed" },
+    {
+      kind: "plugin-cascade",
+      name: "a",
+      scope: "user",
+      status: "failed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+    {
+      kind: "plugin-cascade",
+      name: "b",
+      scope: "user",
+      status: "installed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
   ];
   const sev = cascadeSeverity(rows);
   assert.ok(sev === "success" || sev === "warning", `unexpected severity: ${sev}`);
@@ -150,24 +226,61 @@ test("MSG-SR-4: (upgradable) is a list-render token treated as success on a casc
   // remaining cascade-allowed statuses incorrectly when mixed with success
   // rows -- "available" being the closest list-render analogue here.
   const rows: readonly PluginCascadeRow[] = [
-    { kind: "plugin-cascade", name: "a", scope: "user", status: "available" },
-    { kind: "plugin-cascade", name: "b", scope: "user", status: "installed" },
+    {
+      kind: "plugin-cascade",
+      name: "a",
+      scope: "user",
+      status: "available",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+    {
+      kind: "plugin-cascade",
+      name: "b",
+      scope: "user",
+      status: "installed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
   ];
   assert.equal(cascadeSeverity(rows), "success");
 });
 
 test("Mixed rows: ANY non-trivial row makes severity = warning (OR semantics)", () => {
   const rows: readonly PluginCascadeRow[] = [
-    { kind: "plugin-cascade", name: "a", scope: "user", status: "installed" },
-    { kind: "plugin-cascade", name: "b", scope: "user", status: "updated" },
+    {
+      kind: "plugin-cascade",
+      name: "a",
+      scope: "user",
+      status: "installed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+    {
+      kind: "plugin-cascade",
+      name: "b",
+      scope: "user",
+      status: "updated",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
     {
       kind: "plugin-cascade",
       name: "c",
       scope: "user",
       status: "skipped",
       reasons: ["up-to-date"],
+      declaresAgents: false,
+      declaresMcp: false,
     },
-    { kind: "plugin-cascade", name: "d", scope: "user", status: "failed" },
+    {
+      kind: "plugin-cascade",
+      name: "d",
+      scope: "user",
+      status: "failed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
   ];
   assert.equal(cascadeSeverity(rows), "warning");
 });
@@ -184,8 +297,22 @@ test("cascadeSummary: returns marketplace header line first, then indented sorte
     outcomeClass: "ok",
   };
   const rows: readonly PluginCascadeRow[] = [
-    { kind: "plugin-cascade", name: "beta", scope: "user", status: "installed" },
-    { kind: "plugin-cascade", name: "alpha", scope: "user", status: "installed" },
+    {
+      kind: "plugin-cascade",
+      name: "beta",
+      scope: "user",
+      status: "installed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+    {
+      kind: "plugin-cascade",
+      name: "alpha",
+      scope: "user",
+      status: "installed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
   ];
   const { message, severity } = cascadeSummary({
     marketplace,
@@ -226,8 +353,22 @@ test("cascadeSummary: severity warning when any non-trivial row present", () => 
     outcomeClass: "ok",
   };
   const rows: readonly PluginCascadeRow[] = [
-    { kind: "plugin-cascade", name: "alpha", scope: "user", status: "installed" },
-    { kind: "plugin-cascade", name: "beta", scope: "user", status: "failed" },
+    {
+      kind: "plugin-cascade",
+      name: "alpha",
+      scope: "user",
+      status: "installed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+    {
+      kind: "plugin-cascade",
+      name: "beta",
+      scope: "user",
+      status: "failed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
   ];
   const { severity } = cascadeSummary({
     marketplace,
@@ -245,8 +386,22 @@ test("cascadeSummary: project-scope rows sort before user-scope rows for same na
     outcomeClass: "ok",
   };
   const rows: readonly PluginCascadeRow[] = [
-    { kind: "plugin-cascade", name: "alpha", scope: "user", status: "installed" },
-    { kind: "plugin-cascade", name: "alpha", scope: "project", status: "installed" },
+    {
+      kind: "plugin-cascade",
+      name: "alpha",
+      scope: "user",
+      status: "installed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+    {
+      kind: "plugin-cascade",
+      name: "alpha",
+      scope: "project",
+      status: "installed",
+      declaresAgents: false,
+      declaresMcp: false,
+    },
   ];
   const { message } = cascadeSummary({
     marketplace,

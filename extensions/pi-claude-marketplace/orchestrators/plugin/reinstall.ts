@@ -58,6 +58,7 @@ import {
   errorMessage,
   ManualRecoveryError,
   MarketplaceNotFoundError,
+  PluginShapeError,
 } from "../../shared/errors.ts";
 import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
 import {
@@ -199,6 +200,12 @@ export async function reinstallPlugin(
     // Plan 13-02a-02 / CMC-16: structural failure-class tag so
     // outcomeToCascadeRow maps to `(failed) {rollback partial}` without
     // substring-matching the legacy ES-5 marker text in `notes`.
+    //
+    // Task 260525-cjr B2: pre-narrow the closed Reason via the typed
+    // dispatch (errno + typed-error-class) so EACCES / EPERM / ENOENT
+    // and the typed error classes surface as the precise Reason
+    // instead of the permissive `not in manifest` fallback.
+    const typedReasons = reasonsFromTypedError(err);
     return {
       partition: "failed",
       name: plugin,
@@ -208,6 +215,7 @@ export async function reinstallPlugin(
       ...(findManualRecoveryError(err) !== undefined && {
         failureClass: "manual-recovery" as const,
       }),
+      ...(typedReasons !== undefined && { reasons: typedReasons }),
     };
   }
 
@@ -276,6 +284,15 @@ export async function reinstallPlugins(
       // inline. Plan 13-02a-02 / CMC-16: structural failure-class tag so
       // outcomeToCascadeRow maps to `(failed) {rollback partial}` without
       // substring-matching the legacy ES-5 marker text in `notes`.
+      //
+      // Task 260525-cjr B2: ALSO pre-narrow the closed-set Reason via
+      // `reasonsFromTypedError(err)` so EACCES / EPERM / ENOENT and the
+      // typed error classes (PluginShapeError / ManualRecoveryError /
+      // MarketplaceNotFoundError) surface as their precise closed Reason
+      // instead of degrading to the permissive `not in manifest` fallback
+      // inside `narrowReason`. When the typed dispatch returns
+      // `undefined`, the consumer falls back to substring matching.
+      const typedReasons = reasonsFromTypedError(err);
       outcomes.push({
         partition: "failed",
         name: target.plugin,
@@ -285,6 +302,7 @@ export async function reinstallPlugins(
         ...(findManualRecoveryError(err) !== undefined && {
           failureClass: "manual-recovery" as const,
         }),
+        ...(typedReasons !== undefined && { reasons: typedReasons }),
       });
     }
   }
@@ -570,14 +588,19 @@ export { renderReinstallPartitionAndNotify as __test_renderReinstallPartitionAnd
 function outcomeToCascadeRow(outcome: ReinstallPluginOutcome): PluginCascadeRow {
   switch (outcome.partition) {
     case "reinstalled":
+      // CMC-13 / Task 260525-cjr B1: `declaresAgents` / `declaresMcp`
+      // are now REQUIRED booleans on `ReinstallReinstalledOutcome`;
+      // the `?? false` coalesce that used to compensate for
+      // `?: boolean` is gone -- every producer site sets them
+      // EXPLICITLY (the type enforces it at compile time).
       return {
         kind: "plugin-cascade",
         name: outcome.name,
         scope: outcome.scope,
         version: outcome.version,
         status: "reinstalled",
-        declaresAgents: outcome.declaresAgents ?? false,
-        declaresMcp: outcome.declaresMcp ?? false,
+        declaresAgents: outcome.declaresAgents,
+        declaresMcp: outcome.declaresMcp,
       };
     case "skipped": {
       const reasons = narrowReasons(outcome.notes);
@@ -587,6 +610,8 @@ function outcomeToCascadeRow(outcome: ReinstallPluginOutcome): PluginCascadeRow 
         scope: outcome.scope,
         status: "skipped",
         reasons,
+        declaresAgents: false,
+        declaresMcp: false,
       };
     }
 
@@ -600,12 +625,21 @@ function outcomeToCascadeRow(outcome: ReinstallPluginOutcome): PluginCascadeRow 
       // partial}` at docs/output-catalog.md L330); the opaque `notes`
       // text is NOT additionally narrowed because the cause-chain trailer
       // at the notify boundary already surfaces the underlying error text
-      // via ES-4. Otherwise fall back to `narrowReason` substring
-      // matching for non-manual-recovery rollback / fallback scenarios.
+      // via ES-4.
+      //
+      // Task 260525-cjr B2: NEW precedence rule -- prefer the
+      // producer-narrowed `outcome.reasons` (populated at the catch
+      // site via `reasonsFromTypedError(err)`) over the legacy
+      // notes-substring parse. The substring fallback (`narrowReasons`)
+      // remains as the last resort for back-compat with test fixtures
+      // that build outcomes without `reasons`. Order of preference:
+      // (1) failureClass=manual-recovery -> rollback partial,
+      // (2) typed `outcome.reasons` -> verbatim,
+      // (3) substring parse on `notes` -> legacy fallback.
       const reasons: readonly Reason[] =
         outcome.failureClass === "manual-recovery"
           ? Object.freeze(["rollback partial" as const])
-          : narrowReasons(outcome.notes);
+          : (outcome.reasons ?? narrowReasons(outcome.notes));
       // MSG-SD-3 / effective-state: soft-dep markers do NOT fire on
       // (failed) rows (the plugin's effective state is "not installed");
       // explicitly set false to keep the contract local-and-visible.
@@ -710,6 +744,65 @@ function narrowReason(note: string): Reason {
   // most-permissive cascade skip reason and matches the operator mental
   // model "we couldn't reconcile this row".
   return "not in manifest";
+}
+
+/**
+ * Task 260525-cjr B2: typed-dispatch narrow for thrown errors captured
+ * by the reinstall catch sites. Mirrors the
+ * `orchestrators/marketplace/remove.ts::narrowCascadeFailure` pattern:
+ * check the typed `PluginShapeError` / `ManualRecoveryError` /
+ * `MarketplaceNotFoundError` shape first, then errno codes
+ * (`EACCES`/`EPERM` -> permission denied; `ENOENT`/`ENOTDIR` ->
+ * source missing), and only at the bottom fall through to `undefined`
+ * (NOT a misleading closed-set member). When `undefined` is returned,
+ * the consumer (`outcomeToCascadeRow`) falls back to the legacy
+ * `narrowReasons(notes)` substring parse.
+ *
+ * Returning `undefined` for unknown shapes is deliberate: the consumer
+ * has more context (the full `notes` array) and may extract a better
+ * Reason via substring matching. Forcing a default Reason here would
+ * shadow that fallback.
+ */
+function reasonsFromTypedError(err: unknown): readonly Reason[] | undefined {
+  if (err instanceof PluginShapeError) {
+    // Task 260525-cjr C4: switch on `err.shape.kind` so a future
+    // shape variant addition fails at compile time (the discriminator
+    // is the typed shape's field, not the convenience top-level
+    // shortcut).
+    switch (err.shape.kind) {
+      case "no-longer-installable":
+        return ["no longer installable"] as const;
+      case "not-installable":
+        // Source classification changed since install -- the catalog
+        // form is `(failed) {source mismatch}` for that case.
+        return ["source mismatch"] as const;
+      case "not-in-manifest":
+        return ["not in manifest"] as const;
+      case "already-installed":
+        return ["already installed"] as const;
+    }
+  }
+
+  if (err instanceof ManualRecoveryError) {
+    return ["rollback partial"] as const;
+  }
+
+  if (err instanceof MarketplaceNotFoundError) {
+    return ["not found"] as const;
+  }
+
+  if (err instanceof Error) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EACCES" || code === "EPERM") {
+      return ["permission denied"] as const;
+    }
+
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return ["source missing"] as const;
+    }
+  }
+
+  return undefined;
 }
 
 async function runLockedReinstall(
@@ -1212,8 +1305,10 @@ function renderSuccessBody(outcome: ReinstallReinstalledOutcome, probe: SoftDepP
     scope: outcome.scope,
     version: outcome.version,
     status: "reinstalled",
-    declaresAgents: outcome.declaresAgents ?? false,
-    declaresMcp: outcome.declaresMcp ?? false,
+    // CMC-13 / Task 260525-cjr B1: required `boolean` on the typed
+    // outcome -- no `?? false` coalesce needed.
+    declaresAgents: outcome.declaresAgents,
+    declaresMcp: outcome.declaresMcp,
   };
   const { message } = cascadeSummary({ marketplace: mpRow, rows: [row], probe });
   const hint = reloadHint(outcome.resourcesChanged ? [outcome.name] : []);

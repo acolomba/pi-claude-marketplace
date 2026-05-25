@@ -79,7 +79,14 @@ function makeMockPi(): MockPi {
 
 function makeDeps(overrides: Partial<EdgeDeps> = {}): EdgeDeps {
   const pluginUpdate: PluginUpdateFn = (plugin) =>
-    Promise.resolve<PluginUpdateOutcome>({ partition: "unchanged", name: plugin });
+    Promise.resolve<PluginUpdateOutcome>({
+      partition: "unchanged",
+      name: plugin,
+      fromVersion: "0.0.0",
+      toVersion: "0.0.0",
+      declaresAgents: false,
+      declaresMcp: false,
+    });
 
   const gitOps = {
     clone: () => Promise.resolve(),

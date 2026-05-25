@@ -133,10 +133,28 @@ export type InstallPluginOutcome =
       /** Post-commit warnings collected in orchestrated mode instead of firing individually. */
       readonly postCommitWarnings?: readonly string[];
     }
-  | { readonly status: "already-installed"; readonly cause: string }
-  | { readonly status: "unavailable"; readonly cause: string }
-  | { readonly status: "uninstallable"; readonly cause: string }
-  | { readonly status: "unexpected-failure"; readonly cause: string };
+  | {
+      /**
+       * Task 260525-cjr C3: collapsed failure variant. The pre-C3 shape
+       * had four `status` values (`"already-installed"` /
+       * `"unavailable"` / `"uninstallable"` / `"unexpected-failure"`)
+       * each carrying a re-stringified `cause: string`. Consumers
+       * dispatched on the string status and lost access to the typed
+       * error. The collapsed shape carries the original `Error`
+       * instance directly so consumers can narrow on
+       * `instanceof PluginShapeError` (and, after C4, on
+       * `error.shape.kind`) to recover the precise failure class
+       * without re-parsing the formatted cause text.
+       *
+       * `cause` is preserved as the formatted user-visible text so
+       * callers that previously read it for rendering (orchestrated
+       * mode in `import/execute.ts`) keep working without rewiring.
+       * The `error` field is the load-bearing dispatch surface.
+       */
+      readonly status: "failed";
+      readonly error: Error;
+      readonly cause: string;
+    };
 
 /**
  * Controls how `installPlugin` surfaces notifications.
@@ -662,19 +680,25 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     }
 
     notifyError(ctx, body, err);
-    return { status: "unexpected-failure", cause };
+    // Task 260525-cjr C3: collapsed `status: "failed"` carries the
+    // typed Error so even the standalone-mode return point preserves
+    // the dispatch surface. The legacy `"unexpected-failure"` variant
+    // is retired in favor of the unified shape.
+    const wrapped = err instanceof Error ? err : new Error(cause);
+    return { status: "failed", error: wrapped, cause };
   }
 
   // Defensive: the success path always populates installCtx; if it did not,
   // surface the inconsistency rather than silently emit a missing message.
   if (installCtx === undefined) {
     const cause = `installPlugin: internal error -- guard returned cleanly without populating install context for plugin "${plugin}".`;
+    const internalErr = new Error(cause);
     if (opts.notifications?.mode === "orchestrated") {
-      return { status: "unexpected-failure", cause };
+      return { status: "failed", error: internalErr, cause };
     }
 
     notifyError(ctx, cause);
-    return { status: "unexpected-failure", cause };
+    return { status: "failed", error: internalErr, cause };
   }
 
   const orchestrated = opts.notifications?.mode === "orchestrated";
@@ -885,11 +909,17 @@ function classifyEntityShapeError(
   // SonarCloud S5852 ReDoS regex (`/is not installable:\s*(.+)$/`).
   // The resolver/install throw sites carry their structural classification
   // verbatim, so the catch site no longer reparses the message string.
+  //
+  // Task 260525-cjr C4: switch on `err.shape.kind` and read the
+  // shape-specific `reasons` field directly through `err.shape`. The
+  // pre-C4 `err.reasons?` optional mirror field is gone -- the
+  // discriminator + the typed shape narrow it without a non-null
+  // assertion.
   if (!(err instanceof PluginShapeError)) {
     return undefined;
   }
 
-  switch (err.kind) {
+  switch (err.shape.kind) {
     case "already-installed":
       return {
         kind: "entity-error",
@@ -917,28 +947,79 @@ function classifyEntityShapeError(
         scope: ctx.scope,
         status: "unavailable",
         // Resolver `r.notes` are free-form strings; narrow to closed
-        // `Reason` members for the renderer. The narrowing rules mirror
-        // the legacy `narrowNotInstallableReasons` helper but read the
-        // structural `err.reasons` field directly -- no message parse,
-        // no regex.
-        reasons: narrowResolverReasons(err.reasons ?? []),
+        // `Reason` members for the renderer. Reading from `err.shape`
+        // (the typed discriminated union) means the narrow on
+        // `.kind === "not-installable" | "no-longer-installable"`
+        // guarantees `.reasons` is present -- no `?? []` fallback
+        // needed.
+        reasons: narrowResolverReasons(err.shape.reasons),
       };
     default:
-      return assertNever(err.kind);
+      return assertNever(err.shape);
   }
 }
 
-// Manifest field names allowed through the MSG-GR-4 carve-out. Any segment
-// equal to one of these passes verbatim as a `Reason`. New tokens added here
-// MUST also be added to `shared/grammar/reasons.ts` so the renderer's
-// type-narrowing accepts them.
+// Manifest field names allowed through the MSG-GR-4 carve-out. The closed
+// set holds the BARE token (`hooks`, `lspServers`) -- the value emitted to
+// the renderer. The resolver, however, prefixes the kind with `"contains "`
+// when populating `r.notes` (see `domain/resolver.ts:685` -- the
+// `addUnsupportedKindNotes` helper writes `partial.notes.push(\`contains
+// ${kind}\`)` for every UNSUPPORTED_COMPONENT_KINDS member it detects).
+// The previous predicate `MANIFEST_FIELD_REASONS.has(reason)` compared the
+// WHOLE note string against the bare set -- so the resolver's
+// `"contains hooks"` never matched, the row degraded to
+// `{unsupported source}`, and the carve-out was effectively dead. Task
+// 260525-cjr C5 restores the carve-out: `startsWith("contains ")` strips
+// the resolver's prefix, then checks the remaining token against the set.
+// New tokens added here MUST also be added to `shared/grammar/reasons.ts`
+// so the renderer's type-narrowing accepts them.
 const MANIFEST_FIELD_REASONS: ReadonlySet<string> = new Set(["hooks", "lspServers"]);
+const MANIFEST_FIELD_NOTE_PREFIX = "contains ";
+
+/**
+ * Task 260525-cjr C5: extract the bare manifest-field token from a
+ * resolver `"contains <kind>"` note. Returns `undefined` for any note
+ * that does not start with the prefix OR whose extracted token is not
+ * a member of `MANIFEST_FIELD_REASONS`. The caller then knows it can
+ * emit the bare token as a Reason directly.
+ */
+function manifestFieldTokenFromNote(note: string): Reason | undefined {
+  if (!note.startsWith(MANIFEST_FIELD_NOTE_PREFIX)) {
+    return undefined;
+  }
+
+  const token = note.slice(MANIFEST_FIELD_NOTE_PREFIX.length);
+  if (MANIFEST_FIELD_REASONS.has(token)) {
+    // Safe cast: the set members ("hooks", "lspServers") are documented
+    // members of the closed `Reason` set in `shared/grammar/reasons.ts`.
+    return token as Reason;
+  }
+
+  return undefined;
+}
 
 /**
  * Quick task 260525-aub: narrow resolver `r.notes` (free-form strings)
  * to the closed `Reason` set for renderer consumption. Mirrors the legacy
  * `narrowNotInstallableReasons` behavior but operates on the structural
  * `PluginShapeError.reasons` field; no message-text re-parse.
+ *
+ * Task 260525-cjr B2: extended typed-dispatch path. Previously the
+ * function silently dropped any note that wasn't a manifest-field
+ * carve-out token (`hooks` / `lspServers`) or a "source"-substring
+ * unsupported-source marker, then fell through to `unsupported source`
+ * for the empty-out fallback. That hid permission-denied / EACCES /
+ * EIO / JSON-parse-failure causes behind the misleading
+ * `{unsupported source}` reason on `(failed)` rows. The new ordering:
+ * (1) manifest-field carve-out, (2) "source" substring,
+ * (3) errno-like substrings (EACCES / EPERM / ENOENT / SyntaxError),
+ * (4) the final permissive `unsupported source` fallback only when no
+ * other classifier matched. The errno-substring path is a DEFENSIVE
+ * fallback -- the preferred path is for upstream code to throw a
+ * typed errno-bearing Error which a separate orchestrator-level
+ * catch can dispatch on `.code` directly. The substring fallback
+ * here catches notes that were already serialised into the
+ * `r.notes` array by a deeper helper.
  */
 function narrowResolverReasons(reasons: readonly string[]): readonly Reason[] {
   const out: Reason[] = [];
@@ -947,8 +1028,13 @@ function narrowResolverReasons(reasons: readonly string[]): readonly Reason[] {
       continue;
     }
 
-    if (MANIFEST_FIELD_REASONS.has(reason)) {
-      out.push(reason as Reason);
+    // Task 260525-cjr C5: the resolver emits `"contains hooks"` /
+    // `"contains lspServers"` (NOT bare `"hooks"` / `"lspServers"`)
+    // for the manifest-field carve-out. Extract the bare token via the
+    // typed helper so the MSG-GR-4 carve-out path actually runs.
+    const manifestFieldToken = manifestFieldTokenFromNote(reason);
+    if (manifestFieldToken !== undefined) {
+      out.push(manifestFieldToken);
       continue;
     }
 
@@ -956,12 +1042,28 @@ function narrowResolverReasons(reasons: readonly string[]): readonly Reason[] {
       out.push("unsupported source");
       continue;
     }
+
+    // Defensive errno-substring fallback (see JSDoc above).
+    if (reason.includes("EACCES") || reason.includes("EPERM")) {
+      out.push("permission denied");
+      continue;
+    }
+
+    if (reason.includes("ENOENT") || reason.includes("ENOTDIR")) {
+      out.push("source missing");
+      continue;
+    }
+
+    if (reason.includes("SyntaxError") || reason.includes("Unexpected token")) {
+      out.push("unparseable");
+      continue;
+    }
   }
 
   if (out.length === 0) {
     // Conservative fallback: at least one Reason is required for the
-    // EntityErrorRow `reasons` field. `unsupported source` is the closest
-    // in-set Reason for an unclassifiable PI-4 cause.
+    // EntityErrorRow `reasons` field. `unsupported source` is the
+    // documented permissive default for an unclassifiable PI-4 cause.
     out.push("unsupported source");
   }
 
@@ -969,30 +1071,16 @@ function narrowResolverReasons(reasons: readonly string[]): readonly Reason[] {
 }
 
 function classifyInstallFailure(err: unknown, formattedCause: string): InstallPluginOutcome {
-  // Quick task 260525-aub: dispatch on `instanceof PluginShapeError` +
-  // `.kind` so no `.message.includes(...)` substring matching remains
-  // on this code path. `ConcurrentInstallError` is kept as a separate
-  // typed branch (precedent: install.ts's existing typed catch surface
-  // for the PI-15 race).
-  if (err instanceof ConcurrentInstallError) {
-    return { status: "already-installed", cause: formattedCause };
-  }
-
-  if (err instanceof PluginShapeError) {
-    switch (err.kind) {
-      case "already-installed":
-        return { status: "already-installed", cause: formattedCause };
-      case "not-in-manifest":
-        return { status: "unavailable", cause: formattedCause };
-      case "not-installable":
-      case "no-longer-installable":
-        return { status: "uninstallable", cause: formattedCause };
-      default:
-        return assertNever(err.kind);
-    }
-  }
-
-  return { status: "unexpected-failure", cause: formattedCause };
+  // Task 260525-cjr C3: collapse the four pre-C3 error variants into a
+  // single `{ status: "failed"; error; cause }` shape. The typed `error`
+  // is the dispatch surface (consumers narrow on `instanceof
+  // PluginShapeError` to recover `kind`); `cause` preserves the
+  // formatted user-visible text for callers that previously read the
+  // `cause` field. `ConcurrentInstallError` is preserved as a distinct
+  // typed branch (PI-15 race); non-Error inputs are wrapped so the
+  // contract guarantees `error instanceof Error`.
+  const wrapped = err instanceof Error ? err : new Error(formattedCause);
+  return { status: "failed", error: wrapped, cause: formattedCause };
 }
 
 /**
@@ -1005,3 +1093,4 @@ function classifyInstallFailure(err: unknown, formattedCause: string): InstallPl
  */
 export { classifyEntityShapeError as __test_classifyEntityShapeError };
 export { classifyInstallFailure as __test_classifyInstallFailure };
+export { narrowResolverReasons as __test_narrowResolverReasons };

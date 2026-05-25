@@ -60,7 +60,7 @@ import {
 } from "../../presentation/plugin-list.ts";
 import { compareByNameThenScope } from "../../presentation/sort.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { notifyError, notifySuccess } from "../../shared/notify.ts";
+import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
@@ -143,13 +143,34 @@ async function loadManifestSoftly(manifestPath: string): Promise<MarketplaceMani
   return loadMarketplaceManifest(manifestPath);
 }
 
+/**
+ * Reasons emitted by the list orchestrator. The resolver-narrowing path
+ * produces `hooks` / `lspServers` / `unsupported source`; the
+ * probe-error path produces `permission denied` / `source missing` /
+ * `unreadable` / `unparseable`. All values are members of the closed
+ * `Reason` set so the renderer accepts them unchanged.
+ */
+type ListReason =
+  | "hooks"
+  | "lspServers"
+  | "unsupported source"
+  | "permission denied"
+  | "source missing"
+  | "unreadable"
+  | "unparseable";
+
 interface PluginRowComputation {
   readonly status: PluginRenderStatus;
   readonly version?: string;
   readonly description?: string;
-  readonly reasons?: readonly ("hooks" | "lspServers" | "unsupported source")[];
-  readonly declaresAgents?: boolean;
-  readonly declaresMcp?: boolean;
+  readonly reasons?: readonly ListReason[];
+  // CMC-13 / Task 260525-cjr B1: required `boolean` on the internal
+  // computation, mirroring the same flip applied to `PluginListRow`
+  // and the orchestrator outcome types. Every producer site
+  // populates both predicates explicitly (the `availableRowComputation`
+  // error-path returns the unavailable variant with `false` defaults).
+  readonly declaresAgents: boolean;
+  readonly declaresMcp: boolean;
 }
 
 /**
@@ -172,8 +193,8 @@ function installedRowComputation(
     status: upgradable ? "upgradable" : "installed",
     version: record.version,
     ...(manifestEntry?.description !== undefined && { description: manifestEntry.description }),
-    ...(declaresAgents && { declaresAgents: true }),
-    ...(declaresMcp && { declaresMcp: true }),
+    declaresAgents,
+    declaresMcp,
   };
 }
 
@@ -213,6 +234,66 @@ function narrowResolverNotes(
 }
 
 /**
+ * Captured probe failure -- the resolver threw an unexpected error for one
+ * manifest entry. The classified `reason` flows into the row's reasons
+ * block (so the user sees the cause CLASS on the rendered line); the raw
+ * `message` is aggregated by `listPlugins` into a single trailing
+ * `notifyWarning` so the user sees the underlying detail without having
+ * one notification per failed row.
+ */
+interface ProbeFailure {
+  readonly plugin: string;
+  readonly reason: ListReason;
+  readonly message: string;
+}
+
+/**
+ * Module-scope per-`listPlugins` capture buffer. `listPlugins` resets it
+ * before each call and drains it after `renderPluginList`. This avoids
+ * threading a `probeFailures: ProbeFailure[]` parameter through every
+ * helper (`enumerateMarketplacePlugins` -> `buildMarketplaceBlock` ->
+ * `availableRowComputation`) just to surface aggregated detail. The
+ * orchestrator is single-call per entrypoint (no recursion, no
+ * concurrent calls within one `listPlugins` invocation); the reset is
+ * the single synchronisation point.
+ */
+let PROBE_FAILURES: ProbeFailure[] = [];
+
+/**
+ * Classify a thrown `resolveStrict` failure to a closed-set `ListReason`.
+ *
+ * Errno-bearing Node FS errors map to the matching closed Reason
+ * (`EACCES` -> `permission denied`; `ENOENT` -> `source missing`;
+ * `EIO`/other IO -> `unreadable`). `SyntaxError` (thrown by JSON.parse
+ * inside the resolver / manifest read path) maps to `unparseable`. Any
+ * other thrown shape falls through to `unreadable`, which is the closed
+ * Reason that means "we could not read enough of the source to decide".
+ *
+ * This replaces the previous behavior of substring-matching every
+ * caught error through `narrowResolverNotes` -- which only recognises
+ * `hooks` / `lspServers` and silently degraded EVERY OTHER throw to
+ * `{unsupported source}`, hiding real failure causes from the user.
+ */
+function narrowProbeError(err: unknown): ListReason {
+  if (err instanceof SyntaxError) {
+    return "unparseable";
+  }
+
+  if (err instanceof Error) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EACCES" || code === "EPERM") {
+      return "permission denied";
+    }
+
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return "source missing";
+    }
+  }
+
+  return "unreadable";
+}
+
+/**
  * Resolve a not-yet-installed manifest entry into a PluginRowComputation.
  * `resolveStrict` succeeds + `installable: true` -> `(available)`; the
  * resolver returns `installable: false` (or throws) -> `(unavailable)` with
@@ -239,8 +320,8 @@ async function availableRowComputation(
         ...(manifestEntry.description !== undefined && {
           description: manifestEntry.description,
         }),
-        ...(declaresAgents && { declaresAgents: true }),
-        ...(declaresMcp && { declaresMcp: true }),
+        declaresAgents,
+        declaresMcp,
       };
     }
 
@@ -251,15 +332,41 @@ async function availableRowComputation(
         description: manifestEntry.description,
       }),
       reasons: narrowResolverNotes(resolved.notes),
+      // Task 260525-cjr B1: unavailable rows do not render the
+      // soft-dep marker (MSG-SD-3); the explicit `false` keeps the
+      // required-boolean contract symmetrical.
+      declaresAgents: false,
+      declaresMcp: false,
     };
   } catch (probeErr) {
+    // The previous implementation routed EVERY throw through
+    // `narrowResolverNotes`, which only recognises the strings `hooks`
+    // and `lspServers` and silently degrades everything else to
+    // `{unsupported source}`. That hid EACCES, JSON parse failures,
+    // and programming bugs behind a misleading reason. Route resolver
+    // notes through `narrowResolverNotes` (the path that produces them
+    // is `resolveStrict` returning NotInstallable with structured notes
+    // -- already handled above on the `installable === false` branch),
+    // and route thrown probe failures through `narrowProbeError` so the
+    // row reports the actual cause class. The raw `errorMessage(probeErr)`
+    // is captured into `PROBE_FAILURES` and surfaced once at the end of
+    // `listPlugins` via a single `notifyWarning` (one notification, not
+    // one per failed row).
+    const reason = narrowProbeError(probeErr);
+    PROBE_FAILURES.push({
+      plugin: manifestEntry.name,
+      reason,
+      message: errorMessage(probeErr),
+    });
     return {
       status: "unavailable",
       ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
       ...(manifestEntry.description !== undefined && {
         description: manifestEntry.description,
       }),
-      reasons: narrowResolverNotes([errorMessage(probeErr)]),
+      reasons: [reason],
+      declaresAgents: false,
+      declaresMcp: false,
     };
   }
 }
@@ -282,8 +389,10 @@ function makePluginListRow(
     status: comp.status,
     ...(comp.reasons !== undefined && comp.reasons.length > 0 && { reasons: comp.reasons }),
     ...(comp.description !== undefined && { description: comp.description }),
-    ...(comp.declaresAgents === true && { declaresAgents: true }),
-    ...(comp.declaresMcp === true && { declaresMcp: true }),
+    // CMC-13 / Task 260525-cjr B1: `PluginRowComputation.declares*`
+    // is now REQUIRED boolean; forward verbatim.
+    declaresAgents: comp.declaresAgents,
+    declaresMcp: comp.declaresMcp,
   };
 }
 
@@ -649,11 +758,36 @@ function sortPluginsInBlock(
  */
 export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
   const { ctx, pi } = opts;
+  // Reset the per-call capture buffer. Each `availableRowComputation`
+  // catch site appends a `ProbeFailure` here; we drain into a single
+  // `notifyWarning` after the success render so the user sees the real
+  // failure causes without one notification per failed row. Reset on
+  // function entry rather than after notify so that a throw from
+  // `loadPluginListPayload` itself does not bleed captured failures
+  // into the next invocation.
+  PROBE_FAILURES = [];
   try {
     const payload = await loadPluginListPayload(opts);
     const probe = softDepStatus(pi);
     notifySuccess(ctx, renderPluginList(payload, probe));
+    if (PROBE_FAILURES.length > 0) {
+      const summary = PROBE_FAILURES.map((f) => `  - ${f.plugin}: {${f.reason}} ${f.message}`).join(
+        "\n",
+      );
+      notifyWarning(
+        ctx,
+        `Some plugins could not be probed (${String(PROBE_FAILURES.length)}):\n${summary}`,
+      );
+    }
   } catch (err) {
     notifyError(ctx, errorMessage(err), err);
+  } finally {
+    PROBE_FAILURES = [];
   }
 }
+
+// Test-only re-export. Mirrors the `__test_classifyEntityShapeError` /
+// `__test_classifyInstallFailure` precedent in `install.ts`: the helper
+// is file-private but its classification table is the load-bearing
+// contract that callers (and the user) rely on.
+export { narrowProbeError as __test_narrowProbeError };

@@ -351,6 +351,10 @@ test("MU-6 + MU-8: cascade runs ONLY when autoupdate=true; pluginUpdate called o
         name: plugin,
         fromVersion: "0.0.1",
         toVersion: "0.0.2",
+        stagedAgents: [],
+        stagedMcpServers: [],
+        declaresAgents: false,
+        declaresMcp: false,
       });
     };
 
@@ -391,7 +395,16 @@ test("MU-6: cascade skipped when autoupdate=false (default)", async () => {
     let pluginUpdateCalled = false;
     const pluginUpdate: PluginUpdateFn = async () => {
       pluginUpdateCalled = true;
-      return Promise.resolve({ partition: "updated", name: "x" });
+      return Promise.resolve({
+        partition: "updated",
+        name: "x",
+        fromVersion: "0.0.1",
+        toVersion: "0.0.2",
+        stagedAgents: [],
+        stagedMcpServers: [],
+        declaresAgents: false,
+        declaresMcp: false,
+      });
     };
 
     await updateMarketplace({
@@ -431,16 +444,52 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
     const { gitOps } = makeMockGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000006" },
     });
-    const pluginUpdate: PluginUpdateFn = async (plugin) => {
-      const partition: PluginUpdateOutcome["partition"] =
-        plugin === "a"
-          ? "updated"
-          : plugin === "b"
-            ? "unchanged"
-            : plugin === "c"
-              ? "skipped"
-              : "failed";
-      return Promise.resolve({ partition, name: plugin });
+    // Task 260525-cjr C2: PluginUpdateOutcome is now a discriminated
+    // union; each partition variant has different required fields.
+    // Construct a fixture per branch.
+    const pluginUpdate: PluginUpdateFn = (plugin) => {
+      if (plugin === "a") {
+        return Promise.resolve<PluginUpdateOutcome>({
+          partition: "updated",
+          name: plugin,
+          fromVersion: "0.0.1",
+          toVersion: "0.0.2",
+          stagedAgents: [],
+          stagedMcpServers: [],
+          declaresAgents: false,
+          declaresMcp: false,
+        });
+      }
+
+      if (plugin === "b") {
+        return Promise.resolve<PluginUpdateOutcome>({
+          partition: "unchanged",
+          name: plugin,
+          fromVersion: "0.0.1",
+          toVersion: "0.0.1",
+          declaresAgents: false,
+          declaresMcp: false,
+        });
+      }
+
+      if (plugin === "c") {
+        return Promise.resolve<PluginUpdateOutcome>({
+          partition: "skipped",
+          name: plugin,
+          notes: [],
+          reasons: [],
+          declaresAgents: false,
+          declaresMcp: false,
+        });
+      }
+
+      return Promise.resolve<PluginUpdateOutcome>({
+        partition: "failed",
+        name: plugin,
+        notes: [],
+        declaresAgents: false,
+        declaresMcp: false,
+      });
     };
 
     await updateMarketplace({
@@ -497,6 +546,10 @@ test("MU-9 + MSG-RH-1: success emits canonical reload hint trailer for updated p
         name: plugin,
         fromVersion: "0.0.1",
         toVersion: "0.0.2",
+        stagedAgents: [],
+        stagedMcpServers: [],
+        declaresAgents: false,
+        declaresMcp: false,
       });
 
     await updateMarketplace({
@@ -529,7 +582,14 @@ test("RH-1: NO reload hint when zero plugins updated", async () => {
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000008" },
     });
     const pluginUpdate: PluginUpdateFn = async (plugin) =>
-      Promise.resolve({ partition: "unchanged", name: plugin });
+      Promise.resolve({
+        partition: "unchanged",
+        name: plugin,
+        fromVersion: "0.0.1",
+        toVersion: "0.0.1",
+        declaresAgents: false,
+        declaresMcp: false,
+      });
     await updateMarketplace({
       ctx,
       name: "noupd",
@@ -639,6 +699,8 @@ test("outcomeToCascadeRow: skipped outcome with typed reasons reads them directl
     // to `up-to-date` (default); `reasons` says `not installed`.
     notes: ["irrelevant cause-chain text"],
     reasons: ["not installed"] as const,
+    declaresAgents: false,
+    declaresMcp: false,
   };
   const row = __test_outcomeToCascadeRow(outcome, "project");
   assert.equal(row.kind, "plugin-cascade");
@@ -652,6 +714,8 @@ test("outcomeToCascadeRow: failed outcome with typed reasons reads them directly
     name: "p",
     notes: ["arbitrary cause-chain text"],
     reasons: ["rollback partial"] as const,
+    declaresAgents: false,
+    declaresMcp: false,
   };
   const row = __test_outcomeToCascadeRow(outcome, "project");
   assert.equal(row.kind, "plugin-cascade");
@@ -660,11 +724,18 @@ test("outcomeToCascadeRow: failed outcome with typed reasons reads them directly
 });
 
 test("outcomeToCascadeRow: skipped outcome without typed reasons falls back to notes substring parse (back-compat)", () => {
+  // Task 260525-cjr C2: `reasons` is required on PluginUpdateSkippedOutcome
+  // (the producer-narrowed contract). An empty `reasons: []` array
+  // exercises the consumer's notes-fallback substring narrow without
+  // populating a typed reason -- equivalent in behavior to the
+  // pre-C2 `reasons: undefined` fixture.
   const outcome: PluginUpdateOutcome = {
     partition: "skipped",
     name: "p",
     notes: ["not in manifest"],
-    // No `reasons` -- exercises the transitional notes-fallback path.
+    reasons: [],
+    declaresAgents: false,
+    declaresMcp: false,
   };
   const row = __test_outcomeToCascadeRow(outcome, "project");
   assert.equal(row.status, "skipped");
@@ -676,9 +747,135 @@ test("outcomeToCascadeRow: failed outcome without typed reasons falls back to no
     partition: "failed",
     name: "p",
     notes: ["rollback partial: skills"],
-    // No `reasons` -- exercises the transitional notes-fallback path.
+    // No `reasons` -- exercises the transitional notes-fallback path.,
+    declaresAgents: false,
+    declaresMcp: false,
   };
   const row = __test_outcomeToCascadeRow(outcome, "project");
   assert.equal(row.status, "failed");
   assert.deepEqual(row.reasons, ["rollback partial"]);
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Task 260525-cjr B2: cascadeAutoupdates catch site pre-narrows the closed
+// `Reason` via the typed-dispatch helper. EACCES / EPERM throws surface as
+// `{permission denied}` instead of the consumer's permissive `not in manifest`
+// fallback. Exercised end-to-end through `updateMarketplace` with an injected
+// `pluginUpdate` stub that throws an errno-bearing error.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("260525-cjr B2: cascadeAutoupdates catch -> EACCES surfaces as `{permission denied}` not `{not in manifest}`", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    await seedGithubMarketplace({
+      cwd,
+      name: "official",
+      ref: "main",
+      autoupdate: true,
+      plugins: { alpha: makePluginRecord() },
+    });
+    const { ctx, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000999" },
+    });
+    const pluginUpdate: PluginUpdateFn = () => {
+      const err = new Error("EACCES: permission denied, open '/some/.pi/agent/file'");
+      (err as NodeJS.ErrnoException).code = "EACCES";
+      return Promise.reject(err);
+    };
+
+    await updateMarketplace({
+      ctx,
+      name: "official",
+      scope: "project",
+      cwd,
+      gitOps,
+      pluginUpdate,
+    });
+
+    // The cascade-row body should render the precise `permission denied`
+    // closed Reason rather than degrading to the permissive
+    // `not in manifest` default that the consumer's `narrowFailReasons`
+    // would otherwise pick.
+    const composed = notifications.map((n) => n.message).join("\n");
+    assert.match(
+      composed,
+      /alpha[^\n]*\(failed\)[^\n]*\{permission denied\}/,
+      `expected (failed) {permission denied} for EACCES throw, got:\n${composed}`,
+    );
+    assert.equal(
+      composed.includes("{not in manifest}"),
+      false,
+      `regression: EACCES throw masqueraded as {not in manifest}.\n${composed}`,
+    );
+  });
+});
+
+test("260525-cjr B2: cascadeAutoupdates catch -> ENOENT surfaces as `{source missing}`", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    await seedGithubMarketplace({
+      cwd,
+      name: "official",
+      ref: "main",
+      autoupdate: true,
+      plugins: { alpha: makePluginRecord() },
+    });
+    const { ctx, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000999" },
+    });
+    const pluginUpdate: PluginUpdateFn = () => {
+      const err = new Error("ENOENT: no such file or directory");
+      (err as NodeJS.ErrnoException).code = "ENOENT";
+      return Promise.reject(err);
+    };
+
+    await updateMarketplace({
+      ctx,
+      name: "official",
+      scope: "project",
+      cwd,
+      gitOps,
+      pluginUpdate,
+    });
+
+    const composed = notifications.map((n) => n.message).join("\n");
+    assert.match(composed, /alpha[^\n]*\(failed\)[^\n]*\{source missing\}/);
+  });
+});
+
+test("260525-cjr B2: cascadeAutoupdates catch -> generic Error falls through to notes-substring (back-compat preserved)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    await seedGithubMarketplace({
+      cwd,
+      name: "official",
+      ref: "main",
+      autoupdate: true,
+      plugins: { alpha: makePluginRecord() },
+    });
+    const { ctx, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000999" },
+    });
+    const pluginUpdate: PluginUpdateFn = () =>
+      Promise.reject(new Error("something opaque happened"));
+
+    await updateMarketplace({
+      ctx,
+      name: "official",
+      scope: "project",
+      cwd,
+      gitOps,
+      pluginUpdate,
+    });
+
+    const composed = notifications.map((n) => n.message).join("\n");
+    // Generic Error -> reasonsFromCascadeError returns undefined ->
+    // consumer's narrowFailReason falls through to the legacy notes
+    // substring parse, which lands on `unreadable manifest` (the
+    // documented default for unclassifiable cascade failures). This
+    // proves the typed-dispatch path correctly returned `undefined`
+    // for an unrecognised error shape and deferred to the back-compat
+    // notes path.
+    assert.match(composed, /alpha[^\n]*\(failed\)[^\n]*\{unreadable manifest\}/);
+  });
 });

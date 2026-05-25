@@ -92,10 +92,13 @@ import { cascadeSummary } from "../../presentation/cascade-summary.ts";
 import { composeErrorWithCauseChain } from "../../presentation/cause-chain.ts";
 import { renderRow } from "../../presentation/compact-line.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
+import { composeVersionArrow } from "../../presentation/version-arrow.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   MarketplaceNotFoundError,
   MarketplaceUpdateError,
+  PluginShapeError,
+  assertNever,
   errorMessage,
 } from "../../shared/errors.ts";
 import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
@@ -119,7 +122,12 @@ import type {
 } from "../../presentation/compact-line.ts";
 import type { Reason } from "../../shared/grammar/reasons.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
+import type {
+  PluginUpdateFailedOutcome,
+  PluginUpdateFn,
+  PluginUpdateOutcome,
+  PluginUpdateSkippedOutcome,
+} from "../types.ts";
 
 /**
  * Marketplace label rows never carry per-row soft-dep markers (those
@@ -312,15 +320,73 @@ async function cascadeAutoupdates(
       // JSON-mode outcome aggregation in tests), so the cause-chain
       // trailer must be composed inline rather than relying on
       // notifyError's auto-trailer.
+      //
+      // Task 260525-cjr B2: ALSO pre-narrow the closed-set Reason via
+      // `reasonsFromCascadeError(err)` so the cascade row renders the
+      // precise cause class (`permission denied` / `source missing` /
+      // `no longer installable` / ...) instead of degrading to the
+      // permissive `not in manifest` fallback via the consumer's
+      // `narrowFailReasons` substring parse. Previously this catch
+      // swallowed the throw into a notes-only outcome with `reasons`
+      // absent, leaving the downstream consumer no choice but to
+      // substring-narrow.
+      const typedReasons = reasonsFromCascadeError(err);
       outcomes.push({
         partition: "failed",
         name: plugin,
         notes: [composeErrorWithCauseChain(err)],
+        ...(typedReasons !== undefined && { reasons: typedReasons }),
+        // CMC-13 / Task 260525-cjr B1: required `boolean` on the
+        // outcome contract. `(failed)` cascade rows do not render the
+        // soft-dep marker (MSG-SD-3), so the value is deliberately
+        // `false`; explicit emission keeps every producer site honest.
+        declaresAgents: false,
+        declaresMcp: false,
       });
     }
   }
 
   return outcomes;
+}
+
+/**
+ * Task 260525-cjr B2: typed-dispatch helper for the `cascadeAutoupdates`
+ * catch. Maps a thrown error to a closed-set Reason[] using the same
+ * priority order as the cascade narrowers in
+ * `orchestrators/plugin/{update,reinstall}.ts::reasonsFromTypedError`:
+ * PluginShapeError variants first, then errno-bearing FS errors, then
+ * `undefined` to defer to the consumer's substring fallback.
+ */
+function reasonsFromCascadeError(err: unknown): readonly Reason[] | undefined {
+  if (err instanceof PluginShapeError) {
+    // Task 260525-cjr C4: switch on `err.shape.kind` for compile-time
+    // exhaustiveness.
+    switch (err.shape.kind) {
+      case "no-longer-installable":
+      case "not-installable":
+        return ["no longer installable"] as const;
+      case "not-in-manifest":
+        return ["not in manifest"] as const;
+      case "already-installed":
+        // Cascade-path "already installed" is unexpected (we only
+        // cascade-update plugins already in the record); map to the
+        // permissive `not in manifest` fallback.
+        return ["not in manifest"] as const;
+    }
+  }
+
+  if (err instanceof Error) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EACCES" || code === "EPERM") {
+      return ["permission denied"] as const;
+    }
+
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return ["source missing"] as const;
+    }
+  }
+
+  return undefined;
 }
 
 /**
@@ -340,27 +406,40 @@ async function cascadeAutoupdates(
  *     verifies the rendered text.
  */
 function outcomeToCascadeRow(outcome: PluginUpdateOutcome, scope: Scope): PluginCascadeRow {
-  const baseDeclares = {
-    ...(outcome.declaresAgents !== undefined && { declaresAgents: outcome.declaresAgents }),
-    ...(outcome.declaresMcp !== undefined && { declaresMcp: outcome.declaresMcp }),
-  };
+  // CMC-13 / Task 260525-cjr B1: `outcome.declaresAgents` and
+  // `outcome.declaresMcp` are now REQUIRED booleans on every partition.
+  // Forward them verbatim on `(updated)` rows where MSG-SD-3 allows the
+  // marker; pin to `false` on non-(updated) rows where MSG-SD-3
+  // forbids the marker (the renderer narrows on `status` anyway, but
+  // explicit emission keeps the contract symmetrical with every
+  // producer site).
+  //
+  // Task 260525-cjr C2: PluginUpdateOutcome is now a discriminated
+  // union; the switch exhausts all 4 partitions and ends with an
+  // `assertNever` so any future variant addition fails at compile
+  // time. The (updated) branch no longer needs a `fromVersion !==
+  // undefined` ternary -- both version fields are REQUIRED on
+  // PluginUpdateUpdatedOutcome.
   switch (outcome.partition) {
     case "updated": {
-      // MSG-PL-3: version-transition arrow "v<from> → v<to>". The
-      // renderer's `renderVersion` slot prepends `v`; we omit the
-      // leading `v` on the from-side so the final form is `v<from>
-      // → v<to>` (catalog form). The arrow is U+2192 (space-padded).
-      const version =
-        outcome.fromVersion !== undefined && outcome.toVersion !== undefined
-          ? `${outcome.fromVersion} → v${outcome.toVersion}`
-          : undefined;
+      // MSG-PL-3: version-transition arrow "v<from> → v<to>". Task
+      // 260525-cjr C6: route through the shared
+      // `presentation/version-arrow.ts::composeVersionArrow` helper
+      // so this and the plugin-side `outcomeToCascadeRow` produce
+      // byte-equivalent slot text from the same source of truth.
+      // Updated outcomes always have both versions present, so the
+      // helper returns a defined string -- the local non-null
+      // assertion would be safe but the conditional spread is
+      // clearer.
+      const version = composeVersionArrow(outcome.fromVersion, outcome.toVersion);
       return {
         kind: "plugin-cascade",
         name: outcome.name,
         scope,
         ...(version !== undefined && { version }),
         status: "updated",
-        ...baseDeclares,
+        declaresAgents: outcome.declaresAgents,
+        declaresMcp: outcome.declaresMcp,
       };
     }
 
@@ -371,6 +450,8 @@ function outcomeToCascadeRow(outcome: PluginUpdateOutcome, scope: Scope): Plugin
         scope,
         status: "skipped",
         reasons: ["up-to-date"],
+        declaresAgents: false,
+        declaresMcp: false,
       };
     case "skipped":
       return {
@@ -379,6 +460,8 @@ function outcomeToCascadeRow(outcome: PluginUpdateOutcome, scope: Scope): Plugin
         scope,
         status: "skipped",
         reasons: [narrowSkipReason(outcome)],
+        declaresAgents: false,
+        declaresMcp: false,
       };
     case "failed":
       return {
@@ -387,7 +470,14 @@ function outcomeToCascadeRow(outcome: PluginUpdateOutcome, scope: Scope): Plugin
         scope,
         status: "failed",
         reasons: [narrowFailReason(outcome)],
+        declaresAgents: false,
+        declaresMcp: false,
       };
+    default:
+      // Task 260525-cjr C2: exhaustiveness guard. A new partition
+      // added to PluginUpdateOutcome without updating this switch
+      // fails at compile time on `assertNever(outcome)`.
+      return assertNever(outcome);
   }
 }
 
@@ -404,8 +494,8 @@ function outcomeToCascadeRow(outcome: PluginUpdateOutcome, scope: Scope): Plugin
  * notes-only outcomes (e.g., the `narrowSkipReason fallback` test at
  * line 461) so the fallback stays as a transitional bridge.
  */
-function narrowSkipReason(outcome: PluginUpdateOutcome): Reason {
-  const firstReason = outcome.reasons?.[0];
+function narrowSkipReason(outcome: PluginUpdateSkippedOutcome): Reason {
+  const firstReason = outcome.reasons[0];
   if (firstReason !== undefined) {
     return firstReason;
   }
@@ -413,7 +503,7 @@ function narrowSkipReason(outcome: PluginUpdateOutcome): Reason {
   // Fallback: legacy substring parse of `notes`. Retained for backward
   // compatibility with notes-only outcome fixtures.
   const notes = outcome.notes;
-  if (notes === undefined || notes.length === 0) {
+  if (notes.length === 0) {
     return "up-to-date";
   }
 
@@ -442,7 +532,7 @@ function narrowSkipReason(outcome: PluginUpdateOutcome): Reason {
  * failures bubble up from manifest re-reads; the catalog UAT in Wave 3
  * verifies.
  */
-function narrowFailReason(outcome: PluginUpdateOutcome): Reason {
+function narrowFailReason(outcome: PluginUpdateFailedOutcome): Reason {
   const firstReason = outcome.reasons?.[0];
   if (firstReason !== undefined) {
     return firstReason;
@@ -451,7 +541,7 @@ function narrowFailReason(outcome: PluginUpdateOutcome): Reason {
   // Fallback: legacy substring parse of `notes`. Retained for backward
   // compatibility with notes-only outcome fixtures.
   const notes = outcome.notes;
-  if (notes === undefined || notes.length === 0) {
+  if (notes.length === 0) {
     return "unreadable manifest";
   }
 

@@ -112,6 +112,19 @@ export const DEFAULT_GIT_OPS: GitOps = {
 };
 
 /**
+ * Recognize isomorphic-git's `NotFoundError` without importing the library
+ * into the orchestrator tier (D-13). The class sets both `name` and `code`
+ * to the string `"NotFoundError"` (see `node_modules/isomorphic-git`
+ * `index.cjs` -- `NotFoundError.code = 'NotFoundError'` and
+ * `this.code = this.name = NotFoundError.code`), and `Errors.NotFoundError`
+ * is the documented surface used by `git.resolveRef` when a ref is absent.
+ * Matching on the name keeps the boundary in `platform/git.ts` intact.
+ */
+function isGitNotFoundError(err: unknown): boolean {
+  return err instanceof Error && err.name === "NotFoundError";
+}
+
+/**
  * D-14 follow-upstream-blindly sequence. Three forms:
  *   - storedRef === undefined (default-branch tracking):
  *       fetch + resolveRef('refs/remotes/origin/HEAD') + forceUpdateRef + checkout
@@ -160,8 +173,22 @@ export async function refreshGitHubClone(
       dir: cloneDir,
       ref: `refs/remotes/origin/${storedRef}`,
     });
-  } catch {
-    remoteSha = undefined;
+  } catch (err) {
+    // isomorphic-git's `resolveRef` throws `NotFoundError` (with
+    // `name === "NotFoundError"` and `code === "NotFoundError"`) when the
+    // requested ref does not exist on the remote -- the documented case
+    // where falling back to a detached-HEAD checkout of the stored ref is
+    // the right behavior (D-14 third form). Every OTHER kind of throw
+    // (corrupted git dir, EACCES on .git, EIO, OOM, programming bugs in
+    // a `GitOps` stub) is a real failure: rethrow it so the caller
+    // surfaces the actual cause instead of silently falling back to
+    // stale local state. Name-check rather than `instanceof` keeps the
+    // orchestrator tier free of a direct `isomorphic-git` import (D-13).
+    if (isGitNotFoundError(err)) {
+      remoteSha = undefined;
+    } else {
+      throw err;
+    }
   }
 
   if (remoteSha === undefined) {
@@ -188,13 +215,23 @@ export function renderPartition(
 
   lines.push(`${label}:`);
   for (const o of [...outcomes].sort((a, b) => a.name.localeCompare(b.name))) {
-    if (withVersions && o.fromVersion !== undefined && o.toVersion !== undefined) {
+    // Task 260525-cjr C2: narrow on the discriminated partition before
+    // reading partition-specific fields. The renderer's `withVersions`
+    // gate maps to the (updated)/(unchanged) partitions that carry
+    // `fromVersion` + `toVersion`; the notes-bearing branch maps to
+    // (skipped)/(failed). The bare-row fallback is the (updated) +
+    // !withVersions case (typically the legacy unchanged-row form).
+    if (withVersions && (o.partition === "updated" || o.partition === "unchanged")) {
       lines.push(`  - ${o.name} (${o.fromVersion} → ${o.toVersion})`);
-    } else if (o.notes !== undefined && o.notes.length > 0) {
-      lines.push(`  - ${o.name}: ${o.notes.join("; ")}`);
-    } else {
-      lines.push(`  - ${o.name}`);
+      continue;
     }
+
+    if ((o.partition === "skipped" || o.partition === "failed") && o.notes.length > 0) {
+      lines.push(`  - ${o.name}: ${o.notes.join("; ")}`);
+      continue;
+    }
+
+    lines.push(`  - ${o.name}`);
   }
 }
 

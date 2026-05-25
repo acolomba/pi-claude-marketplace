@@ -38,9 +38,15 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    * `(skipped)` and `(failed)` rows omit them (failed sets these to false
    * to make the constraint explicit even though the renderer narrows on
    * `status === "skipped"` / `"failed"` anyway).
+   *
+   * Task 260525-cjr B1 / CMC-13: required `boolean` (not `?: boolean`)
+   * so every reinstalled-outcome producer populates the predicate
+   * EXPLICITLY rather than relying on `undefined ~= false`. The closed
+   * type enforces the contract at compile time; the `tsc --noEmit` gate
+   * catches any forgotten emitter on every CI run.
    */
-  readonly declaresAgents?: boolean;
-  readonly declaresMcp?: boolean;
+  readonly declaresAgents: boolean;
+  readonly declaresMcp: boolean;
   readonly notes?: readonly string[];
 }
 
@@ -63,6 +69,20 @@ export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
    * `narrowReason` on `notes` for those.
    */
   readonly failureClass?: "manual-recovery";
+  /**
+   * Task 260525-cjr B2: pre-narrowed closed-set `Reason[]` produced at
+   * the throw/catch site instead of substring-matching the opaque
+   * `composeErrorWithCauseChain(err)` text downstream. Mirrors the
+   * `PluginUpdateOutcome.reasons` precedent (CR-06 / NFR-7). When
+   * present, `outcomeToCascadeRow` prefers `reasons[0]` over
+   * `narrowReasons(notes)`; when absent, the legacy substring narrow
+   * is used (back-compat for fixtures that build outcomes without
+   * `reasons`). Populated by the catch in `reinstallPlugins` so an
+   * EACCES / EPERM / ENOENT failure renders as the matching closed
+   * Reason (`permission denied` / `source missing`) rather than the
+   * permissive `not in manifest` default.
+   */
+  readonly reasons?: readonly Reason[];
 }
 
 export type ReinstallPluginOutcome =
@@ -74,95 +94,113 @@ export type ReinstallPluginOutcome =
 export type PluginUpdatePartition = "updated" | "unchanged" | "skipped" | "failed";
 
 /**
- * D-06 outcome shape. Discriminated by `partition`; consumers exhaust-switch.
- * Field optionality reflects MU-7 per-partition semantics:
- *   - updated: fromVersion + toVersion present (string compare changed)
- *   - unchanged: name only (resolved version matched install record)
- *   - skipped: name + optional notes (e.g., resolver could not load)
- *   - failed: notes carries the chained error message tail (Error.cause walk)
- *
- * WR-04: optional stagedAgents / stagedMcpServers fields carry the
- * names of resources the plugin's update actually staged. RH-5 soft-dep
- * warnings (Phase 4 marketplace update; Phase 5 plugin update) use
- * these to decide whether pi-subagents / pi-mcp-adapter need a warning,
- * instead of firing on every plugin update regardless of staged content.
- * Optional because Phase 4 ships the orchestrator before Phase 5 wires
- * the real implementation; tests that don't exercise RH-5 omit them.
+ * Bridge identifier for `PluginUpdateFailedOutcome.phaseFailures`.
+ * Promoted to a named type so callers and tests don't repeat the literal
+ * union inline.
  */
-export interface PluginUpdateOutcome {
-  readonly partition: PluginUpdatePartition;
+export type UpdatePhaseBridge = "skills" | "commands" | "agents" | "mcp";
+
+/**
+ * Plan 13-02a-01 / CMC-17 / MSG-RP-1: per-phase rollback-partial child
+ * carried on the `(failed)` partition when phase-3a aggregation occurred.
+ */
+export interface UpdatePhaseFailure {
+  readonly phase: UpdatePhaseBridge;
+  readonly msg: string;
+}
+
+interface PluginUpdateBase {
   readonly name: string;
+  /**
+   * Task 260525-cjr B1 / CMC-13: required `boolean` on every partition.
+   * The renderer narrows on the partition discriminator (`(updated)` is
+   * the only partition that emits the soft-dep marker per MSG-SD-3), but
+   * the explicit field keeps every producer honest at compile time.
+   */
+  readonly declaresAgents: boolean;
+  readonly declaresMcp: boolean;
+}
+
+/**
+ * Task 260525-cjr C2: `(updated)` partition. `fromVersion` and `toVersion`
+ * are REQUIRED here -- the orchestrator transitioned the install record
+ * from one to the other. `stagedAgents` / `stagedMcpServers` are the
+ * names of resources that were actually written during the update
+ * (WR-04 / RH-5 input).
+ */
+export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase {
+  readonly partition: "updated";
+  readonly fromVersion: string;
+  readonly toVersion: string;
+  readonly stagedAgents: readonly string[];
+  readonly stagedMcpServers: readonly string[];
+}
+
+/**
+ * Task 260525-cjr C2: `(unchanged)` partition. The resolved version
+ * matched the install record version exactly; nothing was written.
+ * `fromVersion === toVersion` is documented here on both fields for
+ * outcome aggregators that want to display a `vX → vX` slot.
+ */
+export interface PluginUpdateUnchangedOutcome extends PluginUpdateBase {
+  readonly partition: "unchanged";
+  readonly fromVersion: string;
+  readonly toVersion: string;
+}
+
+/**
+ * Task 260525-cjr C2: `(skipped)` partition. `fromVersion` is optional --
+ * preflight skipped paths (marketplace-missing / record-missing) have no
+ * install record to read a version from; the manifest-skipped paths
+ * (entry-missing / entry-invalid / no-longer-installable) do. `reasons`
+ * is REQUIRED on skipped (one of the closed `not in manifest` /
+ * `not installed` / `invalid manifest` / `no longer installable`
+ * values). `notes` carries the free-form cause-chain text consumed by
+ * the notify trailer.
+ */
+export interface PluginUpdateSkippedOutcome extends PluginUpdateBase {
+  readonly partition: "skipped";
+  readonly fromVersion?: string;
+  readonly notes: readonly string[];
+  readonly reasons: readonly Reason[];
+}
+
+/**
+ * Task 260525-cjr C2: `(failed)` partition. `fromVersion` / `toVersion`
+ * are optional -- catch sites that don't have version context (e.g. a
+ * marketplace-not-found cascade catch in `cascadeAutoupdates`) leave
+ * them undefined. `notes` is REQUIRED (the composed cause-chain text
+ * for the notify trailer). `reasons` and `phaseFailures` are optional
+ * structured supplements consumed by the cascade renderer; when
+ * neither is set the consumer falls back to the legacy notes
+ * substring parse for back-compat.
+ */
+export interface PluginUpdateFailedOutcome extends PluginUpdateBase {
+  readonly partition: "failed";
   readonly fromVersion?: string;
   readonly toVersion?: string;
-  /**
-   * Free-form note blob for the cause-chain trailer composition (used by
-   * `composeErrorWithCauseChain` at the producer site to capture the full
-   * chained error message). Cascade consumers (`marketplace/update.ts::
-   * outcomeToCascadeRow`) MUST prefer `reasons` (typed, closed-set) for
-   * classification; `notes` is retained ONLY for the notifyError trailer
-   * text path so the user still sees the underlying error message body.
-   *
-   * Quick task 260525-aub: a future cleanup task may remove `notes` from
-   * the consumer contract once every notifyError consumer composes the
-   * trailer from `Error.cause` directly. Today the cascade rendering
-   * partition body and JSON outcome aggregation still consume it.
-   */
-  readonly notes?: readonly string[];
-  /**
-   * Quick task 260525-aub / CR-06 precedent (NFR-7 discriminated dispatch):
-   * pre-narrowed closed-set `Reason[]` produced at the throw/catch site
-   * rather than re-derived by the consumer via substring matching of
-   * `notes`. The cascade renderer (`outcomeToCascadeRow`) reads
-   * `reasons?.[0]` directly when populated; falls back to the legacy
-   * `narrowSkipReason` / `narrowFailReason` substring parse on `notes`
-   * only when `reasons` is undefined (backward-compat for test fixtures
-   * that build outcomes without `reasons`).
-   *
-   * Populated by `plugin/update.ts` producers (the catch in
-   * `updateSinglePlugin` and the static skipped-partition returns in
-   * `preflightUpdate`). All values must be members of the closed
-   * `Reason` set per `shared/grammar/reasons.ts`.
-   */
+  readonly notes: readonly string[];
   readonly reasons?: readonly Reason[];
-  /** WR-04: agents staged by this plugin's update (RH-5 input). */
-  readonly stagedAgents?: readonly string[];
-  /** WR-04: MCP servers staged by this plugin's update (RH-5 input). */
-  readonly stagedMcpServers?: readonly string[];
-  /**
-   * Plan 13-02a-01 / CMC-13: per-row soft-dep predicate inputs (same
-   * semantics as `ReinstallReinstalledOutcome.declaresAgents/Mcp`). True
-   * iff the plugin's manifest declared the kind AND it was actually
-   * staged. The renderer probes companion-loaded state via SoftDepProbe
-   * and emits `{requires pi-subagents}` / `{requires pi-mcp}` iff
-   * (declares AND unloaded). Populated on `(updated)` outcomes; omitted
-   * on `(unchanged) / (skipped) / (failed)` because MSG-SD-3 forbids the
-   * marker on non-(updated) cascade rows.
-   */
-  readonly declaresAgents?: boolean;
-  readonly declaresMcp?: boolean;
-  /**
-   * Plan 13-02a-01 / CMC-17 / MSG-RP-1: per-phase rollback-partial
-   * children for the `(failed)` partition when phase-3a aggregation
-   * occurred. Each entry names one bridge (`skills` | `commands` |
-   * `agents` | `mcp`) whose `commit*` threw or leaked. The cascade
-   * renderer uses these to build the indented children block beneath
-   * the `(failed) {rollback partial}` parent row.
-   *
-   * Encoded as the bridge-name + cause-message pair so the rendering
-   * stays close to the catalog's `[phase3a] failed to remove staged
-   * agent: EACCES` form (the phaseLabel is the bridge name, prefixed
-   * by `[<phase>]` at render time; the reason embeds the cause text
-   * via the closed-set `"rollback partial"` Reason).
-   *
-   * Omitted on `(updated)` / `(unchanged)` / `(skipped)` outcomes and
-   * on `(failed)` outcomes that did not reach phase-3a (preflight
-   * failures, manifest errors, etc.).
-   */
-  readonly phaseFailures?: readonly {
-    readonly phase: "skills" | "commands" | "agents" | "mcp";
-    readonly msg: string;
-  }[];
+  readonly phaseFailures?: readonly UpdatePhaseFailure[];
 }
+
+/**
+ * Task 260525-cjr C2: split into a discriminated union on `partition`
+ * (previously a single interface with every field optional). The
+ * discriminated union makes partition-specific fields (fromVersion /
+ * toVersion on updated; phaseFailures on failed) STRUCTURALLY
+ * unreachable on the wrong partition, so the renderer cannot read
+ * `outcome.fromVersion!` from a skipped outcome without a narrow.
+ *
+ * Each partition variant carries `declaresAgents` / `declaresMcp` via
+ * the shared `PluginUpdateBase` base (Task B1 / CMC-13 required
+ * booleans).
+ */
+export type PluginUpdateOutcome =
+  | PluginUpdateUpdatedOutcome
+  | PluginUpdateUnchangedOutcome
+  | PluginUpdateSkippedOutcome
+  | PluginUpdateFailedOutcome;
 
 /**
  * D-05 function-injection seam. Phase 4 (`marketplace update` with
