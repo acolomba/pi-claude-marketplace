@@ -324,6 +324,29 @@ interface ImportCascadeInput {
   readonly rows: PluginCascadeRow[];
 }
 
+/**
+ * Legacy formatter retained for the test surface that exercises the
+ * Wave 1 cascade composition in isolation (no notify path required).
+ *
+ * Production code does NOT call this -- `importClaudeSettings` below
+ * uses `composeImportSummary` + `reloadHint` + `appendReloadHint`
+ * directly so the notify-boundary severity routing (notifySuccess vs
+ * notifyWarning per MSG-SR-4..6) can ride on the cascadeSummary
+ * severity. Consumers (Phase 14.2-fix WR-07 audit, 2026-05-24):
+ *
+ *   - `tests/orchestrators/import/execute.test.ts` -- the SOLE
+ *     consumer. Eight invocations across five tests covering the
+ *     idempotent-skip preamble, the warning-record actionability
+ *     shape, the soft-dep-marker reasons, and the reload-hint
+ *     trailer. The tests assert on the composed string directly,
+ *     which is the use case `formatClaudeImportSummary` exists to
+ *     serve.
+ *
+ * If this consumer list ever drops to zero, delete this export AND
+ * the re-export at `orchestrators/import/index.ts:2`. The audit grep
+ * is: `grep -rn formatClaudeImportSummary --include="*.ts" extensions/
+ * tests/ | grep -v 'index.ts\\|execute.ts:'`.
+ */
 export function formatClaudeImportSummary(
   result: ClaudeImportExecutionResult,
   probe: SoftDepProbe = DEFAULT_PROBE,
