@@ -74,6 +74,7 @@ import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   appendLeaks,
   errorMessage,
+  PluginShapeError,
   PluginUpdatePhase3Error,
   type Phase3Failure,
 } from "../../shared/errors.ts";
@@ -292,13 +293,55 @@ export const updateSinglePlugin: PluginUpdateFn = async (plugin, marketplace, sc
     // marketplace cascade can continue aggregating outcomes across plugins
     // without aborting the whole batch. `notes` is consumed outside the
     // notify path so the MSG-CC-1 trailer is composed inline here.
-    return {
+    //
+    // Quick task 260525-aub: pre-narrow the closed-set `Reason` here so the
+    // cascade consumer (`marketplace/update.ts::outcomeToCascadeRow`) reads
+    // `outcome.reasons[0]` directly instead of re-deriving from the
+    // free-text `notes` blob. Today the only typed throw we recognize on
+    // the cascade path is `PluginShapeError` (from `requireInstallable`
+    // during preflight). All other typed errors leave `reasons` undefined
+    // so the consumer falls back to the legacy substring-narrow path.
+    const typedReasons = reasonsFromTypedError(err);
+    const base: PluginUpdateOutcome = {
       partition: "failed",
       name: plugin,
       notes: [composeErrorWithCauseChain(err)],
     };
+    return typedReasons === undefined ? base : { ...base, reasons: typedReasons };
   }
 };
+
+/**
+ * Quick task 260525-aub: typed-error -> closed-set `Reason[]` narrowing for
+ * cascade-failure outcomes. Returns `undefined` when no recognized typed
+ * error is present so the consumer falls back to the legacy substring-
+ * narrow path on `notes`. Today only `PluginShapeError` carries enough
+ * structure to map directly; other typed errors leave the narrow to the
+ * consumer.
+ */
+function reasonsFromTypedError(err: unknown): readonly Reason[] | undefined {
+  if (err instanceof PluginShapeError) {
+    switch (err.kind) {
+      case "no-longer-installable":
+        return ["no longer installable"] as const;
+      case "not-installable":
+        // Cascade-path version: a not-installable throw from a CASCADE
+        // update means the source classification changed since install;
+        // we still surface as `"no longer installable"` because the
+        // cascade-row catalog form is `(failed) {no longer installable}`.
+        return ["no longer installable"] as const;
+      case "not-in-manifest":
+        return ["not in manifest"] as const;
+      case "already-installed":
+        // Cascade-path "already installed" should not happen at runtime
+        // (the cascade walks installed plugins only); map to `"not in
+        // manifest"` as the documented permissive fallback.
+        return ["not in manifest"] as const;
+    }
+  }
+
+  return undefined;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared 3-phase swap implementation
@@ -362,16 +405,26 @@ async function preflightUpdate(
   const state = await loadState(locations.extensionRoot);
   const mp = state.marketplaces[marketplace];
   if (mp === undefined) {
+    // Quick task 260525-aub: pre-narrow `reasons` to the closed-set Reason
+    // so the cascade consumer reads it directly instead of regex-parsing
+    // `notes`. Producer-side narrowing replaces the catch-site substring
+    // dispatch in `marketplace/update.ts::narrowSkipReason`.
     return {
       partition: "skipped",
       name: plugin,
       notes: [`marketplace "${marketplace}" not found in ${scope} scope`],
+      reasons: ["not in manifest"] as const,
     };
   }
 
   const record = mp.plugins[plugin];
   if (record === undefined) {
-    return { partition: "skipped", name: plugin, notes: ["not installed"] };
+    return {
+      partition: "skipped",
+      name: plugin,
+      notes: ["not installed"],
+      reasons: ["not installed"] as const,
+    };
   }
 
   const manifest = await loadCachedMarketplaceManifest(mp.manifestPath);
@@ -382,6 +435,7 @@ async function preflightUpdate(
       name: plugin,
       fromVersion: record.version,
       notes: ["not in manifest"],
+      reasons: ["not in manifest"] as const,
     };
   }
 
@@ -391,6 +445,7 @@ async function preflightUpdate(
       name: plugin,
       fromVersion: record.version,
       notes: ["entry failed schema validation"],
+      reasons: ["invalid manifest"] as const,
     };
   }
 
@@ -401,11 +456,20 @@ async function preflightUpdate(
     requireInstallable(resolved, "update");
     installable = resolved;
   } catch (err) {
+    // Quick task 260525-aub: `requireInstallable` now throws
+    // `PluginShapeError` with `kind === "no-longer-installable"` for the
+    // update verb. Pre-narrow to the closed Reason so the cascade row
+    // catalog form `(skipped) {no longer installable}` is produced
+    // without substring-matching the message text. Preserve `notes`
+    // verbatim for the cause-chain trailer. `resolveStrict` itself
+    // never throws (returns a not-installable variant), so the only
+    // typed-throw producer in this block is `requireInstallable`.
     return {
       partition: "skipped",
       name: plugin,
       fromVersion: record.version,
       notes: [errorMessage(err)],
+      reasons: ["no longer installable"] as const,
     };
   }
 
@@ -683,6 +747,15 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
       fromVersion,
       toVersion,
       notes: [aggregateMsg, ...phase3aFailures.map((f) => `${f.phase}: ${f.msg}`)],
+      // Quick task 260525-aub: pre-narrow the closed Reason for the
+      // cascade consumer (`marketplace/update.ts::outcomeToCascadeRow`)
+      // -- phase-3 aggregate failures always render as `(failed)
+      // {rollback partial}` per the catalog at
+      // docs/output-catalog.md L330. The plugin/update.ts-local
+      // `outcomeToCascadeRow` short-circuits on `phaseFailures.length
+      // > 0` and ignores `reasons`; the marketplace cascade consumer
+      // reads `reasons[0]` directly.
+      reasons: ["rollback partial"] as const,
       phaseFailures: phase3aFailures.map((f) => ({ phase: f.phase, msg: f.msg })),
     };
   }

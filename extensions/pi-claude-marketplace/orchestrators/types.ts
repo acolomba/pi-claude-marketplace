@@ -7,6 +7,7 @@
 // Phase 3 D-01's escalation note about a future BridgeOps<Prep, Target>
 // belonging at this same path.
 
+import type { Reason } from "../shared/grammar/reasons.ts";
 import type { Scope } from "../shared/types.ts";
 
 export type ReinstallPluginPartition = "reinstalled" | "skipped" | "failed";
@@ -93,7 +94,36 @@ export interface PluginUpdateOutcome {
   readonly name: string;
   readonly fromVersion?: string;
   readonly toVersion?: string;
+  /**
+   * Free-form note blob for the cause-chain trailer composition (used by
+   * `composeErrorWithCauseChain` at the producer site to capture the full
+   * chained error message). Cascade consumers (`marketplace/update.ts::
+   * outcomeToCascadeRow`) MUST prefer `reasons` (typed, closed-set) for
+   * classification; `notes` is retained ONLY for the notifyError trailer
+   * text path so the user still sees the underlying error message body.
+   *
+   * Quick task 260525-aub: a future cleanup task may remove `notes` from
+   * the consumer contract once every notifyError consumer composes the
+   * trailer from `Error.cause` directly. Today the cascade rendering
+   * partition body and JSON outcome aggregation still consume it.
+   */
   readonly notes?: readonly string[];
+  /**
+   * Quick task 260525-aub / CR-06 precedent (NFR-7 discriminated dispatch):
+   * pre-narrowed closed-set `Reason[]` produced at the throw/catch site
+   * rather than re-derived by the consumer via substring matching of
+   * `notes`. The cascade renderer (`outcomeToCascadeRow`) reads
+   * `reasons?.[0]` directly when populated; falls back to the legacy
+   * `narrowSkipReason` / `narrowFailReason` substring parse on `notes`
+   * only when `reasons` is undefined (backward-compat for test fixtures
+   * that build outcomes without `reasons`).
+   *
+   * Populated by `plugin/update.ts` producers (the catch in
+   * `updateSinglePlugin` and the static skipped-partition returns in
+   * `preflightUpdate`). All values must be members of the closed
+   * `Reason` set per `shared/grammar/reasons.ts`.
+   */
+  readonly reasons?: readonly Reason[];
   /** WR-04: agents staged by this plugin's update (RH-5 input). */
   readonly stagedAgents?: readonly string[];
   /** WR-04: MCP servers staged by this plugin's update (RH-5 input). */

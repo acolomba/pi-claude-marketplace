@@ -68,7 +68,7 @@ import { renderRow } from "../../presentation/compact-line.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { renderRollbackPartial } from "../../presentation/rollback-partial.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
-import { ConcurrentInstallError, errorMessage } from "../../shared/errors.ts";
+import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
 import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
 import { runPhases, type Phase, type RollbackPartial } from "../../transaction/phase-ledger.ts";
@@ -260,7 +260,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
         targetState: state,
       });
       if (source === undefined) {
-        throw new Error(`Plugin "${plugin}" not found in marketplace "${marketplace}".`);
+        throw new PluginShapeError({ kind: "not-in-manifest", plugin, marketplace });
       }
 
       // Target container: same scope record when present, or a cloned
@@ -282,7 +282,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
         // surface PI-5 wording at the early-sanity check (the user-visible
         // message is "already installed"); PI-15 (race-at-commit) surfaces
         // via the state-commit phase's defensive throw.
-        throw new Error(`Plugin "${plugin}" is already installed in marketplace "${marketplace}".`);
+        throw new PluginShapeError({ kind: "already-installed", plugin, marketplace });
       }
 
       // PI-2 cached-manifest read -- NO network, no gitOps. PI-3: entry must
@@ -291,7 +291,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       const manifest = await loadCachedMarketplaceManifest(sourceMp.manifestPath);
       const entryRaw = manifest.plugins.find((p) => p.name === plugin);
       if (entryRaw === undefined) {
-        throw new Error(`Plugin "${plugin}" not found in marketplace "${marketplace}".`);
+        throw new PluginShapeError({ kind: "not-in-manifest", plugin, marketplace });
       }
 
       // Defense-in-depth: re-run the per-entry validator on the chosen entry
