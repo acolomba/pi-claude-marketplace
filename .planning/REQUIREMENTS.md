@@ -13,17 +13,17 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 
 ### Type Model
 
-- [ ] **SNM-01**: `NotificationMessage` type defined in `shared/notify.ts` with shape `{ marketplaces: readonly MarketplaceNotificationMessage[] }`. No `severity` field (computed). No `trailer` field (reload hint computed; no top-level cause).
-- [ ] **SNM-02**: `MarketplaceNotificationMessage` type defined with shape `{ name: string; scope: Scope; status?: MarketplaceStatus; details?: MarketplaceDetails; plugins: readonly PluginNotificationMessage[] }`.
-- [ ] **SNM-03**: `PluginNotificationMessage` defined as a discriminated union on `status` with 10 variants: `installed`, `updated`, `reinstalled`, `uninstalled`, `available`, `unavailable`, `upgradable`, `failed`, `skipped`, `manual recovery`. Each variant pins `status` to its literal string for TypeScript narrowing.
-- [ ] **SNM-04**: `PluginStatus` type derived from `PluginNotificationMessage["status"]` via indexed access; serves as the canonical closed enum for validators, fixture iterators, and external functions that need the bare status list.
-- [ ] **SNM-05**: `MarketplaceStatus` type defined directly as `"added" | "removed" | "updated" | "failed"`.
-- [ ] **SNM-06**: `Dependency` type defined as `"agents" | "mcp"`. Each `installed` / `updated` / `reinstalled` plugin variant carries required `dependencies: readonly Dependency[]` (empty array = no soft deps).
-- [ ] **SNM-07**: `MarketplaceDetails` type defined for the list context (autoupdate state, last-updated timestamp). Optional on `MarketplaceNotificationMessage`.
-- [ ] **SNM-08**: `UsageErrorMessage` type defined with shape `{ message: string; usage: string }`.
-- [ ] **SNM-09**: `failed` plugin variant carries optional `rollbackPartial?: readonly { phase: string; cause?: Error }[]`. No separate `rollback failed` status -- rollback partial is structurally a sub-state of `failed`.
-- [ ] **SNM-10**: `failed` and `manual recovery` plugin variants carry optional `cause?: Error`. Causes are per-plugin -- the v1.3 top-level cause-chain trailer is retired.
-- [ ] **SNM-11**: All plugin variants except `available` / `unavailable` carry optional `scope?: Scope` representing the orphan-fold case (plugin's scope differs from parent marketplace's scope). `available` / `unavailable` carry no scope at all (MSG-PL-6 carve-out preserved).
+- [x] **SNM-01**: `NotificationMessage` type defined in `shared/notify.ts` with shape `{ marketplaces: readonly MarketplaceNotificationMessage[] }`. No `severity` field (computed). No `trailer` field (reload hint computed; no top-level cause).
+- [x] **SNM-02**: `MarketplaceNotificationMessage` type defined with shape `{ name: string; scope: Scope; status?: MarketplaceStatus; details?: MarketplaceDetails; plugins: readonly PluginNotificationMessage[] }`.
+- [x] **SNM-03**: `PluginNotificationMessage` defined as a discriminated union on `status` with 10 variants: `installed`, `updated`, `reinstalled`, `uninstalled`, `available`, `unavailable`, `upgradable`, `failed`, `skipped`, `manual recovery`. Each variant pins `status` to its literal string for TypeScript narrowing.
+- [x] **SNM-04**: `PluginStatus` type derived from `PluginNotificationMessage["status"]` via indexed access; serves as the canonical closed enum for validators, fixture iterators, and external functions that need the bare status list.
+- [x] **SNM-05**: `MarketplaceStatus` type defined directly as `"added" | "removed" | "updated" | "failed"`.
+- [x] **SNM-06**: `Dependency` type defined as `"agents" | "mcp"`. Each `installed` / `updated` / `reinstalled` plugin variant carries required `dependencies: readonly Dependency[]` (empty array = no soft deps).
+- [x] **SNM-07**: `MarketplaceDetails` type defined for the list context (autoupdate state, last-updated timestamp). Optional on `MarketplaceNotificationMessage`.
+- [x] **SNM-08**: `UsageErrorMessage` type defined with shape `{ message: string; usage: string }`.
+- [x] **SNM-09**: `failed` plugin variant carries optional `rollbackPartial?: readonly { phase: string; cause?: Error }[]`. No separate `rollback failed` status -- rollback partial is structurally a sub-state of `failed`.
+- [x] **SNM-10**: `failed` and `manual recovery` plugin variants carry optional `cause?: Error`. Causes are per-plugin -- the v1.3 top-level cause-chain trailer is retired.
+- [x] **SNM-11**: All plugin variants except `available` / `unavailable` carry optional `scope?: Scope` representing the orphan-fold case (plugin's scope differs from parent marketplace's scope). `available` / `unavailable` carry no scope at all (MSG-PL-6 carve-out preserved).
 
 ### Public API
 
@@ -39,7 +39,7 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 
 - [ ] **SNM-19**: `docs/messaging-style-guide.md` v2.0 rewritten to describe the structured type model as the binding contract. The `status_tokens` / `reasons` / `markers` / `pattern_classes` frontmatter sets are either deleted (now type-derived) or kept as a documentation aid with a drift test verifying parity against the TypeScript types.
 - [ ] **SNM-20**: `docs/output-catalog.md` rewritten to reflect the always-marketplace-header spec. Every output renders a marketplace header at column 0 with plugin rows indented two spaces, including single-plugin install / update / uninstall and marketplace add / remove. Per-command sections updated with new expected byte-equal outputs.
-- [ ] **SNM-21**: `docs/adr/v2-001-structured-notify.md` refreshed to reflect the locked design (status renames, `*NotificationMessage` naming, `PluginStatus`/`MarketplaceStatus` enums, `Dependency` closed set, per-plugin causes, dropped trailer, computed severity, always-marketplace-header spec change). Status flips from "Proposed" to "Accepted" with reference to the phase that landed it.
+- [x] **SNM-21**: `docs/adr/v2-001-structured-notify.md` refreshed to reflect the locked design (status renames, `*NotificationMessage` naming, `PluginStatus`/`MarketplaceStatus` enums, `Dependency` closed set, per-plugin causes, dropped trailer, computed severity, always-marketplace-header spec change). Status flips from "Proposed" to "Accepted" with reference to the phase that landed it.
 
 ### Migration & Deletion
 
@@ -75,17 +75,17 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SNM-01 | Phase 15 | Pending |
-| SNM-02 | Phase 15 | Pending |
-| SNM-03 | Phase 15 | Pending |
-| SNM-04 | Phase 15 | Pending |
-| SNM-05 | Phase 15 | Pending |
-| SNM-06 | Phase 15 | Pending |
-| SNM-07 | Phase 15 | Pending |
-| SNM-08 | Phase 15 | Pending |
-| SNM-09 | Phase 15 | Pending |
-| SNM-10 | Phase 15 | Pending |
-| SNM-11 | Phase 15 | Pending |
+| SNM-01 | Phase 15 | Complete |
+| SNM-02 | Phase 15 | Complete |
+| SNM-03 | Phase 15 | Complete |
+| SNM-04 | Phase 15 | Complete |
+| SNM-05 | Phase 15 | Complete |
+| SNM-06 | Phase 15 | Complete |
+| SNM-07 | Phase 15 | Complete |
+| SNM-08 | Phase 15 | Complete |
+| SNM-09 | Phase 15 | Complete |
+| SNM-10 | Phase 15 | Complete |
+| SNM-11 | Phase 15 | Complete |
 | SNM-12 | Phase 16 | Pending |
 | SNM-13 | Phase 16 | Pending |
 | SNM-14 | Phase 16 | Pending |
@@ -95,7 +95,7 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25.
 | SNM-18 | Phase 16 | Pending |
 | SNM-19 | Phase 17 | Pending |
 | SNM-20 | Phase 17 | Pending |
-| SNM-21 | Phase 15 | Pending |
+| SNM-21 | Phase 15 | Complete |
 | SNM-22 | Phase 21 | Pending |
 | SNM-23 | Phase 20 | Pending |
 | SNM-24 | Phase 21 | Pending |
@@ -109,6 +109,7 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25.
 | SNM-32 | Phase 21 | Pending |
 
 **Coverage:**
+
 - v1.4 requirements: 32 total
 - Mapped to phases: 32
 - Unmapped: 0

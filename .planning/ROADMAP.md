@@ -229,7 +229,7 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 | 14. Drift Guard & Test Alignment                                     | v1.3      | 6/6            | Complete    | 2026-05-24 |
 | 14.1. CMC-13 import propagation closure                              | v1.3      | 2/2            | Complete    | 2026-05-24 |
 | 14.2. CR-01 + retroactive Phase 12/14.1 gates                        | v1.3      | 5/5            | Complete    | 2026-05-24 |
-| 15. Type Model & ADR Refresh                                         | v1.4      | 3/3 | Complete   | 2026-05-25 |
+| 15. Type Model & ADR Refresh                                         | v1.4      | 3/3 | Complete    | 2026-05-25 |
 | 16. Renderer & Public API (Alongside V1)                             | v1.4      | 0/?            | Not started | --         |
 | 17. Spec Rewrite & Catalog UAT Migration                             | v1.4      | 0/?            | Not started | --         |
 | 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 0/?            | Not started | --         |
