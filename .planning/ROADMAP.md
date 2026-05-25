@@ -351,7 +351,7 @@ ______________________________________________________________________
 **Goal:** Close v1.3 milestone tech debt so `/gsd:complete-milestone v1.3` archives cleanly with zero outstanding gates: replace 3 local user-first `scopeOrder` helpers with canonical `compareByNameThenScope` (CR-01, affecting CMC-03/25/26/27); tighten the MSG-GR-3 lint rule from no-op to active AST detector; run retroactive `/gsd:secure-phase` + `/gsd:validate-phase` against Phase 12 (existing draft VALIDATION.md) and Phase 14.1 (no prior artefacts); flip 29 Phase-13 CMC checkboxes in ROADMAP.md Coverage and update the 14.1 Phase Details row.
 **Requirements**: CMC-03, CMC-25, CMC-26, CMC-27 (observably-affected v1.3 requirements per CR-01; gate-running plans address no new requirements)
 **Depends on:** Phase 14
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 - [ ] `14.2-01-PLAN.md` -- CR-01 cascade-block-ordering fix: replace 3 local `scopeOrder` helpers with `compareByNameThenScope`; flip `autoupdate.ts:114` iteration order; extend `catalog-uat.test.ts` cross-scope fixture; update 3 orchestrator unit-test cross-scope fixtures (Wave 1)
