@@ -82,6 +82,7 @@ repos:
         additional_dependencies:
           - mdformat-gfm
           - mdformat-gfm-alerts
+          - mdformat-frontmatter
         exclude: ^(tests/fixtures/|tests/bridges/_fixtures/|\.planning/)
 
   - repo: https://github.com/DavidAnson/markdownlint-cli2
