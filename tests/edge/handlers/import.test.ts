@@ -53,15 +53,20 @@ function makeHandler(): {
   return { handler, calls };
 }
 
-test("import handler defaults omitted --scope to user and project scopes", async () => {
+test("import handler defaults omitted --scope to project and user scopes (project-first per MSG-GR-3)", async () => {
   const { ctx, notifications } = makeCtx();
   const { handler, calls } = makeHandler();
 
   await handler("", ctx);
 
+  // Phase 14.2-fix CR-01: the bare-import handler iterates scopes
+  // project-first to match the MSG-GR-3 contract. Orphan diagnostic
+  // lines (insertion-ordered) render project-before-user in same-key
+  // ties; per-marketplace cascade blocks are sorted independently
+  // via compareByNameThenScope.
   assert.deepEqual(
     calls.map((call) => call.selectedScopes),
-    [["user", "project"]],
+    [["project", "user"]],
   );
   assert.equal(calls[0]?.cwd, "/tmp/project");
   assert.deepEqual(notifications, []);
