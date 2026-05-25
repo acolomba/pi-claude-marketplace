@@ -402,11 +402,23 @@ function iconForPluginRow(status: StatusToken, trivialSkip: boolean): string {
     case "manual recovery":
     case "unavailable":
       return ICON_UNINSTALLABLE;
-    default:
-      // The other status tokens (added/removed/no marketplaces/no plugins)
-      // never reach a plugin row; fall through to ⊘ rather than throw so
-      // misuse degrades visibly.
+    // Task 260525-cjr C7: the remaining StatusToken members
+    // (`added`/`removed`/`no marketplaces`/`no plugins`) never reach a
+    // plugin row STRUCTURALLY: every PluginInlineRow / PluginCascadeRow /
+    // PluginListRow narrows `status` via `Extract<StatusToken, ...>` so
+    // the unreachable tokens are excluded at the type level. Enumerate
+    // each explicitly (instead of the previous permissive `default ->
+    // ⊘` fallthrough) and end with `assertNever(status as never)` so a
+    // future StatusToken addition fails at compile time inside this
+    // switch rather than silently degrading to ⊘ -- catching the
+    // missing case at the chokepoint the renderer owns.
+    case "added":
+    case "removed":
+    case "no marketplaces":
+    case "no plugins":
       return ICON_UNINSTALLABLE;
+    default:
+      return assertNever(status);
   }
 }
 
