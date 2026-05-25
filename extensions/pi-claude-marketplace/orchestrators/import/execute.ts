@@ -936,7 +936,10 @@ function dispatchFailedOutcome(
   }
 
   if (error instanceof PluginShapeError) {
-    switch (error.kind) {
+    // Task 260525-cjr C4: switch on `error.shape.kind` for
+    // compile-time exhaustiveness against the typed discriminated
+    // union.
+    switch (error.shape.kind) {
       case "already-installed":
         result.skippedExistingPlugins.push({
           kind: "plugin-skip",

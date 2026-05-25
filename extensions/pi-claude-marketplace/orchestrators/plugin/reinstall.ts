@@ -765,7 +765,11 @@ function narrowReason(note: string): Reason {
  */
 function reasonsFromTypedError(err: unknown): readonly Reason[] | undefined {
   if (err instanceof PluginShapeError) {
-    switch (err.kind) {
+    // Task 260525-cjr C4: switch on `err.shape.kind` so a future
+    // shape variant addition fails at compile time (the discriminator
+    // is the typed shape's field, not the convenience top-level
+    // shortcut).
+    switch (err.shape.kind) {
       case "no-longer-installable":
         return ["no longer installable"] as const;
       case "not-installable":

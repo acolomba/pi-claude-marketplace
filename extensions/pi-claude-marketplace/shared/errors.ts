@@ -353,28 +353,32 @@ export type PluginShapeErrorShape =
 export type PluginShapeErrorKind = PluginShapeErrorShape["kind"];
 
 export class PluginShapeError extends Error {
+  /**
+   * Task 260525-cjr C4: the FULL discriminated shape is exposed as a
+   * single `readonly` field so consumers can narrow on `e.shape.kind`
+   * without non-null-asserting `e.marketplace!` / `e.reasons!` (those
+   * optional mirror fields existed ONLY because the constructor copied
+   * shape-specific data into top-level optional properties; the shape
+   * itself was discarded). The pre-C4 mirror fields are retired.
+   *
+   * Reading `e.shape` returns the same object the constructor received,
+   * including the discriminator and every shape-specific field
+   * (`marketplace` / `reasons`) without optionality. Consumers narrow
+   * on `e.shape.kind` to recover the variant.
+   */
+  readonly shape: PluginShapeErrorShape;
   readonly kind: PluginShapeErrorKind;
   readonly plugin: string;
-  readonly marketplace?: string;
-  readonly reasons?: readonly string[];
 
   constructor(shape: PluginShapeErrorShape, options?: ErrorOptions) {
     super(buildPluginShapeMessage(shape), options);
     this.name = "PluginShapeError";
+    this.shape = shape;
+    // `kind` and `plugin` are kept as convenience top-level shortcuts
+    // because they appear on EVERY shape variant; the
+    // shape-specific fields (marketplace / reasons) are NOT mirrored.
     this.kind = shape.kind;
     this.plugin = shape.plugin;
-    switch (shape.kind) {
-      case "not-in-manifest":
-      case "already-installed":
-        this.marketplace = shape.marketplace;
-        break;
-      case "not-installable":
-      case "no-longer-installable":
-        this.reasons = shape.reasons;
-        break;
-      default:
-        assertNever(shape);
-    }
   }
 }
 

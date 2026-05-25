@@ -327,7 +327,9 @@ export const updateSinglePlugin: PluginUpdateFn = async (plugin, marketplace, sc
  */
 function reasonsFromTypedError(err: unknown): readonly Reason[] | undefined {
   if (err instanceof PluginShapeError) {
-    switch (err.kind) {
+    // Task 260525-cjr C4: switch on `err.shape.kind` for compile-time
+    // exhaustiveness against the typed discriminated union.
+    switch (err.shape.kind) {
       case "no-longer-installable":
         return ["no longer installable"] as const;
       case "not-installable":

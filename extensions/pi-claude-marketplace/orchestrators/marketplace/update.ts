@@ -358,7 +358,9 @@ async function cascadeAutoupdates(
  */
 function reasonsFromCascadeError(err: unknown): readonly Reason[] | undefined {
   if (err instanceof PluginShapeError) {
-    switch (err.kind) {
+    // Task 260525-cjr C4: switch on `err.shape.kind` for compile-time
+    // exhaustiveness.
+    switch (err.shape.kind) {
       case "no-longer-installable":
       case "not-installable":
         return ["no longer installable"] as const;

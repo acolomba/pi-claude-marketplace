@@ -909,11 +909,17 @@ function classifyEntityShapeError(
   // SonarCloud S5852 ReDoS regex (`/is not installable:\s*(.+)$/`).
   // The resolver/install throw sites carry their structural classification
   // verbatim, so the catch site no longer reparses the message string.
+  //
+  // Task 260525-cjr C4: switch on `err.shape.kind` and read the
+  // shape-specific `reasons` field directly through `err.shape`. The
+  // pre-C4 `err.reasons?` optional mirror field is gone -- the
+  // discriminator + the typed shape narrow it without a non-null
+  // assertion.
   if (!(err instanceof PluginShapeError)) {
     return undefined;
   }
 
-  switch (err.kind) {
+  switch (err.shape.kind) {
     case "already-installed":
       return {
         kind: "entity-error",
@@ -941,14 +947,15 @@ function classifyEntityShapeError(
         scope: ctx.scope,
         status: "unavailable",
         // Resolver `r.notes` are free-form strings; narrow to closed
-        // `Reason` members for the renderer. The narrowing rules mirror
-        // the legacy `narrowNotInstallableReasons` helper but read the
-        // structural `err.reasons` field directly -- no message parse,
-        // no regex.
-        reasons: narrowResolverReasons(err.reasons ?? []),
+        // `Reason` members for the renderer. Reading from `err.shape`
+        // (the typed discriminated union) means the narrow on
+        // `.kind === "not-installable" | "no-longer-installable"`
+        // guarantees `.reasons` is present -- no `?? []` fallback
+        // needed.
+        reasons: narrowResolverReasons(err.shape.reasons),
       };
     default:
-      return assertNever(err.kind);
+      return assertNever(err.shape);
   }
 }
 

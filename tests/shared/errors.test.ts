@@ -170,7 +170,14 @@ test("PluginShapeError: kind=not-in-manifest -> byte-equal install.ts:263/294 me
   assert.equal(err.message, 'Plugin "p" not found in marketplace "mp".');
   assert.equal(err.kind, "not-in-manifest");
   assert.equal(err.plugin, "p");
-  assert.equal(err.marketplace, "mp");
+  // Task 260525-cjr C4: shape-specific data is read via `err.shape`,
+  // not via top-level mirror fields. Narrow on `shape.kind` first.
+  if (err.shape.kind === "not-in-manifest") {
+    assert.equal(err.shape.marketplace, "mp");
+  } else {
+    assert.fail("expected shape.kind=not-in-manifest");
+  }
+
   assert.equal(err.name, "PluginShapeError");
   assert.ok(err instanceof PluginShapeError);
   assert.ok(err instanceof Error);
@@ -181,7 +188,11 @@ test("PluginShapeError: kind=already-installed -> byte-equal install.ts:285 mess
   assert.equal(err.message, 'Plugin "p" is already installed in marketplace "mp".');
   assert.equal(err.kind, "already-installed");
   assert.equal(err.plugin, "p");
-  assert.equal(err.marketplace, "mp");
+  if (err.shape.kind === "already-installed") {
+    assert.equal(err.shape.marketplace, "mp");
+  } else {
+    assert.fail("expected shape.kind=already-installed");
+  }
 });
 
 test("PluginShapeError: kind=not-installable -> byte-equal resolver.ts:786 install-verb message", () => {
@@ -193,7 +204,11 @@ test("PluginShapeError: kind=not-installable -> byte-equal resolver.ts:786 insta
   assert.equal(err.message, 'Plugin "p1" is not installable: hooks; lspServers');
   assert.equal(err.kind, "not-installable");
   assert.equal(err.plugin, "p1");
-  assert.deepEqual(err.reasons, ["hooks", "lspServers"]);
+  if (err.shape.kind === "not-installable") {
+    assert.deepEqual(err.shape.reasons, ["hooks", "lspServers"]);
+  } else {
+    assert.fail("expected shape.kind=not-installable");
+  }
 });
 
 test("PluginShapeError: kind=no-longer-installable -> byte-equal resolver.ts:786 update-verb message", () => {
@@ -205,7 +220,11 @@ test("PluginShapeError: kind=no-longer-installable -> byte-equal resolver.ts:786
   assert.equal(err.message, 'Plugin "p1" is no longer installable: unsupported source');
   assert.equal(err.kind, "no-longer-installable");
   assert.equal(err.plugin, "p1");
-  assert.deepEqual(err.reasons, ["unsupported source"]);
+  if (err.shape.kind === "no-longer-installable") {
+    assert.deepEqual(err.shape.reasons, ["unsupported source"]);
+  } else {
+    assert.fail("expected shape.kind=no-longer-installable");
+  }
 });
 
 test("PluginShapeError: reasons preserve arbitrary resolver.ts notes verbatim (byte-equal join)", () => {
