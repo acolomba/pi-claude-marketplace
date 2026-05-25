@@ -1084,8 +1084,10 @@ async function enumerateTargets(opts: UpdatePluginsOptions): Promise<readonly Re
   }
 
   // bare form: every installed plugin across selected scope(s).
+  // Iteration order is project-first per MSG-GR-3 / compareByNameThenScope
+  // so same-name cross-scope stable-sort ties render project-before-user.
   const scopes: readonly Scope[] =
-    explicitScope === undefined ? ["user", "project"] : [explicitScope];
+    explicitScope === undefined ? ["project", "user"] : [explicitScope];
   const out: ResolvedTarget[] = [];
   for (const sc of scopes) {
     const locations = locationsFor(sc, cwd);

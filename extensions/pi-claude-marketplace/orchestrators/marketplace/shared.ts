@@ -404,7 +404,7 @@ export async function resolveScopeFromState(
     return { scope: "user", locations: userLocations };
   }
 
-  throw new MarketplaceNotFoundError(mpName, ["user", "project"]);
+  throw new MarketplaceNotFoundError(mpName, ["project", "user"]);
 }
 
 /**
@@ -423,7 +423,9 @@ export async function loadVisibleMarketplaces(opts: {
   /** When undefined, enumerate BOTH scopes (SC-6). */
   readonly scope?: Scope;
 }): Promise<readonly { scope: Scope; record: ExtensionState["marketplaces"][string] }[]> {
-  const scopes: readonly Scope[] = opts.scope === undefined ? ["user", "project"] : [opts.scope];
+  // Iteration order is project-first per MSG-GR-3 / compareByNameThenScope
+  // so same-name cross-scope stable-sort ties render project-before-user.
+  const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
   const out: { scope: Scope; record: ExtensionState["marketplaces"][string] }[] = [];
   for (const scope of scopes) {
     const locations = locationsFor(scope, opts.cwd);

@@ -160,7 +160,7 @@ export async function resolveInstalledMarketplaceTarget(opts: {
     return { scope: "user", locations: userLocations };
   }
 
-  throw new MarketplaceNotFoundError(opts.marketplace, ["user", "project"]);
+  throw new MarketplaceNotFoundError(opts.marketplace, ["project", "user"]);
 }
 
 /** PI-7 / PUP-3 version precedence: marketplace entry version, then content hash. */

@@ -149,9 +149,16 @@ export default tseslint.config(
   // registry parity test in tests/architecture/msg-rule-registry.test.ts
   // asserts 1:1 with tests/lint-rules/index.js's RULE_NAMES export).
   {
-    // MSG-Block 1 (MSG-SR-1..6): cascade/severity routing -- orchestrators
-    // surface. Every notify* call site lives under orchestrators/ (edge/ has
-    // the separate MSG-SR-7 usage-error variant in Block 2).
+    // MSG-Block 1 (MSG-SR-1..6 + MSG-GR-3): cascade/severity routing --
+    // orchestrators surface. Every notify* call site lives under
+    // orchestrators/ (edge/ has the separate MSG-SR-7 usage-error variant
+    // in Block 2). MSG-GR-3 was promoted here in Phase 14.2 (D-14-2-08
+    // supersedes D-14-09) from the whole-extension meta-assertion bag --
+    // it is now an active AST check that detects (a) local user-first
+    // `scopeOrder` helpers and (b) `["user", "project"]` iteration
+    // literals; scoping to orchestrators/ keeps the canonical
+    // compareByNameThenScope in presentation/sort.ts outside the
+    // detection glob.
     files: ["extensions/pi-claude-marketplace/orchestrators/**/*.ts"],
     plugins: { msg: msgPlugin },
     rules: {
@@ -161,6 +168,7 @@ export default tseslint.config(
       "msg/msg-sr-4-cascade-success": "error",
       "msg/msg-sr-5-cascade-warning": "error",
       "msg/msg-sr-6-no-cascade-error": "error",
+      "msg/msg-gr-3-per-scope": "error",
     },
   },
   {
@@ -257,17 +265,19 @@ export default tseslint.config(
     },
   },
   {
-    // MSG-Block 6 (16 entries): structural meta-assertion rules. Each cites
+    // MSG-Block 6 (15 entries): structural meta-assertion rules. Each cites
     // a structural enforcement mechanism in meta.docs and uses an empty
     // `Program: () => {}` visitor (RESEARCH.md Pitfall 8). Zero runtime
     // cost; satisfies the registry parity test (the rule names must appear
-    // in eslint.config.js for assertion (c) to pass).
+    // in eslint.config.js for assertion (c) to pass). MSG-GR-3 was
+    // promoted out of this bag in Phase 14.2 (D-14-2-08 supersedes
+    // D-14-09) -- it is now an active AST check wired under MSG-Block 1
+    // (orchestrator-scoped) above.
     files: ["extensions/pi-claude-marketplace/**/*.ts"],
     plugins: { msg: msgPlugin },
     rules: {
       "msg/msg-gr-1-line-grammar": "error",
       "msg/msg-gr-2-marketplace-token": "error",
-      "msg/msg-gr-3-per-scope": "error",
       "msg/msg-gr-4-reasons-block": "error",
       "msg/msg-gr-5-marker-slot": "error",
       "msg/msg-ic-1-filled-icon": "error",
