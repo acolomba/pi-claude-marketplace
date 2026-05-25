@@ -39,7 +39,9 @@ export interface ListMarketplacesOptions {
 
 export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<void> {
   // SC-6: bare form enumerates both scopes; explicit --scope narrows.
-  const scopes: readonly Scope[] = opts.scope === undefined ? ["user", "project"] : [opts.scope];
+  // Iteration order is project-first per MSG-GR-3 / compareByNameThenScope
+  // so same-name cross-scope stable-sort ties render project-before-user.
+  const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
 
   const allRecords: MarketplaceListEntry[] = [];
   for (const scope of scopes) {

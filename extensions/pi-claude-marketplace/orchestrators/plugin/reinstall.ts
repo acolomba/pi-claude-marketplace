@@ -310,8 +310,10 @@ async function enumerateAllReinstallTargets(
   cwd: string,
   explicitScope: Scope | undefined,
 ): Promise<readonly ResolvedReinstallTarget[]> {
+  // Iteration order is project-first per MSG-GR-3 / compareByNameThenScope
+  // so same-name cross-scope stable-sort ties render project-before-user.
   const scopes: readonly Scope[] =
-    explicitScope === undefined ? ["user", "project"] : [explicitScope];
+    explicitScope === undefined ? ["project", "user"] : [explicitScope];
   const out: ResolvedReinstallTarget[] = [];
   for (const scope of scopes) {
     out.push(...(await installedTargetsForScope(cwd, scope)));

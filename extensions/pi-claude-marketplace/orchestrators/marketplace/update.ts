@@ -192,7 +192,9 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
  */
 export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions): Promise<void> {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
-  const scopes: readonly Scope[] = opts.scope === undefined ? ["user", "project"] : [opts.scope];
+  // Iteration order is project-first per MSG-GR-3 / compareByNameThenScope
+  // so same-name cross-scope stable-sort ties render project-before-user.
+  const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
 
   // Collect (scope, marketplaceName) pairs from a single fresh state read per scope.
   const targets: { scope: Scope; locations: ScopedLocations; name: string }[] = [];
