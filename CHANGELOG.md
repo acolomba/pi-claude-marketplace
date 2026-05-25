@@ -1,8 +1,28 @@
 # Changelog
 
-## [Unreleased] - v1.3 Phase 12 messaging foundations
+## [0.2.0] - 2026-05-25 -- v1.3 Consistent Messaging
 
-- Reload-hint trailer collapsed to the single canonical form `/reload to pick up changes` (style guide MSG-RH-1). The legacy three-verb selector (`Run /reload to load|refresh|drop "..."`) is retired from `presentation/reload-hint.ts`. 8 reload-hint callsite trailers now emit `/reload to pick up changes`; Phase 12 carve-out per D-CMC-10; roadmap criterion #2 authorizes (the verb-selector removal is the WHAT, which structurally requires the trailer to change wherever the composer is called; roadmap criterion #4 "user-visible output unchanged except for migrate.ts" is read as authorized-by-criterion-#2 for this carve-out). The legacy `RELOAD_HINT_PREFIX` constant in `shared/markers.ts` is retained as a snapshot-test-only export through Phase 12 per D-CMC-08; Phase 13's atomic three-file edit deletes it together with the markers-snapshot row and the PRD §6.12 row.
+Every user-visible `ctx.ui.notify` callsite (and the single sanctioned `console.warn`) now conforms to `docs/messaging-style-guide.md` v1.0 and the per-command catalog in `docs/output-catalog.md`. The v1.3 user-contract is structurally enforced by a 34-rule ESLint drift-guard plugin and a byte-equality catalog UAT runner.
+
+User-visible changes:
+
+- Universal compact-line grammar `<icon> <subject> [<scope>] [<marker>] [(status)] [{reasons}]` on every notify line; closed status-token + reasons enum; reasons rendered as 1-3 words lowercase.
+- Plugin-row icon discipline: `●` installed / `○` uninstalled-no-error / `⊘` error or failure-cascade child. Marketplace icons reflect outcome class.
+- Per-scope marketplace and plugin rendering, name-primary + scope-secondary sort (project before user). Per-row soft-dep markers `{requires pi-subagents}` / `{requires pi-mcp}` replace the aggregated trailer.
+- Single canonical reload trailer `/reload to pick up changes`; the legacy three-verb selector (`Run /reload to load|refresh|drop "..."`) is retired.
+- Single canonical manual-recovery `⊘ <resource> (manual recovery) {<reason>}` line and rollback-partial `{rollback partial}` reason + per-phase indented children; cause chains rendered per style guide §9.
+- ES-5 supersession (PRD §6.12 markers retired): the 5 legacy strings are reachable only via `docs/messaging-style-guide.md` §15 and the static-audit fixture.
+
+Internals:
+
+- New `shared/grammar/` closed-set constants (`STATUS_TOKENS`, `REASONS`, `MARKERS`, `PATTERN_CLASSES`) with YAML-frontmatter set-equality drift test reading the style guide as the binding contract.
+- New `presentation/` Wave 1 composers (`compact-line`, `cascade-summary`, `manual-recovery`, `rollback-partial`, `cause-chain`, `reload-hint`, `sort`) consumed by every user-visible orchestrator.
+- New `tests/lint-rules/` 34-rule MSG-\* drift-guard ESLint plugin (16 meta-assertion + 18 full-impl); 4-way registry parity test ties style-guide body to rule files to ESLint wiring to plugin module.
+- New `tests/architecture/catalog-uat.test.ts` byte-equality runner against `docs/output-catalog.md`.
+- `InstallPluginOutcome.installed` and `PluginCascadeRow` carry REQUIRED `declaresAgents` / `declaresMcp` predicates (CMC-13), propagated through install / reinstall / update / import.
+- Cross-scope cascade ordering canonicalized via `presentation/sort.ts::compareByNameThenScope` (CR-01); active two-axis MSG-GR-3 lint rule prevents regression in orchestrators.
+
+1249/1249 tests green; lint + format + types clean.
 
 ## [0.1.7] - 2026-05-16
 
