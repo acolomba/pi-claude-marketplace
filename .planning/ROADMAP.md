@@ -96,14 +96,14 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 3. `docs/adr/v2-001-structured-notify.md` status is flipped from "Proposed" to "Accepted" with a forward reference to Phase 15; ADR body reflects status renames (`PluginStatus`/`MarketplaceStatus` named enums), `*NotificationMessage` type names, `Dependency` closed set, per-plugin causes, dropped top-level trailer, computed severity, always-marketplace-header spec change.
 4. `npm run check` stays GREEN; no runtime call site references the new types yet (types are unused outside their own declarations and the compile-check file).
 
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 **Wave 1**
 
 - [x] 15-01-PLAN.md -- Append v1.4 structured type model + const tuples (PLUGIN_STATUSES, MARKETPLACE_STATUSES, DEPENDENCIES) to shared/notify.ts (SNM-01..SNM-11; D-15-01..D-15-11)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 15-02-PLAN.md -- Add tests/architecture/notify-types.test.ts compile-time proofs (closed-set + bidirectional SNM-04 round-trip + per-variant invariants per D-15-12)
+- [x] 15-02-PLAN.md -- Add tests/architecture/notify-types.test.ts compile-time proofs (closed-set + bidirectional SNM-04 round-trip + per-variant invariants per D-15-12)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -229,7 +229,7 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 | 14. Drift Guard & Test Alignment                                     | v1.3      | 6/6            | Complete    | 2026-05-24 |
 | 14.1. CMC-13 import propagation closure                              | v1.3      | 2/2            | Complete    | 2026-05-24 |
 | 14.2. CR-01 + retroactive Phase 12/14.1 gates                        | v1.3      | 5/5            | Complete    | 2026-05-24 |
-| 15. Type Model & ADR Refresh                                         | v1.4      | 1/3 | In Progress|  |
+| 15. Type Model & ADR Refresh                                         | v1.4      | 2/3 | In Progress|  |
 | 16. Renderer & Public API (Alongside V1)                             | v1.4      | 0/?            | Not started | --         |
 | 17. Spec Rewrite & Catalog UAT Migration                             | v1.4      | 0/?            | Not started | --         |
 | 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 0/?            | Not started | --         |
