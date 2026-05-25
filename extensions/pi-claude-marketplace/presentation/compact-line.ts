@@ -101,8 +101,8 @@ export interface PluginInlineRow {
     "installed" | "updated" | "failed" | "rollback failed" | "unavailable"
   >;
   readonly reasons?: readonly Reason[];
-  readonly declaresAgents?: boolean;
-  readonly declaresMcp?: boolean;
+  readonly declaresAgents: boolean;
+  readonly declaresMcp: boolean;
 }
 
 /**
@@ -143,8 +143,8 @@ export interface PluginCascadeRow {
     | "rollback failed"
   >;
   readonly reasons?: readonly Reason[];
-  readonly declaresAgents?: boolean;
-  readonly declaresMcp?: boolean;
+  readonly declaresAgents: boolean;
+  readonly declaresMcp: boolean;
 }
 
 // NOTE: `PluginCascadeRow.status` intentionally excludes "upgradable" to
@@ -174,8 +174,8 @@ export interface PluginListRow {
   readonly status: Extract<StatusToken, "installed" | "upgradable" | "available" | "unavailable">;
   readonly reasons?: readonly Reason[];
   readonly description?: string;
-  readonly declaresAgents?: boolean;
-  readonly declaresMcp?: boolean;
+  readonly declaresAgents: boolean;
+  readonly declaresMcp: boolean;
 }
 
 /**

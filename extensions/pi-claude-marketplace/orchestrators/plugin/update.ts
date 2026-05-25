@@ -306,6 +306,11 @@ export const updateSinglePlugin: PluginUpdateFn = async (plugin, marketplace, sc
       partition: "failed",
       name: plugin,
       notes: [composeErrorWithCauseChain(err)],
+      // CMC-13 / Task 260525-cjr B1: required booleans on every
+      // PluginUpdateOutcome partition. `(failed)` rows do NOT render
+      // the soft-dep marker (MSG-SD-3), so the value is `false`.
+      declaresAgents: false,
+      declaresMcp: false,
     };
     return typedReasons === undefined ? base : { ...base, reasons: typedReasons };
   }
@@ -409,11 +414,17 @@ async function preflightUpdate(
     // so the cascade consumer reads it directly instead of regex-parsing
     // `notes`. Producer-side narrowing replaces the catch-site substring
     // dispatch in `marketplace/update.ts::narrowSkipReason`.
+    //
+    // Task 260525-cjr B1: required `boolean` predicates -- skipped
+    // outcomes do NOT render the soft-dep marker (MSG-SD-3), so the
+    // value is `false`. Repeated on every static-skipped return below.
     return {
       partition: "skipped",
       name: plugin,
       notes: [`marketplace "${marketplace}" not found in ${scope} scope`],
       reasons: ["not in manifest"] as const,
+      declaresAgents: false,
+      declaresMcp: false,
     };
   }
 
@@ -424,6 +435,8 @@ async function preflightUpdate(
       name: plugin,
       notes: ["not installed"],
       reasons: ["not installed"] as const,
+      declaresAgents: false,
+      declaresMcp: false,
     };
   }
 
@@ -436,6 +449,8 @@ async function preflightUpdate(
       fromVersion: record.version,
       notes: ["not in manifest"],
       reasons: ["not in manifest"] as const,
+      declaresAgents: false,
+      declaresMcp: false,
     };
   }
 
@@ -446,6 +461,8 @@ async function preflightUpdate(
       fromVersion: record.version,
       notes: ["entry failed schema validation"],
       reasons: ["invalid manifest"] as const,
+      declaresAgents: false,
+      declaresMcp: false,
     };
   }
 
@@ -470,13 +487,23 @@ async function preflightUpdate(
       fromVersion: record.version,
       notes: [errorMessage(err)],
       reasons: ["no longer installable"] as const,
+      declaresAgents: false,
+      declaresMcp: false,
     };
   }
 
   const fromVersion = record.version;
   const toVersion = await resolvePluginVersion(entry, installable);
   if (toVersion === fromVersion) {
-    return { partition: "unchanged", name: plugin, fromVersion, toVersion };
+    // `(unchanged)` rows do not render the soft-dep marker either.
+    return {
+      partition: "unchanged",
+      name: plugin,
+      fromVersion,
+      toVersion,
+      declaresAgents: false,
+      declaresMcp: false,
+    };
   }
 
   return { state, record, entry, installable, fromVersion, toVersion };
@@ -757,6 +784,10 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
       // reads `reasons[0]` directly.
       reasons: ["rollback partial"] as const,
       phaseFailures: phase3aFailures.map((f) => ({ phase: f.phase, msg: f.msg })),
+      // Task 260525-cjr B1: required `boolean`. `(failed)` rows do
+      // not render the soft-dep marker.
+      declaresAgents: false,
+      declaresMcp: false,
     };
   }
 
@@ -926,8 +957,10 @@ function outcomeToCascadeRow(
           scope: target.scope,
           ...(versionSlot !== undefined && { version: versionSlot }),
           status: "updated",
-          declaresAgents: outcome.declaresAgents ?? false,
-          declaresMcp: outcome.declaresMcp ?? false,
+          // Task 260525-cjr B1: required `boolean` on
+          // `PluginUpdateOutcome`; the `?? false` coalesce is gone.
+          declaresAgents: outcome.declaresAgents,
+          declaresMcp: outcome.declaresMcp,
         },
       };
     }
@@ -944,6 +977,8 @@ function outcomeToCascadeRow(
           scope: target.scope,
           status: "skipped",
           reasons: ["up-to-date"],
+          declaresAgents: false,
+          declaresMcp: false,
         },
       };
     }
@@ -959,6 +994,8 @@ function outcomeToCascadeRow(
           // Quick task 260525-aub: prefer producer-narrowed
           // `outcome.reasons` over the legacy notes-substring parse.
           reasons: outcome.reasons ?? narrowSkipReasons(outcome.notes),
+          declaresAgents: false,
+          declaresMcp: false,
         },
       };
     case "failed": {

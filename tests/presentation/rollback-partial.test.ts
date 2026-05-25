@@ -35,6 +35,8 @@ test("MSG-RP-1: parent + 2 children render with 2-space-indented children below 
     version: "1.0.0",
     status: "failed",
     reasons: ["rollback partial"],
+    declaresAgents: false,
+    declaresMcp: false,
   };
   const children: readonly RollbackChild[] = [
     { kind: "rollback-child", phaseLabel: "agents", status: "failed", reasons: ["unparseable"] },
@@ -63,6 +65,8 @@ test("MSG-RP-1: empty children returns just the parent line (no trailing childre
     scope: "user",
     status: "failed",
     reasons: ["rollback partial"],
+    declaresAgents: false,
+    declaresMcp: false,
   };
   const out = renderRollbackPartial(parent, [], PROBE);
   assert.equal(out, "⊘ alpha@official [user] (failed) {rollback partial}");
@@ -78,6 +82,8 @@ test("MSG-RP-1: single-phase parent uses the phase name as a reason (e.g. {agent
     scope: "user",
     status: "failed",
     reasons: ["unparseable"],
+    declaresAgents: false,
+    declaresMcp: false,
   };
   const children: readonly RollbackChild[] = [
     { kind: "rollback-child", phaseLabel: "agents", status: "failed", reasons: ["unparseable"] },
@@ -99,6 +105,8 @@ test("MSG-RP-1: composer never appends a cause-chain trailer (caller composes th
     scope: "user",
     status: "failed",
     reasons: ["rollback partial"],
+    declaresAgents: false,
+    declaresMcp: false,
   };
   const children: readonly RollbackChild[] = [
     { kind: "rollback-child", phaseLabel: "agents", status: "failed", reasons: ["unparseable"] },
@@ -118,6 +126,8 @@ test("MSG-RP-1: PluginCascadeRow parent (no @marketplace) renders correctly", ()
     version: "1.0.0",
     status: "failed" as const,
     reasons: ["rollback partial" as const],
+    declaresAgents: false,
+    declaresMcp: false,
   };
   const children: readonly RollbackChild[] = [
     { kind: "rollback-child", phaseLabel: "agents", status: "failed", reasons: ["unparseable"] },

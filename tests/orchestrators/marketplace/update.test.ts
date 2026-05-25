@@ -351,6 +351,8 @@ test("MU-6 + MU-8: cascade runs ONLY when autoupdate=true; pluginUpdate called o
         name: plugin,
         fromVersion: "0.0.1",
         toVersion: "0.0.2",
+        declaresAgents: false,
+        declaresMcp: false,
       });
     };
 
@@ -391,7 +393,12 @@ test("MU-6: cascade skipped when autoupdate=false (default)", async () => {
     let pluginUpdateCalled = false;
     const pluginUpdate: PluginUpdateFn = async () => {
       pluginUpdateCalled = true;
-      return Promise.resolve({ partition: "updated", name: "x" });
+      return Promise.resolve({
+        partition: "updated",
+        name: "x",
+        declaresAgents: false,
+        declaresMcp: false,
+      });
     };
 
     await updateMarketplace({
@@ -440,7 +447,12 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
             : plugin === "c"
               ? "skipped"
               : "failed";
-      return Promise.resolve({ partition, name: plugin });
+      return Promise.resolve({
+        partition,
+        name: plugin,
+        declaresAgents: false,
+        declaresMcp: false,
+      });
     };
 
     await updateMarketplace({
@@ -497,6 +509,8 @@ test("MU-9 + MSG-RH-1: success emits canonical reload hint trailer for updated p
         name: plugin,
         fromVersion: "0.0.1",
         toVersion: "0.0.2",
+        declaresAgents: false,
+        declaresMcp: false,
       });
 
     await updateMarketplace({
@@ -529,7 +543,12 @@ test("RH-1: NO reload hint when zero plugins updated", async () => {
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000008" },
     });
     const pluginUpdate: PluginUpdateFn = async (plugin) =>
-      Promise.resolve({ partition: "unchanged", name: plugin });
+      Promise.resolve({
+        partition: "unchanged",
+        name: plugin,
+        declaresAgents: false,
+        declaresMcp: false,
+      });
     await updateMarketplace({
       ctx,
       name: "noupd",
@@ -639,6 +658,8 @@ test("outcomeToCascadeRow: skipped outcome with typed reasons reads them directl
     // to `up-to-date` (default); `reasons` says `not installed`.
     notes: ["irrelevant cause-chain text"],
     reasons: ["not installed"] as const,
+    declaresAgents: false,
+    declaresMcp: false,
   };
   const row = __test_outcomeToCascadeRow(outcome, "project");
   assert.equal(row.kind, "plugin-cascade");
@@ -652,6 +673,8 @@ test("outcomeToCascadeRow: failed outcome with typed reasons reads them directly
     name: "p",
     notes: ["arbitrary cause-chain text"],
     reasons: ["rollback partial"] as const,
+    declaresAgents: false,
+    declaresMcp: false,
   };
   const row = __test_outcomeToCascadeRow(outcome, "project");
   assert.equal(row.kind, "plugin-cascade");
@@ -664,7 +687,9 @@ test("outcomeToCascadeRow: skipped outcome without typed reasons falls back to n
     partition: "skipped",
     name: "p",
     notes: ["not in manifest"],
-    // No `reasons` -- exercises the transitional notes-fallback path.
+    // No `reasons` -- exercises the transitional notes-fallback path.,
+    declaresAgents: false,
+    declaresMcp: false,
   };
   const row = __test_outcomeToCascadeRow(outcome, "project");
   assert.equal(row.status, "skipped");
@@ -676,7 +701,9 @@ test("outcomeToCascadeRow: failed outcome without typed reasons falls back to no
     partition: "failed",
     name: "p",
     notes: ["rollback partial: skills"],
-    // No `reasons` -- exercises the transitional notes-fallback path.
+    // No `reasons` -- exercises the transitional notes-fallback path.,
+    declaresAgents: false,
+    declaresMcp: false,
   };
   const row = __test_outcomeToCascadeRow(outcome, "project");
   assert.equal(row.status, "failed");

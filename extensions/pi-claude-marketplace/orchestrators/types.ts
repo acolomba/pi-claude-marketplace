@@ -38,9 +38,15 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    * `(skipped)` and `(failed)` rows omit them (failed sets these to false
    * to make the constraint explicit even though the renderer narrows on
    * `status === "skipped"` / `"failed"` anyway).
+   *
+   * Task 260525-cjr B1 / CMC-13: required `boolean` (not `?: boolean`)
+   * so every reinstalled-outcome producer populates the predicate
+   * EXPLICITLY rather than relying on `undefined ~= false`. The closed
+   * type enforces the contract at compile time; the `tsc --noEmit` gate
+   * catches any forgotten emitter on every CI run.
    */
-  readonly declaresAgents?: boolean;
-  readonly declaresMcp?: boolean;
+  readonly declaresAgents: boolean;
+  readonly declaresMcp: boolean;
   readonly notes?: readonly string[];
 }
 
@@ -134,12 +140,18 @@ export interface PluginUpdateOutcome {
    * iff the plugin's manifest declared the kind AND it was actually
    * staged. The renderer probes companion-loaded state via SoftDepProbe
    * and emits `{requires pi-subagents}` / `{requires pi-mcp}` iff
-   * (declares AND unloaded). Populated on `(updated)` outcomes; omitted
-   * on `(unchanged) / (skipped) / (failed)` because MSG-SD-3 forbids the
-   * marker on non-(updated) cascade rows.
+   * (declares AND unloaded). Populated on `(updated)` outcomes; on
+   * `(unchanged) / (skipped) / (failed)` outcomes the producer sets
+   * these to `false` (MSG-SD-3 forbids the marker on those rows; the
+   * renderer narrows on `partition` anyway, but the explicit value
+   * keeps every producer site honest about emitting both booleans).
+   *
+   * Task 260525-cjr B1 / CMC-13: required `boolean` (not `?: boolean`)
+   * so every plugin-update producer populates the predicate
+   * EXPLICITLY rather than relying on `undefined ~= false`.
    */
-  readonly declaresAgents?: boolean;
-  readonly declaresMcp?: boolean;
+  readonly declaresAgents: boolean;
+  readonly declaresMcp: boolean;
   /**
    * Plan 13-02a-01 / CMC-17 / MSG-RP-1: per-phase rollback-partial
    * children for the `(failed)` partition when phase-3a aggregation

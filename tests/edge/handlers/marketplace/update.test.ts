@@ -42,7 +42,12 @@ function makeDeps(): { deps: EdgeDeps; pluginUpdateCalls: string[] } {
   const pluginUpdateCalls: string[] = [];
   const pluginUpdate = (plugin: string): Promise<PluginUpdateOutcome> => {
     pluginUpdateCalls.push(plugin);
-    return Promise.resolve({ partition: "unchanged", name: plugin });
+    return Promise.resolve({
+      partition: "unchanged",
+      name: plugin,
+      declaresAgents: false,
+      declaresMcp: false,
+    });
   };
 
   const deps: EdgeDeps = { gitOps: gitMock.gitOps, pluginUpdate };

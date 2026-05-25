@@ -570,14 +570,19 @@ export { renderReinstallPartitionAndNotify as __test_renderReinstallPartitionAnd
 function outcomeToCascadeRow(outcome: ReinstallPluginOutcome): PluginCascadeRow {
   switch (outcome.partition) {
     case "reinstalled":
+      // CMC-13 / Task 260525-cjr B1: `declaresAgents` / `declaresMcp`
+      // are now REQUIRED booleans on `ReinstallReinstalledOutcome`;
+      // the `?? false` coalesce that used to compensate for
+      // `?: boolean` is gone -- every producer site sets them
+      // EXPLICITLY (the type enforces it at compile time).
       return {
         kind: "plugin-cascade",
         name: outcome.name,
         scope: outcome.scope,
         version: outcome.version,
         status: "reinstalled",
-        declaresAgents: outcome.declaresAgents ?? false,
-        declaresMcp: outcome.declaresMcp ?? false,
+        declaresAgents: outcome.declaresAgents,
+        declaresMcp: outcome.declaresMcp,
       };
     case "skipped": {
       const reasons = narrowReasons(outcome.notes);
@@ -587,6 +592,8 @@ function outcomeToCascadeRow(outcome: ReinstallPluginOutcome): PluginCascadeRow 
         scope: outcome.scope,
         status: "skipped",
         reasons,
+        declaresAgents: false,
+        declaresMcp: false,
       };
     }
 
@@ -1212,8 +1219,10 @@ function renderSuccessBody(outcome: ReinstallReinstalledOutcome, probe: SoftDepP
     scope: outcome.scope,
     version: outcome.version,
     status: "reinstalled",
-    declaresAgents: outcome.declaresAgents ?? false,
-    declaresMcp: outcome.declaresMcp ?? false,
+    // CMC-13 / Task 260525-cjr B1: required `boolean` on the typed
+    // outcome -- no `?? false` coalesce needed.
+    declaresAgents: outcome.declaresAgents,
+    declaresMcp: outcome.declaresMcp,
   };
   const { message } = cascadeSummary({ marketplace: mpRow, rows: [row], probe });
   const hint = reloadHint(outcome.resourcesChanged ? [outcome.name] : []);

@@ -164,8 +164,13 @@ interface PluginRowComputation {
   readonly version?: string;
   readonly description?: string;
   readonly reasons?: readonly ListReason[];
-  readonly declaresAgents?: boolean;
-  readonly declaresMcp?: boolean;
+  // CMC-13 / Task 260525-cjr B1: required `boolean` on the internal
+  // computation, mirroring the same flip applied to `PluginListRow`
+  // and the orchestrator outcome types. Every producer site
+  // populates both predicates explicitly (the `availableRowComputation`
+  // error-path returns the unavailable variant with `false` defaults).
+  readonly declaresAgents: boolean;
+  readonly declaresMcp: boolean;
 }
 
 /**
@@ -188,8 +193,8 @@ function installedRowComputation(
     status: upgradable ? "upgradable" : "installed",
     version: record.version,
     ...(manifestEntry?.description !== undefined && { description: manifestEntry.description }),
-    ...(declaresAgents && { declaresAgents: true }),
-    ...(declaresMcp && { declaresMcp: true }),
+    declaresAgents,
+    declaresMcp,
   };
 }
 
@@ -315,8 +320,8 @@ async function availableRowComputation(
         ...(manifestEntry.description !== undefined && {
           description: manifestEntry.description,
         }),
-        ...(declaresAgents && { declaresAgents: true }),
-        ...(declaresMcp && { declaresMcp: true }),
+        declaresAgents,
+        declaresMcp,
       };
     }
 
@@ -327,6 +332,11 @@ async function availableRowComputation(
         description: manifestEntry.description,
       }),
       reasons: narrowResolverNotes(resolved.notes),
+      // Task 260525-cjr B1: unavailable rows do not render the
+      // soft-dep marker (MSG-SD-3); the explicit `false` keeps the
+      // required-boolean contract symmetrical.
+      declaresAgents: false,
+      declaresMcp: false,
     };
   } catch (probeErr) {
     // The previous implementation routed EVERY throw through
@@ -355,6 +365,8 @@ async function availableRowComputation(
         description: manifestEntry.description,
       }),
       reasons: [reason],
+      declaresAgents: false,
+      declaresMcp: false,
     };
   }
 }
@@ -377,8 +389,10 @@ function makePluginListRow(
     status: comp.status,
     ...(comp.reasons !== undefined && comp.reasons.length > 0 && { reasons: comp.reasons }),
     ...(comp.description !== undefined && { description: comp.description }),
-    ...(comp.declaresAgents === true && { declaresAgents: true }),
-    ...(comp.declaresMcp === true && { declaresMcp: true }),
+    // CMC-13 / Task 260525-cjr B1: `PluginRowComputation.declares*`
+    // is now REQUIRED boolean; forward verbatim.
+    declaresAgents: comp.declaresAgents,
+    declaresMcp: comp.declaresMcp,
   };
 }
 

@@ -61,6 +61,8 @@ test("CMC-02: plugin-cascade never emits @<marketplace> (carve-out MSG-GR-2)", (
     scope: "user",
     version: "1.0.0",
     status: "reinstalled",
+    declaresAgents: false,
+    declaresMcp: false,
   };
   const out = renderRow(row, PROBE_BOTH_LOADED);
   assert.equal(out, "● alpha [user] v1.0.0 (reinstalled)");
@@ -74,6 +76,8 @@ test("CMC-02: plugin-inline always emits @<marketplace>", () => {
     marketplace: "official",
     scope: "user",
     status: "installed",
+    declaresAgents: false,
+    declaresMcp: false,
   };
   const out = renderRow(row, PROBE_BOTH_LOADED);
   assert.ok(out.includes("@official"), "inline row must contain @marketplace");
@@ -86,6 +90,8 @@ test("MSG-PL-6: plugin-list omits [scope] for (available) and (unavailable)", ()
     scope: "user",
     status: "available",
     version: "2.0.0",
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.equal(renderRow(available, PROBE_BOTH_LOADED), "○ serena v2.0.0 (available)");
 
@@ -95,6 +101,8 @@ test("MSG-PL-6: plugin-list omits [scope] for (available) and (unavailable)", ()
     scope: "user",
     status: "unavailable",
     reasons: ["hooks"],
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.equal(renderRow(unavailable, PROBE_BOTH_LOADED), "⊘ hookify (unavailable) {hooks}");
 });
@@ -106,6 +114,8 @@ test("MSG-PL-6: plugin-list keeps [scope] for (installed) and (upgradable)", () 
     scope: "user",
     status: "installed",
     version: "1.0.0",
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.equal(renderRow(installed, PROBE_BOTH_LOADED), "● alpha [user] v1.0.0 (installed)");
 
@@ -115,6 +125,8 @@ test("MSG-PL-6: plugin-list keeps [scope] for (installed) and (upgradable)", () 
     scope: "project",
     status: "upgradable",
     version: "1.0.0",
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.equal(renderRow(upgradable, PROBE_BOTH_LOADED), "● alpha [project] v1.0.0 (upgradable)");
 });
@@ -154,6 +166,8 @@ test("CMC-06: (installed)/(updated)/(reinstalled) on cascade rows -> ●", () =>
       name: "alpha",
       scope: "user",
       status,
+      declaresAgents: false,
+      declaresMcp: false,
     };
     const out = renderRow(row, PROBE_BOTH_LOADED);
     assert.ok(out.startsWith("● "), `expected ● for ${status}, got: ${out}`);
@@ -167,6 +181,8 @@ test("CMC-06: (upgradable) on plugin-list row -> ● (list-only per MSG-PL-4)", 
     scope: "user",
     status: "upgradable",
     version: "1.0.0",
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.ok(renderRow(row, PROBE_BOTH_LOADED).startsWith("● "));
 });
@@ -177,6 +193,8 @@ test("CMC-06: (available)/(uninstalled) -> ○", () => {
     name: "alpha",
     scope: "user",
     status: "available",
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.ok(renderRow(available, PROBE_BOTH_LOADED).startsWith("○ "));
 
@@ -197,6 +215,8 @@ test("CMC-06: (failed)/(rollback failed)/(manual recovery)/(unavailable) -> ⊘"
     scope: "user",
     status: "failed",
     reasons: ["rollback partial"],
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.ok(renderRow(failed, PROBE_BOTH_LOADED).startsWith("⊘ "));
 
@@ -206,6 +226,8 @@ test("CMC-06: (failed)/(rollback failed)/(manual recovery)/(unavailable) -> ⊘"
     marketplace: "official",
     scope: "user",
     status: "rollback failed",
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.ok(renderRow(rbFailed, PROBE_BOTH_LOADED).startsWith("⊘ "));
 
@@ -216,6 +238,8 @@ test("CMC-06: (failed)/(rollback failed)/(manual recovery)/(unavailable) -> ⊘"
     scope: "user",
     status: "unavailable",
     reasons: ["hooks"],
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.ok(renderRow(unavailable, PROBE_BOTH_LOADED).startsWith("⊘ "));
 
@@ -234,6 +258,8 @@ test("CMC-06: (skipped) {up-to-date} -> ● (trivial skip)", () => {
     scope: "user",
     status: "skipped",
     reasons: ["up-to-date"],
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.ok(renderRow(row, PROBE_BOTH_LOADED).startsWith("● "));
 });
@@ -245,6 +271,8 @@ test("CMC-06: (skipped) {source mismatch} -> ⊘ (non-trivial / failure-cascade 
     scope: "user",
     status: "skipped",
     reasons: ["source mismatch"],
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.ok(renderRow(row, PROBE_BOTH_LOADED).startsWith("⊘ "));
 });
@@ -281,6 +309,8 @@ test("CMC-04: empty reasons array omits {} entirely", () => {
     scope: "user",
     status: "installed",
     reasons: [],
+    declaresAgents: false,
+    declaresMcp: false,
   };
   const out = renderRow(row, PROBE_BOTH_LOADED);
   assert.ok(!out.includes("{"), `empty reasons must omit {}; got: ${out}`);
@@ -293,6 +323,8 @@ test("CMC-04: single reason emits {reason}", () => {
     scope: "user",
     status: "skipped",
     reasons: ["up-to-date"],
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.ok(renderRow(row, PROBE_BOTH_LOADED).endsWith("{up-to-date}"));
 });
@@ -304,6 +336,8 @@ test("CMC-04: multi-reason emits {reason1, reason2} comma-joined", () => {
     scope: "user",
     status: "unavailable",
     reasons: ["hooks", "lspServers"],
+    declaresAgents: false,
+    declaresMcp: false,
   };
   assert.ok(renderRow(row, PROBE_BOTH_LOADED).endsWith("{hooks, lspServers}"));
 });
@@ -334,6 +368,7 @@ test("CMC-13: declaresAgents=true + pi-subagents unloaded -> {requires pi-subage
     scope: "user",
     status: "installed",
     declaresAgents: true,
+    declaresMcp: false,
   };
   const out = renderRow(row, PROBE_NONE_LOADED);
   assert.ok(out.includes("{requires pi-subagents}"), `expected marker; got: ${out}`);
@@ -347,6 +382,7 @@ test("CMC-13: declaresMcp=true + pi-mcp-adapter unloaded -> {requires pi-mcp}", 
     scope: "user",
     status: "installed",
     declaresMcp: true,
+    declaresAgents: false,
   };
   const out = renderRow(row, PROBE_NONE_LOADED);
   assert.ok(out.includes("{requires pi-mcp}"), `expected marker; got: ${out}`);
@@ -402,6 +438,7 @@ test("MSG-SD-1: soft-dep reasons coexist with caller-supplied reasons in a singl
     status: "installed",
     reasons: ["up-to-date"],
     declaresAgents: true,
+    declaresMcp: false,
   };
   const out = renderRow(row, PROBE_NONE_LOADED);
   assert.ok(out.includes("{up-to-date, requires pi-subagents}"), `got: ${out}`);
@@ -479,6 +516,8 @@ test("MSG-PL-4 / CMC-09 structural: (upgradable) cannot be set on plugin-inline 
     scope: "user",
     // @ts-expect-error -- CMC-09 / MSG-PL-4: (upgradable) is structurally restricted to PluginListRow
     status: "upgradable",
+    declaresAgents: false,
+    declaresMcp: false,
   };
   void _badInline;
 
@@ -489,6 +528,8 @@ test("MSG-PL-4 / CMC-09 structural: (upgradable) cannot be set on plugin-inline 
     scope: "user",
     // @ts-expect-error -- CMC-09 / MSG-PL-4: (upgradable) is structurally restricted to PluginListRow
     status: "upgradable",
+    declaresAgents: false,
+    declaresMcp: false,
   };
   void _badCascade;
 });

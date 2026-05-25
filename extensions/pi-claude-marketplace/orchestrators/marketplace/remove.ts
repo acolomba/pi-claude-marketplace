@@ -376,6 +376,12 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
         name: pluginName,
         scope: resolved.scope,
         status: "uninstalled",
+        // CMC-13 / Task 260525-cjr B1: cascade rows always populate
+        // both predicates. `(uninstalled)` rows do not render the
+        // soft-dep marker (the plugin is gone), so the value is
+        // deliberately `false`.
+        declaresAgents: false,
+        declaresMcp: false,
       })),
       ...failedPlugins.map<PluginCascadeRow>((fp) => ({
         kind: "plugin-cascade",
@@ -383,6 +389,8 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
         scope: resolved.scope,
         status: "failed",
         reasons: [narrowCascadeFailure(fp.cause)],
+        declaresAgents: false,
+        declaresMcp: false,
       })),
     ];
 

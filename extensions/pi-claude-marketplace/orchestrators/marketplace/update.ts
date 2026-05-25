@@ -316,6 +316,12 @@ async function cascadeAutoupdates(
         partition: "failed",
         name: plugin,
         notes: [composeErrorWithCauseChain(err)],
+        // CMC-13 / Task 260525-cjr B1: required `boolean` on the
+        // outcome contract. `(failed)` cascade rows do not render the
+        // soft-dep marker (MSG-SD-3), so the value is deliberately
+        // `false`; explicit emission keeps every producer site honest.
+        declaresAgents: false,
+        declaresMcp: false,
       });
     }
   }
@@ -340,10 +346,13 @@ async function cascadeAutoupdates(
  *     verifies the rendered text.
  */
 function outcomeToCascadeRow(outcome: PluginUpdateOutcome, scope: Scope): PluginCascadeRow {
-  const baseDeclares = {
-    ...(outcome.declaresAgents !== undefined && { declaresAgents: outcome.declaresAgents }),
-    ...(outcome.declaresMcp !== undefined && { declaresMcp: outcome.declaresMcp }),
-  };
+  // CMC-13 / Task 260525-cjr B1: `outcome.declaresAgents` and
+  // `outcome.declaresMcp` are now REQUIRED booleans on every partition.
+  // Forward them verbatim on `(updated)` rows where MSG-SD-3 allows the
+  // marker; pin to `false` on non-(updated) rows where MSG-SD-3
+  // forbids the marker (the renderer narrows on `status` anyway, but
+  // explicit emission keeps the contract symmetrical with every
+  // producer site).
   switch (outcome.partition) {
     case "updated": {
       // MSG-PL-3: version-transition arrow "v<from> → v<to>". The
@@ -360,7 +369,8 @@ function outcomeToCascadeRow(outcome: PluginUpdateOutcome, scope: Scope): Plugin
         scope,
         ...(version !== undefined && { version }),
         status: "updated",
-        ...baseDeclares,
+        declaresAgents: outcome.declaresAgents,
+        declaresMcp: outcome.declaresMcp,
       };
     }
 
@@ -371,6 +381,8 @@ function outcomeToCascadeRow(outcome: PluginUpdateOutcome, scope: Scope): Plugin
         scope,
         status: "skipped",
         reasons: ["up-to-date"],
+        declaresAgents: false,
+        declaresMcp: false,
       };
     case "skipped":
       return {
@@ -379,6 +391,8 @@ function outcomeToCascadeRow(outcome: PluginUpdateOutcome, scope: Scope): Plugin
         scope,
         status: "skipped",
         reasons: [narrowSkipReason(outcome)],
+        declaresAgents: false,
+        declaresMcp: false,
       };
     case "failed":
       return {
@@ -387,6 +401,8 @@ function outcomeToCascadeRow(outcome: PluginUpdateOutcome, scope: Scope): Plugin
         scope,
         status: "failed",
         reasons: [narrowFailReason(outcome)],
+        declaresAgents: false,
+        declaresMcp: false,
       };
   }
 }

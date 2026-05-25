@@ -505,6 +505,12 @@ function enumerateMarketplaceBlocks(
       scope: o.scope,
       status: "skipped",
       reasons: ["already installed"],
+      // CMC-13 / Task 260525-cjr B1: non-(installed) cascade rows omit
+      // the soft-dep marker per MSG-SD-3; the renderer narrows on
+      // status, but the explicit `false` keeps every producer site
+      // honest about the required-boolean contract.
+      declaresAgents: false,
+      declaresMcp: false,
     });
   }
 
@@ -516,6 +522,8 @@ function enumerateMarketplaceBlocks(
       scope: o.scope,
       status: "skipped",
       reasons: ["source mismatch"],
+      declaresAgents: false,
+      declaresMcp: false,
     });
   }
 
@@ -527,6 +535,8 @@ function enumerateMarketplaceBlocks(
       scope: o.scope,
       status: "failed",
       reasons: ["not in manifest"],
+      declaresAgents: false,
+      declaresMcp: false,
     });
   }
 
@@ -538,6 +548,8 @@ function enumerateMarketplaceBlocks(
       scope: o.scope,
       status: importWarningStatus(o.reason),
       reasons: [importWarningReason(o.reason)],
+      declaresAgents: false,
+      declaresMcp: false,
     });
   }
 }
