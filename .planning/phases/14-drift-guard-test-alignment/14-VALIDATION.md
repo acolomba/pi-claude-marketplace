@@ -1,7 +1,7 @@
 ---
 phase: 14
 slug: drift-guard-test-alignment
-status: audited
+status: validated
 nyquist_compliant: true
 wave_0_complete: true
 created: 2026-05-24

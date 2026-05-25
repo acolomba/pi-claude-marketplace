@@ -1,7 +1,7 @@
 ---
 phase: 13
 slug: conformance-refactor-es-5-supersession
-status: verified
+status: passed
 threats_open: 0
 asvs_level: 1
 created: 2026-05-24
