@@ -92,6 +92,7 @@ import { cascadeSummary } from "../../presentation/cascade-summary.ts";
 import { composeErrorWithCauseChain } from "../../presentation/cause-chain.ts";
 import { renderRow } from "../../presentation/compact-line.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
+import { composeVersionArrow } from "../../presentation/version-arrow.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   MarketplaceNotFoundError,
@@ -420,20 +421,28 @@ function outcomeToCascadeRow(outcome: PluginUpdateOutcome, scope: Scope): Plugin
   // undefined` ternary -- both version fields are REQUIRED on
   // PluginUpdateUpdatedOutcome.
   switch (outcome.partition) {
-    case "updated":
-      // MSG-PL-3: version-transition arrow "v<from> → v<to>". The
-      // renderer's `renderVersion` slot prepends `v`; we omit the
-      // leading `v` on the from-side so the final form is `v<from>
-      // → v<to>` (catalog form). The arrow is U+2192 (space-padded).
+    case "updated": {
+      // MSG-PL-3: version-transition arrow "v<from> → v<to>". Task
+      // 260525-cjr C6: route through the shared
+      // `presentation/version-arrow.ts::composeVersionArrow` helper
+      // so this and the plugin-side `outcomeToCascadeRow` produce
+      // byte-equivalent slot text from the same source of truth.
+      // Updated outcomes always have both versions present, so the
+      // helper returns a defined string -- the local non-null
+      // assertion would be safe but the conditional spread is
+      // clearer.
+      const version = composeVersionArrow(outcome.fromVersion, outcome.toVersion);
       return {
         kind: "plugin-cascade",
         name: outcome.name,
         scope,
-        version: `${outcome.fromVersion} → v${outcome.toVersion}`,
+        ...(version !== undefined && { version }),
         status: "updated",
         declaresAgents: outcome.declaresAgents,
         declaresMcp: outcome.declaresMcp,
       };
+    }
+
     case "unchanged":
       return {
         kind: "plugin-cascade",

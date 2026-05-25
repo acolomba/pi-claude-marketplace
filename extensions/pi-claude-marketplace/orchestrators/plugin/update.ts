@@ -70,6 +70,7 @@ import { renderRow } from "../../presentation/compact-line.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { renderRollbackPartial } from "../../presentation/rollback-partial.ts";
 import { compareByNameThenScope } from "../../presentation/sort.ts";
+import { composeVersionArrow } from "../../presentation/version-arrow.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   appendLeaks,
@@ -1116,30 +1117,9 @@ function spliceRollbackPartials(
   return out.join("\n");
 }
 
-/**
- * MSG-PL-3 version transition slot. Returns undefined when both sides
- * absent. The renderer's `renderVersion(version)` always prepends a `v`
- * to the supplied string, so the arrow form here is
- * `<from> → v<to>` -- the renderer turns that into `v<from> → v<to>`
- * matching catalog `/claude:plugin update` examples (output-catalog.md
- * lines 419-470). Single-version (unchanged from→to OR only one side
- * supplied) returns the bare version string for the renderer to prefix.
- */
-function composeVersionArrow(from: string | undefined, to: string | undefined): string | undefined {
-  if (from === undefined && to === undefined) {
-    return undefined;
-  }
-
-  if (from !== undefined && to !== undefined && from !== to) {
-    return `${from} → v${to}`;
-  }
-
-  if (to !== undefined) {
-    return to;
-  }
-
-  return from;
-}
+// Task 260525-cjr C6: `composeVersionArrow` lifted to
+// `presentation/version-arrow.ts` so the marketplace-side
+// `outcomeToCascadeRow` shares the same helper. Imported above.
 
 function narrowSkipReasons(notes: readonly string[] | undefined): readonly Reason[] {
   if (notes === undefined || notes.length === 0) {
