@@ -1434,10 +1434,18 @@ test("classifyEntityShapeError dispatches on kind=not-in-manifest -> failed/{not
 test("classifyEntityShapeError dispatches on kind=not-installable -> unavailable + manifest-field reasons preserved verbatim", async () => {
   const { PluginShapeError } =
     await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
+  // Task 260525-cjr C5: the resolver's `r.notes` carry the
+  // `"contains <kind>"` prefix (see resolver.ts:685
+  // `addUnsupportedKindNotes`); the carve-out in
+  // `narrowResolverReasons` strips the prefix and emits the bare
+  // token as the Reason. Pre-C5 the test built bare-token reasons
+  // directly because the dead predicate accepted them; after C5 the
+  // test matches the actual upstream form so we exercise the live
+  // code path.
   const err = new PluginShapeError({
     kind: "not-installable",
     plugin: "p",
-    reasons: ["hooks", "lspServers"],
+    reasons: ["contains hooks", "contains lspServers"],
   });
   const row = __test_classifyEntityShapeError(err, {
     plugin: "p",
@@ -1547,12 +1555,45 @@ test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "fail
 // `unsupported source` fallback runs only when no classifier matched.
 // ───────────────────────────────────────────────────────────────────────────
 
-test("260525-cjr B2: narrowResolverReasons -> `hooks` carve-out passes verbatim", () => {
-  assert.deepEqual([...__test_narrowResolverReasons(["hooks"])], ["hooks"]);
+test("260525-cjr B2 / C5: narrowResolverReasons -> `contains hooks` extracts the bare `hooks` Reason", () => {
+  // Pre-C5 the test passed a bare `"hooks"` string (matching the
+  // dead predicate); C5 aligned the predicate with the resolver's
+  // actual emission form (`"contains hooks"`). The user-visible
+  // catalog row shape (`(unavailable) {hooks}`) is unchanged.
+  assert.deepEqual([...__test_narrowResolverReasons(["contains hooks"])], ["hooks"]);
 });
 
-test("260525-cjr B2: narrowResolverReasons -> `lspServers` carve-out passes verbatim", () => {
-  assert.deepEqual([...__test_narrowResolverReasons(["lspServers"])], ["lspServers"]);
+test("260525-cjr B2 / C5: narrowResolverReasons -> `contains lspServers` extracts the bare `lspServers` Reason", () => {
+  assert.deepEqual([...__test_narrowResolverReasons(["contains lspServers"])], ["lspServers"]);
+});
+
+test("260525-cjr C5: narrowResolverReasons recognises the resolver's `contains hooks` prefix and emits bare `hooks`", () => {
+  // The resolver's `addUnsupportedKindNotes` writes
+  // `partial.notes.push("contains " + kind)` (resolver.ts:685) for
+  // every UNSUPPORTED_COMPONENT_KINDS member. Before this fix the
+  // `MANIFEST_FIELD_REASONS.has(reason)` predicate compared the WHOLE
+  // string against the bare set, so `"contains hooks"` never matched
+  // and the row degraded to `{unsupported source}`. The fix strips
+  // the `contains ` prefix and re-checks; the bare token is emitted
+  // as the Reason, matching the catalog's `(unavailable) {hooks}` /
+  // `(unavailable) {lspServers}` forms.
+  assert.deepEqual([...__test_narrowResolverReasons(["contains hooks"])], ["hooks"]);
+  assert.deepEqual([...__test_narrowResolverReasons(["contains lspServers"])], ["lspServers"]);
+});
+
+test("260525-cjr C5: narrowResolverReasons ignores `contains <unknown-kind>` (kind not in MANIFEST_FIELD_REASONS)", () => {
+  // Resolver also emits `"contains monitors"`, `"contains themes"`,
+  // etc. for the other UNSUPPORTED_COMPONENT_KINDS members. Those
+  // are NOT in the bare-token carve-out -- the catalog renders them
+  // as `{unsupported source}` per the existing convention. The
+  // helper returns `undefined` for those, and the downstream
+  // `reason.includes("source")` check (or the final fallback) takes
+  // over.
+  const reasons = __test_narrowResolverReasons(["contains monitors"]);
+  // `contains monitors` does NOT contain "source"; falls through to
+  // the final `unsupported source` permissive default (empty-out
+  // guard runs).
+  assert.deepEqual([...reasons], ["unsupported source"]);
 });
 
 test("260525-cjr B2: narrowResolverReasons -> source-substring -> `unsupported source`", () => {

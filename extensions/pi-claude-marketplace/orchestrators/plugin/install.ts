@@ -959,11 +959,44 @@ function classifyEntityShapeError(
   }
 }
 
-// Manifest field names allowed through the MSG-GR-4 carve-out. Any segment
-// equal to one of these passes verbatim as a `Reason`. New tokens added here
-// MUST also be added to `shared/grammar/reasons.ts` so the renderer's
-// type-narrowing accepts them.
+// Manifest field names allowed through the MSG-GR-4 carve-out. The closed
+// set holds the BARE token (`hooks`, `lspServers`) -- the value emitted to
+// the renderer. The resolver, however, prefixes the kind with `"contains "`
+// when populating `r.notes` (see `domain/resolver.ts:685` -- the
+// `addUnsupportedKindNotes` helper writes `partial.notes.push(\`contains
+// ${kind}\`)` for every UNSUPPORTED_COMPONENT_KINDS member it detects).
+// The previous predicate `MANIFEST_FIELD_REASONS.has(reason)` compared the
+// WHOLE note string against the bare set -- so the resolver's
+// `"contains hooks"` never matched, the row degraded to
+// `{unsupported source}`, and the carve-out was effectively dead. Task
+// 260525-cjr C5 restores the carve-out: `startsWith("contains ")` strips
+// the resolver's prefix, then checks the remaining token against the set.
+// New tokens added here MUST also be added to `shared/grammar/reasons.ts`
+// so the renderer's type-narrowing accepts them.
 const MANIFEST_FIELD_REASONS: ReadonlySet<string> = new Set(["hooks", "lspServers"]);
+const MANIFEST_FIELD_NOTE_PREFIX = "contains ";
+
+/**
+ * Task 260525-cjr C5: extract the bare manifest-field token from a
+ * resolver `"contains <kind>"` note. Returns `undefined` for any note
+ * that does not start with the prefix OR whose extracted token is not
+ * a member of `MANIFEST_FIELD_REASONS`. The caller then knows it can
+ * emit the bare token as a Reason directly.
+ */
+function manifestFieldTokenFromNote(note: string): Reason | undefined {
+  if (!note.startsWith(MANIFEST_FIELD_NOTE_PREFIX)) {
+    return undefined;
+  }
+
+  const token = note.slice(MANIFEST_FIELD_NOTE_PREFIX.length);
+  if (MANIFEST_FIELD_REASONS.has(token)) {
+    // Safe cast: the set members ("hooks", "lspServers") are documented
+    // members of the closed `Reason` set in `shared/grammar/reasons.ts`.
+    return token as Reason;
+  }
+
+  return undefined;
+}
 
 /**
  * Quick task 260525-aub: narrow resolver `r.notes` (free-form strings)
@@ -995,8 +1028,13 @@ function narrowResolverReasons(reasons: readonly string[]): readonly Reason[] {
       continue;
     }
 
-    if (MANIFEST_FIELD_REASONS.has(reason)) {
-      out.push(reason as Reason);
+    // Task 260525-cjr C5: the resolver emits `"contains hooks"` /
+    // `"contains lspServers"` (NOT bare `"hooks"` / `"lspServers"`)
+    // for the manifest-field carve-out. Extract the bare token via the
+    // typed helper so the MSG-GR-4 carve-out path actually runs.
+    const manifestFieldToken = manifestFieldTokenFromNote(reason);
+    if (manifestFieldToken !== undefined) {
+      out.push(manifestFieldToken);
       continue;
     }
 
