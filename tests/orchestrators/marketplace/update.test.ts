@@ -709,3 +709,127 @@ test("outcomeToCascadeRow: failed outcome without typed reasons falls back to no
   assert.equal(row.status, "failed");
   assert.deepEqual(row.reasons, ["rollback partial"]);
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+// Task 260525-cjr B2: cascadeAutoupdates catch site pre-narrows the closed
+// `Reason` via the typed-dispatch helper. EACCES / EPERM throws surface as
+// `{permission denied}` instead of the consumer's permissive `not in manifest`
+// fallback. Exercised end-to-end through `updateMarketplace` with an injected
+// `pluginUpdate` stub that throws an errno-bearing error.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("260525-cjr B2: cascadeAutoupdates catch -> EACCES surfaces as `{permission denied}` not `{not in manifest}`", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    await seedGithubMarketplace({
+      cwd,
+      name: "official",
+      ref: "main",
+      autoupdate: true,
+      plugins: { alpha: makePluginRecord() },
+    });
+    const { ctx, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000999" },
+    });
+    const pluginUpdate: PluginUpdateFn = () => {
+      const err = new Error("EACCES: permission denied, open '/some/.pi/agent/file'");
+      (err as NodeJS.ErrnoException).code = "EACCES";
+      return Promise.reject(err);
+    };
+
+    await updateMarketplace({
+      ctx,
+      name: "official",
+      scope: "project",
+      cwd,
+      gitOps,
+      pluginUpdate,
+    });
+
+    // The cascade-row body should render the precise `permission denied`
+    // closed Reason rather than degrading to the permissive
+    // `not in manifest` default that the consumer's `narrowFailReasons`
+    // would otherwise pick.
+    const composed = notifications.map((n) => n.message).join("\n");
+    assert.match(
+      composed,
+      /alpha[^\n]*\(failed\)[^\n]*\{permission denied\}/,
+      `expected (failed) {permission denied} for EACCES throw, got:\n${composed}`,
+    );
+    assert.equal(
+      composed.includes("{not in manifest}"),
+      false,
+      `regression: EACCES throw masqueraded as {not in manifest}.\n${composed}`,
+    );
+  });
+});
+
+test("260525-cjr B2: cascadeAutoupdates catch -> ENOENT surfaces as `{source missing}`", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    await seedGithubMarketplace({
+      cwd,
+      name: "official",
+      ref: "main",
+      autoupdate: true,
+      plugins: { alpha: makePluginRecord() },
+    });
+    const { ctx, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000999" },
+    });
+    const pluginUpdate: PluginUpdateFn = () => {
+      const err = new Error("ENOENT: no such file or directory");
+      (err as NodeJS.ErrnoException).code = "ENOENT";
+      return Promise.reject(err);
+    };
+
+    await updateMarketplace({
+      ctx,
+      name: "official",
+      scope: "project",
+      cwd,
+      gitOps,
+      pluginUpdate,
+    });
+
+    const composed = notifications.map((n) => n.message).join("\n");
+    assert.match(composed, /alpha[^\n]*\(failed\)[^\n]*\{source missing\}/);
+  });
+});
+
+test("260525-cjr B2: cascadeAutoupdates catch -> generic Error falls through to notes-substring (back-compat preserved)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    await seedGithubMarketplace({
+      cwd,
+      name: "official",
+      ref: "main",
+      autoupdate: true,
+      plugins: { alpha: makePluginRecord() },
+    });
+    const { ctx, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000999" },
+    });
+    const pluginUpdate: PluginUpdateFn = () =>
+      Promise.reject(new Error("something opaque happened"));
+
+    await updateMarketplace({
+      ctx,
+      name: "official",
+      scope: "project",
+      cwd,
+      gitOps,
+      pluginUpdate,
+    });
+
+    const composed = notifications.map((n) => n.message).join("\n");
+    // Generic Error -> reasonsFromCascadeError returns undefined ->
+    // consumer's narrowFailReason falls through to the legacy notes
+    // substring parse, which lands on `unreadable manifest` (the
+    // documented default for unclassifiable cascade failures). This
+    // proves the typed-dispatch path correctly returned `undefined`
+    // for an unrecognised error shape and deferred to the back-compat
+    // notes path.
+    assert.match(composed, /alpha[^\n]*\(failed\)[^\n]*\{unreadable manifest\}/);
+  });
+});

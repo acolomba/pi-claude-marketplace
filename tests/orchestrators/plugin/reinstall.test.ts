@@ -1169,6 +1169,81 @@ test("Plan 13-02a-02 / CMC-16 / F-2: outcomeToCascadeRow rollback substring stil
   assert.deepEqual([...(row.reasons ?? [])], ["rollback partial"]);
 });
 
+// ───────────────────────────────────────────────────────────────────────────
+// Task 260525-cjr B2: outcomeToCascadeRow prefers `outcome.reasons` (set at
+// the catch site via `reasonsFromTypedError(err)`) over the legacy
+// notes-substring narrow. This locks in the new producer-narrowed contract:
+// EACCES / EPERM / ENOENT (and PluginShapeError shapes) surface as their
+// precise closed Reason instead of degrading to `not in manifest`.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("260525-cjr B2: outcomeToCascadeRow prefers typed `outcome.reasons` (`permission denied`) over notes-substring fallback", () => {
+  const outcome: ReinstallFailedOutcome = {
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    // Notes that the legacy substring path would map to the permissive
+    // `not in manifest` default. The presence of `reasons` MUST win.
+    notes: ["EACCES: permission denied at some/.pi/agent/file"],
+    reasons: ["permission denied"] as const,
+  };
+  const row = __test_outcomeToCascadeRow(outcome);
+  assert.ok(row.status === "failed" && row.reasons !== undefined);
+  assert.deepEqual([...(row.reasons ?? [])], ["permission denied"]);
+});
+
+test("260525-cjr B2: outcomeToCascadeRow `source missing` typed reason wins over notes fallback", () => {
+  const outcome: ReinstallFailedOutcome = {
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    notes: ["ENOENT: no such file or directory"],
+    reasons: ["source missing"] as const,
+  };
+  const row = __test_outcomeToCascadeRow(outcome);
+  assert.ok(row.status === "failed" && row.reasons !== undefined);
+  assert.deepEqual([...(row.reasons ?? [])], ["source missing"]);
+});
+
+test("260525-cjr B2: outcomeToCascadeRow without `reasons` falls back to substring narrow (back-compat preserved)", () => {
+  // No `reasons` field -- the legacy substring narrow on `notes` runs.
+  // The default for opaque text is `not in manifest`.
+  const outcome: ReinstallFailedOutcome = {
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    notes: ["something opaque without a matching substring"],
+  };
+  const row = __test_outcomeToCascadeRow(outcome);
+  assert.ok(row.status === "failed" && row.reasons !== undefined);
+  assert.deepEqual([...(row.reasons ?? [])], ["not in manifest"]);
+});
+
+test("260525-cjr B2: outcomeToCascadeRow `failureClass=manual-recovery` STILL wins over typed `reasons` (precedence locked)", () => {
+  // The precedence order in outcomeToCascadeRow:
+  //   (1) failureClass="manual-recovery"  -> "rollback partial"
+  //   (2) outcome.reasons (typed)         -> verbatim
+  //   (3) narrowReasons(outcome.notes)    -> substring fallback
+  // This test locks in (1) > (2) so a future refactor cannot accidentally
+  // demote the manual-recovery class.
+  const outcome: ReinstallFailedOutcome = {
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    notes: ["EACCES: permission denied"],
+    failureClass: "manual-recovery",
+    reasons: ["permission denied"] as const,
+  };
+  const row = __test_outcomeToCascadeRow(outcome);
+  assert.ok(row.status === "failed" && row.reasons !== undefined);
+  // (1) wins -- the manual-recovery structural tag is highest priority.
+  assert.deepEqual([...(row.reasons ?? [])], ["rollback partial"]);
+});
+
 /**
  * Plan 13-02a-02 / CMC-16 / F-5 dedup regression guard.
  *

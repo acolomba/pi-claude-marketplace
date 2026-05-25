@@ -96,6 +96,7 @@ import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   MarketplaceNotFoundError,
   MarketplaceUpdateError,
+  PluginShapeError,
   errorMessage,
 } from "../../shared/errors.ts";
 import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
@@ -312,10 +313,22 @@ async function cascadeAutoupdates(
       // JSON-mode outcome aggregation in tests), so the cause-chain
       // trailer must be composed inline rather than relying on
       // notifyError's auto-trailer.
+      //
+      // Task 260525-cjr B2: ALSO pre-narrow the closed-set Reason via
+      // `reasonsFromCascadeError(err)` so the cascade row renders the
+      // precise cause class (`permission denied` / `source missing` /
+      // `no longer installable` / ...) instead of degrading to the
+      // permissive `not in manifest` fallback via the consumer's
+      // `narrowFailReasons` substring parse. Previously this catch
+      // swallowed the throw into a notes-only outcome with `reasons`
+      // absent, leaving the downstream consumer no choice but to
+      // substring-narrow.
+      const typedReasons = reasonsFromCascadeError(err);
       outcomes.push({
         partition: "failed",
         name: plugin,
         notes: [composeErrorWithCauseChain(err)],
+        ...(typedReasons !== undefined && { reasons: typedReasons }),
         // CMC-13 / Task 260525-cjr B1: required `boolean` on the
         // outcome contract. `(failed)` cascade rows do not render the
         // soft-dep marker (MSG-SD-3), so the value is deliberately
@@ -327,6 +340,44 @@ async function cascadeAutoupdates(
   }
 
   return outcomes;
+}
+
+/**
+ * Task 260525-cjr B2: typed-dispatch helper for the `cascadeAutoupdates`
+ * catch. Maps a thrown error to a closed-set Reason[] using the same
+ * priority order as the cascade narrowers in
+ * `orchestrators/plugin/{update,reinstall}.ts::reasonsFromTypedError`:
+ * PluginShapeError variants first, then errno-bearing FS errors, then
+ * `undefined` to defer to the consumer's substring fallback.
+ */
+function reasonsFromCascadeError(err: unknown): readonly Reason[] | undefined {
+  if (err instanceof PluginShapeError) {
+    switch (err.kind) {
+      case "no-longer-installable":
+      case "not-installable":
+        return ["no longer installable"] as const;
+      case "not-in-manifest":
+        return ["not in manifest"] as const;
+      case "already-installed":
+        // Cascade-path "already installed" is unexpected (we only
+        // cascade-update plugins already in the record); map to the
+        // permissive `not in manifest` fallback.
+        return ["not in manifest"] as const;
+    }
+  }
+
+  if (err instanceof Error) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EACCES" || code === "EPERM") {
+      return ["permission denied"] as const;
+    }
+
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return ["source missing"] as const;
+    }
+  }
+
+  return undefined;
 }
 
 /**

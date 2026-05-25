@@ -12,6 +12,7 @@ import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/sou
 import {
   __test_classifyEntityShapeError,
   __test_classifyInstallFailure,
+  __test_narrowResolverReasons,
   installPlugin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -1514,4 +1515,61 @@ test("classifyInstallFailure dispatches on PluginShapeError kinds (not-in-manife
   // Non-PluginShapeError input falls through to "unexpected-failure".
   const unexpected = __test_classifyInstallFailure(new Error("random"), "formatted");
   assert.equal(unexpected.status, "unexpected-failure");
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Task 260525-cjr B2: narrowResolverReasons no longer silently degrades
+// non-resolver causes to `{unsupported source}`. EACCES / EPERM / ENOENT /
+// SyntaxError substrings now map to their precise closed Reasons; the
+// `unsupported source` fallback runs only when no classifier matched.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("260525-cjr B2: narrowResolverReasons -> `hooks` carve-out passes verbatim", () => {
+  assert.deepEqual([...__test_narrowResolverReasons(["hooks"])], ["hooks"]);
+});
+
+test("260525-cjr B2: narrowResolverReasons -> `lspServers` carve-out passes verbatim", () => {
+  assert.deepEqual([...__test_narrowResolverReasons(["lspServers"])], ["lspServers"]);
+});
+
+test("260525-cjr B2: narrowResolverReasons -> source-substring -> `unsupported source`", () => {
+  assert.deepEqual(
+    [...__test_narrowResolverReasons(["unsupported source kind: foo"])],
+    ["unsupported source"],
+  );
+});
+
+test("260525-cjr B2: narrowResolverReasons -> EACCES note surfaces as `permission denied` (NOT `unsupported source`)", () => {
+  const reasons = __test_narrowResolverReasons([
+    "EACCES: permission denied opening '/.pi/agent/...'",
+  ]);
+  assert.deepEqual([...reasons], ["permission denied"]);
+});
+
+test("260525-cjr B2: narrowResolverReasons -> EPERM also classifies as `permission denied`", () => {
+  const reasons = __test_narrowResolverReasons(["EPERM: operation not permitted"]);
+  assert.deepEqual([...reasons], ["permission denied"]);
+});
+
+test("260525-cjr B2: narrowResolverReasons -> ENOENT note surfaces as `source missing`", () => {
+  const reasons = __test_narrowResolverReasons(["ENOENT: no such file or directory"]);
+  assert.deepEqual([...reasons], ["source missing"]);
+});
+
+test("260525-cjr B2: narrowResolverReasons -> SyntaxError note surfaces as `unparseable`", () => {
+  const reasons = __test_narrowResolverReasons(["SyntaxError: Unexpected token } in JSON"]);
+  assert.deepEqual([...reasons], ["unparseable"]);
+});
+
+test("260525-cjr B2: narrowResolverReasons -> empty notes -> `unsupported source` (permissive fallback)", () => {
+  assert.deepEqual([...__test_narrowResolverReasons([])], ["unsupported source"]);
+});
+
+test("260525-cjr B2: narrowResolverReasons -> wholly unclassifiable note -> `unsupported source` (permissive fallback)", () => {
+  // No carve-out, no `source` substring, no errno substring -- the
+  // permissive `unsupported source` fallback runs only here.
+  assert.deepEqual(
+    [...__test_narrowResolverReasons(["something genuinely unclassifiable"])],
+    ["unsupported source"],
+  );
 });

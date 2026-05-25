@@ -939,6 +939,23 @@ const MANIFEST_FIELD_REASONS: ReadonlySet<string> = new Set(["hooks", "lspServer
  * to the closed `Reason` set for renderer consumption. Mirrors the legacy
  * `narrowNotInstallableReasons` behavior but operates on the structural
  * `PluginShapeError.reasons` field; no message-text re-parse.
+ *
+ * Task 260525-cjr B2: extended typed-dispatch path. Previously the
+ * function silently dropped any note that wasn't a manifest-field
+ * carve-out token (`hooks` / `lspServers`) or a "source"-substring
+ * unsupported-source marker, then fell through to `unsupported source`
+ * for the empty-out fallback. That hid permission-denied / EACCES /
+ * EIO / JSON-parse-failure causes behind the misleading
+ * `{unsupported source}` reason on `(failed)` rows. The new ordering:
+ * (1) manifest-field carve-out, (2) "source" substring,
+ * (3) errno-like substrings (EACCES / EPERM / ENOENT / SyntaxError),
+ * (4) the final permissive `unsupported source` fallback only when no
+ * other classifier matched. The errno-substring path is a DEFENSIVE
+ * fallback -- the preferred path is for upstream code to throw a
+ * typed errno-bearing Error which a separate orchestrator-level
+ * catch can dispatch on `.code` directly. The substring fallback
+ * here catches notes that were already serialised into the
+ * `r.notes` array by a deeper helper.
  */
 function narrowResolverReasons(reasons: readonly string[]): readonly Reason[] {
   const out: Reason[] = [];
@@ -956,12 +973,28 @@ function narrowResolverReasons(reasons: readonly string[]): readonly Reason[] {
       out.push("unsupported source");
       continue;
     }
+
+    // Defensive errno-substring fallback (see JSDoc above).
+    if (reason.includes("EACCES") || reason.includes("EPERM")) {
+      out.push("permission denied");
+      continue;
+    }
+
+    if (reason.includes("ENOENT") || reason.includes("ENOTDIR")) {
+      out.push("source missing");
+      continue;
+    }
+
+    if (reason.includes("SyntaxError") || reason.includes("Unexpected token")) {
+      out.push("unparseable");
+      continue;
+    }
   }
 
   if (out.length === 0) {
     // Conservative fallback: at least one Reason is required for the
-    // EntityErrorRow `reasons` field. `unsupported source` is the closest
-    // in-set Reason for an unclassifiable PI-4 cause.
+    // EntityErrorRow `reasons` field. `unsupported source` is the
+    // documented permissive default for an unclassifiable PI-4 cause.
     out.push("unsupported source");
   }
 
@@ -1005,3 +1038,4 @@ function classifyInstallFailure(err: unknown, formattedCause: string): InstallPl
  */
 export { classifyEntityShapeError as __test_classifyEntityShapeError };
 export { classifyInstallFailure as __test_classifyInstallFailure };
+export { narrowResolverReasons as __test_narrowResolverReasons };

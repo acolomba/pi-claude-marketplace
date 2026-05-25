@@ -69,6 +69,20 @@ export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
    * `narrowReason` on `notes` for those.
    */
   readonly failureClass?: "manual-recovery";
+  /**
+   * Task 260525-cjr B2: pre-narrowed closed-set `Reason[]` produced at
+   * the throw/catch site instead of substring-matching the opaque
+   * `composeErrorWithCauseChain(err)` text downstream. Mirrors the
+   * `PluginUpdateOutcome.reasons` precedent (CR-06 / NFR-7). When
+   * present, `outcomeToCascadeRow` prefers `reasons[0]` over
+   * `narrowReasons(notes)`; when absent, the legacy substring narrow
+   * is used (back-compat for fixtures that build outcomes without
+   * `reasons`). Populated by the catch in `reinstallPlugins` so an
+   * EACCES / EPERM / ENOENT failure renders as the matching closed
+   * Reason (`permission denied` / `source missing`) rather than the
+   * permissive `not in manifest` default.
+   */
+  readonly reasons?: readonly Reason[];
 }
 
 export type ReinstallPluginOutcome =

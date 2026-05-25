@@ -345,6 +345,22 @@ function reasonsFromTypedError(err: unknown): readonly Reason[] | undefined {
     }
   }
 
+  // Task 260525-cjr B2: errno-bearing FS errors map to the matching
+  // closed Reason instead of falling through to the consumer's
+  // legacy notes-substring parse (which would land on the permissive
+  // `not in manifest` default for both narrowSkipReasons and
+  // narrowFailReasons).
+  if (err instanceof Error) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EACCES" || code === "EPERM") {
+      return ["permission denied"] as const;
+    }
+
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return ["source missing"] as const;
+    }
+  }
+
   return undefined;
 }
 
