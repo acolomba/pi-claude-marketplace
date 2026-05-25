@@ -256,7 +256,7 @@ Plans:
 | 12. Messaging Foundations (v1.3)             | Closed-set constants, renderer/notify primitives, reload-hint collapse            | CMC-08, CMC-11, CMC-14, CMC-19, CMC-36, CMC-37                                                                                                            | 0/4 plans  | Not started | --         |
 | 13. Conformance Refactor & ES-5 (v1.3)       | Mechanical callsite rewrite + ES-5 atomic edit + per-command catalog conformance  | CMC-01..07, CMC-09, CMC-10, CMC-12, CMC-13, CMC-15..18, CMC-20, CMC-21, CMC-22..34, CMC-35                                                                | 0/9 plans  | Not started | --         |
 | 14. Drift Guard & Test Alignment (v1.3)      | Frontmatter-driven drift test suite + CMC-16/CMC-34 audit-absorbed closures       | CMC-16, CMC-34, CMC-38                                                                                                                                    | 0/6 plans  | Planned     | --         |
-| 14.1. Close gap: CMC-13 import propagation   | Close v1.3 audit BLOCKER on `/claude:plugin import` cascade soft-dep markers       | CMC-13                                                                                                                                                    | 0/2 plans  | Planned     | --         |
+| 14.1. Close gap: CMC-13 import propagation   | Close v1.3 audit BLOCKER on `/claude:plugin import` cascade soft-dep markers       | CMC-13                                                                                                                                                    | 2/2 plans  | Complete    | 2026-05-24 |
 
 ## Coverage (v1.3)
 
