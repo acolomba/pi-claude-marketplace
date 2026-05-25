@@ -3,8 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Structured Notification Messages
 status: executing
-last_updated: "2026-05-25T21:22:37.391Z"
-last_activity: 2026-05-25 -- Phase 15 planning complete
+stopped_at: Phase 15 context gathered
+last_updated: "2026-05-25T21:31:05.586Z"
+last_activity: 2026-05-25 -- Phase 15 execution started
 progress:
   total_phases: 7
   completed_phases: 0
@@ -19,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-25)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.4 Structured Notification Messages -- Phase 15 (Type Model & ADR Refresh) is next up.
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 15 — type-model-adr-refresh
 
 ## Current Position
 
-Phase: 15 -- Type Model & ADR Refresh (Not started)
-Plan: --
-Status: Ready to execute
-Last activity: 2026-05-25 -- Phase 15 planning complete
+Phase: 15 (type-model-adr-refresh) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 15
+Last activity: 2026-05-25 -- Phase 15 execution started
 
 ## Performance Metrics
 
