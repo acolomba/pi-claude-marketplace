@@ -681,9 +681,12 @@ test("PRL-04 bulk bare reinstall enumerates user and project scopes", async () =
 
       const outcomes = await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
 
+      // CR-01 / 14.2-01 D-04: ordered via compareByNameThenScope (name
+      // primary case-insensitive, scope secondary project-before-user
+      // per MSG-GR-3). "pmp" sorts before "ump" by name primary alone.
       assert.deepEqual(
         outcomes.map((o) => `[${o.scope}] ${o.name}@${o.marketplace}`),
-        ["[user] uplug@ump", "[project] pplug@pmp"],
+        ["[project] pplug@pmp", "[user] uplug@ump"],
       );
       // Plan 13-02a-01 / CMC-25: the legacy `Reinstalled N plugins.` summary
       // line and `Reinstalled:\n  - [...]` partition body are RETIRED. The
@@ -972,6 +975,11 @@ test("PRL-13 deterministic partition output sorts by scope marketplace plugin", 
 
       const outcomes = await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
 
+      // CR-01 / 14.2-01 D-04: ordered project-before-user via
+      // `compareByNameThenScope` (name primary case-insensitive, scope
+      // secondary project-before-user per MSG-GR-3). Marketplace name
+      // is the primary key: "a" < "u" < "z" lexicographically. Plugin
+      // rows within a marketplace also sort by name primary.
       assert.deepEqual(
         outcomes.map((o) => ({
           partition: o.partition,
@@ -980,18 +988,21 @@ test("PRL-13 deterministic partition output sorts by scope marketplace plugin", 
           name: o.name,
         })),
         [
-          { partition: "reinstalled", scope: "user", marketplace: "u", name: "z" },
           { partition: "reinstalled", scope: "project", marketplace: "a", name: "a" },
           { partition: "reinstalled", scope: "project", marketplace: "a", name: "c" },
+          { partition: "reinstalled", scope: "user", marketplace: "u", name: "z" },
           { partition: "reinstalled", scope: "project", marketplace: "z", name: "b" },
         ],
       );
       const body = notifications.at(-1)?.message ?? "";
-      // Plan 13-02a-01 / CMC-25: per-marketplace cascade blocks ordered
-      // user-before-project (scope primary, name secondary). Plugin rows
-      // inside each marketplace block are sorted by name+scope via
-      // compareByNameThenScope. The legacy `Reinstalled:\n  - [scope]
-      // plug@mp` partition body is RETIRED.
+      // Plan 13-02a-01 / CMC-25 + 14.2-01 D-04: per-marketplace cascade
+      // blocks ordered project-before-user via `compareByNameThenScope`
+      // (name primary case-insensitive, scope secondary
+      // project-before-user). Plugin rows inside each marketplace block
+      // are also sorted by name+scope via the same comparator. The
+      // legacy `Reinstalled:\n  - [scope] plug@mp` partition body is
+      // RETIRED. The body-regex matches below assert presence (not
+      // order between markets) -- the deepEqual above locks order.
       assert.match(body, /● u \[user\]\n {2}● z \[user\] v1\.0\.0 \(reinstalled\)/);
       assert.match(
         body,

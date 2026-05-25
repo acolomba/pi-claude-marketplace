@@ -458,6 +458,21 @@ No `/reload` trailer -- nothing changed on disk, so MSG-RH-1's "any resource cha
 
 Marketplace blocks render alphabetically by marketplace name.
 
+### Same marketplace name in both scopes (cross-scope tie-break)
+
+<!-- catalog-state: same-mp-both-scopes -->
+
+```text
+● official [project]
+  ● alpha [project] v1.0.0 (reinstalled)
+● official [user]
+  ● beta [user] v1.0.0 (reinstalled)
+
+/reload to pick up changes
+```
+
+When the same marketplace name is installed in both scopes, the project-scope cascade block renders before the user-scope block (MSG-GR-3: name primary case-insensitive, scope secondary project-before-user via `compareByNameThenScope`). Each scope renders its own header line and its own indented plugin rows; the marketplaces never collapse.
+
 ______________________________________________________________________
 
 ## `/claude:plugin update` (multi-plugin cascade)
@@ -517,6 +532,21 @@ Trivial-only outcomes route via `notifySuccess` (Pitfall 4); no reload-hint trai
 
 /reload to pick up changes
 ```
+
+### Same marketplace name in both scopes (cross-scope tie-break)
+
+<!-- catalog-state: same-mp-both-scopes -->
+
+```text
+● official [project]
+  ● alpha [project] v0.9.0 → v1.0.0 (updated)
+● official [user]
+  ● beta [user] v0.5.0 → v1.0.0 (updated)
+
+/reload to pick up changes
+```
+
+When the same marketplace name is installed in both scopes, the project-scope cascade block renders before the user-scope block (MSG-GR-3 via `compareByNameThenScope`). Same lock as the reinstall surface.
 
 ______________________________________________________________________
 
@@ -613,6 +643,23 @@ Notes:
 - Each `(installed)` cascade row carries its own `{requires pi-…}` reason when the plugin declares the corresponding resource AND the companion extension is unloaded (MSG-SD-1 / MSG-SD-2). The agents-only row fires `{requires pi-subagents}`; the dual-plugin row fires both reasons inside a single `{}` block.
 - Combined-row ordering is closed-set: `pi-subagents` precedes `pi-mcp`, joined by a literal comma-space inside the `{}` block (MSG-SD-1 closed grammar, mirrored on adjacent surfaces).
 - `(uninstalled)` rows never carry these markers -- uninstall removes the content that would have needed the companion, so the marker has no actionable meaning (MSG-SD-2 carve-out, MSG-SD-3).
+
+### Same marketplace name in both scopes (cross-scope tie-break)
+
+<!-- catalog-state: same-mp-both-scopes -->
+
+```text
+Claude plugin import summary
+
+● official [project] (added)
+  ● alpha [project] (installed)
+● official [user] (added)
+  ● beta [user] (installed)
+
+/reload to pick up changes
+```
+
+When the same marketplace name is added to both scopes during an import, the project-scope cascade block renders before the user-scope block (MSG-GR-3 via `compareByNameThenScope`). Same lock as the reinstall and update surfaces.
 
 ______________________________________________________________________
 
