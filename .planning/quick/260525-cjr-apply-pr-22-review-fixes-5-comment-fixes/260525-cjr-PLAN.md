@@ -73,7 +73,7 @@ Prettier + 1249/1249 tests pass).
   `refactor(260525-cjr): ...`, `test(260525-cjr): ...`,
   `docs(260525-cjr): ...`). Title 5-72 chars; body lines ≤80.
 - Run `pre-commit run --files <changed files>` before each `git commit`. A
-  failed hook means the commit did NOT happen — fix, restage, re-run; do
+  failed hook means the commit did NOT happen -- fix, restage, re-run; do
   not `--amend`.
 - If committing from a worktree, prefix with `SKIP=trufflehog` and run
   `pre-commit run trufflehog --all-files` separately to confirm the scan is
@@ -108,38 +108,38 @@ Prettier + 1249/1249 tests pass).
   <action>
 Fix five inaccurate comments in a single commit.
 
-1. `presentation/reload-hint.ts:13-15` — rewrite the comment narrating
+1. `presentation/reload-hint.ts:13-15` -- rewrite the comment narrating
    "Phase 13's atomic three-file edit ... deletes the legacy constant" to
    present-tense description of current state: there is a single canonical
    reload-hint trailer and no legacy `RELOAD_HINT_PREFIX` fallback. Confirm
    absence by grepping `shared/markers.ts` for `RELOAD_HINT_PREFIX` (should
    be zero hits) before writing.
 
-2. `presentation/cascade-summary.ts:12-14` — comment cites
+2. `presentation/cascade-summary.ts:12-14` -- comment cites
    `tests/architecture/no-notify-from-presentation.test.ts` as the
    enforcement gate; that file does not exist. Grep `tests/` and
    `eslint.config*` / `.eslintrc*` /
    `extensions/pi-claude-marketplace/eslint-rules/` to see if another
    mechanism (lint rule, layering test) enforces "no notify from
    presentation". If one exists, repoint the comment. If none, drop the
-   enforcement claim entirely — describe only the convention.
+   enforcement claim entirely -- describe only the convention.
 
-3. `presentation/compact-line.ts:49-51` — drop the
+3. `presentation/compact-line.ts:49-51` -- drop the
    `presentation/plugin-list.ts:22-24` line anchor in the `ICON_INSTALLED`
    comment. Those line numbers point to docstring text about MSG-PL-1, not
    a constant definition. Keep the convention description; remove the
    anchor.
 
-4. `shared/errors.ts:303-304` — comment references the regex
+4. `shared/errors.ts:303-304` -- comment references the regex
    `/is not installable:\s*(.+)$/` at `install.ts:902` as currently
    present. Grep confirms the regex was removed. Rewrite past-tense
    ("previously parsed ...") or drop the comment if it no longer adds
    value.
 
-5. `shared/errors.ts:307-310` — replace the four exact line anchors
+5. `shared/errors.ts:307-310` -- replace the four exact line anchors
    ("PI-3 / install.ts:263, install.ts:294 … PI-5 / install.ts:285 …
    resolver.ts:786") with function-name references (e.g.
-   `requireInstallable`, `classifyEntityShapeError` — verify the actual
+   `requireInstallable`, `classifyEntityShapeError` -- verify the actual
    exported names in `install.ts` / `resolver.ts` before writing).
 
 Single commit: `docs(260525-cjr): correct 5 stale code-comment anchors`.
@@ -212,10 +212,10 @@ Refactor:
    `e instanceof PluginShapeError` and route through existing
    `narrowResolverNotes` logic.
 2. For non-resolver errors (everything else), route through
-   `notifyWarning` (or the existing notify channel in this file — read the
+   `notifyWarning` (or the existing notify channel in this file -- read the
    imports) with a distinct reason tag such as `unreadable` and include
    the underlying error message in the row's cause chain. The row must
-   still render — `list` is resilient — but the user must see the real
+   still render -- `list` is resilient -- but the user must see the real
    failure cause, not a misleading "unsupported source".
 3. Confirm `notifyWarning` and the cause-chain helper are already imported
    in this file; if not, add the import.
@@ -246,9 +246,9 @@ Flip `declaresAgents` and `declaresMcp` from `?: boolean` to required
 `boolean` to enforce CMC-13 by type instead of by comment.
 
 Touch points (confirmed in scope):
-- `presentation/compact-line.ts:146-147` — `PluginCascadeRow`
-- `orchestrators/types.ts:42-43` — `ReinstallReinstalledOutcome`
-- `orchestrators/types.ts:141-142` — `PluginUpdateOutcome` updated
+- `presentation/compact-line.ts:146-147` -- `PluginCascadeRow`
+- `orchestrators/types.ts:42-43` -- `ReinstallReinstalledOutcome`
+- `orchestrators/types.ts:141-142` -- `PluginUpdateOutcome` updated
   partition
 
 Before editing, search the full repo
@@ -261,7 +261,7 @@ For each emitter that currently spreads an outcome without setting the
 predicates, add explicit `declaresAgents: <expr>, declaresMcp: <expr>`
 using the source of truth (likely a manifest check or a resolver-output
 field). Where the source of truth is unclear, derive from the same logic
-CMC-13's existing comment describes — read the comment first.
+CMC-13's existing comment describes -- read the comment first.
 
 After flipping the type, `npx tsc --noEmit` must surface every missing
 site. Iterate until clean.
@@ -299,21 +299,21 @@ misleading closed-set member).
 
 Sites to refactor:
 
-1. `orchestrators/plugin/reinstall.ts:709-712` — `narrowReason` currently
+1. `orchestrators/plugin/reinstall.ts:709-712` -- `narrowReason` currently
    defaults `{not in manifest}` for any opaque cause, including
    permission-denied rollback. Add typed-dispatch; emit a distinct reason
    for errno-bearing errors.
 
-2. `orchestrators/plugin/update.ts:1087-1135` — `narrowFailReasons` /
+2. `orchestrators/plugin/update.ts:1087-1135` -- `narrowFailReasons` /
    `narrowSkipReasons` use the same anti-pattern. Refactor both functions.
 
-3. `orchestrators/plugin/install.ts:943-969` — `narrowResolverReasons`
+3. `orchestrators/plugin/install.ts:943-969` -- `narrowResolverReasons`
    drops unknown notes silently and falls through to `{unsupported
    source}`. Detect non-resolver causes and emit them through a distinct
    reason (e.g. `{unknown}` with the cause chain attached) rather than
    masquerading as "unsupported source".
 
-4. `orchestrators/marketplace/update.ts:308-320` — `cascadeAutoupdates`
+4. `orchestrators/marketplace/update.ts:308-320` -- `cascadeAutoupdates`
    swallows throws into a notes-only outcome with no `reasons[]`. Capture
    the throw, route through typed dispatch, populate `reasons` accordingly.
 
@@ -322,7 +322,7 @@ For each site, add a unit test asserting:
 - Unknown-shape inputs (e.g. `new Error("EACCES")` or a permission-denied
   case) produce a distinct, non-misleading reason
 
-Do NOT yet introduce the `shape` field from C4 — keep changes scoped to
+Do NOT yet introduce the `shape` field from C4 -- keep changes scoped to
 the narrowers and their test coverage. C4 (Task 10) will refactor the
 consumers afterwards.
 
@@ -357,7 +357,7 @@ devDependencies (check `package.json`). Allow-list ONLY:
 - `extensions/pi-claude-marketplace/presentation/sort.ts`
 - `extensions/pi-claude-marketplace/shared/grammar/pattern-classes.ts`
 
-Verify the allowlist is correct by reading both files — they must contain
+Verify the allowlist is correct by reading both files -- they must contain
 the canonical sort helper / SCOPES_ORDER constant. If the pattern lives
 elsewhere, adjust the allowlist accordingly with a comment justifying each
 entry.
@@ -366,7 +366,7 @@ Failure message: point to the canonical sort helper / SCOPES_ORDER
 constant and instruct the developer to import it instead of duplicating
 the ordering.
 
-Now choose path (a) — fix the three known offenders to use the helper:
+Now choose path (a) -- fix the three known offenders to use the helper:
 - `shared/types.ts:20`
 - `edge/completions/provider.ts:70`
 - `edge/handlers/plugin/import.ts:45`
@@ -378,7 +378,7 @@ Read each call site first. If the offender is a literal
 If it's a ternary `=== "user" ? 0 : 1`, call the sort helper. If for some
 reason an offender genuinely cannot use the helper (e.g. type-level
 ordering for a tuple type), add it to the allowlist with a
-`// scope-order: justified — <reason>` marker — but prefer the fix.
+`// scope-order: justified -- <reason>` marker -- but prefer the fix.
 
 Run the new architecture test; it must PASS after the fixes (or with the
 allowlist additions).
@@ -404,12 +404,12 @@ use the canonical helper or carry a `// scope-order: justified` marker.
 At `transaction/phase-ledger.ts:77`, `partials.push({ phase, msg:
 errorMessage(undoErr) })` records text only; `undoErr.cause` is dropped.
 
-1. Extend `RollbackPartial` (or whatever the type is named — read the
+1. Extend `RollbackPartial` (or whatever the type is named -- read the
    file) to carry `cause?: Error`.
 2. Set `cause: undoErr instanceof Error ? undoErr : undefined` at the
    push site.
-3. Update `presentation/rollback-partial.ts` —
-   `composeRollbackPartialBody` and `renderRollbackPartial` — to emit the
+3. Update `presentation/rollback-partial.ts` --
+   `composeRollbackPartialBody` and `renderRollbackPartial` -- to emit the
    cause-chain trailer for the undo failure itself (reuse the existing
    cause-chain helper from `presentation/cause-chain.ts`).
 4. Add a test in the existing rollback-partial test file (or
@@ -449,16 +449,16 @@ elsewhere). Move `phaseFailures` onto `Failed`. Drop all optional fields
 that become unreachable in their partition.
 
 This change cascades. Expect wider blast radius than other tasks:
-- `orchestrators/plugin/update.ts` — every site that constructs an
+- `orchestrators/plugin/update.ts` -- every site that constructs an
   outcome needs the right variant; every site that reads
   `fromVersion` / `toVersion` needs to narrow on
   `partition === "updated"` first.
-- `presentation/compact-line.ts` — render paths must narrow before
+- `presentation/compact-line.ts` -- render paths must narrow before
   reading partition-specific fields; replace any
   `outcome.fromVersion!` with proper switch/narrow.
-- Edge handlers and tests — grep `PluginUpdateOutcome` across the repo
+- Edge handlers and tests -- grep `PluginUpdateOutcome` across the repo
   and fix all consumers.
-- Tests — fixture construction in test files.
+- Tests -- fixture construction in test files.
 
 After all narrowing is in place, add an `assertNever(outcome as never)`
 in the render switch (`compact-line.ts`) to lock the exhaustiveness
@@ -533,7 +533,7 @@ compensate for the absent `shape` getter).
    code that populates them.
 3. Update consumers in `orchestrators/plugin/install.ts`,
    `orchestrators/plugin/update.ts`,
-   `orchestrators/plugin/reinstall.ts` — replace `e.marketplace!` /
+   `orchestrators/plugin/reinstall.ts` -- replace `e.marketplace!` /
    `e.reasons!` reads with narrowed reads, e.g.
    `e.shape.kind === "X" ? e.shape.marketplace : ...`. Use a switch on
    `e.shape.kind` where multiple branches exist.
@@ -567,7 +567,7 @@ At `orchestrators/plugin/install.ts:935,950`, the
 `domain/resolver.ts:685`), not bare `"hooks"` / `"lspServers"`.
 
 Read `domain/resolver.ts:685` to confirm the exact emitted strings, then
-choose option (a) — preserve intent:
+choose option (a) -- preserve intent:
 
 - Change the predicate to match the resolver's actual output (e.g.
   `note.startsWith("contains ")` plus a token extraction), and emit the
@@ -635,14 +635,14 @@ At `presentation/compact-line.ts:405-410`, replace the `iconForPluginRow`
 fallthrough with an exhaustiveness assertion.
 
 1. Replace the fallthrough branch with `assertNever(status as never)`
-   (import `assertNever` from the existing util — read the file to find
+   (import `assertNever` from the existing util -- read the file to find
    the canonical location; if none exists, add a one-line helper).
 2. Ensure every existing `status` variant has an explicit branch
    returning the right icon constant.
 3. The TypeScript exhaustiveness check should then catch any future
    variant addition at compile time.
 
-No new tests required — the type system enforces this. But run the full
+No new tests required -- the type system enforces this. But run the full
 test suite to confirm no regression.
 
 Commit: `refactor(260525-cjr): assertNever in iconForPluginRow`.
@@ -665,22 +665,22 @@ fallthrough branch remains. Typecheck clean.
 Add 5-8 malformed-input test cases to
 `tests/presentation/compact-line.test.ts`:
 
-1. `version: ""` (empty string) — renders without throwing; verify the
+1. `version: ""` (empty string) -- renders without throwing; verify the
    rendered version slot is either omitted or shows a deterministic
    placeholder.
-2. `reasons: undefined` — renders without throwing; equivalent to
+2. `reasons: undefined` -- renders without throwing; equivalent to
    no-reasons row.
-3. `reasons: []` — explicit empty array; renders without the reasons
+3. `reasons: []` -- explicit empty array; renders without the reasons
    suffix.
-4. Unicode in `name` (e.g. emoji, RTL combining chars) — rendered
+4. Unicode in `name` (e.g. emoji, RTL combining chars) -- rendered
    verbatim without alignment corruption.
-5. Unicode in `marketplace` (e.g. CJK characters) — rendered verbatim.
-6. (Optional) Very long `name` (e.g. 200 chars) — no panic; verify
+5. Unicode in `marketplace` (e.g. CJK characters) -- rendered verbatim.
+6. (Optional) Very long `name` (e.g. 200 chars) -- no panic; verify
    truncation/wrap behavior matches existing convention.
 7. (Optional) Mixed-direction text in `name`.
 
 Assertions should follow the file's existing snapshot or string-equality
-style. Do NOT change production code — these tests document existing
+style. Do NOT change production code -- these tests document existing
 behavior and lock it in.
 
 Commit: `test(260525-cjr): malformed-input cases for compact-line`.
@@ -743,20 +743,20 @@ commit covering all files.
 
 Files and regions to clean:
 
-1. `presentation/compact-line.ts:1-51` — strip D-CMC-01..08, D-13-05..20,
+1. `presentation/compact-line.ts:1-51` -- strip D-CMC-01..08, D-13-05..20,
    Plan 14-03 references.
-2. `presentation/compact-line.ts:62-64` — drop the redundant restatement
+2. `presentation/compact-line.ts:62-64` -- drop the redundant restatement
    of MSG-IC-1..3 (the codes appear elsewhere; this is duplicative).
-3. `shared/grammar/reasons.ts:22-38` — strip the Phase 12 / Phase 13
+3. `shared/grammar/reasons.ts:22-38` -- strip the Phase 12 / Phase 13
    Wave 3 reconciliation narrative.
-4. `shared/grammar/status-tokens.ts` header — strip Plan IDs.
-5. `shared/grammar/markers.ts` header — strip Plan IDs.
-6. `shared/grammar/pattern-classes.ts` header — strip Plan IDs.
-7. `shared/errors.ts:299-301` — strip "Quick task 260525-aub" reference.
-8. `presentation/cause-chain.ts:24-29` — strip "Phase 14.2-fix WR-03".
-9. `presentation/sort.ts:13-15` — strip "D-13-15 places it here…"
+4. `shared/grammar/status-tokens.ts` header -- strip Plan IDs.
+5. `shared/grammar/markers.ts` header -- strip Plan IDs.
+6. `shared/grammar/pattern-classes.ts` header -- strip Plan IDs.
+7. `shared/errors.ts:299-301` -- strip "Quick task 260525-aub" reference.
+8. `presentation/cause-chain.ts:24-29` -- strip "Phase 14.2-fix WR-03".
+9. `presentation/sort.ts:13-15` -- strip "D-13-15 places it here…"
    narration.
-10. `presentation/rollback-partial.ts:19-24, 80-86` — strip
+10. `presentation/rollback-partial.ts:19-24, 80-86` -- strip
     "Plan 14-06 / D-14-04" references.
 
 Rules:
@@ -764,12 +764,12 @@ Rules:
 - KEEP binding-contract sentences: drift-test names, layering
   constraints, NFR references (e.g. NFR-1, NFR-3, NFR-10).
 - KEEP message-spec codes (MSG-*, CMC-*) that are referenced from tests
-  or grammar tables — these are the live contract.
+  or grammar tables -- these are the live contract.
 - STRIP ticket IDs (D-XX-YY, Plan NN-NN, Phase NN, "Quick task XXXXXX")
   and historical narration ("Phase 13's atomic three-file edit…",
   "reconciliation narrative…", "places it here…").
 - When in doubt about whether a code is binding, grep for it elsewhere
-  in the repo. If it's only referenced in comments, it's narration —
+  in the repo. If it's only referenced in comments, it's narration --
   strip it. If a test or grammar table references it, keep it.
 
 Commit: `docs(260525-cjr): strip phase-ticket density from comments`.
@@ -790,7 +790,7 @@ drift-test names) preserved.
 <verification>
 After all 16 commits land on `gsd/v1.3-replan-catalog`:
 
-1. `npm run check` — must pass (typecheck + ESLint + Prettier + tests).
+1. `npm run check` -- must pass (typecheck + ESLint + Prettier + tests).
 2. Test count: expect 1249 baseline + new tests from Tasks 2, 3, 5, 6, 7,
    8 (where applicable), 11, 14, 15. Confirm 1249 baseline tests still
    pass; new test count is additive.
