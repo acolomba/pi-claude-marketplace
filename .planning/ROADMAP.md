@@ -256,47 +256,47 @@ Plans:
 | 12. Messaging Foundations (v1.3)             | Closed-set constants, renderer/notify primitives, reload-hint collapse            | CMC-08, CMC-11, CMC-14, CMC-19, CMC-36, CMC-37                                                                                                            | 0/4 plans  | Not started | --         |
 | 13. Conformance Refactor & ES-5 (v1.3)       | Mechanical callsite rewrite + ES-5 atomic edit + per-command catalog conformance  | CMC-01..07, CMC-09, CMC-10, CMC-12, CMC-13, CMC-15..18, CMC-20, CMC-21, CMC-22..34, CMC-35                                                                | 0/9 plans  | Not started | --         |
 | 14. Drift Guard & Test Alignment (v1.3)      | Frontmatter-driven drift test suite + CMC-16/CMC-34 audit-absorbed closures       | CMC-16, CMC-34, CMC-38                                                                                                                                    | 0/6 plans  | Planned     | --         |
-| 14.1. Close gap: CMC-13 import propagation   | Close v1.3 audit BLOCKER on `/claude:plugin import` cascade soft-dep markers       | CMC-13                                                                                                                                                    | 0/2 plans  | Planned     | --         |
+| 14.1. Close gap: CMC-13 import propagation   | Close v1.3 audit BLOCKER on `/claude:plugin import` cascade soft-dep markers       | CMC-13                                                                                                                                                    | 2/2 plans  | Complete    | 2026-05-24 |
 
 ## Coverage (v1.3)
 
 | Requirement | Phase    | Status  |
 | ----------- | -------- | ------- |
-| CMC-01      | Phase 13 | Pending |
-| CMC-02      | Phase 13 | Pending |
-| CMC-03      | Phase 13 | Pending |
-| CMC-04      | Phase 13 | Pending |
-| CMC-05      | Phase 13 | Pending |
-| CMC-06      | Phase 13 | Pending |
-| CMC-07      | Phase 13 | Pending |
+| CMC-01      | Phase 13 | Complete |
+| CMC-02      | Phase 13 | Complete |
+| CMC-03      | Phase 13 | Complete |
+| CMC-04      | Phase 13 | Complete |
+| CMC-05      | Phase 13 | Complete |
+| CMC-06      | Phase 13 | Complete |
+| CMC-07      | Phase 13 | Complete |
 | CMC-08      | Phase 12 | Pending |
-| CMC-09      | Phase 13 | Pending |
-| CMC-10      | Phase 13 | Pending |
+| CMC-09      | Phase 13 | Complete |
+| CMC-10      | Phase 13 | Complete |
 | CMC-11      | Phase 12 | Pending |
-| CMC-12      | Phase 13 | Pending |
-| CMC-13      | Phase 13 | Pending |
+| CMC-12      | Phase 13 | Complete |
+| CMC-13      | Phase 13 | Complete |
 | CMC-14      | Phase 12 | Pending |
-| CMC-15      | Phase 13 | Pending |
+| CMC-15      | Phase 13 | Complete |
 | CMC-16      | Phase 14 | Complete |
-| CMC-17      | Phase 13 | Pending |
-| CMC-18      | Phase 13 | Pending |
+| CMC-17      | Phase 13 | Complete |
+| CMC-18      | Phase 13 | Complete |
 | CMC-19      | Phase 12 | Pending |
-| CMC-20      | Phase 13 | Pending |
-| CMC-21      | Phase 13 | Pending |
-| CMC-22      | Phase 13 | Pending |
-| CMC-23      | Phase 13 | Pending |
-| CMC-24      | Phase 13 | Pending |
-| CMC-25      | Phase 13 | Pending |
-| CMC-26      | Phase 13 | Pending |
-| CMC-27      | Phase 13 | Pending |
-| CMC-28      | Phase 13 | Pending |
-| CMC-29      | Phase 13 | Pending |
-| CMC-30      | Phase 13 | Pending |
-| CMC-31      | Phase 13 | Pending |
-| CMC-32      | Phase 13 | Pending |
-| CMC-33      | Phase 13 | Pending |
+| CMC-20      | Phase 13 | Complete |
+| CMC-21      | Phase 13 | Complete |
+| CMC-22      | Phase 13 | Complete |
+| CMC-23      | Phase 13 | Complete |
+| CMC-24      | Phase 13 | Complete |
+| CMC-25      | Phase 13 | Complete |
+| CMC-26      | Phase 13 | Complete |
+| CMC-27      | Phase 13 | Complete |
+| CMC-28      | Phase 13 | Complete |
+| CMC-29      | Phase 13 | Complete |
+| CMC-30      | Phase 13 | Complete |
+| CMC-31      | Phase 13 | Complete |
+| CMC-32      | Phase 13 | Complete |
+| CMC-33      | Phase 13 | Complete |
 | CMC-34      | Phase 14 | Complete |
-| CMC-35      | Phase 13 | Pending |
+| CMC-35      | Phase 13 | Complete |
 | CMC-36      | Phase 12 | Pending |
 | CMC-37      | Phase 12 | Pending |
 | CMC-38      | Phase 14 | Complete |
