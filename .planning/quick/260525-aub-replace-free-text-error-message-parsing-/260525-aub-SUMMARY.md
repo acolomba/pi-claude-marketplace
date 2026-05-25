@@ -118,7 +118,7 @@ Each task was committed atomically:
 
 ### Auto-fixed Issues
 
-**1. [Rule 1 — Bug in plan spec] `PluginShapeError.reasons` typed as `readonly string[]`, not `readonly Reason[]`**
+**1. [Rule 1 -- Bug in plan spec] `PluginShapeError.reasons` typed as `readonly string[]`, not `readonly Reason[]`**
 
 - **Found during:** Task 1 (before any code change)
 - **Issue:** The plan's `<interfaces>` block at lines 148-159 stated:
@@ -129,7 +129,7 @@ Each task was committed atomically:
 - **Verification:** Existing `tests/domain/resolver-strict.test.ts:346-368` assertions (`err.message.includes("source dir does not exist")`) stay green unchanged because the resolver's raw notes flow through verbatim. The PI-4 test at `tests/orchestrators/plugin/install.test.ts:401-404` still produces `⊘ hello@mp [project] (unavailable) {unsupported source}` because `narrowResolverReasons` maps the `"source"` substring to the closed `"unsupported source"` Reason at the catch site.
 - **Committed in:** `ab1a937` (Task 1)
 
-**2. [Rule 2 — Plan completeness] Added test-seam re-exports for catch-site helpers**
+**2. [Rule 2 -- Plan completeness] Added test-seam re-exports for catch-site helpers**
 
 - **Found during:** Task 2 (adding the discriminated-dispatch tests)
 - **Issue:** The plan's Task 2 Step 6 calls for "2 NEW tests asserting `classifyEntityShapeError`'s and `classifyInstallFailure`'s typed dispatch" plus 1 test for `narrowCascadeFailure` and 1 test for `outcomeToCascadeRow` -- but these helpers are all private (non-exported) functions. The plan acknowledged this for `narrowCascadeFailure` with "Skip the test entirely if `narrowCascadeFailure` is not exported" but the architectural precedent at `reinstall.ts` (the `__test_outcomeToCascadeRow` re-export) shows a cleaner pattern.
@@ -138,7 +138,7 @@ Each task was committed atomically:
 - **Verification:** All 16 new dispatch tests pass; no other test file is affected by the new exports.
 - **Committed in:** `da04709` (Task 2)
 
-**3. [Rule 2 — Plan completeness] Cascade-row consumer in `plugin/update.ts::outcomeToCascadeRow` also prefers `outcome.reasons` over `narrowSkipReasons`/`narrowFailReasons`**
+**3. [Rule 2 -- Plan completeness] Cascade-row consumer in `plugin/update.ts::outcomeToCascadeRow` also prefers `outcome.reasons` over `narrowSkipReasons`/`narrowFailReasons`**
 
 - **Found during:** Task 2 (after migrating the marketplace/update.ts consumer, found the plugin/update.ts direct-update consumer had the same notes-parsing pattern)
 - **Issue:** The plan focused on `marketplace/update.ts::outcomeToCascadeRow` for the consumer migration but the analogous direct-update consumer at `plugin/update.ts::outcomeToCascadeRow` (line ~894+) also reads `outcome.notes` via local `narrowSkipReasons`/`narrowFailReasons` helpers. With Task 1's producer migration populating `outcome.reasons`, this consumer should also prefer the typed array.
