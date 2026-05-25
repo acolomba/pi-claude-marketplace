@@ -9,10 +9,9 @@
 // MAX_LINE_COLUMN private-constant idiom in presentation/plugin-list.ts:30
 // -- a one-consumer literal does not earn extraction.
 //
-// D-CMC-08: shared/markers.ts retains the legacy RELOAD_HINT_PREFIX export
-// as a snapshot-test-only constant through Phase 12; this composer no
-// longer imports it. Phase 13's atomic three-file edit (markers.ts +
-// markers-snapshot test + PRD §6.12 row) deletes the legacy constant.
+// D-CMC-08: `shared/markers.ts` no longer exports a legacy reload-hint
+// prefix constant; the canonical trailer defined below is the single
+// source of truth and the composer never falls back to a prefix.
 //
 // Pure string functions -- no IO, no ctx parameter. The orchestrator layer
 // decides WHEN to call this (MSG-RH-1 gate: only when generated resources

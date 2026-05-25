@@ -296,18 +296,22 @@ export class ManualRecoveryError extends Error {
 }
 
 /**
- * Quick task 260525-aub: discriminated typed error replacing the free-text
- * `Error.message` parsing previously used in install / update / remove /
- * reinstall catch sites. Closes the systemic v1.3 pattern hole that Phase 13's
- * `ManualRecoveryError` refactor missed in 4 additional catch sites beyond
+ * Discriminated typed error replacing the free-text `Error.message`
+ * parsing previously used in install / update / remove / reinstall catch
+ * sites. Closes the systemic v1.3 pattern hole that the
+ * `ManualRecoveryError` refactor missed in additional catch sites beyond
  * install, and eliminates the SonarCloud `typescript:S5852` ReDoS hotspot
- * at the legacy `install.ts:902` regex (`/is not installable:\s*(.+)$/`).
+ * at the legacy regex (previously `/is not installable:\s*(.+)$/`) that
+ * has since been removed.
  *
  * Discriminated by `kind`:
- *   - `"not-in-manifest"`  -- PI-3 / install.ts:263, install.ts:294
- *   - `"already-installed"` -- PI-5 / install.ts:285
- *   - `"not-installable"`  -- PR-6 / resolver.ts:786 with op = "install"
- *   - `"no-longer-installable"` -- PR-6 / resolver.ts:786 with op = "update"
+ *   - `"not-in-manifest"`     -- PI-3, thrown from `installPlugin`
+ *   - `"already-installed"`   -- PI-5, thrown from `installPlugin`
+ *   - `"not-installable"`     -- PR-6, thrown from `requireInstallable`
+ *                                with `op = "install"`
+ *   - `"no-longer-installable"` -- PR-6, thrown from `requireInstallable`
+ *                                with `op = "update"`
+ * The downstream consumer is `classifyEntityShapeError` (install.ts).
  *
  * The constructor is the SINGLE SOURCE OF TRUTH for the `.message` text. The
  * exact byte-equal forms (preserved so existing

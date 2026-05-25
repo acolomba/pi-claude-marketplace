@@ -47,7 +47,7 @@
 //     children where the plugin is NOT installed (e.g. {source mismatch}).
 //   - Marketplace rows dispatch on `outcomeClass`: "ok" -> ●; "failure" -> ⊘.
 // The three icon constants are file-private here -- they migrated from
-// `presentation/plugin-list.ts:22-24` because compact-line.ts is now the
+// `presentation/plugin-list.ts` because compact-line.ts is now the
 // second consumer (D-CMC-07 promotion criterion satisfied per D-13-15).
 
 import { assertNever } from "../shared/errors.ts";
