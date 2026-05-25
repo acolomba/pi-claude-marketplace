@@ -62,7 +62,7 @@ export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<v
   }
 
   // renderMarketplaceList handles both populated and empty cases:
-  //   - allRecords.length > 0  -> grouped-by-scope rendering (ML-1, ML-2)
-  //   - allRecords.length === 0 -> "No marketplaces configured." (ML-4)
+  //   - allRecords.length > 0   -> flat per-scope rendering (CMC-29/MSG-GR-3 sorted via compareByNameThenScope)
+  //   - allRecords.length === 0 -> bare `(no marketplaces)` EmptyToken (CMC-10, formerly ML-4 sentence)
   notifySuccess(opts.ctx, renderMarketplaceList(allRecords));
 }
