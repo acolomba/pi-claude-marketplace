@@ -84,7 +84,7 @@ completed: 2026-05-23
 ## Accomplishments
 
 - **Two-layer cutover gate landed.** Layer 1 (ESLint `no-restricted-imports`): three relative-path variants of `shared/markers.ts` × five legacy marker names = 15 path/name pairs forbidden from any callsite outside the canonical allow-list. Layer 2 (static-audit test): recursively scans `extensions/pi-claude-marketplace` + `tests` for the 5 literal strings (pinned byte-for-byte in the test body) and asserts zero matches in non-allow-listed files. Both layers stay green through the entire Wave 2 cutover and survive the Wave 3 atomic deletion of the marker exports.
-- **Two-block ESLint structure (BLOCK E + BLOCK E-2) preserves both gates' intended scopes.** The plan's directive of a single block with `files: [extensions/**, tests/**]` would have escaped Gate 1 (Pi peer-import chokepoint, originally extensions-only) into tests/, breaking 17 legitimate test mocks. Disjoint `files:` patterns avoid the BLOCK E paths[]-replacement risk per RESEARCH.md PITFALL 2 — no overlap, no replacement.
+- **Two-block ESLint structure (BLOCK E + BLOCK E-2) preserves both gates' intended scopes.** The plan's directive of a single block with `files: [extensions/**, tests/**]` would have escaped Gate 1 (Pi peer-import chokepoint, originally extensions-only) into tests/, breaking 17 legitimate test mocks. Disjoint `files:` patterns avoid the BLOCK E paths[]-replacement risk per RESEARCH.md PITFALL 2 -- no overlap, no replacement.
 - **presentation/soft-dep.ts thinned to probe-only surface per D-13-07.** Aggregated-trailer helpers removed from the shim and from the `presentation/index.ts` barrel. The shim now publishes only the 3 probe helpers (`hasLoadedPiMcpAdapter`, `hasLoadedPiSubagents`, `softDepStatus`) that the per-row renderer in `compact-line.ts` consumes via the injected `SoftDepProbe`.
 - **Six orchestrator callsites migrated** to source the trailer helpers directly from `platform/pi-api.ts` (the source module). The trailer helpers stay exported from `platform/pi-api.ts` until Wave 2 sub-wave 2c finalization decides whether to delete them per RESEARCH.md Open Question 3.
 - **Static-audit test ALLOW_LIST has 6 entries (3 canonical + 3 header-docstring mentions).** Per RESEARCH.md line 806, comments are not stripped; legitimate header docstrings (D-03 chokepoint, PI-14 + AS-4 headers) are explicitly allow-listed instead.
@@ -93,23 +93,23 @@ completed: 2026-05-23
 
 Each task was committed atomically:
 
-1. **Task 1: Extend ESLint BLOCK E with no-restricted-imports for the 5 legacy markers (D-13-09)** — `030f580` (feat)
-2. **Task 2: Create tests/architecture/no-legacy-markers.test.ts static-audit (D-13-12)** — `57ca692` (test)
-3. **Task 3: Thin presentation/soft-dep.ts to drop aggregated-trailer helpers; update barrel** — `8ff4eef` (refactor)
+1. **Task 1: Extend ESLint BLOCK E with no-restricted-imports for the 5 legacy markers (D-13-09)** -- `030f580` (feat)
+2. **Task 2: Create tests/architecture/no-legacy-markers.test.ts static-audit (D-13-12)** -- `57ca692` (test)
+3. **Task 3: Thin presentation/soft-dep.ts to drop aggregated-trailer helpers; update barrel** -- `8ff4eef` (refactor)
 
 ## Files Created/Modified
 
-- `eslint.config.js` — BLOCK E extended with Gate 2 (5 legacy marker names × 3 relative-path variants) AND temporary per-file ignores for production callsites. NEW BLOCK E-2 mirrors Gate 2 for `tests/**` with disjoint `files:` pattern so Gate 1 (Pi peer-import chokepoint) stays extension-scoped.
-- `tests/architecture/no-legacy-markers.test.ts` — NEW static-audit test (D-13-12 / CMC-35). Recursively scans for the 5 literal markers; 6-entry ALLOW_LIST; literals pinned byte-for-byte (NOT imported from `markers.ts`) so the gate survives Wave 3 export deletion.
-- `extensions/pi-claude-marketplace/presentation/soft-dep.ts` — Thinned: re-exports only the 3 probe helpers (`hasLoadedPiMcpAdapter`, `hasLoadedPiSubagents`, `softDepStatus`); D-13-07 citation added.
-- `extensions/pi-claude-marketplace/presentation/index.ts` — Barrel updated to mirror the thinned shim.
-- `extensions/pi-claude-marketplace/orchestrators/plugin/install.ts` — Trailer helpers imported from `platform/pi-api.ts`.
-- `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts` — Same.
-- `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts` — Same.
-- `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts` — Same.
-- `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts` — Same.
-- `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts` — Same.
-- `tests/presentation/soft-dep.test.ts` — Imports split: probes via thin shim (verifies shim surface); trailer helpers via `platform/pi-api.ts` source.
+- `eslint.config.js` -- BLOCK E extended with Gate 2 (5 legacy marker names × 3 relative-path variants) AND temporary per-file ignores for production callsites. NEW BLOCK E-2 mirrors Gate 2 for `tests/**` with disjoint `files:` pattern so Gate 1 (Pi peer-import chokepoint) stays extension-scoped.
+- `tests/architecture/no-legacy-markers.test.ts` -- NEW static-audit test (D-13-12 / CMC-35). Recursively scans for the 5 literal markers; 6-entry ALLOW_LIST; literals pinned byte-for-byte (NOT imported from `markers.ts`) so the gate survives Wave 3 export deletion.
+- `extensions/pi-claude-marketplace/presentation/soft-dep.ts` -- Thinned: re-exports only the 3 probe helpers (`hasLoadedPiMcpAdapter`, `hasLoadedPiSubagents`, `softDepStatus`); D-13-07 citation added.
+- `extensions/pi-claude-marketplace/presentation/index.ts` -- Barrel updated to mirror the thinned shim.
+- `extensions/pi-claude-marketplace/orchestrators/plugin/install.ts` -- Trailer helpers imported from `platform/pi-api.ts`.
+- `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts` -- Same.
+- `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts` -- Same.
+- `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts` -- Same.
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts` -- Same.
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts` -- Same.
+- `tests/presentation/soft-dep.test.ts` -- Imports split: probes via thin shim (verifies shim surface); trailer helpers via `platform/pi-api.ts` source.
 
 ## Decisions Made
 
@@ -122,7 +122,7 @@ Each task was committed atomically:
 
 ### Auto-fixed Issues
 
-**1. [Rule 3 — Blocking] Split single ESLint block into BLOCK E + BLOCK E-2 with disjoint files: patterns**
+**1. [Rule 3 -- Blocking] Split single ESLint block into BLOCK E + BLOCK E-2 with disjoint files: patterns**
 
 - **Found during:** Task 1 (Extend ESLint BLOCK E with no-restricted-imports for the 5 legacy markers).
 - **Issue:** The plan directed `files: ["extensions/pi-claude-marketplace/**/*.ts", "tests/**/*.ts"]` for a single merged BLOCK E. Running this caused 17 legitimate test mocks (in `tests/edge/`, `tests/orchestrators/`) to fail Gate 1 (`no-restricted-imports` against `@earendil-works/pi-coding-agent`). Tests legitimately import the Pi API directly for mocking; Gate 1 was historically extension-only and the plan did not anticipate the side effect.
@@ -131,16 +131,16 @@ Each task was committed atomically:
 - **Verification:** `npx eslint --no-warn-ignored extensions/pi-claude-marketplace tests/` exits 0; canary file with marker import correctly fails the gate (sanity-tested before commit).
 - **Committed in:** `030f580` (Task 1 commit).
 
-**2. [Rule 3 — Blocking] Added temporary per-file ESLint ignores for 5 production callsites + 4 contract-assertion tests**
+**2. [Rule 3 -- Blocking] Added temporary per-file ESLint ignores for 5 production callsites + 4 contract-assertion tests**
 
 - **Found during:** Task 1 (post-plan grep for current consumers of the 5 legacy marker exports).
-- **Issue:** The plan stated "Most likely none of these production callsites import the markers directly today" (line 151). Reality: `bridges/{agents,skills,commands}/stage.ts` + `orchestrators/plugin/reinstall.ts` import `MANUAL_RECOVERY_REQUIRED`; `transaction/rollback.ts` imports `ROLLBACK_PARTIAL`; `tests/e2e/install-soft-deps.test.ts` + `tests/platform/pi-api.test.ts` + `tests/presentation/soft-dep.test.ts` import `PI_*_NOT_LOADED` for contract assertions; `tests/transaction/rollback.test.ts` imports `ROLLBACK_PARTIAL` for the chokepoint contract. The plan envisioned these would be migrated by Wave 2 sub-waves — but the ESLint gate must land BEFORE Wave 2 to prevent regressions, so the existing imports needed allow-listing.
+- **Issue:** The plan stated "Most likely none of these production callsites import the markers directly today" (line 151). Reality: `bridges/{agents,skills,commands}/stage.ts` + `orchestrators/plugin/reinstall.ts` import `MANUAL_RECOVERY_REQUIRED`; `transaction/rollback.ts` imports `ROLLBACK_PARTIAL`; `tests/e2e/install-soft-deps.test.ts` + `tests/platform/pi-api.test.ts` + `tests/presentation/soft-dep.test.ts` import `PI_*_NOT_LOADED` for contract assertions; `tests/transaction/rollback.test.ts` imports `ROLLBACK_PARTIAL` for the chokepoint contract. The plan envisioned these would be migrated by Wave 2 sub-waves -- but the ESLint gate must land BEFORE Wave 2 to prevent regressions, so the existing imports needed allow-listing.
 - **Fix:** Added 5 production-file + 4 test-file entries to BLOCK E / BLOCK E-2 `ignores:` with TODO comments naming the migrating sub-wave (2a / 2b / 2c). Sub-waves remove their corresponding entries; Wave 3 atomic commit removes the remainder alongside the export deletion. Preserves the plan's intent (the gate prevents NEW regressions during Wave 2) without forcing a scope expansion into this plan.
 - **Files modified:** `eslint.config.js`.
 - **Verification:** `npm run check` exits 0 on the post-edit baseline; canary sanity-test confirms the gate still fires on non-allow-listed callsites.
 - **Committed in:** `030f580` (Task 1 commit).
 
-**3. [Rule 3 — Blocking] Added 3 extra static-audit ALLOW_LIST entries for header-docstring mentions**
+**3. [Rule 3 -- Blocking] Added 3 extra static-audit ALLOW_LIST entries for header-docstring mentions**
 
 - **Found during:** Task 2 (initial test run flagged 3 files with `(rollback partial: ` in header docstrings).
 - **Issue:** Per RESEARCH.md line 806 the test does NOT strip comments. The plan listed a 5-entry ALLOW_LIST (3 canonical sources + 2 .md docs); the .md docs fall outside the .ts/.js scan scope. Three .ts files contain legitimate header-docstring mentions of the `(rollback partial: ...)` chokepoint contract (`transaction/rollback.ts` D-03 header, `transaction/phase-ledger.ts` PI-14 + AS-4 header, `tests/transaction/rollback.test.ts` PI-14 header).
@@ -149,10 +149,10 @@ Each task was committed atomically:
 - **Verification:** `node --test tests/architecture/no-legacy-markers.test.ts` exits 0 (offenders array empty); canary sanity-test confirms a regression triggers test failure.
 - **Committed in:** `57ca692` (Task 2 commit).
 
-**4. [Rule 3 — Blocking] Migrated 6 orchestrator import statements from `presentation/soft-dep.ts` to `platform/pi-api.ts`**
+**4. [Rule 3 -- Blocking] Migrated 6 orchestrator import statements from `presentation/soft-dep.ts` to `platform/pi-api.ts`**
 
 - **Found during:** Task 3 (pre-edit grep for consumers of the trailer helpers).
-- **Issue:** The plan listed only `orchestrators/plugin/install.ts` and `orchestrators/marketplace/remove.ts` as consumers via the barrel. Actual consumers: those 2 PLUS `orchestrators/plugin/reinstall.ts`, `orchestrators/plugin/uninstall.ts`, `orchestrators/plugin/update.ts`, `orchestrators/marketplace/update.ts` — all importing the trailer helpers from `presentation/soft-dep.ts`. Thinning the shim without migrating these would break the build.
+- **Issue:** The plan listed only `orchestrators/plugin/install.ts` and `orchestrators/marketplace/remove.ts` as consumers via the barrel. Actual consumers: those 2 PLUS `orchestrators/plugin/reinstall.ts`, `orchestrators/plugin/uninstall.ts`, `orchestrators/plugin/update.ts`, `orchestrators/marketplace/update.ts` -- all importing the trailer helpers from `presentation/soft-dep.ts`. Thinning the shim without migrating these would break the build.
 - **Fix:** Migrated all 6 import statements to source `subagentWarningIfNeeded` and `mcpAdapterWarningIfNeeded` directly from `../../platform/pi-api.ts`. `import-x/order` auto-reordered the imports (platform before presentation).
 - **Files modified:** All 6 orchestrator files (`orchestrators/plugin/{install,reinstall,uninstall,update}.ts`, `orchestrators/marketplace/{remove,update}.ts`).
 - **Verification:** `npm run check` exits 0; all 1121 tests pass.
@@ -160,7 +160,7 @@ Each task was committed atomically:
 
 ---
 
-**Total deviations:** 4 auto-fixed (4 Rule 3 — Blocking).
+**Total deviations:** 4 auto-fixed (4 Rule 3 -- Blocking).
 **Impact on plan:** All four deviations preserve the plan's intent (cutover gates land in Wave 1; legacy markers cannot be re-introduced after Wave 3) without changing architecture. Three of the four are root-caused by the plan's incomplete grep of existing callsites; the fourth (Block E split) is unavoidable given the file-scope conflict between Gate 1 and Gate 2. No scope creep into Wave 2 migration work.
 
 ## Issues Encountered
@@ -169,7 +169,7 @@ Each task was committed atomically:
 
 ## User Setup Required
 
-None — no external service configuration required.
+None -- no external service configuration required.
 
 ## Next Phase Readiness
 
@@ -192,9 +192,9 @@ None — no external service configuration required.
 - `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts`: FOUND
 - `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts`: FOUND
 - `tests/presentation/soft-dep.test.ts`: FOUND
-- Commit `030f580` (Task 1 — ESLint): FOUND in git log
-- Commit `57ca692` (Task 2 — static-audit test): FOUND in git log
-- Commit `8ff4eef` (Task 3 — soft-dep thinning): FOUND in git log
+- Commit `030f580` (Task 1 -- ESLint): FOUND in git log
+- Commit `57ca692` (Task 2 -- static-audit test): FOUND in git log
+- Commit `8ff4eef` (Task 3 -- soft-dep thinning): FOUND in git log
 - `npm run check`: PASS (1121 tests)
 - `node --test tests/architecture/no-legacy-markers.test.ts`: PASS
 

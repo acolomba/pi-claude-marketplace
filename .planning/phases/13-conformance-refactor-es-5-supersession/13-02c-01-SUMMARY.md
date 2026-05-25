@@ -449,11 +449,11 @@ completed: 2026-05-23
 
 Each task was committed atomically:
 
-1. **Task 1: Rewrite marketplace-list renderer + migrate list orchestrator (CMC-03 / CMC-07 / CMC-10 / CMC-29)** — `4c7ba97` (feat, TDD)
-2. **Task 2: Migrate marketplace/add.ts + marketplace/autoupdate.ts (CMC-30 / CMC-33); extend REASONS set** — `1d4e8b7` (feat, TDD)
-3. **Task 3: Migrate marketplace/update.ts + marketplace/remove.ts (CMC-31 / CMC-15 / CMC-16 / CMC-32)** — `6bf0d7d` (feat, TDD)
-4. **Task 4: Migrate edge handlers to notifyUsageError; delete platform/pi-api.ts legacy trailers** — `1553adf` (feat)
-5. **Catalog fix: drop reload-hint on mp update autoupdate-OFF path** — `1c335ef` (fix, Rule 1)
+1. **Task 1: Rewrite marketplace-list renderer + migrate list orchestrator (CMC-03 / CMC-07 / CMC-10 / CMC-29)** -- `4c7ba97` (feat, TDD)
+2. **Task 2: Migrate marketplace/add.ts + marketplace/autoupdate.ts (CMC-30 / CMC-33); extend REASONS set** -- `1d4e8b7` (feat, TDD)
+3. **Task 3: Migrate marketplace/update.ts + marketplace/remove.ts (CMC-31 / CMC-15 / CMC-16 / CMC-32)** -- `6bf0d7d` (feat, TDD)
+4. **Task 4: Migrate edge handlers to notifyUsageError; delete platform/pi-api.ts legacy trailers** -- `1553adf` (feat)
+5. **Catalog fix: drop reload-hint on mp update autoupdate-OFF path** -- `1c335ef` (fix, Rule 1)
 
 ## Files Created/Modified
 
@@ -461,13 +461,13 @@ See the `key-files.modified:` block in the frontmatter for the complete list and
 
 ### Modified (production)
 
-- `extensions/pi-claude-marketplace/presentation/marketplace-list.ts` — full rewrite on Wave 1 primitives
-- `extensions/pi-claude-marketplace/orchestrators/marketplace/{list,add,autoupdate,update,remove}.ts` — orchestrator migrations
-- `extensions/pi-claude-marketplace/edge/handlers/marketplace/{add,remove,update}.ts` — `notifyError` -> `notifyUsageError`
-- `extensions/pi-claude-marketplace/platform/pi-api.ts` — legacy trailer helpers DELETED
-- `extensions/pi-claude-marketplace/shared/grammar/reasons.ts` — 2 new closed-set REASONS
-- `docs/messaging-style-guide.md` — frontmatter `reasons:` updated to mirror reasons.ts
-- `eslint.config.js` — BLOCK E-2 allow-list trim
+- `extensions/pi-claude-marketplace/presentation/marketplace-list.ts` -- full rewrite on Wave 1 primitives
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/{list,add,autoupdate,update,remove}.ts` -- orchestrator migrations
+- `extensions/pi-claude-marketplace/edge/handlers/marketplace/{add,remove,update}.ts` -- `notifyError` -> `notifyUsageError`
+- `extensions/pi-claude-marketplace/platform/pi-api.ts` -- legacy trailer helpers DELETED
+- `extensions/pi-claude-marketplace/shared/grammar/reasons.ts` -- 2 new closed-set REASONS
+- `docs/messaging-style-guide.md` -- frontmatter `reasons:` updated to mirror reasons.ts
+- `eslint.config.js` -- BLOCK E-2 allow-list trim
 
 ### Modified (test)
 

@@ -50,7 +50,7 @@ key-files:
 key-decisions:
   - "D-13-20 locked: extend STATUS_TOKENS to 15 entries with reinstalled rather than amend the catalog to (installed); amending the catalog would lose observability of which rows the reinstall partition processed"
   - "Discriminant key: explicit `kind` literal (departs from inferred-union codebase precedent at plugin-list.ts:45). RowSpec has 9 variants with meaningful per-variant fields; the explicit discriminant enables grep-ability for Phase 14's drift guard and clean narrowing in the renderer's main switch"
-  - "MSG-SD-3 structural enforcement via field absence: PluginInlineUninstalledRow has no declaresAgents/declaresMcp fields, so the renderer cannot emit the soft-dep marker on (uninstalled) rows (Rule 1 deviation: per the plan must-haves, this constraint also applies to (upgradable) — narrowed PluginCascadeRow.status to exclude upgradable as well)"
+  - "MSG-SD-3 structural enforcement via field absence: PluginInlineUninstalledRow has no declaresAgents/declaresMcp fields, so the renderer cannot emit the soft-dep marker on (uninstalled) rows (Rule 1 deviation: per the plan must-haves, this constraint also applies to (upgradable) -- narrowed PluginCascadeRow.status to exclude upgradable as well)"
   - "Icon constants migrated to compact-line.ts on second-consumer promotion (D-CMC-07 / D-13-15); plugin-list.ts keeps MAX_LINE_COLUMN / truncateColumn66 private per the existing MSG-PL-1 list-only carve-out (sub-wave 2d will revisit the migration if PluginListRow rendering moves into compact-line.ts)"
   - "Composer-internal cascade-summary / cause-chain / manual-recovery / rollback-partial barrel entries deferred to Plan 13-01-02 per the task spec; their files do not exist yet, and adding placeholder entries would break import resolution"
 
@@ -58,7 +58,7 @@ patterns-established:
   - "Pattern 1: discriminated union with explicit kind + exhaustive switch + assertNever sentinel (RowSpec / renderRow). Wave 2 sub-waves consume this shape unchanged"
   - "Pattern 2: structural enforcement of MSG-* rules via per-variant Extract<StatusToken, ...> narrowing AND field absence (declaresAgents/Mcp absent on PluginInlineUninstalledRow)"
   - "Pattern 3: per-row soft-dep injection at composeReasons (renderer probes companion-loaded state via injected SoftDepProbe; emits {requires pi-subagents} / {requires pi-mcp} iff (declares AND unloaded); reasons coexist with caller-supplied reasons in a single comma-joined {} block)"
-  - "Pattern 4: bare-token compact line for empty cases (EmptyToken variant emits (no plugins) / (no marketplaces) with no leading icon, no scope brackets — MSG-ER-1 / CMC-10)"
+  - "Pattern 4: bare-token compact line for empty cases (EmptyToken variant emits (no plugins) / (no marketplaces) with no leading icon, no scope brackets -- MSG-ER-1 / CMC-10)"
   - "Pattern 5: file-private icon constants promoted on second-consumer arrival (compact-line.ts now owns the single ICON_INSTALLED / ICON_AVAILABLE / ICON_UNINSTALLABLE source across surfaces)"
 
 requirements-completed:
@@ -79,7 +79,7 @@ duration: 27min
 completed: 2026-05-23
 ---
 
-# Phase 13 Plan 01-01: Wave 1 Keystone — Compact-Line Grammar Primitives Summary
+# Phase 13 Plan 01-01: Wave 1 Keystone -- Compact-Line Grammar Primitives Summary
 
 **Land the RowSpec discriminated union + grammar-aware renderRow composer + compareByNameThenScope sort helper + STATUS_TOKENS extension to 15 entries (reinstalled per D-13-20); every Wave 2 sub-wave consumes this surface unchanged.**
 
@@ -103,29 +103,29 @@ completed: 2026-05-23
 
 Each task was committed atomically:
 
-1. **Task 1: Extend STATUS_TOKENS to 15 entries (D-13-20)** — `7a0b1da` (feat)
-2. **Task 2: Create presentation/sort.ts with compareByNameThenScope (MSG-GR-3)** — `11139b7` (feat, TDD)
-3. **Task 3: Create presentation/compact-line.ts with RowSpec union + renderRow** — `3c593f2` (feat, TDD)
-4. **Task 4: Update presentation/index.ts barrel with new exports** — `53d3353` (feat)
+1. **Task 1: Extend STATUS_TOKENS to 15 entries (D-13-20)** -- `7a0b1da` (feat)
+2. **Task 2: Create presentation/sort.ts with compareByNameThenScope (MSG-GR-3)** -- `11139b7` (feat, TDD)
+3. **Task 3: Create presentation/compact-line.ts with RowSpec union + renderRow** -- `3c593f2` (feat, TDD)
+4. **Task 4: Update presentation/index.ts barrel with new exports** -- `53d3353` (feat)
 
 _Note: Tasks 2 and 3 are TDD tasks; the RED test was written first and confirmed failing before the implementation landed in the same commit per the task-grained TDD pattern used here._
 
 ## Files Created/Modified
 
-- `extensions/pi-claude-marketplace/presentation/compact-line.ts` — **Created.** The keystone: 9-variant RowSpec union, `renderRow(row, probe)` composer with `switch (row.kind)` + `assertNever`, file-private icon constants (migrated from plugin-list.ts:22-24), per-variant renderers, `composeReasons` per-row soft-dep injection.
-- `extensions/pi-claude-marketplace/presentation/sort.ts` — **Created.** `compareByNameThenScope({name, scope}, {name, scope})` — `localeCompare` with `sensitivity: 'base'` primary, project-before-user tie-breaker secondary. Pure helper; no codebase imports.
-- `extensions/pi-claude-marketplace/presentation/index.ts` — **Modified.** Adds `renderRow` value export + every RowSpec variant interface as type exports + `compareByNameThenScope`.
-- `extensions/pi-claude-marketplace/shared/grammar/status-tokens.ts` — **Modified.** 14 -> 15 entries; `"reinstalled"` inserted after `"updated"`; file-header comment rewritten from "there is NO 15th user-visible token" to cite D-13-20 and the catalog reinstall cascade examples.
-- `docs/messaging-style-guide.md` — **Modified.** Frontmatter `status_tokens:` list + §3 status-tokens table both extended with `reinstalled` byte-equal-positioned after `updated`; lead-in count updated 14 -> 15.
-- `tests/presentation/compact-line.test.ts` — **Created.** 33 assertions covering MSG-GR-1 token order, CMC-02 @marketplace carve-out, CMC-04 reasons block, CMC-06 icon discipline, CMC-07 marketplace icon, CMC-10 empty token, CMC-13 / MSG-SD-1..3 per-row soft-dep, MSG-PL-6 scope-bracket carve-out, MSG-MR-2 manual recovery, MSG-RP-1 rollback child, CMC-34 entity error, `assertNever` exhaustive-switch runtime sentinel; 3 `@ts-expect-error` lines lock MSG-PL-4 / CMC-09 + MSG-SD-3 structural negatives.
-- `tests/presentation/sort.test.ts` — **Created.** 6 assertions covering name primary, case-insensitive equality, project-before-user tie-breaker (both directions), name+scope-tied returns 0, case-insensitive cross-scope, and a heterogeneous-array integration test.
+- `extensions/pi-claude-marketplace/presentation/compact-line.ts` -- **Created.** The keystone: 9-variant RowSpec union, `renderRow(row, probe)` composer with `switch (row.kind)` + `assertNever`, file-private icon constants (migrated from plugin-list.ts:22-24), per-variant renderers, `composeReasons` per-row soft-dep injection.
+- `extensions/pi-claude-marketplace/presentation/sort.ts` -- **Created.** `compareByNameThenScope({name, scope}, {name, scope})` -- `localeCompare` with `sensitivity: 'base'` primary, project-before-user tie-breaker secondary. Pure helper; no codebase imports.
+- `extensions/pi-claude-marketplace/presentation/index.ts` -- **Modified.** Adds `renderRow` value export + every RowSpec variant interface as type exports + `compareByNameThenScope`.
+- `extensions/pi-claude-marketplace/shared/grammar/status-tokens.ts` -- **Modified.** 14 -> 15 entries; `"reinstalled"` inserted after `"updated"`; file-header comment rewritten from "there is NO 15th user-visible token" to cite D-13-20 and the catalog reinstall cascade examples.
+- `docs/messaging-style-guide.md` -- **Modified.** Frontmatter `status_tokens:` list + §3 status-tokens table both extended with `reinstalled` byte-equal-positioned after `updated`; lead-in count updated 14 -> 15.
+- `tests/presentation/compact-line.test.ts` -- **Created.** 33 assertions covering MSG-GR-1 token order, CMC-02 @marketplace carve-out, CMC-04 reasons block, CMC-06 icon discipline, CMC-07 marketplace icon, CMC-10 empty token, CMC-13 / MSG-SD-1..3 per-row soft-dep, MSG-PL-6 scope-bracket carve-out, MSG-MR-2 manual recovery, MSG-RP-1 rollback child, CMC-34 entity error, `assertNever` exhaustive-switch runtime sentinel; 3 `@ts-expect-error` lines lock MSG-PL-4 / CMC-09 + MSG-SD-3 structural negatives.
+- `tests/presentation/sort.test.ts` -- **Created.** 6 assertions covering name primary, case-insensitive equality, project-before-user tie-breaker (both directions), name+scope-tied returns 0, case-insensitive cross-scope, and a heterogeneous-array integration test.
 
 ## Verification Results
 
-- `node --test tests/architecture/grammar-frontmatter.test.ts` — **4/4 pass** (set-equality between STATUS_TOKENS + the binding frontmatter holds after the 15th-entry atomic edit).
-- `node --test tests/presentation/compact-line.test.ts` — **33/33 pass** (every behavior bullet has at least one assertion; structural negatives compile-fail under `tsc --noEmit` and are locked with `@ts-expect-error`).
-- `node --test tests/presentation/sort.test.ts` — **6/6 pass.**
-- `npm run check` — **green: 1077/1077 tests pass**; typecheck clean; ESLint clean; Prettier check clean.
+- `node --test tests/architecture/grammar-frontmatter.test.ts` -- **4/4 pass** (set-equality between STATUS_TOKENS + the binding frontmatter holds after the 15th-entry atomic edit).
+- `node --test tests/presentation/compact-line.test.ts` -- **33/33 pass** (every behavior bullet has at least one assertion; structural negatives compile-fail under `tsc --noEmit` and are locked with `@ts-expect-error`).
+- `node --test tests/presentation/sort.test.ts` -- **6/6 pass.**
+- `npm run check` -- **green: 1077/1077 tests pass**; typecheck clean; ESLint clean; Prettier check clean.
 
 ## Deviations from Plan
 

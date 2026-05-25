@@ -6,7 +6,7 @@
 
 ## Summary
 
-Phase 14 is the v1.3 milestone-close commit. CONTEXT.md has locked D-14-01..D-14-12 — the WHAT and WHERE are settled. This research answers HOW: which APIs, which AST visitor patterns, which file layouts, and what surprises to expect.
+Phase 14 is the v1.3 milestone-close commit. CONTEXT.md has locked D-14-01..D-14-12 -- the WHAT and WHERE are settled. This research answers HOW: which APIs, which AST visitor patterns, which file layouts, and what surprises to expect.
 
 Three findings drive the plan-shape:
 
@@ -14,24 +14,24 @@ Three findings drive the plan-shape:
 
 2. **The `yaml` package is internally CommonJS** (`"type": "commonjs"` in its package.json) but ships a proper `exports.` map with `"types": "./dist/index.d.ts"` and `"node": "./dist/index.js"`. ESM consumers `import { parse } from "yaml"` resolves correctly under Node ≥22 interop. No `createRequire` workaround needed. `[VERIFIED: node_modules/yaml/package.json]`
 
-3. **D-14-04's transaction/rollback.ts refactor path needs revisiting.** D-14-04 offered "accepting a partial-context renderer variant" — having `transaction/rollback.ts` call a presentation/ helper. BUT `eslint.config.js:194-202` BLOCK C zone explicitly forbids `transaction/` from importing `presentation/`. So option (b) violates layering. The recommended path (this research): MOVE rendering OUT of `transaction/rollback.ts` and INTO calling orchestrators. The transaction layer keeps producing structured `RunPhasesResult` data; orchestrators that catch the error call `presentation/rollback-partial.ts` themselves. This honors D-11, satisfies CMC-38 structurally, and the MSG-RP-1 ESLint rule then catches any re-introduction of hand-composed literals.
+3. **D-14-04's transaction/rollback.ts refactor path needs revisiting.** D-14-04 offered "accepting a partial-context renderer variant" -- having `transaction/rollback.ts` call a presentation/ helper. BUT `eslint.config.js:194-202` BLOCK C zone explicitly forbids `transaction/` from importing `presentation/`. So option (b) violates layering. The recommended path (this research): MOVE rendering OUT of `transaction/rollback.ts` and INTO calling orchestrators. The transaction layer keeps producing structured `RunPhasesResult` data; orchestrators that catch the error call `presentation/rollback-partial.ts` themselves. This honors D-11, satisfies CMC-38 structurally, and the MSG-RP-1 ESLint rule then catches any re-introduction of hand-composed literals.
 
-**Primary recommendation:** Adopt the typescript-eslint v8 + ESLint v10 canonical plugin pattern (`ESLintUtils.RuleCreator` + flat-config `plugins: { msg: { rules: { ... } } }` + per-rule `files:` blocks). Use `@typescript-eslint/rule-tester` with the `node:test` adapter shim (RuleTester static-property assignment in a per-test-file preamble, NOT a `--import` flag — the project's existing test glob doesn't use `--import` and adding one would complicate the package.json scripts). Land the YAML loader as a `.js` file (not `.ts`) under `tests/lint-rules/lib/frontmatter.js` to dodge the `parserOptions.projectService` typecheck overhead on what is fundamentally test infrastructure code. Keep all 34 rule files as `.js` for the same reason — they're consumed by ESLint, not by the TypeScript compiler.
+**Primary recommendation:** Adopt the typescript-eslint v8 + ESLint v10 canonical plugin pattern (`ESLintUtils.RuleCreator` + flat-config `plugins: { msg: { rules: { ... } } }` + per-rule `files:` blocks). Use `@typescript-eslint/rule-tester` with the `node:test` adapter shim (RuleTester static-property assignment in a per-test-file preamble, NOT a `--import` flag -- the project's existing test glob doesn't use `--import` and adding one would complicate the package.json scripts). Land the YAML loader as a `.js` file (not `.ts`) under `tests/lint-rules/lib/frontmatter.js` to dodge the `parserOptions.projectService` typecheck overhead on what is fundamentally test infrastructure code. Keep all 34 rule files as `.js` for the same reason -- they're consumed by ESLint, not by the TypeScript compiler.
 
 ## Architectural Responsibility Map
 
 | Capability | Primary Tier | Secondary Tier | Rationale |
 |------------|-------------|----------------|-----------|
-| MSG-* rule definitions (AST visitors) | tests/lint-rules/ (NEW) | — | Test infrastructure; not shipped in `extensions/pi-claude-marketplace/**`. Lives under `tests/` per the established no-legacy-markers and catalog-uat precedent |
-| Frontmatter loader (memoized YAML reader) | tests/lint-rules/lib/ | — | Test-only dependency on `yaml` package; never imported from extension code |
-| ESLint plugin registration | eslint.config.js (root) | — | Flat-config is the single entry point; per-rule `files:` patterns live here |
-| Per-rule RuleTester companion tests | tests/lint-rules/ (NEW, co-located) | — | D-14-11 locks co-location with the rule files |
-| Registry parity test | tests/architecture/ | — | Joins existing `grammar-frontmatter.test.ts`, `no-legacy-markers.test.ts`, `catalog-uat.test.ts` family |
-| Closed-set literal-union types (markers, pattern_classes) | extensions/pi-claude-marketplace/shared/grammar/ | — | Phase 12 D-CMC-01 / D-CMC-08 precedent: one closed-set-per-file in `shared/grammar/` |
+| MSG-* rule definitions (AST visitors) | tests/lint-rules/ (NEW) | -- | Test infrastructure; not shipped in `extensions/pi-claude-marketplace/**`. Lives under `tests/` per the established no-legacy-markers and catalog-uat precedent |
+| Frontmatter loader (memoized YAML reader) | tests/lint-rules/lib/ | -- | Test-only dependency on `yaml` package; never imported from extension code |
+| ESLint plugin registration | eslint.config.js (root) | -- | Flat-config is the single entry point; per-rule `files:` patterns live here |
+| Per-rule RuleTester companion tests | tests/lint-rules/ (NEW, co-located) | -- | D-14-11 locks co-location with the rule files |
+| Registry parity test | tests/architecture/ | -- | Joins existing `grammar-frontmatter.test.ts`, `no-legacy-markers.test.ts`, `catalog-uat.test.ts` family |
+| Closed-set literal-union types (markers, pattern_classes) | extensions/pi-claude-marketplace/shared/grammar/ | -- | Phase 12 D-CMC-01 / D-CMC-08 precedent: one closed-set-per-file in `shared/grammar/` |
 | ManualRecoveryLine emission (CMC-16) | orchestrators/plugin/reinstall.ts | presentation/manual-recovery.ts | Orchestrator owns context (plugin id, scope, recovery instructions); presentation renders |
 | notifyUsageError migration (CMC-34) | edge/handlers/{plugin,marketplace}/*.ts | shared/notify.ts | Edge handlers are the argument-validation surface; notify wrapper exists in shared/ |
 | transaction/rollback.ts refactor (WARNING) | orchestrators that catch the rollback error | presentation/rollback-partial.ts | Layer-clean: transaction continues to produce data; orchestrators render |
-| MARKETPLACE_LABEL_PROBE dedup (WARNING) | extensions/pi-claude-marketplace/shared/constants/ (NEW dir) | — | Treated as a sentinel object, not a closed-set token; `shared/grammar/` is for the latter |
+| MARKETPLACE_LABEL_PROBE dedup (WARNING) | extensions/pi-claude-marketplace/shared/constants/ (NEW dir) | -- | Treated as a sentinel object, not a closed-set token; `shared/grammar/` is for the latter |
 
 ## Standard Stack
 
@@ -58,7 +58,7 @@ Three findings drive the plan-shape:
 |------------|-----------|----------|
 | `@typescript-eslint/rule-tester` | ESLint's built-in `RuleTester` from `eslint` package | Built-in works but requires manual parser configuration on every test file; the `@typescript-eslint/rule-tester` variant pre-wires the parser and gives better error messages for typed rules. Cost is +1 devDep (~50KB). RECOMMEND: install the typescript-eslint variant |
 | `yaml@^2.8.3` | `js-yaml@^4.x`; `gray-matter` (frontmatter-specific) | js-yaml is older API style; gray-matter pulls in additional deps for templating not needed here. `yaml` is already in tree as transitive |
-| `.js` rule files | `.ts` rule files (native TS strip on Node 22.18+) | TS would give type-checking on the AST handlers, but would also force the rule files through the project's strict typecheck. The `.js` choice keeps test infrastructure out of `tsconfig` coverage. The Discretion item in CONTEXT.md leaves this to the planner — RECOMMEND `.js` for friction-reduction |
+| `.js` rule files | `.ts` rule files (native TS strip on Node 22.18+) | TS would give type-checking on the AST handlers, but would also force the rule files through the project's strict typecheck. The `.js` choice keeps test infrastructure out of `tsconfig` coverage. The Discretion item in CONTEXT.md leaves this to the planner -- RECOMMEND `.js` for friction-reduction |
 | Single registry test | Per-rule registration assertions | Single test is simpler; per-rule would scale poorly past 34. RECOMMEND single test |
 
 **Installation:**
@@ -68,15 +68,15 @@ npm install --save-dev @typescript-eslint/rule-tester yaml
 
 **Version verification (2026-05-24):**
 
-- `node_modules/yaml/package.json` reports `"version": "2.8.3"` — transitive dep already on disk; promote to direct devDep. `[VERIFIED: filesystem inspection]`
+- `node_modules/yaml/package.json` reports `"version": "2.8.3"` -- transitive dep already on disk; promote to direct devDep. `[VERIFIED: filesystem inspection]`
 - `node_modules/@typescript-eslint/` lists `utils/`, `parser/`, `eslint-plugin/`, etc. but no `rule-tester/`. `[VERIFIED: filesystem listing]`
 
 ## Package Legitimacy Audit
 
 | Package | Registry | Age | Downloads | Source Repo | slopcheck | Disposition |
 |---------|----------|-----|-----------|-------------|-----------|-------------|
-| `@typescript-eslint/rule-tester` | npm | 4+ yrs | ~3M/wk | github.com/typescript-eslint/typescript-eslint | not run (sibling of already-installed `@typescript-eslint/utils`) | Approved — same monorepo as `typescript-eslint@^8.59.1` already in tree |
-| `yaml` | npm | 9+ yrs | ~50M/wk | github.com/eemeli/yaml | not run (already on disk as transitive) | Approved — present as `node_modules/yaml/` at v2.8.3 |
+| `@typescript-eslint/rule-tester` | npm | 4+ yrs | ~3M/wk | github.com/typescript-eslint/typescript-eslint | not run (sibling of already-installed `@typescript-eslint/utils`) | Approved -- same monorepo as `typescript-eslint@^8.59.1` already in tree |
+| `yaml` | npm | 9+ yrs | ~50M/wk | github.com/eemeli/yaml | not run (already on disk as transitive) | Approved -- present as `node_modules/yaml/` at v2.8.3 |
 
 **Packages removed due to slopcheck [SLOP] verdict:** none.
 **Packages flagged as suspicious [SUS]:** none.
@@ -234,13 +234,13 @@ function sourceReferencesUsage(node) {
 }
 ```
 
-This rule's `files:` scope in `eslint.config.js` is `extensions/pi-claude-marketplace/edge/handlers/**/*.ts` — narrowest valid pattern per D-14-08. After CMC-34 closure (Wave 2), the existing offending callsites are migrated; the rule then catches any reintroduction.
+This rule's `files:` scope in `eslint.config.js` is `extensions/pi-claude-marketplace/edge/handlers/**/*.ts` -- narrowest valid pattern per D-14-08. After CMC-34 closure (Wave 2), the existing offending callsites are migrated; the rule then catches any reintroduction.
 
 **Source:** Pattern derived from typescript-eslint custom-rules docs `[CITED: https://typescript-eslint.io/developers/custom-rules/]` cross-referenced with `@typescript-eslint/utils` source under `node_modules/@typescript-eslint/utils/`.
 
 ### Pattern 2: Meta-assertion rule (no AST visitor)
 
-**What:** A rule that exists to satisfy the registry parity test and cite the structural enforcement mechanism in metadata. Implements an empty `create()` returning `{}` (or a no-op `Program` visitor — see Pitfall 8). The `meta.docs.description` cites the file/test that actually enforces the rule.
+**What:** A rule that exists to satisfy the registry parity test and cite the structural enforcement mechanism in metadata. Implements an empty `create()` returning `{}` (or a no-op `Program` visitor -- see Pitfall 8). The `meta.docs.description` cites the file/test that actually enforces the rule.
 
 **When to use:** Per D-14-09, for MSG-* IDs that are structurally enforced (the TypeScript type system, or `tests/architecture/catalog-uat.test.ts`, already enforces them). The rule's `meta` documents the cross-reference; the rule does no AST work.
 
@@ -289,7 +289,7 @@ export default createRule({
 
 **Trade-off discussion (per research focus item #5):**
 
-Do meta-assertion rules need to RUN against the codebase? No. The registry parity test asserts existence + registration; the rule body does no AST work. ESLint will load and run the rule on every file but the empty visitor returns no reports, so the runtime cost is one function-call per file — negligible. The benefit is uniform discoverability: every MSG-* ID in the style guide has a file under `tests/lint-rules/` and a registration in `eslint.config.js`. The reviewer mental model holds.
+Do meta-assertion rules need to RUN against the codebase? No. The registry parity test asserts existence + registration; the rule body does no AST work. ESLint will load and run the rule on every file but the empty visitor returns no reports, so the runtime cost is one function-call per file -- negligible. The benefit is uniform discoverability: every MSG-* ID in the style guide has a file under `tests/lint-rules/` and a registration in `eslint.config.js`. The reviewer mental model holds.
 
 **Which MSG-* IDs are meta-assertion?** From D-14-09:
 
@@ -305,16 +305,16 @@ Do meta-assertion rules need to RUN against the codebase? No. The registry parit
 
 **Which MSG-* IDs are full-impl?** From D-14-09 (the rules that need real AST coverage):
 
-- **MSG-SR-1..7**: `notifySuccess` / `notifyWarning` / `notifyError` / `notifyUsageError` callsite routing — AST CallExpression visitor inspecting callee identifier + arguments
-- **MSG-MR-1..2**: manual-recovery anchor emission — detect any string literal matching `MANUAL RECOVERY REQUIRED:` outside the renderer; assert `ManualRecoveryLine` is the only emission path
-- **MSG-RP-1**: rollback-partial composition — detect hand-composed `(failed) {rollback partial}` strings outside `presentation/rollback-partial.ts`. After Wave 3's `transaction/rollback.ts` refactor, this rule passes.
-- **MSG-CC-1**: cause-chain trailer — detect manual `Cause:` / `cause:` string composition outside `presentation/cause-chain.ts`
-- **MSG-NC-1**: entity-shaped non-cascade errors — detect literal `unicode-block-icon <name>` patterns outside the renderer
-- **MSG-NC-2**: blank-line separator between message and USAGE block — detect `notifyError(ctx, msg + "\n" + USAGE)` patterns (overlaps MSG-SR-7's detection; MSG-SR-7 is the canonical implementation, MSG-NC-2 cites it)
-- **MSG-RH-1**: reload-hint trailer — detect literal `Run /reload` and `/reload to <verb>` strings outside `presentation/reload-hint.ts`
-- **MSG-LC-1**: console.warn sentence form — detect any `console.warn` outside `persistence/migrate.ts:178` (overlaps existing `no-restricted-syntax` rule)
-- **MSG-LC-2**: eslint discipline — detect any `eslint-disable*` comment touching `no-restricted-syntax` or `no-console` outside the single migrate.ts callsite
-- **MSG-SD-1..2**: soft-dep emission predicate — detect hand-composed `{requires pi-subagents}` / `{requires pi-mcp}` strings outside `presentation/compact-line.ts::composeReasons`
+- **MSG-SR-1..7**: `notifySuccess` / `notifyWarning` / `notifyError` / `notifyUsageError` callsite routing -- AST CallExpression visitor inspecting callee identifier + arguments
+- **MSG-MR-1..2**: manual-recovery anchor emission -- detect any string literal matching `MANUAL RECOVERY REQUIRED:` outside the renderer; assert `ManualRecoveryLine` is the only emission path
+- **MSG-RP-1**: rollback-partial composition -- detect hand-composed `(failed) {rollback partial}` strings outside `presentation/rollback-partial.ts`. After Wave 3's `transaction/rollback.ts` refactor, this rule passes.
+- **MSG-CC-1**: cause-chain trailer -- detect manual `Cause:` / `cause:` string composition outside `presentation/cause-chain.ts`
+- **MSG-NC-1**: entity-shaped non-cascade errors -- detect literal `unicode-block-icon <name>` patterns outside the renderer
+- **MSG-NC-2**: blank-line separator between message and USAGE block -- detect `notifyError(ctx, msg + "\n" + USAGE)` patterns (overlaps MSG-SR-7's detection; MSG-SR-7 is the canonical implementation, MSG-NC-2 cites it)
+- **MSG-RH-1**: reload-hint trailer -- detect literal `Run /reload` and `/reload to <verb>` strings outside `presentation/reload-hint.ts`
+- **MSG-LC-1**: console.warn sentence form -- detect any `console.warn` outside `persistence/migrate.ts:178` (overlaps existing `no-restricted-syntax` rule)
+- **MSG-LC-2**: eslint discipline -- detect any `eslint-disable*` comment touching `no-restricted-syntax` or `no-console` outside the single migrate.ts callsite
+- **MSG-SD-1..2**: soft-dep emission predicate -- detect hand-composed `{requires pi-subagents}` / `{requires pi-mcp}` strings outside `presentation/compact-line.ts::composeReasons`
 
 ### Pattern 3: Memoized YAML frontmatter loader
 
@@ -388,13 +388,13 @@ export const MARKERS_FRONTMATTER = loadFrontmatter().MARKERS_FRONTMATTER;
 export const PATTERN_CLASSES_FRONTMATTER = loadFrontmatter().PATTERN_CLASSES_FRONTMATTER;
 ```
 
-**Why `readFileSync` not `readFile`:** The loader runs at ESM import time. Per the memoization design, all four named exports must resolve synchronously when imported by a rule file. The cost is one synchronous read per Node process per `npm run check` invocation — negligible (~5KB file, <1ms). `[ASSUMED — based on Node ≥22 fs.readFileSync performance characteristics]`
+**Why `readFileSync` not `readFile`:** The loader runs at ESM import time. Per the memoization design, all four named exports must resolve synchronously when imported by a rule file. The cost is one synchronous read per Node process per `npm run check` invocation -- negligible (~5KB file, <1ms). `[ASSUMED -- based on Node ≥22 fs.readFileSync performance characteristics]`
 
 **Why a separate `loadFrontmatter()` function:** The loader can be invoked from tests directly (the migrated `grammar-frontmatter.test.ts` calls it). Module-scope const initialization is sufficient for the rule-file consumers.
 
 ### Pattern 4: Per-rule `files:` scope in flat config
 
-**What:** Each MSG-* rule registered in its own flat-config block with a narrowly-scoped `files:` pattern. Multiple blocks accumulate; ESLint's last-wins applies for conflicting rule settings (none expected here — each rule has a single registration).
+**What:** Each MSG-* rule registered in its own flat-config block with a narrowly-scoped `files:` pattern. Multiple blocks accumulate; ESLint's last-wins applies for conflicting rule settings (none expected here -- each rule has a single registration).
 
 **Example (additions to eslint.config.js):**
 
@@ -686,7 +686,7 @@ test("D-14-12 / CMC-38: rule count is 34 (matches style-guide MSG-* ID count)", 
 });
 ```
 
-**Reading `eslint.config.js` as text not via dynamic import:** The test treats the config file as a source artifact and greps for registration strings. This avoids the need to evaluate ESM (which would also avoid the `parserOptions.projectService` overhead for the config file). Fragile to format reflows in the config file — but the test is run on every `npm run check`, so any format reflow that breaks the regex is caught immediately. RECOMMEND keeping the registration strings consistent (always `"msg/<name>"` with double quotes).
+**Reading `eslint.config.js` as text not via dynamic import:** The test treats the config file as a source artifact and greps for registration strings. This avoids the need to evaluate ESM (which would also avoid the `parserOptions.projectService` overhead for the config file). Fragile to format reflows in the config file -- but the test is run on every `npm run check`, so any format reflow that breaks the regex is caught immediately. RECOMMEND keeping the registration strings consistent (always `"msg/<name>"` with double quotes).
 
 ### Anti-Patterns to Avoid
 
@@ -706,16 +706,16 @@ test("D-14-12 / CMC-38: rule count is 34 (matches style-guide MSG-* ID count)", 
 | Frontmatter to Set parity per rule | Each rule re-reads + re-parses the markdown file | Module-scope memoized loader at `tests/lint-rules/lib/frontmatter.js` | 34 rules x N files per lint run x re-parse = wasted IO; memoize once per Node process |
 | Style-guide MSG-* ID enumeration | Hardcoded list in the registry test | Body-scan via `/MSG-[A-Z]+-[0-9]+/g` regex | D-14-12 locks body-scan; honors SC #3 |
 
-**Key insight:** The MSG-* drift guard is fundamentally an *introspection* problem (does my code match the contract?) not a *transformation* problem. typescript-eslint AST visitors are the right primitive — they already know how to walk source code, compose error messages with source locations, and integrate with ESLint's existing reporting. Reinventing this with raw regex over `fs.readFile` is what the no-legacy-markers test does today; it's adequate for the 5-marker case but doesn't scale to 34 callsite-level rules.
+**Key insight:** The MSG-* drift guard is fundamentally an *introspection* problem (does my code match the contract?) not a *transformation* problem. typescript-eslint AST visitors are the right primitive -- they already know how to walk source code, compose error messages with source locations, and integrate with ESLint's existing reporting. Reinventing this with raw regex over `fs.readFile` is what the no-legacy-markers test does today; it's adequate for the 5-marker case but doesn't scale to 34 callsite-level rules.
 
 ## Runtime State Inventory
 
-This is not a rename/refactor phase — it's an additive phase that lands new infrastructure. The only "runtime state" affected is the npm dep graph (one new direct devDep: `@typescript-eslint/rule-tester`; one transitive-to-direct promotion: `yaml`).
+This is not a rename/refactor phase -- it's an additive phase that lands new infrastructure. The only "runtime state" affected is the npm dep graph (one new direct devDep: `@typescript-eslint/rule-tester`; one transitive-to-direct promotion: `yaml`).
 
 | Category | Items Found | Action Required |
 |----------|-------------|------------------|
-| Stored data | None | none — Phase 14 doesn't touch any datastore |
-| Live service config | None | none — Phase 14 doesn't touch any external service |
+| Stored data | None | none -- Phase 14 doesn't touch any datastore |
+| Live service config | None | none -- Phase 14 doesn't touch any external service |
 | OS-registered state | None | none |
 | Secrets/env vars | None | none |
 | Build artifacts | `package-lock.json` regenerates after dep install | One `npm install -D` run; lockfile committed |
@@ -730,7 +730,7 @@ This is not a rename/refactor phase — it's an additive phase that lands new in
 
 **Why it happens:** `@typescript-eslint/rule-tester` does not auto-detect node:test.
 
-**How to avoid:** Each `*.test.js` file under `tests/lint-rules/` MUST include the 4-line `RuleTester.afterAll = test.after; RuleTester.describe = ...` shim. Place this above the rule import for visibility. Alternative — package.json `test` script gets `--import` of a shared setup file — adds friction; recommend the per-file shim.
+**How to avoid:** Each `*.test.js` file under `tests/lint-rules/` MUST include the 4-line `RuleTester.afterAll = test.after; RuleTester.describe = ...` shim. Place this above the rule import for visibility. Alternative -- package.json `test` script gets `--import` of a shared setup file -- adds friction; recommend the per-file shim.
 
 **Warning signs:** `node --test tests/lint-rules/msg-sr-7-usage-error-routing.test.js` returns 0 with no test output.
 
@@ -738,7 +738,7 @@ This is not a rename/refactor phase — it's an additive phase that lands new in
 
 ### Pitfall 2: parserOptions.projectService trips on local plugin files
 
-**What goes wrong:** The flat-config block at `eslint.config.js:32-40` enables `parserOptions: { projectService: true, tsconfigRootDir: ... }` for `**/*.{js,ts}` files. The local plugin's `.js` rule files are in `tests/lint-rules/` — which may not be in `tsconfig.json`'s `include`. ESLint refuses to run with a "not in tsconfig" error.
+**What goes wrong:** The flat-config block at `eslint.config.js:32-40` enables `parserOptions: { projectService: true, tsconfigRootDir: ... }` for `**/*.{js,ts}` files. The local plugin's `.js` rule files are in `tests/lint-rules/` -- which may not be in `tsconfig.json`'s `include`. ESLint refuses to run with a "not in tsconfig" error.
 
 **Why it happens:** `projectService` requires every TS-aware file to be reachable from `tsconfig.json`.
 
@@ -761,7 +761,7 @@ This is not a rename/refactor phase — it's an additive phase that lands new in
 
 **Why it happens:** Node's ESM-from-CJS interop is heuristic.
 
-**How to avoid:** Use the form `import { parse } from "yaml"` — the package's `exports.` map declares the proper `"types"` and `"node"` entries, and `parse` is a top-level named export from `dist/index.js`. If named import fails (unlikely), fall back to `import yaml from "yaml"; yaml.parse(...)`.
+**How to avoid:** Use the form `import { parse } from "yaml"` -- the package's `exports.` map declares the proper `"types"` and `"node"` entries, and `parse` is a top-level named export from `dist/index.js`. If named import fails (unlikely), fall back to `import yaml from "yaml"; yaml.parse(...)`.
 
 **Warning signs:** `SyntaxError: The requested module 'yaml' does not provide an export named 'parse'`.
 
@@ -769,15 +769,15 @@ This is not a rename/refactor phase — it's an additive phase that lands new in
 
 ### Pitfall 4: notifyUsageError migration leaves trailing newline
 
-**What goes wrong:** Today's `notifyError(ctx, msg + "\n" + USAGE)` produces `msg\nUSAGE`. Migrating to `notifyUsageError(ctx, msg, USAGE)` correctly produces `msg\n\nUSAGE`. But the message string in some callsites — e.g., `bootstrap.ts:48-50` — already includes its own trailing `\n` before the USAGE concatenation. Migration may leave a `msg\n\n\nUSAGE` (triple newline) if not careful.
+**What goes wrong:** Today's `notifyError(ctx, msg + "\n" + USAGE)` produces `msg\nUSAGE`. Migrating to `notifyUsageError(ctx, msg, USAGE)` correctly produces `msg\n\nUSAGE`. But the message string in some callsites -- e.g., `bootstrap.ts:48-50` -- already includes its own trailing `\n` before the USAGE concatenation. Migration may leave a `msg\n\n\nUSAGE` (triple newline) if not careful.
 
 **Why it happens:** Mixed concatenation styles across 6 handlers.
 
 **How to avoid:** Wave 2 plan must inspect each of the 13 callsites and strip any trailing `\n` from the message string before passing it as the 2nd arg to `notifyUsageError`. The MSG-NC-2 rule (full-impl, Wave 3) catches the test cases that planted-fail this.
 
-**Warning signs:** `tests/edge/router.test.ts` would catch the byte-shape today if it asserted `\n\n` byte-exactly — but per the audit, it doesn't. Phase 14's drift guard rule (msg-nc-2) is the structural catch.
+**Warning signs:** `tests/edge/router.test.ts` would catch the byte-shape today if it asserted `\n\n` byte-exactly -- but per the audit, it doesn't. Phase 14's drift guard rule (msg-nc-2) is the structural catch.
 
-### Pitfall 5: reinstall.ts emission of ManualRecoveryLine — where in the pipeline?
+### Pitfall 5: reinstall.ts emission of ManualRecoveryLine -- where in the pipeline?
 
 **What goes wrong:** The temptation is to emit the `ManualRecoveryLine` from `outcomeToCascadeRow` (reinstall.ts:498). But that function builds a `PluginCascadeRow`, not a top-level line. Emitting both shapes from one function violates the function's single responsibility and the MSG-MR-1 "separate top-level compact line, preceded by a blank line, independent of whatever operation triggered them" contract.
 
@@ -789,11 +789,11 @@ This is not a rename/refactor phase — it's an additive phase that lands new in
 
 ### Pitfall 6: transaction/rollback.ts cannot import from presentation/
 
-**What goes wrong:** D-14-04 offered two paths to refactor `transaction/rollback.ts:56-62` through the renderer. Option (b) — "accepting a partial-context renderer variant" — would have `transaction/rollback.ts` call `renderRollbackPartialBody` from `presentation/`. But `eslint.config.js:194-202` BLOCK C zone explicitly forbids `transaction/` from importing `presentation/`.
+**What goes wrong:** D-14-04 offered two paths to refactor `transaction/rollback.ts:56-62` through the renderer. Option (b) -- "accepting a partial-context renderer variant" -- would have `transaction/rollback.ts` call `renderRollbackPartialBody` from `presentation/`. But `eslint.config.js:194-202` BLOCK C zone explicitly forbids `transaction/` from importing `presentation/`.
 
 **Why it happens:** Layering constraint per D-11 / IL-2.
 
-**How to avoid:** Adopt the recommended path (this research) — move rendering responsibility OUT of `transaction/rollback.ts` and INTO calling orchestrators. The `formatRollbackError` function continues to return an `Error` carrying `RunPhasesResult` data in its `cause` chain; callers extract the data via a new helper exported from `transaction/phase-ledger.ts` (which orchestrators already import via `transaction/`) and render via `presentation/rollback-partial.ts` themselves. Mechanically: change `formatRollbackError`'s signature to NOT compose the body, and add a new orchestrator-facing helper.
+**How to avoid:** Adopt the recommended path (this research) -- move rendering responsibility OUT of `transaction/rollback.ts` and INTO calling orchestrators. The `formatRollbackError` function continues to return an `Error` carrying `RunPhasesResult` data in its `cause` chain; callers extract the data via a new helper exported from `transaction/phase-ledger.ts` (which orchestrators already import via `transaction/`) and render via `presentation/rollback-partial.ts` themselves. Mechanically: change `formatRollbackError`'s signature to NOT compose the body, and add a new orchestrator-facing helper.
 
 **Alternative considered:** Add `presentation/` to the allowed-from list for `transaction/` in `eslint.config.js`. Rejected: this widens the D-11 layering contract for a single use case and forfeits a structural protection.
 
@@ -801,13 +801,13 @@ This is not a rename/refactor phase — it's an additive phase that lands new in
 
 **Source:** `[VERIFIED: eslint.config.js:194-202]`
 
-### Pitfall 7: MARKETPLACE_LABEL_PROBE location — grammar/ or constants/?
+### Pitfall 7: MARKETPLACE_LABEL_PROBE location -- grammar/ or constants/?
 
-**What goes wrong:** D-14-05 leaves the location open. The constant is NOT a closed-set token (it's a `SoftDepProbe` shape constant — see usage at `presentation/marketplace-list.ts:74-77`); it's a sentinel object.
+**What goes wrong:** D-14-05 leaves the location open. The constant is NOT a closed-set token (it's a `SoftDepProbe` shape constant -- see usage at `presentation/marketplace-list.ts:74-77`); it's a sentinel object.
 
 **Why it happens:** Phase 12's `shared/grammar/` directory was scoped to closed-set token literal-unions (`STATUS_TOKENS`, `REASONS`). A non-set sentinel doesn't fit semantically.
 
-**How to avoid:** Create `extensions/pi-claude-marketplace/shared/constants/` as a NEW sibling directory. Put `marketplace-label-probe.ts` there exporting the constant. The three current call sites — `presentation/marketplace-list.ts:74`, `orchestrators/marketplace/autoupdate.ts:60`, `orchestrators/marketplace/add.ts:81` — import from the new module. This keeps `shared/grammar/` strictly scoped to closed-set tokens.
+**How to avoid:** Create `extensions/pi-claude-marketplace/shared/constants/` as a NEW sibling directory. Put `marketplace-label-probe.ts` there exporting the constant. The three current call sites -- `presentation/marketplace-list.ts:74`, `orchestrators/marketplace/autoupdate.ts:60`, `orchestrators/marketplace/add.ts:81` -- import from the new module. This keeps `shared/grammar/` strictly scoped to closed-set tokens.
 
 **Warning signs:** Putting it in `shared/grammar/` would force a parallel `as const` literal-union design on what is a single object value, awkward.
 
@@ -823,7 +823,7 @@ This is not a rename/refactor phase — it's an additive phase that lands new in
 
 **Warning signs:** ESLint warning along the lines of `the rule has no selectors`.
 
-**Source:** `[ASSUMED — based on typescript-eslint rule-creation guidance; not formally tested in this research]`
+**Source:** `[ASSUMED -- based on typescript-eslint rule-creation guidance; not formally tested in this research]`
 
 ### Pitfall 9: per-file ignores for composer files
 
@@ -841,7 +841,7 @@ This is not a rename/refactor phase — it's an additive phase that lands new in
 
 **Why it happens:** The orchestrator test asserts the cascade row; the new emission path needs new fixtures.
 
-**How to avoid:** Sequence the waves in commit order even if plans are drafted in parallel. Wave 1 lands first; Wave 2 rebases onto Wave 1. The audit-driven router byte-exact test (Gap Closure Plan #4 in `.planning/v1.3-MILESTONE-AUDIT.md:200`) is satisfied by the MSG-NC-2 rule's RuleTester invalid cases — so no new edge test is strictly needed (D-14-02 lock).
+**How to avoid:** Sequence the waves in commit order even if plans are drafted in parallel. Wave 1 lands first; Wave 2 rebases onto Wave 1. The audit-driven router byte-exact test (Gap Closure Plan #4 in `.planning/v1.3-MILESTONE-AUDIT.md:200`) is satisfied by the MSG-NC-2 rule's RuleTester invalid cases -- so no new edge test is strictly needed (D-14-02 lock).
 
 ## Code Examples
 
@@ -988,7 +988,7 @@ This is a sketch; the planner picks the exact shape. Key invariants:
 
 1. The cascade row's `(failed) {rollback partial}` semantics are PRESERVED (catalog binding).
 2. The manual-recovery anchor is a SEPARATE compact line preceded by a blank line (MSG-MR-1).
-3. `renderManualRecovery` from `presentation/manual-recovery.ts` IS the emission path — no new composer.
+3. `renderManualRecovery` from `presentation/manual-recovery.ts` IS the emission path -- no new composer.
 
 ### transaction/rollback.ts refactor (orchestrator-owns-rendering approach)
 
@@ -1034,7 +1034,7 @@ export function formatRollbackError(
 
 Orchestrators that call `formatRollbackError` now receive the structured `rollbackPartials` array and call `renderRollbackPartial` (or a new bare-row helper) from `presentation/rollback-partial.ts` to compose the body before passing to `notifyError`. The audit-flagged hand-composed literal at line 57 GOES AWAY entirely.
 
-**Note for planner:** This refactor has user-visible behavior implications — `originalError.message` no longer carries the rollback-partial body. Every caller must be updated. The audit (line 65) says the token strings are correct today; the refactor doesn't change WHAT is rendered, only WHERE. Catalog UAT byte-equality assertions catch any regression.
+**Note for planner:** This refactor has user-visible behavior implications -- `originalError.message` no longer carries the rollback-partial body. Every caller must be updated. The audit (line 65) says the token strings are correct today; the refactor doesn't change WHAT is rendered, only WHERE. Catalog UAT byte-equality assertions catch any regression.
 
 ## State of the Art
 
@@ -1058,7 +1058,7 @@ Orchestrators that call `formatRollbackError` now receive the structured `rollba
 |---|-------|---------|---------------|
 | A1 | `@typescript-eslint/rule-tester@8.59.1` is API-stable with `@typescript-eslint/utils@8.59.1` (same monorepo, same version line) | Standard Stack | If versions diverge, RuleTester may not understand the rule shape produced by RuleCreator. Both are released in lockstep from the typescript-eslint monorepo; very low risk |
 | A2 | Empty `create()` returning `{}` is valid for ESLint v10 (meta-assertion rules) | Pattern 2 | If invalid, add `Program: () => {}` no-op visitor; tested at the Pitfall 8 mitigation level. Source not formally verified |
-| A3 | `parserOptions.projectService: true` in `eslint.config.js:37` will refuse to lint files outside `tsconfig.json`'s include glob | Pitfall 2 | If wrong, the `tseslint.configs.disableTypeChecked` override is unnecessary. Cost is zero — adding the override is harmless |
+| A3 | `parserOptions.projectService: true` in `eslint.config.js:37` will refuse to lint files outside `tsconfig.json`'s include glob | Pitfall 2 | If wrong, the `tseslint.configs.disableTypeChecked` override is unnecessary. Cost is zero -- adding the override is harmless |
 | A4 | `import { parse } from "yaml"` resolves correctly under Node 22+ ESM/CJS interop | Pattern 3 | If wrong, fall back to `import yaml from "yaml"; yaml.parse(...)`. Both forms documented in the yaml package |
 | A5 | `originalError.message` mutation by `formatRollbackError` is the binding contract; the audit-flagged literal moves to orchestrator side without user-visible change | transaction/rollback.ts refactor | If wrong, catalog UAT byte-equality test catches any regression |
 | A6 | Wave 3 plan count of 3-4 is sufficient for plan decomposition | Plan decomposition | If wrong, plans are restructured during plan-phase. The wave structure is binding (D-14-03); the plan count is discretionary |
@@ -1078,7 +1078,7 @@ Orchestrators that call `formatRollbackError` now receive the structured `rollba
 
 ## Open Questions
 
-**None — all answered.** The locked decisions in CONTEXT.md D-14-01..D-14-12 settled WHAT and WHERE; this research answered HOW.
+**None -- all answered.** The locked decisions in CONTEXT.md D-14-01..D-14-12 settled WHAT and WHERE; this research answered HOW.
 
 The CONTEXT.md's "Claude's Discretion" subsection lists six items left to planner discretion; this research provides recommendations:
 
@@ -1086,25 +1086,25 @@ The CONTEXT.md's "Claude's Discretion" subsection lists six items left to planne
 2. **Rule-file extension `.js` vs `.ts`:** Recommend `.js`. Reasoning: keeps test infrastructure out of `tsconfig` strict typecheck; matches typescript-eslint's own rule-file convention; sidesteps Pitfall 2.
 3. **Grammar file layout for new closed sets:** Recommend two NEW files (`markers.ts` and `pattern-classes.ts`) per Phase 12 D-CMC-01 / D-CMC-02 one-closed-set-per-file precedent.
 4. **transaction/rollback.ts refactor approach:** Recommend orchestrator-owns-rendering (NOT D-14-04's option (b) because of the D-11 layering constraint). See Pitfall 6 / "Code Examples" section.
-5. **MARKETPLACE_LABEL_PROBE constant location:** Recommend new `extensions/pi-claude-marketplace/shared/constants/` directory (NOT `shared/grammar/` — the constant isn't a closed-set token). See Pitfall 7.
+5. **MARKETPLACE_LABEL_PROBE constant location:** Recommend new `extensions/pi-claude-marketplace/shared/constants/` directory (NOT `shared/grammar/` -- the constant isn't a closed-set token). See Pitfall 7.
 6. **Memoization mechanism for the frontmatter loader:** Recommend plain module-scope const (lazy-init function called once at module load). See Pattern 3.
 
 ## Environment Availability
 
 | Dependency | Required By | Available | Version | Fallback |
 |------------|------------|-----------|---------|----------|
-| Node.js | Test runner, ESLint | yes | 22.22.2 (verified `node --version`) | — |
-| npm | Package management | yes | bundled with Node | — |
-| `@typescript-eslint/utils` | Rule construction | yes | 8.59.1 (transitive via `typescript-eslint`) | — |
-| `@typescript-eslint/rule-tester` | Per-rule tests | NO | — | Install as devDep in Wave 3 plan #1 |
+| Node.js | Test runner, ESLint | yes | 22.22.2 (verified `node --version`) | -- |
+| npm | Package management | yes | bundled with Node | -- |
+| `@typescript-eslint/utils` | Rule construction | yes | 8.59.1 (transitive via `typescript-eslint`) | -- |
+| `@typescript-eslint/rule-tester` | Per-rule tests | NO | -- | Install as devDep in Wave 3 plan #1 |
 | `yaml` | Frontmatter loader | yes (transitive at v2.8.3) | 2.8.3 | Promote to direct devDep in Wave 3 plan #1 |
-| `typescript-eslint` (parser + rules) | flat config | yes | 8.59.1 | — |
-| `eslint` | Plugin loader | yes | 10.2.1 (>=10.x required for flat config) | — |
-| `typescript` | typecheck step | yes | 6.0.3 | — |
+| `typescript-eslint` (parser + rules) | flat config | yes | 8.59.1 | -- |
+| `eslint` | Plugin loader | yes | 10.2.1 (>=10.x required for flat config) | -- |
+| `typescript` | typecheck step | yes | 6.0.3 | -- |
 
 **Missing dependencies with no fallback:** None.
 
-**Missing dependencies with fallback:** `@typescript-eslint/rule-tester` — install as devDep; the planner-side dep install step is the fix.
+**Missing dependencies with fallback:** `@typescript-eslint/rule-tester` -- install as devDep; the planner-side dep install step is the fix.
 
 ## Validation Architecture
 
@@ -1129,7 +1129,7 @@ The CONTEXT.md's "Claude's Discretion" subsection lists six items left to planne
 | CMC-34 | 6 edge handlers use notifyUsageError for argument-validation failures | structural (drift guard MSG-SR-7) | `node --test tests/lint-rules/msg-sr-7-usage-error-routing.test.js` | NO Wave 3 (rule lands after migration) |
 | CMC-34 | Router emits `\n\n` separator between message and USAGE block | structural (drift guard MSG-NC-2) | `node --test tests/lint-rules/msg-nc-2-usage-separator.test.js` | NO Wave 3 |
 | WARNING | transaction/rollback.ts no longer hand-composes literals | structural (drift guard MSG-RP-1) | `node --test tests/lint-rules/msg-rp-1-rollback-partial.test.js` | NO Wave 3 (rule + refactor land together) |
-| WARNING | MARKETPLACE_LABEL_PROBE single source | structural (no-dup grep equivalent) | one rule covering this would be excessive — leave as code review concern after dedup | NO Wave 3 (dedup only) |
+| WARNING | MARKETPLACE_LABEL_PROBE single source | structural (no-dup grep equivalent) | one rule covering this would be excessive -- leave as code review concern after dedup | NO Wave 3 (dedup only) |
 
 **Sampling Rate**
 
@@ -1139,17 +1139,17 @@ The CONTEXT.md's "Claude's Discretion" subsection lists six items left to planne
 
 **Wave 0 Gaps**
 
-- [ ] `tests/lint-rules/lib/frontmatter.js` — shared loader (consumed by 34 rules + grammar-frontmatter.test.ts migration)
-- [ ] `tests/lint-rules/index.js` — plugin entry exporting `RULE_NAMES` + `rules` object
-- [ ] `tests/lint-rules/msg-*.{js,test.js}` — 34 rule files + 34 test files
-- [ ] `tests/architecture/msg-rule-registry.test.ts` — registry parity test
-- [ ] `extensions/pi-claude-marketplace/shared/grammar/markers.ts` — new closed-set literal-union (2 entries)
-- [ ] `extensions/pi-claude-marketplace/shared/grammar/pattern-classes.ts` — new closed-set literal-union (12 entries)
-- [ ] `extensions/pi-claude-marketplace/shared/constants/marketplace-label-probe.ts` — dedup target (NEW directory)
+- [ ] `tests/lint-rules/lib/frontmatter.js` -- shared loader (consumed by 34 rules + grammar-frontmatter.test.ts migration)
+- [ ] `tests/lint-rules/index.js` -- plugin entry exporting `RULE_NAMES` + `rules` object
+- [ ] `tests/lint-rules/msg-*.{js,test.js}` -- 34 rule files + 34 test files
+- [ ] `tests/architecture/msg-rule-registry.test.ts` -- registry parity test
+- [ ] `extensions/pi-claude-marketplace/shared/grammar/markers.ts` -- new closed-set literal-union (2 entries)
+- [ ] `extensions/pi-claude-marketplace/shared/grammar/pattern-classes.ts` -- new closed-set literal-union (12 entries)
+- [ ] `extensions/pi-claude-marketplace/shared/constants/marketplace-label-probe.ts` -- dedup target (NEW directory)
 - [ ] devDep additions: `@typescript-eslint/rule-tester` + `yaml` (promote to direct)
-- [ ] `eslint.config.js` — local plugin registration + per-rule `files:` blocks + per-tests-lint-rules typecheck-disable override
-- [ ] `package.json` — extend test glob to include `tests/lint-rules/**/*.test.{js,ts}` (brace expansion already used; just add the path)
-- [ ] `tests/architecture/grammar-frontmatter.test.ts` — migrate from local extractor to shared loader; extend from 2-key to 4-key
+- [ ] `eslint.config.js` -- local plugin registration + per-rule `files:` blocks + per-tests-lint-rules typecheck-disable override
+- [ ] `package.json` -- extend test glob to include `tests/lint-rules/**/*.test.{js,ts}` (brace expansion already used; just add the path)
+- [ ] `tests/architecture/grammar-frontmatter.test.ts` -- migrate from local extractor to shared loader; extend from 2-key to 4-key
 
 ## Security Domain
 
@@ -1163,21 +1163,21 @@ Security enforcement is not the primary axis of this phase (`security_enforcemen
 | V5 Input Validation | yes (indirect) | The yaml loader inputs are trusted (committed-in-repo markdown); no untrusted YAML input |
 | V6 Cryptography | no | (no crypto surface) |
 
-**Known Threat Patterns:** None directly introduced. The drift guard's input — `docs/messaging-style-guide.md` — is a committed-in-repo file; a malicious YAML input would require a malicious commit, which is governed by the existing git review process.
+**Known Threat Patterns:** None directly introduced. The drift guard's input -- `docs/messaging-style-guide.md` -- is a committed-in-repo file; a malicious YAML input would require a malicious commit, which is governed by the existing git review process.
 
-## Plan Decomposition (Wave 3 — recommendation, planner discretion)
+## Plan Decomposition (Wave 3 -- recommendation, planner discretion)
 
-Wave 1: 1 plan — CMC-16 closure (reinstall.ts emission + remove.ts seam cleanup).
+Wave 1: 1 plan -- CMC-16 closure (reinstall.ts emission + remove.ts seam cleanup).
 
-Wave 2: 1 plan — CMC-34 closure (6 edge handlers + supporting test updates).
+Wave 2: 1 plan -- CMC-34 closure (6 edge handlers + supporting test updates).
 
 Wave 3: 4 plans recommended (per the discretion in CONTEXT.md and the scope size):
 
-**Plan 3a — Infrastructure & Foundations:**
+**Plan 3a -- Infrastructure & Foundations:**
 
 - Install `@typescript-eslint/rule-tester` and promote `yaml` to direct devDep
 - Create `tests/lint-rules/` directory with `lib/frontmatter.js` (memoized loader)
-- Create `tests/lint-rules/index.js` (plugin entry — initially exporting empty rules object; populated in 3b/3c)
+- Create `tests/lint-rules/index.js` (plugin entry -- initially exporting empty rules object; populated in 3b/3c)
 - Create `extensions/pi-claude-marketplace/shared/grammar/markers.ts` (2 entries)
 - Create `extensions/pi-claude-marketplace/shared/grammar/pattern-classes.ts` (12 entries)
 - Migrate `tests/architecture/grammar-frontmatter.test.ts` to use the shared loader
@@ -1186,22 +1186,22 @@ Wave 3: 4 plans recommended (per the discretion in CONTEXT.md and the scope size
 - Extend `package.json:test` script glob to include `tests/lint-rules/**/*.test.{js,ts}`
 - Add `eslint.config.js` override block for `tests/lint-rules/**/*.{js,ts}` (disable type-checked)
 
-**Plan 3b — Meta-Assertion Rules (no AST visitor; structural cross-references):**
+**Plan 3b -- Meta-Assertion Rules (no AST visitor; structural cross-references):**
 
 - Create rule files for MSG-GR-1..5, MSG-IC-1..3, MSG-SD-3, MSG-PL-1..6, MSG-ER-1 (19 rule files)
-- Create RuleTester companion tests (each asserts `valid:` cases compile cleanly — the meta-assertion rules' empty visitors do nothing on valid code, so the test is essentially a smoke test)
+- Create RuleTester companion tests (each asserts `valid:` cases compile cleanly -- the meta-assertion rules' empty visitors do nothing on valid code, so the test is essentially a smoke test)
 - Wire into `tests/lint-rules/index.js`
 - Wire into `eslint.config.js` global block
 
-**Plan 3c — Full-Impl Rules (real AST coverage):**
+**Plan 3c -- Full-Impl Rules (real AST coverage):**
 
 - Create rule files for MSG-SR-1..7, MSG-MR-1..2, MSG-RP-1, MSG-CC-1, MSG-NC-1..2, MSG-RH-1, MSG-LC-1..2, MSG-SD-1..2 (15 rule files)
 - Create RuleTester companion tests with comprehensive `valid:` and `invalid:` fixture arrays
 - Wire into `tests/lint-rules/index.js`
 - Wire into `eslint.config.js` with per-rule `files:` patterns
-- Create `tests/architecture/msg-rule-registry.test.ts` — registry parity assertions
+- Create `tests/architecture/msg-rule-registry.test.ts` -- registry parity assertions
 
-**Plan 3d — WARNING Closures:**
+**Plan 3d -- WARNING Closures:**
 
 - Refactor `transaction/rollback.ts:48-63` (orchestrator-owns-rendering approach)
 - Update callers of `formatRollbackError` to render via `presentation/rollback-partial.ts`
@@ -1212,7 +1212,7 @@ Wave 3: 4 plans recommended (per the discretion in CONTEXT.md and the scope size
 
 - Wave 1 + Wave 2 may parallelize (no file overlap on extension surface; rebase Wave 2 onto Wave 1 in commit order).
 - Plan 3b + Plan 3c may parallelize (no rule-file overlap; both depend on Plan 3a).
-- Plan 3d may parallelize with 3b/3c (no file overlap once dependencies on Plan 3a settle; the MSG-RP-1 rule (in 3c) verifies the 3d refactor structurally, so plan 3d should land before MSG-RP-1's `invalid:` planted-violation tests would fail — sequence is `3a -> 3d -> 3c` for rollback.ts; `3a -> 3b` independent).
+- Plan 3d may parallelize with 3b/3c (no file overlap once dependencies on Plan 3a settle; the MSG-RP-1 rule (in 3c) verifies the 3d refactor structurally, so plan 3d should land before MSG-RP-1's `invalid:` planted-violation tests would fail -- sequence is `3a -> 3d -> 3c` for rollback.ts; `3a -> 3b` independent).
 
 Estimated total plan count: **6 plans (Wave 1 + Wave 2 + 4 Wave 3 sub-plans).** This is within the CONTEXT.md "3-6 plans total" estimate.
 
@@ -1220,49 +1220,49 @@ Estimated total plan count: **6 plans (Wave 1 + Wave 2 + 4 Wave 3 sub-plans).** 
 
 ### Primary (HIGH confidence)
 
-- `docs/messaging-style-guide.md` — Direct file read; frontmatter (lines 1-65), section 1-15 MSG-* IDs (verified 34 unique IDs)
-- `.planning/phases/14-drift-guard-test-alignment/14-CONTEXT.md` — Locked decisions D-14-01..D-14-12
-- `.planning/v1.3-MILESTONE-AUDIT.md` — Audit findings driving absorbed scope; specific file:line evidence for CMC-16 + CMC-34
-- `eslint.config.js` (read in full) — Existing flat-config structure, BLOCK A/B/C/D/E patterns; D-11 layering enforcement
-- `extensions/pi-claude-marketplace/shared/grammar/{status-tokens.ts,reasons.ts}` — `as const` literal-union pattern; D-CMC-08 precedent for new files
-- `extensions/pi-claude-marketplace/shared/notify.ts` — Existing 4-wrapper API; `notifyUsageError` signature
-- `extensions/pi-claude-marketplace/presentation/{manual-recovery.ts,rollback-partial.ts,compact-line.ts}` — Existing composer surfaces; `RowSpec` discriminated union
-- `extensions/pi-claude-marketplace/transaction/rollback.ts` — Hand-composed literal at lines 56-62
-- `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts` — ManualRecoveryError handling at lines 195-205, 268-282; `outcomeToCascadeRow` at 498-554; `renderReinstallPartitionAndNotify` at 416-483
-- `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts` — Dead-code `void renderManualRecovery;` at line 96
-- `extensions/pi-claude-marketplace/edge/handlers/{plugin,marketplace}/*.ts` — All 13 CMC-34 callsites verified
-- `extensions/pi-claude-marketplace/edge/router.ts:125` — `notifyUsageError` canonical usage example
-- `tests/architecture/grammar-frontmatter.test.ts` — Phase 12 extractor pattern (98 lines)
-- `tests/architecture/no-legacy-markers.test.ts` — D-13-12 / CMC-35 recursive-walk pattern (124 lines)
-- `tests/edge/router.test.ts:70-86` — Existing router test (only presence-check; the byte-exact `\n\n` separator IS NOT verified today per audit)
-- `node_modules/yaml/package.json` — Confirmed v2.8.3, `"type": "commonjs"`, ESM-compatible `exports.` map
-- `node_modules/@typescript-eslint/` (filesystem listing) — Confirmed `utils` present, `rule-tester` absent
-- `package.json` — Test script glob; existing devDep list; engines `>=20.19.0`; `typescript: ^6.0.3`
+- `docs/messaging-style-guide.md` -- Direct file read; frontmatter (lines 1-65), section 1-15 MSG-* IDs (verified 34 unique IDs)
+- `.planning/phases/14-drift-guard-test-alignment/14-CONTEXT.md` -- Locked decisions D-14-01..D-14-12
+- `.planning/v1.3-MILESTONE-AUDIT.md` -- Audit findings driving absorbed scope; specific file:line evidence for CMC-16 + CMC-34
+- `eslint.config.js` (read in full) -- Existing flat-config structure, BLOCK A/B/C/D/E patterns; D-11 layering enforcement
+- `extensions/pi-claude-marketplace/shared/grammar/{status-tokens.ts,reasons.ts}` -- `as const` literal-union pattern; D-CMC-08 precedent for new files
+- `extensions/pi-claude-marketplace/shared/notify.ts` -- Existing 4-wrapper API; `notifyUsageError` signature
+- `extensions/pi-claude-marketplace/presentation/{manual-recovery.ts,rollback-partial.ts,compact-line.ts}` -- Existing composer surfaces; `RowSpec` discriminated union
+- `extensions/pi-claude-marketplace/transaction/rollback.ts` -- Hand-composed literal at lines 56-62
+- `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts` -- ManualRecoveryError handling at lines 195-205, 268-282; `outcomeToCascadeRow` at 498-554; `renderReinstallPartitionAndNotify` at 416-483
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts` -- Dead-code `void renderManualRecovery;` at line 96
+- `extensions/pi-claude-marketplace/edge/handlers/{plugin,marketplace}/*.ts` -- All 13 CMC-34 callsites verified
+- `extensions/pi-claude-marketplace/edge/router.ts:125` -- `notifyUsageError` canonical usage example
+- `tests/architecture/grammar-frontmatter.test.ts` -- Phase 12 extractor pattern (98 lines)
+- `tests/architecture/no-legacy-markers.test.ts` -- D-13-12 / CMC-35 recursive-walk pattern (124 lines)
+- `tests/edge/router.test.ts:70-86` -- Existing router test (only presence-check; the byte-exact `\n\n` separator IS NOT verified today per audit)
+- `node_modules/yaml/package.json` -- Confirmed v2.8.3, `"type": "commonjs"`, ESM-compatible `exports.` map
+- `node_modules/@typescript-eslint/` (filesystem listing) -- Confirmed `utils` present, `rule-tester` absent
+- `package.json` -- Test script glob; existing devDep list; engines `>=20.19.0`; `typescript: ^6.0.3`
 
 ### Secondary (MEDIUM confidence)
 
-- [typescript-eslint custom rules docs](https://typescript-eslint.io/developers/custom-rules/) — `ESLintUtils.RuleCreator` pattern, meta object structure, `MessageIds` type inference
-- [typescript-eslint rule-tester docs](https://typescript-eslint.io/packages/rule-tester/) — Node:test integration shim pattern
-- [ESLint flat config plugins docs](https://eslint.org/docs/latest/use/configure/plugins) — `plugins: { namespace: pluginObj }` shape; per-block `files:` patterns
-- [eemeli/yaml docs](https://eemeli.org/yaml/) — ESM `import { parse } from "yaml"` confirmed
-- [Node.js Test Runner docs](https://nodejs.org/api/test.html) — Brace expansion in globs (matches existing `package.json:test` script)
+- [typescript-eslint custom rules docs](https://typescript-eslint.io/developers/custom-rules/) -- `ESLintUtils.RuleCreator` pattern, meta object structure, `MessageIds` type inference
+- [typescript-eslint rule-tester docs](https://typescript-eslint.io/packages/rule-tester/) -- Node:test integration shim pattern
+- [ESLint flat config plugins docs](https://eslint.org/docs/latest/use/configure/plugins) -- `plugins: { namespace: pluginObj }` shape; per-block `files:` patterns
+- [eemeli/yaml docs](https://eemeli.org/yaml/) -- ESM `import { parse } from "yaml"` confirmed
+- [Node.js Test Runner docs](https://nodejs.org/api/test.html) -- Brace expansion in globs (matches existing `package.json:test` script)
 
-### Tertiary (LOW confidence — flagged for validation)
+### Tertiary (LOW confidence -- flagged for validation)
 
-- None — every load-bearing claim is verified against an authoritative source.
+- None -- every load-bearing claim is verified against an authoritative source.
 
 ## Metadata
 
 **Confidence breakdown:**
 
-- Standard stack: HIGH — every package version verified via filesystem or npm registry
-- Architecture: HIGH — recommended patterns verified against authoritative docs and cross-referenced with codebase
-- Pitfalls: HIGH — every pitfall is grounded in observed codebase invariants (eslint.config.js BLOCK C zone, projectService overhead, etc.)
-- Plan decomposition: MEDIUM — recommendation; CONTEXT.md leaves this to planner discretion
-- transaction/rollback.ts refactor approach: MEDIUM-HIGH — the layering constraint forces the orchestrator-owns-rendering path; the alternative (plumbing context) is also viable but requires more code
+- Standard stack: HIGH -- every package version verified via filesystem or npm registry
+- Architecture: HIGH -- recommended patterns verified against authoritative docs and cross-referenced with codebase
+- Pitfalls: HIGH -- every pitfall is grounded in observed codebase invariants (eslint.config.js BLOCK C zone, projectService overhead, etc.)
+- Plan decomposition: MEDIUM -- recommendation; CONTEXT.md leaves this to planner discretion
+- transaction/rollback.ts refactor approach: MEDIUM-HIGH -- the layering constraint forces the orchestrator-owns-rendering path; the alternative (plumbing context) is also viable but requires more code
 
 **Research date:** 2026-05-24
-**Valid until:** 2026-06-24 (30 days — stable surface; typescript-eslint releases major versions ~yearly; ESLint major versions ~2 years)
+**Valid until:** 2026-06-24 (30 days -- stable surface; typescript-eslint releases major versions ~yearly; ESLint major versions ~2 years)
 
 ## RESEARCH COMPLETE
 

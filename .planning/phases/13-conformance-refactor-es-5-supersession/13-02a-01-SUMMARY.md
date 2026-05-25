@@ -241,9 +241,9 @@ completed: 2026-05-23
 
 Each task was committed atomically:
 
-1. **Task 1: Migrate reinstall.ts to cascadeSummary + PluginCascadeRow (CMC-25)** — `2db5b4d` (feat, TDD)
-2. **Task 2: Migrate update.ts with version-transition arrows + rollback-partial (CMC-26 / CMC-17)** — `0ca04be` (feat, TDD)
-3. **Task 3: Migrate import/execute.ts to per-mp cascade (CMC-27 / CMC-20)** — `d78f7f4` (feat, TDD)
+1. **Task 1: Migrate reinstall.ts to cascadeSummary + PluginCascadeRow (CMC-25)** -- `2db5b4d` (feat, TDD)
+2. **Task 2: Migrate update.ts with version-transition arrows + rollback-partial (CMC-26 / CMC-17)** -- `0ca04be` (feat, TDD)
+3. **Task 3: Migrate import/execute.ts to per-mp cascade (CMC-27 / CMC-20)** -- `d78f7f4` (feat, TDD)
 
 ## Files Created/Modified
 
@@ -284,12 +284,12 @@ Each task was committed atomically:
 
 ## Verification Results
 
-- `node --test tests/orchestrators/plugin/reinstall.test.ts` — **19/19 pass**
-- `node --test tests/orchestrators/plugin/update.test.ts` — **16/16 pass**
-- `node --test tests/orchestrators/import/execute.test.ts` — **17/17 pass**
-- `node --test tests/edge/handlers/plugin/reinstall.test.ts` — **7/7 pass**
-- `node --test tests/edge/handlers/plugin/update.test.ts` — all pass
-- `npm run check` — **1121/1121 tests pass**; typecheck clean; ESLint clean; Prettier clean.
+- `node --test tests/orchestrators/plugin/reinstall.test.ts` -- **19/19 pass**
+- `node --test tests/orchestrators/plugin/update.test.ts` -- **16/16 pass**
+- `node --test tests/orchestrators/import/execute.test.ts` -- **17/17 pass**
+- `node --test tests/edge/handlers/plugin/reinstall.test.ts` -- **7/7 pass**
+- `node --test tests/edge/handlers/plugin/update.test.ts` -- all pass
+- `npm run check` -- **1121/1121 tests pass**; typecheck clean; ESLint clean; Prettier clean.
 
 ### Acceptance criteria
 
@@ -322,7 +322,7 @@ Each task was committed atomically:
 
 - **Found during:** Task 2 implementation (rollback-partial children rendering).
 - **Issue:** The plan action paragraph for Task 2 suggested using `phase` strings as `Reason` values on the parent row (single-phase failure case: `reasons: [phase as Reason]`). The closed `REASONS` set in `shared/grammar/reasons.ts` does NOT include `"skills"`, `"commands"`, `"agents"`, or `"mcp"`. The plan also flagged this as a potential closed-set gap that may require discuss-phase escalation if no in-set token captures the semantic.
-- **Fix (Rule 2: missing critical correctness primitive)** — resolved inline: rollback-partial parent rows always carry the canonical `["rollback partial"]` Reason (whether single-phase or multi-phase); the failing bridge name surfaces structurally via `RollbackChild.phaseLabel` (`"[<bridge>]"` form matching the catalog's `[phase3a]` notation). This preserves the closed-set CMC-11 contract without re-introducing free-form reason tokens and is consistent with how `update.ts`'s parent-row failure reason was already specified. Wave 3 catalog UAT is the binding verification that the resulting user-visible shape is sufficient.
+- **Fix (Rule 2: missing critical correctness primitive)** -- resolved inline: rollback-partial parent rows always carry the canonical `["rollback partial"]` Reason (whether single-phase or multi-phase); the failing bridge name surfaces structurally via `RollbackChild.phaseLabel` (`"[<bridge>]"` form matching the catalog's `[phase3a]` notation). This preserves the closed-set CMC-11 contract without re-introducing free-form reason tokens and is consistent with how `update.ts`'s parent-row failure reason was already specified. Wave 3 catalog UAT is the binding verification that the resulting user-visible shape is sufficient.
 - **Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts` (outcomeToCascadeRow + child construction).
 - **Commit:** `0ca04be`.
 
@@ -336,7 +336,7 @@ Each task was committed atomically:
 **4. [Rule 1 - Bug] Test 11 expectation for marketplace header status on already-installed concurrent race**
 
 - **Found during:** Task 3 verification (test 11: already-installed-from-concurrent-race scenario).
-- **Issue:** Initial test assertion expected a bare marketplace header (`● mp [user]`) but the renderer correctly synthesizes the header from the `skippedExistingPlugins` record — and the test's plan output ALSO includes a `(skipped) {already installed}` MarketplaceRow status (because the marketplace is in `skippedExistingMarketplaces`). The orchestrator's `ensureBlock` upserts the header.
+- **Issue:** Initial test assertion expected a bare marketplace header (`● mp [user]`) but the renderer correctly synthesizes the header from the `skippedExistingPlugins` record -- and the test's plan output ALSO includes a `(skipped) {already installed}` MarketplaceRow status (because the marketplace is in `skippedExistingMarketplaces`). The orchestrator's `ensureBlock` upserts the header.
 - **Fix:** Updated test assertion to expect the full header with status: `● mp [user] (skipped) {already installed}`. Both rows (marketplace + plugin) carry the trivial-skip ● icon because `already installed` is a trivial Reason.
 - **Files modified:** `tests/orchestrators/import/execute.test.ts`.
 - **Commit:** `d78f7f4`.
@@ -373,8 +373,8 @@ This plan's tasks are marked `tdd="true"` in the plan frontmatter. Per the plan-
 
 The plan's `<threat_model>` register identified 2 mitigations:
 
-- **T-13-09 (Tampering — cascade severity routing):** mitigated structurally. `cascadeSummary` returns `{message, severity: "success" | "warning"}`; the literal-union type forbids a "error" arm. Orchestrators destructure and dispatch via the 2-arm ternary; they CANNOT accidentally route a non-trivially-failed cascade through `notifySuccess` because the severity is computed by `cascadeSeverity` (pure, deterministic, OR-aggregated).
-- **T-13-10 (Information Disclosure — notifyError cause-chain on import setup failure):** mitigated by reuse. The outer import `catch (err) { notifyError(opts.ctx, "Import failed: ${errorMessage(err)}", err); }` consumes Plan 13-01-02's Wave 1 `notifyError` body that uses `causeChainTrailer` for the trailer; NFR-9 invariant preserved (only `.message` surfaces -- no `.stack`, no absolute paths).
+- **T-13-09 (Tampering -- cascade severity routing):** mitigated structurally. `cascadeSummary` returns `{message, severity: "success" | "warning"}`; the literal-union type forbids a "error" arm. Orchestrators destructure and dispatch via the 2-arm ternary; they CANNOT accidentally route a non-trivially-failed cascade through `notifySuccess` because the severity is computed by `cascadeSeverity` (pure, deterministic, OR-aggregated).
+- **T-13-10 (Information Disclosure -- notifyError cause-chain on import setup failure):** mitigated by reuse. The outer import `catch (err) { notifyError(opts.ctx, "Import failed: ${errorMessage(err)}", err); }` consumes Plan 13-01-02's Wave 1 `notifyError` body that uses `causeChainTrailer` for the trailer; NFR-9 invariant preserved (only `.message` surfaces -- no `.stack`, no absolute paths).
 
 No new security-relevant surface introduced beyond what the threat register anticipated. No `threat_flag:` entries to record.
 

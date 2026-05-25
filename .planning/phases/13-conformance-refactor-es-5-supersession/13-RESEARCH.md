@@ -101,15 +101,15 @@ The Phase 12 foundation is in place and load-bearing: `shared/grammar/{status-to
 
 | Capability | Primary Tier | Secondary Tier | Rationale |
 |------------|--------------|----------------|-----------|
-| Compact-line token-order grammar | `presentation/compact-line.ts` | — | Single emission site; renderer owns MSG-GR-1..5 (D-13-05) |
+| Compact-line token-order grammar | `presentation/compact-line.ts` | -- | Single emission site; renderer owns MSG-GR-1..5 (D-13-05) |
 | Per-row soft-dep predicate compute | `orchestrators/plugin/{list,install,update,reinstall}.ts` | `domain/resolver.ts` (manifest probe) | Orchestrator owns state-reads (D-06); pre-computes `declaresAgents` / `declaresMcp` |
 | Companion-extension load probe | `orchestrators/edge-deps.ts` (existing) | `platform/pi-api.ts` (`hasLoadedPiSubagents/Mcp`) | Already orchestrator-owned; renderer receives as injected dependency |
-| Cascade severity computation | `presentation/cascade-summary.ts` | — | Pure helper; orchestrator destructures + dispatches (D-13-08) |
-| Orphan-fold computation | `orchestrators/plugin/list.ts` | — | State-read concern (D-13-19); renderer stays pure |
-| ES-5 marker enforcement | ESLint `no-restricted-imports` + `tests/architecture/no-legacy-markers.test.ts` | — | Wave 2 gate (D-13-09); Wave 3 audit (D-13-12) |
-| Catalog UAT byte-equality | `tests/architecture/catalog-uat.test.ts` | — | Wave 3 plan #1 gate (D-13-04) |
+| Cascade severity computation | `presentation/cascade-summary.ts` | -- | Pure helper; orchestrator destructures + dispatches (D-13-08) |
+| Orphan-fold computation | `orchestrators/plugin/list.ts` | -- | State-read concern (D-13-19); renderer stays pure |
+| ES-5 marker enforcement | ESLint `no-restricted-imports` + `tests/architecture/no-legacy-markers.test.ts` | -- | Wave 2 gate (D-13-09); Wave 3 audit (D-13-12) |
+| Catalog UAT byte-equality | `tests/architecture/catalog-uat.test.ts` | -- | Wave 3 plan #1 gate (D-13-04) |
 | Cause-chain depth-5 walk | `presentation/cause-chain.ts` | `shared/errors.ts` (Error.cause traversal) | New composer (D-13-15); replaces `formatErrorWithCauses`'s rendering shape |
-| Compact-line sort | `presentation/sort.ts` (or named export of compact-line) | — | Single `compareByNameThenScope` helper (D-13-15) |
+| Compact-line sort | `presentation/sort.ts` (or named export of compact-line) | -- | Single `compareByNameThenScope` helper (D-13-15) |
 
 ## Standard Stack
 

@@ -1,7 +1,7 @@
 # Phase 14: Drift Guard & Test Alignment - Discussion Log
 
 > **Audit trail only.** Do not use as input to planning, research, or execution agents.
-> Decisions are captured in CONTEXT.md — this log preserves the alternatives considered.
+> Decisions are captured in CONTEXT.md -- this log preserves the alternatives considered.
 
 **Date:** 2026-05-24
 **Phase:** 14-drift-guard-test-alignment
@@ -11,7 +11,7 @@
 
 ## Audit Gap Pre-Condition
 
-### Sequencing question — how to handle CMC-16 + CMC-34 relative to landing CMC-38
+### Sequencing question -- how to handle CMC-16 + CMC-34 relative to landing CMC-38
 
 | Option | Description | Selected |
 |--------|-------------|----------|
@@ -163,9 +163,9 @@ Captured in CONTEXT.md `<decisions>` "Claude's Discretion" subsection:
 
 Captured in CONTEXT.md `<deferred>`:
 
-- v1.4 frontmatter additions (new reason, status token, marker, pattern_class) — drift guard accepts these without test-code change per SC #3
-- Future MSG-* rules (v1.4+) — adding requires only style-guide body edit + new rule file + RuleTester companion
-- Restructuring grammar-frontmatter.test.ts into per-key files — single-file extension is also fine
+- v1.4 frontmatter additions (new reason, status token, marker, pattern_class) -- drift guard accepts these without test-code change per SC #3
+- Future MSG-* rules (v1.4+) -- adding requires only style-guide body edit + new rule file + RuleTester companion
+- Restructuring grammar-frontmatter.test.ts into per-key files -- single-file extension is also fine
 - Promoting tests/lint-rules/ to a published eslint-plugin-pi-claude-marketplace-msg package
 - MARKETPLACE_LABEL_PROBE rename or semantic tightening (dedup only in Phase 14)
 - Replacing no-legacy-markers.test.ts with an ESLint rule

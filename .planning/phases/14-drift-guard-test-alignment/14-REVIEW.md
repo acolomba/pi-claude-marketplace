@@ -30,7 +30,7 @@ The review surfaces 1 Critical finding (a hard scope-ordering drift in `orchestr
 
 **File:** `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts:706-708`
 
-**Issue:** `scopeOrder` returns `user → 0, project → 1`, ordering user-before-project. The shared comparator `presentation/sort.ts::compareByNameThenScope` enforces the locked MSG-GR-3 contract **"project before user"** (returns `-1` for project, `+1` for user when name ties). The JSDoc at `reinstall.ts:455-457` explicitly claims this code uses MSG-GR-3 semantics: *"Order marketplace blocks by scope (project before user **per compareByNameThenScope**) then marketplace name."* — but the implementation orders user-first, exercising a different policy than the one cited.
+**Issue:** `scopeOrder` returns `user → 0, project → 1`, ordering user-before-project. The shared comparator `presentation/sort.ts::compareByNameThenScope` enforces the locked MSG-GR-3 contract **"project before user"** (returns `-1` for project, `+1` for user when name ties). The JSDoc at `reinstall.ts:455-457` explicitly claims this code uses MSG-GR-3 semantics: *"Order marketplace blocks by scope (project before user **per compareByNameThenScope**) then marketplace name."* -- but the implementation orders user-first, exercising a different policy than the one cited.
 
 Both call sites are affected:
 - `sortReinstallTargets` (line 388-395): bulk-reinstall outcome iteration order
@@ -38,7 +38,7 @@ Both call sites are affected:
 
 The user-visible output of `/claude:plugin reinstall` therefore disagrees with `/claude:plugin list` and `/claude:plugin marketplace list` (both use compareByNameThenScope), creating an inconsistent per-scope ordering across surfaces despite §1 of the messaging style guide promising a single ordering policy.
 
-The current test fixture at `tests/orchestrators/plugin/reinstall.test.ts:984-988` codifies the wrong order (user before project) so the bug is "tested-in" — a refactor to use `compareByNameThenScope` would have to update that fixture.
+The current test fixture at `tests/orchestrators/plugin/reinstall.test.ts:984-988` codifies the wrong order (user before project) so the bug is "tested-in" -- a refactor to use `compareByNameThenScope` would have to update that fixture.
 
 **Fix:** Replace the local `scopeOrder` helper with the canonical comparator and update the test fixture to match the project-first policy. If user-first ordering is actually intentional, update the JSDoc to delete the false "per compareByNameThenScope" claim and explain why this surface deviates.
 
@@ -56,7 +56,7 @@ The current test fixture at `tests/orchestrators/plugin/reinstall.test.ts:984-98
 
 **File:** `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:149-172`
 
-**Issue:** When `cascadeUnstagePlugin` fails with `EACCES` or `"permission denied"`, the helper returns the Reason `"not in manifest"`. The inline comment even acknowledges the mismatch: *"No closed-set Reason for permission errors today -- map to the most general failure reason."* User sees `⊘ <plugin> [<scope>] (failed) {not in manifest}` when the actual failure is a file-permission error — operator cannot distinguish a missing manifest entry from a file-permission rejection.
+**Issue:** When `cascadeUnstagePlugin` fails with `EACCES` or `"permission denied"`, the helper returns the Reason `"not in manifest"`. The inline comment even acknowledges the mismatch: *"No closed-set Reason for permission errors today -- map to the most general failure reason."* User sees `⊘ <plugin> [<scope>] (failed) {not in manifest}` when the actual failure is a file-permission error -- operator cannot distinguish a missing manifest entry from a file-permission rejection.
 
 **Fix:** Either (a) add a closed-set Reason like `"permission denied"` to `shared/grammar/reasons.ts` (drift test will enforce parity), or (b) map permission errors to `"unreadable"` (already in REASONS) which is semantically closer than `"not in manifest"`.
 
@@ -80,7 +80,7 @@ The current test fixture at `tests/orchestrators/plugin/reinstall.test.ts:984-98
 
 **File:** `tests/lint-rules/msg-sr-4-cascade-success.js:46`, `tests/lint-rules/msg-sr-5-cascade-warning.js:41`
 
-**Issue:** Both rules detect cascade-summary routing via identifier-name heuristics: `/(?:successSummary|cascadeSuccess|okSummary)/i` and `/(?:warningSummary|cascadeWarning|partialSummary)/i`. The orchestrators reviewed (`reinstall.ts:471-478`, `remove.ts:342`) all destructure `{ message, severity } = cascadeSummary(...)` and the destructured `message` identifier does NOT match the hard-coded heuristic set — so the rule will not catch real drift on the current codebase, only the planted RuleTester fixtures.
+**Issue:** Both rules detect cascade-summary routing via identifier-name heuristics: `/(?:successSummary|cascadeSuccess|okSummary)/i` and `/(?:warningSummary|cascadeWarning|partialSummary)/i`. The orchestrators reviewed (`reinstall.ts:471-478`, `remove.ts:342`) all destructure `{ message, severity } = cascadeSummary(...)` and the destructured `message` identifier does NOT match the hard-coded heuristic set -- so the rule will not catch real drift on the current codebase, only the planted RuleTester fixtures.
 
 **Fix:** Either document the limit in the rule's `meta.docs` or widen detection by tracking variable bindings from `cascadeSummary` calls within the same function.
 
@@ -114,7 +114,7 @@ The current test fixture at `tests/orchestrators/plugin/reinstall.test.ts:984-98
 
 **File:** `tests/orchestrators/plugin/reinstall.test.ts:1250-1263` (and `reinstall.ts:1122-1137`)
 
-**Issue:** The depth-5 walker visits depths 0..4 (loop condition `depth < 5`). The MRE at "depth 5 from l0" is unreachable, exactly as the test asserts. But the JSDoc says *"stop at 5 hops"* — slightly imprecise; the walker stops AT 5 visits (4 hops).
+**Issue:** The depth-5 walker visits depths 0..4 (loop condition `depth < 5`). The MRE at "depth 5 from l0" is unreachable, exactly as the test asserts. But the JSDoc says *"stop at 5 hops"* -- slightly imprecise; the walker stops AT 5 visits (4 hops).
 
 **Fix:** Reword the JSDoc to "stop after 5 visits (4 hops)".
 
@@ -146,6 +146,6 @@ The current test fixture at `tests/orchestrators/plugin/reinstall.test.ts:984-98
 
 ## Next Steps
 
-Run `/gsd:code-review 14 --fix` to auto-apply fixes (Critical + Warning by default). CR-01 in particular warrants attention before milestone close — it's a contract violation against locked MSG-GR-3 policy.
+Run `/gsd:code-review 14 --fix` to auto-apply fixes (Critical + Warning by default). CR-01 in particular warrants attention before milestone close -- it's a contract violation against locked MSG-GR-3 policy.
 
 The 1 Critical is a real correctness issue (user-visible output ordering disagrees with rest of codebase). The 8 Warnings are mostly defensive hardening (regex over-reach, comment drift, missing closed-set Reason). The 4 Info items are documentation precision and latent fragility.

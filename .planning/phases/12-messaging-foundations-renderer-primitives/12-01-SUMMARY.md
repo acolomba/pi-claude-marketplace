@@ -64,7 +64,7 @@ completed: 2026-05-22
 - **Started:** 2026-05-22T20:23:00Z
 - **Completed:** 2026-05-22T20:32:42Z
 - **Tasks:** 3
-- **Files modified:** 5 (3 created, 3 modified — see below; lockfile / package.json untouched)
+- **Files modified:** 5 (3 created, 3 modified -- see below; lockfile / package.json untouched)
 
 ## Accomplishments
 
@@ -77,9 +77,9 @@ completed: 2026-05-22
 
 Each task was committed atomically:
 
-1. **Task 1: STATUS_TOKENS and REASONS closed-set grammar constants** — `698e37c` (feat)
-2. **Task 2: grammar-frontmatter drift test** — `d889774` (test)
-3. **Task 3: Reconcile CMC-08 reinstalled clause and 24-vs-23 reasons count** — `12bb10e` (docs)
+1. **Task 1: STATUS_TOKENS and REASONS closed-set grammar constants** -- `698e37c` (feat)
+2. **Task 2: grammar-frontmatter drift test** -- `d889774` (test)
+3. **Task 3: Reconcile CMC-08 reinstalled clause and 24-vs-23 reasons count** -- `12bb10e` (docs)
 
 _Note: TDD tasks 1 and 2 landed as a feat+test pair (Task 1 typecheck-only RED gate; Task 2 set-equality + extractor-guard runtime tests pass against the Task 1 constants). No separate RED-only commit per the plan's `<action>` block, which explicitly instructs creating the constants first and the drift test in the next task._
 
@@ -87,15 +87,15 @@ _Note: TDD tasks 1 and 2 landed as a feat+test pair (Task 1 typecheck-only RED g
 
 ### Created
 
-- `extensions/pi-claude-marketplace/shared/grammar/status-tokens.ts` — 14-entry `STATUS_TOKENS` `as const` tuple + `StatusToken = (typeof STATUS_TOKENS)[number]` derived literal union. Frontmatter-binding header comment cites CMC-08, D-CMC-01..D-CMC-05, D-CMC-08 (markers.ts retention), and the drift test.
-- `extensions/pi-claude-marketplace/shared/grammar/reasons.ts` — 23-entry `REASONS` `as const` tuple + `Reason` derived literal union. Frontmatter-binding header cites CMC-11 and the 24→23 reconciliation.
-- `tests/architecture/grammar-frontmatter.test.ts` — 4 tests: set-equality for STATUS_TOKENS (Test A), set-equality for REASONS (Test B), `extractFrontmatterList` throws on missing frontmatter (Test C), throws on missing key (Test D). Hand-rolled regex extractor is local to this file per D-CMC-04.
+- `extensions/pi-claude-marketplace/shared/grammar/status-tokens.ts` -- 14-entry `STATUS_TOKENS` `as const` tuple + `StatusToken = (typeof STATUS_TOKENS)[number]` derived literal union. Frontmatter-binding header comment cites CMC-08, D-CMC-01..D-CMC-05, D-CMC-08 (markers.ts retention), and the drift test.
+- `extensions/pi-claude-marketplace/shared/grammar/reasons.ts` -- 23-entry `REASONS` `as const` tuple + `Reason` derived literal union. Frontmatter-binding header cites CMC-11 and the 24→23 reconciliation.
+- `tests/architecture/grammar-frontmatter.test.ts` -- 4 tests: set-equality for STATUS_TOKENS (Test A), set-equality for REASONS (Test B), `extractFrontmatterList` throws on missing frontmatter (Test C), throws on missing key (Test D). Hand-rolled regex extractor is local to this file per D-CMC-04.
 
 ### Modified
 
-- `.planning/REQUIREMENTS.md` — CMC-08 "plus the `reinstalled` token used in reinstall cascades" clause dropped, replaced with the research-evidenced explanation that the cascade discriminant is internal; CMC-11 "24 reasons" → "23 reasons" with a binding-frontmatter citation.
-- `.planning/ROADMAP.md` — Phase 12 scope text "all 24 reasons" → "all 23 reasons" with a parenthetical citing Plan 12-01 as the reconciliation site; Success Criterion #1 "24 entries in `reasons:`" → "23 entries in `reasons:`".
-- `.planning/phases/12-messaging-foundations-renderer-primitives/12-CONTEXT.md` — `<canonical_refs>` "Open inconsistency" CMC-08 note rewritten to past-tense "Resolved in Plan 12-01 (Task 3)" with the resolution path explicit; `<deferred>` block adds a second resolved-item entry for the 24→23 reasons-count reconciliation.
+- `.planning/REQUIREMENTS.md` -- CMC-08 "plus the `reinstalled` token used in reinstall cascades" clause dropped, replaced with the research-evidenced explanation that the cascade discriminant is internal; CMC-11 "24 reasons" → "23 reasons" with a binding-frontmatter citation.
+- `.planning/ROADMAP.md` -- Phase 12 scope text "all 24 reasons" → "all 23 reasons" with a parenthetical citing Plan 12-01 as the reconciliation site; Success Criterion #1 "24 entries in `reasons:`" → "23 entries in `reasons:`".
+- `.planning/phases/12-messaging-foundations-renderer-primitives/12-CONTEXT.md` -- `<canonical_refs>` "Open inconsistency" CMC-08 note rewritten to past-tense "Resolved in Plan 12-01 (Task 3)" with the resolution path explicit; `<deferred>` block adds a second resolved-item entry for the 24→23 reasons-count reconciliation.
 
 ## Decisions Made
 
@@ -103,7 +103,7 @@ Followed the plan as specified. All locking decisions (D-CMC-01..D-CMC-05, D-CMC
 
 ## Deviations from Plan
 
-None — plan executed exactly as written.
+None -- plan executed exactly as written.
 
 The one near-miss was an ESLint `@stylistic/padding-line-between-statements` violation in `tests/architecture/grammar-frontmatter.test.ts` after the initial Write. Resolved via `npm run lint:fix`, which inserted the required blank line before the early-return assignment inside `extractFrontmatterList`. This is a standard tool-driven autofix (not a deviation rule trigger) and produced no semantic change.
 
@@ -111,32 +111,32 @@ A second tool-driven note: the Task 1 acceptance criterion required `grep -F "re
 
 ## Issues Encountered
 
-None — all three task verifications passed on first or near-first attempt; the lint-fix and the grep-guard wording adjustment were single-edit corrections.
+None -- all three task verifications passed on first or near-first attempt; the lint-fix and the grep-guard wording adjustment were single-edit corrections.
 
 ## User Setup Required
 
-None — no external service configuration required.
+None -- no external service configuration required.
 
 ## Threat Flags
 
-None — no new attack surface introduced. The constants are pure data; the drift test reads a tracked in-tree doc with a hand-rolled regex over a fixed-shape input (matches the plan's `<threat_model>` register T-12.01-01..03 dispositions).
+None -- no new attack surface introduced. The constants are pure data; the drift test reads a tracked in-tree doc with a hand-rolled regex over a fixed-shape input (matches the plan's `<threat_model>` register T-12.01-01..03 dispositions).
 
 ## Self-Check: PASSED
 
 All claims verified:
 
-- `extensions/pi-claude-marketplace/shared/grammar/status-tokens.ts` — FOUND
-- `extensions/pi-claude-marketplace/shared/grammar/reasons.ts` — FOUND
-- `tests/architecture/grammar-frontmatter.test.ts` — FOUND
-- Commit `698e37c` — FOUND (feat: STATUS_TOKENS and REASONS constants)
-- Commit `d889774` — FOUND (test: grammar-frontmatter drift test)
-- Commit `12bb10e` — FOUND (docs: reconciliation)
-- `npm run check` — exits 0 (1036 / 1036 tests pass)
-- Drift test — exits 0 in isolation (4 / 4 tests pass)
-- `markers-snapshot.test.ts` — exits 0 (D-CMC-08 retention not regressed)
-- `git diff --name-only HEAD~3 HEAD -- docs/messaging-style-guide.md` — empty (style guide untouched; Plan 12-03 owns the §14.1 edit per D-CMC-15)
-- `git diff --name-only HEAD~3 HEAD -- package.json package-lock.json` — empty (no new dependency)
-- `git diff --name-only HEAD~3 HEAD -- eslint.config.js` — empty (IL-3 / CMC-37 discipline preserved)
+- `extensions/pi-claude-marketplace/shared/grammar/status-tokens.ts` -- FOUND
+- `extensions/pi-claude-marketplace/shared/grammar/reasons.ts` -- FOUND
+- `tests/architecture/grammar-frontmatter.test.ts` -- FOUND
+- Commit `698e37c` -- FOUND (feat: STATUS_TOKENS and REASONS constants)
+- Commit `d889774` -- FOUND (test: grammar-frontmatter drift test)
+- Commit `12bb10e` -- FOUND (docs: reconciliation)
+- `npm run check` -- exits 0 (1036 / 1036 tests pass)
+- Drift test -- exits 0 in isolation (4 / 4 tests pass)
+- `markers-snapshot.test.ts` -- exits 0 (D-CMC-08 retention not regressed)
+- `git diff --name-only HEAD~3 HEAD -- docs/messaging-style-guide.md` -- empty (style guide untouched; Plan 12-03 owns the §14.1 edit per D-CMC-15)
+- `git diff --name-only HEAD~3 HEAD -- package.json package-lock.json` -- empty (no new dependency)
+- `git diff --name-only HEAD~3 HEAD -- eslint.config.js` -- empty (IL-3 / CMC-37 discipline preserved)
 
 ## Next Phase Readiness
 

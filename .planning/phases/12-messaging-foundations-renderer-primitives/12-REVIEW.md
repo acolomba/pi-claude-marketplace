@@ -94,13 +94,13 @@ findings below are narrative only.
 `reloadHint(names)` form, but the surrounding comments still describe the
 retired verb selector. Specifically:
 
-- `remove.ts:23` — flow comment reads
+- `remove.ts:23` -- flow comment reads
   `notifySuccess body + soft-dep warnings (RH-5) + trailing reload hint (RH-1, verb 'drop')`.
-- `remove.ts:256` — inline comment reads
+- `remove.ts:256` -- inline comment reads
   `RH-1, RH-2 verb 'drop' with alphabetically-sorted names`.
-- `update.ts:53` — flow comment reads
+- `update.ts:53` -- flow comment reads
   `RH-1/RH-2 reload hint (verb 'refresh')`.
-- `update.ts:345` — inline comment reads
+- `update.ts:345` -- inline comment reads
   `RH-1 / RH-2: reload hint with verb 'refresh' iff updated[].length > 0`.
 
 These four comments now contradict the code below them: the verb is no
@@ -188,7 +188,7 @@ matches the live disable directive at line 177.
 and the PU-8 (a) test name at line 533 is
 `PU-8 (a): >=1 resource dropped -> reload hint present (verb 'drop', 'it' form)`.
 The assertions inside those tests were correctly migrated to
-`/\/reload to pick up changes$/`, so the tests pass — but the test
+`/\/reload to pick up changes$/`, so the tests pass -- but the test
 names and comments describe rendering shapes that no longer exist
 (`(verb 'drop')`, `'it' form`). A future reader debugging an uninstall
 reload-hint regression will read "verb 'drop'" and waste time looking
@@ -213,7 +213,7 @@ orchestrator has a chance to compose the previously-asserted alphabetical
 name ordering (`Run /reload to drop "alpha", "hello".`). Under the new
 grammar the names are no longer interpolated, so seeding two plugins
 and two skills proves nothing the single-plugin variant does not already
-prove. Not a defect — the test still asserts a meaningful invariant —
+prove. Not a defect -- the test still asserts a meaningful invariant --
 but the fixture is now larger than the assertion needs.
 
 **Fix:** Either (a) trim the fixture to a single plugin/skill and rely
@@ -230,7 +230,7 @@ smaller change.
 **File:** `extensions/pi-claude-marketplace/shared/grammar/status-tokens.ts`
 **Issue:** Both modules ship a runtime array (`as const`) plus a derived
 literal-union type and have no production consumer in the Phase 12 tree
-— only the drift test at `tests/architecture/grammar-frontmatter.test.ts`
+-- only the drift test at `tests/architecture/grammar-frontmatter.test.ts`
 imports them. This is intentional per the file headers (Phase 13 will
 consume them; the constants land in Phase 12 so the drift guard can be
 in place when Phase 13 starts). Listed here so the review record
@@ -240,7 +240,7 @@ acknowledges the dead-code shape was inspected and accepted, not missed.
 consumer side and at that point the union types will start narrowing
 real call sites.
 
-### IN-05: `presentation/index.ts` barrel no longer re-exports the deleted `ReloadVerb` type — verified clean
+### IN-05: `presentation/index.ts` barrel no longer re-exports the deleted `ReloadVerb` type -- verified clean
 
 **File:** `extensions/pi-claude-marketplace/presentation/index.ts`
 **Issue:** The Phase 12 barrel correctly drops
