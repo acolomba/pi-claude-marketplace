@@ -99,7 +99,17 @@ test("AS-4 runPhases: undo failure aggregated with phase name", async () => {
   const result = await runPhases(phases, {});
   assert.equal(result.ok, false);
   assert.equal(result.error?.message, "boom");
-  assert.deepEqual([...result.rollbackPartials], [{ phase: "p1", msg: "rm leak" }]);
+  // Task 260525-cjr C1: RollbackPartial now also preserves the
+  // original undo throw via `cause`. Assert field-by-field instead of
+  // a deep-equal on the whole row so the test does not encode the
+  // Error instance identity into the fixture.
+  assert.equal(result.rollbackPartials.length, 1);
+  const first = result.rollbackPartials[0];
+  assert.ok(first !== undefined);
+  assert.equal(first.phase, "p1");
+  assert.equal(first.msg, "rm leak");
+  assert.ok(first.cause instanceof Error);
+  assert.equal(first.cause.message, "rm leak");
 });
 
 test("AS-4 runPhases: multiple undo failures aggregated in reverse order", async () => {
@@ -122,13 +132,15 @@ test("AS-4 runPhases: multiple undo failures aggregated in reverse order", async
   const result = await runPhases(phases, {});
   assert.equal(result.ok, false);
   // undo runs reverse order: p2 first, then p1 -> partials in that order
-  assert.deepEqual(
-    [...result.rollbackPartials],
-    [
-      { phase: "p2", msg: "p2 undo failed" },
-      { phase: "p1", msg: "p1 undo failed" },
-    ],
-  );
+  assert.equal(result.rollbackPartials.length, 2);
+  const [first, second] = result.rollbackPartials;
+  assert.ok(first !== undefined && second !== undefined);
+  assert.equal(first.phase, "p2");
+  assert.equal(first.msg, "p2 undo failed");
+  assert.ok(first.cause instanceof Error);
+  assert.equal(second.phase, "p1");
+  assert.equal(second.msg, "p1 undo failed");
+  assert.ok(second.cause instanceof Error);
 });
 
 test("PI-14 runPhases: PathContainmentError from undo is RE-THROWN (not folded into rollback partial)", async () => {
@@ -236,4 +248,60 @@ test("D-01 runPhases: ctx threaded to every do AND undo call", async () => {
   ];
   await runPhases(phases, ctx);
   assert.deepEqual(ctx.ops, ["do:p1:mytag", "undo:p1:mytag"]);
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Task 260525-cjr C1: RollbackPartial preserves the original undo throw's
+// Error.cause chain so the presentation layer can surface the depth-5 walk
+// to the user. Previously only `errorMessage(undoErr)` was recorded as
+// `msg`, dropping any deeper cause attached via `new Error(..., {cause})`.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("260525-cjr C1: undo error's Error.cause is preserved on the RollbackPartial.cause field", async () => {
+  const innermost = new Error("disk write failed");
+  const undoErr = new Error("rm leak", { cause: innermost });
+  const phases: Phase<object>[] = [
+    {
+      name: "p1",
+      do: noopAsync,
+      undo: () => Promise.reject(undoErr),
+    },
+    {
+      name: "p2",
+      do: throwAsync("boom"),
+    },
+  ];
+  const result = await runPhases(phases, {});
+  assert.equal(result.ok, false);
+  assert.equal(result.rollbackPartials.length, 1);
+  const first = result.rollbackPartials[0];
+  assert.ok(first !== undefined);
+  assert.equal(first.phase, "p1");
+  assert.equal(first.msg, "rm leak");
+  // The Error INSTANCE is preserved (not just the message text) so the
+  // depth-5 cause-chain walker at the presentation layer can traverse
+  // .cause to surface the originating "disk write failed" message.
+  assert.ok(first.cause instanceof Error);
+  assert.equal(first.cause, undoErr);
+  assert.equal((first.cause as Error & { cause?: unknown }).cause, innermost);
+});
+
+test("260525-cjr C1: undo throw of a non-Error (defensive) leaves RollbackPartial.cause undefined", async () => {
+  const phases: Phase<object>[] = [
+    {
+      name: "p1",
+      do: noopAsync,
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- 260525-cjr C1: deliberately reject with a non-Error to exercise the defensive `instanceof Error` guard on RollbackPartial.cause population.
+      undo: () => Promise.reject("string throw, not an Error"),
+    },
+    {
+      name: "p2",
+      do: throwAsync("boom"),
+    },
+  ];
+  const result = await runPhases(phases, {});
+  assert.equal(result.rollbackPartials.length, 1);
+  const first = result.rollbackPartials[0];
+  assert.ok(first !== undefined);
+  assert.equal(first.cause, undefined);
 });

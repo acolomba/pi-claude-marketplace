@@ -23,6 +23,7 @@
 // composes its own `(failed) {rollback partial}` parent line and stitches
 // the bare children block produced here under it).
 
+import { causeChainTrailer } from "./cause-chain.ts";
 import { renderRow } from "./compact-line.ts";
 
 import type {
@@ -39,13 +40,20 @@ import type {
  * canonical producer; `presentation/` cannot import from `transaction/`
  * (BLOCK C / D-11 layering), so this composer accepts a structurally
  * compatible interface that requires only the `phase` field used in
- * rendering. The `msg` field present on `RollbackPartial` is
- * intentionally NOT consumed (free-text reasons surface via the ES-4
- * cause-chain trailer; the closed-set CMC-11 row vocabulary requires
- * the `[phase] (rollback failed) {rollback partial}` triple only).
+ * rendering.
+ *
+ * Task 260525-cjr C1: extended with an optional `cause?: unknown`
+ * field so the composer can emit a per-undo-failure cause-chain
+ * trailer when the orchestrator wants to surface the originating
+ * Error.cause chain to the user. The transaction layer's
+ * `RollbackPartial.cause` (an `Error`) is structurally assignable to
+ * `unknown` so producers may pass through without an adapter. When
+ * `cause` is undefined the composer behaves identically to the legacy
+ * msg-only output.
  */
 export interface RollbackPartialInput {
   readonly phase: string;
+  readonly cause?: unknown;
 }
 
 /**
@@ -102,5 +110,28 @@ export function composeRollbackPartialChildren(partials: readonly RollbackPartia
     return "";
   }
 
-  return partials.map((p) => `  [${p.phase}] (rollback failed) {rollback partial}`).join("\n");
+  return partials
+    .map((p) => {
+      const baseLine = `  [${p.phase}] (rollback failed) {rollback partial}`;
+      // Task 260525-cjr C1: when the orchestrator passed through the
+      // undo throw's `cause` (Error instance) on the RollbackPartial,
+      // emit a depth-5 cause-chain trailer indented under the child
+      // row so the originating Error.cause chain is surfaced to the
+      // user. Producers that do not pass `cause` get the legacy
+      // msg-less behavior verbatim (back-compat: existing callers
+      // unchanged).
+      if (p.cause === undefined) {
+        return baseLine;
+      }
+
+      const trailer = causeChainTrailer(p.cause);
+      if (trailer === "") {
+        return baseLine;
+      }
+
+      // 4-space indent: 2 for the child row + 2 to nest the cause line
+      // beneath it, matching the rollback-block visual hierarchy.
+      return `${baseLine}\n    ${trailer}`;
+    })
+    .join("\n");
 }

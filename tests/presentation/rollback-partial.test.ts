@@ -13,7 +13,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { renderRollbackPartial } from "../../extensions/pi-claude-marketplace/presentation/rollback-partial.ts";
+import {
+  composeRollbackPartialChildren,
+  renderRollbackPartial,
+} from "../../extensions/pi-claude-marketplace/presentation/rollback-partial.ts";
 
 import type {
   PluginInlineRow,
@@ -138,4 +141,53 @@ test("MSG-RP-1: PluginCascadeRow parent (no @marketplace) renders correctly", ()
   assert.equal(lines[0], "⊘ alpha [user] v1.0.0 (failed) {rollback partial}");
   assert.ok(!lines[0].includes("@"), `cascade parent must not contain @<mp>: ${lines[0]}`);
   assert.equal(lines[1], "  agents (failed) {unparseable}");
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Task 260525-cjr C1: composeRollbackPartialChildren emits a 4-space-indented
+// cause-chain trailer beneath the child row when `cause` is populated (the
+// transaction-layer RollbackPartial now passes through the original undo
+// throw's Error.cause chain via the new optional field).
+// ───────────────────────────────────────────────────────────────────────────
+
+test("260525-cjr C1: composeRollbackPartialChildren without cause -> legacy bare child row (back-compat)", () => {
+  const out = composeRollbackPartialChildren([{ phase: "agents" }]);
+  assert.equal(out, "  [agents] (rollback failed) {rollback partial}");
+});
+
+test("260525-cjr C1: composeRollbackPartialChildren with `cause` emits a 4-space-indented cause-chain trailer", () => {
+  const inner = new Error("disk write failed");
+  const undoErr = new Error("rm leak", { cause: inner });
+  const out = composeRollbackPartialChildren([{ phase: "agents", cause: undoErr }]);
+  // The child row first, then the indented cause-chain trailer.
+  const lines = out.split("\n");
+  assert.equal(lines[0], "  [agents] (rollback failed) {rollback partial}");
+  // The depth-5 walker emits `cause: <l1> -> <l2>` (MSG-CC-1 form).
+  // Exact byte equality is asserted by the cause-chain tests; here we
+  // only assert the trailer is present at 4-space indent and includes
+  // the underlying message.
+  assert.ok(lines[1] !== undefined, `expected cause line, got:\n${out}`);
+  assert.match(lines[1], /^ {4}cause:/, `trailer must be 4-space-indented: ${lines[1]}`);
+  assert.ok(
+    lines[1].includes("rm leak") && lines[1].includes("disk write failed"),
+    `trailer must include both undo and root cause messages: ${lines[1]}`,
+  );
+});
+
+test("260525-cjr C1: composeRollbackPartialChildren with multiple partials renders each cause inline", () => {
+  const e1 = new Error("p1 undo failed", { cause: new Error("EACCES") });
+  const e2 = new Error("p2 undo failed", { cause: new Error("EIO") });
+  const out = composeRollbackPartialChildren([
+    { phase: "p2", cause: e2 },
+    { phase: "p1", cause: e1 },
+  ]);
+  const lines = out.split("\n");
+  assert.equal(lines[0], "  [p2] (rollback failed) {rollback partial}");
+  assert.match(lines[1] ?? "", /^ {4}cause:.*EIO/);
+  assert.equal(lines[2], "  [p1] (rollback failed) {rollback partial}");
+  assert.match(lines[3] ?? "", /^ {4}cause:.*EACCES/);
+});
+
+test("260525-cjr C1: composeRollbackPartialChildren empty array still returns empty string", () => {
+  assert.equal(composeRollbackPartialChildren([]), "");
 });
