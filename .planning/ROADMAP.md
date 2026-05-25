@@ -71,7 +71,7 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 - IL-2 / IL-3: All user-visible messages go through `ctx.ui.notify` from `shared/notify.ts` only; the single sanctioned `console.warn` at `persistence/migrate.ts` stays inline-disabled at the call site.
 - Atomic commits per plan; no commits to `main`.
 
-- [ ] **Phase 15: Type Model & ADR Refresh** -- Pure type definitions in `shared/notify.ts` (`NotificationMessage`, `MarketplaceNotificationMessage`, `PluginNotificationMessage`, `PluginStatus`, `MarketplaceStatus`, `Dependency`, `MarketplaceDetails`, `UsageErrorMessage`) plus refreshed source-of-truth ADR
+- [x] **Phase 15: Type Model & ADR Refresh** -- Pure type definitions in `shared/notify.ts` (`NotificationMessage`, `MarketplaceNotificationMessage`, `PluginNotificationMessage`, `PluginStatus`, `MarketplaceStatus`, `Dependency`, `MarketplaceDetails`, `UsageErrorMessage`) plus refreshed source-of-truth ADR (completed 2026-05-25)
 - [ ] **Phase 16: Renderer & Public API (Alongside V1)** -- `notify(ctx, payload)` and `notifyUsageError(ctx, payload)` exported from `shared/notify.ts`; internal switch with `assertNever`; computed severity; computed reload hint; renderer-time dependency probe; per-status unit tests
 - [ ] **Phase 17: Spec Rewrite & Catalog UAT Migration** -- `docs/messaging-style-guide.md` v2.0 + `docs/output-catalog.md` rewritten to always-marketplace-header spec; catalog UAT runner fed by structured `NotificationMessage` fixtures
 - [ ] **Phase 18: Migration Wave 1 -- Marketplace Orchestrator Family** -- Migrate all `orchestrators/marketplace/*` call sites to `notify(ctx, structured)`; retire MSG-* lint globs covering marketplace orchestrators
@@ -96,7 +96,7 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 3. `docs/adr/v2-001-structured-notify.md` status is flipped from "Proposed" to "Accepted" with a forward reference to Phase 15; ADR body reflects status renames (`PluginStatus`/`MarketplaceStatus` named enums), `*NotificationMessage` type names, `Dependency` closed set, per-plugin causes, dropped top-level trailer, computed severity, always-marketplace-header spec change.
 4. `npm run check` stays GREEN; no runtime call site references the new types yet (types are unused outside their own declarations and the compile-check file).
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 **Wave 1**
 
 - [x] 15-01-PLAN.md -- Append v1.4 structured type model + const tuples (PLUGIN_STATUSES, MARKETPLACE_STATUSES, DEPENDENCIES) to shared/notify.ts (SNM-01..SNM-11; D-15-01..D-15-11)
@@ -107,7 +107,7 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 15-03-PLAN.md -- Refresh docs/adr/v2-001-structured-notify.md (Status Proposed -> Accepted; Decision/Consequences/Migration rewrite; Alt-2 flip; Open Questions deletion) (SNM-21)
+- [x] 15-03-PLAN.md -- Refresh docs/adr/v2-001-structured-notify.md (Status Proposed -> Accepted; Decision/Consequences/Migration rewrite; Alt-2 flip; Open Questions deletion) (SNM-21)
 
 ### Phase 16: Renderer & Public API (Alongside V1)
 
@@ -229,7 +229,7 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 | 14. Drift Guard & Test Alignment                                     | v1.3      | 6/6            | Complete    | 2026-05-24 |
 | 14.1. CMC-13 import propagation closure                              | v1.3      | 2/2            | Complete    | 2026-05-24 |
 | 14.2. CR-01 + retroactive Phase 12/14.1 gates                        | v1.3      | 5/5            | Complete    | 2026-05-24 |
-| 15. Type Model & ADR Refresh                                         | v1.4      | 2/3 | In Progress|  |
+| 15. Type Model & ADR Refresh                                         | v1.4      | 3/3 | Complete   | 2026-05-25 |
 | 16. Renderer & Public API (Alongside V1)                             | v1.4      | 0/?            | Not started | --         |
 | 17. Spec Rewrite & Catalog UAT Migration                             | v1.4      | 0/?            | Not started | --         |
 | 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 0/?            | Not started | --         |
