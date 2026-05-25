@@ -10,9 +10,26 @@ Four milestones have shipped: v1.0 (PRD-derived successor architecture), v1.1 (a
 
 A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
-## Next Milestone
+## Current Milestone: v1.4 Structured Notification Messages
 
-To be defined via `/gsd:new-milestone`. v1.4 scope is open.
+**Goal:** Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with a type-driven structured `NotificationMessage` payload. Simultaneously simplify the user-output spec to a single uniform shape: every output renders a marketplace header + indented plugin rows, single-plugin operations included.
+
+**Target features:**
+
+- Two public methods: `notify(ctx, NotificationMessage)` for state-change notifications and `notifyUsageError(ctx, UsageErrorMessage)` for argv-validation errors. Severity computed from contents; reload-hint trailer computed from contents; no caller-visible severity field.
+- `NotificationMessage` carries a `marketplaces: readonly MarketplaceNotificationMessage[]` tree. `MarketplaceNotificationMessage` carries optional `status: MarketplaceStatus` (added | removed | updated | failed), optional `details: MarketplaceDetails` (list context: autoupdate, last-updated), and `plugins: readonly PluginNotificationMessage[]`. `PluginNotificationMessage` is a discriminated union on `status` (10 variants -- installed / updated / reinstalled / uninstalled / available / unavailable / upgradable / failed / skipped / "manual recovery"); `PluginStatus = PluginNotificationMessage["status"]` derived via indexed access.
+- New closed enum `Dependency = "agents" | "mcp"` replaces v1.3's `declaresAgents`/`declaresMcp` booleans on installed/updated/reinstalled plugin rows. Renderer probes each declared dependency at notify time and emits `{requires pi-subagents}` / `{requires pi-mcp}` marker per absent probe.
+- Per-plugin `cause?: Error` on `failed` / "manual recovery" variants replaces v1.3's single top-level cause-chain trailer. Cascade with multiple failures now surfaces each plugin's cause chain.
+- `rollbackPartial?: readonly { phase: string; cause?: Error }[]` modelled as sub-state of `failed` (no separate "rollback failed" status).
+- `scope?` on plugin rows is the orphan-fold case only (present when plugin's scope differs from parent marketplace's scope).
+- Spec simplification: every output now renders marketplace header + indented plugin rows. Single-plugin install changes from `● commit-commands [user] (installed)` (one line) to `● claude-plugins-official [user]\n  ● commit-commands (installed)` (two lines). `docs/messaging-style-guide.md` and `docs/output-catalog.md` rewritten to reflect the simplified spec.
+- Delete `tests/lint-rules/` (~4096 LoC: 34 custom ESLint rules + 34 RuleTester suites + helpers) and `tests/architecture/msg-rule-registry.test.ts`. Replace with stock `eslint.config.js`: `no-restricted-syntax` (only `shared/notify.ts` may call `ctx.ui.notify`) + `no-console` (with `persistence/migrate.ts` per-file override for IL-3).
+- Migrate ~23 call sites across orchestrators/edge from `notifySuccess/Warning/Error/UsageError(ctx, string)` to `notify(ctx, structuredMessage)` / `notifyUsageError(ctx, structuredUsageError)`. Most `presentation/` composers become module-internal helpers of `notify()`'s switch.
+- Coverage moves to per-status unit tests on `notify()` switch + the existing catalog UAT runner (now fed by structured `NotificationMessage` fixtures instead of pre-assembled strings).
+
+**Source-of-truth artifact:** `docs/adr/v2-001-structured-notify.md` (commit `492d9c4`). The ADR predates several v1.4 design refinements -- status renames, `PluginStatus`/`MarketplaceStatus` enums, `Dependency` closed set, always-marketplace-header spec change, per-plugin causes, trailer dropped. Phase 1 refreshes the ADR to reflect the locked design.
+
+**Net code delta target:** ~4300 LoC removed (~+400 new wrappers/types/switch vs ~-4700 deleted lint plugin + parity test + presentation composers absorbed inward).
 
 ## Requirements
 
@@ -30,7 +47,7 @@ To be defined via `/gsd:new-milestone`. v1.4 scope is open.
 
 <!-- Current scope. Building toward these. Detailed REQ-IDs in REQUIREMENTS.md. -->
 
-*v1.3 shipped. The CR-01 follow-up (user-first scope ordering in `edge/handlers/plugin/import.ts:45` outside the orchestrator-scoped MSG-GR-3 glob) and the broader edge-handler scope-iteration audit are tech-debt candidates for v1.4 scoping. Active scope will be (re)defined when `/gsd:new-milestone` runs.*
+*v1.4 active. Detailed REQ-IDs (SNM-XX) in REQUIREMENTS.md. CR-01 / edge-handler scope-iteration tech debt becomes moot under structured payloads (scope is a field on `MarketplaceNotificationMessage` and an orphan-fold-only field on `PluginNotificationMessage` -- the existing iteration-order drift sites have no role in the new model).*
 
 ### Out of Scope
 
@@ -125,6 +142,6 @@ This document evolves at phase transitions and milestone boundaries.
 
 ______________________________________________________________________
 
-*Last updated: 2026-05-25 -- Milestone v1.3 (Consistent Messaging) shipped and archived. 5 phases (12, 13, 14, 14.1, 14.2) across 27 plans, 72 tasks, 223 commits, 180 files changed (+15,030 / -1,917 LOC), ~3 days (2026-05-21 → 2026-05-24). 38/38 CMC requirements satisfied; 1249/1249 tests green; lint+format+types clean. The v1.3 user-contract is structurally enforced by a 34-rule ESLint drift-guard plugin (16 meta-assertion + 18 full-impl) reading `docs/messaging-style-guide.md` YAML frontmatter as the binding contract, plus a byte-equality catalog UAT runner against `docs/output-catalog.md`. ES-5 atomic supersession commit `c4d87d4` deleted the 5 legacy markers; static-audit `no-legacy-markers.test.ts` prevents re-introduction. Awaiting next milestone scope via `/gsd:new-milestone`.*
+*Last updated: 2026-05-25 -- Milestone v1.4 (Structured Notification Messages) started. Seeded from `docs/adr/v2-001-structured-notify.md` (commit `492d9c4`) plus iterative design discussion that refined the ADR: status renames (PluginStatus / MarketplaceStatus closed enums with `status` as discriminator), `Dependency = "agents" | "mcp"` replacing v1.3's two declares-* booleans, per-plugin causes replacing the top-level cause-chain trailer, rollback-partial as sub-state of `failed`, computed severity + computed reload hint, and a v1.3 spec simplification: every output now renders marketplace header + indented plugin rows. Two public methods (`notify(ctx, NotificationMessage)` and `notifyUsageError(ctx, UsageErrorMessage)`) replace the v1.3 `notifySuccess/Warning/Error/UsageError` quartet. Targets ~4300 LoC net removal (deletes the 34-rule `tests/lint-rules/` plugin and the 4-way registry parity test; replaces with stock ESLint `no-restricted-syntax` + `no-console` config). Last shipped: v1.3 (2026-05-25, 5 phases, 27 plans, 1249/1249 tests).*
 
 *Earlier updates (pre-v1.3-close): see git history. Phase 1 (2026-05-09), Phase 2 (2026-05-10), Phases 3-7 v1.0 (2026-05-11), Phases 8-9 v1.1 (2026-05-13/14), Phases 10-11 v1.2 (2026-05-20), Phases 12-14.2 v1.3 (2026-05-22 → 2026-05-24).*

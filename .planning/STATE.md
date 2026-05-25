@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.3
-milestone_name: Consistent Messaging
-status: Awaiting next milestone
-stopped_at: Phase 14.2 context gathered
-last_updated: "2026-05-25T02:59:25.871Z"
-last_activity: 2026-05-25 -- Milestone v1.3 completed and archived
+milestone: v1.4
+milestone_name: Structured Notification Messages
+status: planning
+last_updated: "2026-05-25T20:05:32.654Z"
+last_activity: 2026-05-25
 progress:
-  total_phases: 9
-  completed_phases: 5
-  total_plans: 27
-  completed_plans: 27
-  percent: 56
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -24,10 +23,10 @@ See: .planning/PROJECT.md (updated 2026-05-21)
 
 ## Current Position
 
-Phase: Milestone v1.3 complete
+Phase: Not started (defining requirements)
 Plan: --
-Status: Awaiting next milestone
-Last activity: 2026-05-25 -- Completed quick task 260525-cjr: Apply PR #22 review fixes
+Status: Defining requirements
+Last activity: 2026-05-25 -- Milestone v1.4 started
 
 ## Performance Metrics
 
