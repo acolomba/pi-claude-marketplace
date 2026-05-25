@@ -1,6 +1,6 @@
 # ADR-v2-001: Structured `notify` payload with typed wrappers
 
-- **Status:** Proposed (v2 target)
+- **Status:** Accepted (Phase 15, 2026-05-25)
 - **Date:** 2026-05-25
 - **Supersedes:** D-CMC-11 (no structured-payload arg)
 
@@ -17,135 +17,164 @@ This works but accrues cost: every new notify surface needs a new lint glob; the
 
 ## Decision
 
-Introduce a single structured implementation seam fronted by typed `notify*` wrappers.
+v1.4 introduces a single structured `notify(ctx, NotificationMessage)` entrypoint and a single `notifyUsageError(ctx, UsageErrorMessage)` entrypoint. Per-outcome wrappers are NOT introduced. The discriminator on `status:` literal (per-variant interfaces joined in a discriminated union) recovers per-outcome-wrapper autocomplete ergonomics without the per-wrapper file maintenance cost; `assertNever` in the renderer's `switch` retains the compile-error gate that motivated the wrapper design. The design pivot is documented in the Alternatives section below (Alternative 2 flipped Rejected → ACCEPTED).
 
 ### Public surface
 
-One typed wrapper per outcome variant, all in the existing `notify*` namespace. Past-participle naming matches the status-token vocabulary ("tell the user that X happened"):
+Two exported entrypoints and the user-facing types live in `extensions/pi-claude-marketplace/shared/notify.ts`:
 
 ```ts
-export function notifyPluginInstalled(ctx, args: PluginInstalledArgs): void;
-export function notifyPluginUpdated(ctx, args: PluginUpdatedArgs): void;
-export function notifyPluginFailed(ctx, args: PluginFailedArgs): void;
-export function notifyMarketplaceAdded(ctx, args: MarketplaceAddedArgs): void;
-export function notifyCascade(ctx, args: CascadeArgs): void;
-export function notifyManualRecovery(ctx, args: ManualRecoveryArgs): void;
-export function notifyRollbackPartial(ctx, args: RollbackPartialArgs): void;
-export function notifyUsageError(ctx, args: UsageErrorArgs): void;
-// ...one per kind
+export function notify(ctx: ExtensionContext, message: NotificationMessage): void;
+export function notifyUsageError(ctx: ExtensionContext, message: UsageErrorMessage): void;
+
+// Public types (shipped by Phase 15):
+export type NotificationMessage;            // { marketplaces: readonly MarketplaceNotificationMessage[] }
+export type MarketplaceNotificationMessage; // { name; scope; status?; details?; plugins }
+export type PluginNotificationMessage;      // 10-variant discriminated union on `status`
+export type PluginStatus;                   // 10 literal strings, derived from PLUGIN_STATUSES tuple
+export type MarketplaceStatus;              // 4 literal strings, derived from MARKETPLACE_STATUSES tuple
+export type Dependency;                     // "agents" | "mcp", derived from DEPENDENCIES tuple
+export interface MarketplaceDetails;        // { autoupdate: boolean; lastUpdatedAt?: string }
+export interface UsageErrorMessage;         // { message: string; usage: string }
+
+// Runtime tuples shipped alongside the derived literal-union types (D-15-11):
+export const PLUGIN_STATUSES;       // 10 entries
+export const MARKETPLACE_STATUSES;  // 4 entries
+export const DEPENDENCIES;          // 2 entries
 ```
 
-Each wrapper is two lines with zero formatting logic -- it tags the payload and delegates:
-
-```ts
-export function notifyPluginInstalled(ctx, args: PluginInstalledArgs): void {
-  notify(ctx, { kind: "plugin-installed", ...args });
-}
-```
+The `presentation/` composers become module-internal helpers of `notify()` and are NOT re-exported from the barrel (SNM-18). The Phase 16 renderer is the SOLE consumer of the per-variant grammar.
 
 ### Implementation seam
 
-One private entrypoint where all formatting and severity routing live:
+One private switch over the `status` discriminator is the SOLE site that knows the user-output grammar (SNM-17). The Phase 16 renderer body has the following shape:
 
 ```ts
-function notify(ctx: ExtensionContext, payload: NotifyPayload): void {
-  switch (payload.kind) {
-    case "plugin-installed":
-      ctx.ui.notify(`${ICON_INSTALLED} ${payload.subject.name} [${payload.scope}] (installed)${reasonsBlock(payload.reasons)}`);
-      return;
-    case "plugin-updated":
-      ctx.ui.notify(`${ICON_INSTALLED} ${payload.subject.name} [${payload.scope}] v${payload.from} → v${payload.to} (updated)`);
-      return;
-    case "plugin-failed":
-      ctx.ui.notify(/* ... */, "error");
-      return;
-    // ...
+function renderPlugin(plugin: PluginNotificationMessage): string {
+  switch (plugin.status) {
+    case "installed":
+      return `${ICON_INSTALLED} ${plugin.name}${scopeBracket(plugin.scope)}${versionSlot(plugin.version)} (installed)${dependencyProbes(plugin.dependencies)}`;
+    case "updated":
+      return `${ICON_INSTALLED} ${plugin.name}${scopeBracket(plugin.scope)} v${plugin.from} → v${plugin.to} (updated)${dependencyProbes(plugin.dependencies)}`;
+    // ... 8 more arms, one per PluginStatus literal ...
     default:
-      assertNever(payload);
+      assertNever(plugin);
   }
 }
 ```
 
-The switch is the *only* place that knows the grammar. `assertNever(payload)` makes "added a variant without a case arm" a compile error.
+`assertNever(plugin)` makes "added a variant without a case arm" a compile error (SNM-17). The switch is the only place that picks severity, picks the icon glyph, embeds the status-token literal, orders the grammar slots, or composes brackets / probes / trailers.
 
-`notify()` is not exported. Tests exercise the wrappers and observe `ctx.ui.notify` via a mock `ctx` (matches V1's existing notification-recording test pattern).
+Severity is **computed** from contents inside `notify()` (SNM-14): any plugin with `status: "failed"` raises severity to `"error"`; any plugin with `status: "skipped"` or `status: "manual recovery"` raises severity to `"warning"`; otherwise the call lands at default success severity. No `severity` field on `NotificationMessage` -- the message contents fully determine routing.
 
-### `NotifyPayload`
+The reload-hint trailer is **computed** at render time (SNM-15): the trailer is emitted iff any plugin carries one of `installed | updated | reinstalled | uninstalled` OR any marketplace carries a `status` set. The call site never asks for it.
 
-`NotifyPayload` is a discriminated union mirroring `presentation/compact-line.ts:RowSpec`, augmented with the data needed for trailers (cause chain, manual-recovery anchor, usage block):
+The dependency probe is **computed** at render time (SNM-16): each `dependencies: ["agents"]` triggers a per-row probe for the `pi-subagents` companion extension and emits `{requires pi-subagents}` when absent; `dependencies: ["mcp"]` triggers the analogous probe for `pi-mcp-adapter` and emits `{requires pi-mcp}` when absent. The 3 structurally-absorbed v1.3 Reasons (`rollback partial`, `requires pi-subagents`, `requires pi-mcp`) no longer appear in any typed `reasons` field of the new model.
+
+Tests exercise `notify()` via a mock `ctx` and assert on the exact string passed to `ctx.ui.notify` (matches V1's existing notification-recording test pattern).
+
+### NotificationMessage shape
+
+The top-level payload is a thin envelope; every grammar decision lives in the per-plugin variants:
 
 ```ts
-type NotifyPayload =
-  | { kind: "plugin-installed"; subject: PluginSubject; scope: Scope; reasons?: readonly Reason[] }
-  | { kind: "plugin-updated"; subject: PluginSubject; scope: Scope; from: Version; to: Version }
-  | { kind: "plugin-failed"; subject: PluginSubject; scope: Scope; reasons: readonly Reason[]; cause?: unknown }
-  | { kind: "marketplace-added"; subject: MarketplaceSubject; scope: Scope }
-  | { kind: "cascade"; outcome: CascadeOutcome; header: CascadeHeader; rows: readonly RowSpec[] }
-  | { kind: "manual-recovery"; subject: PluginSubject; reason: Reason; cause?: unknown }
-  | { kind: "rollback-partial"; subject: PluginSubject; phases: readonly RollbackPhase[]; cause?: unknown }
-  | { kind: "usage-error"; message: string; usage: UsageBlock }
-  // ...
+interface NotificationMessage {
+  readonly marketplaces: readonly MarketplaceNotificationMessage[];
+}
+
+interface MarketplaceNotificationMessage {
+  readonly name: string;
+  readonly scope: Scope;
+  readonly status?: MarketplaceStatus; // "added" | "removed" | "updated" | "failed"
+  readonly details?: MarketplaceDetails; // { autoupdate; lastUpdatedAt? }
+  readonly plugins: readonly PluginNotificationMessage[];
+}
+
+type PluginNotificationMessage =
+  | PluginInstalledMessage // status: "installed";   dependencies (required)
+  | PluginUpdatedMessage // status: "updated";     dependencies (required); from/to (required)
+  | PluginReinstalledMessage // status: "reinstalled"; dependencies (required)
+  | PluginUninstalledMessage // status: "uninstalled"
+  | PluginAvailableMessage // status: "available";   NO scope (SNM-11)
+  | PluginUnavailableMessage // status: "unavailable"; reasons (required); NO scope (SNM-11)
+  | PluginUpgradableMessage // status: "upgradable";  reasons (required)
+  | PluginFailedMessage // status: "failed";      reasons (required); cause?; rollbackPartial?
+  | PluginSkippedMessage // status: "skipped";     reasons (required)
+  | PluginManualRecoveryMessage; // status: "manual recovery"; reasons (required); cause?
 ```
 
-`Scope`, `Reason`, `StatusToken`, `PluginSubject`, `MarketplaceSubject` carry over from V1. `UsageBlock` remains free-form Markdown -- it is not customer-grammar-bound and does not warrant a closed shape.
+`NotificationMessage` has NO `severity` field and NO `trailer` field (SNM-01) -- both are computed inside `notify()` from contents per the rules in the Implementation seam.
+
+`MarketplaceNotificationMessage.status?` and `.details?` are independent optionals (SNM-02 + D-15-06) -- they never co-occur in practice (Phase 16 renderer ignores `details` when `status` is set) but the type does not structurally constrain that. An empty `plugins: []` IS the structural representation of the `(no plugins)` rendering on the list surface (D-15-08); on state-change paths an empty `plugins` array is the normal case (renderer emits the marketplace header alone).
+
+The 10-variant `PluginNotificationMessage` discriminated union locks per-variant field carve-outs at compile time (SNM-03 + D-15-12):
+
+- `reasons: readonly Reason[]` REQUIRED only on `unavailable | upgradable | skipped | failed | manual recovery` (D-15-01). The other 5 variants omit the field entirely so `(installed) {up-to-date}` is a compile error.
+- `dependencies: readonly Dependency[]` REQUIRED only on `installed | updated | reinstalled` (D-15-02 + SNM-06). The other 7 variants omit the field; only those 3 switch arms reach the per-dependency probe path.
+- `version?: string` on every variant EXCEPT `updated`, which carries REQUIRED `from: string; to: string` instead (D-15-04). Hash-version contract (PI-7 `hash-<12hex>`) remains a plain string -- no branded type.
+- `scope?: Scope` on every variant EXCEPT `available | unavailable` (SNM-11 -- MSG-PL-6 carve-out preserved structurally; the list surface does not emit `[<scope>]` brackets for those rows).
+- `cause?: Error` on `failed | manual recovery` only (SNM-10). The v1.3 top-level cause-chain trailer is RETIRED -- per-plugin causes survive every cascade and are surfaced individually by the renderer.
+- `rollbackPartial?: readonly { phase; cause? }[]` on `failed` only (SNM-09). No separate `"rollback failed"` status -- rollback-partial is structurally a sub-state of `failed`.
+
+`PluginStatus = (typeof PLUGIN_STATUSES)[number]` -- the runtime tuple and the derived literal-union type stay in lockstep (SNM-04 + D-15-11). Same pattern for `MarketplaceStatus` and `Dependency`.
+
+`MarketplaceDetails = { autoupdate: boolean; lastUpdatedAt?: string }` -- intentionally minimal (SNM-07 + D-15-05); `lastUpdatedAt?` mirrors `persistence/state-io.ts:70` so list-surface orchestrators can pass the record's value through unchanged.
+
+`UsageErrorMessage = { message: string; usage: string }` (SNM-08) -- both fields REQUIRED; the renderer composes the on-the-wire string as `${message}\n\n${usage}` mirroring V1's blank-line discipline. No `cause` (usage-error is non-cause-bearing) and no `severity` (always `"error"` -- structural, not a field).
+
+**Always-marketplace-header spec change.** Every `notify()` output renders a marketplace header at column 0 with plugin rows indented two spaces. v1.3's inline-plugin and bare-cascade emissions are replaced by the always-header form for structural uniformity. The spec rewrite of `docs/output-catalog.md` lands in Phase 17 (SNM-20).
 
 ## Consequences
 
 ### Removed at compile time
 
-No test or lint needed for any of:
-
-- Severity routing -- wrapper choice derives from `kind`
-- Icon glyph -- derives from `kind`
-- Status token literal -- embedded in the switch arm
-- Grammar slot order, scope brackets, scope ordering -- payload shape *is* the grammar
-- Closed sets (status-tokens, reasons, markers) -- encoded in field types
-- Soft-dep markers, reload-hint trailer, cause-chain trailer -- appended structurally inside `notify()`, not by caller
+No test or lint needed for any of: severity routing, icon glyph, status-token literal, grammar slot order, scope brackets, scope ordering, closed sets (status-tokens, dependencies, reasons, markers), soft-dep markers, reload-hint trailer, per-plugin cause-chain trailers. All derive structurally inside `notify()` rather than per caller. Closed sets are encoded as `as const` tuples in `shared/notify.ts` (D-15-11) so the runtime arrays power downstream fixture iteration AND the literal-union types power compile-time narrowing from a single source of truth.
 
 ### Custom ESLint plugin deleted entirely
 
-`tests/lint-rules/` (~4096 lines: 34 rules + 34 RuleTester suites + registry + helpers) is removed. The two surviving call-site policies are stock ESLint config:
+`tests/lint-rules/` (~4096 lines: 34 MSG-\* rules + 34 RuleTester suites + registry + helpers) is removed. `tests/architecture/msg-rule-registry.test.ts` (the 4-way parity test) is also removed -- no plugin to parity-check. `eslint.config.js` swaps the MSG-plugin wiring for stock rules:
 
 ```js
-// eslint.config.js
+// eslint.config.js (post-Phase-21)
 "no-restricted-syntax": ["error", {
   selector: "CallExpression[callee.object.property.name='ui'][callee.property.name='notify']",
-  message: "Call ctx.ui.notify only from shared/notify.ts; use a notify* wrapper.",
+  message: "Call ctx.ui.notify only from shared/notify.ts.",
 }],
-"no-console": ["error", { allow: [] }], // overridden per-file in persistence/migrate.ts (IL-3)
+"no-console": ["error", { allow: [] }], // per-file override in persistence/migrate.ts (IL-3)
 ```
 
-`tests/architecture/msg-rule-registry.test.ts` is also deleted (no plugin to parity-check).
+The deletion lands in Phase 21 after the call-site migration waves (Phases 18-20) complete. The lint plugin stays in place through Phase 20 to guard call sites that have not yet migrated.
 
-### Coverage moves to wrapper tests + the existing catalog UAT
+### Coverage moves to per-variant unit tests + catalog UAT
 
-Each wrapper gets a small unit test that calls it with a mock `ctx` and asserts on the string passed to `ctx.ui.notify`. The catalog UAT runner (`tests/architecture/catalog-uat.test.ts`) keeps its byte-equality role unchanged but is now fed by calling the typed wrappers with structured fixtures, instead of being handed pre-assembled strings. `docs/output-catalog.md` is the same human-readable user contract.
+Each `PluginStatus` and `MarketplaceStatus` value gets a small unit test that calls `notify()` with a mock `ctx` and asserts on the exact string passed to `ctx.ui.notify` (SNM-30). The catalog UAT runner (`tests/architecture/catalog-uat.test.ts`) keeps its byte-equality role unchanged but is now fed by structured `NotificationMessage` fixtures (SNM-31) flowing through `notify()` via mock ctx -- not pre-assembled strings. `docs/output-catalog.md` is rewritten in Phase 17 to reflect the always-marketplace-header spec (SNM-20). `docs/messaging-style-guide.md` v2.0 describes the structured type model as the binding contract (SNM-19).
 
 ### Other consequences
 
-- `messaging-style-guide.md` becomes the binding spec for the discriminated union (frontmatter still drives drift tests for status-tokens / reasons / markers / pattern-classes -- these are still closed sets, just embedded in the type)
-- `presentation/` composers become module-internal helpers of `notify()`'s switch; the public surface shrinks to the `notify*` wrapper set
-- Typed errors (`PluginShapeError`, the v1.3 outcome from quick task 260525-aub) integrate cleanly: `cause?: unknown` on failed/manual-recovery variants accepts the typed error directly, no message pre-formatting
-- IDE autocomplete on `notify*` reveals the full outcome menu -- discoverability matches V1
-- Per-wrapper JSDoc documents each outcome's user-visible contract independently
-- Greppability preserved (each wrapper is a distinct symbol)
+- `presentation/` composers become module-internal helpers of `notify()`'s switch; the public notify surface shrinks to the two entrypoints + the public types (SNM-18). The barrel does not re-export the composers.
+- Per-plugin causes survive every cascade (SNM-10) -- a multi-failure cascade now surfaces each plugin's cause chain separately instead of collapsing into a single top-level trailer.
+- The top-level cause-chain trailer is retired (no top-level `severity`, no top-level `trailer` on `NotificationMessage` per SNM-01); severity is computed from contents, reload-hint is computed from contents.
+- Discoverability is recovered by discriminated-union literal narrowing: typing `status: "` in a `PluginNotificationMessage` literal autocompletes the 10 legal values; selecting one narrows the variant and autocompletes the per-variant field set.
+- Greppability preserved -- per-status `case` arms in the renderer's switch are distinct symbols; grep for `case "installed":` is the structured equivalent of "grep for the literal `(installed)`."
+- Typed errors (`PluginShapeError`, the v1.3 outcome from quick task 260525-aub) integrate cleanly: `cause?: Error` on `failed` / `manual recovery` accepts the typed error directly, no message pre-formatting.
 
 ### Costs
 
-- Migrating ~23 call sites (one per existing `notify*` invocation) -- mechanical but touches every orchestrator
-- ~15-20 wrapper functions to write (each 2 lines, zero logic)
-- Loss of "grep for the literal string" debugging affordance -- but structured fields are *more* greppable, just differently
-- One-time deletion of `tests/lint-rules/` + `eslint.config.js` cleanup
+- Migrating ~33 call sites total (~20 orchestrator `notifySuccess` / `notifyWarning` / `notifyError` sites + ~13 edge `notifyUsageError` sites) -- mechanical but touches every orchestrator family.
+- ~120 LoC of types in `shared/notify.ts` (added by Phase 15).
+- ~80 LoC of compile-check arch test in `tests/architecture/notify-types.test.ts` (added by Phase 15).
+- The Phase 16 `notify()` renderer body (the switch + helpers).
+- One-time deletion of `tests/lint-rules/` + `tests/architecture/msg-rule-registry.test.ts` + `eslint.config.js` MSG-plugin wiring lands in Phase 21.
 
 ### Net code delta
 
-≈ +400 LoC (wrappers + notify switch + payload types) - ≈ 4500 LoC (deleted lint plugin + RuleTester suites) - ≈ 200 LoC (deleted registry parity test) = **~4300 LoC net removed**.
+≈ +400 LoC types/switch/wrappers - ≈ 4500 LoC deleted lint plugin + RuleTester suites - ≈ 200 LoC deleted registry parity test + absorbed presentation composers = **~4300 LoC net removed** at milestone close. Phase 15 in isolation ADDS ~+200 LoC; the deletion happens in Phase 21.
 
 ## Alternatives considered
 
-1. **Keep V1 unchanged.** Cost is the 34 ESLint rules and the ongoing risk of drift sites outside lint globs. Diminishing returns as the surface grows.
+1. **Keep V1 unchanged.** Cost is the 34 ESLint rules and the ongoing risk of drift sites outside lint globs. Diminishing returns as the surface grows. Rejected.
 
-2. **Single `notify(ctx, payload)` only, no typed wrappers.** Loses per-call-site autocomplete and adds `kind:` literal ceremony at every site. Rejected for ergonomics.
+2. **Single `notify(ctx, payload)` only, no typed wrappers. ACCEPTED (v1.4 design pivot).** Discriminated-union literal narrowing on `status:` recovers per-outcome-wrapper autocomplete ergonomics without the per-wrapper file maintenance cost; `assertNever` in the `notify()` switch retains the compile-error gate that motivated the original wrappers; the pivot trades 15-20 per-outcome wrapper symbols for one symbol whose discriminated `status` field is structurally narrower than wrapper-argument types could have been; per-status unit tests (SNM-30) preserve the per-outcome coverage affordance. The original ADR draft preferred typed wrappers; the design pivot that produced the current shape landed between ADR draft and CONTEXT.md decisions, and this refresh documents the pivot honestly (D-15-16).
 
 3. **Typed wrappers only, no shared `notify()` seam.** Each wrapper independently picks severity, formats the string, and calls `ctx.ui.notify`. Moves the drift surface from "string contents" to "what each wrapper renders" -- we'd be right back to needing lint rules to check that `notifyPluginUpdated` actually writes `(updated)` and not `(installed)`. The single switch + `assertNever` exhaustiveness gate is the whole point. Rejected.
 
@@ -157,14 +186,12 @@ Each wrapper gets a small unit test that calls it with a mock `ctx` and asserts 
 
 ## Migration
 
-Single-PR migration is feasible but risky given the lint-rule unwinding. Recommended phased rollout:
+Phased rollout across v1.4 (Phases 15-21). Each phase preserves byte-equality of user-visible output against the catalog UAT until the catalog spec itself is rewritten in Phase 17.
 
-- **Phase v2.0:** introduce `notify(ctx, payload)` + typed `notify*` wrappers alongside V1 wrappers. Match V1 byte-equality. No call sites change. CI green.
-- **Phase v2.1:** migrate one orchestrator family (e.g. `marketplace/*`) end-to-end; retire the corresponding MSG-\* rules' `files:` globs for that surface. Catalog UAT proves byte-equality is preserved.
-- **Phase v2.2..v2.N:** repeat per orchestrator family.
-- **Phase v2.final:** delete V1 wrappers (`notifySuccess/Warning/Error/UsageError`), delete `tests/lint-rules/` and `tests/architecture/msg-rule-registry.test.ts`, swap `eslint.config.js` MSG plugin wiring for stock `no-restricted-syntax` + `no-console` config.
+- **Phase 15** (this ADR): land the type model in `shared/notify.ts` (10-variant `PluginNotificationMessage` discriminated union + closed-set tuples + supporting interfaces) and the compile-check arch test at `tests/architecture/notify-types.test.ts`. No call sites change; V1 wrappers (`notifySuccess` / `notifyWarning` / `notifyError` / `notifyUsageError`) stay intact alongside the new types. `npm run check` GREEN. SNM-21 closes here.
+- **Phase 16:** introduce `notify(ctx, NotificationMessage)` and `notifyUsageError(ctx, UsageErrorMessage)` in `shared/notify.ts` alongside the V1 severity-named wrappers (V1 NOT yet deleted). The internal switch with `assertNever` is the sole grammar site (SNM-17). Per-status unit tests (SNM-30) exercise every variant via a mock `ctx`. Catalog UAT stays GREEN against the V1 callsites unchanged.
+- **Phase 17:** rewrite `docs/messaging-style-guide.md` to v2.0 (SNM-19) and `docs/output-catalog.md` to the always-marketplace-header spec (SNM-20). Migrate `tests/architecture/catalog-uat.test.ts` to feed structured `NotificationMessage` fixtures through `notify()` via mock ctx (SNM-31). Byte-equality assertion remains the user-contract gate.
+- **Phases 18-20:** migrate call sites by family -- Phase 18 marketplace orchestrators, Phase 19 plugin orchestrators, Phase 20 edge handlers + `notifyUsageError` (SNM-23). Each phase narrows the MSG-\* `files:` globs in `eslint.config.js` to the still-unmigrated family. Catalog UAT byte-equality is GREEN for the family at the end of each migration phase.
+- **Phase 21:** delete the V1 severity-named wrappers (`notifySuccess` / `notifyWarning` / `notifyError`) and the V1 three-argument `notifyUsageError(ctx, msg, usage)` signature from `shared/notify.ts` (SNM-22); delete `tests/lint-rules/` (SNM-24) and `tests/architecture/msg-rule-registry.test.ts` (SNM-25); rewrite or delete `tests/architecture/grammar-frontmatter.test.ts` (SNM-26); swap `eslint.config.js` to stock `no-restricted-syntax` + `no-console` with the `persistence/migrate.ts` per-file override (SNM-27); review `tests/architecture/no-legacy-markers.test.ts` for v2 vocabulary (SNM-28); resolve `shared/grammar/` retain-or-delete (SNM-29). `npm run check` GREEN against the new minimal surface (SNM-32).
 
-## Open questions
-
-- Cascade summary headers vs. rows -- is one payload variant per cascade-class enough, or do we need a richer "section" abstraction for surfaces like `plugin list` that nest plugin rows under marketplace headers?
-- Should `notify()` validate `Scope` / `Reason` / `StatusToken` at runtime in addition to the compile-time check, or trust the type system end-to-end?
+If the phase numbers shift between this ADR's acceptance and the final teardown, the canonical traceability is `.planning/REQUIREMENTS.md`'s phase-mapping table (Phase column per SNM-\* row); this ADR's phase numbers are informative, not binding.
