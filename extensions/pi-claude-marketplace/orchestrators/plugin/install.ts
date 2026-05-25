@@ -133,10 +133,28 @@ export type InstallPluginOutcome =
       /** Post-commit warnings collected in orchestrated mode instead of firing individually. */
       readonly postCommitWarnings?: readonly string[];
     }
-  | { readonly status: "already-installed"; readonly cause: string }
-  | { readonly status: "unavailable"; readonly cause: string }
-  | { readonly status: "uninstallable"; readonly cause: string }
-  | { readonly status: "unexpected-failure"; readonly cause: string };
+  | {
+      /**
+       * Task 260525-cjr C3: collapsed failure variant. The pre-C3 shape
+       * had four `status` values (`"already-installed"` /
+       * `"unavailable"` / `"uninstallable"` / `"unexpected-failure"`)
+       * each carrying a re-stringified `cause: string`. Consumers
+       * dispatched on the string status and lost access to the typed
+       * error. The collapsed shape carries the original `Error`
+       * instance directly so consumers can narrow on
+       * `instanceof PluginShapeError` (and, after C4, on
+       * `error.shape.kind`) to recover the precise failure class
+       * without re-parsing the formatted cause text.
+       *
+       * `cause` is preserved as the formatted user-visible text so
+       * callers that previously read it for rendering (orchestrated
+       * mode in `import/execute.ts`) keep working without rewiring.
+       * The `error` field is the load-bearing dispatch surface.
+       */
+      readonly status: "failed";
+      readonly error: Error;
+      readonly cause: string;
+    };
 
 /**
  * Controls how `installPlugin` surfaces notifications.
@@ -662,19 +680,25 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     }
 
     notifyError(ctx, body, err);
-    return { status: "unexpected-failure", cause };
+    // Task 260525-cjr C3: collapsed `status: "failed"` carries the
+    // typed Error so even the standalone-mode return point preserves
+    // the dispatch surface. The legacy `"unexpected-failure"` variant
+    // is retired in favor of the unified shape.
+    const wrapped = err instanceof Error ? err : new Error(cause);
+    return { status: "failed", error: wrapped, cause };
   }
 
   // Defensive: the success path always populates installCtx; if it did not,
   // surface the inconsistency rather than silently emit a missing message.
   if (installCtx === undefined) {
     const cause = `installPlugin: internal error -- guard returned cleanly without populating install context for plugin "${plugin}".`;
+    const internalErr = new Error(cause);
     if (opts.notifications?.mode === "orchestrated") {
-      return { status: "unexpected-failure", cause };
+      return { status: "failed", error: internalErr, cause };
     }
 
     notifyError(ctx, cause);
-    return { status: "unexpected-failure", cause };
+    return { status: "failed", error: internalErr, cause };
   }
 
   const orchestrated = opts.notifications?.mode === "orchestrated";
@@ -1002,30 +1026,16 @@ function narrowResolverReasons(reasons: readonly string[]): readonly Reason[] {
 }
 
 function classifyInstallFailure(err: unknown, formattedCause: string): InstallPluginOutcome {
-  // Quick task 260525-aub: dispatch on `instanceof PluginShapeError` +
-  // `.kind` so no `.message.includes(...)` substring matching remains
-  // on this code path. `ConcurrentInstallError` is kept as a separate
-  // typed branch (precedent: install.ts's existing typed catch surface
-  // for the PI-15 race).
-  if (err instanceof ConcurrentInstallError) {
-    return { status: "already-installed", cause: formattedCause };
-  }
-
-  if (err instanceof PluginShapeError) {
-    switch (err.kind) {
-      case "already-installed":
-        return { status: "already-installed", cause: formattedCause };
-      case "not-in-manifest":
-        return { status: "unavailable", cause: formattedCause };
-      case "not-installable":
-      case "no-longer-installable":
-        return { status: "uninstallable", cause: formattedCause };
-      default:
-        return assertNever(err.kind);
-    }
-  }
-
-  return { status: "unexpected-failure", cause: formattedCause };
+  // Task 260525-cjr C3: collapse the four pre-C3 error variants into a
+  // single `{ status: "failed"; error; cause }` shape. The typed `error`
+  // is the dispatch surface (consumers narrow on `instanceof
+  // PluginShapeError` to recover `kind`); `cause` preserves the
+  // formatted user-visible text for callers that previously read the
+  // `cause` field. `ConcurrentInstallError` is preserved as a distinct
+  // typed branch (PI-15 race); non-Error inputs are wrapped so the
+  // contract guarantees `error instanceof Error`.
+  const wrapped = err instanceof Error ? err : new Error(formattedCause);
+  return { status: "failed", error: wrapped, cause: formattedCause };
 }
 
 /**

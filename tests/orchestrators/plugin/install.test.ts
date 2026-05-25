@@ -1480,41 +1480,64 @@ test("classifyEntityShapeError returns undefined for non-PluginShapeError input 
   assert.equal(row, undefined);
 });
 
-test("classifyInstallFailure dispatches on PluginShapeError kinds (not-in-manifest -> unavailable, already-installed -> already-installed, not-installable -> uninstallable)", async () => {
+test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "failed"` shape carrying the typed Error', async () => {
   const { PluginShapeError } =
     await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
 
-  const notInManifest = __test_classifyInstallFailure(
-    new PluginShapeError({ kind: "not-in-manifest", plugin: "p", marketplace: "mp" }),
-    "formatted",
-  );
-  assert.equal(notInManifest.status, "unavailable");
+  // Task 260525-cjr C3: the four pre-C3 error variants
+  // (already-installed / unavailable / uninstallable /
+  // unexpected-failure) collapse into a single
+  // `{ status: "failed"; error; cause }` shape. The typed Error is
+  // the dispatch surface; consumers narrow on `instanceof
+  // PluginShapeError` and read `.kind` to recover the legacy
+  // semantic class.
+  const notInManifestErr = new PluginShapeError({
+    kind: "not-in-manifest",
+    plugin: "p",
+    marketplace: "mp",
+  });
+  const notInManifest = __test_classifyInstallFailure(notInManifestErr, "formatted");
+  assert.equal(notInManifest.status, "failed");
+  assert.ok(notInManifest.status === "failed");
+  assert.equal(notInManifest.error, notInManifestErr);
+  assert.equal(notInManifest.cause, "formatted");
 
-  const alreadyInstalled = __test_classifyInstallFailure(
-    new PluginShapeError({ kind: "already-installed", plugin: "p", marketplace: "mp" }),
-    "formatted",
-  );
-  assert.equal(alreadyInstalled.status, "already-installed");
+  const alreadyInstalledErr = new PluginShapeError({
+    kind: "already-installed",
+    plugin: "p",
+    marketplace: "mp",
+  });
+  const alreadyInstalled = __test_classifyInstallFailure(alreadyInstalledErr, "formatted");
+  assert.equal(alreadyInstalled.status, "failed");
+  assert.ok(alreadyInstalled.status === "failed");
+  assert.equal(alreadyInstalled.error, alreadyInstalledErr);
 
-  const notInstallable = __test_classifyInstallFailure(
-    new PluginShapeError({ kind: "not-installable", plugin: "p", reasons: ["hooks"] }),
-    "formatted",
-  );
-  assert.equal(notInstallable.status, "uninstallable");
+  const notInstallableErr = new PluginShapeError({
+    kind: "not-installable",
+    plugin: "p",
+    reasons: ["hooks"],
+  });
+  const notInstallable = __test_classifyInstallFailure(notInstallableErr, "formatted");
+  assert.equal(notInstallable.status, "failed");
+  assert.ok(notInstallable.status === "failed");
+  assert.equal(notInstallable.error, notInstallableErr);
 
-  const noLongerInstallable = __test_classifyInstallFailure(
-    new PluginShapeError({
-      kind: "no-longer-installable",
-      plugin: "p",
-      reasons: ["unsupported source"],
-    }),
-    "formatted",
-  );
-  assert.equal(noLongerInstallable.status, "uninstallable");
+  const noLongerInstallableErr = new PluginShapeError({
+    kind: "no-longer-installable",
+    plugin: "p",
+    reasons: ["unsupported source"],
+  });
+  const noLongerInstallable = __test_classifyInstallFailure(noLongerInstallableErr, "formatted");
+  assert.equal(noLongerInstallable.status, "failed");
+  assert.ok(noLongerInstallable.status === "failed");
+  assert.equal(noLongerInstallable.error, noLongerInstallableErr);
 
-  // Non-PluginShapeError input falls through to "unexpected-failure".
-  const unexpected = __test_classifyInstallFailure(new Error("random"), "formatted");
-  assert.equal(unexpected.status, "unexpected-failure");
+  // Non-PluginShapeError input is preserved verbatim on `error`.
+  const opaque = new Error("random");
+  const unexpected = __test_classifyInstallFailure(opaque, "formatted");
+  assert.equal(unexpected.status, "failed");
+  assert.ok(unexpected.status === "failed");
+  assert.equal(unexpected.error, opaque);
 });
 
 // ───────────────────────────────────────────────────────────────────────────

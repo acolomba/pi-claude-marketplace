@@ -11,7 +11,7 @@ import { softDepStatus } from "../../platform/pi-api.ts";
 import { cascadeSummary } from "../../presentation/cascade-summary.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { compareByNameThenScope } from "../../presentation/sort.ts";
-import { errorMessage } from "../../shared/errors.ts";
+import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
 import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
 
 import { buildClaudeImportPlan } from "./marketplaces.ts";
@@ -893,6 +893,50 @@ async function executeScopedPlan(
         }
 
         break;
+      case "failed":
+        // Task 260525-cjr C3: the collapsed `status: "failed"` carries
+        // the typed Error directly. Recover the legacy semantic
+        // dispatch (already-installed / unavailable / uninstallable /
+        // unexpected-failure) by narrowing on `instanceof
+        // PluginShapeError` and reading `.kind`; everything else
+        // (including `ConcurrentInstallError`) falls through to the
+        // unexpected-failure bucket so the user surface matches the
+        // pre-C3 behavior.
+        dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause);
+        break;
+    }
+  }
+}
+
+/**
+ * Task 260525-cjr C3: recover the pre-C3 semantic dispatch by narrowing
+ * on the typed `Error` carried by the collapsed `status: "failed"`
+ * outcome. `PluginShapeError.kind === "already-installed"` and the
+ * legacy `ConcurrentInstallError` both route to the skip bucket;
+ * `not-in-manifest` and `(no-)not-installable` route to the
+ * unavailable / uninstallable warnings; everything else lands in
+ * `unexpectedPluginFailures`.
+ */
+function dispatchFailedOutcome(
+  result: MutableImportResult,
+  plugin: PlannedPluginImport,
+  error: Error,
+  cause: string,
+): void {
+  if (error instanceof ConcurrentInstallError) {
+    result.skippedExistingPlugins.push({
+      kind: "plugin-skip",
+      scope: plugin.scope,
+      plugin: plugin.ref.plugin,
+      marketplace: plugin.ref.marketplace,
+      ref: refLabel(plugin),
+      reason: "already-installed",
+    });
+    return;
+  }
+
+  if (error instanceof PluginShapeError) {
+    switch (error.kind) {
       case "already-installed":
         result.skippedExistingPlugins.push({
           kind: "plugin-skip",
@@ -902,26 +946,26 @@ async function executeScopedPlan(
           ref: refLabel(plugin),
           reason: "already-installed",
         });
-        break;
-      case "unavailable":
-        pushPluginWarning(result, plugin, "unavailable", outcome.cause);
-        break;
-      case "uninstallable":
-        pushPluginWarning(result, plugin, "uninstallable", outcome.cause);
-        break;
-      case "unexpected-failure":
-        result.unexpectedPluginFailures.push({
-          kind: "plugin-failure",
-          scope: plugin.scope,
-          plugin: plugin.ref.plugin,
-          marketplace: plugin.ref.marketplace,
-          ref: refLabel(plugin),
-          reason: "unexpected-failure",
-          cause: outcome.cause,
-        });
-        break;
+        return;
+      case "not-in-manifest":
+        pushPluginWarning(result, plugin, "unavailable", cause);
+        return;
+      case "not-installable":
+      case "no-longer-installable":
+        pushPluginWarning(result, plugin, "uninstallable", cause);
+        return;
     }
   }
+
+  result.unexpectedPluginFailures.push({
+    kind: "plugin-failure",
+    scope: plugin.scope,
+    plugin: plugin.ref.plugin,
+    marketplace: plugin.ref.marketplace,
+    ref: refLabel(plugin),
+    reason: "unexpected-failure",
+    cause,
+  });
 }
 
 export async function importClaudeSettings(
