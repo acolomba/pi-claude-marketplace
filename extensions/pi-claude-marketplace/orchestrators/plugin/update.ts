@@ -65,7 +65,7 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
 import { cascadeSummary } from "../../presentation/cascade-summary.ts";
-import { causeChainTrailer } from "../../presentation/cause-chain.ts";
+import { composeErrorWithCauseChain } from "../../presentation/cause-chain.ts";
 import { renderRow } from "../../presentation/compact-line.ts";
 import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { renderRollbackPartial } from "../../presentation/rollback-partial.ts";
@@ -1185,15 +1185,4 @@ function removePluginRecord(
   delete newPlugins[plugin];
   cloned.marketplaces[marketplace] = { ...mp, plugins: newPlugins };
   return cloned;
-}
-
-/**
- * Compose `errorMessage(err) [\n\n${causeChainTrailer(err)}]` for outcome
- * `notes` aggregated outside the notify path. `notifyError` does this
- * automatically; this helper exists for outcome-aggregation callsites that
- * need the same text without going through the notify channel.
- */
-function composeErrorWithCauseChain(err: unknown): string {
-  const trailer = causeChainTrailer(err);
-  return trailer === "" ? errorMessage(err) : `${errorMessage(err)}\n\n${trailer}`;
 }
