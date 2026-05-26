@@ -101,8 +101,31 @@ export function notifyError(ctx: ExtensionContext, message: string, cause?: unkn
  * blank line between message and Usage block is part of the user contract;
  * tests in Plan 06 assert it byte-for-byte.
  */
-export function notifyUsageError(ctx: ExtensionContext, message: string, usageBlock: string): void {
-  ctx.ui.notify(`${message}\n\n${usageBlock}`, "error");
+/** V1 3-arg overload signature (Phase 21 deletes). */
+export function notifyUsageError(ctx: ExtensionContext, message: string, usageBlock: string): void;
+/** V2 structured usage-error entry point (SNM-13, D-16-02). Coexists with V1 3-arg notifyUsageError. */
+export function notifyUsageError(ctx: ExtensionContext, message: UsageErrorMessage): void;
+export function notifyUsageError(
+  ctx: ExtensionContext,
+  message: string | UsageErrorMessage,
+  usageBlock?: string,
+): void {
+  if (typeof message === "string") {
+    // V1 3-arg path -- byte-equal to the pre-Phase-16 wrapper at the
+    // historical shared/notify.ts:105. The runtime body is identical:
+    // ctx.ui.notify(`${message}\n\n${usageBlock}`, "error").
+    // The overload signature guarantees usageBlock is present here; the
+    // `?? ""` fallback exists solely to satisfy strict-null-check without
+    // an eslint-suppressed non-null assertion (see eslint config: the
+    // per-file override for shared/notify.ts disables no-restricted-syntax
+    // but NOT no-non-null-assertion).
+    ctx.ui.notify(`${message}\n\n${usageBlock ?? ""}`, "error");
+  } else {
+    // V2 structured path -- destructure UsageErrorMessage and emit the
+    // same on-the-wire shape (`${message}\n\n${usage}` with "error"
+    // severity), byte-equal to V1.
+    ctx.ui.notify(`${message.message}\n\n${message.usage}`, "error");
+  }
 }
 
 // ---------------------------------------------------------------------------
