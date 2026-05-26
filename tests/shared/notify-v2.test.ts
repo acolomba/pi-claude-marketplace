@@ -1141,7 +1141,7 @@ test("notify emits [project] bracket on failed plugin row when p.scope !== mp.sc
             status: "failed",
             name: "alpha",
             version: "1.0.0",
-            reasons: ["bridge"],
+            reasons: ["unsupported source"],
             scope: "project", // orphan-fold on an error-class arm
           },
         ],
@@ -1154,7 +1154,7 @@ test("notify emits [project] bracket on failed plugin row when p.scope !== mp.sc
   // severity. A failed PLUGIN does not suppress the reload-hint (only a
   // failed MARKETPLACE does, per D-16-12), so the trailer is appended.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `● demo [user] (added)\n  ⊘ alpha [project] v1.0.0 (failed) {bridge}\n\n/reload to pick up changes`,
+    `● demo [user] (added)\n  ⊘ alpha [project] v1.0.0 (failed) {unsupported source}\n\n/reload to pick up changes`,
     "error",
   ]);
 
