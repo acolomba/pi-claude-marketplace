@@ -24,7 +24,7 @@ v1.4 introduces a single structured `notify(ctx, NotificationMessage)` entrypoin
 Two exported entrypoints and the user-facing types live in `extensions/pi-claude-marketplace/shared/notify.ts`:
 
 ```ts
-export function notify(ctx: ExtensionContext, message: NotificationMessage): void;
+export function notify(ctx: ExtensionContext, pi: ExtensionAPI, message: NotificationMessage): void;
 export function notifyUsageError(ctx: ExtensionContext, message: UsageErrorMessage): void;
 
 // Public types (shipped by Phase 15):
