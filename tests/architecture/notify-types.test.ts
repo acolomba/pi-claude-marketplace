@@ -108,8 +108,8 @@ export const _pb: _Assert_PluginStatusBackward = true;
 type _Assert_PluginStatusesLen = (typeof PLUGIN_STATUSES)["length"] extends 10 ? true : never;
 export const _l1: _Assert_PluginStatusesLen = true;
 
-// D-15-07 + D-15-11: MARKETPLACE_STATUSES tuple length is exactly 4.
-type _Assert_MarketplaceStatusesLen = (typeof MARKETPLACE_STATUSES)["length"] extends 4
+// D-17.1-01 (supersedes D-15-07) + D-15-11: MARKETPLACE_STATUSES tuple length is exactly 7.
+type _Assert_MarketplaceStatusesLen = (typeof MARKETPLACE_STATUSES)["length"] extends 7
   ? true
   : never;
 export const _l2: _Assert_MarketplaceStatusesLen = true;
@@ -138,8 +138,15 @@ type _Assert_PluginStatusValues = _PluginStatusExpected extends PluginStatus
   : never;
 export const _psv: _Assert_PluginStatusValues = true;
 
-// SNM-05 + D-15-07: `MarketplaceStatus` is EXACTLY the 4 expected literals.
-type _MarketplaceStatusExpected = "added" | "removed" | "updated" | "failed";
+// SNM-05 + D-17.1-01 (supersedes D-15-07): `MarketplaceStatus` is EXACTLY the 7 expected literals.
+type _MarketplaceStatusExpected =
+  | "added"
+  | "removed"
+  | "updated"
+  | "failed"
+  | "autoupdate enabled"
+  | "autoupdate disabled"
+  | "skipped";
 type _Assert_MarketplaceStatusValues = _MarketplaceStatusExpected extends MarketplaceStatus
   ? MarketplaceStatus extends _MarketplaceStatusExpected
     ? true
@@ -184,14 +191,16 @@ export type _NoSeverityOnNotificationMessage = NotificationMessage["severity"];
 // @ts-expect-error -- SNM-01: NotificationMessage has NO trailer field
 export type _NoTrailerOnNotificationMessage = NotificationMessage["trailer"];
 
-// SNM-02 + D-15-06: `MarketplaceNotificationMessage` carries name + scope +
-// optional status + optional details + plugins. `status?` and `details?` are
-// independent optionals.
+// SNM-02 + D-15-06 + Phase 17.1 D-17.1-01 reasons? amendment:
+// `MarketplaceNotificationMessage` carries name + scope + optional status +
+// optional details + optional reasons + plugins. `status?`, `details?`, and
+// `reasons?` are independent optionals.
 interface _MarketplaceMessageExpected {
   readonly name: string;
   readonly scope: _Scope;
   readonly status?: MarketplaceStatus;
   readonly details?: MarketplaceDetails;
+  readonly reasons?: readonly _Reason[];
   readonly plugins: readonly PluginNotificationMessage[];
 }
 type _Assert_MarketplaceMessageShape =

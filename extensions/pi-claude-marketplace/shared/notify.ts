@@ -192,14 +192,25 @@ export const PLUGIN_STATUSES = [
 ] as const;
 
 /**
- * Runtime tuple of every marketplace status literal (D-15-07, D-15-11).
- * 4 entries -- no `"skipped"`; v1.3's marketplace-skipped rendering case
- * re-routes through `"updated"` with an empty `plugins: []` or through
- * the always-marketplace-header spec.
+ * Runtime tuple of every marketplace status literal (D-17.1-01 supersedes
+ * D-15-07; D-15-11). 7 entries. The 3 final entries (`"autoupdate enabled"`,
+ * `"autoupdate disabled"`, `"skipped"`) are added per D-17.1-01 to support
+ * the Phase 18 autoupdate-surface migration (D-18-04, D-18-05) and supersede
+ * D-15-07's original 4-entry lock; order is normative -- the 4 pre-existing
+ * entries retain their position to preserve the Phase 16 `renderMpHeader`
+ * switch arm ordering convention.
  *
  * Pattern: shared/grammar/status-tokens.ts:34-52.
  */
-export const MARKETPLACE_STATUSES = ["added", "removed", "updated", "failed"] as const;
+export const MARKETPLACE_STATUSES = [
+  "added",
+  "removed",
+  "updated",
+  "failed",
+  "autoupdate enabled",
+  "autoupdate disabled",
+  "skipped",
+] as const;
 
 /**
  * Runtime tuple of every dependency literal (SNM-06, D-15-11). 2 entries.
@@ -448,12 +459,19 @@ export type PluginNotificationMessage =
   | PluginManualRecoveryMessage;
 
 /**
- * Marketplace-level notification message (SNM-02, D-15-06). `status?`
- * and `details?` are independent optionals -- they never co-occur in
- * practice (Phase 16 renderer ignores `details` when `status` is set) but
- * the type does not structurally constrain that. Mirrors v1.3
- * `MarketplaceRow`'s independent `status?` / `marker?` pattern at
- * presentation/compact-line.ts:190-198.
+ * Marketplace-level notification message (SNM-02, D-15-06). `status?`,
+ * `details?`, and `reasons?` are independent optionals -- the renderer
+ * narrows on `status` and consumes the others only where the relevant arm
+ * needs them, but the type does not structurally constrain co-occurrence.
+ * Mirrors v1.3 `MarketplaceRow`'s independent `status?` / `marker?`
+ * pattern at presentation/compact-line.ts:190-198.
+ *
+ * `readonly reasons?: readonly Reason[]` is the Phase 17.1 amendment per
+ * D-17.1-01 / D-17.1-05: the `"skipped"` mp-status renderer arm consumes
+ * this field to compose the `{<reason>, <reason>}` brace (e.g.,
+ * `{already enabled}` for idempotent autoupdate flips); other mp-status
+ * arms ignore the field per D-15-06's independent-optionals discipline
+ * (the type does not structurally constrain co-occurrence with `status`).
  *
  * `plugins: readonly PluginNotificationMessage[]` is REQUIRED. An empty
  * array IS the structural representation of the `(no plugins)` rendering
@@ -466,6 +484,7 @@ export interface MarketplaceNotificationMessage {
   readonly scope: Scope;
   readonly status?: MarketplaceStatus;
   readonly details?: MarketplaceDetails;
+  readonly reasons?: readonly Reason[];
   readonly plugins: readonly PluginNotificationMessage[];
 }
 
