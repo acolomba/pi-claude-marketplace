@@ -2,7 +2,7 @@ import { assertNever, causeChainTrailer } from "./errors.ts";
 
 import type { Reason } from "./grammar/reasons.ts";
 import type { Scope } from "./types.ts";
-import type { ExtensionContext } from "../platform/pi-api.ts";
+import type { ExtensionContext, SoftDepStatus } from "../platform/pi-api.ts";
 
 // Re-export Reason so Phase 16-20 call-site authors can import the entire v1.4
 // structured-notify surface (types + Reason) from this file alone, instead of
@@ -564,14 +564,297 @@ function renderMpHeader(mp: MarketplaceNotificationMessage): string {
   }
 }
 
-// `ICON_AVAILABLE` is declared above for plan 04's `renderPluginRow` (which
-// owns the `(available)` / `(uninstalled)` plugin-row icon). Referencing it
-// here keeps TS `noUnusedLocals` quiet during the bounded-window between
-// plan 03 (this) and plan 04 without resorting to an inline disable.
-void ICON_AVAILABLE;
+// ---------------------------------------------------------------------------
+// Phase 16 plan 04 -- file-private renderPluginRow + supporting helpers.
+//
+// SNM-17 / SNM-18: the v2 per-plugin row grammar lives HERE as the sole
+// site. SNM-16 / D-16-15: soft-dep markers are injected at render time from
+// the per-row `dependencies?` declaration + the threaded `SoftDepStatus`
+// probe. D-16-10: the switch ends with `default: return assertNever(p);`
+// so a future `PluginNotificationMessage` variant becomes a compile error
+// at this switch.
+//
+// Bounded duplication of literals from `presentation/compact-line.ts` and
+// `presentation/version-arrow.ts` is intentional (D-16-04 / D-16-09) and
+// ends in Phase 21 when V1 wrappers and `presentation/*` composers are
+// deleted together.
+// ---------------------------------------------------------------------------
+
+/** Soft-dep marker literals duplicated from presentation/compact-line.ts per D-16-04/D-16-15. Phase 21 deletes both copies. */
+const SOFT_DEP_MARKER_AGENTS = "requires pi-subagents";
+const SOFT_DEP_MARKER_MCP = "requires pi-mcp";
+
+/**
+ * Join tokens with single spaces, suppressing empty slots so absent
+ * optional tokens (e.g. an undefined scope-bracket on `available` rows)
+ * never produce a double-space. Mirrors `presentation/compact-line.ts`
+ * `joinTokens` (lines 489-491); duplicated inline per D-16-04.
+ */
+function joinTokens(parts: readonly string[]): string {
+  return parts.filter((p) => p !== "").join(" ");
+}
+
+/**
+ * Prepend `v` to the version string, returning `""` when `version` is
+ * undefined or empty so the join discipline collapses the slot cleanly.
+ * Mirrors `presentation/compact-line.ts` `renderVersion` (lines 481-487);
+ * duplicated inline per D-16-04.
+ */
+function renderVersion(version: string | undefined): string {
+  if (version === undefined || version === "") {
+    return "";
+  }
+
+  return `v${version}`;
+}
+
+/**
+ * Conditional `[<scope>]` emitter. SOLE site for scope-bracket emission
+ * inside `renderPluginRow` (BLOCKER-1 fix): per-arm code MUST funnel
+ * `p.scope` through this helper so the bracket renders `""` when scope is
+ * undefined (the common case -- the marketplace header carries the
+ * `[mp.scope]` token; the per-row bracket only appears in the orphan-fold
+ * case per D-16-17 + SNM-11). For `available` / `unavailable` variants
+ * (which have NO `scope?` field at all per MSG-PL-6 / SNM-11 carve-out),
+ * arm code passes `undefined` explicitly so the bracket unconditionally
+ * collapses.
+ */
+function renderScopeBracket(scope: Scope | undefined): string {
+  return scope === undefined ? "" : `[${scope}]`;
+}
+
+/**
+ * Compose the MSG-PL-3 version-transition slot for the `updated` arm
+ * (`<from> → v<to>`) and as a defensive helper for adjacent arms. Mirrors
+ * `presentation/version-arrow.ts` lines 33-50 byte-for-byte; duplicated
+ * inline per D-16-04.
+ *
+ * Per the plan-04 contract this helper returns `""` (not `undefined`) so
+ * the `joinTokens` discipline collapses the slot cleanly when both sides
+ * are undefined. For the `updated` variant, Phase 15 D-15-04 declares
+ * `from` / `to` as REQUIRED so the both-defined branch is the live path;
+ * the only-`to` and only-`from` branches are defensive (no current
+ * caller in this plan exercises them, but they preserve the
+ * version-arrow.ts contract).
+ */
+function composeVersionArrow(from: string | undefined, to: string | undefined): string {
+  if (from === undefined && to === undefined) {
+    return "";
+  }
+
+  if (from !== undefined && to !== undefined) {
+    return `${from} → v${to}`;
+  }
+
+  if (to !== undefined) {
+    return renderVersion(to);
+  }
+
+  // `from` is defined and `to` is undefined -- defensive branch matching
+  // `presentation/version-arrow.ts:49`. Pass through unchanged (no `v`
+  // prefix, mirroring the source helper's intent that `from` is the
+  // bare value).
+  return from ?? "";
+}
+
+/**
+ * Compose the MSG-GR-4 reasons-block, injecting soft-dep markers from
+ * the per-row `dependencies?` declaration + the threaded probe.
+ *
+ *   - Starts from the caller-provided `reasons` array (or `[]` when the
+ *     variant lacks a reasons field).
+ *   - Appends `SOFT_DEP_MARKER_AGENTS` iff `declaresAgents && !probe.piSubagentsLoaded`.
+ *   - Appends `SOFT_DEP_MARKER_MCP`    iff `declaresMcp    && !probe.piMcpAdapterLoaded`.
+ *   - Returns `""` when the composed array is empty (MSG-GR-4 forbids `{}`).
+ *   - Otherwise returns `{<r1>, <r2>, ...}`.
+ *
+ * Mirrors `presentation/compact-line.ts` `composeReasons` (lines 458-479);
+ * duplicated inline per D-16-04 / D-16-15.
+ *
+ * The first parameter is typed `readonly string[] | undefined` rather than
+ * `readonly Reason[] | undefined` for cross-variant ergonomics: each
+ * switch arm passes either `p.reasons` (already `readonly Reason[]`, a
+ * subtype of `readonly string[]`) or `undefined`. The discriminated-union
+ * narrowing inside `renderPluginRow` guarantees that only valid `Reason`
+ * arrays (or `undefined`) flow in.
+ */
+function composeReasons(
+  reasons: readonly string[] | undefined,
+  declaresAgents: boolean,
+  declaresMcp: boolean,
+  probe: SoftDepStatus,
+): string {
+  const composed: string[] = reasons === undefined ? [] : [...reasons];
+
+  if (declaresAgents && !probe.piSubagentsLoaded) {
+    composed.push(SOFT_DEP_MARKER_AGENTS);
+  }
+
+  if (declaresMcp && !probe.piMcpAdapterLoaded) {
+    composed.push(SOFT_DEP_MARKER_MCP);
+  }
+
+  if (composed.length === 0) {
+    return "";
+  }
+
+  return `{${composed.join(", ")}}`;
+}
+
+/**
+ * Renders the v2 plugin row (no leading indent -- caller adds it). SOLE
+ * site for plugin-row grammar (SNM-17). assertNever default arm is the
+ * compile-time exhaustiveness gate (D-16-10).
+ *
+ * Token order follows the v1 grammar `icon name [scope] versionToken
+ * (status) {reasons}` (MSG-GR-1). Scope bracket is emitted conditionally
+ * via `renderScopeBracket(p.scope)` on the 8 variants that declare
+ * `scope?`; the `available` / `unavailable` arms unconditionally omit the
+ * bracket per MSG-PL-6 / SNM-11 by passing `undefined` to
+ * `renderScopeBracket`.
+ *
+ * Soft-dep marker injection (D-16-15): only the `installed` / `updated` /
+ * `reinstalled` arms carry `dependencies` (Phase 15 D-15-02); those arms
+ * pass `p.dependencies.includes("agents")` / `p.dependencies.includes("mcp")`
+ * to `composeReasons`. The other 7 arms pass `false` for both
+ * declares-flags so the soft-dep markers cannot leak onto rows that
+ * structurally never declare a soft dep.
+ *
+ * Per-variant `composeReasons` first argument:
+ *   - 5 reasons-less variants (installed, updated, reinstalled,
+ *     uninstalled, available) pass `undefined`;
+ *   - 5 reasons-bearing variants (unavailable, upgradable, skipped,
+ *     failed, manual recovery) pass `p.reasons`.
+ *
+ * NOT rendered here (plan 05's `notify()` composes them as additional
+ * indented lines AFTER the row):
+ *   - `failed.cause` / `manual recovery.cause` cause-chain trailers.
+ *   - `failed.rollbackPartial[]` child rows.
+ */
+function renderPluginRow(p: PluginNotificationMessage, probe: SoftDepStatus): string {
+  switch (p.status) {
+    case "installed":
+      return joinTokens([
+        ICON_INSTALLED,
+        p.name,
+        renderScopeBracket(p.scope),
+        renderVersion(p.version),
+        "(installed)",
+        composeReasons(
+          undefined,
+          p.dependencies.includes("agents"),
+          p.dependencies.includes("mcp"),
+          probe,
+        ),
+      ]);
+    case "updated":
+      return joinTokens([
+        ICON_INSTALLED,
+        p.name,
+        renderScopeBracket(p.scope),
+        composeVersionArrow(p.from, p.to),
+        "(updated)",
+        composeReasons(
+          undefined,
+          p.dependencies.includes("agents"),
+          p.dependencies.includes("mcp"),
+          probe,
+        ),
+      ]);
+    case "reinstalled":
+      return joinTokens([
+        ICON_INSTALLED,
+        p.name,
+        renderScopeBracket(p.scope),
+        renderVersion(p.version),
+        "(reinstalled)",
+        composeReasons(
+          undefined,
+          p.dependencies.includes("agents"),
+          p.dependencies.includes("mcp"),
+          probe,
+        ),
+      ]);
+    case "uninstalled":
+      return joinTokens([
+        ICON_AVAILABLE,
+        p.name,
+        renderScopeBracket(p.scope),
+        renderVersion(p.version),
+        "(uninstalled)",
+        composeReasons(undefined, false, false, probe),
+      ]);
+    case "available":
+      return joinTokens([
+        ICON_AVAILABLE,
+        p.name,
+        // MSG-PL-6 / SNM-11 carve-out: `available` has NO `scope?` field.
+        renderScopeBracket(undefined),
+        renderVersion(p.version),
+        "(available)",
+        composeReasons(undefined, false, false, probe),
+      ]);
+    case "unavailable":
+      return joinTokens([
+        ICON_UNINSTALLABLE,
+        p.name,
+        // MSG-PL-6 / SNM-11 carve-out: `unavailable` has NO `scope?` field.
+        renderScopeBracket(undefined),
+        renderVersion(p.version),
+        "(unavailable)",
+        composeReasons(p.reasons, false, false, probe),
+      ]);
+    case "upgradable":
+      return joinTokens([
+        ICON_INSTALLED,
+        p.name,
+        renderScopeBracket(p.scope),
+        renderVersion(p.version),
+        "(upgradable)",
+        composeReasons(p.reasons, false, false, probe),
+      ]);
+    case "skipped":
+      return joinTokens([
+        ICON_UNINSTALLABLE,
+        p.name,
+        renderScopeBracket(p.scope),
+        renderVersion(p.version),
+        "(skipped)",
+        composeReasons(p.reasons, false, false, probe),
+      ]);
+    case "failed":
+      return joinTokens([
+        ICON_UNINSTALLABLE,
+        p.name,
+        renderScopeBracket(p.scope),
+        renderVersion(p.version),
+        "(failed)",
+        composeReasons(p.reasons, false, false, probe),
+      ]);
+    case "manual recovery":
+      return joinTokens([
+        ICON_UNINSTALLABLE,
+        p.name,
+        renderScopeBracket(p.scope),
+        renderVersion(p.version),
+        // `manual recovery` discriminator preserved verbatim WITH A SPACE
+        // per CONTEXT `<specifics>` + shared/grammar/status-tokens.ts:47.
+        "(manual recovery)",
+        composeReasons(p.reasons, false, false, probe),
+      ]);
+    default:
+      return assertNever(p);
+  }
+}
+
 // Same self-reference for renderMpHeader -- it is wired by plan 05 into
 // notify(), but is intentionally file-private (SNM-17, D-16-09) so cannot
 // be made visible to TS via a re-export. The `void` discard is the
 // documented escape hatch (per plan 03 execution context) that keeps
-// `noUnusedLocals` quiet without an inline lint disable directive.
+// `noUnusedLocals` quiet without an inline lint disable directive. Plan 04
+// (this) removed the matching `void ICON_AVAILABLE;` self-reference because
+// `renderPluginRow` now consumes `ICON_AVAILABLE` in the `(available)` /
+// `(uninstalled)` arms. Plan 05's `notify()` will consume `renderPluginRow`
+// and delete this remaining `void renderMpHeader;` line.
 void renderMpHeader;
+void renderPluginRow;
