@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Structured Notification Messages
-status: completed
-stopped_at: Phase 18 context gathered
-last_updated: "2026-05-26T16:24:57.093Z"
+status: Phase 17.1 inserted (not planned yet)
+stopped_at: Phase 17.1 context gathered
+last_updated: "2026-05-26T18:42:47.721Z"
 last_activity: 2026-05-26 -- Phase 17 marked complete
 progress:
-  total_phases: 7
+  total_phases: 8
   completed_phases: 3
   total_plans: 12
   completed_plans: 12
-  percent: 43
+  percent: 38
 ---
 
 # Project State
@@ -24,9 +24,9 @@ See: .planning/PROJECT.md (updated 2026-05-25)
 
 ## Current Position
 
-Phase: 17 -- COMPLETE
+Phase: 17.1
 Plan: 1 of 3
-Status: Phase 17 complete
+Status: Phase 17.1 inserted (not planned yet)
 Last activity: 2026-05-26 -- Phase 17 marked complete
 
 ## Performance Metrics
@@ -84,6 +84,7 @@ Last activity: 2026-05-26 -- Phase 17 marked complete
 - Phase 14.1 inserted after Phase 14: Close gap: CMC-13 -- propagate declaresAgents/Mcp through import cascade rows (URGENT)
 - Phase 14.2 inserted after Phase 14: Address tech debt: CR-01 + retroactive Phase 12 / 14.1 gates (URGENT)
 - v1.4 roadmap (2026-05-25): 7 phases (15-21) created by `gsd-roadmapper`. All 32 SNM-* requirements mapped: SNM-01..11 + SNM-21 → Phase 15; SNM-12..18 + SNM-30 → Phase 16; SNM-19, SNM-20, SNM-31 → Phase 17; Phases 18 and 19 are execution-only migration waves (marketplace/* and plugin/* families) with no requirement closure; SNM-23 → Phase 20 (edge family wave + UsageError migration); SNM-22, SNM-24..29, SNM-32 → Phase 21 (final teardown + GREEN gate). SNM-22 maps to Phase 21 because its "wrappers deleted" half is the closure gate.
+- Phase 17.1 inserted after Phase 17: V2 Grammar Amendment: Autoupdate Surface (URGENT)
 
 ### Decisions
 
@@ -157,9 +158,9 @@ All seven quick tasks have a SUMMARY.md and are completed; the `audit-open` quer
 
 ## Session Continuity
 
-Last session: 2026-05-26T16:24:57.079Z
-Stopped At: Phase 18 context gathered
-Resume File: .planning/phases/18-migration-wave-1-marketplace-orchestrator-family/18-CONTEXT.md
+Last session: 2026-05-26T18:42:47.706Z
+Stopped At: Phase 17.1 context gathered
+Resume File: .planning/phases/17.1-v2-grammar-amendment-autoupdate-surface/17.1-CONTEXT.md
 
 ## Operator Next Steps
 
