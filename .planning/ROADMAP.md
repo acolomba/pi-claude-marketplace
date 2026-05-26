@@ -201,7 +201,7 @@ Plans:
 7. `docs/messaging-style-guide.md` MarketplaceStatus pointer says `7 literal strings`; any drift prose refreshed.
 8. `npm run check` exits 0.
 
-**Plans:** 1/4 plans executed
+**Plans:** 2/4 plans executed
 
 Plans:
 
@@ -211,7 +211,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 17.1-02-PLAN.md -- Add 3 new renderMpHeader arms + extend computeSeverity (skipped→warning) + extend shouldEmitReloadHint (autoupdate enabled/disabled trigger) + 5 new byte-equality tests in notify-v2.test.ts (D-17.1-02, D-17.1-05)
+- [x] 17.1-02-PLAN.md -- Add 3 new renderMpHeader arms + extend computeSeverity (skipped→warning) + extend shouldEmitReloadHint (autoupdate enabled/disabled trigger) + 5 new byte-equality tests in notify-v2.test.ts (D-17.1-02, D-17.1-05)
 
 **Wave 3** *(blocked on Wave 2 completion; 17.1-03 and 17.1-04 parallel)*
 
@@ -303,7 +303,7 @@ Plans:
 | 15. Type Model & ADR Refresh                                         | v1.4      | 3/3 | Complete    | 2026-05-25 |
 | 16. Renderer & Public API (Alongside V1)                             | v1.4      | 6/6 | Complete    | 2026-05-26 |
 | 17. Spec Rewrite & Catalog UAT Migration                             | v1.4      | 3/3 | Complete   | 2026-05-26 |
-| 17.1. V2 Grammar Amendment: Autoupdate Surface (INSERTED)            | v1.4      | 1/4 | In Progress|  |
+| 17.1. V2 Grammar Amendment: Autoupdate Surface (INSERTED)            | v1.4      | 2/4 | In Progress|  |
 | 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 0/?            | Not started | --         |
 | 19. Migration Wave 2 -- Plugin Orchestrator Family                   | v1.4      | 0/?            | Not started | --         |
 | 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 0/?            | Not started | --         |
