@@ -32,14 +32,14 @@ export type NotificationMessage;            // { marketplaces: readonly Marketpl
 export type MarketplaceNotificationMessage; // { name; scope; status?; details?; plugins }
 export type PluginNotificationMessage;      // 10-variant discriminated union on `status`
 export type PluginStatus;                   // 10 literal strings, derived from PLUGIN_STATUSES tuple
-export type MarketplaceStatus;              // 4 literal strings, derived from MARKETPLACE_STATUSES tuple
+export type MarketplaceStatus;              // 7 literal strings, derived from MARKETPLACE_STATUSES tuple
 export type Dependency;                     // "agents" | "mcp", derived from DEPENDENCIES tuple
 export interface MarketplaceDetails;        // { autoupdate: boolean; lastUpdatedAt?: string }
 export interface UsageErrorMessage;         // { message: string; usage: string }
 
 // Runtime tuples shipped alongside the derived literal-union types (D-15-11):
 export const PLUGIN_STATUSES;       // 10 entries
-export const MARKETPLACE_STATUSES;  // 4 entries
+export const MARKETPLACE_STATUSES;  // 7 entries
 export const DEPENDENCIES;          // 2 entries
 ```
 
@@ -85,7 +85,7 @@ interface NotificationMessage {
 interface MarketplaceNotificationMessage {
   readonly name: string;
   readonly scope: Scope;
-  readonly status?: MarketplaceStatus; // "added" | "removed" | "updated" | "failed"
+  readonly status?: MarketplaceStatus; // "added" | "removed" | "updated" | "failed" | "autoupdate enabled" | "autoupdate disabled" | "skipped"
   readonly details?: MarketplaceDetails; // { autoupdate; lastUpdatedAt? }
   readonly plugins: readonly PluginNotificationMessage[];
 }
