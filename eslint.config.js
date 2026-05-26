@@ -219,11 +219,21 @@ export default tseslint.config(
     // literal-detection rules (RESEARCH.md Pitfall 9). The composer files
     // themselves legitimately contain the canonical literals they own --
     // they MUST be ignored or the rules report false positives.
+    //
+    // Phase 16 (v1.4) bounded-window addition: shared/notify.ts is the V2
+    // renderer chokepoint (SNM-12 / SNM-15 / D-16-09 / D-16-12) and houses
+    // the duplicated `RELOAD_HINT_TRAILER = "/reload to pick up changes"`
+    // literal consumed by its file-private `shouldEmitReloadHint`-gated
+    // append discipline inside the public `notify()` (plan 05). The
+    // duplication is intentional (D-16-04) and ends in Phase 21 when V1
+    // wrappers + presentation/* composers are deleted together; this ignore
+    // can be removed at the same time as the reload-hint.ts entry above.
     files: ["extensions/pi-claude-marketplace/**/*.ts"],
     ignores: [
       "extensions/pi-claude-marketplace/presentation/manual-recovery.ts",
       "extensions/pi-claude-marketplace/presentation/rollback-partial.ts",
       "extensions/pi-claude-marketplace/presentation/reload-hint.ts",
+      "extensions/pi-claude-marketplace/shared/notify.ts",
     ],
     plugins: { msg: msgPlugin },
     rules: {
