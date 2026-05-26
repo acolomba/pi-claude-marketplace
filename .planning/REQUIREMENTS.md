@@ -27,13 +27,13 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 
 ### Public API
 
-- [ ] **SNM-12**: `notify(ctx: ExtensionContext, pi: ExtensionAPI, message: NotificationMessage): void` exported from `shared/notify.ts`. The single public entrypoint for state-change notifications. The `pi` argument is required for the render-time soft-dep probe (SNM-16); orchestrators already receive both `ctx` and `pi` separately.
-- [ ] **SNM-13**: `notifyUsageError(ctx: ExtensionContext, message: UsageErrorMessage): void` exported from `shared/notify.ts`. The single public entrypoint for argv-validation errors.
-- [ ] **SNM-14**: `notify()` computes severity from contents: any plugin or marketplace `status === "failed"` → error; any plugin status in `{skipped, manual recovery}` → warning; otherwise success. No caller-supplied severity.
-- [ ] **SNM-15**: `notify()` emits the reload-hint trailer (`/reload to pick up changes`) when contents indicate state change: any plugin status in `{installed, updated, reinstalled, uninstalled}` or any state-changing marketplace status (`added`, `removed`, `updated` -- not `failed`). No caller-supplied flag. Rationale: failed marketplace operations roll back and leave nothing to reload.
-- [ ] **SNM-16**: `notify()` probes each declared `Dependency` at notify time (no caller-supplied probe state). `agents` → pi-subagents probe; `mcp` → pi-mcp-adapter probe. Emits `{requires pi-subagents}` / `{requires pi-mcp}` marker per absent probe on the corresponding plugin row.
-- [ ] **SNM-17**: `notify()` internal switch over plugin/marketplace `status` is the SOLE site that knows the user-output grammar. Uses `assertNever` for compile-time exhaustiveness across `PluginStatus` and `MarketplaceStatus`.
-- [ ] **SNM-18**: `presentation/` composers become module-internal helpers of `notify()`. The barrel re-exports the user-facing TYPES (`NotificationMessage`, `MarketplaceNotificationMessage`, `PluginNotificationMessage`, `PluginStatus`, `MarketplaceStatus`, `Dependency`, `MarketplaceDetails`, `UsageErrorMessage`) so callers can construct payloads, but no longer exports any string-producing render functions.
+- [x] **SNM-12**: `notify(ctx: ExtensionContext, pi: ExtensionAPI, message: NotificationMessage): void` exported from `shared/notify.ts`. The single public entrypoint for state-change notifications. The `pi` argument is required for the render-time soft-dep probe (SNM-16); orchestrators already receive both `ctx` and `pi` separately.
+- [x] **SNM-13**: `notifyUsageError(ctx: ExtensionContext, message: UsageErrorMessage): void` exported from `shared/notify.ts`. The single public entrypoint for argv-validation errors.
+- [x] **SNM-14**: `notify()` computes severity from contents: any plugin or marketplace `status === "failed"` → error; any plugin status in `{skipped, manual recovery}` → warning; otherwise success. No caller-supplied severity.
+- [x] **SNM-15**: `notify()` emits the reload-hint trailer (`/reload to pick up changes`) when contents indicate state change: any plugin status in `{installed, updated, reinstalled, uninstalled}` or any state-changing marketplace status (`added`, `removed`, `updated` -- not `failed`). No caller-supplied flag. Rationale: failed marketplace operations roll back and leave nothing to reload.
+- [x] **SNM-16**: `notify()` probes each declared `Dependency` at notify time (no caller-supplied probe state). `agents` → pi-subagents probe; `mcp` → pi-mcp-adapter probe. Emits `{requires pi-subagents}` / `{requires pi-mcp}` marker per absent probe on the corresponding plugin row.
+- [x] **SNM-17**: `notify()` internal switch over plugin/marketplace `status` is the SOLE site that knows the user-output grammar. Uses `assertNever` for compile-time exhaustiveness across `PluginStatus` and `MarketplaceStatus`.
+- [x] **SNM-18**: `presentation/` composers become module-internal helpers of `notify()`. The barrel re-exports the user-facing TYPES (`NotificationMessage`, `MarketplaceNotificationMessage`, `PluginNotificationMessage`, `PluginStatus`, `MarketplaceStatus`, `Dependency`, `MarketplaceDetails`, `UsageErrorMessage`) so callers can construct payloads, but no longer exports any string-producing render functions.
 
 ### Spec & Docs
 
@@ -54,7 +54,7 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 
 ### Test Coverage
 
-- [ ] **SNM-30**: Per-status unit tests on `notify()` switch: one test or test block per variant of `PluginNotificationMessage` and per value of `MarketplaceStatus`. Each test passes a structured payload with a mock `ctx`, asserts on the exact string passed to `ctx.ui.notify`. Covers empty `plugins: []`, single-plugin, multi-plugin, orphan-fold (`scope?` set), `rollbackPartial`, multi-cause cascades.
+- [x] **SNM-30**: Per-status unit tests on `notify()` switch: one test or test block per variant of `PluginNotificationMessage` and per value of `MarketplaceStatus`. Each test passes a structured payload with a mock `ctx`, asserts on the exact string passed to `ctx.ui.notify`. Covers empty `plugins: []`, single-plugin, multi-plugin, orphan-fold (`scope?` set), `rollbackPartial`, multi-cause cascades.
 - [ ] **SNM-31**: `tests/architecture/catalog-uat.test.ts` rewritten to feed structured `NotificationMessage` fixtures through `notify()` (via mock ctx) and assert byte-equality against `docs/output-catalog.md` per-command expected outputs. The byte-equality assertion remains the user-contract gate.
 - [ ] **SNM-32**: `npm run check` GREEN after all migrations land: typecheck + ESLint (with new stock rules) + Prettier + tests (1249 v1.3 baseline minus retired lint-rule tests, plus the new per-variant unit tests; expected net change accounted for in the phase plan).
 
@@ -86,13 +86,13 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25.
 | SNM-09 | Phase 15 | Complete |
 | SNM-10 | Phase 15 | Complete |
 | SNM-11 | Phase 15 | Complete |
-| SNM-12 | Phase 16 | Pending |
-| SNM-13 | Phase 16 | Pending |
-| SNM-14 | Phase 16 | Pending |
-| SNM-15 | Phase 16 | Pending |
-| SNM-16 | Phase 16 | Pending |
-| SNM-17 | Phase 16 | Pending |
-| SNM-18 | Phase 16 | Pending |
+| SNM-12 | Phase 16 | Complete |
+| SNM-13 | Phase 16 | Complete |
+| SNM-14 | Phase 16 | Complete |
+| SNM-15 | Phase 16 | Complete |
+| SNM-16 | Phase 16 | Complete |
+| SNM-17 | Phase 16 | Complete |
+| SNM-18 | Phase 16 | Complete |
 | SNM-19 | Phase 17 | Pending |
 | SNM-20 | Phase 17 | Pending |
 | SNM-21 | Phase 15 | Complete |
@@ -104,7 +104,7 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25.
 | SNM-27 | Phase 21 | Pending |
 | SNM-28 | Phase 21 | Pending |
 | SNM-29 | Phase 21 | Pending |
-| SNM-30 | Phase 16 | Pending |
+| SNM-30 | Phase 16 | Complete |
 | SNM-31 | Phase 17 | Pending |
 | SNM-32 | Phase 21 | Pending |
 
