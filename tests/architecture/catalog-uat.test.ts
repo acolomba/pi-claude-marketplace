@@ -1,69 +1,57 @@
 // tests/architecture/catalog-uat.test.ts
 //
-// Phase 13 Wave 3 Plan 13-03-01 -- catalog UAT byte-equality runner.
+// Phase 17 Plan 17-03 -- catalog UAT byte-equality runner (v2 rewrite).
 //
 // Reads `docs/output-catalog.md` at test time, extracts every fenced
 // renderer-output block annotated with `<!-- catalog-state: STATE -->`
 // inside a per-command H2 section, pairs each `(section, STATE)` tuple
-// with a programmatic fixture, and asserts byte equality against the
-// rendered output of the Wave 1 + Wave 2 presentation primitives:
+// with a programmatic `NotificationMessage` fixture, and asserts byte
+// equality between the v2 catalog's expected block and what
+// `notify(mockCtx, mockPi, message)` actually emits.
 //
-//   - renderRow (presentation/compact-line.ts)
-//   - cascadeSummary (presentation/cascade-summary.ts)
-//   - renderManualRecovery (presentation/manual-recovery.ts)
-//   - renderRollbackPartial (presentation/rollback-partial.ts)
-//   - renderPluginList (presentation/plugin-list.ts)
-//   - renderMarketplaceList (presentation/marketplace-list.ts)
-//   - appendReloadHint (presentation/reload-hint.ts)
+// SCOPE GATE (SNM-31, D-17-03 pure exclusion): this test drives `notify()`
+// exclusively. The V1 composer fan-out (`renderRow`, `cascadeSummary`,
+// `renderManualRecovery`, `renderRollbackPartial`, `renderPluginList`,
+// `renderMarketplaceList`, `appendReloadHint`) is no longer referenced
+// from this file -- Phase 21 owns the deletion of those composers; their
+// surface remains covered by `tests/shared/notify.test.ts` until that
+// deletion lands. The `domain/source.ts::pathSource` fixture-builder
+// dependency is also gone -- v2 fixtures are pure data, not synthesized
+// from domain helpers.
 //
-// This test is the BINDING verification gate for every per-command
-// requirement (CMC-22..34) and the Wave 3 plan #1 gate per D-13-04: if
-// any assertion fails, the Wave 3 ES-5 atomic commit (plan #2) DOES NOT
-// RUN. The catalog is the SOLE source of truth (D-30); the test reads
-// the .md at runtime and does NOT duplicate the rendered examples into
-// test code -- fixtures construct the renderer-input state and let the
-// renderer produce the comparison string.
+// FIXTURE SHAPE (D-17-05, RESEARCH.md Pitfall 6): the FIXTURES map is keyed
+// by `(section, state)` tuples; each entry is a `CatalogFixture` carrying
+// a `NotificationMessage` payload, a `MockPi` factory (to drive the
+// `softDepStatus(pi)` probe inside `notify()`) and an optional
+// `expectedSeverity` ("warning" | "error") so the driver loop can assert
+// the Pi-API magic-string severity arg shape per Pitfall 6.
 //
-// Parser shape (RESEARCH.md Pitfall 7): anchor extraction to the
-// per-command H2 boundaries (`/^## /` lines whose heading text starts
-// with a backtick-wrapped `/claude:plugin ` command, or matches the
-// `Manual recovery anchors` heading). Within each section, walk lines;
-// a `<!-- catalog-state: STATE -->` comment is paired with the NEXT
-// fenced block (triple-backtick optionally followed by a language tag).
+// PARSER PRESERVATION (D-17-05, D-17-06): the catalog-walking logic
+// (`loadCatalogExamples` + the section/state regular expressions + the
+// `currentSection = sectionMatch[2] ?? "manual-recovery-anchors"` fallback)
+// is preserved VERBATIM from v1. The catalog convention is unchanged: a
+// `<!-- catalog-state: STATE -->` comment is paired with the next fenced
+// block inside a per-command H2 section.
 //
-// Templates in non-command sections (Conventions, Severity routing,
-// Status token reference, Empty / no-op surfaces, Usage errors,
-// Resolutions, Cross-references) carry no discriminator and are skipped.
+// BINDING USER-CONTRACT GATE: byte-equality between `notify()`'s output
+// and the v2.0 catalog (`docs/output-catalog.md` rewritten by Plan 17-02)
+// is the closed-loop SNM-31 gate. After this plan lands, every byte change
+// in either side must agree, structurally enforcing the v1.4 user
+// contract.
 
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import test from "node:test";
+import test, { mock } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
-  appendReloadHint,
-  cascadeSummary,
-  renderManualRecovery,
-  renderMarketplaceList,
-  renderRow,
-} from "../../extensions/pi-claude-marketplace/presentation/index.ts";
-import { renderPluginList } from "../../extensions/pi-claude-marketplace/presentation/plugin-list.ts";
-
-import type {
-  EntityErrorRow,
-  ManualRecoveryLine,
-  MarketplaceRow,
-  PluginCascadeRow,
-  PluginInlineRow,
-  PluginInlineUninstalledRow,
-  SoftDepProbe,
-} from "../../extensions/pi-claude-marketplace/presentation/index.ts";
-import type { PluginListMarketplaceBlock } from "../../extensions/pi-claude-marketplace/presentation/plugin-list.ts";
+  notify,
+  type NotificationMessage,
+} from "../../extensions/pi-claude-marketplace/shared/notify.ts";
 
 // ---------------------------------------------------------------------------
-// Catalog extraction
+// Catalog extraction (preserved VERBATIM from v1 per D-17-05 + D-17-06)
 // ---------------------------------------------------------------------------
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -150,1732 +138,1186 @@ function loadCatalogExamples(catalog: string): readonly CatalogExample[] {
 }
 
 // ---------------------------------------------------------------------------
-// Fixture helpers + the FIXTURES map
+// Mock helpers -- inline duplication of `tests/shared/notify-v2.test.ts`
+// lines 136-179 per RESEARCH.md Q1 Option 1 recommendation.
 // ---------------------------------------------------------------------------
 
-const PROBE_BOTH_LOADED: SoftDepProbe = {
-  piSubagentsLoaded: true,
-  piMcpAdapterLoaded: true,
-};
-
-const PROBE_SUBAGENTS_UNLOADED: SoftDepProbe = {
-  piSubagentsLoaded: false,
-  piMcpAdapterLoaded: true,
-};
-
-const PROBE_BOTH_UNLOADED: SoftDepProbe = {
-  piSubagentsLoaded: false,
-  piMcpAdapterLoaded: false,
-};
-
-const RELOAD_HINT = "/reload to pick up changes";
-
-function inlineWithReload(row: PluginInlineRow | PluginInlineUninstalledRow): string {
-  return appendReloadHint(renderRow(row, PROBE_BOTH_LOADED), RELOAD_HINT);
+interface MockCtx {
+  ui: { notify: ReturnType<typeof mock.fn> };
 }
 
-function cascadeWithOptionalReload(
-  marketplace: MarketplaceRow,
-  rows: readonly PluginCascadeRow[],
-  probe: SoftDepProbe,
-  withReload: boolean,
-): string {
-  const { message } = cascadeSummary({ marketplace, rows, probe });
-  return withReload ? appendReloadHint(message, RELOAD_HINT) : message;
+function makeCtx(): MockCtx {
+  return { ui: { notify: mock.fn() } };
 }
 
-type FixtureFactory = () => string;
-type FixtureMap = Readonly<Record<string, Readonly<Record<string, FixtureFactory>>>>;
+interface MockTool {
+  name?: string;
+  sourceInfo?: { source?: string };
+}
+
+interface MockPi {
+  getAllTools: () => MockTool[];
+}
+
+/** Probe reports both pi-subagents and pi-mcp-adapter loaded -- no soft-dep markers fire. */
+function piWithBothLoaded(): MockPi {
+  return {
+    getAllTools: () => [{ name: "subagent" }, { name: "mcp" }],
+  };
+}
+
+/** Probe reports pi-subagents loaded, pi-mcp-adapter NOT loaded -- {requires pi-mcp} fires on dep-bearing rows declaring mcp. */
+function piWithSubagentsLoaded(): MockPi {
+  return {
+    getAllTools: () => [{ name: "subagent" }],
+  };
+}
+
+/** Probe reports pi-mcp-adapter loaded, pi-subagents NOT loaded -- {requires pi-subagents} fires on dep-bearing rows declaring agents. */
+function piWithMcpLoaded(): MockPi {
+  return {
+    getAllTools: () => [{ name: "mcp" }],
+  };
+}
+
+/** Probe reports nothing loaded -- both soft-dep markers fire when the row declares the dep. */
+function piWithNothingLoaded(): MockPi {
+  return {
+    getAllTools: () => [],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Fixture map shape (D-17-05 + RESEARCH.md Pitfall 6).
+// ---------------------------------------------------------------------------
+
+interface CatalogFixture {
+  readonly message: NotificationMessage;
+  readonly pi: MockPi;
+  readonly expectedSeverity?: "warning" | "error";
+}
+
+type FixtureMap = Readonly<Record<string, Readonly<Record<string, CatalogFixture>>>>;
+
+// ---------------------------------------------------------------------------
+// FIXTURES -- one entry per `(section, state)` tuple parsed from the v2
+// catalog. Outer-map keys are the 12 per-command H2 strings plus the
+// `manual-recovery-anchors` fallback key (per the parser's
+// `currentSection = sectionMatch[2] ?? "manual-recovery-anchors"` fallback).
+// Inner-map keys are the catalog-state STATE strings.
+//
+// Per-fixture composition:
+//   - `pi` picks a MockPi factory consistent with the state's soft-dep
+//     markers (or piWithBothLoaded for states that emit no `{requires
+//     pi-...}` markers).
+//   - `expectedSeverity` is set ONLY when the payload triggers
+//     computeSeverity() to return "warning" or "error" per D-16-11:
+//       failed-bearing -> "error"
+//       skipped or manual-recovery without failed -> "warning"
+//       otherwise omit the field (info severity, no 2nd arg).
+//   - Plugin variants honor the discriminated-union carve-outs at
+//     `shared/notify.ts` lines 288-448 (required vs absent reasons /
+//     dependencies / scope / version / cause / rollbackPartial fields).
+// ---------------------------------------------------------------------------
 
 const FIXTURES: FixtureMap = {
+  // -------------------------------------------------------------------------
+  // /claude:plugin list -- list-surface; mp.status === undefined.
+  // -------------------------------------------------------------------------
   "/claude:plugin list": {
-    empty: () => renderPluginList({ marketplaceBlocks: [] }, PROBE_BOTH_LOADED),
-
-    "single-mp-mixed": () => {
-      const block: PluginListMarketplaceBlock = {
-        header: {
-          kind: "marketplace",
-          name: "official",
-          scope: "user",
-          marker: "autoupdate",
-          outcomeClass: "ok",
-        },
-        plugins: [
-          {
-            kind: "plugin-list",
-            name: "alpha",
-            scope: "user",
-            version: "1.0.0",
-            status: "installed",
-            description: "Short description of alpha.",
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-          {
-            kind: "plugin-list",
-            name: "beta",
-            scope: "user",
-            version: "0.5.0 → v1.0.0",
-            status: "upgradable",
-            description: "Long description that exceeds the col-66 width budget will be truncated.",
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-          {
-            kind: "plugin-list",
-            name: "delta",
-            scope: "user",
-            status: "unavailable",
-            reasons: ["hooks"],
-            description: "Free-text description; renders verbatim under 66 cols.",
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-          {
-            kind: "plugin-list",
-            name: "epsilon",
-            scope: "user",
-            status: "unavailable",
-            reasons: ["hooks", "lspServers"],
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-          {
-            kind: "plugin-list",
-            name: "gamma",
-            scope: "user",
-            version: "2.0.0",
-            status: "available",
-            description: "Free-text description; renders verbatim under 66 cols.",
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-        ],
-      };
-      return renderPluginList({ marketplaceBlocks: [block] }, PROBE_BOTH_LOADED);
+    empty: {
+      pi: piWithBothLoaded(),
+      message: { marketplaces: [] },
     },
 
-    "same-plugin-both-scopes": () => {
-      const blocks: PluginListMarketplaceBlock[] = [
-        {
-          header: {
-            kind: "marketplace",
-            name: "official",
-            scope: "project",
-            marker: "autoupdate",
-            outcomeClass: "ok",
-          },
-          plugins: [
-            {
-              kind: "plugin-list",
-              name: "alpha",
-              scope: "project",
-              version: "0.9.0",
-              status: "installed",
-              declaresAgents: false,
-              declaresMcp: false,
-            },
-          ],
-        },
-        {
-          header: {
-            kind: "marketplace",
+    "single-mp-mixed": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
             name: "official",
             scope: "user",
-            marker: "autoupdate",
-            outcomeClass: "ok",
+            details: { autoupdate: true },
+            plugins: [
+              { status: "installed", name: "alpha", version: "1.0.0", dependencies: [] },
+              {
+                status: "upgradable",
+                name: "beta",
+                version: "1.0.0",
+                reasons: ["stale clone"],
+              },
+              { status: "unavailable", name: "delta", reasons: ["hooks"] },
+              {
+                status: "unavailable",
+                name: "epsilon",
+                reasons: ["hooks", "lspServers"],
+              },
+              { status: "available", name: "gamma", version: "2.0.0" },
+            ],
           },
-          plugins: [
-            {
-              kind: "plugin-list",
-              name: "alpha",
-              scope: "user",
-              version: "1.0.0",
-              status: "installed",
-              declaresAgents: false,
-              declaresMcp: false,
-            },
-          ],
-        },
-      ];
-      return renderPluginList({ marketplaceBlocks: blocks }, PROBE_BOTH_LOADED);
+        ],
+      },
     },
 
-    "project-orphan-folded": () => {
-      const block: PluginListMarketplaceBlock = {
-        header: {
-          kind: "marketplace",
-          name: "official",
-          scope: "user",
-          marker: "autoupdate",
-          outcomeClass: "ok",
-        },
-        plugins: [
+    "same-plugin-both-scopes": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
           {
-            kind: "plugin-list",
-            name: "alpha",
+            name: "official",
             scope: "project",
-            version: "0.9.0",
-            status: "installed",
-            declaresAgents: false,
-            declaresMcp: false,
+            details: { autoupdate: true },
+            plugins: [{ status: "installed", name: "alpha", version: "0.9.0", dependencies: [] }],
           },
           {
-            kind: "plugin-list",
-            name: "alpha",
+            name: "official",
             scope: "user",
-            version: "1.0.0",
-            status: "installed",
-            declaresAgents: false,
-            declaresMcp: false,
+            details: { autoupdate: true },
+            plugins: [{ status: "installed", name: "alpha", version: "1.0.0", dependencies: [] }],
           },
         ],
-      };
-      return renderPluginList({ marketplaceBlocks: [block] }, PROBE_BOTH_LOADED);
+      },
     },
 
-    "soft-dep-on-installed": () => {
-      const block: PluginListMarketplaceBlock = {
-        header: {
-          kind: "marketplace",
-          name: "official",
-          scope: "user",
-          marker: "autoupdate",
-          outcomeClass: "ok",
-        },
-        plugins: [
+    "project-orphan-folded": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
           {
-            kind: "plugin-list",
-            name: "dual",
+            name: "official",
             scope: "user",
-            version: "0.5.0",
-            status: "installed",
-            declaresAgents: true,
-            declaresMcp: true,
-          },
-          {
-            kind: "plugin-list",
-            name: "helper",
-            scope: "user",
-            version: "1.0.0",
-            status: "installed",
-            declaresAgents: true,
-            declaresMcp: false,
-          },
-          {
-            kind: "plugin-list",
-            name: "mcp-tool",
-            scope: "user",
-            version: "2.0.0",
-            status: "installed",
-            declaresMcp: true,
-            declaresAgents: false,
+            details: { autoupdate: true },
+            plugins: [
+              {
+                status: "installed",
+                name: "alpha",
+                version: "0.9.0",
+                dependencies: [],
+                scope: "project",
+              },
+              {
+                status: "installed",
+                name: "alpha",
+                version: "1.0.0",
+                dependencies: [],
+                // Same-scope row also carries explicit `scope` because the
+                // orchestrator disambiguates the two `alpha` rows (orphan-
+                // folded + same-scope) by emitting both brackets. Without
+                // the explicit scope, the user-scoped alpha row would emit
+                // no bracket -- catalog renders both with brackets.
+                scope: "user",
+              },
+            ],
           },
         ],
-      };
-      return renderPluginList({ marketplaceBlocks: [block] }, PROBE_BOTH_UNLOADED);
+      },
     },
 
-    "unparseable-mp": () => {
-      const blocks: PluginListMarketplaceBlock[] = [
-        {
-          header: {
-            kind: "marketplace",
-            name: "unparseable-mp",
+    "soft-dep-on-installed": {
+      pi: piWithNothingLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
             scope: "user",
-            outcomeClass: "failure",
-            status: "failed",
-            reasons: ["unparseable"],
+            details: { autoupdate: true },
+            plugins: [
+              {
+                status: "installed",
+                name: "dual",
+                version: "0.5.0",
+                dependencies: ["agents", "mcp"],
+              },
+              {
+                status: "installed",
+                name: "helper",
+                version: "1.0.0",
+                dependencies: ["agents"],
+              },
+              {
+                status: "installed",
+                name: "mcp-tool",
+                version: "2.0.0",
+                dependencies: ["mcp"],
+              },
+            ],
           },
-          plugins: [],
-          causeTrailer: "JSON parse error at line 3",
-        },
-        {
-          header: {
-            kind: "marketplace",
+        ],
+      },
+    },
+
+    "unparseable-mp": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
             name: "other-mp",
             scope: "user",
-            marker: "autoupdate",
-            outcomeClass: "ok",
+            details: { autoupdate: true },
+            plugins: [{ status: "installed", name: "helper", version: "1.0.0", dependencies: [] }],
           },
-          plugins: [
-            {
-              kind: "plugin-list",
-              name: "helper",
-              scope: "user",
-              version: "1.0.0",
-              status: "installed",
-              declaresAgents: false,
-              declaresMcp: false,
-            },
-          ],
-        },
-      ];
-      return renderPluginList({ marketplaceBlocks: blocks }, PROBE_BOTH_LOADED);
+          {
+            name: "unparseable-mp",
+            scope: "user",
+            status: "failed",
+            // Empty plugins[] -- the bare failed marketplace header is the
+            // entire block. The v2 type model does not carry cause on
+            // marketplace headers; orchestrators wanting to surface the
+            // parse error must include a per-plugin failed/manual-recovery
+            // row carrying the diagnostic as `cause?: Error`.
+            plugins: [],
+          },
+        ],
+      },
     },
 
-    "zero-plugin-mp-block": () => {
-      const blocks: PluginListMarketplaceBlock[] = [
-        {
-          header: {
-            kind: "marketplace",
-            name: "empty-mp",
-            scope: "project",
-            outcomeClass: "ok",
-          },
-          plugins: [{ kind: "empty", token: "no plugins" }],
-        },
-        {
-          header: {
-            kind: "marketplace",
+    "zero-plugin-mp-block": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          { name: "empty-mp", scope: "project", plugins: [] },
+          {
             name: "official",
             scope: "user",
-            marker: "autoupdate",
-            outcomeClass: "ok",
+            details: { autoupdate: true },
+            plugins: [{ status: "installed", name: "alpha", version: "1.0.0", dependencies: [] }],
           },
-          plugins: [
-            {
-              kind: "plugin-list",
-              name: "alpha",
-              scope: "user",
-              version: "1.0.0",
-              status: "installed",
-              declaresAgents: false,
-              declaresMcp: false,
-            },
-          ],
-        },
-      ];
-      return renderPluginList({ marketplaceBlocks: blocks }, PROBE_BOTH_LOADED);
+        ],
+      },
     },
 
-    "multiple-mps": () => {
-      const blocks: PluginListMarketplaceBlock[] = [
-        {
-          header: {
-            kind: "marketplace",
+    "multiple-mps": {
+      pi: piWithMcpLoaded(),
+      message: {
+        marketplaces: [
+          {
             name: "official",
             scope: "project",
-            marker: "autoupdate",
-            outcomeClass: "ok",
+            details: { autoupdate: true },
+            plugins: [{ status: "installed", name: "alpha", version: "0.9.0", dependencies: [] }],
           },
-          plugins: [
-            {
-              kind: "plugin-list",
-              name: "alpha",
-              scope: "project",
-              version: "0.9.0",
-              status: "installed",
-              declaresAgents: false,
-              declaresMcp: false,
-            },
-          ],
-        },
-        {
-          header: {
-            kind: "marketplace",
+          {
             name: "official",
             scope: "user",
-            marker: "autoupdate",
-            outcomeClass: "ok",
+            details: { autoupdate: true },
+            plugins: [
+              { status: "installed", name: "alpha", version: "1.0.0", dependencies: [] },
+              { status: "available", name: "beta", version: "2.0.0" },
+            ],
           },
-          plugins: [
-            {
-              kind: "plugin-list",
-              name: "alpha",
-              scope: "user",
-              version: "1.0.0",
-              status: "installed",
-              declaresAgents: false,
-              declaresMcp: false,
-            },
-            {
-              kind: "plugin-list",
-              name: "beta",
-              scope: "user",
-              version: "2.0.0",
-              status: "available",
-              declaresAgents: false,
-              declaresMcp: false,
-            },
-          ],
-        },
-        {
-          header: {
-            kind: "marketplace",
+          {
             name: "zeta-mp",
             scope: "user",
-            outcomeClass: "ok",
+            plugins: [
+              {
+                status: "installed",
+                name: "tool",
+                version: "1.0.0",
+                dependencies: ["agents"],
+              },
+            ],
           },
-          plugins: [
-            {
-              kind: "plugin-list",
-              name: "tool",
-              scope: "user",
-              version: "1.0.0",
-              status: "installed",
-              declaresAgents: true,
-              declaresMcp: false,
-            },
-          ],
-        },
-      ];
-      return renderPluginList({ marketplaceBlocks: blocks }, PROBE_SUBAGENTS_UNLOADED);
+        ],
+      },
     },
   },
 
+  // -------------------------------------------------------------------------
+  // /claude:plugin install -- single-plugin command; bare mp header.
+  // -------------------------------------------------------------------------
   "/claude:plugin install <plugin>@<marketplace>": {
-    success: () =>
-      inlineWithReload({
-        kind: "plugin-inline",
-        name: "helper",
-        marketplace: "official",
-        scope: "user",
-        version: "1.0.0",
-        status: "installed",
-        declaresAgents: false,
-        declaresMcp: false,
-      }),
-
-    "success-with-soft-dep": () =>
-      appendReloadHint(
-        renderRow(
+    success: {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
           {
-            kind: "plugin-inline",
-            name: "helper",
-            marketplace: "official",
+            name: "official",
             scope: "user",
-            version: "1.0.0",
-            status: "installed",
-            declaresAgents: true,
-            declaresMcp: true,
+            plugins: [{ status: "installed", name: "helper", version: "1.0.0", dependencies: [] }],
           },
-          PROBE_BOTH_UNLOADED,
-        ),
-        RELOAD_HINT,
-      ),
-
-    "failure-unsupported-features": () =>
-      renderRow(
-        {
-          kind: "plugin-inline",
-          name: "helper",
-          marketplace: "official",
-          scope: "user",
-          status: "unavailable",
-          reasons: ["hooks", "lspServers"],
-          declaresAgents: false,
-          declaresMcp: false,
-        },
-        PROBE_BOTH_LOADED,
-      ),
-
-    "failure-runtime-with-cause": () => {
-      const head: PluginInlineRow = {
-        kind: "plugin-inline",
-        name: "helper",
-        marketplace: "official",
-        scope: "user",
-        status: "failed",
-        declaresAgents: false,
-        declaresMcp: false,
-      };
-      const causeLine =
-        "  cause: state.json at /path/to/state.json is not valid JSON: Unexpected token n in JSON at position 0";
-      return `${renderRow(head, PROBE_BOTH_LOADED)}\n${causeLine}`;
+        ],
+      },
     },
 
-    "failure-rollback-partial": () => {
-      const parent: PluginInlineRow = {
-        kind: "plugin-inline",
-        name: "helper",
-        marketplace: "official",
-        scope: "user",
-        status: "failed",
-        reasons: ["rollback partial"],
-        declaresAgents: false,
-        declaresMcp: false,
-      };
-      // Catalog form: rollback-partial children carry bracketed phase
-      // prefixes and a cause line at the same indent. The
-      // `presentation/rollback-partial.ts` composer pairs a parent row
-      // with `RollbackChild` compact rows; the catalog example uses a
-      // textual / prose form for the children (operator-readable, no
-      // compact-line status token). The fixture composes the catalog form
-      // directly to mirror the orchestrator's actual emission.
-      return [
-        renderRow(parent, PROBE_BOTH_LOADED),
-        "  [phase3a] failed to remove staged agent: EACCES",
-        "  [phase3b] orphan path: /.../helper.bak",
-        "  cause: orchestrator failed mid-staging",
-      ].join("\n");
+    "success-with-soft-dep": {
+      pi: piWithNothingLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                name: "helper",
+                version: "1.0.0",
+                dependencies: ["agents", "mcp"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    "failure-unsupported-features": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "unavailable",
+                name: "helper",
+                reasons: ["hooks", "lspServers"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    "failure-runtime-with-cause": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["permission denied"],
+                cause: new Error(
+                  "state.json at /path/to/state.json is not valid JSON: Unexpected token n in JSON at position 0",
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    "failure-rollback-partial": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["rollback partial"],
+                cause: new Error("orchestrator failed mid-staging"),
+                rollbackPartial: [
+                  {
+                    phase: "phase3a",
+                    cause: new Error("failed to remove staged agent: EACCES"),
+                  },
+                  { phase: "phase3b", cause: new Error("orphan path: /.../helper.bak") },
+                ],
+              },
+            ],
+          },
+        ],
+      },
     },
   },
 
+  // -------------------------------------------------------------------------
+  // /claude:plugin uninstall -- single-plugin command.
+  // -------------------------------------------------------------------------
   "/claude:plugin uninstall <plugin>@<marketplace>": {
-    success: () =>
-      inlineWithReload({
-        kind: "plugin-inline-uninstalled",
-        name: "helper",
-        marketplace: "official",
-        scope: "user",
-        version: "1.0.0",
-      }),
+    success: {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [{ status: "uninstalled", name: "helper", version: "1.0.0" }],
+          },
+        ],
+      },
+    },
 
-    "success-soft-dep-omitted": () =>
-      inlineWithReload({
-        kind: "plugin-inline-uninstalled",
-        name: "helper",
-        marketplace: "official",
-        scope: "user",
-        version: "1.0.0",
-      }),
+    "success-soft-dep-omitted": {
+      pi: piWithNothingLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [{ status: "uninstalled", name: "helper", version: "1.0.0" }],
+          },
+        ],
+      },
+    },
 
-    "failure-permission-denied": () => {
-      // Uninstall failure renders the failed plugin as an EntityErrorRow
-      // (the only structural variant carrying `name@marketplace [scope]
-      // (status) {reasons}` plus an indented `cause:` trailer) so the
-      // catalog's compact-line + cause-line shape matches by byte.
-      const row: EntityErrorRow = {
-        kind: "entity-error",
-        name: "helper",
-        marketplace: "official",
-        scope: "user",
-        status: "failed",
-        reasons: ["permission denied"],
-      };
-      const cause = "  cause: EACCES: permission denied, unlink '/path/to/file'";
-      return `${renderRow(row, PROBE_BOTH_LOADED)}\n${cause}`;
+    "failure-permission-denied": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["permission denied"],
+                cause: new Error("EACCES: permission denied, unlink '/path/to/file'"),
+              },
+            ],
+          },
+        ],
+      },
     },
   },
 
+  // -------------------------------------------------------------------------
+  // /claude:plugin reinstall -- multi-plugin cascade; bare mp header.
+  // -------------------------------------------------------------------------
   "/claude:plugin reinstall": {
-    "single-mp-all-reinstalled": () =>
-      cascadeWithOptionalReload(
-        {
-          kind: "marketplace",
-          name: "official",
-          scope: "user",
-          marker: "autoupdate",
-          outcomeClass: "ok",
-        },
-        [
+    "single-mp-all-reinstalled": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
           {
-            kind: "plugin-cascade",
-            name: "alpha",
+            name: "official",
             scope: "user",
-            version: "1.0.0",
-            status: "reinstalled",
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-          {
-            kind: "plugin-cascade",
-            name: "beta",
-            scope: "user",
-            version: "0.5.0",
-            status: "reinstalled",
-            declaresAgents: false,
-            declaresMcp: false,
+            plugins: [
+              {
+                status: "reinstalled",
+                name: "alpha",
+                version: "1.0.0",
+                dependencies: [],
+              },
+              {
+                status: "reinstalled",
+                name: "beta",
+                version: "0.5.0",
+                dependencies: [],
+              },
+            ],
           },
         ],
-        PROBE_BOTH_LOADED,
-        true,
-      ),
-
-    "success-with-soft-dep": () =>
-      cascadeWithOptionalReload(
-        {
-          kind: "marketplace",
-          name: "official",
-          scope: "user",
-          marker: "autoupdate",
-          outcomeClass: "ok",
-        },
-        [
-          {
-            kind: "plugin-cascade",
-            name: "alpha",
-            scope: "user",
-            version: "1.0.0",
-            status: "reinstalled",
-            declaresAgents: true,
-            declaresMcp: true,
-          },
-        ],
-        PROBE_BOTH_UNLOADED,
-        true,
-      ),
-
-    "single-mp-mixed-outcomes": () =>
-      cascadeWithOptionalReload(
-        {
-          kind: "marketplace",
-          name: "official",
-          scope: "user",
-          marker: "autoupdate",
-          outcomeClass: "ok",
-        },
-        [
-          {
-            kind: "plugin-cascade",
-            name: "alpha",
-            scope: "user",
-            version: "1.0.0",
-            status: "reinstalled",
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-          {
-            kind: "plugin-cascade",
-            name: "beta",
-            scope: "user",
-            status: "skipped",
-            reasons: ["up-to-date"],
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-          {
-            kind: "plugin-cascade",
-            name: "delta",
-            scope: "user",
-            status: "failed",
-            reasons: ["source missing"],
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-        ],
-        PROBE_BOTH_LOADED,
-        true,
-      ),
-
-    "single-mp-all-failed": () =>
-      cascadeWithOptionalReload(
-        {
-          kind: "marketplace",
-          name: "official",
-          scope: "user",
-          marker: "autoupdate",
-          outcomeClass: "ok",
-        },
-        [
-          {
-            kind: "plugin-cascade",
-            name: "alpha",
-            scope: "user",
-            status: "failed",
-            reasons: ["source missing"],
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-          {
-            kind: "plugin-cascade",
-            name: "beta",
-            scope: "user",
-            status: "failed",
-            reasons: ["unreadable manifest"],
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-        ],
-        PROBE_BOTH_LOADED,
-        false,
-      ),
-
-    "plugin-became-unavailable": () =>
-      cascadeWithOptionalReload(
-        {
-          kind: "marketplace",
-          name: "official",
-          scope: "user",
-          marker: "autoupdate",
-          outcomeClass: "ok",
-        },
-        [
-          {
-            kind: "plugin-cascade",
-            name: "alpha",
-            scope: "user",
-            version: "1.0.0",
-            status: "reinstalled",
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-          {
-            kind: "plugin-cascade",
-            name: "delta",
-            scope: "user",
-            status: "unavailable",
-            reasons: ["hooks"],
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-        ],
-        PROBE_BOTH_LOADED,
-        true,
-      ),
-
-    "bare-multi-mp": () => {
-      const local = cascadeSummary({
-        marketplace: {
-          kind: "marketplace",
-          name: "local-mp",
-          scope: "project",
-          outcomeClass: "ok",
-        },
-        rows: [
-          {
-            kind: "plugin-cascade",
-            name: "helper",
-            scope: "project",
-            version: "0.5.0",
-            status: "reinstalled",
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-          {
-            kind: "plugin-cascade",
-            name: "tool",
-            scope: "project",
-            version: "1.0.0",
-            status: "reinstalled",
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-        ],
-        probe: PROBE_BOTH_LOADED,
-      }).message;
-      const official = cascadeSummary({
-        marketplace: {
-          kind: "marketplace",
-          name: "official",
-          scope: "user",
-          marker: "autoupdate",
-          outcomeClass: "ok",
-        },
-        rows: [
-          {
-            kind: "plugin-cascade",
-            name: "alpha",
-            scope: "user",
-            version: "1.0.0",
-            status: "reinstalled",
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-          {
-            kind: "plugin-cascade",
-            name: "beta",
-            scope: "user",
-            status: "skipped",
-            reasons: ["up-to-date"],
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-          {
-            kind: "plugin-cascade",
-            name: "delta",
-            scope: "user",
-            status: "failed",
-            reasons: ["source missing"],
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-        ],
-        probe: PROBE_BOTH_LOADED,
-      }).message;
-      return appendReloadHint(`${local}\n${official}`, RELOAD_HINT);
+      },
     },
 
-    // CR-01 / 14.2-01 D-03: same-marketplace-name-cross-scope fixture
-    // locks project-before-user cascade-block ordering by byte equality.
-    // Pair with `<!-- catalog-state: same-mp-both-scopes -->` annotation
-    // under `## /claude:plugin reinstall` in docs/output-catalog.md.
-    "same-mp-both-scopes": () => {
-      const project = cascadeSummary({
-        marketplace: {
-          kind: "marketplace",
-          name: "official",
-          scope: "project",
-          outcomeClass: "ok",
-        },
-        rows: [
+    "success-with-soft-dep": {
+      pi: piWithNothingLoaded(),
+      message: {
+        marketplaces: [
           {
-            kind: "plugin-cascade",
-            name: "alpha",
-            scope: "project",
-            version: "1.0.0",
-            status: "reinstalled",
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-        ],
-        probe: PROBE_BOTH_LOADED,
-      }).message;
-      const user = cascadeSummary({
-        marketplace: {
-          kind: "marketplace",
-          name: "official",
-          scope: "user",
-          outcomeClass: "ok",
-        },
-        rows: [
-          {
-            kind: "plugin-cascade",
-            name: "beta",
+            name: "official",
             scope: "user",
-            version: "1.0.0",
-            status: "reinstalled",
-            declaresAgents: false,
-            declaresMcp: false,
+            plugins: [
+              {
+                status: "reinstalled",
+                name: "alpha",
+                version: "1.0.0",
+                dependencies: ["agents", "mcp"],
+              },
+            ],
           },
         ],
-        probe: PROBE_BOTH_LOADED,
-      }).message;
-      return appendReloadHint(`${project}\n${user}`, RELOAD_HINT);
+      },
+    },
+
+    "single-mp-mixed-outcomes": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "reinstalled",
+                name: "alpha",
+                version: "1.0.0",
+                dependencies: [],
+              },
+              { status: "skipped", name: "beta", reasons: ["up-to-date"] },
+              { status: "failed", name: "delta", reasons: ["source missing"] },
+            ],
+          },
+        ],
+      },
+    },
+
+    "single-mp-all-failed": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              { status: "failed", name: "alpha", reasons: ["source missing"] },
+              { status: "failed", name: "beta", reasons: ["invalid manifest"] },
+            ],
+          },
+        ],
+      },
+    },
+
+    "plugin-became-unavailable": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "reinstalled",
+                name: "alpha",
+                version: "1.0.0",
+                dependencies: [],
+              },
+              { status: "unavailable", name: "delta", reasons: ["hooks"] },
+            ],
+          },
+        ],
+      },
+    },
+
+    "bare-multi-mp": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "local-mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "reinstalled",
+                name: "helper",
+                version: "0.5.0",
+                dependencies: [],
+              },
+              {
+                status: "reinstalled",
+                name: "tool",
+                version: "1.0.0",
+                dependencies: [],
+              },
+            ],
+          },
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "reinstalled",
+                name: "alpha",
+                version: "1.0.0",
+                dependencies: [],
+              },
+              { status: "skipped", name: "beta", reasons: ["up-to-date"] },
+              { status: "failed", name: "delta", reasons: ["source missing"] },
+            ],
+          },
+        ],
+      },
+    },
+
+    "same-mp-both-scopes": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "project",
+            plugins: [
+              {
+                status: "reinstalled",
+                name: "alpha",
+                version: "1.0.0",
+                dependencies: [],
+              },
+            ],
+          },
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "reinstalled",
+                name: "beta",
+                version: "1.0.0",
+                dependencies: [],
+              },
+            ],
+          },
+        ],
+      },
     },
   },
 
+  // -------------------------------------------------------------------------
+  // /claude:plugin update -- multi-plugin cascade; version-arrow rows.
+  // -------------------------------------------------------------------------
   "/claude:plugin update": {
-    "single-mp-mixed": () =>
-      cascadeWithOptionalReload(
-        {
-          kind: "marketplace",
-          name: "official",
-          scope: "user",
-          marker: "autoupdate",
-          outcomeClass: "ok",
-        },
-        [
+    "single-mp-mixed": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
           {
-            kind: "plugin-cascade",
-            name: "alpha",
+            name: "official",
             scope: "user",
-            version: "0.5.0 → v1.0.0",
-            status: "updated",
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-          {
-            kind: "plugin-cascade",
-            name: "beta",
-            scope: "user",
-            status: "skipped",
-            reasons: ["up-to-date"],
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-          {
-            kind: "plugin-cascade",
-            name: "delta",
-            scope: "user",
-            version: "1.0.0 → v1.4.0",
-            status: "failed",
-            reasons: ["network unreachable"],
-            declaresAgents: false,
-            declaresMcp: false,
+            plugins: [
+              {
+                status: "updated",
+                name: "alpha",
+                from: "0.5.0",
+                to: "1.0.0",
+                dependencies: [],
+              },
+              { status: "skipped", name: "beta", reasons: ["up-to-date"] },
+              {
+                status: "failed",
+                name: "delta",
+                reasons: ["network unreachable"],
+              },
+            ],
           },
         ],
-        PROBE_BOTH_LOADED,
-        true,
-      ),
-
-    "failed-with-rollback-partial": () => {
-      const mp: MarketplaceRow = {
-        kind: "marketplace",
-        name: "official",
-        scope: "user",
-        marker: "autoupdate",
-        outcomeClass: "ok",
-      };
-      const parent: PluginCascadeRow = {
-        kind: "plugin-cascade",
-        name: "delta",
-        scope: "user",
-        version: "1.0.0 → v1.4.0",
-        status: "failed",
-        reasons: ["rollback partial"],
-        declaresAgents: false,
-        declaresMcp: false,
-      };
-      const mpLine = renderRow(mp, PROBE_BOTH_LOADED);
-      const parentLine = `  ${renderRow(parent, PROBE_BOTH_LOADED)}`;
-      const children = [
-        "    [phase3a] failed to remove staged agent: EACCES",
-        "    [phase3b] orphan path: /.../delta.bak",
-        "    cause: orchestrator failed mid-staging",
-      ];
-      return [mpLine, parentLine, ...children].join("\n");
+      },
     },
 
-    "all-up-to-date-noop": () =>
-      cascadeWithOptionalReload(
-        {
-          kind: "marketplace",
-          name: "official",
-          scope: "user",
-          marker: "autoupdate",
-          outcomeClass: "ok",
-        },
-        [
+    "failed-with-rollback-partial": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
           {
-            kind: "plugin-cascade",
-            name: "alpha",
+            name: "official",
             scope: "user",
-            status: "skipped",
-            reasons: ["up-to-date"],
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-          {
-            kind: "plugin-cascade",
-            name: "beta",
-            scope: "user",
-            status: "skipped",
-            reasons: ["up-to-date"],
-            declaresAgents: false,
-            declaresMcp: false,
+            plugins: [
+              {
+                status: "failed",
+                name: "delta",
+                version: "1.0.0",
+                reasons: ["rollback partial"],
+                cause: new Error("orchestrator failed mid-staging"),
+                rollbackPartial: [
+                  {
+                    phase: "phase3a",
+                    cause: new Error("failed to remove staged agent: EACCES"),
+                  },
+                  { phase: "phase3b", cause: new Error("orphan path: /.../delta.bak") },
+                ],
+              },
+            ],
           },
         ],
-        PROBE_BOTH_LOADED,
-        false,
-      ),
-
-    "bare-multi-mp": () => {
-      const local = cascadeSummary({
-        marketplace: {
-          kind: "marketplace",
-          name: "local-mp",
-          scope: "project",
-          outcomeClass: "ok",
-        },
-        rows: [
-          {
-            kind: "plugin-cascade",
-            name: "helper",
-            scope: "project",
-            version: "0.5.0 → v1.0.0",
-            status: "updated",
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-        ],
-        probe: PROBE_BOTH_LOADED,
-      }).message;
-      const official = cascadeSummary({
-        marketplace: {
-          kind: "marketplace",
-          name: "official",
-          scope: "user",
-          marker: "autoupdate",
-          outcomeClass: "ok",
-        },
-        rows: [
-          {
-            kind: "plugin-cascade",
-            name: "alpha",
-            scope: "user",
-            version: "0.5.0 → v1.0.0",
-            status: "updated",
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-          {
-            kind: "plugin-cascade",
-            name: "beta",
-            scope: "user",
-            status: "skipped",
-            reasons: ["up-to-date"],
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-          {
-            kind: "plugin-cascade",
-            name: "delta",
-            scope: "user",
-            version: "1.0.0 → v1.4.0",
-            status: "failed",
-            reasons: ["network unreachable"],
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-        ],
-        probe: PROBE_BOTH_LOADED,
-      }).message;
-      return appendReloadHint(`${local}\n${official}`, RELOAD_HINT);
+      },
     },
 
-    // CR-01 / 14.2-01 D-03: same-marketplace-name-cross-scope fixture
-    // locks project-before-user cascade-block ordering by byte equality.
-    // Pair with `<!-- catalog-state: same-mp-both-scopes -->` annotation
-    // under `## /claude:plugin update` in docs/output-catalog.md.
-    "same-mp-both-scopes": () => {
-      const project = cascadeSummary({
-        marketplace: {
-          kind: "marketplace",
-          name: "official",
-          scope: "project",
-          outcomeClass: "ok",
-        },
-        rows: [
+    "all-up-to-date-noop": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
           {
-            kind: "plugin-cascade",
-            name: "alpha",
-            scope: "project",
-            version: "0.9.0 → v1.0.0",
-            status: "updated",
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-        ],
-        probe: PROBE_BOTH_LOADED,
-      }).message;
-      const user = cascadeSummary({
-        marketplace: {
-          kind: "marketplace",
-          name: "official",
-          scope: "user",
-          outcomeClass: "ok",
-        },
-        rows: [
-          {
-            kind: "plugin-cascade",
-            name: "beta",
+            name: "official",
             scope: "user",
-            version: "0.5.0 → v1.0.0",
-            status: "updated",
-            declaresAgents: false,
-            declaresMcp: false,
+            plugins: [
+              { status: "skipped", name: "alpha", reasons: ["up-to-date"] },
+              { status: "skipped", name: "beta", reasons: ["up-to-date"] },
+            ],
           },
         ],
-        probe: PROBE_BOTH_LOADED,
-      }).message;
-      return appendReloadHint(`${project}\n${user}`, RELOAD_HINT);
+      },
+    },
+
+    "bare-multi-mp": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "local-mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "updated",
+                name: "helper",
+                from: "0.5.0",
+                to: "1.0.0",
+                dependencies: [],
+              },
+            ],
+          },
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "updated",
+                name: "alpha",
+                from: "0.5.0",
+                to: "1.0.0",
+                dependencies: [],
+              },
+              { status: "skipped", name: "beta", reasons: ["up-to-date"] },
+              {
+                status: "failed",
+                name: "delta",
+                reasons: ["network unreachable"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    "same-mp-both-scopes": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "project",
+            plugins: [
+              {
+                status: "updated",
+                name: "alpha",
+                from: "0.9.0",
+                to: "1.0.0",
+                dependencies: [],
+              },
+            ],
+          },
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "updated",
+                name: "beta",
+                from: "0.5.0",
+                to: "1.0.0",
+                dependencies: [],
+              },
+            ],
+          },
+        ],
+      },
     },
   },
 
+  // -------------------------------------------------------------------------
+  // /claude:plugin import -- multi-marketplace cascade with `added` mp status.
+  // -------------------------------------------------------------------------
   "/claude:plugin import": {
-    "fresh-mixed-both-scopes": () => {
-      const blocks: Array<{ mp: MarketplaceRow; rows: PluginCascadeRow[] }> = [
-        {
-          mp: {
-            kind: "marketplace",
+    "fresh-mixed-both-scopes": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
             name: "claude-plugins-official",
             scope: "project",
-            marker: "autoupdate",
-            outcomeClass: "ok",
             status: "added",
+            plugins: [{ status: "installed", name: "official-plugin", dependencies: [] }],
           },
-          rows: [
-            {
-              kind: "plugin-cascade",
-              name: "official-plugin",
-              scope: "project",
-              status: "installed",
-              declaresAgents: false,
-              declaresMcp: false,
-            },
-          ],
-        },
-        {
-          mp: {
-            kind: "marketplace",
+          {
             name: "claude-plugins-official",
             scope: "user",
-            marker: "autoupdate",
-            outcomeClass: "ok",
             status: "added",
+            plugins: [{ status: "installed", name: "official-plugin", dependencies: [] }],
           },
-          rows: [
-            {
-              kind: "plugin-cascade",
-              name: "official-plugin",
-              scope: "user",
-              status: "installed",
-              declaresAgents: false,
-              declaresMcp: false,
-            },
-          ],
-        },
-        {
-          mp: {
-            kind: "marketplace",
+          {
             name: "directory-marketplace",
             scope: "project",
-            outcomeClass: "ok",
             status: "added",
+            plugins: [{ status: "installed", name: "local-plugin", dependencies: [] }],
           },
-          rows: [
-            {
-              kind: "plugin-cascade",
-              name: "local-plugin",
-              scope: "project",
-              status: "installed",
-              declaresAgents: false,
-              declaresMcp: false,
-            },
-          ],
-        },
-        {
-          mp: {
-            kind: "marketplace",
+          {
             name: "directory-marketplace",
             scope: "user",
-            outcomeClass: "ok",
-            status: "skipped",
-            reasons: ["already installed"],
+            status: "added",
+            plugins: [
+              { status: "installed", name: "local-plugin", dependencies: [] },
+              { status: "unavailable", name: "unavailable-plugin", reasons: ["hooks"] },
+            ],
           },
-          rows: [
-            {
-              kind: "plugin-cascade",
-              name: "local-plugin",
-              scope: "user",
-              status: "installed",
-              declaresAgents: false,
-              declaresMcp: false,
-            },
-            {
-              kind: "plugin-cascade",
-              name: "preinstalled-plugin",
-              scope: "user",
-              status: "skipped",
-              reasons: ["already installed"],
-              declaresAgents: false,
-              declaresMcp: false,
-            },
-            {
-              kind: "plugin-cascade",
-              name: "unavailable-plugin",
-              scope: "user",
-              status: "unavailable",
-              reasons: ["hooks"],
-              declaresAgents: false,
-              declaresMcp: false,
-            },
-          ],
-        },
-        {
-          mp: {
-            kind: "marketplace",
+          {
             name: "github-marketplace",
             scope: "project",
-            marker: "autoupdate",
-            outcomeClass: "ok",
             status: "added",
+            plugins: [{ status: "installed", name: "github-plugin", dependencies: [] }],
           },
-          rows: [
-            {
-              kind: "plugin-cascade",
-              name: "github-plugin",
-              scope: "project",
-              status: "installed",
-              declaresAgents: false,
-              declaresMcp: false,
-            },
-          ],
-        },
-        {
-          mp: {
-            kind: "marketplace",
+          {
             name: "github-marketplace",
             scope: "user",
-            marker: "autoupdate",
-            outcomeClass: "ok",
             status: "added",
+            plugins: [{ status: "installed", name: "github-plugin", dependencies: [] }],
           },
-          rows: [
-            {
-              kind: "plugin-cascade",
-              name: "github-plugin",
-              scope: "user",
-              status: "installed",
-              declaresAgents: false,
-              declaresMcp: false,
-            },
-          ],
-        },
-      ];
-      const bodies = blocks.map(
-        (b) =>
-          cascadeSummary({ marketplace: b.mp, rows: b.rows, probe: PROBE_BOTH_LOADED }).message,
-      );
-      return appendReloadHint(`Claude plugin import summary\n\n${bodies.join("\n")}`, RELOAD_HINT);
+        ],
+      },
     },
 
-    "soft-dep-markers": () => {
-      const blocks: Array<{ mp: MarketplaceRow; rows: PluginCascadeRow[] }> = [
-        {
-          mp: {
-            kind: "marketplace",
+    "scope-project-narrow": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
             name: "claude-plugins-official",
             scope: "project",
-            outcomeClass: "ok",
             status: "added",
+            plugins: [{ status: "installed", name: "official-plugin", dependencies: [] }],
           },
-          rows: [
-            {
-              kind: "plugin-cascade",
-              name: "agent-only-plugin",
-              scope: "project",
-              status: "installed",
-              declaresAgents: true,
-              declaresMcp: false,
-            },
-            {
-              kind: "plugin-cascade",
-              name: "dual-plugin",
-              scope: "project",
-              status: "installed",
-              declaresAgents: true,
-              declaresMcp: true,
-            },
-          ],
-        },
-      ];
-      const bodies = blocks.map(
-        (b) =>
-          cascadeSummary({ marketplace: b.mp, rows: b.rows, probe: PROBE_BOTH_UNLOADED }).message,
-      );
-      return appendReloadHint(`Claude plugin import summary\n\n${bodies.join("\n")}`, RELOAD_HINT);
-    },
-
-    "scope-project-narrow": () => {
-      const blocks: Array<{ mp: MarketplaceRow; rows: PluginCascadeRow[] }> = [
-        {
-          mp: {
-            kind: "marketplace",
-            name: "claude-plugins-official",
-            scope: "project",
-            marker: "autoupdate",
-            outcomeClass: "ok",
-            status: "added",
-          },
-          rows: [
-            {
-              kind: "plugin-cascade",
-              name: "official-plugin",
-              scope: "project",
-              status: "installed",
-              declaresAgents: false,
-              declaresMcp: false,
-            },
-          ],
-        },
-        {
-          mp: {
-            kind: "marketplace",
+          {
             name: "directory-marketplace",
             scope: "project",
-            outcomeClass: "ok",
             status: "added",
+            plugins: [{ status: "installed", name: "local-plugin", dependencies: [] }],
           },
-          rows: [
-            {
-              kind: "plugin-cascade",
-              name: "local-plugin",
-              scope: "project",
-              status: "installed",
-              declaresAgents: false,
-              declaresMcp: false,
-            },
-          ],
-        },
-        {
-          mp: {
-            kind: "marketplace",
+          {
             name: "github-marketplace",
             scope: "project",
-            marker: "autoupdate",
-            outcomeClass: "ok",
             status: "added",
+            plugins: [{ status: "installed", name: "github-plugin", dependencies: [] }],
           },
-          rows: [
-            {
-              kind: "plugin-cascade",
-              name: "github-plugin",
-              scope: "project",
-              status: "installed",
-              declaresAgents: false,
-              declaresMcp: false,
-            },
-          ],
-        },
-      ];
-      const bodies = blocks.map(
-        (b) =>
-          cascadeSummary({ marketplace: b.mp, rows: b.rows, probe: PROBE_BOTH_LOADED }).message,
-      );
-      return appendReloadHint(`Claude plugin import summary\n\n${bodies.join("\n")}`, RELOAD_HINT);
+        ],
+      },
     },
 
-    "source-mismatch": () => {
-      const officialBody = cascadeSummary({
-        marketplace: {
-          kind: "marketplace",
-          name: "claude-plugins-official",
-          scope: "project",
-          marker: "autoupdate",
-          outcomeClass: "ok",
-          status: "added",
-        },
-        rows: [
+    "soft-dep-markers": {
+      pi: piWithNothingLoaded(),
+      message: {
+        marketplaces: [
           {
-            kind: "plugin-cascade",
-            name: "official-plugin",
+            name: "claude-plugins-official",
             scope: "project",
-            status: "installed",
-            declaresAgents: false,
-            declaresMcp: false,
+            status: "added",
+            plugins: [
+              {
+                status: "installed",
+                name: "agent-only-plugin",
+                dependencies: ["agents"],
+              },
+              {
+                status: "installed",
+                name: "dual-plugin",
+                dependencies: ["agents", "mcp"],
+              },
+            ],
           },
         ],
-        probe: PROBE_BOTH_LOADED,
-      }).message;
-
-      const githubBody = cascadeSummary({
-        marketplace: {
-          kind: "marketplace",
-          name: "github-marketplace",
-          scope: "project",
-          marker: "autoupdate",
-          outcomeClass: "ok",
-          status: "added",
-        },
-        rows: [
-          {
-            kind: "plugin-cascade",
-            name: "github-plugin",
-            scope: "project",
-            status: "installed",
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-        ],
-        probe: PROBE_BOTH_LOADED,
-      }).message;
-
-      const mismatchHeader = renderRow(
-        {
-          kind: "marketplace",
-          name: "directory-marketplace",
-          scope: "project",
-          outcomeClass: "failure",
-          status: "failed",
-          reasons: ["source mismatch"],
-        },
-        PROBE_BOTH_LOADED,
-      );
-      const mismatchDiagnostic =
-        "  Existing marketplace source ./mismatched-directory-marketplace does not match Claude settings source ./directory-marketplace.";
-      const mismatchPlugin = `  ${renderRow(
-        {
-          kind: "plugin-cascade",
-          name: "local-plugin",
-          scope: "project",
-          status: "skipped",
-          reasons: ["source mismatch"],
-          declaresAgents: false,
-          declaresMcp: false,
-        },
-        PROBE_BOTH_LOADED,
-      )}`;
-      const mismatchBody = [mismatchHeader, mismatchDiagnostic, mismatchPlugin].join("\n");
-
-      return appendReloadHint(
-        `Claude plugin import summary\n\n${officialBody}\n${mismatchBody}\n${githubBody}`,
-        RELOAD_HINT,
-      );
+      },
     },
 
-    // CR-01 / 14.2-01 D-03: same-marketplace-name-cross-scope fixture
-    // locks project-before-user cascade-block ordering by byte equality.
-    // Pair with `<!-- catalog-state: same-mp-both-scopes -->` annotation
-    // under `## /claude:plugin import` in docs/output-catalog.md.
-    "same-mp-both-scopes": () => {
-      const project = cascadeSummary({
-        marketplace: {
-          kind: "marketplace",
-          name: "official",
-          scope: "project",
-          outcomeClass: "ok",
-          status: "added",
-        },
-        rows: [
+    "same-mp-both-scopes": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
           {
-            kind: "plugin-cascade",
-            name: "alpha",
+            name: "official",
             scope: "project",
-            status: "installed",
-            declaresAgents: false,
-            declaresMcp: false,
+            status: "added",
+            plugins: [{ status: "installed", name: "alpha", dependencies: [] }],
           },
-        ],
-        probe: PROBE_BOTH_LOADED,
-      }).message;
-      const user = cascadeSummary({
-        marketplace: {
-          kind: "marketplace",
-          name: "official",
-          scope: "user",
-          outcomeClass: "ok",
-          status: "added",
-        },
-        rows: [
           {
-            kind: "plugin-cascade",
-            name: "beta",
+            name: "official",
             scope: "user",
-            status: "installed",
-            declaresAgents: false,
-            declaresMcp: false,
+            status: "added",
+            plugins: [{ status: "installed", name: "beta", dependencies: [] }],
           },
         ],
-        probe: PROBE_BOTH_LOADED,
-      }).message;
-      return appendReloadHint(`Claude plugin import summary\n\n${project}\n${user}`, RELOAD_HINT);
+      },
     },
   },
 
+  // -------------------------------------------------------------------------
+  // /claude:plugin bootstrap -- marketplace-only block.
+  // -------------------------------------------------------------------------
   "/claude:plugin bootstrap": {
-    fresh: () =>
-      appendReloadHint(
-        renderRow(
+    fresh: {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
           {
-            kind: "marketplace",
             name: "claude-plugins-official",
             scope: "user",
-            marker: "autoupdate",
-            outcomeClass: "ok",
             status: "added",
-          },
-          PROBE_BOTH_LOADED,
-        ),
-        RELOAD_HINT,
-      ),
-
-    "already-bootstrapped": () =>
-      renderRow(
-        {
-          kind: "marketplace",
-          name: "claude-plugins-official",
-          scope: "user",
-          marker: "autoupdate",
-          outcomeClass: "ok",
-          status: "skipped",
-          reasons: ["already installed"],
-        },
-        PROBE_BOTH_LOADED,
-      ),
-  },
-
-  "/claude:plugin marketplace list": {
-    empty: () => renderMarketplaceList([]),
-
-    "mixed-scopes": () =>
-      renderMarketplaceList([
-        { name: "alpha", scope: "project", source: pathSource("./alpha"), autoupdate: true },
-        { name: "alpha", scope: "user", source: pathSource("./alpha-user") },
-        { name: "beta", scope: "user", source: pathSource("./beta") },
-        { name: "zeta", scope: "project", source: pathSource("./zeta"), autoupdate: true },
-      ]),
-  },
-
-  "/claude:plugin marketplace add <source>": {
-    "path-source": () =>
-      appendReloadHint(
-        renderRow(
-          {
-            kind: "marketplace",
-            name: "local-mp",
-            scope: "user",
-            outcomeClass: "ok",
-            status: "added",
-          },
-          PROBE_BOTH_LOADED,
-        ),
-        RELOAD_HINT,
-      ),
-
-    "github-source": () =>
-      appendReloadHint(
-        renderRow(
-          {
-            kind: "marketplace",
-            name: "claude-plugins-official",
-            scope: "user",
-            marker: "autoupdate",
-            outcomeClass: "ok",
-            status: "added",
-          },
-          PROBE_BOTH_LOADED,
-        ),
-        RELOAD_HINT,
-      ),
-
-    "failure-unreachable": () => {
-      const row: MarketplaceRow = {
-        kind: "marketplace",
-        name: "unreachable-mp",
-        scope: "user",
-        outcomeClass: "failure",
-        status: "failed",
-      };
-      const cause = "  cause: fatal: unable to access 'https://...': Could not resolve host";
-      return `${renderRow(row, PROBE_BOTH_LOADED)}\n${cause}`;
-    },
-  },
-
-  "/claude:plugin marketplace remove <name>": {
-    clean: () =>
-      appendReloadHint(
-        renderRow(
-          {
-            kind: "marketplace",
-            name: "local-mp",
-            scope: "user",
-            outcomeClass: "ok",
-            status: "removed",
-          },
-          PROBE_BOTH_LOADED,
-        ),
-        RELOAD_HINT,
-      ),
-
-    partial: () => {
-      // The partial-removal cascade renders a failed marketplace header
-      // followed by indented child rows (uninstalled successes + failed
-      // children with cause trailers), the reload-hint trailer, and the
-      // recovery anchor.
-      const header = renderRow(
-        {
-          kind: "marketplace",
-          name: "local-mp",
-          scope: "user",
-          outcomeClass: "failure",
-          status: "failed",
-          reasons: ["plugins remain"],
-        },
-        PROBE_BOTH_LOADED,
-      );
-      // Successful uninstall child: indented 2 spaces, no `@local-mp`
-      // marketplace anchor (MSG-GR-2 cascade carve-out). Use a cascade
-      // row variant with status "uninstalled" so the @<mp> token is
-      // omitted; render at the bare compact-line shape.
-      const successChild = `  ${renderRow(
-        {
-          kind: "plugin-cascade",
-          name: "helper",
-          scope: "user",
-          version: "1.0.0",
-          status: "uninstalled",
-          declaresAgents: false,
-          declaresMcp: false,
-        },
-        PROBE_BOTH_LOADED,
-      )}`;
-      const failedChild = `  ${renderRow(
-        {
-          kind: "plugin-cascade",
-          name: "tool",
-          scope: "user",
-          status: "failed",
-          reasons: ["permission denied"],
-          declaresAgents: false,
-          declaresMcp: false,
-        },
-        PROBE_BOTH_LOADED,
-      )}`;
-      const failedChildCause = "    cause: EACCES: permission denied";
-      const body = [header, successChild, failedChild, failedChildCause].join("\n");
-      const retry = "Fix the underlying issue and retry.";
-      return `${appendReloadHint(body, RELOAD_HINT)}\n\n${retry}`;
-    },
-  },
-
-  "/claude:plugin marketplace update <name>": {
-    "autoupdate-off-manifest-refresh": () =>
-      renderRow(
-        {
-          kind: "marketplace",
-          name: "local-mp",
-          scope: "user",
-          outcomeClass: "ok",
-          status: "updated",
-        },
-        PROBE_BOTH_LOADED,
-      ),
-
-    "mixed-outcomes": () =>
-      cascadeWithOptionalReload(
-        {
-          kind: "marketplace",
-          name: "official",
-          scope: "user",
-          marker: "autoupdate",
-          outcomeClass: "ok",
-          status: "updated",
-        },
-        [
-          {
-            kind: "plugin-cascade",
-            name: "alpha",
-            scope: "user",
-            version: "0.5.0 → v1.0.0",
-            status: "updated",
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-          {
-            kind: "plugin-cascade",
-            name: "beta",
-            scope: "user",
-            status: "skipped",
-            reasons: ["up-to-date"],
-            declaresAgents: false,
-            declaresMcp: false,
-          },
-          {
-            kind: "plugin-cascade",
-            name: "delta",
-            scope: "user",
-            version: "1.0.0 → v1.4.0",
-            status: "failed",
-            reasons: ["network unreachable"],
-            declaresAgents: false,
-            declaresMcp: false,
+            plugins: [],
           },
         ],
-        PROBE_BOTH_LOADED,
-        true,
-      ),
+      },
+    },
 
-    "mp-failure-network": () => {
-      const head = renderRow(
-        {
-          kind: "marketplace",
-          name: "official",
-          scope: "user",
-          marker: "autoupdate",
-          outcomeClass: "failure",
-          status: "failed",
-          reasons: ["network unreachable"],
-        },
-        PROBE_BOTH_LOADED,
-      );
-      const cause = "  cause: fatal: unable to access 'https://...': Could not resolve host";
-      return `${head}\n${cause}`;
+    "already-bootstrapped": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            status: "updated",
+            plugins: [],
+          },
+        ],
+      },
     },
   },
 
-  "/claude:plugin marketplace autoupdate <enable|disable> <name>": {
-    "enable-mixed": () =>
-      [
-        renderRow(
+  // -------------------------------------------------------------------------
+  // /claude:plugin marketplace list -- list-surface; mp.status === undefined.
+  // -------------------------------------------------------------------------
+  "/claude:plugin marketplace list": {
+    empty: {
+      pi: piWithBothLoaded(),
+      message: { marketplaces: [] },
+    },
+
+    "mixed-scopes": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
           {
-            kind: "marketplace",
-            name: "local-mp",
-            scope: "user",
-            marker: "autoupdate",
-            outcomeClass: "ok",
-          },
-          PROBE_BOTH_LOADED,
-        ),
-        renderRow(
-          {
-            kind: "marketplace",
-            name: "github-mp",
+            name: "alpha",
             scope: "project",
-            marker: "autoupdate",
-            outcomeClass: "ok",
+            details: { autoupdate: true, lastUpdatedAt: "2026-05-25T00:00:00Z" },
+            plugins: [],
           },
-          PROBE_BOTH_LOADED,
-        ),
-        renderRow(
+          { name: "alpha", scope: "user", plugins: [] },
+          { name: "beta", scope: "user", plugins: [] },
           {
-            kind: "marketplace",
-            name: "claude-plugins-official",
-            scope: "user",
-            marker: "autoupdate",
-            outcomeClass: "ok",
-            reasons: ["already enabled"],
+            name: "zeta",
+            scope: "project",
+            details: { autoupdate: true },
+            plugins: [],
           },
-          PROBE_BOTH_LOADED,
-        ),
-      ].join("\n"),
-
-    "disable-mixed": () =>
-      [
-        renderRow(
-          {
-            kind: "marketplace",
-            name: "local-mp",
-            scope: "user",
-            marker: "no autoupdate",
-            outcomeClass: "ok",
-          },
-          PROBE_BOTH_LOADED,
-        ),
-        renderRow(
-          {
-            kind: "marketplace",
-            name: "some-mp",
-            scope: "user",
-            marker: "no autoupdate",
-            outcomeClass: "ok",
-            reasons: ["already disabled"],
-          },
-          PROBE_BOTH_LOADED,
-        ),
-      ].join("\n"),
-
-    "failure-not-found": () =>
-      renderRow(
-        {
-          kind: "marketplace",
-          name: "missing-mp",
-          scope: "user",
-          outcomeClass: "failure",
-          status: "failed",
-          reasons: ["not found"],
-        },
-        PROBE_BOTH_LOADED,
-      ),
+        ],
+      },
+    },
   },
 
+  // -------------------------------------------------------------------------
+  // /claude:plugin marketplace add -- marketplace-only block.
+  // -------------------------------------------------------------------------
+  "/claude:plugin marketplace add <source>": {
+    "path-source": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [{ name: "local-mp", scope: "user", status: "added", plugins: [] }],
+      },
+    },
+
+    "github-source": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            status: "added",
+            plugins: [],
+          },
+        ],
+      },
+    },
+
+    "failure-unreachable": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "unreachable-mp",
+            scope: "user",
+            status: "failed",
+            plugins: [],
+          },
+        ],
+      },
+    },
+  },
+
+  // -------------------------------------------------------------------------
+  // /claude:plugin marketplace remove -- marketplace + cascade.
+  // -------------------------------------------------------------------------
+  "/claude:plugin marketplace remove <name>": {
+    clean: {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [{ name: "local-mp", scope: "user", status: "removed", plugins: [] }],
+      },
+    },
+
+    partial: {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "local-mp",
+            scope: "user",
+            status: "failed",
+            plugins: [
+              { status: "uninstalled", name: "helper", version: "1.0.0" },
+              {
+                status: "failed",
+                name: "tool",
+                reasons: ["permission denied"],
+                cause: new Error("EACCES: permission denied"),
+              },
+            ],
+          },
+        ],
+      },
+    },
+  },
+
+  // -------------------------------------------------------------------------
+  // /claude:plugin marketplace update -- marketplace + plugin cascade.
+  // -------------------------------------------------------------------------
+  "/claude:plugin marketplace update <name>": {
+    "autoupdate-off-manifest-refresh": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [{ name: "local-mp", scope: "user", status: "updated", plugins: [] }],
+      },
+    },
+
+    "mixed-outcomes": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            status: "updated",
+            plugins: [
+              {
+                status: "updated",
+                name: "alpha",
+                from: "0.5.0",
+                to: "1.0.0",
+                dependencies: [],
+              },
+              { status: "skipped", name: "beta", reasons: ["up-to-date"] },
+              {
+                status: "failed",
+                name: "delta",
+                reasons: ["network unreachable"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    "mp-failure-network": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [{ name: "official", scope: "user", status: "failed", plugins: [] }],
+      },
+    },
+  },
+
+  // -------------------------------------------------------------------------
+  // /claude:plugin marketplace autoupdate -- marketplace-only flag flip.
+  // -------------------------------------------------------------------------
+  "/claude:plugin marketplace autoupdate <enable|disable> <name>": {
+    "enable-mixed": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          { name: "local-mp", scope: "user", status: "updated", plugins: [] },
+          { name: "github-mp", scope: "project", status: "updated", plugins: [] },
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            status: "updated",
+            plugins: [],
+          },
+        ],
+      },
+    },
+
+    "disable-mixed": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          { name: "local-mp", scope: "user", status: "updated", plugins: [] },
+          { name: "some-mp", scope: "user", status: "updated", plugins: [] },
+        ],
+      },
+    },
+
+    "failure-not-found": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [{ name: "missing-mp", scope: "user", status: "failed", plugins: [] }],
+      },
+    },
+  },
+
+  // -------------------------------------------------------------------------
+  // Manual recovery anchors -- per-plugin manual-recovery row inside a block.
+  // -------------------------------------------------------------------------
   "manual-recovery-anchors": {
-    "install-failure-with-anchor": () => {
-      // The catalog renders the failure row WITHOUT a reasons block; the
-      // EntityErrorRow variant requires a reasons array, so emit it empty
-      // (renderRow's composeReasons returns "" when the composed list is
-      // empty -- MSG-GR-4 forbids `{}`).
-      const installFailure: EntityErrorRow = {
-        kind: "entity-error",
-        name: "official-plugin",
-        marketplace: "official",
-        scope: "user",
-        status: "failed",
-        reasons: [],
-      };
-      const head = renderRow(installFailure, PROBE_BOTH_LOADED);
-      const headWithCause = `${head}\n  cause: bridge: agent staging conflict`;
-
-      const recovery: ManualRecoveryLine = {
-        kind: "manual-recovery",
-        resource: "agent index",
-        reasons: ["unreadable"],
-        orphanDetails: ["/path/to/agents-index.json", "/path/to/another-agent.md"],
-      };
-      const recoveryBody = renderManualRecovery(recovery, PROBE_BOTH_LOADED);
-
-      return `${headWithCause}\n\n${recoveryBody}`;
+    "per-plugin-manual-recovery": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "manual recovery",
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["unreadable"],
+                cause: new Error("bridge: agent staging conflict"),
+              },
+            ],
+          },
+        ],
+      },
     },
   },
 };
 
+// Reference `piWithSubagentsLoaded` so the helper does not become dead
+// code when no current fixture uses it; it remains available as a
+// composition primitive for future states. The other three factories
+// are used directly above.
+void piWithSubagentsLoaded;
+
 // ---------------------------------------------------------------------------
-// Test driver
+// Test driver -- walk every parsed catalog example, look up its fixture,
+// invoke notify() against a fresh mock ctx + the fixture's mock pi, and
+// assert byte equality + severity-arg shape.
 // ---------------------------------------------------------------------------
 
-test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal with a fixture", async () => {
+test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal with notify()", async () => {
   const catalog = await readFile(CATALOG_PATH, "utf8");
   const examples = loadCatalogExamples(catalog);
 
@@ -1887,7 +1329,7 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
   interface Failure {
     readonly section: string;
     readonly state: string;
-    readonly kind: "missing-fixture" | "byte-mismatch";
+    readonly kind: "missing-fixture" | "byte-mismatch" | "severity-mismatch";
     readonly expected?: string;
     readonly actual?: string;
   }
@@ -1905,8 +1347,8 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
       continue;
     }
 
-    const factory = sectionFixtures[example.state];
-    if (factory === undefined) {
+    const fixture = sectionFixtures[example.state];
+    if (fixture === undefined) {
       failures.push({
         section: example.section,
         state: example.state,
@@ -1915,7 +1357,20 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
       continue;
     }
 
-    const actual = factory();
+    // Fresh ctx per iteration -- mock.fn() accumulates calls across
+    // invocations, so reusing it would leak state across fixtures.
+    const ctx = makeCtx();
+    notify(ctx as never, fixture.pi as never, fixture.message);
+
+    assert.equal(
+      ctx.ui.notify.mock.calls.length,
+      1,
+      `notify() must call ctx.ui.notify exactly once per invocation (section=${example.section} state=${example.state})`,
+    );
+
+    const callArgs = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    const actual = callArgs[0];
+
     if (actual !== example.expected) {
       failures.push({
         section: example.section,
@@ -1925,6 +1380,27 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
         actual,
       });
     }
+
+    // Severity-arg assertion per RESEARCH.md Pitfall 6.
+    if (fixture.expectedSeverity !== undefined) {
+      if (callArgs.length !== 2 || callArgs[1] !== fixture.expectedSeverity) {
+        failures.push({
+          section: example.section,
+          state: example.state,
+          kind: "severity-mismatch",
+          expected: fixture.expectedSeverity,
+          actual: callArgs[1] ?? "(info / no 2nd arg)",
+        });
+      }
+    } else if (callArgs.length !== 1) {
+      failures.push({
+        section: example.section,
+        state: example.state,
+        kind: "severity-mismatch",
+        expected: "(info / no 2nd arg)",
+        actual: callArgs[1] ?? "?",
+      });
+    }
   }
 
   if (failures.length > 0) {
@@ -1932,6 +1408,14 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
       .map((f) => {
         if (f.kind === "missing-fixture") {
           return `[MISSING FIXTURE] section=${f.section} state=${f.state}`;
+        }
+
+        if (f.kind === "severity-mismatch") {
+          return [
+            `[SEVERITY MISMATCH] section=${f.section} state=${f.state}`,
+            `--- expected severity --- ${f.expected ?? ""}`,
+            `--- actual severity ----- ${f.actual ?? ""}`,
+          ].join("\n");
         }
 
         return [

@@ -155,6 +155,8 @@ The renderer emits the literal `(no marketplaces)` body for an empty top-level `
   ⊘ delta (unavailable) {hooks}
   ⊘ epsilon (unavailable) {hooks, lspServers}
   ○ gamma v2.0.0 (available)
+
+/reload to pick up changes
 ```
 
 Notes:
@@ -173,6 +175,8 @@ Notes:
 
 ● official [user] <autoupdate>
   ● alpha v1.0.0 (installed)
+
+/reload to pick up changes
 ```
 
 Two marketplace blocks; one per scope. Joined by one blank line (D-16-07). Plugin rows omit the scope bracket because `p.scope === mp.scope`.
@@ -185,6 +189,8 @@ Two marketplace blocks; one per scope. Joined by one blank line (D-16-07). Plugi
 ● official [user] <autoupdate>
   ● alpha [project] v0.9.0 (installed)
   ● alpha [user] v1.0.0 (installed)
+
+/reload to pick up changes
 ```
 
 `official [project]` does not exist. The project-scoped `alpha` is folded under the user-scope marketplace header; its row carries the explicit `[project]` bracket because `plugin.scope !== marketplace.scope` (Phase 16 D-16-17). The user-scoped `alpha` omits the bracket per the same rule.
@@ -198,6 +204,8 @@ Two marketplace blocks; one per scope. Joined by one blank line (D-16-07). Plugi
   ● dual v0.5.0 (installed) {requires pi-subagents, requires pi-mcp}
   ● helper v1.0.0 (installed) {requires pi-subagents}
   ● mcp-tool v2.0.0 (installed) {requires pi-mcp}
+
+/reload to pick up changes
 ```
 
 Each `(installed)` row's `dependencies` field drives the soft-dep probe; the probe runs once per `notify()` invocation (D-16-14). Markers appear inside the same brace block as any typed reasons (D-16-15).
@@ -211,10 +219,11 @@ Each `(installed)` row's `dependencies` field drives the soft-dep probe; the pro
   ● helper v1.0.0 (installed)
 
 ⊘ unparseable-mp [user] (failed)
-  cause: JSON parse error at line 3
+
+/reload to pick up changes
 ```
 
-When a marketplace's manifest fails to parse, the marketplace renders as a `(failed)` header carrying `{unparseable}` reasons (omitted from the header rendering; `notify()` does not place reasons on marketplace headers structurally) and the parse error in the 4-space-indent `cause:` trailer below it. The other parseable marketplaces in the list render normally. Severity: `error` (any failed → error).
+When a marketplace's manifest fails to parse, the marketplace renders as a bare `(failed)` header at column 0; the other parseable marketplaces in the list render normally. `notify()` does not emit a marketplace-level `cause:` trailer for failed marketplaces with empty `plugins: []` -- the v2 type model places `cause?: Error` on plugin variants only. Orchestrators wanting to surface the parse error must construct the payload as a per-plugin failed/manual-recovery row carrying the diagnostic as `cause?: Error`, or include a per-plugin error row inside the failed marketplace block. Severity: `error` (any failed → error). Reload-hint fires because the other marketplace's installed plugin row is in the state-changing set per D-16-12.
 
 ### Marketplace whose manifest declares ZERO plugins
 
@@ -225,6 +234,8 @@ When a marketplace's manifest fails to parse, the marketplace renders as a `(fai
 
 ● official [user] <autoupdate>
   ● alpha v1.0.0 (installed)
+
+/reload to pick up changes
 ```
 
 An empty `plugins: []` renders as the bare marketplace header alone (D-15-08); the renderer does NOT emit a `(no plugins)` body line under it. The two marketplace blocks are joined by one blank line (D-16-07).
@@ -243,6 +254,8 @@ An empty `plugins: []` renders as the bare marketplace header alone (D-15-08); t
 
 ● zeta-mp [user]
   ● tool v1.0.0 (installed) {requires pi-subagents}
+
+/reload to pick up changes
 ```
 
 Three marketplace blocks; each joined by one blank line (D-16-07). `zeta-mp` is path-source (no `<autoupdate>` marker). `beta` omits the scope bracket per MSG-PL-6 (the `available` variant has no `scope` field). `tool` declares an agents dependency; the probe reports `pi-subagents` unloaded so the row fires `{requires pi-subagents}`.
@@ -485,12 +498,12 @@ Multi-plugin cascade. Same shape as `reinstall` with version-arrow rows (`<from>
 ● official [user]
   ● alpha 0.5.0 → v1.0.0 (updated)
   ⊘ beta (skipped) {up-to-date}
-  ⊘ delta 1.0.0 → v1.4.0 (failed) {network unreachable}
+  ⊘ delta (failed) {network unreachable}
 
 /reload to pick up changes
 ```
 
-The `updated` variant emits `<from> → v<to>` (note the asymmetric `v` prefix -- `from` is rendered bare; only `to` is `v`-prefixed per `composeVersionArrow`). The `failed` plugin row also emits the version-token slot when set (`delta` carries the same arrow shape because the planner constructed the failed payload that way). Severity: `error`. Reload-hint fires because `alpha` was updated.
+The `updated` variant emits `<from> → v<to>` (note the asymmetric `v` prefix -- `from` is rendered bare; only `to` is `v`-prefixed per `composeVersionArrow`). The `failed` plugin row carries `version?` only (the v2 `PluginFailedMessage` has no `from`/`to` fields per D-15-04 -- `composeVersionArrow` is the `updated` variant's helper alone); `delta` here omits `version` because the orchestrator has no post-failure target version to surface. Severity: `error`. Reload-hint fires because `alpha` was updated.
 
 ### Failed with rollback-partial cause chain
 
@@ -531,12 +544,12 @@ Skipped-only cascade. No reload-hint (no state-changing status). Severity: `warn
 ● official [user]
   ● alpha 0.5.0 → v1.0.0 (updated)
   ⊘ beta (skipped) {up-to-date}
-  ⊘ delta 1.0.0 → v1.4.0 (failed) {network unreachable}
+  ⊘ delta (failed) {network unreachable}
 
 /reload to pick up changes
 ```
 
-Two marketplace blocks. Severity: `error`. Reload-hint fires (two `updated` plugin rows).
+Two marketplace blocks. Severity: `error`. Reload-hint fires (two `updated` plugin rows). The `failed` `delta` row omits the version-arrow slot per the v2 type model (`PluginFailedMessage` does not carry `from`/`to` -- only the `updated` variant does).
 
 ### Same marketplace name in both scopes
 
@@ -662,6 +675,8 @@ The bootstrap path is a marketplace add; the marketplace status `added` triggers
 
 ```text
 ● claude-plugins-official [user] (updated)
+
+/reload to pick up changes
 ```
 
 When the marketplace already exists, the bootstrap orchestrator renders the marketplace with status `updated` (the marketplace persistence record is touched but no plugins changed). Reload-hint fires because `updated` is in the state-changing set per D-16-12. Severity: info. (Alternative implementations may render an empty `(updated)` payload as a no-op; the catalog asserts the structural shape, not the orchestrator's choice between `updated` and emitting nothing.)
@@ -734,12 +749,11 @@ GitHub-source marketplaces default to autoupdate ON; the persisted record stores
 
 ```text
 ⊘ unreachable-mp [user] (failed)
-  cause: fatal: unable to access 'https://...': Could not resolve host
 ```
 
-`failed` marketplace header at column 0; the cause-chain trailer renders at 2-space indent below it (the renderer's marketplace-level cause-chain emission lives in the `notify()` per-block composition, not on the plugin-row path). Severity: `error`. No reload-hint per D-16-12 (failed marketplace status does not trigger).
+Bare `failed` marketplace header at column 0; no plugin children. Severity: `error`. No reload-hint per D-16-12 (failed marketplace status does not trigger).
 
-> Note: the v2 `notify()` renderer's current shape (`composeMarketplaceBlock`) does not emit a 2-space-indent cause trailer below the marketplace header for failed marketplaces with no plugin children. The catalog UAT asserts the byte form that `notify()` actually emits -- if the orchestrator wants to surface the cause-chain, it must construct the payload as a per-plugin manual-recovery row or include a per-plugin failed row with `cause?: Error`. This catalog state is therefore primarily a fence for the failed-marketplace header byte form; the `cause:` trailer line above is included for reviewer context but the test fixture for this state will mirror what `notify()` actually emits (a bare failed header, no trailer).
+> Note: the v2 `notify()` renderer's `composeMarketplaceBlock` does not emit a marketplace-level cause-chain trailer below the failed header. The v2 type model places `cause?: Error` on plugin variants only; orchestrators wanting to surface the diagnostic must construct the payload as a per-plugin failed/manual-recovery row with `cause?: Error`. This catalog state is the bare failed-marketplace header byte form.
 
 ______________________________________________________________________
 
@@ -802,12 +816,12 @@ Bare marketplace `updated` block (no plugin children; `plugins: []` renders as t
 ● official [user] (updated)
   ● alpha 0.5.0 → v1.0.0 (updated)
   ⊘ beta (skipped) {up-to-date}
-  ⊘ delta 1.0.0 → v1.4.0 (failed) {network unreachable}
+  ⊘ delta (failed) {network unreachable}
 
 /reload to pick up changes
 ```
 
-Marketplace header carries `(updated)`; plugin rows mix outcomes. Reload-hint fires (multiple state-changing rows). Severity: `error`.
+Marketplace header carries `(updated)`; plugin rows mix outcomes. Reload-hint fires (multiple state-changing rows). Severity: `error`. The `failed` `delta` row carries no version-arrow because `PluginFailedMessage` has no `from`/`to` fields (only the `updated` variant does per D-15-04).
 
 ### Marketplace update failed (manifest unreachable)
 

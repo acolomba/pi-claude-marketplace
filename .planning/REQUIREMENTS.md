@@ -60,53 +60,53 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 
 ## Out of Scope
 
-| Feature | Reason |
-|---------|--------|
-| Multi-locale message support | Still deferred (IL-1) -- v1.4 stays English-only |
-| Telemetry / event sink for notification emissions | Still deferred (IL-4) -- no metrics, no analytics endpoint |
-| JSON output mode for notifications | Backlog -- structured payloads make it cheaper later but not in v1.4 |
-| Multi-process notification serialization | Out -- concurrent notifies remain safe via Pi host serialization |
-| Codegen wrappers from style-guide YAML | Rejected in ADR alternatives -- adds a build step the type system can handle directly |
-| Optional `notify*` per-outcome typed wrappers | Rejected -- the payload IS the API; per-method wrappers added autocomplete win that's already available from the discriminated-union literal on `kind:` |
+| Feature                                           | Reason                                                                                                                                                  |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Multi-locale message support                      | Still deferred (IL-1) -- v1.4 stays English-only                                                                                                        |
+| Telemetry / event sink for notification emissions | Still deferred (IL-4) -- no metrics, no analytics endpoint                                                                                              |
+| JSON output mode for notifications                | Backlog -- structured payloads make it cheaper later but not in v1.4                                                                                    |
+| Multi-process notification serialization          | Out -- concurrent notifies remain safe via Pi host serialization                                                                                        |
+| Codegen wrappers from style-guide YAML            | Rejected in ADR alternatives -- adds a build step the type system can handle directly                                                                   |
+| Optional `notify*` per-outcome typed wrappers     | Rejected -- the payload IS the API; per-method wrappers added autocomplete win that's already available from the discriminated-union literal on `kind:` |
 
 ## Traceability
 
 Phase mapping populated by `gsd-roadmapper` on 2026-05-25.
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| SNM-01 | Phase 15 | Complete |
-| SNM-02 | Phase 15 | Complete |
-| SNM-03 | Phase 15 | Complete |
-| SNM-04 | Phase 15 | Complete |
-| SNM-05 | Phase 15 | Complete |
-| SNM-06 | Phase 15 | Complete |
-| SNM-07 | Phase 15 | Complete |
-| SNM-08 | Phase 15 | Complete |
-| SNM-09 | Phase 15 | Complete |
-| SNM-10 | Phase 15 | Complete |
-| SNM-11 | Phase 15 | Complete |
-| SNM-12 | Phase 16 | Complete |
-| SNM-13 | Phase 16 | Complete |
-| SNM-14 | Phase 16 | Complete |
-| SNM-15 | Phase 16 | Complete |
-| SNM-16 | Phase 16 | Complete |
-| SNM-17 | Phase 16 | Complete |
-| SNM-18 | Phase 16 | Complete |
-| SNM-19 | Phase 17 | Pending |
-| SNM-20 | Phase 17 | Pending |
-| SNM-21 | Phase 15 | Complete |
-| SNM-22 | Phase 21 | Pending |
-| SNM-23 | Phase 20 | Pending |
-| SNM-24 | Phase 21 | Pending |
-| SNM-25 | Phase 21 | Pending |
-| SNM-26 | Phase 17 | Complete |
-| SNM-27 | Phase 21 | Pending |
-| SNM-28 | Phase 21 | Pending |
-| SNM-29 | Phase 21 | Pending |
-| SNM-30 | Phase 16 | Complete |
-| SNM-31 | Phase 17 | Pending |
-| SNM-32 | Phase 21 | Pending |
+| Requirement | Phase    | Status   |
+| ----------- | -------- | -------- |
+| SNM-01      | Phase 15 | Complete |
+| SNM-02      | Phase 15 | Complete |
+| SNM-03      | Phase 15 | Complete |
+| SNM-04      | Phase 15 | Complete |
+| SNM-05      | Phase 15 | Complete |
+| SNM-06      | Phase 15 | Complete |
+| SNM-07      | Phase 15 | Complete |
+| SNM-08      | Phase 15 | Complete |
+| SNM-09      | Phase 15 | Complete |
+| SNM-10      | Phase 15 | Complete |
+| SNM-11      | Phase 15 | Complete |
+| SNM-12      | Phase 16 | Complete |
+| SNM-13      | Phase 16 | Complete |
+| SNM-14      | Phase 16 | Complete |
+| SNM-15      | Phase 16 | Complete |
+| SNM-16      | Phase 16 | Complete |
+| SNM-17      | Phase 16 | Complete |
+| SNM-18      | Phase 16 | Complete |
+| SNM-19      | Phase 17 | Complete |
+| SNM-20      | Phase 17 | Complete |
+| SNM-21      | Phase 15 | Complete |
+| SNM-22      | Phase 21 | Pending  |
+| SNM-23      | Phase 20 | Pending  |
+| SNM-24      | Phase 21 | Pending  |
+| SNM-25      | Phase 21 | Pending  |
+| SNM-26      | Phase 17 | Complete |
+| SNM-27      | Phase 21 | Pending  |
+| SNM-28      | Phase 21 | Pending  |
+| SNM-29      | Phase 21 | Pending  |
+| SNM-30      | Phase 16 | Complete |
+| SNM-31      | Phase 17 | Complete |
+| SNM-32      | Phase 21 | Pending  |
 
 **Coverage:**
 
@@ -124,5 +124,5 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25.
 
 ---
 
-*Requirements defined: 2026-05-25*
-*Last updated: 2026-05-25 -- Traceability populated by `gsd-roadmapper` against the 7-phase v1.4 roadmap (Phases 15-21). All 32 SNM-* requirements mapped to exactly one phase; no orphans, no duplicates.*
+_Requirements defined: 2026-05-25_
+_Last updated: 2026-05-25 -- Traceability populated by `gsd-roadmapper` against the 7-phase v1.4 roadmap (Phases 15-21). All 32 SNM-_ requirements mapped to exactly one phase; no orphans, no duplicates.\*
