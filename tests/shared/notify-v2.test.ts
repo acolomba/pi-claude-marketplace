@@ -526,6 +526,142 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [`⊘ demo [user] (failed)`, "error"]);
 });
 
+// ===========================================================================
+// 15a-15e (Phase 17.1 D-17.1-05.2): five new tests covering the autoupdate
+// surface added by D-17.1-02 / D-18-05. Three per-arm byte-equality tests
+// (autoupdate enabled, autoupdate disabled, skipped + reasons) lock the
+// renderer arms; two ladder tests structurally lock the severity ladder
+// (mp.skipped -> "warning") and prove the first-match severity routing
+// fires on mp-level status even when a healthy plugin row coexists.
+// ===========================================================================
+
+test("notify renders autoupdate enabled marketplace header alone (info severity + reload-hint per D-17.1-05)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [{ name: "foo", scope: "user", status: "autoupdate enabled", plugins: [] }],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // Per D-17.1-03 byte form: fresh state-flip triggers reload-hint; no
+  // severity arg (info routing).
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● foo [user] (autoupdate enabled)\n\n/reload to pick up changes`,
+  ]);
+});
+
+test("notify renders autoupdate disabled marketplace header alone (info severity + reload-hint per D-17.1-05)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [{ name: "foo", scope: "user", status: "autoupdate disabled", plugins: [] }],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // Per D-17.1-03 byte form: fresh state-flip triggers reload-hint; no
+  // severity arg (info routing).
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● foo [user] (autoupdate disabled)\n\n/reload to pick up changes`,
+  ]);
+});
+
+test("notify renders skipped marketplace header with reasons brace (warning severity, NO reload-hint per D-17.1-05)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      { name: "foo", scope: "user", status: "skipped", reasons: ["already enabled"], plugins: [] },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // Per D-17.1-03 byte form: idempotent flip carries the reasons brace and
+  // routes severity to "warning"; NO reload-hint (no state changed).
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● foo [user] (skipped) {already enabled}`,
+    "warning",
+  ]);
+});
+
+test('notify severity tier mp-skipped: skipped marketplace -> arguments = [..., "warning"] (D-17.1-05 ladder extension)', () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      { name: "foo", scope: "user", status: "skipped", reasons: ["already disabled"], plugins: [] },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // Structural assertion of the severity-arg presence; the byte form is
+  // covered by the preceding test. The Pi API surface routes the second
+  // arg as the severity magic-string per D-16-11.
+  assert.equal(ctx.ui.notify.mock.calls[0]!.arguments.length, 2);
+  assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "warning");
+});
+
+test("notify mixed-severity payload: mp.skipped coexists with healthy plugin row -> first-match severity routing fires on mp.status (D-17.1-05)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  // Mixed payload: mp-level "skipped" (idempotent autoupdate flip) sitting
+  // OVER a healthy plugin row. Plan 17.1-02 Task 3 (checker Issue #3
+  // reframing) calls for this test to PROVE the routing semantics that
+  // Tests 3 and 4 above do not cover (those tests use empty plugins).
+  //
+  // The "healthy" plugin row is "available" rather than "installed". Per
+  // D-16-12 + the Phase 17.1 amendment to shouldEmitReloadHint, plugin
+  // statuses {"installed", "updated", "reinstalled", "uninstalled"} ARE
+  // reload-hint triggers; "available" is NOT. Using "available" lets the
+  // test cleanly isolate the mp.skipped severity routing while honoring
+  // assertion (c) below (no reload-hint trailer). The plan's intent is to
+  // prove "the mp-level routing dominates a non-empty healthy plugin set"
+  // -- the specific healthy variant is unconstrained as long as it routes
+  // to info/no-trigger when alone. (Deviation from plan's "installed"
+  // wording: see SUMMARY for rationale; "installed" would itself trigger
+  // the reload-hint per D-16-12, contradicting assertion (c).)
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "foo",
+        scope: "user",
+        status: "skipped",
+        reasons: ["already enabled"],
+        plugins: [
+          // "available" is a non-state-changing plugin row (no version,
+          // no scope per MSG-PL-6 / SNM-11 carve-out, no reasons). Alone
+          // it routes severity to info AND does NOT trigger the
+          // reload-hint per D-16-12.
+          {
+            name: "p1",
+            status: "available",
+            version: "1.0.0",
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  // (a) Severity ladder: first-match pass routes mp.skipped to "warning"
+  //     REGARDLESS of the healthy "available" plugin row underneath
+  //     (which alone would route to info).
+  assert.equal(args[1], "warning");
+  // (b) mp header renders the skipped state with reasons brace.
+  const body = args[0] as string;
+  assert.ok(
+    body.includes(`● foo [user] (skipped) {already enabled}`),
+    `expected body to include mp-skipped header, got: ${body}`,
+  );
+  // (c) Reload-hint is absent. mp.skipped is an idempotent no-op (no
+  //     state change); the healthy "available" plugin row alone is NOT a
+  //     trigger per D-16-12. Together they yield no reload-hint trailer.
+  assert.ok(
+    !body.includes(`/reload to pick up changes`),
+    `expected body to NOT include reload-hint trailer, got: ${body}`,
+  );
+});
+
 test("notify renders SUB-BRANCH B list-surface marketplace header with autoupdate + lastUpdatedAt tokens", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();

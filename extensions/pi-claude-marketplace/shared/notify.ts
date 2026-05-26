@@ -528,10 +528,21 @@ const ICON_UNINSTALLABLE = "⊘";
  * optional-independent details? field.
  *
  * Byte forms (one per arm):
- *   "added"     -> `${ICON_INSTALLED}     ${name} [${scope}] (added)`
- *   "removed"   -> `${ICON_INSTALLED}     ${name} [${scope}] (removed)`
- *   "updated"   -> `${ICON_INSTALLED}     ${name} [${scope}] (updated)`
- *   "failed"    -> `${ICON_UNINSTALLABLE} ${name} [${scope}] (failed)`
+ *   "added"                -> `${ICON_INSTALLED}     ${name} [${scope}] (added)`
+ *   "removed"              -> `${ICON_INSTALLED}     ${name} [${scope}] (removed)`
+ *   "updated"              -> `${ICON_INSTALLED}     ${name} [${scope}] (updated)`
+ *   "failed"               -> `${ICON_UNINSTALLABLE} ${name} [${scope}] (failed)`
+ *   "autoupdate enabled"   -> `${ICON_INSTALLED}     ${name} [${scope}] (autoupdate enabled)`
+ *                              (Phase 17.1 D-17.1-02 / D-18-05: fresh state-flip;
+ *                              never carries mp.reasons.)
+ *   "autoupdate disabled"  -> `${ICON_INSTALLED}     ${name} [${scope}] (autoupdate disabled)`
+ *                              (Phase 17.1 D-17.1-02 / D-18-05: fresh state-flip;
+ *                              never carries mp.reasons.)
+ *   "skipped"              -> `${ICON_INSTALLED}     ${name} [${scope}] (skipped)`
+ *                              (+ ` {<reason>, ...}` iff `mp.reasons` is defined and
+ *                              non-empty, composed via the shared `composeReasons`
+ *                              helper with both soft-dep flags FALSE per D-16-15;
+ *                              mp-level skipped never emits soft-dep markers.)
  *   undefined   (list-surface):
  *     SUB-BRANCH A (mp.details === undefined): `${ICON_INSTALLED} ${name} [${scope}]`
  *     SUB-BRANCH B (mp.details !== undefined): `${ICON_INSTALLED} ${name} [${scope}]`
@@ -544,8 +555,14 @@ const ICON_UNINSTALLABLE = "⊘";
  * The icon arms use ICON_AVAILABLE nowhere -- marketplaces are either ok
  * (●) or failure-class (⊘); the open-circle ○ is reserved for available /
  * uninstalled PLUGIN rows that plan 04's `renderPluginRow` will own.
+ *
+ * Phase 17.1 signature amendment: the `"skipped"` arm reuses the file-private
+ * `composeReasons` helper to render the reasons brace, which requires the
+ * threaded `SoftDepStatus` probe even though mp-level skipped passes BOTH
+ * declares-flags as `false` (D-16-15 guarantees no soft-dep marker leaks onto
+ * mp-skipped rows). Every call site in this file MUST pass the probe.
  */
-function renderMpHeader(mp: MarketplaceNotificationMessage): string {
+function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus): string {
   switch (mp.status) {
     case "added":
       return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (added)`;
@@ -555,6 +572,29 @@ function renderMpHeader(mp: MarketplaceNotificationMessage): string {
       return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (updated)`;
     case "failed":
       return `${ICON_UNINSTALLABLE} ${mp.name} [${mp.scope}] (failed)`;
+    case "autoupdate enabled":
+      // Phase 17.1 D-17.1-02 + D-18-05: fresh state-flip. Same shape as
+      // "added"/"removed"/"updated"; does NOT carry mp.reasons.
+      return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (autoupdate enabled)`;
+    case "autoupdate disabled":
+      // Phase 17.1 D-17.1-02 + D-18-05: fresh state-flip. Same shape as
+      // "added"/"removed"/"updated"; does NOT carry mp.reasons.
+      return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (autoupdate disabled)`;
+    case "skipped": {
+      // Phase 17.1 D-17.1-02 + D-18-05: idempotent autoupdate no-op. The
+      // reasons brace is composed via composeReasons reusing the helper that
+      // backs plugin-level skipped rows. CRITICAL per D-16-15: pass
+      // (false, false) for the two soft-dep declares flags -- mp-level
+      // skipped never emits {requires pi-subagents} / {requires pi-mcp}
+      // markers; those are plugin-row-only. composeReasons returns "" when
+      // mp.reasons is undefined or empty, so the conditional join collapses
+      // cleanly with no trailing space.
+      const reasonsBrace = composeReasons(mp.reasons, false, false, probe);
+      return reasonsBrace === ""
+        ? `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (skipped)`
+        : `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (skipped) ${reasonsBrace}`;
+    }
+
     case undefined: {
       // List-surface case. mp.details is OPTIONAL and INDEPENDENT of mp.status
       // per Phase 15's D-15-06 (shared/notify.ts:466). Guard explicitly with
@@ -918,38 +958,53 @@ function renderPluginRow(p: PluginNotificationMessage, probe: SoftDepStatus): st
 /** Reload-hint trailer literal duplicated from presentation/reload-hint.ts per D-16-04/D-16-12. Phase 21 deletes both copies. */
 const RELOAD_HINT_TRAILER = "/reload to pick up changes";
 
-/** Severity ladder per SNM-14 / D-16-11. First-match: failed (plugin or marketplace) wins over skipped / manual recovery, wins over success. */
+/** Severity ladder per SNM-14 / D-16-11. First-match: failed (plugin or marketplace) wins over skipped / manual recovery OR marketplace skipped (per D-17.1-05; consistent with plugin-level skipped per D-16-11), wins over success. */
 function computeSeverity(message: NotificationMessage): "warning" | "error" | undefined {
   // First-match pass: any failed (plugin or marketplace) -> "error".
-  for (const mp of message.marketplaces) {
-    if (mp.status === "failed") {
-      return "error";
-    }
-
-    for (const p of mp.plugins) {
-      if (p.status === "failed") {
-        return "error";
-      }
-    }
+  const hasError = message.marketplaces.some(
+    (mp) => mp.status === "failed" || mp.plugins.some((p) => p.status === "failed"),
+  );
+  if (hasError) {
+    return "error";
   }
 
   // Second-match pass: any skipped or manual recovery -> "warning".
-  for (const mp of message.marketplaces) {
-    for (const p of mp.plugins) {
-      if (p.status === "skipped" || p.status === "manual recovery") {
-        return "warning";
-      }
-    }
+  // Phase 17.1 D-17.1-02 + D-17.1-05: mp-level "skipped" (idempotent autoupdate
+  // flip) routes to warning, consistent with plugin-level "skipped" per D-16-11.
+  // The mp.status === "skipped" check on the outer .some() ensures an empty
+  // plugins array still triggers the warning route.
+  const hasWarning = message.marketplaces.some(
+    (mp) =>
+      mp.status === "skipped" ||
+      mp.plugins.some((p) => p.status === "skipped" || p.status === "manual recovery"),
+  );
+  if (hasWarning) {
+    return "warning";
   }
 
   // Otherwise success (omit 2nd arg).
   return undefined;
 }
 
-/** Reload-hint trigger per SNM-15 / D-16-12. Refined wording: any state-changing marketplace status (added/removed/updated -- not failed) or any of the four state-changing plugin statuses. */
+/**
+ * Reload-hint trigger per SNM-15 / D-16-12. Refined wording: any state-changing
+ * marketplace status (added/removed/updated -- not failed) or any of the four
+ * state-changing plugin statuses.
+ *
+ * Phase 17.1 amendment per D-17.1-02 / D-18-05: fresh-flip autoupdate
+ * enabled/disabled trigger the reload hint; mp-level "skipped" (idempotent
+ * no-op) does NOT trigger -- no state was changed, so no /reload is needed.
+ * "failed" continues to suppress (the operation rolled back; no state landed).
+ */
 function shouldEmitReloadHint(message: NotificationMessage): boolean {
   for (const mp of message.marketplaces) {
-    if (mp.status === "added" || mp.status === "removed" || mp.status === "updated") {
+    if (
+      mp.status === "added" ||
+      mp.status === "removed" ||
+      mp.status === "updated" ||
+      mp.status === "autoupdate enabled" ||
+      mp.status === "autoupdate disabled"
+    ) {
       return true;
     }
 
@@ -1036,7 +1091,11 @@ function composePluginLines(p: PluginNotificationMessage, probe: SoftDepStatus):
  * `\n\n` between marketplaces (D-16-07).
  */
 function composeMarketplaceBlock(mp: MarketplaceNotificationMessage, probe: SoftDepStatus): string {
-  const lines: string[] = [renderMpHeader(mp)];
+  // Phase 17.1 D-17.1-02: pass the threaded soft-dep probe into renderMpHeader
+  // so the new "skipped" arm can reuse composeReasons. The mp-skipped arm
+  // passes (false, false) for the two declares-flags per D-16-15; no
+  // soft-dep marker can leak onto an mp-level row.
+  const lines: string[] = [renderMpHeader(mp, probe)];
   for (const p of mp.plugins) {
     lines.push(...composePluginLines(p, probe));
   }
