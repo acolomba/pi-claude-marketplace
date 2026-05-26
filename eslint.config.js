@@ -259,7 +259,7 @@ export default tseslint.config(
   },
   {
     // MSG-Block 5 (MSG-NC-1, MSG-SD-1..2): renderer-chokepoint literal-
-    // detection rules. The canonical renderer lives in
+    // detection rules. The canonical V1 renderer lives in
     // presentation/compact-line.ts; the soft-dep predicate plumbing also
     // legitimately emits the marker literals there. The closed-set
     // Reasons literal-union in shared/grammar/reasons.ts is the
@@ -267,10 +267,20 @@ export default tseslint.config(
     // (`"requires pi-subagents"`, `"requires pi-mcp"`) consumed by the
     // renderer -- it MUST be ignored or MSG-SD-2 reports false
     // positives on the source-of-truth declaration.
+    //
+    // Phase 16 (v1.4) bounded-window addition: shared/notify.ts is the V2
+    // renderer chokepoint (SNM-17 / SNM-18 / D-16-09) and houses the
+    // duplicated SOFT_DEP_MARKER_AGENTS / SOFT_DEP_MARKER_MCP literals
+    // injected by its file-private composeReasons / renderPluginRow (plan
+    // 04). The duplication is intentional (D-16-04) and ends in Phase 21
+    // when V1 wrappers + presentation/* composers are deleted together;
+    // this ignore can be removed at the same time as the compact-line.ts
+    // entry above.
     files: ["extensions/pi-claude-marketplace/**/*.ts"],
     ignores: [
       "extensions/pi-claude-marketplace/presentation/compact-line.ts",
       "extensions/pi-claude-marketplace/shared/grammar/reasons.ts",
+      "extensions/pi-claude-marketplace/shared/notify.ts",
     ],
     plugins: { msg: msgPlugin },
     rules: {
