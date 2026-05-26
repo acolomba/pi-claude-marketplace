@@ -1,6 +1,6 @@
 # ADR-v2-001: Structured `notify` payload with typed wrappers
 
-- **Status:** Accepted (Phase 15, 2026-05-25)
+- **Status:** Accepted (Phase 15, 2026-05-25); landed via Phase 17 -- spec + catalog UAT migration (2026-05-26)
 - **Date:** 2026-05-25
 - **Supersedes:** D-CMC-11 (no structured-payload arg)
 

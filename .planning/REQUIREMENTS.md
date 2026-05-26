@@ -100,7 +100,7 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25.
 | SNM-23 | Phase 20 | Pending |
 | SNM-24 | Phase 21 | Pending |
 | SNM-25 | Phase 21 | Pending |
-| SNM-26 | Phase 21 | Pending |
+| SNM-26 | Phase 17 | Complete |
 | SNM-27 | Phase 21 | Pending |
 | SNM-28 | Phase 21 | Pending |
 | SNM-29 | Phase 21 | Pending |
@@ -113,7 +113,7 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25.
 - v1.4 requirements: 32 total
 - Mapped to phases: 32
 - Unmapped: 0
-- Per-phase distribution: Phase 15 (12: SNM-01..11, SNM-21); Phase 16 (8: SNM-12..18, SNM-30); Phase 17 (3: SNM-19, SNM-20, SNM-31); Phase 18 (0: execution phase); Phase 19 (0: execution phase); Phase 20 (1: SNM-23); Phase 21 (8: SNM-22, SNM-24, SNM-25, SNM-26, SNM-27, SNM-28, SNM-29, SNM-32)
+- Per-phase distribution: Phase 15 (12: SNM-01..11, SNM-21); Phase 16 (8: SNM-12..18, SNM-30); Phase 17 (4: SNM-19, SNM-20, SNM-26, SNM-31); Phase 18 (0: execution phase); Phase 19 (0: execution phase); Phase 20 (1: SNM-23); Phase 21 (7: SNM-22, SNM-24, SNM-25, SNM-27, SNM-28, SNM-29, SNM-32)
 
 **Mapping rationale:**
 
