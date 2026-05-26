@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Structured Notification Messages
-status: executing
-last_updated: "2026-05-26T21:56:38.193Z"
-last_activity: 2026-05-26 -- Phase 17.2 planning complete
+status: ready_to_plan
+last_updated: 2026-05-26T23:08:17.309Z
+last_activity: 2026-05-26 -- Phase 17.2 execution started
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 20
-  completed_plans: 16
+  completed_plans: 20
   percent: 44
+stopped_at: Phase 17.2 complete (4/4) -- ready to discuss Phase 18
 ---
 
 # Project State
@@ -19,20 +20,20 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-25)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 17.1 -- v2-grammar-amendment-autoupdate-surface
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 18 -- migration wave 1 marketplace orchestrator family
 
 ## Current Position
 
-Phase: 17.1 (v2-grammar-amendment-autoupdate-surface) -- EXECUTING
-Plan: 1 of 4
-Status: Ready to execute
-Last activity: 2026-05-26 -- Phase 17.2 planning complete
+Phase: 18
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-05-26
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 76
+- Total plans completed: 80
 - Average duration: -
 - Total execution time: -
 
@@ -53,6 +54,7 @@ Last activity: 2026-05-26 -- Phase 17.2 planning complete
 | 14.2 | 5 | - | - |
 | 15 | 3 | - | - |
 | 16 | 6 | - | - |
+| 17.2 | 4 | - | - |
 
 **Recent Trend:**
 
