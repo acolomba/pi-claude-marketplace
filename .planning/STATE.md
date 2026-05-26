@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Structured Notification Messages
 status: executing
-last_updated: "2026-05-26T11:12:31.147Z"
-last_activity: 2026-05-26 -- Phase 17 planning complete
+last_updated: "2026-05-26T11:32:09.696Z"
+last_activity: 2026-05-26 -- Phase 17 execution started
 progress:
   total_phases: 7
   completed_phases: 2
@@ -19,14 +19,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-25)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 17 -- spec rewrite & catalog uat migration
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 17 -- spec-rewrite-catalog-uat-migration
 
 ## Current Position
 
-Phase: 17
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-26 -- Phase 17 planning complete
+Phase: 17 (spec-rewrite-catalog-uat-migration) -- EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 17
+Last activity: 2026-05-26 -- Phase 17 execution started
 
 ## Performance Metrics
 

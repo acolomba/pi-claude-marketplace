@@ -167,11 +167,11 @@ Plans:
 4. Catalog UAT is GREEN against the new always-marketplace-header spec when driven through the new `notify()`; V1 callsites still produce pre-v2 output but no test of the new contract runs against them (V1 callsites are excluded from catalog UAT or covered by a separate transitional snapshot until their migration phase).
 5. `npm run check` stays GREEN; `docs/adr/v2-001-structured-notify.md` Accepted-status cross-reference to Phase 17 for the spec change is added if not already present.
 
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 Plans:
 **Wave 1**
 
-- [ ] 17-01-PLAN.md -- Style guide v2.0 rewrite + grammar-frontmatter.test.ts deletion + REQUIREMENTS.md SNM-26 traceability + ADR Phase 17 cross-ref (SNM-19, SNM-26; D-17-01, D-17-02, D-17-07, D-17-08)
+- [x] 17-01-PLAN.md -- Style guide v2.0 rewrite + grammar-frontmatter.test.ts deletion + REQUIREMENTS.md SNM-26 traceability + ADR Phase 17 cross-ref (SNM-19, SNM-26; D-17-01, D-17-02, D-17-07, D-17-08)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -267,7 +267,7 @@ Plans:
 | 14.2. CR-01 + retroactive Phase 12/14.1 gates                        | v1.3      | 5/5            | Complete    | 2026-05-24 |
 | 15. Type Model & ADR Refresh                                         | v1.4      | 3/3 | Complete    | 2026-05-25 |
 | 16. Renderer & Public API (Alongside V1)                             | v1.4      | 6/6 | Complete    | 2026-05-26 |
-| 17. Spec Rewrite & Catalog UAT Migration                             | v1.4      | 0/3            | Not started | --         |
+| 17. Spec Rewrite & Catalog UAT Migration                             | v1.4      | 1/3 | In Progress|  |
 | 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 0/?            | Not started | --         |
 | 19. Migration Wave 2 -- Plugin Orchestrator Family                   | v1.4      | 0/?            | Not started | --         |
 | 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 0/?            | Not started | --         |
