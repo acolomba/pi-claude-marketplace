@@ -1,8 +1,10 @@
+import { softDepStatus } from "../platform/pi-api.ts";
+
 import { assertNever, causeChainTrailer } from "./errors.ts";
 
+import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../platform/pi-api.ts";
 import type { Reason } from "./grammar/reasons.ts";
 import type { Scope } from "./types.ts";
-import type { ExtensionContext, SoftDepStatus } from "../platform/pi-api.ts";
 
 // Re-export Reason so Phase 16-20 call-site authors can import the entire v1.4
 // structured-notify surface (types + Reason) from this file alone, instead of
@@ -847,14 +849,217 @@ function renderPluginRow(p: PluginNotificationMessage, probe: SoftDepStatus): st
   }
 }
 
-// Same self-reference for renderMpHeader -- it is wired by plan 05 into
-// notify(), but is intentionally file-private (SNM-17, D-16-09) so cannot
-// be made visible to TS via a re-export. The `void` discard is the
-// documented escape hatch (per plan 03 execution context) that keeps
-// `noUnusedLocals` quiet without an inline lint disable directive. Plan 04
-// (this) removed the matching `void ICON_AVAILABLE;` self-reference because
-// `renderPluginRow` now consumes `ICON_AVAILABLE` in the `(available)` /
-// `(uninstalled)` arms. Plan 05's `notify()` will consume `renderPluginRow`
-// and delete this remaining `void renderMpHeader;` line.
-void renderMpHeader;
-void renderPluginRow;
+// ---------------------------------------------------------------------------
+// Phase 16 plan 05 -- public notify() V2 entry point + file-private helpers.
+//
+// V2 grammar mini-spec (Phase 17 lifts this into docs/output-catalog.md per
+// SNM-19 / SNM-20). The wire format `notify()` emits is:
+//
+//   <mp-header-1>
+//     <plugin-row-1>
+//     [cause-chain at 4-space indent if (failed | manual recovery) with cause]
+//     [rollback child row at 4-space indent for each rollbackPartial phase]
+//       [phase cause-chain at 6-space indent if phase.cause set]
+//     <plugin-row-2>
+//     ...
+//
+//   <mp-header-2>
+//     ...
+//
+//   /reload to pick up changes      <-- iff any state-changing status set
+//
+// Joins / separators:
+//   - Plugin row prefix:                "  " (2 spaces; D-16-04)
+//   - Cause-chain trailer prefix:       "    " (4 spaces; D-16-08)
+//   - rollbackPartial child row prefix: "    " (4 spaces; D-16-08)
+//   - rollbackPartial phase cause:      "      " (6 spaces; D-16-08)
+//   - Between marketplace blocks:        "\n\n" (one blank line; D-16-07)
+//   - Between body and reload-hint:      "\n\n" (one blank line; D-16-13)
+//
+// Severity ladder (D-16-11, first match wins):
+//   1. Any plugin.status === "failed" OR mp.status === "failed" -> "error"
+//   2. Any plugin.status in {"skipped", "manual recovery"}      -> "warning"
+//   3. Otherwise                                                -> undefined (info)
+//
+// Reload-hint trigger (D-16-12, refined SNM-15):
+//   - Any plugin.status in {"installed", "updated", "reinstalled", "uninstalled"}, OR
+//   - Any mp.status in {"added", "removed", "updated"}        (state-changing; NOT "failed")
+//
+// Empty-marketplaces sentinel (D-16-17, planner pick): "(no marketplaces)".
+//
+// Soft-dep probe discipline (D-16-14): single softDepStatus(pi) call at
+// notify() entry; the resulting SoftDepStatus is threaded into every
+// renderPluginRow(p, probe) invocation. No per-row re-probing.
+//
+// D-11 layering: notify() does NOT import from presentation/*; the reload-hint
+// trailer literal is duplicated inline alongside renderMpHeader (plan 03) and
+// renderPluginRow (plan 04). Phase 21 deletes V1 + the duplicates together.
+// ---------------------------------------------------------------------------
+
+/** Reload-hint trailer literal duplicated from presentation/reload-hint.ts per D-16-04/D-16-12. Phase 21 deletes both copies. */
+const RELOAD_HINT_TRAILER = "/reload to pick up changes";
+
+/** Severity ladder per SNM-14 / D-16-11. First-match: failed (plugin or marketplace) wins over skipped / manual recovery, wins over success. */
+function computeSeverity(message: NotificationMessage): "warning" | "error" | undefined {
+  // First-match pass: any failed (plugin or marketplace) -> "error".
+  for (const mp of message.marketplaces) {
+    if (mp.status === "failed") {
+      return "error";
+    }
+
+    for (const p of mp.plugins) {
+      if (p.status === "failed") {
+        return "error";
+      }
+    }
+  }
+
+  // Second-match pass: any skipped or manual recovery -> "warning".
+  for (const mp of message.marketplaces) {
+    for (const p of mp.plugins) {
+      if (p.status === "skipped" || p.status === "manual recovery") {
+        return "warning";
+      }
+    }
+  }
+
+  // Otherwise success (omit 2nd arg).
+  return undefined;
+}
+
+/** Reload-hint trigger per SNM-15 / D-16-12. Refined wording: any state-changing marketplace status (added/removed/updated -- not failed) or any of the four state-changing plugin statuses. */
+function shouldEmitReloadHint(message: NotificationMessage): boolean {
+  for (const mp of message.marketplaces) {
+    if (mp.status === "added" || mp.status === "removed" || mp.status === "updated") {
+      return true;
+    }
+
+    for (const p of mp.plugins) {
+      if (
+        p.status === "installed" ||
+        p.status === "updated" ||
+        p.status === "reinstalled" ||
+        p.status === "uninstalled"
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * D-16-08: render the depth-5 cause-chain trailer at the requested space-indent
+ * prefix when `cause` is defined and the walker returns a non-empty string.
+ * Returns `""` otherwise so callers can `if (trailer !== "") lines.push(...)`.
+ * Centralizes the "guard + walker + indent" composition reused for both the
+ * per-plugin cause (`indent = "    "`, 4 spaces) and the per-rollback-phase
+ * cause (`indent = "      "`, 6 spaces).
+ */
+function renderIndentedCauseChain(cause: unknown, indent: string): string {
+  if (cause === undefined) {
+    return "";
+  }
+
+  const trailer = causeChainTrailer(cause);
+  return trailer === "" ? "" : `${indent}${trailer}`;
+}
+
+/**
+ * D-16-08: render the rollbackPartial child rows for a failed-variant plugin.
+ * Each phase emits a 4-space-indented row plus an optional 6-space-indented
+ * cause-chain trailer when `phase.cause` is set. Returns an empty array when
+ * the plugin has no `rollbackPartial`, so callers can spread the result
+ * unconditionally.
+ */
+function composeRollbackPartialLines(p: PluginNotificationMessage): string[] {
+  if (p.status !== "failed" || p.rollbackPartial === undefined) {
+    return [];
+  }
+
+  const lines: string[] = [];
+  for (const phase of p.rollbackPartial) {
+    lines.push(`    [${phase.phase}] (rollback failed)`);
+    const phaseTrailer = renderIndentedCauseChain(phase.cause, "      ");
+    if (phaseTrailer !== "") {
+      lines.push(phaseTrailer);
+    }
+  }
+
+  return lines;
+}
+
+/**
+ * Compose the multi-line block for a single plugin row: the 2-space-indented
+ * plugin row, the optional 4-space-indented cause-chain trailer (D-16-08), and
+ * any rollbackPartial child rows + nested phase-cause trailers (D-16-08). The
+ * caller pushes these lines into the marketplace block's accumulator in order.
+ */
+function composePluginLines(p: PluginNotificationMessage, probe: SoftDepStatus): string[] {
+  const lines: string[] = [`  ${renderPluginRow(p, probe)}`];
+
+  if (p.status === "failed" || p.status === "manual recovery") {
+    const trailer = renderIndentedCauseChain(p.cause, "    ");
+    if (trailer !== "") {
+      lines.push(trailer);
+    }
+  }
+
+  lines.push(...composeRollbackPartialLines(p));
+  return lines;
+}
+
+/**
+ * Compose the single-marketplace block: header line followed by one composed
+ * plugin block per `mp.plugins[]` entry, in caller order (D-16-06). Joined
+ * with `\n` to produce the block string that `notify()` then joins with
+ * `\n\n` between marketplaces (D-16-07).
+ */
+function composeMarketplaceBlock(mp: MarketplaceNotificationMessage, probe: SoftDepStatus): string {
+  const lines: string[] = [renderMpHeader(mp)];
+  for (const p of mp.plugins) {
+    lines.push(...composePluginLines(p, probe));
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * V2 structured-notification entry point. Sole public surface for state-change
+ * notifications (SNM-12). Severity, reload-hint, and soft-dep probe are
+ * computed from contents at notify time (SNM-14, SNM-15, SNM-16). Coexists
+ * with V1 severity-named wrappers; Phase 21 deletes V1.
+ */
+export function notify(
+  ctx: ExtensionContext,
+  pi: ExtensionAPI,
+  message: NotificationMessage,
+): void {
+  // D-16-14: single soft-dep probe per invocation; threaded into every
+  // renderPluginRow call inside composePluginLines below.
+  const probe = softDepStatus(pi);
+
+  // D-16-06: caller-supplied order honored end-to-end (no internal sort).
+  // D-16-17: empty top-level marketplaces array renders the planner-chosen
+  // "(no marketplaces)" sentinel rather than the empty string.
+  // D-16-07: one blank line between marketplace blocks.
+  const blocks = message.marketplaces.map((mp) => composeMarketplaceBlock(mp, probe));
+  const body = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
+
+  // D-16-12: compute reload-hint per the state-change trigger ladder.
+  // D-16-13: append with one blank line, mirroring V1's appendReloadHint
+  // join discipline at presentation/reload-hint.ts:51-53.
+  const hint = shouldEmitReloadHint(message) ? RELOAD_HINT_TRAILER : "";
+  const withHint = hint === "" ? body : `${body}\n\n${hint}`;
+
+  // D-16-11: severity dispatch via the Pi API's magic-string second-arg
+  // convention. omit-2nd-arg = info severity (V1 notifySuccess precedent at
+  // shared/notify.ts:57-59); "warning" / "error" otherwise.
+  const severity = computeSeverity(message);
+  if (severity === undefined) {
+    ctx.ui.notify(withHint);
+  } else {
+    ctx.ui.notify(withHint, severity);
+  }
+}
