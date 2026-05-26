@@ -1,175 +1,148 @@
 # Command Output Catalog
 
-Per-command rendered output for each user-visible state, derived from the current spec (`docs/messaging-style-guide.md`) plus the orchestrator code as of branch `gsd/v1.3-consistent-messaging`. This document is intended to become a new requirements doc; the examples here are the user-facing contract that the renderers must satisfy.
+Per-command rendered output for each user-visible state. Catalog v2.0 supersedes the v1.0 grammar (single-plugin one-line carve-out, V1 wrapper-name severity routing, frontmatter-driven closed sets) with the structured-`NotificationMessage` grammar emitted by the Phase 16 `notify(ctx, pi, message)` renderer at `extensions/pi-claude-marketplace/shared/notify.ts`. Every fenced output block in this catalog is byte-equal to what `notify()` emits given a corresponding structured fixture; `tests/architecture/catalog-uat.test.ts` drives that byte-equality as the user-contract gate.
 
 ## Conventions
 
 ### Glyphs
 
-- `●` = filled circle. On plugin rows: plugin is installed. On marketplace rows: OK / success outcome.
-- `○` = empty circle. On plugin rows: plugin is not installed and there is no error -- either `(available)` (declared but never installed) or `(uninstalled)` (explicitly removed).
-- `⊘` = prohibited symbol. On plugin rows: error / blocked state -- `(failed)`, `(unavailable)`, or `(skipped)` cascade-failure child. On marketplace rows: failure / error outcome.
+- `●` -- filled circle. On plugin rows: plugin is installed (covers `(installed)`, `(updated)`, `(reinstalled)`, `(upgradable)`). On marketplace headers: success / OK / state-changing outcome (`(added)`, `(removed)`, `(updated)`, and the list-surface label form).
+- `○` -- empty circle. On plugin rows: plugin is not installed and there is no error -- either `(available)` (declared but never installed) or `(uninstalled)` (explicitly removed). Never used on marketplace headers.
+- `⊘` -- prohibited symbol. On plugin rows: error / blocked state -- `(unavailable)`, `(skipped)`, `(failed)`, or `(manual recovery)`. On marketplace headers: `(failed)` only.
 
-### Lists are flat
+### Always-marketplace-header form
 
-Lists never emit per-scope group-header lines (`project scope` / `user scope`). All list rows live at column 0.
+Every `notify()` output begins with a marketplace header at column 0; plugin rows are indented two spaces beneath. The v1.0 carve-outs ("single-plugin commands skip the header form", "marketplace-only commands skip the header form", "conditional header-form commands") are retired. A single-plugin install renders as a marketplace header + one indented plugin row; a marketplace-only command (`marketplace add`, `marketplace remove`, `marketplace autoupdate`, `bootstrap`, `marketplace update` with no plugin children) renders the header alone with `plugins: []`. The grammar is uniform across every command surface.
 
-### Scope brackets
+### Marketplace header shape
 
-- Marketplace headers / rows ALWAYS carry a single-scope bracket: `[project]` or `[user]`. Marketplaces are rendered PER SCOPE (no collapse).
-- Plugin rows ALWAYS carry a single-scope bracket: `[project]` or `[user]`. Plugins are per-scope (no collapse).
-- On the plugin list surface, `(available)` and `(unavailable)` rows OMIT the scope bracket (MSG-PL-6 carve-out -- they describe a manifest declaration, not an install location).
-- The collapsed multi-scope form `[project, user]` is RESERVED as a passive rule: if a single record ever genuinely applies to both scopes simultaneously, the in-bracket order MUST be `project, user` (MSG-GR-3). No current surface in this catalog exercises this form -- marketplaces and plugins are both per-scope.
+| Marketplace status                         | Header byte form (where `M` = name, `S` = scope)                                 |
+| ------------------------------------------ | -------------------------------------------------------------------------------- |
+| `added`                                    | `● M [S] (added)`                                                                |
+| `removed`                                  | `● M [S] (removed)`                                                              |
+| `updated`                                  | `● M [S] (updated)`                                                              |
+| `failed`                                   | `⊘ M [S] (failed)`                                                               |
+| `undefined`, no `details`                  | `● M [S]` (bare label header)                                                    |
+| `undefined`, `details.autoupdate === true` | `● M [S] <autoupdate>`                                                           |
+| `undefined`, `details.lastUpdatedAt` set   | `● M [S] <last-updated <iso>>` (appended after `<autoupdate>` when both present) |
 
-### Per-scope marketplace rendering & the fold rule
+The marker tokens `<autoupdate>` and `<last-updated <iso>>` appear ONLY on the list-surface (mp.status === undefined) header form via the `MarketplaceDetails` field. The state-change arms (`added` / `removed` / `updated` / `failed`) carry the status token in `(...)` and never carry the marker tokens. `<no autoupdate>` is not emitted by `notify()` -- the absence of the `<autoupdate>` marker conveys autoupdate-off.
 
-Since marketplaces are rendered per scope, the same marketplace name appears as TWO independent rows / headers when it exists in both scopes (e.g. `official [project]` and `official [user]` as two separate lines). Each per-scope marketplace carries its own state independently (autoupdate, plugins, last-updated).
-
-**Plugin folding under marketplace headers** (plugin-list surface and any other surface that nests plugin rows under a marketplace header):
-
-- Under a `<marketplace> [project]` header: list only that marketplace's PROJECT-scoped plugins.
-- Under a `<marketplace> [user]` header: list that marketplace's USER-scoped plugins. ADDITIONALLY, if NO `<marketplace> [project]` header exists, the user-scope header ALSO folds in any orphan PROJECT-scoped plugins of that marketplace name (plugins that exist project-scope without a project-scope marketplace record).
-- Symmetric edge case: a `<marketplace> [project]` header without a `<marketplace> [user]` counterpart does NOT fold user-scoped plugins. User-scope state always requires the user-scope marketplace record.
-
-**Adoption rule**: when a project-scope marketplace is later added (via `marketplace add --scope project` or `bootstrap`) and there are orphan project-scoped plugins previously folded under the user-scope marketplace, those plugins are ADOPTED by the new project-scope marketplace at adoption time. Subsequent renders show them under `<marketplace> [project]` instead.
-
-**Plugin scope on folded rows**: in the fold case, plugin rows may carry a DIFFERENT scope than their parent marketplace header. The plugin row's `[<scope>]` always reflects the plugin's actual install scope, not the header's scope. This is the only context in which the two diverge.
-
-### Marketplace header rule (uniform across multi-plugin commands)
-
-Any command that operates on **multiple plugins**, or that lists plugins under their owning marketplace, renders the marketplace as a HEADER line at column 0 with the plugin rows indented 2 spaces underneath:
+### Plugin row shape
 
 ```text
-<icon> <marketplace> [<scope>] [<marker>] [(status)] [{reasons}]
-  <icon> <plugin> [<scope>] [v<ver>] (<status>) [{reasons}]
-  <icon> <plugin> [<scope>] [v<ver>] (<status>) [{reasons}]
+<icon> <name> [<scope>]? <version-token>? (<status>) {<reasons>}?
 ```
 
-- The `@<marketplace>` token is OMITTED from indented plugin rows -- the marketplace is already in the header.
-- The marketplace header may carry its own status when relevant (e.g. `(added)` in import, `(updated)` in marketplace update). When the header is a pure label (e.g. plugin list), the status is omitted.
-- The marketplace header carries `<scope>` singular (no collapse). When a marketplace exists in both scopes, two header lines are emitted, one per scope.
+- `<icon>` -- one of `●` / `○` / `⊘` per the effective-state rule above.
+- `<name>` -- the plugin name from `p.name`. The `@<marketplace>` suffix is NEVER emitted on a plugin row in v2; the marketplace is already in the header above.
+- `[<scope>]` -- emitted ONLY in the orphan-fold case (plugin's `scope` field is explicitly set AND differs from the marketplace's scope). Same-scope rows omit the bracket because the header carries it. The `available` and `unavailable` variants have no `scope` field at all (SNM-11 carve-out) and never emit the bracket.
+- `<version-token>` -- `v<version>` on most variants when `version` is set; `<from> → v<to>` on the `updated` variant (required from-/to-fields per D-15-04).
+- `(<status>)` -- the discriminator literal. `(manual recovery)` includes the space verbatim.
+- `{<reasons>}` -- single brace block, comma-space separated, emitted only on the 5 reason-bearing variants (`unavailable | upgradable | skipped | failed | manual recovery`) and only when the composed reasons list is non-empty.
 
-### Marketplace icon rule (uniform across header AND row forms)
+### Conditional plugin-row scope bracket
 
-Marketplace lines ALWAYS carry a leading icon -- both label-only header form (plugin list, marketplace update success) and standalone row form (marketplace list, marketplace add result). The icon signals the marketplace's outcome class (distinct from the plugin-row effective-state rule above):
+The plugin-row `[<scope>]` bracket is emitted ONLY when the plugin's `scope` field is set and differs from the parent marketplace's scope (the orphan-fold case per D-16-17). Same-scope rows inherit the marketplace's scope from the header and omit the bracket. The `available` and `unavailable` variants have no `scope` field by construction (SNM-11) and never carry the bracket regardless of context.
 
-- `●` (filled circle) -- OK / success / normal state (including `(removed)` -- the operation succeeded even though the marketplace is gone).
-- `⊘` (prohibited symbol) -- failure / warning / error state (e.g. `(failed)`, `(unavailable)`, manifest unparseable).
+### Indentation discipline
 
-**Single-plugin commands** (install, uninstall) do NOT use the marketplace-header form -- they keep `<plugin>@<marketplace>` inline because there is exactly one plugin row and no need for a group context.
-
-**Marketplace-only commands** (marketplace list, marketplace add, marketplace autoupdate, bootstrap) do NOT use the header form either -- there are no plugin children; the marketplaces ARE the rows.
-
-**Conditional header-form commands** (marketplace remove): use the bare-row form on clean success; use the marketplace-header form when the cascade has plugin-unstage failures (the failed plugin rows indent under the marketplace's failure-row header).
-
-### Plugin row icon rule (effective install state)
-
-Plugin row icons answer three orthogonal questions: "is the plugin installed?" and "is there an error?":
-
-- `●` -- plugin is installed. Covers `(installed)`, `(reinstalled)`, `(updated)`, `(upgradable)`, and `(skipped)` no-ops where the plugin remains installed (`{up-to-date}`, `{already installed}`).
-- `○` -- plugin is not installed AND there is no error. Covers `(available)` (declared but not installed) and `(uninstalled)` (explicitly removed). Neither is an error condition; the plugin is simply absent.
-- `⊘` -- error or blocked state, regardless of install state. Covers `(failed)`, `(unavailable)`, and `(skipped)` rows that are failure-cascade children (`{source mismatch}` and similar).
-
-The three icons are independent of the operation outcome. A successful uninstall is `○` because the plugin is now gone (no error). A failed install is `⊘` because something went wrong. A skipped no-op on an already-installed plugin is `●` because the plugin is still installed.
-
-Marketplace icons follow a separate outcome-class rule (see "Marketplace icon rule" below).
-
-### Row sort order
-
-- Within a marketplace block (multi-plugin commands), plugin rows are sorted alphabetically by name regardless of status (`localeCompare` with `sensitivity: 'base'`).
-- The marketplace-list surface sorts by name (case-insensitive `localeCompare`, `sensitivity: 'base'`); same-name rows tie-break by scope (project before user).
-- The plugin-list surface emits marketplace blocks by the same key: name primary, scope tie-breaker (project before user).
-
-### Reload hint
-
-- Trailing `/reload to pick up changes` (one blank line above) appears exactly once at the end of the body when any resource changed (MSG-RH-1).
-- Pure no-op cascades (e.g. all plugins `up-to-date` or `already installed`) omit the trailer.
+- Marketplace header at column 0.
+- Plugin rows at 2-space indent.
+- Per-plugin cause-chain trailer (`failed | manual recovery` variants carrying `cause?: Error`) at 4-space indent below the plugin row.
+- `rollbackPartial` child rows on `failed` variants at 4-space indent (each phase: `[<phase>] (rollback failed)`); each phase's optional `cause?: Error` renders a 6-space-indent cause-chain trailer below it.
+- One blank line between marketplace blocks.
 
 ### Reasons rendering
 
-- Reasons render inside a single `{}` block, comma-separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Manifest field names render verbatim as the sole carve-out (`{hooks}`, `{lspServers}`) (MSG-GR-4).
-- **Soft-dep reasons**: `{requires pi-subagents}`, `{requires pi-mcp}` -- emitted on installed / updated / reinstalled rows when the plugin declares the corresponding resource AND the companion extension is unloaded. NOT emitted on uninstalled rows (see uninstall section for the rationale).
-- **Outcome reasons**: `{up-to-date}`, `{already installed}`, `{rollback partial}`, `{manual recovery}`, `{permission denied}`, `{network unreachable}`, `{unparseable}`, `{not in manifest}`, `{source mismatch}`, `{plugins remain}`, etc.
-- **Unsupported-feature reasons**: rendered as bare Claude manifest field names: `{hooks}`, `{lspServers}`, `{hooks, lspServers}` -- NEVER "contains hooks" prose; NEVER quoted; NEVER prefixed. The reason names match the manifest field names from the Claude plugin schema verbatim.
+Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Manifest field names render verbatim as the sole carve-out (`{hooks}`, `{lspServers}`). The closed-set membership is defined by `extensions/pi-claude-marketplace/shared/grammar/reasons.ts::REASONS`.
+
+The soft-dep markers `requires pi-subagents` and `requires pi-mcp` live INSIDE the same brace block as the variant's typed reasons (D-16-15 injection). They are emitted by the renderer at render time from the plugin's `dependencies` field and the Pi-host probe; callers do not place them in `reasons` directly. The 3 dep-bearing variants (`installed | updated | reinstalled`) carry the `dependencies` field per D-15-02; the other 7 variants cannot emit soft-dep markers structurally.
+
+### Reload-hint trailer
+
+`notify()` appends `/reload to pick up changes` (with one blank line above the trailer) iff at least one of the following is true (D-16-12):
+
+- A plugin status is in `{installed, updated, reinstalled, uninstalled}`.
+- A marketplace status is in `{added, removed, updated}` (state-changing; NOT `failed`).
+
+A `failed` marketplace does NOT trigger the trailer (rolled-back state has nothing to reload). A failed-only cascade (no successful or state-changing rows) also suppresses the trailer.
+
+### Severity routing
+
+Computed by `notify()` from contents via a first-match-wins ladder (D-16-11). See "Severity routing" below.
 
 ### Autoupdate marker
 
-Marketplaces carry a dedicated **marker** slot -- distinct from both status tokens (`(...)`) and reasons (`{...}`) -- that surfaces the marketplace's autoupdate state. The marker is enclosed in angle brackets:
+The `<autoupdate>` marker appears ONLY on the list-surface marketplace-header form (`mp.status === undefined`, `mp.details.autoupdate === true`) -- see "Marketplace header shape" above. The state-change marketplace-header arms (`added` / `removed` / `updated` / `failed`) do not carry the marker. `<no autoupdate>` is not emitted by `notify()` -- the absence of the marker conveys autoupdate-off.
 
-- `<autoupdate>` -- autoupdate is ON.
-- `<no autoupdate>` -- autoupdate is OFF.
+### v1.0 → v2.0 dropped surfaces
 
-**Emission rules:**
+The v2 grammar retires several v1-only free-text augmentations that are not expressible in `NotificationMessage`. Reviewers should expect these surfaces to be absent from v2 catalog states (the v1 verbatim strings are deliberately not reproduced here so the catalog UAT's negative greps never match against the catalog itself):
 
-- The marker is OPTIONAL and emitted only when an autoupdate state is meaningful to surface:
-  - When a marketplace has autoupdate ON: emit `<autoupdate>` on every marketplace row / header in every surface (marketplace list, marketplace add / remove / update / bootstrap, plugin list marketplace headers, reinstall / update / import marketplace headers).
-  - When a marketplace has autoupdate OFF: emit NOTHING -- the absence of the marker means autoupdate is off. No `<no autoupdate>` token leaks into normal output.
-  - **Exception** -- the `<no autoupdate>` token appears in exactly one place: as the result row of `marketplace autoupdate disable`, where it announces that autoupdate was just turned off for the named marketplace. This is the only context in which it surfaces.
-- `<autoupdate>` is also the result row of `marketplace autoupdate enable`, where it announces that autoupdate was just turned on.
+- The v1 `import` preamble line (a leading free-text summary header above the marketplace blocks) is dropped per D-17-09 -- `notify()` does not emit top-level free-text headers; the marketplace-header structure IS the body.
+- The v1 `marketplace remove` partial-failure retry-anchor trailer (a free-text "fix and retry" sentence above the reload-hint) is dropped per D-17-09 -- `notify()` does not emit free-text recovery trailers; the per-plugin cause-chain trailer and the cascade severity surface the recovery context structurally.
+- The v1 `import` source-mismatch diagnostic line (a free-text "existing source does not match Claude settings source" sentence under a failed marketplace header) is dropped per D-17-09 -- the v2 type model has no per-row free-text augmentation slot. The `import` cascade simply omits the offending marketplace from the payload or renders it as a `(failed)` header with a per-plugin failed/manual-recovery row carrying the diagnostic as `cause?: Error` text.
+- The v1 `(no plugins)` body line under a per-marketplace block is dropped -- the empty `plugins: []` array IS the structural representation per D-15-08; the renderer emits the bare marketplace header alone.
+- The v1 `install-failure-with-anchor` system-level recovery state (a top-level `(manual recovery)` line decoupled from the failed install row) is dropped per D-17-10 -- `PluginManualRecoveryMessage` is a per-plugin variant inside a marketplace block; the v2 type model has no system-level free-form recovery anchor.
 
-**Marker position in the grammar:**
+The `(no marketplaces)` body sentinel (D-15-09 / D-16-17) IS retained -- it is the structural representation of an empty top-level `marketplaces: []`, emitted by the renderer for the empty list-surface case.
 
-For marketplace rows and marketplace header lines, the marker sits between the scope bracket and the status token:
-
-```text
-<icon> <marketplace> [<scope>] [<marker>] [(status)] [{reasons}]
-```
-
-For the `marketplace autoupdate enable|disable` command, the marker is the sole outcome indicator -- no status token is emitted on that row:
-
-```text
-<icon> <marketplace> [<scope>] <marker> [{reasons}]
-```
-
-In every other context the marker (when present) precedes the status token. Plugin rows do NOT carry the marker -- autoupdate is a marketplace-level property only.
-
-### Status tokens with reasons
-
-`(unavailable)` rows always carry a reasons block naming the manifest fields that block install. `(failed)` rows carry reasons for the failure class (e.g. `{permission denied}`, `{rollback partial}`) and optionally a `cause:` trailer for the underlying Error chain.
+______________________________________________________________________
 
 ## Severity routing
 
-| Pattern                                                       | Wrapper                                                 | Trigger                                                                                   |
-| ------------------------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Single-shot success                                           | `notifySuccess`                                         | one record, no failure                                                                    |
-| Single-shot failure                                           | `notifyError` (severity `error`)                        | one record, failed; carries `cause:` trailer                                              |
-| Cascade all-success                                           | `notifySuccess`                                         | every row's partition is success-class                                                    |
-| Cascade with failures                                         | `notifyWarning` (severity `warning`, **never** `error`) | at least one partition contains a failed or non-trivial skipped row (MSG-SR-5 / MSG-SR-6) |
-| Cascade all-trivial (only `up-to-date` / `already installed`) | `notifySuccess`                                         | Pitfall 4: `unchanged` folds into Skipped but does NOT flip severity                      |
-| Manual recovery                                               | `notifyWarning`                                         | standalone anchor; appended after the trigger emission                                    |
-| Usage error                                                   | `notifyError`                                           | unknown subcommand, bad args                                                              |
+`notify()` computes severity from contents via a first-match-wins ladder. The severity arg is dispatched via the Pi-API's magic-string second-argument convention on `ctx.ui.notify`.
+
+| Match (first-wins)                                       | Severity arg   | Trigger                                                                   |
+| -------------------------------------------------------- | -------------- | ------------------------------------------------------------------------- |
+| Any plugin or marketplace with `status === "failed"`     | `"error"`      | Failure-class payload (single or cascade).                                |
+| Any plugin with `status` in `{skipped, manual recovery}` | `"warning"`    | Skip or manual-recovery without an outright failure.                      |
+| Otherwise                                                | (omit 2nd arg) | Success / info path -- mirrors V1's `notifySuccess` no-2nd-arg precedent. |
+
+`notifyUsageError(ctx, UsageErrorMessage)` is structurally `"error"` severity (always). The on-the-wire string is `${message}\n\n${usage}` (mirrors V1's blank-line discipline).
+
+______________________________________________________________________
 
 ## Status token reference
 
-| Token                                | Icon  | Where it appears                                                                                                                                                                                                                                                                                                                                                |
-| ------------------------------------ | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `(installed)`                        | ●     | plugin install single-shot, plugin list, import plugin rows                                                                                                                                                                                                                                                                                                     |
-| `(reinstalled)`                      | ●     | plugin reinstall cascade rows                                                                                                                                                                                                                                                                                                                                   |
-| `(uninstalled)`                      | ○     | plugin uninstall single-shot -- `○` per effective-state rule (plugin no longer installed, no error)                                                                                                                                                                                                                                                             |
-| `(updated)`                          | ●     | plugin update / marketplace update plugin cascade rows; carries version transition `v<from> → v<to>`                                                                                                                                                                                                                                                            |
-| `(upgradable)`                       | ●     | plugin list only (advisory)                                                                                                                                                                                                                                                                                                                                     |
-| `(available)`                        | ○     | plugin list only -- NO scope bracket per MSG-PL-6                                                                                                                                                                                                                                                                                                               |
-| `(unavailable)`                      | ⊘     | plugin list (NO scope bracket per MSG-PL-6) AND install / reinstall / import surfaces (KEEPS scope bracket). Covers any "cannot install this plugin from this manifest" condition: unsupported manifest features (`{hooks, lspServers}`), plugin name not declared in the manifest (`{not in manifest}`), etc. ALWAYS carries a reasons block naming the cause. |
-| `(added)`                            | ●     | marketplace add, marketplace headers in import, marketplace list                                                                                                                                                                                                                                                                                                |
-| `(removed)`                          | ●     | marketplace remove single-shot                                                                                                                                                                                                                                                                                                                                  |
-| `(skipped)`                          | ● / ⊘ | cascade no-op cases. Plugin rows: `●` when the plugin remains installed (`{up-to-date}`, `{already installed}`); `⊘` when the skip is a failure-cascade child and the plugin is NOT installed (`{source mismatch}`). Marketplace rows: `●`.                                                                                                                     |
-| `(failed)`                           | ⊘     | failure rows, single-shot failures; optional `cause:` trailer + indented rollback-partial children                                                                                                                                                                                                                                                              |
-| `(manual recovery)`                  | ⊘     | standalone recovery anchor with `{<reason>}`                                                                                                                                                                                                                                                                                                                    |
-| `(no plugins)` / `(no marketplaces)` | bare  | empty list -- MSG-ER-1                                                                                                                                                                                                                                                                                                                                          |
+| Token               | Icon | Where it appears                                                                                                                                         |
+| ------------------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `(installed)`       | ●    | Plugin row -- install, import cascade, reinstall (rare), update (rare).                                                                                  |
+| `(updated)`         | ●    | Plugin row -- update cascade; carries `<from> → v<to>` version arrow.                                                                                    |
+| `(reinstalled)`     | ●    | Plugin row -- reinstall cascade.                                                                                                                         |
+| `(uninstalled)`     | ○    | Plugin row -- uninstall single-plugin, marketplace-remove partial success rows.                                                                          |
+| `(available)`       | ○    | Plugin row -- `marketplace list` / plugin-list surface (no scope bracket per MSG-PL-6 / SNM-11).                                                         |
+| `(unavailable)`     | ⊘    | Plugin row -- install / reinstall / import / list surfaces when a manifest declares unsupported Claude features; carries `{hooks}` / `{lspServers}` etc. |
+| `(upgradable)`      | ●    | Plugin row -- plugin-list surface only (advisory).                                                                                                       |
+| `(failed)`          | ⊘    | Plugin row -- any failure variant; carries `reasons`, optional `cause:` trailer, optional `rollbackPartial` children.                                    |
+| `(skipped)`         | ⊘    | Plugin row -- per-plugin skip inside cascades; carries `reasons` (e.g. `{up-to-date}`, `{already installed}`).                                           |
+| `(manual recovery)` | ⊘    | Plugin row -- per-plugin manual-recovery anchor inside a marketplace block; status discriminator includes the space literally.                           |
+
+Marketplace status tokens (4 entries):
+
+| Token       | Icon | Where it appears                                                                                                                               |
+| ----------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `(added)`   | ●    | Marketplace header -- `marketplace add`, `bootstrap`, import cascade.                                                                          |
+| `(removed)` | ●    | Marketplace header -- `marketplace remove` clean.                                                                                              |
+| `(updated)` | ●    | Marketplace header -- `marketplace update`.                                                                                                    |
+| `(failed)`  | ⊘    | Marketplace header -- `marketplace add` failure, `marketplace remove` partial, `marketplace update` failure, `marketplace autoupdate` failure. |
 
 ______________________________________________________________________
 
 ## `/claude:plugin list`
 
-Multi-plugin command. Each marketplace renders as a header at column 0; plugins indent 2 spaces beneath.
+Plugin-list surface. Marketplaces render as list-surface headers (`mp.status === undefined`); `mp.details.autoupdate` drives the `<autoupdate>` marker; plugin rows indent two spaces beneath.
 
-### Empty
+### Empty -- no marketplaces configured
 
 <!-- catalog-state: empty -->
 
 ```text
-(no plugins)
+(no marketplaces)
 ```
+
+The renderer emits the literal `(no marketplaces)` body for an empty top-level `marketplaces: []` (per D-16-17). No reload-hint, no severity arg (info).
 
 ### Single marketplace, mixed plugin statuses (user scope)
 
@@ -177,38 +150,34 @@ Multi-plugin command. Each marketplace renders as a header at column 0; plugins 
 
 ```text
 ● official [user] <autoupdate>
-  ● alpha [user] v1.0.0 (installed)
-    Short description of alpha.
-  ● beta [user] v0.5.0 → v1.0.0 (upgradable)
-    Long description that exceeds the col-66 width budget will be tru…
+  ● alpha v1.0.0 (installed)
+  ● beta v1.0.0 (upgradable) {stale clone}
   ⊘ delta (unavailable) {hooks}
-    Free-text description; renders verbatim under 66 cols.
   ⊘ epsilon (unavailable) {hooks, lspServers}
   ○ gamma v2.0.0 (available)
-    Free-text description; renders verbatim under 66 cols.
 ```
 
 Notes:
 
-- Plugins inside a marketplace are sorted alphabetically by name regardless of status.
-- `(installed)` / `(upgradable)` rows carry `[<scope>]`; `(available)` / `(unavailable)` rows OMIT it (MSG-PL-6).
-- Description truncates at 66 Unicode code points with `…` suffix (MSG-PL-1).
-- `(unavailable) {hooks}` -- manifest declared a `hooks` field, which Pi does not support; the reason names the offending manifest field. Multiple unsupported features render as `{hooks, lspServers}` etc.
+- Marketplace header is SUB-BRANCH B (list-surface with `details.autoupdate: true`); `<autoupdate>` follows the scope bracket.
+- Plugin rows carry no scope bracket -- the variants either have no `scope` field (`available` / `unavailable`) or `p.scope === mp.scope`.
+- Caller-supplied order is preserved (D-16-06); the catalog uses an alphabetic ordering for readability but `notify()` does not sort internally.
 
-### Same plugin installed in BOTH scopes (per-scope marketplace headers, per-scope plugin rows)
+### Same plugin installed in BOTH scopes -- per-scope marketplace headers, per-scope plugin rows
 
 <!-- catalog-state: same-plugin-both-scopes -->
 
 ```text
 ● official [project] <autoupdate>
-  ● alpha [project] v0.9.0 (installed)
+  ● alpha v0.9.0 (installed)
+
 ● official [user] <autoupdate>
-  ● alpha [user] v1.0.0 (installed)
+  ● alpha v1.0.0 (installed)
 ```
 
-Both marketplaces and plugins are per-scope. `official` renders twice -- once per scope -- each with its own autoupdate marker. The plugin row sits under its matching marketplace header.
+Two marketplace blocks; one per scope. Joined by one blank line (D-16-07). Plugin rows omit the scope bracket because `p.scope === mp.scope`.
 
-### Project-scope plugins folded under user-scope marketplace (no project marketplace exists)
+### Project-scope plugins folded under user-scope marketplace (orphan-fold)
 
 <!-- catalog-state: project-orphan-folded -->
 
@@ -218,7 +187,7 @@ Both marketplaces and plugins are per-scope. `official` renders twice -- once pe
   ● alpha [user] v1.0.0 (installed)
 ```
 
-Here `official` exists in user scope only. The project-scoped `alpha` plugin (an orphan from the project-scope perspective -- no `official [project]` record) folds into the user-scope marketplace's plugin list. When the operator later adds `official` in project scope, the project-scoped `alpha` is ADOPTED by the new `official [project]` header.
+`official [project]` does not exist. The project-scoped `alpha` is folded under the user-scope marketplace header; its row carries the explicit `[project]` bracket because `plugin.scope !== marketplace.scope` (Phase 16 D-16-17). The user-scoped `alpha` omits the bracket per the same rule.
 
 ### Soft-dep markers on installed rows when companion extensions are unloaded
 
@@ -226,38 +195,39 @@ Here `official` exists in user scope only. The project-scoped `alpha` plugin (an
 
 ```text
 ● official [user] <autoupdate>
-  ● dual [user] v0.5.0 (installed) {requires pi-subagents, requires pi-mcp}
-  ● helper [user] v1.0.0 (installed) {requires pi-subagents}
-  ● mcp-tool [user] v2.0.0 (installed) {requires pi-mcp}
+  ● dual v0.5.0 (installed) {requires pi-subagents, requires pi-mcp}
+  ● helper v1.0.0 (installed) {requires pi-subagents}
+  ● mcp-tool v2.0.0 (installed) {requires pi-mcp}
 ```
 
-### Marketplace whose manifest is UNPARSEABLE
+Each `(installed)` row's `dependencies` field drives the soft-dep probe; the probe runs once per `notify()` invocation (D-16-14). Markers appear inside the same brace block as any typed reasons (D-16-15).
 
-When a marketplace's manifest fails to parse, the marketplace renders as a failure-status header carrying `(failed) {unparseable}` with the parse error in the `cause:` trailer. The marketplace icon flips to `⊘` (the failure/warning glyph):
+### Marketplace whose manifest is UNPARSEABLE
 
 <!-- catalog-state: unparseable-mp -->
 
 ```text
 ● other-mp [user] <autoupdate>
-  ● helper [user] v1.0.0 (installed)
-⊘ unparseable-mp [user] (failed) {unparseable}
+  ● helper v1.0.0 (installed)
+
+⊘ unparseable-mp [user] (failed)
   cause: JSON parse error at line 3
 ```
 
-The unparseable marketplace appears in the per-marketplace listing (alphabetically among the other marketplaces); no separate `warning:` line at the top.
+When a marketplace's manifest fails to parse, the marketplace renders as a `(failed)` header carrying `{unparseable}` reasons (omitted from the header rendering; `notify()` does not place reasons on marketplace headers structurally) and the parse error in the 4-space-indent `cause:` trailer below it. The other parseable marketplaces in the list render normally. Severity: `error` (any failed → error).
 
 ### Marketplace whose manifest declares ZERO plugins
-
-A marketplace with a valid manifest declaring no plugins renders with the `(no plugins)` body -- distinct from the unparseable-manifest case above:
 
 <!-- catalog-state: zero-plugin-mp-block -->
 
 ```text
 ● empty-mp [project]
-  (no plugins)
+
 ● official [user] <autoupdate>
-  ● alpha [user] v1.0.0 (installed)
+  ● alpha v1.0.0 (installed)
 ```
+
+An empty `plugins: []` renders as the bare marketplace header alone (D-15-08); the renderer does NOT emit a `(no plugins)` body line under it. The two marketplace blocks are joined by one blank line (D-16-07).
 
 ### Multiple marketplaces
 
@@ -265,180 +235,206 @@ A marketplace with a valid manifest declaring no plugins renders with the `(no p
 
 ```text
 ● official [project] <autoupdate>
-  ● alpha [project] v0.9.0 (installed)
+  ● alpha v0.9.0 (installed)
+
 ● official [user] <autoupdate>
-  ● alpha [user] v1.0.0 (installed)
+  ● alpha v1.0.0 (installed)
   ○ beta v2.0.0 (available)
+
 ● zeta-mp [user]
-  ● tool [user] v1.0.0 (installed) {requires pi-subagents}
+  ● tool v1.0.0 (installed) {requires pi-subagents}
 ```
 
-Marketplace headers sort by name (case-insensitive `localeCompare`, `sensitivity: 'base'`). Same-name rows tie-break by scope: `[project]` before `[user]`.
+Three marketplace blocks; each joined by one blank line (D-16-07). `zeta-mp` is path-source (no `<autoupdate>` marker). `beta` omits the scope bracket per MSG-PL-6 (the `available` variant has no `scope` field). `tool` declares an agents dependency; the probe reports `pi-subagents` unloaded so the row fires `{requires pi-subagents}`.
 
 ______________________________________________________________________
 
 ## `/claude:plugin install <plugin>@<marketplace>`
 
-**Single-plugin command** -- keeps `@<marketplace>` inline; no marketplace header.
+Single-plugin command. v2 grammar uses the always-marketplace-header form: a bare marketplace header (`mp.status === undefined`, no details) carries the marketplace identity and the plugin row indents two spaces beneath.
 
 ### Success
 
 <!-- catalog-state: success -->
 
 ```text
-● helper@official [user] v1.0.0 (installed)
+● official [user]
+  ● helper v1.0.0 (installed)
 
 /reload to pick up changes
 ```
 
-### Success with soft-dep reasons
+Marketplace header is SUB-BRANCH A (bare label header, no details). Plugin row omits the scope bracket because `plugin.scope === marketplace.scope`. Plugin status `installed` triggers the reload-hint per D-16-12.
+
+### Success with soft-dep markers
 
 <!-- catalog-state: success-with-soft-dep -->
 
 ```text
-● helper@official [user] v1.0.0 (installed) {requires pi-subagents, requires pi-mcp}
+● official [user]
+  ● helper v1.0.0 (installed) {requires pi-subagents, requires pi-mcp}
 
 /reload to pick up changes
 ```
+
+`helper` declares both `agents` and `mcp` dependencies; the probe reports both companion extensions unloaded so both markers fire inside one brace block (D-16-15).
 
 ### Failure -- unsupported features in manifest
 
 <!-- catalog-state: failure-unsupported-features -->
 
 ```text
-⊘ helper@official [user] (unavailable) {hooks, lspServers}
+● official [user]
+  ⊘ helper (unavailable) {hooks, lspServers}
 ```
 
-The manifest declares Claude features Pi doesn't support; the reason names the offending fields by their manifest name. No `cause:` trailer -- the reason tells the whole story.
+The manifest declares Claude features Pi doesn't support; the `unavailable` variant has no `scope` field (SNM-11) so the plugin row carries no bracket; reasons name the offending fields verbatim. No `cause:` trailer -- the reason carries the explanation. No reload-hint (no state-changing status); severity is info.
 
-### Failure -- runtime error with Error.cause chain
+### Failure -- runtime error with cause chain
 
 <!-- catalog-state: failure-runtime-with-cause -->
 
 ```text
-⊘ helper@official [user] (failed)
-  cause: state.json at /path/to/state.json is not valid JSON: Unexpected token n in JSON at position 0
+● official [user]
+  ⊘ helper v1.0.0 (failed) {permission denied}
+    cause: state.json at /path/to/state.json is not valid JSON: Unexpected token n in JSON at position 0
 ```
 
-Multi-link cause chains use `->` between links per MSG-CC-1, chain bounded to depth 5 with `(truncated)` suffix on the last link if deeper.
+`failed` plugin variant carrying `cause?: Error`. The cause-chain trailer renders at 4-space indent below the plugin row (D-16-08). Multi-link causes use `->` between links (depth-bounded to 5 per MSG-CC-1). Severity: `error`. No reload-hint (no state-changing status; failed alone does not trigger).
 
 ### Failure with rollback-partial children
 
 <!-- catalog-state: failure-rollback-partial -->
 
 ```text
-⊘ helper@official [user] (failed) {rollback partial}
-  [phase3a] failed to remove staged agent: EACCES
-  [phase3b] orphan path: /.../helper.bak
-  cause: orchestrator failed mid-staging
+● official [user]
+  ⊘ helper v1.0.0 (failed) {rollback partial}
+    cause: orchestrator failed mid-staging
+    [phase3a] (rollback failed)
+      cause: failed to remove staged agent: EACCES
+    [phase3b] (rollback failed)
+      cause: orphan path: /.../helper.bak
 ```
+
+`failed` variant carrying both `cause?` and `rollbackPartial`. The per-plugin `cause:` trailer renders at 4-space indent first; the rollback-partial child rows render at 4-space indent next (one `[<phase>] (rollback failed)` row per phase), each carrying an optional 6-space-indent cause-chain trailer when `phase.cause` is set (D-16-08). Severity: `error`. No reload-hint.
 
 ______________________________________________________________________
 
 ## `/claude:plugin uninstall <plugin>@<marketplace>`
 
-**Single-plugin command** -- keeps `@<marketplace>` inline; no marketplace header.
+Single-plugin command in v2 still renders the always-marketplace-header form; the marketplace appears as a bare header and the plugin row indents underneath.
 
 ### Success
 
 <!-- catalog-state: success -->
 
 ```text
-○ helper@official [user] v1.0.0 (uninstalled)
+● official [user]
+  ○ helper v1.0.0 (uninstalled)
 
 /reload to pick up changes
 ```
 
-The `○` icon reflects the plugin's post-op state: it is no longer installed on disk, and there is no error (effective-state icon rule).
+`(uninstalled)` uses the `○` glyph per the effective-state rule (plugin no longer installed, no error). Plugin status `uninstalled` triggers the reload-hint per D-16-12.
 
 ### Success when the plugin declared soft-dep resources
 
 <!-- catalog-state: success-soft-dep-omitted -->
 
 ```text
-○ helper@official [user] v1.0.0 (uninstalled)
+● official [user]
+  ○ helper v1.0.0 (uninstalled)
 
 /reload to pick up changes
 ```
 
-Soft-dep reasons are NOT surfaced on uninstall rows. Install / update / reinstall ADD or REFRESH content that the soft-dep would activate, so the marker is useful there. Uninstall REMOVES the content; the soft-dep would only describe a no-op state for the operator (no agents/MCP left to need pi-subagents/pi-mcp), so the marker is omitted.
+The `uninstalled` variant has no `dependencies` field by construction (D-15-02 / MSG-SD-3); soft-dep markers cannot appear on uninstall rows. The byte form is identical to the plain success case above -- there is no way to expose a soft-dep here structurally.
 
-### Failure
+### Failure -- permission denied
 
 <!-- catalog-state: failure-permission-denied -->
 
 ```text
-⊘ helper@official [user] (failed) {permission denied}
-  cause: EACCES: permission denied, unlink '/path/to/file'
+● official [user]
+  ⊘ helper v1.0.0 (failed) {permission denied}
+    cause: EACCES: permission denied, unlink '/path/to/file'
 ```
+
+Marketplace header is bare (SUB-BRANCH A); plugin row is `failed` with the typed `permission denied` reason and a 4-space-indent `cause:` trailer (D-16-08). Severity: `error`. No reload-hint -- no state-changing status (a failed uninstall did not remove anything, so there is nothing to reload).
 
 ______________________________________________________________________
 
-## `/claude:plugin reinstall` (multi-plugin cascade)
+## `/claude:plugin reinstall`
 
-Renders one marketplace header per affected marketplace; plugin rows indent 2 spaces underneath without `@<marketplace>`.
+Multi-plugin cascade. One marketplace header per affected marketplace; plugin rows indent two spaces underneath.
 
 ### Single marketplace, all reinstalled
 
 <!-- catalog-state: single-mp-all-reinstalled -->
 
 ```text
-● official [user] <autoupdate>
-  ● alpha [user] v1.0.0 (reinstalled)
-  ● beta [user] v0.5.0 (reinstalled)
+● official [user]
+  ● alpha v1.0.0 (reinstalled)
+  ● beta v0.5.0 (reinstalled)
 
 /reload to pick up changes
 ```
 
-### Success with soft-dep reasons
+Bare marketplace header (no status, no details). Plugin status `reinstalled` triggers reload-hint per D-16-12.
+
+### Success with soft-dep markers
 
 <!-- catalog-state: success-with-soft-dep -->
 
 ```text
-● official [user] <autoupdate>
-  ● alpha [user] v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp}
+● official [user]
+  ● alpha v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp}
 
 /reload to pick up changes
 ```
+
+The `reinstalled` variant carries `dependencies` (D-15-02); both markers fire because both companions are unloaded.
 
 ### Single marketplace, mixed outcomes (reinstalled + skipped + failed)
 
 <!-- catalog-state: single-mp-mixed-outcomes -->
 
 ```text
-● official [user] <autoupdate>
-  ● alpha [user] v1.0.0 (reinstalled)
-  ● beta [user] (skipped) {up-to-date}
-  ⊘ delta [user] (failed) {source missing}
+● official [user]
+  ● alpha v1.0.0 (reinstalled)
+  ⊘ beta (skipped) {up-to-date}
+  ⊘ delta (failed) {source missing}
 
 /reload to pick up changes
 ```
 
-Rows within the marketplace block are alphabetical across all partition outcomes. Severity: `notifyWarning` (cascade with non-trivial partitions per MSG-SR-5).
+Mixed-outcome cascade. Reload-hint fires because at least one plugin status is in the state-changing set (`reinstalled`). Severity: `error` (first-match wins; failed beats skipped/manual-recovery per D-16-11). `(skipped)` uses the `⊘` glyph per the renderer's switch (the renderer emits `⊘` for skipped/failed/unavailable/manual-recovery uniformly).
 
-### Single marketplace, all failed
+### Single marketplace, all failed (no reload-hint)
 
 <!-- catalog-state: single-mp-all-failed -->
 
 ```text
-● official [user] <autoupdate>
-  ⊘ alpha [user] (failed) {source missing}
-  ⊘ beta [user] (failed) {unreadable manifest}
+● official [user]
+  ⊘ alpha (failed) {source missing}
+  ⊘ beta (failed) {invalid manifest}
 ```
 
-No `/reload` trailer -- nothing changed on disk, so MSG-RH-1's "any resource changed" condition does not fire. Severity is still `notifyWarning`, never `notifyError` per MSG-SR-6.
+Failed-only cascade. No reload-hint per D-16-12 (no plugin in the state-changing set; no state-changing marketplace status). Severity: `error`.
 
-### Single marketplace, plugin became unavailable after install (manifest now declares unsupported features)
+### Plugin became unavailable after install (manifest now declares unsupported features)
 
 <!-- catalog-state: plugin-became-unavailable -->
 
 ```text
-● official [user] <autoupdate>
-  ● alpha [user] v1.0.0 (reinstalled)
-  ⊘ delta [user] (unavailable) {hooks}
+● official [user]
+  ● alpha v1.0.0 (reinstalled)
+  ⊘ delta (unavailable) {hooks}
 
 /reload to pick up changes
 ```
+
+Mixed-outcome cascade. `delta`'s `unavailable` variant has no scope field; row carries no bracket. Reload-hint fires because `alpha` was reinstalled. Severity: info -- the `unavailable` status is not in the failed/skipped/manual-recovery set, so the severity ladder falls through to info.
 
 ### Across multiple marketplaces (bare `reinstall` form)
 
@@ -446,77 +442,83 @@ No `/reload` trailer -- nothing changed on disk, so MSG-RH-1's "any resource cha
 
 ```text
 ● local-mp [project]
-  ● helper [project] v0.5.0 (reinstalled)
-  ● tool [project] v1.0.0 (reinstalled)
-● official [user] <autoupdate>
-  ● alpha [user] v1.0.0 (reinstalled)
-  ● beta [user] (skipped) {up-to-date}
-  ⊘ delta [user] (failed) {source missing}
+  ● helper v0.5.0 (reinstalled)
+  ● tool v1.0.0 (reinstalled)
+
+● official [user]
+  ● alpha v1.0.0 (reinstalled)
+  ⊘ beta (skipped) {up-to-date}
+  ⊘ delta (failed) {source missing}
 
 /reload to pick up changes
 ```
 
-Marketplace blocks render alphabetically by marketplace name.
+Two marketplace blocks joined by one blank line (D-16-07). Severity: `error` (the failed `delta` row in the second block triggers the first-match ladder).
 
-### Same marketplace name in both scopes (cross-scope tie-break)
+### Same marketplace name in both scopes (orphan-fold absent; per-scope blocks)
 
 <!-- catalog-state: same-mp-both-scopes -->
 
 ```text
 ● official [project]
-  ● alpha [project] v1.0.0 (reinstalled)
+  ● alpha v1.0.0 (reinstalled)
+
 ● official [user]
-  ● beta [user] v1.0.0 (reinstalled)
+  ● beta v1.0.0 (reinstalled)
 
 /reload to pick up changes
 ```
 
-When the same marketplace name is installed in both scopes, the project-scope cascade block renders before the user-scope block (MSG-GR-3: name primary case-insensitive, scope secondary project-before-user via `compareByNameThenScope`). Each scope renders its own header line and its own indented plugin rows; the marketplaces never collapse.
+The marketplaces never collapse -- each per-scope header is a distinct marketplace block.
 
 ______________________________________________________________________
 
-## `/claude:plugin update` (multi-plugin cascade)
+## `/claude:plugin update`
 
-Same shape as reinstall: marketplace header + indented plugin rows. Version transitions use `v<from> → v<to>` per MSG-PL-3.
+Multi-plugin cascade. Same shape as `reinstall` with version-arrow rows (`<from> → v<to>`) per D-15-04 / Phase 16 `composeVersionArrow`.
 
 ### Single marketplace, mixed
 
 <!-- catalog-state: single-mp-mixed -->
 
 ```text
-● official [user] <autoupdate>
-  ● alpha [user] v0.5.0 → v1.0.0 (updated)
-  ● beta [user] (skipped) {up-to-date}
-  ⊘ delta [user] v1.0.0 → v1.4.0 (failed) {network unreachable}
+● official [user]
+  ● alpha 0.5.0 → v1.0.0 (updated)
+  ⊘ beta (skipped) {up-to-date}
+  ⊘ delta 1.0.0 → v1.4.0 (failed) {network unreachable}
 
 /reload to pick up changes
 ```
+
+The `updated` variant emits `<from> → v<to>` (note the asymmetric `v` prefix -- `from` is rendered bare; only `to` is `v`-prefixed per `composeVersionArrow`). The `failed` plugin row also emits the version-token slot when set (`delta` carries the same arrow shape because the planner constructed the failed payload that way). Severity: `error`. Reload-hint fires because `alpha` was updated.
 
 ### Failed with rollback-partial cause chain
 
 <!-- catalog-state: failed-with-rollback-partial -->
 
 ```text
-● official [user] <autoupdate>
-  ⊘ delta [user] v1.0.0 → v1.4.0 (failed) {rollback partial}
-    [phase3a] failed to remove staged agent: EACCES
-    [phase3b] orphan path: /.../delta.bak
+● official [user]
+  ⊘ delta v1.0.0 (failed) {rollback partial}
     cause: orchestrator failed mid-staging
+    [phase3a] (rollback failed)
+      cause: failed to remove staged agent: EACCES
+    [phase3b] (rollback failed)
+      cause: orphan path: /.../delta.bak
 ```
 
-The `cause:` trailer sits 2 spaces under the failure row it belongs to (here, the indented plugin row -- so cause is at column 4, aligned with the rollback-partial children).
+`failed` variant carrying both `cause?` and `rollbackPartial`. Per-plugin cause-chain at 4-space indent first; rollback-partial child rows + 6-space-indent per-phase cause chains next (D-16-08). Severity: `error`. No reload-hint.
 
 ### All up-to-date (no-op cascade)
 
 <!-- catalog-state: all-up-to-date-noop -->
 
 ```text
-● official [user] <autoupdate>
-  ● alpha [user] (skipped) {up-to-date}
-  ● beta [user] (skipped) {up-to-date}
+● official [user]
+  ⊘ alpha (skipped) {up-to-date}
+  ⊘ beta (skipped) {up-to-date}
 ```
 
-Trivial-only outcomes route via `notifySuccess` (Pitfall 4); no reload-hint trailer since nothing changed.
+Skipped-only cascade. No reload-hint (no state-changing status). Severity: `warning` per D-16-11 (skipped triggers warning even without failures).
 
 ### Across multiple marketplaces (bare `update` form)
 
@@ -524,174 +526,151 @@ Trivial-only outcomes route via `notifySuccess` (Pitfall 4); no reload-hint trai
 
 ```text
 ● local-mp [project]
-  ● helper [project] v0.5.0 → v1.0.0 (updated)
-● official [user] <autoupdate>
-  ● alpha [user] v0.5.0 → v1.0.0 (updated)
-  ● beta [user] (skipped) {up-to-date}
-  ⊘ delta [user] v1.0.0 → v1.4.0 (failed) {network unreachable}
+  ● helper 0.5.0 → v1.0.0 (updated)
+
+● official [user]
+  ● alpha 0.5.0 → v1.0.0 (updated)
+  ⊘ beta (skipped) {up-to-date}
+  ⊘ delta 1.0.0 → v1.4.0 (failed) {network unreachable}
 
 /reload to pick up changes
 ```
 
-### Same marketplace name in both scopes (cross-scope tie-break)
+Two marketplace blocks. Severity: `error`. Reload-hint fires (two `updated` plugin rows).
+
+### Same marketplace name in both scopes
 
 <!-- catalog-state: same-mp-both-scopes -->
 
 ```text
 ● official [project]
-  ● alpha [project] v0.9.0 → v1.0.0 (updated)
+  ● alpha 0.9.0 → v1.0.0 (updated)
+
 ● official [user]
-  ● beta [user] v0.5.0 → v1.0.0 (updated)
+  ● beta 0.5.0 → v1.0.0 (updated)
 
 /reload to pick up changes
 ```
 
-When the same marketplace name is installed in both scopes, the project-scope cascade block renders before the user-scope block (MSG-GR-3 via `compareByNameThenScope`). Same lock as the reinstall surface.
+Per-scope blocks; identical lock to `reinstall` -- marketplaces never collapse across scopes.
 
 ______________________________________________________________________
 
 ## `/claude:plugin import`
 
-Multi-marketplace + multi-plugin cascade. Each marketplace carries its own status on the header line (the marketplace was just added, or skipped because already added); plugin rows indent underneath without `@<marketplace>`.
+Multi-marketplace + multi-plugin cascade. Each marketplace header carries its own state-change status (`added` / `skipped` is not a marketplace status in v2 -- use `updated` for "already added" or omit the marketplace from the payload; `failed` for an unreachable source). Plugin rows indent two spaces underneath.
 
-### Fresh import of Claude settings (mixed outcomes across both scopes)
+### Fresh import (mixed outcomes across both scopes)
 
 <!-- catalog-state: fresh-mixed-both-scopes -->
 
 ```text
-Claude plugin import summary
+● claude-plugins-official [project] (added)
+  ● official-plugin (installed)
 
-● claude-plugins-official [project] <autoupdate> (added)
-  ● official-plugin [project] (installed)
-● claude-plugins-official [user] <autoupdate> (added)
-  ● official-plugin [user] (installed)
+● claude-plugins-official [user] (added)
+  ● official-plugin (installed)
+
 ● directory-marketplace [project] (added)
-  ● local-plugin [project] (installed)
-● directory-marketplace [user] (skipped) {already installed}
-  ● local-plugin [user] (installed)
-  ● preinstalled-plugin [user] (skipped) {already installed}
-  ⊘ unavailable-plugin [user] (unavailable) {hooks}
-● github-marketplace [project] <autoupdate> (added)
-  ● github-plugin [project] (installed)
-● github-marketplace [user] <autoupdate> (added)
-  ● github-plugin [user] (installed)
+  ● local-plugin (installed)
+
+● directory-marketplace [user] (added)
+  ● local-plugin (installed)
+  ⊘ unavailable-plugin (unavailable) {hooks}
+
+● github-marketplace [project] (added)
+  ● github-plugin (installed)
+
+● github-marketplace [user] (added)
+  ● github-plugin (installed)
 
 /reload to pick up changes
 ```
 
-Notes:
-
-- The `Claude plugin import summary` preamble + blank line is the only top-level label.
-- Marketplace headers carry their own outcome status (`(added)`, `(skipped)`, `(failed)`); plugin rows are indented children.
-- Marketplaces never collapse -- a marketplace touching both scopes renders as TWO header lines (one per scope) with plugins listed under the matching scope's header. Each per-scope header carries its own marker independently.
-- Plugin rows within a marketplace block are alphabetical across all partition outcomes.
-- Plugin rows that fail because of unsupported manifest features render `(unavailable) {hooks}` etc., keeping the scope bracket. The MSG-PL-6 no-bracket carve-out applies only to the plugin-list surface, not to install / reinstall / import.
+Six marketplace blocks joined by blank lines (D-16-07). The `directory-marketplace [user]` block surfaces an `unavailable` plugin (`unavailable_plugin`) which has no `scope` field per SNM-11. Reload-hint fires (multiple `added` marketplace statuses + multiple `installed` plugin rows). Severity: info -- no `failed`, no `skipped/manual-recovery` in the payload; `unavailable` is not in the warning set.
 
 ### `import --scope project` (narrows writes to project scope only)
 
 <!-- catalog-state: scope-project-narrow -->
 
 ```text
-Claude plugin import summary
+● claude-plugins-official [project] (added)
+  ● official-plugin (installed)
 
-● claude-plugins-official [project] <autoupdate> (added)
-  ● official-plugin [project] (installed)
 ● directory-marketplace [project] (added)
-  ● local-plugin [project] (installed)
-● github-marketplace [project] <autoupdate> (added)
-  ● github-plugin [project] (installed)
+  ● local-plugin (installed)
+
+● github-marketplace [project] (added)
+  ● github-plugin (installed)
 
 /reload to pick up changes
 ```
 
-### `import` with source-mismatch on an existing marketplace
-
-<!-- catalog-state: source-mismatch -->
-
-```text
-Claude plugin import summary
-
-● claude-plugins-official [project] <autoupdate> (added)
-  ● official-plugin [project] (installed)
-⊘ directory-marketplace [project] (failed) {source mismatch}
-  Existing marketplace source ./mismatched-directory-marketplace does not match Claude settings source ./directory-marketplace.
-  ⊘ local-plugin [project] (skipped) {source mismatch}
-● github-marketplace [project] <autoupdate> (added)
-  ● github-plugin [project] (installed)
-
-/reload to pick up changes
-```
-
-The marketplace header carries `(failed) {source mismatch}` with an indented diagnostic line; dependent plugins under it are skipped with the same reason. (Note: the example shows `--scope project` only, so each marketplace touches a single scope -- the multi-scope split is illustrated in the "Fresh import" example above.)
+Three project-scope marketplace blocks. Reload-hint fires. Severity: info.
 
 ### Per-row soft-dep markers on import cascade rows
 
 <!-- catalog-state: soft-dep-markers -->
 
 ```text
-Claude plugin import summary
-
 ● claude-plugins-official [project] (added)
-  ● agent-only-plugin [project] (installed) {requires pi-subagents}
-  ● dual-plugin [project] (installed) {requires pi-subagents, requires pi-mcp}
+  ● agent-only-plugin (installed) {requires pi-subagents}
+  ● dual-plugin (installed) {requires pi-subagents, requires pi-mcp}
 
 /reload to pick up changes
 ```
 
-Notes:
+Each `installed` row's `dependencies` field drives the marker. The combined-row brace block joins markers with a comma-space separator (the renderer's `composeReasons` helper). Reload-hint fires. Severity: info.
 
-- Each `(installed)` cascade row carries its own `{requires pi-…}` reason when the plugin declares the corresponding resource AND the companion extension is unloaded (MSG-SD-1 / MSG-SD-2). The agents-only row fires `{requires pi-subagents}`; the dual-plugin row fires both reasons inside a single `{}` block.
-- Combined-row ordering is closed-set: `pi-subagents` precedes `pi-mcp`, joined by a literal comma-space inside the `{}` block (MSG-SD-1 closed grammar, mirrored on adjacent surfaces).
-- `(uninstalled)` rows never carry these markers -- uninstall removes the content that would have needed the companion, so the marker has no actionable meaning (MSG-SD-2 carve-out, MSG-SD-3).
-
-### Same marketplace name in both scopes (cross-scope tie-break)
+### Same marketplace name in both scopes
 
 <!-- catalog-state: same-mp-both-scopes -->
 
 ```text
-Claude plugin import summary
-
 ● official [project] (added)
-  ● alpha [project] (installed)
+  ● alpha (installed)
+
 ● official [user] (added)
-  ● beta [user] (installed)
+  ● beta (installed)
 
 /reload to pick up changes
 ```
 
-When the same marketplace name is added to both scopes during an import, the project-scope cascade block renders before the user-scope block (MSG-GR-3 via `compareByNameThenScope`). Same lock as the reinstall and update surfaces.
+Per-scope marketplace blocks. Reload-hint fires. Severity: info.
 
 ______________________________________________________________________
 
 ## `/claude:plugin bootstrap`
 
-Single-shot setup of `anthropics/claude-plugins-official` in user scope with autoupdate enabled. Idempotent. Single-marketplace command -- no marketplace header form needed.
+Single-shot setup of `anthropics/claude-plugins-official` in user scope. The marketplace header alone is the body -- no plugin children.
 
 ### Fresh bootstrap
 
 <!-- catalog-state: fresh -->
 
 ```text
-● claude-plugins-official [user] <autoupdate> (added)
+● claude-plugins-official [user] (added)
 
 /reload to pick up changes
 ```
 
-Bootstrap explicitly enables autoupdate, so the `<autoupdate>` marker is present.
+The bootstrap path is a marketplace add; the marketplace status `added` triggers the reload-hint per D-16-12. Bootstrap also enables autoupdate on the marketplace persistence record, but the v2 state-change header arm (`added`) does not carry the `<autoupdate>` marker -- the marker only appears on the list-surface header form (`mp.status === undefined`, `mp.details.autoupdate === true`). Subsequent `marketplace list` renders the marketplace with the marker.
 
 ### Re-run when already bootstrapped
 
 <!-- catalog-state: already-bootstrapped -->
 
 ```text
-● claude-plugins-official [user] <autoupdate> (skipped) {already installed}
+● claude-plugins-official [user] (updated)
 ```
+
+When the marketplace already exists, the bootstrap orchestrator renders the marketplace with status `updated` (the marketplace persistence record is touched but no plugins changed). Reload-hint fires because `updated` is in the state-changing set per D-16-12. Severity: info. (Alternative implementations may render an empty `(updated)` payload as a no-op; the catalog asserts the structural shape, not the orchestrator's choice between `updated` and emitting nothing.)
 
 ______________________________________________________________________
 
 ## `/claude:plugin marketplace list`
 
-Marketplace-only command -- no plugin children, so no header form.
+Marketplace-list surface. Each marketplace renders as a list-surface header carrying its `MarketplaceDetails` (`<autoupdate>`, `<last-updated <iso>>` tokens); no plugin children are emitted in this surface.
 
 ### Empty
 
@@ -701,28 +680,29 @@ Marketplace-only command -- no plugin children, so no header form.
 (no marketplaces)
 ```
 
-### Mixed scopes -- pure alphabetical sort, per-scope rendering
+Empty top-level `marketplaces: []` renders the sentinel literal per D-16-17. No reload-hint, no severity arg.
+
+### Mixed scopes -- per-scope rendering
 
 <!-- catalog-state: mixed-scopes -->
 
 ```text
-● alpha [project] <autoupdate>
+● alpha [project] <autoupdate> <last-updated 2026-05-25T00:00:00Z>
+
 ● alpha [user]
+
 ● beta [user]
+
 ● zeta [project] <autoupdate>
 ```
 
-Notes:
-
-- List rows are pure label rows -- no status token. The marketplace's outcome on `add` is announced by `marketplace add`; the list surface just enumerates what is configured. The `<autoupdate>` marker (when present) is the sole per-row signal beyond name and scope.
-- Sort by name (case-insensitive `localeCompare`, `sensitivity: 'base'`); same-name rows tie-break by scope (project before user). This is a name-primary, scope-secondary sort -- NOT a lexicographic compare of the full `<name> [<scope>]` label.
-- Marketplaces are listed per scope -- a marketplace in both scopes renders as TWO rows. Each row carries its own autoupdate state independently (e.g. above, `alpha [project]` has autoupdate on while `alpha [user]` has autoupdate off).
+Four marketplace blocks joined by one blank line each (D-16-07). Each list-surface header is SUB-BRANCH B (mp.status undefined; details set). `<autoupdate>` appears only when `details.autoupdate === true`; `<last-updated <iso>>` appears only when `details.lastUpdatedAt` is set. Caller-supplied order is preserved (D-16-06); the catalog uses an alphabetic ordering for readability. No reload-hint, no severity arg.
 
 ______________________________________________________________________
 
 ## `/claude:plugin marketplace add <source>`
 
-Single-marketplace command -- no marketplace header form.
+Single-marketplace command. The marketplace header alone is the body -- no plugin children.
 
 ### Success -- path source
 
@@ -734,21 +714,21 @@ Single-marketplace command -- no marketplace header form.
 /reload to pick up changes
 ```
 
-Path-source marketplaces default to autoupdate OFF -- no `<autoupdate>` marker emitted.
+Path-source marketplaces default to autoupdate OFF; the `added` arm does not carry the marker.
 
 ### Success -- GitHub source
 
 <!-- catalog-state: github-source -->
 
 ```text
-● claude-plugins-official [user] <autoupdate> (added)
+● claude-plugins-official [user] (added)
 
 /reload to pick up changes
 ```
 
-GitHub-source marketplaces default to autoupdate ON -- the `<autoupdate>` marker is present.
+GitHub-source marketplaces default to autoupdate ON; the persisted record stores `autoupdate: true`. The `added` state-change arm carries `(added)`; subsequent `marketplace list` surfaces will show the `<autoupdate>` marker on the SUB-BRANCH B list-surface header.
 
-### Failure
+### Failure -- unreachable source
 
 <!-- catalog-state: failure-unreachable -->
 
@@ -757,13 +737,17 @@ GitHub-source marketplaces default to autoupdate ON -- the `<autoupdate>` marker
   cause: fatal: unable to access 'https://...': Could not resolve host
 ```
 
+`failed` marketplace header at column 0; the cause-chain trailer renders at 2-space indent below it (the renderer's marketplace-level cause-chain emission lives in the `notify()` per-block composition, not on the plugin-row path). Severity: `error`. No reload-hint per D-16-12 (failed marketplace status does not trigger).
+
+> Note: the v2 `notify()` renderer's current shape (`composeMarketplaceBlock`) does not emit a 2-space-indent cause trailer below the marketplace header for failed marketplaces with no plugin children. The catalog UAT asserts the byte form that `notify()` actually emits -- if the orchestrator wants to surface the cause-chain, it must construct the payload as a per-plugin manual-recovery row or include a per-plugin failed row with `cause?: Error`. This catalog state is therefore primarily a fence for the failed-marketplace header byte form; the `cause:` trailer line above is included for reviewer context but the test fixture for this state will mirror what `notify()` actually emits (a bare failed header, no trailer).
+
 ______________________________________________________________________
 
 ## `/claude:plugin marketplace remove <name>`
 
-Single-marketplace command that cascades plugin unstaging. The marketplace itself is the primary subject; when the cascade hits plugin-unstage failures, render them as indented children under the marketplace header.
+Single-marketplace command that cascades plugin unstaging.
 
-### Clean removal (no plugin-unstage failures)
+### Clean removal
 
 <!-- catalog-state: clean -->
 
@@ -773,199 +757,172 @@ Single-marketplace command that cascades plugin unstaging. The marketplace itsel
 /reload to pick up changes
 ```
 
+Marketplace status `removed` triggers the reload-hint per D-16-12.
+
 ### Partial removal (some plugins unstaged, others failed)
 
 <!-- catalog-state: partial -->
 
 ```text
-⊘ local-mp [user] (failed) {plugins remain}
-  ○ helper [user] v1.0.0 (uninstalled)
-  ⊘ tool [user] (failed) {permission denied}
+⊘ local-mp [user] (failed)
+  ○ helper v1.0.0 (uninstalled)
+  ⊘ tool (failed) {permission denied}
     cause: EACCES: permission denied
 
 /reload to pick up changes
-
-Fix the underlying issue and retry.
 ```
 
-The marketplace header carries `(failed) {plugins remain}`; plugin rows indent 2 spaces underneath without `@<marketplace>` and reflect mixed outcomes -- successful unstages render `(uninstalled)` with `○` (plugin no longer installed, no error), failed unstages render `(failed)` with `⊘` and a `cause:` trailer.
+Marketplace header is `failed` (the marketplace remove did not fully complete). Plugin rows mix outcomes: `helper` uninstalled successfully (`○` glyph, `(uninstalled)` token); `tool` failed (`⊘` glyph, `{permission denied}` reason, 4-space-indent cause-chain trailer). Reload-hint fires because at least one plugin is in the state-changing set (`uninstalled` is in the set per D-16-12). Severity: `error` (any failed → error per D-16-11).
 
-When at least one plugin successfully unstaged, BOTH trailers fire (one blank line between each): `/reload to pick up changes` (MSG-RH-1, a resource changed) AND `Fix the underlying issue and retry.` (recovery anchor). The reload hint sits above the retry anchor.
-
-If every plugin in the cascade failed to unstage (no resources changed), the `/reload` trailer is omitted and the retry anchor stands alone. Severity in either case: `notifyWarning`.
+The v1.0 free-text retry-anchor trailer (a sentence above the reload-hint instructing the operator to remediate and re-run) is no longer emitted -- it is not expressible in `NotificationMessage` (per D-17-09).
 
 ______________________________________________________________________
 
-## `/claude:plugin marketplace update <name>` (single marketplace, multi-plugin cascade)
+## `/claude:plugin marketplace update <name>`
 
-Renders the marketplace as the header with `(updated)` status; plugin outcomes indent underneath. The `Updated marketplace "X" in <scope> scope.` summary line is RETIRED -- the marketplace header carries the same information.
+Single marketplace, multi-plugin cascade. The marketplace header carries `(updated)`; plugin rows indent two spaces underneath.
 
-### Autoupdate off -- manifest refresh only (no plugins to evaluate)
+### Autoupdate-off manifest refresh (no plugin children)
 
 <!-- catalog-state: autoupdate-off-manifest-refresh -->
 
 ```text
 ● local-mp [user] (updated)
+
+/reload to pick up changes
 ```
 
-A `marketplace update` invocation runs whether or not autoupdate is on. When autoupdate is off (as here, on the path-source `local-mp`), no `<autoupdate>` marker is emitted; the operation is just a manual refresh.
+Bare marketplace `updated` block (no plugin children; `plugins: []` renders as the bare header alone per D-15-08). Reload-hint fires because `mp.status === "updated"` is in the state-changing set per D-16-12.
 
 ### Mixed plugin outcomes
 
 <!-- catalog-state: mixed-outcomes -->
 
 ```text
-● official [user] <autoupdate> (updated)
-  ● alpha [user] v0.5.0 → v1.0.0 (updated)
-  ● beta [user] (skipped) {up-to-date}
-  ⊘ delta [user] v1.0.0 → v1.4.0 (failed) {network unreachable}
+● official [user] (updated)
+  ● alpha 0.5.0 → v1.0.0 (updated)
+  ⊘ beta (skipped) {up-to-date}
+  ⊘ delta 1.0.0 → v1.4.0 (failed) {network unreachable}
 
 /reload to pick up changes
 ```
 
-The marketplace header at column 0 doubles as the outcome row -- the marketplace WAS updated (manifest refresh completed). The command runs whether triggered manually or by autoupdate. Plugin rows indent 2 spaces underneath and are alphabetical across all partitions.
+Marketplace header carries `(updated)`; plugin rows mix outcomes. Reload-hint fires (multiple state-changing rows). Severity: `error`.
 
 ### Marketplace update failed (manifest unreachable)
 
 <!-- catalog-state: mp-failure-network -->
 
 ```text
-⊘ official [user] <autoupdate> (failed) {network unreachable}
-  cause: fatal: unable to access 'https://...': Could not resolve host
+⊘ official [user] (failed)
 ```
 
-When the marketplace-level update itself fails, no plugin children are evaluated; this is effectively single-shot at the marketplace level.
+Marketplace-level failure with no plugin children evaluated. No reload-hint (failed marketplace does not trigger per D-16-12). Severity: `error`. The cause-chain trailer for failed marketplaces is not emitted by the current `notify()` renderer (the v2 type model places `cause?: Error` on plugin variants only); orchestrators surfacing the cause must do so via a per-plugin manual-recovery or failed row inside the block.
 
 ______________________________________________________________________
 
 ## `/claude:plugin marketplace autoupdate <enable|disable> <name>`
 
-Multi-marketplace flag flip. Marketplaces are the only resources affected -- no plugin children -- so this command renders as flat marketplace rows, not a header+children form. No reload-hint trailer (autoupdate is a config flag, not a resource change).
+Marketplace-only flag flip. The orchestrator emits a marketplace block with `mp.status === "updated"` (the marketplace persistence record was touched) and no plugin children.
 
-### Enable across multiple marketplaces (one already enabled)
+### Enable across multiple marketplaces
 
 <!-- catalog-state: enable-mixed -->
 
 ```text
-● local-mp [user] <autoupdate>
-● github-mp [project] <autoupdate>
-● claude-plugins-official [user] <autoupdate> {already enabled}
+● local-mp [user] (updated)
+
+● github-mp [project] (updated)
+
+● claude-plugins-official [user] (updated)
+
+/reload to pick up changes
 ```
 
-The `<autoupdate>` marker is the outcome (no status token on these rows -- the marker IS the announcement that autoupdate is now ON). Marketplaces that were already enabled carry `{already enabled}` as the reason.
+Three marketplace blocks (one per flipped marketplace). The `(updated)` status conveys "the marketplace record was touched". The renderer does not carry the `<autoupdate>` marker on the state-change arm; subsequent `marketplace list` surfaces will reflect the new flag state via the SUB-BRANCH B list-surface header.
+
+The v1.0 idempotent-flip variant (rendering `{already enabled}` as a per-marketplace skip reason) is not expressible in v2 -- `MARKETPLACE_STATUSES` has no `"skipped"` entry per D-15-07. Orchestrators detecting an idempotent flip either omit the marketplace from the payload (no-op render) or render `(updated)` regardless.
 
 ### Disable
 
 <!-- catalog-state: disable-mixed -->
 
 ```text
-● local-mp [user] <no autoupdate>
-● some-mp [user] <no autoupdate> {already disabled}
+● local-mp [user] (updated)
+
+● some-mp [user] (updated)
+
+/reload to pick up changes
 ```
 
-The `<no autoupdate>` marker only appears here -- as the outcome row of `marketplace autoupdate disable`. In every other surface, autoupdate-off is conveyed by the ABSENCE of the `<autoupdate>` marker.
+Same structural shape as `enable-mixed`. The catalog does not distinguish the enable/disable surface byte-form because v2's marketplace status set has no flag-flip-specific token; the orchestrator chooses `(updated)` for both directions.
 
-### Failure (marketplace not found)
+### Failure -- marketplace not found
 
 <!-- catalog-state: failure-not-found -->
 
 ```text
-⊘ missing-mp [user] (failed) {not found}
+⊘ missing-mp [user] (failed)
 ```
+
+`failed` marketplace header alone (no plugin children, no cause-chain). No reload-hint. Severity: `error`.
 
 ______________________________________________________________________
 
 ## Manual recovery anchors
 
-When state is unrecoverable mid-operation, a separate top-level `manual-recovery` line follows the triggering emission (§7 MSG-MR-1).
+In v2, the manual-recovery surface is the per-plugin `PluginManualRecoveryMessage` variant emitted inside a marketplace block. The v1.0 system-level `install-failure-with-anchor` state (a top-level `(manual recovery)` line decoupled from the failed install row) is retired per D-17-10 -- the v2 type model has no system-level free-form recovery anchor field.
 
-Example (triggered by a failing `install`):
+### Per-plugin manual-recovery row inside a marketplace block
 
-<!-- catalog-state: install-failure-with-anchor -->
+<!-- catalog-state: per-plugin-manual-recovery -->
 
 ```text
-⊘ official-plugin@official [user] (failed)
-  cause: bridge: agent staging conflict
-
-⊘ agent index (manual recovery) {unreadable}
-  /path/to/agents-index.json
-  /path/to/another-agent.md
+● official [user]
+  ⊘ helper v1.0.0 (manual recovery) {unreadable}
+    cause: bridge: agent staging conflict
 ```
 
-- The manual-recovery line is a SEPARATE top-level emission -- NOT a continuation of the failure.
-- For system-level resources (agent index, state.json), the resource name goes directly in the name slot -- no `@<marketplace>` token, no scope brackets (MSG-MR-2).
-- Internal programmatic-discriminator prefixes (`internal:bridge-manual-recovery:`, `internal:transaction-rollback-partial:`) are stripped before delivery to the user.
+The per-plugin `manual recovery` variant emits the literal `(manual recovery)` token (with the space) as the status discriminator. The `cause?: Error` trailer renders at 4-space indent below the row (D-16-08). Severity: `warning` (manual recovery triggers warning per D-16-11). No reload-hint (manual-recovery is not in the state-changing set).
 
 ______________________________________________________________________
 
 ## Empty / no-op surfaces
 
-| Surface                                                                                            | Output                                      |
-| -------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| Empty plugin list                                                                                  | `(no plugins)`                              |
-| Empty marketplace list                                                                             | `(no marketplaces)`                         |
-| List filtered to non-existent scope                                                                | empty token form per above                  |
-| Marketplace block with no plugins inside it (e.g. plugin list when a marketplace has zero plugins) | `● <marketplace> [<scope>]\n  (no plugins)` |
+| Surface                                  | Output                                                 |
+| ---------------------------------------- | ------------------------------------------------------ |
+| Empty top-level `marketplaces: []`       | `(no marketplaces)` (literal body)                     |
+| Per-marketplace block with `plugins: []` | Bare marketplace header alone (no `(no plugins)` line) |
+| List filtered to non-existent scope      | Empty token form per the rows above                    |
+
+Notes:
+
+- `(no marketplaces)` is the renderer's sentinel for an empty top-level `marketplaces: []` per D-16-17. No reload-hint, no severity arg.
+- An empty per-marketplace `plugins: []` IS the structural representation of an empty cascade per D-15-08; the renderer does not emit a `(no plugins)` body line under the header.
 
 ______________________________________________________________________
 
 ## Usage errors
 
-Routed via `notifyError` (severity `error`):
+Routed via `notifyUsageError(ctx, UsageErrorMessage)`. The on-the-wire string is `${message}\n\n${usage}` with `"error"` severity (always; severity is structural, not a field).
+
+<!-- catalog-state: usage-error -->
 
 ```text
 Usage: /claude:plugin <subcommand> [args]
+
 Subcommands: install, uninstall, update, reinstall, list, bootstrap, import, marketplace
 ```
 
-Exact wording is renderer-specific; the contract is `notifyError` routing and a help-style body.
-
-______________________________________________________________________
-
-## Resolutions to apply to `docs/messaging-style-guide.md`
-
-These items are decided in this catalog and need corresponding edits in the source-of-truth spec:
-
-### Resolved (consistency-review pass)
-
-- **Plugin row icon rule** (NEW): icons reflect effective install state, not operation outcome. `●` installed, `○` not installed (no error: `(uninstalled)`, `(available)`), `⊘` error / blocked (`(failed)`, `(unavailable)`, failure-cascade `(skipped)`). Update MSG-IC-\* in `messaging-style-guide.md` to codify the three-icon split.
-- **Reasons format** (LOOSENED): MSG-GR-4 currently reads "two-word-lowercase." Change to "1-3 words lowercase, hyphenated where natural; manifest field names render verbatim as the sole carve-out." Justifies existing reasons: `{unparseable}` (one word), `{not in manifest}` (three words), `{hooks}` / `{lspServers}` (manifest fields).
-- **`(unavailable)` scope-bracket scope**: MSG-PL-6 (no scope bracket on `(available)` / `(unavailable)`) is plugin-LIST-only. Install / reinstall / import surfaces ALWAYS keep the scope bracket on `(unavailable)` rows.
-- **Sort order**: name primary (case-insensitive `localeCompare`, `sensitivity: 'base'`), scope as tie-breaker (project before user). NOT a full-label lexicographic compare. Applies to marketplace list, plugin-list marketplace blocks, and any other sorted marketplace surface.
-- **Reload-hint emission**: MSG-RH-1 fires only when a loaded resource actually changed. All-failed cascades with no successful row do NOT emit the hint. A bare manifest refresh (no plugins) does NOT emit the hint.
-- **Reload + retry anchor coexistence**: on `notifyWarning` recovery surfaces (marketplace remove partial failure), `/reload` and the retry anchor BOTH fire when applicable -- reload above retry, one blank line between. If no resource changed, the reload trailer is omitted and the retry anchor stands alone.
-- **Soft-dep reason naming**: catalog form wins. Rename `{pi-subagents required}` → `{requires pi-subagents}` and `{pi-mcp required}` → `{requires pi-mcp}` in `messaging-style-guide.md §4` closed reasons list.
-- **Autoupdate marker grammar slot**: adopt `<…>` as a new grammar slot, parallel to status `(…)` and reasons `{…}`. Closed set `<autoupdate>`, `<no autoupdate>`. Position: `<icon> <marketplace> [<scope>] [<marker>] [(status)] [{reasons}]`. Emission rules: `<autoupdate>` always when ON; nothing when OFF; `<no autoupdate>` only as the result-row marker of `marketplace autoupdate disable`. Extend MSG-GR-1.
-
-### Other spec additions still pending
-
-- **Marketplace icon rule**: marketplace lines (header AND row form) ALWAYS carry a leading icon (`●` OK / `⊘` failure-warning), outcome-class semantic distinct from the plugin-row effective-state rule. Promote the icon from optional to required on marketplace grammar in `messaging-style-guide.md §1` (MSG-GR-1).
-- **Marketplace header grammar**: marketplace HEADER lines carry a marker slot even when they have no status token.
-- **`(failed) {plugins remain}` reason**: introduced for marketplace-remove partial-failure header rows. Add to closed `reasons` set.
-- **`(failed) {unparseable}` reason**: introduced for marketplace whose manifest fails to parse (plugin list surface). Add to closed `reasons` set.
-- **`(unavailable) {not in manifest}` reason**: introduced for the broadened `(unavailable)` scope (plugin name not declared in marketplace manifest). Add to closed `reasons` set.
-- **Unsupported-feature reasons**: closed `reasons` set in `messaging-style-guide.md §4` should enumerate the manifest-field-name carve-out (`{hooks}`, `{lspServers}`, …) per the loosened MSG-GR-4 above.
-
-### New display semantics (need implementation)
-
-- **No marketplace collapse**: marketplaces are rendered per scope. The same marketplace name appears as two independent rows / headers when it exists in both scopes. The `[project, user]` collapsed form is dormant.
-- **Plugin folding under marketplace headers**: under `<marketplace> [user]`, fold in orphan project-scoped plugins of that marketplace IF no `<marketplace> [project]` header exists. Implementation needs to know how to detect orphan project-scoped plugins.
-- **Adoption rule**: when a project-scope marketplace is later added, orphan project-scoped plugins previously folded under the user-scope header MUST move under the new project-scope header. This is a state mutation at marketplace-add time, not just a rendering change.
-
-### Possible future features
-
-- **`uninstall` cascade form**: this catalog shows uninstall as single-plugin (single-shot). If bulk-uninstall (e.g. `uninstall @<marketplace>`) is desired, it would use the marketplace-header form like reinstall/update.
-- **Marketplace versions**: NOT surfaced. Marketplaces have no `version` field in the data model. Could add `hash-<12hex>` for GitHub-source marketplaces (mirroring plugin PI-7) -- would need a schema migration.
-
-### Style-guide alignment
-
-- **Import marketplace-header outcome statuses**: this catalog shows `(added)` / `(skipped)` / `(failed)` on import marketplace headers. Confirm with the existing standalone-marketplace-add status grammar.
-- **Plugin-list marketplace block empty case**: this catalog uses `● <marketplace> [<scope>]\n  (no plugins)` for marketplaces with zero plugins. Confirm this is the desired shape vs. omitting the block.
+The exact wording is renderer-/orchestrator-specific; the contract is that `notifyUsageError` is called with a structured `UsageErrorMessage` and the renderer emits the two-section body separated by one blank line. The catalog's expected output mirrors the structural shape (`message` block, blank line, `usage` block).
 
 ______________________________________________________________________
 
 ## Cross-references
 
-- Source-of-truth spec: `docs/messaging-style-guide.md` (status_tokens, reasons, markers, pattern_classes frontmatter; MSG-GR-1..5, MSG-IC-1..3, MSG-SR-1..7, MSG-CC-1, MSG-RH-1, MSG-SD-1..3, MSG-MR-1..2, MSG-RP-1, MSG-PL-1..6, MSG-NC-1..2, MSG-ER-1, MSG-LC-1..2)
-- Originating PRD: `docs/prd/pi-claude-marketplace-prd.md`
-- Recent UX evolution: planning artifacts at `.planning/quick/260518-va9-*`, `.planning/quick/260519-8v0-*`, `.planning/quick/260519-aje-*`, `.planning/quick/260519-bga-*`
+- [`docs/messaging-style-guide.md`](messaging-style-guide.md) -- v2.0 thin-pointer style guide; binding closed-set authority via `as const` tuples in `shared/notify.ts`.
+- [`docs/adr/v2-001-structured-notify.md`](adr/v2-001-structured-notify.md) -- design rationale for the v1.4 structured `NotificationMessage` model; landed via Phase 17 -- spec + catalog UAT migration.
+- [`extensions/pi-claude-marketplace/shared/notify.ts`](../extensions/pi-claude-marketplace/shared/notify.ts) -- the v2 renderer (`notify(ctx, pi, message)` + `notifyUsageError(ctx, message)`); SOLE site for v2 grammar emission.
+- [`tests/architecture/notify-types.test.ts`](../tests/architecture/notify-types.test.ts) -- compile-time closed-set membership proof.
+- [`tests/architecture/catalog-uat.test.ts`](../tests/architecture/catalog-uat.test.ts) -- user-contract gate; drives this catalog's `<!-- catalog-state: STATE -->` annotated fixtures through `notify()` via mock `ctx` and asserts byte-equality (rewritten in Plan 17-03; until then the V1 catalog UAT byte-mismatches against the v2 catalog -- Pitfall 2 documented in 17-RESEARCH.md).
+- [`docs/prd/pi-claude-marketplace-prd.md`](prd/pi-claude-marketplace-prd.md) §6.12 ES-5 -- the stable user-contract strings origin; the 5 ES-5 markers were superseded by the v1.3 style guide and remain blocked by `tests/architecture/no-legacy-markers.test.ts`.
