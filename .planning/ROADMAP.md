@@ -74,6 +74,7 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 - [x] **Phase 15: Type Model & ADR Refresh** -- Pure type definitions in `shared/notify.ts` (`NotificationMessage`, `MarketplaceNotificationMessage`, `PluginNotificationMessage`, `PluginStatus`, `MarketplaceStatus`, `Dependency`, `MarketplaceDetails`, `UsageErrorMessage`) plus refreshed source-of-truth ADR (completed 2026-05-25)
 - [x] **Phase 16: Renderer & Public API (Alongside V1)** -- `notify(ctx, payload)` and `notifyUsageError(ctx, payload)` exported from `shared/notify.ts`; internal switch with `assertNever`; computed severity; computed reload hint; renderer-time dependency probe; per-status unit tests (completed 2026-05-26)
 - [x] **Phase 17: Spec Rewrite & Catalog UAT Migration** -- `docs/messaging-style-guide.md` v2.0 + `docs/output-catalog.md` rewritten to always-marketplace-header spec; catalog UAT runner fed by structured `NotificationMessage` fixtures (completed 2026-05-26)
+- [ ] **Phase 17.1: V2 Grammar Amendment: Autoupdate Surface (INSERTED)** -- Amend the V2 type model + renderer + catalog + ADR to restore the user-visible distinction between fresh autoupdate enable/disable, idempotent flips, and failures collapsed by Phase 17 into a single `(updated)` status. Implements the user-locked design from Phase 18 D-18-05 so Plan 18-02 (autoupdate.ts call-site migration) can construct typed messages that round-trip through `notify()` to byte-correct V2 output.
 - [ ] **Phase 18: Migration Wave 1 -- Marketplace Orchestrator Family** -- Migrate all `orchestrators/marketplace/*` call sites to `notify(ctx, structured)`; retire MSG-* lint globs covering marketplace orchestrators
 - [ ] **Phase 19: Migration Wave 2 -- Plugin Orchestrator Family** -- Migrate all `orchestrators/plugin/*` call sites to `notify(ctx, structured)`; retire MSG-* lint globs covering plugin orchestrators
 - [ ] **Phase 20: Migration Wave 3 -- Edge Handlers & UsageError** -- Migrate all `edge/handlers/*` call sites; migrate all `notifyUsageError(ctx, msg, usage)` sites to V2 `notifyUsageError(ctx, structuredUsageError)`; retire remaining MSG-* lint globs
@@ -181,6 +182,42 @@ Plans:
 
 - [x] 17-03-PLAN.md -- catalog-uat.test.ts rewrite to drive notify() via structured fixtures + REQUIREMENTS.md SNM-19/20/31 completion flips (SNM-31; D-17-03, D-17-05, D-17-06)
 
+### Phase 17.1: V2 Grammar Amendment: Autoupdate Surface (INSERTED)
+
+**Goal:** Amend the V2 notify grammar (type model + renderer + catalog + ADR) to restore the user-visible distinction between fresh autoupdate enable/disable, idempotent no-ops, and failures -- collapsed by Phase 17's v2 catalog into a single `(updated)` status -- so Phase 18's plan 18-02 (autoupdate.ts call-site migration) can construct typed messages that round-trip through `notify()` to byte-correct V2 output. Implements the user-locked design from Phase 18 D-18-05.
+
+**Requirements:** None directly (pure layered amendment of Phase 15 / 16 / 17 surfaces locked by D-18-04 / D-18-05; the amendment is justified by the user-locked design in Phase 18 CONTEXT.md rather than by a REQUIREMENTS.md SNM-ID. Phase 18's plan 18-02 unblocks once Phase 17.1 verifies passed.)
+
+**Depends on:** Phase 17
+
+**Success Criteria** (what must be TRUE):
+
+1. `MARKETPLACE_STATUSES` has 7 entries: original 4 (`added`, `removed`, `updated`, `failed`) + 3 new (`autoupdate enabled`, `autoupdate disabled`, `skipped`); `MarketplaceNotificationMessage` carries optional `readonly reasons?: readonly Reason[]`.
+2. `renderMpHeader` has 3 new arms; `computeSeverity` routes `mp.status === "skipped"` to `"warning"`; `shouldEmitReloadHint` triggers on `"autoupdate enabled"` / `"autoupdate disabled"` and NOT on `"skipped"`.
+3. `docs/output-catalog.md` has 5 new catalog-state blocks matching the normative byte forms: `enable-fresh`, `disable-fresh`, `enable-idempotent`, `disable-idempotent`, `failure-not-found`.
+4. `tests/architecture/catalog-uat.test.ts` has 5 new fixtures matching the catalog-state discriminators; catalog UAT byte-equality is GREEN.
+5. `tests/architecture/notify-types.test.ts` length lock is 7; `_MarketplaceStatusExpected` covers all 7; `_MarketplaceMessageExpected` includes `readonly reasons?: readonly Reason[]`. `tests/shared/notify-v2.test.ts` has 5 new tests (3 arms + 2 ladder).
+6. ADR Decision section reflects 7 entries; new `## Amendment: Phase 17.1 ({date})` section captures what + why + ladders. Consequences / Migration / Alternatives sections are byte-identical.
+7. `docs/messaging-style-guide.md` MarketplaceStatus pointer says `7 literal strings`; any drift prose refreshed.
+8. `npm run check` exits 0.
+
+**Plans:** 4 plans
+
+Plans:
+
+**Wave 1**
+
+- [ ] 17.1-01-PLAN.md -- Extend MARKETPLACE_STATUSES 4→7 + add reasons? on MarketplaceNotificationMessage + update notify-types.test.ts closed-set + shape proofs (D-17.1-01, D-17.1-05)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 17.1-02-PLAN.md -- Add 3 new renderMpHeader arms + extend computeSeverity (skipped→warning) + extend shouldEmitReloadHint (autoupdate enabled/disabled trigger) + 5 new byte-equality tests in notify-v2.test.ts (D-17.1-02, D-17.1-05)
+
+**Wave 3** *(blocked on Wave 2 completion; 17.1-03 and 17.1-04 parallel)*
+
+- [ ] 17.1-03-PLAN.md -- Rewrite docs/output-catalog.md autoupdate section with 5 state blocks + replace catalog-uat.test.ts fixture map + update messaging-style-guide.md pointer 4→7 (D-17.1-03, D-17.1-04, D-17.1-06)
+- [ ] 17.1-04-PLAN.md -- In-place ADR Decision section updates (lines 35/42/88) + append ## Amendment: Phase 17.1 section (D-17.1-07, D-17.1-08)
+
 ### Phase 18: Migration Wave 1 -- Marketplace Orchestrator Family
 
 **Goal:** Every call site in `orchestrators/marketplace/*` uses the new `notify(ctx, structured)` entrypoint, and the catalog UAT proves the marketplace command surface is byte-equal to the v2.0 spec.
@@ -249,8 +286,6 @@ Plans:
 4. `tests/architecture/grammar-frontmatter.test.ts` is either rewritten to verify spec-vs-types parity (if the style guide retains frontmatter as a documentation aid) or deleted; `tests/architecture/no-legacy-markers.test.ts` is reviewed and updated for v2 vocabulary; `shared/grammar/` is either deleted (closed sets type-encoded) or retained as the canonical enum source and re-exported from `shared/notify.ts` (decision recorded in phase plan).
 5. `npm run check` is GREEN: typecheck + ESLint (with new stock rules) + Prettier + tests pass. Test count change is accounted for (1249 v1.3 baseline minus retired lint-rule tests, plus new per-variant unit tests).
 
-**Plans:** TBD
-
 ## Progress
 
 | Phase                                                                | Milestone | Plans Complete | Status      | Completed  |
@@ -268,6 +303,7 @@ Plans:
 | 15. Type Model & ADR Refresh                                         | v1.4      | 3/3 | Complete    | 2026-05-25 |
 | 16. Renderer & Public API (Alongside V1)                             | v1.4      | 6/6 | Complete    | 2026-05-26 |
 | 17. Spec Rewrite & Catalog UAT Migration                             | v1.4      | 3/3 | Complete   | 2026-05-26 |
+| 17.1. V2 Grammar Amendment: Autoupdate Surface (INSERTED)            | v1.4      | 0/4            | Not started | --         |
 | 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 0/?            | Not started | --         |
 | 19. Migration Wave 2 -- Plugin Orchestrator Family                   | v1.4      | 0/?            | Not started | --         |
 | 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 0/?            | Not started | --         |
