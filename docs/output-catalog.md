@@ -188,12 +188,12 @@ Two marketplace blocks; one per scope. Joined by one blank line (D-16-07). Plugi
 ```text
 ● official [user] <autoupdate>
   ● alpha [project] v0.9.0 (installed)
-  ● alpha [user] v1.0.0 (installed)
+  ● alpha v1.0.0 (installed)
 
 /reload to pick up changes
 ```
 
-`official [project]` does not exist. The project-scoped `alpha` is folded under the user-scope marketplace header; its row carries the explicit `[project]` bracket because `plugin.scope !== marketplace.scope` (Phase 16 D-16-17). The user-scoped `alpha` omits the bracket per the same rule.
+`official [project]` does not exist; the project-scoped `alpha` is folded under the user-scope marketplace header. Its row carries the explicit `[project]` bracket because `plugin.scope !== marketplace.scope` (Phase 16 D-16-17). The user-scoped `alpha` row omits the bracket because `plugin.scope === marketplace.scope` -- the orphan-fold rule applies symmetrically.
 
 ### Soft-dep markers on installed rows when companion extensions are unloaded
 
