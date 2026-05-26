@@ -1,0 +1,1141 @@
+/**
+ * tests/shared/notify-v2.test.ts -- Per-status unit suite for the V2
+ * `notify()` and `notifyUsageError()` entry points landed by Phase 16 plans
+ * 02-05. This file IS the de facto v2 spec until Phase 17 lifts the grammar
+ * into the output catalog (SNM-19 / SNM-20 / SNM-31).
+ *
+ * ===========================================================================
+ * V2 grammar mini-spec (Phase 16 binding contract; D-16-04 authority)
+ * ===========================================================================
+ *
+ *   ICON DISPATCH (MSG-IC-1..3, duplicated inline in shared/notify.ts per
+ *   D-16-04):
+ *     - `●` ICON_INSTALLED      -> installed | updated | reinstalled |
+ *                                  upgradable plugin rows; added | removed |
+ *                                  updated | undefined-list-surface
+ *                                  marketplace headers.
+ *     - `○` ICON_AVAILABLE      -> available | uninstalled plugin rows.
+ *     - `⊘` ICON_UNINSTALLABLE  -> unavailable | skipped | failed |
+ *                                  manual-recovery plugin rows; failed
+ *                                  marketplace headers.
+ *
+ *   SCOPE-BRACKET PLACEMENT (unconditional carve-out, MSG-PL-6 / SNM-11):
+ *     The `available` and `unavailable` plugin variants have NO `scope` field
+ *     at all. The `[<scope>]` bracket is UNCONDITIONALLY omitted on those two
+ *     rows (regardless of any caller value). The marketplace-header's
+ *     `[<mp.scope>]` bracket still appears.
+ *
+ *   SCOPE-BRACKET PLACEMENT (conditional emission on the 8 scope-bearing
+ *   variants, BLOCKER-1 fix from plan 04):
+ *     For `installed` | `updated` | `reinstalled` | `uninstalled` |
+ *     `upgradable` | `skipped` | `failed` | `manual recovery`, the
+ *     `scope?: Scope` field is OPTIONAL (Phase 15 D-15-02/D-15-04). The
+ *     `[<scope>]` bracket is emitted ONLY when `p.scope !== undefined`.
+ *     The typical case (cascade rows inheriting the marketplace's scope via
+ *     the header) leaves `p.scope` undefined and emits NO bracket on the
+ *     row. The orphan-fold case (caller sets `p.scope` explicitly to drive
+ *     the inline inflection) emits the bracket inline on the row.
+ *
+ *     Anti-pattern guarded against: an unconditional `[${p.scope}]`
+ *     interpolation produces the literal substring `[undefined]` when
+ *     `p.scope` is undefined. The `renderScopeBracket(p.scope)` helper
+ *     returns `""` for that case and `joinTokens` filters the empty slot
+ *     out, so the row contains NO bracket between the plugin name and the
+ *     version/status slots. Tests assert this byte-for-byte (test 21a).
+ *
+ *   REASONS-BLOCK FORMAT (MSG-GR-4):
+ *     `{reason1, reason2}` -- a single brace block joined by `", "`. The
+ *     soft-dep markers `requires pi-subagents` and `requires pi-mcp` go
+ *     INSIDE the same brace block, NOT in separate braces.
+ *
+ *   SOFT-DEP MARKER INJECTION (D-16-15):
+ *     The marker is emitted iff the row's `dependencies` array includes the
+ *     dep AND the probe says it is not loaded. The two markers are
+ *     `requires pi-subagents` (for the `"agents"` dep) and `requires pi-mcp`
+ *     (for the `"mcp"` dep). Only the 3 dep-bearing arms (installed,
+ *     updated, reinstalled) carry `dependencies?` per Phase 15 D-15-02; the
+ *     other 7 arms cannot emit the markers.
+ *
+ *   MARKETPLACE HEADER SHAPE:
+ *     - State-change arms ("added" | "removed" | "updated" | "failed"):
+ *       `<icon> <mp.name> [<mp.scope>] (<status>)`.
+ *     - List-surface arm (mp.status === undefined):
+ *       - SUB-BRANCH A (mp.details === undefined): bare header, no
+ *         trailing autoupdate/lastUpdatedAt tokens, NO crash. Plan 03's
+ *         BLOCKER-3 fix explicitly guards `mp.details === undefined` so the
+ *         arm cannot crash at runtime. Tests assert this no-crash invariant
+ *         (test 17a).
+ *       - SUB-BRANCH B (mp.details !== undefined): bare header +
+ *         `" <autoupdate>"` iff `details.autoupdate === true` +
+ *         `" <last-updated <iso>>"` iff `details.lastUpdatedAt` is defined.
+ *         Empty token slots are collapsed by the join discipline.
+ *
+ *   BODY COMPOSITION:
+ *     - Marketplace header at column 0.
+ *     - Plugin rows at 2-space indent (D-16-04).
+ *     - Multi-marketplace blocks joined by one blank line (D-16-07).
+ *     - Per-plugin cause-chain at 4-space indent below the row, only on
+ *       `failed` / `manual recovery` rows when `cause?: Error` is set
+ *       (D-16-08).
+ *     - `failed.rollbackPartial[]` child rows at 4-space indent
+ *       (`    [<phase>] (rollback failed)`); each phase emits an optional
+ *       6-space-indented cause-chain trailer when `phase.cause` is set
+ *       (D-16-08; planner pick byte form from 16-05-SUMMARY).
+ *
+ *   EMPTY-LIST SENTINELS:
+ *     - Empty `marketplaces: []` at the top level: the body is exactly the
+ *       17 bytes `"(no marketplaces)"` -- no leading icon, no trailing
+ *       newline, no reload-hint, no severity arg (planner pick per 16-05).
+ *     - Empty `plugins: []` on a per-marketplace block: bare header alone
+ *       (no `(no plugins)` sentinel inside the body; D-15-08).
+ *
+ *   RELOAD-HINT TRIGGER LADDER (D-16-12 -- refines SNM-15):
+ *     - Any plugin.status in {"installed", "updated", "reinstalled",
+ *       "uninstalled"}, OR
+ *     - Any mp.status in {"added", "removed", "updated"} (state-changing;
+ *       NOT "failed").
+ *     - Otherwise: suppressed.
+ *
+ *   RELOAD-HINT APPEND:
+ *     `${body}\n\n/reload to pick up changes` -- one blank line between
+ *     body and trailer (D-16-13; mirrors V1's appendReloadHint shape).
+ *
+ *   SEVERITY LADDER (D-16-11, first match wins):
+ *     1. Any plugin.status === "failed" OR mp.status === "failed" -> "error"
+ *     2. Any plugin.status in {"skipped", "manual recovery"}      -> "warning"
+ *     3. Otherwise                                                -> undefined (info)
+ *
+ *     Pi-API surface: omit-2nd-arg = info severity; pass "warning" / "error"
+ *     otherwise.
+ *
+ *   NOTIFY-USAGE-ERROR SHAPE (SNM-13 / D-16-02):
+ *     `ctx.ui.notify(`${msg.message}\n\n${msg.usage}`, "error")` -- one
+ *     blank line between message and usage block; severity always
+ *     "error" (structural, not a field).
+ *
+ * Authority: this file is the de facto v2 spec until Phase 17 lifts it into
+ * the output catalog (SNM-19 / SNM-20 / SNM-31).
+ */
+
+import assert from "node:assert/strict";
+import test, { mock } from "node:test";
+
+import {
+  notify,
+  notifyUsageError,
+  type NotificationMessage,
+  type UsageErrorMessage,
+} from "../../extensions/pi-claude-marketplace/shared/notify.ts";
+
+// ---------------------------------------------------------------------------
+// Mock helpers -- mirror tests/shared/notify.test.ts:17-23 verbatim for ctx;
+// extend with mock-pi shapes for softDepStatus(pi) inspection per CONTEXT
+// <specifics> "Mock pi shape" bullet.
+// ---------------------------------------------------------------------------
+
+interface MockCtx {
+  ui: { notify: ReturnType<typeof mock.fn> };
+}
+
+function makeCtx(): MockCtx {
+  return { ui: { notify: mock.fn() } };
+}
+
+interface MockTool {
+  name?: string;
+  sourceInfo?: { source?: string };
+}
+
+interface MockPi {
+  getAllTools: () => MockTool[];
+}
+
+/** Probe reports both pi-subagents and pi-mcp-adapter loaded. */
+function piWithBothLoaded(): MockPi {
+  return {
+    getAllTools: () => [{ name: "subagent" }, { name: "mcp" }],
+  };
+}
+
+/** Probe reports pi-subagents loaded, pi-mcp-adapter NOT loaded. */
+function piWithSubagentsLoaded(): MockPi {
+  return {
+    getAllTools: () => [{ name: "subagent" }],
+  };
+}
+
+/** Probe reports pi-mcp-adapter loaded, pi-subagents NOT loaded. */
+function piWithMcpLoaded(): MockPi {
+  return {
+    getAllTools: () => [{ name: "mcp" }],
+  };
+}
+
+/** Probe reports nothing loaded -- both soft-dep markers fire when declared. */
+function piWithNothingLoaded(): MockPi {
+  return {
+    getAllTools: () => [],
+  };
+}
+
+// ===========================================================================
+// 1-10: Per-plugin-status variants (one test per PluginNotificationMessage
+// discriminant). Each test wraps the plugin row inside an "added" marketplace
+// header so the 2-line body shape is asserted alongside the per-row grammar.
+// Baselines omit `p.scope` to exercise the non-orphan-fold path (no `[scope]`
+// bracket on the row).
+// ===========================================================================
+
+test("notify renders single installed plugin with empty deps under added marketplace (info severity + reload-hint)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [
+          {
+            status: "installed",
+            name: "commit-commands",
+            version: "1.0.0",
+            dependencies: [],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user] (added)\n  ● commit-commands v1.0.0 (installed)\n\n/reload to pick up changes`,
+  ]);
+});
+
+test("notify renders installed plugin with agents dep + probe unloaded (soft-dep marker emitted inside brace)", () => {
+  const ctx = makeCtx();
+  const pi = piWithMcpLoaded(); // agents NOT loaded
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [
+          {
+            status: "installed",
+            name: "commit-commands",
+            version: "1.0.0",
+            dependencies: ["agents"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user] (added)\n  ● commit-commands v1.0.0 (installed) {requires pi-subagents}\n\n/reload to pick up changes`,
+  ]);
+});
+
+test("notify renders updated plugin with version arrow + mcp dep marker", () => {
+  const ctx = makeCtx();
+  const pi = piWithSubagentsLoaded(); // mcp NOT loaded
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [
+          {
+            status: "updated",
+            name: "commit-commands",
+            from: "1.0.0",
+            to: "1.1.0",
+            dependencies: ["mcp"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user] (added)\n  ● commit-commands 1.0.0 → v1.1.0 (updated) {requires pi-mcp}\n\n/reload to pick up changes`,
+  ]);
+});
+
+test("notify renders reinstalled plugin with both deps loaded (no soft-dep marker, empty brace suppressed)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [
+          {
+            status: "reinstalled",
+            name: "commit-commands",
+            version: "1.0.0",
+            dependencies: ["agents", "mcp"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user] (added)\n  ● commit-commands v1.0.0 (reinstalled)\n\n/reload to pick up changes`,
+  ]);
+});
+
+test("notify renders uninstalled plugin (no dependencies field, ICON_AVAILABLE)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [
+          {
+            status: "uninstalled",
+            name: "commit-commands",
+            version: "1.0.0",
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user] (added)\n  ○ commit-commands v1.0.0 (uninstalled)\n\n/reload to pick up changes`,
+  ]);
+});
+
+test("notify renders available plugin (MSG-PL-6 carve-out: NO scope bracket ever, list-surface header)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        // list-surface (no status); details undefined -> SUB-BRANCH A bare header.
+        plugins: [
+          {
+            status: "available",
+            name: "commit-commands",
+            version: "1.0.0",
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // Bare header (SUB-BRANCH A) + indented available row (no scope bracket on
+  // the row per MSG-PL-6 / SNM-11). No reload-hint (no state-changing
+  // statuses); no severity arg (info).
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user]\n  ○ commit-commands v1.0.0 (available)`,
+  ]);
+});
+
+test("notify renders unavailable plugin with reasons (MSG-PL-6 carve-out: NO scope bracket)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "unavailable",
+            name: "commit-commands",
+            reasons: ["hooks"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // Variant has no `version` set -> renderVersion("") -> "" slot collapsed.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user]\n  ⊘ commit-commands (unavailable) {hooks}`,
+  ]);
+});
+
+test("notify renders upgradable plugin with version and reasons brace", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "upgradable",
+            name: "commit-commands",
+            version: "1.0.0",
+            reasons: ["stale clone"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // No scope bracket on the row (p.scope omitted); no reload-hint (no
+  // state-changing status); upgradable does not trigger severity warning.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user]\n  ● commit-commands v1.0.0 (upgradable) {stale clone}`,
+  ]);
+});
+
+test("notify renders skipped plugin with reasons (warning severity)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [
+          {
+            status: "skipped",
+            name: "commit-commands",
+            version: "1.0.0",
+            reasons: ["up-to-date"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // mp.status === "added" triggers reload-hint per D-16-12. p.status === "skipped"
+  // routes severity to "warning" per D-16-11.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user] (added)\n  ⊘ commit-commands v1.0.0 (skipped) {up-to-date}\n\n/reload to pick up changes`,
+    "warning",
+  ]);
+});
+
+test("notify renders failed plugin with reasons only -- no cause, no rollback (error severity, NO reload-hint when mp.status=failed)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "failed",
+        plugins: [
+          {
+            status: "failed",
+            name: "commit-commands",
+            version: "1.0.0",
+            reasons: ["network unreachable"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // mp.status === "failed" does NOT trigger reload-hint (D-16-12: SNM-15
+  // refinement -- failed rollbacks do not trigger). p.status === "failed"
+  // routes severity to "error" per D-16-11.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {network unreachable}`,
+    "error",
+  ]);
+});
+
+// ===========================================================================
+// 11-15: Marketplace-header variants (5 cases). Each uses empty `plugins: []`
+// to focus the assertion on the header byte form. The first 4 are
+// state-change arms (status set); the 5th is the list-surface SUB-BRANCH B
+// case (mp.status undefined, details defined).
+// ===========================================================================
+
+test("notify renders added marketplace header alone (empty plugins -> header-only body + reload-hint)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [{ name: "demo", scope: "user", status: "added", plugins: [] }],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user] (added)\n\n/reload to pick up changes`,
+  ]);
+});
+
+test("notify renders removed marketplace header alone (empty plugins + reload-hint)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [{ name: "demo", scope: "user", status: "removed", plugins: [] }],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user] (removed)\n\n/reload to pick up changes`,
+  ]);
+});
+
+test("notify renders updated marketplace header alone (empty plugins + reload-hint)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [{ name: "demo", scope: "user", status: "updated", plugins: [] }],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user] (updated)\n\n/reload to pick up changes`,
+  ]);
+});
+
+test("notify renders failed marketplace header alone (empty plugins -> NO reload-hint per D-16-12; no severity because no failed plugin)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [{ name: "demo", scope: "user", status: "failed", plugins: [] }],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // mp.status === "failed" triggers severity "error" per D-16-11 (the
+  // severity ladder catches mp.status === "failed" even with no failed
+  // plugins). But the reload-hint is suppressed per D-16-12 (failed
+  // marketplace operations roll back; no state landed).
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [`⊘ demo [user] (failed)`, "error"]);
+});
+
+test("notify renders SUB-BRANCH B list-surface marketplace header with autoupdate + lastUpdatedAt tokens", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        // mp.status omitted (list-surface)
+        details: { autoupdate: true, lastUpdatedAt: "2026-05-25T00:00:00Z" },
+        plugins: [],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // SUB-BRANCH B byte form per 16-03-SUMMARY: bare header + " <autoupdate>"
+  // + " <last-updated <iso>>" tokens. No reload-hint (no state-changing
+  // status); no severity arg.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user] <autoupdate> <last-updated 2026-05-25T00:00:00Z>`,
+  ]);
+});
+
+// ===========================================================================
+// 16: Empty plugins on a state-change marketplace -- already covered by 11
+// but reasserted as a single-purpose test of the "header-only block when
+// plugins: []" invariant alongside its reload-hint trigger semantics.
+// ===========================================================================
+
+test("notify renders header-only block on empty plugins under added marketplace (reload-hint APPENDED, state-change trigger)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [{ name: "demo", scope: "user", status: "added", plugins: [] }],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // Header-only block; reload-hint appended at end (state-change trigger).
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user] (added)\n\n/reload to pick up changes`,
+  ]);
+});
+
+// ===========================================================================
+// 17: Empty top-level marketplaces -- the "(no marketplaces)" sentinel per
+// 16-05-SUMMARY. No reload-hint, no severity.
+// ===========================================================================
+
+test("notify renders (no marketplaces) sentinel for empty marketplaces array (no reload-hint, no severity)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = { marketplaces: [] };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // Bare sentinel; no leading icon, no trailing newline, no reload-hint, no
+  // severity arg (no state-changing or failure-class statuses in the
+  // payload). Planner pick per 16-05-SUMMARY: 17 bytes "(no marketplaces)".
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [`(no marketplaces)`]);
+});
+
+// ===========================================================================
+// 17a: BLOCKER-COVERAGE (locks in plan-03 BLOCKER-3 fix).
+//
+// Empty-list-surface payload: single marketplace with `status: undefined`,
+// `details: undefined` (BOTH absent independently per Phase 15 D-15-06's
+// optional-and-independent typing), `plugins: []`. Expected output: the
+// BARE marketplace header from SUB-BRANCH A of renderMpHeader (no trailing
+// autoupdate/lastUpdatedAt tokens). Critical assertion: the call MUST NOT
+// throw -- plan 03's `case undefined:` arm explicitly guards
+// `mp.details === undefined` before reading `mp.details.autoupdate`.
+// Reload-hint MUST be suppressed (neither plugin nor marketplace status is
+// in the trigger set).
+// ===========================================================================
+
+test("notify renders bare marketplace header when mp.status and mp.details are both undefined (no-crash, BLOCKER-3 coverage)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        // status: undefined (omitted) AND details: undefined (omitted).
+        // BOTH absent independently per D-15-06 -- this is the empty-list-
+        // surface payload that test 17a guards against the plan-03
+        // BLOCKER-3 regression (runtime crash when reading mp.details
+        // .autoupdate without a guard).
+        plugins: [],
+      },
+    ],
+  };
+  // The next call MUST NOT throw. If `renderMpHeader`'s `case undefined:`
+  // arm regresses and unconditionally reads `mp.details.autoupdate`, this
+  // would throw `TypeError: Cannot read properties of undefined`.
+  assert.doesNotThrow(() => {
+    notify(ctx as never, pi as never, msg);
+  });
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // SUB-BRANCH A byte form per 16-03-SUMMARY: bare header "● demo [user]"
+  // with NO trailing autoupdate / lastUpdatedAt tokens. No reload-hint, no
+  // severity arg.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [`● demo [user]`]);
+});
+
+// ===========================================================================
+// 18: Single-plugin payload -- explicit 2-line shape assertion (header + row).
+// ===========================================================================
+
+test("notify renders single-plugin payload as 2-line body (header + 2-space indented row)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "project",
+        status: "added",
+        plugins: [
+          {
+            status: "installed",
+            name: "alpha",
+            version: "1.0.0",
+            dependencies: [],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [project] (added)\n  ● alpha v1.0.0 (installed)\n\n/reload to pick up changes`,
+  ]);
+});
+
+// ===========================================================================
+// 19: Multi-plugin payload (3 installed plugins under one "added"
+// marketplace). Verify caller-supplied order is preserved (D-16-06 -- no
+// internal sort). Pass plugins in non-alphabetical order (gamma, alpha, beta)
+// and assert the output reflects the caller order.
+// ===========================================================================
+
+test("notify preserves caller-supplied plugin order across multi-plugin payload (D-16-06: no internal sort)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [
+          { status: "installed", name: "gamma", version: "1.0.0", dependencies: [] },
+          { status: "installed", name: "alpha", version: "2.0.0", dependencies: [] },
+          { status: "installed", name: "beta", version: "3.0.0", dependencies: [] },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // Order MUST be gamma, alpha, beta (caller-supplied), NOT alpha, beta,
+  // gamma (alphabetical). D-16-06: notify() iterates msg.marketplaces[] and
+  // each mp.plugins[] in caller order with no internal sort.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user] (added)\n  ● gamma v1.0.0 (installed)\n  ● alpha v2.0.0 (installed)\n  ● beta v3.0.0 (installed)\n\n/reload to pick up changes`,
+  ]);
+});
+
+// ===========================================================================
+// 20: Multi-marketplace payload (2 "added" marketplaces with 1 plugin each).
+// Verify blocks separated by one blank line (D-16-07) and reload-hint
+// appended at end.
+// ===========================================================================
+
+test("notify joins multi-marketplace blocks with single blank line and appends reload-hint at end (D-16-07)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "alpha-mp",
+        scope: "user",
+        status: "added",
+        plugins: [
+          { status: "installed", name: "alpha-plugin", version: "1.0.0", dependencies: [] },
+        ],
+      },
+      {
+        name: "beta-mp",
+        scope: "project",
+        status: "added",
+        plugins: [{ status: "installed", name: "beta-plugin", version: "2.0.0", dependencies: [] }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // Two marketplace blocks separated by "\n\n" (D-16-07); reload-hint
+  // appended after one additional "\n\n" (D-16-13).
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● alpha-mp [user] (added)\n  ● alpha-plugin v1.0.0 (installed)\n\n● beta-mp [project] (added)\n  ● beta-plugin v2.0.0 (installed)\n\n/reload to pick up changes`,
+  ]);
+});
+
+// ===========================================================================
+// 21: Orphan-fold PRESENT -- plugin row with `scope: "user"` explicitly set
+// inside a marketplace header with `scope: "project"`. Plugin row's [user]
+// bracket reflects the plugin's scope; header's [project] bracket reflects
+// the marketplace's scope.
+// ===========================================================================
+
+test("notify emits inline [scope] bracket on plugin row when p.scope set (orphan-fold PRESENT)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "project",
+        status: "added",
+        plugins: [
+          {
+            status: "installed",
+            name: "commit-commands",
+            version: "1.0.0",
+            dependencies: [],
+            scope: "user", // orphan-fold: plugin scope differs from marketplace scope
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // The header carries [project]; the plugin row carries the inline [user]
+  // bracket reflecting the plugin's scope.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [project] (added)\n  ● commit-commands [user] v1.0.0 (installed)\n\n/reload to pick up changes`,
+  ]);
+});
+
+// ===========================================================================
+// 21a: BLOCKER-COVERAGE (locks in plan-04 BLOCKER-1 fix).
+//
+// Orphan-fold ABSENT: the same `installed` plugin payload as test 21 BUT
+// with `p.scope` OMITTED (undefined). Expected output: the plugin row
+// contains NO `[scope]` bracket at all -- `renderScopeBracket(p.scope)`
+// yields "" when `p.scope === undefined` and `joinTokens` filters the empty
+// slot out. Critical assertions: the row MUST NOT contain `[undefined]`,
+// MUST NOT contain ANY `[...]` bracket between the plugin name and the
+// version slot (the marketplace header's `[project]` is the only `[...]`
+// bracket in the body). This test would fail LOUDLY if the implementation
+// regressed to an unconditional `[${p.scope}]` interpolation.
+// ===========================================================================
+
+test("notify omits scope bracket on plugin row when p.scope is undefined (non-orphan-fold, BLOCKER-1 coverage)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "project",
+        status: "added",
+        plugins: [
+          {
+            status: "installed",
+            name: "commit-commands",
+            version: "1.0.0",
+            dependencies: [],
+            // p.scope OMITTED (undefined) -- non-orphan-fold case. The
+            // BLOCKER-1 anti-pattern would emit the literal "[undefined]"
+            // here via an unconditional `[${p.scope}]` interpolation.
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // The header carries [project]; the plugin row has NO bracket at all
+  // between "commit-commands" and "v1.0.0". The exact-byte assertion
+  // catches both the [undefined] regression AND any accidental [project]
+  // leak from the header.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [project] (added)\n  ● commit-commands v1.0.0 (installed)\n\n/reload to pick up changes`,
+  ]);
+
+  // Defense-in-depth anti-regression check: explicitly assert the
+  // [undefined] anti-pattern is absent from the body.
+  const callArgs = ctx.ui.notify.mock.calls[0]!.arguments as [string];
+  const body = callArgs[0];
+  assert.ok(
+    !body.includes("[undefined]"),
+    "BLOCKER-1: row must not contain the literal [undefined] substring",
+  );
+  // The plugin row line is the second line of the body.
+  const lines = body.split("\n");
+  const pluginRow = lines[1]!;
+  assert.ok(
+    !pluginRow.includes("[project]"),
+    "BLOCKER-1: plugin row must not leak the marketplace's [project] bracket",
+  );
+  assert.ok(
+    !pluginRow.includes("[user]"),
+    "BLOCKER-1: plugin row must not contain a stray [user] bracket either",
+  );
+});
+
+// ===========================================================================
+// 22: Failed plugin with rollbackPartial (no causes) -- assert the
+// 4-space-indented child rows per phase per 16-05-SUMMARY byte form.
+// ===========================================================================
+
+test("notify renders rollbackPartial child rows at 4-space indent for failed plugin (no causes)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "failed",
+        plugins: [
+          {
+            status: "failed",
+            name: "commit-commands",
+            version: "1.0.0",
+            reasons: ["permission denied"],
+            rollbackPartial: [{ phase: "skills" }, { phase: "agents" }],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // Per 16-05-SUMMARY: each rollbackPartial child row is
+  // "    [<phase>] (rollback failed)" (4-space indent). No causes -> no
+  // 6-space-indent trailers. mp.status === "failed" -> error severity but
+  // no reload-hint (D-16-12).
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}\n    [skills] (rollback failed)\n    [agents] (rollback failed)`,
+    "error",
+  ]);
+});
+
+// ===========================================================================
+// 23: Failed plugin with cause + rollbackPartial-with-cause -- assert the
+// full nested indent shape (PATTERNS.md "Indent shape worked example"
+// pattern). Per-plugin cause-chain at 4-space indent; rollback child rows
+// at 4-space indent; per-phase cause-chain at 6-space indent.
+// ===========================================================================
+
+test("notify renders nested cause chains: per-plugin at 4-space indent, per-phase rollback cause at 6-space indent (D-16-08)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const inner = new Error("inner", { cause: new Error("root") });
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "failed",
+        plugins: [
+          {
+            status: "failed",
+            name: "commit-commands",
+            version: "1.0.0",
+            reasons: ["permission denied"],
+            cause: inner,
+            rollbackPartial: [{ phase: "skills", cause: new Error("EACCES") }],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // Indent shape:
+  //   col 0 -- marketplace header (⊘ demo [user] (failed))
+  //   col 2 -- plugin row (⊘ commit-commands v1.0.0 (failed) {install failed})
+  //   col 4 -- per-plugin cause-chain trailer (cause: inner -> root)
+  //   col 4 -- rollback child row ([skills] (rollback failed))
+  //   col 6 -- per-phase cause-chain trailer (cause: EACCES)
+  // mp.status === "failed" -> error severity; reload-hint suppressed.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}\n    cause: inner -> root\n    [skills] (rollback failed)\n      cause: EACCES`,
+    "error",
+  ]);
+});
+
+// ===========================================================================
+// 24: Multi-cause cascade -- 2 failed plugins each with own cause, both
+// under one marketplace. Each plugin row followed by its own 4-space-
+// indented cause-chain trailer (D-16-08: cause chains are inline below
+// their row, not aggregated).
+// ===========================================================================
+
+test("notify emits per-plugin cause-chain inline below each failed row (multi-cause cascade, D-16-08)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [
+          {
+            status: "failed",
+            name: "alpha",
+            version: "1.0.0",
+            reasons: ["permission denied"],
+            cause: new Error("alpha-root"),
+          },
+          {
+            status: "failed",
+            name: "beta",
+            version: "2.0.0",
+            reasons: ["network unreachable"],
+            cause: new Error("beta-root"),
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // Each plugin's cause-chain renders inline below its OWN row at 4-space
+  // indent (not aggregated under a single trailer). mp.status === "added"
+  // triggers reload-hint per D-16-12; severity is "error" per D-16-11.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user] (added)\n  ⊘ alpha v1.0.0 (failed) {permission denied}\n    cause: alpha-root\n  ⊘ beta v2.0.0 (failed) {network unreachable}\n    cause: beta-root\n\n/reload to pick up changes`,
+    "error",
+  ]);
+});
+
+// ===========================================================================
+// 25-27: Severity routing -- one test per tier (info / warning / error),
+// plus the first-match-wins assertion for the error tier.
+// ===========================================================================
+
+test("notify severity tier info: installed plugin in added marketplace -> arguments length 1 (no severity arg)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [{ status: "installed", name: "alpha", version: "1.0.0", dependencies: [] }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // Info severity = omit 2nd arg (V1 notifySuccess precedent).
+  assert.equal(ctx.ui.notify.mock.calls[0]!.arguments.length, 1);
+});
+
+test('notify severity tier warning: single skipped plugin -> arguments = [..., "warning"]', () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "skipped",
+            name: "commit-commands",
+            version: "1.0.0",
+            reasons: ["up-to-date"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // skipped -> warning severity per D-16-11.
+  assert.equal(ctx.ui.notify.mock.calls[0]!.arguments.length, 2);
+  assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "warning");
+});
+
+test('notify severity tier error first-match: failed + skipped in same payload -> "error" (failed beats warning)', () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          { status: "skipped", name: "alpha", version: "1.0.0", reasons: ["up-to-date"] },
+          { status: "failed", name: "beta", version: "2.0.0", reasons: ["permission denied"] },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // failed wins per D-16-11 first-match ladder.
+  assert.equal(ctx.ui.notify.mock.calls[0]!.arguments.length, 2);
+  assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "error");
+});
+
+// ===========================================================================
+// 28: Reload-hint suppression -- payload with ONLY failed plugins under
+// failed marketplaces: NO `/reload to pick up changes` trailer. Negative
+// counterpart to tests 1-5, 9, 11-13, 16, 18-21, 24 (which all assert the
+// positive trigger).
+// ===========================================================================
+
+test("notify suppresses reload-hint when payload contains only failed statuses (D-16-12 negative case)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "failed",
+        plugins: [
+          {
+            status: "failed",
+            name: "commit-commands",
+            version: "1.0.0",
+            reasons: ["permission denied"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // Neither plugin nor marketplace status is in the trigger set (mp.status
+  // "failed" is excluded; p.status "failed" is excluded). Body MUST NOT
+  // contain the `/reload to pick up changes` trailer.
+  const callArgs = ctx.ui.notify.mock.calls[0]!.arguments as [string, string];
+  const body = callArgs[0];
+  assert.ok(
+    !body.includes("/reload to pick up changes"),
+    "D-16-12: reload-hint must be suppressed when no state-changing status is present",
+  );
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}`,
+    "error",
+  ]);
+});
+
+// ===========================================================================
+// 29: notifyUsageError shape (SNM-13 / D-16-02) -- ${message}\n\n${usage}
+// with "error" severity arg.
+// ===========================================================================
+
+test("notifyUsageError emits ${msg.message}\\n\\n${msg.usage} with 'error' severity (SNM-13)", () => {
+  const ctx = makeCtx();
+  const msg: UsageErrorMessage = {
+    message: "Unknown plugin",
+    usage: "Usage: /claude:plugin install <name>",
+  };
+  notifyUsageError(ctx as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `Unknown plugin\n\nUsage: /claude:plugin install <name>`,
+    "error",
+  ]);
+});
+
+// ===========================================================================
+// 30: Manual-recovery plugin -- the 10th PluginNotificationMessage variant.
+// Discriminator literal includes the space ("manual recovery"); status slot
+// emits it verbatim per shared/grammar/status-tokens.ts:47. Carries optional
+// cause (D-16-08 inline cause-chain trailer at 4-space indent below the
+// row); severity routes to "warning" per D-16-11.
+// ===========================================================================
+
+test("notify renders manual recovery plugin with cause-chain trailer (warning severity, status literal includes the space)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "manual recovery",
+            name: "commit-commands",
+            version: "1.0.0",
+            reasons: ["rollback partial"],
+            cause: new Error("EACCES"),
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // status slot is the literal "(manual recovery)" WITH a space. Severity
+  // is "warning" per D-16-11. Cause-chain at 4-space indent below the row
+  // per D-16-08.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user]\n  ⊘ commit-commands v1.0.0 (manual recovery) {rollback partial}\n    cause: EACCES`,
+    "warning",
+  ]);
+});
