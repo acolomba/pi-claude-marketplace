@@ -1,4 +1,4 @@
-import { causeChainTrailer } from "./errors.ts";
+import { assertNever, causeChainTrailer } from "./errors.ts";
 
 import type { Reason } from "./grammar/reasons.ts";
 import type { Scope } from "./types.ts";
@@ -483,3 +483,95 @@ export interface MarketplaceNotificationMessage {
 export interface NotificationMessage {
   readonly marketplaces: readonly MarketplaceNotificationMessage[];
 }
+
+// ---------------------------------------------------------------------------
+// Phase 16 v2 grammar additions -- file-private rendering helpers (D-16-09).
+//
+// SNM-17 / SNM-18 contract: the v2 marketplace-header grammar and per-status
+// icon discipline live HERE as the sole site that knows them. Plan 04 will
+// add `renderPluginRow`; plan 05 will compose both helpers into the public
+// `notify()` entry point. The duplication of literals from `presentation/*`
+// is intentional (D-16-04 / D-16-09) and ends in Phase 21 when V1 wrappers
+// and `presentation/*` composers are deleted together.
+// ---------------------------------------------------------------------------
+
+/** V2 grammar constants duplicated from presentation/compact-line.ts per D-16-04. Phase 21 deletes both copies. */
+const ICON_INSTALLED = "●";
+const ICON_AVAILABLE = "○";
+const ICON_UNINSTALLABLE = "⊘";
+
+/**
+ * Renders the v2 marketplace header line. SOLE site for marketplace-header
+ * grammar (SNM-17). File-private; consumed by notify() in plan 05. The case
+ * undefined: arm explicitly guards mp.details === undefined per Phase 15's
+ * optional-independent details? field.
+ *
+ * Byte forms (one per arm):
+ *   "added"     -> `${ICON_INSTALLED}     ${name} [${scope}] (added)`
+ *   "removed"   -> `${ICON_INSTALLED}     ${name} [${scope}] (removed)`
+ *   "updated"   -> `${ICON_INSTALLED}     ${name} [${scope}] (updated)`
+ *   "failed"    -> `${ICON_UNINSTALLABLE} ${name} [${scope}] (failed)`
+ *   undefined   (list-surface):
+ *     SUB-BRANCH A (mp.details === undefined): `${ICON_INSTALLED} ${name} [${scope}]`
+ *     SUB-BRANCH B (mp.details !== undefined): `${ICON_INSTALLED} ${name} [${scope}]`
+ *       + " <autoupdate>" iff mp.details.autoupdate === true (V1 marketplace-list
+ *         byte-equivalent: marker omitted entirely when autoupdate is false)
+ *       + " <last-updated ${mp.details.lastUpdatedAt}>" iff mp.details.lastUpdatedAt
+ *         is defined (v2-only marker following V1's `<marker>` angle-bracket
+ *         convention from presentation/compact-line.ts MarketplaceRow.marker)
+ *
+ * The icon arms use ICON_AVAILABLE nowhere -- marketplaces are either ok
+ * (●) or failure-class (⊘); the open-circle ○ is reserved for available /
+ * uninstalled PLUGIN rows that plan 04's `renderPluginRow` will own.
+ */
+function renderMpHeader(mp: MarketplaceNotificationMessage): string {
+  switch (mp.status) {
+    case "added":
+      return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (added)`;
+    case "removed":
+      return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (removed)`;
+    case "updated":
+      return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (updated)`;
+    case "failed":
+      return `${ICON_UNINSTALLABLE} ${mp.name} [${mp.scope}] (failed)`;
+    case undefined: {
+      // List-surface case. mp.details is OPTIONAL and INDEPENDENT of mp.status
+      // per Phase 15's D-15-06 (shared/notify.ts:466). Guard explicitly with
+      // an early return for SUB-BRANCH A (mp.details === undefined) so the
+      // SUB-BRANCH B composition below reads narrowed (non-optional)
+      // mp.details.autoupdate / mp.details.lastUpdatedAt under TS strict.
+      if (mp.details === undefined) {
+        // SUB-BRANCH A: empty-list-surface -- bare header, no trailing tokens.
+        return `${ICON_INSTALLED} ${mp.name} [${mp.scope}]`;
+      }
+
+      // SUB-BRANCH B: list-surface with details.
+      // Compose tokens conditionally, then suppress empty slots so the join
+      // never emits double-spaces. Mirrors V1 marketplace-list.ts:88 byte
+      // discipline: emit `<autoupdate>` iff `autoupdate === true` (no
+      // `<no autoupdate>` counterpart -- absence of the marker conveys
+      // autoupdate-off).
+      const autoupdateToken = mp.details.autoupdate ? "<autoupdate>" : "";
+      const lastUpdatedToken =
+        mp.details.lastUpdatedAt === undefined ? "" : `<last-updated ${mp.details.lastUpdatedAt}>`;
+      return [ICON_INSTALLED, mp.name, `[${mp.scope}]`, autoupdateToken, lastUpdatedToken]
+        .filter((t) => t !== "")
+        .join(" ");
+    }
+
+    default:
+      return assertNever(mp.status);
+  }
+}
+
+// `ICON_AVAILABLE` is declared above for plan 04's `renderPluginRow` (which
+// owns the `(available)` / `(uninstalled)` plugin-row icon). Referencing it
+// here keeps TS `noUnusedLocals` quiet during the bounded-window between
+// plan 03 (this) and plan 04 without resorting to an inline disable.
+void ICON_AVAILABLE;
+// Same self-reference for renderMpHeader -- it is wired by plan 05 into
+// notify(), but is intentionally file-private (SNM-17, D-16-09) so cannot
+// be made visible to TS via a re-export. The `void` discard is the
+// documented escape hatch (per plan 03 execution context) that keeps
+// `noUnusedLocals` quiet without an inline lint disable directive.
+void renderMpHeader;
