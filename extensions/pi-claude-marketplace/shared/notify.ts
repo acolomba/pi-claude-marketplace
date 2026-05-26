@@ -670,18 +670,34 @@ function renderVersion(version: string | undefined): string {
 }
 
 /**
- * Conditional `[<scope>]` emitter. SOLE site for scope-bracket emission
- * inside `renderPluginRow` (BLOCKER-1 fix): per-arm code MUST funnel
- * `p.scope` through this helper so the bracket renders `""` when scope is
- * undefined (the common case -- the marketplace header carries the
- * `[mp.scope]` token; the per-row bracket only appears in the orphan-fold
- * case per D-16-17 + SNM-11). For `available` / `unavailable` variants
- * (which have NO `scope?` field at all per MSG-PL-6 / SNM-11 carve-out),
- * arm code passes `undefined` explicitly so the bracket unconditionally
- * collapses.
+ * Conditional `[<pluginScope>]` emitter -- orphan-fold contract per D-17.2-01
+ * / D-17.2-02. SOLE site for plugin-row scope-bracket emission inside
+ * `renderPluginRow`: per-arm code MUST funnel `p.scope` (or `undefined` for
+ * the MSG-PL-6 / SNM-11 carve-out variants) AND the parent marketplace scope
+ * through this helper.
+ *
+ * The bracket emits ONLY when `pluginScope !== undefined AND
+ * pluginScope !== mpScope` -- the orphan-fold case from D-16-17. When the
+ * plugin's scope matches the parent marketplace's scope, the bracket is
+ * suppressed because the marketplace header already carries the
+ * `[mpScope]` token; emitting a redundant per-row bracket would
+ * contradict the binding contract at `docs/messaging-style-guide.md:73`
+ * ("plugin row emits `[<scope>]` ONLY when its scope differs from the
+ * parent marketplace's scope").
+ *
+ * `mpScope` is non-optional: the renderer always has the parent
+ * marketplace's scope from `composeMarketplaceBlock` threading. The
+ * `available` / `unavailable` arms (which have NO `scope?` field per
+ * MSG-PL-6 / SNM-11) call with `pluginScope: undefined`; the same-scope
+ * and orphan-fold short-circuits in the body cover both that carve-out
+ * and the same-scope case uniformly.
  */
-function renderScopeBracket(scope: Scope | undefined): string {
-  return scope === undefined ? "" : `[${scope}]`;
+function renderScopeBracket(pluginScope: Scope | undefined, mpScope: Scope): string {
+  if (pluginScope === undefined || pluginScope === mpScope) {
+    return "";
+  }
+
+  return `[${pluginScope}]`;
 }
 
 /**
@@ -768,11 +784,16 @@ function composeReasons(
  * compile-time exhaustiveness gate (D-16-10).
  *
  * Token order follows the v1 grammar `icon name [scope] versionToken
- * (status) {reasons}` (MSG-GR-1). Scope bracket is emitted conditionally
- * via `renderScopeBracket(p.scope)` on the 8 variants that declare
- * `scope?`; the `available` / `unavailable` arms unconditionally omit the
- * bracket per MSG-PL-6 / SNM-11 by passing `undefined` to
- * `renderScopeBracket`.
+ * (status) {reasons}` (MSG-GR-1). Scope bracket is emitted via the
+ * orphan-fold contract per D-17.2-01 / D-17.2-02: the 8 scope-bearing arms
+ * pass `(p.scope, mpScope)` to `renderScopeBracket`, which emits the
+ * bracket ONLY when `p.scope !== undefined AND p.scope !== mpScope`. The
+ * `available` / `unavailable` arms unconditionally omit the bracket per
+ * MSG-PL-6 / SNM-11 by passing `(undefined, mpScope)`.
+ *
+ * `mpScope` is threaded from `composeMarketplaceBlock` -> `composePluginLines`
+ * -> here so every per-arm bracket call has the parent marketplace's scope
+ * available.
  *
  * Soft-dep marker injection (D-16-15): only the `installed` / `updated` /
  * `reinstalled` arms carry `dependencies` (Phase 15 D-15-02); those arms
@@ -792,13 +813,17 @@ function composeReasons(
  *   - `failed.cause` / `manual recovery.cause` cause-chain trailers.
  *   - `failed.rollbackPartial[]` child rows.
  */
-function renderPluginRow(p: PluginNotificationMessage, probe: SoftDepStatus): string {
+function renderPluginRow(
+  p: PluginNotificationMessage,
+  probe: SoftDepStatus,
+  mpScope: Scope,
+): string {
   switch (p.status) {
     case "installed":
       return joinTokens([
         ICON_INSTALLED,
         p.name,
-        renderScopeBracket(p.scope),
+        renderScopeBracket(p.scope, mpScope),
         renderVersion(p.version),
         "(installed)",
         composeReasons(
@@ -812,7 +837,7 @@ function renderPluginRow(p: PluginNotificationMessage, probe: SoftDepStatus): st
       return joinTokens([
         ICON_INSTALLED,
         p.name,
-        renderScopeBracket(p.scope),
+        renderScopeBracket(p.scope, mpScope),
         composeVersionArrow(p.from, p.to),
         "(updated)",
         composeReasons(
@@ -826,7 +851,7 @@ function renderPluginRow(p: PluginNotificationMessage, probe: SoftDepStatus): st
       return joinTokens([
         ICON_INSTALLED,
         p.name,
-        renderScopeBracket(p.scope),
+        renderScopeBracket(p.scope, mpScope),
         renderVersion(p.version),
         "(reinstalled)",
         composeReasons(
@@ -840,7 +865,7 @@ function renderPluginRow(p: PluginNotificationMessage, probe: SoftDepStatus): st
       return joinTokens([
         ICON_AVAILABLE,
         p.name,
-        renderScopeBracket(p.scope),
+        renderScopeBracket(p.scope, mpScope),
         renderVersion(p.version),
         "(uninstalled)",
         composeReasons(undefined, false, false, probe),
@@ -850,7 +875,7 @@ function renderPluginRow(p: PluginNotificationMessage, probe: SoftDepStatus): st
         ICON_AVAILABLE,
         p.name,
         // MSG-PL-6 / SNM-11 carve-out: `available` has NO `scope?` field.
-        renderScopeBracket(undefined),
+        renderScopeBracket(undefined, mpScope),
         renderVersion(p.version),
         "(available)",
         composeReasons(undefined, false, false, probe),
@@ -860,7 +885,7 @@ function renderPluginRow(p: PluginNotificationMessage, probe: SoftDepStatus): st
         ICON_UNINSTALLABLE,
         p.name,
         // MSG-PL-6 / SNM-11 carve-out: `unavailable` has NO `scope?` field.
-        renderScopeBracket(undefined),
+        renderScopeBracket(undefined, mpScope),
         renderVersion(p.version),
         "(unavailable)",
         composeReasons(p.reasons, false, false, probe),
@@ -869,7 +894,7 @@ function renderPluginRow(p: PluginNotificationMessage, probe: SoftDepStatus): st
       return joinTokens([
         ICON_INSTALLED,
         p.name,
-        renderScopeBracket(p.scope),
+        renderScopeBracket(p.scope, mpScope),
         renderVersion(p.version),
         "(upgradable)",
         composeReasons(p.reasons, false, false, probe),
@@ -878,7 +903,7 @@ function renderPluginRow(p: PluginNotificationMessage, probe: SoftDepStatus): st
       return joinTokens([
         ICON_UNINSTALLABLE,
         p.name,
-        renderScopeBracket(p.scope),
+        renderScopeBracket(p.scope, mpScope),
         renderVersion(p.version),
         "(skipped)",
         composeReasons(p.reasons, false, false, probe),
@@ -887,7 +912,7 @@ function renderPluginRow(p: PluginNotificationMessage, probe: SoftDepStatus): st
       return joinTokens([
         ICON_UNINSTALLABLE,
         p.name,
-        renderScopeBracket(p.scope),
+        renderScopeBracket(p.scope, mpScope),
         renderVersion(p.version),
         "(failed)",
         composeReasons(p.reasons, false, false, probe),
@@ -896,7 +921,7 @@ function renderPluginRow(p: PluginNotificationMessage, probe: SoftDepStatus): st
       return joinTokens([
         ICON_UNINSTALLABLE,
         p.name,
-        renderScopeBracket(p.scope),
+        renderScopeBracket(p.scope, mpScope),
         renderVersion(p.version),
         // `manual recovery` discriminator preserved verbatim WITH A SPACE
         // per CONTEXT `<specifics>` + shared/grammar/status-tokens.ts:47.
@@ -1070,8 +1095,12 @@ function composeRollbackPartialLines(p: PluginNotificationMessage): string[] {
  * any rollbackPartial child rows + nested phase-cause trailers (D-16-08). The
  * caller pushes these lines into the marketplace block's accumulator in order.
  */
-function composePluginLines(p: PluginNotificationMessage, probe: SoftDepStatus): string[] {
-  const lines: string[] = [`  ${renderPluginRow(p, probe)}`];
+function composePluginLines(
+  p: PluginNotificationMessage,
+  probe: SoftDepStatus,
+  mpScope: Scope,
+): string[] {
+  const lines: string[] = [`  ${renderPluginRow(p, probe, mpScope)}`];
 
   if (p.status === "failed" || p.status === "manual recovery") {
     const trailer = renderIndentedCauseChain(p.cause, "    ");
@@ -1097,7 +1126,7 @@ function composeMarketplaceBlock(mp: MarketplaceNotificationMessage, probe: Soft
   // soft-dep marker can leak onto an mp-level row.
   const lines: string[] = [renderMpHeader(mp, probe)];
   for (const p of mp.plugins) {
-    lines.push(...composePluginLines(p, probe));
+    lines.push(...composePluginLines(p, probe, mp.scope));
   }
 
   return lines.join("\n");
