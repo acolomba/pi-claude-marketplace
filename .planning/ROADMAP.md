@@ -201,13 +201,13 @@ Plans:
 7. `docs/messaging-style-guide.md` MarketplaceStatus pointer says `7 literal strings`; any drift prose refreshed.
 8. `npm run check` exits 0.
 
-**Plans:** 4 plans
+**Plans:** 1/4 plans executed
 
 Plans:
 
 **Wave 1**
 
-- [ ] 17.1-01-PLAN.md -- Extend MARKETPLACE_STATUSES 4→7 + add reasons? on MarketplaceNotificationMessage + update notify-types.test.ts closed-set + shape proofs (D-17.1-01, D-17.1-05)
+- [x] 17.1-01-PLAN.md -- Extend MARKETPLACE_STATUSES 4→7 + add reasons? on MarketplaceNotificationMessage + update notify-types.test.ts closed-set + shape proofs (D-17.1-01, D-17.1-05)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -303,7 +303,7 @@ Plans:
 | 15. Type Model & ADR Refresh                                         | v1.4      | 3/3 | Complete    | 2026-05-25 |
 | 16. Renderer & Public API (Alongside V1)                             | v1.4      | 6/6 | Complete    | 2026-05-26 |
 | 17. Spec Rewrite & Catalog UAT Migration                             | v1.4      | 3/3 | Complete   | 2026-05-26 |
-| 17.1. V2 Grammar Amendment: Autoupdate Surface (INSERTED)            | v1.4      | 0/4            | Not started | --         |
+| 17.1. V2 Grammar Amendment: Autoupdate Surface (INSERTED)            | v1.4      | 1/4 | In Progress|  |
 | 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 0/?            | Not started | --         |
 | 19. Migration Wave 2 -- Plugin Orchestrator Family                   | v1.4      | 0/?            | Not started | --         |
 | 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 0/?            | Not started | --         |
