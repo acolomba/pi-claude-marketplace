@@ -16,43 +16,52 @@ export type { Reason } from "./grammar/reasons.ts";
 /**
  * shared/notify.ts -- the SOLE sanctioned ctx.ui.notify call site (D-07).
  *
- * Severity is part of the function name. The Pi API's `notify(msg, type?)`
+ * Severity is structural, not a field. The Pi API's `notify(msg, type?)`
  * accepts a magic-string `"info" | "warning" | "error"` second arg; a typo
  * like `"warining"` silently degrades to `"info"` because there is no
- * exhaustiveness check. Severity-named wrappers eliminate that class of bug.
+ * exhaustiveness check. The V1 severity-named wrappers eliminate that
+ * class of bug; the V2 entry points compute severity from message
+ * contents at notify time (D-16-11) and route through the same
+ * sanctioned Pi-API call.
  *
- * The eslint per-file override in eslint.config.js (D-06 / BLOCK B) disables
- * `no-restricted-syntax` for this file, so inline `eslint-disable-next-line`
- * comments are unnecessary here (they would trigger
- * `reportUnusedDisableDirectives` warnings). The per-file override is the
- * single audit surface; this comment documents the sanctioned-use intent in
- * its place.
+ * The eslint per-file override in eslint.config.js (D-06 / BLOCK B)
+ * disables `no-restricted-syntax` for this file, so inline
+ * `eslint-disable-next-line` comments are unnecessary here. The per-file
+ * override is the single audit surface; this comment documents the
+ * sanctioned-use intent in its place.
  *
- * SANCTIONED WRAPPERS (CMC-19 Phase 12 affirmation, governed by style guide
- * §10 MSG-SR-1..7):
- *
- *   (§10 numbering: MSG-SR-1..3 govern single-shot severity routing -- one
- *    rule per wrapper for the non-cascade case; MSG-SR-4..6 govern cascade
- *    summary routing -- those rules pick BETWEEN notifySuccess and
- *    notifyWarning for cascade summaries and never assign to notifyError or
- *    notifyUsageError; MSG-SR-7 is the dedicated usage-error rule routing to
- *    notifyUsageError.)
+ * V1 severity-named wrappers (governed by style guide §10 MSG-SR-1..7).
+ * Phase 21 deletes these once every orchestrator/edge call site has
+ * migrated to the V2 entry points (SNM-22 closure gate):
  *
  *   - notifySuccess(ctx, message)                -- default severity (MSG-SR-1; cascade variant MSG-SR-4)
  *   - notifyWarning(ctx, message)                -- "warning" severity (MSG-SR-2; cascade variant MSG-SR-5; MSG-SR-6 forbids cascade notifyError)
  *   - notifyError(ctx, message, cause?)          -- "error" severity (MSG-SR-3)
  *   - notifyUsageError(ctx, message, usageBlock) -- "error" severity (MSG-SR-7)
  *
- * Phase 13 composers return strings that flow VERBATIM into these wrappers;
- * no fifth wrapper, no structured-payload arg, no cascade-summary helper is
- * added (D-CMC-11). Severity remains structural via the wrapper name --
- * never embedded as a "[error]" / "[warning]" prefix in message text
+ * V2 structured entry points (Phase 16 SNM-12..18):
+ *
+ *   - notify(ctx, pi, NotificationMessage)
+ *       Renders the marketplace/plugin tree to a single string and routes
+ *       through ctx.ui.notify with computed severity (D-16-11) and
+ *       computed reload-hint trailer (D-16-12 / D-16-13). Single
+ *       softDepStatus(pi) probe at entry threaded through the renderer
+ *       so per-row {requires pi-subagents} / {requires pi-mcp} markers
+ *       are injected at render time (D-16-15).
+ *   - notifyUsageError(ctx, UsageErrorMessage)  [V2 overload]
+ *       2-arg structured form; coexists byte-equal with the V1 3-arg
+ *       overload above. Phase 21 deletes the V1 overload.
+ *
+ * The V1 and V2 surfaces coexist byte-for-byte during the Phase 16-20
+ * migration window. Severity remains structural via either the wrapper
+ * name (V1) or the renderer's content-driven ladder (V2) -- never
+ * embedded as a `"[error]"` / `"[warning]"` prefix in message text
  * (PRD §6.12 ES-2, reaffirmed by MSG-SR-7).
  *
- * Import path (D-CMC-13): callers import the wrappers directly from this
- * file (e.g., `import { notifySuccess } from "../../shared/notify.ts"`). No
- * presentation/ barrel re-exports the wrappers in Phase 12; the existing
- * direct-import path is the stable surface.
+ * Import path: callers import the surface directly from this file
+ * (e.g., `import { notify } from "../../shared/notify.ts"`). No
+ * presentation/ barrel re-exports any of these; the direct-import path
+ * is the stable surface.
  */
 
 /** Default-severity notify -- success path. */
@@ -92,16 +101,27 @@ export function notifyError(ctx: ExtensionContext, message: string, cause?: unkn
 
 /**
  * Usage error notify (ES-3 primitive). Surfaces a usage-style error at
- * `error` severity with the relevant Usage block appended after a blank line.
+ * `error` severity with the relevant Usage block appended after a blank
+ * line. Two overload signatures coexist:
  *
- * Phase 6 will assemble actual Usage block strings (from PRD §6.12 ES-5
- * placeholders + per-subcommand argument tables) and call this primitive at
- * every argument-validation failure site. Phase 1 ships the primitive only;
- * call sites do not yet exist.
+ *   - V1 3-arg: `notifyUsageError(ctx, message, usageBlock)`
+ *       The pre-Phase-16 form, consumed by every argument-validation
+ *       failure site across orchestrators and edge handlers. Live and
+ *       byte-stable across the v1.4 migration window. Phase 21 deletes
+ *       this overload once every call site has migrated to the V2 form
+ *       (SNM-22 closure gate).
  *
- * Contract: the on-the-wire string is `${message}\n\n${usageBlock}`. The
- * blank line between message and Usage block is part of the user contract;
- * tests in Plan 06 assert it byte-for-byte.
+ *   - V2 structured: `notifyUsageError(ctx, UsageErrorMessage)`
+ *       The Phase 16 structured form (SNM-13, D-16-02). Coexists
+ *       byte-equal with V1 -- both emit the same on-the-wire string
+ *       `${message}\n\n${usage}` at "error" severity. Future call sites
+ *       prefer the V2 form; the V1 form is retained only for V1's
+ *       installed callers.
+ *
+ * Contract (both overloads): the on-the-wire string is
+ * `${message}\n\n${usageBlock}` (V1) or `${message.message}\n\n${message.usage}`
+ * (V2). The blank line between message and Usage block is part of the
+ * user contract; tests/shared/notify-v2.test.ts asserts it byte-for-byte.
  */
 /** V1 3-arg overload signature (Phase 21 deletes). */
 export function notifyUsageError(ctx: ExtensionContext, message: string, usageBlock: string): void;
@@ -620,8 +640,10 @@ function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus
         .join(" ");
     }
 
-    default:
-      return assertNever(mp.status);
+    default: {
+      assertNever(mp.status);
+      return "";
+    }
   }
 }
 
@@ -631,9 +653,11 @@ function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus
 // SNM-17 / SNM-18: the v2 per-plugin row grammar lives HERE as the sole
 // site. SNM-16 / D-16-15: soft-dep markers are injected at render time from
 // the per-row `dependencies?` declaration + the threaded `SoftDepStatus`
-// probe. D-16-10: the switch ends with `default: return assertNever(p);`
-// so a future `PluginNotificationMessage` variant becomes a compile error
-// at this switch.
+// probe. D-16-10 / Phase 17.2 WR-06: the switch ends with the hardened
+// shape `default: { assertNever(p); return ""; }` so a future
+// `PluginNotificationMessage` variant becomes a compile error at this
+// switch (the typecheck relies on `assertNever`'s throw at runtime, not
+// on its `never` return type via a value-returning expression).
 //
 // Bounded duplication of literals from `presentation/compact-line.ts` and
 // `presentation/version-arrow.ts` is intentional (D-16-04 / D-16-09) and
@@ -670,52 +694,45 @@ function renderVersion(version: string | undefined): string {
 }
 
 /**
- * Conditional `[<scope>]` emitter. SOLE site for scope-bracket emission
- * inside `renderPluginRow` (BLOCKER-1 fix): per-arm code MUST funnel
- * `p.scope` through this helper so the bracket renders `""` when scope is
- * undefined (the common case -- the marketplace header carries the
- * `[mp.scope]` token; the per-row bracket only appears in the orphan-fold
- * case per D-16-17 + SNM-11). For `available` / `unavailable` variants
- * (which have NO `scope?` field at all per MSG-PL-6 / SNM-11 carve-out),
- * arm code passes `undefined` explicitly so the bracket unconditionally
- * collapses.
+ * Conditional `[<pluginScope>]` emitter -- orphan-fold contract per D-17.2-01
+ * / D-17.2-02. SOLE site for plugin-row scope-bracket emission inside
+ * `renderPluginRow`: per-arm code MUST funnel `p.scope` (or `undefined` for
+ * the MSG-PL-6 / SNM-11 carve-out variants) AND the parent marketplace scope
+ * through this helper.
+ *
+ * The bracket emits ONLY when `pluginScope !== undefined AND
+ * pluginScope !== mpScope` -- the orphan-fold case from D-16-17. When the
+ * plugin's scope matches the parent marketplace's scope, the bracket is
+ * suppressed because the marketplace header already carries the
+ * `[mpScope]` token; emitting a redundant per-row bracket would
+ * contradict the binding contract at `docs/messaging-style-guide.md:73`
+ * ("plugin row emits `[<scope>]` ONLY when its scope differs from the
+ * parent marketplace's scope").
+ *
+ * `mpScope` is non-optional: the renderer always has the parent
+ * marketplace's scope from `composeMarketplaceBlock` threading. The
+ * `available` / `unavailable` arms (which have NO `scope?` field per
+ * MSG-PL-6 / SNM-11) call with `pluginScope: undefined`; the same-scope
+ * and orphan-fold short-circuits in the body cover both that carve-out
+ * and the same-scope case uniformly.
  */
-function renderScopeBracket(scope: Scope | undefined): string {
-  return scope === undefined ? "" : `[${scope}]`;
+function renderScopeBracket(pluginScope: Scope | undefined, mpScope: Scope): string {
+  if (pluginScope === undefined || pluginScope === mpScope) {
+    return "";
+  }
+
+  return `[${pluginScope}]`;
 }
 
 /**
  * Compose the MSG-PL-3 version-transition slot for the `updated` arm
- * (`<from> → v<to>`) and as a defensive helper for adjacent arms. Mirrors
- * `presentation/version-arrow.ts` lines 33-50 byte-for-byte; duplicated
- * inline per D-16-04.
- *
- * Per the plan-04 contract this helper returns `""` (not `undefined`) so
- * the `joinTokens` discipline collapses the slot cleanly when both sides
- * are undefined. For the `updated` variant, Phase 15 D-15-04 declares
- * `from` / `to` as REQUIRED so the both-defined branch is the live path;
- * the only-`to` and only-`from` branches are defensive (no current
- * caller in this plan exercises them, but they preserve the
- * version-arrow.ts contract).
+ * (`<from> → v<to>`). Caller precondition (Phase 15 D-15-04): both
+ * `from` and `to` are REQUIRED on the `updated` variant, so the helper
+ * is only ever invoked with both values defined. Sole caller is the
+ * `updated` arm in renderPluginRow.
  */
-function composeVersionArrow(from: string | undefined, to: string | undefined): string {
-  if (from === undefined && to === undefined) {
-    return "";
-  }
-
-  if (from !== undefined && to !== undefined) {
-    return `${from} → v${to}`;
-  }
-
-  if (to !== undefined) {
-    return renderVersion(to);
-  }
-
-  // `from` is defined and `to` is undefined -- defensive branch matching
-  // `presentation/version-arrow.ts:49`. Pass through unchanged (no `v`
-  // prefix, mirroring the source helper's intent that `from` is the
-  // bare value).
-  return from ?? "";
+function composeVersionArrow(from: string, to: string): string {
+  return `${from} → v${to}`;
 }
 
 /**
@@ -768,11 +785,16 @@ function composeReasons(
  * compile-time exhaustiveness gate (D-16-10).
  *
  * Token order follows the v1 grammar `icon name [scope] versionToken
- * (status) {reasons}` (MSG-GR-1). Scope bracket is emitted conditionally
- * via `renderScopeBracket(p.scope)` on the 8 variants that declare
- * `scope?`; the `available` / `unavailable` arms unconditionally omit the
- * bracket per MSG-PL-6 / SNM-11 by passing `undefined` to
- * `renderScopeBracket`.
+ * (status) {reasons}` (MSG-GR-1). Scope bracket is emitted via the
+ * orphan-fold contract per D-17.2-01 / D-17.2-02: the 8 scope-bearing arms
+ * pass `(p.scope, mpScope)` to `renderScopeBracket`, which emits the
+ * bracket ONLY when `p.scope !== undefined AND p.scope !== mpScope`. The
+ * `available` / `unavailable` arms unconditionally omit the bracket per
+ * MSG-PL-6 / SNM-11 by passing `(undefined, mpScope)`.
+ *
+ * `mpScope` is threaded from `composeMarketplaceBlock` -> `composePluginLines`
+ * -> here so every per-arm bracket call has the parent marketplace's scope
+ * available.
  *
  * Soft-dep marker injection (D-16-15): only the `installed` / `updated` /
  * `reinstalled` arms carry `dependencies` (Phase 15 D-15-02); those arms
@@ -792,13 +814,17 @@ function composeReasons(
  *   - `failed.cause` / `manual recovery.cause` cause-chain trailers.
  *   - `failed.rollbackPartial[]` child rows.
  */
-function renderPluginRow(p: PluginNotificationMessage, probe: SoftDepStatus): string {
+function renderPluginRow(
+  p: PluginNotificationMessage,
+  probe: SoftDepStatus,
+  mpScope: Scope,
+): string {
   switch (p.status) {
     case "installed":
       return joinTokens([
         ICON_INSTALLED,
         p.name,
-        renderScopeBracket(p.scope),
+        renderScopeBracket(p.scope, mpScope),
         renderVersion(p.version),
         "(installed)",
         composeReasons(
@@ -812,7 +838,7 @@ function renderPluginRow(p: PluginNotificationMessage, probe: SoftDepStatus): st
       return joinTokens([
         ICON_INSTALLED,
         p.name,
-        renderScopeBracket(p.scope),
+        renderScopeBracket(p.scope, mpScope),
         composeVersionArrow(p.from, p.to),
         "(updated)",
         composeReasons(
@@ -826,7 +852,7 @@ function renderPluginRow(p: PluginNotificationMessage, probe: SoftDepStatus): st
       return joinTokens([
         ICON_INSTALLED,
         p.name,
-        renderScopeBracket(p.scope),
+        renderScopeBracket(p.scope, mpScope),
         renderVersion(p.version),
         "(reinstalled)",
         composeReasons(
@@ -840,7 +866,7 @@ function renderPluginRow(p: PluginNotificationMessage, probe: SoftDepStatus): st
       return joinTokens([
         ICON_AVAILABLE,
         p.name,
-        renderScopeBracket(p.scope),
+        renderScopeBracket(p.scope, mpScope),
         renderVersion(p.version),
         "(uninstalled)",
         composeReasons(undefined, false, false, probe),
@@ -850,7 +876,7 @@ function renderPluginRow(p: PluginNotificationMessage, probe: SoftDepStatus): st
         ICON_AVAILABLE,
         p.name,
         // MSG-PL-6 / SNM-11 carve-out: `available` has NO `scope?` field.
-        renderScopeBracket(undefined),
+        renderScopeBracket(undefined, mpScope),
         renderVersion(p.version),
         "(available)",
         composeReasons(undefined, false, false, probe),
@@ -860,7 +886,7 @@ function renderPluginRow(p: PluginNotificationMessage, probe: SoftDepStatus): st
         ICON_UNINSTALLABLE,
         p.name,
         // MSG-PL-6 / SNM-11 carve-out: `unavailable` has NO `scope?` field.
-        renderScopeBracket(undefined),
+        renderScopeBracket(undefined, mpScope),
         renderVersion(p.version),
         "(unavailable)",
         composeReasons(p.reasons, false, false, probe),
@@ -869,7 +895,7 @@ function renderPluginRow(p: PluginNotificationMessage, probe: SoftDepStatus): st
       return joinTokens([
         ICON_INSTALLED,
         p.name,
-        renderScopeBracket(p.scope),
+        renderScopeBracket(p.scope, mpScope),
         renderVersion(p.version),
         "(upgradable)",
         composeReasons(p.reasons, false, false, probe),
@@ -878,7 +904,7 @@ function renderPluginRow(p: PluginNotificationMessage, probe: SoftDepStatus): st
       return joinTokens([
         ICON_UNINSTALLABLE,
         p.name,
-        renderScopeBracket(p.scope),
+        renderScopeBracket(p.scope, mpScope),
         renderVersion(p.version),
         "(skipped)",
         composeReasons(p.reasons, false, false, probe),
@@ -887,7 +913,7 @@ function renderPluginRow(p: PluginNotificationMessage, probe: SoftDepStatus): st
       return joinTokens([
         ICON_UNINSTALLABLE,
         p.name,
-        renderScopeBracket(p.scope),
+        renderScopeBracket(p.scope, mpScope),
         renderVersion(p.version),
         "(failed)",
         composeReasons(p.reasons, false, false, probe),
@@ -896,15 +922,17 @@ function renderPluginRow(p: PluginNotificationMessage, probe: SoftDepStatus): st
       return joinTokens([
         ICON_UNINSTALLABLE,
         p.name,
-        renderScopeBracket(p.scope),
+        renderScopeBracket(p.scope, mpScope),
         renderVersion(p.version),
         // `manual recovery` discriminator preserved verbatim WITH A SPACE
         // per CONTEXT `<specifics>` + shared/grammar/status-tokens.ts:47.
         "(manual recovery)",
         composeReasons(p.reasons, false, false, probe),
       ]);
-    default:
-      return assertNever(p);
+    default: {
+      assertNever(p);
+      return "";
+    }
   }
 }
 
@@ -1070,8 +1098,12 @@ function composeRollbackPartialLines(p: PluginNotificationMessage): string[] {
  * any rollbackPartial child rows + nested phase-cause trailers (D-16-08). The
  * caller pushes these lines into the marketplace block's accumulator in order.
  */
-function composePluginLines(p: PluginNotificationMessage, probe: SoftDepStatus): string[] {
-  const lines: string[] = [`  ${renderPluginRow(p, probe)}`];
+function composePluginLines(
+  p: PluginNotificationMessage,
+  probe: SoftDepStatus,
+  mpScope: Scope,
+): string[] {
+  const lines: string[] = [`  ${renderPluginRow(p, probe, mpScope)}`];
 
   if (p.status === "failed" || p.status === "manual recovery") {
     const trailer = renderIndentedCauseChain(p.cause, "    ");
@@ -1097,7 +1129,7 @@ function composeMarketplaceBlock(mp: MarketplaceNotificationMessage, probe: Soft
   // soft-dep marker can leak onto an mp-level row.
   const lines: string[] = [renderMpHeader(mp, probe)];
   for (const p of mp.plugins) {
-    lines.push(...composePluginLines(p, probe));
+    lines.push(...composePluginLines(p, probe, mp.scope));
   }
 
   return lines.join("\n");
