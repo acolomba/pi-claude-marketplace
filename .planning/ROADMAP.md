@@ -75,6 +75,7 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 - [x] **Phase 16: Renderer & Public API (Alongside V1)** -- `notify(ctx, payload)` and `notifyUsageError(ctx, payload)` exported from `shared/notify.ts`; internal switch with `assertNever`; computed severity; computed reload hint; renderer-time dependency probe; per-status unit tests (completed 2026-05-26)
 - [x] **Phase 17: Spec Rewrite & Catalog UAT Migration** -- `docs/messaging-style-guide.md` v2.0 + `docs/output-catalog.md` rewritten to always-marketplace-header spec; catalog UAT runner fed by structured `NotificationMessage` fixtures (completed 2026-05-26)
 - [x] **Phase 17.1: V2 Grammar Amendment: Autoupdate Surface (INSERTED)** -- Amend the V2 type model + renderer + catalog + ADR to restore the user-visible distinction between fresh autoupdate enable/disable, idempotent flips, and failures collapsed by Phase 17 into a single `(updated)` status. Implements the user-locked design from Phase 18 D-18-05 so Plan 18-02 (autoupdate.ts call-site migration) can construct typed messages that round-trip through `notify()` to byte-correct V2 output. (completed 2026-05-26)
+- [ ] **Phase 17.2: renderScopeBracket orphan-fold contract fix (INSERTED)** -- Fix the renderer to honor the documented orphan-fold contract: `renderScopeBracket(pluginScope, mpScope)` returns `""` when scopes match, thread `mp.scope` through `composePluginLines`/`renderPluginRow`, update the 10 call sites. Fold in WR-01..WR-06 (docstring refresh, composeVersionArrow simplification, soft-dep probe coverage tests, dead-helper deletion, exhaustiveness gate hardening, catalog narrative tightening) as a single notify.ts hygiene sweep. Closes CR-01 + WR-01..WR-06 from the 17.1 code review; unblocks Phase 18.
 - [ ] **Phase 18: Migration Wave 1 -- Marketplace Orchestrator Family** -- Migrate all `orchestrators/marketplace/*` call sites to `notify(ctx, structured)`; retire MSG-* lint globs covering marketplace orchestrators
 - [ ] **Phase 19: Migration Wave 2 -- Plugin Orchestrator Family** -- Migrate all `orchestrators/plugin/*` call sites to `notify(ctx, structured)`; retire MSG-* lint globs covering plugin orchestrators
 - [ ] **Phase 20: Migration Wave 3 -- Edge Handlers & UsageError** -- Migrate all `edge/handlers/*` call sites; migrate all `notifyUsageError(ctx, msg, usage)` sites to V2 `notifyUsageError(ctx, structuredUsageError)`; retire remaining MSG-* lint globs
@@ -181,6 +182,42 @@ Plans:
 **Wave 3** *(blocked on Wave 2 completion)*
 
 - [x] 17-03-PLAN.md -- catalog-uat.test.ts rewrite to drive notify() via structured fixtures + REQUIREMENTS.md SNM-19/20/31 completion flips (SNM-31; D-17-03, D-17-05, D-17-06)
+
+### Phase 17.2: renderScopeBracket orphan-fold contract fix (INSERTED)
+
+**Goal:** Fix the divergence between the documented orphan-fold plugin-row scope-bracket contract (D-16-17 + `docs/messaging-style-guide.md:73` + `docs/output-catalog.md:39/46/196`) and the current `renderScopeBracket` implementation at `extensions/pi-claude-marketplace/shared/notify.ts:683-685`. Thread `mp.scope` through `composePluginLines`/`renderPluginRow`; update all 10 call sites to the 2-arg `renderScopeBracket(p.scope, mp.scope)` form; sync the catalog byte form + fixture; fold in the remaining six 17.1 review warnings (WR-01..WR-06) as a single notify.ts / pi-api.ts test / catalog hygiene sweep. Unblocks Phase 18.
+
+**Requirements:** None directly (pure tech-debt fix closing the 17.1 review CR-01 + WR-01..WR-06 findings; no SNM-* requirement closes in this phase. Per D-17.2-09 there is no Phase-18 hand-off scaffolding beyond fixing the renderer.)
+
+**Depends on:** Phase 17.1
+
+**Success Criteria** (what must be TRUE):
+
+1. `renderScopeBracket(pluginScope: Scope | undefined, mpScope: Scope): string` returns `""` when `pluginScope === undefined || pluginScope === mpScope`, otherwise `` `[${pluginScope}]` ``.
+2. `mpScope` is threaded from `composeMarketplaceBlock` through `composePluginLines` into `renderPluginRow`; all 10 per-arm `renderScopeBracket` call sites use the 2-arg form (8 with `p.scope`, 2 carve-out arms with `undefined`).
+3. Four new byte-equality unit tests in `tests/shared/notify-v2.test.ts` lock the orphan-fold contract for representative variants (same-scope `installed`, orphan-fold `installed`, same-scope `updated`, orphan-fold `failed`).
+4. `docs/output-catalog.md:191` byte form drops the `[user]` bracket on the same-scope `alpha v1.0.0` row inside the `project-orphan-folded` state; narratives at `:182` and `:196` accurately describe the corrected rule.
+5. The `project-orphan-folded` fixture at `tests/architecture/catalog-uat.test.ts:282-313` has the misleading 4-line workaround comment removed; the `void piWithSubagentsLoaded;` dead-code hack at lines 1328-1332 is deleted along with its rationalisation comment.
+6. `composeVersionArrow` has signature `(from: string, to: string): string` with a single live branch (WR-03); the top-of-file docstring (lines 16-56) and `notifyUsageError` preamble (lines 97-105) are refreshed without historical-fiction futurism clauses (WR-01); both default arms in `renderMpHeader` AND `renderPluginRow` use the hardened `{ assertNever(...); return ""; }` shape (WR-06).
+7. Three new tests in `tests/platform/pi-api.test.ts` cover the WR-04 boundary branches (`pi-mcp-adapter` source-substring boundary; `try/catch` fallback hardening; `tool.name === undefined` boundary).
+8. `npm run check` exits 0; catalog UAT byte-equality is GREEN.
+
+**Plans:** 4/4 plans
+
+Plans:
+
+**Wave 1** *(parallel-safe: plan 01 modifies notify.ts + notify-v2.test.ts; plan 03 modifies pi-api.test.ts; no overlap)*
+
+- [ ] 17.2-01-PLAN.md -- CR-01 renderScopeBracket signature fix + threading + 10 call sites + 4 new byte-equality unit tests + WR-01/WR-03/WR-06 notify.ts hygiene sweep (D-17.2-01, D-17.2-02, D-17.2-03, D-17.2-04, D-17.2-07, D-17.2-10, D-17.2-11)
+- [ ] 17.2-03-PLAN.md -- WR-04 soft-dep probe coverage tests in tests/platform/pi-api.test.ts (3 new tests for source-substring boundary, try/catch fallback, tool.name === undefined boundary) (D-17.2-08)
+
+**Wave 2** *(blocked on plan 01 completion)*
+
+- [ ] 17.2-02-PLAN.md -- docs/output-catalog.md byte form update at line 191 + narrative tightening at lines 182/196 + tests/architecture/catalog-uat.test.ts project-orphan-folded fixture cleanup + WR-05 dead-helper deletion (D-17.2-05, D-17.2-06)
+
+**Wave 3** *(blocked on Waves 1+2 completion)*
+
+- [ ] 17.2-04-PLAN.md -- Final `npm run check` GREEN gate + WR-01..WR-06 + CR-01 closure mapping recorded in SUMMARY (D-17.2-04 rollup, D-17.2-09, D-17.2-10, D-17.2-11)
 
 ### Phase 17.1: V2 Grammar Amendment: Autoupdate Surface (INSERTED)
 
@@ -304,6 +341,7 @@ Plans:
 | 16. Renderer & Public API (Alongside V1)                             | v1.4      | 6/6 | Complete    | 2026-05-26 |
 | 17. Spec Rewrite & Catalog UAT Migration                             | v1.4      | 3/3 | Complete   | 2026-05-26 |
 | 17.1. V2 Grammar Amendment: Autoupdate Surface (INSERTED)            | v1.4      | 4/4 | Complete   | 2026-05-26 |
+| 17.2. renderScopeBracket orphan-fold contract fix (INSERTED)         | v1.4      | 0/4 | Not started | --         |
 | 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 0/?            | Not started | --         |
 | 19. Migration Wave 2 -- Plugin Orchestrator Family                   | v1.4      | 0/?            | Not started | --         |
 | 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 0/?            | Not started | --         |

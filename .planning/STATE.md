@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Structured Notification Messages
 status: executing
-last_updated: "2026-05-26T21:23:50.294Z"
-last_activity: 2026-05-26 -- Phase 17.1 execution started
+last_updated: "2026-05-26T21:56:38.193Z"
+last_activity: 2026-05-26 -- Phase 17.2 planning complete
 progress:
   total_phases: 9
   completed_phases: 4
-  total_plans: 16
+  total_plans: 20
   completed_plans: 16
   percent: 44
 ---
@@ -19,14 +19,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-25)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 17.1 — v2-grammar-amendment-autoupdate-surface
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 17.1 -- v2-grammar-amendment-autoupdate-surface
 
 ## Current Position
 
-Phase: 17.1 (v2-grammar-amendment-autoupdate-surface) — EXECUTING
+Phase: 17.1 (v2-grammar-amendment-autoupdate-surface) -- EXECUTING
 Plan: 1 of 4
-Status: Executing Phase 17.1
-Last activity: 2026-05-26 -- Phase 17.1 execution started
+Status: Ready to execute
+Last activity: 2026-05-26 -- Phase 17.2 planning complete
 
 ## Performance Metrics
 
