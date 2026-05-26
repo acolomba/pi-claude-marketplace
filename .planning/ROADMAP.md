@@ -72,7 +72,7 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 - Atomic commits per plan; no commits to `main`.
 
 - [x] **Phase 15: Type Model & ADR Refresh** -- Pure type definitions in `shared/notify.ts` (`NotificationMessage`, `MarketplaceNotificationMessage`, `PluginNotificationMessage`, `PluginStatus`, `MarketplaceStatus`, `Dependency`, `MarketplaceDetails`, `UsageErrorMessage`) plus refreshed source-of-truth ADR (completed 2026-05-25)
-- [ ] **Phase 16: Renderer & Public API (Alongside V1)** -- `notify(ctx, payload)` and `notifyUsageError(ctx, payload)` exported from `shared/notify.ts`; internal switch with `assertNever`; computed severity; computed reload hint; renderer-time dependency probe; per-status unit tests
+- [x] **Phase 16: Renderer & Public API (Alongside V1)** -- `notify(ctx, payload)` and `notifyUsageError(ctx, payload)` exported from `shared/notify.ts`; internal switch with `assertNever`; computed severity; computed reload hint; renderer-time dependency probe; per-status unit tests (completed 2026-05-26)
 - [ ] **Phase 17: Spec Rewrite & Catalog UAT Migration** -- `docs/messaging-style-guide.md` v2.0 + `docs/output-catalog.md` rewritten to always-marketplace-header spec; catalog UAT runner fed by structured `NotificationMessage` fixtures
 - [ ] **Phase 18: Migration Wave 1 -- Marketplace Orchestrator Family** -- Migrate all `orchestrators/marketplace/*` call sites to `notify(ctx, structured)`; retire MSG-* lint globs covering marketplace orchestrators
 - [ ] **Phase 19: Migration Wave 2 -- Plugin Orchestrator Family** -- Migrate all `orchestrators/plugin/*` call sites to `notify(ctx, structured)`; retire MSG-* lint globs covering plugin orchestrators
@@ -125,7 +125,7 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 4. Per-status unit tests exist for every variant of `PluginNotificationMessage` (10 variants) and every value of `MarketplaceStatus` (4 values), passing a structured payload through a mock `ctx` and asserting on the exact string passed to `ctx.ui.notify`. Tests cover empty `plugins: []`, single-plugin, multi-plugin, orphan-fold (`scope?` set), `rollbackPartial`, and multi-cause cascades.
 5. Catalog UAT (`tests/architecture/catalog-uat.test.ts`) still passes byte-equality against V1 callsites unchanged; `npm run check` stays GREEN.
 
-**Plans:** 5/6 plans executed
+**Plans:** 6/6 plans complete
 Plans:
 **Wave 1**
 
@@ -149,7 +149,7 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 16-06-PLAN.md -- Create tests/shared/notify-v2.test.ts with mini-spec header and >=20 per-variant unit tests (SNM-30, D-16-16..D-16-18)
+- [x] 16-06-PLAN.md -- Create tests/shared/notify-v2.test.ts with mini-spec header and >=20 per-variant unit tests (SNM-30, D-16-16..D-16-18)
 
 ### Phase 17: Spec Rewrite & Catalog UAT Migration
 
@@ -254,7 +254,7 @@ Plans:
 | 14.1. CMC-13 import propagation closure                              | v1.3      | 2/2            | Complete    | 2026-05-24 |
 | 14.2. CR-01 + retroactive Phase 12/14.1 gates                        | v1.3      | 5/5            | Complete    | 2026-05-24 |
 | 15. Type Model & ADR Refresh                                         | v1.4      | 3/3 | Complete    | 2026-05-25 |
-| 16. Renderer & Public API (Alongside V1)                             | v1.4      | 5/6 | In Progress|  |
+| 16. Renderer & Public API (Alongside V1)                             | v1.4      | 6/6 | Complete   | 2026-05-26 |
 | 17. Spec Rewrite & Catalog UAT Migration                             | v1.4      | 0/?            | Not started | --         |
 | 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 0/?            | Not started | --         |
 | 19. Migration Wave 2 -- Plugin Orchestrator Family                   | v1.4      | 0/?            | Not started | --         |
