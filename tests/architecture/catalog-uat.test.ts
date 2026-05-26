@@ -1242,28 +1242,48 @@ const FIXTURES: FixtureMap = {
   // /claude:plugin marketplace autoupdate -- marketplace-only flag flip.
   // -------------------------------------------------------------------------
   "/claude:plugin marketplace autoupdate <enable|disable> <name>": {
-    "enable-mixed": {
+    "enable-fresh": {
       pi: piWithBothLoaded(),
       message: {
+        marketplaces: [{ name: "foo", scope: "user", status: "autoupdate enabled", plugins: [] }],
+      },
+    },
+
+    "disable-fresh": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [{ name: "foo", scope: "user", status: "autoupdate disabled", plugins: [] }],
+      },
+    },
+
+    "enable-idempotent": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
         marketplaces: [
-          { name: "local-mp", scope: "user", status: "updated", plugins: [] },
-          { name: "github-mp", scope: "project", status: "updated", plugins: [] },
           {
-            name: "claude-plugins-official",
+            name: "foo",
             scope: "user",
-            status: "updated",
+            status: "skipped",
+            reasons: ["already enabled"],
             plugins: [],
           },
         ],
       },
     },
 
-    "disable-mixed": {
+    "disable-idempotent": {
       pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
       message: {
         marketplaces: [
-          { name: "local-mp", scope: "user", status: "updated", plugins: [] },
-          { name: "some-mp", scope: "user", status: "updated", plugins: [] },
+          {
+            name: "foo",
+            scope: "user",
+            status: "skipped",
+            reasons: ["already disabled"],
+            plugins: [],
+          },
         ],
       },
     },

@@ -837,39 +837,51 @@ ______________________________________________________________________
 
 ## `/claude:plugin marketplace autoupdate <enable|disable> <name>`
 
-Marketplace-only flag flip. The orchestrator emits a marketplace block with `mp.status === "updated"` (the marketplace persistence record was touched) and no plugin children.
+Marketplace-only flag flip. The orchestrator emits a single marketplace block with no plugin children; the block's `mp.status` discriminates between the V2 outcomes. V2 distinguishes five user-visible states for this surface: fresh-flip enable, fresh-flip disable, idempotent enable (no-op), idempotent disable (no-op), and failure when the marketplace persistence record cannot be found. The per-state catalog blocks below give the exact byte form for each outcome. Cross-reference the list-surface `<autoupdate>` / `<no autoupdate>` markers documented under [`## /claude:plugin marketplace list`](#claudeplugin-marketplace-list); those markers are reserved for the list surface (`mp.status === undefined` + `mp.details.autoupdate`) and are NOT emitted on any state-change arm of this surface.
 
-### Enable across multiple marketplaces
+### Fresh enable
 
-<!-- catalog-state: enable-mixed -->
+<!-- catalog-state: enable-fresh -->
 
 ```text
-● local-mp [user] (updated)
-
-● github-mp [project] (updated)
-
-● claude-plugins-official [user] (updated)
+● foo [user] (autoupdate enabled)
 
 /reload to pick up changes
 ```
 
-Three marketplace blocks (one per flipped marketplace). The `(updated)` status conveys "the marketplace record was touched". The renderer does not carry the `<autoupdate>` marker on the state-change arm; subsequent `marketplace list` surfaces will reflect the new flag state via the SUB-BRANCH B list-surface header.
+Fresh state change -- the marketplace record was mutated. `mp.status` = `"autoupdate enabled"`; severity = info (no severity arg); reload-hint emitted per D-16-12 state-change trigger ladder.
 
-The v1.0 idempotent-flip variant (rendering `{already enabled}` as a per-marketplace skip reason) is not expressible in v2 -- `MARKETPLACE_STATUSES` has no `"skipped"` entry per D-15-07. Orchestrators detecting an idempotent flip either omit the marketplace from the payload (no-op render) or render `(updated)` regardless.
+### Fresh disable
 
-### Disable
-
-<!-- catalog-state: disable-mixed -->
+<!-- catalog-state: disable-fresh -->
 
 ```text
-● local-mp [user] (updated)
-
-● some-mp [user] (updated)
+● foo [user] (autoupdate disabled)
 
 /reload to pick up changes
 ```
 
-Same structural shape as `enable-mixed`. The catalog does not distinguish the enable/disable surface byte-form because v2's marketplace status set has no flag-flip-specific token; the orchestrator chooses `(updated)` for both directions.
+Fresh state change -- the marketplace record was mutated. `mp.status` = `"autoupdate disabled"`; severity = info (no severity arg); reload-hint emitted per D-16-12 state-change trigger ladder.
+
+### Idempotent enable
+
+<!-- catalog-state: enable-idempotent -->
+
+```text
+● foo [user] (skipped) {already enabled}
+```
+
+Idempotent no-op -- the flag was already in the requested state. `mp.status` = `"skipped"`; `mp.reasons` = `["already enabled"]`; severity = `"warning"` (consistent with plugin-level skipped per D-16-11); reload-hint suppressed.
+
+### Idempotent disable
+
+<!-- catalog-state: disable-idempotent -->
+
+```text
+● foo [user] (skipped) {already disabled}
+```
+
+Idempotent no-op -- the flag was already in the requested state. `mp.status` = `"skipped"`; `mp.reasons` = `["already disabled"]`; severity = `"warning"` (consistent with plugin-level skipped per D-16-11); reload-hint suppressed.
 
 ### Failure -- marketplace not found
 
@@ -879,7 +891,9 @@ Same structural shape as `enable-mixed`. The catalog does not distinguish the en
 ⊘ missing-mp [user] (failed)
 ```
 
-`failed` marketplace header alone (no plugin children, no cause-chain). No reload-hint. Severity: `error`.
+Marketplace persistence record lookup failed. `mp.status` = `"failed"`; severity = `"error"`; no reload-hint (failed state-change rolled back; nothing landed).
+
+The five blocks above span two ladders. The severity ladder runs fresh → info, skipped → warning, failed → error (per D-16-11 + Phase 17.1's mp-level skipped extension). The reload-hint ladder runs fresh-flip → emit, skipped → suppress, failed → suppress (per D-16-12 + D-17.1-05 -- only fresh state changes contribute to "/reload to pick up changes"; idempotent no-ops and rolled-back failures do not).
 
 ______________________________________________________________________
 

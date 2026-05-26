@@ -24,7 +24,7 @@ export type NotificationMessage; // { marketplaces: readonly MarketplaceNotifica
 export type MarketplaceNotificationMessage; // { name; scope; status?; details?; plugins }
 export type PluginNotificationMessage; // 10-variant discriminated union on `status`
 export type PluginStatus; // 10 literal strings, derived from PLUGIN_STATUSES tuple
-export type MarketplaceStatus; // 4 literal strings, derived from MARKETPLACE_STATUSES tuple
+export type MarketplaceStatus; // 7 literal strings, derived from MARKETPLACE_STATUSES tuple
 export type Dependency; // "agents" | "mcp", derived from DEPENDENCIES tuple
 export interface MarketplaceDetails; // { autoupdate: boolean; lastUpdatedAt?: string }
 export interface UsageErrorMessage; // { message: string; usage: string }
@@ -49,7 +49,7 @@ type PluginNotificationMessage =
 The closed sets are encoded as runtime tuples and their literal-union types are derived via indexed access (SNM-04 / SNM-05 / SNM-06 / D-15-11):
 
 - `PLUGIN_STATUSES` -- the closed set of 10 plugin status discriminators. The literal-union type `PluginStatus` is derived as `(typeof PLUGIN_STATUSES)[number]`. Read `extensions/pi-claude-marketplace/shared/notify.ts` for the canonical membership and ordering; do not re-enumerate the values in prose. Fixture iterators (per-variant unit tests, catalog UAT drivers) consume the runtime tuple.
-- `MARKETPLACE_STATUSES` -- the closed set of 4 marketplace status discriminators. `MarketplaceStatus = (typeof MARKETPLACE_STATUSES)[number]`. Same rule. v1.3's `marketplace skipped` rendering case re-routes through `updated` with an empty `plugins: []` per the always-marketplace-header spec.
+- `MARKETPLACE_STATUSES` -- the closed set of 7 marketplace status discriminators. `MarketplaceStatus = (typeof MARKETPLACE_STATUSES)[number]`. Same rule. The 3 autoupdate-surface statuses (`autoupdate enabled`, `autoupdate disabled`, `skipped`) were added in Phase 17.1 per D-17.1-01 to support the user-locked surface design in D-18-05.
 - `DEPENDENCIES` -- the closed set of 2 soft-dependency probe targets. `Dependency = (typeof DEPENDENCIES)[number]`. Same rule. Drives the render-time probe path; `agents` → `pi-subagents`, `mcp` → `pi-mcp-adapter`.
 - `REASONS` (closed-set reason tokens used inside `{<reason>}` braces on the 5 reason-bearing plugin variants) -- defined in `extensions/pi-claude-marketplace/shared/grammar/reasons.ts`. The reason set survives v2.0 unchanged in spirit; the 3 v1.3 reasons structurally absorbed by the type model (`rollback partial`, `requires pi-subagents`, `requires pi-mcp`) no longer appear in any typed `reasons` field -- they are emitted by the renderer from the `rollbackPartial` field and the soft-dep probe, respectively.
 
