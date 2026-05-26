@@ -166,13 +166,6 @@ function piWithBothLoaded(): MockPi {
   };
 }
 
-/** Probe reports pi-subagents loaded, pi-mcp-adapter NOT loaded -- {requires pi-mcp} fires on dep-bearing rows declaring mcp. */
-function piWithSubagentsLoaded(): MockPi {
-  return {
-    getAllTools: () => [{ name: "subagent" }],
-  };
-}
-
 /** Probe reports pi-mcp-adapter loaded, pi-subagents NOT loaded -- {requires pi-subagents} fires on dep-bearing rows declaring agents. */
 function piWithMcpLoaded(): MockPi {
   return {
@@ -300,12 +293,13 @@ const FIXTURES: FixtureMap = {
                 name: "alpha",
                 version: "1.0.0",
                 dependencies: [],
-                // Same-scope row also carries explicit `scope` because the
-                // orchestrator disambiguates the two `alpha` rows (orphan-
-                // folded + same-scope) by emitting both brackets. Without
-                // the explicit scope, the user-scoped alpha row would emit
-                // no bracket -- catalog renders both with brackets.
-                scope: "user",
+                // Same-scope row: no explicit `scope`. The renderer's
+                // orphan-fold rule (D-16-17) suppresses the bracket when
+                // `p.scope === mp.scope`; here we leave `p.scope`
+                // undefined so the short-circuit is on the `undefined`
+                // arm rather than the equality arm. Either input shape
+                // yields the same byte form; mirrors the cleaner
+                // `same-plugin-both-scopes` fixture above.
               },
             ],
           },
@@ -1324,12 +1318,6 @@ const FIXTURES: FixtureMap = {
     },
   },
 };
-
-// Reference `piWithSubagentsLoaded` so the helper does not become dead
-// code when no current fixture uses it; it remains available as a
-// composition primitive for future states. The other three factories
-// are used directly above.
-void piWithSubagentsLoaded;
 
 // ---------------------------------------------------------------------------
 // Test driver -- walk every parsed catalog example, look up its fixture,
