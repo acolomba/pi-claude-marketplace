@@ -974,6 +974,206 @@ test("notify omits scope bracket on plugin row when p.scope is undefined (non-or
 });
 
 // ===========================================================================
+// 21b-21e: Post-CR-01 orphan-fold contract locks (Phase 17.2 D-17.2-07)
+//
+// These four tests lock the corrected 2-arg `renderScopeBracket(pluginScope,
+// mpScope)` contract at the renderer level, independent of the catalog UAT.
+// Coverage spans `installed` (same-scope + orphan-fold), `updated`
+// (same-scope), and `failed` (orphan-fold) so the 8 scope-bearing variants
+// are exercised across both dep-bearing and error-class arms. Each test
+// inherits the defense-in-depth assertions from test 21a (lines 957-973):
+// the body MUST NOT contain `[undefined]`; the plugin row MUST NOT leak
+// the marketplace header's bracket.
+// ===========================================================================
+
+test("notify omits scope bracket on installed plugin row when p.scope === mp.scope (D-17.2-07a)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [
+          {
+            status: "installed",
+            name: "alpha",
+            version: "1.0.0",
+            dependencies: [],
+            scope: "user", // same-scope: plugin scope matches marketplace scope -> no bracket
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // Header carries [user]; plugin row has NO bracket between "alpha" and
+  // "v1.0.0" because p.scope === mp.scope (orphan-fold contract).
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user] (added)\n  ● alpha v1.0.0 (installed)\n\n/reload to pick up changes`,
+  ]);
+
+  // Defense-in-depth (mirrors 21a): no `[undefined]`; plugin row contains
+  // no `[user]` or `[project]` bracket of any kind.
+  const callArgs = ctx.ui.notify.mock.calls[0]!.arguments as [string];
+  const body = callArgs[0];
+  assert.ok(
+    !body.includes("[undefined]"),
+    "D-17.2-07a: row must not contain the literal [undefined] substring",
+  );
+  const pluginRow = body.split("\n")[1]!;
+  assert.ok(
+    !pluginRow.includes("[user]"),
+    "D-17.2-07a: same-scope plugin row must not contain a [user] bracket",
+  );
+  assert.ok(
+    !pluginRow.includes("[project]"),
+    "D-17.2-07a: same-scope plugin row must not leak any other [scope] bracket",
+  );
+});
+
+test("notify emits [project] bracket on installed plugin row when p.scope !== mp.scope (D-17.2-07b)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [
+          {
+            status: "installed",
+            name: "alpha",
+            version: "1.0.0",
+            dependencies: [],
+            scope: "project", // orphan-fold: plugin scope differs from marketplace scope
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // Header carries [user]; plugin row carries inline [project] bracket.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user] (added)\n  ● alpha [project] v1.0.0 (installed)\n\n/reload to pick up changes`,
+  ]);
+
+  // Defense-in-depth: no `[undefined]`; plugin row DOES contain the
+  // literal `[project]` substring.
+  const callArgs = ctx.ui.notify.mock.calls[0]!.arguments as [string];
+  const body = callArgs[0];
+  assert.ok(
+    !body.includes("[undefined]"),
+    "D-17.2-07b: row must not contain the literal [undefined] substring",
+  );
+  const pluginRow = body.split("\n")[1]!;
+  assert.ok(
+    pluginRow.includes("[project]"),
+    "D-17.2-07b: orphan-fold plugin row must contain the [project] bracket",
+  );
+});
+
+test("notify omits scope bracket on updated plugin row when p.scope === mp.scope (D-17.2-07c)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "project",
+        status: "added",
+        plugins: [
+          {
+            status: "updated",
+            name: "alpha",
+            from: "0.9.0",
+            to: "1.0.0",
+            dependencies: [],
+            scope: "project", // same-scope: no bracket
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // Header carries [project]; plugin row has NO bracket between "alpha"
+  // and the version-arrow slot. The version-arrow renders as
+  // `<from> → v<to>`.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [project] (added)\n  ● alpha 0.9.0 → v1.0.0 (updated)\n\n/reload to pick up changes`,
+  ]);
+
+  // Defense-in-depth: no `[undefined]`; plugin row contains no `[...]`
+  // bracket at all.
+  const callArgs = ctx.ui.notify.mock.calls[0]!.arguments as [string];
+  const body = callArgs[0];
+  assert.ok(
+    !body.includes("[undefined]"),
+    "D-17.2-07c: row must not contain the literal [undefined] substring",
+  );
+  const pluginRow = body.split("\n")[1]!;
+  assert.ok(
+    !pluginRow.includes("[user]"),
+    "D-17.2-07c: same-scope updated row must not contain a [user] bracket",
+  );
+  assert.ok(
+    !pluginRow.includes("[project]"),
+    "D-17.2-07c: same-scope updated row must not leak the [project] bracket",
+  );
+});
+
+test("notify emits [project] bracket on failed plugin row when p.scope !== mp.scope (D-17.2-07d)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [
+          {
+            status: "failed",
+            name: "alpha",
+            version: "1.0.0",
+            reasons: ["bridge"],
+            scope: "project", // orphan-fold on an error-class arm
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // mp.status === "added" (fresh-add cascade) + 1 failed plugin -> "error"
+  // severity. A failed PLUGIN does not suppress the reload-hint (only a
+  // failed MARKETPLACE does, per D-16-12), so the trailer is appended.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user] (added)\n  ⊘ alpha [project] v1.0.0 (failed) {bridge}\n\n/reload to pick up changes`,
+    "error",
+  ]);
+
+  // Defense-in-depth: no `[undefined]`; plugin row DOES contain the
+  // literal `[project]` substring.
+  const callArgs = ctx.ui.notify.mock.calls[0]!.arguments as [string, string];
+  const body = callArgs[0];
+  assert.ok(
+    !body.includes("[undefined]"),
+    "D-17.2-07d: row must not contain the literal [undefined] substring",
+  );
+  const pluginRow = body.split("\n")[1]!;
+  assert.ok(
+    pluginRow.includes("[project]"),
+    "D-17.2-07d: orphan-fold failed row must contain the [project] bracket",
+  );
+});
+
+// ===========================================================================
 // 22: Failed plugin with rollbackPartial (no causes) -- assert the
 // 4-space-indented child rows per phase per 16-05-SUMMARY byte form.
 // ===========================================================================
