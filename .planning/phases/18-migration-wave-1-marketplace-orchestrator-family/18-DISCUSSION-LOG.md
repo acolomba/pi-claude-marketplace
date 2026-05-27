@@ -69,12 +69,12 @@ User initially asked for clarification on what `(updated)` meant in this context
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| Insert Phase 17.5 (V2 grammar amendment) before Phase 18 (Recommended) | /gsd-phase --insert adds 17.5 'V2 Grammar Amendment: Autoupdate Surface' amending Phase 15 types + Phase 16 renderer + Phase 17 catalog + ADR atomically. Phase 18 stays a pure execution wave. | ✓ |
+| Insert Phase 17.1 (V2 grammar amendment) before Phase 18 (Recommended) | /gsd-phase --insert adds 17.1 'V2 Grammar Amendment: Autoupdate Surface' amending Phase 15 types + Phase 16 renderer + Phase 17 catalog + ADR atomically. Phase 18 stays a pure execution wave. | ✓ |
 | Widen Phase 18's scope to include the upstream amendments | Phase 18 adds 3 upstream-amendment plans + 5 migration plans + 1 lint plan. Phase 18 stops being a 'wave 1 migration'. | |
 | Defer to v1.5 | Ship Phase 18 with V2 catalog as-is; restore distinctions later. Both directions render `(updated)`; idempotent invisible. | |
 
-**User's choice:** Insert Phase 17.5 (V2 grammar amendment) before Phase 18
-**Notes:** User-locked design captured as D-18-05. New MarketplaceStatus values: `"autoupdate enabled"`, `"autoupdate disabled"`, `"skipped"`. New REASONS: `"already enabled"`, `"already disabled"`. New optional `reasons?: readonly Reason[]` on MarketplaceNotificationMessage. Severity: failed → error; skipped → warning (consistent with plugin); fresh enable/disable → info. Reload-hint: fresh triggers; skipped does not. Captured as D-18-04 (insertion mechanic) + D-18-05 (design contract for Phase 17.5 to implement).
+**User's choice:** Insert Phase 17.1 (V2 grammar amendment) before Phase 18
+**Notes:** User-locked design captured as D-18-05. New MarketplaceStatus values: `"autoupdate enabled"`, `"autoupdate disabled"`, `"skipped"`. New REASONS: `"already enabled"`, `"already disabled"`. New optional `reasons?: readonly Reason[]` on MarketplaceNotificationMessage. Severity: failed → error; skipped → warning (consistent with plugin); fresh enable/disable → info. Reload-hint: fresh triggers; skipped does not. Captured as D-18-04 (insertion mechanic) + D-18-05 (design contract for Phase 17.1 to implement).
 
 ### Move-on check: More questions or next area?
 
@@ -134,7 +134,7 @@ Captured in CONTEXT.md `<decisions>` under "Claude's Discretion":
 
 Captured in CONTEXT.md `<deferred>`:
 
-- Phase 17.5 (V2 Grammar Amendment: Autoupdate Surface) -- inserted before Phase 18 lands.
+- Phase 17.1 (V2 Grammar Amendment: Autoupdate Surface) -- inserted before Phase 18 lands.
 - Phase 19 (Plugin family migration), Phase 20 (Edge + UsageError), Phase 21 (Final teardown).
 - `orchestrators/marketplace/shared.ts` stale comment cleanup.
 - `makeCtx()` + `pi.getAllTools` test-helper extraction (cosmetic).
