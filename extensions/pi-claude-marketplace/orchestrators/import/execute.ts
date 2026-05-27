@@ -7,12 +7,9 @@ import {
 } from "../../orchestrators/plugin/install.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState as defaultLoadState, type ExtensionState } from "../../persistence/state-io.ts";
-import { softDepStatus } from "../../platform/pi-api.ts";
-import { cascadeSummary } from "../../presentation/cascade-summary.ts";
-import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { compareByNameThenScope } from "../../presentation/sort.ts";
 import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
-import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
+import { notify } from "../../shared/notify.ts";
 
 import { buildClaudeImportPlan } from "./marketplaces.ts";
 import { loadMergedClaudeSettingsForScope as defaultLoadSettings } from "./settings.ts";
@@ -25,12 +22,17 @@ import type {
 } from "./types.ts";
 import type { AddMarketplaceOptions } from "../../orchestrators/marketplace/add.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type {
-  MarketplaceRow,
-  PluginCascadeRow,
-  SoftDepProbe,
-} from "../../presentation/compact-line.ts";
 import type { Reason } from "../../shared/grammar/reasons.ts";
+import type {
+  Dependency,
+  MarketplaceNotificationMessage,
+  MarketplaceStatus,
+  PluginFailedMessage,
+  PluginInstalledMessage,
+  PluginNotificationMessage,
+  PluginSkippedMessage,
+  PluginUnavailableMessage,
+} from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface MarketplaceAddedOutcome {
@@ -250,20 +252,6 @@ function pluginsForMarketplace(
   return plugins.filter((plugin) => plugin.ref.marketplace === marketplace);
 }
 
-function hasWarnings(result: ClaudeImportExecutionResult): boolean {
-  return (
-    result.warnings.length > 0 ||
-    result.marketplaceFailures.length > 0 ||
-    result.sourceMismatches.length > 0 ||
-    result.unexpectedPluginFailures.length > 0 ||
-    result.diagnostics.length > 0
-  );
-}
-
-function anyChanges(result: ClaudeImportExecutionResult): boolean {
-  return result.addedMarketplaces.length > 0 || result.installedPlugins.length > 0;
-}
-
 function pushPluginWarning(
   result: MutableImportResult,
   plugin: PlannedPluginImport,
@@ -297,272 +285,48 @@ function pushDiagnostic(
   });
 }
 
-/**
- * Plan 13-02a-01 / CMC-27: Compose the Claude-import body via the Wave 1
- * cascade primitives. The `Claude plugin import summary` preamble is
- * preserved verbatim; per-marketplace cascade blocks render via
- * `cascadeSummary` with marketplace headers carrying their own
- * `(added)` / `(skipped) {already installed}` / `(failed) {source
- * mismatch}` status tokens, and indented plugin rows with
- * `(installed)` / `(skipped)` / `(unavailable)` / `(failed)` statuses.
- *
- * Severity is aggregated per-marketplace via cascadeSeverity (returned
- * by cascadeSummary) and ORed across all marketplaces; the result drives
- * notifySuccess vs notifyWarning (MSG-SR-4..6 -- notifyError is NEVER
- * used for cascade summaries).
- *
- * The `probe` argument defaults to companions-loaded so callers that
- * don't have a Pi handle (legacy formatClaudeImportSummary signature)
- * still produce sensible output; production callers pass the real probe.
- */
-const PREAMBLE = "Claude plugin import summary";
-const DEFAULT_PROBE: SoftDepProbe = { piSubagentsLoaded: true, piMcpAdapterLoaded: true };
+// Plan 20-02 / D-20-02 (strict D-19-02 mirror): the V1 cascade composition
+// (the V1 import-summary composer + its exported test-formatter + the
+// composed-import alias + the source-mismatch splice helper + the orphan
+// diagnostic line helper + the V1 preamble constant) is RETIRED entirely.
+// The V2 cascade construction lives inline in importClaudeSettings via
+// buildImportNotificationMarketplaces below; notify() owns severity
+// (D-16-11), reload-hint (D-16-12), and soft-dep markers (D-16-14,
+// D-16-15).
+//
+// Locked V1 -> V2 outcome mapping (A1-A3 from 20-RESEARCH.md):
+//   A1 (ImportWarningOutcome marketplace-failed / unmappable-marketplace-source) -> DROP
+//   A2 (orphan diagnostics)                                                       -> DROP
+//   A3 ("Already up to date" + PREAMBLE)                                          -> DROP
 
-interface ImportCascadeInput {
+interface MarketplaceBlock {
   readonly key: string;
-  readonly marketplace: MarketplaceRow;
-  readonly rows: PluginCascadeRow[];
+  name: string;
+  scope: Scope;
+  status?: MarketplaceStatus;
+  reasons?: readonly Reason[];
+  plugins: PluginNotificationMessage[];
 }
 
-/**
- * Legacy formatter retained for the test surface that exercises the
- * Wave 1 cascade composition in isolation (no notify path required).
- *
- * Production code does NOT call this -- `importClaudeSettings` below
- * uses `composeImportSummary` + `reloadHint` + `appendReloadHint`
- * directly so the notify-boundary severity routing (notifySuccess vs
- * notifyWarning per MSG-SR-4..6) can ride on the cascadeSummary
- * severity. Consumers (Phase 14.2-fix WR-07 audit, 2026-05-24):
- *
- *   - `tests/orchestrators/import/execute.test.ts` -- the SOLE
- *     consumer. Eight invocations across five tests covering the
- *     idempotent-skip preamble, the warning-record actionability
- *     shape, the soft-dep-marker reasons, and the reload-hint
- *     trailer. The tests assert on the composed string directly,
- *     which is the use case `formatClaudeImportSummary` exists to
- *     serve.
- *
- * If this consumer list ever drops to zero, delete this export AND
- * the re-export at `orchestrators/import/index.ts:2`. The audit grep
- * is: `grep -rn formatClaudeImportSummary --include="*.ts" extensions/
- * tests/ | grep -v 'index.ts\\|execute.ts:'`.
- */
-export function formatClaudeImportSummary(
-  result: ClaudeImportExecutionResult,
-  probe: SoftDepProbe = DEFAULT_PROBE,
-): string {
-  const { body } = composeImportSummary(result, probe);
-  const hint = reloadHint(
-    result.installedPlugins.filter((o) => o.resourcesChanged).map((o) => o.plugin),
-  );
-  return appendReloadHint(body, hint);
-}
-
-interface ComposedImport {
-  readonly body: string;
-  readonly severity: "success" | "warning";
-}
-
-function composeImportSummary(
-  result: ClaudeImportExecutionResult,
-  probe: SoftDepProbe,
-): ComposedImport {
-  // Build per-(scope, marketplace) cascade blocks from the result arrays.
-  // The marketplace blocks render in deterministic order via
-  // compareByNameThenScope (name primary case-insensitive, scope secondary
-  // project-before-user per MSG-GR-3).
-  const byMp = new Map<string, ImportCascadeInput>();
-  enumerateMarketplaceBlocks(result, byMp);
-
-  // "Already up to date" confirmation line: surfaces under the preamble
-  // when nothing was actually added or installed (skipped rows do not
-  // count as changes). The legacy formatter emitted this verbatim
-  // alongside the (now-retired) `Skipped existing items:` partition
-  // body; the cascade body below still renders the skipped rows, but
-  // the confirmation line stays as the operator's "nothing actually
-  // happened" signal.
-  const upToDateNotice =
-    !anyChanges(result) && !hasWarnings(result) ? "Import already up to date." : "";
-
-  // Top-level orphan signal: diagnostics that don't tie to a marketplace
-  // (settings-read-error, etc.) get surfaced as a bare line beneath the
-  // preamble. Keeps the cascade body clean per CMC-27.
-  const orphanLines = orphanDiagnosticLines(result);
-
-  const blocks = [...byMp.values()].sort((a, b) =>
-    compareByNameThenScope(a.marketplace, b.marketplace),
-  );
-
-  const segments: string[] = [];
-  let aggregatedSeverity: "success" | "warning" = "success";
-  for (const block of blocks) {
-    const { message, severity } = cascadeSummary({
-      marketplace: block.marketplace,
-      rows: block.rows,
-      probe,
-    });
-    segments.push(message);
-    if (severity === "warning") {
-      aggregatedSeverity = "warning";
-    }
+function ensureMarketplaceBlock(
+  byMp: Map<string, MarketplaceBlock>,
+  scope: Scope,
+  marketplaceName: string,
+): MarketplaceBlock {
+  const key = `${scope}:${marketplaceName}`;
+  const existing = byMp.get(key);
+  if (existing !== undefined) {
+    return existing;
   }
 
-  // Orphan diagnostic lines are warning-severity by construction
-  // (loadState errors block the scope; settings-parse errors block
-  // the import for that scope). Pin severity accordingly.
-  if (orphanLines.length > 0) {
-    aggregatedSeverity = "warning";
-  }
-
-  // Source-mismatch: surface the diagnostic line beneath the failing
-  // marketplace header so the user sees the reason inline (catalog
-  // lines 525-540). The line lives in `result.sourceMismatches[].cause`.
-  const cascadeBodyWithDiagnostics = spliceSourceMismatchDiagnostics(segments, blocks, result);
-
-  const sections: string[] = [PREAMBLE];
-  if (upToDateNotice !== "") {
-    sections.push(upToDateNotice);
-  }
-
-  for (const line of orphanLines) {
-    sections.push(line);
-  }
-
-  if (cascadeBodyWithDiagnostics !== "") {
-    sections.push(cascadeBodyWithDiagnostics);
-  }
-
-  return { body: sections.join("\n\n"), severity: aggregatedSeverity };
-}
-
-function enumerateMarketplaceBlocks(
-  result: ClaudeImportExecutionResult,
-  byMp: Map<string, ImportCascadeInput>,
-): void {
-  // Marketplace headers come from added / skipped-existing / failed /
-  // source-mismatch records. Each yields one MarketplaceRow.
-  for (const o of result.addedMarketplaces) {
-    ensureBlock(byMp, o.scope, o.marketplace, {
-      status: "added",
-      outcomeClass: "ok",
-      // The source kind isn't carried on the added outcome; the import
-      // planner records it indirectly via the plugin's source mapping.
-      // We omit the autoupdate marker for now (Wave 3 catalog UAT is the
-      // binding verification; sub-wave 2c will revisit github-source
-      // marker propagation if needed).
-    });
-  }
-
-  for (const o of result.skippedExistingMarketplaces) {
-    ensureBlock(byMp, o.scope, o.marketplace, {
-      status: "skipped",
-      reasons: ["already installed"],
-      outcomeClass: "ok",
-    });
-  }
-
-  for (const o of result.marketplaceFailures) {
-    ensureBlock(byMp, o.scope, o.marketplace, {
-      status: "failed",
-      reasons: ["not found"],
-      outcomeClass: "failure",
-    });
-  }
-
-  // Source-mismatch records carry the marketplace identity via the
-  // dependent plugin's ref. Group dependent plugins by mp+scope and
-  // synthesize a (failed) {source mismatch} header. addedMarketplaces
-  // entries for the same mp would have already inserted an entry; the
-  // failure shape supersedes (the source-mismatch path is mutually
-  // exclusive with addMarketplace success).
-  for (const o of result.sourceMismatches) {
-    upsertSourceMismatchHeader(byMp, o.scope, o.marketplace);
-  }
-
-  // Plugin rows -- map each install / skip / warning / failure to a
-  // PluginCascadeRow under its marketplace header. If no header exists
-  // for this plugin's marketplace (e.g. installed against an existing
-  // marketplace whose header wasn't in addedMarketplaces), synthesize a
-  // bare label header so the plugin still renders under its marketplace.
-  // CMC-13 / MSG-SD-1..3: predicates propagated from install outcome
-  for (const o of result.installedPlugins) {
-    const block = ensureBareHeader(byMp, o.scope, o.marketplace);
-    block.rows.push({
-      kind: "plugin-cascade",
-      name: o.plugin,
-      scope: o.scope,
-      status: "installed",
-      declaresAgents: o.declaresAgents,
-      declaresMcp: o.declaresMcp,
-    });
-  }
-
-  for (const o of result.skippedExistingPlugins) {
-    const block = ensureBareHeader(byMp, o.scope, o.marketplace);
-    block.rows.push({
-      kind: "plugin-cascade",
-      name: o.plugin,
-      scope: o.scope,
-      status: "skipped",
-      reasons: ["already installed"],
-      // CMC-13 / Task 260525-cjr B1: non-(installed) cascade rows omit
-      // the soft-dep marker per MSG-SD-3; the renderer narrows on
-      // status, but the explicit `false` keeps every producer site
-      // honest about the required-boolean contract.
-      declaresAgents: false,
-      declaresMcp: false,
-    });
-  }
-
-  for (const o of result.sourceMismatches) {
-    const block = ensureBareHeader(byMp, o.scope, o.marketplace);
-    block.rows.push({
-      kind: "plugin-cascade",
-      name: o.plugin,
-      scope: o.scope,
-      status: "skipped",
-      reasons: ["source mismatch"],
-      declaresAgents: false,
-      declaresMcp: false,
-    });
-  }
-
-  for (const o of result.unexpectedPluginFailures) {
-    const block = ensureBareHeader(byMp, o.scope, o.marketplace);
-    block.rows.push({
-      kind: "plugin-cascade",
-      name: o.plugin,
-      scope: o.scope,
-      status: "failed",
-      reasons: ["not in manifest"],
-      declaresAgents: false,
-      declaresMcp: false,
-    });
-  }
-
-  for (const o of result.warnings) {
-    const block = ensureBareHeader(byMp, o.scope, o.marketplace);
-    block.rows.push({
-      kind: "plugin-cascade",
-      name: o.plugin,
-      scope: o.scope,
-      status: importWarningStatus(o.reason),
-      reasons: [importWarningReason(o.reason)],
-      declaresAgents: false,
-      declaresMcp: false,
-    });
-  }
-}
-
-function importWarningStatus(reason: ImportWarningOutcome["reason"]): "unavailable" | "skipped" {
-  switch (reason) {
-    case "unavailable":
-    case "uninstallable":
-      return "unavailable";
-    case "marketplace-failed":
-    case "unmappable-marketplace-source":
-      return "skipped";
-  }
+  const block: MarketplaceBlock = {
+    key,
+    name: marketplaceName,
+    scope,
+    plugins: [],
+  };
+  byMp.set(key, block);
+  return block;
 }
 
 function importWarningReason(reason: ImportWarningOutcome["reason"]): Reason {
@@ -577,156 +341,165 @@ function importWarningReason(reason: ImportWarningOutcome["reason"]): Reason {
   }
 }
 
-function ensureBlock(
-  byMp: Map<string, ImportCascadeInput>,
-  scope: Scope,
-  marketplaceName: string,
-  spec: {
-    status?: MarketplaceRow["status"];
-    reasons?: readonly Reason[];
-    outcomeClass: "ok" | "failure";
-  },
-): ImportCascadeInput {
-  const key = `${scope}:${marketplaceName}`;
-  const existing = byMp.get(key);
-  if (existing !== undefined) {
-    return existing;
+function dependenciesFromInstalled(o: PluginInstalledOutcome): readonly Dependency[] {
+  const deps: Dependency[] = [];
+  if (o.declaresAgents) {
+    deps.push("agents");
   }
 
-  const marketplace: MarketplaceRow = {
-    kind: "marketplace",
-    name: marketplaceName,
-    scope,
-    ...(spec.status !== undefined && { status: spec.status }),
-    ...(spec.reasons !== undefined && { reasons: spec.reasons }),
-    outcomeClass: spec.outcomeClass,
-  };
-  const entry: ImportCascadeInput = { key, marketplace, rows: [] };
-  byMp.set(key, entry);
-  return entry;
-}
+  if (o.declaresMcp) {
+    deps.push("mcp");
+  }
 
-function ensureBareHeader(
-  byMp: Map<string, ImportCascadeInput>,
-  scope: Scope,
-  marketplaceName: string,
-): ImportCascadeInput {
-  return ensureBlock(byMp, scope, marketplaceName, { outcomeClass: "ok" });
+  return Object.freeze(deps);
 }
 
 /**
- * Source-mismatch headers supersede whatever (added/skipped) header was
- * already registered for the same marketplace because the import for that
- * marketplace effectively failed; the dependent plugins below render as
- * `(skipped) {source mismatch}` children. Catalog lines 525-540.
+ * Plan 20-02 / D-20-02 (strict D-19-02 mirror): pivot the linear outcome
+ * arrays in `ClaudeImportExecutionResult` into the V2 cascade payload
+ * tree `MarketplaceNotificationMessage[]`. The orchestrator owns iteration
+ * order per D-16-06 (`compareByNameThenScope` -- name primary
+ * case-insensitive, scope secondary project-before-user); `notify()` does
+ * NOT sort.
+ *
+ * Per-plugin `scope?` is OMITTED (Phase 17.2 orphan-fold contract) -- the
+ * import cascade groups plugins by their owning scope, so every row's
+ * scope matches its marketplace's scope by construction.
+ *
+ * V1 -> V2 mapping (locked in PLAN frontmatter):
+ *   - MarketplaceAddedOutcome                          -> status: "added"
+ *   - MarketplaceSkipOutcome (already-present)         -> status: "updated"
+ *     (no-op accepted partition; the marketplace was already registered)
+ *   - MarketplaceFailureOutcome                        -> status: "failed", plugins: []
+ *     (free-text cause LOST per D-18-02 precedent -- no cause? field on
+ *     MarketplaceNotificationMessage)
+ *   - SourceMismatchOutcome                            -> status: "failed",
+ *     reasons: ["source mismatch"] (Phase 17.1 reasons?: field; per-plugin
+ *     failed rows accumulate under the marketplace header)
+ *   - PluginInstalledOutcome                           -> PluginInstalledMessage
+ *     with `dependencies` derived from declaresAgents + declaresMcp
+ *   - PluginSkipOutcome                                -> PluginSkippedMessage
+ *     reasons: ["already installed"]
+ *   - UnexpectedPluginFailureOutcome                   -> PluginFailedMessage
+ *     reasons: ["not in manifest"], cause: undefined (V1 free-text cause
+ *     was non-rendered per A5 precedent; preserves V1 behavior)
+ *   - ImportWarningOutcome (unavailable / uninstallable) -> PluginUnavailableMessage
+ *     reasons: ["no longer installable"]
+ *   - ImportWarningOutcome (marketplace-failed / unmappable-marketplace-source)
+ *     -> DROP entirely (A1; the failing marketplace's own status carries
+ *     the structural signal, or it was an advisory-only warning)
+ *   - result.diagnostics (orphan / per-marketplace)    -> DROP entirely (A2;
+ *     in-memory record stays, user-facing surfacing is silenced)
  */
-function upsertSourceMismatchHeader(
-  byMp: Map<string, ImportCascadeInput>,
-  scope: Scope,
-  marketplaceName: string,
-): void {
-  const key = `${scope}:${marketplaceName}`;
-  const existing = byMp.get(key);
-  const marketplace: MarketplaceRow = {
-    kind: "marketplace",
-    name: marketplaceName,
-    scope,
-    status: "failed",
-    reasons: ["source mismatch"],
-    outcomeClass: "failure",
-  };
-  if (existing === undefined) {
-    byMp.set(key, { key, marketplace, rows: [] });
-    return;
-  }
-
-  // Replace the header; keep accumulated rows so dependent plugins still
-  // render under the same block.
-  byMp.set(key, { key, marketplace, rows: existing.rows });
-}
-
-/**
- * Surface free-text source-mismatch cause lines beneath their owning
- * marketplace header (catalog: the diagnostic sits indented 2 spaces
- * under the `⊘ <mp> [scope] (failed) {source mismatch}` header, before
- * the dependent plugin rows). cascadeSummary already produced the header
- * line; we splice the cause text after it.
- */
-function spliceSourceMismatchDiagnostics(
-  segments: readonly string[],
-  blocks: readonly ImportCascadeInput[],
+function buildImportNotificationMarketplaces(
   result: ClaudeImportExecutionResult,
-): string {
-  if (result.sourceMismatches.length === 0) {
-    return segments.join("\n\n");
+): readonly MarketplaceNotificationMessage[] {
+  const byMp = new Map<string, MarketplaceBlock>();
+
+  // Marketplace-level outcomes: set status on the (scope, marketplace) tuple.
+  for (const o of result.addedMarketplaces) {
+    const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
+    block.status = "added";
   }
 
-  // Map each block (by index) to the cause text of its first source-mismatch
-  // dependent plugin (one cause per marketplace; the cause text is
-  // identical for all dependent plugins of the same mp).
-  const causeByBlockIdx = new Map<number, string>();
-  for (let i = 0; i < blocks.length; i++) {
-    const b = blocks[i];
-    if (b === undefined) {
+  for (const o of result.skippedExistingMarketplaces) {
+    const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
+    block.status = "updated";
+  }
+
+  for (const o of result.marketplaceFailures) {
+    const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
+    block.status = "failed";
+  }
+
+  // Source-mismatch supersedes any prior status (the import for that
+  // marketplace effectively failed); dependent plugin rows accumulate as
+  // PluginFailedMessage children under the (failed) header.
+  for (const o of result.sourceMismatches) {
+    const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
+    block.status = "failed";
+    block.reasons = ["source mismatch"] as const;
+  }
+
+  // Plugin rows -- orphan-fold contract: per-row `scope?` is OMITTED
+  // because the row's scope matches its marketplace's scope by
+  // construction (the import cascade groups outcomes by their owning scope).
+  for (const o of result.installedPlugins) {
+    const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
+    const row: PluginInstalledMessage = {
+      status: "installed",
+      name: o.plugin,
+      dependencies: dependenciesFromInstalled(o),
+    };
+    block.plugins.push(row);
+  }
+
+  for (const o of result.skippedExistingPlugins) {
+    const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
+    const row: PluginSkippedMessage = {
+      status: "skipped",
+      name: o.plugin,
+      reasons: ["already installed"] as const,
+    };
+    block.plugins.push(row);
+  }
+
+  for (const o of result.sourceMismatches) {
+    const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
+    const row: PluginFailedMessage = {
+      status: "failed",
+      name: o.plugin,
+      reasons: ["source mismatch"] as const,
+    };
+    block.plugins.push(row);
+  }
+
+  for (const o of result.unexpectedPluginFailures) {
+    const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
+    const row: PluginFailedMessage = {
+      status: "failed",
+      name: o.plugin,
+      reasons: ["not in manifest"] as const,
+    };
+    block.plugins.push(row);
+  }
+
+  for (const o of result.warnings) {
+    // A1 DROP: marketplace-failed / unmappable-marketplace-source warnings
+    // have no V2 representation (the failing marketplace's own status: "failed"
+    // carries the structural signal; advisory-only warnings are silenced).
+    if (o.reason === "marketplace-failed" || o.reason === "unmappable-marketplace-source") {
       continue;
     }
 
-    if (b.marketplace.outcomeClass !== "failure") {
-      continue;
-    }
-
-    const mismatch = result.sourceMismatches.find(
-      (m) => m.scope === b.marketplace.scope && m.marketplace === b.marketplace.name,
-    );
-    if (mismatch !== undefined) {
-      causeByBlockIdx.set(i, mismatch.cause);
-    }
+    const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
+    const row: PluginUnavailableMessage = {
+      status: "unavailable",
+      name: o.plugin,
+      reasons: [importWarningReason(o.reason)],
+    };
+    block.plugins.push(row);
   }
 
-  if (causeByBlockIdx.size === 0) {
-    return segments.join("\n\n");
-  }
+  // A2 DROP: result.diagnostics (orphan + per-marketplace) have no V2
+  // representation. The in-memory record stays on the returned result;
+  // Pi runtime debug logs preserve diagnostic visibility.
 
-  const updated = segments.map((segment, idx) => {
-    const cause = causeByBlockIdx.get(idx);
-    if (cause === undefined) {
-      return segment;
-    }
-
-    // Splice the cause line after the header (first line) and before
-    // any indented plugin rows.
-    const lines = segment.split("\n");
-    if (lines.length === 0) {
-      return segment;
-    }
-
-    const header = lines[0] ?? "";
-    const rest = lines.slice(1);
-    return [header, `  ${cause}`, ...rest].join("\n");
-  });
-
-  return updated.join("\n\n");
-}
-
-function orphanDiagnosticLines(result: ClaudeImportExecutionResult): readonly string[] {
-  const lines: string[] = [];
-  for (const d of result.diagnostics) {
-    // Diagnostics tied to a marketplace render inside the cascade above
-    // (per-marketplace block); diagnostics without a marketplace tie --
-    // including malformed-enabled-plugin-ref (which carries a `ref` but
-    // can't be mapped back to a marketplace cascade because the ref is
-    // unparseable) -- surface as bare lines under the preamble. This
-    // preserves the legacy behavior of always rendering settings-parse
-    // and ref-shape warnings.
-    if (d.marketplace !== undefined) {
-      continue;
-    }
-
-    const subject = d.ref ?? d.path ?? d.code;
-    lines.push(`${d.scope}: ${subject} (${d.code}) - ${d.message}`);
-  }
-
-  return lines;
+  // D-16-06: orchestrator owns iteration order; notify() does NOT sort.
+  // Project-before-user tie-break per MSG-GR-3 via compareByNameThenScope.
+  return Object.freeze(
+    [...byMp.values()]
+      .sort((a, b) => compareByNameThenScope(a, b))
+      .map(
+        (block): MarketplaceNotificationMessage => ({
+          name: block.name,
+          scope: block.scope,
+          ...(block.status !== undefined && { status: block.status }),
+          ...(block.reasons !== undefined && { reasons: block.reasons }),
+          plugins: Object.freeze(block.plugins),
+        }),
+      ),
+  );
 }
 
 // The import workflow is intentionally linear: ensure marketplaces, record diagnostics,
@@ -976,47 +749,42 @@ export async function importClaudeSettings(
   opts: ImportClaudeSettingsOptions,
 ): Promise<ClaudeImportExecutionResult> {
   const result = emptyResult();
-  try {
-    const loadSettings = settingsLoader(opts.deps);
-    const settingsResults = await Promise.all(
-      opts.selectedScopes.map(async (scope) => ({
-        scope,
-        loaded: await loadSettings(scope, { cwd: opts.cwd }),
-      })),
-    );
+  const loadSettings = settingsLoader(opts.deps);
+  const settingsResults = await Promise.all(
+    opts.selectedScopes.map(async (scope) => ({
+      scope,
+      loaded: await loadSettings(scope, { cwd: opts.cwd }),
+    })),
+  );
 
-    for (const loaded of settingsResults) {
-      result.diagnostics.push(...loaded.loaded.diagnostics);
-    }
-
-    const plan = buildClaudeImportPlan(
-      settingsResults.map((entry) => ({ scope: entry.scope, settings: entry.loaded.settings })),
-    );
-    result.diagnostics.push(...plan.diagnostics);
-
-    for (const scopePlan of plan.scopes) {
-      await executeScopedPlan(opts, result, scopePlan);
-    }
-  } catch (err) {
-    notifyError(opts.ctx, `Import failed: ${errorMessage(err)}`, err);
-    return result;
+  for (const loaded of settingsResults) {
+    result.diagnostics.push(...loaded.loaded.diagnostics);
   }
 
-  // Plan 13-02a-01 / CMC-27 / MSG-SR-4..6: cascade summary severity is
-  // restricted to "success" | "warning"; notifyError is forbidden on
-  // cascade surfaces. The legacy 3-arm branch (notifyError on
-  // unexpectedPluginFailures > 0) collapses to a 2-arm dispatch driven
-  // by composeImportSummary's aggregated severity. Per-row failures
-  // surface via the cascade row's `(failed)` token; the user sees the
-  // failure structurally without a notifyError severity level.
-  const probe = softDepStatus(opts.pi);
-  const { body, severity } = composeImportSummary(result, probe);
-  const hint = reloadHint(
-    result.installedPlugins.filter((o) => o.resourcesChanged).map((o) => o.plugin),
+  const plan = buildClaudeImportPlan(
+    settingsResults.map((entry) => ({ scope: entry.scope, settings: entry.loaded.settings })),
   );
-  const finalBody = appendReloadHint(body, hint);
-  const dispatch = severity === "warning" ? notifyWarning : notifySuccess;
-  dispatch(opts.ctx, finalBody);
+  result.diagnostics.push(...plan.diagnostics);
+
+  for (const scopePlan of plan.scopes) {
+    await executeScopedPlan(opts, result, scopePlan);
+  }
+
+  // Plan 20-02 / D-20-02 (strict D-19-02 mirror): V2 cascade construction
+  // mirrors the Plan 19-04 reinstall.ts recipe at
+  // orchestrators/plugin/reinstall.ts; execute.ts substitutes the
+  // import-cascade variant set (added / updated / failed marketplaces
+  // crossed with installed / skipped / failed / unavailable plugins) per
+  // D-20-02 + D-19-02 strict mirror. Severity (D-16-11), reload-hint
+  // (D-16-12), and soft-dep markers (D-16-14, D-16-15) are computed by
+  // notify(). The V1 outer try/catch and the catastrophic-error path
+  // (V1 notifyError with the legacy import-failed prefix) are DROPPED
+  // per A3 + D-20-03 extension; truly catastrophic throws bubble to Pi
+  // runtime (BETTER for debugging than a polished V1 message that masks
+  // the bug). The inner executeScopedPlan per-scope try/catch already
+  // covers expected loadState failures.
+  const marketplaces = buildImportNotificationMarketplaces(result);
+  notify(opts.ctx, opts.pi, { marketplaces });
 
   return result;
 }

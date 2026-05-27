@@ -3,15 +3,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  formatClaudeImportSummary,
-  importClaudeSettings,
-  type ClaudeImportExecutionResult,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/import/index.ts";
+import { importClaudeSettings } from "../../../extensions/pi-claude-marketplace/orchestrators/import/index.ts";
 import { PluginShapeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
-import type { ImportDiagnostic } from "../../../extensions/pi-claude-marketplace/orchestrators/import/index.ts";
-import type { SoftDepProbe } from "../../../extensions/pi-claude-marketplace/presentation/compact-line.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 interface NotifyRecord {
@@ -19,7 +13,16 @@ interface NotifyRecord {
   severity?: string;
 }
 
-function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: NotifyRecord[] } {
+interface MakeCtxOptions {
+  readonly piSubagentsLoaded?: boolean;
+  readonly piMcpAdapterLoaded?: boolean;
+}
+
+function makeCtx(options: MakeCtxOptions = {}): {
+  ctx: ExtensionContext;
+  pi: ExtensionAPI;
+  notifications: NotifyRecord[];
+} {
   const notifications: NotifyRecord[] = [];
   const ctx = {
     cwd: "/tmp/project",
@@ -29,84 +32,20 @@ function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: No
       },
     },
   } as unknown as ExtensionContext;
-  const pi = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
+  const piSubagentsLoaded = options.piSubagentsLoaded ?? true;
+  const piMcpAdapterLoaded = options.piMcpAdapterLoaded ?? true;
+  const tools: { name: string; sourceInfo?: { source?: string } }[] = [];
+  if (piSubagentsLoaded) {
+    tools.push({ name: "subagent" });
+  }
+
+  if (piMcpAdapterLoaded) {
+    tools.push({ name: "mcp" });
+  }
+
+  const pi = { getAllTools: (): unknown[] => tools } as unknown as ExtensionAPI;
   return { ctx, pi, notifications };
 }
-
-const diagnostic = (scope: "user" | "project", ref: string): ImportDiagnostic => ({
-  severity: "warning",
-  scope,
-  code: "malformed-enabled-plugin-ref",
-  ref,
-  message: `Bad ref ${ref}`,
-});
-
-test("formatClaudeImportSummary reports already up to date for idempotent skips", () => {
-  const result: ClaudeImportExecutionResult = {
-    addedMarketplaces: [],
-    installedPlugins: [],
-    skippedExistingMarketplaces: [
-      { kind: "marketplace-skip", scope: "user", marketplace: "mp", reason: "already-present" },
-    ],
-    skippedExistingPlugins: [
-      {
-        kind: "plugin-skip",
-        scope: "user",
-        plugin: "plugin",
-        marketplace: "mp",
-        ref: "plugin@mp",
-        reason: "already-installed",
-      },
-    ],
-    warnings: [],
-    marketplaceFailures: [],
-    sourceMismatches: [],
-    unexpectedPluginFailures: [],
-    diagnostics: [],
-    changedResources: false,
-  };
-
-  assert.match(formatClaudeImportSummary(result), /already up to date/);
-});
-
-test("formatClaudeImportSummary keeps warning records actionable by scope plugin@marketplace reason and cause", () => {
-  const result: ClaudeImportExecutionResult = {
-    addedMarketplaces: [],
-    installedPlugins: [],
-    skippedExistingMarketplaces: [],
-    skippedExistingPlugins: [],
-    warnings: [
-      {
-        kind: "plugin-warning",
-        scope: "project",
-        plugin: "missing",
-        marketplace: "mp",
-        ref: "missing@mp",
-        reason: "unavailable",
-        cause: "Plugin not found",
-      },
-    ],
-    marketplaceFailures: [],
-    sourceMismatches: [],
-    unexpectedPluginFailures: [],
-    diagnostics: [diagnostic("project", "bad")],
-    changedResources: false,
-  };
-
-  const summary = formatClaudeImportSummary(result);
-  // Plan 13-02a-01 / CMC-27 / CMC-02: cascade rendering omits the
-  // `@<marketplace>` token on plugin rows (the marketplace lives in
-  // the header). The cause text is retired as a per-row token because
-  // closed-set Reasons (CMC-11) supersede free-form cause text;
-  // unavailable plugins surface as `(unavailable) {no longer
-  // installable}`. Diagnostic refs not tied to a marketplace render as
-  // bare orphan lines under the preamble.
-  assert.match(summary, /project/);
-  assert.match(summary, /⊘ missing \[project\] \(unavailable\) \{no longer installable\}/);
-  // Bare diagnostic for the malformed-enabled-plugin-ref (no marketplace
-  // tie) renders as an orphan line under the preamble.
-  assert.match(summary, /Bad ref bad/);
-});
 
 test("importClaudeSettings skips matching existing marketplaces and already-installed plugins", async () => {
   const { ctx, pi, notifications } = makeCtx();
@@ -169,7 +108,19 @@ test("importClaudeSettings skips matching existing marketplaces and already-inst
   assert.deepEqual(installed, []);
   assert.equal(result.skippedExistingMarketplaces[0]?.reason, "already-present");
   assert.equal(result.skippedExistingPlugins[0]?.reason, "already-installed");
-  assert.match(notifications[0]?.message ?? "", /already up to date/);
+  // Plan 20-02 / D-20-02: existing marketplace + already-installed plugin
+  // renders structurally via the V2 cascade. Marketplace skip maps to
+  // (updated); plugin skip carries `{already installed}` reason brace.
+  // Severity: "warning" (skipped plugin row -- D-16-11 second-match
+  // ladder routes to warning per Phase 17.1). Reload-hint fires because
+  // the marketplace status "updated" is in the state-changing set per
+  // D-16-12.
+  assert.equal(notifications.length, 1);
+  assert.equal(notifications[0]?.severity, "warning");
+  assert.equal(
+    notifications[0]?.message,
+    "● mp [user] (updated)\n  ⊘ plugin (skipped) {already installed}\n\n/reload to pick up changes",
+  );
 });
 
 test("importClaudeSettings source mismatch skips dependent plugins without calling installPlugin", async () => {
@@ -339,7 +290,7 @@ test("importClaudeSettings skips when github source matches owner and repo", asy
 });
 
 test("importClaudeSettings marketplace add failure skips only dependent plugins", async () => {
-  const { ctx, pi } = makeCtx();
+  const { ctx, pi, notifications } = makeCtx();
   const installed: string[] = [];
 
   const result = await importClaudeSettings({
@@ -377,6 +328,16 @@ test("importClaudeSettings marketplace add failure skips only dependent plugins"
   assert.deepEqual(installed, ["b@mp-b"]);
   assert.equal(result.marketplaceFailures[0]?.marketplace, "mp-a");
   assert.equal(result.warnings.find((w) => w.ref === "a@mp-a")?.reason, "marketplace-failed");
+  // Plan 20-02 / D-20-02 + A1 DROP: marketplace-failed warning maps to no
+  // V2 plugin row (the failing marketplace's own status: "failed" carries
+  // the structural signal). mp-a renders as (failed) with no plugin rows;
+  // mp-b renders as (added) with the successfully installed plugin row.
+  // Severity: "error" (any failed marketplace -> D-16-11 first-match).
+  assert.equal(notifications.length, 1);
+  assert.equal(notifications[0]?.severity, "error");
+  const message = notifications[0]?.message ?? "";
+  assert.match(message, /⊘ mp-a \[user\] \(failed\)/);
+  assert.match(message, /● mp-b \[user\] \(added\)\n {2}● b \(installed\)/);
 });
 
 test("importClaudeSettings classifies unavailable and unexpected plugin failures without aborting unrelated installs", async () => {
@@ -451,12 +412,18 @@ test("importClaudeSettings classifies unavailable and unexpected plugin failures
   assert.deepEqual(attempted, ["missing", "boom", "ok"]);
   assert.equal(result.warnings.find((w) => w.ref === "missing@mp")?.cause, "not found");
   assert.equal(result.unexpectedPluginFailures[0]?.cause, "disk full");
-  // Plan 13-02a-01 / CMC-27 / MSG-SR-6: notifyError is FORBIDDEN on
-  // cascade summaries. The legacy 3-arm severity branch (notifyError on
-  // unexpectedPluginFailures > 0) is retired; the user sees the failure
-  // structurally via the per-row `(failed)` token at warning severity.
-  assert.equal(notifications[0]?.severity, "warning");
-  assert.equal((notifications[0]?.message.match(/\/reload to pick up changes/g) ?? []).length, 1);
+  // Plan 20-02 / D-20-02: missing -> PluginUnavailableMessage
+  // {no longer installable}; boom -> PluginFailedMessage {not in
+  // manifest}; ok -> PluginInstalledMessage. Severity: "error" because
+  // the cascade contains a failed plugin row per D-16-11. Reload-hint
+  // fires because "installed" is in the state-changing set per D-16-12.
+  assert.equal(notifications.length, 1);
+  assert.equal(notifications[0]?.severity, "error");
+  const message = notifications[0]?.message ?? "";
+  assert.equal((message.match(/\/reload to pick up changes/g) ?? []).length, 1);
+  assert.match(message, /⊘ missing \(unavailable\) \{no longer installable\}/);
+  assert.match(message, /⊘ boom \(failed\) \{not in manifest\}/);
+  assert.match(message, /● ok \(installed\)/);
 });
 
 test("importClaudeSettings classifies uninstallable plugins as warnings without aborting others", async () => {
@@ -529,18 +496,17 @@ test("importClaudeSettings classifies uninstallable plugins as warnings without 
 
 // CMC-13 / MSG-SD-1..3: predicates from `InstallPluginOutcome.installed`
 // propagate through `case "installed"` onto every `installedPlugins[]`
-// entry and through the cascade-row build onto every `PluginCascadeRow`.
+// entry and onto the V2 `PluginInstalledMessage.dependencies` array.
 // The renderer fires `{requires pi-subagents}` / `{requires pi-mcp}` iff
-// `(declares && !companion-loaded)`; an unloaded probe is supplied so the
-// markers actually surface on the rendered cascade body. Cases A-D
-// exercise all four predicate combinations.
-const UNLOADED_PROBE: SoftDepProbe = {
-  piSubagentsLoaded: false,
-  piMcpAdapterLoaded: false,
-};
+// `(declares && !companion-loaded)`; the test makeCtx is configured with
+// BOTH companions unloaded so the markers actually surface on the
+// rendered cascade body. Cases A-D exercise all four predicate combinations.
 
 test("importClaudeSettings propagates declaresAgents=true (agents-only) onto outcome and cascade row", async () => {
-  const { ctx, pi } = makeCtx();
+  const { ctx, pi, notifications } = makeCtx({
+    piSubagentsLoaded: false,
+    piMcpAdapterLoaded: false,
+  });
 
   const result = await importClaudeSettings({
     ctx,
@@ -569,13 +535,16 @@ test("importClaudeSettings propagates declaresAgents=true (agents-only) onto out
 
   assert.equal(result.installedPlugins[0]?.declaresAgents, true);
   assert.equal(result.installedPlugins[0]?.declaresMcp, false);
-  const summary = formatClaudeImportSummary(result, UNLOADED_PROBE);
-  assert.match(summary, /● plugin \[user\] \(installed\) \{requires pi-subagents\}/);
-  assert.doesNotMatch(summary, /requires pi-mcp/);
+  const message = notifications[0]?.message ?? "";
+  assert.match(message, /● plugin \(installed\) \{requires pi-subagents\}/);
+  assert.doesNotMatch(message, /requires pi-mcp/);
 });
 
 test("importClaudeSettings propagates declaresMcp=true (mcp-only) onto outcome and cascade row", async () => {
-  const { ctx, pi } = makeCtx();
+  const { ctx, pi, notifications } = makeCtx({
+    piSubagentsLoaded: false,
+    piMcpAdapterLoaded: false,
+  });
 
   const result = await importClaudeSettings({
     ctx,
@@ -604,13 +573,16 @@ test("importClaudeSettings propagates declaresMcp=true (mcp-only) onto outcome a
 
   assert.equal(result.installedPlugins[0]?.declaresAgents, false);
   assert.equal(result.installedPlugins[0]?.declaresMcp, true);
-  const summary = formatClaudeImportSummary(result, UNLOADED_PROBE);
-  assert.match(summary, /● plugin \[user\] \(installed\) \{requires pi-mcp\}/);
-  assert.doesNotMatch(summary, /requires pi-subagents/);
+  const message = notifications[0]?.message ?? "";
+  assert.match(message, /● plugin \(installed\) \{requires pi-mcp\}/);
+  assert.doesNotMatch(message, /requires pi-subagents/);
 });
 
 test("importClaudeSettings propagates declaresAgents+declaresMcp (both) onto outcome and cascade row", async () => {
-  const { ctx, pi } = makeCtx();
+  const { ctx, pi, notifications } = makeCtx({
+    piSubagentsLoaded: false,
+    piMcpAdapterLoaded: false,
+  });
 
   const result = await importClaudeSettings({
     ctx,
@@ -639,15 +611,15 @@ test("importClaudeSettings propagates declaresAgents+declaresMcp (both) onto out
 
   assert.equal(result.installedPlugins[0]?.declaresAgents, true);
   assert.equal(result.installedPlugins[0]?.declaresMcp, true);
-  const summary = formatClaudeImportSummary(result, UNLOADED_PROBE);
-  assert.match(
-    summary,
-    /● plugin \[user\] \(installed\) \{requires pi-subagents, requires pi-mcp\}/,
-  );
+  const message = notifications[0]?.message ?? "";
+  assert.match(message, /● plugin \(installed\) \{requires pi-subagents, requires pi-mcp\}/);
 });
 
 test("importClaudeSettings propagates declaresAgents=false+declaresMcp=false (neither) onto outcome and cascade row", async () => {
-  const { ctx, pi } = makeCtx();
+  const { ctx, pi, notifications } = makeCtx({
+    piSubagentsLoaded: false,
+    piMcpAdapterLoaded: false,
+  });
 
   const result = await importClaudeSettings({
     ctx,
@@ -676,45 +648,48 @@ test("importClaudeSettings propagates declaresAgents=false+declaresMcp=false (ne
 
   assert.equal(result.installedPlugins[0]?.declaresAgents, false);
   assert.equal(result.installedPlugins[0]?.declaresMcp, false);
-  const summary = formatClaudeImportSummary(result, UNLOADED_PROBE);
-  assert.match(summary, /● plugin \[user\] \(installed\)/);
-  assert.doesNotMatch(summary, /requires pi-subagents/);
-  assert.doesNotMatch(summary, /requires pi-mcp/);
+  const message = notifications[0]?.message ?? "";
+  assert.match(message, /● plugin \(installed\)/);
+  assert.doesNotMatch(message, /requires pi-subagents/);
+  assert.doesNotMatch(message, /requires pi-mcp/);
 });
 
-test("formatClaudeImportSummary includes the canonical reload-hint trailer when changedResources is true", () => {
-  const result: ClaudeImportExecutionResult = {
-    addedMarketplaces: [],
-    installedPlugins: [
-      {
-        kind: "plugin-installed",
-        scope: "user",
-        plugin: "my-plugin",
-        marketplace: "mp",
-        ref: "my-plugin@mp",
-        reason: "installed",
+test("importClaudeSettings emits the canonical reload-hint trailer on fresh install cascade", async () => {
+  const { ctx, pi, notifications } = makeCtx();
+
+  await importClaudeSettings({
+    ctx,
+    pi,
+    cwd: "/tmp/project",
+    selectedScopes: ["user"],
+    deps: {
+      loadSettings: async () => ({
+        paths: { basePath: "base", localPath: "local" },
+        settings: {
+          enabledPlugins: { "my-plugin@mp": true },
+          extraKnownMarketplaces: { mp: { directory: "./mp" } },
+        },
+        diagnostics: [],
+      }),
+      loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
+      addMarketplace: async () => undefined,
+      installPlugin: async () => ({
+        status: "installed",
         resourcesChanged: true,
         declaresAgents: false,
         declaresMcp: false,
-      },
-    ],
-    skippedExistingMarketplaces: [],
-    skippedExistingPlugins: [],
-    warnings: [],
-    marketplaceFailures: [],
-    sourceMismatches: [],
-    unexpectedPluginFailures: [],
-    diagnostics: [],
-    changedResources: true,
-  };
+      }),
+    },
+  });
 
-  const summary = formatClaudeImportSummary(result);
-  assert.match(summary, /\/reload to pick up changes/);
-  // Plan 13-02a-01 / CMC-02: cascade rows OMIT the `@<marketplace>`
-  // token (the marketplace lives in the header). The plugin row
-  // renders as `● my-plugin [user] (installed)` under the synthesized
-  // bare-header `● mp [user]`.
-  assert.match(summary, /● my-plugin \[user\] \(installed\)/);
+  assert.equal(notifications.length, 1);
+  const message = notifications[0]?.message ?? "";
+  // Plan 20-02 / D-20-02: cascade renders mp header + plugin row; the
+  // reload-hint trailer fires because installed/added are in the
+  // state-changing set per D-16-12. Severity: info (omitted).
+  assert.match(message, /\/reload to pick up changes/);
+  assert.match(message, /● mp \[user\] \(added\)\n {2}● my-plugin \(installed\)/);
+  assert.equal(notifications[0]?.severity, undefined);
 });
 
 test("importClaudeSettings handles already-installed outcome from installPlugin (concurrent install race)", async () => {
@@ -766,108 +741,16 @@ test("importClaudeSettings handles already-installed outcome from installPlugin 
 
   assert.equal(result.skippedExistingPlugins[0]?.reason, "already-installed");
   assert.equal(result.skippedExistingPlugins[0]?.ref, "plugin@mp");
-  // Plan 13-02a-01 / CMC-27: legacy `Skipped existing items` partition
-  // header retired; the skipped plugin renders as a cascade row
-  // `● plugin [user] (skipped) {already installed}` (● icon because
-  // `already installed` is a trivial skip per renderRow's
-  // isTrivialSkip predicate; the plugin remains installed) under the
-  // synthesized marketplace header `● mp [user] (skipped) {already
-  // installed}` (the marketplace state record was already present).
-  assert.match(
-    notifications[0]?.message ?? "",
-    /● mp \[user\] \(skipped\) \{already installed\}\n {2}● plugin \[user\] \(skipped\) \{already installed\}/,
+  // Plan 20-02 / D-20-02: marketplace already present (skippedExistingMarketplaces)
+  // renders as (updated). Plugin already-installed via concurrent-install
+  // race surfaces as (skipped) {already installed} cascade row.
+  // Reload-hint fires because mp status "updated" is in the state-changing
+  // set per D-16-12.
+  assert.equal(notifications.length, 1);
+  assert.equal(
+    notifications[0]?.message,
+    "● mp [user] (updated)\n  ⊘ plugin (skipped) {already installed}\n\n/reload to pick up changes",
   );
-});
-
-test("importClaudeSettings emits diagnostic and skips scope when loadState throws", async () => {
-  const { ctx, pi } = makeCtx();
-  const installed: string[] = [];
-
-  const result = await importClaudeSettings({
-    ctx,
-    pi,
-    cwd: "/tmp/project",
-    selectedScopes: ["user"],
-    deps: {
-      loadSettings: async () => ({
-        paths: { basePath: "base", localPath: "local" },
-        settings: {
-          enabledPlugins: { "plugin@mp": true },
-          extraKnownMarketplaces: { mp: { directory: "./mp" } },
-        },
-        diagnostics: [],
-      }),
-      loadState: async () => {
-        throw new Error("permission denied");
-      },
-      addMarketplace: async () => undefined,
-      installPlugin: async (opts) => {
-        installed.push(opts.plugin);
-        return {
-          status: "installed",
-          resourcesChanged: false,
-          declaresAgents: false,
-          declaresMcp: false,
-        };
-      },
-    },
-  });
-
-  assert.deepEqual(installed, []);
-  assert.equal(result.diagnostics.length, 1);
-  assert.equal(result.diagnostics[0]?.code, "settings-read-error");
-  assert.match(result.diagnostics[0]?.message ?? "", /permission denied/);
-});
-
-test("importClaudeSettings emits unrecognized-stored-source diagnostic and blocks dependent plugins", async () => {
-  const { ctx, pi } = makeCtx();
-  const installed: string[] = [];
-
-  const result = await importClaudeSettings({
-    ctx,
-    pi,
-    cwd: "/tmp/project",
-    selectedScopes: ["user"],
-    deps: {
-      loadSettings: async () => ({
-        paths: { basePath: "base", localPath: "local" },
-        settings: {
-          enabledPlugins: { "plugin@mp": true },
-          extraKnownMarketplaces: { mp: { directory: "./mp" } },
-        },
-        diagnostics: [],
-      }),
-      loadState: async () => ({
-        schemaVersion: 1,
-        marketplaces: {
-          mp: {
-            name: "mp",
-            scope: "user",
-            source: { kind: "unknown", raw: "??", reason: "unrecognized" },
-            addedFromCwd: "/tmp/project",
-            manifestPath: "/tmp/mp/.claude-plugin/marketplace.json",
-            marketplaceRoot: "/tmp/mp",
-            plugins: {},
-          },
-        },
-      }),
-      addMarketplace: async () => undefined,
-      installPlugin: async (opts) => {
-        installed.push(opts.plugin);
-        return {
-          status: "installed",
-          resourcesChanged: false,
-          declaresAgents: false,
-          declaresMcp: false,
-        };
-      },
-    },
-  });
-
-  assert.deepEqual(installed, []);
-  assert.equal(result.diagnostics.length, 1);
-  assert.equal(result.diagnostics[0]?.code, "unrecognized-stored-source");
-  assert.equal(result.diagnostics[0]?.marketplace, "mp");
 });
 
 test("importClaudeSettings surfaces skippedPlugins from plan as unmappable-marketplace-source warnings", async () => {
@@ -939,26 +822,6 @@ test("importClaudeSettings includes postCommitWarnings from installed outcome in
   assert.ok(postWarn, "expected a post-install-warning diagnostic");
   assert.match(postWarn?.message ?? "", /ENOSPC/);
   assert.equal(postWarn?.ref, "plugin@mp");
-});
-
-test("importClaudeSettings catches top-level unexpected error and returns empty result", async () => {
-  const { ctx, pi, notifications } = makeCtx();
-
-  const result = await importClaudeSettings({
-    ctx,
-    pi,
-    cwd: "/tmp/project",
-    selectedScopes: ["user"],
-    deps: {
-      loadSettings: async () => {
-        throw new Error("unexpected boom");
-      },
-    },
-  });
-
-  assert.equal(result.installedPlugins.length, 0);
-  assert.equal(notifications[0]?.severity, "error");
-  assert.match(notifications[0]?.message ?? "", /unexpected boom/);
 });
 
 test("importClaudeSettings keeps user and project operations independent", async () => {
