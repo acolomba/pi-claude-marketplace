@@ -25,7 +25,9 @@ interface NotifyRecord {
 function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: NotifyRecord[] } {
   const notifications: NotifyRecord[] = [];
   // Plan 18-00: `pi` required on AutoupdateOptions; mirror production
-  // wiring shape (D-18-06 preserved).
+  // wiring shape (D-18-06 preserved). Plan 18-02: `pi` is now actively
+  // consumed by the orchestrator to drive notify()'s soft-dep probe
+  // (D-16-14); the stub still satisfies the ExtensionAPI surface.
   const pi = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
   const ctx = {
     ui: {
@@ -77,7 +79,7 @@ function makeMarketplaceRecord(
   };
 }
 
-test("MAU-1 / CMC-33: enable=true on a single marketplace flips false->true and emits `● <mp> [<scope>] <autoupdate>` (marker-as-outcome, no status token)", async () => {
+test("MAU-1 / D-18-05: enable=true on a single marketplace flips false->true and emits V2 `(autoupdate enabled)` + reload-hint trailer", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
@@ -92,11 +94,16 @@ test("MAU-1 / CMC-33: enable=true on a single marketplace flips false->true and 
     const after = await loadState(locations.extensionRoot);
     assert.equal(after.marketplaces["mp"]!.autoupdate, true);
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "● mp [project] <autoupdate>");
+    assert.equal(
+      notifications[0]!.message,
+      "● mp [project] (autoupdate enabled)\n\n/reload to pick up changes",
+    );
+    // D-18-05 severity ladder: fresh autoupdate enable -> info (no 2nd arg).
+    assert.equal(notifications[0]!.severity, undefined);
   });
 });
 
-test("MAU-1 / CMC-33: enable=false flips true->false and emits `● <mp> [<scope>] <no autoupdate>` (the only surface where `<no autoupdate>` appears)", async () => {
+test("MAU-1 / D-18-05: enable=false flips true->false and emits V2 `(autoupdate disabled)` + reload-hint trailer", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
@@ -108,11 +115,16 @@ test("MAU-1 / CMC-33: enable=false flips true->false and emits `● <mp> [<scope
     await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: false, scope: "project", cwd });
     const after = await loadState(locations.extensionRoot);
     assert.equal(after.marketplaces["mp"]!.autoupdate, false);
-    assert.equal(notifications[0]!.message, "● mp [project] <no autoupdate>");
+    assert.equal(
+      notifications[0]!.message,
+      "● mp [project] (autoupdate disabled)\n\n/reload to pick up changes",
+    );
+    // D-18-05 severity ladder: fresh autoupdate disable -> info (no 2nd arg).
+    assert.equal(notifications[0]!.severity, undefined);
   });
 });
 
-test("MAU-3 / CMC-33: idempotent -- already-true + enable=true emits marker + `{already enabled}` reason; state unchanged", async () => {
+test("MAU-3 / D-18-05: idempotent -- already-true + enable=true emits V2 `(skipped) {already enabled}` at severity warning", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
@@ -124,11 +136,13 @@ test("MAU-3 / CMC-33: idempotent -- already-true + enable=true emits marker + `{
     await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: true, scope: "project", cwd });
     const after = await loadState(locations.extensionRoot);
     assert.equal(after.marketplaces["mp"]!.autoupdate, true);
-    assert.equal(notifications[0]!.message, "● mp [project] <autoupdate> {already enabled}");
+    assert.equal(notifications[0]!.message, "● mp [project] (skipped) {already enabled}");
+    // D-18-05 severity ladder: skipped -> warning.
+    assert.equal(notifications[0]!.severity, "warning");
   });
 });
 
-test("MAU-3 / CMC-33: idempotent -- already-false + enable=false emits `<no autoupdate>` + `{already disabled}` reason", async () => {
+test("MAU-3 / D-18-05: idempotent -- already-false + enable=false emits V2 `(skipped) {already disabled}` at severity warning", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
@@ -138,11 +152,13 @@ test("MAU-3 / CMC-33: idempotent -- already-false + enable=false emits `<no auto
     });
     const { ctx, pi, notifications } = makeCtx();
     await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: false, scope: "project", cwd });
-    assert.equal(notifications[0]!.message, "● mp [project] <no autoupdate> {already disabled}");
+    assert.equal(notifications[0]!.message, "● mp [project] (skipped) {already disabled}");
+    // D-18-05 severity ladder: skipped -> warning.
+    assert.equal(notifications[0]!.severity, "warning");
   });
 });
 
-test("MAU-4: missing autoupdate field treated as false; enable=true flips it to true", async () => {
+test("MAU-4: missing autoupdate field treated as false; enable=true flips it to true (V2 `(autoupdate enabled)`)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
@@ -155,11 +171,16 @@ test("MAU-4: missing autoupdate field treated as false; enable=true flips it to 
     await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: true, scope: "project", cwd });
     const after = await loadState(locations.extensionRoot);
     assert.equal(after.marketplaces["mp"]!.autoupdate, true);
-    assert.equal(notifications[0]!.message, "● mp [project] <autoupdate>");
+    assert.equal(
+      notifications[0]!.message,
+      "● mp [project] (autoupdate enabled)\n\n/reload to pick up changes",
+    );
+    // D-18-05 severity ladder: fresh enable -> info.
+    assert.equal(notifications[0]!.severity, undefined);
   });
 });
 
-test("MAU-4: missing autoupdate field treated as false; enable=false reports `{already disabled}` idempotently", async () => {
+test("MAU-4: missing autoupdate field treated as false; enable=false reports V2 `(skipped) {already disabled}` idempotently", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
@@ -169,11 +190,13 @@ test("MAU-4: missing autoupdate field treated as false; enable=false reports `{a
     });
     const { ctx, pi, notifications } = makeCtx();
     await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: false, scope: "project", cwd });
-    assert.equal(notifications[0]!.message, "● mp [project] <no autoupdate> {already disabled}");
+    assert.equal(notifications[0]!.message, "● mp [project] (skipped) {already disabled}");
+    // D-18-05 severity ladder: skipped -> warning.
+    assert.equal(notifications[0]!.severity, "warning");
   });
 });
 
-test("MAU-2 / CMC-33: bare form flips every marketplace in scope; mixed changed + unchanged renders TWO row lines joined by newline", async () => {
+test("MAU-2 / CMC-33 (V2): bare form flips every marketplace in scope; one notify() emits both rows separated by blank line", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
@@ -192,24 +215,55 @@ test("MAU-2 / CMC-33: bare form flips every marketplace in scope; mixed changed 
     assert.equal(after.marketplaces["already"]!.autoupdate, true);
     assert.equal(after.marketplaces["to-flip"]!.autoupdate, true);
 
-    // Both lines present, marker-as-outcome form per CMC-33.
-    assert.match(
-      notifications[0]!.message,
-      /● already \[project\] <autoupdate> \{already enabled\}/,
+    // V2 catalog forms: one notification carries both rows.
+    // D-16-06: caller-order honored (no alphabetic sort at the
+    // orchestrator). The orchestrator's accumulator pushes
+    // `result.changed[]` rows BEFORE `result.unchanged[]` rows (see
+    // setMarketplaceAutoupdate's per-scope loop), so the changed
+    // marketplace ("to-flip") precedes the unchanged one ("already")
+    // in the rendered output -- regardless of state insertion order.
+    // Both row bytes assert as substrings so the test stays robust to
+    // the intra-block join discipline.
+    assert.equal(notifications.length, 1);
+    const message = notifications[0]!.message;
+    assert.ok(
+      message.includes("● already [project] (skipped) {already enabled}"),
+      `expected idempotent row, got: ${message}`,
     );
-    assert.match(notifications[0]!.message, /● to-flip \[project\] <autoupdate>$/m);
+    assert.ok(
+      message.includes("● to-flip [project] (autoupdate enabled)"),
+      `expected fresh-enable row, got: ${message}`,
+    );
+    // Caller-order invariant: changed-first-then-unchanged grouping
+    // (the orchestrator's accumulator order); to-flip precedes already.
+    assert.ok(
+      message.indexOf("● to-flip [project]") < message.indexOf("● already [project]"),
+      `expected changed-first ordering (to-flip before already), got: ${message}`,
+    );
+    // Mixed-outcome multi-marketplace: severity is the WORST present
+    // (warning > info) per the notify()-computed severity ladder
+    // (D-16-11). Since one row is skipped (warning), overall = warning.
+    assert.equal(notifications[0]!.severity, "warning");
+    // /reload to pick up changes fires because at least one row is
+    // state-changing (the to-flip row hit `autoupdate enabled`).
+    assert.ok(
+      message.includes("/reload to pick up changes"),
+      `expected reload-hint trailer, got: ${message}`,
+    );
   });
 });
 
-test("CMC-10 + SC-6: bare form across both empty scopes succeeds with `(no marketplaces)` EmptyToken", async () => {
+test("CMC-10 + SC-6: bare form across both empty scopes succeeds with `(no marketplaces)` sentinel", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, pi, notifications } = makeCtx();
     await setMarketplaceAutoupdate({ ctx, pi, enable: true, cwd }); // no name, no scope
+    // D-16-17: empty marketplaces[] -> notify() emits the sentinel
+    // verbatim. The V1 byte form is identical to V2.
     assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });
 
-test("Single-name flip across BOTH scopes when --scope omitted: flips in user scope only does NOT surface project-scope-not-found error", async () => {
+test("Single-name flip across BOTH scopes when --scope omitted: flip in user scope only emits V2 `(autoupdate enabled)` (no error)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const userLocations = locationsFor("user", cwd);
     await mkdir(userLocations.extensionRoot, { recursive: true });
@@ -221,12 +275,17 @@ test("Single-name flip across BOTH scopes when --scope omitted: flips in user sc
     await setMarketplaceAutoupdate({ ctx, pi, name: "only", enable: true, cwd });
     // user-scope flip succeeded; project-scope MarketplaceNotFoundError was swallowed gracefully.
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "● only [user] <autoupdate>");
+    assert.equal(
+      notifications[0]!.message,
+      "● only [user] (autoupdate enabled)\n\n/reload to pick up changes",
+    );
     assert.notEqual(notifications[0]!.severity, "error");
+    // D-18-05: fresh enable -> info severity.
+    assert.equal(notifications[0]!.severity, undefined);
   });
 });
 
-test("single-name cross-scope flip surfaces state lock failures instead of reporting partial success", async () => {
+test("single-name cross-scope flip surfaces state lock failures as V2 `(failed)` row at severity error", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const userLocations = locationsFor("user", cwd);
     const projectLocations = locationsFor("project", cwd);
@@ -245,23 +304,33 @@ test("single-name cross-scope flip surfaces state lock failures instead of repor
       const { ctx, pi, notifications } = makeCtx();
       await setMarketplaceAutoupdate({ ctx, pi, name: "only", enable: true, cwd });
 
+      // Plan 18-02 D-18-06: V2 byte form replaces the V1 cause-message
+      // assertion. Per D-16-08, V2 confines `cause?: Error` to plugin
+      // variants -- mp-level `(failed)` rows do NOT surface the
+      // underlying error message in the rendered byte. The lock-failure
+      // cause is preserved in error logs (V1 carry-forward) but the
+      // user-visible bytes are the catalog `failure-not-found` shape.
       assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]!.message, "⊘ only [project] (failed)");
+      // D-18-05 severity ladder: failed -> error.
       assert.equal(notifications[0]!.severity, "error");
-      assert.match(
-        notifications[0]!.message,
-        /Another pi-claude-marketplace operation is in progress/,
-      );
     } finally {
       await release();
     }
   });
 });
 
-test("Single-name flip across BOTH scopes when name absent from BOTH scopes: surfaces error", async () => {
+test("Single-name flip across BOTH scopes when name absent from BOTH scopes: surfaces V2 `(failed)` row at severity error", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, pi, notifications } = makeCtx();
     await setMarketplaceAutoupdate({ ctx, pi, name: "absent-zzz-9999", enable: true, cwd });
     assert.equal(notifications.length, 1);
+    // missingEverywhere path: `first.scope` is the FIRST scope in the
+    // SC-6 iteration order ("project" comes before "user"). The
+    // failure row carries the scope where the FIRST not-found was
+    // observed.
+    assert.equal(notifications[0]!.message, "⊘ absent-zzz-9999 [project] (failed)");
+    // D-18-05 severity ladder: failed -> error.
     assert.equal(notifications[0]!.severity, "error");
   });
 });
