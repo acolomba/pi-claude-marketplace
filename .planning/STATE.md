@@ -3,8 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Structured Notification Messages
 status: executing
-last_updated: "2026-05-27T15:51:03.478Z"
-last_activity: 2026-05-27 -- Phase 20 planning complete
+stopped_at: Phase 20 context gathered
+last_updated: "2026-05-27T16:19:21.774Z"
+last_activity: 2026-05-27 -- Phase 20 execution started
 progress:
   total_phases: 9
   completed_phases: 7
@@ -19,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-25)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 20 -- migration wave 3    edge handlers & usageerror
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 20 -- migration-wave-3-edge-handlers-usageerror
 
 ## Current Position
 
-Phase: 20
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-27 -- Phase 20 planning complete
+Phase: 20 (migration-wave-3-edge-handlers-usageerror) -- EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 20
+Last activity: 2026-05-27 -- Phase 20 execution started
 
 ## Performance Metrics
 
