@@ -296,6 +296,25 @@ function narrowResolverNotes(
  * `{unsupported source}`, hiding real failure causes from the user.
  */
 function narrowProbeError(err: unknown): ListReason {
+  return narrowErrnoLikeError(err);
+}
+
+/**
+ * WR-03 shared core: errno-first + SyntaxError + permissive fallback
+ * classifier. Both `narrowProbeError` (per-row resolver probe failures)
+ * and `narrowListFailReason` (orchestrator-level list failures) share
+ * this implementation -- the classifier ladder for a Node FS / JSON
+ * throw is the same regardless of which surface caught it. The two
+ * named wrappers exist for documentation (different callers, different
+ * semantic meaning of "unreadable") and to provide stable test seams
+ * (`__test_narrowProbeError` / `__test_narrowListFailReason`).
+ *
+ * Keeping the function bodies distinct would trip
+ * `sonarjs/no-identical-functions`; collapsing the two named functions
+ * would lose the semantic distinction documented at the call sites.
+ * The shared-core indirection threads the needle.
+ */
+function narrowErrnoLikeError(err: unknown): ListReason {
   if (err instanceof SyntaxError) {
     return "unparseable";
   }
@@ -788,22 +807,7 @@ function sortPluginsInBlock(
  * loadManifest / cross-scope walk throws).
  */
 function narrowListFailReason(err: unknown): ListReason {
-  if (err instanceof SyntaxError) {
-    return "unparseable";
-  }
-
-  if (err instanceof Error) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === "EACCES" || code === "EPERM") {
-      return "permission denied";
-    }
-
-    if (code === "ENOENT" || code === "ENOTDIR") {
-      return "source missing";
-    }
-  }
-
-  return "unreadable";
+  return narrowErrnoLikeError(err);
 }
 
 /**
