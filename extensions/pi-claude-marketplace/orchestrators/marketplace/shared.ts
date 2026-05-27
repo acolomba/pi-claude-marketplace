@@ -475,10 +475,11 @@ export async function loadVisibleMarketplaces(opts: {
   return out;
 }
 
-// Phase 13 / D-CMC-12: the depth-5 cause-chain walker relocated to
-// `shared/errors.ts::causeChainTrailer` with the MSG-CC-1 rendered shape
-// (`cause: <l1> -> <l2> -> ... [(truncated)]`). Callers that previously
-// wrapped errors before passing into `notifyError` now pass `errorMessage(err)`
-// and let `notifyError` append the trailer automatically; callers that need
-// the trailer outside the notify path compose it inline via
+// Phase 13 / D-CMC-12 (refreshed Phase 18 / SNM-22): the depth-5 cause-chain
+// walker lives at `shared/errors.ts::causeChainTrailer` with the MSG-CC-1
+// rendered shape (`cause: <l1> -> <l2> -> ... [(truncated)]`). Marketplace
+// callers now route errors through the V2 `notify(ctx, "error", ...)`
+// chokepoint (see `shared/notify.ts` and 18-01-SUMMARY.md): they pass the
+// failure facts and let `notify` compose the trailer via `causeChainTrailer`.
+// Callers that need the trailer outside the notify path compose it inline via
 // `causeChainTrailer(err)` imported from `presentation/cause-chain.ts`.
