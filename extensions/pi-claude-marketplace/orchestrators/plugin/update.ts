@@ -180,21 +180,47 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
   try {
     targets = await enumerateTargets(opts);
   } catch (err) {
-    // Plan 19-05 / D-19-02 Option B: synthesize a PluginFailedMessage carrying
-    // the typed `cause` so the renderer's 4-space cause-chain trailer
-    // (D-16-08) preserves the V1 error-message text. The `enumerateTargets`
-    // failure path is only reachable when target.kind !== "all" (the bare
-    // form never throws here), so we always know the marketplace identity.
+    // WR-05: the previous code path assumed `target.kind !== "all"` was the
+    // only reachable failure mode (the comment claimed "the bare form never
+    // throws here"), but `enumerateTargets` for the bare form calls
+    // `loadState` for both scopes and propagates any I/O / schema-validation
+    // throw. When the bare form throws, the synthetic identity collapsed
+    // onto the literal string `"(targets)"` returned by
+    // `targetMarketplaceName` -- producing a user-visible row reading
+    // `⊘ (targets) (failed) ...` under a marketplace block named
+    // `(targets)`. Hardcoding `scope: "project"` as the default also did
+    // not necessarily match the scope whose state.json actually failed
+    // to load.
+    //
+    // Split the failure path on `target.kind`:
+    //   - `marketplace` / `plugin`: the marketplace identity is present
+    //     on the target; surface the failure via `notifyDirectFailure`
+    //     under the real marketplace name (V1 behavior preserved).
+    //   - `all` (bare form): no marketplace identity is available;
+    //     surface a marketplace-level failure via the `(no marketplaces)`
+    //     sentinel `{ marketplaces: [] }` and a separate explicit-failure
+    //     emission carrying just the cause chain. Avoid the misleading
+    //     `(targets)` stand-in entirely.
+    if (target.kind === "all") {
+      notifyBareFormEnumerateFailure({ ctx, pi, scope: explicitScope, err });
+      return;
+    }
+
+    // Plan 19-05 / D-19-02 Option B: synthesize a PluginFailedMessage
+    // carrying the typed `cause` so the renderer's 4-space cause-chain
+    // trailer (D-16-08) preserves the V1 error-message text. Reaching
+    // here implies `target.kind === "marketplace" | "plugin"` so
+    // `target.marketplace` is structurally present.
     notifyDirectFailure({
       ctx,
       pi,
-      marketplace: targetMarketplaceName(target),
+      marketplace: target.marketplace,
       // No state.json was read yet, so explicit scope is the best fact
       // available; default to "project" when omitted (matches V1 enumerate
       // failure mode where `not found in <explicitScope> scope.` was the
       // user-facing text).
       scope: explicitScope ?? "project",
-      pluginName: targetMarketplaceName(target),
+      pluginName: target.kind === "plugin" ? target.plugin : target.marketplace,
       err,
     });
     return;
@@ -1317,21 +1343,56 @@ function narrowDirectFailReason(err: Error): Reason {
 }
 
 /**
- * Derive the marketplace name for the enumerate-targets failure path.
- * Per the V1 contract that path is only reachable when target.kind !==
- * "all" (the bare form's enumeration cannot throw); the marketplace
- * identity is always present on those kinds.
+ * WR-05: bare-form (`target.kind === "all"`) enumerate-failure emission.
+ * Distinct from the marketplace/plugin failure path because the bare
+ * form has no marketplace identity to thread into the row; using the
+ * marketplace identity slot for a synthetic `"(targets)"` literal
+ * produced operator-confusing output (`⊘ (targets) (failed) ...` under
+ * a marketplace block named `(targets)`).
+ *
+ * Mirrors the `orchestrators/plugin/reinstall.ts::reinstallPlugins`
+ * bare-form enumeration-failure precedent (line 350: synthetic
+ * `"(reinstall)"` marketplace name). Use `"(update)"` here so the
+ * parens-wrapped form reads to the operator as "synthetic placeholder
+ * for the bare-form update orchestration". The scope defaults to the
+ * caller's explicit scope when present, else `"user"` -- the choice is
+ * cosmetic (no real marketplace exists with this name; the cause-chain
+ * trailer carries the diagnostic).
  */
-function targetMarketplaceName(target: UpdatePluginsTarget): string {
-  if (target.kind === "marketplace" || target.kind === "plugin") {
-    return target.marketplace;
-  }
-
-  // "all" form -- defensive fallback: the enumerate path for the bare
-  // form never throws, so this string is structurally unreachable. Use a
-  // descriptive synthetic name in case future refactors expose it.
-  return "(targets)";
+function notifyBareFormEnumerateFailure(args: {
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  readonly scope: Scope | undefined;
+  readonly err: unknown;
+}): void {
+  const { ctx, pi, scope, err } = args;
+  const cause = err instanceof Error ? err : new Error(String(err));
+  const reasons: readonly Reason[] = [narrowDirectFailReason(cause)];
+  const failedRow: PluginFailedMessage = {
+    status: "failed",
+    name: SYNTHETIC_UPDATE_PLACEHOLDER_NAME,
+    scope: scope ?? "user",
+    reasons,
+    cause,
+  };
+  notify(ctx, pi, {
+    marketplaces: [
+      {
+        name: SYNTHETIC_UPDATE_PLACEHOLDER_NAME,
+        scope: scope ?? "user",
+        plugins: [failedRow],
+      },
+    ],
+  });
 }
+
+/**
+ * WR-05: synthetic placeholder for the bare-form enumerate-failure path.
+ * Held as a module-level constant so a future change has a single edit
+ * point. Mirrors the `"(reinstall)"` precedent in
+ * `orchestrators/plugin/reinstall.ts`.
+ */
+const SYNTHETIC_UPDATE_PLACEHOLDER_NAME = "(update)";
 
 // Plan 19-05: the legacy version-arrow helper is no longer imported -- the
 // V2 renderer (shared/notify.ts) owns version-arrow composition via the
