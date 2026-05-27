@@ -270,7 +270,7 @@ Plans:
 3. Catalog UAT byte-equality is GREEN for every marketplace-family command output (`add`, `remove`, `update`, `list` marketplace headers and rows where applicable) against the v2.0 always-marketplace-header spec.
 4. `npm run check` stays GREEN; no orchestrators outside marketplace have changed call-site shape.
 
-**Plans:** 2/7 plans executed
+**Plans:** 6/7 plans executed
 
 Plans:
 
@@ -284,10 +284,10 @@ Plans:
 
 **Wave 2** *(parallel migrations -- depend on Wave 1)*
 
-- [ ] 18-02-PLAN.md -- Migrate `orchestrators/marketplace/autoupdate.ts` (4 V1 callsites) against Phase 17.1's landed 7-entry MarketplaceStatus + optional reasons?: (D-18-04, D-18-05)
-- [ ] 18-03-PLAN.md -- Migrate `orchestrators/marketplace/list.ts` (1 V1 callsite) -- list-surface arm (mp.status === undefined); add lastUpdatedAt enrichment
-- [ ] 18-04-PLAN.md -- Migrate `orchestrators/marketplace/remove.ts` (4 V1 callsites); DROP cleanup-leak warnings per D-18-01; restructure cascade cause-chain per D-18-03
-- [ ] 18-05-PLAN.md -- Migrate `orchestrators/marketplace/update.ts` (6 V1 callsites -- research-verified count); DROP retry-hint suffix per D-18-02; restructure cascade per D-18-03; complete factory pi-required wiring (option-a)
+- [x] 18-02-PLAN.md -- Migrate `orchestrators/marketplace/autoupdate.ts` (4 V1 callsites) against Phase 17.1's landed 7-entry MarketplaceStatus + optional reasons?: (D-18-04, D-18-05)
+- [x] 18-03-PLAN.md -- Migrate `orchestrators/marketplace/list.ts` (1 V1 callsite) -- list-surface arm (mp.status === undefined); add lastUpdatedAt enrichment
+- [x] 18-04-PLAN.md -- Migrate `orchestrators/marketplace/remove.ts` (4 V1 callsites); DROP cleanup-leak warnings per D-18-01; restructure cascade cause-chain per D-18-03
+- [x] 18-05-PLAN.md -- Migrate `orchestrators/marketplace/update.ts` (6 V1 callsites -- research-verified count); DROP retry-hint suffix per D-18-02; restructure cascade per D-18-03; complete factory pi-required wiring (option-a)
 
 **Wave 3** *(lint narrowing + final gate -- depends on all of Wave 2)*
 
@@ -363,7 +363,7 @@ Plans:
 | 17. Spec Rewrite & Catalog UAT Migration                             | v1.4      | 3/3 | Complete   | 2026-05-26 |
 | 17.1. V2 Grammar Amendment: Autoupdate Surface (INSERTED)            | v1.4      | 4/4 | Complete   | 2026-05-26 |
 | 17.2. renderScopeBracket orphan-fold contract fix (INSERTED)         | v1.4      | 4/4 | Complete    | 2026-05-26 |
-| 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 2/7 | In Progress|  |
+| 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 6/7 | In Progress|  |
 | 19. Migration Wave 2 -- Plugin Orchestrator Family                   | v1.4      | 0/?            | Not started | --         |
 | 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 0/?            | Not started | --         |
 | 21. Final Teardown & GREEN Gate                                      | v1.4      | 0/?            | Not started | --         |
