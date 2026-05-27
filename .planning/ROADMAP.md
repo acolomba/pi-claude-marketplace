@@ -343,7 +343,7 @@ Plans:
 4. Catalog UAT byte-equality is GREEN for every edge-handler output and every usage-error output against the v2.0 spec.
 5. `npm run check` stays GREEN.
 
-**Plans:** 4/5 plans complete (4 original executed; 1 gap-closure planned from REVIEW.md WR-01..03 + IN-01..03)
+**Plans:** 5/5 plans complete
 
 **Wave 1** *(mechanical sweep -- low risk; atomic single commit)*
 
@@ -360,7 +360,7 @@ Plans:
 
 **Wave 4** *(gap closure from REVIEW.md WR-01..03 + IN-01..03 -- depends on Wave 3)*
 
-- [ ] 20-05-importer-error-boundary-and-polish-PLAN.md -- WR-02 Option A: wrap installPlugin in try/catch in executeScopedPlan + route unexpected throws to result.unexpectedPluginFailures + new test locking partial-cascade preservation; WR-01/WR-03: rewrite stale comment in edge/handlers/plugin/import.ts:52-55 to cite execute.ts:518-528 + 577-608 + new installPlugin wrap (drop the execute.ts:745-755 ghost ref); IN-01: add MSG-Block 1b doc note noting orchestrators/import/** follows the same Block-1-ignore / Block-1b-keep parallel as orchestrators/plugin/**; IN-02: keep Object.freeze on the 3 import.ts sites (dominant codebase convention) and annotate each as defense-in-depth; IN-03: mark MarketplaceBlock.name and .scope readonly. IN-04 deferred.
+- [x] 20-05-importer-error-boundary-and-polish-PLAN.md -- WR-02 Option A: wrap installPlugin in try/catch in executeScopedPlan + route unexpected throws to result.unexpectedPluginFailures + new test locking partial-cascade preservation; WR-01/WR-03: rewrite stale comment in edge/handlers/plugin/import.ts:52-55 to cite execute.ts:518-528 + 577-608 + new installPlugin wrap (drop the execute.ts:745-755 ghost ref); IN-01: add MSG-Block 1b doc note noting orchestrators/import/** follows the same Block-1-ignore / Block-1b-keep parallel as orchestrators/plugin/**; IN-02: keep Object.freeze on the 3 import.ts sites (dominant codebase convention) and annotate each as defense-in-depth; IN-03: mark MarketplaceBlock.name and .scope readonly. IN-04 deferred.
 
 ### Phase 21: Final Teardown & GREEN Gate
 
@@ -399,5 +399,5 @@ Plans:
 | 17.2. renderScopeBracket orphan-fold contract fix (INSERTED)         | v1.4      | 4/4 | Complete    | 2026-05-26 |
 | 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 7/7 | Complete    | 2026-05-27 |
 | 19. Migration Wave 2 -- Plugin Orchestrator Family                   | v1.4      | 6/6 | Complete    | 2026-05-27 |
-| 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 4/5 | In Progress | 2026-05-27 |
+| 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 5/5 | Complete   | 2026-05-27 |
 | 21. Final Teardown & GREEN Gate                                      | v1.4      | 0/?            | Not started | --         |
