@@ -2,47 +2,37 @@
 //
 // MR-1..8 + RH-1/RH-5 composition + NFR-5 (no network).
 //
-// Phase 13 Wave 2 sub-wave 2c (Plan 13-02c-01): CMC-31 / CMC-15 /
-// CMC-16 / CMC-13 migration. The user-visible surface is now:
+// Phase 18 / Plan 18-04: V1 -> V2 migration. User-visible surface is now
+// a single `notify(opts.ctx, opts.pi, ...)` call per outcome:
 //
-//   - CLEAN success (no plugin-unstage failures): a single bare
-//     `MarketplaceRow{status:"removed"}` row + reload-hint trailer when
-//     at least one plugin's resources were actually removed. The
-//     legacy `Removed marketplace "X" from <scope> scope.` sentence
-//     and the inline `Dropped plugins: ...` enumeration are RETIRED.
-//   - PARTIAL failure (CMC-31): header `MarketplaceRow{status:"failed",
-//     reasons:["plugins remain"]}` + indented `PluginCascadeRow[]`
-//     children for each failed plugin (via `cascadeSummary`). The
-//     successful unstages render with `(uninstalled)` status (○ icon
-//     -- the plugin no longer is installed); the failed unstages
-//     render with `(failed) {<narrowed reason>}` + `⊘` icon.
-//   - CMC-15 dual trailer on partial failure: when at least one plugin
-//     successfully unstaged, BOTH `/reload to pick up changes` (MSG-RH-1)
-//     AND `Fix the underlying issue and retry.` (free-form §18.2 retry
-//     anchor) fire, one blank line between each, reload above retry.
-//     When every plugin failed, the reload trailer is suppressed and
-//     the retry anchor stands alone.
-//   - CMC-16: post-state cleanup leaks (MR-6) surface as a separate
-//     `notifyWarning` (sentence form; cleanup is an out-of-band hygienic
-//     concern, not a cascade outcome). Manual-recovery anchors are not
-//     currently emitted by mp remove because no system-level resource
-//     (agent index, state.json) participates in this code path. Phase 14
-//     D-14-02 centralized the CMC-16 emission in `orchestrators/plugin/
-//     reinstall.ts` (the only production surface that catches
-//     `ManualRecoveryError`); the historical dead-code import hedge this
-//     file carried is gone. If a future deviation surfaces a
-//     ManualRecoveryError on the marketplace-remove path, the import +
-//     emission can be added at that time.
-//
-// Severity routing: clean -> notifySuccess; partial -> notifyWarning
-// (via the `cascadeSummary` literal-union dispatch; MSG-SR-6 forbids
-// notifyError on cascade summaries). Post-state cleanup leak -> dedicated
-// notifyWarning. The aggregated soft-dep trailer is GONE; per-row markers
-// would attach to the `PluginCascadeRow` children if those rows ever
-// carry `declaresAgents/Mcp` predicates. Today the per-plugin cascade
-// returns only success/failure flags (no per-plugin manifest replay), so
-// CMC-13 markers don't fire on this surface -- the user sees soft-dep
-// markers on subsequent install/update flows instead.
+//   - CLEAN success: one `MarketplaceNotificationMessage{ status:"removed",
+//     plugins: [] }`. The `/reload to pick up changes` trailer is computed
+//     by `notify()` per D-16-12 (mp.status "removed" is state-changing) and
+//     fires whether or not plugins were removed. Severity = info (no 2nd
+//     arg). The V1 contract distinction "no reload-hint when no plugin
+//     resources changed" is deliberately retired in V2 per D-16-12.
+//   - PARTIAL failure (D-18-03 cascade restructure): one
+//     `MarketplaceNotificationMessage{ status:"failed", plugins: [...] }`
+//     whose `plugins[]` mixes `PluginUninstalledMessage` (the successful
+//     unstages, ○ icon) and `PluginFailedMessage{ cause?: Error }` (the
+//     failed unstages, ⊘ icon). Per-plugin `cause` MOVES from V1's
+//     marketplace-level `causeChainTrailer(err)` body to per-row
+//     `PluginFailedMessage.cause`, rendered at 4-space indent below each
+//     failed plugin row per D-16-08. The V1 free-text retry-anchor
+//     trailer ("Fix the underlying issue and retry.") is DROPPED per
+//     D-17-09 (already excluded by the Phase 17 catalog rewrite).
+//     Severity = error (any plugin/mp failed per D-16-11). Reload-hint
+//     fires because at least one plugin status is `"uninstalled"` per
+//     D-16-12.
+//   - Post-state cleanup leaks (MR-6) and completion-cache cleanup leaks:
+//     DROPPED per D-18-01 (parallel to D-17-09 + add.ts pilot). The
+//     underlying `rm()` calls inside the try/catch blocks STILL RUN
+//     (correctness preserved); only the user-visible `notifyWarning`
+//     vanishes because the V2 `MarketplaceNotificationMessage` type has
+//     no field representing "cleanup leak after successful state
+//     mutation" (folding into `status: "failed"` would misrepresent the
+//     operation; a second `notify()` call after the primary would double
+//     severity routing without a catalog fixture to gate against).
 //
 // Flow:
 //   1. resolveScopeFromState(name, userLocs, projectLocs) when --scope omitted (MR-1).
@@ -52,17 +42,15 @@
 //          outcome = cascade(plugin, marketplace, locations, installedPlugin)
 //                    // cascade is opts.cascade ?? cascadeUnstagePlugin (DI seam
 //                    // for test determinism; zero runtime cost in production).
-//          if (outcome.ok): delete record.plugins[plugin]; track dropped + removedPlugins
+//          if (outcome.ok): delete record.plugins[plugin]; track successfullyUnstaged
 //          else:            failedPlugins.push({name, cause})  // D-02 / D-03 fail-fast per plugin
 //        if (failedPlugins.length === 0): delete state.marketplaces[name]
 //      })
 //   3. POST-STATE cleanup (after guard returns):
 //        - per-plugin data dirs (always)
 //        - marketplace data dir + GitHub clone dir (ONLY when failedPlugins.length === 0; MR-7)
-//        - aggregate leaks into one warning per MR-6 (separate notifyWarning)
-//   4. Compose user-visible output via the Wave 1 primitives:
-//        - failedPlugins.length > 0 -> CMC-31 partial form + CMC-15 dual trailer
-//        - else -> CMC-31 clean bare-row form + MR-8 reload-hint
+//        - cleanup failures are SWALLOWED silently per D-18-01.
+//   4. Compose user-visible output via one `notify(opts.ctx, opts.pi, ...)` call.
 //
 // D-02: hand-rolled try/catch loop (NOT the phase-ledger runner).
 // D-03 corollary: per-plugin order mirrors PU-1 (skills → commands → agents → MCP).
@@ -70,14 +58,9 @@
 import { rm } from "node:fs/promises";
 
 import { locationsFor } from "../../persistence/locations.ts";
-import { softDepStatus } from "../../platform/pi-api.ts";
-import { cascadeSummary } from "../../presentation/cascade-summary.ts";
-import { causeChainTrailer } from "../../presentation/cause-chain.ts";
-import { renderRow } from "../../presentation/compact-line.ts";
-import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
 import { dropMarketplaceCache, invalidateMarketplaceNames } from "../../shared/completion-cache.ts";
-import { MarketplaceNotFoundError, appendLeaks, errorMessage } from "../../shared/errors.ts";
-import { notifySuccess, notifyWarning } from "../../shared/notify.ts";
+import { MarketplaceNotFoundError } from "../../shared/errors.ts";
+import { notify } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
 import {
@@ -87,17 +70,9 @@ import {
 } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type {
-  MarketplaceRow,
-  PluginCascadeRow,
-  SoftDepProbe,
-} from "../../presentation/compact-line.ts";
 import type { Reason } from "../../shared/grammar/reasons.ts";
+import type { PluginFailedMessage, PluginUninstalledMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
-
-// CMC-15 (free-form §18.2): retry anchor literal. Pinned here because
-// it's the single source of the partial-failure retry trailer.
-const RETRY_ANCHOR = "Fix the underlying issue and retry.";
 
 export interface RemoveMarketplaceOptions {
   readonly ctx: ExtensionContext;
@@ -118,29 +93,18 @@ export interface RemoveMarketplaceOptions {
   readonly cascade?: typeof cascadeUnstagePlugin;
 }
 
-function resourcesDropped(dropped: {
-  readonly skills: readonly string[];
-  readonly commands: readonly string[];
-  readonly agents: readonly string[];
-  readonly mcpServers: readonly string[];
-}): boolean {
-  return (
-    dropped.skills.length > 0 ||
-    dropped.commands.length > 0 ||
-    dropped.agents.length > 0 ||
-    dropped.mcpServers.length > 0
-  );
-}
-
-async function removePath(
-  cleanupLeaks: string[],
-  label: string,
-  pathPromise: Promise<string>,
-): Promise<void> {
+async function removePath(pathPromise: Promise<string>): Promise<void> {
+  // D-18-01 precedent (Plan 18-04 cleanup-leak DROP): the cleanup `rm()`
+  // call still runs (correctness preserved); failures are swallowed
+  // silently because the V2 `MarketplaceNotificationMessage` type has no
+  // field to surface "cleanup leak after successful state mutation".
+  // The `label` accumulator that V1 fed into a second `notifyWarning`
+  // call is gone; nothing surfaces these failures to the user.
   try {
     await rm(await pathPromise, { recursive: true, force: true });
-  } catch (err) {
-    cleanupLeaks.push(`${label}: ${errorMessage(err)}`);
+  } catch {
+    // Cleanup is a hygienic concern, not part of the state contract.
+    // Per D-18-01: never the primary user-facing failure path.
   }
 }
 
@@ -236,8 +200,6 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
   // Per-plugin tracking accumulators captured by the guard closure.
   const failedPlugins: { name: string; cause: Error }[] = [];
   const successfullyUnstaged: string[] = []; // plugins whose cascade returned ok:true
-  const cleanedPluginNames: string[] = [];
-  const removedPlugins: string[] = []; // plugins whose resources were ACTUALLY removed (MR-8 gate)
   let sourceKindAtRecord: "github" | "path" | "unknown" | undefined;
 
   await withStateGuard(locations, async (state) => {
@@ -264,12 +226,7 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
     for (const [pluginName, plugin] of Object.entries(record.plugins)) {
       const outcome = await cascade(pluginName, opts.name, locations, plugin);
       if (outcome.ok) {
-        cleanedPluginNames.push(pluginName);
         successfullyUnstaged.push(pluginName);
-        // RH-1: only count plugins whose resources actually changed.
-        if (resourcesDropped(outcome.dropped)) {
-          removedPlugins.push(pluginName);
-        }
 
         // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- record.plugins is a dynamic-key Record<string, ...>.
         delete record.plugins[pluginName];
@@ -289,137 +246,99 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
   // D-03-INV (Plan 06-05): post-state-commit completion-cache cleanup.
   // The marketplace-names cache and per-marketplace plugin cache file must be
   // unlinked because the marketplace set changed and this marketplace is gone.
-  // Failure routes through notifyWarning so the primary remove success surface
-  // stays intact -- cache cleanup is a hygienic concern, not a contract.
+  // Cache cleanup is a hygienic concern, not a contract.
+  //
+  // D-18-01 precedent (Plan 18-04 cleanup-leak DROP): cache-refresh
+  // failures are swallowed silently in V2. The underlying `dropMarketplaceCache`
+  // / `invalidateMarketplaceNames` calls STILL RUN (correctness preserved);
+  // only the user-facing V1 `notifyWarning("...cache cleanup deferred...")`
+  // disappears because the V2 `MarketplaceNotificationMessage` type has no
+  // field to surface "cleanup leak after successful state mutation".
   try {
     await invalidateMarketplaceNames(locations.marketplaceNamesCacheFile, resolved.scope);
     const cachePath = await locations.pluginCacheFile(opts.name);
     await dropMarketplaceCache(cachePath, resolved.scope, opts.name);
-  } catch (err) {
-    notifyWarning(
-      opts.ctx,
-      `Marketplace "${opts.name}" removed; completion cache cleanup deferred: ${errorMessage(err)}`,
-    );
+  } catch {
+    // Per D-18-01: cache cleanup hygiene never the primary user-facing path.
   }
 
   // POST-STATE cleanup (MR-5/MR-6/MR-7). Runs OUTSIDE the guard;
-  // state.json already saved.
-  const cleanupLeaks: string[] = [];
-  for (const cleaned of cleanedPluginNames) {
-    await removePath(
-      cleanupLeaks,
-      `plugin data ${opts.name}/${cleaned}`,
-      locations.pluginDataDir(opts.name, cleaned),
-    );
+  // state.json already saved. Per D-18-01, individual cleanup failures
+  // are swallowed by `removePath` (correctness of the `rm()` calls is
+  // preserved; aggregation into a second `notifyWarning` is dropped).
+  for (const cleaned of successfullyUnstaged) {
+    await removePath(locations.pluginDataDir(opts.name, cleaned));
   }
 
   if (failedPlugins.length === 0) {
-    await removePath(
-      cleanupLeaks,
-      `marketplace data ${opts.name}`,
-      locations.marketplaceDataDir(opts.name),
-    );
+    await removePath(locations.marketplaceDataDir(opts.name));
 
     // MR-7: GitHub clone dirs retained when any plugin failed; here failedPlugins.length === 0.
     if (sourceKindAtRecord === "github") {
-      await removePath(
-        cleanupLeaks,
-        `source clone ${opts.name}`,
-        locations.sourceCloneDir(opts.name),
-      );
+      await removePath(locations.sourceCloneDir(opts.name));
     }
   }
 
-  // MR-6: aggregate leaks into one user-visible warning.
-  //
-  // WR-02: state.json has already been saved by withStateGuard --
-  // throwing here would propagate to the edge layer and get translated
-  // into a user-visible error, despite state being committed. The MR-6
-  // contract is "marketplace removed BUT cleanup failed", which is a
-  // warning, not an error. Use ctx.ui.notify with severity 'warning'
-  // (IL-2) and return cleanly so callers can chain.
-  if (cleanupLeaks.length > 0) {
-    const aggregated = appendLeaks(
-      new Error(
-        `Marketplace removed but post-state cleanup failed for ${cleanupLeaks.length.toString()} path(s).`,
-      ),
-      cleanupLeaks,
-    );
-    // notifyWarning does NOT auto-append the cause-chain trailer (only
-    // notifyError does -- D-CMC-12). Compose inline so the user still sees
-    // the chained leaks per MR-6.
-    const trailer = causeChainTrailer(aggregated);
-    const body =
-      trailer === "" ? errorMessage(aggregated) : `${errorMessage(aggregated)}\n\n${trailer}`;
-    notifyWarning(opts.ctx, body);
-    return;
-  }
-
-  const probe: SoftDepProbe = softDepStatus(opts.pi);
-
-  // CMC-31 PARTIAL form: at least one plugin failed to unstage.
-  // Render the marketplace header `(failed) {plugins remain}` + the
-  // children rows via cascadeSummary; layer the CMC-15 dual trailer.
+  // NotificationMessage construction recipe (Plan 18-04; mirrors the
+  // Wave 1 pilot at orchestrators/marketplace/add.ts:160-169).
+  // - One MarketplaceNotificationMessage per outcome, emitted via one
+  //   notify(opts.ctx, opts.pi, ...) call; `plugins: []` is required.
+  // - V2 cascade per D-18-03: per-plugin `PluginFailedMessage.cause`
+  //   renders at 4-space indent via renderPluginRow (D-16-08). The V1
+  //   marketplace-level `causeChainTrailer(err)` body is GONE.
+  // - V1 `RETRY_ANCHOR` ("Fix the underlying issue and retry.") is
+  //   DROPPED per D-17-09 (already excluded by the Phase 17 catalog).
+  // - Severity (error on partial, info on clean) and `/reload to pick up
+  //   changes` are computed by notify() per D-16-11 + D-16-12; callers
+  //   MUST NOT compose.
+  // - Reference: catalog UAT `clean` + `partial` fixtures at
+  //   tests/architecture/catalog-uat.test.ts:1154-1183.
   if (failedPlugins.length > 0) {
-    const headerRow: MarketplaceRow = {
-      kind: "marketplace",
-      name: opts.name,
-      scope: resolved.scope,
-      outcomeClass: "failure",
-      status: "failed",
-      reasons: ["plugins remain"],
-    };
-
-    const childRows: PluginCascadeRow[] = [
-      ...successfullyUnstaged.map<PluginCascadeRow>((pluginName) => ({
-        kind: "plugin-cascade",
-        name: pluginName,
-        scope: resolved.scope,
-        status: "uninstalled",
-        // CMC-13 / Task 260525-cjr B1: cascade rows always populate
-        // both predicates. `(uninstalled)` rows do not render the
-        // soft-dep marker (the plugin is gone), so the value is
-        // deliberately `false`.
-        declaresAgents: false,
-        declaresMcp: false,
-      })),
-      ...failedPlugins.map<PluginCascadeRow>((fp) => ({
-        kind: "plugin-cascade",
-        name: fp.name,
-        scope: resolved.scope,
-        status: "failed",
-        reasons: [narrowCascadeFailure(fp.cause)],
-        declaresAgents: false,
-        declaresMcp: false,
-      })),
-    ];
-
-    const { message } = cascadeSummary({ marketplace: headerRow, rows: childRows, probe });
-
-    // CMC-15 dual trailer: reload-hint above retry-anchor, blank line
-    // between each. Reload-hint fires iff at least one plugin's
-    // resources were actually removed; retry-anchor always fires on
-    // the partial path.
-    const removedSorted = [...removedPlugins].sort((a, b) => a.localeCompare(b));
-    const reloadTrailer = reloadHint(removedSorted);
-    let body = appendReloadHint(message, reloadTrailer);
-    body = `${body}\n\n${RETRY_ANCHOR}`;
-    notifyWarning(opts.ctx, body);
+    // CMC-31 PARTIAL: mp.status="failed"; plugins[] mixes uninstalled +
+    // failed (with per-plugin cause). Caller-order honored end-to-end:
+    // successfullyUnstaged first, failed second (D-16-06).
+    notify(opts.ctx, opts.pi, {
+      marketplaces: [
+        {
+          name: opts.name,
+          scope: resolved.scope,
+          status: "failed",
+          plugins: [
+            ...successfullyUnstaged.map(
+              (name): PluginUninstalledMessage => ({
+                status: "uninstalled",
+                name,
+              }),
+            ),
+            ...failedPlugins.map(
+              ({ name, cause }): PluginFailedMessage => ({
+                status: "failed",
+                name,
+                reasons: [narrowCascadeFailure(cause)],
+                cause,
+              }),
+            ),
+          ],
+        },
+      ],
+    });
     return;
   }
 
-  // CMC-31 CLEAN form: single bare `MarketplaceRow{status:"removed"}`
-  // row + RH-1 reload-hint trailer when any plugin's resources changed.
-  const cleanRow: MarketplaceRow = {
-    kind: "marketplace",
-    name: opts.name,
-    scope: resolved.scope,
-    outcomeClass: "ok",
-    status: "removed",
-  };
-  const removedSorted = [...removedPlugins].sort((a, b) => a.localeCompare(b));
-  const hint = reloadHint(removedSorted);
-  notifySuccess(opts.ctx, appendReloadHint(renderRow(cleanRow, probe), hint));
+  // CMC-31 CLEAN: mp.status="removed"; empty plugins[]. Reload-hint
+  // fires from `mp.status === "removed"` per D-16-12, regardless of
+  // whether any plugin resources were actually removed (deliberate
+  // V2 contract change vs V1 per RESEARCH Risks #7).
+  notify(opts.ctx, opts.pi, {
+    marketplaces: [
+      {
+        name: opts.name,
+        scope: resolved.scope,
+        status: "removed",
+        plugins: [],
+      },
+    ],
+  });
 }
 
 /**
