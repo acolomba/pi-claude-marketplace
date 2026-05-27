@@ -1118,14 +1118,21 @@ function renderUpdateCascadeAndNotify(
   const byMp = new Map<string, MpGroup>();
   for (const { target, outcome } of outcomes) {
     const key = `${target.scope}:${target.marketplace}`;
-    const group = byMp.get(key) ?? {
-      name: target.marketplace,
-      scope: target.scope,
-      plugins: [],
-    };
-    group.plugins.push(outcomeToCascadePluginMessage(target, outcome));
-    if (!byMp.has(key)) {
-      byMp.set(key, group);
+    // WR-01: mirror the reinstall.ts:597-610 get-existing-or-construct-new
+    // shape so the in-place mutation invariant does not rely on the
+    // get-then-conditional-set pattern (which was correct but obscured the
+    // intent -- a future refactor that converted the conditional set to an
+    // unconditional one would silently break the second-iteration mutation
+    // path).
+    const existing = byMp.get(key);
+    if (existing === undefined) {
+      byMp.set(key, {
+        name: target.marketplace,
+        scope: target.scope,
+        plugins: [outcomeToCascadePluginMessage(target, outcome)],
+      });
+    } else {
+      existing.plugins.push(outcomeToCascadePluginMessage(target, outcome));
     }
   }
 
