@@ -187,12 +187,17 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
 // Empty state (CMC-10 / MSG-ER-1 sentinel)
 // ──────────────────────────────────────────────────────────────────────────
 
-test("CMC-10: empty state in both scopes renders bare `(no plugins)` EmptyToken", async () => {
+test("CMC-10: empty state in both scopes renders V2 `(no marketplaces)` sentinel", async () => {
+  // V1->V2 byte change: V1 emitted `(no plugins)` for an empty list; V2
+  // emits `(no marketplaces)` because the top-level
+  // `marketplaces: []` array is the structural empty sentinel
+  // (D-16-17 / shared/notify.ts:1158). Catalog reference:
+  // docs/output-catalog.md:139-145 -- `<!-- catalog-state: empty -->`.
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd });
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "(no plugins)");
+    assert.equal(notifications[0]!.message, "(no marketplaces)");
     assert.equal(notifications[0]!.severity, undefined);
   });
 });
@@ -227,10 +232,23 @@ test("PL-1: no flags = every bucket (installed, available, unavailable)", async 
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     assert.equal(notifications.length, 1);
     const out = notifications[0]!.message;
-    // CMC-22 catalog form: installed carries [<scope>]; available/unavailable omit it.
-    assert.match(out, /● alpha \[user\] v1\.0\.0 \(installed\)/);
-    assert.match(out, /○ beta v2\.0\.0 \(available\)/);
-    assert.match(out, /⊘ gamma v3\.0\.0 \(unavailable\)/);
+    // V1->V2 byte form: per D-16-17 / shared/notify.ts:719 orphan-fold rule
+    // the renderer suppresses `[<scope>]` on a plugin row when
+    // `p.scope === mp.scope`. Here mp.scope and the installed plugin's
+    // scope are both "user", so the bracket is omitted on the alpha row.
+    // SNM-11: `available` / `unavailable` rows never carry a `scope`
+    // field by construction, so their brackets are always absent.
+    assert.equal(
+      out,
+      [
+        "● mp1 [user]",
+        "  ● alpha v1.0.0 (installed)",
+        "  ○ beta v2.0.0 (available)",
+        "  ⊘ gamma v3.0.0 (unavailable) {unsupported source}",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
+    );
   });
 });
 
@@ -256,7 +274,12 @@ test("PL-1: --installed alone shows only installed plugins", async () => {
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
     const out = notifications[0]!.message;
-    assert.match(out, /● alpha \[user\]/);
+    // V2: plugin.scope === mp.scope (both "user") -> bracket suppressed
+    // per D-16-17. The installed alpha row is `● alpha v1.0.0 (installed)`,
+    // not `● alpha [user] v1.0.0 (installed)`. The `[user]` marker
+    // appears on the marketplace header only.
+    assert.match(out, /● alpha v1\.0\.0 \(installed\)/);
+    assert.equal(out.includes("● alpha [user]"), false, out);
     assert.equal(out.includes("○ beta"), false);
     assert.equal(out.includes("⊘"), false);
   });
@@ -398,9 +421,16 @@ test("CMC-21 / D-13-17 / D-13-19: same-name marketplace in BOTH scopes renders T
     const projIdx = out.indexOf("● official [project]");
     const userIdx = out.indexOf("● official [user]");
     assert.ok(projIdx < userIdx, `expected project header first: ${out}`);
-    // Each header carries its own plugin row.
-    assert.match(out, /● alpha \[project\] v0\.9\.0 \(installed\)/);
-    assert.match(out, /● alpha \[user\] v1\.0\.0 \(installed\)/);
+    // V1->V2 byte form (catalog `same-plugin-both-scopes` at
+    // docs/output-catalog.md:168-182): the plugin scope equals each
+    // marketplace block's scope, so the renderer's D-16-17 orphan-fold
+    // rule SUPPRESSES the `[<scope>]` bracket on each row. Plugin rows
+    // are `● alpha v0.9.0 (installed)` (under project header) and
+    // `● alpha v1.0.0 (installed)` (under user header).
+    assert.match(out, /● alpha v0\.9\.0 \(installed\)/);
+    assert.match(out, /● alpha v1\.0\.0 \(installed\)/);
+    assert.equal(out.includes("● alpha [project]"), false, out);
+    assert.equal(out.includes("● alpha [user]"), false, out);
   });
 });
 
@@ -469,8 +499,10 @@ test("PL-5: installed version differs from manifest version -> upgradable", asyn
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
-    // CMC-09 (upgradable) carries the ● effective-state icon.
-    assert.match(out, /● plug \[user\] v1\.0\.0 \(upgradable\)/);
+    // V1->V2 byte form: CMC-09 (upgradable) carries the ● effective-state
+    // icon. D-16-17: `[<scope>]` suppressed when `p.scope === mp.scope`.
+    assert.match(out, /● plug v1\.0\.0 \(upgradable\)/);
+    assert.equal(out.includes("● plug [user]"), false, out);
   });
 });
 
@@ -493,7 +525,9 @@ test("PL-5: installed version equals manifest version -> NOT upgradable", async 
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
-    assert.match(out, /● plug \[user\] v1\.0\.0 \(installed\)/);
+    // V1->V2: D-16-17 suppresses `[<scope>]` bracket on same-scope rows.
+    assert.match(out, /● plug v1\.0\.0 \(installed\)/);
+    assert.equal(out.includes("● plug [user]"), false, out);
     assert.equal(out.includes("upgradable"), false);
   });
 });
@@ -525,7 +559,18 @@ test("PL-5: hash-* versions string-compare (any difference -> upgradable; NOT se
 // PL-6: manifest soft-fail (catalog CMC-22 form: failed-marketplace header)
 // ──────────────────────────────────────────────────────────────────────────
 
-test("PL-6 / CMC-22: manifest load failure renders the marketplace as a failed header + indented cause trailer", async () => {
+test("PL-6 / CMC-22: manifest load failure renders the marketplace as a bare V2 failed header (no `{unparseable}` brace; no cause trailer)", async () => {
+  // V1->V2 byte form (catalog `unparseable-mp` at
+  // docs/output-catalog.md:215-226): the V1 rendering surfaced
+  // `(failed) {unparseable}` plus a 2-space-indented `cause: <message>`
+  // trailer. V2 emits a BARE `(failed)` header (no reasons brace, no
+  // cause trailer) because the v2 type model places `cause?: Error`
+  // on plugin variants only -- not marketplace headers -- and the
+  // orchestrator constructs the unparseable mp with `status: "failed"`
+  // + `plugins: []` per the catalog reference. Severity: "error"
+  // computed by notify() per D-16-11 (any mp.status === "failed"
+  // routes to error). No reload-hint (failed is not in the
+  // state-changing variant set per D-16-12).
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     const fakePath = path.join(userRoot, "marketplaces", "mp1", ".claude-plugin", "no-such.json");
@@ -540,12 +585,18 @@ test("PL-6 / CMC-22: manifest load failure renders the marketplace as a failed h
 
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user" });
-    const out = notifications[0]!.message;
-    // CMC-22 catalog form: ⊘ <mp> [<scope>] (failed) {unparseable} + indented cause.
-    assert.match(out, /⊘ mp1 \[user\] \(failed\) \{unparseable\}/);
-    assert.match(out, /\n {2}cause:/);
+    assert.equal(notifications.length, 1);
+    const note = notifications[0]!;
+    // Severity is "error" because the synthetic mp has status "failed".
+    assert.equal(note.severity, "error");
+    // Bare V2 failed header; no `{unparseable}` brace; no cause trailer.
+    assert.equal(note.message, "⊘ mp1 [user] (failed)");
+    const out = note.message;
+    assert.equal(out.includes("{unparseable}"), false, out);
+    assert.equal(out.includes("cause:"), false, out);
     // Installed plugins are NOT rendered under a failed-manifest header
-    // per the catalog (the failure replaces the per-plugin enumeration).
+    // (the failure replaces the per-plugin enumeration; plugins: [] in
+    // the V2 payload).
     assert.equal(out.includes("stranded"), false);
   });
 });
