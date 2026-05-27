@@ -3,8 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Structured Notification Messages
 status: completed
-stopped_at: Phase 20 context gathered
-last_updated: "2026-05-27T19:40:31.595Z"
+last_updated: "2026-05-27T21:26:55.520Z"
 last_activity: 2026-05-27 -- Phase 20 marked complete
 progress:
   total_phases: 9
@@ -162,9 +161,9 @@ All seven quick tasks have a SUMMARY.md and are completed; the `audit-open` quer
 
 ## Session Continuity
 
-Last session: 2026-05-27T14:59:36.918Z
-Stopped At: Phase 20 context gathered
-Resume File: .planning/phases/20-migration-wave-3-edge-handlers-usageerror/20-CONTEXT.md
+Last session: 2026-05-27T21:26:55.497Z
+Stopped At: Phase 21 context gathered
+Resume File: .planning/phases/21-final-teardown-green-gate/21-CONTEXT.md
 
 ## Operator Next Steps
 
