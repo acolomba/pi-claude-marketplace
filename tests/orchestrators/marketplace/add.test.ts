@@ -57,7 +57,7 @@ async function withTmpScope<T>(
   }
 }
 
-test("MA-5 + MA-11: github source clones, validates, renames, mutates state, emits exact success message; NO reload hint", async () => {
+test("MA-5: github source clones, validates, renames, mutates state, emits V2 success message with reload-hint trailer (D-18-06 flip)", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     const { ctx, pi, notifications } = makeCtx();
     const { gitOps, state } = makeMockGitOps({
@@ -87,17 +87,23 @@ test("MA-5 + MA-11: github source clones, validates, renames, mutates state, emi
     assert.ok(recorded);
     assert.equal(recorded.scope, "project");
 
-    // Exactly one notification, MA-11 byte-for-byte; default severity (no `severity` key).
+    // Exactly one notification, V2 byte-for-byte; default severity (info; no
+    // 2nd arg per D-16-11).
     assert.equal(notifications.length, 1);
     const note = notifications[0];
     assert.ok(note);
-    // CMC-30: success path renders `● <name> [<scope>] <autoupdate> (added)`
-    // for github source (default autoupdate=ON; marker present). Path source
-    // (NFR-5 branch below) omits the marker.
-    assert.equal(note.message, "● valid-marketplace [project] <autoupdate> (added)");
+    // Plan 18-01 / D-18-06: V2 catalog `<!-- catalog-state: github-source -->`
+    // collapses github + path source onto one `(added)` shape with the
+    // `/reload to pick up changes` trailer (D-16-12). The V1 `<autoupdate>`
+    // marker has moved off this surface onto the list-surface header.
+    assert.equal(
+      note.message,
+      "● valid-marketplace [project] (added)\n\n/reload to pick up changes",
+    );
     assert.equal(note.severity, undefined);
-    // MSG-RH-1: NO reload hint substring in any notification.
-    assert.equal(note.message.includes("/reload to pick up changes"), false);
+    // D-18-06 implicit consequence: reload-hint flips POSITIVE for github
+    // source under V2 (mp.status `"added"` is state-changing per D-16-12).
+    assert.equal(note.message.includes("/reload to pick up changes"), true);
   });
 });
 
@@ -302,9 +308,15 @@ test("NFR-5: path-source add never calls gitOps", async () => {
       assert.ok("valid-marketplace" in persisted.marketplaces);
       const note = notifications[0];
       assert.ok(note);
-      // CMC-30: path-source defaults to autoupdate=OFF; the `<autoupdate>`
-      // marker is OMITTED per MSG-GR-5 (absence conveys autoupdate-off).
-      assert.equal(note.message, "● valid-marketplace [project] (added)");
+      // Plan 18-01 / D-18-06: V2 catalog `<!-- catalog-state: path-source -->`
+      // emits the same `(added)` shape as github-source plus the
+      // `/reload to pick up changes` trailer (D-16-12). The V1 omission of
+      // the `<autoupdate>` marker is irrelevant here -- the marker no longer
+      // appears on the (added) arm at all in V2.
+      assert.equal(
+        note.message,
+        "● valid-marketplace [project] (added)\n\n/reload to pick up changes",
+      );
     } finally {
       await rm(localMpDir, { recursive: true, force: true });
     }
@@ -389,8 +401,12 @@ test("CR-02 / MA-4: ~/path is expanded against $HOME for the on-disk probe; sour
 
       const note = notifications[0];
       assert.ok(note);
-      // CMC-30: path-source defaults to autoupdate=OFF; marker omitted.
-      assert.equal(note.message, "● valid-marketplace [project] (added)");
+      // Plan 18-01 / D-18-06: V2 collapses path-source onto the canonical
+      // `(added)` shape with the `/reload to pick up changes` trailer.
+      assert.equal(
+        note.message,
+        "● valid-marketplace [project] (added)\n\n/reload to pick up changes",
+      );
     } finally {
       if (originalHome === undefined) {
         delete process.env.HOME;

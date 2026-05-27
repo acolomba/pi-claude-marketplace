@@ -141,15 +141,16 @@ test("bootstrap (clean state): adds marketplace + enables autoupdate; two notifi
     assert.equal(recorded.scope, "user");
     assert.equal(recorded.autoupdate, true);
 
-    // Exactly two notifications in order. CMC-30 / CMC-33 compact-line
-    // forms (Plan 13-02c-01): add emits `● <mp> [user] <autoupdate>
-    // (added)` (github source -> autoupdate marker present); autoupdate
-    // enable emits the marker-as-outcome `● <mp> [user] <autoupdate>`
-    // (no status token).
+    // Exactly two notifications in order. Plan 18-01 (Rule 3 deviation):
+    // bootstrap composes `addMarketplace` which now emits the V2 catalog
+    // `(added)` shape (`<autoupdate>` marker moved off this surface; the
+    // `/reload to pick up changes` trailer fires per D-16-12). The second
+    // notification (from `setMarketplaceAutoupdate`, still V1) keeps its
+    // V1 marker-as-outcome shape until Plan 18-02 migrates autoupdate.ts.
     assert.equal(notifications.length, 2);
     assert.equal(
       notifications[0]?.message,
-      "● claude-plugins-official [user] <autoupdate> (added)",
+      "● claude-plugins-official [user] (added)\n\n/reload to pick up changes",
     );
     assert.equal(notifications[1]?.message, "● claude-plugins-official [user] <autoupdate>");
     // Clone happened exactly once on the clean path.
