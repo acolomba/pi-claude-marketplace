@@ -10,7 +10,7 @@ import { installPlugin } from "../../../extensions/pi-claude-marketplace/orchest
 import {
   __test_errorWithManualRecovery,
   __test_findManualRecoveryError,
-  __test_outcomeToCascadeRow,
+  __test_outcomeToPluginMessage,
   __test_renderReinstallPartitionAndNotify,
   reinstallPlugin,
   reinstallPlugins,
@@ -20,7 +20,6 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { renderRow } from "../../../extensions/pi-claude-marketplace/presentation/compact-line.ts";
 import { __resetCacheForTests } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { ManualRecoveryError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
@@ -28,10 +27,6 @@ import type {
   ReinstallFailedOutcome,
   ReinstallPluginOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
-import type {
-  ManualRecoveryLine,
-  SoftDepProbe,
-} from "../../../extensions/pi-claude-marketplace/presentation/compact-line.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 interface NotifyRecord {
@@ -489,7 +484,18 @@ test("PRL-10: force overwrites foreign previous agent content and rollback resto
   });
 });
 
-test("PRL-12: cache and data cleanup failures are warning-only after successful reinstall", async () => {
+test("PRL-12 (Plan 19-04): cache and data cleanup failures are SILENTLY swallowed after successful reinstall (V1 warning surface DROPPED per D-19-01)", async () => {
+  // V1 emitted two standalone-mode notifyWarning lines (bridgeWarnings +
+  // maintenanceWarnings) after a successful reinstall when the
+  // post-state-commit cache/data cleanup paths failed. Plan 19-04 / D-19-01
+  // DROPS those two surfaces entirely: the underlying try/catch is
+  // retained (the side effects -- dropMarketplaceCache + rm -- still
+  // attempt to run), but the user-visible warning surface is gone. The
+  // primary success notification still fires.
+  //
+  // The orchestrated-mode `notes` field accumulation is asserted in the
+  // PRL-13-quiet test below; this test asserts the standalone-mode
+  // user-visible flow.
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-cleanup-warning-"));
     try {
@@ -516,17 +522,28 @@ test("PRL-12: cache and data cleanup failures are warning-only after successful 
       });
 
       assert.equal(outcome.partition, "reinstalled");
+      // Exactly one notification (the V2 success cascade); zero warnings.
+      assert.equal(notifications.length, 1);
       assert.equal(errorNotifications(notifications).length, 0);
-      const warnings = notifications.filter((n) => n.severity === "warning").map((n) => n.message);
-      assert.ok(warnings.some((w) => w.includes("cache drop failed")));
-      assert.ok(warnings.some((w) => w.includes("data cleanup failed")));
+      assert.equal(notifications.filter((n) => n.severity === "warning").length, 0);
+      // Defense-in-depth: the dropped warning text MUST NOT leak into the
+      // success notification's message.
+      const body = notifications[0]?.message ?? "";
+      assert.equal(body.includes("cache drop failed"), false);
+      assert.equal(body.includes("data cleanup failed"), false);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
   });
 });
 
-test("PRL-12/RH-5: no-resource reinstall suppresses reload hint; agents/MCP warn when unloaded", async () => {
+test("PRL-12/RH-5 (Plan 19-04): V2 per-variant reload-hint -- emitted on reinstalled even with zero resources changed (cascade stub); agents/MCP warn when unloaded", async () => {
+  // V1 -> V2 behavior change: V1 suppressed the reload-hint when the
+  // cascade-outcome's `resourcesChanged` flag was false. V2 emits the
+  // reload-hint structurally from `PluginReinstalledMessage.status` per
+  // D-16-12 (the `reinstalled` status is in the state-changing variant
+  // set), NOT from cascade-outcome resource count. Mirrors the Wave 1
+  // pilot PU-8 (b) flip documented in 19-01-SUMMARY.md.
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-output-"));
     try {
@@ -541,9 +558,12 @@ test("PRL-12/RH-5: no-resource reinstall suppresses reload hint; agents/MCP warn
       const { ctx, pi, notifications } = makeCtx();
       const noResource = await reinstallDefault(cwd, ctx, pi);
       assert.equal(noResource.partition, "reinstalled");
+      // V1 -> V2 flip: V2 emits the reload-hint trailer structurally
+      // from the `reinstalled` variant per D-16-12, regardless of
+      // resourcesChanged.
       assert.equal(
         (notifications.at(-1)?.message ?? "").includes("/reload to pick up changes"),
-        false,
+        true,
       );
 
       notifications.length = 0;
@@ -688,15 +708,16 @@ test("PRL-04 bulk bare reinstall enumerates user and project scopes", async () =
         outcomes.map((o) => `[${o.scope}] ${o.name}@${o.marketplace}`),
         ["[project] pplug@pmp", "[user] uplug@ump"],
       );
-      // Plan 13-02a-01 / CMC-25: the legacy `Reinstalled N plugins.` summary
-      // line and `Reinstalled:\n  - [...]` partition body are RETIRED. The
-      // bulk reinstall now renders per-marketplace cascades with a label-
-      // header (`outcomeClass: ok`) and (reinstalled) status tokens on the
-      // indented plugin rows. Project-scoped marketplaces sort before user
+      // Plan 19-04 / D-19-02: V2 cascade renders with orphan-fold per-row
+      // scope suppression (D-17.2-01 / D-17.2-02): when the plugin's
+      // scope matches the parent marketplace's scope, the per-row
+      // `[<scope>]` bracket is OMITTED (renderScopeBracket contract at
+      // shared/notify.ts:719). The marketplace header still carries the
+      // `[<scope>]` token. Project-scoped marketplaces sort before user
       // (compareByNameThenScope: project-before-user tie-breaker).
       const body = notifications.at(-1)?.message ?? "";
-      assert.match(body, /● pmp \[project\]\n {2}● pplug \[project\] v\d/);
-      assert.match(body, /● ump \[user\]\n {2}● uplug \[user\] v\d/);
+      assert.match(body, /● pmp \[project\]\n {2}● pplug v\d/);
+      assert.match(body, /● ump \[user\]\n {2}● uplug v\d/);
       // The retired summary/partition forms must NOT appear.
       assert.equal(body.includes("Reinstalled 2 plugins."), false);
       assert.equal(body.includes("Reinstalled:"), false);
@@ -732,10 +753,11 @@ test("PRL-03 bulk marketplace reinstall resolves implicit scope like update", as
         outcomes.map((o) => o.scope),
         ["project"],
       );
-      // Plan 13-02a-01 / CMC-25: marketplace header + indented plugin row;
-      // the `@<marketplace>` token is OMITTED from cascade rows per CMC-02.
+      // Plan 19-04 / D-19-02: V2 cascade marketplace header + indented
+      // plugin row; orphan-fold suppresses the per-row `[<scope>]`
+      // bracket when it matches the parent marketplace's scope.
       const body = notifications.at(-1)?.message ?? "";
-      assert.match(body, /● mymp \[project\]\n {2}● plug \[project\] v/);
+      assert.match(body, /● mymp \[project\]\n {2}● plug v/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -820,12 +842,12 @@ test("PRL-05 explicit plugin reinstall in another scope reports not-installed in
         notifications.some((n) => n.severity === "error"),
         false,
       );
-      // Plan 13-02a-01 / CMC-25: legacy `Skipped:\n  - [scope] plug@mp:`
-      // form retired. Cascade row carries `(skipped) {not installed}`; the
-      // `@<marketplace>` token is OMITTED per CMC-02. Severity routes via
-      // notifyWarning (non-trivial skip) per MSG-SR-5.
+      // Plan 19-04 / D-19-02: V2 cascade row carries `(skipped) {not
+      // installed}`; per-row scope is orphan-folded (matches marketplace
+      // scope). Severity computed by notify() per D-16-11: `warning`
+      // (skipped row in plugins[] tips ladder to warning).
       const body = notifications.at(-1)?.message ?? "";
-      assert.match(body, /● mp \[project\]\n {2}⊘ plug \[project\] \(skipped\) \{not installed\}/);
+      assert.match(body, /● mp \[project\]\n {2}⊘ plug \(skipped\) \{not installed\}/);
       assert.equal(notifications.at(-1)?.severity, "warning");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -908,22 +930,24 @@ test("PRL-13 batch reinstall continues after failed plugin", async () => {
         ["bad:failed", "good:reinstalled"],
       );
       const body = notifications.at(-1)?.message ?? "";
-      // Plan 13-02a-01 / CMC-25: per-marketplace cascade with mixed rows;
-      // `(reinstalled)` on the success row, `(failed) {not in manifest}` on
-      // the failure row (narrowed from `Plugin "bad" not found in cached
-      // manifest`). Rows are alphabetical within the marketplace block.
-      // Severity routes via notifyWarning (any failed row).
-      assert.match(body, /● mp \[project\]\n {2}⊘ bad \[project\] \(failed\) \{not in manifest\}/);
-      assert.match(body, /● good \[project\] v1\.0\.0 \(reinstalled\)/);
+      // Plan 19-04 / D-19-02: V2 cascade with mixed rows; `(reinstalled)`
+      // on the success row, `(failed) {not in manifest}` on the failure
+      // row (narrowed from `Plugin "bad" not found in cached manifest`).
+      // Per-row scope orphan-folded (matches marketplace scope).
+      // Severity computed by notify() per D-16-11: `error` (any failed
+      // row tips the ladder to error in V2; D-16-11 first-match takes
+      // failed before warning).
+      assert.match(body, /● mp \[project\]\n {2}⊘ bad \(failed\) \{not in manifest\}/);
+      assert.match(body, /● good v1\.0\.0 \(reinstalled\)/);
       // Legacy `Reinstalled plugin "good".` summary line + `Failed:` partition
       // header retired.
       assert.equal(body.includes('Reinstalled plugin "good".'), false);
       assert.equal(body.includes("Failed:"), false);
-      assert.equal(
-        notifications.some((n) => n.severity === "error"),
-        false,
-      );
-      assert.equal(notifications.at(-1)?.severity, "warning");
+      // V1 -> V2 severity flip: V1 routed mixed cascades to
+      // `notifyWarning` (MSG-SR-6 forbade notifyError on cascade
+      // summaries). V2 computes severity from contents per D-16-11 ->
+      // any failed row tips the ladder to `error`.
+      assert.equal(notifications.at(-1)?.severity, "error");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -995,20 +1019,18 @@ test("PRL-13 deterministic partition output sorts by scope marketplace plugin", 
         ],
       );
       const body = notifications.at(-1)?.message ?? "";
-      // Plan 13-02a-01 / CMC-25 + 14.2-01 D-04: per-marketplace cascade
-      // blocks ordered project-before-user via `compareByNameThenScope`
-      // (name primary case-insensitive, scope secondary
-      // project-before-user). Plugin rows inside each marketplace block
-      // are also sorted by name+scope via the same comparator. The
-      // legacy `Reinstalled:\n  - [scope] plug@mp` partition body is
-      // RETIRED. The body-regex matches below assert presence (not
-      // order between markets) -- the deepEqual above locks order.
-      assert.match(body, /● u \[user\]\n {2}● z \[user\] v1\.0\.0 \(reinstalled\)/);
+      // Plan 19-04 / D-19-02 + 14.2-01 D-04: V2 per-marketplace cascade
+      // blocks ordered via `compareByNameThenScope` (name primary
+      // case-insensitive, scope secondary project-before-user). Per-row
+      // scope orphan-folded (matches marketplace scope). The body-regex
+      // matches below assert presence (not order between markets) -- the
+      // deepEqual above locks outcome order.
+      assert.match(body, /● u \[user\]\n {2}● z v1\.0\.0 \(reinstalled\)/);
       assert.match(
         body,
-        /● a \[project\]\n {2}● a \[project\] v1\.0\.0 \(reinstalled\)\n {2}● c \[project\] v1\.0\.0 \(reinstalled\)/,
+        /● a \[project\]\n {2}● a v1\.0\.0 \(reinstalled\)\n {2}● c v1\.0\.0 \(reinstalled\)/,
       );
-      assert.match(body, /● z \[project\]\n {2}● b \[project\] v1\.0\.0 \(reinstalled\)/);
+      assert.match(body, /● z \[project\]\n {2}● b v1\.0\.0 \(reinstalled\)/);
       assert.equal(body.includes("Reinstalled:"), false);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -1156,17 +1178,17 @@ test("PRL-15 batch soft dependency warnings aggregate successful restaged resour
       await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
 
       const body = notifications.at(-1)?.message ?? "";
-      // Plan 13-02a-01 / CMC-13 / MSG-SD-1..2: per-row soft-dep markers
-      // replace the aggregated trailer. The `good` plugin (reinstalled
-      // with agent+mcp) carries `{requires pi-subagents, requires
-      // pi-mcp}`; the `bad` plugin (failed) does NOT (effective state =
-      // not installed; MSG-SD-3 + Plan 13-01-01 narrowing). The
-      // `Failed:\n  - [scope] bad@mp` partition header is retired.
+      // Plan 19-04 / D-19-02 + MSG-SD-1..2: per-row soft-dep markers via
+      // the V2 notify() probe. The `good` plugin (reinstalled with
+      // agent+mcp) carries `{requires pi-subagents, requires pi-mcp}`;
+      // the `bad` plugin (failed) does NOT (effective state = not
+      // installed; MSG-SD-3 -- failed rows omit soft-dep markers).
+      // Per-row scope orphan-folded (matches marketplace scope).
       assert.match(
         body,
-        /● good \[project\] v1\.0\.0 \(reinstalled\) \{requires pi-subagents, requires pi-mcp\}/,
+        /● good v1\.0\.0 \(reinstalled\) \{requires pi-subagents, requires pi-mcp\}/,
       );
-      assert.match(body, /⊘ bad \[project\] \(failed\) \{not in manifest\}/);
+      assert.match(body, /⊘ bad \(failed\) \{not in manifest\}/);
       assert.equal(body.includes("Failed:"), false);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -1175,23 +1197,26 @@ test("PRL-15 batch soft dependency warnings aggregate successful restaged resour
 });
 
 /**
- * Plan 13-02a-02 / CMC-16 / F-2 binding regression guard.
+ * Plan 19-04 / D-19-02 binding regression guard (V2 successor to the V1
+ * `outcomeToCascadeRow` regression tests).
  *
- * The structural pivot in `narrowReason` / `outcomeToCascadeRow` (Wave 2
- * sub-wave 2a continuation Task 2) replaces the legacy substring branch
- * on the retired manual-recovery marker prefix with a typed-tag check on
- * `failureClass: "manual-recovery"`. Without this binding test, a silent
- * Reason-drop in the structural pivot would pass the catalog UAT (which is
- * fixture-driven on PluginInlineRow / PluginCascadeRow values directly,
- * NOT through the reinstall.ts → outcomeToCascadeRow → renderRow path).
+ * The structural pivot in `outcomeToPluginMessage` (V2 replacement for V1's
+ * `outcomeToCascadeRow`) preserves the precedence ladder for the failed-
+ * variant Reason mapping:
+ *   (1) failureClass="manual-recovery"  -> PluginManualRecoveryMessage
+ *                                          with reasons: ["rollback partial"]
+ *   (2) typed outcome.reasons           -> PluginFailedMessage with verbatim
+ *                                          reasons
+ *   (3) narrowReasons(outcome.notes)    -> PluginFailedMessage with
+ *                                          substring-narrowed reasons
  *
- * The test exercises the `__test_outcomeToCascadeRow` seam exported from
- * reinstall.ts with a fabricated `ReinstallFailedOutcome` carrying
- * `failureClass: "manual-recovery"`. We assert the cascade row carries
- * `reasons: ["rollback partial"]` BYTE-FOR-BYTE -- the same closed-set
- * Reason that the legacy substring branch produced.
+ * In V2 the manual-recovery variant pivots from a `PluginFailedMessage`
+ * carrying `reasons: ["rollback partial"]` (V1 cascade shape) to a
+ * distinct `PluginManualRecoveryMessage` discriminated variant per
+ * D-19-02 (the status discriminator is the literal `"manual recovery"`
+ * WITH a space per shared/grammar/status-tokens.ts:47).
  */
-test("Plan 13-02a-02 / CMC-16 / F-2: outcomeToCascadeRow maps failureClass=manual-recovery -> rollback partial", () => {
+test("Plan 19-04 / D-19-02: outcomeToPluginMessage maps failureClass=manual-recovery -> PluginManualRecoveryMessage with rollback partial", () => {
   const outcome: ReinstallFailedOutcome = {
     partition: "failed",
     name: "hello",
@@ -1200,18 +1225,19 @@ test("Plan 13-02a-02 / CMC-16 / F-2: outcomeToCascadeRow maps failureClass=manua
     notes: ["staging failed"],
     failureClass: "manual-recovery",
   };
-  const row = __test_outcomeToCascadeRow(outcome);
-  assert.equal(row.kind, "plugin-cascade");
-  assert.equal(row.status, "failed");
-  // Closed-set CMC-11 Reason: "rollback partial" is the canonical mapping
-  // for the manual-recovery class; the structural tag pivot replaces the
-  // legacy substring branch that read the retired marker prefix out of
-  // the free-text notes.
-  assert.ok(row.status === "failed" && row.reasons !== undefined);
-  assert.deepEqual([...(row.reasons ?? [])], ["rollback partial"]);
+  // marketplace scope matches outcome.scope -> per-row scope orphan-folded
+  // (omitted from the variant per Phase 17.2 contract).
+  const row = __test_outcomeToPluginMessage(outcome, "project");
+  // V2 manual-recovery is its own discriminated variant per D-19-02 -- NOT
+  // a `failed` row carrying `{rollback partial}`. The status discriminator
+  // is the literal "manual recovery" WITH a space per shared/grammar/
+  // status-tokens.ts:47.
+  assert.equal(row.status, "manual recovery");
+  assert.ok(row.status === "manual recovery");
+  assert.deepEqual([...row.reasons], ["rollback partial"]);
 });
 
-test("Plan 13-02a-02 / CMC-16 / F-2: outcomeToCascadeRow without failureClass falls back to narrowReason", () => {
+test("Plan 19-04 / D-19-02: outcomeToPluginMessage without failureClass falls back to narrowReason -> PluginFailedMessage", () => {
   // Without the structural tag, the closed-set narrowing falls through to
   // the `"not in manifest"` catch-all (the catalog's most permissive
   // cascade skip reason; consistent with the pre-migration legacy fallback
@@ -1223,15 +1249,17 @@ test("Plan 13-02a-02 / CMC-16 / F-2: outcomeToCascadeRow without failureClass fa
     scope: "project",
     notes: ["something opaque"],
   };
-  const row = __test_outcomeToCascadeRow(outcome);
-  assert.ok(row.status === "failed" && row.reasons !== undefined);
-  assert.deepEqual([...(row.reasons ?? [])], ["not in manifest"]);
+  const row = __test_outcomeToPluginMessage(outcome, "project");
+  assert.equal(row.status, "failed");
+  assert.ok(row.status === "failed");
+  assert.deepEqual([...row.reasons], ["not in manifest"]);
 });
 
-test("Plan 13-02a-02 / CMC-16 / F-2: outcomeToCascadeRow rollback substring still maps to rollback partial", () => {
-  // The `"rollback"` substring branch in `narrowReason` stays in place per
-  // Plan Task 2 Step 5 -- it covers non-manual-recovery rollback scenarios
-  // (the rollback-partial fallback path).
+test("Plan 19-04 / D-19-02: outcomeToPluginMessage rollback substring still maps to rollback partial", () => {
+  // The `"rollback"` substring branch in `narrowReason` stays in place --
+  // it covers non-manual-recovery rollback scenarios (the rollback-partial
+  // fallback path) and produces a PluginFailedMessage (NOT a
+  // PluginManualRecoveryMessage; the structural tag is the sole pivot).
   const outcome: ReinstallFailedOutcome = {
     partition: "failed",
     name: "hello",
@@ -1239,20 +1267,21 @@ test("Plan 13-02a-02 / CMC-16 / F-2: outcomeToCascadeRow rollback substring stil
     scope: "project",
     notes: ["rollback failed at phase X"],
   };
-  const row = __test_outcomeToCascadeRow(outcome);
-  assert.ok(row.status === "failed" && row.reasons !== undefined);
-  assert.deepEqual([...(row.reasons ?? [])], ["rollback partial"]);
+  const row = __test_outcomeToPluginMessage(outcome, "project");
+  assert.equal(row.status, "failed");
+  assert.ok(row.status === "failed");
+  assert.deepEqual([...row.reasons], ["rollback partial"]);
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// Task 260525-cjr B2: outcomeToCascadeRow prefers `outcome.reasons` (set at
-// the catch site via `reasonsFromTypedError(err)`) over the legacy
-// notes-substring narrow. This locks in the new producer-narrowed contract:
-// EACCES / EPERM / ENOENT (and PluginShapeError shapes) surface as their
-// precise closed Reason instead of degrading to `not in manifest`.
+// Task 260525-cjr B2 (V2 successor): outcomeToPluginMessage prefers typed
+// `outcome.reasons` over the legacy notes-substring narrow. This locks in
+// the producer-narrowed contract: EACCES / EPERM / ENOENT (and
+// PluginShapeError shapes) surface as their precise closed Reason instead
+// of degrading to `not in manifest`.
 // ───────────────────────────────────────────────────────────────────────────
 
-test("260525-cjr B2: outcomeToCascadeRow prefers typed `outcome.reasons` (`permission denied`) over notes-substring fallback", () => {
+test("Plan 19-04 / D-19-02: outcomeToPluginMessage prefers typed `outcome.reasons` (`permission denied`) over notes-substring fallback", () => {
   const outcome: ReinstallFailedOutcome = {
     partition: "failed",
     name: "hello",
@@ -1263,12 +1292,13 @@ test("260525-cjr B2: outcomeToCascadeRow prefers typed `outcome.reasons` (`permi
     notes: ["EACCES: permission denied at some/.pi/agent/file"],
     reasons: ["permission denied"] as const,
   };
-  const row = __test_outcomeToCascadeRow(outcome);
-  assert.ok(row.status === "failed" && row.reasons !== undefined);
-  assert.deepEqual([...(row.reasons ?? [])], ["permission denied"]);
+  const row = __test_outcomeToPluginMessage(outcome, "project");
+  assert.equal(row.status, "failed");
+  assert.ok(row.status === "failed");
+  assert.deepEqual([...row.reasons], ["permission denied"]);
 });
 
-test("260525-cjr B2: outcomeToCascadeRow `source missing` typed reason wins over notes fallback", () => {
+test("Plan 19-04 / D-19-02: outcomeToPluginMessage `source missing` typed reason wins over notes fallback", () => {
   const outcome: ReinstallFailedOutcome = {
     partition: "failed",
     name: "hello",
@@ -1277,12 +1307,13 @@ test("260525-cjr B2: outcomeToCascadeRow `source missing` typed reason wins over
     notes: ["ENOENT: no such file or directory"],
     reasons: ["source missing"] as const,
   };
-  const row = __test_outcomeToCascadeRow(outcome);
-  assert.ok(row.status === "failed" && row.reasons !== undefined);
-  assert.deepEqual([...(row.reasons ?? [])], ["source missing"]);
+  const row = __test_outcomeToPluginMessage(outcome, "project");
+  assert.equal(row.status, "failed");
+  assert.ok(row.status === "failed");
+  assert.deepEqual([...row.reasons], ["source missing"]);
 });
 
-test("260525-cjr B2: outcomeToCascadeRow without `reasons` falls back to substring narrow (back-compat preserved)", () => {
+test("Plan 19-04 / D-19-02: outcomeToPluginMessage without `reasons` falls back to substring narrow (back-compat preserved)", () => {
   // No `reasons` field -- the legacy substring narrow on `notes` runs.
   // The default for opaque text is `not in manifest`.
   const outcome: ReinstallFailedOutcome = {
@@ -1292,16 +1323,18 @@ test("260525-cjr B2: outcomeToCascadeRow without `reasons` falls back to substri
     scope: "project",
     notes: ["something opaque without a matching substring"],
   };
-  const row = __test_outcomeToCascadeRow(outcome);
-  assert.ok(row.status === "failed" && row.reasons !== undefined);
-  assert.deepEqual([...(row.reasons ?? [])], ["not in manifest"]);
+  const row = __test_outcomeToPluginMessage(outcome, "project");
+  assert.equal(row.status, "failed");
+  assert.ok(row.status === "failed");
+  assert.deepEqual([...row.reasons], ["not in manifest"]);
 });
 
-test("260525-cjr B2: outcomeToCascadeRow `failureClass=manual-recovery` STILL wins over typed `reasons` (precedence locked)", () => {
-  // The precedence order in outcomeToCascadeRow:
-  //   (1) failureClass="manual-recovery"  -> "rollback partial"
-  //   (2) outcome.reasons (typed)         -> verbatim
-  //   (3) narrowReasons(outcome.notes)    -> substring fallback
+test("Plan 19-04 / D-19-02: outcomeToPluginMessage `failureClass=manual-recovery` STILL wins over typed `reasons` (precedence locked)", () => {
+  // The precedence order in outcomeToPluginMessage:
+  //   (1) failureClass="manual-recovery"  -> PluginManualRecoveryMessage
+  //                                          with reasons: ["rollback partial"]
+  //   (2) outcome.reasons (typed)         -> PluginFailedMessage with verbatim
+  //   (3) narrowReasons(outcome.notes)    -> PluginFailedMessage substring fallback
   // This test locks in (1) > (2) so a future refactor cannot accidentally
   // demote the manual-recovery class.
   const outcome: ReinstallFailedOutcome = {
@@ -1313,10 +1346,11 @@ test("260525-cjr B2: outcomeToCascadeRow `failureClass=manual-recovery` STILL wi
     failureClass: "manual-recovery",
     reasons: ["permission denied"] as const,
   };
-  const row = __test_outcomeToCascadeRow(outcome);
-  assert.ok(row.status === "failed" && row.reasons !== undefined);
+  const row = __test_outcomeToPluginMessage(outcome, "project");
   // (1) wins -- the manual-recovery structural tag is highest priority.
-  assert.deepEqual([...(row.reasons ?? [])], ["rollback partial"]);
+  assert.equal(row.status, "manual recovery");
+  assert.ok(row.status === "manual recovery");
+  assert.deepEqual([...row.reasons], ["rollback partial"]);
 });
 
 /**
@@ -1425,38 +1459,39 @@ test("WR-01: findManualRecoveryError respects the depth-5 bound", () => {
 });
 
 /**
- * D-14-02 / CMC-16 anchor-emission regression guard.
+ * Plan 19-04 / D-19-02 manual-recovery inline-row emission regression guard
+ * (V2 successor to the V1 D-14-02 / CMC-16 separate-anchor-line test).
  *
- * Plan 14-01 wires `renderManualRecovery` from `presentation/manual-
- * recovery.ts` into `orchestrators/plugin/reinstall.ts`'s
- * `renderReinstallPartitionAndNotify` so that outcomes carrying the
- * structural `failureClass: "manual-recovery"` tag emit a SEPARATE top-
- * level compact line (MSG-MR-1) below the cascade body. The cascade row's
- * `(failed) {rollback partial}` shape is preserved verbatim (catalog
- * byte-binding at docs/output-catalog.md L330); the anchor is ADDITIONAL
- * structure, not a replacement.
+ * V1 emitted the manual-recovery anchor as a SEPARATE top-level compact
+ * line below the cascade body (composed via `renderManualRecovery` and
+ * joined with `\n\n`). V2 collapses this: per D-19-02 the manual-recovery
+ * row is folded INSIDE the same cascade `plugins[]` array as the
+ * reinstalled/skipped/failed siblings, structurally typed as a
+ * `PluginManualRecoveryMessage` discriminated variant. The status
+ * discriminator is the literal `"manual recovery"` WITH a space per
+ * shared/grammar/status-tokens.ts:47.
  *
  * This test exercises the `__test_renderReinstallPartitionAndNotify` seam
  * with a synthetic outcome list containing one manual-recovery failure
  * alongside one successful reinstall, and asserts the captured notify
  * body contains:
- *   (a) the cascade `(failed) {rollback partial}` row (preserved binding);
- *   (b) the separate `⊘ <name>@<marketplace> (manual recovery) {rollback
- *       partial}` anchor line composed via `renderRow` (preserves the
- *       grammar contract through the renderer rather than hand-composing);
- *   (c) a `\n\n` separator between the cascade body and the anchor line
- *       (MSG-MR-1 blank-line discipline);
- *   (d) the reload-hint trailer still composes correctly for the
- *       successful reinstall row (existing trailer composition unaffected).
+ *   (a) the manual-recovery row inline at the row level with the literal
+ *       `(manual recovery) {rollback partial}` token (NOT a separate
+ *       top-level line below the cascade body);
+ *   (b) the successful reinstall row co-exists in the same plugins[]
+ *       array;
+ *   (c) NO separate `\n\n`-separated anchor line after the cascade body
+ *       (the V1 emission shape is gone);
+ *   (d) the reload-hint trailer still composes for the successful
+ *       reinstall row (D-16-12 trigger via `reinstalled` status).
  *
- * The severity dispatch is asserted to be "warning" (any failed row routes
- * to notifyWarning; MSG-SR-6 forbids notifyError on cascade summaries).
+ * Severity per D-16-11: `warning` (manual recovery is in the warning set;
+ * no `failed` row tips it to error). The V1 dispatch ternary that picked
+ * notifyWarning vs notifySuccess based on aggregated cascade severity is
+ * GONE -- V2 notify() computes severity from contents.
  */
-test("D-14-02 / CMC-16: manual-recovery outcome emits separate top-level anchor line below cascade body", () => {
+test("Plan 19-04 / D-19-02: manual-recovery outcome folds into cascade plugins[] as PluginManualRecoveryMessage row", () => {
   const { ctx, pi, notifications } = makeCtx();
-  // Mirror the probe shape that `softDepStatus(pi)` produces for our
-  // `makeCtx()` mock (getAllTools returns `[]` -- neither companion loaded).
-  const probe: SoftDepProbe = { piSubagentsLoaded: false, piMcpAdapterLoaded: false };
   const outcomes: readonly ReinstallPluginOutcome[] = [
     {
       partition: "failed",
@@ -1482,55 +1517,41 @@ test("D-14-02 / CMC-16: manual-recovery outcome emits separate top-level anchor 
 
   __test_renderReinstallPartitionAndNotify(ctx, pi, outcomes);
 
-  // Exactly one notification was emitted; severity routes via notifyWarning
-  // because at least one row is (failed) -- MSG-SR-6 forbids notifyError.
+  // Exactly one notification was emitted; severity routes via notify()'s
+  // content-derived ladder (D-16-11): manual-recovery in plugins[] -> warning.
   assert.equal(notifications.length, 1);
   assert.equal(notifications[0]?.severity, "warning");
   const body = notifications[0]?.message ?? "";
 
-  // (a) Cascade row preserves the `(failed) {rollback partial}` byte-shape
-  // (catalog byte-binding at docs/output-catalog.md L330).
-  assert.match(body, /⊘ broken \[project\] \(failed\) \{rollback partial\}/);
-  // The successful reinstall row co-exists in the cascade body.
-  assert.match(body, /● good \[project\] v1\.0\.0 \(reinstalled\)/);
+  // (a) Inline manual-recovery row with the literal "(manual recovery)"
+  // token WITH a space per shared/grammar/status-tokens.ts:47. Per-row
+  // scope is orphan-folded (matches the marketplace block's scope).
+  assert.match(body, /⊘ broken \(manual recovery\) \{rollback partial\}/);
+  // (b) The successful reinstall row co-exists in the same plugins[]
+  // array (no separate cascade body for the manual-recovery anchor).
+  assert.match(body, /● good v1\.0\.0 \(reinstalled\)/);
 
-  // (b) Separate top-level anchor line composed via renderRow so the
-  // assertion preserves the MSG-MR-1 / MSG-MR-2 grammar contract through
-  // the renderer rather than hand-composing the expected string. Per
-  // MSG-MR-2 the anchor has no `[<scope>]` slot; `resource` collapses to
-  // `<name>@<marketplace>`.
-  const expectedAnchorLine = renderRow(
-    {
-      kind: "manual-recovery",
-      resource: "broken@mp",
-      reasons: ["rollback partial"],
-    } satisfies ManualRecoveryLine,
-    probe,
-  );
+  // (c) No separate top-level anchor line below the cascade body. V1
+  // would have emitted a stand-alone `⊘ broken@mp (manual recovery)
+  // {rollback partial}` line below `\n\n`; V2's plugins[]-array form
+  // does NOT use the `<name>@<marketplace>` resource collapse.
   assert.ok(
-    body.includes(expectedAnchorLine),
-    `expected body to include anchor line ${JSON.stringify(expectedAnchorLine)}; body was ${JSON.stringify(body)}`,
+    !body.includes("⊘ broken@mp (manual recovery)"),
+    `V2 must NOT emit the V1 separate anchor line; body was ${JSON.stringify(body)}`,
   );
 
-  // (c) `\n\n` blank-line separator immediately precedes the anchor line
-  // (MSG-MR-1 blank-line discipline). Verify the anchor is preceded by a
-  // blank line rather than appended on the same line as the cascade body.
-  assert.ok(
-    body.includes(`\n\n${expectedAnchorLine}`),
-    `expected blank-line separator before anchor; body was ${JSON.stringify(body)}`,
-  );
-
-  // (d) Reload-hint trailer still composes for the successful reinstall
-  // row (existing trailer composition unaffected by the new emission).
+  // (d) Reload-hint trailer composes for the successful reinstall row
+  // (D-16-12 trigger: `reinstalled` is in the state-changing variant set).
   assert.match(body, /\/reload to pick up changes/);
 });
 
-test("WR-01: outcomeToCascadeRow path stays correct when the orchestrator catches a release-wrapped MRE", () => {
+test("Plan 19-04 / D-19-02: outcomeToPluginMessage stays correct when the orchestrator catches a release-wrapped MRE (WR-01 V2 successor)", () => {
   // End-to-end binding: simulate the catch block's behavior on a
   // release-also-failed wrapper. The spread guard now uses
   // findManualRecoveryError, so the failureClass tag IS set, and
-  // outcomeToCascadeRow maps to ["rollback partial"] (vs the pre-fix
-  // silent downgrade to ["not in manifest"]).
+  // outcomeToPluginMessage maps to PluginManualRecoveryMessage with
+  // reasons ["rollback partial"] (vs the pre-fix silent downgrade to
+  // PluginFailedMessage with ["not in manifest"]).
   const inner = new ManualRecoveryError("staging failed", ["agents: foo"]);
   const releaseWrapped = new Error("staging failed (lock release also failed: chmod denied)", {
     cause: inner,
@@ -1544,9 +1565,11 @@ test("WR-01: outcomeToCascadeRow path stays correct when the orchestrator catche
     notes: ["staging failed (lock release also failed: chmod denied)"],
     ...(mre !== undefined && { failureClass: "manual-recovery" as const }),
   };
-  const row = __test_outcomeToCascadeRow(outcome);
-  assert.ok(row.status === "failed" && row.reasons !== undefined);
+  const row = __test_outcomeToPluginMessage(outcome, "project");
   // The structural fix preserves the canonical CMC-11 Reason across the
-  // release-failure wrapping path; pre-fix this asserted ["not in manifest"].
-  assert.deepEqual([...(row.reasons ?? [])], ["rollback partial"]);
+  // release-failure wrapping path -- AND elevates the variant from
+  // PluginFailedMessage to PluginManualRecoveryMessage per D-19-02.
+  assert.equal(row.status, "manual recovery");
+  assert.ok(row.status === "manual recovery");
+  assert.deepEqual([...row.reasons], ["rollback partial"]);
 });
