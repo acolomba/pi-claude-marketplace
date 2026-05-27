@@ -637,17 +637,29 @@ export async function loadPluginListPayload(
       // scope), surfaced via the renderer's orphan-fold rule when
       // `p.scope !== mp.scope`.
       const { manifest } = await loadMarketplaceManifestSoftly(projectMp);
-      folded = await enumerateMarketplacePlugins(opts, projectMp, "project", "user", manifest);
+      // WR-02: filter to ONLY installed/upgradable rows. The project-side
+      // enumeration also returns `available` and `unavailable` bucket rows
+      // from the same shared manifest (cloned `marketplaceRoot`); folding
+      // those into the user-scope block would duplicate every manifest-
+      // listed plugin that is not installed in either scope (one row from
+      // the project-side enumeration, one from the user-side's own
+      // enumeration). The documented fold semantic is "fold installed
+      // records from the other scope" -- restrict the carry-over set
+      // accordingly.
+      const projectSideRows = await enumerateMarketplacePlugins(
+        opts,
+        projectMp,
+        "project",
+        "user",
+        manifest,
+      );
+      folded = projectSideRows.filter((r) => r.status === "installed" || r.status === "upgradable");
       // Record the folded plugin names so the user-scope manifest's
       // available-bucket enumeration skips them (catalog
       // `project-orphan-folded` state shows a single
       // `● alpha [project] ... (installed)` row -- no duplicate
       // `○ alpha (available)` row under the same header).
-      foldedNames = new Set(
-        folded
-          .filter((r) => r.status === "installed" || r.status === "upgradable")
-          .map((r) => r.name),
-      );
+      foldedNames = new Set(folded.map((r) => r.name));
     }
 
     const built = await buildMarketplaceMessage({
