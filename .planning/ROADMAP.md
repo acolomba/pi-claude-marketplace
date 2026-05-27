@@ -77,7 +77,7 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 - [x] **Phase 17.1: V2 Grammar Amendment: Autoupdate Surface (INSERTED)** -- Amend the V2 type model + renderer + catalog + ADR to restore the user-visible distinction between fresh autoupdate enable/disable, idempotent flips, and failures collapsed by Phase 17 into a single `(updated)` status. Implements the user-locked design from Phase 18 D-18-05 so Plan 18-02 (autoupdate.ts call-site migration) can construct typed messages that round-trip through `notify()` to byte-correct V2 output. (completed 2026-05-26)
 - [x] **Phase 17.2: renderScopeBracket orphan-fold contract fix (INSERTED)** -- Fix the renderer to honor the documented orphan-fold contract: `renderScopeBracket(pluginScope, mpScope)` returns `""` when scopes match, thread `mp.scope` through `composePluginLines`/`renderPluginRow`, update the 10 call sites. Fold in WR-01..WR-06 (docstring refresh, composeVersionArrow simplification, soft-dep probe coverage tests, dead-helper deletion, exhaustiveness gate hardening, catalog narrative tightening) as a single notify.ts hygiene sweep. Closes CR-01 + WR-01..WR-06 from the 17.1 code review; unblocks Phase 18. (completed 2026-05-26)
 - [x] **Phase 18: Migration Wave 1 -- Marketplace Orchestrator Family** -- Migrate all `orchestrators/marketplace/*` call sites to `notify(ctx, structured)`; retire MSG-* lint globs covering marketplace orchestrators (completed 2026-05-27)
-- [ ] **Phase 19: Migration Wave 2 -- Plugin Orchestrator Family** -- Migrate all `orchestrators/plugin/*` call sites to `notify(ctx, structured)`; retire MSG-* lint globs covering plugin orchestrators
+- [x] **Phase 19: Migration Wave 2 -- Plugin Orchestrator Family** -- Migrate all `orchestrators/plugin/*` call sites to `notify(ctx, structured)`; retire MSG-* lint globs covering plugin orchestrators (completed 2026-05-27)
 - [ ] **Phase 20: Migration Wave 3 -- Edge Handlers & UsageError** -- Migrate all `edge/handlers/*` call sites; migrate all `notifyUsageError(ctx, msg, usage)` sites to V2 `notifyUsageError(ctx, structuredUsageError)`; retire remaining MSG-* lint globs
 - [ ] **Phase 21: Final Teardown & GREEN Gate** -- Delete V1 severity-named wrappers; delete `tests/lint-rules/` (34 rules + 34 RuleTester suites + helpers); delete `tests/architecture/msg-rule-registry.test.ts`; replace MSG-* config in `eslint.config.js` with stock `no-restricted-syntax` + `no-console` (with `persistence/migrate.ts` per-file override); update / delete `tests/architecture/grammar-frontmatter.test.ts`; resolve `shared/grammar/` retain-or-delete; review `no-legacy-markers.test.ts`; `npm run check` GREEN
 
@@ -308,7 +308,7 @@ Plans:
 3. Catalog UAT byte-equality is GREEN for every plugin-family command output (single-plugin install with the new marketplace header + indented row shape, bulk cascades, manual-recovery rows, rollback-partial sub-state, per-plugin cause chains in multi-failure cascades) against the v2.0 spec.
 4. `npm run check` stays GREEN; no edge handlers have changed call-site shape.
 
-**Plans:** 5/6 plans executed
+**Plans:** 6/6 plans complete
 
 Plans:
 
@@ -325,7 +325,7 @@ Plans:
 
 **Wave 3** *(lint narrowing + final gate -- depends on all of Wave 2)*
 
-- [ ] 19-06-PLAN.md -- Add `"extensions/pi-claude-marketplace/orchestrators/plugin/**"` to MSG-Block 1 + MSG-Block 1b ignores per D-19-08; final end-to-end SC #1..#4 verification
+- [x] 19-06-PLAN.md -- Add `"extensions/pi-claude-marketplace/orchestrators/plugin/**"` to MSG-Block 1 + MSG-Block 1b ignores per D-19-08; final end-to-end SC #1..#4 verification
 
 ### Phase 20: Migration Wave 3 -- Edge Handlers & UsageError
 
@@ -381,6 +381,6 @@ Plans:
 | 17.1. V2 Grammar Amendment: Autoupdate Surface (INSERTED)            | v1.4      | 4/4 | Complete   | 2026-05-26 |
 | 17.2. renderScopeBracket orphan-fold contract fix (INSERTED)         | v1.4      | 4/4 | Complete    | 2026-05-26 |
 | 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 7/7 | Complete    | 2026-05-27 |
-| 19. Migration Wave 2 -- Plugin Orchestrator Family                   | v1.4      | 5/6 | In Progress|  |
+| 19. Migration Wave 2 -- Plugin Orchestrator Family                   | v1.4      | 6/6 | Complete   | 2026-05-27 |
 | 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 0/?            | Not started | --         |
 | 21. Final Teardown & GREEN Gate                                      | v1.4      | 0/?            | Not started | --         |
