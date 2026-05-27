@@ -34,7 +34,18 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 //   PUP-7: phase-3 abort cleans staging, no mask of original error.
 //   PUP-8: reload hint when >=1 plugin updated; suppressed when 0 updated.
 //   PUP-9: cascade vs direct routing (updateSinglePlugin never throws;
-//          updatePlugins fires notifyError on phase-2-or-earlier throws).
+//          updatePlugins surfaces phase-2-or-earlier throws via V2
+//          notify() with a synthetic PluginFailedMessage carrying cause).
+//
+// Phase 19 / Plan 19-05: byte-exact assertions match the V2 catalog forms
+// at docs/output-catalog.md:489-568 (plugin update). The V1 `[<scope>]`
+// plugin-row bracket is suppressed by Phase 17.2 orphan-fold (plugin.scope
+// === mp.scope -> renderScopeBracket returns ""). Empty-targets renders
+// `(no marketplaces)` via notify({ marketplaces: [] }) per the Wave 1
+// precedent (orchestrators/marketplace/update.ts:230). Direct-path
+// failures (enumerate / syncClone / runThreePhaseUpdate / phase-3
+// aggregate) surface as synthetic PluginFailedMessage rows with cause
+// threaded for the 4-space cause-chain trailer per D-16-08.
 
 interface NotifyRecord {
   message: string;
@@ -227,7 +238,7 @@ async function rewriteManifest(
 
 // ─── PUP-1: empty target ───────────────────────────────────────────────────────
 
-test("PUP-1: bare form against empty state -> '(no plugins)' silent success (CMC-10 / MSG-ER-1)", async () => {
+test("PUP-1: bare form against empty state -> '(no marketplaces)' silent success", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-pup1-empty-"));
     try {
@@ -235,10 +246,13 @@ test("PUP-1: bare form against empty state -> '(no plugins)' silent success (CMC
       await updatePlugins({ ctx, pi, scope: "project", cwd, target: { kind: "all" } });
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined);
-      // Plan 13-02a-01 / CMC-10 / MSG-ER-1: legacy "No plugins installed."
-      // sentence form retired; empty-set renders via EmptyToken -> bare
-      // "(no plugins)" compact line.
-      assert.equal(notifications[0]?.message, "(no plugins)");
+      // Phase 19 / Plan 19-05: V2 empty-targets shape mirrors the Wave 1
+      // precedent at orchestrators/marketplace/update.ts:230 --
+      // notify({ marketplaces: [] }) renders the renderer's
+      // `(no marketplaces)` sentinel per D-16-17. The legacy
+      // EmptyToken "(no plugins)" rendering retires alongside the V1
+      // renderRow / compact-line composer.
+      assert.equal(notifications[0]?.message, "(no marketplaces)");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -276,15 +290,17 @@ test("PUP-3: version equality -> outcome.partition='unchanged'; no bridge state 
       const after = await readFile(stateJsonPath, "utf8");
       assert.equal(before, after, "state.json must NOT be rewritten on unchanged path");
 
-      // Plan 13-02a-01 / CMC-26: legacy "Updated:" / "Unchanged:" partition
-      // header forms RETIRED. `unchanged` partition renders as a
-      // (skipped) {up-to-date} cascade row (trivial skip -> ● icon ->
-      // notifySuccess severity per MSG-SR-4). No reload hint when no
-      // (updated) outcomes.
+      // Phase 19 / Plan 19-05: V2 byte form mirrors catalog
+      // `all-up-to-date-noop` (docs/output-catalog.md:528-532). The
+      // `unchanged` partition maps to a `(skipped) {up-to-date}` row
+      // (warning severity per D-16-11). Plugin-row `[<scope>]` bracket
+      // is suppressed by Phase 17.2 orphan-fold (plugin.scope ===
+      // mp.scope -> renderScopeBracket returns ""). No reload-hint when
+      // no plugin row is in the state-changing variant set per D-16-12.
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined);
+      assert.equal(notifications[0]?.severity, "warning");
       const body = notifications[0]?.message ?? "";
-      assert.match(body, /● hello \[project\] \(skipped\) \{up-to-date\}/);
+      assert.equal(body, "● mp [project]\n  ⊘ hello (skipped) {up-to-date}");
       assert.equal(body.includes("Unchanged:"), false);
       assert.equal(
         body.includes("/reload to pick up changes"),
@@ -325,11 +341,12 @@ test("PUP-4: source overridden to github-flavored URL -> outcome.partition='skip
 
       assert.equal(notifications.length, 1);
       const body = notifications[0]?.message ?? "";
-      // Plan 13-02a-01 / CMC-26: legacy "Skipped:" partition header
-      // retired; cascade row carries `(skipped) {no longer installable}`
-      // (narrowed from the legacy free-text "is no longer installable").
-      // Severity routes via notifyWarning (non-trivial skip per MSG-SR-5).
-      assert.match(body, /⊘ hello \[project\].+\(skipped\) \{no longer installable\}/);
+      // Phase 19 / Plan 19-05: V2 byte form. `(skipped) {no longer
+      // installable}` row with the optional `v<fromVersion>` token from
+      // the installed record (PUP-4 carries `fromVersion: "1.0.0"`).
+      // Plugin-row `[<scope>]` bracket suppressed by orphan-fold per
+      // Phase 17.2. Severity routes via warning per D-16-11.
+      assert.equal(body, "● mp [project]\n  ⊘ hello v1.0.0 (skipped) {no longer installable}");
       assert.equal(notifications[0]?.severity, "warning");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -365,9 +382,10 @@ test("PUP-5: refreshed manifest no longer lists entry -> outcome.partition='skip
 
       assert.equal(notifications.length, 1);
       const body = notifications[0]?.message ?? "";
-      // Plan 13-02a-01 / CMC-26: legacy "Skipped:" header retired;
-      // cascade row carries `(skipped) {not in manifest}` per MSG-GR-1.
-      assert.match(body, /⊘ hello \[project\].+\(skipped\) \{not in manifest\}/);
+      // Phase 19 / Plan 19-05: V2 byte form. `(skipped) {not in manifest}`
+      // row with the optional `v<fromVersion>` token from the installed
+      // record. Plugin-row `[<scope>]` bracket suppressed by orphan-fold.
+      assert.equal(body, "● mp [project]\n  ⊘ hello v1.0.0 (skipped) {not in manifest}");
       assert.equal(notifications[0]?.severity, "warning");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -421,15 +439,27 @@ test("PUP-6 happy: version bump triggers 3-phase swap; state reflects new versio
       const skillTarget = path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md");
       assert.ok((await readFile(skillTarget, "utf8")).length > 0, "skill must exist on disk");
 
-      // Plan 13-02a-01 / CMC-26 / MSG-PL-3 / MSG-RH-1: legacy "Updated:"
-      // partition header retired; per-marketplace cascade with version-
-      // transition arrow `v<from> → v<to>` (U+2192 space-padded) on the
-      // (updated) cascade row. Single canonical reload trailer.
+      // Phase 19 / Plan 19-05: V2 byte form mirrors catalog
+      // `single-mp-mixed` (docs/output-catalog.md:495-504) version-arrow
+      // discipline at line 499: `<from> → v<to>` with the asymmetric `v`
+      // prefix on `to` only -- the renderer's composeVersionArrow owns
+      // the formatting per D-15-04 / D-16-04. Plugin-row `[<scope>]`
+      // bracket suppressed by orphan-fold. Soft-dep markers emit because
+      // the plugin declares agents + mcp but the host's `getAllTools()`
+      // returns [] (probe sees both companions unloaded). Reload-hint
+      // appended by notify() per D-16-12 from the `updated` variant.
       const errs = notifications.filter((n) => n.severity === "error");
       assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, undefined);
       const body = notifications[0]?.message ?? "";
-      assert.match(body, /● hello \[project\] v1\.0\.0 → v1\.0\.1 \(updated\)/);
-      assert.match(body, /\/reload to pick up changes$/);
+      assert.equal(
+        body,
+        "● mp [project]\n" +
+          "  ● hello 1.0.0 → v1.0.1 (updated) {requires pi-subagents, requires pi-mcp}\n" +
+          "\n" +
+          "/reload to pick up changes",
+      );
 
       // Ensure we referenced the seeded marketplaceRoot (compile-time use of `seeded`).
       assert.ok(seeded.marketplaceRoot.length > 0);
@@ -564,17 +594,27 @@ test("PUP-1 @mp form: enumerates all installed plugins in the marketplace, parti
       });
 
       const body = notifications[0]?.message ?? "";
-      // Plan 13-02a-01 / CMC-26: partition-header ordering retired; the
-      // cascade renders rows in alphabetical order within the marketplace
-      // block (compareByNameThenScope from Wave 1). alpha (updated) and
-      // beta (skipped {up-to-date}) coexist under the same marketplace
-      // header. Version-transition arrow on (updated) row per MSG-PL-3.
-      assert.match(
+      // Phase 19 / Plan 19-05: V2 byte form combines `single-mp-mixed`
+      // catalog shape (docs/output-catalog.md:495-504): alpha (updated)
+      // + beta (skipped {up-to-date}) under one marketplace header in
+      // caller-order (D-16-06 -- orchestrator iterates in the
+      // enumerateTargets order; notify() does not sort plugin rows).
+      // Plugin-row `[<scope>]` brackets suppressed by orphan-fold. The
+      // (updated) row has no soft-dep markers (plugin declares no agents
+      // / no mcp; PUP-1 @mp fixture sets only `hasSkill: true`).
+      assert.equal(
         body,
-        /● mp \[project\]\n {2}● alpha \[project\] v1\.0\.0 → v1\.0\.1 \(updated\)\n {2}● beta \[project\] \(skipped\) \{up-to-date\}/,
+        "● mp [project]\n" +
+          "  ● alpha 1.0.0 → v1.0.1 (updated)\n" +
+          "  ⊘ beta (skipped) {up-to-date}\n" +
+          "\n" +
+          "/reload to pick up changes",
       );
-      // PUP-8 / MSG-RH-1: hint emitted for the one updated plugin.
-      assert.match(body, /\/reload to pick up changes$/);
+      // Severity routes to `error` if any failed; here no failed -> warning
+      // (skipped row present) per D-16-11. Actually warning vs undefined --
+      // any skipped row triggers warning, so the cascade's severity is
+      // `warning` despite the updated row.
+      assert.equal(notifications[0]?.severity, "warning");
       assert.ok(seeded.marketplaceRoot.length > 0);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -811,9 +851,9 @@ test("PUP-1 pl@mp: targeting a plugin not in state -> partition='skipped' (not i
       });
 
       const body = notifications[0]?.message ?? "";
-      // Plan 13-02a-01 / CMC-26: legacy "Skipped:" header retired;
-      // cascade row carries `(skipped) {not installed}`.
-      assert.match(body, /⊘ hello \[project\] \(skipped\) \{not installed\}/);
+      // Phase 19 / Plan 19-05: V2 byte form. Plugin-row `[<scope>]`
+      // bracket suppressed by orphan-fold. Skipped severity per D-16-11.
+      assert.equal(body, "● mp [project]\n  ⊘ hello (skipped) {not installed}");
       assert.equal(notifications[0]?.severity, "warning");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -821,9 +861,9 @@ test("PUP-1 pl@mp: targeting a plugin not in state -> partition='skipped' (not i
   });
 });
 
-// ─── PUP-1 missing marketplace -> notifyError (direct path) ────────────────────
+// ─── PUP-1 missing marketplace -> direct-path V2 notify (PluginFailedMessage) ─
 
-test("PUP-1: targeting an unknown marketplace -> notifyError 'not found in <scope> scope'", async () => {
+test("PUP-1: targeting an unknown marketplace -> direct-path V2 notify (PluginFailedMessage with cause)", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-pup1-nomp-"));
     try {
@@ -836,9 +876,28 @@ test("PUP-1: targeting an unknown marketplace -> notifyError 'not found in <scop
         target: { kind: "marketplace", marketplace: "ghost-mp" },
       });
 
+      // Phase 19 / Plan 19-05: V2 direct-path failure (Option B) -- the
+      // enumerate-targets throw surfaces via a single notify(ctx, pi,
+      // { marketplaces: [{ name, scope, plugins: [PluginFailedMessage] }] })
+      // call. The marketplace name is used as the synthetic failed-row
+      // identity since the failure is about the marketplace being missing
+      // (not a specific plugin). The renderer composes the 4-space
+      // cause-chain trailer per D-16-08 from PluginFailedMessage.cause,
+      // preserving the V1 error-text `Marketplace "ghost-mp" not found
+      // in project scope.`.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
+      // Cause-chain trailer text preserves the V1 error message.
       assert.match(notifications[0]?.message ?? "", /not found in project scope/);
+      // V2 byte form -- bare marketplace header + a synthetic failed plugin
+      // row carrying the marketplace name (since the marketplace itself
+      // is the failed entity).
+      assert.equal(
+        notifications[0]?.message,
+        "● ghost-mp [project]\n" +
+          "  ⊘ ghost-mp (failed) {not found}\n" +
+          '    cause: Marketplace "ghost-mp" not found in project scope.',
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -871,10 +930,10 @@ test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback res
       });
 
       const body = notifications[0]?.message ?? "";
-      // Plan 13-02a-01 / CMC-26: legacy "Skipped:" header retired;
-      // cascade row carries `(skipped) {not installed}` (CMC-02: no
-      // `@<marketplace>` token on cascade child rows).
-      assert.match(body, /⊘ hello \[project\] \(skipped\) \{not installed\}/);
+      // Phase 19 / Plan 19-05: V2 byte form mirrors the pl@mp
+      // not-installed shape (PUP-1 above). Plugin-row `[<scope>]` bracket
+      // suppressed by orphan-fold.
+      assert.equal(body, "● mp [project]\n  ⊘ hello (skipped) {not installed}");
       assert.equal(notifications[0]?.severity, "warning");
     } finally {
       await rm(cwd, { recursive: true, force: true });

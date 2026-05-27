@@ -31,7 +31,24 @@
 //
 // PUP-9 routing:
 //   updateSinglePlugin -- cascade path -- catches into partition='failed'
-//   updatePlugins      -- direct path -- surfaces phase-2-or-earlier throws via notifyError
+//   updatePlugins      -- direct path -- surfaces phase-2-or-earlier throws via
+//                         a single V2 notify(ctx, pi, NotificationMessage) per
+//                         orchestration arm (cause threaded structurally on a
+//                         PluginFailedMessage; renderer composes the 4-space
+//                         cause-chain trailer per D-16-08).
+//
+// Phase 19 / Plan 19-05: success and failure notifications are a single V2
+//   notify(opts.ctx, opts.pi, { marketplaces: [{ ..., plugins: [...] }] })
+// call per orchestration arm. The V1 severity-named wrappers
+// (the legacy notify{Success,Warning,Error} helpers), the legacy cascade-
+// summary composer, the legacy version-arrow helper, the legacy
+// splice-rollback-partials shim, and the V1 dispatch ternary are GONE.
+// The V1 post-success completion-cache-refresh warning inside
+// dropPluginCompletionCache is DROPPED per D-19-01: the underlying
+// dropMarketplaceCache call STILL RUNS (correctness preserved), only the
+// standalone-mode user-visible warning surface disappears. See the
+// construction recipe block-comment above the surviving notify() call site
+// for the catalog cross-reference.
 //
 // D-11 import boundaries: orchestrators/plugin/ may import named exports
 // from orchestrators/marketplace/shared.ts (GitOps, DEFAULT_GIT_OPS,
@@ -63,14 +80,8 @@ import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { softDepStatus } from "../../platform/pi-api.ts";
-import { cascadeSummary } from "../../presentation/cascade-summary.ts";
 import { composeErrorWithCauseChain } from "../../presentation/cause-chain.ts";
-import { renderRow } from "../../presentation/compact-line.ts";
-import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
-import { renderRollbackPartial } from "../../presentation/rollback-partial.ts";
 import { compareByNameThenScope } from "../../presentation/sort.ts";
-import { composeVersionArrow } from "../../presentation/version-arrow.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   appendLeaks,
@@ -81,7 +92,7 @@ import {
   type Phase3Failure,
 } from "../../shared/errors.ts";
 import { RECOVERY_PLUGIN_REINSTALL_PREFIX } from "../../shared/markers.ts";
-import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
+import { notify } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_GIT_OPS, refreshGitHubClone, type GitOps } from "../marketplace/shared.ts";
 
@@ -102,12 +113,13 @@ import type { ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type {
-  MarketplaceRow,
-  PluginCascadeRow,
-  RollbackChild,
-} from "../../presentation/compact-line.ts";
 import type { Reason } from "../../shared/grammar/reasons.ts";
+import type {
+  Dependency,
+  MarketplaceNotificationMessage,
+  PluginFailedMessage,
+  PluginNotificationMessage,
+} from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
 
@@ -150,32 +162,49 @@ export interface UpdatePluginsOptions {
  * PUP-1..9 direct entrypoint. Enumerates targets per PUP-1 three forms,
  * runs PUP-2 syncCloneOnce per (scope, marketplace) pair, then drives each
  * plugin through the shared 3-phase swap. Partitions outcomes and renders
- * the MU-7-equivalent partition body + RH-5 soft-dep warnings + RH-1/RH-2
- * reload hint.
+ * a single V2 cascade notification per orchestration arm.
  *
  * PUP-9 direct routing: phase-2-or-earlier throws from `runThreePhaseUpdate`
- * surface via `notifyError`. Phase-3a aggregate failures land in
- * `partition='failed'` outcomes; the body's "Failed:" section names them
- * and notifyError fires for the aggregate.
+ * surface via a synthetic `PluginFailedMessage` carrying the typed `cause`
+ * (Option B per Plan 19-05); the renderer composes the 4-space cause-chain
+ * trailer per D-16-08. Phase-3a aggregate failures land in
+ * `partition='failed'` outcomes and also fire a direct-path notification
+ * BEFORE the cascade is built (the cascade body still names them via the
+ * `PluginUpdatedMessage`/`PluginSkippedMessage`/`PluginFailedMessage` rows).
  */
 export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
-  const { ctx, pi, cwd } = opts;
+  const { ctx, pi, cwd, target, scope: explicitScope } = opts;
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
 
   let targets: readonly ResolvedTarget[];
   try {
     targets = await enumerateTargets(opts);
   } catch (err) {
-    // D-CMC-12: notifyError auto-appends the MSG-CC-1 cause-chain trailer.
-    notifyError(ctx, errorMessage(err), err);
+    // Plan 19-05 / D-19-02 Option B: synthesize a PluginFailedMessage carrying
+    // the typed `cause` so the renderer's 4-space cause-chain trailer
+    // (D-16-08) preserves the V1 error-message text. The `enumerateTargets`
+    // failure path is only reachable when target.kind !== "all" (the bare
+    // form never throws here), so we always know the marketplace identity.
+    notifyDirectFailure({
+      ctx,
+      pi,
+      marketplace: targetMarketplaceName(target),
+      // No state.json was read yet, so explicit scope is the best fact
+      // available; default to "project" when omitted (matches V1 enumerate
+      // failure mode where `not found in <explicitScope> scope.` was the
+      // user-facing text).
+      scope: explicitScope ?? "project",
+      pluginName: targetMarketplaceName(target),
+      err,
+    });
     return;
   }
 
   if (targets.length === 0) {
-    // CMC-10 / MSG-ER-1: bare empty token rendered via the Wave 1 renderer
-    // (no icon, no scope brackets); supersedes the legacy PRD "No plugins
-    // installed." sentence form retired by Plan 13-02a-01.
-    notifySuccess(ctx, renderRow({ kind: "empty", token: "no plugins" }, softDepStatus(pi)));
+    // Plan 19-05 / D-19-02: empty-targets success mirrors Plan 19-04's
+    // empty-targets shape -- `marketplaces: []` round-trips through notify()
+    // to the (no marketplaces) sentinel. Severity: undefined. No reload-hint.
+    notify(ctx, pi, { marketplaces: [] });
     return;
   }
 
@@ -220,11 +249,23 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
       await syncCloneOnce(t.scope, t.marketplace, t.locations);
     } catch (err) {
       // Pre-3-phase error (D-14 step failure or marketplace-missing): surface
-      // via notifyError per PUP-9 direct path. Abort the whole batch -- a
-      // syncClone failure means we cannot read the refreshed manifest for
-      // ANY plugin in that marketplace and the rest of the batch is suspect.
-      // D-CMC-12: notifyError auto-appends the MSG-CC-1 cause-chain trailer.
-      notifyError(ctx, errorMessage(err), err);
+      // via a single V2 notify() with a synthetic PluginFailedMessage carrying
+      // the typed cause (Plan 19-05 / D-19-02 Option B). Abort the whole
+      // batch -- a syncClone failure means we cannot read the refreshed
+      // manifest for ANY plugin in that marketplace and the rest of the
+      // batch is suspect. The renderer composes the 4-space cause-chain
+      // trailer per D-16-08.
+      notifyDirectFailure({
+        ctx,
+        pi,
+        marketplace: t.marketplace,
+        scope: t.scope,
+        // The marketplace is implicated but no single plugin "caused" the
+        // syncClone failure; use the marketplace name as the synthetic
+        // failed-row identity (Option B) so the cause-chain trailer renders.
+        pluginName: t.marketplace,
+        err,
+      });
       return;
     }
 
@@ -238,6 +279,11 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
         locations: t.locations,
         cascade: false,
         ctx,
+        // Plan 19-05 / D-19-02: thread `pi` for the phase-3a aggregate
+        // direct-path V2 notify() invocation inside runThreePhaseUpdate.
+        // Cascade mode leaves `pi` undefined (the cascade orchestrator
+        // owns its own notify call).
+        pi,
         // AG-7 opt-in: thread `--map-model` from the user-facing options
         // bag into the per-plugin 3-phase swap. The cascade entrypoint
         // (`updateSinglePlugin`) intentionally never sets this -- it
@@ -248,10 +294,19 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
     } catch (err) {
       // PUP-9 direct path: phase-2-or-earlier throws (including PI-14
       // PathContainmentError, ST-9 stale-version, prep-phase errors) surface
-      // via notifyError. Abort the batch -- the plugin's resources may be
-      // in an unknown state and continuing risks compounding the failure.
-      // D-CMC-12: notifyError auto-appends the MSG-CC-1 cause-chain trailer.
-      notifyError(ctx, errorMessage(err), err);
+      // via a single V2 notify() with a synthetic PluginFailedMessage
+      // carrying the typed cause (Plan 19-05 / D-19-02 Option B). The
+      // renderer composes the 4-space cause-chain trailer per D-16-08.
+      // Abort the batch -- the plugin's resources may be in an unknown
+      // state and continuing risks compounding the failure.
+      notifyDirectFailure({
+        ctx,
+        pi,
+        marketplace: t.marketplace,
+        scope: t.scope,
+        pluginName: t.plugin,
+        err,
+      });
       return;
     }
 
@@ -389,11 +444,18 @@ interface ThreePhaseArgs {
   /**
    * Direct-path-only notification surface. Undefined in cascade mode.
    * When defined AND phase-3a aggregates failures, this is used for the
-   * notifyError fire. Phase-2-or-earlier throws propagate to the caller
-   * who does its own notifyError (so this field is only consulted at the
-   * phase-3 aggregate-error step).
+   * direct-path V2 notify() fire. Phase-2-or-earlier throws propagate to
+   * the caller who does its own notify (so this field is only consulted
+   * at the phase-3 aggregate-error step).
    */
   readonly ctx?: ExtensionContext;
+  /**
+   * Direct-path-only ExtensionAPI handle. Required alongside `ctx` for the
+   * single softDepStatus(pi) probe per V2 notify() invocation (D-16-14).
+   * Undefined in cascade mode; the cascade orchestrator (marketplace
+   * autoupdate) owns its own notify() invocation.
+   */
+  readonly pi?: ExtensionAPI;
   /**
    * AG-7 opt-in. Set by `updatePlugins` from `UpdatePluginsOptions.mapModel`
    * (which the edge handler populates from `--map-model`). The cascade
@@ -774,13 +836,33 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
       phase3aFailures,
       aggregateCause(firstCause),
     );
-    // PUP-9 direct path: surface aggregate error via notifyError. The
-    // returned partition='failed' outcome lets the partition renderer
-    // include it in the "Failed:" body so the user sees both the
-    // notification and the per-bridge breakdown. D-CMC-12: notifyError
-    // auto-appends the MSG-CC-1 cause-chain trailer.
-    if (isDirectUpdate(args) && args.ctx !== undefined) {
-      notifyError(args.ctx, errorMessage(aggregate), aggregate);
+    // PUP-9 direct path: surface the aggregate failure via a single V2
+    // notify() with a synthetic PluginFailedMessage carrying the typed
+    // cause (Plan 19-05 / D-19-02 Option B). Per the catalog UAT fixture
+    // `failed-with-rollback-partial` (docs/output-catalog.md:510-522) the
+    // renderer composes the 4-space cause-chain trailer beneath the
+    // failed plugin row. The cascade is NOT re-rendered here -- aborting
+    // before the cascade walk means there's exactly one row to surface.
+    // NB: the renderer does NOT walk phase3aFailures structurally here
+    // (rollbackPartial is the structural channel for that, but the
+    // direct-path aggregate is itself a single failure summary; the
+    // returned `partition: "failed"` outcome below provides the cascade
+    // shape when reached through the cascade pathway).
+    if (isDirectUpdate(args) && args.ctx !== undefined && args.pi !== undefined) {
+      notifyDirectFailure({
+        ctx: args.ctx,
+        pi: args.pi,
+        marketplace: args.marketplace,
+        scope: args.scope,
+        pluginName: args.plugin,
+        err: aggregate,
+        // Phase-3a aggregate failures map to the catalog "rollback partial"
+        // reason form. Thread the per-phase rollback children structurally
+        // so the renderer emits the indented 4-space child rows + 6-space
+        // per-phase cause-chains per D-16-08.
+        reasonOverride: "rollback partial" as const,
+        rollbackPartial: phase3aFailures,
+      });
     }
 
     // Plan 13-02a-01 / CMC-17 / MSG-RP-1: surface phaseFailures structurally
@@ -839,18 +921,24 @@ async function dropPluginCompletionCache(args: ThreePhaseArgs): Promise<void> {
       args.scope,
       args.marketplace,
     );
-  } catch (err) {
-    if (isDirectUpdate(args) && args.ctx !== undefined) {
-      notifyWarning(
-        args.ctx,
-        `Plugin "${args.plugin}" updated; completion cache refresh deferred: ${errorMessage(err)}`,
-      );
-    }
+  } catch {
+    // D-19-01 precedent (D-18-01 lineage): direct-path completion-cache-refresh
+    // warnings are swallowed silently in V2. The cache-refresh side effect
+    // still fires above; only the user-visible standalone-mode warning
+    // surface is gone. The orchestrated/cascade path is unaffected by
+    // D-19-01 (no separate warning emission in cascade mode).
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Plan 13-02a-01 / CMC-26: cascade rendering + MSG-RH-1 reload-hint dispatch.
+// Plan 19-05: V2 cascade construction (Plan 13-02a-01 / CMC-26 lineage).
+// The V1 dispatch ternary at the old line 952 (the `aggregatedSeverity`-
+// driven branch that picked notifyWarning vs notifySuccess) is RETIRED --
+// notify()'s content-derived severity (D-16-11) and reload-hint (D-16-12)
+// replace it. The legacy cascade-summary composer, version-arrow helper,
+// reload-hint helper, rollback-partial composer, and compact-line renderer
+// are no longer imported -- the V2 renderer in shared/notify.ts owns every
+// rendering concern.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface TargetedOutcome {
@@ -859,267 +947,370 @@ interface TargetedOutcome {
 }
 
 /**
- * Render the update cascade per MSG-GR-1 + MSG-IC-1..3 + MSG-PL-3 + MSG-SR-4..6.
+ * Map an outcome to a V2 `PluginNotificationMessage`. Returns `undefined`
+ * for outcomes the cascade should skip rendering entirely (currently
+ * none -- the V1 `unchanged` partition maps to a `(skipped) {up-to-date}`
+ * cascade row per the catalog at `docs/output-catalog.md:528-532`).
  *
- *   ● <mp> [<scope>]
- *     ● <plugin> [<scope>] v<from> → v<to> (updated) [{requires ...}]
- *     ● <plugin> [<scope>] (skipped) {<reason>}
- *     ⊘ <plugin> [<scope>] v<from> → v<to> (failed) {rollback partial}
- *       [skills] (rollback failed) {rollback partial}
- *       [agents] (rollback failed) {rollback partial}
+ * Per-partition mapping (mirrors marketplace/update.ts:446 precedent):
+ *   - updated  -> PluginUpdatedMessage   ({ from, to, dependencies })
+ *   - unchanged -> PluginSkippedMessage  (reasons: ["up-to-date"])
+ *   - skipped  -> PluginSkippedMessage   (reasons from producer or notes-fallback)
+ *   - failed   -> PluginFailedMessage    (reasons + cause? + rollbackPartial?)
  *
- *   /reload to pick up changes
+ * Plugin scope is forwarded so the renderer's orphan-fold (Phase 17.2)
+ * can suppress the redundant `[<scope>]` bracket when plugin.scope ===
+ * mp.scope.
+ */
+function outcomeToCascadePluginMessage(
+  target: ResolvedTarget,
+  outcome: PluginUpdateOutcome,
+): PluginNotificationMessage {
+  switch (outcome.partition) {
+    case "updated":
+      return {
+        status: "updated",
+        name: outcome.name,
+        scope: target.scope,
+        from: outcome.fromVersion,
+        to: outcome.toVersion,
+        // D-15-02: declared kinds drive the renderer-time soft-dep
+        // marker (MSG-SD-3). The V2 renderer narrows on `dependencies`
+        // membership + the notify-time probe.
+        dependencies: outcomeDependencies(outcome.declaresAgents, outcome.declaresMcp),
+      };
+    case "unchanged":
+      // Catalog `all-up-to-date-noop` (docs/output-catalog.md:528-532):
+      // unchanged renders as `(skipped) {up-to-date}`. V2 severity for
+      // skipped is `warning` per D-16-11 (consistent with the existing
+      // CMC-26 dispatch ternary's `aggregatedSeverity` behavior).
+      return {
+        status: "skipped",
+        name: outcome.name,
+        scope: target.scope,
+        reasons: ["up-to-date"],
+      };
+    case "skipped": {
+      // Producer-narrowed `outcome.reasons` (CR-06) takes precedence over
+      // the legacy notes-substring parse; empty `reasons` opts into the
+      // back-compat fallback path.
+      const reasons =
+        outcome.reasons.length > 0 ? outcome.reasons : narrowSkipReasons(outcome.notes);
+      return {
+        status: "skipped",
+        name: outcome.name,
+        scope: target.scope,
+        ...(outcome.fromVersion !== undefined &&
+          outcome.fromVersion !== "" && { version: outcome.fromVersion }),
+        reasons,
+      };
+    }
+
+    case "failed": {
+      const phaseFailures = outcome.phaseFailures ?? [];
+      const hasPhaseFailures = phaseFailures.length > 0;
+      const reasons: readonly Reason[] = hasPhaseFailures
+        ? (["rollback partial"] as const)
+        : (outcome.reasons ?? narrowFailReasons(outcome.notes));
+      // D-15-04 carve-out: PluginFailedMessage has NO `from`/`to` fields
+      // (only the `updated` variant carries them). The renderer emits at
+      // most the bare `version?` token, so we surface only the
+      // pre-update version (`fromVersion`) when available -- the catalog
+      // form `failed-with-rollback-partial` (510-522) renders
+      // `⊘ delta v1.0.0 (failed) {rollback partial}` using the old
+      // version.
+      const version = outcome.fromVersion;
+      const base: PluginFailedMessage = {
+        status: "failed",
+        name: outcome.name,
+        scope: target.scope,
+        reasons,
+        ...(version !== undefined && version !== "" && { version }),
+        ...(outcome.cause !== undefined && { cause: outcome.cause }),
+      };
+      if (!hasPhaseFailures) {
+        return base;
+      }
+
+      // Catalog `failed-with-rollback-partial` (docs/output-catalog.md:510-522):
+      // the renderer composes `    [<phase>] (rollback failed)` at 4-space
+      // indent followed by the optional 6-space-indent per-phase cause-chain
+      // (D-16-08). `UpdatePhaseFailure` carries `msg: string` (and the
+      // underlying `Phase3Failure.cause` carries an `unknown` cause); the
+      // outcome's `phaseFailures` is pre-narrowed to `{phase, msg}` only,
+      // so synthesize an Error from the typed msg to feed the cause-chain
+      // walker per D-19-03 caveat fallback.
+      return {
+        ...base,
+        rollbackPartial: phaseFailures.map((p) => ({
+          phase: p.phase,
+          // `UpdatePhaseFailure` discards the original `Phase3Failure.cause`
+          // (it's typed `unknown` and never threaded into the outcome
+          // shape); synthesize a typed Error from `msg` so the renderer's
+          // 6-space-indent cause-chain walker has structured input.
+          ...(p.msg !== "" && { cause: new Error(p.msg) }),
+        })),
+      };
+    }
+
+    default:
+      // Task 260525-cjr C2: exhaustiveness guard for PluginUpdateOutcome's
+      // discriminated union; any future partition must update this switch.
+      return assertNever(outcome);
+  }
+}
+
+/** Derive the v2 Dependency[] tuple from the outcome's declared kinds. */
+function outcomeDependencies(declaresAgents: boolean, declaresMcp: boolean): readonly Dependency[] {
+  return [
+    ...(declaresAgents ? (["agents"] as const) : []),
+    ...(declaresMcp ? (["mcp"] as const) : []),
+  ];
+}
+
+/**
+ * Build the V2 cascade payload and emit via a single notify(ctx, pi, ...)
+ * call. Replaces the V1 cascade-summary + dispatch-ternary + reload-hint
+ * + rollback-partial-splice composition chain per Plan 19-05 / D-19-02.
  *
- * - Marketplace headers carry `status: undefined` (the marketplace itself
- *   was NOT updated by plugin update; the header is a pure label).
- * - Severity dispatch: all-trivial -> notifySuccess; any non-trivial (any
- *   failed / non-trivial skipped) -> notifyWarning. MSG-SR-6 forbids
- *   notifyError on cascade summaries.
- * - Reload-hint trailer emitted iff at least one outcome is `(updated)`.
- *   All-up-to-date / all-skipped cascades omit the trailer (MSG-RH-1).
- * - Rollback-partial parents (phaseFailures non-empty) substitute their
- *   row in the cascade body with `renderRollbackPartial(parentRow,
- *   children, probe)` so the indented children block sits beneath the
- *   parent line at the cascade-row indentation level.
+ * Marketplace blocks are grouped by (scope, marketplace) per CMC-21 and
+ * sorted via compareByNameThenScope before emission so the renderer's
+ * caller-order honored discipline (D-16-06) preserves alphabetic ordering.
+ *
+ * Severity (`error` / `warning` / info) is computed by notify() per
+ * D-16-11; reload-hint trailer is appended by notify() per D-16-12; the
+ * per-row soft-dep marker is injected by the renderer per D-16-14 /
+ * D-16-15. Orchestrator MUST NOT compose any of these.
  */
 function renderUpdateCascadeAndNotify(
   ctx: ExtensionContext,
   pi: ExtensionAPI,
   outcomes: readonly TargetedOutcome[],
 ): void {
-  const probe = softDepStatus(pi);
-  // Group by (scope, marketplace) per CMC-21.
-  interface Block {
-    marketplace: MarketplaceRow;
-    rows: { row: PluginCascadeRow; rollbackChildren?: readonly RollbackChild[] }[];
+  // Group by (scope, marketplace) per CMC-21. Insertion order tracks the
+  // first occurrence of each (scope, marketplace) pair -- the post-grouping
+  // sort below restores alphabetic-by-name then project-before-user
+  // (MSG-GR-3) ordering across marketplaces, while plugin rows within a
+  // marketplace stay in caller order (D-16-06).
+  interface MpGroup {
+    readonly name: string;
+    readonly scope: Scope;
+    readonly plugins: PluginNotificationMessage[];
   }
-  const byMp = new Map<string, Block>();
+  const byMp = new Map<string, MpGroup>();
   for (const { target, outcome } of outcomes) {
     const key = `${target.scope}:${target.marketplace}`;
-    const existing = byMp.get(key);
-    const rowEntry = outcomeToCascadeRow(target, outcome);
-    if (rowEntry === undefined) {
-      continue;
-    }
-
-    if (existing === undefined) {
-      byMp.set(key, {
-        marketplace: {
-          kind: "marketplace",
-          name: target.marketplace,
-          scope: target.scope,
-          outcomeClass: "ok",
-        },
-        rows: [rowEntry],
-      });
-    } else {
-      existing.rows.push(rowEntry);
+    const group = byMp.get(key) ?? {
+      name: target.marketplace,
+      scope: target.scope,
+      plugins: [],
+    };
+    group.plugins.push(outcomeToCascadePluginMessage(target, outcome));
+    if (!byMp.has(key)) {
+      byMp.set(key, group);
     }
   }
 
-  // Sort marketplace blocks via compareByNameThenScope (name primary
-  // case-insensitive, scope secondary project-before-user per MSG-GR-3).
-  const sortedBlocks = [...byMp.values()].sort((a, b) =>
-    compareByNameThenScope(a.marketplace, b.marketplace),
-  );
+  // Sort marketplace blocks via compareByNameThenScope (D-16-06: orchestrator
+  // controls iteration order; notify() does not sort). The comparator's
+  // `Sortable` shape requires only `name` + `scope`.
+  const marketplaces: MarketplaceNotificationMessage[] = [...byMp.values()]
+    .sort((a, b) =>
+      compareByNameThenScope({ name: a.name, scope: a.scope }, { name: b.name, scope: b.scope }),
+    )
+    .map((g) => ({
+      name: g.name,
+      scope: g.scope,
+      plugins: g.plugins,
+    }));
 
-  const bodySegments: string[] = [];
-  let aggregatedSeverity: "success" | "warning" = "success";
-  for (const block of sortedBlocks) {
-    const { message, severity } = cascadeSummary({
-      marketplace: block.marketplace,
-      rows: block.rows.map((r) => r.row),
-      probe,
-    });
-    // MSG-RP-1: post-render splice the rollback-partial children block
-    // beneath each parent row that carries phase failures. cascadeSummary
-    // already rendered the parent row; we replace that line with the
-    // parent + indented children form from renderRollbackPartial.
-    const withRollback = spliceRollbackPartials(message, block.rows, probe);
-    bodySegments.push(withRollback);
-    if (severity === "warning") {
-      aggregatedSeverity = "warning";
-    }
-  }
+  // V2 cascade construction recipe (mirrors Plan 19-01 pilot at
+  // orchestrators/plugin/uninstall.ts; Plan 19-05 substitutes the
+  // version-arrow cascade variant set per D-19-02 + D-15-04).
+  // - One MarketplaceNotificationMessage per affected (scope, marketplace)
+  //   group, emitted via a single notify(ctx, pi, ...) call per
+  //   orchestration.
+  // - plugins: readonly PluginNotificationMessage[] carries the
+  //   PluginUpdatedMessage (status "updated" with required from/to per
+  //   D-15-04) / PluginSkippedMessage (status "skipped" with required
+  //   reasons) / PluginFailedMessage (status "failed" with required
+  //   reasons + optional cause + optional rollbackPartial) variants.
+  //   The renderer composes the version-arrow `<from> → v<to>` with the
+  //   asymmetric `v` prefix on `to` only per docs/output-catalog.md:499.
+  // - Severity and `/reload to pick up changes` trailer are computed by
+  //   notify() per D-16-11 + D-16-12 from the variant set.
+  // - Reference: catalog UAT plugin-update fixtures at
+  //   docs/output-catalog.md:489-568 (single-mp-mixed, failed-with-
+  //   rollback-partial, all-up-to-date-noop, bare-multi-mp,
+  //   same-mp-both-scopes).
+  notify(ctx, pi, { marketplaces });
+}
 
-  const body = bodySegments.join("\n\n");
-  // PUP-8 / MSG-RH-1: reload hint emitted iff at least one outcome is
-  // (updated). All-trivial cascades suppress the trailer.
-  const updatedNames = outcomes
-    .filter((o) => o.outcome.partition === "updated")
-    .map((o) => o.outcome.name);
-  const hint = reloadHint(updatedNames);
-  const dispatch = aggregatedSeverity === "warning" ? notifyWarning : notifySuccess;
-  dispatch(ctx, appendReloadHint(body, hint));
+// ─────────────────────────────────────────────────────────────────────────────
+// Plan 19-05: V2 direct-path failure helper. The 4 V1 notifyError sites
+// (enumerate-targets / syncCloneOnce / runThreePhaseUpdate / phase-3
+// aggregate) consolidate through this helper. Per D-19-02 Option B, each
+// site emits a synthetic PluginFailedMessage carrying the typed `cause`
+// so the renderer composes the 4-space cause-chain trailer per D-16-08.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface NotifyDirectFailureArgs {
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  readonly marketplace: string;
+  readonly scope: Scope;
+  readonly pluginName: string;
+  readonly err: unknown;
+  /**
+   * Optional override that pins the closed-set Reason on the synthetic
+   * PluginFailedMessage. Used by the phase-3 aggregate path where the
+   * `"rollback partial"` reason is the catalog form (510-522). Omitted
+   * for direct-path enumerate / syncClone / phase-2 failures, which
+   * route through `narrowDirectFailReason` for a best-fit Reason from
+   * the typed error.
+   */
+  readonly reasonOverride?: Reason;
+  /**
+   * Optional per-phase rollback children. Threaded only by the phase-3
+   * aggregate path. Each entry's `msg` is wrapped in a synthesized Error
+   * so the renderer's 6-space-indent cause-chain walker has structured
+   * input (the underlying Phase3Failure.cause is `unknown` and discarded
+   * earlier in the pipeline; this preserves the V1 cause-text via the
+   * msg field).
+   */
+  readonly rollbackPartial?: readonly Phase3Failure[];
+}
+
+function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
+  const { ctx, pi, marketplace, scope, pluginName, err } = args;
+  const cause = err instanceof Error ? err : new Error(String(err));
+  const reasons: readonly Reason[] = [args.reasonOverride ?? narrowDirectFailReason(cause)];
+  const failedRow: PluginFailedMessage = {
+    status: "failed",
+    name: pluginName,
+    scope,
+    reasons,
+    cause,
+    ...(args.rollbackPartial !== undefined &&
+      args.rollbackPartial.length > 0 && {
+        rollbackPartial: args.rollbackPartial.map((p) => ({
+          phase: p.phase,
+          ...rollbackPartialCauseSlot(p),
+        })),
+      }),
+  };
+  notify(ctx, pi, {
+    marketplaces: [
+      {
+        name: marketplace,
+        scope,
+        plugins: [failedRow],
+      },
+    ],
+  });
 }
 
 /**
- * Map an outcome to its cascade-row representation. Returns `undefined`
- * for `unchanged` outcomes -- they map to `(skipped) {up-to-date}` per
- * the catalog (CMC-26: unchanged is an internal partition; the user
- * sees `(skipped) {up-to-date}` in the cascade).
+ * Coerce a `Phase3Failure.cause` (typed `unknown`) into the optional
+ * `{ cause?: Error }` slot consumed by `PluginFailedMessage.rollbackPartial`.
+ * Prefers the typed Error when present; falls back to synthesizing a typed
+ * Error from `msg` per D-19-03 caveat so the renderer's 6-space-indent
+ * cause-chain walker has structured input. Returns the empty object when
+ * neither is available (caller spreads it via `...`).
  */
-function outcomeToCascadeRow(
-  target: ResolvedTarget,
-  outcome: PluginUpdateOutcome,
-): { row: PluginCascadeRow; rollbackChildren?: readonly RollbackChild[] } | undefined {
-  switch (outcome.partition) {
-    case "updated":
-      // MSG-PL-3 version-transition arrow `v<from> → v<to>` (U+2192,
-      // space-padded). The renderer's renderVersion slot just emits
-      // whatever the orchestrator supplies in `version`, so we compose
-      // the arrow string here and pass it through verbatim.
-      //
-      // Task 260525-cjr C2: fromVersion / toVersion are REQUIRED on
-      // PluginUpdateUpdatedOutcome -- the optional-arg ternary in
-      // composeVersionArrow is now dead for this branch.
-      return {
-        row: {
-          kind: "plugin-cascade",
-          name: outcome.name,
-          scope: target.scope,
-          version: `${outcome.fromVersion} → v${outcome.toVersion}`,
-          status: "updated",
-          // Task 260525-cjr B1: required `boolean` on
-          // `PluginUpdateOutcome`; the `?? false` coalesce is gone.
-          declaresAgents: outcome.declaresAgents,
-          declaresMcp: outcome.declaresMcp,
-        },
-      };
-    case "unchanged": {
-      // Catalog: `(skipped) {up-to-date}` -- the unchanged partition is
-      // an internal optimization; the user-visible token is `(skipped)`
-      // with `{up-to-date}` reason. The renderer treats `up-to-date` as
-      // a trivial skip (● icon, success severity).
-      return {
-        row: {
-          kind: "plugin-cascade",
-          name: outcome.name,
-          scope: target.scope,
-          status: "skipped",
-          reasons: ["up-to-date"],
-          declaresAgents: false,
-          declaresMcp: false,
-        },
-      };
-    }
-
-    case "skipped":
-      return {
-        row: {
-          kind: "plugin-cascade",
-          name: outcome.name,
-          scope: target.scope,
-          ...(outcome.fromVersion !== undefined && { version: outcome.fromVersion }),
-          status: "skipped",
-          // Quick task 260525-aub / Task 260525-cjr C2: prefer the
-          // producer-narrowed `outcome.reasons` over the legacy
-          // notes-substring parse. `reasons` is now REQUIRED
-          // (PluginUpdateSkippedOutcome.reasons: readonly Reason[]) so
-          // an empty array opts into the consumer fallback path
-          // explicitly (back-compat with notes-only fixtures).
-          reasons: outcome.reasons.length > 0 ? outcome.reasons : narrowSkipReasons(outcome.notes),
-          declaresAgents: false,
-          declaresMcp: false,
-        },
-      };
-    case "failed": {
-      const hasPhaseFailures = (outcome.phaseFailures ?? []).length > 0;
-      const versionSlot = composeVersionArrow(outcome.fromVersion, outcome.toVersion);
-      const failedRow: PluginCascadeRow = {
-        kind: "plugin-cascade",
-        name: outcome.name,
-        scope: target.scope,
-        ...(versionSlot !== undefined && { version: versionSlot }),
-        status: "failed",
-        // Quick task 260525-aub: phase-3 aggregate failures take
-        // precedence (catalog `(failed) {rollback partial}`); otherwise
-        // prefer producer-narrowed `outcome.reasons` over the legacy
-        // notes-substring parse.
-        reasons: hasPhaseFailures
-          ? (["rollback partial"] as const)
-          : (outcome.reasons ?? narrowFailReasons(outcome.notes)),
-        declaresAgents: false,
-        declaresMcp: false,
-      };
-
-      if (!hasPhaseFailures) {
-        return { row: failedRow };
-      }
-
-      const children: readonly RollbackChild[] = (outcome.phaseFailures ?? []).map((f) => ({
-        kind: "rollback-child",
-        // MSG-RP-1: phaseLabel renders verbatim in the bare compact line.
-        // Bracketed form mirrors the catalog example.
-        phaseLabel: `[${f.phase}]`,
-        // Inner bridge commit failures are rollback-failed semantically:
-        // the swap was attempted, the bridge threw, and the post-commit
-        // recovery is the per-plugin reinstall hint. `rollback failed`
-        // captures that effective state.
-        status: "rollback failed",
-        // The free-text error message does NOT fit the closed Reason set;
-        // narrow to `"rollback partial"` (the parent's reason) and the
-        // phaseLabel + status carry the user-visible failure shape.
-        reasons: ["rollback partial"] as const,
-      }));
-      return { row: failedRow, rollbackChildren: children };
-    }
-
-    default:
-      // Task 260525-cjr C2: exhaustiveness guard for the new
-      // discriminated union; any future partition added to
-      // PluginUpdateOutcome must update this switch or the compiler
-      // refuses to assign `outcome` to `never`.
-      return assertNever(outcome);
+function rollbackPartialCauseSlot(p: Phase3Failure): { readonly cause?: Error } {
+  if (p.cause instanceof Error) {
+    return { cause: p.cause };
   }
+
+  if (p.msg !== "") {
+    return { cause: new Error(p.msg) };
+  }
+
+  return {};
 }
 
 /**
- * Splice rollback-partial children into the cascade message. cascadeSummary
- * already emits the parent row at indentation 2; for each row with
- * rollbackChildren, append the children block at indentation 4
- * (rollback-child indented 2 spaces beneath the cascade-child row).
+ * Narrow a direct-path failure's typed error to a closed-set `Reason` for
+ * the synthetic `PluginFailedMessage`. Order: instanceof typed errors
+ * first, errno-bearing FS errors second, message-substring fallback last.
+ * The fallback `"unreadable manifest"` mirrors the marketplace/update.ts
+ * narrowFailReason precedent for unknown error shapes.
  */
-function spliceRollbackPartials(
-  cascadeMessage: string,
-  rows: readonly { row: PluginCascadeRow; rollbackChildren?: readonly RollbackChild[] }[],
-  probe: ReturnType<typeof softDepStatus>,
-): string {
-  const haveChildren = rows.filter((r) => r.rollbackChildren !== undefined);
-  if (haveChildren.length === 0) {
-    return cascadeMessage;
-  }
-
-  const lines = cascadeMessage.split("\n");
-  const out: string[] = [];
-  for (const line of lines) {
-    out.push(line);
-    // Look for an exact match against any rollback-parent row's rendered
-    // form (the line is `  ${renderRow(row, probe)}` per cascadeSummary).
-    for (const r of haveChildren) {
-      const renderedRow = `  ${renderRow(r.row, probe)}`;
-      if (line === renderedRow) {
-        // Children render at indent 4 (the inner block of renderRollbackPartial
-        // sits at +2 relative to the parent, which is already at +2 here).
-        const block = renderRollbackPartial(r.row, r.rollbackChildren ?? [], probe);
-        const blockLines = block.split("\n");
-        // blockLines[0] is the parent (already in `line`); skip it and
-        // append the indented children with an extra 2-space prefix.
-        for (let i = 1; i < blockLines.length; i++) {
-          out.push(`  ${blockLines[i]}`);
-        }
-
-        break;
-      }
+function narrowDirectFailReason(err: Error): Reason {
+  // Phase-3 aggregate failures are surfaced via reasonOverride; here we
+  // handle the enumerate / syncClone / phase-2 paths only.
+  if (err instanceof PluginShapeError) {
+    switch (err.shape.kind) {
+      case "no-longer-installable":
+      case "not-installable":
+        return "no longer installable";
+      case "not-in-manifest":
+      case "already-installed":
+        return "not in manifest";
     }
   }
 
-  return out.join("\n");
+  const code = (err as NodeJS.ErrnoException).code;
+  if (code === "EACCES" || code === "EPERM") {
+    return "permission denied";
+  }
+
+  if (code === "ENOENT" || code === "ENOTDIR") {
+    return "source missing";
+  }
+
+  // Message-substring fallback. Mirrors marketplace/update.ts:553-580
+  // narrowFailReason classification ladder, scoped to the direct-path
+  // failure modes (enumerate target / syncClone / phase-2 throw).
+  const text = err.message.toLowerCase();
+  if (text.includes("not found")) {
+    return "not found";
+  }
+
+  if (text.includes("rollback")) {
+    return "rollback partial";
+  }
+
+  if (text.includes("concurrently uninstalled") || text.includes("concurrently removed")) {
+    return "concurrently uninstalled";
+  }
+
+  if (text.includes("concurrently updated")) {
+    return "concurrently updated";
+  }
+
+  if (text.includes("network")) {
+    return "network unreachable";
+  }
+
+  if (text.includes("unparseable") || text.includes("invalid")) {
+    return "invalid manifest";
+  }
+
+  return "unreadable manifest";
 }
 
-// Task 260525-cjr C6: `composeVersionArrow` lifted to
-// `presentation/version-arrow.ts` so the marketplace-side
-// `outcomeToCascadeRow` shares the same helper. Imported above.
+/**
+ * Derive the marketplace name for the enumerate-targets failure path.
+ * Per the V1 contract that path is only reachable when target.kind !==
+ * "all" (the bare form's enumeration cannot throw); the marketplace
+ * identity is always present on those kinds.
+ */
+function targetMarketplaceName(target: UpdatePluginsTarget): string {
+  if (target.kind === "marketplace" || target.kind === "plugin") {
+    return target.marketplace;
+  }
+
+  // "all" form -- defensive fallback: the enumerate path for the bare
+  // form never throws, so this string is structurally unreachable. Use a
+  // descriptive synthetic name in case future refactors expose it.
+  return "(targets)";
+}
+
+// Plan 19-05: the legacy version-arrow helper is no longer imported -- the
+// V2 renderer (shared/notify.ts) owns version-arrow composition via the
+// PluginUpdatedMessage's required from/to fields per D-15-04.
 
 function narrowSkipReasons(notes: readonly string[] | undefined): readonly Reason[] {
   if (notes === undefined || notes.length === 0) {
