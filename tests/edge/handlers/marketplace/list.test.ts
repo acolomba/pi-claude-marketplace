@@ -1,9 +1,11 @@
 // Plan 06-04 Task 1: marketplace list handler shim tests.
 //
-// `handleMarketplaceList` is a plain (non-factory) function. It accepts
-// optional --scope and delegates to listMarketplaces. The orchestrator
-// emits the bare CMC-10 EmptyToken form `(no marketplaces)` when state
-// is empty.
+// Plan 18-00 (Wave 0): the previous plain `handleMarketplaceList`
+// function is now a `makeMarketplaceListHandler(pi)` factory that
+// returns the same `(args, ctx) => Promise<void>` shape. Tests
+// thread an empty-getAllTools `pi` to mirror production wiring.
+// The orchestrator emits the bare CMC-10 EmptyToken form `(no
+// marketplaces)` when state is empty.
 
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -11,9 +13,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { handleMarketplaceList } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/list.ts";
+import { makeMarketplaceListHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/list.ts";
 
-import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
 interface NotifyRecord {
   message: string;
@@ -31,6 +33,14 @@ function makeCtx(cwd: string): { ctx: ExtensionCommandContext; notifications: No
     },
   } as unknown as ExtensionCommandContext;
   return { ctx, notifications };
+}
+
+// Plan 18-00 (Wave 0): factory takes `pi: ExtensionAPI`. Mirror the
+// production wiring shape used by sibling marketplace handler tests.
+function makePi(): ExtensionAPI {
+  return {
+    getAllTools: (): unknown[] => [],
+  } as unknown as ExtensionAPI;
 }
 
 async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Promise<T> {
@@ -55,7 +65,8 @@ async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Pr
 test("shim :: no positional calls listMarketplaces with scope: undefined", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
-    await handleMarketplaceList("", ctx);
+    const handler = makeMarketplaceListHandler(makePi());
+    await handler("", ctx);
     assert.equal(notifications.length, 1);
     // CMC-10: bare `(no marketplaces)` EmptyToken (formerly the
     // "No marketplaces configured." sentence; retired by Plan 13-02c-01).
@@ -66,7 +77,8 @@ test("shim :: no positional calls listMarketplaces with scope: undefined", async
 test('shim :: --scope user calls listMarketplaces with scope: "user"', async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
-    await handleMarketplaceList("--scope user", ctx);
+    const handler = makeMarketplaceListHandler(makePi());
+    await handler("--scope user", ctx);
     assert.equal(notifications.length, 1);
     // CMC-10: bare `(no marketplaces)` EmptyToken (formerly the
     // "No marketplaces configured." sentence; retired by Plan 13-02c-01).
@@ -77,7 +89,8 @@ test('shim :: --scope user calls listMarketplaces with scope: "user"', async () 
 test('shim :: --scope project calls listMarketplaces with scope: "project"', async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
-    await handleMarketplaceList("--scope project", ctx);
+    const handler = makeMarketplaceListHandler(makePi());
+    await handler("--scope project", ctx);
     assert.equal(notifications.length, 1);
     // CMC-10: bare `(no marketplaces)` EmptyToken (formerly the
     // "No marketplaces configured." sentence; retired by Plan 13-02c-01).

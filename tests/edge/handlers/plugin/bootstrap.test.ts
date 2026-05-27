@@ -19,7 +19,7 @@ import { loadState } from "../../../../extensions/pi-claude-marketplace/persiste
 import { fixtureMarketplaceDir, makeMockGitOps } from "../../../helpers/git-mock.ts";
 
 import type { EdgeDeps } from "../../../../extensions/pi-claude-marketplace/edge/types.ts";
-import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
 interface NotifyRecord {
   message: string;
@@ -38,6 +38,15 @@ function makeCtx(cwd: string): { ctx: ExtensionCommandContext; notifications: No
     pi: { getAllTools: (): unknown[] => [] },
   } as unknown as ExtensionCommandContext;
   return { ctx, notifications };
+}
+
+// Plan 18-00 (Wave 0): `makeBootstrapHandler(pi, deps)` requires `pi`
+// as first positional arg (the composed `addMarketplace` /
+// `setMarketplaceAutoupdate` orchestrators now require `pi`).
+function makePi(): ExtensionAPI {
+  return {
+    getAllTools: (): unknown[] => [],
+  } as unknown as ExtensionAPI;
 }
 
 async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Promise<T> {
@@ -90,7 +99,7 @@ test("bootstrap handler (no args, clean state): dispatches to orchestrator and e
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
     const { deps, gitState } = makeDeps();
-    const handler = makeBootstrapHandler(deps);
+    const handler = makeBootstrapHandler(makePi(), deps);
 
     await handler("", ctx);
 
@@ -122,7 +131,7 @@ test("bootstrap handler (whitespace-only args): treated identically to empty arg
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
     const { deps } = makeDeps();
-    const handler = makeBootstrapHandler(deps);
+    const handler = makeBootstrapHandler(makePi(), deps);
 
     await handler("   ", ctx);
 
@@ -140,7 +149,7 @@ test("bootstrap handler (positional argument): rejected with usage error, orches
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
     const { deps, gitState } = makeDeps();
-    const handler = makeBootstrapHandler(deps);
+    const handler = makeBootstrapHandler(makePi(), deps);
 
     await handler("foo", ctx);
 
@@ -163,7 +172,7 @@ test("bootstrap handler (--scope project): rejected with user-scope-only usage e
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
     const { deps, gitState } = makeDeps();
-    const handler = makeBootstrapHandler(deps);
+    const handler = makeBootstrapHandler(makePi(), deps);
 
     await handler("--scope project", ctx);
 
@@ -181,7 +190,7 @@ test("bootstrap handler (--scope user): rejected too -- the bootstrap subcommand
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
     const { deps } = makeDeps();
-    const handler = makeBootstrapHandler(deps);
+    const handler = makeBootstrapHandler(makePi(), deps);
 
     await handler("--scope user", ctx);
 
@@ -198,7 +207,7 @@ test("bootstrap handler (invalid --scope value): surfaces parseArgs error", asyn
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
     const { deps } = makeDeps();
-    const handler = makeBootstrapHandler(deps);
+    const handler = makeBootstrapHandler(makePi(), deps);
 
     await handler("--scope nope", ctx);
 

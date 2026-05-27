@@ -19,24 +19,29 @@ import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-
 import { fixtureMarketplaceDir, makeMockGitOps } from "../../helpers/git-mock.ts";
 
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 interface NotifyRecord {
   message: string;
   severity?: string;
 }
 
-function makeCtx(): { ctx: ExtensionContext; notifications: NotifyRecord[] } {
+function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: NotifyRecord[] } {
   const notifications: NotifyRecord[] = [];
+  // Plan 18-00: `pi` is required on every marketplace orchestrator's
+  // `*Options` interface. Mirror the production wiring shape so tests
+  // can pass the same value the edge layer would. The empty
+  // `getAllTools()` mirrors the existing makeCtx pattern (D-18-06).
+  const pi = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
   const ctx = {
     ui: {
       notify: (msg: string, sev?: string): void => {
         notifications.push(sev === undefined ? { message: msg } : { message: msg, severity: sev });
       },
     },
-    pi: { getAllTools: (): unknown[] => [] },
+    pi,
   } as unknown as ExtensionContext;
-  return { ctx, notifications };
+  return { ctx, pi, notifications };
 }
 
 async function withTmpScope<T>(
@@ -54,13 +59,14 @@ async function withTmpScope<T>(
 
 test("MA-5 + MA-11: github source clones, validates, renames, mutates state, emits exact success message; NO reload hint", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps, state } = makeMockGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
     await addMarketplace({
       ctx,
+      pi,
       scope: "project",
       cwd,
       rawSource: "anthropics/claude-plugins-official",
@@ -97,13 +103,14 @@ test("MA-5 + MA-11: github source clones, validates, renames, mutates state, emi
 
 test("MA-5: github HTTPS source with #ref clones the canonical repo URL at that ref", async () => {
   await withTmpScope(async ({ cwd }) => {
-    const { ctx } = makeCtx();
+    const { ctx, pi } = makeCtx();
     const { gitOps, state } = makeMockGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
     await addMarketplace({
       ctx,
+      pi,
       scope: "project",
       cwd,
       rawSource: "https://github.com/anthropics/claude-plugins-official#main",
@@ -128,7 +135,7 @@ test("MA-5: github HTTPS source with #ref clones the canonical repo URL at that 
 
 test("MA-6: pre-existing non-empty sources/<name>/ throws StaleSourceCloneError", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
-    const { ctx } = makeCtx();
+    const { ctx, pi } = makeCtx();
     // Pre-create the final dir with a marker file so pathExists returns true.
     const finalDir = await locations.sourceCloneDir("valid-marketplace");
     await mkdir(finalDir, { recursive: true });
@@ -141,6 +148,7 @@ test("MA-6: pre-existing non-empty sources/<name>/ throws StaleSourceCloneError"
     await assert.rejects(
       addMarketplace({
         ctx,
+        pi,
         scope: "project",
         cwd,
         rawSource: "anthropics/claude-plugins-official",
@@ -153,13 +161,14 @@ test("MA-6: pre-existing non-empty sources/<name>/ throws StaleSourceCloneError"
 
 test("MA-8: duplicate name in same scope throws MarketplaceDuplicateNameError", async () => {
   await withTmpScope(async ({ cwd }) => {
-    const { ctx } = makeCtx();
+    const { ctx, pi } = makeCtx();
     const { gitOps: gitOps1 } = makeMockGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
     // First add succeeds.
     await addMarketplace({
       ctx,
+      pi,
       scope: "project",
       cwd,
       rawSource: "anthropics/claude-plugins-official",
@@ -173,6 +182,7 @@ test("MA-8: duplicate name in same scope throws MarketplaceDuplicateNameError", 
     await assert.rejects(
       addMarketplace({
         ctx,
+        pi,
         scope: "project",
         cwd,
         rawSource: "anthropics/claude-plugins-official",
@@ -186,7 +196,7 @@ test("MA-8: duplicate name in same scope throws MarketplaceDuplicateNameError", 
 
 test("MA-9: invalid manifest after clone triggers cleanupStaging + appendLeakToError", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
-    const { ctx } = makeCtx();
+    const { ctx, pi } = makeCtx();
     const { gitOps, state } = makeMockGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("invalid-manifest"),
     });
@@ -195,6 +205,7 @@ test("MA-9: invalid manifest after clone triggers cleanupStaging + appendLeakToE
     try {
       await addMarketplace({
         ctx,
+        pi,
         scope: "project",
         cwd,
         rawSource: "anthropics/claude-plugins-official",
@@ -243,12 +254,13 @@ test("MA-9: invalid manifest after clone triggers cleanupStaging + appendLeakToE
 
 test("MA-10: unknown source kind throws with parser's reason", async () => {
   await withTmpScope(async ({ cwd }) => {
-    const { ctx } = makeCtx();
+    const { ctx, pi } = makeCtx();
     const { gitOps, state } = makeMockGitOps();
 
     await assert.rejects(
       addMarketplace({
         ctx,
+        pi,
         scope: "project",
         cwd,
         rawSource: "git@github.com:foo/bar.git",
@@ -265,7 +277,7 @@ test("MA-10: unknown source kind throws with parser's reason", async () => {
 
 test("NFR-5: path-source add never calls gitOps", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     // Set up a local marketplace fixture by copying the valid-marketplace fixture
     // into a non-pi-claude-marketplace location and pointing rawSource at it.
     const localMpDir = await mkdtemp(path.join(tmpdir(), "mp-local-"));
@@ -276,7 +288,7 @@ test("NFR-5: path-source add never calls gitOps", async () => {
       const { gitOps, state } = makeMockGitOps();
 
       // Use absolute path so domain/source.ts classifies as path source.
-      await addMarketplace({ ctx, scope: "project", cwd, rawSource: localMpDir, gitOps });
+      await addMarketplace({ ctx, pi, scope: "project", cwd, rawSource: localMpDir, gitOps });
 
       // Zero gitOps calls (NFR-5).
       assert.equal(state.cloneCalls.length, 0);
@@ -301,14 +313,21 @@ test("NFR-5: path-source add never calls gitOps", async () => {
 
 test("MA-3: path source accepts a direct path to marketplace.json (not just the directory)", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
-    const { ctx } = makeCtx();
+    const { ctx, pi } = makeCtx();
     const localMpDir = await mkdtemp(path.join(tmpdir(), "mp-local-"));
     try {
       await cp(fixtureMarketplaceDir("valid-marketplace"), localMpDir, { recursive: true });
       const directManifestPath = path.join(localMpDir, ".claude-plugin", "marketplace.json");
       const { gitOps } = makeMockGitOps();
 
-      await addMarketplace({ ctx, scope: "project", cwd, rawSource: directManifestPath, gitOps });
+      await addMarketplace({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        rawSource: directManifestPath,
+        gitOps,
+      });
 
       const persisted = await loadState(locations.extensionRoot);
       assert.ok("valid-marketplace" in persisted.marketplaces);
@@ -331,7 +350,7 @@ test("MA-4: tilde paths are preserved verbatim in stored source.raw", async () =
 
 test("CR-02 / MA-4: ~/path is expanded against $HOME for the on-disk probe; source.raw stays verbatim", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     // Stand up a hermetic HOME containing the fixture so that
     // "~/projects/local-mp" resolves to a real directory.
     const originalHome = process.env.HOME;
@@ -346,6 +365,7 @@ test("CR-02 / MA-4: ~/path is expanded against $HOME for the on-disk probe; sour
       const { gitOps, state } = makeMockGitOps();
       await addMarketplace({
         ctx,
+        pi,
         scope: "project",
         cwd,
         rawSource: `~/${tildeRelDir}`,
@@ -387,14 +407,14 @@ test("MA-2 / SC-5 / CMC-30: orchestrator accepts scope='project'; success row ca
   // The edge layer (Phase 6) defaults --scope to "user". This test
   // confirms the orchestrator threads the value through verbatim.
   await withTmpScope(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps } = makeMockGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
     // Use project scope so we get a real tmp scope root; the assertion
     // is just that the scope is reflected in the success row's
     // `[<scope>]` token per the compact-line grammar (MSG-GR-1).
-    await addMarketplace({ ctx, scope: "project", cwd, rawSource: "owner/repo", gitOps });
+    await addMarketplace({ ctx, pi, scope: "project", cwd, rawSource: "owner/repo", gitOps });
     const note = notifications[0];
     assert.ok(note);
     assert.ok(note.message.includes("[project]"));
@@ -417,7 +437,7 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
   //      invalidation call site rather than rehydrating stale disk data.
   await withTmpScope(async ({ cwd, locations }) => {
     __resetCacheForTests();
-    const { ctx } = makeCtx();
+    const { ctx, pi } = makeCtx();
     const { gitOps } = makeMockGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
@@ -442,6 +462,7 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
     // Run addMarketplace -- D-03-INV must fire invalidateMarketplaceNames.
     await addMarketplace({
       ctx,
+      pi,
       scope: "project",
       cwd,
       rawSource: "anthropics/claude-plugins-official",
@@ -467,12 +488,13 @@ test("CMP-1: same marketplace name in user scope and project scope are independe
   process.env.HOME = hermeticHome;
   try {
     await withTmpScope(async ({ cwd }) => {
-      const { ctx: ctx1, notifications: n1 } = makeCtx();
+      const { ctx: ctx1, pi: pi1, notifications: n1 } = makeCtx();
       const { gitOps: gitOps1 } = makeMockGitOps({
         fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       });
       await addMarketplace({
         ctx: ctx1,
+        pi: pi1,
         scope: "project",
         cwd,
         rawSource: "anthropics/claude-plugins-official",
@@ -480,13 +502,14 @@ test("CMP-1: same marketplace name in user scope and project scope are independe
       });
       assert.equal(n1[0]?.severity, undefined, "project-scope add emits no error");
 
-      const { ctx: ctx2, notifications: n2 } = makeCtx();
+      const { ctx: ctx2, pi: pi2, notifications: n2 } = makeCtx();
       const { gitOps: gitOps2 } = makeMockGitOps({
         fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       });
       // Same marketplace name but user scope -- MUST NOT throw MarketplaceDuplicateNameError.
       await addMarketplace({
         ctx: ctx2,
+        pi: pi2,
         scope: "user",
         cwd,
         rawSource: "anthropics/claude-plugins-official",

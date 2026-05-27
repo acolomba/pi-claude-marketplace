@@ -48,24 +48,27 @@ import {
 import { makeMockGitOps } from "../../helpers/git-mock.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 interface NotifyRecord {
   message: string;
   severity?: string;
 }
 
-function makeCtx(): { ctx: ExtensionContext; notifications: NotifyRecord[] } {
+function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: NotifyRecord[] } {
   const notifications: NotifyRecord[] = [];
+  // Plan 18-00: `pi` required on BootstrapOptions (mirroring the composed
+  // marketplace orchestrators); mirror production wiring shape.
+  const pi = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
   const ctx = {
     ui: {
       notify: (m: string, s?: string): void => {
         notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
       },
     },
-    pi: { getAllTools: (): unknown[] => [] },
+    pi,
   } as unknown as ExtensionContext;
-  return { ctx, notifications };
+  return { ctx, pi, notifications };
 }
 
 async function withHermeticHome<T>(
@@ -122,12 +125,12 @@ function fixtureClaudePluginsOfficial(): string {
 
 test("bootstrap (clean state): adds marketplace + enables autoupdate; two notifications", async () => {
   await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps, state: gitState } = makeMockGitOps({
       fixtureSourceDir: fixtureClaudePluginsOfficial(),
     });
 
-    await bootstrapClaudePlugin({ ctx, cwd, gitOps });
+    await bootstrapClaudePlugin({ ctx, pi, cwd, gitOps });
 
     // State has the marketplace recorded under user scope with autoupdate=true.
     const userLocations = locationsFor("user", cwd);
@@ -172,12 +175,12 @@ test("bootstrap (already bootstrapped): swallows duplicate-name, reports idempot
     await saveState(userLocations.extensionRoot, seeded);
     const before = await loadState(userLocations.extensionRoot);
 
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps } = makeMockGitOps({
       fixtureSourceDir: fixtureClaudePluginsOfficial(),
     });
 
-    await bootstrapClaudePlugin({ ctx, cwd, gitOps });
+    await bootstrapClaudePlugin({ ctx, pi, cwd, gitOps });
 
     // State unchanged (deep-equal, modulo the autoupdate field which was
     // already true; setMarketplaceAutoupdate hits the unchanged path).
@@ -209,12 +212,12 @@ test("bootstrap (half-configured: autoupdate off): swallows duplicate-name, flip
       },
     });
 
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps } = makeMockGitOps({
       fixtureSourceDir: fixtureClaudePluginsOfficial(),
     });
 
-    await bootstrapClaudePlugin({ ctx, cwd, gitOps });
+    await bootstrapClaudePlugin({ ctx, pi, cwd, gitOps });
 
     const after = await loadState(userLocations.extensionRoot);
     assert.equal(after.marketplaces["claude-plugins-official"]?.autoupdate, true);
@@ -231,12 +234,12 @@ test("bootstrap (half-configured: autoupdate off): swallows duplicate-name, flip
 
 test("bootstrap touches ONLY user scope: project-scope state file is never created", async () => {
   await withHermeticHome(async ({ cwd }) => {
-    const { ctx } = makeCtx();
+    const { ctx, pi } = makeCtx();
     const { gitOps } = makeMockGitOps({
       fixtureSourceDir: fixtureClaudePluginsOfficial(),
     });
 
-    await bootstrapClaudePlugin({ ctx, cwd, gitOps });
+    await bootstrapClaudePlugin({ ctx, pi, cwd, gitOps });
 
     // Project scope must remain empty (loadState on missing dir returns
     // DEFAULT_STATE per persistence/state-io.ts).
@@ -253,7 +256,7 @@ test("bootstrap touches ONLY user scope: project-scope state file is never creat
 
 test("bootstrap (non-duplicate clone error): propagates and autoupdate step is NOT reached", async () => {
   await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const cloneFailure = new Error("network down");
     const { gitOps, state: gitState } = makeMockGitOps({
       fixtureSourceDir: fixtureClaudePluginsOfficial(),
@@ -261,7 +264,7 @@ test("bootstrap (non-duplicate clone error): propagates and autoupdate step is N
     });
 
     await assert.rejects(
-      bootstrapClaudePlugin({ ctx, cwd, gitOps }),
+      bootstrapClaudePlugin({ ctx, pi, cwd, gitOps }),
       (err: unknown): err is Error => err instanceof Error && err.message.includes("network down"),
     );
 

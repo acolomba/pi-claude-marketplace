@@ -30,7 +30,7 @@ import { MarketplaceDuplicateNameError } from "../../shared/errors.ts";
 import { addMarketplace } from "../marketplace/add.ts";
 import { setMarketplaceAutoupdate } from "../marketplace/autoupdate.ts";
 
-import type { ExtensionContext } from "../../platform/pi-api.ts";
+import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { GitOps } from "../marketplace/shared.ts";
 
 /**
@@ -51,6 +51,15 @@ const BOOTSTRAP_MARKETPLACE_NAME = "claude-plugins-official";
 
 export interface BootstrapOptions {
   readonly ctx: ExtensionContext;
+  /**
+   * Factory `pi` reference. Plumbed in Plan 18-00 (Wave 0) so the composed
+   * `addMarketplace` / `setMarketplaceAutoupdate` orchestrators -- which
+   * now require `pi` as part of the Wave 0 plumbing -- can be invoked
+   * without a downstream compile break. Bootstrap itself does not yet
+   * read `pi`; future V2 migrations will use it for `notify(ctx, pi,
+   * message)` routing.
+   */
+  readonly pi: ExtensionAPI;
   readonly cwd: string;
   /** D-12 injection seam. Always provided by the edge handler via EdgeDeps. */
   readonly gitOps: GitOps;
@@ -84,6 +93,7 @@ export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<voi
   try {
     await addMarketplace({
       ctx: opts.ctx,
+      pi: opts.pi,
       scope: "user",
       cwd: opts.cwd,
       rawSource: BOOTSTRAP_SOURCE,
@@ -102,6 +112,7 @@ export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<voi
 
   await setMarketplaceAutoupdate({
     ctx: opts.ctx,
+    pi: opts.pi,
     name: BOOTSTRAP_MARKETPLACE_NAME,
     enable: true,
     scope: "user",

@@ -177,6 +177,7 @@ test("CMC-21 / D-13-17 phase 1: project-scope plugin installed from user-scope m
     const userAdd = makeCtx(env.cwd);
     await addMarketplace({
       ctx: userAdd.ctx,
+      pi: userAdd.pi,
       scope: "user",
       cwd: env.cwd,
       rawSource: officialRoot,
@@ -267,6 +268,7 @@ test("CMC-21 / D-13-17 phase 2: when an INDEPENDENT project-scope marketplace is
       const userAdd = makeCtx(env.cwd);
       await addMarketplace({
         ctx: userAdd.ctx,
+        pi: userAdd.pi,
         scope: "user",
         cwd: env.cwd,
         rawSource: userOfficialRoot,
@@ -309,6 +311,7 @@ test("CMC-21 / D-13-17 phase 2: when an INDEPENDENT project-scope marketplace is
       const projectAdd = makeCtx(env.cwd);
       await addMarketplace({
         ctx: projectAdd.ctx,
+        pi: projectAdd.pi,
         scope: "project",
         cwd: env.cwd,
         rawSource: projectOfficialRoot,
