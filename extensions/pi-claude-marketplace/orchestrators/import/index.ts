@@ -1,5 +1,4 @@
 export {
-  formatClaudeImportSummary,
   importClaudeSettings,
   type ClaudeImportExecutionResult,
   type ImportWarningOutcome,
