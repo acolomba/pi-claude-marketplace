@@ -160,6 +160,7 @@ export default tseslint.config(
     ignores: [
       "extensions/pi-claude-marketplace/orchestrators/marketplace/**",
       "extensions/pi-claude-marketplace/orchestrators/plugin/**",
+      "extensions/pi-claude-marketplace/orchestrators/import/**",
     ],
     plugins: { msg: msgPlugin },
     rules: {
