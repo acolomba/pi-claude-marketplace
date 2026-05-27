@@ -174,6 +174,14 @@ export interface PluginUpdateSkippedOutcome extends PluginUpdateBase {
  * structured supplements consumed by the cascade renderer; when
  * neither is set the consumer falls back to the legacy notes
  * substring parse for back-compat.
+ *
+ * Plan 18-05 / D-18-03: `cause?: Error` carries the raw thrown error
+ * (only populated by the cascadeAutoupdates catch where the error is
+ * in scope) so the V2 `outcomeToCascadePluginMessage` mapper can attach
+ * it to `PluginFailedMessage.cause` for the per-plugin 4-space-indent
+ * cause-chain trailer (D-16-08). Producers that don't have the original
+ * Error instance (e.g. failed outcomes built by plugin/update.ts) leave
+ * this undefined; the V2 renderer simply omits the trailer.
  */
 export interface PluginUpdateFailedOutcome extends PluginUpdateBase {
   readonly partition: "failed";
@@ -182,6 +190,7 @@ export interface PluginUpdateFailedOutcome extends PluginUpdateBase {
   readonly notes: readonly string[];
   readonly reasons?: readonly Reason[];
   readonly phaseFailures?: readonly UpdatePhaseFailure[];
+  readonly cause?: Error;
 }
 
 /**

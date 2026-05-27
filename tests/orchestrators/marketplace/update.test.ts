@@ -9,7 +9,7 @@ import {
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
-  __test_outcomeToCascadeRow,
+  __test_outcomeToCascadePluginMessage,
   updateAllMarketplaces,
   updateMarketplace,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
@@ -165,6 +165,13 @@ test("MU-4 + D-14: github source refreshes via fetch+forceUpdateRef+checkout in 
     const first = notifications[0];
     assert.ok(first !== undefined);
     assert.notEqual(first.severity, "error");
+    // Plan 18-05 / RESEARCH Risks #4 silent contract change: V1
+    // autoupdate-OFF manifest-refresh suppressed the reload-hint; V2
+    // emits it because `mp.status === "updated"` is state-changing per
+    // D-16-12. Catalog UAT fixture `autoupdate-off-manifest-refresh`
+    // at docs/output-catalog.md:801-806.
+    assert.equal(first.severity, undefined);
+    assert.equal(first.message, "● official [project] (updated)\n\n/reload to pick up changes");
   });
 });
 
@@ -266,13 +273,20 @@ test("D-14: SHA-no-longer-exists (checkout throws) surfaces as notifyError with 
 
     await updateMarketplace({ ctx, pi, name: "rewritten", scope: "project", cwd, gitOps });
 
-    // notifyError emitted (severity 'error'); MU-5 retry hint applies
-    // because the clone advanced (fetch succeeded).
+    // Plan 18-05 / D-18-02: V1 emitted a multi-line error body with the
+    // `${errorMessage(err)}\n${err.retryHint}` retry-anchor trailer; V2
+    // collapses the marketplace-level failure to the bare V2 catalog
+    // shape `⊘ <name> [<scope>] (failed)` (catalog UAT fixture
+    // `mp-failure-network` at docs/output-catalog.md:828-832). The
+    // retry-hint is dropped from the user-visible surface; `err.retryHint`
+    // stays internal to MarketplaceUpdateError for programmatic
+    // inspection. No cause-chain trailer (V2 confines cause? to per-plugin
+    // variants per D-16-08).
     assert.equal(notifications.length, 1);
     const first = notifications[0];
     assert.ok(first !== undefined);
     assert.equal(first.severity, "error");
-    assert.match(first.message, /Retry the command\./);
+    assert.equal(first.message, "⊘ rewritten [project] (failed)");
   });
 });
 
@@ -291,8 +305,15 @@ test("CR-05 / MU-5: pre-fetch failure (gitOps.fetch throws) does NOT append 'Ret
     const first = notifications[0];
     assert.ok(first !== undefined);
     assert.equal(first.severity, "error");
-    // The MU-5 retry hint MUST NOT appear when fetch itself failed.
-    assert.equal(first.message.includes("Retry the command."), false);
+    // Plan 18-05 / D-18-02: the V1 distinction between "fetch failed
+    // (no retry-hint)" vs "clone advanced then later step failed (retry-
+    // hint emitted)" disappears in V2 -- both produce the same bare V2
+    // failed-marketplace shape. `err.retryHint` stays internal to
+    // MarketplaceUpdateError for programmatic inspection (test still
+    // exercises the cloneAdvanced=false branch via gitOps.fetchThrows;
+    // the difference now surfaces only via MarketplaceUpdateError.retryHint
+    // inspection, not via notify bytes).
+    assert.equal(first.message, "⊘ offline [project] (failed)");
   });
 });
 
@@ -325,11 +346,15 @@ test("MU-5: clone advances + manifest re-validation fails -- 'Retry the command.
     });
     await updateMarketplace({ ctx, pi, name: "broken", scope: "project", cwd, gitOps });
 
+    // Plan 18-05 / D-18-02: clone advanced + manifest re-read failed used
+    // to emit the retry-hint suffix; V2 collapses to the bare failed-mp
+    // shape (catalog `mp-failure-network`). Retry-hint dropped per
+    // D-18-02 (stays internal to MarketplaceUpdateError).
     assert.equal(notifications.length, 1);
     const first = notifications[0];
     assert.ok(first !== undefined);
     assert.equal(first.severity, "error");
-    assert.match(first.message, /Retry the command\./);
+    assert.equal(first.message, "⊘ broken [project] (failed)");
   });
 });
 
@@ -511,17 +536,22 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
     const first = notifications[0];
     assert.ok(first !== undefined);
     const body = first.message;
-    // Rows interleave alphabetically: a (updated), b (skipped up-to-date),
-    // c (skipped {up-to-date} via the fallback narrowing), d (failed).
-    // Icons reflect MSG-IC-1..3 dispatch: updated -> ●; trivial skip
-    // {up-to-date} -> ● (plugin still installed); failed -> ⊘. The
-    // narrowSkipReason fallback maps an unmatched `skipped` outcome to
-    // `up-to-date` (the documented permissive default), so `c` also
-    // gets the trivial-skip ● treatment.
-    const idxA = body.indexOf("  ● a [project]");
-    const idxB = body.indexOf("  ● b [project]");
-    const idxC = body.indexOf("  ● c [project]");
-    const idxD = body.indexOf("  ⊘ d [project]");
+    // Plan 18-05 / D-18-03: Rows interleave in caller order (D-16-06):
+    // a (updated), b (unchanged), c (skipped fallback), d (failed). V2
+    // catalog `mixed-outcomes` shape (docs/output-catalog.md:813-822).
+    // Glyph map per D-16-11 severity ladder:
+    //   updated -> ● (info)
+    //   skipped -> ⊘ (warning)   <-- RESEARCH Risks #5 flip vs V1's ●
+    //   failed  -> ⊘ (error)
+    // The `[project]` scope bracket is suppressed by Phase 17.2 orphan-fold
+    // (plugin.scope === mp.scope -> renderScopeBracket returns ""). The
+    // narrowSkipReason fallback maps `c` (skipped + reasons=[] +
+    // notes=[]) to `up-to-date`; narrowFailReason fallback maps `d`
+    // (failed + notes=[] + no reasons) to `unreadable manifest`.
+    const idxA = body.indexOf("  ● a 0.0.1 → v0.0.2 (updated)");
+    const idxB = body.indexOf("  ⊘ b (skipped) {up-to-date}");
+    const idxC = body.indexOf("  ⊘ c (skipped) {up-to-date}");
+    const idxD = body.indexOf("  ⊘ d (failed) {unreadable manifest}");
     assert.ok(
       idxA >= 0 && idxB > idxA && idxC > idxB && idxD > idxC,
       `row order broken in body:\n${body}`,
@@ -576,7 +606,7 @@ test("MU-9 + MSG-RH-1: success emits canonical reload hint trailer for updated p
   });
 });
 
-test("RH-1: NO reload hint when zero plugins updated", async () => {
+test('RH-1 + V2 D-16-12: cascade all-unchanged still emits reload-hint (mp.status "updated" is state-changing)', async () => {
   await withHermeticHome(async ({ cwd }) => {
     await seedGithubMarketplace({
       cwd,
@@ -607,9 +637,17 @@ test("RH-1: NO reload hint when zero plugins updated", async () => {
       gitOps,
       pluginUpdate,
     });
+    // Plan 18-05 / V2 D-16-12 contract: even when every plugin in the
+    // cascade is `unchanged` (renders as `skipped {up-to-date}`), the
+    // marketplace itself successfully refreshed -- `mp.status === "updated"`
+    // is in the V2 reload-hint trigger set per shared/notify.ts:1027-1052
+    // (shouldEmitReloadHint). V1 suppressed the trailer in this case
+    // (V1 reloadHint() needed at least one updated plugin name); V2's
+    // mp-level trigger ladder is the source of truth. Test renamed
+    // accordingly; assertion flips from `false` to substring presence.
     const first = notifications[0];
     assert.ok(first !== undefined);
-    assert.equal(first.message.includes("/reload to pick up changes"), false);
+    assert.match(first.message, /\/reload to pick up changes$/);
   });
 });
 
@@ -692,13 +730,66 @@ test("D-03-INV :: update invalidates plugin cache for that marketplace", async (
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// Quick task 260525-aub: outcomeToCascadeRow prefers typed `outcome.reasons`
-// over the legacy notes-parsing fallback. Locks in the producer-narrowed
-// contract per CR-06 so a future refactor cannot regress to substring
-// matching.
+// Plan 18-05 / D-18-03: outcomeToCascadePluginMessage maps a
+// PluginUpdateOutcome to a discriminated PluginNotificationMessage. The
+// V2 mapper returns one of `PluginUpdatedMessage{from,to,dependencies}`,
+// `PluginSkippedMessage{reasons}`, or `PluginFailedMessage{reasons,cause?}`
+// (no PluginUnchangedMessage variant -- `unchanged` outcomes map to
+// `skipped` + `["up-to-date"]` per RESEARCH Risks #5 glyph flip).
+//
+// Carries forward Quick task 260525-aub's typed-reasons preference over
+// the notes-parsing fallback (CR-06 producer-narrowed contract) so a
+// future refactor cannot regress to substring matching.
 // ───────────────────────────────────────────────────────────────────────────
 
-test("outcomeToCascadeRow: skipped outcome with typed reasons reads them directly (no notes parse)", () => {
+test("outcomeToCascadePluginMessage: updated outcome -> PluginUpdatedMessage with from/to/dependencies", () => {
+  const outcome: PluginUpdateOutcome = {
+    partition: "updated",
+    name: "p",
+    fromVersion: "0.5.0",
+    toVersion: "1.0.0",
+    stagedAgents: [],
+    stagedMcpServers: [],
+    declaresAgents: true,
+    declaresMcp: false,
+  };
+  const msg = __test_outcomeToCascadePluginMessage(outcome, "project");
+  assert.equal(msg.status, "updated");
+  assert.equal(msg.name, "p");
+  assert.equal(msg.scope, "project");
+  if (msg.status !== "updated") {
+    throw new Error("unreachable: narrowed above");
+  }
+
+  assert.equal(msg.from, "0.5.0");
+  assert.equal(msg.to, "1.0.0");
+  // `declaresAgents: true` -> "agents" appears in dependencies;
+  // `declaresMcp: false` -> "mcp" is absent.
+  assert.deepEqual(msg.dependencies, ["agents"]);
+});
+
+test('outcomeToCascadePluginMessage: unchanged outcome -> PluginSkippedMessage with ["up-to-date"] (glyph flips to ⊘ at render time)', () => {
+  // RESEARCH Risks #5: V1 mapped `unchanged` to a trivial-skip ● glyph
+  // via `outcomeToCascadeRow`. V2 maps it to `skipped` + `["up-to-date"]`;
+  // the V2 renderer routes `skipped` to warning severity -> ⊘ glyph.
+  const outcome: PluginUpdateOutcome = {
+    partition: "unchanged",
+    name: "p",
+    fromVersion: "0.0.1",
+    toVersion: "0.0.1",
+    declaresAgents: false,
+    declaresMcp: false,
+  };
+  const msg = __test_outcomeToCascadePluginMessage(outcome, "project");
+  assert.equal(msg.status, "skipped");
+  if (msg.status !== "skipped") {
+    throw new Error("unreachable: narrowed above");
+  }
+
+  assert.deepEqual(msg.reasons, ["up-to-date"]);
+});
+
+test("outcomeToCascadePluginMessage: skipped outcome with typed reasons reads them directly (no notes parse)", () => {
   const outcome: PluginUpdateOutcome = {
     partition: "skipped",
     name: "p",
@@ -711,13 +802,17 @@ test("outcomeToCascadeRow: skipped outcome with typed reasons reads them directl
     declaresAgents: false,
     declaresMcp: false,
   };
-  const row = __test_outcomeToCascadeRow(outcome, "project");
-  assert.equal(row.kind, "plugin-cascade");
-  assert.equal(row.status, "skipped");
-  assert.deepEqual(row.reasons, ["not installed"]);
+  const msg = __test_outcomeToCascadePluginMessage(outcome, "project");
+  assert.equal(msg.status, "skipped");
+  if (msg.status !== "skipped") {
+    throw new Error("unreachable: narrowed above");
+  }
+
+  assert.deepEqual(msg.reasons, ["not installed"]);
 });
 
-test("outcomeToCascadeRow: failed outcome with typed reasons reads them directly (no notes parse)", () => {
+test("outcomeToCascadePluginMessage: failed outcome with typed reasons + cause -> PluginFailedMessage", () => {
+  const cause = new Error("permission denied");
   const outcome: PluginUpdateOutcome = {
     partition: "failed",
     name: "p",
@@ -725,14 +820,21 @@ test("outcomeToCascadeRow: failed outcome with typed reasons reads them directly
     reasons: ["rollback partial"] as const,
     declaresAgents: false,
     declaresMcp: false,
+    cause,
   };
-  const row = __test_outcomeToCascadeRow(outcome, "project");
-  assert.equal(row.kind, "plugin-cascade");
-  assert.equal(row.status, "failed");
-  assert.deepEqual(row.reasons, ["rollback partial"]);
+  const msg = __test_outcomeToCascadePluginMessage(outcome, "project");
+  assert.equal(msg.status, "failed");
+  if (msg.status !== "failed") {
+    throw new Error("unreachable: narrowed above");
+  }
+
+  assert.deepEqual(msg.reasons, ["rollback partial"]);
+  // D-18-03: cause is forwarded to PluginFailedMessage for the
+  // 4-space-indent cause-chain trailer at render time.
+  assert.equal(msg.cause, cause);
 });
 
-test("outcomeToCascadeRow: skipped outcome without typed reasons falls back to notes substring parse (back-compat)", () => {
+test("outcomeToCascadePluginMessage: skipped outcome without typed reasons falls back to notes substring parse (back-compat)", () => {
   // Task 260525-cjr C2: `reasons` is required on PluginUpdateSkippedOutcome
   // (the producer-narrowed contract). An empty `reasons: []` array
   // exercises the consumer's notes-fallback substring narrow without
@@ -746,12 +848,16 @@ test("outcomeToCascadeRow: skipped outcome without typed reasons falls back to n
     declaresAgents: false,
     declaresMcp: false,
   };
-  const row = __test_outcomeToCascadeRow(outcome, "project");
-  assert.equal(row.status, "skipped");
-  assert.deepEqual(row.reasons, ["not in manifest"]);
+  const msg = __test_outcomeToCascadePluginMessage(outcome, "project");
+  assert.equal(msg.status, "skipped");
+  if (msg.status !== "skipped") {
+    throw new Error("unreachable: narrowed above");
+  }
+
+  assert.deepEqual(msg.reasons, ["not in manifest"]);
 });
 
-test("outcomeToCascadeRow: failed outcome without typed reasons falls back to notes substring parse (back-compat)", () => {
+test("outcomeToCascadePluginMessage: failed outcome without typed reasons falls back to notes substring parse (back-compat)", () => {
   const outcome: PluginUpdateOutcome = {
     partition: "failed",
     name: "p",
@@ -760,9 +866,16 @@ test("outcomeToCascadeRow: failed outcome without typed reasons falls back to no
     declaresAgents: false,
     declaresMcp: false,
   };
-  const row = __test_outcomeToCascadeRow(outcome, "project");
-  assert.equal(row.status, "failed");
-  assert.deepEqual(row.reasons, ["rollback partial"]);
+  const msg = __test_outcomeToCascadePluginMessage(outcome, "project");
+  assert.equal(msg.status, "failed");
+  if (msg.status !== "failed") {
+    throw new Error("unreachable: narrowed above");
+  }
+
+  assert.deepEqual(msg.reasons, ["rollback partial"]);
+  // No cause was stamped on the outcome -> the V2 mapper omits it on
+  // PluginFailedMessage; the renderer skips the cause-chain trailer.
+  assert.equal(msg.cause, undefined);
 });
 
 // ───────────────────────────────────────────────────────────────────────────
