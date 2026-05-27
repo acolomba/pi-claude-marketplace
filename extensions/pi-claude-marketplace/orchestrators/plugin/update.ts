@@ -1292,6 +1292,13 @@ function narrowDirectFailReason(err: Error): Reason {
   // Phase-3 aggregate failures are surfaced via reasonOverride; here we
   // handle the enumerate / syncClone / phase-2 paths only.
   if (err instanceof PluginShapeError) {
+    // IN-03: add `default: assertNever(err.shape)` for compile-time
+    // exhaustiveness against the `PluginShapeError.shape.kind`
+    // discriminator. Mirrors the install.ts:1155 +
+    // outcomeToCascadePluginMessage default-arm precedent. Without this
+    // a future 5th shape kind would silently fall through to the errno-
+    // substring branch below and surface as `unreadable manifest` --
+    // masking a class of errors that should have a precise mapping.
     switch (err.shape.kind) {
       case "no-longer-installable":
       case "not-installable":
@@ -1299,6 +1306,8 @@ function narrowDirectFailReason(err: Error): Reason {
       case "not-in-manifest":
       case "already-installed":
         return "not in manifest";
+      default:
+        return assertNever(err.shape);
     }
   }
 
