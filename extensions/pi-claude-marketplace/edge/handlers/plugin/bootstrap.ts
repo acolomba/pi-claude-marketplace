@@ -13,12 +13,18 @@
 // `positional.length === 0` ourselves.
 //
 // BLOCK A: zero direct ctx.ui.notify calls -- routes through
-// notifyError / notifySuccess via shared/notify.ts. The orchestrator
-// emits the success path through its own composed orchestrators.
+// notifyUsageError via shared/notify.ts. The orchestrator emits the
+// success path through its own composed orchestrators. Per Plan 20-03
+// (D-20-03) the outer try/catch catch-all wrapper was DROPPED -- the
+// inner orchestrators `addMarketplace` + `setMarketplaceAutoupdate`
+// own their own V2 failed-marketplace emission per D-18-02; truly
+// catastrophic uncaught throws bubble to Pi runtime (a stack trace is
+// better for debugging than a polished error message that masks the
+// bug).
 
 import { bootstrapClaudePlugin } from "../../../orchestrators/plugin/bootstrap.ts";
 import { errorMessage } from "../../../shared/errors.ts";
-import { notifyError, notifyUsageError } from "../../../shared/notify.ts";
+import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseArgs } from "../../args.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
@@ -53,15 +59,15 @@ export function makeBootstrapHandler(
       return;
     }
 
-    try {
-      await bootstrapClaudePlugin({
-        ctx,
-        pi,
-        cwd: ctx.cwd,
-        gitOps: deps.gitOps,
-      });
-    } catch (err) {
-      notifyError(ctx, errorMessage(err), err);
-    }
+    await bootstrapClaudePlugin({
+      ctx,
+      pi,
+      cwd: ctx.cwd,
+      gitOps: deps.gitOps,
+    });
+    // No try/catch: inner orchestrators (`addMarketplace` +
+    // `setMarketplaceAutoupdate`) emit V2 failed notifications for
+    // expected failures per D-18-02; catastrophic uncaught throws
+    // bubble to Pi runtime per D-20-03.
   };
 }

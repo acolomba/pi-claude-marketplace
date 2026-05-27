@@ -3,8 +3,7 @@ import {
   type ClaudeImportExecutionResult,
   type ImportClaudeSettingsOptions,
 } from "../../../orchestrators/import/execute.ts";
-import { errorMessage } from "../../../shared/errors.ts";
-import { notifyError, notifyUsageError } from "../../../shared/notify.ts";
+import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseArgs } from "../../args.ts";
 
 import type { GitOps } from "../../../orchestrators/marketplace/shared.ts";
@@ -43,16 +42,16 @@ export function makeImportHandler(
       return;
     }
 
-    try {
-      await (deps.importClaudeSettings ?? importClaudeSettings)({
-        ctx,
-        pi,
-        cwd: ctx.cwd,
-        selectedScopes: parsed.scope === undefined ? ["project", "user"] : [parsed.scope],
-        gitOps: deps.gitOps,
-      });
-    } catch (err) {
-      notifyError(ctx, `Import encountered an unexpected error: ${errorMessage(err)}`, err);
-    }
+    await (deps.importClaudeSettings ?? importClaudeSettings)({
+      ctx,
+      pi,
+      cwd: ctx.cwd,
+      selectedScopes: parsed.scope === undefined ? ["project", "user"] : [parsed.scope],
+      gitOps: deps.gitOps,
+    });
+    // No try/catch: the inner `importClaudeSettings` after Plan 20-02
+    // owns its own per-scope try/catch via `executeScopedPlan`
+    // (execute.ts:745-755); catastrophic uncaught throws bubble to Pi
+    // runtime per D-20-03.
   };
 }
