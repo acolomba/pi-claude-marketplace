@@ -16,12 +16,37 @@
 //     runPhases(phases, ctx)                               // D-01 5-phase ledger
 //     capture rollbackPartials, throw raw error            // D-02 PI-14 bypass
 //   })
-//   POST-state-commit (D-08 / AS-6):  mkdir(pluginDataDir) -> warning on failure
-//   Success notify via PluginInlineRow + renderRow (CMC-23) + reload hint;
-//   per-row soft-dep markers via declaresAgents/Mcp (CMC-13 / MSG-SD-1..3).
-//   Failure with rollback-partial routes through renderRollbackPartial
-//   (CMC-17 / MSG-RP-1) with parent PluginInlineRow + RollbackChild[] +
-//   auto-appended cause-chain trailer via notifyError (D-CMC-12).
+//   POST-state-commit (D-08 / AS-6):  mkdir(pluginDataDir) -> dropped per D-19-01
+//   Success notify via V2 notify() with PluginInstalledMessage carrying
+//   dependencies: readonly Dependency[] derived from staged content; the
+//   renderer probes companion-loaded state once per notify() call (D-16-14)
+//   and emits per-row soft-dep markers + the reload-hint trailer
+//   structurally per D-16-11 + D-16-12.
+//   Failure routes through one V2 notify() call with PluginFailedMessage
+//   carrying optional cause + optional rollbackPartial[]; the renderer
+//   composes the depth-5 cause-chain (D-16-08) and per-phase rollback child
+//   rows automatically.
+//
+// Phase 19 / Plan 19-02: standalone-mode emission paths are a single V2
+//   notify(ctx, pi, { marketplaces: [{ ..., plugins: [<row>] }] })
+// call per orchestration arm. The V1 severity-named wrappers
+// (notifySuccess/notifyWarning/notifyError) and the presentation/* composers
+// (renderRow / appendReloadHint / reloadHint / renderRollbackPartial /
+// causeChainTrailer) are GONE. The 5 V1 post-state-commit notifyWarning
+// sites (mkdir / cache-refresh / agentForeignFailures / bridgeWarnings /
+// PI-13 deps note) are DROPPED entirely per D-19-01: the V2
+// MarketplaceNotificationMessage type has no field to surface
+// "soft warning after successful state mutation"; the underlying side
+// effects (mkdir / dropMarketplaceCache / agents-bridge foreign-row
+// preservation / bridge cleanup-leak fold / PI-13 detection) STILL RUN
+// (correctness preserved); only the user-facing warning surface
+// disappears in standalone mode. The orchestrated-mode
+// `InstallOutcome.postCommitWarnings` branch is preserved verbatim --
+// the import cascade caller at orchestrators/import/execute.ts:890
+// injects each warning into its `pushDiagnostic` channel which surfaces
+// per-marketplace in the cascade's rendering (Plan 19-02 audit per
+// 19-RESEARCH Open Question 1: the standalone/orchestrated asymmetry
+// is INTENTIONAL and consistent with D-19-01).
 //
 // NFR-5 / PI-2 architectural guard: this file MUST NOT import platform-git
 // or the default git ops, and MUST NOT carry a gitOps field; the architectural
@@ -29,9 +54,10 @@
 // and greps this file's source for the forbidden surface tokens.
 //
 // D-11 import boundaries: orchestrators/plugin/ may import from bridges/,
-// domain/, transaction/, persistence/, presentation/, shared/, AND from
+// domain/, transaction/, persistence/, shared/, AND from
 // orchestrators/marketplace/shared.ts (named exports only -- no add.ts /
-// remove.ts / update.ts cycle).
+// remove.ts / update.ts cycle). Phase 19's V1 -> V2 migration removed all
+// presentation/* imports from this file.
 
 import { mkdir } from "node:fs/promises";
 
@@ -62,19 +88,15 @@ import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { softDepStatus } from "../../platform/pi-api.ts";
-import { causeChainTrailer } from "../../presentation/cause-chain.ts";
-import { renderRow } from "../../presentation/compact-line.ts";
-import { appendReloadHint, reloadHint } from "../../presentation/reload-hint.ts";
-import { renderRollbackPartial } from "../../presentation/rollback-partial.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   assertNever,
+  causeChainTrailer,
   ConcurrentInstallError,
   errorMessage,
   PluginShapeError,
 } from "../../shared/errors.ts";
-import { notifyError, notifySuccess, notifyWarning } from "../../shared/notify.ts";
+import { notify } from "../../shared/notify.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
 import { runPhases, type Phase, type RollbackPartial } from "../../transaction/phase-ledger.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
@@ -96,13 +118,15 @@ import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type {
-  EntityErrorRow,
-  PluginInlineRow,
-  RollbackChild,
-  SoftDepProbe,
-} from "../../presentation/compact-line.ts";
+import type { EntityErrorRow } from "../../presentation/compact-line.ts";
 import type { Reason } from "../../shared/grammar/reasons.ts";
+import type {
+  Dependency,
+  PluginFailedMessage,
+  PluginInstalledMessage,
+  PluginNotificationMessage,
+  PluginUnavailableMessage,
+} from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -110,19 +134,24 @@ import type { Scope } from "../../shared/types.ts";
  * the edge layer's responsibility (Phase 6); this orchestrator entrypoint
  * accepts already-parsed strings + the resolved scope.
  *
- * `pi` is REQUIRED -- `softDepStatus(pi)` constructs the SoftDepProbe that
- * `renderRow` consumes for per-row soft-dep marker injection (CMC-13 /
- * MSG-SD-1..3). Making `pi` optional would force a runtime branch the
- * type checker cannot reason about.
+ * `pi` is REQUIRED -- V2 `notify(ctx, pi, message)` consumes it for the
+ * single `softDepStatus(pi)` probe per call (D-16-14). The renderer
+ * injects per-row `{requires pi-subagents}` / `{requires pi-mcp}`
+ * markers from the per-row `dependencies: readonly Dependency[]`
+ * declaration combined with the threaded probe (D-16-15). Making `pi`
+ * optional would force a runtime branch the type checker cannot reason
+ * about.
  *
- * CMC-13 / MSG-SD-1..3: the `"installed"` variant carries REQUIRED
- * `declaresAgents` / `declaresMcp` boolean predicates. They are derived
- * once at the success-return site from `installCtx.stagedAgentNames.length
- * > 0` / `installCtx.stagedMcpServerNames.length > 0` (the same expression
- * form used by the standalone cascade-row site) and propagated through
- * orchestrators that compose plugin rows (e.g. `import/execute.ts`).
- * Making them REQUIRED rather than optional honors NFR-7: a discriminated
- * outcome must not have a third undefined state at consumers.
+ * SNM-04 / D-15-02: the `"installed"` variant carries REQUIRED
+ * `dependencies: readonly Dependency[]` (the closed-set
+ * `"agents" | "mcp"` per Phase 15 SNM-04). The orchestrator derives the
+ * array at the success-return site from
+ * `installCtx.stagedAgentNames.length > 0` (-> `"agents"`) and
+ * `installCtx.stagedMcpServerNames.length > 0` (-> `"mcp"`); the
+ * `declaresAgents`/`declaresMcp` predicates on `InstallPluginOutcome`
+ * remain (consumed by `orchestrators/import/execute.ts` for its
+ * cascade-row composition) -- NFR-7's discriminated-outcome contract
+ * is unchanged.
  */
 export type InstallPluginOutcome =
   | {
@@ -159,11 +188,22 @@ export type InstallPluginOutcome =
 /**
  * Controls how `installPlugin` surfaces notifications.
  *
- * - `"standalone"` (default): fires `notifyError`/`notifySuccess`/`notifyWarning`
- *   directly and appends a reload hint. Use for direct `/claude:plugin install`.
- * - `"orchestrated"`: suppresses all notifications, returns the typed outcome,
- *   and collects post-commit warnings in `outcome.postCommitWarnings`. Use when
- *   a parent orchestrator (e.g. import) owns the full notification surface.
+ * - `"standalone"` (default): fires a SINGLE V2 `notify(ctx, pi, ...)`
+ *   call per orchestration arm with the per-variant
+ *   `PluginInstalledMessage` / `PluginFailedMessage` payload. Severity +
+ *   reload-hint + soft-dep markers are computed by `notify()` per
+ *   D-16-11 / D-16-12 / D-16-15. Use for direct `/claude:plugin install`.
+ *   Phase 19 / Plan 19-02 dropped the 5 V1 post-state-commit
+ *   `notifyWarning` sites per D-19-01: the user-visible warning surface
+ *   for mkdir / cache-refresh / agentForeignFailures / bridgeWarnings /
+ *   PI-13 deps note is GONE in standalone mode (the underlying side
+ *   effects still fire).
+ * - `"orchestrated"`: suppresses all notifications, returns the typed
+ *   outcome, and collects post-commit warnings in
+ *   `outcome.postCommitWarnings`. The import cascade caller injects each
+ *   warning into its `pushDiagnostic` channel which surfaces per-marketplace
+ *   in the cascade's rendering -- the standalone/orchestrated asymmetry
+ *   is INTENTIONAL and consistent with D-19-01.
  */
 export type InstallPluginNotifications =
   | { readonly mode: "standalone" }
@@ -237,17 +277,30 @@ async function loadCachedMarketplaceManifest(
 
 /**
  * PI-1..15 entrypoint. The function never re-throws -- failures surface
- * via `notifyError` (Pattern S-1 single chokepoint, IL-2 lint gate).
+ * via a single V2 `notify()` call carrying a `PluginFailedMessage`
+ * (Pattern S-1 single chokepoint, IL-2 lint gate). Standalone-mode emits
+ * exactly one notification per orchestration arm; orchestrated-mode emits
+ * none and returns the typed outcome.
  *
- * Failure modes funnel through three paths:
+ * Failure modes funnel through three paths inside the single V2 catch
+ * site:
  *   1. Guard-closure throw (PI-3 / PI-4 / PI-5 / PI-6 / PI-7 errors,
  *      ConcurrentInstallError from PI-15 layer (a), and the rolled-up
- *      ledger error via formatRollbackError) -> notifyError.
+ *      ledger error captured as failureRollbackPartials) -> V2 notify()
+ *      with `PluginFailedMessage` carrying the typed `cause` and
+ *      (when rollback partials are present) the
+ *      `rollbackPartial: readonly { phase; cause? }[]` field. The renderer
+ *      handles all indentation + cause-chain rendering automatically
+ *      (D-16-08).
  *   2. PathContainmentError originating in a bridge prepare or undo path
- *      propagates VERBATIM via formatRollbackError's PI-14 bypass
- *      (Plan 05-02 chokepoint extension).
- *   3. Post-state-commit pluginDataDir mkdir failure -> notifyWarning
- *      (AS-6 warning severity; the install itself succeeded).
+ *      propagates VERBATIM: its message becomes `cause` on the
+ *      `PluginFailedMessage` and never surfaces as a rollback-partial
+ *      (PI-14 bypass).
+ *   3. Post-state-commit pluginDataDir mkdir failure / cache-refresh
+ *      failure / agentForeignFailures rows / bridgeWarnings rows /
+ *      PI-13 deps note are DROPPED in standalone mode per D-19-01.
+ *      Orchestrated-mode collects them in
+ *      `InstallOutcome.postCommitWarnings` for the cascade caller.
  */
 // Install sequencing intentionally keeps the state guard, bridge staging, rollback,
 // and notification logic in one audited flow matching PI-1..15.
@@ -259,16 +312,15 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   // Post-guard composition data. The guard closure populates this on
   // success; the catch block leaves it undefined and returns early.
   let installCtx: InstallCtx | undefined;
-  // Captured-on-throw context for the catch block. `failurePhaseResolvedVersion`
-  // is the version we know about when the ledger threw -- absent if the throw
-  // pre-dated resolvePluginVersion. `failureRollbackPartials` mirrors the
-  // ledger's RollbackPartial[] for the renderRollbackPartial child block;
-  // when empty, the catch routes through the bare PluginInlineRow form
-  // (no rollback children, per the catalog single-line failure shape).
+  // Captured-on-throw context for the catch block.
+  // `failureRollbackPartials` mirrors the ledger's RollbackPartial[] and
+  // populates `PluginFailedMessage.rollbackPartial` when non-empty; when
+  // empty, the catch emits the bare failure row form (no rollback
+  // children, per `docs/output-catalog.md:308-314`). `failureVersion` is
+  // the resolved version at throw time (undefined when the throw
+  // pre-dated `resolvePluginVersion`).
   let failureRollbackPartials: readonly RollbackPartial[] = [];
   let failureVersion: string | undefined;
-  let failureDeclaresAgents = false;
-  let failureDeclaresMcp = false;
 
   try {
     await withStateGuard(locations, async (state) => {
@@ -611,17 +663,17 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
 
       const result = await runPhases(phases, ctxLocal);
       if (!result.ok) {
-        // Capture the rollbackPartials + best-known-version + declares-*
-        // predicates BEFORE re-throwing. The post-guard catch block uses
-        // these to compose a PluginInlineRow + RollbackChild[] for
-        // renderRollbackPartial (CMC-17 / MSG-RP-1). PathContainmentError
-        // bypasses the rollback-partial rendering verbatim per PI-14:
-        // the catch block detects the error class and surfaces .message
-        // unchanged.
+        // Capture the rollbackPartials + best-known-version BEFORE
+        // re-throwing. The post-guard catch block threads
+        // `failureRollbackPartials` into `PluginFailedMessage.rollbackPartial`
+        // (per-phase typed `cause?: Error` carried verbatim from the
+        // ledger -- no synthesis). PathContainmentError bypasses the
+        // rollback-partial path verbatim per PI-14: the catch detects the
+        // error class, omits the `rollbackPartial` field, and lets the
+        // renderer surface the PathContainmentError's text through the
+        // cause-chain trailer.
         failureRollbackPartials = result.rollbackPartials;
         failureVersion = ctxLocal.version;
-        failureDeclaresAgents = ctxLocal.stagedAgentNames.length > 0;
-        failureDeclaresMcp = ctxLocal.stagedMcpServerNames.length > 0;
         // result.error is non-undefined on !ok per phase-ledger.ts contract.
         throw result.error ?? new Error("phase ledger failed");
       }
@@ -631,61 +683,85 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       installCtx = ctxLocal;
     });
   } catch (err) {
-    // Pattern S-1 single chokepoint for user-visible errors.
+    // Pattern S-1 single chokepoint for user-visible errors (V2: one
+    // notify(ctx, pi, ...) call carrying a per-variant
+    // PluginFailedMessage / PluginUnavailableMessage).
     //
-    // D-CMC-12: the orchestrated outcome carries the composed message + the
-    // cause-chain trailer; the standalone notify path passes the rendered
-    // body and lets `notifyError` auto-append the MSG-CC-1 trailer once.
+    // Failure routing priority (highest first); the V2 renderer composes
+    // the depth-5 cause-chain trailer (D-16-08) and per-phase
+    // rollback-child rows automatically. Severity is derived to "error"
+    // structurally per D-16-11; no reload-hint per D-16-12 (failed /
+    // unavailable do not trigger the trailer).
     //
-    // Failure routing priority (highest first):
-    //   1. PI-14 PathContainmentError -- VERBATIM .message surface (no
-    //      compact-line wrapping; the symlink/escape diagnostic is the
-    //      entire user surface).
-    //   2. CMC-17 rollback-partial (failureRollbackPartials.length > 0) --
-    //      parent PluginInlineRow{status:"failed", reasons:["rollback partial"]}
-    //      + indented RollbackChild[] block via renderRollbackPartial.
-    //   3. CMC-34 / MSG-NC-1 entity-shape errors (PI-3 not-in-manifest,
-    //      PI-4 not-installable, PI-5 already-installed) -- compact
-    //      EntityErrorRow via renderRow. The orchestrator throws these
-    //      with specific message patterns that classifyEntityShapeError
-    //      narrows to closed-set Reasons.
-    //   4. Generic runtime errors -- bare errorMessage(err); notifyError
-    //      auto-appends the MSG-CC-1 cause-chain trailer per D-CMC-12.
+    //   1. PI-14 PathContainmentError -- emits a bare PluginFailedMessage
+    //      with reasons: [] and cause: err. The renderer surfaces the
+    //      PathContainmentError message via the 4-space-indent cause-chain
+    //      trailer; NO rollback-partial children even when partials are
+    //      present (PI-14 bypass).
+    //   2. Rollback-partial (failureRollbackPartials.length > 0 AND not
+    //      PathContainmentError) -- PluginFailedMessage with
+    //      reasons: ["rollback partial"] plus rollbackPartial: readonly
+    //      { phase; cause? }[] with the typed Error threaded directly
+    //      from the phase-ledger per Plan 19-02 RESEARCH Finding 1
+    //      (RollbackPartial.cause is already typed Error -- NO synthesis
+    //      from the free-form .msg string).
+    //   3. Entity-shape errors (PI-3 / PI-4 / PI-5 via
+    //      `classifyEntityShapeError`) -- the classifier's EntityErrorRow
+    //      carries `status: "failed" | "unavailable"` AND `reasons:
+    //      readonly Reason[]`; install.ts preserves the discriminator
+    //      verbatim (catalog `failure-unsupported-features` uses
+    //      `unavailable`; catalog `failure-rollback-partial` /
+    //      `failure-runtime-with-cause` use `failed`). PluginUnavailable
+    //      has no `cause?` field per D-15-01; the entity-shape reason
+    //      carries the explanation. PluginFailed carries `cause: err`
+    //      for the renderer's 4-space-indent trailer.
+    //   4. Generic runtime error -- PluginFailedMessage with reasons: []
+    //      and cause: err. The renderer suppresses the empty `{...}`
+    //      brace per D-15-01 and surfaces the cause-chain trailer below
+    //      the bare `(failed)` row.
     const isPathContainment = err instanceof PathContainmentError;
-    const probe = softDepStatus(pi);
     const rolledBackPartial = !isPathContainment && failureRollbackPartials.length > 0;
-    let body: string;
-    if (isPathContainment) {
-      body = errorMessage(err);
-    } else if (rolledBackPartial) {
-      body = composeRollbackPartialBody({
-        plugin,
-        marketplace,
-        scope,
-        version: failureVersion,
-        declaresAgents: failureDeclaresAgents,
-        declaresMcp: failureDeclaresMcp,
-        partials: failureRollbackPartials,
-        probe,
-      });
-    } else {
-      const entityRow = classifyEntityShapeError(err, { plugin, marketplace, scope });
-      body = entityRow === undefined ? errorMessage(err) : renderRow(entityRow, probe);
-    }
+    const entityErrorRow = isPathContainment
+      ? undefined
+      : classifyEntityShapeError(err, { plugin, marketplace, scope });
+    const failureMessage = composeInstallFailureMessage({
+      err,
+      plugin,
+      marketplace,
+      scope,
+      version: failureVersion,
+      rolledBackPartial,
+      rollbackPartials: failureRollbackPartials,
+      entityErrorRow,
+    });
 
-    const trailer = causeChainTrailer(err);
-    const cause = trailer === "" ? body : `${body}\n\n${trailer}`;
     if (opts.notifications?.mode === "orchestrated") {
-      return classifyInstallFailure(err, cause);
+      // Orchestrated-mode preserves the V1 string `cause` contract for the
+      // import cascade's existing dispatchFailedOutcome consumer. Compose
+      // the formatted-cause string from the underlying error's message +
+      // depth-5 cause-chain walker so consumers that previously read
+      // `outcome.cause` for rendering keep working. The typed Error
+      // remains the dispatch surface (Task 260525-cjr C3) so callers
+      // continue to narrow on `instanceof PluginShapeError`.
+      return classifyInstallFailure(err, formatOrchestratedCause(err));
     }
 
-    notifyError(ctx, body, err);
+    notify(ctx, pi, {
+      marketplaces: [
+        {
+          name: marketplace,
+          scope,
+          plugins: [failureMessage],
+        },
+      ],
+    });
     // Task 260525-cjr C3: collapsed `status: "failed"` carries the
     // typed Error so even the standalone-mode return point preserves
-    // the dispatch surface. The legacy `"unexpected-failure"` variant
-    // is retired in favor of the unified shape.
-    const wrapped = err instanceof Error ? err : new Error(cause);
-    return { status: "failed", error: wrapped, cause };
+    // the dispatch surface. `cause` is the formatted text the
+    // orchestrated path would have produced -- preserved here for
+    // byte-equivalence on the InstallPluginOutcome contract.
+    const wrapped = err instanceof Error ? err : new Error(errorMessage(err));
+    return { status: "failed", error: wrapped, cause: formatOrchestratedCause(err) };
   }
 
   // Defensive: the success path always populates installCtx; if it did not,
@@ -697,7 +773,28 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       return { status: "failed", error: internalErr, cause };
     }
 
-    notifyError(ctx, cause);
+    // V2 internal-error defensive arm: synthesise a PluginFailedMessage
+    // carrying the wrapped internalErr. `reasons: []` -- no closed-set
+    // Reason classifies an internal invariant violation; the renderer
+    // suppresses the empty brace per D-15-01 and surfaces the cause
+    // text via the 4-space-indent trailer (D-16-08).
+    notify(ctx, pi, {
+      marketplaces: [
+        {
+          name: marketplace,
+          scope,
+          plugins: [
+            {
+              status: "failed",
+              name: plugin,
+              reasons: [] as const,
+              scope,
+              cause: internalErr,
+            },
+          ],
+        },
+      ],
+    });
     return { status: "failed", error: internalErr, cause };
   }
 
@@ -705,40 +802,52 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   const postCommitWarnings: string[] = [];
 
   // POST-state-commit (AS-6 / D-08): eager per-plugin data dir mkdir.
-  // Failure HERE is warning-severity -- the state record is already
-  // committed; the user knows the install succeeded but a path needs
-  // manual creation on first plugin-data write.
+  // The state record is already committed; the side effect runs inside
+  // a defensive try/catch so a permission error cannot strand the
+  // install. The standalone-mode user-visible warning is DROPPED per
+  // D-19-01 (D-18-01 lineage): the V2
+  // MarketplaceNotificationMessage type has no field to surface
+  // "data-dir creation deferred after successful state mutation". The
+  // orchestrated-mode collection path is preserved for the cascade
+  // caller's pushDiagnostic channel.
   try {
     await mkdir(installCtx.pluginDataDir, { recursive: true });
   } catch (mkdirErr) {
     const msg = `Plugin "${plugin}" installed; data dir creation deferred at ${installCtx.pluginDataDir}: ${errorMessage(mkdirErr)}`;
     if (orchestrated) {
       postCommitWarnings.push(msg);
-    } else {
-      notifyWarning(ctx, msg);
     }
+    // else: D-19-01 precedent -- dropped in standalone mode.
   }
 
   // D-03-INV (Plan 06-05): post-state-commit completion-cache invalidation.
   // Plugin moved from "available" -> "installed"; drop the cached plugin
   // index for this marketplace so the next completion read rebuilds with
   // the new status. Defense-in-depth try/catch.
+  //
+  // D-19-01 precedent (D-18-01 lineage): cache-refresh failure is
+  // swallowed silently in V2. The cache-refresh side effect still fires;
+  // only the user-visible warning surface is gone. The orchestrated-mode
+  // collection path is preserved for the cascade caller.
   try {
     await dropMarketplaceCache(await locations.pluginCacheFile(marketplace), scope, marketplace);
   } catch (err) {
     const msg = `Plugin "${plugin}" installed; completion cache refresh deferred: ${errorMessage(err)}`;
     if (orchestrated) {
       postCommitWarnings.push(msg);
-    } else {
-      notifyWarning(ctx, msg);
     }
+    // else: D-19-01 precedent -- dropped in standalone mode.
   }
 
-  // AS-7 / W-08 / B-08: route any AG-5 foreign-content rows the agents
-  // bridge preserved during prepare. The install of NEW agents succeeded;
-  // the foreign-preserved rows are a manual-cleanup hint surfaced at
-  // warning severity so the user is informed without the install itself
-  // appearing failed.
+  // AS-7 / W-08 / B-08: agents-bridge preserved foreign-content rows
+  // during prepare. The install of NEW agents succeeded; the
+  // foreign-preserved rows are a manual-cleanup hint. The standalone-mode
+  // user-visible warning is DROPPED per D-19-01 (D-18-01 lineage):
+  // agent foreign-file preservation rows have no clean V2
+  // MarketplaceNotificationMessage representation. The
+  // orchestrated-mode collection path is preserved for the cascade
+  // caller; the underlying agents-bridge state still records the
+  // foreign-row preservation in agents-index.json.
   if (installCtx.agentForeignFailures.length > 0) {
     const detail = installCtx.agentForeignFailures
       .map((f) => `${f.generatedName}: ${f.reason}`)
@@ -746,25 +855,25 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     const msg = `Plugin "${plugin}" installed; ${installCtx.agentForeignFailures.length.toString()} pre-existing agent file(s) preserved on disk: ${detail}`;
     if (orchestrated) {
       postCommitWarnings.push(msg);
-    } else {
-      notifyWarning(ctx, msg);
     }
+    // else: D-19-01 precedent -- dropped in standalone mode.
   }
 
-  // Bridge-side soft warnings (e.g. agents bridge cleanup-leak return values).
-  // Each is surfaced via notifyWarning so the success notification stays
-  // focused on the canonical "Installed" line + soft-dep + reload-hint.
+  // Bridge-side soft warnings (e.g. agents bridge cleanup-leak return
+  // values aggregated during the staged phases). The standalone-mode
+  // user-visible warning is DROPPED per D-19-01 (D-18-01 lineage):
+  // bridge-side soft warnings have no clean V2 representation. The
+  // orchestrated-mode collection path is preserved.
   for (const w of installCtx.bridgeWarnings) {
     if (orchestrated) {
       postCommitWarnings.push(w);
-    } else {
-      notifyWarning(ctx, w);
     }
+    // else: D-19-01 precedent -- dropped in standalone mode.
   }
 
-  // RH-1 reload-hint gate: emit the hint only if at least one resource
-  // was actually staged (the install would otherwise be a noop and the
-  // user has nothing to /reload).
+  // PI-9 corollary: track whether anything was actually staged. Preserved
+  // verbatim because `InstallPluginOutcome.resourcesChanged` is consumed
+  // by import/execute.ts as a structural predicate.
   const stagedAny =
     installCtx.stagedSkillNames.length > 0 ||
     installCtx.stagedCommandNames.length > 0 ||
@@ -772,41 +881,52 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     installCtx.stagedMcpServerNames.length > 0;
 
   if (!orchestrated) {
-    // CMC-23 / D-13-05 / D-13-06: emit via PluginInlineRow + renderRow.
-    // CMC-13 / MSG-SD-1..3: declaresAgents / declaresMcp predicates drive
-    // the per-row soft-dep marker injection inside renderRow's composeReasons
-    // (the renderer probes companion-loaded state via the injected
-    // SoftDepProbe and appends `{requires pi-subagents}` / `{requires pi-mcp}`
-    // iff (declares AND unloaded)). The legacy aggregated PI_*_NOT_LOADED
-    // trailer pattern is RETIRED per D-13-07; the per-row marker is the
-    // single source.
-    const probe: SoftDepProbe = softDepStatus(pi);
-    const successRow: PluginInlineRow = {
-      kind: "plugin-inline",
-      name: plugin,
-      marketplace,
-      scope,
-      ...(installCtx.version !== "" && { version: installCtx.version }),
-      status: "installed",
-      declaresAgents: installCtx.stagedAgentNames.length > 0,
-      declaresMcp: installCtx.stagedMcpServerNames.length > 0,
-    };
-    const body = renderRow(successRow, probe);
-    const hint = reloadHint(stagedAny ? [plugin] : []);
-    notifySuccess(ctx, appendReloadHint(body, hint));
-
-    // PI-13 dependencies declaration: the resolver appends the canonical
-    // PR-5 phrase to `installable.notes`. This is free-form prose (not a
-    // closed-set Reason) and does not fit the compact-line grammar -- emit
-    // it as a separate `notifyWarning` after the success row per the §18.2
-    // free-form trailer escape (the catalog does not list a per-row PI-13
-    // example; the planner's default is a follow-up notifyWarning).
-    const depsNote = installCtx.resolved.notes.find((n) =>
-      n.includes("dependencies that must be installed manually"),
-    );
-    if (depsNote !== undefined) {
-      notifyWarning(ctx, depsNote);
+    // V2 success: one notify(ctx, pi, ...) call with a
+    // PluginInstalledMessage. The renderer probes companion-loaded
+    // state via softDepStatus(pi) per D-16-14 + D-16-15 and emits the
+    // per-row soft-dep markers (`{requires pi-subagents, requires
+    // pi-mcp}`) automatically from `dependencies: readonly
+    // Dependency[]`. The "/reload to pick up changes" trailer fires
+    // structurally on the `installed` status per D-16-12 -- the V1 RH-1
+    // noop-gate (suppress when `!stagedAny`) is GONE in V2; the
+    // reload-hint trigger ladder is per-variant, not per-resource-count
+    // (mirrors Plan 19-01 pilot's PU-8 (b) behavior change).
+    //
+    // PI-13 dependencies-declaration note (V1 line 808 follow-up
+    // notifyWarning) is DROPPED per D-19-01: the PR-5 free-form prose
+    // had no clean V2 MarketplaceNotificationMessage representation;
+    // the resolver still appends the note to `installable.notes` so
+    // downstream surfaces (e.g. `/claude:plugin list` rendering) can
+    // continue to consume it.
+    const dependencies: Dependency[] = [];
+    if (installCtx.stagedAgentNames.length > 0) {
+      dependencies.push("agents");
     }
+
+    if (installCtx.stagedMcpServerNames.length > 0) {
+      dependencies.push("mcp");
+    }
+
+    const installedRow: PluginInstalledMessage = {
+      status: "installed",
+      name: plugin,
+      dependencies,
+      ...(installCtx.version !== "" && { version: installCtx.version }),
+      scope,
+    };
+    // V2 notify() call mirrors the Plan 19-01 pilot recipe at
+    // orchestrators/plugin/uninstall.ts; install.ts substitutes
+    // "installed" + dependencies[] + per-D-19-03 failure branches
+    // (D-19-02 + D-19-03).
+    notify(ctx, pi, {
+      marketplaces: [
+        {
+          name: marketplace,
+          scope,
+          plugins: [installedRow],
+        },
+      ],
+    });
   }
 
   return {
@@ -818,66 +938,143 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   };
 }
 
+// Plan 19-02 (D-19-03): the V1 CMC-17 / MSG-RP-1 rollback-partial body
+// composer is RETIRED entirely. The V2 PluginFailedMessage.rollbackPartial
+// field (SNM-09 + SNM-10) is the structural replacement; the renderer at
+// shared/notify.ts::composeRollbackPartialLines drives all indentation
+// (4-space rollback-child row + 6-space per-phase cause-chain trailer)
+// per D-16-08. The transaction/phase-ledger.ts RollbackPartial already
+// exposes the typed cause?: Error, threaded directly into the V2 field
+// per Plan 19-02 RESEARCH Finding 1.
+
 /**
- * CMC-17 / MSG-RP-1 rollback-partial composer for the single-plugin install
- * failure surface. Builds a PluginInlineRow parent + RollbackChild[] block
- * via `renderRollbackPartial`.
+ * Plan 19-02 helper: compose the per-variant V2 plugin notification for
+ * the install failure surface. Routes to one of four shapes per D-19-03
+ * (priority highest first):
  *
- * - Parent: `⊘ <plugin>@<marketplace> [<scope>] v<ver?> (failed) {rollback partial}`
- *   (the renderer prepends the icon and the closed-set Reason `rollback partial`
- *   is the canonical parent-row reason per Wave 1's narrowing -- bridge
- *   phase names like `skills` / `agents` are not closed Reasons; the
- *   per-phase failure name surfaces via the indented child's `phaseLabel`).
- * - Children: one `[<phase>] (rollback failed) {rollback partial}` per
- *   ledger RollbackPartial entry. The free-text `msg` is NOT a closed-set
- *   Reason and would not survive narrowing; the phaseLabel + status pair
- *   surfaces the failing bridge by name (matching the catalog form at
- *   `docs/output-catalog.md` lines 304-310). The cause-chain trailer is
- *   appended by `notifyError` (D-CMC-12) after this composer returns.
+ *   1. PI-14 PathContainmentError -- PluginFailedMessage with reasons:
+ *      [], cause: err. The renderer surfaces the message via the
+ *      4-space-indent cause-chain trailer; no rollback-partial children
+ *      even when partials are present.
+ *   2. Rollback-partial -- PluginFailedMessage with reasons:
+ *      ["rollback partial"] plus rollbackPartial: readonly { phase;
+ *      cause? }[] (typed Error threaded directly from the ledger per
+ *      RESEARCH Finding 1).
+ *   3. Entity-shape (classifier returns non-undefined) -- preserves the
+ *      classifier's status discriminator (failed vs unavailable) so the
+ *      catalog `failure-unsupported-features` byte form (uses
+ *      "unavailable") and the catalog `failure-rollback-partial` /
+ *      `failure-runtime-with-cause` forms (use "failed") both
+ *      round-trip cleanly. PluginUnavailableMessage carries reasons but
+ *      no cause (D-15-01 / SNM-10); PluginFailedMessage carries both.
+ *   4. Generic runtime error -- PluginFailedMessage with reasons: [],
+ *      cause: err.
  *
- * The `declaresAgents` / `declaresMcp` predicates are still surfaced on
- * the parent row so the renderer's per-row soft-dep injection (CMC-13 /
- * MSG-SD-1..3) fires on failed installs that staged agents/mcp content
- * before the rollback; structurally, the renderer treats them identically
- * to a successful row's marker probe.
+ * The narrowed `cause?: Error` field on failure variants is populated
+ * only when `err instanceof Error` (defensive against non-Error throws).
  */
-function composeRollbackPartialBody(args: {
+function composeInstallFailureMessage(args: {
+  err: unknown;
   plugin: string;
   marketplace: string;
   scope: Scope;
   version: string | undefined;
-  declaresAgents: boolean;
-  declaresMcp: boolean;
-  partials: readonly RollbackPartial[];
-  probe: SoftDepProbe;
-}): string {
-  const parent: PluginInlineRow = {
-    kind: "plugin-inline",
-    name: args.plugin,
-    marketplace: args.marketplace,
-    scope: args.scope,
-    ...(args.version !== undefined && args.version !== "" && { version: args.version }),
+  rolledBackPartial: boolean;
+  rollbackPartials: readonly RollbackPartial[];
+  entityErrorRow: EntityErrorRow | undefined;
+}): PluginNotificationMessage {
+  const { err, plugin, scope, version, rolledBackPartial, rollbackPartials, entityErrorRow } = args;
+  const cause = err instanceof Error ? err : undefined;
+  const isPathContainment = err instanceof PathContainmentError;
+
+  // Branch 1: PI-14 PathContainmentError. Bare failed row with cause
+  // trailer; no rollback-partial children, no entity-shape narrowing.
+  if (isPathContainment) {
+    const failed: PluginFailedMessage = {
+      status: "failed",
+      name: plugin,
+      reasons: [] as const,
+      ...(version !== undefined && version !== "" && { version }),
+      scope,
+      ...(cause !== undefined && { cause }),
+    };
+    return failed;
+  }
+
+  // Branch 2: rollback-partial. Thread RollbackPartial.cause directly
+  // per RESEARCH Finding 1 -- no synthesis from the free-form .msg.
+  if (rolledBackPartial) {
+    const failed: PluginFailedMessage = {
+      status: "failed",
+      name: plugin,
+      reasons: ["rollback partial"] as const,
+      ...(version !== undefined && version !== "" && { version }),
+      scope,
+      ...(cause !== undefined && { cause }),
+      rollbackPartial: rollbackPartials.map((p) => ({
+        phase: p.phase,
+        ...(p.cause !== undefined && { cause: p.cause }),
+      })),
+    };
+    return failed;
+  }
+
+  // Branch 3: entity-shape error. Preserve the classifier's status
+  // discriminator (`failed` | `unavailable`) so the catalog byte forms
+  // round-trip. The classifier's reasons array is closed-set Reason[]
+  // already; thread it verbatim. PluginUnavailableMessage has no `cause?`
+  // field per D-15-01 -- the reason text carries the explanation.
+  if (entityErrorRow !== undefined) {
+    if (entityErrorRow.status === "unavailable") {
+      const unavailable: PluginUnavailableMessage = {
+        status: "unavailable",
+        name: plugin,
+        reasons: entityErrorRow.reasons,
+        ...(version !== undefined && version !== "" && { version }),
+      };
+      return unavailable;
+    }
+
+    const failed: PluginFailedMessage = {
+      status: "failed",
+      name: plugin,
+      reasons: entityErrorRow.reasons,
+      ...(version !== undefined && version !== "" && { version }),
+      scope,
+      ...(cause !== undefined && { cause }),
+    };
+    return failed;
+  }
+
+  // Branch 4: generic runtime error. Empty reasons array -- the renderer
+  // suppresses the `{}` brace per D-15-01; the cause-chain trailer
+  // carries the error text below the bare `(failed)` row.
+  const failed: PluginFailedMessage = {
     status: "failed",
-    reasons: ["rollback partial"] as const,
-    declaresAgents: args.declaresAgents,
-    declaresMcp: args.declaresMcp,
+    name: plugin,
+    reasons: [] as const,
+    ...(version !== undefined && version !== "" && { version }),
+    scope,
+    ...(cause !== undefined && { cause }),
   };
-  const children: readonly RollbackChild[] = args.partials.map((p) => ({
-    kind: "rollback-child",
-    // MSG-RP-1 catalog form: bracketed phase token; renders verbatim as the
-    // bare compact line's leading slot in `renderRollbackChild`.
-    phaseLabel: `[${p.phase}]`,
-    // The undo step threw; the swap was attempted and the post-commit
-    // recovery is the per-plugin reinstall hint. `rollback failed`
-    // captures that effective state. Mirrors the precedent established
-    // by orchestrators/plugin/update.ts (sub-wave 2a, Plan 13-02a-01).
-    status: "rollback failed",
-    // The free-text `p.msg` is not in the closed REASONS set; narrow to
-    // the canonical parent reason so the child stays inside CMC-11.
-    // The phaseLabel + status pair carries the user-visible failure shape.
-    reasons: ["rollback partial"] as const,
-  }));
-  return renderRollbackPartial(parent, children, args.probe);
+  return failed;
+}
+
+/**
+ * Plan 19-02 helper: format the orchestrated-mode `cause` string for the
+ * `InstallPluginOutcome.cause` field. The import cascade caller at
+ * `orchestrators/import/execute.ts` reads this string for its
+ * `dispatchFailedOutcome` rendering. Mirrors the V1 D-CMC-12 join
+ * discipline: `<errorMessage>` plus the depth-5 cause-chain trailer
+ * (shared/errors.ts::causeChainTrailer) joined with a blank line when
+ * present. Standalone-mode trailers are emitted by V2 `notify()` from
+ * the structural `PluginFailedMessage.cause` field; this helper exists
+ * solely to preserve the orchestrated-mode string contract.
+ */
+function formatOrchestratedCause(err: unknown): string {
+  const head = errorMessage(err);
+  const trailer = causeChainTrailer(err);
+  return trailer === "" ? head : `${head}\n\n${trailer}`;
 }
 
 /**

@@ -293,7 +293,7 @@ async function seedPathMarketplaceWithPlugin(opts: {
 // PI-3 -- plugin not in marketplace manifest
 // ───────────────────────────────────────────────────────────────────────────
 
-test("PI-3: plugin name not in marketplace plugins[] -> notifyError 'not found in marketplace'", async () => {
+test("PI-3: plugin name not in marketplace plugins[] -> V2 failed/{not in manifest}", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi3-"));
     try {
@@ -317,16 +317,17 @@ test("PI-3: plugin name not in marketplace plugins[] -> notifyError 'not found i
         plugin: "ghost-plugin",
       });
 
-      // CMC-34 / MSG-NC-1 compact entity-error row + D-CMC-12 cause-chain
-      // trailer that preserves the original message text. The compact form
-      // is the primary surface; the trailer aids machine-grep + debugging.
+      // V2 byte form matches `docs/output-catalog.md` lines 308-314
+      // (`failure-runtime-with-cause`) with the entity-shape `{not in
+      // manifest}` reason. Severity `"error"` per D-16-11.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
-      assert.match(
-        notifications[0]?.message ?? "",
-        /⊘ ghost-plugin@mp \[project\] \(failed\) \{not in manifest\}/,
+      assert.equal(
+        notifications[0]?.message,
+        "● mp [project]\n" +
+          "  ⊘ ghost-plugin (failed) {not in manifest}\n" +
+          '    cause: Plugin "ghost-plugin" not found in marketplace "mp".',
       );
-      assert.match(notifications[0]?.message ?? "", /not found in marketplace/);
 
       // State unchanged.
       const after = await loadState(locations.extensionRoot);
@@ -339,7 +340,7 @@ test("PI-3: plugin name not in marketplace plugins[] -> notifyError 'not found i
   });
 });
 
-test("PI-3: marketplace itself absent -> notifyError 'not found in marketplace'", async () => {
+test("PI-3: marketplace itself absent -> V2 failed/{not in manifest}", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi3b-"));
     try {
@@ -356,12 +357,12 @@ test("PI-3: marketplace itself absent -> notifyError 'not found in marketplace'"
 
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
-      // CMC-34 / MSG-NC-1 compact entity-error row.
-      assert.match(
-        notifications[0]?.message ?? "",
-        /⊘ anything@ghost-mp \[project\] \(failed\) \{not in manifest\}/,
+      assert.equal(
+        notifications[0]?.message,
+        "● ghost-mp [project]\n" +
+          "  ⊘ anything (failed) {not in manifest}\n" +
+          '    cause: Plugin "anything" not found in marketplace "ghost-mp".',
       );
-      assert.match(notifications[0]?.message ?? "", /not found in marketplace/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -372,7 +373,7 @@ test("PI-3: marketplace itself absent -> notifyError 'not found in marketplace'"
 // PI-4 -- non-installable plugin (e.g. github source in V1 is not installable)
 // ───────────────────────────────────────────────────────────────────────────
 
-test("PI-4: non-path source -> notifyError 'is not installable'", async () => {
+test("PI-4: non-path source -> V2 unavailable/{unsupported source}", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi4-"));
     try {
@@ -397,17 +398,23 @@ test("PI-4: non-path source -> notifyError 'is not installable'", async () => {
         plugin: "hello",
       });
 
+      // V2 byte form matches `docs/output-catalog.md:295-302` (catalog
+      // `failure-unsupported-features`): `(unavailable)` with no
+      // `[scope]` bracket on the plugin row (MSG-PL-6 / SNM-11 carve-out)
+      // and reasons narrowed to the closed `unsupported source` Reason.
+      // No `v<version>` slot because PI-4 throws BEFORE
+      // `resolvePluginVersion` runs (`failureVersion` is undefined at
+      // throw time). PluginUnavailableMessage carries no `cause?` field
+      // per D-15-01 -- the reason text carries the explanation; no
+      // cause-chain trailer. Severity is undefined (info) per D-16-11 --
+      // `unavailable` is NOT in the error-severity set (catalog
+      // confirms: only the `failed` discriminator emits `error`).
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "error");
-      // CMC-34 / MSG-NC-1 compact entity-error row: status `(unavailable)`
-      // per catalog `### Failure -- unsupported features in manifest`.
-      // Reasons narrowed from the resolver's notes -- a non-path source
-      // becomes `{unsupported source}` in the closed REASONS set.
-      assert.match(
-        notifications[0]?.message ?? "",
-        /⊘ hello@mp \[project\] \(unavailable\) \{unsupported source\}/,
+      assert.equal(notifications[0]?.severity, undefined);
+      assert.equal(
+        notifications[0]?.message,
+        "● mp [project]\n  ⊘ hello (unavailable) {unsupported source}",
       );
-      assert.match(notifications[0]?.message ?? "", /is not installable/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -418,7 +425,7 @@ test("PI-4: non-path source -> notifyError 'is not installable'", async () => {
 // PI-5 -- already installed (early-sanity check at top of guard closure)
 // ───────────────────────────────────────────────────────────────────────────
 
-test("PI-5: state already has plugin record -> notifyError 'is already installed'", async () => {
+test("PI-5: state already has plugin record -> V2 failed/{already installed}", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi5-"));
     try {
@@ -440,14 +447,20 @@ test("PI-5: state already has plugin record -> notifyError 'is already installed
         plugin: "hello",
       });
 
+      // V2 byte form matches `docs/output-catalog.md:306-314`
+      // (`failure-runtime-with-cause`) with the entity-shape `{already
+      // installed}` reason. No `v<version>` slot because the PI-5
+      // early-sanity check throws BEFORE `resolvePluginVersion` runs
+      // (`failureVersion` is undefined at throw time even though the
+      // preInstall state record holds version "0.0.0").
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
-      // CMC-34 / MSG-NC-1 compact entity-error row.
-      assert.match(
-        notifications[0]?.message ?? "",
-        /⊘ hello@mp \[project\] \(failed\) \{already installed\}/,
+      assert.equal(
+        notifications[0]?.message,
+        "● mp [project]\n" +
+          "  ⊘ hello (failed) {already installed}\n" +
+          '    cause: Plugin "hello" is already installed in marketplace "mp".',
       );
-      assert.match(notifications[0]?.message ?? "", /is already installed/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -642,16 +655,23 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
       assert.deepEqual([...record.resources.agents], [`${GENERATED_AGENT_PREFIX}hello-bot`]);
       assert.deepEqual([...record.resources.mcpServers], ["server1"]);
 
-      // Single success notification with the canonical compact-line shape
-      // per CMC-23 / D-13-05 (PluginInlineRow + renderRow) + MSG-RH-1
-      // blank-line reload-hint trailer. The fixture seeds version 1.0.0.
+      // V2 byte form matches `docs/output-catalog.md:286-292`
+      // (`success-with-soft-dep`): the default `makeCtx()` mocks pi
+      // without `subagent` or `mcp` tools so both companion extensions
+      // are unloaded; the renderer emits both per-row soft-dep markers
+      // from `dependencies: ["agents", "mcp"]` + the threaded probe
+      // per D-16-14 / D-16-15. The fixture seeds version 1.0.0.
+      // PluginInstalledMessage triggers the reload-hint structurally
+      // per D-16-12.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined);
-      assert.match(
-        notifications[0]?.message ?? "",
-        /● hello@mp \[project\] v1\.0\.0 \(installed\)/,
+      assert.equal(
+        notifications[0]?.message,
+        "● mp [project]\n" +
+          "  ● hello v1.0.0 (installed) {requires pi-subagents, requires pi-mcp}\n" +
+          "\n" +
+          "/reload to pick up changes",
       );
-      assert.match(notifications[0]?.message ?? "", /\/reload to pick up changes$/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -818,7 +838,7 @@ test("PI-12 / RH-4: staged mcp + pi.getAllTools has no 'mcp' -> success message 
 // PI-13 -- dependencies declaration -> manual-install note
 // ───────────────────────────────────────────────────────────────────────────
 
-test("PI-13: entry declares dependencies -> success message includes the PR-5 phrase", async () => {
+test("PI-13: entry declares dependencies -> V2 dropped per D-19-01 (no PR-5 trailer)", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi13-"));
     try {
@@ -841,20 +861,24 @@ test("PI-13: entry declares dependencies -> success message includes the PR-5 ph
         plugin: "hello",
       });
 
-      // PI-13 deps note is free-form prose (not a closed-set Reason) and
-      // does not fit the compact-line grammar. Per Plan 13-02b-01 Task 1
-      // default + §18.2 free-form trailer escape, it is now emitted as a
-      // SEPARATE notifyWarning after the success compact line (two
-      // notifications total). The first is the canonical compact line; the
-      // second is the PR-5 manual-install phrase at warning severity.
-      assert.equal(notifications.length, 2);
+      // Plan 19-02 D-19-01: the V1 PI-13 follow-up notifyWarning (PR-5
+      // manual-install free-form trailer) is DROPPED entirely in
+      // standalone mode. The resolver still detects the deps note and
+      // appends it to `installable.notes` so downstream surfaces (e.g.
+      // `/claude:plugin list`) can continue to consume it; the
+      // standalone-mode user-visible warning is gone (no clean V2
+      // MarketplaceNotificationMessage representation for the PR-5 free
+      // prose). Only the canonical V2 success notification fires.
+      assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined);
-      assert.match(notifications[0]?.message ?? "", /● hello@mp \[project\] .*\(installed\)/);
-      assert.equal(notifications[1]?.severity, "warning");
-      assert.match(
-        notifications[1]?.message ?? "",
-        /dependencies that must be installed manually/,
-        "must include the PR-5 manual-install phrase",
+      assert.match(notifications[0]?.message ?? "", /● hello v\S+ \(installed\)/);
+      // Defense-in-depth: the dropped PR-5 phrase must NOT leak onto the
+      // V2 notification surface (it does NOT appear on the success line
+      // either -- the renderer has no field for it).
+      assert.equal(
+        (notifications[0]?.message ?? "").includes("dependencies that must be installed manually"),
+        false,
+        "D-19-01: PR-5 phrase must not appear on the V2 success surface",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -964,7 +988,7 @@ test("PI-15 layer (a): record already exists -> caught by early-sanity check (co
 // AS-6 -- post-state-commit pluginDataDir mkdir failure -> warning severity
 // ───────────────────────────────────────────────────────────────────────────
 
-test("AS-6: pluginDataDir mkdir failure post-state-commit -> warning surfaces, state record IS persisted", async () => {
+test("AS-6: pluginDataDir mkdir failure post-state-commit -> V2 drops warning per D-19-01, state record IS persisted", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-as6-"));
     try {
@@ -982,7 +1006,10 @@ test("AS-6: pluginDataDir mkdir failure post-state-commit -> warning surfaces, s
       // the existing dirs without issue; the leaf "hello" doesn't exist so
       // lstat reports ENOENT -> walk returns OK). State commit then succeeds.
       // POST-state-commit, mkdir(dataRoot/mp/hello, {recursive: true}) fails
-      // EACCES because the parent is not writable -> AS-6 warning path fires.
+      // EACCES because the parent is not writable. In V1 this surfaced via
+      // AS-6 notifyWarning; in V2 the warning is DROPPED per D-19-01
+      // (D-18-01 lineage) -- the side effect still runs inside its
+      // try/catch but the user-visible warning surface is gone.
       await mkdir(path.join(locations.dataRoot, "mp"), { recursive: true });
       const { chmod } = await import("node:fs/promises");
       await chmod(path.join(locations.dataRoot, "mp"), 0o555);
@@ -1003,23 +1030,24 @@ test("AS-6: pluginDataDir mkdir failure post-state-commit -> warning surfaces, s
       }
 
       // The state record IS committed (state save happens BEFORE the mkdir).
+      // AS-6's core invariant -- state-commit precedes data-dir creation --
+      // is unchanged in V2.
       const after = await loadState(locations.extensionRoot);
       assert.ok(
         "hello" in (after.marketplaces["mp"]?.plugins ?? {}),
         "state record must be persisted (mkdir failure is post-commit)",
       );
 
-      // A warning notification is present with the data dir creation deferred message.
-      const warnings = notifications.filter((n) => n.severity === "warning");
+      // Plan 19-02 D-19-01: no warning notification fires in V2 standalone
+      // mode. Only the canonical V2 success notification is emitted; the
+      // "data dir creation deferred" phrase MUST NOT appear on any
+      // notification.
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, undefined);
       assert.equal(
-        warnings.length >= 1,
-        true,
-        `expected at least one warning notification, got: ${JSON.stringify(notifications)}`,
-      );
-      assert.match(
-        warnings[0]?.message ?? "",
-        /data dir creation deferred/i,
-        "warning must mention data dir creation deferred",
+        (notifications[0]?.message ?? "").toLowerCase().includes("data dir creation deferred"),
+        false,
+        "D-19-01: mkdir-failure warning surface is dropped in V2",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -1031,7 +1059,7 @@ test("AS-6: pluginDataDir mkdir failure post-state-commit -> warning surfaces, s
 // AS-7 -- agents-bridge foreign-content rows surface via warning, state persists
 // ───────────────────────────────────────────────────────────────────────────
 
-test("AS-7: pre-existing foreign agent file under target name -> warning surfaces, state record IS persisted", async () => {
+test("AS-7: pre-existing foreign agent file under target name -> V2 drops warning per D-19-01, state record IS persisted", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-as7-"));
     try {
@@ -1046,8 +1074,11 @@ test("AS-7: pre-existing foreign agent file under target name -> warning surface
 
       // Pre-seed the agents-index with a row for hello/bot pointing at a
       // foreign file (no marker in body) at the target. The agents bridge
-      // SOFT-FAILS this row via `failed[]` -- the install proceeds and the
-      // orchestrator routes the failed rows to notifyWarning.
+      // SOFT-FAILS this row via `failed[]` -- the install proceeds. In V1
+      // the orchestrator routed the failed rows to notifyWarning; in V2
+      // the warning surface is DROPPED per D-19-01 (D-18-01 lineage). The
+      // underlying agents-index state still records the foreign-row
+      // preservation; only the user-visible warning is gone.
       await mkdir(locations.extensionRoot, { recursive: true });
       await mkdir(locations.agentsDir, { recursive: true });
       const foreignAgentName = `${GENERATED_AGENT_PREFIX}hello-bot`;
@@ -1091,12 +1122,16 @@ test("AS-7: pre-existing foreign agent file under target name -> warning surface
       const after = await loadState(locations.extensionRoot);
       assert.ok("hello" in (after.marketplaces["mp"]?.plugins ?? {}));
 
-      // A warning notification names the preserved foreign agent.
-      const warnings = notifications.filter((n) => n.severity === "warning");
+      // Plan 19-02 D-19-01: no warning notification fires in V2 standalone
+      // mode -- the AS-7 foreign-agent warning surface is dropped. Only
+      // the canonical V2 success notification is emitted, and the
+      // "pre-existing agent file" phrase MUST NOT appear on it.
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, undefined);
       assert.equal(
-        warnings.some((w) => w.message.includes("pre-existing agent file")),
-        true,
-        `expected AS-7 warning naming the pre-existing agent file; got: ${JSON.stringify(notifications)}`,
+        (notifications[0]?.message ?? "").includes("pre-existing agent file"),
+        false,
+        "D-19-01: AS-7 foreign-agent warning surface is dropped in V2",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -1132,9 +1167,15 @@ test("CMP-3 / PI-16: project-target install falls back to user-scope marketplace
         plugin: "hello",
       });
 
-      // CMC-23 compact-line success shape (D-13-05 / D-13-06).
+      // V2 byte form: bare marketplace header + plugin row at 2-space
+      // indent + reload-hint trailer per D-16-12.
+      assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined);
-      assert.match(notifications[0]?.message ?? "", /● hello@mp \[project\] .*\(installed\)/);
+      assert.match(
+        notifications[0]?.message ?? "",
+        /^● mp \[project\]\n {2}● hello [^(]*\(installed\)/,
+      );
+      assert.match(notifications[0]?.message ?? "", /\/reload to pick up changes$/);
 
       const userAfter = await loadState(userLocations.extensionRoot);
       const projectAfter = await loadState(projectLocations.extensionRoot);
@@ -1170,9 +1211,15 @@ test("CMP-4 / PI-16: user-target install cannot source a project-only marketplac
         plugin: "hello",
       });
 
+      // V2 byte form: same shape as PI-3 (failed/{not in manifest}) --
+      // the failed-discriminator entity-shape row plus the cause-chain
+      // trailer that names the marketplace verbatim.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
-      assert.match(notifications[0]?.message ?? "", /not found in marketplace "mp"/);
+      assert.match(
+        notifications[0]?.message ?? "",
+        /^● mp \[user\]\n {2}⊘ hello \(failed\) \{not in manifest\}\n {4}cause: .*not found in marketplace "mp"/,
+      );
 
       const userAfter = await loadState(userLocations.extensionRoot);
       const projectAfter = await loadState(projectLocations.extensionRoot);
@@ -1209,9 +1256,14 @@ test("PI-17: same plugin may be installed in both user and project target scopes
         plugin: "hello",
       });
 
-      // CMC-23 compact-line success shape (D-13-05 / D-13-06).
+      // V2 byte form: bare marketplace header + plugin row at 2-space
+      // indent.
+      assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined);
-      assert.match(notifications[0]?.message ?? "", /● hello@mp \[project\] .*\(installed\)/);
+      assert.match(
+        notifications[0]?.message ?? "",
+        /^● mp \[project\]\n {2}● hello [^(]*\(installed\)/,
+      );
 
       const userAfter = await loadState(userLocations.extensionRoot);
       const projectAfter = await loadState(projectLocations.extensionRoot);
@@ -1244,7 +1296,7 @@ test("PI-2 / NFR-5: install.ts has zero git surface (no platform-git import, no 
 // Bridge ordering sanity (PI-9 corollary) -- state record reflects all 4 bridges
 // ───────────────────────────────────────────────────────────────────────────
 
-test("PI-9 corollary: empty plugin (no skills/commands/agents/mcp) still produces a clean state record + reload hint suppressed", async () => {
+test("PI-9 corollary: empty plugin (no skills/commands/agents/mcp) -> V2 emits reload-hint structurally on installed status", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi9b-"));
     try {
@@ -1276,13 +1328,18 @@ test("PI-9 corollary: empty plugin (no skills/commands/agents/mcp) still produce
       assert.deepEqual([...record.resources.agents], []);
       assert.deepEqual([...record.resources.mcpServers], []);
 
-      // MSG-RH-1: when nothing was staged, no reload hint is appended.
+      // V1->V2 behavior change (mirrors Plan 19-01 pilot's PU-8 (b)
+      // behavior flip): V2 emits the reload-hint structurally from the
+      // `installed` status per D-16-12; the V1 MSG-RH-1 noop-gate
+      // ("suppress when nothing was staged") is GONE. The trigger ladder
+      // is per-variant, not per-cascade-outcome resource count. The
+      // resourcesChanged field on InstallPluginOutcome still tracks
+      // whether anything was staged for downstream cascade consumers.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined);
       assert.equal(
-        (notifications[0]?.message ?? "").includes("/reload to pick up changes"),
-        false,
-        "MSG-RH-1: no reload hint when nothing was staged",
+        notifications[0]?.message,
+        "● mp [project]\n" + "  ● hello v0.1.0 (installed)\n" + "\n" + "/reload to pick up changes",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
