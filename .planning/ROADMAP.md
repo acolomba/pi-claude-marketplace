@@ -76,7 +76,7 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 - [x] **Phase 17: Spec Rewrite & Catalog UAT Migration** -- `docs/messaging-style-guide.md` v2.0 + `docs/output-catalog.md` rewritten to always-marketplace-header spec; catalog UAT runner fed by structured `NotificationMessage` fixtures (completed 2026-05-26)
 - [x] **Phase 17.1: V2 Grammar Amendment: Autoupdate Surface (INSERTED)** -- Amend the V2 type model + renderer + catalog + ADR to restore the user-visible distinction between fresh autoupdate enable/disable, idempotent flips, and failures collapsed by Phase 17 into a single `(updated)` status. Implements the user-locked design from Phase 18 D-18-05 so Plan 18-02 (autoupdate.ts call-site migration) can construct typed messages that round-trip through `notify()` to byte-correct V2 output. (completed 2026-05-26)
 - [x] **Phase 17.2: renderScopeBracket orphan-fold contract fix (INSERTED)** -- Fix the renderer to honor the documented orphan-fold contract: `renderScopeBracket(pluginScope, mpScope)` returns `""` when scopes match, thread `mp.scope` through `composePluginLines`/`renderPluginRow`, update the 10 call sites. Fold in WR-01..WR-06 (docstring refresh, composeVersionArrow simplification, soft-dep probe coverage tests, dead-helper deletion, exhaustiveness gate hardening, catalog narrative tightening) as a single notify.ts hygiene sweep. Closes CR-01 + WR-01..WR-06 from the 17.1 code review; unblocks Phase 18. (completed 2026-05-26)
-- [ ] **Phase 18: Migration Wave 1 -- Marketplace Orchestrator Family** -- Migrate all `orchestrators/marketplace/*` call sites to `notify(ctx, structured)`; retire MSG-* lint globs covering marketplace orchestrators
+- [x] **Phase 18: Migration Wave 1 -- Marketplace Orchestrator Family** -- Migrate all `orchestrators/marketplace/*` call sites to `notify(ctx, structured)`; retire MSG-* lint globs covering marketplace orchestrators (completed 2026-05-27)
 - [ ] **Phase 19: Migration Wave 2 -- Plugin Orchestrator Family** -- Migrate all `orchestrators/plugin/*` call sites to `notify(ctx, structured)`; retire MSG-* lint globs covering plugin orchestrators
 - [ ] **Phase 20: Migration Wave 3 -- Edge Handlers & UsageError** -- Migrate all `edge/handlers/*` call sites; migrate all `notifyUsageError(ctx, msg, usage)` sites to V2 `notifyUsageError(ctx, structuredUsageError)`; retire remaining MSG-* lint globs
 - [ ] **Phase 21: Final Teardown & GREEN Gate** -- Delete V1 severity-named wrappers; delete `tests/lint-rules/` (34 rules + 34 RuleTester suites + helpers); delete `tests/architecture/msg-rule-registry.test.ts`; replace MSG-* config in `eslint.config.js` with stock `no-restricted-syntax` + `no-console` (with `persistence/migrate.ts` per-file override); update / delete `tests/architecture/grammar-frontmatter.test.ts`; resolve `shared/grammar/` retain-or-delete; review `no-legacy-markers.test.ts`; `npm run check` GREEN
@@ -270,7 +270,7 @@ Plans:
 3. Catalog UAT byte-equality is GREEN for every marketplace-family command output (`add`, `remove`, `update`, `list` marketplace headers and rows where applicable) against the v2.0 always-marketplace-header spec.
 4. `npm run check` stays GREEN; no orchestrators outside marketplace have changed call-site shape.
 
-**Plans:** 6/7 plans executed
+**Plans:** 7/7 plans complete
 
 Plans:
 
@@ -291,7 +291,7 @@ Plans:
 
 **Wave 3** *(lint narrowing + final gate -- depends on all of Wave 2)*
 
-- [ ] 18-06-PLAN.md -- Add `ignores: ["extensions/pi-claude-marketplace/orchestrators/marketplace/**"]` to MSG-Block 1 + MSG-Block 1b per D-18-07; final end-to-end SC #1..#4 verification
+- [x] 18-06-PLAN.md -- Add `ignores: ["extensions/pi-claude-marketplace/orchestrators/marketplace/**"]` to MSG-Block 1 + MSG-Block 1b per D-18-07; final end-to-end SC #1..#4 verification
 
 ### Phase 19: Migration Wave 2 -- Plugin Orchestrator Family
 
@@ -363,7 +363,7 @@ Plans:
 | 17. Spec Rewrite & Catalog UAT Migration                             | v1.4      | 3/3 | Complete   | 2026-05-26 |
 | 17.1. V2 Grammar Amendment: Autoupdate Surface (INSERTED)            | v1.4      | 4/4 | Complete   | 2026-05-26 |
 | 17.2. renderScopeBracket orphan-fold contract fix (INSERTED)         | v1.4      | 4/4 | Complete    | 2026-05-26 |
-| 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 6/7 | In Progress|  |
+| 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 7/7 | Complete   | 2026-05-27 |
 | 19. Migration Wave 2 -- Plugin Orchestrator Family                   | v1.4      | 0/?            | Not started | --         |
 | 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 0/?            | Not started | --         |
 | 21. Final Teardown & GREEN Gate                                      | v1.4      | 0/?            | Not started | --         |
