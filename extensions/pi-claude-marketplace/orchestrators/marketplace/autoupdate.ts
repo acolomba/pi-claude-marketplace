@@ -2,22 +2,36 @@
 //
 // MAU-1, MAU-2, MAU-3, MAU-4 + SC-6 + NFR-5.
 //
-// Phase 13 Wave 2 sub-wave 2c (Plan 13-02c-01) -- CMC-33 / CMC-10 /
-// CMC-05 / MSG-GR-5 migration. The legacy "Enabled autoupdate:"
-// / "Disabled autoupdate:" / "Already enabled:" / "Already disabled:"
-// sentence forms and the legacy empty-state marker (formerly the
-// "No marketplaces" sentence) are RETIRED in favor of the
-// marker-as-outcome `MarketplaceRow` form
-// emitted via `renderRow`:
-//   - enable success      -> `● <mp> [<scope>] <autoupdate>`
-//   - enable already-on   -> `● <mp> [<scope>] <autoupdate> {already enabled}`
-//   - disable success     -> `● <mp> [<scope>] <no autoupdate>`
-//   - disable already-off -> `● <mp> [<scope>] <no autoupdate> {already disabled}`
-//   - empty scopes        -> `(no marketplaces)` (CMC-10 EmptyToken)
-// CMC-33 binding: the marker IS the outcome -- no `(<status>)` token on
-// the autoupdate result row. `<no autoupdate>` appears ONLY here (per
-// MSG-GR-5 / catalog §autoupdate); every other surface conveys
-// autoupdate-off by ABSENCE of the marker.
+// Phase 18 / Plan 18-02: V1 -> V2 migration. The 4 V1 severity-named
+// wrapper callsites (2 error + 2 success) collapse to a single
+// notify(opts.ctx, opts.pi, { marketplaces: [...] }) call per
+// orchestration. Payloads are constructed against the Phase 17.1
+// amended grammar (7-entry MarketplaceStatus + optional `reasons?:`):
+//
+//   - enable fresh         -> status: "autoupdate enabled"
+//                             -> `● <mp> [<scope>] (autoupdate enabled)`
+//                                + `/reload to pick up changes` trailer (D-16-12)
+//   - disable fresh        -> status: "autoupdate disabled"
+//                             -> `● <mp> [<scope>] (autoupdate disabled)`
+//                                + `/reload to pick up changes` trailer (D-16-12)
+//   - enable idempotent    -> status: "skipped", reasons: ["already enabled"]
+//                             -> `● <mp> [<scope>] (skipped) {already enabled}`
+//                                severity: "warning" (D-16-11)
+//   - disable idempotent   -> status: "skipped", reasons: ["already disabled"]
+//                             -> `● <mp> [<scope>] (skipped) {already disabled}`
+//                                severity: "warning" (D-16-11)
+//   - failure (not-found)  -> status: "failed"
+//                             -> `⊘ <mp> [<scope>] (failed)`
+//                                severity: "error" (D-16-11)
+//   - empty scopes         -> marketplaces: []
+//                             -> `(no marketplaces)` (D-16-17 sentinel)
+//
+// CMC-33 / MSG-GR-5 retirement: the V1 marker-as-outcome row form
+// (`● <mp> [<scope>] <autoupdate>`, `<no autoupdate>`) is no longer
+// emitted by this orchestrator. The `<autoupdate>` marker now lives
+// ONLY on the marketplace-list surface header (per D-17.1-01); on
+// state-flip results, the outcome is conveyed by the `(autoupdate
+// enabled)` / `(autoupdate disabled)` status token instead.
 //
 // Single orchestrator parameterized by `enable: boolean`. The edge
 // layer (Phase 6) maps `marketplace autoupdate` -> enable=true and
@@ -31,36 +45,36 @@
 //     })  // saves state.json on no-throw
 //     accumulate result.changed[] and result.unchanged[] across scopes
 //
-//   compose user-visible message: build a `MarketplaceRow` per accumulated
-//   marketplace; join rows with `\n`; route via `notifySuccess` (flips
-//   are always successes -- entity-shape failures surface at the edge
-//   layer per CMC-34 / MSG-NC-1).
+//   compose one MarketplaceNotificationMessage per outcome (D-18-05
+//   mapping above); emit ONE notify(opts.ctx, opts.pi, ...) call. The
+//   caller-supplied order is honored end-to-end per D-16-06; the SC-6
+//   scopes-loop order (project-then-user) is the visible iteration
+//   order. The alphabetic sort that the V1 path applied (lines 178-180
+//   pre-migration) is dropped -- the renderer no longer sorts and
+//   D-16-06 forbids re-sorting at the orchestrator.
 //
 // NFR-5: zero git surface -- autoupdate never imports platform/git
 // or DEFAULT_GIT_OPS.
 
 import { locationsFor } from "../../persistence/locations.ts";
-import { renderRow } from "../../presentation/compact-line.ts";
-import { MARKETPLACE_LABEL_PROBE } from "../../shared/constants/marketplace-label-probe.ts";
-import { errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
-import { notifyError, notifySuccess } from "../../shared/notify.ts";
+import { MarketplaceNotFoundError } from "../../shared/errors.ts";
+import { notify } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
 import { applyAutoupdateFlipInPlace } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { MarketplaceRow } from "../../presentation/compact-line.ts";
+import type { MarketplaceNotificationMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface AutoupdateOptions {
   readonly ctx: ExtensionContext;
   /**
-   * Factory `pi` reference. Plumbed in Plan 18-00 (Wave 0) so subsequent
-   * Wave 1/2 migrations can swap V1 notify-wrappers for V2
-   * `notify(ctx, pi, message)` calls without re-touching this signature
-   * or `edge/register.ts`. Today this orchestrator does not yet read `pi`
-   * (the V1 wrappers handle severity routing); the migration to V2 lands
-   * in Plan 18-02.
+   * Factory `pi` reference. Plumbed in Plan 18-00 (Wave 0); consumed in
+   * Plan 18-02 by the V2 `notify(ctx, pi, message)` calls below to drive
+   * the single per-invocation soft-dep probe (D-16-14) -- even though
+   * mp-level rows never inject soft-dep markers (D-16-15), the probe is
+   * threaded through every notify() entry for invariant symmetry.
    */
   readonly pi: ExtensionAPI;
   /** When undefined, flip every marketplace in target scope(s). */
@@ -77,7 +91,7 @@ function shouldCollectNotFound(opts: AutoupdateOptions, err: unknown): boolean {
   return opts.name !== undefined && err instanceof MarketplaceNotFoundError;
 }
 
-interface AutoupdateRowInput {
+interface AutoupdateFlipRow {
   readonly name: string;
   readonly scope: Scope;
   readonly alreadyMatching: boolean;
@@ -86,7 +100,7 @@ interface AutoupdateRowInput {
 function missingEverywhere(
   opts: AutoupdateOptions,
   result: {
-    readonly rows: readonly AutoupdateRowInput[];
+    readonly rows: readonly AutoupdateFlipRow[];
     readonly errors: readonly unknown[];
     readonly scopes: readonly Scope[];
   },
@@ -98,31 +112,10 @@ function missingEverywhere(
   );
 }
 
-/**
- * CMC-33: build a `MarketplaceRow` for one autoupdate outcome. The
- * marker IS the outcome (no `(<status>)` token); `{already enabled}`
- * / `{already disabled}` reasons attach on idempotent flips per the
- * catalog at docs/output-catalog.md:700-709.
- */
-function buildAutoupdateRow(input: AutoupdateRowInput, enable: boolean): MarketplaceRow {
-  const marker: "autoupdate" | "no autoupdate" = enable ? "autoupdate" : "no autoupdate";
-  return {
-    kind: "marketplace",
-    name: input.name,
-    scope: input.scope,
-    outcomeClass: "ok",
-    marker,
-    // status intentionally omitted -- CMC-33 marker-as-outcome form.
-    ...(input.alreadyMatching && {
-      reasons: [enable ? ("already enabled" as const) : ("already disabled" as const)],
-    }),
-  };
-}
-
 export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise<void> {
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
 
-  const rows: AutoupdateRowInput[] = [];
+  const rows: AutoupdateFlipRow[] = [];
   const errors: { scope: Scope; cause: unknown }[] = [];
 
   for (const scope of scopes) {
@@ -147,7 +140,26 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
       // lives in the OTHER scope; we collect and only surface if BOTH
       // scopes failed AND no flips happened anywhere.
       if (!shouldCollectNotFound(opts, err)) {
-        notifyError(opts.ctx, errorMessage(err), err);
+        // NotificationMessage construction recipe -- see add.ts:160-169
+        // for the Wave 1 pilot recipe; this file uses statuses
+        // [autoupdate enabled, autoupdate disabled, skipped, failed] per
+        // D-18-05. Failure path: status: "failed" + empty plugins[];
+        // severity is computed by notify() to "error" (D-16-11). The
+        // underlying `err` is intentionally not surfaced as a cause chain
+        // -- V2 confines `cause?: Error` to plugin-level variants per
+        // D-16-08; the catalog `failure-not-found` fixture asserts the
+        // rendered byte form only (mp name + scope + `(failed)`).
+        const failureName = opts.name ?? "(unknown)";
+        notify(opts.ctx, opts.pi, {
+          marketplaces: [
+            {
+              name: failureName,
+              scope,
+              status: "failed",
+              plugins: [],
+            },
+          ],
+        });
         return;
       }
 
@@ -157,38 +169,70 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
 
   // If a single-name flip was requested but the name was missing
   // from EVERY iterated scope (no row accumulated and every scope
-  // errored), surface as a single error.
+  // errored), surface as a single failure marketplace row.
   if (missingEverywhere(opts, { rows, errors, scopes })) {
     const first = errors[0];
     if (first !== undefined) {
-      notifyError(opts.ctx, errorMessage(first.cause), first.cause);
+      // Construction recipe -- failure path; see comments above the
+      // per-scope failure notify() and the recipe block at the end of
+      // this function for the full Wave 2 mirror template.
+      const failureName = opts.name ?? "(unknown)";
+      notify(opts.ctx, opts.pi, {
+        marketplaces: [
+          {
+            name: failureName,
+            scope: first.scope,
+            status: "failed",
+            plugins: [],
+          },
+        ],
+      });
     }
 
     return;
   }
 
-  // CMC-10: bare form across both empty scopes -- EmptyToken row.
+  // D-16-17: empty marketplaces[] -> notify() emits the `(no marketplaces)`
+  // sentinel verbatim. No orchestrator-side composition.
   if (rows.length === 0) {
-    notifySuccess(
-      opts.ctx,
-      renderRow({ kind: "empty", token: "no marketplaces" }, MARKETPLACE_LABEL_PROBE),
-    );
+    notify(opts.ctx, opts.pi, { marketplaces: [] });
     return;
   }
 
-  // CMC-33: compose per-marketplace rows. Sort alphabetical by name for
-  // deterministic output (Open Question 2 carry-forward); same-name
-  // entries across scopes tie-break by scope via the row construction
-  // order (project enumerated before user when both are iterated -- the
-  // outer `scopes` loop order). The renderer's MSG-GR-3 sort comparator
-  // is NOT applied here because the autoupdate result block is a
-  // per-call result list, not the marketplace-list surface; alphabetical
-  // by name is the established autoupdate-result ordering.
-  const sorted = [...rows].sort((a, b) =>
-    a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
-  );
-  const lines = sorted.map((row) =>
-    renderRow(buildAutoupdateRow(row, opts.enable), MARKETPLACE_LABEL_PROBE),
-  );
-  notifySuccess(opts.ctx, lines.join("\n"));
+  // NotificationMessage construction recipe (mirror of add.ts:160-169
+  // pilot; Plan 18-02 substitutes the mp.status discriminator for the 4
+  // Phase-17.1 autoupdate states).
+  // - One MarketplaceNotificationMessage per outcome, emitted via ONE
+  //   notify(opts.ctx, opts.pi, ...) call; `plugins: []` is required.
+  // - Discriminator here: mp.status drawn from
+  //   { "autoupdate enabled", "autoupdate disabled", "skipped" } per
+  //   D-18-05; idempotent flips additionally carry
+  //   `reasons: ["already enabled" | "already disabled"]`.
+  // - Severity (info / warning) and `/reload to pick up changes` are
+  //   computed by notify() per D-16-11 + D-16-12; callers MUST NOT compose.
+  // - D-16-06: caller-order honored end-to-end -- the SC-6 scopes-loop
+  //   order is the visible iteration order. NO alphabetic sort here.
+  // - Reference: catalog UAT fixtures `enable-fresh`, `disable-fresh`,
+  //   `enable-idempotent`, `disable-idempotent` at
+  //   tests/architecture/catalog-uat.test.ts:1239-1283.
+  const marketplaces: MarketplaceNotificationMessage[] = rows.map((row) => {
+    if (row.alreadyMatching) {
+      return {
+        name: row.name,
+        scope: row.scope,
+        status: "skipped",
+        reasons: [opts.enable ? "already enabled" : "already disabled"],
+        plugins: [],
+      };
+    }
+
+    return {
+      name: row.name,
+      scope: row.scope,
+      status: opts.enable ? "autoupdate enabled" : "autoupdate disabled",
+      plugins: [],
+    };
+  });
+
+  notify(opts.ctx, opts.pi, { marketplaces });
 }

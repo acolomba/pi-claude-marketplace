@@ -141,18 +141,23 @@ test("bootstrap (clean state): adds marketplace + enables autoupdate; two notifi
     assert.equal(recorded.scope, "user");
     assert.equal(recorded.autoupdate, true);
 
-    // Exactly two notifications in order. Plan 18-01 (Rule 3 deviation):
-    // bootstrap composes `addMarketplace` which now emits the V2 catalog
-    // `(added)` shape (`<autoupdate>` marker moved off this surface; the
-    // `/reload to pick up changes` trailer fires per D-16-12). The second
-    // notification (from `setMarketplaceAutoupdate`, still V1) keeps its
-    // V1 marker-as-outcome shape until Plan 18-02 migrates autoupdate.ts.
+    // Exactly two notifications in order. Plan 18-02 (Rule 3 deviation):
+    // bootstrap composes `setMarketplaceAutoupdate` which now emits the
+    // V2 catalog `(autoupdate enabled)` shape with the
+    // `/reload to pick up changes` trailer per D-16-12 (the V1
+    // marker-as-outcome `<autoupdate>` shape is retired here per
+    // D-17.1-01 / D-18-04). `addMarketplace` was already on V2 from
+    // Plan 18-01; both inherited bytes now match the catalog UAT
+    // fixtures.
     assert.equal(notifications.length, 2);
     assert.equal(
       notifications[0]?.message,
       "● claude-plugins-official [user] (added)\n\n/reload to pick up changes",
     );
-    assert.equal(notifications[1]?.message, "● claude-plugins-official [user] <autoupdate>");
+    assert.equal(
+      notifications[1]?.message,
+      "● claude-plugins-official [user] (autoupdate enabled)\n\n/reload to pick up changes",
+    );
     // Clone happened exactly once on the clean path.
     assert.equal(gitState.cloneCalls.length, 1);
     assert.equal(
@@ -188,12 +193,14 @@ test("bootstrap (already bootstrapped): swallows duplicate-name, reports idempot
     const after = await loadState(userLocations.extensionRoot);
     assert.deepEqual(after, before);
     // Exactly one notification: the idempotent autoupdate report.
-    // CMC-33 compact form: marker + `{already enabled}` reason.
+    // Plan 18-02: V2 catalog form -- `(skipped)` token + `{already
+    // enabled}` reason; severity warning per D-18-05 ladder.
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]?.message,
-      "● claude-plugins-official [user] <autoupdate> {already enabled}",
+      "● claude-plugins-official [user] (skipped) {already enabled}",
     );
+    assert.equal(notifications[0]?.severity, "warning");
     // No `(added)` row in this run.
     assert.equal(
       notifications.some((n) => n.message.includes("(added)")),
@@ -223,8 +230,12 @@ test("bootstrap (half-configured: autoupdate off): swallows duplicate-name, flip
     const after = await loadState(userLocations.extensionRoot);
     assert.equal(after.marketplaces["claude-plugins-official"]?.autoupdate, true);
     assert.equal(notifications.length, 1);
-    // CMC-33: marker-as-outcome enable result.
-    assert.equal(notifications[0]?.message, "● claude-plugins-official [user] <autoupdate>");
+    // Plan 18-02: V2 catalog form -- `(autoupdate enabled)` token plus
+    // reload-hint trailer per D-16-12.
+    assert.equal(
+      notifications[0]?.message,
+      "● claude-plugins-official [user] (autoupdate enabled)\n\n/reload to pick up changes",
+    );
     // No `(added)` row in this run.
     assert.equal(
       notifications.some((n) => n.message.includes("(added)")),
