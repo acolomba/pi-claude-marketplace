@@ -432,7 +432,7 @@ test("importClaudeSettings catches unexpected installPlugin throws and surfaces 
   // executeScopedPlan try/catch MUST (a) keep iterating the per-plugin loop,
   // (b) record the throw in result.unexpectedPluginFailures matching the
   // dispatchFailedOutcome shape, and (c) leave the final notify() at
-  // importClaudeSettings:787 to fire exactly once with the cascade row.
+  // the final notify() at the end of importClaudeSettings to fire exactly once with the cascade row.
   const { ctx, pi, notifications } = makeCtx();
   const attempted: string[] = [];
 
@@ -485,19 +485,19 @@ test("importClaudeSettings catches unexpected installPlugin throws and surfaces 
   assert.deepEqual(attempted, ["before", "boom", "after"]);
 
   // (2) catch handler pushed the discriminated entry matching
-  // dispatchFailedOutcome's shape (execute.ts:737-745).
+  // dispatchFailedOutcome's shape (the catch arm in executeScopedPlan's pluginsToInstall loop).
   assert.equal(result.unexpectedPluginFailures.length, 1);
   assert.equal(result.unexpectedPluginFailures[0]?.plugin, "boom");
   assert.equal(result.unexpectedPluginFailures[0]?.reason, "unexpected-failure");
   assert.equal(result.unexpectedPluginFailures[0]?.cause, "simulated host crash");
 
-  // (3) final notify() at importClaudeSettings:787 fired exactly once;
+  // (3) final notify() at the end of importClaudeSettings fired exactly once;
   // severity routes to "error" per D-16-11 (cascade contains a failed row).
   assert.equal(notifications.length, 1);
   assert.equal(notifications[0]?.severity, "error");
 
   // (4) unexpectedPluginFailures round-trips through
-  // buildImportNotificationMarketplaces (execute.ts:457-465) to the V2
+  // buildImportNotificationMarketplaces (the V2 cascade builder in execute.ts) to the V2
   // PluginFailedMessage {not in manifest} row; the two surrounding plugins
   // STILL render as (installed), proving loop-continuation end-to-end.
   const message = notifications[0]?.message ?? "";

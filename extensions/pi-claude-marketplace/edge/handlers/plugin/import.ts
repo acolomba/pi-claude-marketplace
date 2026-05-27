@@ -49,17 +49,18 @@ export function makeImportHandler(
       selectedScopes: parsed.scope === undefined ? ["project", "user"] : [parsed.scope],
       gitOps: deps.gitOps,
     });
-    // No try/catch: importClaudeSettings wraps loadState (execute.ts:518-528),
-    // addMarketplace (execute.ts:577-608), and installPlugin (Plan 20-05
-    // WR-02 gap closure) per-scope; expected installPlugin failures already
-    // route through the discriminated {status: "failed"} return. With WR-02
-    // in place, unexpected installPlugin throws are ALSO caught and routed
-    // to result.unexpectedPluginFailures; the per-scope loop continues and
-    // the final notify() emission still fires. Only uncaught throws from
-    // the inline cascade builder (buildImportNotificationMarketplaces) or
-    // from code paths NOT covered by these wraps would abort the loop --
-    // per D-20-03 such catastrophic throws bubble to Pi runtime where a
-    // stack trace is more useful than a polished message that masks the
-    // bug.
+    // No try/catch: importClaudeSettings wraps loadState (in executeScopedPlan's
+    // state-load try block), addMarketplace (in executeScopedPlan's
+    // marketplacesToEnsure loop), and installPlugin (in executeScopedPlan's
+    // pluginsToInstall loop, per Plan 20-05 WR-02 gap closure) per-scope;
+    // expected installPlugin failures already route through the discriminated
+    // {status: "failed"} return. With WR-02 in place, unexpected installPlugin
+    // throws are ALSO caught and routed to result.unexpectedPluginFailures; the
+    // per-scope loop continues and the final notify() at the end of
+    // importClaudeSettings still fires. Only uncaught throws from the inline
+    // cascade builder (buildImportNotificationMarketplaces) or from code paths
+    // NOT covered by these wraps would abort the loop -- per D-20-03 such
+    // catastrophic throws bubble to Pi runtime where a stack trace is more
+    // useful than a polished message that masks the bug.
   };
 }

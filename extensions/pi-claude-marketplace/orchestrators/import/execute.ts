@@ -641,7 +641,7 @@ async function executeScopedPlan(
     // WR-02 (gap closure, Plan 20-05): catch unexpected installPlugin throws
     // and route them to result.unexpectedPluginFailures matching
     // dispatchFailedOutcome's shape; per-scope loop continues and the final
-    // notify() at importClaudeSettings:787 still fires.
+    // notify() at the end of importClaudeSettings still fires.
     let outcome: InstallPluginOutcome;
     try {
       outcome = await installPlugin({
