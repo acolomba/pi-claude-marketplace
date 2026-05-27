@@ -727,7 +727,6 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     const failureMessage = composeInstallFailureMessage({
       err,
       plugin,
-      marketplace,
       scope,
       version: failureVersion,
       rolledBackPartial,
@@ -973,10 +972,19 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
  * The narrowed `cause?: Error` field on failure variants is populated
  * only when `err instanceof Error` (defensive against non-Error throws).
  */
+// WR-04: `marketplace` removed from the args type. The pre-fix signature
+// accepted `marketplace: string` but never read it -- the destructuring
+// at the function body omitted it and no usage referenced
+// `args.marketplace`. The caller silently dropped the value, leaving no
+// compile-time gate against a future refactor that would expect the
+// marketplace name to participate in the cause-chain trailer (e.g. to
+// disambiguate a same-named plugin across marketplaces) and would
+// silently use stale data. If the marketplace becomes needed for future
+// cause-chain composition, add it back here with a comment marking the
+// dependency.
 function composeInstallFailureMessage(args: {
   err: unknown;
   plugin: string;
-  marketplace: string;
   scope: Scope;
   version: string | undefined;
   rolledBackPartial: boolean;
