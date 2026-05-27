@@ -308,7 +308,7 @@ Plans:
 3. Catalog UAT byte-equality is GREEN for every plugin-family command output (single-plugin install with the new marketplace header + indented row shape, bulk cascades, manual-recovery rows, rollback-partial sub-state, per-plugin cause chains in multi-failure cascades) against the v2.0 spec.
 4. `npm run check` stays GREEN; no edge handlers have changed call-site shape.
 
-**Plans:** 1/6 plans executed
+**Plans:** 5/6 plans executed
 
 Plans:
 
@@ -318,10 +318,10 @@ Plans:
 
 **Wave 2** *(parallel migrations -- depend on Wave 1)*
 
-- [ ] 19-02-PLAN.md -- Migrate `orchestrators/plugin/install.ts` (8 V1 callsites: 3 migrated, 5 DROPPED per D-19-01); retire `composeRollbackPartialBody` per D-19-03; thread `RollbackPartial.cause` directly per RESEARCH Finding 1
-- [ ] 19-03-PLAN.md -- Migrate `orchestrators/plugin/list.ts` (3 V1 callsites: 2 migrated, 1 DROPPED per D-19-01); remove `PROBE_FAILURES` module-level capture-buffer + drain entirely
-- [ ] 19-04-PLAN.md -- Migrate `orchestrators/plugin/reinstall.ts` (7 V1 callsites + dispatch ternary + 2 cascadeSummary calls: 5 migrated, 2 DROPPED per D-19-01); retire 2 cascadeSummary calls per D-19-02; fold manual-recovery anchor into cascade plugins[] as PluginManualRecoveryMessage variant
-- [ ] 19-05-PLAN.md -- Migrate `orchestrators/plugin/update.ts` (7 V1 callsites + dispatch ternary + 1 cascadeSummary call: 6 migrated, 1 DROPPED per D-19-01); retire cascadeSummary at line 929 per D-19-02; PluginUpdatedMessage with required from/to per D-15-04 (RESEARCH Finding 3 corrects CONTEXT line-attribution for the 4 direct-path failures)
+- [x] 19-02-PLAN.md -- Migrate `orchestrators/plugin/install.ts` (8 V1 callsites: 3 migrated, 5 DROPPED per D-19-01); retire `composeRollbackPartialBody` per D-19-03; thread `RollbackPartial.cause` directly per RESEARCH Finding 1
+- [x] 19-03-PLAN.md -- Migrate `orchestrators/plugin/list.ts` (3 V1 callsites: 2 migrated, 1 DROPPED per D-19-01); remove `PROBE_FAILURES` module-level capture-buffer + drain entirely
+- [x] 19-04-PLAN.md -- Migrate `orchestrators/plugin/reinstall.ts` (7 V1 callsites + dispatch ternary + 2 cascadeSummary calls: 5 migrated, 2 DROPPED per D-19-01); retire 2 cascadeSummary calls per D-19-02; fold manual-recovery anchor into cascade plugins[] as PluginManualRecoveryMessage variant
+- [x] 19-05-PLAN.md -- Migrate `orchestrators/plugin/update.ts` (7 V1 callsites + dispatch ternary + 1 cascadeSummary call: 6 migrated, 1 DROPPED per D-19-01); retire cascadeSummary at line 929 per D-19-02; PluginUpdatedMessage with required from/to per D-15-04 (RESEARCH Finding 3 corrects CONTEXT line-attribution for the 4 direct-path failures)
 
 **Wave 3** *(lint narrowing + final gate -- depends on all of Wave 2)*
 
@@ -381,6 +381,6 @@ Plans:
 | 17.1. V2 Grammar Amendment: Autoupdate Surface (INSERTED)            | v1.4      | 4/4 | Complete   | 2026-05-26 |
 | 17.2. renderScopeBracket orphan-fold contract fix (INSERTED)         | v1.4      | 4/4 | Complete    | 2026-05-26 |
 | 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 7/7 | Complete    | 2026-05-27 |
-| 19. Migration Wave 2 -- Plugin Orchestrator Family                   | v1.4      | 1/6 | In Progress|  |
+| 19. Migration Wave 2 -- Plugin Orchestrator Family                   | v1.4      | 5/6 | In Progress|  |
 | 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 0/?            | Not started | --         |
 | 21. Final Teardown & GREEN Gate                                      | v1.4      | 0/?            | Not started | --         |
