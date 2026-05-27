@@ -181,14 +181,21 @@ export default tseslint.config(
     // for its `selectedScopes` argument, contradicting the project-first
     // contract enforced everywhere else. The canonical comparator in
     // `presentation/sort.ts` remains outside the detection glob.
+    //
+    // IN-06: `orchestrators/plugin/**` is NOT ignored here even though the
+    // Wave 2 V1->V2 migration retired the severity-named notify wrappers
+    // that MSG-Block 1 (routing rules) check for. The project-first
+    // iteration discipline enforced by MSG-GR-3 is independent of the
+    // V1 wrapper migration -- a new helper in `orchestrators/plugin/`
+    // that constructs `["user", "project"]` for its iteration order
+    // should still get a lint warning. The ignore list below mirrors
+    // MSG-Block 1 (orchestrators/marketplace/**) but does NOT ignore
+    // orchestrators/plugin/**.
     files: [
       "extensions/pi-claude-marketplace/orchestrators/**/*.ts",
       "extensions/pi-claude-marketplace/edge/handlers/**/*.ts",
     ],
-    ignores: [
-      "extensions/pi-claude-marketplace/orchestrators/marketplace/**",
-      "extensions/pi-claude-marketplace/orchestrators/plugin/**",
-    ],
+    ignores: ["extensions/pi-claude-marketplace/orchestrators/marketplace/**"],
     plugins: { msg: msgPlugin },
     rules: {
       "msg/msg-gr-3-per-scope": "error",
