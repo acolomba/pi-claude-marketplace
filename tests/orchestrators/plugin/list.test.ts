@@ -34,6 +34,7 @@ import test from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
+  __test_narrowListFailReason,
   __test_narrowProbeError,
   listPlugins,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
@@ -691,6 +692,47 @@ test("260525-cjr A3: narrowProbeError -> generic Error falls through to `unreada
 // straightforward pass-through. The pre-fix call site is documented in
 // the commit message; the binding contract is that `narrowProbeError`
 // returns the closed-set Reason the user sees on the row.
+
+// ──────────────────────────────────────────────────────────────────────────
+// WR-03: narrowListFailReason -- dedicated narrower for orchestrator-level
+// list failures (loadState / cross-scope walk throws). Distinct from
+// narrowProbeError (per-row resolver probe failures). Mirrors the same
+// classifier ladder so the test ergonomics carry over.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WR-03: narrowListFailReason -> EACCES classifies as `permission denied`", () => {
+  const err = new Error("EACCES: permission denied, open '/foo/state.json'");
+  (err as NodeJS.ErrnoException).code = "EACCES";
+  assert.equal(__test_narrowListFailReason(err), "permission denied");
+});
+
+test("WR-03: narrowListFailReason -> EPERM also classifies as `permission denied`", () => {
+  const err = new Error("EPERM");
+  (err as NodeJS.ErrnoException).code = "EPERM";
+  assert.equal(__test_narrowListFailReason(err), "permission denied");
+});
+
+test("WR-03: narrowListFailReason -> ENOENT classifies as `source missing`", () => {
+  const err = new Error("ENOENT");
+  (err as NodeJS.ErrnoException).code = "ENOENT";
+  assert.equal(__test_narrowListFailReason(err), "source missing");
+});
+
+test("WR-03: narrowListFailReason -> SyntaxError classifies as `unparseable`", () => {
+  const err = new SyntaxError("Unexpected token } in JSON at position 7");
+  assert.equal(__test_narrowListFailReason(err), "unparseable");
+});
+
+test("WR-03: narrowListFailReason -> generic Error falls through to `unreadable`", () => {
+  const err = new Error("something went wrong loading state");
+  assert.equal(__test_narrowListFailReason(err), "unreadable");
+});
+
+test("WR-03: narrowListFailReason -> non-Error throw falls through to `unreadable`", () => {
+  assert.equal(__test_narrowListFailReason("string throw"), "unreadable");
+  assert.equal(__test_narrowListFailReason(42), "unreadable");
+  assert.equal(__test_narrowListFailReason(undefined), "unreadable");
+});
 
 // ──────────────────────────────────────────────────────────────────────────
 // Source-grep self-tests (NFR-5 / PI-2 / PL-3 defense-in-depth)

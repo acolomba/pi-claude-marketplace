@@ -771,6 +771,42 @@ function sortPluginsInBlock(
 }
 
 /**
+ * WR-03: dedicated closed-set Reason narrower for orchestrator-level list
+ * failures. Mirrors the `update.ts::narrowDirectFailReason` precedent:
+ * errno-bearing FS errors map to the closed Reason that names the cause
+ * class (`permission denied` / `source missing`); `SyntaxError` maps to
+ * `unparseable` (state.json schema validation throws or JSON.parse
+ * failures); the permissive fallback is `unreadable`.
+ *
+ * Distinct from `narrowProbeError`: that helper classifies per-row
+ * resolver probe failures (NOT orchestrator-level list failures). Using
+ * `narrowProbeError` for the catch path conflated two failure surfaces --
+ * a `loadState` permission error here would surface as `{unreadable}`
+ * which semantically describes a resolver probe failure, not a list
+ * orchestration failure. The narrower here returns closed-set Reasons
+ * accurate to the list-orchestration failure modes (loadState /
+ * loadManifest / cross-scope walk throws).
+ */
+function narrowListFailReason(err: unknown): ListReason {
+  if (err instanceof SyntaxError) {
+    return "unparseable";
+  }
+
+  if (err instanceof Error) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EACCES" || code === "EPERM") {
+      return "permission denied";
+    }
+
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return "source missing";
+    }
+  }
+
+  return "unreadable";
+}
+
+/**
  * D-06 orchestrator entrypoint. Read-only listing of plugins. Constructs
  * the V2 `NotificationMessage` payload inline and forwards it to a single
  * `notify(ctx, pi, message)` call per orchestration arm (success or
@@ -801,15 +837,33 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
     // computed as "error" by notify() per D-16-11 (any failed plugin row
     // -> error); no reload-hint per D-16-12 (failed is not in the
     // state-changing variant set).
+    //
+    // WR-03: use the dedicated `narrowListFailReason` instead of
+    // `narrowProbeError`. The two failure surfaces have different
+    // semantics -- `narrowProbeError` classifies per-row resolver probe
+    // failures (where `unreadable` means "we could not read the plugin
+    // source"); `narrowListFailReason` classifies list-orchestration
+    // failures (where `unreadable` means "we could not load state.json
+    // or walk the marketplace records"). Both share the closed-set
+    // `ListReason` codomain so the renderer accepts the result unchanged.
     const cause = err instanceof Error ? err : new Error(errorMessage(err));
     const failedRow: PluginFailedMessage = {
       status: "failed",
-      name: "list",
-      reasons: [narrowProbeError(err)],
+      name: SYNTHETIC_LIST_FAILURE_PLUGIN_NAME,
+      reasons: [narrowListFailReason(err)],
       cause,
     };
     const mp: MarketplaceNotificationMessage = {
-      name: "(list)",
+      // WR-03: the V1 synthetic marketplace name `"(list)"` rendered as
+      // `● (list) [user]` -- visually indistinguishable from a real
+      // marketplace called "(list)". The current
+      // `MarketplaceNotificationMessage` shape does not support a
+      // failure-trailer channel separate from the marketplace-row form,
+      // so keep the synthetic placeholder but use a more conspicuously-
+      // synthetic name (mirrors the `(reinstall)` / `(targets)` precedent
+      // in reinstall.ts / update.ts). The cause-chain trailer carries
+      // the actual diagnostic text via the failedRow's `cause` field.
+      name: SYNTHETIC_LIST_FAILURE_MARKETPLACE_NAME,
       scope: opts.scope ?? "user",
       plugins: [failedRow],
     };
@@ -817,8 +871,20 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
   }
 }
 
+/**
+ * WR-03: synthetic identities used by the list-orchestration catch path.
+ * Held as module-level constants so tests can assert against them and
+ * future changes are gated behind a single edit point. Both render under
+ * the V2 cascade grammar as parens-wrapped tokens -- the renderer does
+ * not special-case parens, so the visual marker reads as "synthetic
+ * placeholder" to an operator scanning output.
+ */
+const SYNTHETIC_LIST_FAILURE_MARKETPLACE_NAME = "(list)";
+const SYNTHETIC_LIST_FAILURE_PLUGIN_NAME = "(list)";
+
 // Test-only re-export. Mirrors the `__test_classifyEntityShapeError` /
 // `__test_classifyInstallFailure` precedent in `install.ts`: the helper
 // is file-private but its classification table is the load-bearing
 // contract that callers (and the user) rely on.
 export { narrowProbeError as __test_narrowProbeError };
+export { narrowListFailReason as __test_narrowListFailReason };
