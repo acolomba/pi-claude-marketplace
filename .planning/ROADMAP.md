@@ -343,7 +343,21 @@ Plans:
 4. Catalog UAT byte-equality is GREEN for every edge-handler output and every usage-error output against the v2.0 spec.
 5. `npm run check` stays GREEN.
 
-**Plans:** TBD
+**Plans:** 4 plans across 3 waves
+
+**Wave 1** *(mechanical sweep -- low risk; atomic single commit)*
+
+- [ ] 20-01-usage-error-signature-sweep-PLAN.md -- Migrate all 30 V1 3-arg `notifyUsageError(ctx, msg, USAGE)` callsites across 13 production edge files (router + plugin/shared + 5 marketplace handlers + 6 plugin handlers) to V2 1-arg `notifyUsageError(ctx, { message: msg, usage })`; preserve mixed `notifyError, notifyUsageError` imports in bootstrap.ts + import.ts (Plan 20-03 drops them with catch-alls) (SNM-23; D-20-01, D-20-04, D-20-06)
+
+**Wave 2** *(parallel-safe migrations -- depend on Wave 1; disjoint files per D-20-05)*
+
+- [ ] 20-02-import-cascade-migration-PLAN.md -- Migrate `orchestrators/import/execute.ts` cascade: retire `composeImportSummary` + `formatClaudeImportSummary` + `spliceSourceMismatchDiagnostics` + `orphanDiagnosticLines` + V1 PREAMBLE; DROP outer try/catch + line-1001 catastrophic-error per A3 default; REPLACE line-1018 dispatch ternary with single V2 `notify(opts.ctx, opts.pi, { marketplaces })` constructing payload inline; locked A1-A3 mappings (DROP marketplace-failed/unmappable warnings, orphan diagnostics, "Already up to date" notice); rewrite tests/orchestrators/import/execute.test.ts to V2 byte-exact via makeCtx() (D-20-02, D-20-05, D-19-02 strict mirror)
+- [ ] 20-03-edge-handler-catchall-drop-PLAN.md -- DROP 2 V1 `notifyError` catch-all wrappers in `edge/handlers/plugin/bootstrap.ts:57-66` + `edge/handlers/plugin/import.ts:40-50` (truly catastrophic throws bubble to Pi runtime per D-20-03); clean `notifyError` + `errorMessage` imports from both files; DELETE catch-all test at `tests/edge/handlers/import.test.ts:111-123` outright per D-19-01 (D-20-03, D-20-05, D-20-06)
+
+**Wave 3** *(lint narrowing + final gate -- depends on all of Wave 2)*
+
+- [ ] 20-04-lint-narrow-orchestrators-import-PLAN.md -- Add `"extensions/pi-claude-marketplace/orchestrators/import/**"` to MSG-Block 1's `ignores: [...]` array in `eslint.config.js` per D-20-07; MSG-Block 1b STAYS unchanged per IN-06 in-file rationale (MSG-GR-3 iteration discipline is V1-wrapper-INDEPENDENT); Blocks 2-6 STAY unchanged (orthogonal); final end-to-end SC #1..#5 verification (D-20-07)
+
 
 ### Phase 21: Final Teardown & GREEN Gate
 
@@ -382,5 +396,5 @@ Plans:
 | 17.2. renderScopeBracket orphan-fold contract fix (INSERTED)         | v1.4      | 4/4 | Complete    | 2026-05-26 |
 | 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 7/7 | Complete    | 2026-05-27 |
 | 19. Migration Wave 2 -- Plugin Orchestrator Family                   | v1.4      | 6/6 | Complete    | 2026-05-27 |
-| 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 0/?            | Not started | --         |
+| 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 0/4 | Planned     | --         |
 | 21. Final Teardown & GREEN Gate                                      | v1.4      | 0/?            | Not started | --         |
