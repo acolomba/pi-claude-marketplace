@@ -15,24 +15,27 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 interface NotifyRecord {
   message: string;
   severity?: string;
 }
 
-function makeCtx(): { ctx: ExtensionContext; notifications: NotifyRecord[] } {
+function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: NotifyRecord[] } {
   const notifications: NotifyRecord[] = [];
+  // Plan 18-00: `pi` required on AutoupdateOptions; mirror production
+  // wiring shape (D-18-06 preserved).
+  const pi = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
   const ctx = {
     ui: {
       notify: (m: string, s?: string): void => {
         notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
       },
     },
-    pi: { getAllTools: (): unknown[] => [] },
+    pi,
   } as unknown as ExtensionContext;
-  return { ctx, notifications };
+  return { ctx, pi, notifications };
 }
 
 async function withHermeticHome<T>(
@@ -83,8 +86,8 @@ test("MAU-1 / CMC-33: enable=true on a single marketplace flips false->true and 
       marketplaces: { mp: makeMarketplaceRecord("mp", "project", cwd, false) },
     });
 
-    const { ctx, notifications } = makeCtx();
-    await setMarketplaceAutoupdate({ ctx, name: "mp", enable: true, scope: "project", cwd });
+    const { ctx, pi, notifications } = makeCtx();
+    await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: true, scope: "project", cwd });
 
     const after = await loadState(locations.extensionRoot);
     assert.equal(after.marketplaces["mp"]!.autoupdate, true);
@@ -101,8 +104,8 @@ test("MAU-1 / CMC-33: enable=false flips true->false and emits `● <mp> [<scope
       schemaVersion: 1,
       marketplaces: { mp: makeMarketplaceRecord("mp", "project", cwd, true) },
     });
-    const { ctx, notifications } = makeCtx();
-    await setMarketplaceAutoupdate({ ctx, name: "mp", enable: false, scope: "project", cwd });
+    const { ctx, pi, notifications } = makeCtx();
+    await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: false, scope: "project", cwd });
     const after = await loadState(locations.extensionRoot);
     assert.equal(after.marketplaces["mp"]!.autoupdate, false);
     assert.equal(notifications[0]!.message, "● mp [project] <no autoupdate>");
@@ -117,8 +120,8 @@ test("MAU-3 / CMC-33: idempotent -- already-true + enable=true emits marker + `{
       schemaVersion: 1,
       marketplaces: { mp: makeMarketplaceRecord("mp", "project", cwd, true) },
     });
-    const { ctx, notifications } = makeCtx();
-    await setMarketplaceAutoupdate({ ctx, name: "mp", enable: true, scope: "project", cwd });
+    const { ctx, pi, notifications } = makeCtx();
+    await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: true, scope: "project", cwd });
     const after = await loadState(locations.extensionRoot);
     assert.equal(after.marketplaces["mp"]!.autoupdate, true);
     assert.equal(notifications[0]!.message, "● mp [project] <autoupdate> {already enabled}");
@@ -133,8 +136,8 @@ test("MAU-3 / CMC-33: idempotent -- already-false + enable=false emits `<no auto
       schemaVersion: 1,
       marketplaces: { mp: makeMarketplaceRecord("mp", "project", cwd, false) },
     });
-    const { ctx, notifications } = makeCtx();
-    await setMarketplaceAutoupdate({ ctx, name: "mp", enable: false, scope: "project", cwd });
+    const { ctx, pi, notifications } = makeCtx();
+    await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: false, scope: "project", cwd });
     assert.equal(notifications[0]!.message, "● mp [project] <no autoupdate> {already disabled}");
   });
 });
@@ -148,8 +151,8 @@ test("MAU-4: missing autoupdate field treated as false; enable=true flips it to 
       schemaVersion: 1,
       marketplaces: { mp: makeMarketplaceRecord("mp", "project", cwd) },
     });
-    const { ctx, notifications } = makeCtx();
-    await setMarketplaceAutoupdate({ ctx, name: "mp", enable: true, scope: "project", cwd });
+    const { ctx, pi, notifications } = makeCtx();
+    await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: true, scope: "project", cwd });
     const after = await loadState(locations.extensionRoot);
     assert.equal(after.marketplaces["mp"]!.autoupdate, true);
     assert.equal(notifications[0]!.message, "● mp [project] <autoupdate>");
@@ -164,8 +167,8 @@ test("MAU-4: missing autoupdate field treated as false; enable=false reports `{a
       schemaVersion: 1,
       marketplaces: { mp: makeMarketplaceRecord("mp", "project", cwd) },
     });
-    const { ctx, notifications } = makeCtx();
-    await setMarketplaceAutoupdate({ ctx, name: "mp", enable: false, scope: "project", cwd });
+    const { ctx, pi, notifications } = makeCtx();
+    await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: false, scope: "project", cwd });
     assert.equal(notifications[0]!.message, "● mp [project] <no autoupdate> {already disabled}");
   });
 });
@@ -182,8 +185,8 @@ test("MAU-2 / CMC-33: bare form flips every marketplace in scope; mixed changed 
         "to-flip": makeMarketplaceRecord("to-flip", "project", cwd, false),
       },
     });
-    const { ctx, notifications } = makeCtx();
-    await setMarketplaceAutoupdate({ ctx, enable: true, scope: "project", cwd });
+    const { ctx, pi, notifications } = makeCtx();
+    await setMarketplaceAutoupdate({ ctx, pi, enable: true, scope: "project", cwd });
 
     const after = await loadState(locations.extensionRoot);
     assert.equal(after.marketplaces["already"]!.autoupdate, true);
@@ -200,8 +203,8 @@ test("MAU-2 / CMC-33: bare form flips every marketplace in scope; mixed changed 
 
 test("CMC-10 + SC-6: bare form across both empty scopes succeeds with `(no marketplaces)` EmptyToken", async () => {
   await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx();
-    await setMarketplaceAutoupdate({ ctx, enable: true, cwd }); // no name, no scope
+    const { ctx, pi, notifications } = makeCtx();
+    await setMarketplaceAutoupdate({ ctx, pi, enable: true, cwd }); // no name, no scope
     assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });
@@ -214,8 +217,8 @@ test("Single-name flip across BOTH scopes when --scope omitted: flips in user sc
       schemaVersion: 1,
       marketplaces: { only: makeMarketplaceRecord("only", "user", cwd, false) },
     });
-    const { ctx, notifications } = makeCtx();
-    await setMarketplaceAutoupdate({ ctx, name: "only", enable: true, cwd });
+    const { ctx, pi, notifications } = makeCtx();
+    await setMarketplaceAutoupdate({ ctx, pi, name: "only", enable: true, cwd });
     // user-scope flip succeeded; project-scope MarketplaceNotFoundError was swallowed gracefully.
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.message, "● only [user] <autoupdate>");
@@ -239,8 +242,8 @@ test("single-name cross-scope flip surfaces state lock failures instead of repor
     });
 
     try {
-      const { ctx, notifications } = makeCtx();
-      await setMarketplaceAutoupdate({ ctx, name: "only", enable: true, cwd });
+      const { ctx, pi, notifications } = makeCtx();
+      await setMarketplaceAutoupdate({ ctx, pi, name: "only", enable: true, cwd });
 
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]!.severity, "error");
@@ -256,8 +259,8 @@ test("single-name cross-scope flip surfaces state lock failures instead of repor
 
 test("Single-name flip across BOTH scopes when name absent from BOTH scopes: surfaces error", async () => {
   await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx();
-    await setMarketplaceAutoupdate({ ctx, name: "absent-zzz-9999", enable: true, cwd });
+    const { ctx, pi, notifications } = makeCtx();
+    await setMarketplaceAutoupdate({ ctx, pi, name: "absent-zzz-9999", enable: true, cwd });
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
   });

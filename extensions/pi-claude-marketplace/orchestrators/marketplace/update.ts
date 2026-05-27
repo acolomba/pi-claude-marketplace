@@ -155,10 +155,15 @@ export interface UpdateMarketplaceOptions {
   readonly pluginUpdate?: PluginUpdateFn;
   /**
    * Soft-dep probe target. `pi.getAllTools()` is the source of truth
-   * for whether `pi-subagents` / `pi-mcp-adapter` are loaded. Optional
-   * because tests that don't care about RH-5 can omit it.
+   * for whether `pi-subagents` / `pi-mcp-adapter` are loaded. Plan 18-00
+   * (Wave 0) promoted this from optional `pi?` to required so the
+   * Wave 1/2 V1->V2 notify migration in Plan 18-05 has a non-null
+   * reference at every call site. The NULL_PROBE fallback below remains
+   * for now because the internal `refreshOneMarketplace` codepath still
+   * branches on `pi === undefined` (Plan 18-05 deletes the fallback once
+   * the V2 migration removes the last optional-pi reader).
    */
-  readonly pi?: ExtensionAPI;
+  readonly pi: ExtensionAPI;
 }
 
 export interface UpdateAllMarketplacesOptions {
@@ -167,7 +172,11 @@ export interface UpdateAllMarketplacesOptions {
   readonly cwd: string;
   readonly gitOps?: GitOps;
   readonly pluginUpdate?: PluginUpdateFn;
-  readonly pi?: ExtensionAPI;
+  /**
+   * See `UpdateMarketplaceOptions.pi` for the Plan 18-00 promotion
+   * rationale.
+   */
+  readonly pi: ExtensionAPI;
 }
 
 /** MU-1 single-name form. */
@@ -185,12 +194,12 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
 
   await refreshOneMarketplace({
     ctx: opts.ctx,
+    pi: opts.pi,
     name: opts.name,
     scope: resolved.scope,
     locations: resolved.locations,
     gitOps,
     ...(opts.pluginUpdate !== undefined && { pluginUpdate: opts.pluginUpdate }),
-    ...(opts.pi !== undefined && { pi: opts.pi }),
   });
 }
 
@@ -225,12 +234,12 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
   for (const t of targets) {
     await refreshOneMarketplace({
       ctx: opts.ctx,
+      pi: opts.pi,
       name: t.name,
       scope: t.scope,
       locations: t.locations,
       gitOps,
       ...(opts.pluginUpdate !== undefined && { pluginUpdate: opts.pluginUpdate }),
-      ...(opts.pi !== undefined && { pi: opts.pi }),
     });
   }
 }

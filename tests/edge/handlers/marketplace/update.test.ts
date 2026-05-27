@@ -17,7 +17,7 @@ import { makeMockGitOps } from "../../../helpers/git-mock.ts";
 
 import type { EdgeDeps } from "../../../../extensions/pi-claude-marketplace/edge/types.ts";
 import type { PluginUpdateOutcome } from "../../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
-import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
 interface NotifyRecord {
   message: string;
@@ -35,6 +35,15 @@ function makeCtx(cwd: string): { ctx: ExtensionCommandContext; notifications: No
     },
   } as unknown as ExtensionCommandContext;
   return { ctx, notifications };
+}
+
+// Plan 18-00 (Wave 0): `makeMarketplaceUpdateHandler(pi, deps)` requires
+// `pi` as first positional arg (the upstream orchestrator's `pi?` was
+// promoted to required `pi` in the same plan).
+function makePi(): ExtensionAPI {
+  return {
+    getAllTools: (): unknown[] => [],
+  } as unknown as ExtensionAPI;
 }
 
 function makeDeps(): { deps: EdgeDeps; pluginUpdateCalls: string[] } {
@@ -79,7 +88,7 @@ test("shim :: bare /marketplace update calls updateAllMarketplaces", async () =>
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
     const { deps } = makeDeps();
-    const handler = makeMarketplaceUpdateHandler(deps);
+    const handler = makeMarketplaceUpdateHandler(makePi(), deps);
     await handler("", ctx);
     // updateAllMarketplaces on fresh state -> "No marketplaces configured."
     assert.equal(notifications.length, 1);
@@ -93,7 +102,7 @@ test("shim :: named /marketplace update <name> calls updateMarketplace with name
   await withHermeticHome(async ({ cwd }) => {
     const { ctx } = makeCtx(cwd);
     const { deps } = makeDeps();
-    const handler = makeMarketplaceUpdateHandler(deps);
+    const handler = makeMarketplaceUpdateHandler(makePi(), deps);
     // updateMarketplace's `resolveScopeFromState` throws
     // MarketplaceNotFoundError when --scope is omitted and the name is
     // absent in BOTH scopes. The throw is NOT caught by the orchestrator
@@ -108,7 +117,7 @@ test("shim :: --scope user/project propagated", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
     const { deps } = makeDeps();
-    const handler = makeMarketplaceUpdateHandler(deps);
+    const handler = makeMarketplaceUpdateHandler(makePi(), deps);
     await handler("--scope project", ctx);
     // updateAllMarketplaces on project scope, empty -> "No marketplaces..."
     assert.equal(notifications.length, 1);
@@ -122,7 +131,7 @@ test("shim :: deps.pluginUpdate passed through to orchestrator for cascade", asy
   await withHermeticHome(async ({ cwd }) => {
     const { ctx } = makeCtx(cwd);
     const { deps, pluginUpdateCalls } = makeDeps();
-    const handler = makeMarketplaceUpdateHandler(deps);
+    const handler = makeMarketplaceUpdateHandler(makePi(), deps);
     // Empty state -> nothing to update -> pluginUpdate is never called (no
     // marketplaces with autoupdate=true). But the deps.pluginUpdate field
     // was structurally accepted -- the type-check that deps.pluginUpdate

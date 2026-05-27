@@ -26,24 +26,28 @@ import type {
   PluginUpdateOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 interface NotifyRecord {
   message: string;
   severity?: string;
 }
 
-function makeCtx(): { ctx: ExtensionContext; notifications: NotifyRecord[] } {
+function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: NotifyRecord[] } {
   const notifications: NotifyRecord[] = [];
+  // Plan 18-00: `pi` promoted from `pi?` to required on
+  // UpdateMarketplaceOptions / UpdateAllMarketplacesOptions; mirror
+  // production wiring shape (D-18-06 preserved).
+  const pi = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
   const ctx = {
     ui: {
       notify: (m: string, s?: string): void => {
         notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
       },
     },
-    pi: { getAllTools: (): unknown[] => [] },
+    pi,
   } as unknown as ExtensionContext;
-  return { ctx, notifications };
+  return { ctx, pi, notifications };
 }
 
 async function withHermeticHome<T>(
@@ -124,9 +128,9 @@ function makePluginRecord(): ExtensionState["marketplaces"][string]["plugins"][s
 
 test("CMC-10 + MU-1: bare form against empty scope succeeds with `(no marketplaces)` EmptyToken and NO reload hint", async () => {
   await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps } = makeMockGitOps();
-    await updateAllMarketplaces({ ctx, scope: "project", cwd, gitOps });
+    await updateAllMarketplaces({ ctx, pi, scope: "project", cwd, gitOps });
     assert.equal(notifications.length, 1);
     const first = notifications[0];
     assert.ok(first !== undefined);
@@ -140,12 +144,12 @@ test("CMC-10 + MU-1: bare form against empty scope succeeds with `(no marketplac
 test("MU-4 + D-14: github source refreshes via fetch+forceUpdateRef+checkout in that order", async () => {
   await withHermeticHome(async ({ cwd }) => {
     await seedGithubMarketplace({ cwd, name: "official", ref: "main" });
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps, state } = makeMockGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
     });
 
-    await updateMarketplace({ ctx, name: "official", scope: "project", cwd, gitOps });
+    await updateMarketplace({ ctx, pi, name: "official", scope: "project", cwd, gitOps });
 
     // D-14 sequence: fetch first, then forceUpdateRef, then checkout.
     assert.equal(state.fetchCalls.length, 1);
@@ -173,7 +177,7 @@ test("CR-01 / D-14 default-branch: forceUpdateRef target is refs/heads/<branch>,
   // ref argument, producing a meaningless `refs/<40-hex>` write.
   await withHermeticHome(async ({ cwd }) => {
     await seedGithubMarketplace({ cwd, name: "defaultbranch" });
-    const { ctx } = makeCtx();
+    const { ctx, pi } = makeCtx();
     const remoteSha = "abcdef000000000000000000000000000000000a";
     const { gitOps, state } = makeMockGitOps({
       remoteRefs: {
@@ -184,7 +188,7 @@ test("CR-01 / D-14 default-branch: forceUpdateRef target is refs/heads/<branch>,
       currentBranchOverride: "main",
     });
 
-    await updateMarketplace({ ctx, name: "defaultbranch", scope: "project", cwd, gitOps });
+    await updateMarketplace({ ctx, pi, name: "defaultbranch", scope: "project", cwd, gitOps });
 
     // currentBranch was consulted (CR-01 contract).
     assert.equal(state.currentBranchCalls.length, 1);
@@ -209,7 +213,7 @@ test("CR-01 / D-14 default-branch: detached HEAD -> checkout SHA directly, no fo
   // to advance. It checks out the remote SHA directly.
   await withHermeticHome(async ({ cwd }) => {
     await seedGithubMarketplace({ cwd, name: "detached" });
-    const { ctx } = makeCtx();
+    const { ctx, pi } = makeCtx();
     const remoteSha = "abcdef000000000000000000000000000000000b";
     const { gitOps, state } = makeMockGitOps({
       remoteRefs: {
@@ -219,7 +223,7 @@ test("CR-01 / D-14 default-branch: detached HEAD -> checkout SHA directly, no fo
       currentBranchOverride: null, // null = detached HEAD
     });
 
-    await updateMarketplace({ ctx, name: "detached", scope: "project", cwd, gitOps });
+    await updateMarketplace({ ctx, pi, name: "detached", scope: "project", cwd, gitOps });
 
     assert.equal(state.currentBranchCalls.length, 1);
     assert.equal(state.forceUpdateRefCalls.length, 0, "detached HEAD must NOT write local ref");
@@ -234,13 +238,13 @@ test("D-14: detached-HEAD path checks out SHA directly without forceUpdateRef", 
   await withHermeticHome(async ({ cwd }) => {
     const sha = "abcdef0000000000000000000000000000000002";
     await seedGithubMarketplace({ cwd, name: "pinned", ref: sha });
-    const { ctx } = makeCtx();
+    const { ctx, pi } = makeCtx();
     // Mock has the SHA available as a 40-char hex; resolveRef of
     // refs/remotes/origin/<sha> will throw (no such branch), forcing
     // the detached path.
     const { gitOps, state } = makeMockGitOps();
 
-    await updateMarketplace({ ctx, name: "pinned", scope: "project", cwd, gitOps });
+    await updateMarketplace({ ctx, pi, name: "pinned", scope: "project", cwd, gitOps });
 
     // forceUpdateRef should NOT have been called for detached-HEAD.
     assert.equal(state.forceUpdateRefCalls.length, 0);
@@ -255,12 +259,12 @@ test("D-14: detached-HEAD path checks out SHA directly without forceUpdateRef", 
 test("D-14: SHA-no-longer-exists (checkout throws) surfaces as notifyError with chained cause", async () => {
   await withHermeticHome(async ({ cwd }) => {
     await seedGithubMarketplace({ cwd, name: "rewritten", ref: "deadbeef" });
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps } = makeMockGitOps({
       checkoutThrows: new Error("mock: ref deadbeef no longer exists on remote"),
     });
 
-    await updateMarketplace({ ctx, name: "rewritten", scope: "project", cwd, gitOps });
+    await updateMarketplace({ ctx, pi, name: "rewritten", scope: "project", cwd, gitOps });
 
     // notifyError emitted (severity 'error'); MU-5 retry hint applies
     // because the clone advanced (fetch succeeded).
@@ -275,13 +279,13 @@ test("D-14: SHA-no-longer-exists (checkout throws) surfaces as notifyError with 
 test("CR-05 / MU-5: pre-fetch failure (gitOps.fetch throws) does NOT append 'Retry the command.'", async () => {
   await withHermeticHome(async ({ cwd }) => {
     await seedGithubMarketplace({ cwd, name: "offline", ref: "main" });
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     // Simulate DNS / network-unreachable on fetch -- cloneAdvanced must
     // stay false, so the retry hint is suppressed.
     const { gitOps } = makeMockGitOps({
       fetchThrows: new Error("mock: ENETUNREACH https://github.com"),
     });
-    await updateMarketplace({ ctx, name: "offline", scope: "project", cwd, gitOps });
+    await updateMarketplace({ ctx, pi, name: "offline", scope: "project", cwd, gitOps });
 
     assert.equal(notifications.length, 1);
     const first = notifications[0];
@@ -314,12 +318,12 @@ test("MU-5: clone advances + manifest re-validation fails -- 'Retry the command.
       },
     });
 
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps } = makeMockGitOps({
       remoteRefs: { "refs/remotes/origin/HEAD": "abcdef0000000000000000000000000000000003" },
       localRefs: { HEAD: "abcdef0000000000000000000000000000000003" },
     });
-    await updateMarketplace({ ctx, name: "broken", scope: "project", cwd, gitOps });
+    await updateMarketplace({ ctx, pi, name: "broken", scope: "project", cwd, gitOps });
 
     assert.equal(notifications.length, 1);
     const first = notifications[0];
@@ -339,7 +343,7 @@ test("MU-6 + MU-8: cascade runs ONLY when autoupdate=true; pluginUpdate called o
       autoupdate: true,
       plugins: { hello: makePluginRecord() },
     });
-    const { ctx } = makeCtx();
+    const { ctx, pi } = makeCtx();
     const { gitOps } = makeMockGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000004" },
     });
@@ -360,6 +364,7 @@ test("MU-6 + MU-8: cascade runs ONLY when autoupdate=true; pluginUpdate called o
 
     await updateMarketplace({
       ctx,
+      pi,
       name: "auto-mp",
       scope: "project",
       cwd,
@@ -388,7 +393,7 @@ test("MU-6: cascade skipped when autoupdate=false (default)", async () => {
       autoupdate: false,
       plugins: { hello: makePluginRecord() },
     });
-    const { ctx } = makeCtx();
+    const { ctx, pi } = makeCtx();
     const { gitOps } = makeMockGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000005" },
     });
@@ -409,6 +414,7 @@ test("MU-6: cascade skipped when autoupdate=false (default)", async () => {
 
     await updateMarketplace({
       ctx,
+      pi,
       name: "manual-mp",
       scope: "project",
       cwd,
@@ -440,7 +446,7 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
         d: makePluginRecord(),
       },
     });
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps } = makeMockGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000006" },
     });
@@ -494,6 +500,7 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
 
     await updateMarketplace({
       ctx,
+      pi,
       name: "mixed",
       scope: "project",
       cwd,
@@ -536,7 +543,7 @@ test("MU-9 + MSG-RH-1: success emits canonical reload hint trailer for updated p
       autoupdate: true,
       plugins: { x: makePluginRecord(), a: makePluginRecord() },
     });
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps } = makeMockGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000007" },
     });
@@ -554,6 +561,7 @@ test("MU-9 + MSG-RH-1: success emits canonical reload hint trailer for updated p
 
     await updateMarketplace({
       ctx,
+      pi,
       name: "rh",
       scope: "project",
       cwd,
@@ -577,7 +585,7 @@ test("RH-1: NO reload hint when zero plugins updated", async () => {
       autoupdate: true,
       plugins: { p: makePluginRecord() },
     });
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps } = makeMockGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000008" },
     });
@@ -592,6 +600,7 @@ test("RH-1: NO reload hint when zero plugins updated", async () => {
       });
     await updateMarketplace({
       ctx,
+      pi,
       name: "noupd",
       scope: "project",
       cwd,
@@ -626,9 +635,9 @@ test("NFR-5: path-source update calls zero gitOps methods", async () => {
           },
         },
       });
-      const { ctx } = makeCtx();
+      const { ctx, pi } = makeCtx();
       const { gitOps, state } = makeMockGitOps();
-      await updateMarketplace({ ctx, name: "local", scope: "project", cwd, gitOps });
+      await updateMarketplace({ ctx, pi, name: "local", scope: "project", cwd, gitOps });
 
       assert.equal(state.cloneCalls.length, 0);
       assert.equal(state.fetchCalls.length, 0);
@@ -652,7 +661,7 @@ test("D-03-INV :: update invalidates plugin cache for that marketplace", async (
   await withHermeticHome(async ({ cwd }) => {
     __resetCacheForTests();
     await seedGithubMarketplace({ cwd, name: "official", ref: "main" });
-    const { ctx } = makeCtx();
+    const { ctx, pi } = makeCtx();
     const { gitOps } = makeMockGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
     });
@@ -671,7 +680,7 @@ test("D-03-INV :: update invalidates plugin cache for that marketplace", async (
     await rm(pluginCachePath, { force: true });
 
     // Run update: must invalidate the plugin cache for (project, official).
-    await updateMarketplace({ ctx, name: "official", scope: "project", cwd, gitOps });
+    await updateMarketplace({ ctx, pi, name: "official", scope: "project", cwd, gitOps });
 
     // Memory must be cleared; with file absent, next read invokes rebuild.
     await getPluginIndex(pluginCachePath, "project", "official", () => {
@@ -773,7 +782,7 @@ test("260525-cjr B2: cascadeAutoupdates catch -> EACCES surfaces as `{permission
       autoupdate: true,
       plugins: { alpha: makePluginRecord() },
     });
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps } = makeMockGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000999" },
     });
@@ -785,6 +794,7 @@ test("260525-cjr B2: cascadeAutoupdates catch -> EACCES surfaces as `{permission
 
     await updateMarketplace({
       ctx,
+      pi,
       name: "official",
       scope: "project",
       cwd,
@@ -819,7 +829,7 @@ test("260525-cjr B2: cascadeAutoupdates catch -> ENOENT surfaces as `{source mis
       autoupdate: true,
       plugins: { alpha: makePluginRecord() },
     });
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps } = makeMockGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000999" },
     });
@@ -831,6 +841,7 @@ test("260525-cjr B2: cascadeAutoupdates catch -> ENOENT surfaces as `{source mis
 
     await updateMarketplace({
       ctx,
+      pi,
       name: "official",
       scope: "project",
       cwd,
@@ -852,7 +863,7 @@ test("260525-cjr B2: cascadeAutoupdates catch -> generic Error falls through to 
       autoupdate: true,
       plugins: { alpha: makePluginRecord() },
     });
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps } = makeMockGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000999" },
     });
@@ -861,6 +872,7 @@ test("260525-cjr B2: cascadeAutoupdates catch -> generic Error falls through to 
 
     await updateMarketplace({
       ctx,
+      pi,
       name: "official",
       scope: "project",
       cwd,

@@ -18,12 +18,13 @@ import { addMarketplace } from "../../../orchestrators/marketplace/add.ts";
 import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
 
-import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { EdgeDeps } from "../../types.ts";
 
 const USAGE = "Usage: /claude:plugin marketplace add <source> [--scope user|project]";
 
 export function makeAddHandler(
+  pi: ExtensionAPI,
   deps: EdgeDeps,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
@@ -48,6 +49,7 @@ export function makeAddHandler(
 
     await addMarketplace({
       ctx,
+      pi,
       scope: parsed.scope ?? "user",
       cwd: ctx.cwd,
       rawSource: parsed.source,

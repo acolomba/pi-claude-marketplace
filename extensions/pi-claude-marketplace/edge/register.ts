@@ -41,7 +41,7 @@ import {
 import { getArgumentCompletions } from "./completions/provider.ts";
 import { makeAddHandler } from "./handlers/marketplace/add.ts";
 import { makeAutoupdateHandler } from "./handlers/marketplace/autoupdate.ts";
-import { handleMarketplaceList } from "./handlers/marketplace/list.ts";
+import { makeMarketplaceListHandler } from "./handlers/marketplace/list.ts";
 import { makeRemoveHandler } from "./handlers/marketplace/remove.ts";
 import { makeMarketplaceUpdateHandler } from "./handlers/marketplace/update.ts";
 import { makeBootstrapHandler } from "./handlers/plugin/bootstrap.ts";
@@ -74,19 +74,19 @@ const COMMAND_DESCRIPTION =
  */
 export function registerClaudePluginCommand(pi: ExtensionAPI, deps: EdgeDeps): void {
   const handlers: SubcommandHandlers = {
-    bootstrap: makeBootstrapHandler(deps),
+    bootstrap: makeBootstrapHandler(pi, deps),
     install: makeInstallHandler(pi),
     uninstall: makeUninstallHandler(pi),
     update: makeUpdateHandler(pi),
     reinstall: makeReinstallHandler(pi),
     list: makeListHandler(pi),
     import: makeImportHandler(pi, deps),
-    marketplaceAdd: makeAddHandler(deps),
+    marketplaceAdd: makeAddHandler(pi, deps),
     marketplaceRemove: makeRemoveHandler(pi),
-    marketplaceList: handleMarketplaceList,
-    marketplaceUpdate: makeMarketplaceUpdateHandler(deps),
-    marketplaceAutoupdate: makeAutoupdateHandler(true),
-    marketplaceNoautoupdate: makeAutoupdateHandler(false),
+    marketplaceList: makeMarketplaceListHandler(pi),
+    marketplaceUpdate: makeMarketplaceUpdateHandler(pi, deps),
+    marketplaceAutoupdate: makeAutoupdateHandler(pi, true),
+    marketplaceNoautoupdate: makeAutoupdateHandler(pi, false),
   };
 
   pi.registerCommand("claude:plugin", {

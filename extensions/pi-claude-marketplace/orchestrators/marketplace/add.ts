@@ -68,12 +68,21 @@ import { DEFAULT_GIT_OPS, type GitOps } from "./shared.ts";
 import type { GitHubSource, PathSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { ExtensionContext } from "../../platform/pi-api.ts";
+import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { MarketplaceRow } from "../../presentation/compact-line.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface AddMarketplaceOptions {
   readonly ctx: ExtensionContext;
+  /**
+   * Factory `pi` reference. Plumbed in Plan 18-00 (Wave 0) so subsequent
+   * Wave 1/2 migrations can swap V1 notify-wrappers for V2
+   * `notify(ctx, pi, message)` calls without re-touching this signature
+   * or `edge/register.ts`. Today this orchestrator does not yet read `pi`
+   * (the V1 wrappers handle severity routing); the migration to V2 lands
+   * in Plan 18-01.
+   */
+  readonly pi: ExtensionAPI;
   /** SC-5: edge layer (Phase 6) defaults this to "user"; orchestrator receives a fully resolved Scope. */
   readonly scope: Scope;
   /** Used to compute project-scope locations (`<cwd>/.pi`). Ignored when scope === "user". */

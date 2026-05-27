@@ -21,7 +21,7 @@ import { makeMockGitOps } from "../../../helpers/git-mock.ts";
 
 import type { EdgeDeps } from "../../../../extensions/pi-claude-marketplace/edge/types.ts";
 import type { PluginUpdateOutcome } from "../../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
-import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
 interface NotifyRecord {
   message: string;
@@ -39,6 +39,14 @@ function makeCtx(cwd: string): { ctx: ExtensionCommandContext; notifications: No
     },
   } as unknown as ExtensionCommandContext;
   return { ctx, notifications };
+}
+
+// Plan 18-00 (Wave 0): `makeAddHandler(pi, deps)` requires `pi` as first
+// positional arg. Edge shim tests mirror the production wiring shape.
+function makePi(): ExtensionAPI {
+  return {
+    getAllTools: (): unknown[] => [],
+  } as unknown as ExtensionAPI;
 }
 
 function makeDeps(): {
@@ -82,7 +90,7 @@ test("shim :: missing source positional emits USAGE; no orchestrator call", asyn
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
     const { deps, gitMock } = makeDeps();
-    const handler = makeAddHandler(deps);
+    const handler = makeAddHandler(makePi(), deps);
     await handler("", ctx);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
@@ -96,7 +104,7 @@ test('shim :: valid source calls addMarketplace with { ctx, scope: "user", cwd, 
   await withHermeticHome(async ({ cwd }) => {
     const { ctx } = makeCtx(cwd);
     const { deps, gitMock } = makeDeps();
-    const handler = makeAddHandler(deps);
+    const handler = makeAddHandler(makePi(), deps);
     // A non-existent path source surfaces an ENOENT-class error from
     // addMarketplace's stat() probe -- the surfacing is via a thrown error
     // (addMarketplace re-throws via withStateGuard). We expect the
@@ -112,7 +120,7 @@ test("shim :: --scope project propagated to addMarketplace", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx } = makeCtx(cwd);
     const { deps, gitMock } = makeDeps();
-    const handler = makeAddHandler(deps);
+    const handler = makeAddHandler(makePi(), deps);
     // Same path-source path with --scope project. The shim selecting project
     // scope is observed by addMarketplace looking up project locations; the
     // resulting ENOENT also rejects. We assert reject + no clone calls.
@@ -125,7 +133,7 @@ test("shim :: deps.gitOps is passed through from EdgeDeps", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx } = makeCtx(cwd);
     const { deps, gitMock } = makeDeps();
-    const handler = makeAddHandler(deps);
+    const handler = makeAddHandler(makePi(), deps);
     // A github source triggers the gitOps.clone path. The mock has no fixture
     // configured, so the orchestrator will fail at manifest read after clone;
     // but the clone call will be RECORDED on gitMock.state.cloneCalls -- proof

@@ -48,12 +48,21 @@ import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
 import { applyAutoupdateFlipInPlace } from "./shared.ts";
 
-import type { ExtensionContext } from "../../platform/pi-api.ts";
+import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { MarketplaceRow } from "../../presentation/compact-line.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface AutoupdateOptions {
   readonly ctx: ExtensionContext;
+  /**
+   * Factory `pi` reference. Plumbed in Plan 18-00 (Wave 0) so subsequent
+   * Wave 1/2 migrations can swap V1 notify-wrappers for V2
+   * `notify(ctx, pi, message)` calls without re-touching this signature
+   * or `edge/register.ts`. Today this orchestrator does not yet read `pi`
+   * (the V1 wrappers handle severity routing); the migration to V2 lands
+   * in Plan 18-02.
+   */
+  readonly pi: ExtensionAPI;
   /** When undefined, flip every marketplace in target scope(s). */
   readonly name?: string;
   /** true -> autoupdate; false -> noautoupdate. */

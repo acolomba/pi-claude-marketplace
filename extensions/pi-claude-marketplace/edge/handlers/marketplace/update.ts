@@ -18,12 +18,13 @@ import {
 import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
 
-import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { EdgeDeps } from "../../types.ts";
 
 const USAGE = "Usage: /claude:plugin marketplace update [<name>] [--scope user|project]";
 
 export function makeMarketplaceUpdateHandler(
+  pi: ExtensionAPI,
   deps: EdgeDeps,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
@@ -46,6 +47,7 @@ export function makeMarketplaceUpdateHandler(
     if (parsed.name === undefined) {
       await updateAllMarketplaces({
         ctx,
+        pi,
         cwd: ctx.cwd,
         gitOps: deps.gitOps,
         pluginUpdate: deps.pluginUpdate,
@@ -56,6 +58,7 @@ export function makeMarketplaceUpdateHandler(
 
     await updateMarketplace({
       ctx,
+      pi,
       name: parsed.name,
       cwd: ctx.cwd,
       gitOps: deps.gitOps,

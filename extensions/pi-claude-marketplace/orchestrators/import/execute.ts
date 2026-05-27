@@ -804,6 +804,7 @@ async function executeScopedPlan(
     try {
       await addMarketplace({
         ctx: opts.ctx,
+        pi: opts.pi,
         scope: marketplace.scope,
         cwd: opts.cwd,
         rawSource: marketplace.source,

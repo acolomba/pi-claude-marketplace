@@ -12,24 +12,27 @@ import { listMarketplaces } from "../../../extensions/pi-claude-marketplace/orch
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 interface NotifyRecord {
   message: string;
   severity?: string;
 }
 
-function makeCtx(): { ctx: ExtensionContext; notifications: NotifyRecord[] } {
+function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: NotifyRecord[] } {
   const notifications: NotifyRecord[] = [];
+  // Plan 18-00: `pi` required on ListMarketplacesOptions; mirror
+  // production wiring shape (D-18-06 preserved).
+  const pi = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
   const ctx = {
     ui: {
       notify: (m: string, s?: string): void => {
         notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
       },
     },
-    pi: { getAllTools: (): unknown[] => [] },
+    pi,
   } as unknown as ExtensionContext;
-  return { ctx, notifications };
+  return { ctx, pi, notifications };
 }
 
 /**
@@ -59,8 +62,8 @@ async function withHermeticHome<T>(
 
 test("CMC-10 + SC-6: bare form emits `(no marketplaces)` EmptyToken when both scopes are empty", async () => {
   await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx();
-    await listMarketplaces({ ctx, cwd });
+    const { ctx, pi, notifications } = makeCtx();
+    await listMarketplaces({ ctx, pi, cwd });
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.message, "(no marketplaces)");
     assert.equal(notifications[0]!.severity, undefined);
@@ -86,8 +89,8 @@ test("CMC-29: project-scope marketplace renders flat row `● <name> [<scope>]` 
       },
     });
 
-    const { ctx, notifications } = makeCtx();
-    await listMarketplaces({ ctx, scope: "project", cwd });
+    const { ctx, pi, notifications } = makeCtx();
+    await listMarketplaces({ ctx, pi, scope: "project", cwd });
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.message, "● local [project]");
   });
@@ -112,8 +115,8 @@ test("CMC-29: github source renders the same flat row form (no parenthesised URL
       },
     });
 
-    const { ctx, notifications } = makeCtx();
-    await listMarketplaces({ ctx, scope: "project", cwd });
+    const { ctx, pi, notifications } = makeCtx();
+    await listMarketplaces({ ctx, pi, scope: "project", cwd });
     // CMC-29: row form is `<icon> <name> [<scope>] [<marker>]` -- no
     // parenthesised source URL/path suffix per the new style guide. The
     // source is only used to derive the marker default at `add` time;
@@ -142,8 +145,8 @@ test("CMC-05 / MSG-GR-5: autoupdate=true emits `<autoupdate>` marker", async () 
       },
     });
 
-    const { ctx, notifications } = makeCtx();
-    await listMarketplaces({ ctx, scope: "project", cwd });
+    const { ctx, pi, notifications } = makeCtx();
+    await listMarketplaces({ ctx, pi, scope: "project", cwd });
     assert.equal(notifications[0]!.message, "● auto [project] <autoupdate>");
   });
 });
@@ -167,8 +170,8 @@ test("SC-6: bare form enumerates BOTH user and project; user-only entry renders 
       },
     });
 
-    const { ctx, notifications } = makeCtx();
-    await listMarketplaces({ ctx, cwd }); // bare form -- no scope
+    const { ctx, pi, notifications } = makeCtx();
+    await listMarketplaces({ ctx, pi, cwd }); // bare form -- no scope
     assert.equal(notifications[0]!.message, "● user-only [user]");
   });
 });
