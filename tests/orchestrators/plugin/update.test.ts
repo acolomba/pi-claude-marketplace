@@ -774,14 +774,27 @@ test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'pl
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
-      // Look for the recovery hint marker anywhere in the notifications.
-      // Either notifyError fired (phase-3a aggregate) or the body's
-      // Failed: section names the recovery hint.
-      const allText = notifications.map((n) => n.message).join("\n");
+      // CR-01: phase-3a aggregate failure must fire EXACTLY ONE
+      // notification. Previously this test joined all notifications via
+      // `.join("\n")` before regex-matching, which silently masked the
+      // duplicate emission (one from the inline `notifyDirectFailure`
+      // inside `runThreePhaseUpdate`, a second from the cascade
+      // `renderUpdateCascadeAndNotify` walk after the outcome fell through
+      // to `outcomes[]`). The fix in `update.ts::updatePlugins` early-
+      // returns when the outcome carries `phaseFailures`, so a regression
+      // would surface here as `notifications.length === 2`.
+      assert.equal(
+        notifications.length,
+        1,
+        `expected exactly one notification for phase-3a aggregate failure, got ${notifications.length.toString()}: ${notifications.map((n) => n.message).join("\n---\n")}`,
+      );
+      // The recovery hint marker is carried by the inline
+      // `notifyDirectFailure` emission's `aggregate` cause text.
+      const allText = notifications[0]?.message ?? "";
       assert.match(
         allText,
         /plugin-uninstall \+ plugin-install for "hello"\./,
-        `expected RECOVERY_PLUGIN_REINSTALL_PREFIX hint somewhere in:\n${allText}`,
+        `expected RECOVERY_PLUGIN_REINSTALL_PREFIX hint in notification:\n${allText}`,
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });

@@ -310,6 +310,24 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
       return;
     }
 
+    // CR-01: phase-3a aggregate failures already fire `notifyDirectFailure`
+    // inline from `runThreePhaseUpdate` (with `reasonOverride: "rollback
+    // partial"` and the structural `rollbackPartial[]` children). The block
+    // comment at the inline emission site asserts "the cascade is NOT
+    // re-rendered here -- aborting before the cascade walk means there's
+    // exactly one row to surface", but that invariant is only preserved by
+    // returning here. Without this early-return, the outcome falls through
+    // to `outcomes.push` + `renderUpdateCascadeAndNotify` below, producing
+    // a SECOND notification rendering the same failure via
+    // `outcomeToCascadePluginMessage`'s failed arm. Phase-3a aggregates are
+    // distinguishable from phase-2-or-earlier failures by the presence of
+    // `phaseFailures` on the returned outcome (only the aggregate path
+    // populates it). Phase-2-or-earlier failures throw and are handled by
+    // the `catch` block above, never reaching this branch.
+    if (outcome.partition === "failed" && outcome.phaseFailures !== undefined) {
+      return;
+    }
+
     outcomes.push({ target: t, outcome });
   }
 
