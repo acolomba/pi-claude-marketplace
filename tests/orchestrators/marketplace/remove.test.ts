@@ -150,8 +150,14 @@ test("MR-1: same name in both scopes without --scope removes project-scope recor
       const projAfter = await loadState(projLoc.extensionRoot);
       assert.ok("dup-name" in userAfter.marketplaces, "user-scope record untouched");
       assert.ok(!("dup-name" in projAfter.marketplaces), "project-scope record removed");
-      // CMC-31 clean form: bare `● <mp> [<scope>] (removed)` row.
-      assert.equal(notifications[0]?.message, "● dup-name [project] (removed)");
+      // V2 CMC-31 clean form: `● <mp> [<scope>] (removed)` row + reload-hint
+      // trailer (D-16-12: mp.status "removed" is state-changing, regardless of
+      // plugin count). V1 emitted NO reload-hint on empty marketplace removal;
+      // V2 DOES per the catalog `clean` fixture (catalog-uat.test.ts:1155-1160).
+      assert.equal(
+        notifications[0]?.message,
+        "● dup-name [project] (removed)\n\n/reload to pick up changes",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -183,8 +189,11 @@ test("MR-1: name only in user scope without --scope removes user-scope record", 
 
       const userAfter = await loadState(userLoc.extensionRoot);
       assert.ok(!("user-only" in userAfter.marketplaces), "user-scope record removed");
-      // CMC-31 clean form.
-      assert.equal(notifications[0]?.message, "● user-only [user] (removed)");
+      // V2 CMC-31 clean form -- reload-hint fires from mp.status "removed" per D-16-12.
+      assert.equal(
+        notifications[0]?.message,
+        "● user-only [user] (removed)\n\n/reload to pick up changes",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -229,7 +238,7 @@ test("MR-1: same name in both scopes WITH --scope=user removes only user-scope r
 
 // MR-2 + MR-8 (RH-1) -----------------------------------------------
 
-test("MR-2 + MR-8 (RH-1): empty marketplace removed cleanly emits success WITHOUT reload hint", async () => {
+test("MR-2 + V2 D-16-12: empty marketplace removed cleanly emits success WITH mp-level reload-hint", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-"));
     try {
@@ -256,10 +265,15 @@ test("MR-2 + MR-8 (RH-1): empty marketplace removed cleanly emits success WITHOU
       assert.equal("empty" in after.marketplaces, false);
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]!.severity, undefined); // success, default severity
-      assert.equal(notifications[0]!.message.includes("/reload to pick up changes"), false);
-      // CMC-31 clean form: bare row, no reload trailer because no
-      // resources changed (empty marketplace).
-      assert.equal(notifications[0]!.message, "● empty [project] (removed)");
+      // V2 contract flip per D-16-12 / RESEARCH Risks #7: reload-hint fires
+      // from mp.status "removed" (state-changing) regardless of plugin count.
+      // V1 emitted NO reload-hint here; V2 DOES.
+      assert.equal(notifications[0]!.message.includes("/reload to pick up changes"), true);
+      // V2 CMC-31 clean form: bare `● <mp> [<scope>] (removed)` row + reload-hint trailer.
+      assert.equal(
+        notifications[0]!.message,
+        "● empty [project] (removed)\n\n/reload to pick up changes",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -328,9 +342,9 @@ test("NFR-5: remove for a path-source marketplace makes no network calls", async
   assert.equal(src.includes("gitOps"), false);
 });
 
-// MR-4 (single aggregated warning, canonical trailer) --------------
+// MR-4 (single V2 cascade notification, severity=error) ------------
 
-test("MR-4: cascade failure produces ONE aggregated warning ending with the canonical trailer", async () => {
+test("MR-4: cascade failure produces ONE V2 notification with severity=error (D-16-11)", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "remove-mr4-"));
     try {
@@ -383,14 +397,12 @@ test("MR-4: cascade failure produces ONE aggregated warning ending with the cano
         cascade: stubCascade,
       });
 
-      // Exactly ONE notification, severity 'warning', ending with the canonical trailer.
-      assert.equal(notifications.length, 1, "exactly one aggregated notification");
-      assert.equal(notifications[0]!.severity, "warning", "severity must be warning");
-      assert.match(
-        notifications[0]!.message,
-        /Fix the underlying issue and retry\.?$/,
-        "must end with canonical trailer",
-      );
+      // Exactly ONE V2 notification, severity=error (any plugin/mp failed
+      // routes to error per D-16-11; the V1 free-text retry-anchor
+      // ("Fix the underlying issue and retry.") is DROPPED per D-17-09 /
+      // D-18-03 -- it has no V2 catalog representation).
+      assert.equal(notifications.length, 1, "exactly one V2 notification");
+      assert.equal(notifications[0]!.severity, "error", "severity must be error");
 
       // MR-7: record retained when any plugin failed.
       const after = await loadState(locations.extensionRoot);
