@@ -270,13 +270,13 @@ Plans:
 3. Catalog UAT byte-equality is GREEN for every marketplace-family command output (`add`, `remove`, `update`, `list` marketplace headers and rows where applicable) against the v2.0 always-marketplace-header spec.
 4. `npm run check` stays GREEN; no orchestrators outside marketplace have changed call-site shape.
 
-**Plans:** 7 plans
+**Plans:** 1/7 plans executed
 
 Plans:
 
 **Wave 0** *(pre-cleanup -- must land first)*
 
-- [ ] 18-00-PLAN.md -- Pre-thread `pi: ExtensionAPI` through the 3 marketplace orchestrators that don't currently accept it (`add.ts`, `autoupdate.ts`, `list.ts`) + edge handler factories + `register.ts` wiring (D-18-08-amendment)
+- [x] 18-00-PLAN.md -- Pre-thread `pi: ExtensionAPI` through the 3 marketplace orchestrators that don't currently accept it (`add.ts`, `autoupdate.ts`, `list.ts`) + edge handler factories + `register.ts` wiring (D-18-08-amendment)
 
 **Wave 1** *(pilot -- depends on Wave 0)*
 
@@ -363,7 +363,7 @@ Plans:
 | 17. Spec Rewrite & Catalog UAT Migration                             | v1.4      | 3/3 | Complete   | 2026-05-26 |
 | 17.1. V2 Grammar Amendment: Autoupdate Surface (INSERTED)            | v1.4      | 4/4 | Complete   | 2026-05-26 |
 | 17.2. renderScopeBracket orphan-fold contract fix (INSERTED)         | v1.4      | 4/4 | Complete    | 2026-05-26 |
-| 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 0/7            | Not started | --         |
+| 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 1/7 | In Progress|  |
 | 19. Migration Wave 2 -- Plugin Orchestrator Family                   | v1.4      | 0/?            | Not started | --         |
 | 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 0/?            | Not started | --         |
 | 21. Final Teardown & GREEN Gate                                      | v1.4      | 0/?            | Not started | --         |
