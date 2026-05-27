@@ -221,17 +221,16 @@ export async function reinstallPlugin(
     return notes.length === 0 ? locked.outcome : { ...locked.outcome, notes };
   }
 
-  // D-19-01 precedent (D-18-01 lineage): the two V1 post-success
-  // notifyWarning loops (over bridgeWarnings + maintenanceWarnings) are
-  // DROPPED in V2. The underlying side effects (cache drop + data-dir rm
-  // + bridge finalize) still fire; the orchestrated-mode `notes` field
+  // IN-01: the two V1 post-success notifyWarning loops (over
+  // bridgeWarnings + maintenanceWarnings) are DROPPED in V2 per the
+  // D-19-01 precedent (D-18-01 lineage). The underlying side effects
+  // (cache drop + data-dir rm + bridge finalize) still fire above; the
+  // orchestrated-mode `notes` field at the `render === "none"` arm
   // above still carries the warning strings for consumers outside the
   // notify path; only the standalone-mode user-visible warning surface
-  // is gone (no clean MarketplaceNotificationMessage representation for
-  // a post-success soft warning). `maintenanceWarnings` is awaited
+  // is gone (no clean MarketplaceNotificationMessage representation
+  // for a post-success soft warning). `maintenanceWarnings` is awaited
   // strictly for its side effects.
-  void locked.bridgeWarnings;
-  void maintenanceWarnings;
 
   // Plan 19-04 / D-19-02: single-plugin reinstall success is a 1-row
   // cascade carrying a PluginReinstalledMessage variant. The legacy
@@ -244,11 +243,16 @@ export async function reinstallPlugin(
   //
   // Per-row scope is OMITTED (orphan-fold) since it matches the
   // marketplace block's scope on the single-plugin surface.
+  // IN-02: drop the `version !== ""` defensive spread. `resolvePluginVersion`
+  // always returns a non-empty string (see install.ts:914 commit message).
+  // The renderer suppresses the `v<version>` token on undefined / empty
+  // anyway, so the behavior is preserved against the legacy-state-with-
+  // empty-version case.
   const reinstalledRow: PluginReinstalledMessage = {
     status: "reinstalled",
     name: plugin,
     dependencies: dependenciesFromOutcome(locked.outcome),
-    ...(locked.outcome.version !== "" && { version: locked.outcome.version }),
+    version: locked.outcome.version,
   };
   notify(ctx, pi, {
     marketplaces: [{ name: marketplace, scope, plugins: [reinstalledRow] }],

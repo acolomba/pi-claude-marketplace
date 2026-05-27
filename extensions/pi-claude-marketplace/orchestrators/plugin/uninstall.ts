@@ -220,7 +220,9 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
       status: "failed",
       name: plugin,
       reasons: [narrowCascadeFailure(cause)],
-      ...(removedVersion !== undefined && removedVersion !== "" && { version: removedVersion }),
+      // IN-02: see the success-path commit message; the `!== ""` half of
+      // the guard is dead by construction.
+      ...(removedVersion !== undefined && { version: removedVersion }),
       cause,
     };
     notify(ctx, pi, {
@@ -295,10 +297,19 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
   // with the same PluginUninstalledMessage payload. Reference: catalog UAT
   // `success` fixture at docs/output-catalog.md:340-348.
   void outcome;
+  // IN-02: keep the `removedVersion !== undefined` guard (variable is
+  // typed `string | undefined` because it is hoisted from inside the
+  // withStateGuard closure; the type system cannot prove the closure
+  // ran), but drop the redundant `!== ""` half of the guard. State
+  // records persisted by previous install/update paths always carry a
+  // non-empty version by construction (see install.ts IN-02 commit).
+  // The renderer suppresses the `v<version>` token on undefined / empty
+  // anyway, so the empty-version edge case (theoretical legacy state)
+  // is handled structurally.
   const uninstalledRow: PluginUninstalledMessage = {
     status: "uninstalled",
     name: plugin,
-    ...(removedVersion !== undefined && removedVersion !== "" && { version: removedVersion }),
+    ...(removedVersion !== undefined && { version: removedVersion }),
   };
   // NotificationMessage cascade recipe (Plan 19-01 pilot; Wave 2 mirrors).
   // - One MarketplaceNotificationMessage per affected marketplace, emitted

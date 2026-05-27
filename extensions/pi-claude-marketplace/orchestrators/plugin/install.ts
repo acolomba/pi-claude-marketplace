@@ -906,11 +906,18 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       dependencies.push("mcp");
     }
 
+    // IN-02: drop the `version !== ""` defensive spread. `resolvePluginVersion`
+    // (orchestrators/plugin/shared.ts) always returns a non-empty string
+    // (either `entry.version` with length > 0 or the 12-hex hash via
+    // `computeHashVersion`), so the guard was dead. The renderer's
+    // version-slot composer treats undefined and empty-string identically
+    // (suppresses the `v<version>` token), so behavior is preserved against
+    // the theoretical legacy-state-with-empty-version case anyway.
     const installedRow: PluginInstalledMessage = {
       status: "installed",
       name: plugin,
       dependencies,
-      ...(installCtx.version !== "" && { version: installCtx.version }),
+      version: installCtx.version,
       scope,
     };
     // V2 notify() call mirrors the Plan 19-01 pilot recipe at
