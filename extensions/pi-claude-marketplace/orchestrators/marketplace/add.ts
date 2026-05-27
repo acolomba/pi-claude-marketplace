@@ -24,11 +24,15 @@
 //       state.marketplaces[derivedName] = { ... }            // NFR-5: NO gitOps calls
 //   })
 //
-//   // CMC-30 + CMC-05 / MSG-GR-5: success row via `renderRow(MarketplaceRow)`:
-//   //   github source -> `● <name> [<scope>] <autoupdate> (added)` (marker present)
-//   //   path source   -> `● <name> [<scope>] (added)` (marker omitted; autoupdate-off default)
-//   // MA-11 / RH-1: NO reload hint here (add never stages resources -- the
-//   // marketplace record is metadata, not user-visible per-plugin output).
+//   // Phase 18 / Plan 18-01: success notification is a single V2
+//   //   notify(opts.ctx, opts.pi, { marketplaces: [{ status: "added", ... }] })
+//   // call. Both github and path source kinds collapse to the same V2
+//   // payload (the V1 `<autoupdate>` marker has moved off the (added) arm
+//   // onto the list-surface header per D-17.1-01 / D-18-04). The
+//   // `/reload to pick up changes` trailer is computed by `notify()` per
+//   // D-16-12 (mp.status `"added"` is state-changing); callers MUST NOT
+//   // append it. See the construction recipe block-comment above the
+//   // notify() call site for the full Wave 2 mirror template.
 //
 // V1 carry-forward shape only (D-09 staging dir, D-12 GitOps injection,
 // D-14 follow-upstream-blindly all supersede V1 specifics).
@@ -50,9 +54,7 @@ import path from "node:path";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { renderRow } from "../../presentation/compact-line.ts";
 import { dropMarketplaceCache, invalidateMarketplaceNames } from "../../shared/completion-cache.ts";
-import { MARKETPLACE_LABEL_PROBE } from "../../shared/constants/marketplace-label-probe.ts";
 import {
   MarketplaceDuplicateNameError,
   StaleSourceCloneError,
@@ -60,7 +62,7 @@ import {
   errorMessage,
 } from "../../shared/errors.ts";
 import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
-import { notifySuccess, notifyWarning } from "../../shared/notify.ts";
+import { notify } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
 import { DEFAULT_GIT_OPS, type GitOps } from "./shared.ts";
@@ -69,7 +71,6 @@ import type { GitHubSource, PathSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { MarketplaceRow } from "../../presentation/compact-line.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface AddMarketplaceOptions {
@@ -146,27 +147,36 @@ export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void>
       opts.scope,
       recordedName,
     );
-  } catch (err) {
-    notifyWarning(
-      opts.ctx,
-      `Marketplace "${recordedName}" added; completion cache refresh deferred: ${errorMessage(err)}`,
-    );
+  } catch {
+    // D-18-01 precedent (Plan 18-01): cache-refresh failures are swallowed
+    // silently in V2. The V1 cache-leak warning surface has no clean
+    // MarketplaceNotificationMessage representation (it is neither a
+    // failed marketplace nor a state-changing success), and emitting a
+    // second `notify()` after the primary would double severity routing
+    // without a catalog fixture to gate against. The state mutation
+    // already succeeded; only the user-facing warning disappears.
   }
 
-  // CMC-30 / CMC-05 / MSG-GR-5: compose `MarketplaceRow` for the success
-  // row. Marker dispatched by source kind:
-  //   github -> autoupdate=ON default (marker present)
-  //   path   -> autoupdate=OFF default (marker omitted)
-  // MA-11 / RH-1: NO reload hint trailer -- add does not stage resources.
-  const successRow: MarketplaceRow = {
-    kind: "marketplace",
-    name: recordedName,
-    scope: opts.scope,
-    status: "added",
-    outcomeClass: "ok",
-    ...(source.kind === "github" && { marker: "autoupdate" as const }),
-  };
-  notifySuccess(opts.ctx, renderRow(successRow, MARKETPLACE_LABEL_PROBE));
+  // NotificationMessage construction recipe (Plan 18-01 pilot; Wave 2 mirrors).
+  // - One MarketplaceNotificationMessage per outcome, emitted via one
+  //   notify(opts.ctx, opts.pi, ...) call; `plugins: []` is required.
+  // - Discriminator here: `mp.status === "added"` (github + path collapse
+  //   to one V2 shape; V1 `<autoupdate>` marker moved to the list surface).
+  // - Severity (info; no 2nd arg) and `/reload to pick up changes` are
+  //   computed by notify() per D-16-11 + D-16-12; callers MUST NOT compose.
+  // - Reference: catalog UAT `path-source` + `github-source` fixtures at
+  //   tests/architecture/catalog-uat.test.ts:1113-1133. Per D-18-08-amend,
+  //   Wave 2 (18-02..05) mirrors this with its own mp.status values.
+  notify(opts.ctx, opts.pi, {
+    marketplaces: [
+      {
+        name: recordedName,
+        scope: opts.scope,
+        status: "added",
+        plugins: [],
+      },
+    ],
+  });
 }
 
 async function addGithubInGuard(args: {

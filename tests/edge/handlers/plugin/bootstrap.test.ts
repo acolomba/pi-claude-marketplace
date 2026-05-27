@@ -105,10 +105,14 @@ test("bootstrap handler (no args, clean state): dispatches to orchestrator and e
 
     // Both composed orchestrators emitted their messages in order.
     assert.equal(notifications.length, 2);
-    // CMC-28 / CMC-30 / CMC-33 compact-line forms (Plan 13-02c-01).
+    // Plan 18-01 (Rule 3 deviation): bootstrap composes `addMarketplace`
+    // which now emits the V2 catalog `(added)` shape (`<autoupdate>` marker
+    // moved off this surface; `/reload to pick up changes` trailer fires
+    // per D-16-12). The second notification (from autoupdate, still V1)
+    // keeps its V1 marker-as-outcome shape until Plan 18-02.
     assert.equal(
       notifications[0]?.message,
-      "● claude-plugins-official [user] <autoupdate> (added)",
+      "● claude-plugins-official [user] (added)\n\n/reload to pick up changes",
     );
     assert.equal(notifications[1]?.message, "● claude-plugins-official [user] <autoupdate>");
 
@@ -136,10 +140,10 @@ test("bootstrap handler (whitespace-only args): treated identically to empty arg
     await handler("   ", ctx);
 
     assert.equal(notifications.length, 2);
-    // CMC-28 / CMC-30 / CMC-33 compact-line forms (Plan 13-02c-01).
+    // Plan 18-01 (Rule 3 deviation): see preceding test for V2 byte rationale.
     assert.equal(
       notifications[0]?.message,
-      "● claude-plugins-official [user] <autoupdate> (added)",
+      "● claude-plugins-official [user] (added)\n\n/reload to pick up changes",
     );
     assert.equal(notifications[1]?.message, "● claude-plugins-official [user] <autoupdate>");
   });
