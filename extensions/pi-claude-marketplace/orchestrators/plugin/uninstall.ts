@@ -172,7 +172,18 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
     await withStateGuard(locations, async (state) => {
       const mp = state.marketplaces[marketplace];
       if (mp === undefined) {
-        // Marketplace itself absent -- nothing to uninstall; treat as silent converge.
+        // IN-05: reachability note. The prior `resolveInstalledPluginTarget`
+        // call at line 152-160 already verified the marketplace's existence
+        // when no `explicitScope` was supplied (it returns `undefined` on
+        // missing record); when `explicitScope` IS set,
+        // `resolveInstalledPluginTarget` short-circuits to
+        // `{ scope: opts.scope, locations: ... }` WITHOUT reading state. So
+        // this branch is reached only via the explicit-scope path, where
+        // the closure's `loadState` may find an empty state.json. Exercised
+        // by the PU-5 marketplace-absent test at uninstall.test.ts:489.
+        //
+        // Marketplace itself absent -- nothing to uninstall; treat as
+        // silent converge.
         alreadyGone = true;
         return;
       }
