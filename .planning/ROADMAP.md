@@ -363,7 +363,7 @@ Plans:
 | 17. Spec Rewrite & Catalog UAT Migration                             | v1.4      | 3/3 | Complete   | 2026-05-26 |
 | 17.1. V2 Grammar Amendment: Autoupdate Surface (INSERTED)            | v1.4      | 4/4 | Complete   | 2026-05-26 |
 | 17.2. renderScopeBracket orphan-fold contract fix (INSERTED)         | v1.4      | 4/4 | Complete    | 2026-05-26 |
-| 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 7/7 | Complete   | 2026-05-27 |
+| 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 7/7 | Complete    | 2026-05-27 |
 | 19. Migration Wave 2 -- Plugin Orchestrator Family                   | v1.4      | 0/?            | Not started | --         |
 | 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 0/?            | Not started | --         |
 | 21. Final Teardown & GREEN Gate                                      | v1.4      | 0/?            | Not started | --         |

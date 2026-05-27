@@ -43,7 +43,7 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 
 ### Migration & Deletion
 
-- [ ] **SNM-22**: All `notifySuccess` / `notifyWarning` / `notifyError` call sites across orchestrators (~20 sites) migrated to `notify(ctx, structuredMessage)`. The V1 severity-named wrappers are deleted from `shared/notify.ts`.
+- [x] **SNM-22**: All `notifySuccess` / `notifyWarning` / `notifyError` call sites across orchestrators (~20 sites) migrated to `notify(ctx, structuredMessage)`. The V1 severity-named wrappers are deleted from `shared/notify.ts`.
 - [ ] **SNM-23**: All `notifyUsageError(ctx, msg, usage)` call sites across edge handlers (~13 sites) migrated to the V2 `notifyUsageError(ctx, structuredUsageError)`. The V1 three-argument signature is deleted.
 - [ ] **SNM-24**: `tests/lint-rules/` directory deleted in full (34 MSG-\* rule files + 34 RuleTester companion tests + helpers + plugin shell + types).
 - [ ] **SNM-25**: `tests/architecture/msg-rule-registry.test.ts` (4-way parity test) deleted.
@@ -96,7 +96,7 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25.
 | SNM-19      | Phase 17 | Complete |
 | SNM-20      | Phase 17 | Complete |
 | SNM-21      | Phase 15 | Complete |
-| SNM-22      | Phase 21 | Pending  |
+| SNM-22      | Phase 21 | Complete |
 | SNM-23      | Phase 20 | Pending  |
 | SNM-24      | Phase 21 | Pending  |
 | SNM-25      | Phase 21 | Pending  |
