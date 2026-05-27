@@ -308,13 +308,13 @@ Plans:
 3. Catalog UAT byte-equality is GREEN for every plugin-family command output (single-plugin install with the new marketplace header + indented row shape, bulk cascades, manual-recovery rows, rollback-partial sub-state, per-plugin cause chains in multi-failure cascades) against the v2.0 spec.
 4. `npm run check` stays GREEN; no edge handlers have changed call-site shape.
 
-**Plans:** 6/6 plans created
+**Plans:** 1/6 plans executed
 
 Plans:
 
 **Wave 1** *(pilot -- locks the V2 inline-cascade construction recipe block-comment for Wave 2 to mirror)*
 
-- [ ] 19-01-PLAN.md -- Migrate `orchestrators/plugin/uninstall.ts` (5 V1 callsites: 3 migrated, 2 DROPPED per D-19-01); embed Wave-1-pilot recipe block-comment + V2 byte-exact tests (D-19-04 / D-19-05)
+- [x] 19-01-PLAN.md -- Migrate `orchestrators/plugin/uninstall.ts` (5 V1 callsites: 3 migrated, 2 DROPPED per D-19-01); embed Wave-1-pilot recipe block-comment + V2 byte-exact tests (D-19-04 / D-19-05)
 
 **Wave 2** *(parallel migrations -- depend on Wave 1)*
 
@@ -381,6 +381,6 @@ Plans:
 | 17.1. V2 Grammar Amendment: Autoupdate Surface (INSERTED)            | v1.4      | 4/4 | Complete   | 2026-05-26 |
 | 17.2. renderScopeBracket orphan-fold contract fix (INSERTED)         | v1.4      | 4/4 | Complete    | 2026-05-26 |
 | 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 7/7 | Complete    | 2026-05-27 |
-| 19. Migration Wave 2 -- Plugin Orchestrator Family                   | v1.4      | 0/6            | Planned     | --         |
+| 19. Migration Wave 2 -- Plugin Orchestrator Family                   | v1.4      | 1/6 | In Progress|  |
 | 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 0/?            | Not started | --         |
 | 21. Final Teardown & GREEN Gate                                      | v1.4      | 0/?            | Not started | --         |
