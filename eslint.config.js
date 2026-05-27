@@ -157,6 +157,7 @@ export default tseslint.config(
     // iteration literal in `edge/handlers/plugin/import.ts:45` that the
     // orchestrator-only glob missed.
     files: ["extensions/pi-claude-marketplace/orchestrators/**/*.ts"],
+    ignores: ["extensions/pi-claude-marketplace/orchestrators/marketplace/**"],
     plugins: { msg: msgPlugin },
     rules: {
       "msg/msg-sr-1-success-routing": "error",
@@ -181,6 +182,7 @@ export default tseslint.config(
       "extensions/pi-claude-marketplace/orchestrators/**/*.ts",
       "extensions/pi-claude-marketplace/edge/handlers/**/*.ts",
     ],
+    ignores: ["extensions/pi-claude-marketplace/orchestrators/marketplace/**"],
     plugins: { msg: msgPlugin },
     rules: {
       "msg/msg-gr-3-per-scope": "error",
