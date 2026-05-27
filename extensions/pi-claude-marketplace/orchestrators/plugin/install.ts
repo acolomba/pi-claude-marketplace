@@ -913,12 +913,21 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // version-slot composer treats undefined and empty-string identically
     // (suppresses the `v<version>` token), so behavior is preserved against
     // the theoretical legacy-state-with-empty-version case anyway.
+    //
+    // IN-04: `scope` is OMITTED from the row (canonical "only emit fields
+    // that affect the byte output" form). The single-plugin install
+    // surface's row scope is always the same as the marketplace block's
+    // scope -- the renderer's `renderScopeBracket` (shared/notify.ts:719)
+    // suppresses the bracket when `pluginScope === mpScope`, so emitting
+    // `scope` here was a no-op byte-wise but diverged stylistically from
+    // uninstall.ts:298-302 (which omits) and reinstall.ts:247-252 (which
+    // omits via `rowScope === undefined`). Aligning install.ts on the
+    // omit convention reduces future divergence.
     const installedRow: PluginInstalledMessage = {
       status: "installed",
       name: plugin,
       dependencies,
       version: installCtx.version,
-      scope,
     };
     // V2 notify() call mirrors the Plan 19-01 pilot recipe at
     // orchestrators/plugin/uninstall.ts; install.ts substitutes
