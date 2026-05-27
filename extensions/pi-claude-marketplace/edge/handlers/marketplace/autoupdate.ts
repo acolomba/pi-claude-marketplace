@@ -35,7 +35,7 @@ export function makeAutoupdateHandler(
         usage,
       },
       (message) => {
-        notifyUsageError(ctx, message, usage);
+        notifyUsageError(ctx, { message, usage });
       },
     );
     if (parsed === undefined) {

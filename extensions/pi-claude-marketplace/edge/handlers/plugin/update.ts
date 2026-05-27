@@ -33,7 +33,7 @@ export function makeUpdateHandler(
     try {
       parsed = parseArgs(args);
     } catch (err) {
-      notifyUsageError(ctx, errorMessage(err), USAGE);
+      notifyUsageError(ctx, { message: errorMessage(err), usage: USAGE });
       return;
     }
 
@@ -45,7 +45,7 @@ export function makeUpdateHandler(
     const { nonFlagPositionals, mapModel } = flagged;
 
     if (nonFlagPositionals.length > 1) {
-      notifyUsageError(ctx, "Too many arguments.", USAGE);
+      notifyUsageError(ctx, { message: "Too many arguments.", usage: USAGE });
       return;
     }
 
@@ -58,7 +58,10 @@ export function makeUpdateHandler(
     } else {
       const split = splitPluginMarketplaceRef(ref);
       if (split === undefined) {
-        notifyUsageError(ctx, `Invalid <plugin>@<marketplace> ref: "${ref}".`, USAGE);
+        notifyUsageError(ctx, {
+          message: `Invalid <plugin>@<marketplace> ref: "${ref}".`,
+          usage: USAGE,
+        });
         return;
       }
 

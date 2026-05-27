@@ -55,7 +55,7 @@ export function parsePositionalsWithFlags(
     if (token === "--map-model") {
       mapModel = true;
     } else if (token.startsWith("--")) {
-      notifyUsageError(ctx, `Unknown flag: "${token}".`, usage);
+      notifyUsageError(ctx, { message: `Unknown flag: "${token}".`, usage });
       return undefined;
     } else {
       nonFlagPositionals.push(token);
@@ -82,7 +82,7 @@ export function parseRequiredPluginMarketplaceRef(
       // itself on the missing-required-positional path; suppress the
       // duplicate-usage case by stripping when message === usage.
       const head = message === usage ? "Missing required argument." : message;
-      notifyUsageError(ctx, head, usage);
+      notifyUsageError(ctx, { message: head, usage });
     },
   );
   if (parsed === undefined) {
@@ -92,7 +92,10 @@ export function parseRequiredPluginMarketplaceRef(
   const ref = splitPluginMarketplaceRef(parsed.ref);
   if (ref === undefined) {
     // PI-1 invalid `<plugin>@<marketplace>` token -- USAGE error per MSG-NC-2.
-    notifyUsageError(ctx, `Invalid <plugin>@<marketplace> ref: "${parsed.ref}".`, usage);
+    notifyUsageError(ctx, {
+      message: `Invalid <plugin>@<marketplace> ref: "${parsed.ref}".`,
+      usage,
+    });
     return undefined;
   }
 

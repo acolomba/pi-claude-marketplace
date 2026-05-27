@@ -35,22 +35,21 @@ export function makeBootstrapHandler(
     try {
       parsed = parseArgs(args);
     } catch (err) {
-      notifyUsageError(ctx, errorMessage(err), USAGE);
+      notifyUsageError(ctx, { message: errorMessage(err), usage: USAGE });
       return;
     }
 
     if (parsed.positional.length > 0) {
-      notifyUsageError(ctx, "bootstrap takes no arguments.", USAGE);
+      notifyUsageError(ctx, { message: "bootstrap takes no arguments.", usage: USAGE });
       return;
     }
 
     // Reject --scope flag explicitly: bootstrap is user-scope only.
     if (parsed.scope !== undefined) {
-      notifyUsageError(
-        ctx,
-        "bootstrap does not accept --scope; it always targets user scope.",
-        USAGE,
-      );
+      notifyUsageError(ctx, {
+        message: "bootstrap does not accept --scope; it always targets user scope.",
+        usage: USAGE,
+      });
       return;
     }
 

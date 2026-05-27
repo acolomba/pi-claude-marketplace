@@ -28,12 +28,18 @@ export function makeImportHandler(
     try {
       parsed = parseArgs(args);
     } catch (err) {
-      notifyUsageError(ctx, err instanceof Error ? err.message : String(err), USAGE);
+      notifyUsageError(ctx, {
+        message: err instanceof Error ? err.message : String(err),
+        usage: USAGE,
+      });
       return;
     }
 
     if (parsed.positional.length > 0) {
-      notifyUsageError(ctx, "import does not accept positional arguments.", USAGE);
+      notifyUsageError(ctx, {
+        message: "import does not accept positional arguments.",
+        usage: USAGE,
+      });
       return;
     }
 
