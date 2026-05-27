@@ -426,6 +426,86 @@ test("importClaudeSettings classifies unavailable and unexpected plugin failures
   assert.match(message, /● ok \(installed\)/);
 });
 
+test("importClaudeSettings catches unexpected installPlugin throws and surfaces a partial cascade row (WR-02)", async () => {
+  // Plan 20-05 WR-02 gap closure: when installPlugin throws an unexpected
+  // host-side error (not a structured {status: "failed"} return), the
+  // executeScopedPlan try/catch MUST (a) keep iterating the per-plugin loop,
+  // (b) record the throw in result.unexpectedPluginFailures matching the
+  // dispatchFailedOutcome shape, and (c) leave the final notify() at
+  // importClaudeSettings:787 to fire exactly once with the cascade row.
+  const { ctx, pi, notifications } = makeCtx();
+  const attempted: string[] = [];
+
+  const result = await importClaudeSettings({
+    ctx,
+    pi,
+    cwd: "/tmp/project",
+    selectedScopes: ["project"],
+    deps: {
+      loadSettings: async () => ({
+        paths: { basePath: "base", localPath: "local" },
+        settings: {
+          enabledPlugins: { "before@mp": true, "boom@mp": true, "after@mp": true },
+          extraKnownMarketplaces: { mp: { directory: "./mp" } },
+        },
+        diagnostics: [],
+      }),
+      loadState: async () => ({
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: { kind: "path", raw: "./mp", logical: "./mp" },
+            addedFromCwd: "/tmp/project",
+            manifestPath: "/tmp/mp/.claude-plugin/marketplace.json",
+            marketplaceRoot: "/tmp/mp",
+            plugins: {},
+          },
+        },
+      }),
+      addMarketplace: async () => undefined,
+      installPlugin: async (opts) => {
+        attempted.push(opts.plugin);
+        if (opts.plugin === "boom") {
+          throw new Error("simulated host crash");
+        }
+
+        return {
+          status: "installed",
+          resourcesChanged: true,
+          declaresAgents: false,
+          declaresMcp: false,
+        };
+      },
+    },
+  });
+
+  // (1) per-plugin loop continues across the throw: all three plugins attempted.
+  assert.deepEqual(attempted, ["before", "boom", "after"]);
+
+  // (2) catch handler pushed the discriminated entry matching
+  // dispatchFailedOutcome's shape (execute.ts:737-745).
+  assert.equal(result.unexpectedPluginFailures.length, 1);
+  assert.equal(result.unexpectedPluginFailures[0]?.plugin, "boom");
+  assert.equal(result.unexpectedPluginFailures[0]?.reason, "unexpected-failure");
+  assert.equal(result.unexpectedPluginFailures[0]?.cause, "simulated host crash");
+
+  // (3) final notify() at importClaudeSettings:787 fired exactly once;
+  // severity routes to "error" per D-16-11 (cascade contains a failed row).
+  assert.equal(notifications.length, 1);
+  assert.equal(notifications[0]?.severity, "error");
+
+  // (4) unexpectedPluginFailures round-trips through
+  // buildImportNotificationMarketplaces (execute.ts:457-465) to the V2
+  // PluginFailedMessage {not in manifest} row; the two surrounding plugins
+  // STILL render as (installed), proving loop-continuation end-to-end.
+  const message = notifications[0]?.message ?? "";
+  assert.match(message, /⊘ boom \(failed\) \{not in manifest\}/);
+  assert.match(message, /● before \(installed\)/);
+  assert.match(message, /● after \(installed\)/);
+});
+
 test("importClaudeSettings classifies uninstallable plugins as warnings without aborting others", async () => {
   const { ctx, pi } = makeCtx();
   const attempted: string[] = [];

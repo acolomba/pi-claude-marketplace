@@ -635,15 +635,33 @@ async function executeScopedPlan(
       continue;
     }
 
-    const outcome = await installPlugin({
-      ctx: opts.ctx,
-      pi: opts.pi,
-      scope: plugin.scope,
-      cwd: opts.cwd,
-      marketplace: plugin.ref.marketplace,
-      plugin: plugin.ref.plugin,
-      notifications: { mode: "orchestrated" },
-    });
+    // WR-02 (gap closure, Plan 20-05): catch unexpected installPlugin throws
+    // and route them to result.unexpectedPluginFailures matching
+    // dispatchFailedOutcome's shape; per-scope loop continues and the final
+    // notify() at importClaudeSettings:787 still fires.
+    let outcome: InstallPluginOutcome;
+    try {
+      outcome = await installPlugin({
+        ctx: opts.ctx,
+        pi: opts.pi,
+        scope: plugin.scope,
+        cwd: opts.cwd,
+        marketplace: plugin.ref.marketplace,
+        plugin: plugin.ref.plugin,
+        notifications: { mode: "orchestrated" },
+      });
+    } catch (err) {
+      result.unexpectedPluginFailures.push({
+        kind: "plugin-failure",
+        scope: plugin.scope,
+        plugin: plugin.ref.plugin,
+        marketplace: plugin.ref.marketplace,
+        ref: refLabel(plugin),
+        reason: "unexpected-failure",
+        cause: errorMessage(err),
+      });
+      continue;
+    }
 
     switch (outcome.status) {
       case "installed":
