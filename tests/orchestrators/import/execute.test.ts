@@ -506,6 +506,81 @@ test("importClaudeSettings catches unexpected installPlugin throws and surfaces 
   assert.match(message, /● after \(installed\)/);
 });
 
+test("importClaudeSettings continues to next scope after unexpected installPlugin throw on prior scope (WR-02 cross-scope)", async () => {
+  // Plan 20-06 WR-02 cross-scope sibling: locks that an unexpected
+  // installPlugin throw on scope A does NOT abort the outer
+  // for (const scopePlan of plan.scopes) loop. Scope B still runs to
+  // completion and a SINGLE merged notify() emits the combined cascade
+  // for both scopes (the in-scope sibling at line 429 only covers
+  // per-plugin loop continuation within a single scope).
+  const { ctx, pi, notifications } = makeCtx();
+  const attempted: string[] = [];
+
+  const result = await importClaudeSettings({
+    ctx,
+    pi,
+    cwd: "/tmp/project",
+    selectedScopes: ["project", "user"],
+    deps: {
+      loadSettings: async (scope) => ({
+        paths: { basePath: "base", localPath: "local" },
+        settings: {
+          enabledPlugins: { [`${scope === "project" ? "boom" : "other"}@mp`]: true },
+          extraKnownMarketplaces: { mp: { directory: "./mp" } },
+        },
+        diagnostics: [],
+      }),
+      loadState: async () => ({
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: { kind: "path", raw: "./mp", logical: "./mp" },
+            addedFromCwd: "/tmp/project",
+            manifestPath: "/tmp/mp/.claude-plugin/marketplace.json",
+            marketplaceRoot: "/tmp/mp",
+            plugins: {},
+          },
+        },
+      }),
+      addMarketplace: async () => undefined,
+      installPlugin: async (opts) => {
+        attempted.push(`${opts.scope}:${opts.plugin}`);
+        if (opts.scope === "project") {
+          throw new Error("scope-A host crash");
+        }
+
+        return {
+          status: "installed",
+          resourcesChanged: true,
+          declaresAgents: false,
+          declaresMcp: false,
+        };
+      },
+    },
+  });
+
+  // (1) Outer for (const scopePlan of plan.scopes) loop iterates across the
+  // throw: BOTH scopes attempted.
+  assert.deepEqual(attempted, ["project:boom", "user:other"]);
+
+  // (2) Only the throwing scope's plugin lands in unexpectedPluginFailures.
+  assert.equal(result.unexpectedPluginFailures.length, 1);
+  assert.equal(result.unexpectedPluginFailures[0]?.scope, "project");
+  assert.equal(result.unexpectedPluginFailures[0]?.plugin, "boom");
+
+  // (3) Final notify() at the end of importClaudeSettings fires EXACTLY
+  // ONCE for the combined cascade across both scopes (NOT one-per-scope).
+  assert.equal(notifications.length, 1);
+
+  // (4) The single notification renders BOTH scope A's failed row AND
+  // scope B's installed row, proving cross-scope merge end-to-end.
+  const message = notifications[0]?.message ?? "";
+  assert.match(message, /⊘ boom \(failed\) \{not in manifest\}/);
+  assert.match(message, /● other \(installed\)/);
+});
+
 test("importClaudeSettings classifies uninstallable plugins as warnings without aborting others", async () => {
   const { ctx, pi } = makeCtx();
   const attempted: string[] = [];
