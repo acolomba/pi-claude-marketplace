@@ -71,11 +71,13 @@ test("shim :: bare /update with no positional calls updatePlugins with target = 
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeUpdateHandler(makePi());
     await handler("", ctx);
-    // Plan 13-02a-01 / CMC-10: empty-set renders via EmptyToken ->
-    // "(no plugins)" (legacy "No plugins installed." sentence retired).
+    // Phase 19 / Plan 19-05: V2 empty-targets renders via notify({
+    // marketplaces: [] }) -> renderer's `(no marketplaces)` sentinel
+    // per D-16-17. Mirrors the Wave 1 precedent at
+    // orchestrators/marketplace/update.ts:230.
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(notifications[0]!.message, "(no plugins)");
+    assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });
 
@@ -112,9 +114,9 @@ test("shim :: --scope user/project propagated to updatePlugins", async () => {
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeUpdateHandler(makePi());
     await handler("--scope project", ctx);
-    // Plan 13-02a-01 / CMC-10: empty-set renders via EmptyToken.
+    // Phase 19 / Plan 19-05: V2 empty-targets renders `(no marketplaces)`.
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "(no plugins)");
+    assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });
 
@@ -139,11 +141,11 @@ test("shim :: bare form + --map-model is accepted; control reaches updatePlugins
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeUpdateHandler(makePi());
     await handler("--map-model", ctx);
-    // Plan 13-02a-01 / CMC-10: empty-set renders via EmptyToken; critically,
-    // no USAGE error fires.
+    // Phase 19 / Plan 19-05: V2 empty-targets renders `(no marketplaces)`;
+    // critically, no USAGE error fires.
     assert.equal(notifications.length, 1);
     assert.doesNotMatch(notifications[0]!.message, /Usage: \/claude:plugin update/);
-    assert.equal(notifications[0]!.message, "(no plugins)");
+    assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });
 
