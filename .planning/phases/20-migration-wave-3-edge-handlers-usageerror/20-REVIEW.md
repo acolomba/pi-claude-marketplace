@@ -24,13 +24,13 @@ files_reviewed_list:
   - tests/orchestrators/import/execute.test.ts
 findings:
   critical: 0
-  warning: 3
-  info: 4
-  total: 7
+  warning: 2
+  info: 3
+  total: 5
 status: issues_found
 ---
 
-# Phase 20: Code Review Report
+# Phase 20: Code Review Report (Post-Gap-Closure)
 
 **Reviewed:** 2026-05-27
 **Depth:** standard
@@ -39,25 +39,40 @@ status: issues_found
 
 ## Summary
 
-Phase 20 is a mechanical V1 -> V2 notify migration. The sweep is well-executed:
-the 30 `notifyUsageError` callsites switched cleanly to the V2 1-arg structured
-form (`{ message, usage }`); the import orchestrator's cascade is now built
-inline via `buildImportNotificationMarketplaces` and emitted through a single
-`notify(opts.ctx, opts.pi, { marketplaces })` call; and the two outer
-try/catch wrappers in `bootstrap.ts` and `import.ts` were dropped per D-20-03.
-The ESLint MSG-Block 1 ignore-list narrowing correctly removes
-`orchestrators/import/**` from the V1-routing-rules glob while keeping
-MSG-Block 1b's project-first iteration enforcement (MSG-GR-3) live across
-both surfaces, including the new V2 inline composer.
+This is the post-gap-closure review for Phase 20 (migration-wave-3-edge-handlers-
+usageerror). The prior review's three Warnings and four Info items were addressed
+by Plan 20-05; IN-04 (sonarjs/cognitive-complexity disable on `executeScopedPlan`)
+was explicitly deferred. The behavioral hardening from WR-02 -- a `try/catch`
+around `installPlugin` inside `executeScopedPlan` that routes unexpected throws
+to `result.unexpectedPluginFailures` -- is correctly implemented and round-trips
+through `buildImportNotificationMarketplaces` into a V2 `PluginFailedMessage
+{ reasons: ["not in manifest"] }` cascade row. The 30 V2 `notifyUsageError`
+callsites across all 13 edge handlers (`add`, `autoupdate`, `list`,
+`remove`, `update` under `marketplace/`; `bootstrap`, `install`, `uninstall`,
+`reinstall`, `update`, `list`, `import` under `plugin/`; plus `router.ts` and
+`shared.ts`) all use the structured `{ message, usage }` form consistently.
+The `readonly` modifiers on `MarketplaceBlock.name` and `.scope` are correctly
+applied and zero callers reassign those fields. `npm run check` is GREEN per
+the gap-closure summary, and a local `tsc --noEmit` + `eslint` pass on the
+two most-mutated files (`orchestrators/import/execute.ts` and
+`edge/handlers/plugin/import.ts`) both exit 0.
 
-No critical defects found. Three warning-level findings concern (a) a
-misleading inline comment in `edge/handlers/plugin/import.ts` that
-overstates the safety guarantee provided by `executeScopedPlan` after the
-outer catch-all was dropped, (b) a cross-iteration partial-result-loss risk
-introduced by that same drop when `installPlugin` throws an unexpected
-exception mid-loop, and (c) a stale line-number reference in the same
-comment. Info-level findings flag a documentation drift, an unused export,
-and two minor code-quality observations on the inline cascade builder.
+Two warning-level findings concern (a) **stale line-number citations
+re-introduced by Plan 20-05 itself**: Task 1 (WR-02) added 12 lines of
+try/catch + comments inside `executeScopedPlan` BEFORE the Task 2 rewrite
+of `edge/handlers/plugin/import.ts:52-63`, and Task 2 wrote line-number
+citations that match the file's pre-Task-1 state, not its current state.
+The same drift affects two comments in `tests/orchestrators/import/execute.
+test.ts` (lines 435, 494) and one in `orchestrators/import/execute.ts:644`
+that cite `importClaudeSettings:787` for the final `notify()` -- it is now
+at line 808. And (b) **the new WR-02 lock-test does not cover the
+cross-scope guarantee**: it exercises in-scope per-plugin loop continuation
+on a single scope only, leaving the original cross-scope partial-cascade-
+loss concern from the prior review's WR-02 narrative without an
+explicit regression test. Three info-level items are observations on the
+deferred IN-04 disable, a dead-code switch-arm pair in `importWarningReason`,
+and a pattern observation (line-anchored comments keep drifting; named-
+anchor comments would be more stable).
 
 ## Structural Findings (fallow)
 
@@ -68,220 +83,271 @@ this section.
 
 ## Warnings
 
-### WR-01: Misleading "per-scope try/catch via executeScopedPlan" claim in dropped-catch comment
+### WR-01: Stale line-number citations re-introduced by Plan 20-05
 
-**File:** `extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts:52-55`
-**Issue:** The justifying comment for the dropped outer catch reads:
-> "the inner `importClaudeSettings` after Plan 20-02 owns its own per-scope
-> try/catch via `executeScopedPlan` (execute.ts:745-755); catastrophic
-> uncaught throws bubble to Pi runtime per D-20-03."
+**File:**
+- `extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts:52-53`
+- `extensions/pi-claude-marketplace/orchestrators/import/execute.ts:644`
+- `tests/orchestrators/import/execute.test.ts:435, 494`
 
-This overstates the safety guarantee. Inspecting
-`orchestrators/import/execute.ts`:
+**Issue:** The prior 20-REVIEW.md flagged stale line refs as WR-03 ("Stale
+line-number reference in dropped-catch justification"). Plan 20-05 Task 2
+("WR-01/WR-03 -- Correct error-boundary comment") rewrote the
+`import.ts:52-63` comment block with what were, at the time of writing,
+the correct line numbers. However, Plan 20-05 Task 1 (committed earlier as
+`2ae0aab`) had already added 12 source lines inside `executeScopedPlan`
+(the new `installPlugin` try/catch + its 6-line `WR-02 (gap closure, Plan
+20-05)` block comment + the `let outcome: InstallPluginOutcome;` hoist).
+Those 12 lines sit BELOW `loadState` (lines 521-531) and BELOW
+`addMarketplace` (lines 580-611), but ABOVE the dispatchFailedOutcome
+function and the final `notify()` call.
 
-- `loadState` IS wrapped (lines 518-528) -- on failure, the per-scope plan
-  records a `settings-read-error` diagnostic and returns early.
-- `addMarketplace` IS wrapped (lines 577-608) -- on failure, the
-  marketplace lands in `result.marketplaceFailures` and dependent plugin
-  warnings are emitted.
-- `installPlugin` is **NOT** wrapped (lines 638-646). The orchestrator's
-  collapsed `{status: "installed"} | {status: "failed", error, cause}`
-  discriminated return covers expected failures, but an unexpected throw
-  (programming bug, unhandled host-side exception, etc.) propagates out of
-  `executeScopedPlan` and aborts the outer `for (const scopePlan of
-  plan.scopes)` loop in `importClaudeSettings` (lines 769-771), which in
-  turn skips the final `notify(opts.ctx, opts.pi, { marketplaces })` call
-  at line 787.
+The result is that the line citations written in Task 2 -- intended to
+describe the file post-Task-1 -- match the file's PRE-Task-1 state.
+Concretely:
 
-The net effect: a single unexpected throw from `installPlugin` on scope A
-will (a) prevent scope B from running at all and (b) suppress the V2
-cascade for the work that DID complete on scope A. Per D-20-03 this is
-acceptable behavior for "truly catastrophic" throws, but the comment
-should not claim a per-scope try/catch boundary that does not exist in
-the code. The referenced "execute.ts:745-755" location is also incorrect
-(see WR-03).
+| Citation in comment / test                                   | Actual location now           | Off-by |
+| ------------------------------------------------------------ | ----------------------------- | ------ |
+| `import.ts:52` -- "loadState (execute.ts:518-528)"           | `execute.ts:521-531`           | -3     |
+| `import.ts:53` -- "addMarketplace (execute.ts:577-608)"      | `execute.ts:580-611`           | -3     |
+| `execute.ts:644` -- "notify() at importClaudeSettings:787"   | `execute.ts:808`               | -21    |
+| `execute.test.ts:435` -- "importClaudeSettings:787"          | `execute.ts:808`               | -21    |
+| `execute.test.ts:494` -- "importClaudeSettings:787"          | `execute.ts:808`               | -21    |
 
-**Fix:** Rewrite the comment to accurately describe what's covered and
-what bubbles:
+The previous review's gap-closure self-check did not catch this because
+its grep verification asserted the literal string `execute.ts:518-528`
+APPEARS in `import.ts` (it does) and that `execute.ts:745-755` does NOT
+appear (correct), but it never verified that the cited range still POINTS
+AT the loadState try/catch. The 12-line Task 1 insert silently shifted
+the target.
+
+This is the **same class of bug** the previous review's WR-03 closed.
+Closing it the same way (hand-counted line numbers in comments) sets up
+the next regression.
+
+**Fix:** Two options; pick one explicitly:
+
+**Option A (low-effort, immediate)** -- update the citations to the
+current line numbers:
 
 ```ts
-// No try/catch: `importClaudeSettings` wraps `loadState` and
-// `addMarketplace` per-scope (execute.ts:518-528, 577-608) and routes
-// expected `installPlugin` failures through the discriminated
-// `{status: "failed"}` return. Unexpected throws from `installPlugin` or
-// from the inline cascade build will abort the per-scope loop and skip
-// the final notify() emission; per D-20-03 this is intentional --
-// catastrophic uncaught throws bubble to Pi runtime where a stack trace
-// is more useful than a polished message that masks the bug.
+// edge/handlers/plugin/import.ts:52-53
+// No try/catch: importClaudeSettings wraps loadState (execute.ts:521-531),
+// addMarketplace (execute.ts:580-611), and installPlugin (Plan 20-05
 ```
 
-### WR-02: Unexpected `installPlugin` throw silently discards completed-scope cascade
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/import/execute.ts:638-646, 769-771, 786-787`
-**Issue:** Related to WR-01 but tracked separately because the underlying
-risk is independent of the comment wording. Before Phase 20, the outer
-try/catch in the edge handler converted any uncaught throw from
-`importClaudeSettings` into a single user-visible `notifyError` message.
-After Phase 20 the throw bubbles to Pi runtime. That is the design intent
-per D-20-03 -- a stack trace is more useful than a masked bug. The
-specific concern is that `executeScopedPlan` accumulates results into a
-shared `MutableImportResult` across scopes, and the final V2 cascade
-emission happens after the for-loop completes:
-
 ```ts
-for (const scopePlan of plan.scopes) {
-  await executeScopedPlan(opts, result, scopePlan);  // throw here ...
-}
-
-const marketplaces = buildImportNotificationMarketplaces(result);
-notify(opts.ctx, opts.pi, { marketplaces });          // ... skips this
+// orchestrators/import/execute.ts:644
+// notify() at importClaudeSettings (execute.ts:808) still fires.
 ```
 
-If a throw occurs mid-loop, both the completed-scope cascade AND the
-in-progress-scope partial cascade are discarded silently from the
-user-facing surface. The in-memory `result` is also lost because the
-throw propagates out of `importClaudeSettings` itself. This breaks the
-PRD NFR-3 "fail-clean" expectation for the partial-success path: the
-user sees a Pi-runtime stack trace but no record of what DID install
-on the prior scope.
+```ts
+// tests/orchestrators/import/execute.test.ts:435 + :494
+// importClaudeSettings (execute.ts:808) to fire exactly once with the cascade row.
+// (3) final notify() at importClaudeSettings (execute.ts:808) fired exactly once;
+```
 
-**Fix:** Two reasonable options; pick one explicitly:
-
-Option A (cheaper, preserves D-20-03 intent for catastrophic-bug
-debugging): wrap the `installPlugin` call in `executeScopedPlan` in
-try/catch and route unexpected throws into the existing
-`result.unexpectedPluginFailures` bucket -- the same bucket
-`dispatchFailedOutcome` already uses for non-`PluginShapeError`
-failures. This converts an unexpected throw from `installPlugin` into
-the same V2 `PluginFailedMessage {not in manifest}` surface the
-discriminated-failure path already emits.
+**Option B (durable, recommended)** -- replace line-anchored citations
+with function-anchored citations. The three sites being described all
+have unique stable function or block names that will not drift on minor
+edits:
 
 ```ts
-let outcome;
-try {
-  outcome = await installPlugin({ /* ... */ });
-} catch (err) {
-  result.unexpectedPluginFailures.push({
-    kind: "plugin-failure",
-    scope: plugin.scope,
-    plugin: plugin.ref.plugin,
-    marketplace: plugin.ref.marketplace,
-    ref: refLabel(plugin),
-    reason: "unexpected-failure",
-    cause: errorMessage(err),
+// edge/handlers/plugin/import.ts:52-53
+// No try/catch: importClaudeSettings wraps loadState (in executeScopedPlan's
+// state-load try block), addMarketplace (in executeScopedPlan's
+// marketplacesToEnsure loop), and installPlugin (Plan 20-05 WR-02 gap
+// closure; in executeScopedPlan's pluginsToInstall loop) per-scope...
+```
+
+```ts
+// orchestrators/import/execute.ts:644
+// notify() at the end of importClaudeSettings still fires.
+```
+
+Option B prevents this WR from re-occurring on the next edit that touches
+`execute.ts`. Pair with a one-line check in any future gap-closure
+self-check that verifies cited ranges actually contain the cited construct
+(`grep -c "try {" <file>` near the cited range, or similar).
+
+### WR-02: WR-02 lock-test covers in-scope continuation but not cross-scope continuation
+
+**File:** `tests/orchestrators/import/execute.test.ts:429-507`
+**Issue:** The new lock-test `importClaudeSettings catches unexpected
+installPlugin throws and surfaces a partial cascade row (WR-02)` exercises
+exactly one `selectedScopes: ["project"]` invocation with three plugins
+(`before`, `boom`, `after`) -- one of which throws. This locks the
+per-plugin loop-continuation behavior INSIDE a single
+`executeScopedPlan` invocation.
+
+The original WR-02 narrative in the prior 20-REVIEW.md described a
+different (broader) concern:
+
+> "If a throw occurs mid-loop, both the completed-scope cascade AND the
+> in-progress-scope partial cascade are discarded silently from the
+> user-facing surface."
+
+That sentence is about the OUTER `for (const scopePlan of plan.scopes)`
+loop in `importClaudeSettings` (lines 790-792). The new try/catch fix
+addresses the in-progress-scope concern, but the cross-scope guarantee
+(scope A throws unexpectedly -> scope B still runs to completion -> single
+`notify()` emits the merged cascade for BOTH scopes) is not regression-
+guarded by any test. There is one existing test asserting cross-scope
+independence (`keeps user and project operations independent` at line
+907-940), but it has no failing/throwing path.
+
+The behavior IS now correct (the try/catch routes throws into the result
+bucket and `continue`s the per-plugin loop, so `executeScopedPlan` returns
+normally and the outer per-scope for-loop iterates to scope B). But
+without a test asserting that, a future refactor that hoists the
+try/catch upward to wrap the entire pluginsToInstall loop, or that adds
+a re-throw branch, could regress the cross-scope guarantee silently.
+
+**Fix:** Add a sibling test that locks the cross-scope guarantee. Suggested
+minimal scaffold (adapt to existing test mock conventions):
+
+```ts
+test("importClaudeSettings continues to next scope after unexpected installPlugin throw on prior scope (WR-02 cross-scope)", async () => {
+  const { ctx, pi, notifications } = makeCtx();
+  const attempted: string[] = [];
+
+  await importClaudeSettings({
+    ctx,
+    pi,
+    cwd: "/tmp/project",
+    selectedScopes: ["project", "user"],
+    deps: {
+      loadSettings: async (scope) => ({
+        paths: { basePath: "base", localPath: "local" },
+        settings: {
+          enabledPlugins: { [`p-${scope}@mp`]: true },
+          extraKnownMarketplaces: { mp: { directory: "./mp" } },
+        },
+        diagnostics: [],
+      }),
+      loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
+      addMarketplace: async () => undefined,
+      installPlugin: async (opts) => {
+        attempted.push(`${opts.scope}:${opts.plugin}`);
+        if (opts.scope === "project") {
+          throw new Error("scope-A host crash");
+        }
+        return {
+          status: "installed",
+          resourcesChanged: true,
+          declaresAgents: false,
+          declaresMcp: false,
+        };
+      },
+    },
   });
-  continue;
-}
+
+  // Both scopes attempted -- outer loop did not abort on scope-A throw.
+  assert.deepEqual(attempted, ["project:p-project", "user:p-user"]);
+  // Single notify() fires with merged cascade.
+  assert.equal(notifications.length, 1);
+  const message = notifications[0]?.message ?? "";
+  assert.match(message, /p-project \(failed\) \{not in manifest\}/);
+  assert.match(message, /p-user \(installed\)/);
+});
 ```
-
-Option B (preserves the bubble-to-Pi-runtime contract verbatim):
-explicitly document on `importClaudeSettings` that partial-result-loss
-is the contract for unexpected throws, and add a test asserting the
-loop aborts. The current code documents nothing about this trade-off.
-
-### WR-03: Stale line-number reference in dropped-catch justification
-
-**File:** `extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts:53`
-**Issue:** The comment cites `execute.ts:745-755` as the "per-scope
-try/catch" location. Actual line 745-755 in the current
-`execute.ts` is inside the `dispatchFailedOutcome` function body
-(lines 737-746: pushing an `unexpectedPluginFailures` row) and the start
-of the `importClaudeSettings` function signature (lines 748-750). No
-try/catch exists in that range. The only per-scope try/catch in
-`executeScopedPlan` is the `loadState` wrap at lines 518-528.
-**Fix:** Update the line range to `execute.ts:518-528` (loadState wrap)
-and `577-608` (addMarketplace wrap), or remove the line reference
-entirely and describe the wraps by name. Pair this with the WR-01 fix.
 
 ## Info
 
-### IN-01: ESLint config block comment references retired V1 wrappers without noting Phase 20 implications
+### IN-01: IN-04 deferral now harder to retire after WR-02 commit
 
-**File:** `eslint.config.js:155-158, 188-194`
-**Issue:** The MSG-Block 1 comment (lines 155-158) describes
-`orchestrators/marketplace/**` and `orchestrators/plugin/**` as already
-exempted because of the Wave 2 V1 wrapper retirement, then adds
-`orchestrators/import/**` to that list. The IN-06 explanatory note in
-MSG-Block 1b (lines 188-194) elaborates on the orchestrators/plugin/**
-ignore distinction for MSG-GR-3 but does not yet mention the parallel
-Phase 20 distinction for `orchestrators/import/**`: MSG-Block 1 ignores
-it (because the V1 routing wrappers no longer exist there), but
-MSG-Block 1b does NOT ignore it (because project-first iteration
-discipline is independent of the V1 wrapper migration). Both behaviors
-are correct, but a maintainer scanning these blocks would benefit from
-an explicit note that `orchestrators/import/**` follows the same pattern
-as `orchestrators/plugin/**`.
-**Fix:** Add a brief note in the MSG-Block 1b IN-06 paragraph (line
-188-194):
+**File:** `extensions/pi-claude-marketplace/orchestrators/import/execute.ts:510-511`
+**Issue:** The previous review filed IN-04 (`eslint-disable-next-line
+sonarjs/cognitive-complexity`) as a deferred item. Plan 20-05 explicitly
+chose to defer it, which is fine. However, the WR-02 try/catch added in
+Task 1 introduces one additional branch in `executeScopedPlan` (the new
+catch arm that pushes to `unexpectedPluginFailures` and `continue`s),
+raising the cognitive-complexity score by approximately one. The
+`eslint-disable` line therefore now covers a quantitatively HIGHER score
+than it did pre-Phase-20. Nothing immediately breaks (the threshold of 15
+is presumably already exceeded, hence the disable), but the gap between
+the function's actual complexity and the policy threshold widened
+without acknowledgment.
+**Fix:** No code change required. If/when a future plan extracts the
+marketplaces-ensure block (lines 535-612) as the previous IN-04
+suggested, recount the score afterwards to verify retiring the disable
+is still possible. Optionally update the previous review's IN-04 line
+range (cited "lines 530-609") to the post-Phase-20 range (`lines 535-612`)
+in whatever planning artifact tracks the deferral.
 
-```js
-// IN-06: `orchestrators/plugin/**` is NOT ignored here even though the
-// Wave 2 V1->V2 migration retired the severity-named notify wrappers
-// that MSG-Block 1 (routing rules) check for. The Phase 20 migration
-// extended the same treatment to `orchestrators/import/**` (Plan 20-02
-// inlined the V2 cascade construction) -- MSG-Block 1 ignores it but
-// MSG-Block 1b does not, since the project-first iteration discipline
-// remains in force everywhere outside `orchestrators/marketplace/**`.
-```
+### IN-02: `importWarningReason` has dead switch arms after caller-side pre-filter
 
-### IN-02: `dependenciesFromInstalled` returns a `Object.freeze`d array typed as `readonly Dependency[]`
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/import/execute.ts:344-355`
-**Issue:** Minor: `Object.freeze` returns its argument typed as
-`Readonly<T>`; for arrays, the return type still includes the mutating
-methods at the type level even though they would throw at runtime.
-TypeScript's `readonly Dependency[]` already enforces immutability at
-the type level for consumers, so the runtime freeze is defense-in-depth
-but adds work the type system doesn't reward. The sibling
-`buildImportNotificationMarketplaces` at line 499 also freezes the
-per-block `plugins` array. Both are non-load-bearing.
-**Fix:** Either accept the freeze as defense-in-depth and leave a brief
-comment that it's intentional, or drop the `Object.freeze` calls --
-the consumer-visible types (`readonly Dependency[]`,
-`readonly PluginNotificationMessage[]`) already prevent the obvious
-mutation paths.
-
-### IN-03: `MarketplaceBlock.plugins` field is `PluginNotificationMessage[]` (mutable) inside an otherwise-readonly type
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/import/execute.ts:302-309`
-**Issue:** The `MarketplaceBlock` interface declares `key: string` as
-readonly but `name`, `scope`, `status?`, `reasons?`, and `plugins` as
-mutable. The mutation pattern is intentional (the builder mutates a
-single instance across multiple result loops via
-`ensureMarketplaceBlock`). The asymmetry between `readonly key` and the
-mutable rest is inconsistent: `name` and `scope` are set once at block
-creation (line 322-327) and never reassigned; only `status`, `reasons`,
-and `plugins` actually require mutation. Marking `name` and `scope` as
-`readonly` would more accurately reflect the builder's intent.
-**Fix:**
+**File:** `extensions/pi-claude-marketplace/orchestrators/import/execute.ts:332-342, 468-474`
+**Issue:** `importWarningReason` is a pure helper that maps an
+`ImportWarningOutcome["reason"]` to a `Reason`. It has four arms:
+`"unavailable"`, `"uninstallable"`, `"marketplace-failed"`,
+`"unmappable-marketplace-source"`. Its single caller --
+`buildImportNotificationMarketplaces` at lines 468-483 -- filters out
+the last two reasons via an early `continue` (the "A1 DROP" branch)
+BEFORE invoking the helper:
 
 ```ts
-interface MarketplaceBlock {
-  readonly key: string;
-  readonly name: string;
-  readonly scope: Scope;
-  status?: MarketplaceStatus;
-  reasons?: readonly Reason[];
-  plugins: PluginNotificationMessage[];
+for (const o of result.warnings) {
+  if (o.reason === "marketplace-failed" || o.reason === "unmappable-marketplace-source") {
+    continue;
+  }
+  // ...
+  const row: PluginUnavailableMessage = {
+    status: "unavailable",
+    name: o.plugin,
+    reasons: [importWarningReason(o.reason)],
+  };
 }
 ```
 
-### IN-04: `eslint-disable sonarjs/cognitive-complexity` on `executeScopedPlan` accumulates without scrutiny
+So only `"unavailable"` and `"uninstallable"` reach `importWarningReason`.
+The other two arms are unreachable at the current callsite. This is not
+a bug -- the helper is broader than its current consumer, defensively
+mapping every possible warning reason -- but a reader scanning the
+helper in isolation would conclude `marketplace-failed` renders as
+"not found" and `unmappable-marketplace-source` renders as
+"unsupported source" on the user surface, which is contradicted by the
+caller's A1-DROP filter.
+**Fix:** Either (a) document the unreachability at the helper:
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/import/execute.ts:507`
-**Issue:** Pre-existing, not introduced by Phase 20. The function is
-~175 lines and has six distinct phases (load state, ensure marketplaces
-with three branches, surface skipped plugins, install loop with
-discriminated dispatch). The Phase 20 sweep did not enlarge the
-function meaningfully, but it also did not extract any of the
-phase-20-touched logic (the V2 cascade construction was instead put in
-the sibling `buildImportNotificationMarketplaces`). If a future plan
-wants to retire the eslint-disable, the marketplaces-ensure block (lines
-530-609) is the natural extraction candidate -- it has three orthogonal
-branches (`existing && unknown-stored`, `existing && match`,
-`existing && mismatch`, plus the `add new` else-branch) and is the
-largest contributor to the cognitive-complexity score.
-**Fix:** No change required for Phase 20. Filed for future extraction.
+```ts
+function importWarningReason(reason: ImportWarningOutcome["reason"]): Reason {
+  // Only "unavailable" / "uninstallable" reach this helper at the
+  // current callsite (buildImportNotificationMarketplaces filters
+  // marketplace-failed and unmappable-marketplace-source via A1 DROP
+  // before invocation). The other arms are defensive; if a future
+  // caller drops the pre-filter, this mapping defines the V2 reason.
+  switch (reason) {
+    ...
+  }
+}
+```
+
+Or (b) narrow the parameter type to a 2-member literal union (matching
+the actual reachable subset) and add an `assertNever` at the caller for
+the dropped pair. (a) is the cheaper option.
+
+### IN-03: Line-anchored citations across comments and tests are an ongoing maintenance pitfall
+
+**File:**
+- `extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts:52-63`
+- `extensions/pi-claude-marketplace/orchestrators/import/execute.ts:644`
+- `tests/orchestrators/import/execute.test.ts:435, 494, 500`
+**Issue:** This phase's prior REVIEW.md WR-03 closed a stale-line-number
+issue. Plan 20-05 reintroduced the same class of stale-line-number issue
+(see WR-01 above) within the same plan run. The root cause is
+non-architectural -- comments and test assertions cite line numbers in
+sibling files, which any insert/delete above the citation breaks
+silently. This is recurring across phases: WR-03 in 20-REVIEW v1 and
+WR-01 in 20-REVIEW v2 are the same bug class.
+**Fix:** No change required for this phase. Filed as a pattern
+observation. A durable mitigation candidate: prefer function-anchored
+citations (e.g. "in `executeScopedPlan`'s state-load try block") over
+line-anchored citations (e.g. "execute.ts:518-528"); function names do
+not drift on edits below the citation point. Optionally adopt a
+lint-time check that asserts cited line numbers in comments resolve to
+expected constructs (one-line awk verifier in `npm run check`). Not in
+scope for Phase 20 closure.
 
 ---
 
