@@ -343,7 +343,7 @@ Plans:
 4. Catalog UAT byte-equality is GREEN for every edge-handler output and every usage-error output against the v2.0 spec.
 5. `npm run check` stays GREEN.
 
-**Plans:** 5/5 plans complete
+**Plans:** 5/6 plans complete (20-06 pending refinement)
 
 **Wave 1** *(mechanical sweep -- low risk; atomic single commit)*
 
@@ -361,6 +361,10 @@ Plans:
 **Wave 4** *(gap closure from REVIEW.md WR-01..03 + IN-01..03 -- depends on Wave 3)*
 
 - [x] 20-05-importer-error-boundary-and-polish-PLAN.md -- WR-02 Option A: wrap installPlugin in try/catch in executeScopedPlan + route unexpected throws to result.unexpectedPluginFailures + new test locking partial-cascade preservation; WR-01/WR-03: rewrite stale comment in edge/handlers/plugin/import.ts:52-55 to cite execute.ts:518-528 + 577-608 + new installPlugin wrap (drop the execute.ts:745-755 ghost ref); IN-01: add MSG-Block 1b doc note noting orchestrators/import/** follows the same Block-1-ignore / Block-1b-keep parallel as orchestrators/plugin/**; IN-02: keep Object.freeze on the 3 import.ts sites (dominant codebase convention) and annotate each as defense-in-depth; IN-03: mark MarketplaceBlock.name and .scope readonly. IN-04 deferred.
+
+**Wave 5** *(gap closure from REVIEW.md (post-closure) WR-01..02 -- depends on Wave 4)*
+
+- [ ] 20-06-citation-anchor-and-cross-scope-test-PLAN.md -- WR-01 Option B (REVIEW.md post-closure): replace line-anchored citations (`execute.ts:NNN-NNN`, `importClaudeSettings:NNN`) with function-anchored citations across edge/handlers/plugin/import.ts + orchestrators/import/execute.ts WR-02 comment + tests/orchestrators/import/execute.test.ts; WR-02 (post-closure): add sibling cross-scope regression test exercising selectedScopes: ["project", "user"] with installPlugin throwing on scope A and succeeding on scope B; asserts both scopes attempted, single merged notify() emission, and merged cascade rendering. Refinement only -- SNM-23 was already SATISFIED by Plans 20-01..20-05.
 
 ### Phase 21: Final Teardown & GREEN Gate
 
