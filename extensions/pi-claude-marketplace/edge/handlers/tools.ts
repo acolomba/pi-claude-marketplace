@@ -26,12 +26,15 @@
 // boolean. Presence of `mp.plugins[name]` === installed. Per-marketplace
 // plugin count for the list tool is `Object.keys(mp.plugins).length`.
 //
-// Phase 13 Wave 2 sub-wave 2d migration: the plugin-list payload now uses
-// the Wave 1 RowSpec shape (`marketplaceBlocks` of `PluginListMarketplaceBlock`
-// with `PluginListRow` children). The LLM tool's structured surface
-// translates the new payload back into its V1-style flat-line projection;
-// the slash-command surface uses the catalog form via `renderPluginList`
-// directly (orchestrators/plugin/list.ts).
+// Phase 19 / Plan 19-03 migration: the plugin-list payload is now the V2
+// `MarketplaceNotificationMessage[]` shape (one per marketplace, with
+// `plugins: readonly PluginNotificationMessage[]`). The LLM tool's
+// structured surface translates the V2 payload into its V1-style flat-line
+// projection; the slash-command surface uses the V2 grammar via
+// `notify(ctx, pi, message)` directly (orchestrators/plugin/list.ts).
+// The `(upgradable)` plugin variant maps onto the tool's `[installed]`
+// projection (the plugin IS installed; the upgrade status is internal to
+// the slash-command surface per MSG-PL-4).
 
 import Type from "typebox";
 
@@ -40,8 +43,8 @@ import { loadPluginListPayload } from "../../orchestrators/plugin/list.ts";
 import { sourceLogical } from "../../presentation/marketplace-list.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { EmptyToken, PluginListRow } from "../../presentation/compact-line.ts";
 import type { ParsedSource } from "../../presentation/marketplace-list.ts";
+import type { PluginNotificationMessage } from "../../shared/notify.ts";
 
 // ─── LLM tool parameter schemas (TypeBox) ─────────────────────────────────
 
@@ -143,7 +146,20 @@ interface PluginRow {
   reasons?: readonly string[];
 }
 
-function projectRowStatus(status: PluginListRow["status"]): ToolPluginStatus {
+/**
+ * Project the V2 PluginNotificationMessage status set onto the tool's
+ * three-bucket projection. The list-surface variants are
+ * `installed | upgradable | available | unavailable`; only this subset
+ * appears inside the `loadPluginListPayload` return shape (the orchestrator
+ * builds list-only variants on the success path; the failure path emits a
+ * `failed` row in a synthetic `(list)` marketplace which never traverses
+ * this projection -- the tool's try/catch short-circuits to its error
+ * branch before reaching here). The other plugin-status variants
+ * (`updated` / `reinstalled` / `uninstalled` / `failed` / `skipped` /
+ * `manual recovery`) are unreachable on this surface and an exhaustive
+ * `assertNever`-style throw guards the invariant.
+ */
+function projectRowStatus(status: PluginNotificationMessage["status"]): ToolPluginStatus {
   switch (status) {
     case "installed":
     case "upgradable":
@@ -152,6 +168,15 @@ function projectRowStatus(status: PluginListRow["status"]): ToolPluginStatus {
       return "available";
     case "unavailable":
       return "unavailable";
+    case "updated":
+    case "reinstalled":
+    case "uninstalled":
+    case "failed":
+    case "skipped":
+    case "manual recovery":
+      throw new Error(
+        `pi_claude_marketplace_plugin_list: unexpected plugin status "${status}" on list payload`,
+      );
   }
 }
 
@@ -254,8 +279,91 @@ async function loadToolPluginPayload(
   });
 }
 
-function isPluginRow(child: PluginListRow | EmptyToken): child is PluginListRow {
-  return child.kind === "plugin-list";
+/**
+ * Read `p.scope` defensively from the V2 PluginNotificationMessage union.
+ * The `available` / `unavailable` variants OMIT the `scope` field by
+ * construction (SNM-11); the other list-surface variants carry an OPTIONAL
+ * `scope` that is present only when the plugin's install scope differs
+ * from the marketplace block's scope (orphan-fold rule, D-13-18). When
+ * absent, fall back to the marketplace scope so the structured tool
+ * surface always carries a stable `scope` field for the agent.
+ *
+ * The list-surface variant subset for this projection is narrowed by
+ * `projectRowStatus` (the only callers come from inside the rendering
+ * loop after the status switch). For `installed` / `upgradable` the
+ * `scope` field exists structurally; for `available` / `unavailable`
+ * it does not -- the `status`-narrowed switch handles both arms.
+ */
+function pluginScopeOrFallback(
+  p: PluginNotificationMessage,
+  marketplaceScope: "user" | "project",
+): "user" | "project" {
+  switch (p.status) {
+    case "installed":
+    case "upgradable":
+      return p.scope ?? marketplaceScope;
+    case "available":
+    case "unavailable":
+      return marketplaceScope;
+    case "updated":
+    case "reinstalled":
+    case "uninstalled":
+    case "failed":
+    case "skipped":
+    case "manual recovery":
+      // Unreachable on the list surface; renderer-as-spec guard.
+      return marketplaceScope;
+  }
+}
+
+/**
+ * Read `p.reasons` defensively. Only a subset of plugin variants carry the
+ * field (D-15-01); for list-surface variants `available` / `installed`
+ * omit `reasons` entirely. The reduced V2 shape collapses to the same
+ * V1-style projection on the tool surface (omit when undefined or empty).
+ */
+function pluginReasons(p: PluginNotificationMessage): readonly string[] | undefined {
+  switch (p.status) {
+    case "unavailable":
+    case "upgradable":
+      return p.reasons.length > 0 ? p.reasons : undefined;
+    case "installed":
+    case "available":
+      return undefined;
+    case "updated":
+    case "reinstalled":
+    case "uninstalled":
+    case "failed":
+    case "skipped":
+    case "manual recovery":
+      // Unreachable on the list surface.
+      return undefined;
+  }
+}
+
+/**
+ * Read `p.version` defensively. The `updated` variant has REQUIRED
+ * `from`/`to` instead of `version`; every other variant carries an
+ * OPTIONAL `version` (D-15-04). On the list surface only the
+ * installed / upgradable / available / unavailable subset is reachable.
+ */
+function pluginVersion(p: PluginNotificationMessage): string | undefined {
+  switch (p.status) {
+    case "installed":
+    case "upgradable":
+    case "available":
+    case "unavailable":
+    case "reinstalled":
+    case "uninstalled":
+    case "failed":
+    case "skipped":
+    case "manual recovery":
+      return p.version;
+    case "updated":
+      // The updated variant has `from`/`to` instead of a single `version`;
+      // synthesize the post-update version for downstream callers.
+      return p.to;
+  }
 }
 
 function renderPluginPayload(
@@ -264,29 +372,36 @@ function renderPluginPayload(
 ): { lines: string[]; rows: PluginRow[] } {
   const lines: string[] = [];
   const rows: PluginRow[] = [];
-  for (const block of payload.marketplaceBlocks) {
-    const mpName = block.header.name;
-    const mpScope = block.header.scope;
+  for (const mp of payload) {
+    const mpName = mp.name;
+    const mpScope = mp.scope;
     lines.push(`Marketplace ${mpName} (${mpScope})`);
-    const pluginRows = block.plugins.filter(isPluginRow);
-    if (pluginRows.length === 0) {
+
+    // Unparseable-manifest marketplace block (status: "failed", plugins: [])
+    // and zero-plugin manifest blocks both render as the bare-header form
+    // followed by the "(no plugins)" body line. The V1 `causeTrailer` was
+    // dropped in V2 (catalog `unparseable-mp`); the tool surface keeps
+    // the V1-style "(no plugins)" line for shape stability.
+    if (mp.plugins.length === 0) {
       lines.push("  (no plugins)");
       continue;
     }
 
-    for (const p of pluginRows) {
+    for (const p of mp.plugins) {
       const status = projectRowStatus(p.status);
       if (!buckets[statusKey(status)]) {
         continue;
       }
 
+      const reasons = pluginReasons(p);
+      const version = pluginVersion(p);
       const row: PluginRow = {
         marketplace: mpName,
-        scope: p.scope,
+        scope: pluginScopeOrFallback(p, mpScope),
         name: p.name,
         status,
-        ...(p.version !== undefined && { version: p.version }),
-        ...(p.reasons !== undefined && p.reasons.length > 0 && { reasons: p.reasons }),
+        ...(version !== undefined && { version }),
+        ...(reasons !== undefined && { reasons }),
       };
       lines.push(renderPluginRow(row));
       rows.push(row);
@@ -353,7 +468,7 @@ export function registerListPluginsTool(pi: ExtensionAPI): void {
 
       const { lines, rows } = renderPluginPayload(payload, buckets);
 
-      if (rows.length === 0 && payload.marketplaceBlocks.length === 0) {
+      if (rows.length === 0 && payload.length === 0) {
         return {
           content: [{ type: "text", text: "No marketplaces configured." }],
           details: { plugins: [] },
