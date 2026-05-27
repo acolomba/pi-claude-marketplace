@@ -343,7 +343,7 @@ Plans:
 4. Catalog UAT byte-equality is GREEN for every edge-handler output and every usage-error output against the v2.0 spec.
 5. `npm run check` stays GREEN.
 
-**Plans:** 5/6 plans complete (20-06 pending refinement)
+**Plans:** 6/6 plans complete
 
 **Wave 1** *(mechanical sweep -- low risk; atomic single commit)*
 
@@ -364,7 +364,7 @@ Plans:
 
 **Wave 5** *(gap closure from REVIEW.md (post-closure) WR-01..02 -- depends on Wave 4)*
 
-- [ ] 20-06-citation-anchor-and-cross-scope-test-PLAN.md -- WR-01 Option B (REVIEW.md post-closure): replace line-anchored citations (`execute.ts:NNN-NNN`, `importClaudeSettings:NNN`) with function-anchored citations across edge/handlers/plugin/import.ts + orchestrators/import/execute.ts WR-02 comment + tests/orchestrators/import/execute.test.ts; WR-02 (post-closure): add sibling cross-scope regression test exercising selectedScopes: ["project", "user"] with installPlugin throwing on scope A and succeeding on scope B; asserts both scopes attempted, single merged notify() emission, and merged cascade rendering. Refinement only -- SNM-23 was already SATISFIED by Plans 20-01..20-05.
+- [x] 20-06-citation-anchor-and-cross-scope-test-PLAN.md -- WR-01 Option B (REVIEW.md post-closure): replace line-anchored citations (`execute.ts:NNN-NNN`, `importClaudeSettings:NNN`) with function-anchored citations across edge/handlers/plugin/import.ts + orchestrators/import/execute.ts WR-02 comment + tests/orchestrators/import/execute.test.ts; WR-02 (post-closure): add sibling cross-scope regression test exercising selectedScopes: ["project", "user"] with installPlugin throwing on scope A and succeeding on scope B; asserts both scopes attempted, single merged notify() emission, and merged cascade rendering. Refinement only -- SNM-23 was already SATISFIED by Plans 20-01..20-05.
 
 ### Phase 21: Final Teardown & GREEN Gate
 
@@ -403,5 +403,5 @@ Plans:
 | 17.2. renderScopeBracket orphan-fold contract fix (INSERTED)         | v1.4      | 4/4 | Complete    | 2026-05-26 |
 | 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 7/7 | Complete    | 2026-05-27 |
 | 19. Migration Wave 2 -- Plugin Orchestrator Family                   | v1.4      | 6/6 | Complete    | 2026-05-27 |
-| 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 5/5 | Complete   | 2026-05-27 |
+| 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 6/6 | Complete   | 2026-05-27 |
 | 21. Final Teardown & GREEN Gate                                      | v1.4      | 0/?            | Not started | --         |
