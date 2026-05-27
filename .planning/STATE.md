@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Structured Notification Messages
-status: ready_to_plan
-last_updated: 2026-05-27T14:15:38.744Z
-last_activity: 2026-05-27 -- Phase 19 execution started
+status: planning
+last_updated: "2026-05-27T14:59:36.936Z"
+last_activity: 2026-05-27
 progress:
   total_phases: 9
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 33
   completed_plans: 33
-  percent: 67
-stopped_at: Phase 19 complete (6/6) — ready to discuss Phase 20
+  percent: 78
 ---
 
 # Project State
@@ -162,9 +161,9 @@ All seven quick tasks have a SUMMARY.md and are completed; the `audit-open` quer
 
 ## Session Continuity
 
-Last session: 2026-05-27T10:32:20.545Z
-Stopped At: Phase 19 context gathered
-Resume File: .planning/phases/19-migration-wave-2-plugin-orchestrator-family/19-CONTEXT.md
+Last session: 2026-05-27T14:59:36.918Z
+Stopped At: Phase 20 context gathered
+Resume File: .planning/phases/20-migration-wave-3-edge-handlers-usageerror/20-CONTEXT.md
 
 ## Operator Next Steps
 
