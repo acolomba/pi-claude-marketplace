@@ -122,7 +122,7 @@ export async function routeClaudePlugin(
   const [head, rest] = peelToken(args);
 
   if (head === "") {
-    notifyUsageError(ctx, "Usage error.", TOP_LEVEL_USAGE);
+    notifyUsageError(ctx, { message: "Usage error.", usage: TOP_LEVEL_USAGE });
     return;
   }
 
@@ -145,7 +145,7 @@ export async function routeClaudePlugin(
     case "marketplace":
       return routeMarketplace(rest, handlers, ctx);
     default:
-      notifyUsageError(ctx, `Unknown subcommand: "${head}".`, TOP_LEVEL_USAGE);
+      notifyUsageError(ctx, { message: `Unknown subcommand: "${head}".`, usage: TOP_LEVEL_USAGE });
       return;
   }
 }
@@ -158,7 +158,10 @@ export async function routeMarketplace(
   const [head, rest] = peelToken(args);
 
   if (head === "") {
-    notifyUsageError(ctx, "marketplace requires a subcommand.", MARKETPLACE_USAGE);
+    notifyUsageError(ctx, {
+      message: "marketplace requires a subcommand.",
+      usage: MARKETPLACE_USAGE,
+    });
     return;
   }
 
@@ -178,7 +181,10 @@ export async function routeMarketplace(
     case "noautoupdate":
       return handlers.marketplaceNoautoupdate(rest, ctx);
     default:
-      notifyUsageError(ctx, `Unknown marketplace subcommand: "${head}".`, MARKETPLACE_USAGE);
+      notifyUsageError(ctx, {
+        message: `Unknown marketplace subcommand: "${head}".`,
+        usage: MARKETPLACE_USAGE,
+      });
       return;
   }
 }

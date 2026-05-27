@@ -49,7 +49,7 @@ export function makeInstallHandler(
     } catch (err) {
       // MSG-NC-2: argument-parsing failure (invalid --scope value) -- sentence
       // form with Usage block appended after a blank line.
-      notifyUsageError(ctx, errorMessage(err), USAGE);
+      notifyUsageError(ctx, { message: errorMessage(err), usage: USAGE });
       return;
     }
 
@@ -62,7 +62,10 @@ export function makeInstallHandler(
 
     const positional = nonFlagPositionals[0];
     if (nonFlagPositionals.length !== 1 || positional === undefined) {
-      notifyUsageError(ctx, "install requires exactly one <plugin>@<marketplace> argument.", USAGE);
+      notifyUsageError(ctx, {
+        message: "install requires exactly one <plugin>@<marketplace> argument.",
+        usage: USAGE,
+      });
       return;
     }
 
@@ -72,7 +75,10 @@ export function makeInstallHandler(
       // trailing `@`) -- per the plan's task 3 note this is a USAGE ERROR,
       // not an entity-shape error: the ref string never anchored to a real
       // plugin/marketplace pair.
-      notifyUsageError(ctx, `Invalid <plugin>@<marketplace> ref: "${positional}".`, USAGE);
+      notifyUsageError(ctx, {
+        message: `Invalid <plugin>@<marketplace> ref: "${positional}".`,
+        usage: USAGE,
+      });
       return;
     }
 

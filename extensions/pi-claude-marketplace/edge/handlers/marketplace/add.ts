@@ -40,7 +40,10 @@ export function makeAddHandler(
         // Substitute "Missing required argument." when the parser hands
         // back the usage string verbatim (the duplicate-usage case --
         // notifyUsageError would re-emit the Usage block otherwise).
-        notifyUsageError(ctx, message === USAGE ? "Missing required argument." : message, USAGE);
+        notifyUsageError(ctx, {
+          message: message === USAGE ? "Missing required argument." : message,
+          usage: USAGE,
+        });
       },
     );
     if (parsed === undefined) {

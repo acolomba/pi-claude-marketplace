@@ -31,7 +31,7 @@ export function makeReinstallHandler(
     try {
       parsed = parseArgs(args);
     } catch (err) {
-      notifyUsageError(ctx, errorMessage(err), USAGE);
+      notifyUsageError(ctx, { message: errorMessage(err), usage: USAGE });
       return;
     }
 
@@ -41,7 +41,7 @@ export function makeReinstallHandler(
       if (token === "--force") {
         force = true;
       } else if (token.startsWith("--")) {
-        notifyUsageError(ctx, `Unknown option: "${token}".`, USAGE);
+        notifyUsageError(ctx, { message: `Unknown option: "${token}".`, usage: USAGE });
         return;
       } else {
         refs.push(token);
@@ -49,7 +49,7 @@ export function makeReinstallHandler(
     }
 
     if (refs.length > 1) {
-      notifyUsageError(ctx, "Too many arguments.", USAGE);
+      notifyUsageError(ctx, { message: "Too many arguments.", usage: USAGE });
       return;
     }
 
@@ -83,7 +83,10 @@ function parseTarget(
 
   const pluginRef = splitPluginMarketplaceRef(ref);
   if (pluginRef === undefined) {
-    notifyUsageError(ctx, `Invalid <plugin>@<marketplace> ref: "${ref}".`, USAGE);
+    notifyUsageError(ctx, {
+      message: `Invalid <plugin>@<marketplace> ref: "${ref}".`,
+      usage: USAGE,
+    });
     return undefined;
   }
 

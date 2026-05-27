@@ -37,7 +37,7 @@ export function makeListHandler(
     try {
       parsed = parseArgs(args);
     } catch (err) {
-      notifyUsageError(ctx, errorMessage(err), USAGE);
+      notifyUsageError(ctx, { message: errorMessage(err), usage: USAGE });
       return;
     }
 
@@ -54,7 +54,7 @@ export function makeListHandler(
         unavailable = true;
       } else if (token.startsWith("--")) {
         // Unknown long flag -- surface USAGE.
-        notifyUsageError(ctx, `Unknown option: "${token}".`, USAGE);
+        notifyUsageError(ctx, { message: `Unknown option: "${token}".`, usage: USAGE });
         return;
       } else {
         nonFlagPositionals.push(token);
@@ -62,7 +62,7 @@ export function makeListHandler(
     }
 
     if (nonFlagPositionals.length > 1) {
-      notifyUsageError(ctx, "Too many arguments.", USAGE);
+      notifyUsageError(ctx, { message: "Too many arguments.", usage: USAGE });
       return;
     }
 

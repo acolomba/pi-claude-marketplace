@@ -33,7 +33,10 @@ export function makeRemoveHandler(
         usage: USAGE,
       },
       (message) => {
-        notifyUsageError(ctx, message === USAGE ? "Missing required argument." : message, USAGE);
+        notifyUsageError(ctx, {
+          message: message === USAGE ? "Missing required argument." : message,
+          usage: USAGE,
+        });
       },
     );
     if (parsed === undefined) {

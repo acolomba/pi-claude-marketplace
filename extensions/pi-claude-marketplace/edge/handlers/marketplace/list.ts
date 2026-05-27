@@ -33,7 +33,7 @@ export function makeMarketplaceListHandler(
         usage: USAGE,
       },
       (message) => {
-        notifyUsageError(ctx, message, USAGE);
+        notifyUsageError(ctx, { message, usage: USAGE });
       },
     );
     if (parsed === undefined) {
