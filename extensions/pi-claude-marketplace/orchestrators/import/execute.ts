@@ -301,8 +301,8 @@ function pushDiagnostic(
 
 interface MarketplaceBlock {
   readonly key: string;
-  name: string;
-  scope: Scope;
+  readonly name: string;
+  readonly scope: Scope;
   status?: MarketplaceStatus;
   reasons?: readonly Reason[];
   plugins: PluginNotificationMessage[];
@@ -351,6 +351,7 @@ function dependenciesFromInstalled(o: PluginInstalledOutcome): readonly Dependen
     deps.push("mcp");
   }
 
+  // defense-in-depth: typed readonly + runtime freeze (codebase convention)
   return Object.freeze(deps);
 }
 
@@ -487,6 +488,7 @@ function buildImportNotificationMarketplaces(
 
   // D-16-06: orchestrator owns iteration order; notify() does NOT sort.
   // Project-before-user tie-break per MSG-GR-3 via compareByNameThenScope.
+  // defense-in-depth: typed readonly + runtime freeze (codebase convention)
   return Object.freeze(
     [...byMp.values()]
       .sort((a, b) => compareByNameThenScope(a, b))
@@ -496,6 +498,7 @@ function buildImportNotificationMarketplaces(
           scope: block.scope,
           ...(block.status !== undefined && { status: block.status }),
           ...(block.reasons !== undefined && { reasons: block.reasons }),
+          // defense-in-depth: typed readonly + runtime freeze (codebase convention)
           plugins: Object.freeze(block.plugins),
         }),
       ),
@@ -635,15 +638,33 @@ async function executeScopedPlan(
       continue;
     }
 
-    const outcome = await installPlugin({
-      ctx: opts.ctx,
-      pi: opts.pi,
-      scope: plugin.scope,
-      cwd: opts.cwd,
-      marketplace: plugin.ref.marketplace,
-      plugin: plugin.ref.plugin,
-      notifications: { mode: "orchestrated" },
-    });
+    // WR-02 (gap closure, Plan 20-05): catch unexpected installPlugin throws
+    // and route them to result.unexpectedPluginFailures matching
+    // dispatchFailedOutcome's shape; per-scope loop continues and the final
+    // notify() at importClaudeSettings:787 still fires.
+    let outcome: InstallPluginOutcome;
+    try {
+      outcome = await installPlugin({
+        ctx: opts.ctx,
+        pi: opts.pi,
+        scope: plugin.scope,
+        cwd: opts.cwd,
+        marketplace: plugin.ref.marketplace,
+        plugin: plugin.ref.plugin,
+        notifications: { mode: "orchestrated" },
+      });
+    } catch (err) {
+      result.unexpectedPluginFailures.push({
+        kind: "plugin-failure",
+        scope: plugin.scope,
+        plugin: plugin.ref.plugin,
+        marketplace: plugin.ref.marketplace,
+        ref: refLabel(plugin),
+        reason: "unexpected-failure",
+        cause: errorMessage(err),
+      });
+      continue;
+    }
 
     switch (outcome.status) {
       case "installed":
