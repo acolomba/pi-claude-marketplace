@@ -192,6 +192,16 @@ export default tseslint.config(
     // should still get a lint warning. The ignore list below mirrors
     // MSG-Block 1 (orchestrators/marketplace/**) but does NOT ignore
     // orchestrators/plugin/**.
+    //
+    // Plan 20-05 (IN-01 doc note): the Phase 20 migration (Plan 20-02)
+    // extended the same Block-1-ignore / Block-1b-keep pattern to
+    // `orchestrators/import/**`. MSG-Block 1 ignores it (the V1 routing
+    // wrappers no longer exist there after the inline V2 cascade
+    // construction landed in Plan 20-02), but MSG-Block 1b does NOT
+    // ignore it because MSG-GR-3 project-first iteration discipline is
+    // V1-wrapper-INDEPENDENT. A maintainer scanning these blocks should
+    // see `orchestrators/import/**` follows the same shape as
+    // `orchestrators/plugin/**`.
     files: [
       "extensions/pi-claude-marketplace/orchestrators/**/*.ts",
       "extensions/pi-claude-marketplace/edge/handlers/**/*.ts",
