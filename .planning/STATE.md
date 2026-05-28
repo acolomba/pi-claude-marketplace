@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Structured Notification Messages
-status: executing
-last_updated: "2026-05-28T00:05:34.676Z"
-last_activity: 2026-05-28 -- Phase 21 execution started
+status: completed
+last_updated: "2026-05-27T22:00:00.000Z"
+last_activity: 2026-05-27 -- Phase 21 marked complete -- v1.4 milestone closed
 progress:
   total_phases: 9
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 42
-  completed_plans: 39
-  percent: 89
+  completed_plans: 42
+  percent: 100
 ---
 
 # Project State
@@ -19,14 +19,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-25)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 21 — final-teardown-green-gate
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 21 -- final-teardown-green-gate
 
 ## Current Position
 
-Phase: 21 (final-teardown-green-gate) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 21
-Last activity: 2026-05-28 -- Phase 21 execution started
+Phase: 21 (final-teardown-green-gate) -- COMPLETE
+Plan: 3 of 3
+Status: Phase 21 complete -- v1.4 milestone closed
+Last activity: 2026-05-27 -- Phase 21 marked complete -- v1.4 milestone closed
 
 ## Performance Metrics
 
@@ -56,6 +56,8 @@ Last activity: 2026-05-28 -- Phase 21 execution started
 | 17.2 | 4 | - | - |
 | 18 | 7 | - | - |
 | 19 | 6 | - | - |
+| 20 | 6 | - | - |
+| 21 | 3 | - | - |
 
 **Recent Trend:**
 
@@ -161,10 +163,10 @@ All seven quick tasks have a SUMMARY.md and are completed; the `audit-open` quer
 
 ## Session Continuity
 
-Last session: 2026-05-27T21:26:55.497Z
-Stopped At: Phase 21 context gathered
-Resume File: .planning/phases/21-final-teardown-green-gate/21-CONTEXT.md
+Last session: 2026-05-27T22:00:00.000Z
+Stopped At: Phase 21 complete -- v1.4 milestone closed
+Resume File: .planning/phases/21-final-teardown-green-gate/21-03-SUMMARY.md
 
 ## Operator Next Steps
 
-- Run `/gsd-plan-phase 15` to plan Phase 15 (Type Model & ADR Refresh).
+- v1.4 Structured Notification Messages milestone is CLOSED. Next milestone planning is operator-initiated (`/gsd-new-milestone` or equivalent).
