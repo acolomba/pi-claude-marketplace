@@ -79,7 +79,7 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 - [x] **Phase 18: Migration Wave 1 -- Marketplace Orchestrator Family** -- Migrate all `orchestrators/marketplace/*` call sites to `notify(ctx, structured)`; retire MSG-* lint globs covering marketplace orchestrators (completed 2026-05-27)
 - [x] **Phase 19: Migration Wave 2 -- Plugin Orchestrator Family** -- Migrate all `orchestrators/plugin/*` call sites to `notify(ctx, structured)`; retire MSG-* lint globs covering plugin orchestrators (completed 2026-05-27)
 - [x] **Phase 20: Migration Wave 3 -- Edge Handlers & UsageError** -- Migrate all `edge/handlers/*` call sites; migrate all `notifyUsageError(ctx, msg, usage)` sites to V2 `notifyUsageError(ctx, structuredUsageError)`; retire remaining MSG-* lint globs (completed 2026-05-27)
-- [ ] **Phase 21: Final Teardown & GREEN Gate** -- Delete V1 severity-named wrappers; delete `tests/lint-rules/` (34 rules + 34 RuleTester suites + helpers); delete `tests/architecture/msg-rule-registry.test.ts`; replace MSG-* config in `eslint.config.js` with stock `no-restricted-syntax` + `no-console` (with `persistence/migrate.ts` per-file override); update / delete `tests/architecture/grammar-frontmatter.test.ts`; resolve `shared/grammar/` retain-or-delete; review `no-legacy-markers.test.ts`; `npm run check` GREEN
+- [x] **Phase 21: Final Teardown & GREEN Gate** -- Delete V1 severity-named wrappers; delete `tests/lint-rules/` (34 rules + 34 RuleTester suites + helpers); delete `tests/architecture/msg-rule-registry.test.ts`; replace MSG-* config in `eslint.config.js` with stock `no-restricted-syntax` + `no-console` (with `persistence/migrate.ts` per-file override); update / delete `tests/architecture/grammar-frontmatter.test.ts`; resolve `shared/grammar/` retain-or-delete; review `no-legacy-markers.test.ts`; `npm run check` GREEN (completed 2026-05-28)
 
 ## Phase Details
 
@@ -404,4 +404,4 @@ Plans:
 | 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 7/7 | Complete    | 2026-05-27 |
 | 19. Migration Wave 2 -- Plugin Orchestrator Family                   | v1.4      | 6/6 | Complete    | 2026-05-27 |
 | 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 6/6 | Complete   | 2026-05-27 |
-| 21. Final Teardown & GREEN Gate                                      | v1.4      | 2/3 | In Progress|  |
+| 21. Final Teardown & GREEN Gate                                      | v1.4      | 3/3 | Complete   | 2026-05-28 |
