@@ -80,19 +80,18 @@ import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { composeErrorWithCauseChain } from "../../presentation/cause-chain.ts";
-import { compareByNameThenScope } from "../../presentation/sort.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   appendLeaks,
   assertNever,
+  composeErrorWithCauseChain,
   errorMessage,
   PluginShapeError,
   PluginUpdatePhase3Error,
   type Phase3Failure,
 } from "../../shared/errors.ts";
 import { RECOVERY_PLUGIN_REINSTALL_PREFIX } from "../../shared/markers.ts";
-import { notify } from "../../shared/notify.ts";
+import { compareByNameThenScope, notify } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_GIT_OPS, refreshGitHubClone, type GitOps } from "../marketplace/shared.ts";
 
@@ -113,12 +112,12 @@ import type { ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { Reason } from "../../shared/grammar/reasons.ts";
 import type {
   Dependency,
   MarketplaceNotificationMessage,
   PluginFailedMessage,
   PluginNotificationMessage,
+  Reason,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";

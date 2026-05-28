@@ -6,11 +6,12 @@
 //   - `../shared/errors.ts` for `errorMessage`
 //   - `../shared/types.ts` for `Scope`
 //
-// Note: `notify` is delivered as a callback parameter (`notifyError`),
+// Note: `notify` is delivered as a callback parameter (`onError`),
 // NOT imported. The caller (handler) passes a closure that wraps the
-// canonical `notifyError(ctx, ...)` from `shared/notify.ts`. This keeps
-// this module independent of `ExtensionContext` and lets tests inject a
-// spy.
+// canonical `notify(ctx, pi, NotificationMessage)` /
+// `notifyUsageError(ctx, UsageErrorMessage)` from `shared/notify.ts`.
+// This keeps this module independent of `ExtensionContext` and lets
+// tests inject a spy.
 
 import { errorMessage } from "../shared/errors.ts";
 
@@ -25,12 +26,12 @@ import type { Scope } from "../shared/types.ts";
  */
 function parseArgsOrNotify(
   args: string,
-  notifyError: (message: string) => void,
+  onError: (message: string) => void,
 ): ParsedArgs | undefined {
   try {
     return parseArgs(args);
   } catch (err) {
-    notifyError(errorMessage(err));
+    onError(errorMessage(err));
     return undefined;
   }
 }
@@ -40,14 +41,14 @@ function parseArgsOrNotify(
  * Each schema entry names a positional and whether it is required; the
  * returned object exposes each positional as a typed property (string
  * for required, string|undefined for optional). On any failure, calls
- * `notifyError(usage)` and returns undefined so the handler can early-
+ * `onError(usage)` and returns undefined so the handler can early-
  * return.
  *
  * Example:
  *   const parsed = parseCommandArgs(args, {
  *     positional: [{ name: "marketplace" }, { name: "plugin" }],
  *     usage: "Usage: ...:plugin-install <marketplace> <plugin> [--scope ...]",
- *   }, notifyError);
+ *   }, onError);
  *   if (parsed === undefined) return;
  *   parsed.marketplace; // string
  *   parsed.plugin;      // string
@@ -68,9 +69,9 @@ export type ParsedCommandArgs<Spec extends readonly PositionalSpec[]> = {
 export function parseCommandArgs<const Spec extends readonly PositionalSpec[]>(
   args: string,
   schema: { positional: Spec; usage: string },
-  notifyError: (message: string) => void,
+  onError: (message: string) => void,
 ): ParsedCommandArgs<Spec> | undefined {
-  const parsed = parseArgsOrNotify(args, notifyError);
+  const parsed = parseArgsOrNotify(args, onError);
   if (parsed === undefined) {
     return undefined;
   }
@@ -81,7 +82,7 @@ export function parseCommandArgs<const Spec extends readonly PositionalSpec[]>(
     const required = entry.required !== false;
     if (required) {
       if (value === undefined || value.trim() === "") {
-        notifyError(schema.usage);
+        onError(schema.usage);
         return undefined;
       }
 

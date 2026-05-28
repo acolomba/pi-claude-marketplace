@@ -118,16 +118,35 @@ import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { EntityErrorRow } from "../../presentation/compact-line.ts";
-import type { Reason } from "../../shared/grammar/reasons.ts";
 import type {
   Dependency,
   PluginFailedMessage,
   PluginInstalledMessage,
   PluginNotificationMessage,
   PluginUnavailableMessage,
+  Reason,
+  StatusToken,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
+
+/**
+ * Entity-shaped non-cascade error line (MSG-NC-1 / CMC-34) -- internal
+ * classified-error return shape for `classifyEntityShapeError` and the
+ * install.ts error-routing path. Relocated file-local from the retired
+ * presentation/compact-line.ts per D-21-02 (sole consumer is this
+ * module).
+ *
+ * Examples: `⊘ unknown@claude-plugins-official (failed) {not found}`;
+ * `⊘ hookify [user] (unavailable) {hooks}`.
+ */
+interface EntityErrorRow {
+  readonly kind: "entity-error";
+  readonly name: string;
+  readonly marketplace?: string;
+  readonly scope?: Scope;
+  readonly status: Extract<StatusToken, "failed" | "unavailable">;
+  readonly reasons: readonly Reason[];
+}
 
 /**
  * Parsed (plugin, marketplace) options bundle. PI-1 / RH-1 / RH-2 parse is

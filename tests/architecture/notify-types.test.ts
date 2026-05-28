@@ -84,7 +84,7 @@ type _VManualRecovery = Extract<PluginNotificationMessage, { status: "manual rec
 
 // Cross-module type aliases used in positional `extends` checks below.
 type _Scope = import("../../extensions/pi-claude-marketplace/shared/types.ts").Scope;
-type _Reason = import("../../extensions/pi-claude-marketplace/shared/grammar/reasons.ts").Reason;
+type _Reason = import("../../extensions/pi-claude-marketplace/shared/notify.ts").Reason;
 
 // ============================================================================
 // Closed-set membership (SNM-03, SNM-04, SNM-05, SNM-06, D-15-11)

@@ -106,13 +106,13 @@ import path from "node:path";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { composeErrorWithCauseChain } from "../../presentation/cause-chain.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   MarketplaceNotFoundError,
   MarketplaceUpdateError,
   PluginShapeError,
   assertNever,
+  composeErrorWithCauseChain,
 } from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
@@ -128,8 +128,7 @@ import type { ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { Reason } from "../../shared/grammar/reasons.ts";
-import type { PluginNotificationMessage } from "../../shared/notify.ts";
+import type { PluginNotificationMessage, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
   PluginUpdateFailedOutcome,

@@ -42,6 +42,10 @@ async function loadZones(): Promise<RestrictedPathsZone[] | null> {
 }
 
 const EXTENSION_ROOT = "./extensions/pi-claude-marketplace";
+// Phase 21 (D-21-02) retired the presentation/ folder, dropping the 9-zone
+// configuration down to 8 zones. Edge/ may now import domain/ directly
+// (the prior cross-zone re-export hack via the retired rendering layer is
+// gone); accordingly `edge`'s forbidden set no longer includes `domain`.
 const FOLDERS = [
   "edge",
   "orchestrators",
@@ -49,7 +53,6 @@ const FOLDERS = [
   "domain",
   "transaction",
   "persistence",
-  "presentation",
   "platform",
   "shared",
 ] as const;
@@ -61,7 +64,6 @@ const FOLDERS = [
 const EXPECTED_FORBIDDEN: Record<string, string[]> = {
   [`${EXTENSION_ROOT}/edge`]: [
     `${EXTENSION_ROOT}/bridges`,
-    `${EXTENSION_ROOT}/domain`,
     `${EXTENSION_ROOT}/transaction`,
     `${EXTENSION_ROOT}/persistence`,
   ],
@@ -70,7 +72,6 @@ const EXPECTED_FORBIDDEN: Record<string, string[]> = {
     `${EXTENSION_ROOT}/edge`,
     `${EXTENSION_ROOT}/orchestrators`,
     `${EXTENSION_ROOT}/transaction`,
-    `${EXTENSION_ROOT}/presentation`,
   ],
   [`${EXTENSION_ROOT}/domain`]: [
     `${EXTENSION_ROOT}/edge`,
@@ -78,28 +79,18 @@ const EXPECTED_FORBIDDEN: Record<string, string[]> = {
     `${EXTENSION_ROOT}/bridges`,
     `${EXTENSION_ROOT}/transaction`,
     `${EXTENSION_ROOT}/persistence`,
-    `${EXTENSION_ROOT}/presentation`,
   ],
   [`${EXTENSION_ROOT}/transaction`]: [
     `${EXTENSION_ROOT}/edge`,
     `${EXTENSION_ROOT}/orchestrators`,
     `${EXTENSION_ROOT}/bridges`,
     `${EXTENSION_ROOT}/domain`,
-    `${EXTENSION_ROOT}/presentation`,
   ],
   [`${EXTENSION_ROOT}/persistence`]: [
     `${EXTENSION_ROOT}/edge`,
     `${EXTENSION_ROOT}/orchestrators`,
     `${EXTENSION_ROOT}/bridges`,
     `${EXTENSION_ROOT}/transaction`,
-    `${EXTENSION_ROOT}/presentation`,
-  ],
-  [`${EXTENSION_ROOT}/presentation`]: [
-    `${EXTENSION_ROOT}/edge`,
-    `${EXTENSION_ROOT}/orchestrators`,
-    `${EXTENSION_ROOT}/bridges`,
-    `${EXTENSION_ROOT}/transaction`,
-    `${EXTENSION_ROOT}/persistence`,
   ],
   [`${EXTENSION_ROOT}/platform`]: [
     `${EXTENSION_ROOT}/edge`,
@@ -108,7 +99,6 @@ const EXPECTED_FORBIDDEN: Record<string, string[]> = {
     `${EXTENSION_ROOT}/domain`,
     `${EXTENSION_ROOT}/transaction`,
     `${EXTENSION_ROOT}/persistence`,
-    `${EXTENSION_ROOT}/presentation`,
   ],
   [`${EXTENSION_ROOT}/shared`]: [
     `${EXTENSION_ROOT}/edge`,
@@ -117,11 +107,10 @@ const EXPECTED_FORBIDDEN: Record<string, string[]> = {
     `${EXTENSION_ROOT}/domain`,
     `${EXTENSION_ROOT}/transaction`,
     `${EXTENSION_ROOT}/persistence`,
-    `${EXTENSION_ROOT}/presentation`,
   ],
 };
 
-test("import-x/no-restricted-paths defines exactly 9 zones (one per folder) -- D-11", async () => {
+test("import-x/no-restricted-paths defines exactly 8 zones (one per folder) -- D-11 (Phase 21 retired presentation/)", async () => {
   const zones = await loadZones();
   assert.ok(
     zones !== null,

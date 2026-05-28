@@ -70,8 +70,7 @@ import {
 } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { Reason } from "../../shared/grammar/reasons.ts";
-import type { PluginFailedMessage, PluginUninstalledMessage } from "../../shared/notify.ts";
+import type { PluginFailedMessage, PluginUninstalledMessage, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface RemoveMarketplaceOptions {

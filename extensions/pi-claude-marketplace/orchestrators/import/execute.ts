@@ -7,9 +7,8 @@ import {
 } from "../../orchestrators/plugin/install.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState as defaultLoadState, type ExtensionState } from "../../persistence/state-io.ts";
-import { compareByNameThenScope } from "../../presentation/sort.ts";
 import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
-import { notify } from "../../shared/notify.ts";
+import { compareByNameThenScope, notify } from "../../shared/notify.ts";
 
 import { buildClaudeImportPlan } from "./marketplaces.ts";
 import { loadMergedClaudeSettingsForScope as defaultLoadSettings } from "./settings.ts";
@@ -22,7 +21,6 @@ import type {
 } from "./types.ts";
 import type { AddMarketplaceOptions } from "../../orchestrators/marketplace/add.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { Reason } from "../../shared/grammar/reasons.ts";
 import type {
   Dependency,
   MarketplaceNotificationMessage,
@@ -32,6 +30,7 @@ import type {
   PluginNotificationMessage,
   PluginSkippedMessage,
   PluginUnavailableMessage,
+  Reason,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 

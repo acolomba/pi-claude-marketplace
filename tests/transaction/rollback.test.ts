@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { composeRollbackPartialChildren } from "../../extensions/pi-claude-marketplace/presentation/rollback-partial.ts";
 import {
   PathContainmentError,
   SymlinkRefusedError,
@@ -17,23 +16,24 @@ import type { RunPhasesResult } from "../../extensions/pi-claude-marketplace/tra
  * Pitfall 6): formatRollbackError no longer composes the user-visible
  * body. It returns a structured `RollbackErrorResult` -- the original
  * (or cause-wrapped) Error PLUS the raw `RollbackPartial[]` data so the
- * orchestrator can render via `presentation/rollback-partial.ts`.
+ * orchestrator can render via the V2 `notify` path.
  *
- * The transaction layer cannot import from presentation/ (BLOCK C /
- * D-11), so the rendering moves to the orchestrator side. The pre-Plan-
- * 14-06 hand-composed `(failed) {rollback partial}` body is gone from
- * the transaction-layer code; MSG-RP-1 (Plan 14-05) catches any
- * re-introduction.
+ * The pre-Plan-14-06 hand-composed `(failed) {rollback partial}` body
+ * is gone from the transaction-layer code.
  *
  * Tests verify (a) zero-partial fast path returns the original Error
  * instance unwrapped with an empty partials array, (b) the cause-wrapped
  * Error preserves the original .message and sets .cause, (c) the raw
  * `rollbackPartials` array is forwarded verbatim, (d) PathContainmentError
  * / SymlinkRefusedError bypass returns the original instance verbatim
- * with an empty partials array, (e) the bare-children composer in
- * `presentation/rollback-partial.ts` produces the byte-equivalent
- * `[<phase>] (rollback failed) {rollback partial}` children block the
- * pre-refactor inline composer produced.
+ * with an empty partials array.
+ *
+ * The byte-equivalent rendering of the children block was historically
+ * tested here against the V1 `composeRollbackPartialChildren` helper
+ * (Plan 14-06); Phase 21 deletes that helper alongside the rest of the
+ * V1 rendering surface, and the V2 byte form is enforced by
+ * `tests/architecture/catalog-uat.test.ts` against the renderer in
+ * `shared/notify.ts`.
  */
 
 test("D-03 formatRollbackError: empty partials returns original error unchanged + empty partials array", () => {
@@ -75,8 +75,9 @@ test("D-03 / AS-4 formatRollbackError: 2 partials return cause-wrapped Error + r
     original,
     "expected cause-wrapped Error to retain reference to originalError",
   );
-  // Raw partials forwarded verbatim -- orchestrator consumes this array
-  // to render the children block via composeRollbackPartialChildren.
+  // Raw partials forwarded verbatim -- the V2 notify renderer consumes
+  // this array to render the children block via composeRollbackPartialLines
+  // in shared/notify.ts.
   assert.equal(got.rollbackPartials.length, 2);
   assert.equal(got.rollbackPartials[0]?.phase, "skills/prompts");
   assert.equal(got.rollbackPartials[1]?.phase, "agents");
@@ -206,51 +207,10 @@ test("PI-14 / D-02: SymlinkRefusedError (subclass) bypasses rollback-partial wra
   assert.ok(got.error instanceof SymlinkRefusedError);
 });
 
-/**
- * Plan 14-06 / D-14-04 byte-equivalence test for the orchestrator-side
- * children-block composer.
- *
- * The bare-children helper (`composeRollbackPartialChildren`) lives in
- * `presentation/rollback-partial.ts` and produces a string that the
- * orchestrator stitches under its own `(failed) {rollback partial}`
- * parent line. The output MUST be byte-equal to what the pre-Plan-
- * 14-06 `transaction/rollback.ts` hand-composed inline at its
- * `childLines` step (docs/output-catalog.md L330-333 catalog form).
- *
- * The free-text `msg` fields on each RollbackPartial surface ONLY via
- * the ES-4 Error.cause chain (preserved by the original error message);
- * they are intentionally NOT embedded in the rendered child rows
- * themselves (per the closed-set CMC-11 narrowing; the phaseLabel +
- * status pair carries the user-visible failure shape).
- */
-test("Plan 14-06 / D-14-04: composeRollbackPartialChildren produces the byte-equivalent catalog children block", () => {
-  const partials = [
-    { phase: "skills/prompts", msg: "rm failed" },
-    { phase: "agents", msg: "index unreadable" },
-  ] as const;
-  const got = composeRollbackPartialChildren(partials);
-  const expected =
-    "  [skills/prompts] (rollback failed) {rollback partial}\n" +
-    "  [agents] (rollback failed) {rollback partial}";
-  assert.equal(got, expected, `children block drift; got: "${got}"`);
-  // Free-text `msg` fields MUST NOT appear in the rendered child rows
-  // themselves (per CMC-11 closed-set narrowing; the orchestrator's
-  // notify-boundary cause-chain trailer surfaces them).
-  assert.ok(
-    !got.includes("rm failed"),
-    `unexpected free-text msg "rm failed" in children block: "${got}"`,
-  );
-  assert.ok(
-    !got.includes("index unreadable"),
-    `unexpected free-text msg "index unreadable" in children block: "${got}"`,
-  );
-});
-
-test("Plan 14-06 / D-14-04: composeRollbackPartialChildren returns empty string for zero partials", () => {
-  assert.equal(composeRollbackPartialChildren([]), "");
-});
-
-test("Plan 14-06 / D-14-04: composeRollbackPartialChildren handles a single partial", () => {
-  const got = composeRollbackPartialChildren([{ phase: "p1" }]);
-  assert.equal(got, "  [p1] (rollback failed) {rollback partial}");
-});
+// Plan 14-06's V1 byte-equivalence tests for the rollback children block
+// previously lived here, invoking `composeRollbackPartialChildren` from
+// the retired `presentation/rollback-partial.ts`. Phase 21 (D-21-02) deletes
+// that V1 helper alongside the rest of the V1 rendering layer; the V2
+// `composeRollbackPartialLines` in `shared/notify.ts` now owns the
+// children-block grammar, and `tests/architecture/catalog-uat.test.ts`
+// asserts byte-equality against the v1.4 catalog fixtures.

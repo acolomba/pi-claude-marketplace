@@ -88,6 +88,26 @@ function linkMessage(c: unknown): string {
 }
 
 /**
+ * Compose `errorMessage(err) [\n\n${causeChainTrailer(err)}]` for outcome
+ * `notes` aggregated outside the notify path. The V2 `notify` renderer
+ * trails the cause chain automatically per the renderPluginRow path; this
+ * helper exists for outcome-aggregation callsites
+ * (orchestrators/marketplace/update.ts, orchestrators/plugin/reinstall.ts,
+ * orchestrators/plugin/update.ts) that need the same text without going
+ * through the notify channel.
+ *
+ * Extracted from three byte-identical private copies in the
+ * orchestrator files above (D-21-02 relocation from
+ * presentation/cause-chain.ts). The single canonical implementation here
+ * is the source of truth -- if the cause-chain trailer contract changes
+ * (depth bound, separator, trimming rule), the change lands once.
+ */
+export function composeErrorWithCauseChain(err: unknown): string {
+  const trailer = causeChainTrailer(err);
+  return trailer === "" ? errorMessage(err) : `${errorMessage(err)}\n\n${trailer}`;
+}
+
+/**
  * If `leak` is non-undefined, return a new Error that names both `err` and
  * the leak so the user sees the original cause AND the manual-cleanup hint
  * in the same notification.

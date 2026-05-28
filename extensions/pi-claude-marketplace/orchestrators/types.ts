@@ -7,7 +7,7 @@
 // Phase 3 D-01's escalation note about a future BridgeOps<Prep, Target>
 // belonging at this same path.
 
-import type { Reason } from "../shared/grammar/reasons.ts";
+import type { Reason } from "../shared/notify.ts";
 import type { Scope } from "../shared/types.ts";
 
 export type ReinstallPluginPartition = "reinstalled" | "skipped" | "failed";

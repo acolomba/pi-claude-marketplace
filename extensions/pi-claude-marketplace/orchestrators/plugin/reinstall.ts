@@ -66,17 +66,16 @@ import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { composeErrorWithCauseChain } from "../../presentation/cause-chain.ts";
-import { compareByNameThenScope } from "../../presentation/sort.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   assertNever,
+  composeErrorWithCauseChain,
   errorMessage,
   ManualRecoveryError,
   MarketplaceNotFoundError,
   PluginShapeError,
 } from "../../shared/errors.ts";
-import { notify } from "../../shared/notify.ts";
+import { compareByNameThenScope, notify } from "../../shared/notify.ts";
 import {
   withLockedStateTransaction,
   type LockedStateTransaction,
@@ -95,7 +94,6 @@ import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { Reason } from "../../shared/grammar/reasons.ts";
 import type {
   Dependency,
   MarketplaceNotificationMessage,
@@ -104,6 +102,7 @@ import type {
   PluginNotificationMessage,
   PluginReinstalledMessage,
   PluginSkippedMessage,
+  Reason,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {

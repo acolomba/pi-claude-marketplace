@@ -161,16 +161,17 @@ export default tseslint.config(
         {
           basePath: import.meta.dirname,
           zones: [
+            // D-21-02 Phase 21: edge/ may now import domain/ directly; the
+            // prior cross-zone re-export hack via the retired rendering
+            // layer is gone.
             {
               target: "./extensions/pi-claude-marketplace/edge",
               from: [
                 "./extensions/pi-claude-marketplace/bridges",
-                "./extensions/pi-claude-marketplace/domain",
                 "./extensions/pi-claude-marketplace/transaction",
                 "./extensions/pi-claude-marketplace/persistence",
               ],
-              message:
-                "edge/ may only import from orchestrators/, presentation/, shared/, platform/.",
+              message: "edge/ may only import from orchestrators/, domain/, shared/, platform/.",
             },
             {
               target: "./extensions/pi-claude-marketplace/orchestrators",
@@ -183,7 +184,6 @@ export default tseslint.config(
                 "./extensions/pi-claude-marketplace/edge",
                 "./extensions/pi-claude-marketplace/orchestrators",
                 "./extensions/pi-claude-marketplace/transaction",
-                "./extensions/pi-claude-marketplace/presentation",
               ],
               message:
                 "bridges/ may only import from domain/, persistence/, shared/, platform/. Cross-bridge imports are also forbidden.",
@@ -196,7 +196,6 @@ export default tseslint.config(
                 "./extensions/pi-claude-marketplace/bridges",
                 "./extensions/pi-claude-marketplace/transaction",
                 "./extensions/pi-claude-marketplace/persistence",
-                "./extensions/pi-claude-marketplace/presentation",
               ],
               message:
                 "domain/ MUST NOT import upward -- pure logic only. shared/ and platform/ are the only sibling imports allowed.",
@@ -208,7 +207,6 @@ export default tseslint.config(
                 "./extensions/pi-claude-marketplace/orchestrators",
                 "./extensions/pi-claude-marketplace/bridges",
                 "./extensions/pi-claude-marketplace/domain",
-                "./extensions/pi-claude-marketplace/presentation",
               ],
               message: "transaction/ may only import from persistence/, shared/, platform/.",
             },
@@ -219,20 +217,8 @@ export default tseslint.config(
                 "./extensions/pi-claude-marketplace/orchestrators",
                 "./extensions/pi-claude-marketplace/bridges",
                 "./extensions/pi-claude-marketplace/transaction",
-                "./extensions/pi-claude-marketplace/presentation",
               ],
               message: "persistence/ may only import from domain/, shared/, platform/.",
-            },
-            {
-              target: "./extensions/pi-claude-marketplace/presentation",
-              from: [
-                "./extensions/pi-claude-marketplace/edge",
-                "./extensions/pi-claude-marketplace/orchestrators",
-                "./extensions/pi-claude-marketplace/bridges",
-                "./extensions/pi-claude-marketplace/transaction",
-                "./extensions/pi-claude-marketplace/persistence",
-              ],
-              message: "presentation/ may only import from domain/, shared/, platform/.",
             },
             {
               target: "./extensions/pi-claude-marketplace/platform",
@@ -243,7 +229,6 @@ export default tseslint.config(
                 "./extensions/pi-claude-marketplace/domain",
                 "./extensions/pi-claude-marketplace/transaction",
                 "./extensions/pi-claude-marketplace/persistence",
-                "./extensions/pi-claude-marketplace/presentation",
               ],
               message:
                 "platform/ may only import from shared/. It's the external-system boundary (git, Pi API surface).",
@@ -257,7 +242,6 @@ export default tseslint.config(
                 "./extensions/pi-claude-marketplace/domain",
                 "./extensions/pi-claude-marketplace/transaction",
                 "./extensions/pi-claude-marketplace/persistence",
-                "./extensions/pi-claude-marketplace/presentation",
               ],
               message: "shared/ may only import from platform/ for Pi API types.",
             },
