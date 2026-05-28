@@ -108,18 +108,19 @@ ______________________________________________________________________
 
 ## Status token reference
 
-| Token               | Icon | Where it appears                                                                                                                                         |
-| ------------------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `(installed)`       | ●    | Plugin row -- install, import cascade, reinstall (rare), update (rare).                                                                                  |
-| `(updated)`         | ●    | Plugin row -- update cascade; carries `<from> → v<to>` version arrow.                                                                                    |
-| `(reinstalled)`     | ●    | Plugin row -- reinstall cascade.                                                                                                                         |
-| `(uninstalled)`     | ○    | Plugin row -- uninstall single-plugin, marketplace-remove partial success rows.                                                                          |
-| `(available)`       | ○    | Plugin row -- `marketplace list` / plugin-list surface (no scope bracket per MSG-PL-6 / SNM-11).                                                         |
-| `(unavailable)`     | ⊘    | Plugin row -- install / reinstall / import / list surfaces when a manifest declares unsupported Claude features; carries `{hooks}` / `{lspServers}` etc. |
-| `(upgradable)`      | ●    | Plugin row -- plugin-list surface only (advisory).                                                                                                       |
-| `(failed)`          | ⊘    | Plugin row -- any failure variant; carries `reasons`, optional `cause:` trailer, optional `rollbackPartial` children.                                    |
-| `(skipped)`         | ⊘    | Plugin row -- per-plugin skip inside cascades; carries `reasons` (e.g. `{up-to-date}`, `{already installed}`).                                           |
-| `(manual recovery)` | ⊘    | Plugin row -- per-plugin manual-recovery anchor inside a marketplace block; status discriminator includes the space literally.                           |
+| Token                                       | Icon | Where it appears                                                                                                                                                            |
+| ------------------------------------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `(installed)`                               | ●    | Plugin row -- `list` (steady-state inventory via `present` discriminator), install, import cascade, reinstall (rare), update (rare).                                        |
+| `(installed)` (via `present` discriminator) | ●    | Plugin row -- list surface (steady-state inventory). Byte-identical render to the transition `(installed)` token but does not trigger the reload-hint per SNM-15 / G-21-01. |
+| `(updated)`                                 | ●    | Plugin row -- update cascade; carries `<from> → v<to>` version arrow.                                                                                                       |
+| `(reinstalled)`                             | ●    | Plugin row -- reinstall cascade.                                                                                                                                            |
+| `(uninstalled)`                             | ○    | Plugin row -- uninstall single-plugin, marketplace-remove partial success rows.                                                                                             |
+| `(available)`                               | ○    | Plugin row -- `marketplace list` / plugin-list surface (no scope bracket per MSG-PL-6 / SNM-11).                                                                            |
+| `(unavailable)`                             | ⊘    | Plugin row -- install / reinstall / import / list surfaces when a manifest declares unsupported Claude features; carries `{hooks}` / `{lspServers}` etc.                    |
+| `(upgradable)`                              | ●    | Plugin row -- plugin-list surface only (advisory).                                                                                                                          |
+| `(failed)`                                  | ⊘    | Plugin row -- any failure variant; carries `reasons`, optional `cause:` trailer, optional `rollbackPartial` children.                                                       |
+| `(skipped)`                                 | ⊘    | Plugin row -- per-plugin skip inside cascades; carries `reasons` (e.g. `{up-to-date}`, `{already installed}`).                                                              |
+| `(manual recovery)`                         | ⊘    | Plugin row -- per-plugin manual-recovery anchor inside a marketplace block; status discriminator includes the space literally.                                              |
 
 Marketplace status tokens (4 entries):
 
