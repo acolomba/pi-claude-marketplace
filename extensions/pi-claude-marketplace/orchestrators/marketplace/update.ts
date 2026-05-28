@@ -526,9 +526,18 @@ function narrowSkipReason(outcome: PluginUpdateSkippedOutcome): Reason {
 
   // Fallback: legacy substring parse of `notes`. Retained for backward
   // compatibility with notes-only outcome fixtures.
+  //
+  // WR-06: a `partition: "skipped"` outcome with no reasons AND no notes
+  // is a producer-contract violation -- the previous code masked it as
+  // `"up-to-date"` (a SUCCESS reason), so the operator read
+  // `skipped {up-to-date}` and assumed nothing was wrong while in fact
+  // the producer failed to populate its outcome. Map empty-notes to
+  // `"unreadable manifest"` instead so the brace surfaces a real failure
+  // classification rather than a false success claim (mirrors the
+  // narrowFailReason symmetric fallback below).
   const notes = outcome.notes;
   if (notes.length === 0) {
-    return "up-to-date";
+    return "unreadable manifest";
   }
 
   const text = notes.join(" ").toLowerCase();
@@ -544,7 +553,9 @@ function narrowSkipReason(outcome: PluginUpdateSkippedOutcome): Reason {
     return "no longer installable";
   }
 
-  return "up-to-date";
+  // WR-06: no-substring-match -> SAME treatment as empty-notes; do not
+  // mask the unknown-class skip as `"up-to-date"`.
+  return "unreadable manifest";
 }
 
 /**

@@ -544,13 +544,14 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
     //   skipped -> ⊘ (warning)   <-- RESEARCH Risks #5 flip vs V1's ●
     //   failed  -> ⊘ (error)
     // The `[project]` scope bracket is suppressed by Phase 17.2 orphan-fold
-    // (plugin.scope === mp.scope -> renderScopeBracket returns ""). The
-    // narrowSkipReason fallback maps `c` (skipped + reasons=[] +
-    // notes=[]) to `up-to-date`; narrowFailReason fallback maps `d`
-    // (failed + notes=[] + no reasons) to `unreadable manifest`.
+    // (plugin.scope === mp.scope -> renderScopeBracket returns ""). Both
+    // narrowSkipReason (WR-06) and narrowFailReason fallbacks now map an
+    // empty-notes/no-substring-match outcome to `unreadable manifest`;
+    // mapping to `up-to-date` would have falsely claimed SUCCESS on a
+    // producer-contract violation.
     const idxA = body.indexOf("  ● a 0.0.1 → v0.0.2 (updated)");
     const idxB = body.indexOf("  ⊘ b (skipped) {up-to-date}");
-    const idxC = body.indexOf("  ⊘ c (skipped) {up-to-date}");
+    const idxC = body.indexOf("  ⊘ c (skipped) {unreadable manifest}");
     const idxD = body.indexOf("  ⊘ d (failed) {unreadable manifest}");
     assert.ok(
       idxA >= 0 && idxB > idxA && idxC > idxB && idxD > idxC,
