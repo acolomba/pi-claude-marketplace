@@ -161,6 +161,11 @@ interface PluginRow {
  */
 function projectRowStatus(status: PluginNotificationMessage["status"]): ToolPluginStatus {
   switch (status) {
+    // UAT G-21-01: the list orchestrator emits the list-only `present`
+    // token for steady-state inventory rows in place of the cascade
+    // `installed` token. Both project to the same `installed` tool
+    // surface so the tool consumer sees no V1->V2 semantic change.
+    case "present":
     case "installed":
     case "upgradable":
       return "installed";
@@ -299,6 +304,9 @@ function pluginScopeOrFallback(
   marketplaceScope: "user" | "project",
 ): "user" | "project" {
   switch (p.status) {
+    // UAT G-21-01: list-only `present` joins `upgradable` as a
+    // scope-bearing list-surface variant.
+    case "present":
     case "installed":
     case "upgradable":
       return p.scope ?? marketplaceScope;
@@ -327,6 +335,9 @@ function pluginReasons(p: PluginNotificationMessage): readonly string[] | undefi
     case "unavailable":
     case "upgradable":
       return p.reasons.length > 0 ? p.reasons : undefined;
+    // UAT G-21-01: `present` mirrors `installed` -- no `reasons` field
+    // structurally.
+    case "present":
     case "installed":
     case "available":
       return undefined;
@@ -349,6 +360,9 @@ function pluginReasons(p: PluginNotificationMessage): readonly string[] | undefi
  */
 function pluginVersion(p: PluginNotificationMessage): string | undefined {
   switch (p.status) {
+    // UAT G-21-01: `present` carries `version?: string` like the other
+    // optional-version variants.
+    case "present":
     case "installed":
     case "upgradable":
     case "available":

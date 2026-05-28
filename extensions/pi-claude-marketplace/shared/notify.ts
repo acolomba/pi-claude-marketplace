@@ -210,13 +210,22 @@ export function notifyUsageError(ctx: ExtensionContext, message: UsageErrorMessa
 // ---------------------------------------------------------------------------
 
 /**
- * Runtime tuple of every plugin status literal (D-15-11). 10 entries.
+ * Runtime tuple of every plugin status literal (D-15-11). 11 entries.
  * `"manual recovery"` is a literal string WITH A SPACE (historical
  * convention; canonicalised here in Phase 21 from the retired
  * `shared/grammar/status-tokens.ts`); do not transform to kebab-case
  * ("manual-recovery") or camelCase ("manualRecovery") -- the renderer
  * emits the discriminator literal directly into the `(<status>)` brace
  * slot.
+ *
+ * The trailing `"present"` entry is the list-only inventory token
+ * introduced to close UAT gap G-21-01 (SNM-15 surface tightening). The
+ * four state-change tokens at the head of the tuple (`installed`,
+ * `updated`, `reinstalled`, `uninstalled`) are the structurally-
+ * distinguished transition tokens that drive `shouldEmitReloadHint`;
+ * `"present"` is deliberately ABSENT from that trigger set so steady-state
+ * `/claude:plugin list` rows never emit the `/reload to pick up changes`
+ * trailer.
  *
  * Pattern: closed-set `as const` tuple + `(typeof X)[number]` literal-union.
  */
@@ -231,6 +240,7 @@ export const PLUGIN_STATUSES = [
   "failed",
   "skipped",
   "manual recovery",
+  "present",
 ] as const;
 
 /**
@@ -431,6 +441,33 @@ export interface PluginUpgradableMessage {
 }
 
 /**
+ * `(present)` -- list-only inventory row emitted by
+ * `list.ts::installedRowMessage`; never emitted by cascade-row code paths.
+ * STRUCTURALLY constrained to the list surface so `shouldEmitReloadHint`
+ * can distinguish steady-state inventory (no `/reload` trailer) from
+ * actual state-changing transitions (with `/reload` trailer). Introduced
+ * to close UAT gap G-21-01 (SNM-15 surface tightening): the four
+ * state-change tokens (installed / updated / reinstalled / uninstalled)
+ * unambiguously trigger the reload-hint, while `"present"` is deliberately
+ * ABSENT from the trigger set.
+ *
+ * The structural shape mirrors `PluginInstalledMessage` exactly (dependencies
+ * REQUIRED so the soft-dep marker injection still applies; version optional;
+ * scope optional). The renderer arm for this discriminator is BYTE-IDENTICAL
+ * to the `installed` arm -- the human-visible row text
+ * `● <name> [<scope>] v<ver> (installed)` is preserved; only the trailing
+ * `/reload to pick up changes` line that the inventory case was misfiring
+ * is removed by virtue of the new discriminator.
+ */
+export interface PluginPresentMessage {
+  readonly status: "present";
+  readonly name: string;
+  readonly dependencies: readonly Dependency[];
+  readonly version?: string;
+  readonly scope?: Scope;
+}
+
+/**
  * `(failed)` -- failure row across single-shot and cascade surfaces.
  * Carries REQUIRED `reasons` (D-15-01); optional `cause?: Error` (SNM-10)
  * feeds the depth-5 cause-chain trailer; optional
@@ -498,6 +535,7 @@ export type PluginNotificationMessage =
   | PluginAvailableMessage
   | PluginUnavailableMessage
   | PluginUpgradableMessage
+  | PluginPresentMessage
   | PluginFailedMessage
   | PluginSkippedMessage
   | PluginManualRecoveryMessage;
@@ -925,6 +963,25 @@ function renderPluginRow(
         renderVersion(p.version),
         "(upgradable)",
         composeReasons(p.reasons, false, false, probe),
+      ]);
+    // UAT G-21-01: list-only inventory row; byte-identical to the
+    // "installed" arm so list-surface byte tests are preserved. The
+    // discriminator differs so shouldEmitReloadHint structurally
+    // distinguishes inventory (no /reload) from transitions (with
+    // /reload).
+    case "present":
+      return joinTokens([
+        ICON_INSTALLED,
+        p.name,
+        renderScopeBracket(p.scope, mpScope),
+        renderVersion(p.version),
+        "(installed)",
+        composeReasons(
+          undefined,
+          p.dependencies.includes("agents"),
+          p.dependencies.includes("mcp"),
+          probe,
+        ),
       ]);
     case "skipped":
       return joinTokens([

@@ -68,6 +68,8 @@ The soft-dep markers `requires pi-subagents` and `requires pi-mcp` live INSIDE t
 
 A `failed` marketplace does NOT trigger the trailer (rolled-back state has nothing to reload). A failed-only cascade (no successful or state-changing rows) also suppresses the trailer.
 
+The list-only inventory token `present` (emitted by `/claude:plugin list` for already-installed plugins as a steady-state row -- distinct from the cascade-context `installed` transition token) is deliberately ABSENT from the plugin-status trigger set. This keeps `shouldEmitReloadHint`'s contents-derived decision unambiguous per SNM-15: every status discriminator either always triggers or never triggers; no token straddles both inventory and transition surfaces. See UAT gap G-21-01 in `.planning/phases/21-final-teardown-green-gate/21-HUMAN-UAT.md` for the failure mode the split closes.
+
 ### Severity routing
 
 Computed by `notify()` from contents via a first-match-wins ladder (D-16-11). See "Severity routing" below.
@@ -155,8 +157,6 @@ The renderer emits the literal `(no marketplaces)` body for an empty top-level `
   ⊘ delta (unavailable) {hooks}
   ⊘ epsilon (unavailable) {hooks, lspServers}
   ○ gamma v2.0.0 (available)
-
-/reload to pick up changes
 ```
 
 Notes:
@@ -175,8 +175,6 @@ Notes:
 
 ● official [user] <autoupdate>
   ● alpha v1.0.0 (installed)
-
-/reload to pick up changes
 ```
 
 Two marketplace blocks; one per scope. Joined by one blank line (D-16-07). Plugin rows omit the scope bracket because `p.scope === mp.scope`.
@@ -189,8 +187,6 @@ Two marketplace blocks; one per scope. Joined by one blank line (D-16-07). Plugi
 ● official [user] <autoupdate>
   ● alpha [project] v0.9.0 (installed)
   ● alpha v1.0.0 (installed)
-
-/reload to pick up changes
 ```
 
 `official [project]` does not exist; the project-scoped `alpha` is folded under the user-scope marketplace header. Its row carries the explicit `[project]` bracket because `plugin.scope !== marketplace.scope` (Phase 16 D-16-17). The user-scoped `alpha` row omits the bracket because `plugin.scope === marketplace.scope` -- the orphan-fold rule applies symmetrically.
@@ -204,8 +200,6 @@ Two marketplace blocks; one per scope. Joined by one blank line (D-16-07). Plugi
   ● dual v0.5.0 (installed) {requires pi-subagents, requires pi-mcp}
   ● helper v1.0.0 (installed) {requires pi-subagents}
   ● mcp-tool v2.0.0 (installed) {requires pi-mcp}
-
-/reload to pick up changes
 ```
 
 Each `(installed)` row's `dependencies` field drives the soft-dep probe; the probe runs once per `notify()` invocation (D-16-14). Markers appear inside the same brace block as any typed reasons (D-16-15).
@@ -219,11 +213,9 @@ Each `(installed)` row's `dependencies` field drives the soft-dep probe; the pro
   ● helper v1.0.0 (installed)
 
 ⊘ unparseable-mp [user] (failed)
-
-/reload to pick up changes
 ```
 
-When a marketplace's manifest fails to parse, the marketplace renders as a bare `(failed)` header at column 0; the other parseable marketplaces in the list render normally. `notify()` does not emit a marketplace-level `cause:` trailer for failed marketplaces with empty `plugins: []` -- the v2 type model places `cause?: Error` on plugin variants only. Orchestrators wanting to surface the parse error must construct the payload as a per-plugin failed/manual-recovery row carrying the diagnostic as `cause?: Error`, or include a per-plugin error row inside the failed marketplace block. Severity: `error` (any failed → error). Reload-hint fires because the other marketplace's installed plugin row is in the state-changing set per D-16-12.
+When a marketplace's manifest fails to parse, the marketplace renders as a bare `(failed)` header at column 0; the other parseable marketplaces in the list render normally. `notify()` does not emit a marketplace-level `cause:` trailer for failed marketplaces with empty `plugins: []` -- the v2 type model places `cause?: Error` on plugin variants only. Orchestrators wanting to surface the parse error must construct the payload as a per-plugin failed/manual-recovery row carrying the diagnostic as `cause?: Error`, or include a per-plugin error row inside the failed marketplace block. Severity: `error` (any failed → error). No reload-hint trailer fires on the list surface: the failed marketplace header is not in the marketplace-status trigger set (per D-16-12 + the SNM-15 ladder), and the other marketplace's `present` plugin row is the list-only inventory token deliberately excluded from the trigger set (UAT gap G-21-01).
 
 ### Marketplace whose manifest declares ZERO plugins
 
@@ -234,8 +226,6 @@ When a marketplace's manifest fails to parse, the marketplace renders as a bare 
 
 ● official [user] <autoupdate>
   ● alpha v1.0.0 (installed)
-
-/reload to pick up changes
 ```
 
 An empty `plugins: []` renders as the bare marketplace header alone (D-15-08); the renderer does NOT emit a `(no plugins)` body line under it. The two marketplace blocks are joined by one blank line (D-16-07).
@@ -254,8 +244,6 @@ An empty `plugins: []` renders as the bare marketplace header alone (D-15-08); t
 
 ● zeta-mp [user]
   ● tool v1.0.0 (installed) {requires pi-subagents}
-
-/reload to pick up changes
 ```
 
 Three marketplace blocks; each joined by one blank line (D-16-07). `zeta-mp` is path-source (no `<autoupdate>` marker). `beta` omits the scope bracket per MSG-PL-6 (the `available` variant has no `scope` field). `tool` declares an agents dependency; the probe reports `pi-subagents` unloaded so the row fires `{requires pi-subagents}`.
