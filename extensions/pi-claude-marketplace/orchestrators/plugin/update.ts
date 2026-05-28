@@ -210,6 +210,16 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
     // trailer (D-16-08) preserves the V1 error-message text. Reaching
     // here implies `target.kind === "marketplace" | "plugin"` so
     // `target.marketplace` is structurally present.
+    //
+    // WR-01: when target.kind === "marketplace" (no plugin name) the
+    // previous code put the marketplace name in the plugin-row name slot,
+    // which renders as `⊘ <marketplace> (failed) {<reason>}` directly
+    // underneath a marketplace block ALSO named `<marketplace>` -- a
+    // redundant / confusing row. Wrap the marketplace identity in parens
+    // when used as a synthetic plugin-row name (mirroring the bare-form
+    // SYNTHETIC_UPDATE_PLACEHOLDER_NAME = "(update)" precedent) so the
+    // row reads `⊘ (<marketplace>) (failed) {<reason>}` and is visually
+    // distinguishable from the surrounding mp header.
     notifyDirectFailure({
       ctx,
       pi,
@@ -219,7 +229,7 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
       // failure mode where `not found in <explicitScope> scope.` was the
       // user-facing text).
       scope: explicitScope ?? "project",
-      pluginName: target.kind === "plugin" ? target.plugin : target.marketplace,
+      pluginName: target.kind === "plugin" ? target.plugin : `(${target.marketplace})`,
       err,
     });
     return;

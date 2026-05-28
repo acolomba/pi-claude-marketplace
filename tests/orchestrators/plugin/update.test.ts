@@ -892,23 +892,26 @@ test("PUP-1: targeting an unknown marketplace -> direct-path V2 notify (PluginFa
       // Phase 19 / Plan 19-05: V2 direct-path failure (Option B) -- the
       // enumerate-targets throw surfaces via a single notify(ctx, pi,
       // { marketplaces: [{ name, scope, plugins: [PluginFailedMessage] }] })
-      // call. The marketplace name is used as the synthetic failed-row
-      // identity since the failure is about the marketplace being missing
-      // (not a specific plugin). The renderer composes the 4-space
-      // cause-chain trailer per D-16-08 from PluginFailedMessage.cause,
-      // preserving the V1 error-text `Marketplace "ghost-mp" not found
-      // in project scope.`.
+      // call. The synthetic failed-row identity is the marketplace name
+      // wrapped in parens (WR-01: a bare marketplace name in the plugin-row
+      // slot would render as `⊘ <marketplace> (failed) ...` directly under
+      // a marketplace block ALSO named `<marketplace>` -- a redundant /
+      // confusing row; the parens-wrapped form `⊘ (<marketplace>) (failed)
+      // ...` mirrors the SYNTHETIC_UPDATE_PLACEHOLDER_NAME = "(update)"
+      // bare-form precedent and is visually distinguishable from the mp
+      // header). The renderer composes the 4-space cause-chain trailer per
+      // D-16-08 from PluginFailedMessage.cause, preserving the V1
+      // error-text `Marketplace "ghost-mp" not found in project scope.`.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
       // Cause-chain trailer text preserves the V1 error message.
       assert.match(notifications[0]?.message ?? "", /not found in project scope/);
       // V2 byte form -- bare marketplace header + a synthetic failed plugin
-      // row carrying the marketplace name (since the marketplace itself
-      // is the failed entity).
+      // row carrying the parens-wrapped marketplace name (WR-01).
       assert.equal(
         notifications[0]?.message,
         "● ghost-mp [project]\n" +
-          "  ⊘ ghost-mp (failed) {not found}\n" +
+          "  ⊘ (ghost-mp) (failed) {not found}\n" +
           '    cause: Marketplace "ghost-mp" not found in project scope.',
       );
     } finally {
