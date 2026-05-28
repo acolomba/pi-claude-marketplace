@@ -687,7 +687,18 @@ export async function loadPluginListPayload(
         "user",
         manifest,
       );
-      folded = projectSideRows.filter((r) => r.status === "installed" || r.status === "upgradable");
+      // UAT G-21-01: after the inventory-vs-transition discriminator split,
+      // `installedRowMessage` emits `status: "present"` (list-only) for the
+      // steady-state inventory row, not the cascade-context `"installed"`
+      // token. The carry-over filter MUST discriminate on `"present"` (plus
+      // the unchanged `"upgradable"` arm) so orphan-folded rows survive.
+      // The prior `r.status === "installed"` half of the predicate was
+      // structurally unreachable post-split and silently dropped every
+      // folded inventory row (CR-01 / 21-04-REVIEW.md). The integration
+      // regression for this fold lives at tests/integration/fold-adoption.test.ts
+      // phase 2; the orchestrator-level reproduction is in
+      // tests/orchestrators/plugin/list.test.ts ("CR-01 / G-21-01 fold-carryover...").
+      folded = projectSideRows.filter((r) => r.status === "present" || r.status === "upgradable");
       // Record the folded plugin names so the user-scope manifest's
       // available-bucket enumeration skips them (catalog
       // `project-orphan-folded` state shows a single
@@ -768,19 +779,26 @@ function sortPluginsInBlock(
   // SNM-11: `available` / `unavailable` variants have no `scope` field by
   // construction; the other list-surface variants (`present` /
   // `upgradable`) carry an optional `scope`. The status-narrowing switch
-  // is the only safe access path under TS strict. UAT G-21-01: list
-  // orchestrator emits `present` (list-only inventory token) in place
-  // of the cascade-context `installed`; the `installed` arm is left in
-  // the unreachable bucket below as a renderer-as-spec guard.
+  // is the only safe access path under TS strict. UAT G-21-01: the list
+  // orchestrator emits `present` (list-only inventory token) for
+  // steady-state inventory rows; `installed` is the cascade-context
+  // transition token. WR-02 (21-04-REVIEW.md): keep `installed` in the
+  // scope-bearing arm alongside `present` / `upgradable`. The body
+  // `return p.scope ?? marketplaceScope` is correct for both the
+  // (post-fix) unreachable list-surface case AND any future regression
+  // that re-routes a cascade-context `installed` row through the list
+  // orchestrator -- the cross-scope orphan-fold scope on a
+  // `PluginInstalledMessage` (SNM-11 / D-13-18) is preserved instead of
+  // silently overwritten with `marketplaceScope`.
   const scopeOf = (p: PluginNotificationMessage): Scope => {
     switch (p.status) {
       case "present":
       case "upgradable":
+      case "installed":
         return p.scope ?? marketplaceScope;
       case "available":
       case "unavailable":
         return marketplaceScope;
-      case "installed":
       case "updated":
       case "reinstalled":
       case "uninstalled":

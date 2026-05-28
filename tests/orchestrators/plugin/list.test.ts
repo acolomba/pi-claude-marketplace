@@ -438,6 +438,121 @@ test("CMC-21 / D-13-17 / D-13-19: same-name marketplace in BOTH scopes renders T
   });
 });
 
+test("CR-01 / G-21-01: project-scope plugin under a CLONED user marketplace folds under the user-scope header (carry-over filter must discriminate on `present`)", async () => {
+  // Regression for 21-04-REVIEW.md CR-01 (closes the orphan-fold filter
+  // gap). Setup: seed a user-scope marketplace `mp1` AND a project-scope
+  // marketplace `mp1` whose state record points at the SAME
+  // `marketplaceRoot` directory -- this is the on-disk shape produced by
+  // the install orchestrator's `cloneMarketplaceRecordForTargetScope`
+  // path when a project-scope install runs against a user-scope
+  // marketplace. `isCloneOfUserMarketplace` returns true on
+  // `marketplaceRoot` equality, which routes the project-side
+  // enumeration through the orphan-fold filter at
+  // `loadPluginListPayload`. Pre-fix, that filter discriminated on the
+  // (now-unreachable) cascade-context `status: "installed"` arm and
+  // silently dropped every `status: "present"` row, re-emitting the
+  // plugin as `(available)` under the user header. Post-fix it
+  // discriminates on `"present"` (plus the unchanged `"upgradable"`
+  // arm), so the folded row appears under the user-scope header with
+  // the cross-scope `[project]` bracket per D-13-18 / D-16-17.
+  //
+  // The integration counterpart for this regression is
+  // tests/integration/fold-adoption.test.ts phase 2 (CMC-21 phase 2).
+  // The same-mp-both-scopes test above does NOT cover this case
+  // because both seedMarketplace calls allocate independent
+  // `marketplaceRoot` paths -- the fold rule does not trigger.
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+
+    // Seed user-scope first so the on-disk marketplace fixture exists
+    // under `<userRoot>/marketplaces/mp1`. The seedMarketplace helper
+    // writes `marketplaceRoot: mpRoot` into state; we capture that
+    // exact path below so the project-scope record can point at it.
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }],
+      },
+      installablePluginDirs: ["alpha"],
+      // No installed plugins in user scope -- the alpha install lives
+      // in project scope (the orphan-fold case).
+    });
+
+    // Project-scope record: the install orchestrator's clone path copies
+    // the user-scope record verbatim (same `marketplaceRoot`). We
+    // simulate that by seeding a project-scope marketplace whose
+    // on-disk seed lives under the user scopeRoot path. The
+    // seedMarketplace helper would normally allocate
+    // `<projectRoot>/marketplaces/mp1` as a NEW dir; to match a real
+    // clone we instead write state.json directly with the same
+    // marketplaceRoot as the user-scope record.
+    const sharedMpRoot = path.join(userRoot, "marketplaces", "mp1");
+    const sharedManifestPath = path.join(sharedMpRoot, ".claude-plugin", "marketplace.json");
+    const projectLocations = locationsFor("project", cwd);
+    await mkdir(projectLocations.extensionRoot, { recursive: true });
+    await saveState(projectLocations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: {
+        mp1: {
+          name: "mp1",
+          scope: "project",
+          source: pathSource("./mp1-src"),
+          addedFromCwd: cwd,
+          manifestPath: sharedManifestPath,
+          // CLONE: same marketplaceRoot as the user-scope record.
+          marketplaceRoot: sharedMpRoot,
+          plugins: {
+            alpha: {
+              version: "1.0.0",
+              resolvedSource: "./placeholder",
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+              installedAt: "2026-01-01T00:00:00.000Z",
+              updatedAt: "2026-01-01T00:00:00.000Z",
+            },
+          },
+        },
+      },
+    } as unknown as Parameters<typeof saveState>[1]);
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd });
+    assert.equal(notifications.length, 1);
+    const out = notifications[0]!.message;
+
+    // The orphan-fold row appears under the user-scope header with the
+    // cross-scope `[project]` bracket -- this is the assertion the
+    // CR-01 regression breaks pre-fix.
+    assert.match(
+      out,
+      /● mp1 \[user\][\s\S]*● alpha \[project\] v1\.0\.0 \(installed\)/,
+      `expected orphan-folded alpha row under mp1 [user] header: ${out}`,
+    );
+
+    // The duplicate `(available)` row that the pre-fix regression
+    // emitted (when the filter dropped the `present` row and the
+    // user-side enumeration re-emitted alpha from the manifest) MUST
+    // NOT appear under the user-scope block.
+    assert.equal(
+      /● mp1 \[user\][\s\S]*○ alpha v1\.0\.0 \(available\)/.test(out),
+      false,
+      `regression: alpha should not re-emit as (available) when present row is folded: ${out}`,
+    );
+
+    // No separate project-scope mp1 header (the project-scope record is
+    // a clone of the user-scope record per D-13-19; folded under user).
+    assert.equal(
+      out.includes("● mp1 [project]"),
+      false,
+      `expected no project-scope mp1 header in cloned-state phase: ${out}`,
+    );
+  });
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // PL-3: marketplace narrowing
 // ──────────────────────────────────────────────────────────────────────────
