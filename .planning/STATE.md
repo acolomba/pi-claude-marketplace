@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Structured Notification Messages
-status: executing
-stopped_at: Phase 21 complete -- v1.4 milestone closed
-last_updated: "2026-05-28T02:46:57.213Z"
-last_activity: 2026-05-28 -- Phase 21 execution started
+status: completed
+last_updated: "2026-05-28T03:41:53.526Z"
+last_activity: 2026-05-28 -- Phase 21 gap closure (G-21-01) complete -- v1.4 milestone re-closed
 progress:
   total_phases: 9
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 43
-  completed_plans: 42
-  percent: 89
+  completed_plans: 43
+  percent: 100
 ---
 
 # Project State
@@ -20,20 +19,20 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-25)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 21 -- final-teardown-green-gate
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.4 milestone closed -- Phase 21 complete
 
 ## Current Position
 
-Phase: 21 (final-teardown-green-gate) -- EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 21
-Last activity: 2026-05-28 -- Phase 21 execution started
+Phase: 21 (final-teardown-green-gate) -- COMPLETE
+Plan: 4 of 4
+Status: Phase 21 complete -- v1.4 milestone closed (gap G-21-01 resolved)
+Last activity: 2026-05-28 -- Phase 21 gap closure (G-21-01) verified PASS
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 93
+- Total plans completed: 97
 - Average duration: -
 - Total execution time: -
 
@@ -58,7 +57,7 @@ Last activity: 2026-05-28 -- Phase 21 execution started
 | 18 | 7 | - | - |
 | 19 | 6 | - | - |
 | 20 | 6 | - | - |
-| 21 | 3 | - | - |
+| 21 | 4 | - | - |
 
 **Recent Trend:**
 
