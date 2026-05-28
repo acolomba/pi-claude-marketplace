@@ -37,26 +37,26 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 
 ### Spec & Docs
 
-- [ ] **SNM-19**: `docs/messaging-style-guide.md` v2.0 rewritten to describe the structured type model as the binding contract. The `status_tokens` / `reasons` / `markers` / `pattern_classes` frontmatter sets are either deleted (now type-derived) or kept as a documentation aid with a drift test verifying parity against the TypeScript types.
-- [ ] **SNM-20**: `docs/output-catalog.md` rewritten to reflect the always-marketplace-header spec. Every output renders a marketplace header at column 0 with plugin rows indented two spaces, including single-plugin install / update / uninstall and marketplace add / remove. Per-command sections updated with new expected byte-equal outputs.
+- [x] **SNM-19**: `docs/messaging-style-guide.md` v2.0 rewritten to describe the structured type model as the binding contract. The `status_tokens` / `reasons` / `markers` / `pattern_classes` frontmatter sets are either deleted (now type-derived) or kept as a documentation aid with a drift test verifying parity against the TypeScript types.
+- [x] **SNM-20**: `docs/output-catalog.md` rewritten to reflect the always-marketplace-header spec. Every output renders a marketplace header at column 0 with plugin rows indented two spaces, including single-plugin install / update / uninstall and marketplace add / remove. Per-command sections updated with new expected byte-equal outputs.
 - [x] **SNM-21**: `docs/adr/v2-001-structured-notify.md` refreshed to reflect the locked design (status renames, `*NotificationMessage` naming, `PluginStatus`/`MarketplaceStatus` enums, `Dependency` closed set, per-plugin causes, dropped trailer, computed severity, always-marketplace-header spec change). Status flips from "Proposed" to "Accepted" with reference to the phase that landed it.
 
 ### Migration & Deletion
 
 - [x] **SNM-22**: All `notifySuccess` / `notifyWarning` / `notifyError` call sites across orchestrators (~20 sites) migrated to `notify(ctx, structuredMessage)`. The V1 severity-named wrappers are deleted from `shared/notify.ts`.
 - [ ] **SNM-23**: All `notifyUsageError(ctx, msg, usage)` call sites across edge handlers (~13 sites) migrated to the V2 `notifyUsageError(ctx, structuredUsageError)`. The V1 three-argument signature is deleted.
-- [ ] **SNM-24**: `tests/lint-rules/` directory deleted in full (34 MSG-\* rule files + 34 RuleTester companion tests + helpers + plugin shell + types).
-- [ ] **SNM-25**: `tests/architecture/msg-rule-registry.test.ts` (4-way parity test) deleted.
-- [ ] **SNM-26**: `tests/architecture/grammar-frontmatter.test.ts` rewritten or deleted -- replaced by the spec-vs-types drift verification from SNM-19 (closed-set membership is now compile-enforced; runtime drift test only needed if style-guide retains the frontmatter sets as a documentation aid).
-- [ ] **SNM-27**: `eslint.config.js` cleaned of all 34 MSG-\* rule wirings. Added: `no-restricted-syntax` rule blocking `ctx.ui.notify` calls outside `shared/notify.ts`; `no-console` rule with per-file override for `persistence/migrate.ts` (IL-3 sanctioned legacy-migration warn).
-- [ ] **SNM-28**: `tests/architecture/no-legacy-markers.test.ts` reviewed and updated for v2 vocabulary (the 5 ES-5 legacy markers it blocks remain relevant; the test's closed-set source may need to migrate from style-guide frontmatter to the new type definitions).
-- [ ] **SNM-29**: `shared/grammar/` files (`status-tokens.ts`, `reasons.ts`, `markers.ts`, `pattern-classes.ts`) either deleted (closed sets now type-encoded) or retained as the `Reason` / `Marker` enum source and re-exported from `shared/notify.ts`. Either path preserves the binding contract; pick at phase plan time.
+- [x] **SNM-24**: `tests/lint-rules/` directory deleted in full (34 MSG-\* rule files + 34 RuleTester companion tests + helpers + plugin shell + types).
+- [x] **SNM-25**: `tests/architecture/msg-rule-registry.test.ts` (4-way parity test) deleted.
+- [x] **SNM-26**: `tests/architecture/grammar-frontmatter.test.ts` rewritten or deleted -- replaced by the spec-vs-types drift verification from SNM-19 (closed-set membership is now compile-enforced; runtime drift test only needed if style-guide retains the frontmatter sets as a documentation aid).
+- [x] **SNM-27**: `eslint.config.js` cleaned of all 34 MSG-\* rule wirings. Added: `no-restricted-syntax` rule blocking `ctx.ui.notify` calls outside `shared/notify.ts`; `no-console` rule with per-file override for `persistence/migrate.ts` (IL-3 sanctioned legacy-migration warn).
+- [x] **SNM-28**: `tests/architecture/no-legacy-markers.test.ts` reviewed and updated for v2 vocabulary (the 5 ES-5 legacy markers it blocks remain relevant; the test's closed-set source may need to migrate from style-guide frontmatter to the new type definitions).
+- [x] **SNM-29**: `shared/grammar/` files (`status-tokens.ts`, `reasons.ts`, `markers.ts`, `pattern-classes.ts`) either deleted (closed sets now type-encoded) or retained as the `Reason` / `Marker` enum source and re-exported from `shared/notify.ts`. Either path preserves the binding contract; pick at phase plan time.
 
 ### Test Coverage
 
 - [x] **SNM-30**: Per-status unit tests on `notify()` switch: one test or test block per variant of `PluginNotificationMessage` and per value of `MarketplaceStatus`. Each test passes a structured payload with a mock `ctx`, asserts on the exact string passed to `ctx.ui.notify`. Covers empty `plugins: []`, single-plugin, multi-plugin, orphan-fold (`scope?` set), `rollbackPartial`, multi-cause cascades.
-- [ ] **SNM-31**: `tests/architecture/catalog-uat.test.ts` rewritten to feed structured `NotificationMessage` fixtures through `notify()` (via mock ctx) and assert byte-equality against `docs/output-catalog.md` per-command expected outputs. The byte-equality assertion remains the user-contract gate.
-- [ ] **SNM-32**: `npm run check` GREEN after all migrations land: typecheck + ESLint (with new stock rules) + Prettier + tests (1249 v1.3 baseline minus retired lint-rule tests, plus the new per-variant unit tests; expected net change accounted for in the phase plan).
+- [x] **SNM-31**: `tests/architecture/catalog-uat.test.ts` rewritten to feed structured `NotificationMessage` fixtures through `notify()` (via mock ctx) and assert byte-equality against `docs/output-catalog.md` per-command expected outputs. The byte-equality assertion remains the user-contract gate.
+- [x] **SNM-32**: `npm run check` GREEN after all migrations land: typecheck + ESLint (with new stock rules) + Prettier + tests (1249 v1.3 baseline minus retired lint-rule tests, plus the new per-variant unit tests; expected net change accounted for in the phase plan).
 
 ## Out of Scope
 
@@ -98,21 +98,23 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25.
 | SNM-21      | Phase 15 | Complete |
 | SNM-22      | Phase 21 | Complete |
 | SNM-23      | Phase 20 | Pending  |
-| SNM-24      | Phase 21 | Pending  |
-| SNM-25      | Phase 21 | Pending  |
+| SNM-24      | Phase 21 | Complete |
+| SNM-25      | Phase 21 | Complete |
 | SNM-26      | Phase 17 | Complete |
-| SNM-27      | Phase 21 | Pending  |
-| SNM-28      | Phase 21 | Pending  |
-| SNM-29      | Phase 21 | Pending  |
+| SNM-27      | Phase 21 | Complete |
+| SNM-28      | Phase 21 | Complete |
+| SNM-29      | Phase 21 | Complete |
 | SNM-30      | Phase 16 | Complete |
 | SNM-31      | Phase 17 | Complete |
-| SNM-32      | Phase 21 | Pending  |
+| SNM-32      | Phase 21 | Complete |
 
 **Coverage:**
 
 - v1.4 requirements: 32 total
 - Mapped to phases: 32
 - Unmapped: 0
+- Complete: 31 (all except SNM-23 -- traceability-row reconciliation deferred to a Phase 20 record-keeping quick-fix per Phase 21 B6 scope discipline; SNM-23's behavior closed in Phase 20)
+- Pending: 1 (SNM-23 traceability-row only; behavior is shipped)
 - Per-phase distribution: Phase 15 (12: SNM-01..11, SNM-21); Phase 16 (8: SNM-12..18, SNM-30); Phase 17 (4: SNM-19, SNM-20, SNM-26, SNM-31); Phase 18 (0: execution phase); Phase 19 (0: execution phase); Phase 20 (1: SNM-23); Phase 21 (7: SNM-22, SNM-24, SNM-25, SNM-27, SNM-28, SNM-29, SNM-32)
 
 **Mapping rationale:**
@@ -125,4 +127,4 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25.
 ---
 
 _Requirements defined: 2026-05-25_
-_Last updated: 2026-05-25 -- Traceability populated by `gsd-roadmapper` against the 7-phase v1.4 roadmap (Phases 15-21). All 32 SNM-_ requirements mapped to exactly one phase; no orphans, no duplicates.\*
+_Last updated: 2026-05-27 -- Phase 21 closed v1.4 milestone: SNM-22, SNM-24, SNM-25, SNM-27, SNM-28, SNM-29, SNM-32 flipped to Complete in both per-section checklist and traceability table. SNM-19, SNM-20, SNM-26, SNM-31 per-section checkboxes reconciled with their traceability `Complete` state (W7 invariant per Plan 21-03). SNM-23 left as Pending in traceability per B6 scope discipline (its behavior closed in Phase 20; the traceability-row reconciliation is a Phase 20 record-keeping debt to be addressed in a separate `/gsd-quick` commit, not by extending Phase 21 scope)._

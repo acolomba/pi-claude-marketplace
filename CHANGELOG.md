@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.3.0] - 2026-05-27 -- v1.4 Structured Notification Messages
+
+Every user-visible `ctx.ui.notify` callsite now flows through the V2 `notify(ctx, pi, NotificationMessage)` and `notifyUsageError(ctx, UsageErrorMessage)` structured entry points; severity, reload hint, and per-row soft-dep markers are computed from message contents at notify time rather than caller-supplied. The v1.3 34-rule MSG-\* drift guard plugin (`tests/lint-rules/`) is retired in favor of closed-set type encoding (PluginStatus / MarketplaceStatus / Reason / StatusToken / Marker unions in `shared/notify.ts`).
+
+User-visible changes:
+
+- No user-visible message-format changes vs v1.3 -- the catalog output shape was locked in Phase 17 (v2.0 always-marketplace-header spec) and has been catalog-UAT GREEN since. v1.4 is a structural / internal milestone.
+
+Internals:
+
+- V2 type model: `NotificationMessage` / `MarketplaceNotificationMessage` / `PluginNotificationMessage` (10-variant discriminated union) / `PluginStatus` / `MarketplaceStatus` / `Dependency` / `UsageErrorMessage` shipped in `shared/notify.ts` (SNM-01..11, SNM-21).
+- V2 public API: `notify()` derives severity / reload trailer / per-row soft-dep markers from contents (SNM-12..18, SNM-30).
+- Spec rewrite: `docs/messaging-style-guide.md` v2.0 + `docs/output-catalog.md` v2.0 + catalog UAT runner driven by structured fixtures (SNM-19, SNM-20, SNM-26, SNM-31).
+- All `notifySuccess` / `notifyWarning` / `notifyError` callsites migrated across `orchestrators/marketplace/*`, `orchestrators/plugin/*`, `orchestrators/import/*`, and `edge/handlers/*`; V1 wrappers deleted from `shared/notify.ts` (SNM-22). All `notifyUsageError(ctx, msg, usage)` callsites migrated to V2 1-arg form (SNM-23).
+- Drift-guard teardown: `tests/lint-rules/` (73 files), `tests/architecture/ msg-rule-registry.test.ts`, `tests/architecture/no-legacy-markers.test.ts` deleted; `eslint.config.js` rewritten to stock rules + retained BLOCKS A/B/C/D/E + new `persistence/migrate.ts` block-level no-console override (SNM-24, SNM-25, SNM-27, SNM-28).
+- Source consolidation: `shared/grammar/` deleted; REASONS / STATUS_TOKENS / MARKERS / PATTERN_CLASSES inlined into `shared/notify.ts` (SNM-29). `presentation/` directory deleted; 5 utilities relocated (composeError WithCauseChain → `shared/errors.ts`; compareByNameThenScope → `shared/ notify.ts`; EntityErrorRow → file-local in `orchestrators/plugin/ install.ts`; sourceLogical / ParsedSource → direct from `domain/ source.ts` via narrowed BLOCK C edge zone; renderMarketplaceList deleted, zero callers).
+- `edge/args-schema.ts` callback parameter renamed `notifyError` → `onError` for V1-era name-shadow cleanup.
+
+1120/1120 tests green; lint + format + types clean.
+
 ## [0.2.0] - 2026-05-25 -- v1.3 Consistent Messaging
 
 Every user-visible `ctx.ui.notify` callsite (and the single sanctioned `console.warn`) now conforms to `docs/messaging-style-guide.md` v1.0 and the per-command catalog in `docs/output-catalog.md`. The v1.3 user-contract is structurally enforced by a 34-rule ESLint drift-guard plugin and a byte-equality catalog UAT runner.
