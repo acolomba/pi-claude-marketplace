@@ -186,15 +186,18 @@ test("CMC-36: persistence/migrate.ts warn body matches style guide §14.1 wordin
   );
 });
 
-test("CMC-37: IL-3 eslint-disable-next-line comment is preserved verbatim above the warn", async () => {
+test("CMC-37 / D-21-04: IL-3 console.warn callsite carries no inline eslint-disable directive (block-level override supersedes)", async () => {
   const src = await readFile(MIGRATE_PATH, "utf8");
-  const expectedPattern =
-    /\/\/ eslint-disable-next-line no-restricted-syntax, no-console -- IL-3: load-time migrate save fail\n\s*console\.warn\(/;
-  assert.match(
-    src,
-    expectedPattern,
-    "IL-3 inline disable must appear directly above the warn (CMC-37 / D-CMC-16)",
+  // Plan 21-01 D-21-04 retired the inline `eslint-disable-next-line` above the
+  // warn in favor of a block-level files-override (BLOCK B-2 in eslint.config.js)
+  // scoped to this single file. Assert the inline directive is GONE.
+  assert.ok(
+    !/eslint-disable-next-line\s+no-restricted-syntax/.test(src),
+    "Inline `eslint-disable-next-line` directive at the IL-3 warn callsite must be removed; the BLOCK B-2 files-override in eslint.config.js supplies the equivalent suppression.",
   );
+  // The console.warn callsite itself must still be present and lint clean
+  // (verified by `npm run lint` separately).
+  assert.match(src, /console\.warn\(/, "IL-3 console.warn callsite must remain");
 });
 
 test("CMC-37: exactly one sanctioned warn callsite in persistence/migrate.ts", async () => {

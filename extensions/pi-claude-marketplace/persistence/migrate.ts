@@ -3,11 +3,11 @@
 // Legacy state.json record migration (ST-4, ST-5) and the SINGLE
 // sanctioned `console-warn` callsite (IL-3).
 //
-// Per Phase 1 SUMMARY handoff item #2, the disable-comment incantation
-// disables BOTH no-restricted-syntax AND no-console rules:
-//   // eslint-disable-next-line no-restricted-syntax,no-console -- IL-3 ...
-// Any other use of `console-warn` in this file (or anywhere in the
-// extension) trips the eslint rule by design.
+// Per Plan 21-01 D-21-04: the IL-3 console.warn callsite is permitted by
+// a block-level files-override in eslint.config.js (BLOCK B-2) that turns
+// no-console + no-restricted-syntax off for this single file. Any other
+// use of `console-warn` in the extension still trips the eslint rule by
+// design, since BLOCK A scopes the prohibition extension-wide.
 //
 // Per ST-4: missing manifestPath / marketplaceRoot are filled with
 // V1's default-derivation. Per ST-5: missing resources.agents /
@@ -161,10 +161,11 @@ export function migrateLegacyMarketplaceRecords(
  * it manually if needed, but the in-memory state is still usable for the
  * remainder of this Pi process.
  *
- * Per Phase 1 SUMMARY handoff item #2: the disable-comment must disable
- * BOTH `no-restricted-syntax` AND `no-console` in a single comment. Any
- * other shape trips ESLint by design (the no-console block-error and the
- * no-restricted-syntax message both point operators here).
+ * Per Plan 21-01 D-21-04: the IL-3 callsite below is allowed by the
+ * block-level files-override at `extensions/pi-claude-marketplace/persistence/migrate.ts`
+ * in eslint.config.js (BLOCK B-2). No inline disable directive is
+ * required. Any other `console.warn` in the extension trips BLOCK A by
+ * design.
  */
 export async function persistMigratedState(
   stateJsonPath: string,
@@ -174,7 +175,6 @@ export async function persistMigratedState(
     await atomicWriteJson(stateJsonPath, normalizedState);
   } catch (err) {
     const errMsg = errorMessage(err);
-    // eslint-disable-next-line no-restricted-syntax, no-console -- IL-3: load-time migrate save fail
     console.warn(
       `Legacy marketplace migration could not be persisted to ${stateJsonPath}; the in-memory normalized state is being used and the on-disk state.json is unchanged. Cause: ${errMsg}.`,
     );
