@@ -404,4 +404,4 @@ Plans:
 | 18. Migration Wave 1 -- Marketplace Orchestrator Family              | v1.4      | 7/7 | Complete    | 2026-05-27 |
 | 19. Migration Wave 2 -- Plugin Orchestrator Family                   | v1.4      | 6/6 | Complete    | 2026-05-27 |
 | 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 6/6 | Complete   | 2026-05-27 |
-| 21. Final Teardown & GREEN Gate                                      | v1.4      | 0/?            | Not started | --         |
+| 21. Final Teardown & GREEN Gate                                      | v1.4      | 1/3 | In Progress|  |
