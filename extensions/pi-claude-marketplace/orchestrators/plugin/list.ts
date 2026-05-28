@@ -30,11 +30,15 @@
 // the dropped warning.
 //
 // CMC-13 / MSG-SD-1..3 per-row soft-dep markers: each installed-variant
-// `PluginInstalledMessage` carries `dependencies: readonly Dependency[]`
+// `PluginPresentMessage` carries `dependencies: readonly Dependency[]`
 // derived from the plugin's installed resources (state-recorded). V2's
 // `notify()` owns the single softDepStatus(pi) probe per call (D-16-14)
 // and emits the `{requires pi-subagents}` / `{requires pi-mcp}` markers
-// when (declares AND companion unloaded).
+// when (declares AND companion unloaded). UAT G-21-01 (SNM-15 surface
+// tightening): the list orchestrator emits the list-only present token
+// for steady-state inventory rows instead of the cascade-context
+// installed token, so `shouldEmitReloadHint` does NOT fire the
+// `/reload to pick up changes` trailer on plain list invocations.
 //
 // Contract (from PRD §5.3.1 + Plan 05-08, preserved):
 //   - PL-1 filter union semantics: when NO filter flags (--installed /
@@ -70,8 +74,8 @@ import type {
   MarketplaceNotificationMessage,
   PluginAvailableMessage,
   PluginFailedMessage,
-  PluginInstalledMessage,
   PluginNotificationMessage,
+  PluginPresentMessage,
   PluginUnavailableMessage,
   PluginUpgradableMessage,
 } from "../../shared/notify.ts";
@@ -79,12 +83,15 @@ import type { Scope } from "../../shared/types.ts";
 
 /**
  * PluginRenderStatus retained as an internal alias to keep the orchestrator's
- * bucketing logic (installed / upgradable / available / unavailable) typed.
+ * bucketing logic (present / upgradable / available / unavailable) typed.
  * Maps 1:1 onto the V2 PluginNotificationMessage list-surface discriminator
- * subset (installed / upgradable / available / unavailable) per
- * shared/notify.ts:469-479.
+ * subset per shared/notify.ts. UAT G-21-01: the installed bucket emits the
+ * list-only `present` token instead of the cascade-context `installed`
+ * token so `shouldEmitReloadHint` does not misfire on steady-state list
+ * invocations; the PL-1 `--installed` filter treats `present` and
+ * `upgradable` as the installed bucket.
  */
-type PluginRenderStatus = "installed" | "upgradable" | "available" | "unavailable";
+type PluginRenderStatus = "present" | "upgradable" | "available" | "unavailable";
 
 /**
  * Options bag for {@link listPlugins}. Phase 6 edge layer constructs this
@@ -93,7 +100,7 @@ type PluginRenderStatus = "installed" | "upgradable" | "available" | "unavailabl
  * `pi` is REQUIRED -- the V2 `notify(ctx, pi, message)` call consumes it
  * for the single softDepStatus(pi) probe per invocation (D-16-14). The
  * renderer derives per-row soft-dep markers from each
- * `PluginInstalledMessage.dependencies` field plus the probe result.
+ * `PluginPresentMessage.dependencies` field plus the probe result.
  */
 export interface ListPluginsOptions {
   readonly ctx: ExtensionContext;
@@ -127,7 +134,7 @@ function shouldShow(opts: ListPluginsOptions, status: PluginRenderStatus): boole
     return true;
   }
 
-  if (opts.installed === true && (status === "installed" || status === "upgradable")) {
+  if (opts.installed === true && (status === "present" || status === "upgradable")) {
     return true;
   }
 
@@ -189,7 +196,7 @@ function dependenciesFromDeclares(declaresAgents: boolean, declaresMcp: boolean)
 }
 
 /**
- * Build a `PluginInstalledMessage` (or `PluginUpgradableMessage` when the
+ * Build a `PluginPresentMessage` (or `PluginUpgradableMessage` when the
  * manifest version differs from the installed record's version per PL-5
  * string compare) for an INSTALLED plugin record. `dependencies` derives
  * from the installed record's `resources` (state-recorded counts). The
@@ -200,6 +207,14 @@ function dependenciesFromDeclares(declaresAgents: boolean, declaresMcp: boolean)
  * through to the V2 row only when it differs from the owning marketplace's
  * scope -- the renderer's MSG-PL-6 / D-16-17 orphan-fold rule suppresses
  * the `[<scope>]` bracket when `p.scope === mp.scope`.
+ *
+ * Inventory-vs-transition discriminator (UAT G-21-01): the steady-state
+ * list row emits the list-only `present` inventory token (absent from
+ * `shouldEmitReloadHint`'s trigger set) instead of the cascade transition
+ * `installed` token (which DOES trigger the reload hint). The renderer
+ * arm for `"present"` is byte-identical to the `"installed"` arm so the
+ * human-visible row text `● <name> [<scope>] v<ver> (installed)` is
+ * preserved.
  */
 function installedRowMessage(
   pluginName: string,
@@ -207,7 +222,7 @@ function installedRowMessage(
   marketplaceScope: Scope,
   record: ExtensionState["marketplaces"][string]["plugins"][string],
   manifestEntry: MarketplaceManifest["plugins"][number] | undefined,
-): PluginInstalledMessage | PluginUpgradableMessage {
+): PluginPresentMessage | PluginUpgradableMessage {
   const declaresAgents = record.resources.agents.length > 0;
   const declaresMcp = record.resources.mcpServers.length > 0;
   const upgradable =
@@ -237,7 +252,7 @@ function installedRowMessage(
   }
 
   return {
-    status: "installed",
+    status: "present",
     name: pluginName,
     dependencies: dependenciesFromDeclares(declaresAgents, declaresMcp),
     version: record.version,
@@ -751,17 +766,21 @@ function sortPluginsInBlock(
   }
 
   // SNM-11: `available` / `unavailable` variants have no `scope` field by
-  // construction; the other list-surface variants (`installed` /
+  // construction; the other list-surface variants (`present` /
   // `upgradable`) carry an optional `scope`. The status-narrowing switch
-  // is the only safe access path under TS strict.
+  // is the only safe access path under TS strict. UAT G-21-01: list
+  // orchestrator emits `present` (list-only inventory token) in place
+  // of the cascade-context `installed`; the `installed` arm is left in
+  // the unreachable bucket below as a renderer-as-spec guard.
   const scopeOf = (p: PluginNotificationMessage): Scope => {
     switch (p.status) {
-      case "installed":
+      case "present":
       case "upgradable":
         return p.scope ?? marketplaceScope;
       case "available":
       case "unavailable":
         return marketplaceScope;
+      case "installed":
       case "updated":
       case "reinstalled":
       case "uninstalled":

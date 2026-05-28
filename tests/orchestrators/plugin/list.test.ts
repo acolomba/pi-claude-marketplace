@@ -239,6 +239,11 @@ test("PL-1: no flags = every bucket (installed, available, unavailable)", async 
     // scope are both "user", so the bracket is omitted on the alpha row.
     // SNM-11: `available` / `unavailable` rows never carry a `scope`
     // field by construction, so their brackets are always absent.
+    // UAT G-21-01: list-surface inventory row emits no reload-hint
+    // trailer; the previous trailer was the misfire shouldEmitReloadHint
+    // produced because installedRowMessage emitted the cascade-context
+    // `status: "installed"` discriminator. Now it emits `status:
+    // "present"` (list-only) and the trailer is correctly absent.
     assert.equal(
       out,
       [
@@ -246,8 +251,6 @@ test("PL-1: no flags = every bucket (installed, available, unavailable)", async 
         "  ● alpha v1.0.0 (installed)",
         "  ○ beta v2.0.0 (available)",
         "  ⊘ gamma v3.0.0 (unavailable) {unsupported source}",
-        "",
-        "/reload to pick up changes",
       ].join("\n"),
     );
   });

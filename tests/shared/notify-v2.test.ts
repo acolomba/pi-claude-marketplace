@@ -707,6 +707,85 @@ test("notify renders header-only block on empty plugins under added marketplace 
 });
 
 // ===========================================================================
+// 16a / 16b: UAT G-21-01 inventory-vs-transition discriminator (SNM-15
+// surface tightening). The list-only `present` token does NOT trigger
+// the reload-hint; the cascade-context `installed` token DOES.
+// ===========================================================================
+
+test("UAT G-21-01: list-shaped message with status: 'present' plugin row emits NO /reload trailer (SNM-15 inventory-vs-transition discriminator)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  // List-shaped payload: mp.status === undefined (list surface) +
+  // single steady-state inventory row using the new list-only token
+  // `status: "present"`. shouldEmitReloadHint must NOT fire because
+  // "present" is deliberately ABSENT from the trigger set (gap fix).
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "present",
+            name: "alpha",
+            version: "1.0.0",
+            dependencies: [],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  // The list-only `present` token renders byte-identical to `installed`
+  // on the human-visible row text (the renderer arm preserves the
+  // `(installed)` parenthetical so the list-surface byte assertions are
+  // preserved); only the trailing reload-hint is removed.
+  assert.ok(
+    body.includes("● alpha v1.0.0 (installed)"),
+    `expected body to include byte-identical-to-installed row, got: ${body}`,
+  );
+  assert.ok(
+    !body.includes("/reload to pick up changes"),
+    `expected body to NOT include reload-hint trailer, got: ${body}`,
+  );
+});
+
+test("UAT G-21-01: cascade-shaped message with status: 'installed' plugin row continues to emit the /reload trailer (transition token preserved)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  // Cascade-shaped payload: bare marketplace header (mp.status ===
+  // undefined, no details) + single `installed` cascade transition row.
+  // shouldEmitReloadHint MUST fire because `installed` is one of the
+  // four state-change tokens that drive the trigger set; the gap fix
+  // does not touch that discriminator path.
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "installed",
+            name: "alpha",
+            version: "1.0.0",
+            dependencies: [],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.ok(
+    body.includes("/reload to pick up changes"),
+    `expected body to include reload-hint trailer, got: ${body}`,
+  );
+});
+
+// ===========================================================================
 // 17: Empty top-level marketplaces -- the "(no marketplaces)" sentinel per
 // 16-05-SUMMARY. No reload-hint, no severity.
 // ===========================================================================

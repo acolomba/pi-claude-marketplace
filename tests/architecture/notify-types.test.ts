@@ -104,8 +104,10 @@ type _Assert_PluginStatusBackward = PluginNotificationMessage["status"] extends 
   : never;
 export const _pb: _Assert_PluginStatusBackward = true;
 
-// D-15-11: PLUGIN_STATUSES tuple length is exactly 10.
-type _Assert_PluginStatusesLen = (typeof PLUGIN_STATUSES)["length"] extends 10 ? true : never;
+// D-15-11: PLUGIN_STATUSES tuple length is exactly 11.
+// UAT G-21-01: tuple grew from 10 to 11 entries with the addition of the
+// list-only `"present"` inventory token (SNM-15 surface tightening).
+type _Assert_PluginStatusesLen = (typeof PLUGIN_STATUSES)["length"] extends 11 ? true : never;
 export const _l1: _Assert_PluginStatusesLen = true;
 
 // D-17.1-01 (supersedes D-15-07) + D-15-11: MARKETPLACE_STATUSES tuple length is exactly 7.
@@ -118,8 +120,10 @@ export const _l2: _Assert_MarketplaceStatusesLen = true;
 type _Assert_DependenciesLen = (typeof DEPENDENCIES)["length"] extends 2 ? true : never;
 export const _l3: _Assert_DependenciesLen = true;
 
-// SNM-03 + D-15-11: `PluginStatus` is EXACTLY the 10 expected literals (no
-// more, no fewer). Bidirectional `extends` proves set-equality.
+// SNM-03 + D-15-11: `PluginStatus` is EXACTLY the 11 expected literals (no
+// more, no fewer). Bidirectional `extends` proves set-equality. UAT G-21-01:
+// the trailing `"present"` literal is the list-only inventory token
+// introduced to close the reload-hint misfire on `/claude:plugin list`.
 type _PluginStatusExpected =
   | "installed"
   | "updated"
@@ -130,7 +134,8 @@ type _PluginStatusExpected =
   | "upgradable"
   | "failed"
   | "skipped"
-  | "manual recovery";
+  | "manual recovery"
+  | "present";
 type _Assert_PluginStatusValues = _PluginStatusExpected extends PluginStatus
   ? PluginStatus extends _PluginStatusExpected
     ? true
