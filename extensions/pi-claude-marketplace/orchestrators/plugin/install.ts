@@ -796,6 +796,12 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // Reason classifies an internal invariant violation; the renderer
     // suppresses the empty brace per D-15-01 and surfaces the cause
     // text via the 4-space-indent trailer (D-16-08).
+    //
+    // CR-02: row-level `scope` is OMITTED -- the marketplace block carries
+    // the same scope, and `renderScopeBracket` (shared/notify.ts:743)
+    // suppresses the per-row bracket in that case. Matches the IN-04
+    // omit convention pinned at install.ts:936-944 and the primary catch
+    // path's `composeInstallFailureMessage` recipe.
     notify(ctx, pi, {
       marketplaces: [
         {
@@ -806,7 +812,6 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
               status: "failed",
               name: plugin,
               reasons: [] as const,
-              scope,
               cause: internalErr,
             },
           ],
