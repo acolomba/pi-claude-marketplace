@@ -81,6 +81,12 @@ type _VUpgradable = Extract<PluginNotificationMessage, { status: "upgradable" }>
 type _VFailed = Extract<PluginNotificationMessage, { status: "failed" }>;
 type _VSkipped = Extract<PluginNotificationMessage, { status: "skipped" }>;
 type _VManualRecovery = Extract<PluginNotificationMessage, { status: "manual recovery" }>;
+// UAT G-21-01 / 21-04-REVIEW.md WR-01: PluginPresentMessage is the 11th
+// variant (list-only inventory token introduced to close the reload-hint
+// misfire). Its per-variant invariants mirror the `_VInstalled` blocks
+// verbatim (dependencies REQUIRED, version OPTIONAL, scope OPTIONAL; no
+// cause / rollbackPartial / reasons / from / to).
+type _VPresent = Extract<PluginNotificationMessage, { status: "present" }>;
 
 // Cross-module type aliases used in positional `extends` checks below.
 type _Scope = import("../../extensions/pi-claude-marketplace/shared/types.ts").Scope;
@@ -278,6 +284,8 @@ export type _NoCauseOnUnavailable = _VUnavailable["cause"];
 export type _NoCauseOnUpgradable = _VUpgradable["cause"];
 // @ts-expect-error -- SNM-10: skipped has NO cause field
 export type _NoCauseOnSkipped = _VSkipped["cause"];
+// @ts-expect-error -- SNM-10: present has NO cause field (UAT G-21-01)
+export type _NoCauseOnPresent = _VPresent["cause"];
 
 // ============================================================================
 // Per-variant: rollbackPartial? (SNM-09 + D-15-12)
@@ -310,6 +318,8 @@ export type _NoRollbackOnUpgradable = _VUpgradable["rollbackPartial"];
 export type _NoRollbackOnSkipped = _VSkipped["rollbackPartial"];
 // @ts-expect-error -- SNM-09: manual recovery has NO rollbackPartial field
 export type _NoRollbackOnManualRecovery = _VManualRecovery["rollbackPartial"];
+// @ts-expect-error -- SNM-09: present has NO rollbackPartial field (UAT G-21-01)
+export type _NoRollbackOnPresent = _VPresent["rollbackPartial"];
 
 // ============================================================================
 // Per-variant: dependencies (SNM-06 + D-15-02 + D-15-12)
@@ -348,6 +358,19 @@ type _Assert_DepsNotOptionalReinstalled = undefined extends _VReinstalled["depen
   ? never
   : true;
 export const _dnR: _Assert_DepsNotOptionalReinstalled = true;
+
+// UAT G-21-01 (21-04-REVIEW.md WR-01): PluginPresentMessage carries REQUIRED
+// `dependencies: readonly Dependency[]` so the soft-dep marker injection
+// (D-16-15) still applies on list-surface inventory rows. The renderer arm
+// for `present` is byte-identical to the `installed` arm, which structurally
+// depends on the dependencies field being required.
+type _Assert_DepsRequiredPresent = _VPresent["dependencies"] extends readonly Dependency[]
+  ? true
+  : never;
+export const _drP: _Assert_DepsRequiredPresent = true;
+
+type _Assert_DepsNotOptionalPresent = undefined extends _VPresent["dependencies"] ? never : true;
+export const _dnP: _Assert_DepsNotOptionalPresent = true;
 
 // @ts-expect-error -- D-15-02: uninstalled has NO dependencies field
 export type _NoDepsOnUninstalled = _VUninstalled["dependencies"];
@@ -427,6 +450,8 @@ export type _NoReasonsOnReinstalled = _VReinstalled["reasons"];
 export type _NoReasonsOnUninstalled = _VUninstalled["reasons"];
 // @ts-expect-error -- D-15-01: available has NO reasons field
 export type _NoReasonsOnAvailable = _VAvailable["reasons"];
+// @ts-expect-error -- D-15-01: present has NO reasons field (UAT G-21-01)
+export type _NoReasonsOnPresent = _VPresent["reasons"];
 
 // ============================================================================
 // Per-variant: scope? (SNM-11 + D-15-12)
@@ -461,6 +486,13 @@ type _Assert_ScopeOnManualRecovery = _VManualRecovery["scope"] extends _Scope | 
   ? true
   : never;
 export const _scMR: _Assert_ScopeOnManualRecovery = true;
+
+// UAT G-21-01 (21-04-REVIEW.md WR-01): PluginPresentMessage carries OPTIONAL
+// `scope?: Scope` mirroring PluginInstalledMessage; the orphan-fold rule
+// (D-16-17 / D-13-18) emits the cross-scope `[<scope>]` bracket when the
+// plugin's actual scope differs from the owning marketplace block's scope.
+type _Assert_ScopeOnPresent = _VPresent["scope"] extends _Scope | undefined ? true : never;
+export const _scP: _Assert_ScopeOnPresent = true;
 
 // @ts-expect-error -- SNM-11: available has NO scope field (MSG-PL-6 carve-out)
 export type _NoScopeOnAvailable = _VAvailable["scope"];
@@ -505,6 +537,8 @@ export type _NoFromOnFailed = _VFailed["from"];
 export type _NoFromOnSkipped = _VSkipped["from"];
 // @ts-expect-error -- D-15-04: manual recovery has NO from field
 export type _NoFromOnManualRecovery = _VManualRecovery["from"];
+// @ts-expect-error -- D-15-04: present has NO from field (UAT G-21-01)
+export type _NoFromOnPresent = _VPresent["from"];
 
 // @ts-expect-error -- D-15-04: installed has NO to field
 export type _NoToOnInstalled = _VInstalled["to"];
@@ -524,6 +558,8 @@ export type _NoToOnFailed = _VFailed["to"];
 export type _NoToOnSkipped = _VSkipped["to"];
 // @ts-expect-error -- D-15-04: manual recovery has NO to field
 export type _NoToOnManualRecovery = _VManualRecovery["to"];
+// @ts-expect-error -- D-15-04: present has NO to field (UAT G-21-01)
+export type _NoToOnPresent = _VPresent["to"];
 
 // ============================================================================
 // Per-variant: version? (D-15-04 + D-15-12)
@@ -568,6 +604,12 @@ type _Assert_VersionOnManualRecovery = _VManualRecovery["version"] extends strin
   ? true
   : never;
 export const _vMR: _Assert_VersionOnManualRecovery = true;
+
+// UAT G-21-01 (21-04-REVIEW.md WR-01): PluginPresentMessage carries OPTIONAL
+// `version?: string` mirroring PluginInstalledMessage (the installed record's
+// version is captured at install time and carries through to the inventory row).
+type _Assert_VersionOnPresent = _VPresent["version"] extends string | undefined ? true : never;
+export const _vP: _Assert_VersionOnPresent = true;
 
 // ============================================================================
 // node:test anchor
