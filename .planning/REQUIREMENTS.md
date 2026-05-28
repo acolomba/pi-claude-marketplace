@@ -1,7 +1,43 @@
-# Requirements: pi-claude-marketplace v1.4 -- Structured Notification Messages
+# Requirements: pi-claude-marketplace v1.4.1 -- Post-ship UAT Patches
 
-**Defined:** 2026-05-25
+**Defined:** 2026-05-28
 **Core Value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
+
+## v1.4.1 Milestone Goal
+
+Close the 8 gaps surfaced by the v1.4 milestone-spanning UAT (`.planning/v1.4-MILESTONE-UAT.md`) so v1.4's user-visible message surfaces match the catalog spec and user expectations end-to-end. The UAT was run conversationally on 2026-05-28 against the user's installed pi-claude-marketplace v0.1.7 runtime (V1 wrappers, pre-v1.4) and identified 6 gaps that are already triable in source plus 2 gaps that need a reproduction phase against the not-yet-published v0.2.0 (v1.4) runtime.
+
+## v1.4.1 Requirements (Active)
+
+### Reload-hint Discipline
+
+- [ ] **SNM-33**: `shouldEmitReloadHint` (in `shared/notify.ts`) gates the marketplace-level transition tokens (`MarketplaceAddedMessage` / `MarketplaceRemovedMessage` / `MarketplaceUpdatedMessage`) on whether the embedded `plugins[]` cascade contains at least one row with a state-change discriminator (`installed` / `updated` / `reinstalled` / `uninstalled`). Currently those marketplace-level tokens fire the trailer unconditionally even when no Pi-visible resources changed. Closes G-MIL-01 (`marketplace add` of empty mp), G-MIL-02 (`marketplace remove` of empty mp), G-MIL-06 (`marketplace update` no-op). Same SNM-15 family as the G-21-01 fix in Plan 21-04. Includes byte-equality regression tests in `tests/shared/notify-v2.test.ts` for each of the three "no plugin state change → no trailer" cases.
+
+### Version Resolution & Display
+
+- [ ] **SNM-34**: `resolvePluginVersion` in `orchestrators/plugin/shared.ts` adds a tier-2 fallback that consults `installable.manifest?.version` (the plugin's own `.claude-plugin/plugin.json`'s `version` field) BEFORE falling through to PI-7 `computeHashVersion`. The resolved version order becomes: (1) marketplace.json `plugins[].version` if declared; (2) plugin.json `version` if declared, with SemVer shape validation; (3) PI-7 hash-version as last-resort fallback. Closes G-MIL-05. Documents the precedence in PRD §11 PI-7 contract wording. Includes unit test in `tests/orchestrators/plugin/install.test.ts` for the tier-2 case with a fixture where marketplace.json omits `version` and plugin.json declares a SemVer.
+
+- [ ] **SNM-35**: Hash-version display transforms to git-style short-SHA form `v#<7hex>` instead of the current `vhash-<12hex>`. PERSISTED state.json byte form (`hash-<12hex>`) is UNCHANGED -- PI-7 contract intact, no state migration. The transform is renderer-only: a new `formatHashVersionForDisplay(version)` helper in `shared/notify.ts` detects hash-versions via the existing `looksLikeHashVersion` predicate and emits `#<7hex>` (the `v` prefix is added by `renderVersion` downstream, producing the final byte form `v#<7hex>`). Updates: `renderVersion`, `composeVersionArrow`, and all catalog-state byte-form fixtures in `tests/shared/notify-v2.test.ts`, `tests/architecture/catalog-uat.test.ts`, and `docs/output-catalog.md`. Closes G-MIL-08.
+
+### Grammar Consistency
+
+- [ ] **SNM-36**: The lone camelCase token leak in the user-rendered `REASONS` closed-set at `shared/notify.ts:79` is eliminated. Either (a) rename the REASON discriminator from `"lspServers"` to `"lsp servers"` and update all 13 consumer call-sites in `orchestrators/plugin/list.ts` (8 sites) and `orchestrators/plugin/install.ts` (4 sites) plus the JSDoc comment at `domain/components/plugin.ts:46`, or (b) keep the camelCase discriminator but inject a renderer-side translation `"lspServers" → "lsp servers"` inside `composeReasons` / the reason brace block emitter. Preference (a) per design endorsement -- preserves the closed-set invariant uniformly. The manifest-side JSON key `lspServers` (referenced at `domain/components/plugin.ts:31` and `domain/resolver.ts:142,160`) MUST remain unchanged -- it's the actual `.claude-plugin/plugin.json` field name. Closes G-MIL-04.
+
+### Reproduction Infrastructure & v1.4 Runtime Verification
+
+- [ ] **SNM-37**: Source v0.2.0 (the v1.4 milestone) is published to npm or npm-linked into the user's Pi runtime so the v1.4-specific behavior can be exercised in the live environment. This is the gating prerequisite for SNM-38 and SNM-39 (which need the v1.4 runtime to reproduce). Methodology: publish to npm OR `npm link` from the source tree into `~/.npm-global` and verify Pi loads the new code via `pi --version` and a smoke `/claude:plugin list` invocation that shows v1.4 catalog conformance (e.g., no `/reload` trailer on read-only list; `v#<7hex>` hash form per SNM-35).
+
+- [ ] **SNM-38**: G-MIL-03 (indent ladder visual off-by-one vs catalog D-16-08 documented 2/4/6 ladder) is reproduced or refuted against the v1.4 runtime. Methodology: capture the byte form of a representative `/claude:plugin list` output, count leading whitespace per line, compare against catalog L155-189 canonical examples and `renderPluginRow` / `renderMpHeader` indent constants. If a real off-by-one bug is confirmed, fix at the renderer with a regression test; if catalog rendering matches code intent, document the visual discrepancy as a catalog wording clarification or close as not-a-bug. Depends on SNM-37.
+
+- [ ] **SNM-39**: G-MIL-07 (tab completion for `/claude:plugin update @<TAB>` returns nothing in the runtime despite a passing unit test at `tests/edge/completions/provider.test.ts:806`) is reproduced or refuted against the v1.4 runtime. Methodology: install a fixture with at least one installed plugin per marketplace, type `/claude:plugin update @` and trigger tab completion, observe the result. If empty, trace the completion provider call path against the Pi-tui runtime to isolate whether the gap is in: (a) completion provider code path divergence between v0.1.7 and v0.2.0; (b) Pi-tui consumption / display of the `AutocompleteItem[]` payload; (c) `getInstalledPluginToMarketplacesMap` returning an empty map due to a scope-root mismatch at runtime. Fix or defer per root-cause finding. Depends on SNM-37.
+
+### GREEN Gate
+
+- [ ] **SNM-40**: `npm run check` GREEN end-to-end after all v1.4.1 fixes land: typecheck + ESLint + Prettier + tests. New regression tests added in SNM-33 / SNM-34 / SNM-35 / SNM-36 included in the test suite. `tests/integration/fold-adoption.test.ts` phase 1 pre-existing failure (documented in Plan 21-04 review-fix report) remains out of scope -- it predates this milestone and is on the `npm run test:integration` track, not `npm test`. The milestone-close gate matches the v1.4-close gate pattern (SNM-32).
+
+## v1.4 Requirements (Shipped 2026-05-27)
+
+_Original v1.4 milestone scope. All requirements complete except SNM-23 traceability-row reconciliation (its behavior shipped in Phase 20; traceability bookkeeping is a known record-keeping debt)._
 
 ## Milestone Goal
 
@@ -58,7 +94,17 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 - [x] **SNM-31**: `tests/architecture/catalog-uat.test.ts` rewritten to feed structured `NotificationMessage` fixtures through `notify()` (via mock ctx) and assert byte-equality against `docs/output-catalog.md` per-command expected outputs. The byte-equality assertion remains the user-contract gate.
 - [x] **SNM-32**: `npm run check` GREEN after all migrations land: typecheck + ESLint (with new stock rules) + Prettier + tests (1249 v1.3 baseline minus retired lint-rule tests, plus the new per-variant unit tests; expected net change accounted for in the phase plan).
 
-## Out of Scope
+## v1.4.1 Out of Scope
+
+| Feature | Reason |
+| --- | --- |
+| New user-facing features | This is a bug-fix milestone scoped strictly to the v1.4 post-ship UAT inventory. New capabilities defer to v1.5. |
+| v1.4 phase dir archival | v1.4 phase dirs (15-21) remain in `.planning/phases/`; 1.4.1 phases continue numbering at 22+. Archival via `/gsd-complete-milestone` is operator-initiated when desired. |
+| State migration for already-installed hash-versioned plugins | A plugin previously installed under v0.1.7 with `version: "hash-<12hex>"` whose plugin.json declares a SemVer will retain the hash form in state. The SNM-34 tier-2 fallback fires at NEXT install/reinstall/update; an explicit migration of existing records is not in scope. Marketplace update will naturally surface the version discrepancy as upgradable for the user to resolve. |
+| `tests/integration/fold-adoption.test.ts` phase 1 fix | Pre-existing failure on the v1.4 baseline (`npm run test:integration` track, not `npm test`); documented in Plan 21-04 review-fix report. Tracked for a separate `/gsd-debug` session. |
+| Catalog spec restructure | Catalog rendering changes (G-MIL-08 `v#<7hex>`, G-MIL-04 grammar) and PRD §11 PI-7 wording updates land alongside the renderer fixes; no broader spec rewrite. |
+
+## v1.4 Out of Scope (Inherited, Still Active)
 
 | Feature                                           | Reason                                                                                                                                                  |
 | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -126,5 +172,5 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25.
 
 ---
 
-_Requirements defined: 2026-05-25_
-_Last updated: 2026-05-27 -- Phase 21 closed v1.4 milestone: SNM-22, SNM-24, SNM-25, SNM-27, SNM-28, SNM-29, SNM-32 flipped to Complete in both per-section checklist and traceability table. SNM-19, SNM-20, SNM-26, SNM-31 per-section checkboxes reconciled with their traceability `Complete` state (W7 invariant per Plan 21-03). SNM-23 left as Pending in traceability per B6 scope discipline (its behavior closed in Phase 20; the traceability-row reconciliation is a Phase 20 record-keeping debt to be addressed in a separate `/gsd-quick` commit, not by extending Phase 21 scope)._
+_Requirements defined: 2026-05-25 (v1.4 baseline); 2026-05-28 (v1.4.1 patches added)_
+_Last updated: 2026-05-28 -- v1.4.1 Post-ship UAT Patches milestone started. Added SNM-33..SNM-40 (8 requirements) closing 8 UAT findings from `.planning/v1.4-MILESTONE-UAT.md`. v1.4.1 traceability rows will be populated by `gsd-roadmapper` when the milestone roadmap lands. v1.4 traceability table preserved as historical record._
