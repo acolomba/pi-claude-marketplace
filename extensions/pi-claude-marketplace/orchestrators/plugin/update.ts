@@ -337,19 +337,25 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
 
     // CR-01: phase-3a aggregate failures already fire `notifyDirectFailure`
     // inline from `runThreePhaseUpdate` (with `reasonOverride: "rollback
-    // partial"` and the structural `rollbackPartial[]` children). The block
-    // comment at the inline emission site asserts "the cascade is NOT
-    // re-rendered here -- aborting before the cascade walk means there's
-    // exactly one row to surface", but that invariant is only preserved by
-    // returning here. Without this early-return, the outcome falls through
-    // to `outcomes.push` + `renderUpdateCascadeAndNotify` below, producing
-    // a SECOND notification rendering the same failure via
-    // `outcomeToCascadePluginMessage`'s failed arm. Phase-3a aggregates are
-    // distinguishable from phase-2-or-earlier failures by the presence of
-    // `phaseFailures` on the returned outcome (only the aggregate path
-    // populates it). Phase-2-or-earlier failures throw and are handled by
-    // the `catch` block above, never reaching this branch.
-    if (outcome.partition === "failed" && outcome.phaseFailures !== undefined) {
+    // partial"` and the structural `rollbackPartial[]` children). We must
+    // skip pushing the failing plugin into `outcomes` so the cascade
+    // renderer does NOT re-render the same failure via
+    // `outcomeToCascadePluginMessage`'s failed arm (which would produce
+    // a duplicate notification for the failing plugin). But earlier
+    // plugins in the same batch that succeeded already committed state
+    // to disk via their own `withStateGuard` closures; suppressing the
+    // cascade for them entirely would leave the on-disk state and the
+    // user-visible report divergent (successful #1-#3 updates invisible
+    // when #4 hits phase-3a). Instead, emit the cascade for the
+    // already-accumulated successful outcomes and abort the batch.
+    //
+    // Phase-3a aggregates are distinguishable from phase-2-or-earlier
+    // failures by the presence of `phaseFailures` on the returned outcome
+    // (only the aggregate path populates it). Phase-2-or-earlier failures
+    // throw and are handled by the `catch` block above, never reaching
+    // this branch.
+    if (isPhase3aAggregateFailure(outcome)) {
+      renderUpdateCascadeIfAny(ctx, pi, outcomes);
       return;
     }
 
@@ -357,6 +363,31 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
   }
 
   renderUpdateCascadeAndNotify(ctx, pi, outcomes);
+}
+
+/**
+ * CR-01 predicate: discriminates phase-3a aggregate failures (which carry
+ * a populated `phaseFailures` array and have already fired their own
+ * direct-path notify) from phase-2-or-earlier failures (which throw and
+ * are handled by the `catch` block in the enclosing batch loop).
+ */
+function isPhase3aAggregateFailure(outcome: PluginUpdateOutcome): boolean {
+  return outcome.partition === "failed" && outcome.phaseFailures !== undefined;
+}
+
+/**
+ * CR-01 helper: emit the cascade notification ONLY when at least one
+ * outcome accumulated. Empty accumulators skip the call so we do not
+ * emit an empty-marketplaces sentinel after a phase-3a abort.
+ */
+function renderUpdateCascadeIfAny(
+  ctx: ExtensionContext,
+  pi: ExtensionAPI,
+  outcomes: readonly TargetedOutcome[],
+): void {
+  if (outcomes.length > 0) {
+    renderUpdateCascadeAndNotify(ctx, pi, outcomes);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
