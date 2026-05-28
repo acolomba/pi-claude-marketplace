@@ -38,10 +38,10 @@ export function assertNever(x: never): never {
  * absolute paths. The `shared/notify.ts::notifyError` body consumes this
  * walker so the trailer lands automatically on every error notification.
  *
- * Located in `shared/errors.ts` because `shared/notify.ts` cannot import
- * from `presentation/` (D-11 layering). `presentation/cause-chain.ts`
- * re-exports this symbol so presentation-layer consumers reference it via
- * `presentation/`.
+ * Single canonical implementation in `shared/errors.ts` (D-11 layering;
+ * canonicalised here in Phase 21 from the retired
+ * `presentation/cause-chain.ts`). The `shared/notify.ts::notifyError`
+ * body consumes this walker directly.
  */
 export function causeChainTrailer(err: unknown): string {
   if (err === undefined || err === null) {
@@ -97,10 +97,11 @@ function linkMessage(c: unknown): string {
  * through the notify channel.
  *
  * Extracted from three byte-identical private copies in the
- * orchestrator files above (D-21-02 relocation from
- * presentation/cause-chain.ts). The single canonical implementation here
- * is the source of truth -- if the cause-chain trailer contract changes
- * (depth bound, separator, trimming rule), the change lands once.
+ * orchestrator files above (D-21-02; canonicalised here in Phase 21 from
+ * the retired `presentation/cause-chain.ts`). The single canonical
+ * implementation here is the source of truth -- if the cause-chain trailer
+ * contract changes (depth bound, separator, trimming rule), the change
+ * lands once.
  */
 export function composeErrorWithCauseChain(err: unknown): string {
   const trailer = causeChainTrailer(err);
@@ -208,8 +209,8 @@ export class CrossPluginConflictError extends Error {
  * record already exists (another process beat us to the commit). The outer
  * `runPhases` result unwinds the staged resources via the ledger's
  * `undo` chain; `formatRollbackError` returns the structured rollback
- * result and the orchestrator composes the final user message via
- * `presentation/rollback-partial.ts`.
+ * result and the orchestrator composes the final user message via the
+ * V2 `notify(ctx, NotificationMessage)` path (`shared/notify.ts`).
  */
 export class ConcurrentInstallError extends Error {
   readonly plugin: string;

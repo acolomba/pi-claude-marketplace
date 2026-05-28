@@ -31,13 +31,14 @@ import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../platform/
  *       `${message.message}\n\n${message.usage}` at "error" severity
  *       (SNM-13 / D-16-02).
  *
- * Closed-set source of truth (D-21-01, inlined from the retired
- * shared/grammar/ directory): `REASONS`, `STATUS_TOKENS`, `MARKERS`,
- * `PATTERN_CLASSES` const tuples and their derived literal-union types
- * `Reason`, `StatusToken`, `Marker`, `PatternClass` live in THIS file.
- * The `compareByNameThenScope` comparator (D-21-02, relocated from the
- * retired presentation/sort.ts) also lives here as the single per-scope
- * row-order policy across every list-rendering surface.
+ * Closed-set source of truth (D-21-01): `REASONS`, `STATUS_TOKENS`,
+ * `MARKERS`, `PATTERN_CLASSES` const tuples and their derived literal-union
+ * types `Reason`, `StatusToken`, `Marker`, `PatternClass` live in THIS file
+ * (canonicalised here in Phase 21 from the retired `shared/grammar/`
+ * directory). The `compareByNameThenScope` comparator (D-21-02) also lives
+ * here as the single per-scope row-order policy across every list-rendering
+ * surface (canonicalised here in Phase 21 from the retired
+ * `presentation/sort.ts`).
  *
  * Import path: callers import the surface directly from this file
  * (`import { notify, type Reason, compareByNameThenScope } from
@@ -47,13 +48,13 @@ import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../platform/
 // ---------------------------------------------------------------------------
 // Closed-set runtime tuples + derived literal-union types (D-21-01).
 //
-// Inlined from the retired shared/grammar/ directory. Each tuple is the
-// runtime carrier for a closed set the v1.4 structured-notification grammar
-// recognizes; the derived `(typeof X)[number]` literal-union types are the
-// compile-time enforcement that rejects out-of-set string literals at
-// renderer call sites. Tuples are stored WITHOUT surrounding `{}` or `<>`
-// brace/chevron decoration -- the renderer composes those at emission time
-// (MSG-GR-5 historical convention).
+// Canonicalised here in Phase 21 (previously in `shared/grammar/`). Each
+// tuple is the runtime carrier for a closed set the v1.4 structured-
+// notification grammar recognizes; the derived `(typeof X)[number]`
+// literal-union types are the compile-time enforcement that rejects
+// out-of-set string literals at renderer call sites. Tuples are stored
+// WITHOUT surrounding `{}` or `<>` brace/chevron decoration -- the renderer
+// composes those at emission time (MSG-GR-5 historical convention).
 // ---------------------------------------------------------------------------
 
 /**
@@ -187,40 +188,37 @@ export function notifyUsageError(ctx: ExtensionContext, message: UsageErrorMessa
 // on available/unavailable).
 //
 // Governed by locked decisions D-15-01 (per-variant reasons discipline),
-// D-15-02 (per-variant dependencies discipline), D-15-03 (Reason imported
-// from shared/grammar/reasons.ts unchanged), D-15-04 (version vs from/to
-// placement), D-15-05 (MarketplaceDetails fields), D-15-06 (status?/details?
-// independent optionals), D-15-07 (MarketplaceStatus 4 entries, no "skipped"),
-// D-15-08 / D-15-09 (empty arrays IS the structural "(no plugins)" /
-// "(no marketplaces)" rendering), D-15-11 (runtime `as const` tuples shipped
-// alongside derived literal-union types).
+// D-15-02 (per-variant dependencies discipline), D-15-03 (Reason canonicalised
+// here in Phase 21; previously imported from `shared/grammar/reasons.ts`),
+// D-15-04 (version vs from/to placement), D-15-05 (MarketplaceDetails fields),
+// D-15-06 (status?/details? independent optionals), D-15-07 (MarketplaceStatus
+// 4 entries, no "skipped"), D-15-08 / D-15-09 (empty arrays IS the structural
+// "(no plugins)" / "(no marketplaces)" rendering), D-15-11 (runtime `as const`
+// tuples shipped alongside derived literal-union types).
 //
 // Patterns:
 //   - `as const` tuple + `(typeof X)[number]` literal-union derivation
-//     mirrors shared/grammar/status-tokens.ts:34-52.
+//     mirrors the closed-set tuple convention historically rooted in
+//     `shared/grammar/status-tokens.ts` (canonicalised here in Phase 21).
 //   - Named per-variant interfaces joined in one discriminated union mirrors
-//     presentation/compact-line.ts:96-259 (RowSpec). PluginNotificationMessage
-//     discriminates on `status` instead of `kind`.
+//     the v1.3 `RowSpec` shape historically rooted in
+//     `presentation/compact-line.ts` (canonicalised here in Phase 21);
+//     PluginNotificationMessage discriminates on `status` instead of `kind`.
 //   - MarketplaceDetails.lastUpdatedAt? mirrors persistence/state-io.ts:70
 //     so list-surface orchestrators can pass the record's value through
 //     unchanged.
-//
-// Zero runtime impact in Phase 15: the V1 wrappers above are the only call
-// site of `ctx.ui.notify` in this file (D-07); no call site in extensions/
-// references these new symbols (success criterion #4). Phase 16 wires the
-// renderer + `notify(ctx, NotificationMessage)` public API; Phases 17-20
-// migrate the catalog UAT and call sites; Phase 21 deletes the V1 wrappers.
 // ---------------------------------------------------------------------------
 
 /**
  * Runtime tuple of every plugin status literal (D-15-11). 10 entries.
- * `"manual recovery"` is a literal string WITH A SPACE per
- * shared/grammar/status-tokens.ts:47 precedent; do not transform to
- * kebab-case ("manual-recovery") or camelCase ("manualRecovery") -- the
- * Phase 16 renderer emits the discriminator literal directly into the
- * `(<status>)` brace slot.
+ * `"manual recovery"` is a literal string WITH A SPACE (historical
+ * convention; canonicalised here in Phase 21 from the retired
+ * `shared/grammar/status-tokens.ts`); do not transform to kebab-case
+ * ("manual-recovery") or camelCase ("manualRecovery") -- the renderer
+ * emits the discriminator literal directly into the `(<status>)` brace
+ * slot.
  *
- * Pattern: shared/grammar/status-tokens.ts:34-52.
+ * Pattern: closed-set `as const` tuple + `(typeof X)[number]` literal-union.
  */
 export const PLUGIN_STATUSES = [
   "installed",
@@ -244,7 +242,7 @@ export const PLUGIN_STATUSES = [
  * entries retain their position to preserve the Phase 16 `renderMpHeader`
  * switch arm ordering convention.
  *
- * Pattern: shared/grammar/status-tokens.ts:34-52.
+ * Pattern: closed-set `as const` tuple + `(typeof X)[number]` literal-union.
  */
 export const MARKETPLACE_STATUSES = [
   "added",
@@ -261,7 +259,7 @@ export const MARKETPLACE_STATUSES = [
  * Drives the Phase 16 renderer's per-dependency soft-dep probe path
  * (`requires pi-subagents` / `requires pi-mcp` reason emission).
  *
- * Pattern: shared/grammar/status-tokens.ts:34-52.
+ * Pattern: closed-set `as const` tuple + `(typeof X)[number]` literal-union.
  */
 export const DEPENDENCIES = ["agents", "mcp"] as const;
 
@@ -320,8 +318,9 @@ export interface UsageErrorMessage {
 // Per-variant plugin notification interfaces (SNM-03).
 //
 // Each variant is a separate exported `interface` joined in the
-// `PluginNotificationMessage` union below. Pattern mirrors
-// presentation/compact-line.ts:96-259 (RowSpec). Every field `readonly`.
+// `PluginNotificationMessage` union below. Pattern mirrors the v1.3
+// `RowSpec` shape (canonicalised here in Phase 21 from the retired
+// `presentation/compact-line.ts`). Every field `readonly`.
 //
 // Per-variant required/optional discipline:
 //   - D-15-01: `reasons: readonly Reason[]` REQUIRED only on the 5 variants
@@ -468,10 +467,10 @@ export interface PluginSkippedMessage {
 /**
  * `(manual recovery)` -- per-plugin manual-recovery anchor row (MSG-MR-1).
  * Status discriminator is the literal string `"manual recovery"` WITH A
- * SPACE per shared/grammar/status-tokens.ts:47 precedent. Carries REQUIRED
- * `reasons` (D-15-01) and optional `cause?: Error` (SNM-10); no
- * `dependencies` (D-15-02); no `rollbackPartial` (only `failed` carries
- * it per SNM-09).
+ * SPACE (historical convention; canonicalised here in Phase 21 from the
+ * retired `shared/grammar/status-tokens.ts`). Carries REQUIRED `reasons`
+ * (D-15-01) and optional `cause?: Error` (SNM-10); no `dependencies`
+ * (D-15-02); no `rollbackPartial` (only `failed` carries it per SNM-09).
  */
 export interface PluginManualRecoveryMessage {
   readonly status: "manual recovery";
@@ -488,7 +487,8 @@ export interface PluginManualRecoveryMessage {
  * exhaustiveness; downstream tests iterate `PLUGIN_STATUSES` to enumerate
  * the variants.
  *
- * Pattern: presentation/compact-line.ts:250-259 (RowSpec).
+ * Pattern: discriminated union over named per-variant interfaces (v1.3
+ * `RowSpec`-style shape; canonicalised here in Phase 21).
  */
 export type PluginNotificationMessage =
   | PluginInstalledMessage
@@ -507,8 +507,9 @@ export type PluginNotificationMessage =
  * `details?`, and `reasons?` are independent optionals -- the renderer
  * narrows on `status` and consumes the others only where the relevant arm
  * needs them, but the type does not structurally constrain co-occurrence.
- * Mirrors v1.3 `MarketplaceRow`'s independent `status?` / `marker?`
- * pattern at presentation/compact-line.ts:190-198.
+ * Mirrors v1.3 `MarketplaceRow`'s independent `status?` / `marker?` shape
+ * (canonicalised here in Phase 21 from the retired
+ * `presentation/compact-line.ts`).
  *
  * `readonly reasons?: readonly Reason[]` is the Phase 17.1 amendment per
  * D-17.1-01 / D-17.1-05: the `"skipped"` mp-status renderer arm consumes
@@ -550,17 +551,17 @@ export interface NotificationMessage {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 16 v2 grammar additions -- file-private rendering helpers (D-16-09).
+// V2 grammar rendering helpers -- file-private (D-16-09).
 //
 // SNM-17 / SNM-18 contract: the v2 marketplace-header grammar and per-status
-// icon discipline live HERE as the sole site that knows them. Plan 04 will
-// add `renderPluginRow`; plan 05 will compose both helpers into the public
-// `notify()` entry point. The duplication of literals from `presentation/*`
-// is intentional (D-16-04 / D-16-09) and ends in Phase 21 when V1 wrappers
-// and `presentation/*` composers are deleted together.
+// icon discipline live HERE as the sole site that knows them.
+// `renderMpHeader` + `renderPluginRow` compose into the public `notify()`
+// entry point. The grammar-literal constants below were duplicated in
+// v1.3's retired `presentation/*` composers per D-16-04 / D-16-09; Phase 21
+// retired those composers and canonicalised the literals here.
 // ---------------------------------------------------------------------------
 
-/** V2 grammar constants duplicated from presentation/compact-line.ts per D-16-04. Phase 21 deletes both copies. */
+/** V2 grammar icon literals (D-16-04; canonicalised here in Phase 21). */
 const ICON_INSTALLED = "●";
 const ICON_AVAILABLE = "○";
 const ICON_UNINSTALLABLE = "⊘";
@@ -593,8 +594,8 @@ const ICON_UNINSTALLABLE = "⊘";
  *       + " <autoupdate>" iff mp.details.autoupdate === true (V1 marketplace-list
  *         byte-equivalent: marker omitted entirely when autoupdate is false)
  *       + " <last-updated ${mp.details.lastUpdatedAt}>" iff mp.details.lastUpdatedAt
- *         is defined (v2-only marker following V1's `<marker>` angle-bracket
- *         convention from presentation/compact-line.ts MarketplaceRow.marker)
+ *         is defined (v2-only marker following the v1.3 `<marker>` angle-bracket
+ *         convention from the retired `MarketplaceRow.marker` shape).
  *
  * The icon arms use ICON_AVAILABLE nowhere -- marketplaces are either ok
  * (●) or failure-class (⊘); the open-circle ○ is reserved for available /
@@ -683,21 +684,22 @@ function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus
 // switch (the typecheck relies on `assertNever`'s throw at runtime, not
 // on its `never` return type via a value-returning expression).
 //
-// Bounded duplication of literals from `presentation/compact-line.ts` and
-// `presentation/version-arrow.ts` is intentional (D-16-04 / D-16-09) and
-// ends in Phase 21 when V1 wrappers and `presentation/*` composers are
-// deleted together.
+// Grammar-literal constants below were duplicated by v1.3's retired
+// `presentation/compact-line.ts` + `presentation/version-arrow.ts`
+// composers per D-16-04 / D-16-09; Phase 21 retired those composers and
+// canonicalised the literals here.
 // ---------------------------------------------------------------------------
 
-/** Soft-dep marker literals duplicated from presentation/compact-line.ts per D-16-04/D-16-15. Phase 21 deletes both copies. */
+/** Soft-dep marker literals (D-16-04 / D-16-15; canonicalised here in Phase 21). */
 const SOFT_DEP_MARKER_AGENTS = "requires pi-subagents";
 const SOFT_DEP_MARKER_MCP = "requires pi-mcp";
 
 /**
  * Join tokens with single spaces, suppressing empty slots so absent
  * optional tokens (e.g. an undefined scope-bracket on `available` rows)
- * never produce a double-space. Mirrors `presentation/compact-line.ts`
- * `joinTokens` (lines 489-491); duplicated inline per D-16-04.
+ * never produce a double-space. Single canonical implementation (D-16-04;
+ * canonicalised here in Phase 21 from the retired
+ * `presentation/compact-line.ts::joinTokens`).
  */
 function joinTokens(parts: readonly string[]): string {
   return parts.filter((p) => p !== "").join(" ");
@@ -706,8 +708,8 @@ function joinTokens(parts: readonly string[]): string {
 /**
  * Prepend `v` to the version string, returning `""` when `version` is
  * undefined or empty so the join discipline collapses the slot cleanly.
- * Mirrors `presentation/compact-line.ts` `renderVersion` (lines 481-487);
- * duplicated inline per D-16-04.
+ * Single canonical implementation (D-16-04; canonicalised here in Phase 21
+ * from the retired `presentation/compact-line.ts::renderVersion`).
  */
 function renderVersion(version: string | undefined): string {
   if (version === undefined || version === "") {
@@ -770,8 +772,8 @@ function composeVersionArrow(from: string, to: string): string {
  *   - Returns `""` when the composed array is empty (MSG-GR-4 forbids `{}`).
  *   - Otherwise returns `{<r1>, <r2>, ...}`.
  *
- * Mirrors `presentation/compact-line.ts` `composeReasons` (lines 458-479);
- * duplicated inline per D-16-04 / D-16-15.
+ * Single canonical implementation (D-16-04 / D-16-15; canonicalised here in
+ * Phase 21 from the retired `presentation/compact-line.ts::composeReasons`).
  *
  * The first parameter is typed `readonly string[] | undefined` rather than
  * `readonly Reason[] | undefined` for cross-variant ergonomics: each
@@ -949,7 +951,7 @@ function renderPluginRow(
         renderScopeBracket(p.scope, mpScope),
         renderVersion(p.version),
         // `manual recovery` discriminator preserved verbatim WITH A SPACE
-        // per CONTEXT `<specifics>` + shared/grammar/status-tokens.ts:47.
+        // (historical convention; canonicalised in Phase 21).
         "(manual recovery)",
         composeReasons(p.reasons, false, false, probe),
       ]);
@@ -1002,12 +1004,13 @@ function renderPluginRow(
 // notify() entry; the resulting SoftDepStatus is threaded into every
 // renderPluginRow(p, probe) invocation. No per-row re-probing.
 //
-// D-11 layering: notify() does NOT import from presentation/*; the reload-hint
-// trailer literal is duplicated inline alongside renderMpHeader (plan 03) and
-// renderPluginRow (plan 04). Phase 21 deletes V1 + the duplicates together.
+// D-11 layering: notify() lives entirely in `shared/`; the reload-hint
+// trailer literal is canonicalised here in Phase 21 alongside the
+// renderMpHeader / renderPluginRow grammar literals (previously duplicated
+// in the retired `presentation/*` composers).
 // ---------------------------------------------------------------------------
 
-/** Reload-hint trailer literal duplicated from presentation/reload-hint.ts per D-16-04/D-16-12. Phase 21 deletes both copies. */
+/** Reload-hint trailer literal (D-16-04 / D-16-12; canonicalised here in Phase 21). */
 const RELOAD_HINT_TRAILER = "/reload to pick up changes";
 
 /** Severity ladder per SNM-14 / D-16-11. First-match: failed (plugin or marketplace) wins over skipped / manual recovery OR marketplace skipped (per D-17.1-05; consistent with plugin-level skipped per D-16-11), wins over success. */
@@ -1183,7 +1186,8 @@ export function notify(
 
   // D-16-12: compute reload-hint per the state-change trigger ladder.
   // D-16-13: append with one blank line, mirroring V1's appendReloadHint
-  // join discipline at presentation/reload-hint.ts:51-53.
+  // join discipline (canonicalised here in Phase 21 from the retired
+  // `presentation/reload-hint.ts`).
   const hint = shouldEmitReloadHint(message) ? RELOAD_HINT_TRAILER : "";
   const withHint = hint === "" ? body : `${body}\n\n${hint}`;
 
@@ -1199,8 +1203,8 @@ export function notify(
 }
 
 // ---------------------------------------------------------------------------
-// MSG-GR-3 single per-scope sort comparator (D-21-02; relocated from the
-// retired presentation/sort.ts).
+// MSG-GR-3 single per-scope sort comparator (D-21-02; canonicalised here
+// in Phase 21 from the retired `presentation/sort.ts`).
 //
 // Per the v1.4 messaging style guide §7 (Per-Scope Rendering) the canonical
 // row order across every list-rendering surface (marketplace list, plugin

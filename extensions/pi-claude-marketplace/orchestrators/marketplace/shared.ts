@@ -482,4 +482,5 @@ export async function loadVisibleMarketplaces(opts: {
 // chokepoint (see `shared/notify.ts` and 18-01-SUMMARY.md): they pass the
 // failure facts and let `notify` compose the trailer via `causeChainTrailer`.
 // Callers that need the trailer outside the notify path compose it inline via
-// `causeChainTrailer(err)` imported from `presentation/cause-chain.ts`.
+// `causeChainTrailer(err)` imported from `shared/errors.ts` (canonicalised
+// there in Phase 21 from the retired `presentation/cause-chain.ts`).

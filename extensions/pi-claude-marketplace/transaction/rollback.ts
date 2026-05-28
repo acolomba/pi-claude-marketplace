@@ -4,10 +4,11 @@
 // PRESENTATION CONTEXT. Per Plan 14-06 / D-14-04 / RESEARCH.md Pitfall 6
 // (orchestrator-owns-rendering), this layer NO LONGER composes the
 // user-visible `(failed) {rollback partial}` body inline. The body
-// composition moves to the calling orchestrator, which can call the
-// canonical composer in `presentation/rollback-partial.ts` (BLOCK C
-// permits orchestrators/ -> presentation/ but not transaction/ ->
-// presentation/).
+// composition moves to the calling orchestrator, which emits the row via
+// the V2 `notify(ctx, NotificationMessage)` path with a
+// `PluginFailedMessage.rollbackPartial` payload (`shared/notify.ts`
+// owns the rendering; the orchestrator-owned `rollbackPartial[]`
+// children block lives there).
 //
 // The audit's WARNING finding at the pre-Plan-14-06 line 56-62
 // hand-composed literal site is mitigated: the literal is gone here,
@@ -30,8 +31,9 @@ import type { RollbackPartial, RunPhasesResult } from "./phase-ledger.ts";
 
 /**
  * Structured result from {@link formatRollbackError}. Orchestrators
- * destructure this and compose the user-visible body via
- * `presentation/rollback-partial.ts`.
+ * destructure this and forward the `rollbackPartials[]` into a
+ * `PluginFailedMessage.rollbackPartial` payload consumed by the V2
+ * `notify()` renderer in `shared/notify.ts`.
  *
  * `error` is either the original Error (zero-partial fast path and
  * PathContainmentError bypass) or a new Error wrapping the original via
@@ -47,8 +49,9 @@ export interface RollbackErrorResult {
  * Format a RunPhasesResult into a structured rollback-error result.
  *
  * The transaction layer does NOT compose the user-visible body -- that
- * responsibility moves to the calling orchestrator (BLOCK C layering
- * constraint prevents `transaction/` from importing `presentation/`).
+ * responsibility moves to the calling orchestrator, which routes the
+ * payload through the V2 `notify()` path in `shared/notify.ts`. The
+ * `transaction/` layer remains presentation-free.
  *
  * - PathContainmentError (and SymlinkRefusedError subclass, Phase 1 D-17):
  *   `{ error: originalError, rollbackPartials: [] }` -- the bypass per
@@ -58,9 +61,10 @@ export interface RollbackErrorResult {
  *   the original error needs no wrapping; no body composition required.
  * - One or more partials: `{ error: new Error(originalError.message, {
  *   cause: originalError }), rollbackPartials: result.rollbackPartials }`
- *   -- ES-4 cause-chain preserved; the orchestrator composes the
+ *   -- ES-4 cause-chain preserved; the orchestrator emits the
  *   `(failed) {rollback partial}` parent + indented per-phase children
- *   via `renderRollbackPartial` (presentation/rollback-partial.ts).
+ *   by routing the data through a `PluginFailedMessage.rollbackPartial`
+ *   payload in `shared/notify.ts` (V2 renderer owns the byte form).
  */
 export function formatRollbackError(
   result: RunPhasesResult,
