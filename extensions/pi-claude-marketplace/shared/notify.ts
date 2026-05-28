@@ -2,152 +2,176 @@ import { softDepStatus } from "../platform/pi-api.ts";
 
 import { assertNever, causeChainTrailer } from "./errors.ts";
 
-import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../platform/pi-api.ts";
-import type { Reason } from "./grammar/reasons.ts";
 import type { Scope } from "./types.ts";
-
-// Re-export Reason so Phase 16-20 call-site authors can import the entire v1.4
-// structured-notify surface (types + Reason) from this file alone, instead of
-// hopping to shared/grammar/reasons.ts. The runtime REASONS array + drift test
-// against docs/messaging-style-guide.md stay in their original module; this
-// is a pure type re-export (D-15-03 + Claude's discretion per CONTEXT).
-export type { Reason } from "./grammar/reasons.ts";
+import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../platform/pi-api.ts";
 
 /**
- * shared/notify.ts -- the SOLE sanctioned ctx.ui.notify call site (D-07).
+ * shared/notify.ts -- the SOLE sanctioned ctx.ui.notify call site (D-07)
+ * and the single source of truth for the v1.4 structured-notification
+ * surface. Severity is structural, not a field. The Pi API's
+ * `notify(msg, type?)` accepts a magic-string `"info" | "warning" |
+ * "error"` second arg; severity is computed from message contents at
+ * notify time (D-16-11) rather than caller-supplied as a prefix or field
+ * (PRD §6.12 ES-2). The eslint per-file override in eslint.config.js
+ * (BLOCK B) disables `no-restricted-syntax` for this file so inline
+ * `eslint-disable-next-line` comments are unnecessary here.
  *
- * Severity is structural, not a field. The Pi API's `notify(msg, type?)`
- * accepts a magic-string `"info" | "warning" | "error"` second arg; a typo
- * like `"warining"` silently degrades to `"info"` because there is no
- * exhaustiveness check. The V1 severity-named wrappers eliminate that
- * class of bug; the V2 entry points compute severity from message
- * contents at notify time (D-16-11) and route through the same
- * sanctioned Pi-API call.
- *
- * The eslint per-file override in eslint.config.js (D-06 / BLOCK B)
- * disables `no-restricted-syntax` for this file, so inline
- * `eslint-disable-next-line` comments are unnecessary here. The per-file
- * override is the single audit surface; this comment documents the
- * sanctioned-use intent in its place.
- *
- * V1 severity-named wrappers (governed by style guide §10 MSG-SR-1..7).
- * Phase 21 deletes these once every orchestrator/edge call site has
- * migrated to the V2 entry points (SNM-22 closure gate):
- *
- *   - notifySuccess(ctx, message)                -- default severity (MSG-SR-1; cascade variant MSG-SR-4)
- *   - notifyWarning(ctx, message)                -- "warning" severity (MSG-SR-2; cascade variant MSG-SR-5; MSG-SR-6 forbids cascade notifyError)
- *   - notifyError(ctx, message, cause?)          -- "error" severity (MSG-SR-3)
- *   - notifyUsageError(ctx, message, usageBlock) -- "error" severity (MSG-SR-7)
- *
- * V2 structured entry points (Phase 16 SNM-12..18):
+ * Public API (V2-only post-Phase-21):
  *
  *   - notify(ctx, pi, NotificationMessage)
- *       Renders the marketplace/plugin tree to a single string and routes
- *       through ctx.ui.notify with computed severity (D-16-11) and
- *       computed reload-hint trailer (D-16-12 / D-16-13). Single
- *       softDepStatus(pi) probe at entry threaded through the renderer
- *       so per-row {requires pi-subagents} / {requires pi-mcp} markers
- *       are injected at render time (D-16-15).
- *   - notifyUsageError(ctx, UsageErrorMessage)  [V2 overload]
- *       2-arg structured form; coexists byte-equal with the V1 3-arg
- *       overload above. Phase 21 deletes the V1 overload.
+ *       Single state-change entry. Renders the marketplace/plugin tree
+ *       to a single string and routes through ctx.ui.notify with computed
+ *       severity (D-16-11), computed reload-hint trailer
+ *       (D-16-12 / D-16-13), and a single softDepStatus(pi) probe at
+ *       entry threaded through the renderer so per-row
+ *       {requires pi-subagents} / {requires pi-mcp} markers are injected
+ *       at render time (D-16-15).
+ *   - notifyUsageError(ctx, UsageErrorMessage)
+ *       Argv-validation errors. On-the-wire string is
+ *       `${message.message}\n\n${message.usage}` at "error" severity
+ *       (SNM-13 / D-16-02).
  *
- * The V1 and V2 surfaces coexist byte-for-byte during the Phase 16-20
- * migration window. Severity remains structural via either the wrapper
- * name (V1) or the renderer's content-driven ladder (V2) -- never
- * embedded as a `"[error]"` / `"[warning]"` prefix in message text
- * (PRD §6.12 ES-2, reaffirmed by MSG-SR-7).
+ * Closed-set source of truth (D-21-01, inlined from the retired
+ * shared/grammar/ directory): `REASONS`, `STATUS_TOKENS`, `MARKERS`,
+ * `PATTERN_CLASSES` const tuples and their derived literal-union types
+ * `Reason`, `StatusToken`, `Marker`, `PatternClass` live in THIS file.
+ * The `compareByNameThenScope` comparator (D-21-02, relocated from the
+ * retired presentation/sort.ts) also lives here as the single per-scope
+ * row-order policy across every list-rendering surface.
  *
  * Import path: callers import the surface directly from this file
- * (e.g., `import { notify } from "../../shared/notify.ts"`). No
- * presentation/ barrel re-exports any of these; the direct-import path
- * is the stable surface.
+ * (`import { notify, type Reason, compareByNameThenScope } from
+ * "../../shared/notify.ts"`). No barrel re-exports.
  */
 
-/** Default-severity notify -- success path. */
-export function notifySuccess(ctx: ExtensionContext, message: string): void {
-  ctx.ui.notify(message);
-}
-
-/** Warning notify -- used for cleanup leaks, partial failures, soft-dep warnings. */
-export function notifyWarning(ctx: ExtensionContext, message: string): void {
-  ctx.ui.notify(message, "warning");
-}
+// ---------------------------------------------------------------------------
+// Closed-set runtime tuples + derived literal-union types (D-21-01).
+//
+// Inlined from the retired shared/grammar/ directory. Each tuple is the
+// runtime carrier for a closed set the v1.4 structured-notification grammar
+// recognizes; the derived `(typeof X)[number]` literal-union types are the
+// compile-time enforcement that rejects out-of-set string literals at
+// renderer call sites. Tuples are stored WITHOUT surrounding `{}` or `<>`
+// brace/chevron decoration -- the renderer composes those at emission time
+// (MSG-GR-5 historical convention).
+// ---------------------------------------------------------------------------
 
 /**
- * Error notify -- operation did not succeed; state unchanged or fully rolled
- * back. Optional `cause` feeds Error.cause for the depth-5 MSG-CC-1 walk; the
- * trailer is appended automatically with a blank-line separator
- * (`${message}\n\n${trailer}`), matching the MSG-RH-1 blank-line discipline.
- *
- * D-CMC-12 (Phase 13): this body replaces the Phase 6 placeholder that
- * surfaced the cause as `\nCause: <message>`. The depth-5 walker lives in
- * `shared/errors.ts::causeChainTrailer` (re-exported from
- * `presentation/cause-chain.ts` for presentation-layer consumers); orchestrators
- * pass bare `err` here and let `notifyError` compose the trailer once, retiring
- * the legacy per-callsite pre-format-then-pass-as-message wrapping.
- *
- * NFR-9 / T-13-05 invariant: the trailer surfaces ONLY `Error.message` (or
- * `string` verbatim or `Object.prototype.toString.call` fallback for non-Error
- * causes). No `.stack`, no absolute paths. Callers that need to expose a path
- * must put it in `message` deliberately. Depth bound 5 prevents cycle DoS
- * (T-13-04) via the walker's cycle-detection inside `shared/errors.ts`.
+ * CMC-11 closed reasons set. Byte-equal to the `reasons:` block in the
+ * binding frontmatter at `docs/messaging-style-guide.md`. The set was
+ * extended from the original 23 entries to cover the autoupdate-flip
+ * idempotent rows (`"already enabled"` / `"already disabled"`) and the
+ * failure-class closed Reasons the catalog UAT requires across uninstall /
+ * marketplace-remove partial / reinstall / update / marketplace-update rows
+ * (`"permission denied"` / `"source missing"` / `"network unreachable"`).
  */
-export function notifyError(ctx: ExtensionContext, message: string, cause?: unknown): void {
-  const trailer = cause === undefined ? "" : causeChainTrailer(cause);
-  const body = trailer === "" ? message : `${message}\n\n${trailer}`;
-  ctx.ui.notify(body, "error");
-}
+export const REASONS = [
+  "up-to-date",
+  "not found",
+  "already installed",
+  "not installed",
+  "not in manifest",
+  "invalid manifest",
+  "no longer installable",
+  "unsupported source",
+  "hooks",
+  "lspServers",
+  "requires pi-subagents",
+  "requires pi-mcp",
+  "rollback partial",
+  "unreadable",
+  "unparseable",
+  "unreadable manifest",
+  "source mismatch",
+  "plugins remain",
+  "concurrently uninstalled",
+  "concurrently updated",
+  "stale clone",
+  "duplicate name",
+  "lock held",
+  "already enabled",
+  "already disabled",
+  "permission denied",
+  "source missing",
+  "network unreachable",
+] as const;
+
+export type Reason = (typeof REASONS)[number];
+
+/**
+ * CMC-08 closed status-token set. Byte-equal to the `status_tokens:` block
+ * in the binding frontmatter at `docs/messaging-style-guide.md`.
+ * `(no marketplaces)` and `(no plugins)` are FLAT members of this single
+ * tuple; the bare-token render shape (no icon, no scope brackets) is a
+ * renderer concern that branches at emission time.
+ */
+export const STATUS_TOKENS = [
+  "installed",
+  "updated",
+  "reinstalled",
+  "uninstalled",
+  "added",
+  "removed",
+  "available",
+  "unavailable",
+  "upgradable",
+  "skipped",
+  "failed",
+  "rollback failed",
+  "manual recovery",
+  "no marketplaces",
+  "no plugins",
+] as const;
+
+export type StatusToken = (typeof STATUS_TOKENS)[number];
+
+/**
+ * CMC-38 closed marker set. Byte-equal to the `markers:` block in the
+ * binding frontmatter at `docs/messaging-style-guide.md`. Entries are
+ * stored WITHOUT surrounding `<>` chevrons; the `<marker>` chevron form
+ * is composed by the renderer at emission time (MSG-GR-5).
+ */
+export const MARKERS = ["autoupdate", "no autoupdate"] as const;
+
+export type Marker = (typeof MARKERS)[number];
+
+/**
+ * CMC-38 closed pattern-class set. Byte-equal to the `pattern_classes:`
+ * block in the binding frontmatter at `docs/messaging-style-guide.md`.
+ * Pattern classes label the SHAPES of compact-line emissions (success /
+ * failure / cascade-row / etc.) for documentation and rule-attribution
+ * purposes. They are NOT emitted in the rendered output -- the renderer
+ * dispatches on the `NotificationMessage` discriminated union's `status`
+ * field. The set exists so the style-guide body and the catalog can
+ * reference the same canonical labels.
+ */
+export const PATTERN_CLASSES = [
+  "success",
+  "failure",
+  "cascade-row",
+  "cascade-summary",
+  "list-rendering",
+  "reload-hint",
+  "soft-dep",
+  "manual-recovery",
+  "rollback-partial",
+  "usage",
+  "empty",
+  "legacy-migrate",
+] as const;
+
+export type PatternClass = (typeof PATTERN_CLASSES)[number];
 
 /**
  * Usage error notify (ES-3 primitive). Surfaces a usage-style error at
  * `error` severity with the relevant Usage block appended after a blank
- * line. Two overload signatures coexist:
- *
- *   - V1 3-arg: `notifyUsageError(ctx, message, usageBlock)`
- *       The pre-Phase-16 form, consumed by every argument-validation
- *       failure site across orchestrators and edge handlers. Live and
- *       byte-stable across the v1.4 migration window. Phase 21 deletes
- *       this overload once every call site has migrated to the V2 form
- *       (SNM-22 closure gate).
- *
- *   - V2 structured: `notifyUsageError(ctx, UsageErrorMessage)`
- *       The Phase 16 structured form (SNM-13, D-16-02). Coexists
- *       byte-equal with V1 -- both emit the same on-the-wire string
- *       `${message}\n\n${usage}` at "error" severity. Future call sites
- *       prefer the V2 form; the V1 form is retained only for V1's
- *       installed callers.
- *
- * Contract (both overloads): the on-the-wire string is
- * `${message}\n\n${usageBlock}` (V1) or `${message.message}\n\n${message.usage}`
- * (V2). The blank line between message and Usage block is part of the
- * user contract; tests/shared/notify-v2.test.ts asserts it byte-for-byte.
+ * line. The on-the-wire string is
+ * `${message.message}\n\n${message.usage}` (SNM-13 / D-16-02). The blank
+ * line between message and Usage block is part of the user contract;
+ * `tests/shared/notify-v2.test.ts` asserts it byte-for-byte.
  */
-/** V1 3-arg overload signature (Phase 21 deletes). */
-export function notifyUsageError(ctx: ExtensionContext, message: string, usageBlock: string): void;
-/** V2 structured usage-error entry point (SNM-13, D-16-02). Coexists with V1 3-arg notifyUsageError. */
-export function notifyUsageError(ctx: ExtensionContext, message: UsageErrorMessage): void;
-export function notifyUsageError(
-  ctx: ExtensionContext,
-  message: string | UsageErrorMessage,
-  usageBlock?: string,
-): void {
-  if (typeof message === "string") {
-    // V1 3-arg path -- byte-equal to the pre-Phase-16 wrapper at the
-    // historical shared/notify.ts:105. The runtime body is identical:
-    // ctx.ui.notify(`${message}\n\n${usageBlock}`, "error").
-    // The overload signature guarantees usageBlock is present here; the
-    // `?? ""` fallback exists solely to satisfy strict-null-check without
-    // an eslint-suppressed non-null assertion (see eslint config: the
-    // per-file override for shared/notify.ts disables no-restricted-syntax
-    // but NOT no-non-null-assertion).
-    ctx.ui.notify(`${message}\n\n${usageBlock ?? ""}`, "error");
-  } else {
-    // V2 structured path -- destructure UsageErrorMessage and emit the
-    // same on-the-wire shape (`${message}\n\n${usage}` with "error"
-    // severity), byte-equal to V1.
-    ctx.ui.notify(`${message.message}\n\n${message.usage}`, "error");
-  }
+export function notifyUsageError(ctx: ExtensionContext, message: UsageErrorMessage): void {
+  ctx.ui.notify(`${message.message}\n\n${message.usage}`, "error");
 }
 
 // ---------------------------------------------------------------------------
@@ -1164,12 +1188,64 @@ export function notify(
   const withHint = hint === "" ? body : `${body}\n\n${hint}`;
 
   // D-16-11: severity dispatch via the Pi API's magic-string second-arg
-  // convention. omit-2nd-arg = info severity (V1 notifySuccess precedent at
-  // shared/notify.ts:57-59); "warning" / "error" otherwise.
+  // convention. omit-2nd-arg = info severity (mirrors the historical
+  // success-path emission); "warning" / "error" otherwise.
   const severity = computeSeverity(message);
   if (severity === undefined) {
     ctx.ui.notify(withHint);
   } else {
     ctx.ui.notify(withHint, severity);
   }
+}
+
+// ---------------------------------------------------------------------------
+// MSG-GR-3 single per-scope sort comparator (D-21-02; relocated from the
+// retired presentation/sort.ts).
+//
+// Per the v1.4 messaging style guide §7 (Per-Scope Rendering) the canonical
+// row order across every list-rendering surface (marketplace list, plugin
+// list, plugin folding, cascade summaries) is:
+//   1. name primary, case-insensitive (`localeCompare` with
+//      `sensitivity: 'base'`)
+//   2. scope secondary as a tie-breaker -- project before user
+//
+// SINGLE source of that policy. Every list-rendering surface (mp list,
+// plugin list, import / update / reinstall cascades) consumes this helper
+// directly.
+//
+// MSG-GR-3 lock notes:
+//   - The comparator accepts a STRUCTURAL minimum
+//     `{ readonly name: string; readonly scope: "user" | "project" }`
+//     so it can sort any row type that carries these two fields without
+//     requiring an adapter.
+//   - `sensitivity: 'base'` treats "Alpha", "alpha", and "ALPHA" as
+//     equal -- accent differences are folded as well (matching the
+//     style guide's "case-insensitive" wording, which under the JS spec
+//     maps to base sensitivity).
+//   - The scope tie-breaker uses a strict ternary -- mapping project to
+//     -1 and user to +1 -- so the canonical "project before user"
+//     ordering holds for every same-name pair. When
+//     `a.scope === b.scope` the result is 0, leaving
+//     Array.prototype.sort's stability guarantee to preserve
+//     caller-side ordering.
+//   - The comparator never throws.
+// ---------------------------------------------------------------------------
+
+export interface Sortable {
+  readonly name: string;
+  readonly scope: "user" | "project";
+}
+
+export function compareByNameThenScope(a: Sortable, b: Sortable): number {
+  const byName = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  if (byName !== 0) {
+    return byName;
+  }
+
+  // Tie-breaker: project before user per MSG-GR-3.
+  if (a.scope === b.scope) {
+    return 0;
+  }
+
+  return a.scope === "project" ? -1 : 1;
 }
