@@ -81,7 +81,7 @@ publish/verification (Phase 25). No state-migration tooling. No new commands.
   against a future over-eager gate silently regressing the state-change paths.
 
 ### `add` end-state (derived, confirmed)
-- **D-22-05:** `marketplace add` will **never** emit the trailer -- `add.ts:170`
+- **D-22-05 [informational]:** `marketplace add` will **never** emit the trailer -- `add.ts:170`
   only ever emits `{status:"added", plugins:[]}` (it does not cascade-install;
   Claude-Code parity). SC#4's "add whose cascade installed ≥1 plugin" clause is
   vacuous today; the D-22-01 rule is forward-correct should `add` ever construct
