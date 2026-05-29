@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.4.1
 milestone_name: Post-ship UAT Patches
 status: planning
-last_updated: "2026-05-28T22:00:00.000Z"
-last_activity: 2026-05-28
+last_updated: "2026-05-29T01:04:10.498Z"
+last_activity: "2026-05-28 -- v1.4.1 roadmap created (5 phases: 22-26 mapping SNM-33..SNM-40)"
 progress:
-  total_phases: 5
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_phases: 14
+  completed_phases: 9
+  total_plans: 43
+  completed_plans: 43
+  percent: 64
 ---
 
 # Project State
@@ -174,9 +174,9 @@ Additional v1.4.1-scope deferrals:
 
 ## Session Continuity
 
-Last session: 2026-05-28T22:00:00.000Z
-Stopped At: v1.4.1 roadmap landed; ready to plan Phase 22 (Reload-hint Discipline Family)
-Resume File: .planning/ROADMAP.md (Phase 22 section)
+Last session: 2026-05-29T01:04:10.478Z
+Stopped At: Phase 22 context gathered
+Resume File: .planning/phases/22-reload-hint-discipline-family/22-CONTEXT.md
 
 ## Operator Next Steps
 
