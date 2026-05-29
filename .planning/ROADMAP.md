@@ -412,7 +412,10 @@ Plans:
 3. Running `/claude:plugin marketplace update <mp>` on a marketplace whose plugin cascade is all `(skipped) {up-to-date}` outputs the `(updated)` header + the cascade rows but NO `/reload to pick up changes` trailer.
 4. State-changing variants still emit the trailer: `marketplace add` whose cascade installed at least one plugin, `marketplace remove` whose cascade uninstalled at least one plugin, and `marketplace update` whose cascade updated/reinstalled/installed/uninstalled at least one plugin all still terminate with `/reload to pick up changes`.
 
-**Plans:** TBD
+**Plans:** 1 plan
+**Wave 1**
+
+- [ ] 22-01-PLAN.md -- Collapse shouldEmitReloadHint to plugin-row-only (D-22-01), make clean marketplace remove carry (uninstalled) rows (D-22-02), drop autoupdate fresh-flip trailer (D-22-03); catalog + fixture + test lockstep (SNM-33)
 
 ### Phase 23: Version Display Bundle
 
