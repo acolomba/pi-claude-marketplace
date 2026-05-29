@@ -149,3 +149,9 @@ placeholders, or unwired components were introduced.
   all other hooks (prettier, eslint, typecheck, mdformat, markdownlint, secret
   detectors) passed. The diffs contain no credentials -- only a regex literal,
   template strings, test fixtures, and doc prose.
+
+## Self-Check: PASSED
+
+All four modified files exist; SUMMARY.md exists; all four task/summary commits
+(`31a456b`, `f63935b`, `225dd86`, `2062225`) are reachable in git history.
+Working tree clean; HEAD on `worktree-agent-ae72e06d042477ec5`.
