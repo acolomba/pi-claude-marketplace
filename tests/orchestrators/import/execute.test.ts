@@ -112,14 +112,14 @@ test("importClaudeSettings skips matching existing marketplaces and already-inst
   // renders structurally via the V2 cascade. Marketplace skip maps to
   // (updated); plugin skip carries `{already installed}` reason brace.
   // Severity: "warning" (skipped plugin row -- D-16-11 second-match
-  // ladder routes to warning per Phase 17.1). Reload-hint fires because
-  // the marketplace status "updated" is in the state-changing set per
-  // D-16-12.
+  // ladder routes to warning per Phase 17.1). Under SNM-33 / D-22-01 the
+  // only plugin row is `skipped` (no state-change token), so NO reload-hint
+  // trailer -- a marketplace `(updated)` alone is not a Pi-visible change.
   assert.equal(notifications.length, 1);
   assert.equal(notifications[0]?.severity, "warning");
   assert.equal(
     notifications[0]?.message,
-    "● mp [user] (updated)\n  ⊘ plugin (skipped) {already installed}\n\n/reload to pick up changes",
+    "● mp [user] (updated)\n  ⊘ plugin (skipped) {already installed}",
   );
 });
 
@@ -898,13 +898,14 @@ test("importClaudeSettings handles already-installed outcome from installPlugin 
   assert.equal(result.skippedExistingPlugins[0]?.ref, "plugin@mp");
   // Plan 20-02 / D-20-02: marketplace already present (skippedExistingMarketplaces)
   // renders as (updated). Plugin already-installed via concurrent-install
-  // race surfaces as (skipped) {already installed} cascade row.
-  // Reload-hint fires because mp status "updated" is in the state-changing
-  // set per D-16-12.
+  // race surfaces as (skipped) {already installed} cascade row. Under
+  // SNM-33 / D-22-01 the only plugin row is `skipped` (no state-change
+  // token), so NO reload-hint trailer -- a marketplace `(updated)` alone is
+  // not a Pi-visible resource change.
   assert.equal(notifications.length, 1);
   assert.equal(
     notifications[0]?.message,
-    "● mp [user] (updated)\n  ⊘ plugin (skipped) {already installed}\n\n/reload to pick up changes",
+    "● mp [user] (updated)\n  ⊘ plugin (skipped) {already installed}",
   );
 });
 

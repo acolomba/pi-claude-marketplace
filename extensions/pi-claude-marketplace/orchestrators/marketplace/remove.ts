@@ -6,11 +6,12 @@
 // a single `notify(opts.ctx, opts.pi, ...)` call per outcome:
 //
 //   - CLEAN success: one `MarketplaceNotificationMessage{ status:"removed",
-//     plugins: [] }`. The `/reload to pick up changes` trailer is computed
-//     by `notify()` per D-16-12 (mp.status "removed" is state-changing) and
-//     fires whether or not plugins were removed. Severity = info (no 2nd
-//     arg). The V1 contract distinction "no reload-hint when no plugin
-//     resources changed" is deliberately retired in V2 per D-16-12.
+//     plugins: [...] }` carrying one `PluginUninstalledMessage` (○ icon) per
+//     successfully unstaged plugin (D-22-02). The `/reload to pick up changes`
+//     trailer is computed by `notify()` per D-22-01 and fires iff >=1 plugin
+//     was unstaged (an `uninstalled` row is the only Pi-visible state change).
+//     An empty remove is header-only (`plugins: []`) with no trailer
+//     (G-MIL-02). Severity = info (no 2nd arg).
 //   - PARTIAL failure (D-18-03 cascade restructure): one
 //     `MarketplaceNotificationMessage{ status:"failed", plugins: [...] }`
 //     whose `plugins[]` mixes `PluginUninstalledMessage` (the successful
@@ -281,15 +282,17 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
   // NotificationMessage construction recipe (Plan 18-04; mirrors the
   // Wave 1 pilot at orchestrators/marketplace/add.ts:160-169).
   // - One MarketplaceNotificationMessage per outcome, emitted via one
-  //   notify(opts.ctx, opts.pi, ...) call; `plugins: []` is required.
+  //   notify(opts.ctx, opts.pi, ...) call; `plugins[]` carries one
+  //   PluginUninstalledMessage per successfully unstaged plugin (D-22-02).
   // - V2 cascade per D-18-03: per-plugin `PluginFailedMessage.cause`
   //   renders at 4-space indent via renderPluginRow (D-16-08). The V1
   //   marketplace-level `causeChainTrailer(err)` body is GONE.
   // - V1 `RETRY_ANCHOR` ("Fix the underlying issue and retry.") is
   //   DROPPED per D-17-09 (already excluded by the Phase 17 catalog).
-  // - Severity (error on partial, info on clean) and `/reload to pick up
-  //   changes` are computed by notify() per D-16-11 + D-16-12; callers
-  //   MUST NOT compose.
+  // - Severity (error on partial, info on clean) is computed by notify()
+  //   per D-16-11; the `/reload to pick up changes` trailer is computed per
+  //   D-22-01 (fires iff >=1 plugin row carries a state-change token);
+  //   callers MUST NOT compose.
   // - Reference: catalog UAT `clean` + `partial` fixtures at
   //   tests/architecture/catalog-uat.test.ts:1154-1183.
   if (failedPlugins.length > 0) {
@@ -324,17 +327,24 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
     return;
   }
 
-  // CMC-31 CLEAN: mp.status="removed"; empty plugins[]. Reload-hint
-  // fires from `mp.status === "removed"` per D-16-12, regardless of
-  // whether any plugin resources were actually removed (deliberate
-  // V2 contract change vs V1 per RESEARCH Risks #7).
+  // CMC-31 CLEAN (D-22-02): mp.status="removed"; plugins[] carries one
+  // PluginUninstalledMessage per successfullyUnstaged plugin (○ icon). The
+  // `/reload to pick up changes` trailer is computed by notify() per
+  // D-22-01 and fires iff >=1 plugin was unstaged (an `uninstalled` row is
+  // a Pi-visible state change). An empty remove leaves successfullyUnstaged
+  // == [] -> plugins: [] -> header-only with no trailer (G-MIL-02).
   notify(opts.ctx, opts.pi, {
     marketplaces: [
       {
         name: opts.name,
         scope: resolved.scope,
         status: "removed",
-        plugins: [],
+        plugins: successfullyUnstaged.map(
+          (name): PluginUninstalledMessage => ({
+            status: "uninstalled",
+            name,
+          }),
+        ),
       },
     ],
   });

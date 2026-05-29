@@ -1099,27 +1099,32 @@ function computeSeverity(message: NotificationMessage): "warning" | "error" | un
 }
 
 /**
- * Reload-hint trigger per SNM-15 / D-16-12. Refined wording: any state-changing
- * marketplace status (added/removed/updated -- not failed) or any of the four
- * state-changing plugin statuses.
+ * Reload-hint trigger per SNM-33 / D-22-01. The trailer is reserved for
+ * operations that actually change a Pi-visible resource. The ONLY Pi-visible
+ * resources are plugin rows (skill / agent / command / MCP entry); marketplace
+ * records are bookkeeping, not resources, so they never warrant a `/reload`.
  *
- * Phase 17.1 amendment per D-17.1-02 / D-18-05: fresh-flip autoupdate
- * enabled/disabled trigger the reload hint; mp-level "skipped" (idempotent
- * no-op) does NOT trigger -- no state was changed, so no /reload is needed.
- * "failed" continues to suppress (the operation rolled back; no state landed).
+ * The rule is therefore plugin-row-driven only: emit iff some marketplace
+ * carries a plugin row whose status is one of the four state-change tokens
+ * `installed | updated | reinstalled | uninstalled`. No marketplace-status arm
+ * remains -- every marketplace status (added / removed / updated / autoupdate
+ * enabled / autoupdate disabled / skipped / failed) now NEVER triggers on its
+ * own. This mirrors the G-21-01 invariant (Plan 21-04): every status
+ * discriminator either always triggers the reload-hint or never does -- no
+ * token straddles inventory vs transition, so the predicate is unambiguous.
+ *
+ * D-22-03: this supersedes the reload-trigger half of D-17.1-02 -- fresh-flip
+ * autoupdate enabled/disabled no longer emit the trailer (the flip changes a
+ * marketplace record, not a Pi-visible resource). The `skipped -> warning`
+ * severity route (computeSeverity, D-17.1-05) is unaffected: severity and
+ * reload-hint are independent ladders.
+ *
+ * Clean `marketplace remove` carries one `PluginUninstalledMessage` row per
+ * unstaged plugin (D-22-02), so a non-empty remove still emits the trailer via
+ * the `uninstalled` token while an empty remove (header-only) does not.
  */
 function shouldEmitReloadHint(message: NotificationMessage): boolean {
   for (const mp of message.marketplaces) {
-    if (
-      mp.status === "added" ||
-      mp.status === "removed" ||
-      mp.status === "updated" ||
-      mp.status === "autoupdate enabled" ||
-      mp.status === "autoupdate disabled"
-    ) {
-      return true;
-    }
-
     for (const p of mp.plugins) {
       if (
         p.status === "installed" ||

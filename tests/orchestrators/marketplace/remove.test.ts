@@ -150,14 +150,11 @@ test("MR-1: same name in both scopes without --scope removes project-scope recor
       const projAfter = await loadState(projLoc.extensionRoot);
       assert.ok("dup-name" in userAfter.marketplaces, "user-scope record untouched");
       assert.ok(!("dup-name" in projAfter.marketplaces), "project-scope record removed");
-      // V2 CMC-31 clean form: `● <mp> [<scope>] (removed)` row + reload-hint
-      // trailer (D-16-12: mp.status "removed" is state-changing, regardless of
-      // plugin count). V1 emitted NO reload-hint on empty marketplace removal;
-      // V2 DOES per the catalog `clean` fixture (catalog-uat.test.ts:1155-1160).
-      assert.equal(
-        notifications[0]?.message,
-        "● dup-name [project] (removed)\n\n/reload to pick up changes",
-      );
+      // SNM-33 / D-22-01 / D-22-02: an EMPTY marketplace remove (no plugins
+      // staged) carries no `(uninstalled)` rows, so the body is header-only
+      // with NO `/reload` trailer (G-MIL-02). The trailer fires only when at
+      // least one plugin row carries a state-change token.
+      assert.equal(notifications[0]?.message, "● dup-name [project] (removed)");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -189,11 +186,8 @@ test("MR-1: name only in user scope without --scope removes user-scope record", 
 
       const userAfter = await loadState(userLoc.extensionRoot);
       assert.ok(!("user-only" in userAfter.marketplaces), "user-scope record removed");
-      // V2 CMC-31 clean form -- reload-hint fires from mp.status "removed" per D-16-12.
-      assert.equal(
-        notifications[0]?.message,
-        "● user-only [user] (removed)\n\n/reload to pick up changes",
-      );
+      // SNM-33 / D-22-01: empty remove (no plugins) is header-only, no trailer.
+      assert.equal(notifications[0]?.message, "● user-only [user] (removed)");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -238,7 +232,7 @@ test("MR-1: same name in both scopes WITH --scope=user removes only user-scope r
 
 // MR-2 + MR-8 (RH-1) -----------------------------------------------
 
-test("MR-2 + V2 D-16-12: empty marketplace removed cleanly emits success WITH mp-level reload-hint", async () => {
+test("MR-2 + SNM-33 / D-22-02: empty marketplace removed cleanly emits success with NO reload-hint (G-MIL-02)", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-"));
     try {
@@ -265,15 +259,12 @@ test("MR-2 + V2 D-16-12: empty marketplace removed cleanly emits success WITH mp
       assert.equal("empty" in after.marketplaces, false);
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]!.severity, undefined); // success, default severity
-      // V2 contract flip per D-16-12 / RESEARCH Risks #7: reload-hint fires
-      // from mp.status "removed" (state-changing) regardless of plugin count.
-      // V1 emitted NO reload-hint here; V2 DOES.
-      assert.equal(notifications[0]!.message.includes("/reload to pick up changes"), true);
-      // V2 CMC-31 clean form: bare `● <mp> [<scope>] (removed)` row + reload-hint trailer.
-      assert.equal(
-        notifications[0]!.message,
-        "● empty [project] (removed)\n\n/reload to pick up changes",
-      );
+      // SNM-33 / D-22-02 (G-MIL-02): an empty marketplace remove carries no
+      // `(uninstalled)` rows, so the body is header-only with NO trailer. The
+      // trailer is reserved for true Pi-visible state changes (plugin rows).
+      assert.equal(notifications[0]!.message.includes("/reload to pick up changes"), false);
+      // SNM-33 / D-22-02 clean form: bare `● <mp> [<scope>] (removed)` header.
+      assert.equal(notifications[0]!.message, "● empty [project] (removed)");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
