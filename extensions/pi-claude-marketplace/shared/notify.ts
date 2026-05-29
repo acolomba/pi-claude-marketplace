@@ -1051,9 +1051,9 @@ function renderPluginRow(
 //   2. Any plugin.status in {"skipped", "manual recovery"}      -> "warning"
 //   3. Otherwise                                                -> undefined (info)
 //
-// Reload-hint trigger (D-16-12, refined SNM-15):
-//   - Any plugin.status in {"installed", "updated", "reinstalled", "uninstalled"}, OR
-//   - Any mp.status in {"added", "removed", "updated"}        (state-changing; NOT "failed")
+// Reload-hint trigger (SNM-33 / D-22-01, supersedes D-16-12 mp-status arm):
+//   - Any plugin.status in {"installed", "updated", "reinstalled", "uninstalled"}.
+//   - No marketplace-status arm: marketplace records are bookkeeping, not Pi-visible.
 //
 // Empty-marketplaces sentinel (D-16-17, planner pick): "(no marketplaces)".
 //
