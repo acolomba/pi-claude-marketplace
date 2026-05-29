@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.4.1
 milestone_name: Post-ship UAT Patches
-status: executing
+status: completed
 stopped_at: Phase 24 Plan 01 complete
-last_updated: "2026-05-29T14:26:04Z"
-last_activity: 2026-05-29 -- Phase 24 Plan 01 executed (lspServers -> lsp REASONS rename)
+last_updated: "2026-05-29T14:42:13.294Z"
+last_activity: 2026-05-29
 progress:
   total_phases: 14
   completed_phases: 12
@@ -24,16 +24,16 @@ See: .planning/PROJECT.md (updated 2026-05-28)
 
 ## Current Position
 
-Phase: 24 (grammar-consistency) -- COMPLETE
-Plan: 1 of 1 complete
+Phase: 25
+Plan: Not started
 Status: Phase 24 complete; SNM-36 / G-MIL-04 closed
-Last activity: 2026-05-29 -- Phase 24 Plan 01 executed (lspServers -> lsp REASONS rename)
+Last activity: 2026-05-29
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 100
+- Total plans completed: 101
 - Average duration: -
 - Total execution time: -
 
@@ -61,6 +61,7 @@ Last activity: 2026-05-29 -- Phase 24 Plan 01 executed (lspServers -> lsp REASON
 | 21 | 4 | - | - |
 | 22 | 1 | - | - |
 | 23 | 2 | - | - |
+| 24 | 1 | - | - |
 
 **Recent Trend:**
 

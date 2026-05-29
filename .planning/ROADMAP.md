@@ -522,6 +522,6 @@ Plans:
 | 21. Final Teardown & GREEN Gate                                      | v1.4      | 4/4            | Complete    | 2026-05-28 |
 | 22. Reload-hint Discipline Family                                    | v1.4.1    | 1/1 | Complete    | 2026-05-29 |
 | 23. Version Display Bundle                                           | v1.4.1    | 2/2 | Complete    | 2026-05-29 |
-| 24. Grammar Consistency                                              | v1.4.1    | 1/1 | Complete   | 2026-05-29 |
+| 24. Grammar Consistency                                              | v1.4.1    | 1/1 | Complete    | 2026-05-29 |
 | 25. Runtime Publish & Verification                                   | v1.4.1    | 0/0            | Not started | --         |
 | 26. GREEN Gate Close                                                 | v1.4.1    | 0/0            | Not started | --         |

@@ -21,7 +21,7 @@ Close the 8 gaps surfaced by the v1.4 milestone-spanning UAT (`.planning/v1.4-MI
 
 ### Grammar Consistency
 
-- [ ] **SNM-36**: The lone camelCase token leak in the user-rendered `REASONS` closed-set at `shared/notify.ts:79` is eliminated. Either (a) rename the REASON discriminator from `"lspServers"` to `"lsp"` and propagate via a type-driven compile cascade through the two detection-vs-emission seams in `orchestrators/plugin/list.ts` (`narrowResolverNotes`) and `orchestrators/plugin/install.ts` (`manifestFieldTokenFromNote`, via a `MANIFEST_FIELD_TO_REASON` map), plus the catalog/fixture byte-form lockstep -- the detection substrings stay camelCase, only the emitted Reason becomes `"lsp"` (D-24-04), or (b) keep the camelCase discriminator but inject a renderer-side translation `"lspServers" → "lsp"` inside `composeReasons` / the reason brace block emitter. Preference (a) per design endorsement -- preserves the closed-set invariant uniformly. The manifest-side JSON key `lspServers` (referenced at `domain/components/plugin.ts:31` and `domain/resolver.ts:142,160`) MUST remain unchanged -- it's the actual `.claude-plugin/plugin.json` field name. Closes G-MIL-04.
+- [x] **SNM-36**: The lone camelCase token leak in the user-rendered `REASONS` closed-set at `shared/notify.ts:79` is eliminated. Either (a) rename the REASON discriminator from `"lspServers"` to `"lsp"` and propagate via a type-driven compile cascade through the two detection-vs-emission seams in `orchestrators/plugin/list.ts` (`narrowResolverNotes`) and `orchestrators/plugin/install.ts` (`manifestFieldTokenFromNote`, via a `MANIFEST_FIELD_TO_REASON` map), plus the catalog/fixture byte-form lockstep -- the detection substrings stay camelCase, only the emitted Reason becomes `"lsp"` (D-24-04), or (b) keep the camelCase discriminator but inject a renderer-side translation `"lspServers" → "lsp"` inside `composeReasons` / the reason brace block emitter. Preference (a) per design endorsement -- preserves the closed-set invariant uniformly. The manifest-side JSON key `lspServers` (referenced at `domain/components/plugin.ts:31` and `domain/resolver.ts:142,160`) MUST remain unchanged -- it's the actual `.claude-plugin/plugin.json` field name. Closes G-MIL-04.
 
 ### Reproduction Infrastructure & v1.4 Runtime Verification
 
@@ -156,7 +156,7 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25 (v1.4 rows) and 2026-0
 | SNM-33      | Phase 22 | Complete |
 | SNM-34      | Phase 23 | Complete |
 | SNM-35      | Phase 23 | Complete |
-| SNM-36      | Phase 24 | Pending  |
+| SNM-36      | Phase 24 | Complete |
 | SNM-37      | Phase 25 | Pending  |
 | SNM-38      | Phase 25 | Pending  |
 | SNM-39      | Phase 25 | Pending  |
