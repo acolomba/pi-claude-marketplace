@@ -1176,7 +1176,7 @@ const FIXTURES: FixtureMap = {
             scope: "user",
             status: "failed",
             plugins: [
-              { status: "uninstalled", name: "helper", version: "1.0.0" },
+              { status: "uninstalled", name: "helper" },
               {
                 status: "failed",
                 name: "tool",

@@ -760,7 +760,7 @@ Clean (no-failure) removal carries one `PluginUninstalledMessage` row (`○` gly
 
 ```text
 ⊘ local-mp [user] (failed)
-  ○ helper v1.0.0 (uninstalled)
+  ○ helper (uninstalled)
   ⊘ tool (failed) {permission denied}
     cause: EACCES: permission denied
 
