@@ -29,7 +29,7 @@ Close the 8 gaps surfaced by the v1.4 milestone-spanning UAT (`.planning/v1.4-MI
 
 - [x] **SNM-38**: G-MIL-03 (indent ladder visual off-by-one vs catalog D-16-08 documented 2/4/6 ladder) is reproduced or refuted against the v1.4 runtime. Methodology: capture the byte form of a representative `/claude:plugin list` output, count leading whitespace per line, compare against catalog L155-189 canonical examples and `renderPluginRow` / `renderMpHeader` indent constants. If a real off-by-one bug is confirmed, fix at the renderer with a regression test; if catalog rendering matches code intent, document the visual discrepancy as a catalog wording clarification or close as not-a-bug. Depends on SNM-37.
 
-- [ ] **SNM-39**: G-MIL-07 (tab completion for `/claude:plugin update @<TAB>` returns nothing in the runtime despite a passing unit test at `tests/edge/completions/provider.test.ts:806`) is reproduced or refuted against the v1.4 runtime. Methodology: install a fixture with at least one installed plugin per marketplace, type `/claude:plugin update @` and trigger tab completion, observe the result. If empty, trace the completion provider call path against the Pi-tui runtime to isolate whether the gap is in: (a) completion provider code path divergence between v0.1.7 and v0.2.0; (b) Pi-tui consumption / display of the `AutocompleteItem[]` payload; (c) `getInstalledPluginToMarketplacesMap` returning an empty map due to a scope-root mismatch at runtime. Fix or defer per root-cause finding. Depends on SNM-37.
+- [x] **SNM-39**: G-MIL-07 (tab completion for `/claude:plugin update @<TAB>` returns nothing in the runtime despite a passing unit test at `tests/edge/completions/provider.test.ts:806`) is reproduced or refuted against the v1.4 runtime. Methodology: install a fixture with at least one installed plugin per marketplace, type `/claude:plugin update @` and trigger tab completion, observe the result. If empty, trace the completion provider call path against the Pi-tui runtime to isolate whether the gap is in: (a) completion provider code path divergence between v0.1.7 and v0.2.0; (b) Pi-tui consumption / display of the `AutocompleteItem[]` payload; (c) `getInstalledPluginToMarketplacesMap` returning an empty map due to a scope-root mismatch at runtime. Fix or defer per root-cause finding. Depends on SNM-37.
 
 ### GREEN Gate
 
@@ -96,13 +96,13 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 
 ## v1.4.1 Out of Scope
 
-| Feature | Reason |
-| --- | --- |
-| New user-facing features | This is a bug-fix milestone scoped strictly to the v1.4 post-ship UAT inventory. New capabilities defer to v1.5. |
-| v1.4 phase dir archival | v1.4 phase dirs (15-21) remain in `.planning/phases/`; 1.4.1 phases continue numbering at 22+. Archival via `/gsd-complete-milestone` is operator-initiated when desired. |
+| Feature                                                      | Reason                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| New user-facing features                                     | This is a bug-fix milestone scoped strictly to the v1.4 post-ship UAT inventory. New capabilities defer to v1.5.                                                                                                                                                                                                                                                                         |
+| v1.4 phase dir archival                                      | v1.4 phase dirs (15-21) remain in `.planning/phases/`; 1.4.1 phases continue numbering at 22+. Archival via `/gsd-complete-milestone` is operator-initiated when desired.                                                                                                                                                                                                                |
 | State migration for already-installed hash-versioned plugins | A plugin previously installed under v0.1.7 with `version: "hash-<12hex>"` whose plugin.json declares a SemVer will retain the hash form in state. The SNM-34 tier-2 fallback fires at NEXT install/reinstall/update; an explicit migration of existing records is not in scope. Marketplace update will naturally surface the version discrepancy as upgradable for the user to resolve. |
-| `tests/integration/fold-adoption.test.ts` phase 1 fix | Pre-existing failure on the v1.4 baseline (`npm run test:integration` track, not `npm test`); documented in Plan 21-04 review-fix report. Tracked for a separate `/gsd-debug` session. |
-| Catalog spec restructure | Catalog rendering changes (G-MIL-08 `v#<7hex>`, G-MIL-04 grammar) and PRD §11 PI-7 wording updates land alongside the renderer fixes; no broader spec rewrite. |
+| `tests/integration/fold-adoption.test.ts` phase 1 fix        | Pre-existing failure on the v1.4 baseline (`npm run test:integration` track, not `npm test`); documented in Plan 21-04 review-fix report. Tracked for a separate `/gsd-debug` session.                                                                                                                                                                                                   |
+| Catalog spec restructure                                     | Catalog rendering changes (G-MIL-08 `v#<7hex>`, G-MIL-04 grammar) and PRD §11 PI-7 wording updates land alongside the renderer fixes; no broader spec rewrite.                                                                                                                                                                                                                           |
 
 ## v1.4 Out of Scope (Inherited, Still Active)
 
@@ -159,7 +159,7 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25 (v1.4 rows) and 2026-0
 | SNM-36      | Phase 24 | Complete |
 | SNM-37      | Phase 25 | Complete |
 | SNM-38      | Phase 25 | Complete |
-| SNM-39      | Phase 25 | Pending  |
+| SNM-39      | Phase 25 | Complete |
 | SNM-40      | Phase 26 | Pending  |
 
 **Coverage:**
