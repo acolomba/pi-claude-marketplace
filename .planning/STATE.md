@@ -4,13 +4,13 @@ milestone: v1.4.1
 milestone_name: Post-ship UAT Patches
 status: executing
 stopped_at: Phase 25 context gathered
-last_updated: "2026-05-29T22:04:24.323Z"
+last_updated: "2026-05-29T22:14:19.137Z"
 last_activity: 2026-05-29
 progress:
   total_phases: 14
   completed_phases: 12
   total_plans: 50
-  completed_plans: 48
+  completed_plans: 49
   percent: 86
 ---
 
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-05-28)
 ## Current Position
 
 Phase: 25 (runtime-publish-verification) -- EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-05-29
 
@@ -85,6 +85,7 @@ Last activity: 2026-05-29
 | Phase 09 P03 | 20 min | 3 tasks | 3 files |
 | Phase 09 P04 | - | 4 tasks | 4 files |
 | Phase 25 P01 | 14 min | 3 tasks | 4 files |
+| Phase 25 P2 | 5min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -135,6 +136,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 24]: SNM-36 closed via D-24-04 detection-vs-emission seam: REASONS member `lspServers` -> `lsp` (shared/notify.ts:79); detection substrings stay camelCase (resolver-note match), only the emitted Reason renders `lsp`. install.ts seam uses a typed `MANIFEST_FIELD_TO_REASON` map (D-24-05) gating on the retained camelCase `MANIFEST_FIELD_REASONS` set, removing the `as Reason` cast. Catalog/fixture/doc byte forms + spec wording (`lsp servers` -> `lsp`) amended in the same atomic commit (D-24-03/07); SC#4 manifest surface (`plugin.ts:31`, `resolver.ts:142,160`) byte-unchanged. -- Plan 24-01.
 - [Roadmap v1.4.1]: 5-phase split (22-26): reload-hint discipline -> version display bundle -> grammar consistency -> runtime publish & verification -> GREEN gate close. Phase boundaries respect the shared/notify.ts convergence (SNM-33 / SNM-35 / SNM-36 all touch the same file) by serializing them across phases rather than parallel waves. Phase 25 is operational + investigation: SNM-37 (publish/npm-link) is an operator-action checkpoint that gates SNM-38 (G-MIL-03 indent reproduction) and SNM-39 (G-MIL-07 completion reproduction); SNM-38/39 can run in parallel after SNM-37 lands. State migration for already-installed hash-versioned plugins is out of scope (REQUIREMENTS Out of Scope) -- marketplace update will naturally surface those as upgradable once SNM-34 ships.
 - [Phase 25]: SNM-37 gate satisfied via scripts/pi.sh source-load (no npm publish/link, D-25-01) + a tests/shared/snm37-behavioral-smoke.test.ts byte-form smoke proving v1.4 identity at the pre-tui notify boundary (D-25-04; stronger than pi --version, moot under -e source-load). Real-publish validation deferred (D-25-06). SNM-37 text + ROADMAP SC#1 amended in lockstep (D-25-03). Gates SNM-38 (25-02) + SNM-39 (25-03). -- Plan 25-01.
+- [Phase ?]: [Phase 25]: SNM-38 (G-MIL-03 indent ladder) REFUTED by pre-tui byte evidence (D-25-09): notify() emits the catalog-conformant 0/2/4 ladder at ctx.ui.notify (captured indents [0,2,2,2,2,4,0,0,2]); the observed 1/3 visual is a markdown/tui display-layer artifact, not a renderer deviation. Recorded as a docs/output-catalog.md Indentation-discipline clarification + a tests/shared/snm38-indent-ladder.test.ts readability lock (on top of the catalog-uat byte-equality gate). Anchored on notify.ts constants, NOT the UAT 2/4 truth-line misquote. -- Plan 25-02.
 
 ### Pending Todos
 
@@ -181,7 +183,7 @@ Additional v1.4.1-scope deferrals:
 
 ## Session Continuity
 
-Last session: 2026-05-29T22:03:59.034Z
+Last session: 2026-05-29T22:14:09.195Z
 Stopped At: Phase 25 context gathered
 Resume File: None
 
