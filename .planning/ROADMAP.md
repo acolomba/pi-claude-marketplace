@@ -93,7 +93,7 @@ Close the 8 gaps surfaced by the v1.4 milestone-spanning UAT (`.planning/v1.4-MI
 - [x] **Phase 22: Reload-hint Discipline Family** -- Gate marketplace-level transition tokens (`MarketplaceAddedMessage` / `MarketplaceRemovedMessage` / `MarketplaceUpdatedMessage`) on `plugins[].some(state-change)` inside `shouldEmitReloadHint`; add byte-equality regression tests for the three "no plugin state change -> no trailer" cases (SNM-33; closes G-MIL-01 / G-MIL-02 / G-MIL-06) (completed 2026-05-29)
 - [x] **Phase 23: Version Display Bundle** -- (a) Add tier-2 `installable.manifest?.version` fallback to `resolvePluginVersion` in `orchestrators/plugin/shared.ts:167` with SemVer shape validation (SNM-34; closes G-MIL-05); (b) Renderer-only transform of hash-version display to `v#<7hex>` git-style short SHA in `shared/notify.ts` (`formatHashVersionForDisplay` helper); update byte-form fixtures in `tests/shared/notify-v2.test.ts`, `tests/architecture/catalog-uat.test.ts`, and `docs/output-catalog.md`. Persistence stays at `hash-<12hex>` (PI-7 intact). (SNM-35; closes G-MIL-08) (completed 2026-05-29)
 - [x] **Phase 24: Grammar Consistency** -- Rename the `"lspServers"` REASON discriminator in the `REASONS` closed-set at `shared/notify.ts:79` to `"lsp"`. The real shape is a single closed-set tuple edit plus a type-driven compile cascade through two detection-vs-emission seams (`list.ts::narrowResolverNotes` and `install.ts::manifestFieldTokenFromNote`, via a `MANIFEST_FIELD_TO_REASON` map) plus the catalog/fixture byte-form lockstep -- detection substrings stay camelCase, only the emitted Reason becomes `"lsp"` (D-24-04). The manifest-side JSON key `lspServers` (in `domain/components/plugin.ts:31` schema + `domain/resolver.ts` references) stays unchanged. (SNM-36; closes G-MIL-04) (completed 2026-05-29)
-- [ ] **Phase 25: Runtime Publish & Verification** -- (a) Source-load v0.2.0 (v1.4 source) into a Pi runtime via `scripts/pi.sh` (sandbox home) so v1.4-specific behavior can be exercised live (D-25-01); verify v1.4 identity via a behavioral byte-form smoke (NOT `pi --version`, moot under `-e` source-load per D-25-04) over `/claude:plugin list` -- no `/reload` trailer on read-only list, `v#<7hex>`, `{lsp}`; real-publish validation deferred (D-25-06) (SNM-37; reproduction enabler). (b) Reproduce-or-refute G-MIL-03 (indent ladder 1/3 vs catalog 2/4/6) against the v1.4 runtime; fix or document as not-a-bug per finding (SNM-38). (c) Reproduce-or-refute G-MIL-07 (tab completion for `update @<TAB>` empty) against the v1.4 runtime; fix or defer per root-cause finding (SNM-39).
+- [x] **Phase 25: Runtime Publish & Verification** -- (a) Source-load v0.2.0 (v1.4 source) into a Pi runtime via `scripts/pi.sh` (sandbox home) so v1.4-specific behavior can be exercised live (D-25-01); verify v1.4 identity via a behavioral byte-form smoke (NOT `pi --version`, moot under `-e` source-load per D-25-04) over `/claude:plugin list` -- no `/reload` trailer on read-only list, `v#<7hex>`, `{lsp}`; real-publish validation deferred (D-25-06) (SNM-37; reproduction enabler). (b) Reproduce-or-refute G-MIL-03 (indent ladder 1/3 vs catalog 2/4/6) against the v1.4 runtime; fix or document as not-a-bug per finding (SNM-38). (c) Reproduce-or-refute G-MIL-07 (tab completion for `update @<TAB>` empty) against the v1.4 runtime; fix or defer per root-cause finding (SNM-39). (completed 2026-05-29)
 - [ ] **Phase 26: GREEN Gate Close** -- Final `npm run check` GREEN end-to-end after Phases 22-25 land. Verify the v1.4.1 regression tests added in SNM-33 / SNM-34 / SNM-35 / SNM-36 are in the suite; record milestone-close summary. (SNM-40)
 
 ## Phase Details
@@ -477,7 +477,7 @@ Plans:
 2. G-MIL-03 (indent ladder) is conclusively reproduced or refuted against the v1.4 runtime: leading-whitespace byte counts of a representative `/claude:plugin list` output are compared against the catalog `docs/output-catalog.md` 2/4/6 ladder per D-16-08. A real off-by-one bug is fixed at the renderer with a regression test; otherwise a not-a-bug rationale or catalog wording clarification is recorded.
 3. G-MIL-07 (tab completion for `/claude:plugin update @<TAB>` empty) is conclusively reproduced or refuted against the v1.4 runtime: an installed fixture with at least one plugin per marketplace is loaded, the completion is triggered, and the result is captured. A real runtime gap is traced to its root cause (provider divergence, Pi-tui consumption, or scope-root mismatch) and fixed; otherwise a not-a-bug or defer-with-rationale outcome is recorded.
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 **Wave 1 (gate)**
 
@@ -486,7 +486,7 @@ Plans:
 **Wave 2 (parallel after the gate)**
 
 - [x] 25-02-PLAN.md -- SNM-38 (G-MIL-03): byte-evidence-first reproduce-or-refute of the indent ladder at the pre-tui `ctx.ui.notify` boundary vs the catalog 0/2(/4/6) ladder (D-25-09); record verdict (expected REFUTE + display-layer catalog clarification) + explicit ladder-locking readability test
-- [ ] 25-03-PLAN.md -- SNM-39 (G-MIL-07): root-cause-first reproduce-or-refute of `update @<TAB>` empty; static trace (a/b/c) + LIVE `scripts/pi.sh` interactive trigger (D-25-08, interactive escalation) + recorded verdict (expected defer-with-finding: pi-tui `@`-precedence, D-25-10)
+- [x] 25-03-PLAN.md -- SNM-39 (G-MIL-07): root-cause-first reproduce-or-refute of `update @<TAB>` empty; static trace (a/b/c) + LIVE `scripts/pi.sh` interactive trigger (D-25-08, interactive escalation) + recorded verdict (expected defer-with-finding: pi-tui `@`-precedence, D-25-10)
 
 **UI hint**: yes
 
@@ -533,5 +533,5 @@ Plans:
 | 22. Reload-hint Discipline Family                                    | v1.4.1    | 1/1 | Complete    | 2026-05-29 |
 | 23. Version Display Bundle                                           | v1.4.1    | 2/2 | Complete    | 2026-05-29 |
 | 24. Grammar Consistency                                              | v1.4.1    | 1/1 | Complete    | 2026-05-29 |
-| 25. Runtime Publish & Verification                                   | v1.4.1    | 2/3 | In Progress|  |
+| 25. Runtime Publish & Verification                                   | v1.4.1    | 3/3 | Complete   | 2026-05-29 |
 | 26. GREEN Gate Close                                                 | v1.4.1    | 0/0            | Not started | --         |

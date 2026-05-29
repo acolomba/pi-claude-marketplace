@@ -73,7 +73,7 @@ completed: 2026-05-29
 
 - **Task 1 (prior run, committed `cd1b3a3`):** Static root-cause of the completion gap across causes (a)/(b)/(c) + a finding comment above TC-6 in `tests/edge/completions/provider.test.ts:793`. No product code changed.
 - **Task 2 (prior run, LIVE checkpoint RESOLVED):** The user ran `scripts/pi.sh --home <sandbox> --cd <empty-fixture-project>`, typed `/claude:plugin update @`, pressed Tab, and reported FILE PATHS appeared (not `@<mp>` candidates) -- the binding runtime artifact.
-- **Task 3 (this run, committed `6c2849a`):** Recorded the verdicts in `.planning/v1.4-MILESTONE-UAT.md` (G-MIL-07 `root_cause`/`artifacts`/`missing`/Triage row + G-MIL-03 REFUTE cross-reference) and `.planning/STATE.md` (SNM-37 blocker RESOLVED, SNM-38/SNM-39 decisions, pi-tui upstream finding in Deferred Items).
+- **Task 3 (this run, committed `bc75f6b`):** Recorded the verdicts in `.planning/v1.4-MILESTONE-UAT.md` (G-MIL-07 `root_cause`/`artifacts`/`missing`/Triage row + G-MIL-03 REFUTE cross-reference) and `.planning/STATE.md` (SNM-37 blocker RESOLVED, SNM-38/SNM-39 decisions, pi-tui upstream finding in Deferred Items).
 
 ## Root Cause (isolated)
 
@@ -140,7 +140,7 @@ None - no external service configuration required. Opening an upstream `@earendi
 - FOUND: `.planning/STATE.md` (SNM-37 blocker RESOLVED; SNM-38/SNM-39 decisions; pi-tui finding in Deferred Items)
 - FOUND: `tests/edge/completions/provider.test.ts` (Task 1 finding comment above TC-6)
 - FOUND commit: `cd1b3a3` (Task 1 finding comment)
-- FOUND commit: `6c2849a` (Task 3 verdict record)
+- FOUND commit: `bc75f6b` (Task 3 verdict record)
 - FOUND: `.planning/phases/25-runtime-publish-verification/25-03-SUMMARY.md`
 
 ---

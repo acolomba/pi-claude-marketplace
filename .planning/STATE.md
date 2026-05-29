@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-28)
 
 Phase: 25 (runtime-publish-verification) -- EXECUTING
 Plan: 3 of 3
-Status: Phase complete — ready for verification
+Status: Phase complete -- ready for verification
 Last activity: 2026-05-29
 
 ## Performance Metrics
