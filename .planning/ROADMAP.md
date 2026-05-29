@@ -91,7 +91,7 @@ Close the 8 gaps surfaced by the v1.4 milestone-spanning UAT (`.planning/v1.4-MI
 - No state migration tooling for already-installed `hash-<12hex>` plugins; SNM-34's tier-2 fallback fires at NEXT install/reinstall/update only.
 
 - [x] **Phase 22: Reload-hint Discipline Family** -- Gate marketplace-level transition tokens (`MarketplaceAddedMessage` / `MarketplaceRemovedMessage` / `MarketplaceUpdatedMessage`) on `plugins[].some(state-change)` inside `shouldEmitReloadHint`; add byte-equality regression tests for the three "no plugin state change -> no trailer" cases (SNM-33; closes G-MIL-01 / G-MIL-02 / G-MIL-06) (completed 2026-05-29)
-- [ ] **Phase 23: Version Display Bundle** -- (a) Add tier-2 `installable.manifest?.version` fallback to `resolvePluginVersion` in `orchestrators/plugin/shared.ts:167` with SemVer shape validation (SNM-34; closes G-MIL-05); (b) Renderer-only transform of hash-version display to `v#<7hex>` git-style short SHA in `shared/notify.ts` (`formatHashVersionForDisplay` helper); update byte-form fixtures in `tests/shared/notify-v2.test.ts`, `tests/architecture/catalog-uat.test.ts`, and `docs/output-catalog.md`. Persistence stays at `hash-<12hex>` (PI-7 intact). (SNM-35; closes G-MIL-08)
+- [x] **Phase 23: Version Display Bundle** -- (a) Add tier-2 `installable.manifest?.version` fallback to `resolvePluginVersion` in `orchestrators/plugin/shared.ts:167` with SemVer shape validation (SNM-34; closes G-MIL-05); (b) Renderer-only transform of hash-version display to `v#<7hex>` git-style short SHA in `shared/notify.ts` (`formatHashVersionForDisplay` helper); update byte-form fixtures in `tests/shared/notify-v2.test.ts`, `tests/architecture/catalog-uat.test.ts`, and `docs/output-catalog.md`. Persistence stays at `hash-<12hex>` (PI-7 intact). (SNM-35; closes G-MIL-08) (completed 2026-05-29)
 - [ ] **Phase 24: Grammar Consistency** -- Rename the `"lspServers"` REASON discriminator in the `REASONS` closed-set at `shared/notify.ts:79` to `"lsp servers"`; propagate to 13 consumer call-sites in `orchestrators/plugin/list.ts` (8) and `orchestrators/plugin/install.ts` (4) plus the JSDoc reference in `domain/components/plugin.ts:46`. The manifest-side JSON key `lspServers` (in `domain/components/plugin.ts:31` schema + `domain/resolver.ts` references) stays unchanged. (SNM-36; closes G-MIL-04)
 - [ ] **Phase 25: Runtime Publish & Verification** -- (a) Publish/npm-link v0.2.0 (v1.4 source) into the user's Pi runtime so v1.4-specific behavior can be exercised live; verify Pi loads the new code via `pi --version` + smoke `/claude:plugin list` (SNM-37; reproduction enabler). (b) Reproduce-or-refute G-MIL-03 (indent ladder 1/3 vs catalog 2/4/6) against the v1.4 runtime; fix or document as not-a-bug per finding (SNM-38). (c) Reproduce-or-refute G-MIL-07 (tab completion for `update @<TAB>` empty) against the v1.4 runtime; fix or defer per root-cause finding (SNM-39).
 - [ ] **Phase 26: GREEN Gate Close** -- Final `npm run check` GREEN end-to-end after Phases 22-25 land. Verify the v1.4.1 regression tests added in SNM-33 / SNM-34 / SNM-35 / SNM-36 are in the suite; record milestone-close summary. (SNM-40)
@@ -432,7 +432,7 @@ Plans:
 3. State.json byte form for hash-versioned plugins is unchanged: persisted `version` field remains `hash-<12hex>`. The PI-7 12-hex collision envelope is preserved internally for compare semantics; the 7-hex form is display-only.
 4. Catalog spec (`docs/output-catalog.md`) examples use the new `v#<7hex>` form wherever a hash-version appears; the catalog UAT runner (`tests/architecture/catalog-uat.test.ts`) and `tests/shared/notify-v2.test.ts` byte fixtures are updated in lockstep and remain GREEN.
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 **Wave 1**
 
@@ -440,7 +440,7 @@ Plans:
 
 **Wave 2** (serialized after Wave 1 per the `shared/notify.ts` convergence constraint, D-23-07)
 
-- [ ] 23-02-PLAN.md -- SNM-35: `looksLikeHashVersion` + `formatHashVersionForDisplay` helpers; route `renderVersion` + `composeVersionArrow` through the transform (`v#<7hex>`); catalog + `catalog-uat` + `notify-v2` byte-equality lockstep (D-23-04/05/06)
+- [x] 23-02-PLAN.md -- SNM-35: `looksLikeHashVersion` + `formatHashVersionForDisplay` helpers; route `renderVersion` + `composeVersionArrow` through the transform (`v#<7hex>`); catalog + `catalog-uat` + `notify-v2` byte-equality lockstep (D-23-04/05/06)
 
 ### Phase 24: Grammar Consistency
 
@@ -517,7 +517,7 @@ Plans:
 | 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 6/6            | Complete    | 2026-05-27 |
 | 21. Final Teardown & GREEN Gate                                      | v1.4      | 4/4            | Complete    | 2026-05-28 |
 | 22. Reload-hint Discipline Family                                    | v1.4.1    | 1/1 | Complete    | 2026-05-29 |
-| 23. Version Display Bundle                                           | v1.4.1    | 1/2 | In Progress|  |
+| 23. Version Display Bundle                                           | v1.4.1    | 2/2 | Complete   | 2026-05-29 |
 | 24. Grammar Consistency                                              | v1.4.1    | 0/0            | Not started | --         |
 | 25. Runtime Publish & Verification                                   | v1.4.1    | 0/0            | Not started | --         |
 | 26. GREEN Gate Close                                                 | v1.4.1    | 0/0            | Not started | --         |
