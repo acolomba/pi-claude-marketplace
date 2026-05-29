@@ -11,7 +11,7 @@ Close the 8 gaps surfaced by the v1.4 milestone-spanning UAT (`.planning/v1.4-MI
 
 ### Reload-hint Discipline
 
-- [ ] **SNM-33**: `shouldEmitReloadHint` (in `shared/notify.ts`) gates the marketplace-level transition tokens (`MarketplaceAddedMessage` / `MarketplaceRemovedMessage` / `MarketplaceUpdatedMessage`) on whether the embedded `plugins[]` cascade contains at least one row with a state-change discriminator (`installed` / `updated` / `reinstalled` / `uninstalled`). Currently those marketplace-level tokens fire the trailer unconditionally even when no Pi-visible resources changed. Closes G-MIL-01 (`marketplace add` of empty mp), G-MIL-02 (`marketplace remove` of empty mp), G-MIL-06 (`marketplace update` no-op). Same SNM-15 family as the G-21-01 fix in Plan 21-04. Includes byte-equality regression tests in `tests/shared/notify-v2.test.ts` for each of the three "no plugin state change → no trailer" cases.
+- [x] **SNM-33**: `shouldEmitReloadHint` (in `shared/notify.ts`) gates the marketplace-level transition tokens (`MarketplaceAddedMessage` / `MarketplaceRemovedMessage` / `MarketplaceUpdatedMessage`) on whether the embedded `plugins[]` cascade contains at least one row with a state-change discriminator (`installed` / `updated` / `reinstalled` / `uninstalled`). Currently those marketplace-level tokens fire the trailer unconditionally even when no Pi-visible resources changed. Closes G-MIL-01 (`marketplace add` of empty mp), G-MIL-02 (`marketplace remove` of empty mp), G-MIL-06 (`marketplace update` no-op). Same SNM-15 family as the G-21-01 fix in Plan 21-04. Includes byte-equality regression tests in `tests/shared/notify-v2.test.ts` for each of the three "no plugin state change → no trailer" cases.
 
 ### Version Resolution & Display
 
@@ -153,7 +153,7 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25 (v1.4 rows) and 2026-0
 | SNM-30      | Phase 16 | Complete |
 | SNM-31      | Phase 17 | Complete |
 | SNM-32      | Phase 21 | Complete |
-| SNM-33      | Phase 22 | Pending  |
+| SNM-33      | Phase 22 | Complete |
 | SNM-34      | Phase 23 | Pending  |
 | SNM-35      | Phase 23 | Pending  |
 | SNM-36      | Phase 24 | Pending  |
@@ -169,8 +169,8 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25 (v1.4 rows) and 2026-0
 - Total: 40 requirements
 - Mapped to phases: 40
 - Unmapped: 0
-- Complete: 31 (v1.4 -- all except SNM-23 traceability-row reconciliation)
-- Pending: 9 (SNM-23 traceability-row only + 8 v1.4.1 SNM-33..SNM-40)
+- Complete: 32 (v1.4 -- all except SNM-23 traceability-row reconciliation; + v1.4.1 SNM-33)
+- Pending: 8 (SNM-23 traceability-row only + 7 v1.4.1 SNM-34..SNM-40)
 - Per-phase distribution (v1.4): Phase 15 (12: SNM-01..11, SNM-21); Phase 16 (8: SNM-12..18, SNM-30); Phase 17 (4: SNM-19, SNM-20, SNM-26, SNM-31); Phase 18 (0: execution phase); Phase 19 (0: execution phase); Phase 20 (1: SNM-23); Phase 21 (7: SNM-22, SNM-24, SNM-25, SNM-27, SNM-28, SNM-29, SNM-32)
 - Per-phase distribution (v1.4.1): Phase 22 (1: SNM-33); Phase 23 (2: SNM-34, SNM-35); Phase 24 (1: SNM-36); Phase 25 (3: SNM-37, SNM-38, SNM-39); Phase 26 (1: SNM-40)
 

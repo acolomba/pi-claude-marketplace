@@ -508,7 +508,7 @@ Plans:
 | 19. Migration Wave 2 -- Plugin Orchestrator Family                   | v1.4      | 6/6            | Complete    | 2026-05-27 |
 | 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 6/6            | Complete    | 2026-05-27 |
 | 21. Final Teardown & GREEN Gate                                      | v1.4      | 4/4            | Complete    | 2026-05-28 |
-| 22. Reload-hint Discipline Family                                    | v1.4.1    | 1/1 | Complete   | 2026-05-29 |
+| 22. Reload-hint Discipline Family                                    | v1.4.1    | 1/1 | Complete    | 2026-05-29 |
 | 23. Version Display Bundle                                           | v1.4.1    | 0/0            | Not started | --         |
 | 24. Grammar Consistency                                              | v1.4.1    | 0/0            | Not started | --         |
 | 25. Runtime Publish & Verification                                   | v1.4.1    | 0/0            | Not started | --         |
