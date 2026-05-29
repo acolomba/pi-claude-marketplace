@@ -117,7 +117,7 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 
 ## Traceability
 
-Phase mapping populated by `gsd-roadmapper` on 2026-05-25.
+Phase mapping populated by `gsd-roadmapper` on 2026-05-25 (v1.4 rows) and 2026-05-28 (v1.4.1 rows).
 
 | Requirement | Phase    | Status   |
 | ----------- | -------- | -------- |
@@ -153,15 +153,26 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25.
 | SNM-30      | Phase 16 | Complete |
 | SNM-31      | Phase 17 | Complete |
 | SNM-32      | Phase 21 | Complete |
+| SNM-33      | Phase 22 | Pending  |
+| SNM-34      | Phase 23 | Pending  |
+| SNM-35      | Phase 23 | Pending  |
+| SNM-36      | Phase 24 | Pending  |
+| SNM-37      | Phase 25 | Pending  |
+| SNM-38      | Phase 25 | Pending  |
+| SNM-39      | Phase 25 | Pending  |
+| SNM-40      | Phase 26 | Pending  |
 
 **Coverage:**
 
 - v1.4 requirements: 32 total
-- Mapped to phases: 32
+- v1.4.1 requirements: 8 total (SNM-33..SNM-40)
+- Total: 40 requirements
+- Mapped to phases: 40
 - Unmapped: 0
-- Complete: 31 (all except SNM-23 -- traceability-row reconciliation deferred to a Phase 20 record-keeping quick-fix per Phase 21 B6 scope discipline; SNM-23's behavior closed in Phase 20)
-- Pending: 1 (SNM-23 traceability-row only; behavior is shipped)
-- Per-phase distribution: Phase 15 (12: SNM-01..11, SNM-21); Phase 16 (8: SNM-12..18, SNM-30); Phase 17 (4: SNM-19, SNM-20, SNM-26, SNM-31); Phase 18 (0: execution phase); Phase 19 (0: execution phase); Phase 20 (1: SNM-23); Phase 21 (7: SNM-22, SNM-24, SNM-25, SNM-27, SNM-28, SNM-29, SNM-32)
+- Complete: 31 (v1.4 -- all except SNM-23 traceability-row reconciliation)
+- Pending: 9 (SNM-23 traceability-row only + 8 v1.4.1 SNM-33..SNM-40)
+- Per-phase distribution (v1.4): Phase 15 (12: SNM-01..11, SNM-21); Phase 16 (8: SNM-12..18, SNM-30); Phase 17 (4: SNM-19, SNM-20, SNM-26, SNM-31); Phase 18 (0: execution phase); Phase 19 (0: execution phase); Phase 20 (1: SNM-23); Phase 21 (7: SNM-22, SNM-24, SNM-25, SNM-27, SNM-28, SNM-29, SNM-32)
+- Per-phase distribution (v1.4.1): Phase 22 (1: SNM-33); Phase 23 (2: SNM-34, SNM-35); Phase 24 (1: SNM-36); Phase 25 (3: SNM-37, SNM-38, SNM-39); Phase 26 (1: SNM-40)
 
 **Mapping rationale:**
 
@@ -169,8 +180,9 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25.
 - Phases 18, 19, 20 are execution waves migrating call sites by family. They have rich success criteria (zero V1 callers in the family, lint glob narrowed, catalog UAT GREEN for the family) but only Phase 20 owns a v1.4 requirement (SNM-23: edge-handler `notifyUsageError` migration completes in this wave).
 - SNM-22 ("all V1 callers migrated AND V1 wrappers deleted") closes in Phase 21 because the deletion half of the requirement requires the migration waves of 18-20 to have already landed. Phases 18-20 each prove their migration completeness through their own success criteria; SNM-22 records the final closure.
 - Phase 21 closes the teardown requirements (SNM-24..29) plus the GREEN gate (SNM-32) plus SNM-22's deletion half.
+- **v1.4.1 mapping rationale:** The 8 requirements cluster naturally into three convergence-respecting bundles + one investigation phase + one close gate. Phase 22 owns SNM-33 alone because it's a single chokepoint fix at `shouldEmitReloadHint` closing three UAT gaps (G-MIL-01/02/06) with one diff; isolating it from the other notify.ts work keeps the regression-test additions clean. Phase 23 bundles SNM-34 (resolver tier-2 fallback in `orchestrators/plugin/shared.ts`) and SNM-35 (`v#<7hex>` renderer transform in `shared/notify.ts`) because both are version-handling fixes that conceptually pair, and SNM-35's catalog/fixture sweep is more efficient when planned alongside SNM-34's manifest-version surfacing; both will be serialized within the phase (separate plans, not parallel waves) per the shared/notify.ts convergence constraint. Phase 24 owns SNM-36 because the REASONS rename + 13 consumer call-site propagation is a single mechanical fix with a clean closure boundary; bundling it elsewhere would mix grammar concerns with version or reload-hint concerns. Phase 25 bundles SNM-37/38/39: SNM-37 is the operational publish/npm-link prerequisite, and SNM-38 + SNM-39 are reproduction-or-refutation investigations that can only run after the v1.4 runtime is loaded -- they parallelize naturally once SNM-37 lands. Phase 26 owns SNM-40 (final GREEN gate close) as a verification-only phase mirroring v1.4's SNM-32 pattern.
 
 ---
 
 _Requirements defined: 2026-05-25 (v1.4 baseline); 2026-05-28 (v1.4.1 patches added)_
-_Last updated: 2026-05-28 -- v1.4.1 Post-ship UAT Patches milestone started. Added SNM-33..SNM-40 (8 requirements) closing 8 UAT findings from `.planning/v1.4-MILESTONE-UAT.md`. v1.4.1 traceability rows will be populated by `gsd-roadmapper` when the milestone roadmap lands. v1.4 traceability table preserved as historical record._
+_Last updated: 2026-05-28 -- v1.4.1 traceability populated by `gsd-roadmapper`. SNM-33..SNM-40 mapped across Phases 22-26. v1.4 traceability table preserved as historical record (all 32 SNM rows complete except SNM-23 traceability-row reconciliation)._

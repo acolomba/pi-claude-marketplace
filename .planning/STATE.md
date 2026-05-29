@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v1.4.1
 milestone_name: Post-ship UAT Patches
 status: planning
-last_updated: "2026-05-28T21:42:14.738Z"
+last_updated: "2026-05-28T22:00:00.000Z"
 last_activity: 2026-05-28
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,16 +17,16 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-25)
+See: .planning/PROJECT.md (updated 2026-05-28)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.4 milestone closed -- Phase 21 complete
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.4.1 Post-ship UAT Patches -- roadmap landed; ready to plan Phase 22 (Reload-hint Discipline Family).
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 22 (next; Reload-hint Discipline Family)
 Plan: --
-Status: Defining requirements
-Last activity: 2026-05-28 -- Milestone v1.4.1 started
+Status: Roadmap landed; ready to plan Phase 22
+Last activity: 2026-05-28 -- v1.4.1 roadmap created (5 phases: 22-26 mapping SNM-33..SNM-40)
 
 ## Performance Metrics
 
@@ -87,9 +87,10 @@ Last activity: 2026-05-28 -- Milestone v1.4.1 started
 
 - Phase 14.1 inserted after Phase 14: Close gap: CMC-13 -- propagate declaresAgents/Mcp through import cascade rows (URGENT)
 - Phase 14.2 inserted after Phase 14: Address tech debt: CR-01 + retroactive Phase 12 / 14.1 gates (URGENT)
-- v1.4 roadmap (2026-05-25): 7 phases (15-21) created by `gsd-roadmapper`. All 32 SNM-* requirements mapped: SNM-01..11 + SNM-21 → Phase 15; SNM-12..18 + SNM-30 → Phase 16; SNM-19, SNM-20, SNM-31 → Phase 17; Phases 18 and 19 are execution-only migration waves (marketplace/* and plugin/* families) with no requirement closure; SNM-23 → Phase 20 (edge family wave + UsageError migration); SNM-22, SNM-24..29, SNM-32 → Phase 21 (final teardown + GREEN gate). SNM-22 maps to Phase 21 because its "wrappers deleted" half is the closure gate.
+- v1.4 roadmap (2026-05-25): 7 phases (15-21) created by `gsd-roadmapper`. All 32 SNM-* requirements mapped: SNM-01..11 + SNM-21 -> Phase 15; SNM-12..18 + SNM-30 -> Phase 16; SNM-19, SNM-20, SNM-31 -> Phase 17; Phases 18 and 19 are execution-only migration waves (marketplace/* and plugin/* families) with no requirement closure; SNM-23 -> Phase 20 (edge family wave + UsageError migration); SNM-22, SNM-24..29, SNM-32 -> Phase 21 (final teardown + GREEN gate). SNM-22 maps to Phase 21 because its "wrappers deleted" half is the closure gate.
 - Phase 17.1 inserted after Phase 17: V2 Grammar Amendment: Autoupdate Surface (URGENT)
 - Phase 17.2 inserted after Phase 17: renderScopeBracket orphan-fold contract fix (URGENT)
+- v1.4.1 roadmap (2026-05-28): 5 phases (22-26) created by `gsd-roadmapper`. All 8 SNM-* requirements (SNM-33..SNM-40) mapped: SNM-33 -> Phase 22 (Reload-hint Discipline Family -- 3-gap chokepoint fix at shouldEmitReloadHint); SNM-34 + SNM-35 -> Phase 23 (Version Display Bundle -- tier-2 plugin.json fallback + v#<7hex> renderer transform; serialized within phase per shared/notify.ts convergence constraint); SNM-36 -> Phase 24 (Grammar Consistency -- lspServers REASONS rename + 13 call-site propagation); SNM-37 + SNM-38 + SNM-39 -> Phase 25 (Runtime Publish & Verification -- SNM-37 gates SNM-38/SNM-39; G-MIL-03 indent + G-MIL-07 completion reproduction-or-refutation against v1.4 runtime); SNM-40 -> Phase 26 (GREEN Gate Close). v1.4 phase dirs (15-21) intentionally left under .planning/phases/; v1.4.1 continues phase numbering at 22+ rather than archiving.
 
 ### Decisions
 
@@ -99,7 +100,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - Initialization: Skip `/gsd-map-codebase` (PRD §9 already documents V1 architecture)
 - Initialization: Two scopes only (`user`, `project`); no Claude `local`
 - Initialization: 12-char SHA-256 truncation locked as user contract (PI-7)
-- Roadmap: Adopt synthesizer's 7-phase split (dependency-graph inside-out: foundations → primitives → bridges → marketplace orchestrators → plugin orchestrators → edge → integration)
+- Roadmap: Adopt synthesizer's 7-phase split (dependency-graph inside-out: foundations -> primitives -> bridges -> marketplace orchestrators -> plugin orchestrators -> edge -> integration)
 - Roadmap: Phase ledger primitive lands in Phase 2 (transaction primitive, not Phase 5 use-case)
 - Roadmap: `MARKERS.ts` and symlink-aware `assertPathInside` land in Phase 1 so they propagate to every later phase
 - Roadmap: Gap 3 (component-path supplement vs. replace) resolved in Phase 5 as supplement-fix; documented as "behavior corrected vs. V1"
@@ -122,10 +123,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 09]: reinstallPlugins provides update-analogous bulk target forms, deterministic partitions, reload-hint aggregation, soft-dependency aggregation, and quiet single-plugin rendering for batch UX. -- Plan 09-01 completed PRL-03/04/05/13/14/15.
 - [Phase 09]: /claude:plugin reinstall is routed, registered, documented, and completed with installed-only tab completion plus reinstall-specific --force. -- Plans 09-02/09-03/09-04 completed PRL-01/16 and final validation.
 - [Roadmap v1.3]: D-30 locks `docs/messaging-style-guide.md` v1.0 + `docs/output-catalog.md` as the v1.3 user-contract, superseding PRD §6.12 ES-5 marker strings.
-- [Roadmap v1.3]: v1.3 phases = 12 (Foundations) + 13 (Conformance Refactor & ES-5) + 14 (Drift Guard). 38/38 CMC requirements mapped (CMC-08/11/14/19/36/37 → Phase 12; CMC-01..07/09/10/12/13/15..18/20/21/22..34/35 → Phase 13; CMC-38 → Phase 14).
+- [Roadmap v1.3]: v1.3 phases = 12 (Foundations) + 13 (Conformance Refactor & ES-5) + 14 (Drift Guard). 38/38 CMC requirements mapped (CMC-08/11/14/19/36/37 -> Phase 12; CMC-01..07/09/10/12/13/15..18/20/21/22..34/35 -> Phase 13; CMC-38 -> Phase 14).
 - [Roadmap v1.3]: ES-5 atomic three-file edit (`shared/markers.ts` + `tests/architecture/markers-snapshot.test.ts` + PRD §6.12) lives in Phase 13 (CMC-35) per style guide §15 supersession contract -- snapshot test's prefix-extraction shape is structurally incompatible with new tokenised forms, so the deferral is mandatory.
 - [Roadmap v1.3]: Drift guard reads style-guide YAML frontmatter as binding contract (no duplicated lists in test code); placed last because it asserts conformance for every callsite.
-- [Roadmap v1.4]: 7-phase split (15-21): types → renderer → spec → 3 migration waves (marketplace, plugin, edge+UsageError) → final teardown. SNM-22 closure deferred to Phase 21 because the "V1 wrappers deleted" half cannot land until all migration waves complete. Phases 18 and 19 are execution phases without REQ closure -- their success criteria (zero V1 callers in family, narrowed lint glob, catalog UAT GREEN for family) prove incremental progress toward SNM-22 closure in Phase 21.
+- [Roadmap v1.4]: 7-phase split (15-21): types -> renderer -> spec -> 3 migration waves (marketplace, plugin, edge+UsageError) -> final teardown. SNM-22 closure deferred to Phase 21 because the "V1 wrappers deleted" half cannot land until all migration waves complete. Phases 18 and 19 are execution phases without REQ closure -- their success criteria (zero V1 callers in family, narrowed lint glob, catalog UAT GREEN for family) prove incremental progress toward SNM-22 closure in Phase 21.
+- [Roadmap v1.4.1]: 5-phase split (22-26): reload-hint discipline -> version display bundle -> grammar consistency -> runtime publish & verification -> GREEN gate close. Phase boundaries respect the shared/notify.ts convergence (SNM-33 / SNM-35 / SNM-36 all touch the same file) by serializing them across phases rather than parallel waves. Phase 25 is operational + investigation: SNM-37 (publish/npm-link) is an operator-action checkpoint that gates SNM-38 (G-MIL-03 indent reproduction) and SNM-39 (G-MIL-07 completion reproduction); SNM-38/39 can run in parallel after SNM-37 lands. State migration for already-installed hash-versioned plugins is out of scope (REQUIREMENTS Out of Scope) -- marketplace update will naturally surface those as upgradable once SNM-34 ships.
 
 ### Pending Todos
 
@@ -133,6 +135,7 @@ None yet.
 
 ### Blockers/Concerns
 
+- Phase 25 SNM-37 publish step requires an operator action (publish to npm or npm-link the source tree into the user's Pi runtime). SNM-38 and SNM-39 are gated on this; planning Phase 25 must surface a clear hand-off checkpoint between SNM-37 completion and SNM-38/39 reproduction work.
 - Historical `write-file-atomic@^8` engine concern is resolved on main by v0.1.2: package engines now allow `>=20.19.0` and the dependency is `write-file-atomic@^7`.
 
 ### Quick Tasks Completed
@@ -161,12 +164,20 @@ Items acknowledged and deferred at v1.3 milestone close on 2026-05-25:
 
 All seven quick tasks have a SUMMARY.md and are completed; the `audit-open` query flags them as `missing` because their SUMMARY.md frontmatter lacks a `status:` field (pre-canonical-frontmatter format). No follow-up work; acknowledged as deferred at v1.3 close.
 
+Additional v1.4.1-scope deferrals:
+
+| Category | Item | Status | Deferred At |
+| -------- | ---- | ------ | ----------- |
+| integration_test | tests/integration/fold-adoption.test.ts phase 1 failure | pre-existing on v1.4 baseline; tracked for separate /gsd-debug | 2026-05-28 |
+| state_migration | Migration tooling for already-installed `hash-<12hex>` plugins whose plugin.json declares a SemVer | out of scope v1.4.1; marketplace update will naturally surface as upgradable post-SNM-34 | 2026-05-28 |
+| milestone_archival | v1.4 phase dirs (15-21) archival | deferred; phase dirs remain under .planning/phases/ during v1.4.1; operator-initiated via /gsd-complete-milestone | 2026-05-28 |
+
 ## Session Continuity
 
-Last session: 2026-05-27T22:00:00.000Z
-Stopped At: Phase 21 complete -- v1.4 milestone closed
-Resume File: .planning/phases/21-final-teardown-green-gate/21-03-SUMMARY.md
+Last session: 2026-05-28T22:00:00.000Z
+Stopped At: v1.4.1 roadmap landed; ready to plan Phase 22 (Reload-hint Discipline Family)
+Resume File: .planning/ROADMAP.md (Phase 22 section)
 
 ## Operator Next Steps
 
-- v1.4 Structured Notification Messages milestone is CLOSED. Next milestone planning is operator-initiated (`/gsd-new-milestone` or equivalent).
+- v1.4.1 roadmap landed (5 phases, 8 requirements mapped). Next: `/gsd-plan-phase 22` to plan the reload-hint discipline chokepoint fix.
