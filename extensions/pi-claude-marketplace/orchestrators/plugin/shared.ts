@@ -13,6 +13,7 @@
 // and may import from `domain/`, `shared/`, and `persistence/` (type-only).
 // No imports from `bridges/` or `orchestrators/marketplace/*`.
 
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { computeHashVersion } from "../../domain/version.ts";
@@ -163,15 +164,46 @@ export async function resolveInstalledMarketplaceTarget(opts: {
   throw new MarketplaceNotFoundError(opts.marketplace, ["project", "user"]);
 }
 
-/** PI-7 / PUP-3 version precedence: marketplace entry version, then content hash. */
+/**
+ * PI-7 / PUP-3 / SNM-34 version precedence (3 tiers, highest first):
+ *   1. The plugin's own `<pluginRoot>/.claude-plugin/plugin.json` `version`
+ *      (D-23-01: "If also set in the marketplace entry, `plugin.json` wins.").
+ *   2. The marketplace `entry.version` (formerly tier 1; moved below plugin.json).
+ *   3. The PI-7 `computeHashVersion` content hash, as a last resort.
+ *
+ * Each declared `version` is accepted iff it is a non-empty string (the same
+ * gate used for `entry.version`; D-23-03 -- no SemVer enforcement). The
+ * plugin.json read is re-done here independently (D-23-02): the NFR-7
+ * discriminated `ResolvedPluginInstallable` union is NOT widened with a
+ * `manifest` field. Any read/parse failure (ENOENT, malformed JSON, missing
+ * or non-string `.version`) silently falls through to the next tier and never
+ * throws.
+ */
 export async function resolvePluginVersion(
   entry: PluginEntry,
   installable: ResolvedPluginInstallable,
 ): Promise<string> {
+  // Tier 1: the plugin's own plugin.json `version`. Re-read in place; any
+  // failure falls through to the next tier (D-23-02 / D-23-03).
+  try {
+    const manifestPath = path.join(installable.pluginRoot, ".claude-plugin", "plugin.json");
+    const raw = await readFile(manifestPath, "utf8");
+    const parsed: unknown = JSON.parse(raw);
+    const pluginJsonVersion = (parsed as { version?: unknown }).version;
+    if (typeof pluginJsonVersion === "string" && pluginJsonVersion.length > 0) {
+      return pluginJsonVersion;
+    }
+  } catch {
+    // Fall through -- plugin.json is absent, unparseable, or carries no usable
+    // version; tier 2 / tier 3 cover it.
+  }
+
+  // Tier 2: the marketplace entry version.
   if (typeof entry.version === "string" && entry.version.length > 0) {
     return entry.version;
   }
 
+  // Tier 3: PI-7 content hash (last resort, unchanged).
   return computeHashVersion(installable.pluginRoot);
 }
 

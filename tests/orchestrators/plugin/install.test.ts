@@ -172,6 +172,7 @@ async function seedPathMarketplaceWithPlugin(opts: {
   } else if (opts.pluginJsonVersion !== null) {
     pluginManifest.version = opts.pluginJsonVersion;
   }
+
   await writeFile(
     path.join(pluginRoot, ".claude-plugin", "plugin.json"),
     JSON.stringify(pluginManifest),
@@ -677,6 +678,11 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
         marketplaceName: "mp",
         pluginName: "hello",
         pluginVersion: "1.0.0",
+        // SNM-34 D-23-01: plugin.json wins over entry.version. Align the
+        // seeded plugin.json version with the entry so the rendered byte form
+        // stays v1.0.0 (this test exercises the install pipeline + rendering,
+        // not version precedence -- the dedicated tier tests own that).
+        pluginJsonVersion: "1.0.0",
         skills: [{ sourceName: "tool" }],
         commands: [{ sourceName: "deploy" }],
         agents: [{ sourceName: "bot" }],
@@ -1370,6 +1376,11 @@ test("PI-9 corollary: empty plugin (no skills/commands/agents/mcp) -> V2 emits r
         marketplaceName: "mp",
         pluginName: "hello",
         pluginVersion: "0.1.0",
+        // SNM-34 D-23-01: plugin.json wins over entry.version. Align the
+        // seeded plugin.json version with the entry so the rendered byte form
+        // stays v0.1.0 (this test exercises the reload-hint trigger, not
+        // version precedence).
+        pluginJsonVersion: "0.1.0",
         // No skills, commands, agents, or mcpServers.
       });
 
