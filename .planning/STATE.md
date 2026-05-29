@@ -3,14 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.4.1
 milestone_name: Post-ship UAT Patches
 status: executing
-last_updated: "2026-05-29T13:59:00.424Z"
-last_activity: 2026-05-29 -- Phase 24 planning complete
+stopped_at: Phase 24 Plan 01 complete
+last_updated: "2026-05-29T14:26:04Z"
+last_activity: 2026-05-29 -- Phase 24 Plan 01 executed (lspServers -> lsp REASONS rename)
 progress:
   total_phases: 14
-  completed_phases: 11
+  completed_phases: 12
   total_plans: 47
-  completed_plans: 46
-  percent: 79
+  completed_plans: 47
+  percent: 86
 ---
 
 # Project State
@@ -19,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-28)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 24 -- grammar consistency
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 24 -- grammar-consistency
 
 ## Current Position
 
-Phase: 24
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-29 -- Phase 24 planning complete
+Phase: 24 (grammar-consistency) -- COMPLETE
+Plan: 1 of 1 complete
+Status: Phase 24 complete; SNM-36 / G-MIL-04 closed
+Last activity: 2026-05-29 -- Phase 24 Plan 01 executed (lspServers -> lsp REASONS rename)
 
 ## Performance Metrics
 
@@ -129,6 +130,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Roadmap v1.3]: ES-5 atomic three-file edit (`shared/markers.ts` + `tests/architecture/markers-snapshot.test.ts` + PRD §6.12) lives in Phase 13 (CMC-35) per style guide §15 supersession contract -- snapshot test's prefix-extraction shape is structurally incompatible with new tokenised forms, so the deferral is mandatory.
 - [Roadmap v1.3]: Drift guard reads style-guide YAML frontmatter as binding contract (no duplicated lists in test code); placed last because it asserts conformance for every callsite.
 - [Roadmap v1.4]: 7-phase split (15-21): types -> renderer -> spec -> 3 migration waves (marketplace, plugin, edge+UsageError) -> final teardown. SNM-22 closure deferred to Phase 21 because the "V1 wrappers deleted" half cannot land until all migration waves complete. Phases 18 and 19 are execution phases without REQ closure -- their success criteria (zero V1 callers in family, narrowed lint glob, catalog UAT GREEN for family) prove incremental progress toward SNM-22 closure in Phase 21.
+- [Phase 24]: SNM-36 closed via D-24-04 detection-vs-emission seam: REASONS member `lspServers` -> `lsp` (shared/notify.ts:79); detection substrings stay camelCase (resolver-note match), only the emitted Reason renders `lsp`. install.ts seam uses a typed `MANIFEST_FIELD_TO_REASON` map (D-24-05) gating on the retained camelCase `MANIFEST_FIELD_REASONS` set, removing the `as Reason` cast. Catalog/fixture/doc byte forms + spec wording (`lsp servers` -> `lsp`) amended in the same atomic commit (D-24-03/07); SC#4 manifest surface (`plugin.ts:31`, `resolver.ts:142,160`) byte-unchanged. -- Plan 24-01.
 - [Roadmap v1.4.1]: 5-phase split (22-26): reload-hint discipline -> version display bundle -> grammar consistency -> runtime publish & verification -> GREEN gate close. Phase boundaries respect the shared/notify.ts convergence (SNM-33 / SNM-35 / SNM-36 all touch the same file) by serializing them across phases rather than parallel waves. Phase 25 is operational + investigation: SNM-37 (publish/npm-link) is an operator-action checkpoint that gates SNM-38 (G-MIL-03 indent reproduction) and SNM-39 (G-MIL-07 completion reproduction); SNM-38/39 can run in parallel after SNM-37 lands. State migration for already-installed hash-versioned plugins is out of scope (REQUIREMENTS Out of Scope) -- marketplace update will naturally surface those as upgradable once SNM-34 ships.
 
 ### Pending Todos
@@ -176,10 +178,10 @@ Additional v1.4.1-scope deferrals:
 
 ## Session Continuity
 
-Last session: 2026-05-29T12:26:16.857Z
-Stopped At: Phase 24 context gathered
-Resume File: .planning/phases/24-grammar-consistency/24-CONTEXT.md
+Last session: 2026-05-29T14:26:04Z
+Stopped At: Phase 24 Plan 01 complete
+Resume File: .planning/phases/24-grammar-consistency/24-01-SUMMARY.md
 
 ## Operator Next Steps
 
-- v1.4.1 roadmap landed (5 phases, 8 requirements mapped). Next: `/gsd-plan-phase 22` to plan the reload-hint discipline chokepoint fix.
+- Phase 24 complete (SNM-36 / G-MIL-04 closed). v1.4.1 progress: 4/8 gaps closed (SNM-33/34/35/36). Next: `/gsd-verify-work` for Phase 24, then plan Phase 25 (Runtime Publish & Verification) -- note SNM-37 requires an operator publish/npm-link action that gates SNM-38/39.
