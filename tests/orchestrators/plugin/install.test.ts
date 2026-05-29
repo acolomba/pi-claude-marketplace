@@ -122,6 +122,16 @@ async function seedPathMarketplaceWithPlugin(opts: {
   scope?: "user" | "project";
   /** Optional version stamp on the entry; absent -> hash-version fallback. */
   pluginVersion?: string;
+  /**
+   * The plugin's OWN `.claude-plugin/plugin.json` `version` field (distinct
+   * from `pluginVersion`, which is the MARKETPLACE `entry.version`).
+   *  - `undefined` (default): preserve the legacy seeded shape
+   *    `{ name, version: "0.0.1" }` so existing fixtures are unaffected.
+   *  - non-empty string: write that string as the plugin.json `version`.
+   *  - `null`: write plugin.json WITHOUT a `version` field so the SNM-34
+   *    tier-1 read finds no version and falls through.
+   */
+  pluginJsonVersion?: string | null;
   /** Skills to seed -- each `{ sourceName, body? }` becomes <pluginRoot>/skills/<sourceName>/SKILL.md. */
   skills?: { sourceName: string; frontmatterName?: string; body?: string }[];
   /** Commands -- each becomes <pluginRoot>/commands/<sourceName>.md. */
@@ -153,9 +163,18 @@ async function seedPathMarketplaceWithPlugin(opts: {
   const pluginRoot = path.join(marketplaceRoot, "plugins", pluginName);
   await mkdir(pluginRoot, { recursive: true });
   await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  // SNM-34 fixture knob: the plugin's OWN plugin.json version, distinct from
+  // the marketplace entry.version (`pluginVersion`). `undefined` preserves the
+  // legacy `0.0.1` shape; a string sets that version; `null` omits the field.
+  const pluginManifest: Record<string, unknown> = { name: pluginName };
+  if (opts.pluginJsonVersion === undefined) {
+    pluginManifest.version = "0.0.1";
+  } else if (opts.pluginJsonVersion !== null) {
+    pluginManifest.version = opts.pluginJsonVersion;
+  }
   await writeFile(
     path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-    JSON.stringify({ name: pluginName, version: "0.0.1" }),
+    JSON.stringify(pluginManifest),
   );
 
   // Skills
@@ -520,7 +539,7 @@ test("PI-6: generated skill name collides with another plugin's existing skill -
 // PI-7 -- version precedence
 // ───────────────────────────────────────────────────────────────────────────
 
-test("PI-7 (a): entry.version present -> recorded state.version matches entry.version verbatim", async () => {
+test("PI-7 (a): entry.version present, plugin.json version absent -> recorded state.version matches entry.version verbatim", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi7a-"));
     try {
@@ -531,6 +550,9 @@ test("PI-7 (a): entry.version present -> recorded state.version matches entry.ve
         marketplaceName: "mp",
         pluginName: "hello",
         pluginVersion: "1.2.3",
+        // SNM-34 D-23-01: plugin.json wins when it declares a version, so to
+        // exercise the marketplace entry.version (tier 2) suppress plugin.json's.
+        pluginJsonVersion: null,
         skills: [{ sourceName: "tool" }],
       });
 
@@ -558,7 +580,7 @@ test("PI-7 (a): entry.version present -> recorded state.version matches entry.ve
   });
 });
 
-test("PI-7 (b): entry.version absent -> recorded state.version is hash-<12hex>", async () => {
+test("PI-7 (b): entry.version absent, plugin.json version absent -> recorded state.version is hash-<12hex>", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi7b-"));
     try {
@@ -568,7 +590,9 @@ test("PI-7 (b): entry.version absent -> recorded state.version is hash-<12hex>",
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         pluginName: "hello",
-        // No pluginVersion -> hash fallback.
+        // No pluginVersion (tier 2 absent) AND plugin.json version omitted
+        // (tier 1 absent) -> genuine PI-7 hash fallback (tier 3).
+        pluginJsonVersion: null,
         skills: [{ sourceName: "tool" }],
       });
 
@@ -593,6 +617,45 @@ test("PI-7 (b): entry.version absent -> recorded state.version is hash-<12hex>",
         /^hash-[0-9a-f]{12}$/,
         `expected hash-<12hex>, got "${record.version}"`,
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("SNM-34: plugin.json version present, entry.version absent -> recorded state.version equals the plugin.json version verbatim (not a hash)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-snm34-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        // Marketplace entry.version OMITTED (tier 2 absent); the plugin's own
+        // plugin.json declares a version (tier 1) -> plugin.json tier fires.
+        pluginJsonVersion: "1.2.3",
+        skills: [{ sourceName: "tool" }],
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      const errs = notifications.filter((n) => n.severity === "error");
+      assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
+
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(record !== undefined);
+      assert.equal(record.version, "1.2.3");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
