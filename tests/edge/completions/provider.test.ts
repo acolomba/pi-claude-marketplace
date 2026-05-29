@@ -790,6 +790,41 @@ test("TC-6 :: update <here> -- status filter shows only installed plugins", asyn
   }
 });
 
+// FINDING (SNM-39 / G-MIL-07, D-25-10 -- DEFER-WITH-FINDING, host-external):
+// This test proves OUR provider is CORRECT for the bare `update @` form --
+// `getArgumentCompletions("update @")` returns `["@mp-a","@mp-b"]`. Yet the
+// live runtime shows NOTHING (or file paths) for `/claude:plugin update @<TAB>`.
+// The gap is NOT in our code; it is the host's `@`-precedence in
+// `@earendil-works/pi-tui` (root-caused against the GLOBAL pi-tui 0.76.0 that
+// `scripts/pi.sh` actually execs, NOT the local node_modules 0.74.2 -- the
+// `@`-logic is byte-identical across both versions):
+//
+//   pi-tui dist/autocomplete.js (0.76.0):
+//     - CombinedAutocompleteProvider.getSuggestions  (:188)
+//       checks `const atPrefix = this.extractAtPrefix(textBeforeCursor)` (:191)
+//       and, when truthy, routes to `getFuzzyFileSuggestions` and returns
+//       early (:192-204) -- BEFORE the slash-command branch
+//       `if (!options.force && textBeforeCursor.startsWith("/"))` (:205).
+//     - extractAtPrefix (:331) splits on `findLastDelimiter` against
+//       `PATH_DELIMITERS = new Set([" ","\t",'"',"'","="])` (:6) -- which has
+//       NO `@`. So for `/claude:plugin update @` the trailing `@` token is
+//       treated as a file-mention prefix; if no cwd files match, the user sees
+//       nothing (matching the original G-MIL-07 report); if files match, file
+//       paths appear. Either way our slash-command `getArgumentCompletions`
+//       is NEVER reached for the bare-`@<mp>` token.
+//
+// Causes ruled out: (a) provider code-path divergence -- ELIMINATED, the v1.4
+// runtime now source-loads v0.2.0 (the version this test covers) via SNM-37
+// (plan 25-01). (c) `getInstalledPluginToMarketplacesMap` empty via scope-root
+// mismatch -- not the cause: pi-tui intercepts before our resolver map
+// (`data.ts:313`) is ever consulted for a bare `@` token.
+//
+// Per D-25-10 this is `@earendil-works/pi-tui`-external -- DEFER, do NOT contort
+// our provider to dodge the host's `@`-precedence (that would degrade the
+// documented bare-`@<mp>` UX without fixing the interception). The
+// `<plugin>@<mp>` and bare-`<TAB>` plugin-half forms are unaffected (their
+// token does not START with `@`). See `.planning/v1.4-MILESTONE-UAT.md` G-MIL-07
+// for the recorded verdict.
 test("TC-6 :: update accepts bare @<marketplace> form", async () => {
   __resetCacheForTests();
   const f = await makeFixture({
