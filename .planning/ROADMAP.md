@@ -457,7 +457,11 @@ Plans:
 3. The `REASONS` closed-set tuple in `shared/notify.ts:79` no longer contains the string `"lspServers"`; the renamed discriminator `"lsp servers"` is consistent across the 13 consumer call-sites in `orchestrators/plugin/list.ts` (8 sites) and `orchestrators/plugin/install.ts` (4 sites) plus the JSDoc comment in `domain/components/plugin.ts:46`.
 4. The manifest-side field name `lspServers` remains in `domain/components/plugin.ts:31` (typebox schema), `domain/resolver.ts:142,160`, and any related manifest-parsing surfaces -- changing it would break parsing of real Claude plugin manifests.
 
-**Plans:** TBD
+**Plans:** 1 plan
+
+**Wave 1**
+
+- [ ] 24-01-PLAN.md -- SNM-36: rename the `REASONS` closed-set member `"lspServers"` -> `"lsp"` and rewire both detection-vs-emission seams (`list.ts::narrowResolverNotes`, `install.ts::manifestFieldTokenFromNote` via a `MANIFEST_FIELD_TO_REASON` map); catalog + `catalog-uat` + `install.test` byte-form lockstep with the KEEP-bucket false-GREEN guard; fold 6 stale `shared/grammar/reasons.ts` pointers; amend ROADMAP/REQUIREMENTS/UAT/PROJECT "lsp servers" -> "lsp" (D-24-01..09; single atomic commit per D-24-07)
 
 ### Phase 25: Runtime Publish & Verification
 
