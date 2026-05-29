@@ -477,11 +477,11 @@ Plans:
 2. G-MIL-03 (indent ladder) is conclusively reproduced or refuted against the v1.4 runtime: leading-whitespace byte counts of a representative `/claude:plugin list` output are compared against the catalog `docs/output-catalog.md` 2/4/6 ladder per D-16-08. A real off-by-one bug is fixed at the renderer with a regression test; otherwise a not-a-bug rationale or catalog wording clarification is recorded.
 3. G-MIL-07 (tab completion for `/claude:plugin update @<TAB>` empty) is conclusively reproduced or refuted against the v1.4 runtime: an installed fixture with at least one plugin per marketplace is loaded, the completion is triggered, and the result is captured. A real runtime gap is traced to its root cause (provider divergence, Pi-tui consumption, or scope-root mismatch) and fixed; otherwise a not-a-bug or defer-with-rationale outcome is recorded.
 
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 **Wave 1 (gate)**
 
-- [ ] 25-01-PLAN.md -- SNM-37: source-load v0.2.0 via `scripts/pi.sh` (sandbox home) + behavioral byte-form smoke proving v1.4 identity (no `/reload` trailer on read-only list, `v#<7hex>`, `{lsp}`); amend SNM-37 text + SC#1 in lockstep (D-25-03/04); real-publish validation deferred (D-25-06)
+- [x] 25-01-PLAN.md -- SNM-37: source-load v0.2.0 via `scripts/pi.sh` (sandbox home) + behavioral byte-form smoke proving v1.4 identity (no `/reload` trailer on read-only list, `v#<7hex>`, `{lsp}`); amend SNM-37 text + SC#1 in lockstep (D-25-03/04); real-publish validation deferred (D-25-06)
 
 **Wave 2 (parallel after the gate)**
 
@@ -533,5 +533,5 @@ Plans:
 | 22. Reload-hint Discipline Family                                    | v1.4.1    | 1/1 | Complete    | 2026-05-29 |
 | 23. Version Display Bundle                                           | v1.4.1    | 2/2 | Complete    | 2026-05-29 |
 | 24. Grammar Consistency                                              | v1.4.1    | 1/1 | Complete    | 2026-05-29 |
-| 25. Runtime Publish & Verification                                   | v1.4.1    | 0/0            | Not started | --         |
+| 25. Runtime Publish & Verification                                   | v1.4.1    | 1/3 | In Progress|  |
 | 26. GREEN Gate Close                                                 | v1.4.1    | 0/0            | Not started | --         |

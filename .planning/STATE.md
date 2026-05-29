@@ -4,13 +4,13 @@ milestone: v1.4.1
 milestone_name: Post-ship UAT Patches
 status: executing
 stopped_at: Phase 25 context gathered
-last_updated: "2026-05-29T19:56:37.285Z"
-last_activity: 2026-05-29 -- Phase 25 planning complete
+last_updated: "2026-05-29T22:04:24.323Z"
+last_activity: 2026-05-29
 progress:
   total_phases: 14
   completed_phases: 12
   total_plans: 50
-  completed_plans: 47
+  completed_plans: 48
   percent: 86
 ---
 
@@ -20,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-28)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 24 -- grammar-consistency
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 25 -- runtime-publish-verification
 
 ## Current Position
 
-Phase: 25
-Plan: Not started
+Phase: 25 (runtime-publish-verification) -- EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-05-29 -- Phase 25 planning complete
+Last activity: 2026-05-29
 
 ## Performance Metrics
 
@@ -84,6 +84,7 @@ Last activity: 2026-05-29 -- Phase 25 planning complete
 | Phase 09 P02 | 35 min | 3 tasks | 6 files |
 | Phase 09 P03 | 20 min | 3 tasks | 3 files |
 | Phase 09 P04 | - | 4 tasks | 4 files |
+| Phase 25 P01 | 14 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -133,6 +134,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Roadmap v1.4]: 7-phase split (15-21): types -> renderer -> spec -> 3 migration waves (marketplace, plugin, edge+UsageError) -> final teardown. SNM-22 closure deferred to Phase 21 because the "V1 wrappers deleted" half cannot land until all migration waves complete. Phases 18 and 19 are execution phases without REQ closure -- their success criteria (zero V1 callers in family, narrowed lint glob, catalog UAT GREEN for family) prove incremental progress toward SNM-22 closure in Phase 21.
 - [Phase 24]: SNM-36 closed via D-24-04 detection-vs-emission seam: REASONS member `lspServers` -> `lsp` (shared/notify.ts:79); detection substrings stay camelCase (resolver-note match), only the emitted Reason renders `lsp`. install.ts seam uses a typed `MANIFEST_FIELD_TO_REASON` map (D-24-05) gating on the retained camelCase `MANIFEST_FIELD_REASONS` set, removing the `as Reason` cast. Catalog/fixture/doc byte forms + spec wording (`lsp servers` -> `lsp`) amended in the same atomic commit (D-24-03/07); SC#4 manifest surface (`plugin.ts:31`, `resolver.ts:142,160`) byte-unchanged. -- Plan 24-01.
 - [Roadmap v1.4.1]: 5-phase split (22-26): reload-hint discipline -> version display bundle -> grammar consistency -> runtime publish & verification -> GREEN gate close. Phase boundaries respect the shared/notify.ts convergence (SNM-33 / SNM-35 / SNM-36 all touch the same file) by serializing them across phases rather than parallel waves. Phase 25 is operational + investigation: SNM-37 (publish/npm-link) is an operator-action checkpoint that gates SNM-38 (G-MIL-03 indent reproduction) and SNM-39 (G-MIL-07 completion reproduction); SNM-38/39 can run in parallel after SNM-37 lands. State migration for already-installed hash-versioned plugins is out of scope (REQUIREMENTS Out of Scope) -- marketplace update will naturally surface those as upgradable once SNM-34 ships.
+- [Phase 25]: SNM-37 gate satisfied via scripts/pi.sh source-load (no npm publish/link, D-25-01) + a tests/shared/snm37-behavioral-smoke.test.ts byte-form smoke proving v1.4 identity at the pre-tui notify boundary (D-25-04; stronger than pi --version, moot under -e source-load). Real-publish validation deferred (D-25-06). SNM-37 text + ROADMAP SC#1 amended in lockstep (D-25-03). Gates SNM-38 (25-02) + SNM-39 (25-03). -- Plan 25-01.
 
 ### Pending Todos
 
@@ -179,9 +181,9 @@ Additional v1.4.1-scope deferrals:
 
 ## Session Continuity
 
-Last session: 2026-05-29T15:39:46.425Z
+Last session: 2026-05-29T22:03:59.034Z
 Stopped At: Phase 25 context gathered
-Resume File: .planning/phases/25-runtime-publish-verification/25-CONTEXT.md
+Resume File: None
 
 ## Operator Next Steps
 
