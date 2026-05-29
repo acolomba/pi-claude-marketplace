@@ -90,7 +90,7 @@ Close the 8 gaps surfaced by the v1.4 milestone-spanning UAT (`.planning/v1.4-MI
 - Atomic commits per plan; no commits to `main`.
 - No state migration tooling for already-installed `hash-<12hex>` plugins; SNM-34's tier-2 fallback fires at NEXT install/reinstall/update only.
 
-- [ ] **Phase 22: Reload-hint Discipline Family** -- Gate marketplace-level transition tokens (`MarketplaceAddedMessage` / `MarketplaceRemovedMessage` / `MarketplaceUpdatedMessage`) on `plugins[].some(state-change)` inside `shouldEmitReloadHint`; add byte-equality regression tests for the three "no plugin state change -> no trailer" cases (SNM-33; closes G-MIL-01 / G-MIL-02 / G-MIL-06)
+- [x] **Phase 22: Reload-hint Discipline Family** -- Gate marketplace-level transition tokens (`MarketplaceAddedMessage` / `MarketplaceRemovedMessage` / `MarketplaceUpdatedMessage`) on `plugins[].some(state-change)` inside `shouldEmitReloadHint`; add byte-equality regression tests for the three "no plugin state change -> no trailer" cases (SNM-33; closes G-MIL-01 / G-MIL-02 / G-MIL-06) (completed 2026-05-29)
 - [ ] **Phase 23: Version Display Bundle** -- (a) Add tier-2 `installable.manifest?.version` fallback to `resolvePluginVersion` in `orchestrators/plugin/shared.ts:167` with SemVer shape validation (SNM-34; closes G-MIL-05); (b) Renderer-only transform of hash-version display to `v#<7hex>` git-style short SHA in `shared/notify.ts` (`formatHashVersionForDisplay` helper); update byte-form fixtures in `tests/shared/notify-v2.test.ts`, `tests/architecture/catalog-uat.test.ts`, and `docs/output-catalog.md`. Persistence stays at `hash-<12hex>` (PI-7 intact). (SNM-35; closes G-MIL-08)
 - [ ] **Phase 24: Grammar Consistency** -- Rename the `"lspServers"` REASON discriminator in the `REASONS` closed-set at `shared/notify.ts:79` to `"lsp servers"`; propagate to 13 consumer call-sites in `orchestrators/plugin/list.ts` (8) and `orchestrators/plugin/install.ts` (4) plus the JSDoc reference in `domain/components/plugin.ts:46`. The manifest-side JSON key `lspServers` (in `domain/components/plugin.ts:31` schema + `domain/resolver.ts` references) stays unchanged. (SNM-36; closes G-MIL-04)
 - [ ] **Phase 25: Runtime Publish & Verification** -- (a) Publish/npm-link v0.2.0 (v1.4 source) into the user's Pi runtime so v1.4-specific behavior can be exercised live; verify Pi loads the new code via `pi --version` + smoke `/claude:plugin list` (SNM-37; reproduction enabler). (b) Reproduce-or-refute G-MIL-03 (indent ladder 1/3 vs catalog 2/4/6) against the v1.4 runtime; fix or document as not-a-bug per finding (SNM-38). (c) Reproduce-or-refute G-MIL-07 (tab completion for `update @<TAB>` empty) against the v1.4 runtime; fix or defer per root-cause finding (SNM-39).
@@ -412,10 +412,10 @@ Plans:
 3. Running `/claude:plugin marketplace update <mp>` on a marketplace whose plugin cascade is all `(skipped) {up-to-date}` outputs the `(updated)` header + the cascade rows but NO `/reload to pick up changes` trailer.
 4. State-changing variants still emit the trailer: `marketplace add` whose cascade installed at least one plugin, `marketplace remove` whose cascade uninstalled at least one plugin, and `marketplace update` whose cascade updated/reinstalled/installed/uninstalled at least one plugin all still terminate with `/reload to pick up changes`.
 
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 **Wave 1**
 
-- [ ] 22-01-PLAN.md -- Collapse shouldEmitReloadHint to plugin-row-only (D-22-01), make clean marketplace remove carry (uninstalled) rows (D-22-02), drop autoupdate fresh-flip trailer (D-22-03); catalog + fixture + test lockstep (SNM-33)
+- [x] 22-01-PLAN.md -- Collapse shouldEmitReloadHint to plugin-row-only (D-22-01), make clean marketplace remove carry (uninstalled) rows (D-22-02), drop autoupdate fresh-flip trailer (D-22-03); catalog + fixture + test lockstep (SNM-33)
 
 ### Phase 23: Version Display Bundle
 
@@ -508,7 +508,7 @@ Plans:
 | 19. Migration Wave 2 -- Plugin Orchestrator Family                   | v1.4      | 6/6            | Complete    | 2026-05-27 |
 | 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 6/6            | Complete    | 2026-05-27 |
 | 21. Final Teardown & GREEN Gate                                      | v1.4      | 4/4            | Complete    | 2026-05-28 |
-| 22. Reload-hint Discipline Family                                    | v1.4.1    | 0/0            | Not started | --         |
+| 22. Reload-hint Discipline Family                                    | v1.4.1    | 1/1 | Complete   | 2026-05-29 |
 | 23. Version Display Bundle                                           | v1.4.1    | 0/0            | Not started | --         |
 | 24. Grammar Consistency                                              | v1.4.1    | 0/0            | Not started | --         |
 | 25. Runtime Publish & Verification                                   | v1.4.1    | 0/0            | Not started | --         |

@@ -3,8 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.4.1
 milestone_name: Post-ship UAT Patches
 status: executing
-last_updated: "2026-05-29T01:46:47.409Z"
-last_activity: 2026-05-29 -- Phase 22 planning complete
+stopped_at: Phase 22 context gathered
+last_updated: "2026-05-29T01:56:39.878Z"
+last_activity: 2026-05-29 -- Phase 22 execution started
 progress:
   total_phases: 14
   completed_phases: 9
@@ -19,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-28)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.4.1 Post-ship UAT Patches -- roadmap landed; ready to plan Phase 22 (Reload-hint Discipline Family).
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 22 -- reload-hint-discipline-family
 
 ## Current Position
 
-Phase: 22 (next; Reload-hint Discipline Family)
-Plan: --
-Status: Ready to execute
-Last activity: 2026-05-29 -- Phase 22 planning complete
+Phase: 22 (reload-hint-discipline-family) -- EXECUTING
+Plan: 1 of 1
+Status: Executing Phase 22
+Last activity: 2026-05-29 -- Phase 22 execution started
 
 ## Performance Metrics
 
