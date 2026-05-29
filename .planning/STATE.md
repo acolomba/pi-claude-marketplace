@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.4.1
 milestone_name: Post-ship UAT Patches
-status: executing
-last_updated: "2026-05-29T11:19:50.399Z"
+status: ready_to_plan
+last_updated: 2026-05-29T12:06:54.441Z
 last_activity: 2026-05-29 -- Phase 23 execution started
 progress:
   total_phases: 14
   completed_phases: 10
   total_plans: 46
-  completed_plans: 44
+  completed_plans: 46
   percent: 71
+stopped_at: Phase 23 complete (2/2) -- ready to discuss Phase 24
 ---
 
 # Project State
@@ -19,20 +20,20 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-28)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 23 -- version-display-bundle
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 24 -- grammar consistency
 
 ## Current Position
 
-Phase: 23 (version-display-bundle) -- EXECUTING
-Plan: 1 of 2
-Status: Executing Phase 23
-Last activity: 2026-05-29 -- Phase 23 execution started
+Phase: 24
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-05-29
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 98
+- Total plans completed: 100
 - Average duration: -
 - Total execution time: -
 
@@ -59,6 +60,7 @@ Last activity: 2026-05-29 -- Phase 23 execution started
 | 20 | 6 | - | - |
 | 21 | 4 | - | - |
 | 22 | 1 | - | - |
+| 23 | 2 | - | - |
 
 **Recent Trend:**
 

@@ -15,9 +15,9 @@ Close the 8 gaps surfaced by the v1.4 milestone-spanning UAT (`.planning/v1.4-MI
 
 ### Version Resolution & Display
 
-- [ ] **SNM-34**: `resolvePluginVersion` in `orchestrators/plugin/shared.ts` re-reads `<pluginRoot>/.claude-plugin/plugin.json` directly (the plugin's own `version` field) and prefers it over the marketplace entry version before falling through to PI-7 `computeHashVersion`. The resolved version order becomes: (1) plugin.json `version` if declared (non-empty string); (2) marketplace.json `plugins[].version` if declared; (3) PI-7 hash-version as last resort. Order corrected to plugin.json-first per D-23-01 (matches PRD §11 PI-7 and Claude Code upstream "If also set in the marketplace entry, `plugin.json` wins"). The plugin.json `version` is accepted as any non-empty string (no SemVer enforcement; a malformed/empty/non-string value falls through to the next tier) per D-23-03. The NFR-7 discriminated `ResolvedPluginInstallable` union is NOT widened with a `manifest` field (D-23-02) -- `resolvePluginVersion` re-reads independently. Closes G-MIL-05. The precedence is already documented in PRD §11 PI-7 contract wording. Includes a unit test in `tests/orchestrators/plugin/install.test.ts` for the plugin.json tier with a fixture where marketplace.json omits `version` and plugin.json declares a version string.
+- [x] **SNM-34**: `resolvePluginVersion` in `orchestrators/plugin/shared.ts` re-reads `<pluginRoot>/.claude-plugin/plugin.json` directly (the plugin's own `version` field) and prefers it over the marketplace entry version before falling through to PI-7 `computeHashVersion`. The resolved version order becomes: (1) plugin.json `version` if declared (non-empty string); (2) marketplace.json `plugins[].version` if declared; (3) PI-7 hash-version as last resort. Order corrected to plugin.json-first per D-23-01 (matches PRD §11 PI-7 and Claude Code upstream "If also set in the marketplace entry, `plugin.json` wins"). The plugin.json `version` is accepted as any non-empty string (no SemVer enforcement; a malformed/empty/non-string value falls through to the next tier) per D-23-03. The NFR-7 discriminated `ResolvedPluginInstallable` union is NOT widened with a `manifest` field (D-23-02) -- `resolvePluginVersion` re-reads independently. Closes G-MIL-05. The precedence is already documented in PRD §11 PI-7 contract wording. Includes a unit test in `tests/orchestrators/plugin/install.test.ts` for the plugin.json tier with a fixture where marketplace.json omits `version` and plugin.json declares a version string.
 
-- [ ] **SNM-35**: Hash-version display transforms to git-style short-SHA form `v#<7hex>` instead of the current `vhash-<12hex>`. PERSISTED state.json byte form (`hash-<12hex>`) is UNCHANGED -- PI-7 contract intact, no state migration. The transform is renderer-only: a new `formatHashVersionForDisplay(version)` helper in `shared/notify.ts` detects hash-versions via the existing `looksLikeHashVersion` predicate and emits `#<7hex>` (the `v` prefix is added by `renderVersion` downstream, producing the final byte form `v#<7hex>`). Updates: `renderVersion`, `composeVersionArrow`, and all catalog-state byte-form fixtures in `tests/shared/notify-v2.test.ts`, `tests/architecture/catalog-uat.test.ts`, and `docs/output-catalog.md`. Closes G-MIL-08.
+- [x] **SNM-35**: Hash-version display transforms to git-style short-SHA form `v#<7hex>` instead of the current `vhash-<12hex>`. PERSISTED state.json byte form (`hash-<12hex>`) is UNCHANGED -- PI-7 contract intact, no state migration. The transform is renderer-only: a new `formatHashVersionForDisplay(version)` helper in `shared/notify.ts` detects hash-versions via the existing `looksLikeHashVersion` predicate and emits `#<7hex>` (the `v` prefix is added by `renderVersion` downstream, producing the final byte form `v#<7hex>`). Updates: `renderVersion`, `composeVersionArrow`, and all catalog-state byte-form fixtures in `tests/shared/notify-v2.test.ts`, `tests/architecture/catalog-uat.test.ts`, and `docs/output-catalog.md`. Closes G-MIL-08.
 
 ### Grammar Consistency
 
@@ -154,8 +154,8 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25 (v1.4 rows) and 2026-0
 | SNM-31      | Phase 17 | Complete |
 | SNM-32      | Phase 21 | Complete |
 | SNM-33      | Phase 22 | Complete |
-| SNM-34      | Phase 23 | Pending  |
-| SNM-35      | Phase 23 | Pending  |
+| SNM-34      | Phase 23 | Complete |
+| SNM-35      | Phase 23 | Complete |
 | SNM-36      | Phase 24 | Pending  |
 | SNM-37      | Phase 25 | Pending  |
 | SNM-38      | Phase 25 | Pending  |
