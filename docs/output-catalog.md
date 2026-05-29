@@ -53,6 +53,8 @@ The plugin-row `[<scope>]` bracket is emitted ONLY when the plugin's `scope` fie
 - `rollbackPartial` child rows on `failed` variants at 4-space indent (each phase: `[<phase>] (rollback failed)`); each phase's optional `cause?: Error` renders a 6-space-indent cause-chain trailer below it.
 - One blank line between marketplace blocks.
 
+This 0 / 2 / 4 / 6 ladder is the byte-exact contract `notify()` emits at the `ctx.ui.notify` boundary, captured **before** any markdown/tui display layer. The interactive pi-tui markdown renderer can add a single leading space when it displays the message, so a header may **appear** at one space and plugin rows at three (a "1/3" visual). That appearance is a display-layer artifact, not a renderer deviation: the binding contract is the pre-tui byte ladder above, which `tests/architecture/catalog-uat.test.ts` (byte-equality) and `tests/shared/snm38-indent-ladder.test.ts` (explicit leading-whitespace) both lock at 0 / 2 / 4 / 6 (SNM-38 / G-MIL-03, D-25-09 -- refuted: not a renderer bug).
+
 ### Reasons rendering
 
 Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Manifest field names render verbatim as the sole carve-out (`{hooks}`, `{lsp}`). The closed-set membership is defined by `extensions/pi-claude-marketplace/shared/notify.ts::REASONS`.
