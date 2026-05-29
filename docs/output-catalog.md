@@ -12,7 +12,7 @@ Per-command rendered output for each user-visible state. Catalog v2.0 supersedes
 
 ### Always-marketplace-header form
 
-Every `notify()` output begins with a marketplace header at column 0; plugin rows are indented two spaces beneath. The v1.0 carve-outs ("single-plugin commands skip the header form", "marketplace-only commands skip the header form", "conditional header-form commands") are retired. A single-plugin install renders as a marketplace header + one indented plugin row; a marketplace-only command (`marketplace add`, `marketplace remove`, `marketplace autoupdate`, `bootstrap`, `marketplace update` with no plugin children) renders the header alone with `plugins: []`. The grammar is uniform across every command surface.
+Every `notify()` output begins with a marketplace header at column 0; plugin rows are indented two spaces beneath. The v1.0 carve-outs ("single-plugin commands skip the header form", "marketplace-only commands skip the header form", "conditional header-form commands") are retired. A single-plugin install renders as a marketplace header + one indented plugin row; a header-only command (`marketplace add`, `marketplace autoupdate`, `bootstrap`, an _empty_ `marketplace remove`, `marketplace update` with no plugin children) renders the header alone with `plugins: []`. A non-empty `marketplace remove` renders the header plus one indented `(uninstalled)` row per unstaged plugin (D-22-02). The grammar is uniform across every command surface.
 
 ### Marketplace header shape
 
@@ -61,12 +61,11 @@ The soft-dep markers `requires pi-subagents` and `requires pi-mcp` live INSIDE t
 
 ### Reload-hint trailer
 
-`notify()` appends `/reload to pick up changes` (with one blank line above the trailer) iff at least one of the following is true (D-16-12):
+`notify()` appends `/reload to pick up changes` (with one blank line above the trailer) iff (SNM-33 / D-22-01):
 
 - A plugin status is in `{installed, updated, reinstalled, uninstalled}`.
-- A marketplace status is in `{added, removed, updated}` (state-changing; NOT `failed`).
 
-A `failed` marketplace does NOT trigger the trailer (rolled-back state has nothing to reload). A failed-only cascade (no successful or state-changing rows) also suppresses the trailer.
+The principle: marketplace records are bookkeeping, not Pi-visible resources; only plugin rows (skill / agent / command / MCP entry) are. A marketplace status alone (`added`, `removed`, `updated`, `autoupdate enabled`, `autoupdate disabled`) never warrants a `/reload` -- the trailer fires only when a plugin row carries one of the four state-change tokens. A `failed` marketplace does NOT trigger the trailer (rolled-back state has nothing to reload). A failed-only cascade (no successful or state-changing rows) also suppresses the trailer.
 
 The list-only inventory token `present` (emitted by `/claude:plugin list` for already-installed plugins as a steady-state row -- distinct from the cascade-context `installed` transition token) is deliberately ABSENT from the plugin-status trigger set. This keeps `shouldEmitReloadHint`'s contents-derived decision unambiguous per SNM-15: every status discriminator either always triggers or never triggers; no token straddles both inventory and transition surfaces. See UAT gap G-21-01 in `.planning/phases/21-final-teardown-green-gate/21-HUMAN-UAT.md` for the failure mode the split closes.
 
@@ -652,11 +651,9 @@ Single-shot setup of `anthropics/claude-plugins-official` in user scope. The mar
 
 ```text
 ● claude-plugins-official [user] (added)
-
-/reload to pick up changes
 ```
 
-The bootstrap path is a marketplace add; the marketplace status `added` triggers the reload-hint per D-16-12. Bootstrap also enables autoupdate on the marketplace persistence record, but the v2 state-change header arm (`added`) does not carry the `<autoupdate>` marker -- the marker only appears on the list-surface header form (`mp.status === undefined`, `mp.details.autoupdate === true`). Subsequent `marketplace list` renders the marketplace with the marker.
+The bootstrap path is a marketplace add; the marketplace status `added` carries the `(added)` header arm. No reload-hint: a marketplace record is not a Pi-visible resource (SNM-33 / D-22-01). Bootstrap also enables autoupdate on the marketplace persistence record, but the v2 state-change header arm (`added`) does not carry the `<autoupdate>` marker -- the marker only appears on the list-surface header form (`mp.status === undefined`, `mp.details.autoupdate === true`). Subsequent `marketplace list` renders the marketplace with the marker.
 
 ### Re-run when already bootstrapped
 
@@ -664,11 +661,9 @@ The bootstrap path is a marketplace add; the marketplace status `added` triggers
 
 ```text
 ● claude-plugins-official [user] (updated)
-
-/reload to pick up changes
 ```
 
-When the marketplace already exists, the bootstrap orchestrator renders the marketplace with status `updated` (the marketplace persistence record is touched but no plugins changed). Reload-hint fires because `updated` is in the state-changing set per D-16-12. Severity: info. (Alternative implementations may render an empty `(updated)` payload as a no-op; the catalog asserts the structural shape, not the orchestrator's choice between `updated` and emitting nothing.)
+When the marketplace already exists, the bootstrap orchestrator renders the marketplace with status `updated` (the marketplace persistence record is touched but no plugins changed). No reload-hint: with no plugin children there is no Pi-visible resource change, so the touch alone does not warrant a `/reload` (SNM-33 / D-22-01). Severity: info. (Alternative implementations may render an empty `(updated)` payload as a no-op; the catalog asserts the structural shape, not the orchestrator's choice between `updated` and emitting nothing.)
 
 ______________________________________________________________________
 
@@ -714,11 +709,9 @@ Single-marketplace command. The marketplace header alone is the body -- no plugi
 
 ```text
 ● local-mp [user] (added)
-
-/reload to pick up changes
 ```
 
-Path-source marketplaces default to autoupdate OFF; the `added` arm does not carry the marker.
+Path-source marketplaces default to autoupdate OFF; the `added` arm does not carry the marker. No reload-hint: `marketplace add` changes a marketplace record, not a Pi-visible resource (SNM-33 / D-22-01).
 
 ### Success -- GitHub source
 
@@ -726,11 +719,9 @@ Path-source marketplaces default to autoupdate OFF; the `added` arm does not car
 
 ```text
 ● claude-plugins-official [user] (added)
-
-/reload to pick up changes
 ```
 
-GitHub-source marketplaces default to autoupdate ON; the persisted record stores `autoupdate: true`. The `added` state-change arm carries `(added)`; subsequent `marketplace list` surfaces will show the `<autoupdate>` marker on the SUB-BRANCH B list-surface header.
+GitHub-source marketplaces default to autoupdate ON; the persisted record stores `autoupdate: true`. The `added` state-change arm carries `(added)`; subsequent `marketplace list` surfaces will show the `<autoupdate>` marker on the SUB-BRANCH B list-surface header. No reload-hint: a marketplace record is not a Pi-visible resource (SNM-33 / D-22-01).
 
 ### Failure -- unreachable source
 
@@ -756,11 +747,12 @@ Single-marketplace command that cascades plugin unstaging.
 
 ```text
 ● local-mp [user] (removed)
+  ○ helper (uninstalled)
 
 /reload to pick up changes
 ```
 
-Marketplace status `removed` triggers the reload-hint per D-16-12.
+Clean (no-failure) removal carries one `PluginUninstalledMessage` row (`○` glyph, `(uninstalled)` token) per successfully unstaged plugin (D-22-02). The name-only row has no `v<version>` token because the `successfullyUnstaged` accumulator is a `string[]` of plugin names. The reload-hint fires because at least one plugin row carries the `uninstalled` state-change token (SNM-33 / D-22-01). An empty `marketplace remove` (no plugins were staged) renders the header alone with no trailer (G-MIL-02).
 
 ### Partial removal (some plugins unstaged, others failed)
 
@@ -791,11 +783,9 @@ Single marketplace, multi-plugin cascade. The marketplace header carries `(updat
 
 ```text
 ● local-mp [user] (updated)
-
-/reload to pick up changes
 ```
 
-Bare marketplace `updated` block (no plugin children; `plugins: []` renders as the bare header alone per D-15-08). Reload-hint fires because `mp.status === "updated"` is in the state-changing set per D-16-12.
+Bare marketplace `updated` block (no plugin children; `plugins: []` renders as the bare header alone per D-15-08). No reload-hint: with no plugin children there is no Pi-visible resource change, so a manifest-only refresh does not warrant a `/reload` (SNM-33 / D-22-01 / G-MIL-06).
 
 ### Mixed plugin outcomes
 
@@ -834,11 +824,9 @@ Marketplace-only flag flip. The orchestrator emits a single marketplace block wi
 
 ```text
 ● foo [user] (autoupdate enabled)
-
-/reload to pick up changes
 ```
 
-Fresh state change -- the marketplace record was mutated. `mp.status` = `"autoupdate enabled"`; severity = info (no severity arg); reload-hint emitted per D-16-12 state-change trigger ladder.
+Fresh state change -- the marketplace record was mutated. `mp.status` = `"autoupdate enabled"`; severity = info (no severity arg). No reload-hint: the autoupdate flag lives on the marketplace record, not on any Pi-visible resource, so a fresh flip does not warrant a `/reload` (SNM-33 / D-22-01 / D-22-03, superseding the reload-trigger half of D-17.1-02).
 
 ### Fresh disable
 
@@ -846,11 +834,9 @@ Fresh state change -- the marketplace record was mutated. `mp.status` = `"autoup
 
 ```text
 ● foo [user] (autoupdate disabled)
-
-/reload to pick up changes
 ```
 
-Fresh state change -- the marketplace record was mutated. `mp.status` = `"autoupdate disabled"`; severity = info (no severity arg); reload-hint emitted per D-16-12 state-change trigger ladder.
+Fresh state change -- the marketplace record was mutated. `mp.status` = `"autoupdate disabled"`; severity = info (no severity arg). No reload-hint: the autoupdate flag lives on the marketplace record, not on any Pi-visible resource, so a fresh flip does not warrant a `/reload` (SNM-33 / D-22-01 / D-22-03, superseding the reload-trigger half of D-17.1-02).
 
 ### Idempotent enable
 
@@ -882,7 +868,7 @@ Idempotent no-op -- the flag was already in the requested state. `mp.status` = `
 
 Marketplace persistence record lookup failed. `mp.status` = `"failed"`; severity = `"error"`; no reload-hint (failed state-change rolled back; nothing landed).
 
-The five blocks above span two ladders. The severity ladder runs fresh → info, skipped → warning, failed → error (per D-16-11 + Phase 17.1's mp-level skipped extension). The reload-hint ladder runs fresh-flip → emit, skipped → suppress, failed → suppress (per D-16-12 + D-17.1-05 -- only fresh state changes contribute to "/reload to pick up changes"; idempotent no-ops and rolled-back failures do not).
+The five blocks above span two ladders. The severity ladder runs fresh → info, skipped → warning, failed → error (per D-16-11 + Phase 17.1's mp-level skipped extension). The reload-hint ladder is uniform here: every autoupdate flag flip suppresses the trailer (per SNM-33 / D-22-01 / D-22-03). The autoupdate flag lives on a marketplace record, not on any Pi-visible resource, so neither a fresh flip nor an idempotent no-op nor a rolled-back failure contributes to "/reload to pick up changes" -- only a plugin row state change does.
 
 ______________________________________________________________________
 

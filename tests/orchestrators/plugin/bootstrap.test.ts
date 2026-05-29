@@ -141,22 +141,16 @@ test("bootstrap (clean state): adds marketplace + enables autoupdate; two notifi
     assert.equal(recorded.scope, "user");
     assert.equal(recorded.autoupdate, true);
 
-    // Exactly two notifications in order. Plan 18-02 (Rule 3 deviation):
-    // bootstrap composes `setMarketplaceAutoupdate` which now emits the
-    // V2 catalog `(autoupdate enabled)` shape with the
-    // `/reload to pick up changes` trailer per D-16-12 (the V1
-    // marker-as-outcome `<autoupdate>` shape is retired here per
-    // D-17.1-01 / D-18-04). `addMarketplace` was already on V2 from
-    // Plan 18-01; both inherited bytes now match the catalog UAT
-    // fixtures.
+    // Exactly two notifications in order. SNM-33 / D-22-01 / D-22-03:
+    // both are marketplace-status-only blocks (no plugin rows), so NEITHER
+    // carries the `/reload` trailer -- a marketplace record (and its
+    // autoupdate flag) is not a Pi-visible resource. `addMarketplace` and
+    // `setMarketplaceAutoupdate` both inherit the collapsed reload-hint rule.
     assert.equal(notifications.length, 2);
-    assert.equal(
-      notifications[0]?.message,
-      "● claude-plugins-official [user] (added)\n\n/reload to pick up changes",
-    );
+    assert.equal(notifications[0]?.message, "● claude-plugins-official [user] (added)");
     assert.equal(
       notifications[1]?.message,
-      "● claude-plugins-official [user] (autoupdate enabled)\n\n/reload to pick up changes",
+      "● claude-plugins-official [user] (autoupdate enabled)",
     );
     // Clone happened exactly once on the clean path.
     assert.equal(gitState.cloneCalls.length, 1);
@@ -230,11 +224,11 @@ test("bootstrap (half-configured: autoupdate off): swallows duplicate-name, flip
     const after = await loadState(userLocations.extensionRoot);
     assert.equal(after.marketplaces["claude-plugins-official"]?.autoupdate, true);
     assert.equal(notifications.length, 1);
-    // Plan 18-02: V2 catalog form -- `(autoupdate enabled)` token plus
-    // reload-hint trailer per D-16-12.
+    // SNM-33 / D-22-03: `(autoupdate enabled)` header-only block, NO
+    // `/reload` trailer (the autoupdate flag is not a Pi-visible resource).
     assert.equal(
       notifications[0]?.message,
-      "● claude-plugins-official [user] (autoupdate enabled)\n\n/reload to pick up changes",
+      "● claude-plugins-official [user] (autoupdate enabled)",
     );
     // No `(added)` row in this run.
     assert.equal(

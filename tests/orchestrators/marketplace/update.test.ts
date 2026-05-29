@@ -165,13 +165,12 @@ test("MU-4 + D-14: github source refreshes via fetch+forceUpdateRef+checkout in 
     const first = notifications[0];
     assert.ok(first !== undefined);
     assert.notEqual(first.severity, "error");
-    // Plan 18-05 / RESEARCH Risks #4 silent contract change: V1
-    // autoupdate-OFF manifest-refresh suppressed the reload-hint; V2
-    // emits it because `mp.status === "updated"` is state-changing per
-    // D-16-12. Catalog UAT fixture `autoupdate-off-manifest-refresh`
-    // at docs/output-catalog.md:801-806.
+    // SNM-33 / D-22-01 (G-MIL-06): an autoupdate-OFF manifest refresh has no
+    // plugin children, so there is no Pi-visible resource change and NO
+    // `/reload` trailer. Catalog UAT fixture `autoupdate-off-manifest-refresh`
+    // in docs/output-catalog.md.
     assert.equal(first.severity, undefined);
-    assert.equal(first.message, "● official [project] (updated)\n\n/reload to pick up changes");
+    assert.equal(first.message, "● official [project] (updated)");
   });
 });
 
@@ -607,7 +606,7 @@ test("MU-9 + MSG-RH-1: success emits canonical reload hint trailer for updated p
   });
 });
 
-test('RH-1 + V2 D-16-12: cascade all-unchanged still emits reload-hint (mp.status "updated" is state-changing)', async () => {
+test("RH-1 + SNM-33 / D-22-01: cascade all-unchanged emits NO reload-hint (no plugin state-change row; G-MIL-06)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     await seedGithubMarketplace({
       cwd,
@@ -638,17 +637,14 @@ test('RH-1 + V2 D-16-12: cascade all-unchanged still emits reload-hint (mp.statu
       gitOps,
       pluginUpdate,
     });
-    // Plan 18-05 / V2 D-16-12 contract: even when every plugin in the
-    // cascade is `unchanged` (renders as `skipped {up-to-date}`), the
-    // marketplace itself successfully refreshed -- `mp.status === "updated"`
-    // is in the V2 reload-hint trigger set per shared/notify.ts:1027-1052
-    // (shouldEmitReloadHint). V1 suppressed the trailer in this case
-    // (V1 reloadHint() needed at least one updated plugin name); V2's
-    // mp-level trigger ladder is the source of truth. Test renamed
-    // accordingly; assertion flips from `false` to substring presence.
+    // SNM-33 / D-22-01 (G-MIL-06): when every plugin in the cascade is
+    // `unchanged` (renders as `skipped {up-to-date}`), no plugin row carries
+    // a state-change token. The marketplace record refreshed, but a
+    // marketplace record is not a Pi-visible resource, so the trailer is
+    // suppressed -- shouldEmitReloadHint is plugin-row-driven only.
     const first = notifications[0];
     assert.ok(first !== undefined);
-    assert.match(first.message, /\/reload to pick up changes$/);
+    assert.doesNotMatch(first.message, /\/reload to pick up changes/);
   });
 });
 

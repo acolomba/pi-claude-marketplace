@@ -79,7 +79,7 @@ function makeMarketplaceRecord(
   };
 }
 
-test("MAU-1 / D-18-05: enable=true on a single marketplace flips false->true and emits V2 `(autoupdate enabled)` + reload-hint trailer", async () => {
+test("MAU-1 / D-18-05: enable=true on a single marketplace flips false->true and emits V2 `(autoupdate enabled)` with NO reload-hint trailer (SNM-33 / D-22-03)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
@@ -94,16 +94,15 @@ test("MAU-1 / D-18-05: enable=true on a single marketplace flips false->true and
     const after = await loadState(locations.extensionRoot);
     assert.equal(after.marketplaces["mp"]!.autoupdate, true);
     assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      "● mp [project] (autoupdate enabled)\n\n/reload to pick up changes",
-    );
+    // SNM-33 / D-22-03: a fresh autoupdate flip mutates a marketplace record,
+    // not a Pi-visible resource, so NO `/reload` trailer.
+    assert.equal(notifications[0]!.message, "● mp [project] (autoupdate enabled)");
     // D-18-05 severity ladder: fresh autoupdate enable -> info (no 2nd arg).
     assert.equal(notifications[0]!.severity, undefined);
   });
 });
 
-test("MAU-1 / D-18-05: enable=false flips true->false and emits V2 `(autoupdate disabled)` + reload-hint trailer", async () => {
+test("MAU-1 / D-18-05: enable=false flips true->false and emits V2 `(autoupdate disabled)` with NO reload-hint trailer (SNM-33 / D-22-03)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
@@ -115,10 +114,8 @@ test("MAU-1 / D-18-05: enable=false flips true->false and emits V2 `(autoupdate 
     await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: false, scope: "project", cwd });
     const after = await loadState(locations.extensionRoot);
     assert.equal(after.marketplaces["mp"]!.autoupdate, false);
-    assert.equal(
-      notifications[0]!.message,
-      "● mp [project] (autoupdate disabled)\n\n/reload to pick up changes",
-    );
+    // SNM-33 / D-22-03: fresh autoupdate flip -> NO `/reload` trailer.
+    assert.equal(notifications[0]!.message, "● mp [project] (autoupdate disabled)");
     // D-18-05 severity ladder: fresh autoupdate disable -> info (no 2nd arg).
     assert.equal(notifications[0]!.severity, undefined);
   });
@@ -171,10 +168,8 @@ test("MAU-4: missing autoupdate field treated as false; enable=true flips it to 
     await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: true, scope: "project", cwd });
     const after = await loadState(locations.extensionRoot);
     assert.equal(after.marketplaces["mp"]!.autoupdate, true);
-    assert.equal(
-      notifications[0]!.message,
-      "● mp [project] (autoupdate enabled)\n\n/reload to pick up changes",
-    );
+    // SNM-33 / D-22-03: fresh autoupdate flip -> NO `/reload` trailer.
+    assert.equal(notifications[0]!.message, "● mp [project] (autoupdate enabled)");
     // D-18-05 severity ladder: fresh enable -> info.
     assert.equal(notifications[0]!.severity, undefined);
   });
@@ -244,11 +239,11 @@ test("MAU-2 / CMC-33 (V2): bare form flips every marketplace in scope; one notif
     // (warning > info) per the notify()-computed severity ladder
     // (D-16-11). Since one row is skipped (warning), overall = warning.
     assert.equal(notifications[0]!.severity, "warning");
-    // /reload to pick up changes fires because at least one row is
-    // state-changing (the to-flip row hit `autoupdate enabled`).
+    // SNM-33 / D-22-03: neither row carries a plugin state-change token
+    // (autoupdate flips mutate marketplace records only), so NO trailer.
     assert.ok(
-      message.includes("/reload to pick up changes"),
-      `expected reload-hint trailer, got: ${message}`,
+      !message.includes("/reload to pick up changes"),
+      `expected NO reload-hint trailer, got: ${message}`,
     );
   });
 });
@@ -275,10 +270,8 @@ test("Single-name flip across BOTH scopes when --scope omitted: flip in user sco
     await setMarketplaceAutoupdate({ ctx, pi, name: "only", enable: true, cwd });
     // user-scope flip succeeded; project-scope MarketplaceNotFoundError was swallowed gracefully.
     assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      "● only [user] (autoupdate enabled)\n\n/reload to pick up changes",
-    );
+    // SNM-33 / D-22-03: fresh autoupdate flip -> NO `/reload` trailer.
+    assert.equal(notifications[0]!.message, "● only [user] (autoupdate enabled)");
     assert.notEqual(notifications[0]!.severity, "error");
     // D-18-05: fresh enable -> info severity.
     assert.equal(notifications[0]!.severity, undefined);

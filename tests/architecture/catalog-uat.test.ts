@@ -1155,7 +1155,14 @@ const FIXTURES: FixtureMap = {
     clean: {
       pi: piWithBothLoaded(),
       message: {
-        marketplaces: [{ name: "local-mp", scope: "user", status: "removed", plugins: [] }],
+        marketplaces: [
+          {
+            name: "local-mp",
+            scope: "user",
+            status: "removed",
+            plugins: [{ status: "uninstalled", name: "helper" }],
+          },
+        ],
       },
     },
 

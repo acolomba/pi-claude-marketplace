@@ -426,10 +426,13 @@ test("notify renders skipped plugin with reasons (warning severity)", () => {
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  // mp.status === "added" triggers reload-hint per D-16-12. p.status === "skipped"
-  // routes severity to "warning" per D-16-11.
+  // The marketplace-status arm is deleted per SNM-33 / D-22-01, so a
+  // `(skipped)` row under an `(added)` marketplace emits NO trailer
+  // (`skipped` is not one of installed/updated/reinstalled/uninstalled).
+  // p.status === "skipped" still routes severity to "warning" per D-16-11
+  // (computeSeverity is independent of shouldEmitReloadHint).
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `● demo [user] (added)\n  ⊘ commit-commands v1.0.0 (skipped) {up-to-date}\n\n/reload to pick up changes`,
+    `● demo [user] (added)\n  ⊘ commit-commands v1.0.0 (skipped) {up-to-date}`,
     "warning",
   ]);
 });
@@ -472,7 +475,7 @@ test("notify renders failed plugin with reasons only -- no cause, no rollback (e
 // case (mp.status undefined, details defined).
 // ===========================================================================
 
-test("notify renders added marketplace header alone (empty plugins -> header-only body + reload-hint)", () => {
+test("notify renders added marketplace header alone (empty plugins -> header-only body, NO reload-hint per SNM-33/D-22-01)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -480,12 +483,11 @@ test("notify renders added marketplace header alone (empty plugins -> header-onl
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `● demo [user] (added)\n\n/reload to pick up changes`,
-  ]);
+  // No plugin rows -> no Pi-visible state change -> no trailer (D-22-01).
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [`● demo [user] (added)`]);
 });
 
-test("notify renders removed marketplace header alone (empty plugins + reload-hint)", () => {
+test("notify renders removed marketplace header alone (empty plugins -> header-only, NO reload-hint per SNM-33/D-22-01, G-MIL-02)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -493,12 +495,11 @@ test("notify renders removed marketplace header alone (empty plugins + reload-hi
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `● demo [user] (removed)\n\n/reload to pick up changes`,
-  ]);
+  // Empty remove (no plugins unstaged) -> no trailer (G-MIL-02 / D-22-01).
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [`● demo [user] (removed)`]);
 });
 
-test("notify renders updated marketplace header alone (empty plugins + reload-hint)", () => {
+test("notify renders updated marketplace header alone (empty plugins -> header-only, NO reload-hint per SNM-33/D-22-01, G-MIL-06)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -506,9 +507,9 @@ test("notify renders updated marketplace header alone (empty plugins + reload-hi
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `● demo [user] (updated)\n\n/reload to pick up changes`,
-  ]);
+  // Empty `plugins:[]` update (manifest refresh, no plugin children) -> no
+  // trailer (G-MIL-06 / D-22-01).
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [`● demo [user] (updated)`]);
 });
 
 test("notify renders failed marketplace header alone (empty plugins -> NO reload-hint per D-16-12; no severity because no failed plugin)", () => {
@@ -535,7 +536,7 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
 // fires on mp-level status even when a healthy plugin row coexists.
 // ===========================================================================
 
-test("notify renders autoupdate enabled marketplace header alone (info severity + reload-hint per D-17.1-05)", () => {
+test("notify renders autoupdate enabled marketplace header alone (info severity, NO reload-hint per SNM-33/D-22-01/D-22-03)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -543,14 +544,13 @@ test("notify renders autoupdate enabled marketplace header alone (info severity 
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  // Per D-17.1-03 byte form: fresh state-flip triggers reload-hint; no
-  // severity arg (info routing).
-  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `● foo [user] (autoupdate enabled)\n\n/reload to pick up changes`,
-  ]);
+  // D-22-03 supersedes the reload-trigger half of D-17.1-02: a fresh
+  // autoupdate flip mutates a marketplace record, not a Pi-visible
+  // resource, so NO trailer; no severity arg (info routing).
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [`● foo [user] (autoupdate enabled)`]);
 });
 
-test("notify renders autoupdate disabled marketplace header alone (info severity + reload-hint per D-17.1-05)", () => {
+test("notify renders autoupdate disabled marketplace header alone (info severity, NO reload-hint per SNM-33/D-22-01/D-22-03)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -558,11 +558,10 @@ test("notify renders autoupdate disabled marketplace header alone (info severity
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  // Per D-17.1-03 byte form: fresh state-flip triggers reload-hint; no
-  // severity arg (info routing).
-  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `● foo [user] (autoupdate disabled)\n\n/reload to pick up changes`,
-  ]);
+  // D-22-03 supersedes the reload-trigger half of D-17.1-02: a fresh
+  // autoupdate flip mutates a marketplace record, not a Pi-visible
+  // resource, so NO trailer; no severity arg (info routing).
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [`● foo [user] (autoupdate disabled)`]);
 });
 
 test("notify renders skipped marketplace header with reasons brace (warning severity, NO reload-hint per D-17.1-05)", () => {
@@ -692,7 +691,7 @@ test("notify renders SUB-BRANCH B list-surface marketplace header with autoupdat
 // plugins: []" invariant alongside its reload-hint trigger semantics.
 // ===========================================================================
 
-test("notify renders header-only block on empty plugins under added marketplace (reload-hint APPENDED, state-change trigger)", () => {
+test("notify renders header-only block on empty plugins under added marketplace (NO reload-hint per SNM-33/D-22-01)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -700,10 +699,8 @@ test("notify renders header-only block on empty plugins under added marketplace 
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  // Header-only block; reload-hint appended at end (state-change trigger).
-  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `● demo [user] (added)\n\n/reload to pick up changes`,
-  ]);
+  // Header-only block; no plugin rows -> no trailer (D-22-01).
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [`● demo [user] (added)`]);
 });
 
 // ===========================================================================
@@ -782,6 +779,114 @@ test("UAT G-21-01: cascade-shaped message with status: 'installed' plugin row co
   assert.ok(
     body.includes("/reload to pick up changes"),
     `expected body to include reload-hint trailer, got: ${body}`,
+  );
+});
+
+// ===========================================================================
+// 16c-16g: D-22-04 reload-trailer discipline (SNM-33). Three NEGATIVE
+// regressions lock the G-MIL-01/02/06 gaps (a marketplace-status-only
+// operation with no plugin state-change row emits NO trailer); two POSITIVE
+// guards (SC#4) prove the trailer STILL fires for every true state-change
+// path. Mirrors the G-21-01 16a/16b template.
+// ===========================================================================
+
+test("D-22-04 NEGATIVE: empty `marketplace add` ({status:'added', plugins:[]}) emits NO /reload trailer (SNM-33 / G-MIL-01)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [{ name: "local-mp", scope: "user", status: "added", plugins: [] }],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.ok(
+    !body.includes("/reload to pick up changes"),
+    `expected empty add to NOT include reload-hint trailer, got: ${body}`,
+  );
+});
+
+test("D-22-04 NEGATIVE: empty `marketplace remove` ({status:'removed', plugins:[]}) emits NO /reload trailer (SNM-33 / G-MIL-02)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [{ name: "local-mp", scope: "user", status: "removed", plugins: [] }],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.ok(
+    !body.includes("/reload to pick up changes"),
+    `expected empty remove to NOT include reload-hint trailer, got: ${body}`,
+  );
+});
+
+test("D-22-04 NEGATIVE: no-op `marketplace update` (all plugin rows skipped) emits NO /reload trailer (SNM-33 / G-MIL-06)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "local-mp",
+        scope: "user",
+        status: "updated",
+        plugins: [{ status: "skipped", name: "alpha", reasons: ["up-to-date"] }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  // No plugin row carries a state-change token (all `skipped`), so the
+  // trailer is suppressed even though mp.status === "updated".
+  assert.ok(
+    !body.includes("/reload to pick up changes"),
+    `expected all-skipped update to NOT include reload-hint trailer, got: ${body}`,
+  );
+});
+
+test("D-22-04 POSITIVE: `marketplace remove` that uninstalled >=1 plugin emits the /reload trailer (SC#4)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "local-mp",
+        scope: "user",
+        status: "removed",
+        plugins: [{ status: "uninstalled", name: "alpha" }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.ok(
+    body.includes("/reload to pick up changes"),
+    `expected non-empty remove to include reload-hint trailer, got: ${body}`,
+  );
+});
+
+test("D-22-04 POSITIVE: `marketplace update` with >=1 changed plugin emits the /reload trailer (SC#4)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "local-mp",
+        scope: "user",
+        status: "updated",
+        plugins: [
+          { status: "updated", name: "alpha", from: "1.0.0", to: "2.0.0", dependencies: [] },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.ok(
+    body.includes("/reload to pick up changes"),
+    `expected update with a changed plugin to include reload-hint trailer, got: ${body}`,
   );
 });
 
@@ -1230,10 +1335,12 @@ test("notify emits [project] bracket on failed plugin row when p.scope !== mp.sc
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // mp.status === "added" (fresh-add cascade) + 1 failed plugin -> "error"
-  // severity. A failed PLUGIN does not suppress the reload-hint (only a
-  // failed MARKETPLACE does, per D-16-12), so the trailer is appended.
+  // severity. Under SNM-33 / D-22-01 the only plugin row is `failed`, which
+  // is NOT one of the four state-change tokens, and the marketplace-status
+  // arm is gone -- so NO reload-hint trailer is appended. (Severity routing
+  // is independent and still returns "error" for the failed plugin.)
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `● demo [user] (added)\n  ⊘ alpha [project] v1.0.0 (failed) {unsupported source}\n\n/reload to pick up changes`,
+    `● demo [user] (added)\n  ⊘ alpha [project] v1.0.0 (failed) {unsupported source}`,
     "error",
   ]);
 
@@ -1373,10 +1480,12 @@ test("notify emits per-plugin cause-chain inline below each failed row (multi-ca
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // Each plugin's cause-chain renders inline below its OWN row at 4-space
-  // indent (not aggregated under a single trailer). mp.status === "added"
-  // triggers reload-hint per D-16-12; severity is "error" per D-16-11.
+  // indent (not aggregated under a single trailer). Under SNM-33 / D-22-01
+  // every plugin row is `failed` (no state-change token) and the
+  // marketplace-status arm is gone, so NO reload-hint trailer; severity is
+  // "error" per D-16-11 (independent of the reload-hint ladder).
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `● demo [user] (added)\n  ⊘ alpha v1.0.0 (failed) {permission denied}\n    cause: alpha-root\n  ⊘ beta v2.0.0 (failed) {network unreachable}\n    cause: beta-root\n\n/reload to pick up changes`,
+    `● demo [user] (added)\n  ⊘ alpha v1.0.0 (failed) {permission denied}\n    cause: alpha-root\n  ⊘ beta v2.0.0 (failed) {network unreachable}\n    cause: beta-root`,
     "error",
   ]);
 });

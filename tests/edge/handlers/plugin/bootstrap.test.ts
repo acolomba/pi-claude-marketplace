@@ -105,18 +105,14 @@ test("bootstrap handler (no args, clean state): dispatches to orchestrator and e
 
     // Both composed orchestrators emitted their messages in order.
     assert.equal(notifications.length, 2);
-    // Plan 18-02 (Rule 3 deviation): bootstrap composes
-    // `setMarketplaceAutoupdate` which now emits the V2 catalog
-    // `(autoupdate enabled)` shape with the reload-hint trailer per
-    // D-16-12. `addMarketplace` was already migrated to V2 in Plan
-    // 18-01; both inherited bytes now match the catalog UAT fixtures.
-    assert.equal(
-      notifications[0]?.message,
-      "● claude-plugins-official [user] (added)\n\n/reload to pick up changes",
-    );
+    // SNM-33 / D-22-01 / D-22-03: both composed orchestrators emit
+    // marketplace-status-only blocks (no plugin rows), so NEITHER carries
+    // the `/reload` trailer -- a marketplace record and its autoupdate flag
+    // are not Pi-visible resources.
+    assert.equal(notifications[0]?.message, "● claude-plugins-official [user] (added)");
     assert.equal(
       notifications[1]?.message,
-      "● claude-plugins-official [user] (autoupdate enabled)\n\n/reload to pick up changes",
+      "● claude-plugins-official [user] (autoupdate enabled)",
     );
 
     // Clone happened against the canonical Anthropic repo URL.
@@ -143,14 +139,11 @@ test("bootstrap handler (whitespace-only args): treated identically to empty arg
     await handler("   ", ctx);
 
     assert.equal(notifications.length, 2);
-    // Plan 18-02 (Rule 3 deviation): see preceding test for V2 byte rationale.
-    assert.equal(
-      notifications[0]?.message,
-      "● claude-plugins-official [user] (added)\n\n/reload to pick up changes",
-    );
+    // SNM-33 / D-22-01 / D-22-03: see preceding test for the no-trailer rationale.
+    assert.equal(notifications[0]?.message, "● claude-plugins-official [user] (added)");
     assert.equal(
       notifications[1]?.message,
-      "● claude-plugins-official [user] (autoupdate enabled)\n\n/reload to pick up changes",
+      "● claude-plugins-official [user] (autoupdate enabled)",
     );
   });
 });
