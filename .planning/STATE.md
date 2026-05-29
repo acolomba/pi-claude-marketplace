@@ -47,21 +47,21 @@ Last activity: 2026-05-29
 | 05    | 10    | -     | -        |
 | 07    | 6     | -     | -        |
 | 08    | 4     | -     | -        |
-| 12 | 4 | - | - |
-| 13 | 10 | - | - |
-| 14.1 | 2 | - | - |
-| 14 | 6 | - | - |
-| 14.2 | 5 | - | - |
-| 15 | 3 | - | - |
-| 16 | 6 | - | - |
-| 17.2 | 4 | - | - |
-| 18 | 7 | - | - |
-| 19 | 6 | - | - |
-| 20 | 6 | - | - |
-| 21 | 4 | - | - |
-| 22 | 1 | - | - |
-| 23 | 2 | - | - |
-| 24 | 1 | - | - |
+| 12    | 4     | -     | -        |
+| 13    | 10    | -     | -        |
+| 14.1  | 2     | -     | -        |
+| 14    | 6     | -     | -        |
+| 14.2  | 5     | -     | -        |
+| 15    | 3     | -     | -        |
+| 16    | 6     | -     | -        |
+| 17.2  | 4     | -     | -        |
+| 18    | 7     | -     | -        |
+| 19    | 6     | -     | -        |
+| 20    | 6     | -     | -        |
+| 21    | 4     | -     | -        |
+| 22    | 1     | -     | -        |
+| 23    | 2     | -     | -        |
+| 24    | 1     | -     | -        |
 
 **Recent Trend:**
 
@@ -93,10 +93,10 @@ Last activity: 2026-05-29
 
 - Phase 14.1 inserted after Phase 14: Close gap: CMC-13 -- propagate declaresAgents/Mcp through import cascade rows (URGENT)
 - Phase 14.2 inserted after Phase 14: Address tech debt: CR-01 + retroactive Phase 12 / 14.1 gates (URGENT)
-- v1.4 roadmap (2026-05-25): 7 phases (15-21) created by `gsd-roadmapper`. All 32 SNM-* requirements mapped: SNM-01..11 + SNM-21 -> Phase 15; SNM-12..18 + SNM-30 -> Phase 16; SNM-19, SNM-20, SNM-31 -> Phase 17; Phases 18 and 19 are execution-only migration waves (marketplace/* and plugin/* families) with no requirement closure; SNM-23 -> Phase 20 (edge family wave + UsageError migration); SNM-22, SNM-24..29, SNM-32 -> Phase 21 (final teardown + GREEN gate). SNM-22 maps to Phase 21 because its "wrappers deleted" half is the closure gate.
+- v1.4 roadmap (2026-05-25): 7 phases (15-21) created by `gsd-roadmapper`. All 32 SNM-_ requirements mapped: SNM-01..11 + SNM-21 -> Phase 15; SNM-12..18 + SNM-30 -> Phase 16; SNM-19, SNM-20, SNM-31 -> Phase 17; Phases 18 and 19 are execution-only migration waves (marketplace/_ and plugin/\* families) with no requirement closure; SNM-23 -> Phase 20 (edge family wave + UsageError migration); SNM-22, SNM-24..29, SNM-32 -> Phase 21 (final teardown + GREEN gate). SNM-22 maps to Phase 21 because its "wrappers deleted" half is the closure gate.
 - Phase 17.1 inserted after Phase 17: V2 Grammar Amendment: Autoupdate Surface (URGENT)
 - Phase 17.2 inserted after Phase 17: renderScopeBracket orphan-fold contract fix (URGENT)
-- v1.4.1 roadmap (2026-05-28): 5 phases (22-26) created by `gsd-roadmapper`. All 8 SNM-* requirements (SNM-33..SNM-40) mapped: SNM-33 -> Phase 22 (Reload-hint Discipline Family -- 3-gap chokepoint fix at shouldEmitReloadHint); SNM-34 + SNM-35 -> Phase 23 (Version Display Bundle -- tier-2 plugin.json fallback + v#<7hex> renderer transform; serialized within phase per shared/notify.ts convergence constraint); SNM-36 -> Phase 24 (Grammar Consistency -- lspServers REASONS rename + 13 call-site propagation); SNM-37 + SNM-38 + SNM-39 -> Phase 25 (Runtime Publish & Verification -- SNM-37 gates SNM-38/SNM-39; G-MIL-03 indent + G-MIL-07 completion reproduction-or-refutation against v1.4 runtime); SNM-40 -> Phase 26 (GREEN Gate Close). v1.4 phase dirs (15-21) intentionally left under .planning/phases/; v1.4.1 continues phase numbering at 22+ rather than archiving.
+- v1.4.1 roadmap (2026-05-28): 5 phases (22-26) created by `gsd-roadmapper`. All 8 SNM-\* requirements (SNM-33..SNM-40) mapped: SNM-33 -> Phase 22 (Reload-hint Discipline Family -- 3-gap chokepoint fix at shouldEmitReloadHint); SNM-34 + SNM-35 -> Phase 23 (Version Display Bundle -- tier-2 plugin.json fallback + v#<7hex> renderer transform; serialized within phase per shared/notify.ts convergence constraint); SNM-36 -> Phase 24 (Grammar Consistency -- lspServers REASONS rename + 13 call-site propagation); SNM-37 + SNM-38 + SNM-39 -> Phase 25 (Runtime Publish & Verification -- SNM-37 gates SNM-38/SNM-39; G-MIL-03 indent + G-MIL-07 completion reproduction-or-refutation against v1.4 runtime); SNM-40 -> Phase 26 (GREEN Gate Close). v1.4 phase dirs (15-21) intentionally left under .planning/phases/; v1.4.1 continues phase numbering at 22+ rather than archiving.
 
 ### Decisions
 
@@ -137,6 +137,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Roadmap v1.4.1]: 5-phase split (22-26): reload-hint discipline -> version display bundle -> grammar consistency -> runtime publish & verification -> GREEN gate close. Phase boundaries respect the shared/notify.ts convergence (SNM-33 / SNM-35 / SNM-36 all touch the same file) by serializing them across phases rather than parallel waves. Phase 25 is operational + investigation: SNM-37 (publish/npm-link) is an operator-action checkpoint that gates SNM-38 (G-MIL-03 indent reproduction) and SNM-39 (G-MIL-07 completion reproduction); SNM-38/39 can run in parallel after SNM-37 lands. State migration for already-installed hash-versioned plugins is out of scope (REQUIREMENTS Out of Scope) -- marketplace update will naturally surface those as upgradable once SNM-34 ships.
 - [Phase 25]: SNM-37 gate satisfied via scripts/pi.sh source-load (no npm publish/link, D-25-01) + a tests/shared/snm37-behavioral-smoke.test.ts byte-form smoke proving v1.4 identity at the pre-tui notify boundary (D-25-04; stronger than pi --version, moot under -e source-load). Real-publish validation deferred (D-25-06). SNM-37 text + ROADMAP SC#1 amended in lockstep (D-25-03). Gates SNM-38 (25-02) + SNM-39 (25-03). -- Plan 25-01.
 - [Phase ?]: [Phase 25]: SNM-38 (G-MIL-03 indent ladder) REFUTED by pre-tui byte evidence (D-25-09): notify() emits the catalog-conformant 0/2/4 ladder at ctx.ui.notify (captured indents [0,2,2,2,2,4,0,0,2]); the observed 1/3 visual is a markdown/tui display-layer artifact, not a renderer deviation. Recorded as a docs/output-catalog.md Indentation-discipline clarification + a tests/shared/snm38-indent-ladder.test.ts readability lock (on top of the catalog-uat byte-equality gate). Anchored on notify.ts constants, NOT the UAT 2/4 truth-line misquote. -- Plan 25-02.
+- [Phase 25]: SNM-39 (G-MIL-07 tab completion) DEFER-WITH-FINDING (D-25-10): our provider is correct (TC-6 `update @` -> `["@mp-a","@mp-b"]` GREEN; cause (a) eliminated by v0.2.0 source-load, cause (c) ruled out). Root cause is cause (b) -- host-side `@`-precedence in the GLOBAL `@earendil-works/pi-tui` 0.76.0 that scripts/pi.sh execs (`@`-logic byte-identical to local 0.74.2): `CombinedAutocompleteProvider.getSuggestions:188` checks `extractAtPrefix:191`/`:331` against `PATH_DELIMITERS:6` (no `@`) and routes any `@`-leading token to file-mention completion BEFORE the slash branch `:205`, so our `getArgumentCompletions` is never reached for bare `update @`. LIVE scripts/pi.sh trigger (D-25-08) showed FILE PATHS (not `@<mp>` candidates) -> CONFIRMS the interception (D-25-05 real-home spot-check not triggered). pi-tui-external; defer, do NOT contort the provider (would degrade bare-`@<mp>` UX without fixing the host). Recorded in UAT + a finding comment above TC-6 (provider.test.ts:793). -- Plan 25-03.
 
 ### Pending Todos
 
@@ -144,42 +145,43 @@ None yet.
 
 ### Blockers/Concerns
 
-- Phase 25 SNM-37 publish step requires an operator action (publish to npm or npm-link the source tree into the user's Pi runtime). SNM-38 and SNM-39 are gated on this; planning Phase 25 must surface a clear hand-off checkpoint between SNM-37 completion and SNM-38/39 reproduction work.
+- RESOLVED (Phase 25, plans 25-01..25-03): the SNM-37 operator-gated hand-off blocker is closed. The gate was satisfied via `scripts/pi.sh` source-load (no npm publish/link, D-25-01) -- the runtime source-loads v0.2.0 -- so SNM-38 (25-02) and SNM-39 (25-03) reproduced/refuted against the v1.4 runtime without an operator publish. Original concern: SNM-37 publish step required an operator action (publish to npm or npm-link the source tree into the user's Pi runtime), gating SNM-38/SNM-39; the hand-off checkpoint was surfaced and satisfied. Real-publish validation remains deferred (D-25-06).
 - Historical `write-file-atomic@^8` engine concern is resolved on main by v0.1.2: package engines now allow `>=20.19.0` and the dependency is `write-file-atomic@^7`.
 
 ### Quick Tasks Completed
 
-| #          | Description                                                                                                      | Date       | Commit  | Status   | Directory                                                                 |
-| ---------- | ---------------------------------------------------------------------------------------------------------------- | ---------- | ------- | -------- | ------------------------------------------------------------------------- |
-| 260515-bkt | lets update the specs and the implementation to listen to PI_CODING_AGENT_DIR if set instead of hardcoding ~/.pi | 2026-05-14 | 0257577 | Verified | [260515-bkt-pi-coding-agent-dir](./quick/260515-bkt-pi-coding-agent-dir/) |
-| 260515-tqx | fix these gaps | 2026-05-15 | 5d8fd1d | Verified | [260515-tqx-fix-these-gaps](./quick/260515-tqx-fix-these-gaps/) |
-| 260522-c80 | patch PROJECT.md to close requirements-section gaps surfaced during Phase 12 discuss-phase | 2026-05-22 | 39f6611 |  | [260522-c80-patch-project-md-to-close-requirements-s](./quick/260522-c80-patch-project-md-to-close-requirements-s/) |
-| 260525-aub | Replace free-text Error.message parsing in install/update/remove orchestrators with typed PluginShapeError dispatch (eliminates SonarCloud S5852 ReDoS hotspot; closes v1.3 pattern hole) | 2026-05-25 | da04709 |  | [260525-aub-replace-free-text-error-message-parsing-](./quick/260525-aub-replace-free-text-error-message-parsing-/) |
-| 260525-cjr | Apply PR #22 review fixes: 5 comment fixes, 2 silent-failure catches, declaresAgents/Mcp required, 4 narrowReason migrations, drift architecture test, plus 10 polish items | 2026-05-25 | c79b6bc |  | [260525-cjr-apply-pr-22-review-fixes-5-comment-fixes](./quick/260525-cjr-apply-pr-22-review-fixes-5-comment-fixes/) |
+| #          | Description                                                                                                                                                                               | Date       | Commit  | Status   | Directory                                                                                                           |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------- |
+| 260515-bkt | lets update the specs and the implementation to listen to PI_CODING_AGENT_DIR if set instead of hardcoding ~/.pi                                                                          | 2026-05-14 | 0257577 | Verified | [260515-bkt-pi-coding-agent-dir](./quick/260515-bkt-pi-coding-agent-dir/)                                           |
+| 260515-tqx | fix these gaps                                                                                                                                                                            | 2026-05-15 | 5d8fd1d | Verified | [260515-tqx-fix-these-gaps](./quick/260515-tqx-fix-these-gaps/)                                                     |
+| 260522-c80 | patch PROJECT.md to close requirements-section gaps surfaced during Phase 12 discuss-phase                                                                                                | 2026-05-22 | 39f6611 |          | [260522-c80-patch-project-md-to-close-requirements-s](./quick/260522-c80-patch-project-md-to-close-requirements-s/) |
+| 260525-aub | Replace free-text Error.message parsing in install/update/remove orchestrators with typed PluginShapeError dispatch (eliminates SonarCloud S5852 ReDoS hotspot; closes v1.3 pattern hole) | 2026-05-25 | da04709 |          | [260525-aub-replace-free-text-error-message-parsing-](./quick/260525-aub-replace-free-text-error-message-parsing-/) |
+| 260525-cjr | Apply PR #22 review fixes: 5 comment fixes, 2 silent-failure catches, declaresAgents/Mcp required, 4 narrowReason migrations, drift architecture test, plus 10 polish items               | 2026-05-25 | c79b6bc |          | [260525-cjr-apply-pr-22-review-fixes-5-comment-fixes](./quick/260525-cjr-apply-pr-22-review-fixes-5-comment-fixes/) |
 
 ## Deferred Items
 
 Items acknowledged and deferred at v1.3 milestone close on 2026-05-25:
 
-| Category    | Item                                                  | Status                       | Deferred At |
-| ----------- | ----------------------------------------------------- | ---------------------------- | ----------- |
-| quick_task  | 260515-bkt-pi-coding-agent-dir                        | complete (frontmatter stale) | 2026-05-25  |
-| quick_task  | 260515-cmp-scope-rules-implementation                 | complete (frontmatter stale) | 2026-05-25  |
-| quick_task  | 260515-tqx-fix-these-gaps                             | complete (frontmatter stale) | 2026-05-25  |
-| quick_task  | 260515-wpe-scope-rules                                | complete (frontmatter stale) | 2026-05-25  |
-| quick_task  | 260516-02r-implement-claude-plugin-bootstrap-comman   | complete (frontmatter stale) | 2026-05-25  |
-| quick_task  | 260516-08j-modify-agent-mapping-logic-to-omit-model   | complete (frontmatter stale) | 2026-05-25  |
-| quick_task  | 260522-c80-patch-project-md-to-close-requirements-s   | complete (frontmatter stale) | 2026-05-25  |
+| Category   | Item                                                | Status                       | Deferred At |
+| ---------- | --------------------------------------------------- | ---------------------------- | ----------- |
+| quick_task | 260515-bkt-pi-coding-agent-dir                      | complete (frontmatter stale) | 2026-05-25  |
+| quick_task | 260515-cmp-scope-rules-implementation               | complete (frontmatter stale) | 2026-05-25  |
+| quick_task | 260515-tqx-fix-these-gaps                           | complete (frontmatter stale) | 2026-05-25  |
+| quick_task | 260515-wpe-scope-rules                              | complete (frontmatter stale) | 2026-05-25  |
+| quick_task | 260516-02r-implement-claude-plugin-bootstrap-comman | complete (frontmatter stale) | 2026-05-25  |
+| quick_task | 260516-08j-modify-agent-mapping-logic-to-omit-model | complete (frontmatter stale) | 2026-05-25  |
+| quick_task | 260522-c80-patch-project-md-to-close-requirements-s | complete (frontmatter stale) | 2026-05-25  |
 
 All seven quick tasks have a SUMMARY.md and are completed; the `audit-open` query flags them as `missing` because their SUMMARY.md frontmatter lacks a `status:` field (pre-canonical-frontmatter format). No follow-up work; acknowledged as deferred at v1.3 close.
 
 Additional v1.4.1-scope deferrals:
 
-| Category | Item | Status | Deferred At |
-| -------- | ---- | ------ | ----------- |
-| integration_test | tests/integration/fold-adoption.test.ts phase 1 failure | pre-existing on v1.4 baseline; tracked for separate /gsd-debug | 2026-05-28 |
-| state_migration | Migration tooling for already-installed `hash-<12hex>` plugins whose plugin.json declares a SemVer | out of scope v1.4.1; marketplace update will naturally surface as upgradable post-SNM-34 | 2026-05-28 |
-| milestone_archival | v1.4 phase dirs (15-21) archival | deferred; phase dirs remain under .planning/phases/ during v1.4.1; operator-initiated via /gsd-complete-milestone | 2026-05-28 |
+| Category           | Item                                                                                                                                                                                                                                                                                                                                                                                    | Status                                                                                                                                                                                                         | Deferred At |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| integration_test   | tests/integration/fold-adoption.test.ts phase 1 failure                                                                                                                                                                                                                                                                                                                                 | pre-existing on v1.4 baseline; tracked for separate /gsd-debug                                                                                                                                                 | 2026-05-28  |
+| state_migration    | Migration tooling for already-installed `hash-<12hex>` plugins whose plugin.json declares a SemVer                                                                                                                                                                                                                                                                                      | out of scope v1.4.1; marketplace update will naturally surface as upgradable post-SNM-34                                                                                                                       | 2026-05-28  |
+| milestone_archival | v1.4 phase dirs (15-21) archival                                                                                                                                                                                                                                                                                                                                                        | deferred; phase dirs remain under .planning/phases/ during v1.4.1; operator-initiated via /gsd-complete-milestone                                                                                              | 2026-05-28  |
+| upstream_finding   | pi-tui `@`-precedence intercepts `/claude:plugin update @<TAB>` (G-MIL-07 / SNM-39): `@earendil-works/pi-tui` 0.76.0 `CombinedAutocompleteProvider.getSuggestions:188` checks `extractAtPrefix:191`/`:331` (`PATH_DELIMITERS:6`, no `@`) BEFORE the slash branch `:205`, so a bare `@<mp>` token is routed to file-mention completion and our `getArgumentCompletions` is never reached | defer-with-finding; recorded in-repo with exact line refs (UAT G-MIL-07 + provider.test.ts:793). Opening an upstream pi-tui issue is the user's call (RESEARCH Open Q2). Do NOT contort our provider (D-25-10) | 2026-05-29  |
 
 ## Session Continuity
 
