@@ -161,14 +161,14 @@ async function loadManifestSoftly(manifestPath: string): Promise<MarketplaceMani
 
 /**
  * Reasons emitted by the list orchestrator. The resolver-narrowing path
- * produces `hooks` / `lspServers` / `unsupported source`; the
+ * produces `hooks` / `lsp` / `unsupported source`; the
  * probe-error path produces `permission denied` / `source missing` /
  * `unreadable` / `unparseable`. All values are members of the closed
  * `Reason` set so the renderer accepts them unchanged.
  */
 type ListReason =
   | "hooks"
-  | "lspServers"
+  | "lsp"
   | "unsupported source"
   | "permission denied"
   | "source missing"
@@ -262,15 +262,16 @@ function installedRowMessage(
 
 /**
  * Narrow the resolver `notes` array to closed-set REASONS members. The
- * manifest field carve-out (MSG-GR-4) passes `hooks` / `lspServers`
- * verbatim; any other unsupported-source note falls through to
+ * manifest field carve-out (MSG-GR-4) passes `hooks` verbatim and maps the
+ * manifest-field detection token `lspServers` to the emitted Reason `lsp`;
+ * any other unsupported-source note falls through to
  * `unsupported source`. Empty notes -> empty reasons array (the row is
  * `(unavailable)` without an explicit reason; uncommon path).
  */
 function narrowResolverNotes(
   notes: readonly string[],
-): readonly ("hooks" | "lspServers" | "unsupported source")[] {
-  const out: ("hooks" | "lspServers" | "unsupported source")[] = [];
+): readonly ("hooks" | "lsp" | "unsupported source")[] {
+  const out: ("hooks" | "lsp" | "unsupported source")[] = [];
   const seen = new Set<string>();
   for (const note of notes) {
     // Scan the note for known manifest-field carve-outs in order.
@@ -280,9 +281,11 @@ function narrowResolverNotes(
       continue;
     }
 
-    if (note.includes("lspServers") && !seen.has("lspServers")) {
-      out.push("lspServers");
-      seen.add("lspServers");
+    // DETECT on the camelCase manifest-field token the resolver writes into
+    // the note (`contains lspServers`); EMIT the closed-set Reason `lsp`.
+    if (note.includes("lspServers") && !seen.has("lsp")) {
+      out.push("lsp");
+      seen.add("lsp");
       continue;
     }
 

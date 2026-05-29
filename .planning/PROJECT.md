@@ -27,7 +27,7 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
    - G-MIL-08: render hash-version as `v#<7hex>` (git-style short SHA) instead of the current `vhash-<12hex>`. Persistence stays at `hash-<12hex>` (PI-7 contract intact, no state migration). Renderer-only transform.
 
 3. **Grammar leak** -- 1 gap
-   - G-MIL-04: `"lspServers"` in the user-rendered REASONS closed-set at `shared/notify.ts:79` is the lone camelCase leak. Either rename the discriminator string to `"lsp servers"` and update the 13 consumer call-sites in list.ts + install.ts, or insert a renderer-side translation. Preserves manifest-side field name `lspServers`.
+   - G-MIL-04: `"lspServers"` in the user-rendered REASONS closed-set at `shared/notify.ts:79` is the lone camelCase leak. Either rename the discriminator string to `"lsp"` and update the 13 consumer call-sites in list.ts + install.ts, or insert a renderer-side translation. Preserves manifest-side field name `lspServers`.
 
 4. **Verification needing v1.4 runtime first** -- 2 gaps
    - G-MIL-03: indent ladder appears 1/3 vs catalog D-16-08 documented 2/4/6 ladder. Needs byte-exact verification against v1.4 build.

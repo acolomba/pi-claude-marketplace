@@ -76,7 +76,7 @@ export const REASONS = [
   "no longer installable",
   "unsupported source",
   "hooks",
-  "lspServers",
+  "lsp",
   "requires pi-subagents",
   "requires pi-mcp",
   "rollback partial",

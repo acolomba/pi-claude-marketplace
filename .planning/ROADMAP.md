@@ -92,7 +92,7 @@ Close the 8 gaps surfaced by the v1.4 milestone-spanning UAT (`.planning/v1.4-MI
 
 - [x] **Phase 22: Reload-hint Discipline Family** -- Gate marketplace-level transition tokens (`MarketplaceAddedMessage` / `MarketplaceRemovedMessage` / `MarketplaceUpdatedMessage`) on `plugins[].some(state-change)` inside `shouldEmitReloadHint`; add byte-equality regression tests for the three "no plugin state change -> no trailer" cases (SNM-33; closes G-MIL-01 / G-MIL-02 / G-MIL-06) (completed 2026-05-29)
 - [x] **Phase 23: Version Display Bundle** -- (a) Add tier-2 `installable.manifest?.version` fallback to `resolvePluginVersion` in `orchestrators/plugin/shared.ts:167` with SemVer shape validation (SNM-34; closes G-MIL-05); (b) Renderer-only transform of hash-version display to `v#<7hex>` git-style short SHA in `shared/notify.ts` (`formatHashVersionForDisplay` helper); update byte-form fixtures in `tests/shared/notify-v2.test.ts`, `tests/architecture/catalog-uat.test.ts`, and `docs/output-catalog.md`. Persistence stays at `hash-<12hex>` (PI-7 intact). (SNM-35; closes G-MIL-08) (completed 2026-05-29)
-- [ ] **Phase 24: Grammar Consistency** -- Rename the `"lspServers"` REASON discriminator in the `REASONS` closed-set at `shared/notify.ts:79` to `"lsp servers"`; propagate to 13 consumer call-sites in `orchestrators/plugin/list.ts` (8) and `orchestrators/plugin/install.ts` (4) plus the JSDoc reference in `domain/components/plugin.ts:46`. The manifest-side JSON key `lspServers` (in `domain/components/plugin.ts:31` schema + `domain/resolver.ts` references) stays unchanged. (SNM-36; closes G-MIL-04)
+- [ ] **Phase 24: Grammar Consistency** -- Rename the `"lspServers"` REASON discriminator in the `REASONS` closed-set at `shared/notify.ts:79` to `"lsp"`. The real shape is a single closed-set tuple edit plus a type-driven compile cascade through two detection-vs-emission seams (`list.ts::narrowResolverNotes` and `install.ts::manifestFieldTokenFromNote`, via a `MANIFEST_FIELD_TO_REASON` map) plus the catalog/fixture byte-form lockstep -- detection substrings stay camelCase, only the emitted Reason becomes `"lsp"` (D-24-04). The manifest-side JSON key `lspServers` (in `domain/components/plugin.ts:31` schema + `domain/resolver.ts` references) stays unchanged. (SNM-36; closes G-MIL-04)
 - [ ] **Phase 25: Runtime Publish & Verification** -- (a) Publish/npm-link v0.2.0 (v1.4 source) into the user's Pi runtime so v1.4-specific behavior can be exercised live; verify Pi loads the new code via `pi --version` + smoke `/claude:plugin list` (SNM-37; reproduction enabler). (b) Reproduce-or-refute G-MIL-03 (indent ladder 1/3 vs catalog 2/4/6) against the v1.4 runtime; fix or document as not-a-bug per finding (SNM-38). (c) Reproduce-or-refute G-MIL-07 (tab completion for `update @<TAB>` empty) against the v1.4 runtime; fix or defer per root-cause finding (SNM-39).
 - [ ] **Phase 26: GREEN Gate Close** -- Final `npm run check` GREEN end-to-end after Phases 22-25 land. Verify the v1.4.1 regression tests added in SNM-33 / SNM-34 / SNM-35 / SNM-36 are in the suite; record milestone-close summary. (SNM-40)
 
@@ -444,7 +444,7 @@ Plans:
 
 ### Phase 24: Grammar Consistency
 
-**Goal:** The `lspServers` camelCase token no longer leaks into user-visible output anywhere; the rendered REASON reads `lsp servers` in space-separated lowercase per the v1.4 grammar contract, while the underlying manifest JSON key `lspServers` (a real `.claude-plugin/plugin.json` field name) stays untouched.
+**Goal:** The `lspServers` camelCase token no longer leaks into user-visible output anywhere; the rendered REASON reads `lsp` per the v1.4 grammar contract (parallel to the single-word `{hooks}` carve-out), while the underlying manifest JSON key `lspServers` (a real `.claude-plugin/plugin.json` field name) stays untouched.
 
 **Depends on:** Phase 23
 
@@ -452,9 +452,9 @@ Plans:
 
 **Success Criteria** (what must be TRUE):
 
-1. Running `/claude:plugin list` against a plugin whose manifest declares unsupported `lspServers` shows the row's reason brace block as `{lsp servers}`, never `{lspServers}`.
-2. Running `/claude:plugin install` whose preflight surfaces an `lspServers` rejection row produces the same `{lsp servers}` rendering.
-3. The `REASONS` closed-set tuple in `shared/notify.ts:79` no longer contains the string `"lspServers"`; the renamed discriminator `"lsp servers"` is consistent across the 13 consumer call-sites in `orchestrators/plugin/list.ts` (8 sites) and `orchestrators/plugin/install.ts` (4 sites) plus the JSDoc comment in `domain/components/plugin.ts:46`.
+1. Running `/claude:plugin list` against a plugin whose manifest declares unsupported `lspServers` shows the row's reason brace block as `{lsp}`, never `{lspServers}`.
+2. Running `/claude:plugin install` whose preflight surfaces an `lspServers` rejection row produces the same `{lsp}` rendering.
+3. The `REASONS` closed-set tuple in `shared/notify.ts:79` no longer contains the string `"lspServers"`; the renamed discriminator `"lsp"` propagates via a type-driven compile cascade through the two detection-vs-emission seams in `orchestrators/plugin/list.ts` (`narrowResolverNotes`) and `orchestrators/plugin/install.ts` (`manifestFieldTokenFromNote`, via a `MANIFEST_FIELD_TO_REASON` map) plus the catalog/fixture byte-form lockstep -- the detection substrings stay camelCase `lspServers`, only the emitted Reason becomes `"lsp"` (D-24-04).
 4. The manifest-side field name `lspServers` remains in `domain/components/plugin.ts:31` (typebox schema), `domain/resolver.ts:142,160`, and any related manifest-parsing surfaces -- changing it would break parsing of real Claude plugin manifests.
 
 **Plans:** 1 plan
@@ -491,7 +491,7 @@ Plans:
 **Success Criteria** (what must be TRUE):
 
 1. `npm run check` exits 0 on a clean checkout of the post-Phase-25 tree: TypeScript strict typecheck, ESLint (stock-rules baseline from Phase 21 unchanged), Prettier, and the full `npm test` suite all pass.
-2. The reload-hint regression tests for SNM-33 (3 byte-equality cases in `tests/shared/notify-v2.test.ts`), the version-resolver tier-2 test for SNM-34 (in `tests/orchestrators/plugin/install.test.ts` or sibling), the `v#<7hex>` hash-display fixtures for SNM-35 (across `tests/shared/notify-v2.test.ts` + `tests/architecture/catalog-uat.test.ts`), and the `lsp servers` rename for SNM-36 (across the catalog UAT fixtures + the impacted unit tests) are all present and GREEN.
+2. The reload-hint regression tests for SNM-33 (3 byte-equality cases in `tests/shared/notify-v2.test.ts`), the version-resolver tier-2 test for SNM-34 (in `tests/orchestrators/plugin/install.test.ts` or sibling), the `v#<7hex>` hash-display fixtures for SNM-35 (across `tests/shared/notify-v2.test.ts` + `tests/architecture/catalog-uat.test.ts`), and the `lsp` rename for SNM-36 (across the catalog UAT fixtures + the impacted unit tests) are all present and GREEN.
 3. The `tests/integration/fold-adoption.test.ts` phase 1 pre-existing failure remains out of scope (it predates v1.4.1 and runs on the separate `npm run test:integration` track, not `npm test`); the v1.4.1 close gate is NOT blocked by it.
 4. Closure narrative is recorded in CHANGELOG and STATE.md / PROJECT.md / REQUIREMENTS.md per the v1.4-close pattern (SNM-32); the milestone is ready for `/gsd-complete-milestone`.
 

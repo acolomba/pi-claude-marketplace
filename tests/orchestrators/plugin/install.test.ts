@@ -1585,8 +1585,10 @@ test("classifyEntityShapeError dispatches on kind=not-installable -> unavailable
   });
   assert.ok(row);
   assert.equal(row.status, "unavailable");
-  // MSG-GR-4 carve-out: manifest field names pass through verbatim as Reasons.
-  assert.deepEqual(row.reasons, ["hooks", "lspServers"]);
+  // MSG-GR-4 carve-out: the manifest-field detection token `lspServers`
+  // (camelCase) is detected and emitted as the closed-set Reason `lsp`
+  // (SNM-36 / D-24-04); `hooks` emits unchanged.
+  assert.deepEqual(row.reasons, ["hooks", "lsp"]);
 });
 
 test("classifyEntityShapeError dispatches on kind=not-installable with source note -> {unsupported source}", async () => {
@@ -1694,8 +1696,8 @@ test("260525-cjr B2 / C5: narrowResolverReasons -> `contains hooks` extracts the
   assert.deepEqual([...__test_narrowResolverReasons(["contains hooks"])], ["hooks"]);
 });
 
-test("260525-cjr B2 / C5: narrowResolverReasons -> `contains lspServers` extracts the bare `lspServers` Reason", () => {
-  assert.deepEqual([...__test_narrowResolverReasons(["contains lspServers"])], ["lspServers"]);
+test("260525-cjr B2 / C5: narrowResolverReasons -> `contains lspServers` extracts the `lspServers` token and emits the `lsp` Reason (SNM-36)", () => {
+  assert.deepEqual([...__test_narrowResolverReasons(["contains lspServers"])], ["lsp"]);
 });
 
 test("260525-cjr C5: narrowResolverReasons recognises the resolver's `contains hooks` prefix and emits bare `hooks`", () => {
@@ -1705,11 +1707,12 @@ test("260525-cjr C5: narrowResolverReasons recognises the resolver's `contains h
   // `MANIFEST_FIELD_REASONS.has(reason)` predicate compared the WHOLE
   // string against the bare set, so `"contains hooks"` never matched
   // and the row degraded to `{unsupported source}`. The fix strips
-  // the `contains ` prefix and re-checks; the bare token is emitted
-  // as the Reason, matching the catalog's `(unavailable) {hooks}` /
-  // `(unavailable) {lspServers}` forms.
+  // the `contains ` prefix and re-checks; the mapped Reason is emitted,
+  // matching the catalog's `(unavailable) {hooks}` /
+  // `(unavailable) {lsp}` forms (the `lspServers` detection token maps to
+  // the `lsp` Reason per SNM-36 / D-24-04).
   assert.deepEqual([...__test_narrowResolverReasons(["contains hooks"])], ["hooks"]);
-  assert.deepEqual([...__test_narrowResolverReasons(["contains lspServers"])], ["lspServers"]);
+  assert.deepEqual([...__test_narrowResolverReasons(["contains lspServers"])], ["lsp"]);
 });
 
 test("260525-cjr C5: narrowResolverReasons ignores `contains <unknown-kind>` (kind not in MANIFEST_FIELD_REASONS)", () => {

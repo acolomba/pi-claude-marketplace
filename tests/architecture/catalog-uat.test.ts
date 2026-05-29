@@ -243,7 +243,7 @@ const FIXTURES: FixtureMap = {
               {
                 status: "unavailable",
                 name: "epsilon",
-                reasons: ["hooks", "lspServers"],
+                reasons: ["hooks", "lsp"],
               },
               { status: "available", name: "gamma", version: "2.0.0" },
             ],
@@ -487,7 +487,7 @@ const FIXTURES: FixtureMap = {
               {
                 status: "unavailable",
                 name: "helper",
-                reasons: ["hooks", "lspServers"],
+                reasons: ["hooks", "lsp"],
               },
             ],
           },

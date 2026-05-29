@@ -55,7 +55,7 @@ The plugin-row `[<scope>]` bracket is emitted ONLY when the plugin's `scope` fie
 
 ### Reasons rendering
 
-Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Manifest field names render verbatim as the sole carve-out (`{hooks}`, `{lspServers}`). The closed-set membership is defined by `extensions/pi-claude-marketplace/shared/grammar/reasons.ts::REASONS`.
+Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Manifest field names render verbatim as the sole carve-out (`{hooks}`, `{lsp}`). The closed-set membership is defined by `extensions/pi-claude-marketplace/shared/notify.ts::REASONS`.
 
 The soft-dep markers `requires pi-subagents` and `requires pi-mcp` live INSIDE the same brace block as the variant's typed reasons (D-16-15 injection). They are emitted by the renderer at render time from the plugin's `dependencies` field and the Pi-host probe; callers do not place them in `reasons` directly. The 3 dep-bearing variants (`installed | updated | reinstalled`) carry the `dependencies` field per D-15-02; the other 7 variants cannot emit soft-dep markers structurally.
 
@@ -115,7 +115,7 @@ ______________________________________________________________________
 | `(reinstalled)`                             | ●    | Plugin row -- reinstall cascade.                                                                                                                                            |
 | `(uninstalled)`                             | ○    | Plugin row -- uninstall single-plugin, marketplace-remove partial success rows.                                                                                             |
 | `(available)`                               | ○    | Plugin row -- `marketplace list` / plugin-list surface (no scope bracket per MSG-PL-6 / SNM-11).                                                                            |
-| `(unavailable)`                             | ⊘    | Plugin row -- install / reinstall / import / list surfaces when a manifest declares unsupported Claude features; carries `{hooks}` / `{lspServers}` etc.                    |
+| `(unavailable)`                             | ⊘    | Plugin row -- install / reinstall / import / list surfaces when a manifest declares unsupported Claude features; carries `{hooks}` / `{lsp}` etc.                           |
 | `(upgradable)`                              | ●    | Plugin row -- plugin-list surface only (advisory).                                                                                                                          |
 | `(failed)`                                  | ⊘    | Plugin row -- any failure variant; carries `reasons`, optional `cause:` trailer, optional `rollbackPartial` children.                                                       |
 | `(skipped)`                                 | ⊘    | Plugin row -- per-plugin skip inside cascades; carries `reasons` (e.g. `{up-to-date}`, `{already installed}`).                                                              |
@@ -155,7 +155,7 @@ The renderer emits the literal `(no marketplaces)` body for an empty top-level `
   ● alpha v1.0.0 (installed)
   ● beta v1.0.0 (upgradable) {stale clone}
   ⊘ delta (unavailable) {hooks}
-  ⊘ epsilon (unavailable) {hooks, lspServers}
+  ⊘ epsilon (unavailable) {hooks, lsp}
   ○ gamma v2.0.0 (available)
 ```
 
@@ -297,7 +297,7 @@ Marketplace header is SUB-BRANCH A (bare label header, no details). Plugin row o
 
 ```text
 ● official [user]
-  ⊘ helper (unavailable) {hooks, lspServers}
+  ⊘ helper (unavailable) {hooks, lsp}
 ```
 
 The manifest declares Claude features Pi doesn't support; the `unavailable` variant has no `scope` field (SNM-11) so the plugin row carries no bracket; reasons name the offending fields verbatim. No `cause:` trailer -- the reason carries the explanation. No reload-hint (no state-changing status); severity is info.

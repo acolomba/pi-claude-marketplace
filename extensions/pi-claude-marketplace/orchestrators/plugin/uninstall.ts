@@ -96,7 +96,7 @@ export interface UninstallPluginOptions {
  * the typed-cause dispatch in `orchestrators/marketplace/remove.ts`
  * (quick task 260525-aub): instanceof `AgentsUnstageFailureError` first,
  * `NodeJS.ErrnoException.code` second, permissive fallback last. Closed-set
- * Reasons live in `shared/grammar/reasons.ts`.
+ * Reasons live in `shared/notify.ts::REASONS`.
  */
 function narrowCascadeFailure(cause: Error): Reason {
   if (cause instanceof AgentsUnstageFailureError) {

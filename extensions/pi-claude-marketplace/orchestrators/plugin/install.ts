@@ -1204,9 +1204,10 @@ function classifyEntityShapeError(
   }
 }
 
-// Manifest field names allowed through the MSG-GR-4 carve-out. The closed
-// set holds the BARE token (`hooks`, `lspServers`) -- the value emitted to
-// the renderer. The resolver, however, prefixes the kind with `"contains "`
+// Manifest field names detected through the MSG-GR-4 carve-out. The closed
+// set holds the BARE camelCase token (`hooks`, `lspServers`) -- the DETECTION
+// key sliced from the resolver note, derived from the real `.claude-plugin/
+// plugin.json` JSON key. The resolver prefixes the kind with `"contains "`
 // when populating `r.notes` (see `domain/resolver.ts:685` -- the
 // `addUnsupportedKindNotes` helper writes `partial.notes.push(\`contains
 // ${kind}\`)` for every UNSUPPORTED_COMPONENT_KINDS member it detects).
@@ -1216,17 +1217,29 @@ function classifyEntityShapeError(
 // `{unsupported source}`, and the carve-out was effectively dead. Task
 // 260525-cjr C5 restores the carve-out: `startsWith("contains ")` strips
 // the resolver's prefix, then checks the remaining token against the set.
-// New tokens added here MUST also be added to `shared/grammar/reasons.ts`
-// so the renderer's type-narrowing accepts them.
+// New detection tokens added here MUST also have an entry in
+// `MANIFEST_FIELD_TO_REASON` below mapping them to a member of the closed
+// `Reason` set in `shared/notify.ts::REASONS` so the renderer accepts them.
 const MANIFEST_FIELD_REASONS: ReadonlySet<string> = new Set(["hooks", "lspServers"]);
 const MANIFEST_FIELD_NOTE_PREFIX = "contains ";
 
+// SNM-36 / D-24-04 detection-vs-emission seam: the DETECTION token stays
+// camelCase (matches the resolver note derived from the JSON manifest key);
+// the EMITTED closed-set Reason is the user-rendered value. `lspServers`
+// detects but renders as `lsp` (parallel to the single-word `hooks`
+// carve-out); `hooks` detects and renders unchanged.
+const MANIFEST_FIELD_TO_REASON: Readonly<Record<string, Reason>> = {
+  hooks: "hooks",
+  lspServers: "lsp",
+};
+
 /**
  * Task 260525-cjr C5: extract the bare manifest-field token from a
- * resolver `"contains <kind>"` note. Returns `undefined` for any note
- * that does not start with the prefix OR whose extracted token is not
- * a member of `MANIFEST_FIELD_REASONS`. The caller then knows it can
- * emit the bare token as a Reason directly.
+ * resolver `"contains <kind>"` note and map it to the emitted closed-set
+ * `Reason`. Returns `undefined` for any note that does not start with the
+ * prefix OR whose extracted token has no entry in `MANIFEST_FIELD_TO_REASON`.
+ * The detection token (camelCase) and the emitted Reason can differ -- see
+ * the SNM-36 / D-24-04 seam note above.
  */
 function manifestFieldTokenFromNote(note: string): Reason | undefined {
   if (!note.startsWith(MANIFEST_FIELD_NOTE_PREFIX)) {
@@ -1234,13 +1247,15 @@ function manifestFieldTokenFromNote(note: string): Reason | undefined {
   }
 
   const token = note.slice(MANIFEST_FIELD_NOTE_PREFIX.length);
-  if (MANIFEST_FIELD_REASONS.has(token)) {
-    // Safe cast: the set members ("hooks", "lspServers") are documented
-    // members of the closed `Reason` set in `shared/grammar/reasons.ts`.
-    return token as Reason;
+  // DETECT: gate on the camelCase manifest-field token (STAYS camelCase --
+  // it matches the resolver note derived from the JSON manifest key).
+  if (!MANIFEST_FIELD_REASONS.has(token)) {
+    return undefined;
   }
 
-  return undefined;
+  // EMIT: map the detected camelCase token to its closed-set Reason.
+  // Typed lookup -- no cast needed (D-24-04 / D-24-05 seam).
+  return MANIFEST_FIELD_TO_REASON[token];
 }
 
 /**
