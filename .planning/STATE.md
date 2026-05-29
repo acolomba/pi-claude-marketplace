@@ -2,13 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.4.1
 milestone_name: Post-ship UAT Patches
-status: completed
-last_updated: "2026-05-29T15:39:46.447Z"
-last_activity: 2026-05-29
+status: executing
+stopped_at: Phase 25 context gathered
+last_updated: "2026-05-29T19:56:37.285Z"
+last_activity: 2026-05-29 -- Phase 25 planning complete
 progress:
   total_phases: 14
   completed_phases: 12
-  total_plans: 47
+  total_plans: 50
   completed_plans: 47
   percent: 86
 ---
@@ -25,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-05-28)
 
 Phase: 25
 Plan: Not started
-Status: Phase 24 complete; SNM-36 / G-MIL-04 closed
-Last activity: 2026-05-29
+Status: Ready to execute
+Last activity: 2026-05-29 -- Phase 25 planning complete
 
 ## Performance Metrics
 
