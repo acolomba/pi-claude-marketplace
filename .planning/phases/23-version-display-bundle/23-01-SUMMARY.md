@@ -137,6 +137,10 @@ None - no external service configuration required.
 - Plan 23-02 (SNM-35: `looksLikeHashVersion` + `formatHashVersionForDisplay` renderer transform in `shared/notify.ts`) is the serialized Wave 2 follow-on. It is file-disjoint from this plan (renderer + catalog/fixtures vs. resolver + install test) and can proceed.
 - SNM-34's reorder fires at the NEXT install/reinstall/update only — no state migration for already-installed hash-versioned plugins (REQUIREMENTS Out of Scope). `marketplace update` will naturally surface those as upgradable.
 
+## Self-Check: PASSED
+
+All claimed files exist on disk (shared.ts, install.test.ts, REQUIREMENTS.md, ROADMAP.md, 23-01-SUMMARY.md) and all four commits are present in history (`d974066`, `e8a9d88`, `7aaaa91`, `0718864`). The 3-tier `resolvePluginVersion` body and the `node:fs/promises` `readFile` import are confirmed in `shared.ts`. `npm run check` GREEN at 1129/1129.
+
 ---
 *Phase: 23-version-display-bundle*
 *Completed: 2026-05-29*
