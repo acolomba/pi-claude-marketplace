@@ -432,7 +432,15 @@ Plans:
 3. State.json byte form for hash-versioned plugins is unchanged: persisted `version` field remains `hash-<12hex>`. The PI-7 12-hex collision envelope is preserved internally for compare semantics; the 7-hex form is display-only.
 4. Catalog spec (`docs/output-catalog.md`) examples use the new `v#<7hex>` form wherever a hash-version appears; the catalog UAT runner (`tests/architecture/catalog-uat.test.ts`) and `tests/shared/notify-v2.test.ts` byte fixtures are updated in lockstep and remain GREEN.
 
-**Plans:** TBD
+**Plans:** 2 plans
+
+**Wave 1**
+
+- [ ] 23-01-PLAN.md -- SNM-34: reorder `resolvePluginVersion` to 3-tier (plugin.json `version` -> marketplace `entry.version` -> PI-7 hash) via in-place plugin.json re-read; fixture knob + new tier test + repaired PI-7 (a)/(b); amend SNM-34 / SC#1 wording (D-23-01/02/03)
+
+**Wave 2** (serialized after Wave 1 per the `shared/notify.ts` convergence constraint, D-23-07)
+
+- [ ] 23-02-PLAN.md -- SNM-35: `looksLikeHashVersion` + `formatHashVersionForDisplay` helpers; route `renderVersion` + `composeVersionArrow` through the transform (`v#<7hex>`); catalog + `catalog-uat` + `notify-v2` byte-equality lockstep (D-23-04/05/06)
 
 ### Phase 24: Grammar Consistency
 
