@@ -1663,3 +1663,101 @@ test("notify renders manual recovery plugin with cause-chain trailer (warning se
     "warning",
   ]);
 });
+
+// ===========================================================================
+// 31-33: SNM-35 hash-version display (D-23-04 / D-23-05 / D-23-06).
+// A persisted PI-7 `hash-<12hex>` renders as a git-style short SHA
+// `v#<7hex>` (first 7 of the 12-hex truncation), NOT the verbose
+// `v` + `hash-<12hex>` form. Canonical example: `hash-2ea95f85703d` ->
+// `v#2ea95f8`. Persistence is unchanged (state.json keeps `hash-<12hex>`,
+// PI-7 intact, SC#3); the transform is renderer-only. The verbose
+// `v` + raw-hash literal MUST NOT appear in any expected byte string here.
+// ===========================================================================
+
+test("notify renders single-version hash row as v#<7hex> via renderVersion chokepoint (SNM-35)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [
+          {
+            status: "installed",
+            name: "commit-commands",
+            version: "hash-2ea95f85703d",
+            dependencies: [],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // The persisted `hash-2ea95f85703d` renders the version token `v#2ea95f8`
+  // (NOT the verbose `v` + raw hash); first 7 hex of the 12-hex truncation.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user] (added)\n  ● commit-commands v#2ea95f8 (installed)\n\n/reload to pick up changes`,
+  ]);
+});
+
+test("notify renders update arrow with hash on both sides as #<7hex> → v#<7hex> via composeVersionArrow (SNM-35)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [
+          {
+            status: "updated",
+            name: "commit-commands",
+            from: "hash-2ea95f85703d",
+            to: "hash-1c3d9a0bbef1",
+            dependencies: [],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // Asymmetric `v`: `from` rendered bare (`#2ea95f8`), `to` v-prefixed
+  // (`v#1c3d9a0`) per composeVersionArrow / output-catalog.md.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user] (added)\n  ● commit-commands #2ea95f8 → v#1c3d9a0 (updated)\n\n/reload to pick up changes`,
+  ]);
+});
+
+test("notify passes a SemVer version through unchanged -> v1.0.0 (non-hash pass-through guard, SNM-35)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [
+          {
+            status: "installed",
+            name: "commit-commands",
+            version: "1.0.0",
+            dependencies: [],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // A non-hash version (SemVer) is NOT transformed: it renders `v1.0.0`,
+  // confirming `formatHashVersionForDisplay` only touches `hash-<12hex>`.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user] (added)\n  ● commit-commands v1.0.0 (installed)\n\n/reload to pick up changes`,
+  ]);
+});
