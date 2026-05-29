@@ -37,7 +37,7 @@ The marker tokens `<autoupdate>` and `<last-updated <iso>>` appear ONLY on the l
 - `<icon>` -- one of `●` / `○` / `⊘` per the effective-state rule above.
 - `<name>` -- the plugin name from `p.name`. The `@<marketplace>` suffix is NEVER emitted on a plugin row in v2; the marketplace is already in the header above.
 - `[<scope>]` -- emitted ONLY in the orphan-fold case (plugin's `scope` field is explicitly set AND differs from the marketplace's scope). Same-scope rows omit the bracket because the header carries it. The `available` and `unavailable` variants have no `scope` field at all (SNM-11 carve-out) and never emit the bracket.
-- `<version-token>` -- `v<version>` on most variants when `version` is set; `<from> → v<to>` on the `updated` variant (required from-/to-fields per D-15-04).
+- `<version-token>` -- `v<version>` on most variants when `version` is set; `<from> → v<to>` on the `updated` variant (required from-/to-fields per D-15-04). A persisted PI-7 hash-version (`hash-<12hex>`) renders as a git-style short SHA `v#<7hex>` -- the `hash-` prefix is stripped and only the first 7 of the 12 hex chars are shown (matching git `--short=7`); e.g. `hash-2ea95f85703d` renders `v#2ea95f8`. Persistence is unchanged (`state.json` keeps the full `hash-<12hex>`, PI-7 intact, no migration); the short form exists only at render time (SNM-35, D-23-04 / D-23-05).
 - `(<status>)` -- the discriminator literal. `(manual recovery)` includes the space verbatim.
 - `{<reasons>}` -- single brace block, comma-space separated, emitted only on the 5 reason-bearing variants (`unavailable | upgradable | skipped | failed | manual recovery`) and only when the composed reasons list is non-empty.
 
@@ -247,6 +247,17 @@ An empty `plugins: []` renders as the bare marketplace header alone (D-15-08); t
 ```
 
 Three marketplace blocks; each joined by one blank line (D-16-07). `zeta-mp` is path-source (no `<autoupdate>` marker). `beta` omits the scope bracket per MSG-PL-6 (the `available` variant has no `scope` field). `tool` declares an agents dependency; the probe reports `pi-subagents` unloaded so the row fires `{requires pi-subagents}`.
+
+### Hash-version inventory row (PI-7 short-SHA display)
+
+<!-- catalog-state: hash-version-list -->
+
+```text
+● official [user]
+  ● hashed-plugin v#2ea95f8 (installed)
+```
+
+The plugin's persisted version is the PI-7 content hash `hash-2ea95f85703d`; the list row renders it as the git-style short SHA `v#2ea95f8` (first 7 of the 12 hex chars). Persistence is unchanged -- `state.json` retains the full `hash-2ea95f85703d` (PI-7 intact, no migration); the short form is renderer-only (SNM-35, D-23-04). The `present` inventory discriminator carries no `/reload` trailer.
 
 ______________________________________________________________________
 
@@ -491,7 +502,7 @@ Multi-plugin cascade. Same shape as `reinstall` with version-arrow rows (`<from>
 /reload to pick up changes
 ```
 
-The `updated` variant emits `<from> → v<to>` (note the asymmetric `v` prefix -- `from` is rendered bare; only `to` is `v`-prefixed per `composeVersionArrow`). The `failed` plugin row carries `version?` only (the v2 `PluginFailedMessage` has no `from`/`to` fields per D-15-04 -- `composeVersionArrow` is the `updated` variant's helper alone); `delta` here omits `version` because the orchestrator has no post-failure target version to surface. Severity: `error`. Reload-hint fires because `alpha` was updated.
+The `updated` variant emits `<from> → v<to>` (note the asymmetric `v` prefix -- `from` is rendered bare; only `to` is `v`-prefixed per `composeVersionArrow`). When a side is a PI-7 hash-version it is shortened to git-style `#<7hex>` (bare `from`) / `v#<7hex>` (prefixed `to`), e.g. `#2ea95f8 → v#1c3d9a0` (SNM-35, D-23-05). The `failed` plugin row carries `version?` only (the v2 `PluginFailedMessage` has no `from`/`to` fields per D-15-04 -- `composeVersionArrow` is the `updated` variant's helper alone); `delta` here omits `version` because the orchestrator has no post-failure target version to surface. Severity: `error`. Reload-hint fires because `alpha` was updated.
 
 ### Failed with rollback-partial cause chain
 
@@ -554,6 +565,19 @@ Two marketplace blocks. Severity: `error`. Reload-hint fires (two `updated` plug
 ```
 
 Per-scope blocks; identical lock to `reinstall` -- marketplaces never collapse across scopes.
+
+### Hash-version update arrow (PI-7 short-SHA display, both sides)
+
+<!-- catalog-state: hash-version-arrow -->
+
+```text
+● official [user]
+  ● hashed-plugin #2ea95f8 → v#1c3d9a0 (updated)
+
+/reload to pick up changes
+```
+
+Both `from` and `to` are PI-7 hash-versions (`hash-2ea95f85703d` -> `hash-1c3d9a0bbef1`); each is shortened to its git-style 7-hex form. The asymmetric `v` prefix is preserved: `from` renders bare (`#2ea95f8`), `to` is `v`-prefixed (`v#1c3d9a0`) per `composeVersionArrow` (SNM-35, D-23-05). Persistence keeps the full `hash-<12hex>` on both sides. Severity: info. Reload-hint fires because `hashed-plugin` was updated.
 
 ______________________________________________________________________
 

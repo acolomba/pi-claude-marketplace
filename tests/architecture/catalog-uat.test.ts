@@ -415,6 +415,28 @@ const FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // SNM-35: persisted PI-7 hash renders as git-style short SHA on a
+    // list-surface inventory row (`hash-2ea95f85703d` -> `v#2ea95f8`).
+    "hash-version-list": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "present",
+                name: "hashed-plugin",
+                version: "hash-2ea95f85703d",
+                dependencies: [],
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 
   // -------------------------------------------------------------------------
@@ -910,6 +932,30 @@ const FIXTURES: FixtureMap = {
                 name: "beta",
                 from: "0.5.0",
                 to: "1.0.0",
+                dependencies: [],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // SNM-35: an update arrow with PI-7 hashes on BOTH sides renders the
+    // git-style short SHAs `#2ea95f8 → v#1c3d9a0` (bare from, v-prefixed
+    // to per composeVersionArrow's asymmetry; D-23-05).
+    "hash-version-arrow": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "updated",
+                name: "hashed-plugin",
+                from: "hash-2ea95f85703d",
+                to: "hash-1c3d9a0bbef1",
                 dependencies: [],
               },
             ],
