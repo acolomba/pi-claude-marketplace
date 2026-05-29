@@ -744,17 +744,51 @@ function joinTokens(parts: readonly string[]): string {
 }
 
 /**
+ * Anchored-exact predicate for a persisted PI-7 hash-version string. Matches
+ * EXACTLY `hash-` + 12 lowercase-hex chars -- the shape produced by
+ * `domain/version.ts::computeHashVersion` (`"hash-" + sha256.slice(0, 12)`).
+ * Uppercase hex, wrong length, or a trailing/leading character are all
+ * rejected so a malformed pseudo-hash is never silently rewritten into a
+ * misleading short SHA (T-23-06; SNM-35, D-23-04).
+ */
+const HASH_VERSION_RE = /^hash-[0-9a-f]{12}$/;
+function looksLikeHashVersion(v: string): boolean {
+  return HASH_VERSION_RE.test(v);
+}
+
+/**
+ * Render a persisted PI-7 hash-version to a compact git-style short SHA for
+ * display: `hash-2ea95f85703d` -> `#2ea95f8` (the `hash-` prefix stripped, the
+ * first 7 of the 12 hex chars kept, matching git `--short=7`). Returns WITHOUT
+ * the `v` prefix -- the `v` is prepended downstream by `renderVersion` /
+ * `composeVersionArrow`, producing the final `v#2ea95f8` byte form. A non-hash
+ * string (e.g. a SemVer `1.0.0`) passes through UNCHANGED so SemVer rows still
+ * render `v1.0.0`. Renderer-only: persistence stays `hash-<12hex>` (PI-7
+ * intact, no migration; SC#3). SNM-35, D-23-04.
+ */
+function formatHashVersionForDisplay(v: string): string {
+  if (!looksLikeHashVersion(v)) {
+    return v;
+  }
+
+  return `#${v.slice("hash-".length, "hash-".length + 7)}`;
+}
+
+/**
  * Prepend `v` to the version string, returning `""` when `version` is
  * undefined or empty so the join discipline collapses the slot cleanly.
- * Single canonical implementation (D-16-04; canonicalised here in Phase 21
- * from the retired `presentation/compact-line.ts::renderVersion`).
+ * Routes the token through `formatHashVersionForDisplay` first so a persisted
+ * PI-7 `hash-<12hex>` renders as `v#<7hex>` while a SemVer passes through to
+ * `v<version>` (SNM-35, D-23-05). Single canonical implementation (D-16-04;
+ * canonicalised here in Phase 21 from the retired
+ * `presentation/compact-line.ts::renderVersion`).
  */
 function renderVersion(version: string | undefined): string {
   if (version === undefined || version === "") {
     return "";
   }
 
-  return `v${version}`;
+  return `v${formatHashVersionForDisplay(version)}`;
 }
 
 /**
@@ -794,9 +828,15 @@ function renderScopeBracket(pluginScope: Scope | undefined, mpScope: Scope): str
  * `from` and `to` are REQUIRED on the `updated` variant, so the helper
  * is only ever invoked with both values defined. Sole caller is the
  * `updated` arm in renderPluginRow.
+ *
+ * Both sides route through `formatHashVersionForDisplay`, preserving the
+ * asymmetric `v` prefix (bare `from`, `v`-prefixed `to` per
+ * `docs/output-catalog.md`): two hashes render `#<7hex> → v#<7hex>`
+ * (e.g. `#2ea95f8 → v#1c3d9a0`) while SemVer pairs stay `<from> → v<to>`
+ * (SNM-35, D-23-05).
  */
 function composeVersionArrow(from: string, to: string): string {
-  return `${from} → v${to}`;
+  return `${formatHashVersionForDisplay(from)} → v${formatHashVersionForDisplay(to)}`;
 }
 
 /**
