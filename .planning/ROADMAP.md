@@ -432,11 +432,11 @@ Plans:
 3. State.json byte form for hash-versioned plugins is unchanged: persisted `version` field remains `hash-<12hex>`. The PI-7 12-hex collision envelope is preserved internally for compare semantics; the 7-hex form is display-only.
 4. Catalog spec (`docs/output-catalog.md`) examples use the new `v#<7hex>` form wherever a hash-version appears; the catalog UAT runner (`tests/architecture/catalog-uat.test.ts`) and `tests/shared/notify-v2.test.ts` byte fixtures are updated in lockstep and remain GREEN.
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 **Wave 1**
 
-- [ ] 23-01-PLAN.md -- SNM-34: reorder `resolvePluginVersion` to 3-tier (plugin.json `version` -> marketplace `entry.version` -> PI-7 hash) via in-place plugin.json re-read; fixture knob + new tier test + repaired PI-7 (a)/(b); amend SNM-34 / SC#1 wording (D-23-01/02/03)
+- [x] 23-01-PLAN.md -- SNM-34: reorder `resolvePluginVersion` to 3-tier (plugin.json `version` -> marketplace `entry.version` -> PI-7 hash) via in-place plugin.json re-read; fixture knob + new tier test + repaired PI-7 (a)/(b); amend SNM-34 / SC#1 wording (D-23-01/02/03)
 
 **Wave 2** (serialized after Wave 1 per the `shared/notify.ts` convergence constraint, D-23-07)
 
@@ -517,7 +517,7 @@ Plans:
 | 20. Migration Wave 3 -- Edge Handlers & UsageError                   | v1.4      | 6/6            | Complete    | 2026-05-27 |
 | 21. Final Teardown & GREEN Gate                                      | v1.4      | 4/4            | Complete    | 2026-05-28 |
 | 22. Reload-hint Discipline Family                                    | v1.4.1    | 1/1 | Complete    | 2026-05-29 |
-| 23. Version Display Bundle                                           | v1.4.1    | 0/0            | Not started | --         |
+| 23. Version Display Bundle                                           | v1.4.1    | 1/2 | In Progress|  |
 | 24. Grammar Consistency                                              | v1.4.1    | 0/0            | Not started | --         |
 | 25. Runtime Publish & Verification                                   | v1.4.1    | 0/0            | Not started | --         |
 | 26. GREEN Gate Close                                                 | v1.4.1    | 0/0            | Not started | --         |
