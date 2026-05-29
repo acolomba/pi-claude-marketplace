@@ -148,6 +148,12 @@ None - no external service configuration required.
 - SNM-33 closed; `npm run check` GREEN at 1128/1128.
 - Phase 23 (Version Display Bundle, SNM-34/35) is next and also touches `shared/notify.ts`; the reload-hint chokepoint is now stable and the catalog-uat runner remains the byte-equality gate. No blockers.
 
+## Self-Check: PASSED
+
+- `22-01-SUMMARY.md` exists.
+- Commit `c6734cf` (source/catalog/test lockstep) exists.
+- Commit `52066b9` (SUMMARY) exists.
+
 ---
 *Phase: 22-reload-hint-discipline-family*
 *Completed: 2026-05-29*
