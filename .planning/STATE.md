@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.4.1
 milestone_name: Post-ship UAT Patches
-status: executing
-stopped_at: Phase 26 context gathered
-last_updated: "2026-05-30T01:53:07.605Z"
-last_activity: 2026-05-30 -- Phase 26 planning complete
+status: completed
+stopped_at: Phase 26 complete -- v1.4.1 milestone ready for /gsd-complete-milestone
+last_updated: "2026-05-30T02:03:18Z"
+last_activity: 2026-05-30 -- Phase 26 (GREEN Gate Close) complete; SNM-40 closed
 progress:
   total_phases: 14
-  completed_phases: 13
+  completed_phases: 14
   total_plans: 51
-  completed_plans: 50
-  percent: 93
+  completed_plans: 51
+  percent: 100
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-28)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 25 -- runtime-publish-verification
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.4.1 milestone closed -- ready for `/gsd-complete-milestone` (operator-initiated archival).
 
 ## Current Position
 
-Phase: 26
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-30 -- Phase 26 planning complete
+Phase: 26 (complete)
+Plan: 26-01 (complete)
+Status: v1.4.1 milestone complete -- ready for `/gsd-complete-milestone`
+Last activity: 2026-05-30 -- Phase 26 (GREEN Gate Close) complete; SNM-40 closed, `npm run check` GREEN 1137/1137 on a clean tree
 
 ## Performance Metrics
 
@@ -186,10 +186,11 @@ Additional v1.4.1-scope deferrals:
 
 ## Session Continuity
 
-Last session: 2026-05-30T01:40:47.384Z
-Stopped At: Phase 26 context gathered
-Resume File: .planning/phases/26-green-gate-close/26-CONTEXT.md
+Last session: 2026-05-30T02:03:18Z
+Stopped At: Phase 26 complete -- v1.4.1 milestone ready for `/gsd-complete-milestone`
+Resume File: .planning/phases/26-green-gate-close/26-01-SUMMARY.md
 
 ## Operator Next Steps
 
-- Phase 24 complete (SNM-36 / G-MIL-04 closed). v1.4.1 progress: 4/8 gaps closed (SNM-33/34/35/36). Next: `/gsd-verify-work` for Phase 24, then plan Phase 25 (Runtime Publish & Verification) -- note SNM-37 requires an operator publish/npm-link action that gates SNM-38/39.
+- Phase 26 complete (SNM-40 / GREEN Gate Close). The v1.4.1 (Post-ship UAT Patches) milestone is closed: `npm run check` GREEN end-to-end on a clean tree (1137/1137 tests, exit 0); SNM-33/34/35/36 regression tests located + re-confirmed GREEN (evidence in `.planning/phases/26-green-gate-close/VERIFICATION.md`); CHANGELOG folded to one unreleased `[0.2.0]`; SNM-23 + SNM-40 traceability rows reconciled (40/40 Complete). `package.json` stays at `0.2.0` (D-26-01; not yet released, not yet bug-free).
+- **Next: run `/gsd-complete-milestone`** to archive the v1.4 + v1.4.1 phase dirs (15-26) -- operator-initiated, intentionally NOT run in Phase 26 (D-26-04; see Deferrals archival row). The `0.2.0` npm release / git tag is a separate future effort once bug-free (D-26-01 / D-25-06).

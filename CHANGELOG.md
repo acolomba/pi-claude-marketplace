@@ -1,6 +1,26 @@
 # Changelog
 
-## [0.3.0] - 2026-05-27 -- v1.4 Structured Notification Messages
+## [0.2.0] -- unreleased
+
+`0.2.0` is the single in-progress, not-yet-released version covering all messaging work since `v0.1.7` -- the v1.3 consistent-messaging refactor, the v1.4 structured notification model, and the v1.4.1 post-ship UAT patches. It ships once it is bug-free; the iterations below are pre-release milestones toward it, not separate releases. The 2026-05-2x dates that previously sat on the (now retired) `[0.3.0]` header no longer imply a shipped release.
+
+### v1.4.1 Post-ship UAT Patches
+
+Closed the 8 gaps surfaced by the v1.4 milestone-spanning UAT so v1.4's user-visible message surfaces match the catalog spec and user expectations end-to-end.
+
+User-visible changes:
+
+- Reload-hint discipline (SNM-33, G-MIL-01/02/06): `marketplace add` / `marketplace remove` of an empty marketplace and a no-op `marketplace update` no longer emit the `/reload to pick up changes` trailer when no Pi-visible resource changed. The trailer now fires only when a plugin row carries a state-change token (`installed` / `updated` / `reinstalled` / `uninstalled`); a genuine `marketplace remove` still earns it via one `(uninstalled)` row per removed plugin.
+- Version resolution (SNM-34, G-MIL-05): a plugin's own `<pluginRoot>/.claude-plugin/plugin.json` `version` is now preferred over the marketplace entry version before falling back to the PI-7 hash, so an installed plugin shows its declared version rather than a content hash. Persisted `hash-<12hex>` records are unchanged (no state migration).
+- Hash-version display (SNM-35, G-MIL-08): content-hash versions render in git-style short-SHA form `v#<7hex>` (e.g. `v#2ea95f8`) instead of `vhash-<12hex>`. Renderer-only -- persisted state keeps `hash-<12hex>`, so the PI-7 contract is intact.
+- Grammar consistency (SNM-36, G-MIL-04): the lone camelCase token leak in the user-rendered reasons set renders as `lsp` instead of `lspServers`. The manifest-side JSON key `lspServers` is unchanged.
+
+Internals:
+
+- SNM-37/38/39: v0.2.0 source-loaded into a Pi runtime via `scripts/pi.sh` (no `npm publish` / `npm link`, D-25-01) for live verification. G-MIL-03 (indent ladder) REFUTED by pre-tui byte evidence -- `notify()` emits the catalog-conformant 0/2/4 ladder; the user-observed 1/3 is a markdown/tui display-layer artifact (recorded as a catalog clarification + readability-lock test). G-MIL-07 (`update @<TAB>` completion) DEFER-WITH-FINDING -- our provider is correct; the gap is host-side `@`-precedence in the external `@earendil-works/pi-tui` and is recorded in-repo with line refs. Real `npm publish` / packaged-artifact validation remains deferred (D-25-06).
+- SNM-40: `npm run check` GREEN end-to-end on a clean tree -- typecheck + ESLint + Prettier + `npm test` -- with all v1.4.1 regression tests included. **1137/1137 tests green; lint + format + types clean.** (`tests/integration/fold-adoption.test.ts` phase-1 failure is a pre-existing, out-of-scope item on the separate `npm run test:integration` track.)
+
+### v1.4 Structured Notification Messages
 
 Every user-visible `ctx.ui.notify` callsite now flows through the V2 `notify(ctx, pi, NotificationMessage)` and `notifyUsageError(ctx, UsageErrorMessage)` structured entry points; severity, reload hint, and per-row soft-dep markers are computed from message contents at notify time rather than caller-supplied. The v1.3 34-rule MSG-\* drift guard plugin (`tests/lint-rules/`) is retired in favor of closed-set type encoding (PluginStatus / MarketplaceStatus / Reason / StatusToken / Marker unions in `shared/notify.ts`).
 
@@ -18,9 +38,7 @@ Internals:
 - Source consolidation: `shared/grammar/` deleted; REASONS / STATUS_TOKENS / MARKERS / PATTERN_CLASSES inlined into `shared/notify.ts` (SNM-29). `presentation/` directory deleted; 5 utilities relocated (composeError WithCauseChain → `shared/errors.ts`; compareByNameThenScope → `shared/ notify.ts`; EntityErrorRow → file-local in `orchestrators/plugin/ install.ts`; sourceLogical / ParsedSource → direct from `domain/ source.ts` via narrowed BLOCK C edge zone; renderMarketplaceList deleted, zero callers).
 - `edge/args-schema.ts` callback parameter renamed `notifyError` → `onError` for V1-era name-shadow cleanup.
 
-1120/1120 tests green; lint + format + types clean.
-
-## [0.2.0] - 2026-05-25 -- v1.3 Consistent Messaging
+### v1.3 Consistent Messaging
 
 Every user-visible `ctx.ui.notify` callsite (and the single sanctioned `console.warn`) now conforms to `docs/messaging-style-guide.md` v1.0 and the per-command catalog in `docs/output-catalog.md`. The v1.3 user-contract is structurally enforced by a 34-rule ESLint drift-guard plugin and a byte-equality catalog UAT runner.
 

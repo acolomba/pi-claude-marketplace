@@ -33,11 +33,11 @@ Close the 8 gaps surfaced by the v1.4 milestone-spanning UAT (`.planning/v1.4-MI
 
 ### GREEN Gate
 
-- [ ] **SNM-40**: `npm run check` GREEN end-to-end after all v1.4.1 fixes land: typecheck + ESLint + Prettier + tests. New regression tests added in SNM-33 / SNM-34 / SNM-35 / SNM-36 included in the test suite. `tests/integration/fold-adoption.test.ts` phase 1 pre-existing failure (documented in Plan 21-04 review-fix report) remains out of scope -- it predates this milestone and is on the `npm run test:integration` track, not `npm test`. The milestone-close gate matches the v1.4-close gate pattern (SNM-32).
+- [x] **SNM-40**: `npm run check` GREEN end-to-end after all v1.4.1 fixes land: typecheck + ESLint + Prettier + tests. New regression tests added in SNM-33 / SNM-34 / SNM-35 / SNM-36 included in the test suite. `tests/integration/fold-adoption.test.ts` phase 1 pre-existing failure (documented in Plan 21-04 review-fix report) remains out of scope -- it predates this milestone and is on the `npm run test:integration` track, not `npm test`. The milestone-close gate matches the v1.4-close gate pattern (SNM-32).
 
 ## v1.4 Requirements (Shipped 2026-05-27)
 
-_Original v1.4 milestone scope. All requirements complete except SNM-23 traceability-row reconciliation (its behavior shipped in Phase 20; traceability bookkeeping is a known record-keeping debt)._
+_Original v1.4 milestone scope. All requirements complete; the SNM-23 traceability row (its behavior shipped in Phase 20) was reconciled at the v1.4.1 milestone close (Phase 26, D-26-05)._
 
 ## Milestone Goal
 
@@ -80,7 +80,7 @@ Replace v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with 
 ### Migration & Deletion
 
 - [x] **SNM-22**: All `notifySuccess` / `notifyWarning` / `notifyError` call sites across orchestrators (~20 sites) migrated to `notify(ctx, structuredMessage)`. The V1 severity-named wrappers are deleted from `shared/notify.ts`.
-- [ ] **SNM-23**: All `notifyUsageError(ctx, msg, usage)` call sites across edge handlers (~13 sites) migrated to the V2 `notifyUsageError(ctx, structuredUsageError)`. The V1 three-argument signature is deleted.
+- [x] **SNM-23**: All `notifyUsageError(ctx, msg, usage)` call sites across edge handlers (~13 sites) migrated to the V2 `notifyUsageError(ctx, structuredUsageError)`. The V1 three-argument signature is deleted.
 - [x] **SNM-24**: `tests/lint-rules/` directory deleted in full (34 MSG-\* rule files + 34 RuleTester companion tests + helpers + plugin shell + types).
 - [x] **SNM-25**: `tests/architecture/msg-rule-registry.test.ts` (4-way parity test) deleted.
 - [x] **SNM-26**: `tests/architecture/grammar-frontmatter.test.ts` rewritten or deleted -- replaced by the spec-vs-types drift verification from SNM-19 (closed-set membership is now compile-enforced; runtime drift test only needed if style-guide retains the frontmatter sets as a documentation aid).
@@ -143,7 +143,7 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25 (v1.4 rows) and 2026-0
 | SNM-20      | Phase 17 | Complete |
 | SNM-21      | Phase 15 | Complete |
 | SNM-22      | Phase 21 | Complete |
-| SNM-23      | Phase 20 | Pending  |
+| SNM-23      | Phase 20 | Complete |
 | SNM-24      | Phase 21 | Complete |
 | SNM-25      | Phase 21 | Complete |
 | SNM-26      | Phase 17 | Complete |
@@ -160,7 +160,7 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25 (v1.4 rows) and 2026-0
 | SNM-37      | Phase 25 | Complete |
 | SNM-38      | Phase 25 | Complete |
 | SNM-39      | Phase 25 | Complete |
-| SNM-40      | Phase 26 | Pending  |
+| SNM-40      | Phase 26 | Complete |
 
 **Coverage:**
 
@@ -169,8 +169,8 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25 (v1.4 rows) and 2026-0
 - Total: 40 requirements
 - Mapped to phases: 40
 - Unmapped: 0
-- Complete: 32 (v1.4 -- all except SNM-23 traceability-row reconciliation; + v1.4.1 SNM-33)
-- Pending: 8 (SNM-23 traceability-row only + 7 v1.4.1 SNM-34..SNM-40)
+- Complete: 40 (all 32 v1.4 SNM rows -- SNM-23 traceability row reconciled at v1.4.1 close, D-26-05; + all 8 v1.4.1 SNM-33..SNM-40, with SNM-40 the GREEN-gate close)
+- Pending: 0
 - Per-phase distribution (v1.4): Phase 15 (12: SNM-01..11, SNM-21); Phase 16 (8: SNM-12..18, SNM-30); Phase 17 (4: SNM-19, SNM-20, SNM-26, SNM-31); Phase 18 (0: execution phase); Phase 19 (0: execution phase); Phase 20 (1: SNM-23); Phase 21 (7: SNM-22, SNM-24, SNM-25, SNM-27, SNM-28, SNM-29, SNM-32)
 - Per-phase distribution (v1.4.1): Phase 22 (1: SNM-33); Phase 23 (2: SNM-34, SNM-35); Phase 24 (1: SNM-36); Phase 25 (3: SNM-37, SNM-38, SNM-39); Phase 26 (1: SNM-40)
 
@@ -185,4 +185,4 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25 (v1.4 rows) and 2026-0
 ---
 
 _Requirements defined: 2026-05-25 (v1.4 baseline); 2026-05-28 (v1.4.1 patches added)_
-_Last updated: 2026-05-28 -- v1.4.1 traceability populated by `gsd-roadmapper`. SNM-33..SNM-40 mapped across Phases 22-26. v1.4 traceability table preserved as historical record (all 32 SNM rows complete except SNM-23 traceability-row reconciliation)._
+_Last updated: 2026-05-30 -- v1.4.1 milestone closed (Phase 26, SNM-40 GREEN gate). SNM-40 flipped Pending -> Complete; SNM-23 traceability row reconciled Pending -> Complete in the same pass (D-26-05). Coverage now 40/40 Complete, 0 Pending. Earlier: 2026-05-28 -- v1.4.1 traceability populated by `gsd-roadmapper`; SNM-33..SNM-40 mapped across Phases 22-26._
