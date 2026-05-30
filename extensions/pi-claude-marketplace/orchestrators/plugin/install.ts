@@ -1309,7 +1309,6 @@ function narrowResolverReasons(reasons: readonly string[]): readonly Reason[] {
 
     if (reason.includes("SyntaxError") || reason.includes("Unexpected token")) {
       out.push("unparseable");
-      continue;
     }
   }
 

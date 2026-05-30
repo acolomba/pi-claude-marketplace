@@ -306,7 +306,7 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
   // V2 byte shape because both arms route through the same notify() call
   // with the same PluginUninstalledMessage payload. Reference: catalog UAT
   // `success` fixture at docs/output-catalog.md:340-348.
-  void outcome;
+  //
   // IN-02: keep the `removedVersion !== undefined` guard (variable is
   // typed `string | undefined` because it is hoisted from inside the
   // withStateGuard closure; the type system cannot prove the closure

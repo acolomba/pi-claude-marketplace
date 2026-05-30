@@ -879,7 +879,11 @@ function renderPluginRow(
   mpScope: Scope,
 ): string {
   switch (p.status) {
+    // `present` (UAT G-21-01) is a list-only inventory row that renders
+    // byte-identically to `installed`; it stays a distinct status so
+    // shouldEmitReloadHint suppresses the /reload trailer for inventory rows.
     case "installed":
+    case "present":
       return joinTokens([
         ICON_INSTALLED,
         p.name,
@@ -958,25 +962,6 @@ function renderPluginRow(
         renderVersion(p.version),
         "(upgradable)",
         composeReasons(p.reasons, false, false, probe),
-      ]);
-    // UAT G-21-01: list-only inventory row; byte-identical to the
-    // "installed" arm so list-surface byte tests are preserved. The
-    // discriminator differs so shouldEmitReloadHint structurally
-    // distinguishes inventory (no /reload) from transitions (with
-    // /reload).
-    case "present":
-      return joinTokens([
-        ICON_INSTALLED,
-        p.name,
-        renderScopeBracket(p.scope, mpScope),
-        renderVersion(p.version),
-        "(installed)",
-        composeReasons(
-          undefined,
-          p.dependencies.includes("agents"),
-          p.dependencies.includes("mcp"),
-          probe,
-        ),
       ]);
     case "skipped":
       return joinTokens([

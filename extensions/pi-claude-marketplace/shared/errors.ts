@@ -67,7 +67,7 @@ export function causeChainTrailer(err: unknown): string {
   }
 
   if (truncated) {
-    links[links.length - 1] = `${links[links.length - 1]} (truncated)`;
+    links[links.length - 1] = `${links.at(-1)} (truncated)`;
   }
 
   return `${PREFIX}${links.join(JOINER)}`;
