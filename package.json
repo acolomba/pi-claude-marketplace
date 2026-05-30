@@ -13,7 +13,7 @@
   "description": "Access Claude plugin marketplaces from Pi.",
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^0.75.3",
-    "@earendil-works/pi-tui": "^0.74.0",
+    "@earendil-works/pi-tui": "^0.78.0",
     "@eslint/js": "^10.0.1",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/proper-lockfile": "^4.1.4",
