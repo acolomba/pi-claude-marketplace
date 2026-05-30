@@ -505,7 +505,10 @@ Plans:
 3. The `tests/integration/fold-adoption.test.ts` phase 1 pre-existing failure remains out of scope (it predates v1.4.1 and runs on the separate `npm run test:integration` track, not `npm test`); the v1.4.1 close gate is NOT blocked by it.
 4. Closure narrative is recorded in CHANGELOG and STATE.md / PROJECT.md / REQUIREMENTS.md per the v1.4-close pattern (SNM-32); the milestone is ready for `/gsd-complete-milestone`.
 
-**Plans:** TBD
+**Plans:** 1 plan
+Plans:
+
+- [ ] 26-01-PLAN.md -- clean-tree GREEN gate (npm run check exit 0 + recorded npm test count) → VERIFICATION.md (SNM-33..36 → test:case inventory) → four-doc closure narrative (CHANGELOG fold to unreleased [0.2.0] + STATE milestone-ready + PROJECT evolution + REQUIREMENTS SNM-23/SNM-40 rows) as one docs(26): commit; no version bump, no archival
 
 ## Progress
 
