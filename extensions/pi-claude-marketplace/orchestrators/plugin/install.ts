@@ -19,34 +19,28 @@
 //   POST-state-commit (D-08 / AS-6):  mkdir(pluginDataDir) -> dropped per D-19-01
 //   Success notify via V2 notify() with PluginInstalledMessage carrying
 //   dependencies: readonly Dependency[] derived from staged content; the
-//   renderer probes companion-loaded state once per notify() call (D-16-14)
+//  renderer probes companion-loaded state once per notify call
 //   and emits per-row soft-dep markers + the reload-hint trailer
-//   structurally per D-16-11 + D-16-12.
+//  structurally.
 //   Failure routes through one V2 notify() call with PluginFailedMessage
 //   carrying optional cause + optional rollbackPartial[]; the renderer
-//   composes the depth-5 cause-chain (D-16-08) and per-phase rollback child
+//  composes the depth-5 cause-chain and per-phase rollback child
 //   rows automatically.
 //
-// Phase 19 / Plan 19-02: standalone-mode emission paths are a single V2
-//   notify(ctx, pi, { marketplaces: [{ ..., plugins: [<row>] }] })
-// call per orchestration arm. The V1 severity-named wrappers
-// (notifySuccess/notifyWarning/notifyError) and the presentation/* composers
-// (renderRow / appendReloadHint / reloadHint / renderRollbackPartial /
-// causeChainTrailer) are GONE. The 5 V1 post-state-commit notifyWarning
-// sites (mkdir / cache-refresh / agentForeignFailures / bridgeWarnings /
-// PI-13 deps note) are DROPPED entirely per D-19-01: the V2
-// MarketplaceNotificationMessage type has no field to surface
-// "soft warning after successful state mutation"; the underlying side
-// effects (mkdir / dropMarketplaceCache / agents-bridge foreign-row
-// preservation / bridge cleanup-leak fold / PI-13 detection) STILL RUN
-// (correctness preserved); only the user-facing warning surface
-// disappears in standalone mode. The orchestrated-mode
-// `InstallOutcome.postCommitWarnings` branch is preserved verbatim --
-// the import cascade caller at orchestrators/import/execute.ts:890
-// injects each warning into its `pushDiagnostic` channel which surfaces
-// per-marketplace in the cascade's rendering (Plan 19-02 audit per
-// 19-RESEARCH Open Question 1: the standalone/orchestrated asymmetry
-// is INTENTIONAL and consistent with D-19-01).
+// Standalone-mode emission is a single notify(ctx, pi, { marketplaces:
+// [{ ..., plugins: [<row>] }] }) call per orchestration arm. The 5
+// post-state-commit soft-warning sites (mkdir / cache-refresh /
+// agentForeignFailures / bridgeWarnings / PI-13 deps note) are NOT surfaced:
+// MarketplaceNotificationMessage has no field for a "soft warning after
+// successful state mutation". The underlying side effects (mkdir /
+// dropMarketplaceCache / agents-bridge foreign-row preservation / bridge
+// cleanup-leak fold / PI-13 detection) STILL RUN (correctness preserved);
+// only the user-facing warning surface disappears in standalone mode. The
+// orchestrated-mode `InstallOutcome.postCommitWarnings` branch is preserved:
+// the import cascade caller (orchestrators/import/execute.ts, the
+// `importPlugins` path) injects each warning into its `pushDiagnostic`
+// channel which surfaces per-marketplace in the cascade's rendering. The
+// standalone/orchestrated asymmetry is INTENTIONAL.
 //
 // NFR-5 / PI-2 architectural guard: this file MUST NOT import platform-git
 // or the default git ops, and MUST NOT carry a gitOps field; the architectural
@@ -56,8 +50,8 @@
 // D-11 import boundaries: orchestrators/plugin/ may import from bridges/,
 // domain/, transaction/, persistence/, shared/, AND from
 // orchestrators/marketplace/shared.ts (named exports only -- no add.ts /
-// remove.ts / update.ts cycle). Phase 19's V1 -> V2 migration removed all
-// presentation/* imports from this file.
+// remove.ts / update.ts cycle). User-visible output flows through
+// shared/notify.ts; this file holds no rendering imports.
 
 import { mkdir } from "node:fs/promises";
 
@@ -132,9 +126,8 @@ import type { Scope } from "../../shared/types.ts";
 /**
  * Entity-shaped non-cascade error line (MSG-NC-1 / CMC-34) -- internal
  * classified-error return shape for `classifyEntityShapeError` and the
- * install.ts error-routing path. Relocated file-local from the retired
- * presentation/compact-line.ts per D-21-02 (sole consumer is this
- * module).
+ * install.ts error-routing path. File-local; this module is the sole
+ * consumer.
  *
  * Examples: `⊘ unknown@claude-plugins-official (failed) {not found}`;
  * `⊘ hookify [user] (unavailable) {hooks}`.
@@ -154,10 +147,10 @@ interface EntityErrorRow {
  * accepts already-parsed strings + the resolved scope.
  *
  * `pi` is REQUIRED -- V2 `notify(ctx, pi, message)` consumes it for the
- * single `softDepStatus(pi)` probe per call (D-16-14). The renderer
+ * single `softDepStatus(pi)` probe per call. The renderer
  * injects per-row `{requires pi-subagents}` / `{requires pi-mcp}`
  * markers from the per-row `dependencies: readonly Dependency[]`
- * declaration combined with the threaded probe (D-16-15). Making `pi`
+ * declaration combined with the threaded probe. Making `pi`
  * optional would force a runtime branch the type checker cannot reason
  * about.
  *
@@ -211,7 +204,7 @@ export type InstallPluginOutcome =
  *   call per orchestration arm with the per-variant
  *   `PluginInstalledMessage` / `PluginFailedMessage` payload. Severity +
  *   reload-hint + soft-dep markers are computed by `notify()` per
- *   D-16-11 / D-16-12 / D-16-15. Use for direct `/claude:plugin install`.
+ * . Use for direct `/claude:plugin install`.
  *   Phase 19 / Plan 19-02 dropped the 5 V1 post-state-commit
  *   `notifyWarning` sites per D-19-01: the user-visible warning surface
  *   for mkdir / cache-refresh / agentForeignFailures / bridgeWarnings /
@@ -310,7 +303,7 @@ async function loadCachedMarketplaceManifest(
  *      (when rollback partials are present) the
  *      `rollbackPartial: readonly { phase; cause? }[]` field. The renderer
  *      handles all indentation + cause-chain rendering automatically
- *      (D-16-08).
+ * .
  *   2. PathContainmentError originating in a bridge prepare or undo path
  *      propagates VERBATIM: its message becomes `cause` on the
  *      `PluginFailedMessage` and never surfaces as a rollback-partial
@@ -707,9 +700,9 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // PluginFailedMessage / PluginUnavailableMessage).
     //
     // Failure routing priority (highest first); the V2 renderer composes
-    // the depth-5 cause-chain trailer (D-16-08) and per-phase
+    // the depth-5 cause-chain trailer and per-phase
     // rollback-child rows automatically. Severity is derived to "error"
-    // structurally per D-16-11; no reload-hint per D-16-12 (failed /
+    // structurally; no reload-hint (failed /
     // unavailable do not trigger the trailer).
     //
     //   1. PI-14 PathContainmentError -- emits a bare PluginFailedMessage
@@ -795,7 +788,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // carrying the wrapped internalErr. `reasons: []` -- no closed-set
     // Reason classifies an internal invariant violation; the renderer
     // suppresses the empty brace per D-15-01 and surfaces the cause
-    // text via the 4-space-indent trailer (D-16-08).
+    // text via the 4-space-indent trailer.
     //
     // CR-02: row-level `scope` is OMITTED -- the marketplace block carries
     // the same scope, and `renderScopeBracket` (shared/notify.ts:743)
@@ -906,11 +899,11 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   if (!orchestrated) {
     // V2 success: one notify(ctx, pi, ...) call with a
     // PluginInstalledMessage. The renderer probes companion-loaded
-    // state via softDepStatus(pi) per D-16-14 + D-16-15 and emits the
+    // state via softDepStatus(pi) and emits the
     // per-row soft-dep markers (`{requires pi-subagents, requires
     // pi-mcp}`) automatically from `dependencies: readonly
     // Dependency[]`. The "/reload to pick up changes" trailer fires
-    // structurally on the `installed` status per D-16-12 -- the V1 RH-1
+    // structurally on the `installed` status -- the V1 RH-1
     // noop-gate (suppress when `!stagedAny`) is GONE in V2; the
     // reload-hint trigger ladder is per-variant, not per-resource-count
     // (mirrors Plan 19-01 pilot's PU-8 (b) behavior change).
@@ -982,7 +975,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
 // field (SNM-09 + SNM-10) is the structural replacement; the renderer at
 // shared/notify.ts::composeRollbackPartialLines drives all indentation
 // (4-space rollback-child row + 6-space per-phase cause-chain trailer)
-// per D-16-08. The transaction/phase-ledger.ts RollbackPartial already
+// . The transaction/phase-ledger.ts RollbackPartial already
 // exposes the typed cause?: Error, threaded directly into the V2 field
 // per Plan 19-02 RESEARCH Finding 1.
 

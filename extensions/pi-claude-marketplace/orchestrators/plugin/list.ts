@@ -32,7 +32,7 @@
 // CMC-13 / MSG-SD-1..3 per-row soft-dep markers: each installed-variant
 // `PluginPresentMessage` carries `dependencies: readonly Dependency[]`
 // derived from the plugin's installed resources (state-recorded). V2's
-// `notify()` owns the single softDepStatus(pi) probe per call (D-16-14)
+// `notify` owns the single softDepStatus(pi) probe per call
 // and emits the `{requires pi-subagents}` / `{requires pi-mcp}` markers
 // when (declares AND companion unloaded). UAT G-21-01 (SNM-15 surface
 // tightening): the list orchestrator emits the list-only present token
@@ -98,7 +98,7 @@ type PluginRenderStatus = "present" | "upgradable" | "available" | "unavailable"
  * from `/claude:plugin list` argv parsing.
  *
  * `pi` is REQUIRED -- the V2 `notify(ctx, pi, message)` call consumes it
- * for the single softDepStatus(pi) probe per invocation (D-16-14). The
+ * for the single softDepStatus(pi) probe per invocation. The
  * renderer derives per-row soft-dep markers from each
  * `PluginPresentMessage.dependencies` field plus the probe result.
  */
@@ -180,7 +180,7 @@ type ListReason =
  * Mirrors the V1 SoftDepProbe per-row marker logic at notify-time: the
  * renderer probes once and emits `{requires pi-subagents}` / `{requires
  * pi-mcp}` when (declares AND companion unloaded). Empty array elides both
- * markers structurally (D-15-02 / D-16-15).
+ * markers structurally (D-15-02).
  */
 function dependenciesFromDeclares(declaresAgents: boolean, declaresMcp: boolean): Dependency[] {
   const deps: Dependency[] = [];
@@ -205,7 +205,7 @@ function dependenciesFromDeclares(declaresAgents: boolean, declaresMcp: boolean)
  *
  * `pluginScope`: the actual install scope of this plugin record. Passed
  * through to the V2 row only when it differs from the owning marketplace's
- * scope -- the renderer's MSG-PL-6 / D-16-17 orphan-fold rule suppresses
+ * scope -- the renderer's MSG-PL-6 orphan-fold rule suppresses
  * the `[<scope>]` bracket when `p.scope === mp.scope`.
  *
  * Inventory-vs-transition discriminator (UAT G-21-01): the steady-state
@@ -229,7 +229,7 @@ function installedRowMessage(
     manifestEntry?.version !== undefined && manifestEntry.version !== record.version;
 
   // Same-scope: omit the `scope` field so the renderer's orphan-fold rule
-  // (D-16-17) suppresses the `[<scope>]` bracket. Cross-scope (orphan
+  //  suppresses the `[<scope>]` bracket. Cross-scope (orphan
   // fold case): emit the actual install scope so the renderer prints the
   // `[<actualScope>]` bracket on the row.
   const scopeField: { readonly scope?: Scope } =
@@ -730,7 +730,7 @@ export async function loadPluginListPayload(
 
   // MSG-GR-3 / CMC-03 sort: pre-sort the marketplace blocks AND the plugin
   // rows within each block at the orchestrator boundary per D-13-19
-  // (CMC-03). D-16-06: notify() does NOT sort -- the caller owns iteration
+  // (CMC-03). : notify does NOT sort -- the caller owns iteration
   // order. Name primary case-insensitive, scope secondary
   // project-before-user.
   const sortedBlocks = [...filtered].sort((a, b) => compareMpForSort(a.mp, b.mp));
@@ -855,7 +855,7 @@ function narrowListFailReason(err: unknown): ListReason {
  * the V2 `NotificationMessage` payload inline and forwards it to a single
  * `notify(ctx, pi, message)` call per orchestration arm (success or
  * failure). V2's `notify()` owns the single softDepStatus(pi) probe per
- * invocation (D-16-14) and emits per-row `{requires pi-subagents}` /
+ * invocation and emits per-row `{requires pi-subagents}` /
  * `{requires pi-mcp}` markers when (declares AND companion unloaded).
  */
 export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
@@ -867,7 +867,7 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
     // list-surface plugin variants (available / unavailable / upgradable
     // / installed) per D-19-02. Severity (info; omitted 2nd arg) and
     // the `/reload to pick up changes` trailer are computed by notify()
-    // per D-16-11 + D-16-12 (the trailer fires when at least one
+    //  (the trailer fires when at least one
     // installed/updated/reinstalled/uninstalled plugin row is present;
     // pure available/unavailable/upgradable lists emit no trailer).
     notify(ctx, pi, { marketplaces });
@@ -877,9 +877,9 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
     // Discretion per Plan 19-03 step 4 Option B): construct a synthetic
     // `MarketplaceNotificationMessage` carrying a single
     // `PluginFailedMessage` so the V2 renderer's 4-space-indent cause
-    // chain (D-16-08) surfaces the diagnostic verbatim. Severity is
-    // computed as "error" by notify() per D-16-11 (any failed plugin row
-    // -> error); no reload-hint per D-16-12 (failed is not in the
+    // chain surfaces the diagnostic verbatim. Severity is
+    // computed as "error" by notify (any failed plugin row
+    // -> error); no reload-hint (failed is not in the
     // state-changing variant set).
     //
     // WR-03: use the dedicated `narrowListFailReason` instead of

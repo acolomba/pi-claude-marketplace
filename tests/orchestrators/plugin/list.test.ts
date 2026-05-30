@@ -1,19 +1,17 @@
 // tests/orchestrators/plugin/list.test.ts
 //
-// Phase 13 Wave 2 sub-wave 2d (Plan 13-02d-01):
-//
-// PL-1..7 orchestrator-level test corpus for listPlugins. Pairs with
-// `tests/presentation/plugin-list.test.ts` (byte-shape contract on the
-// renderer) -- this file owns the orchestrator semantics on top of the
-// new Wave 1 `RowSpec` / `PluginListPayload` shape:
+// PL-1..7 orchestrator-level test corpus for listPlugins. This file owns the
+// orchestrator semantics; the rendered byte-shape contract is covered by the
+// catalog UAT in `tests/architecture/catalog-uat.test.ts`. The list surface
+// emits its rows through the `notify()` NotificationMessage payload.
 //
 //   - PL-1 filter union (--installed / --available / --unavailable)
 //   - PL-3 marketplace narrowing
 //   - PL-5 (upgradable) string compare
 //   - PL-6 manifest soft-fail -> failed-marketplace header per CMC-22
-//   - PL-7 <autoupdate> marker via MarketplaceRow.marker
-//   - CMC-21 / D-13-17 orphan-fold rule (rendered cross-scope, but the
-//     adoption round-trip lives in `tests/integration/fold-adoption.test.ts`)
+//   - PL-7 <autoupdate> marker on the marketplace header
+//   - CMC-21 orphan-fold rule (rendered cross-scope, but the adoption
+//     round-trip lives in `tests/integration/fold-adoption.test.ts`)
 //
 // Plus the redundant in-test source grep for NFR-5 / PI-2 / PL-3
 // defense-in-depth (mirror of `tests/architecture/no-orchestrator-network`).

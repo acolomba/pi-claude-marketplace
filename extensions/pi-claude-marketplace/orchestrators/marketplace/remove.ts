@@ -19,12 +19,12 @@
 //     failed unstages, ⊘ icon). Per-plugin `cause` MOVES from V1's
 //     marketplace-level `causeChainTrailer(err)` body to per-row
 //     `PluginFailedMessage.cause`, rendered at 4-space indent below each
-//     failed plugin row per D-16-08. The V1 free-text retry-anchor
+//  failed plugin row. The V1 free-text retry-anchor
 //     trailer ("Fix the underlying issue and retry.") is DROPPED per
 //     D-17-09 (already excluded by the Phase 17 catalog rewrite).
-//     Severity = error (any plugin/mp failed per D-16-11). Reload-hint
+//  Severity = error (any plugin/mp failed). Reload-hint
 //     fires because at least one plugin status is `"uninstalled"` per
-//     D-16-12.
+// .
 //   - Post-state cleanup leaks (MR-6) and completion-cache cleanup leaks:
 //     DROPPED per D-18-01 (parallel to D-17-09 + add.ts pilot). The
 //     underlying `rm()` calls inside the try/catch blocks STILL RUN
@@ -285,12 +285,12 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
   //   notify(opts.ctx, opts.pi, ...) call; `plugins[]` carries one
   //   PluginUninstalledMessage per successfully unstaged plugin (D-22-02).
   // - V2 cascade per D-18-03: per-plugin `PluginFailedMessage.cause`
-  //   renders at 4-space indent via renderPluginRow (D-16-08). The V1
+  //  renders at 4-space indent via renderPluginRow. The V1
   //   marketplace-level `causeChainTrailer(err)` body is GONE.
   // - V1 `RETRY_ANCHOR` ("Fix the underlying issue and retry.") is
   //   DROPPED per D-17-09 (already excluded by the Phase 17 catalog).
   // - Severity (error on partial, info on clean) is computed by notify()
-  //   per D-16-11; the `/reload to pick up changes` trailer is computed per
+  // ; the `/reload to pick up changes` trailer is computed per
   //   D-22-01 (fires iff >=1 plugin row carries a state-change token);
   //   callers MUST NOT compose.
   // - Reference: catalog UAT `clean` + `partial` fixtures at
@@ -298,7 +298,7 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
   if (failedPlugins.length > 0) {
     // CMC-31 PARTIAL: mp.status="failed"; plugins[] mixes uninstalled +
     // failed (with per-plugin cause). Caller-order honored end-to-end:
-    // successfullyUnstaged first, failed second (D-16-06).
+    // successfullyUnstaged first, failed second.
     notify(opts.ctx, opts.pi, {
       marketplaces: [
         {

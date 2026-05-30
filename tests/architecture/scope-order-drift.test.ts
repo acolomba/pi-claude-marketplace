@@ -15,9 +15,10 @@
 //      should import-and-reuse rather than re-declare the ordering.
 //
 //   2. The inline scope-rank ternary `=== "user" ? 0 : 1`. The canonical
-//      comparator lives in `extensions/pi-claude-marketplace/presentation/
-//      sort.ts::compareByNameThenScope`; every sort site should call the
-//      shared helper rather than re-derive the rank in-line.
+//      comparator lives in
+//      `extensions/pi-claude-marketplace/shared/notify.ts::compareByNameThenScope`;
+//      every sort site should call the shared helper rather than re-derive the
+//      rank in-line.
 //
 // The allowlist contains files that MUST contain the canonical literal
 // because they ARE the canonical declaration. Adding entries beyond the

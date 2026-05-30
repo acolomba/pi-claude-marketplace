@@ -15,7 +15,7 @@
 //   D-19-01 precedent (D-18-01 lineage) -- the underlying rm() still runs,
 //   only the user-visible warning surface is gone.
 //   PU-8 reload hint: computed by notify() from PluginUninstalledMessage
-//   per D-16-12 (uninstalled is in the state-changing variant set).
+//  (uninstalled is in the state-changing variant set).
 //
 // Phase 19 / Plan 19-01: success and failure notifications are a single V2
 //   notify(opts.ctx, opts.pi, { marketplaces: [{ ..., plugins: [<row>] }] })
@@ -44,7 +44,7 @@
 //
 // API parameter shape note: `pi` is required because V2 `notify(ctx, pi,
 // message)` consumes it for the single softDepStatus(pi) probe per call
-// (D-16-14). The uninstalled variant has no `dependencies` field by
+// . The uninstalled variant has no `dependencies` field by
 // construction (D-15-02 / MSG-SD-3) so the renderer cannot emit
 // `{requires pi-subagents}` / `{requires pi-mcp}` markers on (uninstalled)
 // rows even though the probe is uniformly threaded.
@@ -223,7 +223,7 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
     // `PluginFailedMessage` with the typed cause threaded through. State was
     // NOT saved (guard contract); the plugin record stays intact for retry.
     // Severity (`error`) and reload-hint suppression are computed by notify()
-    // per D-16-11 (any failed -> error) and D-16-12 (no state-changing
+    //  (any failed -> error) and (no state-changing
     // variant -> no reload-hint).
     const cause = err instanceof Error ? err : new Error(String(err));
     const failedRow: PluginFailedMessage = {
@@ -286,7 +286,7 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
     // Per D-19-01: hygienic cleanup never becomes the primary user-facing path.
   }
 
-  // PU-8 reload hint: computed by notify() per D-16-12 from the
+  // PU-8 reload hint: computed by notify from the
   // PluginUninstalledMessage status (uninstalled is in the state-changing
   // variant set). The V1 "only when >=1 resource dropped" gate is GONE:
   // V2 reload-hint trigger is per-variant status, not per-cascade-outcome
@@ -325,12 +325,12 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
   // - One MarketplaceNotificationMessage per affected marketplace, emitted
   //   via a single notify(opts.ctx, opts.pi, ...) call per orchestration.
   // - plugins: readonly PluginNotificationMessage[] in display order
-  //   (orchestrator-controlled iteration per D-16-06; notify() does not sort).
+  //  (orchestrator-controlled iteration; notify does not sort).
   // - Discriminators by status: "uninstalled" here. Plans 19-02..05 mirror
   //   with their own status sets: installed/updated/reinstalled/failed/
   //   skipped/manual recovery/available/unavailable/upgradable.
   // - Severity + "/reload to pick up changes" trailer are computed by notify()
-  //   per D-16-11 + D-16-12; callers MUST NOT compose them.
+  // ; callers MUST NOT compose them.
   // - Reference: catalog UAT plugin-uninstall fixtures at docs/output-catalog.md:340-378.
   notify(ctx, pi, {
     marketplaces: [

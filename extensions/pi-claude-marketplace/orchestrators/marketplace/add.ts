@@ -30,7 +30,7 @@
 //   // payload (the V1 `<autoupdate>` marker has moved off the (added) arm
 //   // onto the list-surface header per D-17.1-01 / D-18-04). The
 //   // `/reload to pick up changes` trailer is computed by `notify()` per
-//   // D-16-12 (mp.status `"added"` is state-changing); callers MUST NOT
+//  (mp.status `"added"` is state-changing); callers MUST NOT
 //   // append it. See the construction recipe block-comment above the
 //   // notify() call site for the full Wave 2 mirror template.
 //
@@ -163,7 +163,7 @@ export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void>
   // - Discriminator here: `mp.status === "added"` (github + path collapse
   //   to one V2 shape; V1 `<autoupdate>` marker moved to the list surface).
   // - Severity (info; no 2nd arg) and `/reload to pick up changes` are
-  //   computed by notify() per D-16-11 + D-16-12; callers MUST NOT compose.
+  //  computed by notify; callers MUST NOT compose.
   // - Reference: catalog UAT `path-source` + `github-source` fixtures at
   //   tests/architecture/catalog-uat.test.ts:1113-1133. Per D-18-08-amend,
   //   Wave 2 (18-02..05) mirrors this with its own mp.status values.

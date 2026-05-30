@@ -290,8 +290,8 @@ function pushDiagnostic(
 // diagnostic line helper + the V1 preamble constant) is RETIRED entirely.
 // The V2 cascade construction lives inline in importClaudeSettings via
 // buildImportNotificationMarketplaces below; notify() owns severity
-// (D-16-11), reload-hint (D-16-12), and soft-dep markers (D-16-14,
-// D-16-15).
+// , reload-hint, and soft-dep markers (
+// ).
 //
 // Locked V1 -> V2 outcome mapping (A1-A3 from 20-RESEARCH.md):
 //   A1 (ImportWarningOutcome marketplace-failed / unmappable-marketplace-source) -> DROP
@@ -358,7 +358,7 @@ function dependenciesFromInstalled(o: PluginInstalledOutcome): readonly Dependen
  * Plan 20-02 / D-20-02 (strict D-19-02 mirror): pivot the linear outcome
  * arrays in `ClaudeImportExecutionResult` into the V2 cascade payload
  * tree `MarketplaceNotificationMessage[]`. The orchestrator owns iteration
- * order per D-16-06 (`compareByNameThenScope` -- name primary
+ * order (`compareByNameThenScope` -- name primary
  * case-insensitive, scope secondary project-before-user); `notify()` does
  * NOT sort.
  *
@@ -485,7 +485,7 @@ function buildImportNotificationMarketplaces(
   // representation. The in-memory record stays on the returned result;
   // Pi runtime debug logs preserve diagnostic visibility.
 
-  // D-16-06: orchestrator owns iteration order; notify() does NOT sort.
+  // : orchestrator owns iteration order; notify does NOT sort.
   // Project-before-user tie-break per MSG-GR-3 via compareByNameThenScope.
   // defense-in-depth: typed readonly + runtime freeze (codebase convention)
   return Object.freeze(
@@ -795,8 +795,8 @@ export async function importClaudeSettings(
   // orchestrators/plugin/reinstall.ts; execute.ts substitutes the
   // import-cascade variant set (added / updated / failed marketplaces
   // crossed with installed / skipped / failed / unavailable plugins) per
-  // D-20-02 + D-19-02 strict mirror. Severity (D-16-11), reload-hint
-  // (D-16-12), and soft-dep markers (D-16-14, D-16-15) are computed by
+  // D-20-02 + D-19-02 strict mirror. Severity, reload-hint
+  // , and soft-dep markers are computed by
   // notify(). The V1 outer try/catch and the catastrophic-error path
   // (V1 notifyError with the legacy import-failed prefix) are DROPPED
   // per A3 + D-20-03 extension; truly catastrophic throws bubble to Pi

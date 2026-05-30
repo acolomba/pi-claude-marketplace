@@ -1,25 +1,19 @@
 // tests/architecture/catalog-uat.test.ts
 //
-// Phase 17 Plan 17-03 -- catalog UAT byte-equality runner (v2 rewrite).
+// Catalog UAT byte-equality runner.
 //
 // Reads `docs/output-catalog.md` at test time, extracts every fenced
 // renderer-output block annotated with `<!-- catalog-state: STATE -->`
 // inside a per-command H2 section, pairs each `(section, STATE)` tuple
 // with a programmatic `NotificationMessage` fixture, and asserts byte
-// equality between the v2 catalog's expected block and what
+// equality between the catalog's expected block and what
 // `notify(mockCtx, mockPi, message)` actually emits.
 //
-// SCOPE GATE (SNM-31, D-17-03 pure exclusion): this test drives `notify()`
-// exclusively. The V1 composer fan-out (`renderRow`, `cascadeSummary`,
-// `renderManualRecovery`, `renderRollbackPartial`, `renderPluginList`,
-// `renderMarketplaceList`, `appendReloadHint`) is no longer referenced
-// from this file -- Phase 21 owns the deletion of those composers; their
-// surface remains covered by `tests/shared/notify.test.ts` until that
-// deletion lands. The `domain/source.ts::pathSource` fixture-builder
-// dependency is also gone -- v2 fixtures are pure data, not synthesized
-// from domain helpers.
+// SCOPE GATE (SNM-31): this test drives `notify()` exclusively. Fixtures are
+// pure `NotificationMessage` data -- they are not synthesized from domain
+// helpers.
 //
-// FIXTURE SHAPE (D-17-05, RESEARCH.md Pitfall 6): the FIXTURES map is keyed
+// FIXTURE SHAPE: the FIXTURES map is keyed
 // by `(section, state)` tuples; each entry is a `CatalogFixture` carrying
 // a `NotificationMessage` payload, a `MockPi` factory (to drive the
 // `softDepStatus(pi)` probe inside `notify()`) and an optional

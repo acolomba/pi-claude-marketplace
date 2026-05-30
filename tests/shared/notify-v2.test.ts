@@ -129,9 +129,8 @@ import {
 } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
 
 // ---------------------------------------------------------------------------
-// Mock helpers -- mirror tests/shared/notify.test.ts:17-23 verbatim for ctx;
-// extend with mock-pi shapes for softDepStatus(pi) inspection per CONTEXT
-// <specifics> "Mock pi shape" bullet.
+// Mock helpers -- a minimal ctx whose `ui.notify` is a mock.fn, plus mock-pi
+// shapes that drive the softDepStatus(pi) probe inspection.
 // ---------------------------------------------------------------------------
 
 interface MockCtx {

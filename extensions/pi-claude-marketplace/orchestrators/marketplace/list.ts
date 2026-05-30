@@ -13,10 +13,10 @@
 //   for each scope: loadState(locationsFor(scope, cwd).extensionRoot)
 //     -> accumulate one MarketplaceNotificationMessage per state.marketplaces[<name>]
 //   notify(opts.ctx, opts.pi, { marketplaces: <built array> });
-//   // D-16-17: an empty top-level marketplaces array renders the
+// : an empty top-level marketplaces array renders the
 //   //   `(no marketplaces)` sentinel (planner-chosen) -- replaces the V1
 //   //   CMC-10 EmptyToken path through renderMarketplaceList.
-//   // D-16-06: caller-supplied order honored end-to-end (no internal
+// : caller-supplied order honored end-to-end (no internal
 //   //   sort); the outer scopes loop is project-then-user (SC-6 / MSG-GR-3),
 //   //   so same-name cross-scope rows land in V1's compareByNameThenScope
 //   //   project-before-user order when single-name. Cross-name ordering is
@@ -65,9 +65,9 @@ export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<v
       // - `details: MarketplaceDetails` is OPTIONAL and INDEPENDENT of status
       //   per D-15-06; SET when the persisted record carries `autoupdate`
       //   and/or `lastUpdatedAt`, OMITTED otherwise so the renderer emits a
-      //   bare `● <name> [<scope>]` row (D-16-07 list-surface sub-branch A).
+      //  bare `● <name> [<scope>]` row (list-surface sub-branch A).
       // - Severity (info; no 2nd arg) and reload-hint are computed by
-      //   notify() per D-16-11 + D-16-12 (list surface emits neither).
+      //  notify (list surface emits neither).
       // - Reference: catalog UAT `mixed-scopes` fixture at
       //   tests/architecture/catalog-uat.test.ts:1087-1107 (binding
       //   `<autoupdate>` + `<last-updated <iso>>` tokens).
@@ -89,8 +89,8 @@ export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<v
     }
   }
 
-  // D-16-17: empty top-level marketplaces array renders `(no marketplaces)`.
-  // D-16-06: caller-supplied order honored end-to-end; the outer loop above
+  // : empty top-level marketplaces array renders `(no marketplaces)`.
+  // : caller-supplied order honored end-to-end; the outer loop above
   // already enforces the SC-6 / MSG-GR-3 project-first ordering.
   notify(opts.ctx, opts.pi, { marketplaces });
 }
