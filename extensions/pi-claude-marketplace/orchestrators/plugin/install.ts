@@ -1327,7 +1327,10 @@ function narrowResolverReasons(reasons: readonly string[]): readonly Reason[] {
     out.push("unsupported source");
   }
 
-  return out;
+  // Dedup, preserving first-seen order: a multi-note resolver failure can
+  // map several notes to the same closed Reason, and the row must not
+  // render a duplicate token.
+  return [...new Set(out)];
 }
 
 function classifyInstallFailure(err: unknown, formattedCause: string): InstallPluginOutcome {

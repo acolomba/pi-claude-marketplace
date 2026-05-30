@@ -482,6 +482,10 @@ export interface PluginFailedMessage {
   readonly scope?: Scope;
   readonly cause?: Error;
   readonly rollbackPartial?: readonly {
+    // Free-form phase label sourced from transaction/phase-ledger.ts's
+    // RollbackPartial.phase. The install path emits `phase3a` / `phase3b`
+    // while the update path emits bridge names; the renderer only echoes the
+    // label into the MSG-RP-1 child row, so the field stays `string`.
     readonly phase: string;
     readonly cause?: Error;
   }[];
@@ -728,9 +732,9 @@ function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus
 // canonicalised the literals here.
 // ---------------------------------------------------------------------------
 
-/** Soft-dep marker literals (D-16-04 / D-16-15; canonicalised here in Phase 21). */
-const SOFT_DEP_MARKER_AGENTS = "requires pi-subagents";
-const SOFT_DEP_MARKER_MCP = "requires pi-mcp";
+/** Soft-dep marker literals -- both are REASONS members (closed set). */
+const SOFT_DEP_MARKER_AGENTS: Reason = "requires pi-subagents";
+const SOFT_DEP_MARKER_MCP: Reason = "requires pi-mcp";
 
 /**
  * Join tokens with single spaces, suppressing empty slots so absent
@@ -850,23 +854,21 @@ function composeVersionArrow(from: string, to: string): string {
  *   - Returns `""` when the composed array is empty (MSG-GR-4 forbids `{}`).
  *   - Otherwise returns `{<r1>, <r2>, ...}`.
  *
- * Single canonical implementation (D-16-04 / D-16-15; canonicalised here in
- * Phase 21 from the retired `presentation/compact-line.ts::composeReasons`).
+ * Single canonical implementation (D-16-04 / D-16-15).
  *
- * The first parameter is typed `readonly string[] | undefined` rather than
- * `readonly Reason[] | undefined` for cross-variant ergonomics: each
- * switch arm passes either `p.reasons` (already `readonly Reason[]`, a
- * subtype of `readonly string[]`) or `undefined`. The discriminated-union
- * narrowing inside `renderPluginRow` guarantees that only valid `Reason`
- * arrays (or `undefined`) flow in.
+ * The reasons array is the closed `Reason` set end-to-end: every switch arm
+ * passes either `p.reasons` (a `readonly Reason[]`) or `undefined`, and the
+ * appended soft-dep markers are themselves `Reason` members. Typing the
+ * parameter and accumulator as `Reason` rejects out-of-set strings at the
+ * call sites at compile time (CMC-11 closed-set discipline).
  */
 function composeReasons(
-  reasons: readonly string[] | undefined,
+  reasons: readonly Reason[] | undefined,
   declaresAgents: boolean,
   declaresMcp: boolean,
   probe: SoftDepStatus,
 ): string {
-  const composed: string[] = reasons === undefined ? [] : [...reasons];
+  const composed: Reason[] = reasons === undefined ? [] : [...reasons];
 
   if (declaresAgents && !probe.piSubagentsLoaded) {
     composed.push(SOFT_DEP_MARKER_AGENTS);

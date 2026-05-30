@@ -34,16 +34,17 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    * effective-state-at-render-time signal without re-deriving from the
    * stagedAgents / stagedMcpServers arrays at the renderer site).
    *
-   * MSG-SD-3 / D-13-07: per-row markers fire on `(reinstalled)` rows only;
-   * `(skipped)` and `(failed)` rows omit them (failed sets these to false
-   * to make the constraint explicit even though the renderer narrows on
-   * `status === "skipped"` / `"failed"` anyway).
+   * MSG-SD-3: per-row markers fire on `(reinstalled)` rows only. These
+   * flags live ONLY on this reinstalled arm; the `(skipped)` and
+   * `(failed)` arms do not declare them at all, because the renderer
+   * narrows on the partition discriminator and never reads soft-dep flags
+   * for those rows.
    *
-   * Task 260525-cjr B1 / CMC-13: required `boolean` (not `?: boolean`)
-   * so every reinstalled-outcome producer populates the predicate
-   * EXPLICITLY rather than relying on `undefined ~= false`. The closed
-   * type enforces the contract at compile time; the `tsc --noEmit` gate
-   * catches any forgotten emitter on every CI run.
+   * CMC-13: required `boolean` (not `?: boolean`) so every reinstalled
+   * outcome producer populates the predicate EXPLICITLY rather than
+   * relying on `undefined ~= false`. The closed type enforces the contract
+   * at compile time; the `tsc --noEmit` gate catches any forgotten emitter
+   * on every CI run.
    */
   readonly declaresAgents: boolean;
   readonly declaresMcp: boolean;
@@ -94,9 +95,11 @@ export type ReinstallPluginOutcome =
 export type PluginUpdatePartition = "updated" | "unchanged" | "skipped" | "failed";
 
 /**
- * Bridge identifier for `PluginUpdateFailedOutcome.phaseFailures`.
- * Promoted to a named type so callers and tests don't repeat the literal
- * union inline.
+ * Bridge identifier for `PluginUpdateFailedOutcome.phaseFailures` on the
+ * update path. Promoted to a named type so callers and tests don't repeat
+ * the literal union inline. (Distinct from the free-form
+ * `PluginFailedMessage.rollbackPartial[].phase` label, which also carries the
+ * install path's `phase3a` / `phase3b` tokens.)
  */
 export type UpdatePhaseBridge = "skills" | "commands" | "agents" | "mcp";
 
