@@ -68,7 +68,7 @@ V1 helper has FOUR documented branches (`presentation/version-arrow.ts:25-32`):
   - only `from` present     → `from`
 
 The notify.ts inline copy (`shared/notify.ts:647-649`) collapses the equal /
-differ cases into one — it returns `${from} → v${to}` whenever both sides are
+differ cases into one -- it returns `${from} → v${to}` whenever both sides are
 present regardless of equality:
 
 ```ts
@@ -137,7 +137,7 @@ Both calls this "info severity". The Pi API's accepted magic strings are
 `"info" | "warning" | "error"` (per the file header comment line 20). The V1
 `notifySuccess` wrapper at lines 59-61 omits the second arg, which the Pi API
 then defaults to... whatever `notify()` defaults to when severity is
-unspecified. That is not necessarily `"info"` — the doc comment is asserting
+unspecified. That is not necessarily `"info"` -- the doc comment is asserting
 a Pi-API behaviour without proof. Tests assert `arguments.length === 1` (test
 25), which only checks that no second arg was passed, not that the Pi API
 treats it as `"info"`. If Pi's default ever drifts from `"info"` to (e.g.)
@@ -161,7 +161,7 @@ overload-vs-impl typing gap with `usageBlock ?? ""`. The justifying comment
 (lines 119-123) acknowledges this is solely to satisfy strict-null-check
 without `// eslint-disable no-non-null-assertion`. The behaviour is
 defensive but silently masks a real bug class: a caller that compiles via
-`as never` / `as any` (the V2 tests themselves do exactly this — see
+`as never` / `as any` (the V2 tests themselves do exactly this -- see
 `tests/shared/notify-v2.test.ts:209` etc.) and passes only `(ctx, "msg")`
 without a usageBlock would route to the V1 branch and emit `msg\n\n` (a
 trailing blank line, no Usage block) at `"error"` severity instead of
@@ -204,7 +204,7 @@ disables three rules for the V2 renderer file: `msg-nc-1-entity-error`,
 `msg-sd-1-soft-dep-reason`, and `msg-sd-2-soft-dep-predicate`. The
 justifying comment (lines 280-288) cites only the soft-dep-marker
 duplication for `msg-sd-1` / `msg-sd-2`. There is no `msg-nc-1` (entity-
-error literal) duplication in `shared/notify.ts` — the renderer does not
+error literal) duplication in `shared/notify.ts` -- the renderer does not
 emit entity-error literals. The `msg-nc-1` exemption is broader than the
 duplication justification warrants and risks masking a future regression
 that introduces an entity-error literal into `shared/notify.ts` (where the
@@ -216,7 +216,7 @@ soft-dep-marker chokepoint reason, but its rule list copies the entire
 Block 5 ruleset without filtering for the rules that actually apply to
 `shared/notify.ts`. The same critique applies symmetrically to Block 4a
 (`msg-rh-1` is the cited reason; `msg-mr-1` / `msg-mr-2` / `msg-rp-1`
-exemptions are tagged-along) — `shared/notify.ts` legitimately owns the
+exemptions are tagged-along) -- `shared/notify.ts` legitimately owns the
 `"(manual recovery)"` literal in `renderPluginRow` (line 844) and the
 `"[${phase.phase}] (rollback failed)"` literal in
 `composeRollbackPartialLines` (line 983), so those exemptions are
@@ -243,7 +243,7 @@ justified.
   ignores: [
     "extensions/pi-claude-marketplace/presentation/compact-line.ts",
     "extensions/pi-claude-marketplace/shared/grammar/reasons.ts",
-    // NOTE: shared/notify.ts intentionally NOT exempted — V2 renderer
+    // NOTE: shared/notify.ts intentionally NOT exempted -- V2 renderer
     // does not own entity-error literals and msg-nc-1 should fire if one
     // is introduced.
   ],
@@ -263,16 +263,16 @@ justified.
 **Issue:** Multiple doc-comments cite source line numbers that no longer
 match the current file (Phase 16 additions shifted line numbers). Examples:
 
-  - Line 252 cites `presentation/compact-line.ts:96` (verified — present).
-  - Line 541 cites `shared/notify.ts:466` for D-15-06 — line 466 is
+  - Line 252 cites `presentation/compact-line.ts:96` (verified -- present).
+  - Line 541 cites `shared/notify.ts:466` for D-15-06 -- line 466 is
     inside `MarketplaceNotificationMessage`, which is correct (line 464
     in current file). Close.
   - Line 595 cites `presentation/compact-line.ts:489-491` for joinTokens
-    — verified at the cited lines.
+    -- verified at the cited lines.
   - Line 605 cites `presentation/compact-line.ts:481-487` for
-    renderVersion — verified at the cited lines.
+    renderVersion -- verified at the cited lines.
   - Line 632-633 cites `presentation/version-arrow.ts:33-50` byte-for-byte
-    — see WR-01: this claim is FALSE (the inline copy diverges).
+    -- see WR-01: this claim is FALSE (the inline copy diverges).
 
 These references are doc-only and do not affect runtime behaviour, but they
 will continue to drift through Phases 17-21 unless a CI test asserts they
@@ -291,9 +291,9 @@ cheaper and removes the maintenance tax.
 
 **Issue:** The severity-ladder implementation walks `message.marketplaces`
 TWICE: once for the failed-class match (lines 905-915), once for the
-warning-class match (lines 918-924). This is not a correctness bug — the
+warning-class match (lines 918-924). This is not a correctness bug -- the
 first-match-wins semantics requires the failed pass to complete fully
-before any warning pass evaluates anything (D-16-11) — but it can be done
+before any warning pass evaluates anything (D-16-11) -- but it can be done
 in a single pass with one early return:
 
 ```ts
@@ -336,14 +336,14 @@ deepEqual on every per-status test.
 rather than `readonly Reason[] | undefined`. The doc-comment at lines 676-681
 acknowledges this is "for cross-variant ergonomics" because each switch arm
 passes either `p.reasons` (Reason[]) or `undefined`. The widening is not
-strictly necessary — TypeScript's structural subtyping would accept
+strictly necessary -- TypeScript's structural subtyping would accept
 `readonly Reason[]` and `undefined` against a `readonly Reason[] | undefined`
 parameter just as readily. The widening DOES allow the helper to silently
 accept a string array that is NOT a Reason member, which could mask a
 regression where a caller hand-builds a `reasons: ["arbitrary text"]` array.
 
 The V1 source helper `presentation/compact-line.ts:458-479` declares the
-parameter as `readonly Reason[] | undefined` — the V2 inline copy is
+parameter as `readonly Reason[] | undefined` -- the V2 inline copy is
 strictly more permissive than the V1 source it claims (line 674-675) to
 mirror.
 

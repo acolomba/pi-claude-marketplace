@@ -22,7 +22,7 @@
 
 ---
 
-## Post-success warnings (DROP vs FOLD) — install.ts (5 sources)
+## Post-success warnings (DROP vs FOLD) -- install.ts (5 sources)
 
 | Option | Description | Selected |
 |--------|-------------|----------|
@@ -35,7 +35,7 @@
 
 ---
 
-## Post-success warnings (DROP vs FOLD) — list.ts (PROBE_FAILURES summary)
+## Post-success warnings (DROP vs FOLD) -- list.ts (PROBE_FAILURES summary)
 
 | Option | Description | Selected |
 |--------|-------------|----------|
@@ -74,7 +74,7 @@
 
 ---
 
-## Plan granularity & pilot file — Wave 1 pilot selection
+## Plan granularity & pilot file -- Wave 1 pilot selection
 
 | Option | Description | Selected |
 |--------|-------------|----------|
@@ -87,7 +87,7 @@
 
 ---
 
-## Plan granularity & pilot file — Plan/wave structure
+## Plan granularity & pilot file -- Plan/wave structure
 
 | Option | Description | Selected |
 |--------|-------------|----------|

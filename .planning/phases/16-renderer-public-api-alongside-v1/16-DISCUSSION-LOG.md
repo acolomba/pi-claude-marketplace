@@ -1,7 +1,7 @@
 # Phase 16: Renderer & Public API (Alongside V1) - Discussion Log
 
 > **Audit trail only.** Do not use as input to planning, research, or execution agents.
-> Decisions are captured in CONTEXT.md — this log preserves the alternatives considered.
+> Decisions are captured in CONTEXT.md -- this log preserves the alternatives considered.
 
 **Date:** 2026-05-25
 **Phase:** 16-renderer-public-api-alongside-v1
@@ -14,10 +14,10 @@
 | Option | Description | Selected |
 |--------|-------------|----------|
 | Add pi as 2nd arg: notify(ctx, pi, message) | Most natural; mirrors how orchestrators already pass pi separately. Requires amending SNM-12's literal signature in REQUIREMENTS.md + ADR. Probe is computed inline (softDepStatus(pi)); no module-level state. | ✓ |
-| Module-level setPi(pi) at bootstrap; notify reads global | Keeps SNM-12 signature unchanged. Adds hidden global state in shared/notify.ts — test isolation gets harder, parallel session safety dubious. Pi must be set exactly once. | |
+| Module-level setPi(pi) at bootstrap; notify reads global | Keeps SNM-12 signature unchanged. Adds hidden global state in shared/notify.ts -- test isolation gets harder, parallel session safety dubious. Pi must be set exactly once. | |
 | Inject probe via 3rd opts arg: notify(ctx, message, opts?: { probe?: SoftDepProbe }) | Keeps SNM-12 close (extension via opts). Mildly violates SNM-16 'no caller-supplied probe state' literal wording, but the spirit (renderer owns probing) holds when opts.probe is omitted in production and only tests inject it. | |
 
-**User's choice:** Add `pi` as 2nd arg — `notify(ctx, pi, message)`.
+**User's choice:** Add `pi` as 2nd arg -- `notify(ctx, pi, message)`.
 **Notes:** SNM-12 needs an editorial update to add `pi` to the literal signature. Captured as part of D-16-01.
 
 ---
@@ -26,9 +26,9 @@
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| V1 grammar — single-plugin inline form | Phase 16 goal explicitly says 'byte-equal output to V1 callers when given equivalent payloads'. Catalog UAT byte-equality against V1 composers stays GREEN. | |
+| V1 grammar -- single-plugin inline form | Phase 16 goal explicitly says 'byte-equal output to V1 callers when given equivalent payloads'. Catalog UAT byte-equality against V1 composers stays GREEN. | |
 | v2 always-marketplace-header form already | Phase 16 emits the two-line form. Per-status unit tests assert v2 shape; catalog UAT still tests V1. Phase 17 becomes pure docs + UAT-migration. | ✓ |
-| Both — switch on a feature flag or payload field | Conditional emission introduces a flag-removal task in Phase 17. Adds complexity for no clear win. | |
+| Both -- switch on a feature flag or payload field | Conditional emission introduces a flag-removal task in Phase 17. Adds complexity for no clear win. | |
 
 **User's choice:** v2 always-marketplace-header form NOW (Phase 16 lands the new grammar in code).
 **Notes:** Catalog UAT (testing V1 composers) stays GREEN because V1 callers route through V1 wrappers. The phase goal's "byte-equal to V1" wording is interpreted as a non-blocker because no V1 caller routes through `notify()` in Phase 16. Authority resolution covered in the next question.
@@ -54,7 +54,7 @@
 |--------|-------------|----------|
 | tests/shared/notify-v2.test.ts | Mirrors existing tests/shared/notify.test.ts. Keeps V1 and V2 tests side-by-side; Phase 21 deletes notify.test.ts and renames notify-v2.test.ts → notify.test.ts. | ✓ |
 | Extend tests/shared/notify.test.ts with V2 test blocks | Single file holds V1 + V2 tests. Risks file size growth. | |
-| tests/architecture/notify-renderer.test.ts | tests/architecture/ historically holds 'gate' / drift / parity tests, not per-variant unit tests — convention shift. | |
+| tests/architecture/notify-renderer.test.ts | tests/architecture/ historically holds 'gate' / drift / parity tests, not per-variant unit tests -- convention shift. | |
 
 **User's choice:** `tests/shared/notify-v2.test.ts`.
 **Notes:** Captured as D-16-16.
@@ -78,8 +78,8 @@
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| No — marketplace header + indented rows is the full output | v2 spec is uniform: every output renders marketplace header + indented plugin rows. Simpler grammar; aligns with PROJECT.md wording. | ✓ |
-| Yes — keep the cascade-summary line above the marketplace block | Multi-plugin payloads emit a summary line. Preserves V1's at-a-glance summary. Adds another grammar element to model. | |
+| No -- marketplace header + indented rows is the full output | v2 spec is uniform: every output renders marketplace header + indented plugin rows. Simpler grammar; aligns with PROJECT.md wording. | ✓ |
+| Yes -- keep the cascade-summary line above the marketplace block | Multi-plugin payloads emit a summary line. Preserves V1's at-a-glance summary. Adds another grammar element to model. | |
 | Yes for cascades ≥ N plugins, otherwise no | Threshold-based. Adds a tunable that needs a value picked. Adds branching to the renderer. | |
 
 **User's choice:** No cascade-summary line.
@@ -91,10 +91,10 @@
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| notifyUsageError(ctx, message: UsageErrorMessage) — no pi | UsageErrorMessage has no plugin rows / dependencies / soft-dep probes — no need for pi. Keeps SNM-13 signature as written. | ✓ |
-| notifyUsageError(ctx, pi, message) — symmetric with notify() | Always pass pi. Consistent call-site shape across the V2 surface. Mildly amends SNM-13. | |
+| notifyUsageError(ctx, message: UsageErrorMessage) -- no pi | UsageErrorMessage has no plugin rows / dependencies / soft-dep probes -- no need for pi. Keeps SNM-13 signature as written. | ✓ |
+| notifyUsageError(ctx, pi, message) -- symmetric with notify() | Always pass pi. Consistent call-site shape across the V2 surface. Mildly amends SNM-13. | |
 
-**User's choice:** `notifyUsageError(ctx, message: UsageErrorMessage)` — no pi.
+**User's choice:** `notifyUsageError(ctx, message: UsageErrorMessage)` -- no pi.
 **Notes:** Captured as D-16-02.
 
 ---
@@ -107,7 +107,7 @@
 | One combined dispatch table keyed by stringified discriminator | Single Record<MpStatus|PluginStatus, fn>. More terse but mixes concerns. Less idiomatic. | |
 | Two file-private helpers, each its own assertNever switch | Same as (1) but helpers extracted at module scope. Easier unit-test seams. | |
 
-**User's choice:** Two nested switches with one `assertNever` each (interpreted as two file-private helpers `renderMpHeader` / `renderPluginRow` at module scope per the preview shown — both wordings describe the same structure).
+**User's choice:** Two nested switches with one `assertNever` each (interpreted as two file-private helpers `renderMpHeader` / `renderPluginRow` at module scope per the preview shown -- both wordings describe the same structure).
 **Notes:** User initially asked for clarification on what `assertNever` is; explanation provided and re-asked. Captured as D-16-09.
 
 ---
@@ -143,7 +143,7 @@
 | Option | Description | Selected |
 |--------|-------------|----------|
 | Single blank line between marketplaces | `...indented rows...\n\n● next-marketplace [scope]\n  ...`. Standard Markdown/CLI convention. Reload-hint trailer appends after one more blank line. | ✓ |
-| No separator — marketplaces stack directly | More compact but visually harder to scan when 3+ marketplaces appear. | |
+| No separator -- marketplaces stack directly | More compact but visually harder to scan when 3+ marketplaces appear. | |
 | Horizontal divider line between marketplaces | Adds a vocabulary element to the v2 spec; not aligned with v1.3 visual style. | |
 
 **User's choice:** Single blank line between marketplaces.
@@ -169,7 +169,7 @@
 | Option | Description | Selected |
 |--------|-------------|----------|
 | Only on success-class statuses (added/removed/updated) | Reload-hint fires when marketplace.status ∈ {added, removed, updated} OR any plugin status ∈ {installed, updated, reinstalled, uninstalled}. Marketplace 'failed' does NOT trigger hint. | ✓ |
-| Any marketplace status set, including failed (literal SNM-15 reading) | Reload-hint fires whenever marketplace.status is set, even when failed. Users see '/reload to pick up changes' under failed marketplace headers — may be confusing. | |
+| Any marketplace status set, including failed (literal SNM-15 reading) | Reload-hint fires whenever marketplace.status is set, even when failed. Users see '/reload to pick up changes' under failed marketplace headers -- may be confusing. | |
 | Also when failed has rollbackPartial (state really changed) | Hint fires on success-class statuses AND on plugin failed-with-rollbackPartial. Most semantically precise but requires walking the payload tree for rollbackPartial[] presence. | |
 
 **User's choice:** Only on success-class statuses.
@@ -193,13 +193,13 @@ Decisions deferred to the planner (recorded in CONTEXT.md `<decisions>` → "Cla
 
 Ideas captured in CONTEXT.md `<deferred>`:
 
-- Migrating any orchestrator or edge call site to `notify()` — Phases 18 / 19 / 20.
-- Deleting V1 wrappers, MSG-* lint rules, `presentation/*` composers — Phase 21 final teardown.
-- Rewriting `docs/messaging-style-guide.md` v1.0 → v2.0 — Phase 17 (SNM-19).
-- Rewriting `docs/output-catalog.md` to always-marketplace-header form — Phase 17 (SNM-20).
-- Migrating `tests/architecture/catalog-uat.test.ts` to drive `notify()` via structured fixtures — Phase 17 (SNM-31).
-- Splitting `notify()`'s internal helpers into multiple files under `shared/notify/` — Phase 21 (if file size warrants).
-- Removing the grammar duplication via a `presentation/* → shared/notify` import — Phase 21 (when V1 wrappers and composers are deleted together).
-- Pruning `Reason` to a v1.4-active subset — Phase 21 (alongside the `shared/grammar/` retire-or-keep decision per SNM-29).
-- Branded `Version` type with `hash-<12hex>` / semver validation — Carried over from Phase 15; backlog.
-- JSON output mode for notifications — REQUIREMENTS.md "Out of Scope"; backlog.
+- Migrating any orchestrator or edge call site to `notify()` -- Phases 18 / 19 / 20.
+- Deleting V1 wrappers, MSG-* lint rules, `presentation/*` composers -- Phase 21 final teardown.
+- Rewriting `docs/messaging-style-guide.md` v1.0 → v2.0 -- Phase 17 (SNM-19).
+- Rewriting `docs/output-catalog.md` to always-marketplace-header form -- Phase 17 (SNM-20).
+- Migrating `tests/architecture/catalog-uat.test.ts` to drive `notify()` via structured fixtures -- Phase 17 (SNM-31).
+- Splitting `notify()`'s internal helpers into multiple files under `shared/notify/` -- Phase 21 (if file size warrants).
+- Removing the grammar duplication via a `presentation/* → shared/notify` import -- Phase 21 (when V1 wrappers and composers are deleted together).
+- Pruning `Reason` to a v1.4-active subset -- Phase 21 (alongside the `shared/grammar/` retire-or-keep decision per SNM-29).
+- Branded `Version` type with `hash-<12hex>` / semver validation -- Carried over from Phase 15; backlog.
+- JSON output mode for notifications -- REQUIREMENTS.md "Out of Scope"; backlog.

@@ -33,7 +33,7 @@ resulting renderer/completion fix + regression test, and the
 requirement-text amendments to SNM-37 / SC#1 in lockstep.
 
 **Out of scope:** real `npm publish` / packaged-artifact (release-tarball)
-validation (deferred — SNM-37 is reproduction-enablement, not a release gate);
+validation (deferred -- SNM-37 is reproduction-enablement, not a release gate);
 the GREEN-gate close (Phase 26); state migration for hash-versioned plugins
 (REQUIREMENTS Out of Scope); any new commands or capabilities.
 </domain>
@@ -41,8 +41,8 @@ the GREEN-gate close (Phase 26); state migration for hash-versioned plugins
 <decisions>
 ## Implementation Decisions
 
-### Delivery mechanism (SNM-37) — user-locked
-- **D-25-01:** Use the **existing `scripts/pi.sh`** as the delivery mechanism —
+### Delivery mechanism (SNM-37) -- user-locked
+- **D-25-01:** Use the **existing `scripts/pi.sh`** as the delivery mechanism --
   NOT a real `npm publish` or `npm link`. It loads the v0.2.0 source tree
   directly (`-e extensions/pi-claude-marketplace/index.ts`) into an interactive
   Pi, and also loads the `pi-subagents` + `pi-mcp-adapter` companions
@@ -52,25 +52,25 @@ the GREEN-gate close (Phase 26); state migration for hash-versioned plugins
 - **D-25-02:** Run reproductions under **`scripts/pi.sh --home <tmp sandbox>`**
   (sets `PI_CODING_AGENT_DIR` / `PI_CODING_AGENT_SESSION_DIR`). Sandbox is the
   PRIMARY environment: reproducible, non-destructive, leaves the user's real
-  `~/.pi` untouched. The script's `--cd` controls cwd — relevant because the
+  `~/.pi` untouched. The script's `--cd` controls cwd -- relevant because the
   completion provider captures `process.cwd()` at registration
   (`edge/register.ts:95-99`).
-- **D-25-03 (SNM-37 amendment, lockstep — mirrors D-23-01 / D-24-03):** Amend
+- **D-25-03 (SNM-37 amendment, lockstep -- mirrors D-23-01 / D-24-03):** Amend
   SNM-37's "published to npm or npm-linked into the user's Pi runtime" wording
   to "loaded from source via `scripts/pi.sh` (sandbox home)." The requirement's
   *purpose* (reproduction-enablement for SNM-38/39) is unchanged; only the
   methodology text is corrected to match what's actually being done. Amend in
   the same commit as the phase work.
 
-### SNM-37 verification — behavioral, not version-string (user-locked, all 3 caveats)
+### SNM-37 verification -- behavioral, not version-string (user-locked, all 3 caveats)
 - **D-25-04:** SC#1's "`pi --version`" verification half is **moot under a
-  source-load** — `pi --version` reports *Pi's* version, not the source-loaded
+  source-load** -- `pi --version` reports *Pi's* version, not the source-loaded
   extension's (in `-e` mode the extension is not a separately-versioned
   installed package). **Amend SC#1: the v1.4-identity proof is the BEHAVIORAL
-  smoke** — a `/claude:plugin list` that shows v1.4 catalog-conformant byte
+  smoke** -- a `/claude:plugin list` that shows v1.4 catalog-conformant byte
   forms: no `/reload to pick up changes` trailer on a read-only list,
   `v#<7hex>` hash display (SNM-35), `{lsp}` not `{lspServers}` (SNM-36). This is
-  *stronger* evidence than a version string — it proves the new code paths
+  *stronger* evidence than a version string -- it proves the new code paths
   execute. Reuse the Phase-07 runtime-smoke pattern (`runPiRuntimeSmoke`) where
   it helps, but the binding signal is the byte forms.
 - **D-25-05:** **Keep a real-`~/.pi`-home fallback for G-MIL-07 only.** The
@@ -78,7 +78,7 @@ the GREEN-gate close (Phase 26); state migration for hash-versioned plugins
   specific to the user's real home layout, a clean sandbox could *false-refute*
   it. If the sandbox does not reproduce G-MIL-07, a quick real-home spot-check
   confirms before concluding "refuted." G-MIL-03 (pure rendering) carries no
-  such risk — sandbox alone is sufficient.
+  such risk -- sandbox alone is sufficient.
 - **D-25-06:** **Packaged-artifact / real-publish validation is explicitly
   deferred** (recorded, not silently skipped). `scripts/pi.sh` does not validate
   the `files:` tarball or a real npm install; SNM-37 is not a release gate, so
@@ -87,16 +87,16 @@ the GREEN-gate close (Phase 26); state migration for hash-versioned plugins
 
 ### Work split / automation ceiling (user-locked)
 - **D-25-07:** **Automate as much as possible first.** G-MIL-03 byte-capture is
-  **fully automated** — capture leading-whitespace byte counts at the
+  **fully automated** -- capture leading-whitespace byte counts at the
   `ctx.ui.notify` boundary (before any tui/markdown rendering), independent of
   the live tui.
 - **D-25-08:** For G-MIL-07, **go straight to a live `scripts/pi.sh`
-  interactive trigger** with the user — do NOT build a new harness layer. The
+  interactive trigger** with the user -- do NOT build a new harness layer. The
   unit test (`provider.test.ts:806`) already covers `getArgumentCompletions`;
   the suspected gap is tui consumption, which only manifests at the live
   keystroke. The final confirmation is an interactive escalation to the user.
 
-### G-MIL-03 resolution boundary (SNM-38) — user-locked
+### G-MIL-03 resolution boundary (SNM-38) -- user-locked
 - **D-25-09:** **Byte-evidence first, then decide.** Capture what the renderer
   actually emits at `ctx.ui.notify`:
   - If the code emits the catalog 2/4/6 ladder correctly → the observed 1/3 is a
@@ -109,14 +109,14 @@ the GREEN-gate close (Phase 26); state migration for hash-versioned plugins
     (plugin row prefix = 2 spaces per D-16-04; cause-chain at 4/6 via
     `renderIndentedCauseChain`).
 
-### G-MIL-07 resolution boundary (SNM-39) — user-locked
+### G-MIL-07 resolution boundary (SNM-39) -- user-locked
 - **D-25-10:** **Root-cause first, then fix-or-defer.** Trace to the actual
   cause among the recon's three candidates: (a) provider code-path divergence,
   (b) Pi-tui consumption/display of the `AutocompleteItem[]` payload, (c)
   `getInstalledPluginToMarketplacesMap` returning empty due to a scope-root
   mismatch at runtime.
   - If the cause is **our code** (provider wiring, scope-root resolution, the
-    dual completion surfaces — `getArgumentCompletions` at `register.ts:98` vs
+    dual completion surfaces -- `getArgumentCompletions` at `register.ts:98` vs
     the `addAutocompleteProvider` wrapper at `register.ts:108`) → fix it + add
     regression coverage.
   - If the cause is **genuinely Pi-tui-external** (a `@earendil-works/pi-tui`
@@ -127,7 +127,7 @@ the GREEN-gate close (Phase 26); state migration for hash-versioned plugins
 ### Claude's Discretion
 - **Regression-test policy on a refuted finding:** whether to still add a
   byte-equality test locking the 2/4/6 ladder even when G-MIL-03 is refuted
-  (recommended default: yes — cheap drift insurance, feeds Phase 26's GREEN
+  (recommended default: yes -- cheap drift insurance, feeds Phase 26's GREEN
   gate), and similarly for G-MIL-07. Planner's call.
 - **Exact sandbox fixture shape** (marketplaces + plugins): must include ≥1
   installed plugin per marketplace (G-MIL-07 precondition) and a row that
@@ -138,7 +138,7 @@ the GREEN-gate close (Phase 26); state migration for hash-versioned plugins
   interactive escalation. Likely: one setup/smoke plan (SNM-37) → SNM-38 plan ∥
   SNM-39 plan. Planner owns the split.
 - Whether `runPiRuntimeSmoke` is extended for the behavioral smoke or a new
-  thin smoke is added — discretion.
+  thin smoke is added -- discretion.
 </decisions>
 
 <canonical_refs>
@@ -148,78 +148,78 @@ the GREEN-gate close (Phase 26); state migration for hash-versioned plugins
 
 ### Requirement & gap source
 - `.planning/REQUIREMENTS.md` §SNM-37 (`:28`), §SNM-38 (`:30`), §SNM-39 (`:32`)
-  — the three requirements this phase closes. **NOTE:** SNM-37's
+  -- the three requirements this phase closes. **NOTE:** SNM-37's
   "published to npm or npm-linked" methodology and `pi --version` verification
   are CORRECTED by D-25-01/D-25-03 (use `scripts/pi.sh`) and D-25-04
-  (behavioral smoke) — amend in lockstep.
-- `.planning/ROADMAP.md` — Phase 25 goal + SC#1–#3 (`:466-481`); cross-cutting
+  (behavioral smoke) -- amend in lockstep.
+- `.planning/ROADMAP.md` -- Phase 25 goal + SC#1-#3 (`:466-481`); cross-cutting
   v1.4.1 constraints (`:85-91`). SC#1's `pi --version` half is amended per
-  D-25-04. **UI hint: yes** (`:481`) — the changes touch user-visible output
+  D-25-04. **UI hint: yes** (`:481`) -- the changes touch user-visible output
   rendering (indent), so a UI-SPEC pass may apply.
-- `.planning/v1.4-MILESTONE-UAT.md` — the source of both findings and the
+- `.planning/v1.4-MILESTONE-UAT.md` -- the source of both findings and the
   reproduction methodology:
   - **G-MIL-03** (`:476-494`): indent ladder, with the user's visual sample and
     the explicit note that "markdown rendering can obscure single-space
-    differences" — grounds the byte-evidence-first decision (D-25-09).
+    differences" -- grounds the byte-evidence-first decision (D-25-09).
   - **G-MIL-07** (`:686-721`): tab completion, with the recon's three candidate
-    causes and the "reproduce in v1.4 build first" action — grounds D-25-10.
+    causes and the "reproduce in v1.4 build first" action -- grounds D-25-10.
   - `runtime_caveat` (`:11-24`) + Triage table (`:739-749`) + Recommended
     follow-up (`:765-770`): why these two were deferred to a v1.4-runtime UAT
     and the publish-then-reproduce sequencing.
 
 ### Delivery / runtime methodology (SNM-37)
-- `scripts/pi.sh` — **the delivery mechanism (D-25-01/D-25-02).** Loads the
+- `scripts/pi.sh` -- **the delivery mechanism (D-25-01/D-25-02).** Loads the
   project extension from source (`-e .../index.ts`) + `pi-mcp-adapter` +
   `pi-subagents`; supports `--home <PATH>` (sandbox via `PI_CODING_AGENT_DIR` /
   `PI_CODING_AGENT_SESSION_DIR`), `--cd <PATH>`, `--clear`. Forwards remaining
   args to `pi`.
-- `tests/e2e/_helpers.ts` — `runPiRuntimeSmoke` (the Phase-07 automated
+- `tests/e2e/_helpers.ts` -- `runPiRuntimeSmoke` (the Phase-07 automated
   source-load smoke: `pi --offline --no-extensions --extension <path> --help`
   under isolated HOME/cwd) + `makeMockPi` / `makeCtx` notify-capture harness.
   Reference for the behavioral-smoke automation (D-25-04, D-25-07).
-- `tests/e2e/pi-runtime-smoke.test.ts` — the existing runtime-smoke test that
+- `tests/e2e/pi-runtime-smoke.test.ts` -- the existing runtime-smoke test that
   asserts the extension loads via the installed `pi` bin.
-- `package.json` — already at `version: 0.2.0` (no bump needed for SNM-37). No
+- `package.json` -- already at `version: 0.2.0` (no bump needed for SNM-37). No
   `project.json` / `sonar.properties` exist in this repo (the CLAUDE.md note is
   a generic global). Peer deps are `@earendil-works/pi-coding-agent` +
   `@earendil-works/pi-tui` (NOT the stale `@mariozechner/*` from CLAUDE.md).
 
 ### G-MIL-03 indent surface (SNM-38)
-- `extensions/pi-claude-marketplace/shared/notify.ts` — `renderPluginRow`
+- `extensions/pi-claude-marketplace/shared/notify.ts` -- `renderPluginRow`
   (plugin row prefix = 2 spaces, D-16-04; `:887`), `renderMpHeader`, and
   `renderIndentedCauseChain` (4-space per-plugin cause / 6-space per-phase
   cause, `:1184-1226`). The D-16-08 2/4/6 ladder contract lives here. Capture
   bytes at the `ctx.ui.notify` call boundary.
-- `docs/output-catalog.md` — the canonical indent examples (project-orphan-fold
+- `docs/output-catalog.md` -- the canonical indent examples (project-orphan-fold
   / list states around L155-189 per the UAT reference) that the byte counts are
   compared against.
 
 ### G-MIL-07 completion surface (SNM-39)
-- `extensions/pi-claude-marketplace/edge/completions/provider.ts` —
+- `extensions/pi-claude-marketplace/edge/completions/provider.ts` --
   `parseUpdateMode` sets `allowMarketplaceOnly: true` for `update` (`:196,202`);
   `getArgumentCompletions` (`:213`) returns `AutocompleteItem[] | null`.
-- `extensions/pi-claude-marketplace/edge/completions/data.ts` —
+- `extensions/pi-claude-marketplace/edge/completions/data.ts` --
   `getMarketplaceOnlyCompletions` (`:383`), `getInstalledPluginToMarketplacesMap`
   (`:313`), `getPluginToMarketplacesMap` (`:346`). Candidate cause (c)
   scope-root mismatch lives in this map's resolver.
-- `extensions/pi-claude-marketplace/edge/register.ts` — **the dual completion
+- `extensions/pi-claude-marketplace/edge/register.ts` -- **the dual completion
   wiring (key to root-cause):** `getArgumentCompletions` is registered on the
   command (`:98-100`, captures `process.cwd()` at registration, `:95`) AND a
   separate `addAutocompleteProvider` wrapper is installed on `session_start`
   (`:108-122`). Divergence between these two surfaces is a prime suspect.
 - `extensions/pi-claude-marketplace/tests/edge/completions/provider.test.ts:806`
-  — the passing unit test (`update @` → `["@mp-a","@mp-b"]`). The gap is
+  -- the passing unit test (`update @` → `["@mp-a","@mp-b"]`). The gap is
   between this GREEN unit path and live tui delivery.
-- `@earendil-works/pi-tui` (peer dep) — the external host that consumes the
+- `@earendil-works/pi-tui` (peer dep) -- the external host that consumes the
   `AutocompleteItem[]` payload; candidate cause (b). If the cause lands here,
   defer-with-finding (D-25-10).
 
 ### Precedent to mirror
 - `.planning/phases/23-version-display-bundle/23-CONTEXT.md` (D-23-01) +
-  `.planning/phases/24-grammar-consistency/24-CONTEXT.md` (D-24-03) — the
+  `.planning/phases/24-grammar-consistency/24-CONTEXT.md` (D-24-03) -- the
   requirement-text-correction-in-lockstep pattern this phase repeats for the
   SNM-37 / SC#1 amendments (D-25-03, D-25-04).
-- `.planning/STATE.md` Blockers/Concerns (`:143`) — the operator-gated SNM-37
+- `.planning/STATE.md` Blockers/Concerns (`:143`) -- the operator-gated SNM-37
   hand-off this phase resolves via the `scripts/pi.sh` sandbox decision.
 </canonical_refs>
 
@@ -228,13 +228,13 @@ the GREEN-gate close (Phase 26); state migration for hash-versioned plugins
 
 ### Reusable Assets
 - **`scripts/pi.sh`** is a ready-made interactive source-loader with companion
-  bootstrapping and `--home` sandboxing — it removes any need to build publish
+  bootstrapping and `--home` sandboxing -- it removes any need to build publish
   tooling for SNM-37.
 - **`runPiRuntimeSmoke` + `makeCtx`/`makeMockPi`** (`tests/e2e/_helpers.ts`)
   give a notify-capturing harness for the fully-automated G-MIL-03 byte-capture
   (D-25-07) and the behavioral smoke (D-25-04).
 - The completion provider, its data layer, and `provider.test.ts:806` already
-  exist and pass — SNM-39 is a *delivery-gap* investigation, not a missing
+  exist and pass -- SNM-39 is a *delivery-gap* investigation, not a missing
   feature.
 
 ### Established Patterns
@@ -242,7 +242,7 @@ the GREEN-gate close (Phase 26); state migration for hash-versioned plugins
   output is captured at the `ctx.ui.notify` boundary (pre-tui), because the live
   tui/markdown layer can mutate leading whitespace (the whole premise of
   D-25-09).
-- **Requirement-text amendment in lockstep** (Phase 23/24 precedent) — SNM-37
+- **Requirement-text amendment in lockstep** (Phase 23/24 precedent) -- SNM-37
   and SC#1 are corrected in the same commit as the work.
 - **Catalog UAT byte-equality + `npm run check` GREEN** stay green at the phase
   boundary (v1.4.1 cross-cutting constraint); any renderer fix ships with
@@ -255,7 +255,7 @@ the GREEN-gate close (Phase 26); state migration for hash-versioned plugins
 - The two completion surfaces in `edge/register.ts` (command-registered
   `getArgumentCompletions` vs `session_start` `addAutocompleteProvider`) are the
   integration boundary where G-MIL-07's runtime divergence most likely hides.
-- No persistence-layer or domain-resolver behavior changes are anticipated —
+- No persistence-layer or domain-resolver behavior changes are anticipated --
   only (conditionally) the renderer indent and/or completion wiring.
 </code_context>
 
@@ -267,7 +267,7 @@ the GREEN-gate close (Phase 26); state migration for hash-versioned plugins
   trailer, `v#<7hex>`, `{lsp}`).
 - G-MIL-03 capture target: leading-whitespace byte counts per line at
   `ctx.ui.notify`, compared against catalog 2/4/6. The user's observed sample
-  was a 1-space marketplace header / 3-space plugin row — to be confirmed as
+  was a 1-space marketplace header / 3-space plugin row -- to be confirmed as
   real-emit vs markdown-collapse.
 - G-MIL-07 reproduction: install ≥1 plugin per marketplace in the sandbox, type
   `/claude:plugin update @` and trigger completion in the live `scripts/pi.sh`
@@ -279,11 +279,11 @@ the GREEN-gate close (Phase 26); state migration for hash-versioned plugins
 <deferred>
 ## Deferred Ideas
 
-- **Real `npm publish` / packaged-artifact (release tarball) validation** —
+- **Real `npm publish` / packaged-artifact (release tarball) validation** --
   out of v1.4.1 scope (D-25-06). SNM-37 is reproduction-enablement, not a
   release gate; `scripts/pi.sh` does not exercise the `files:` tarball or a real
   npm install. Belongs to an actual release effort.
-- **State migration for already-installed hash-versioned plugins** — carried
+- **State migration for already-installed hash-versioned plugins** -- carried
   from the v1.4.1 milestone deferral (REQUIREMENTS Out of Scope `:103`); not
   re-litigated here.
 - Discussion otherwise stayed within phase scope.

@@ -18,7 +18,7 @@ re_verification:
 
 **Verified:** 2026-05-25T22:55:58Z
 **Status:** passed
-**Re-verification:** No — initial verification
+**Re-verification:** No -- initial verification
 
 ## Goal Achievement
 
@@ -33,7 +33,7 @@ re_verification:
 | 5 | `MarketplaceStatus = "added" | "removed" | "updated" | "failed"` (SNM-05; D-15-07: no `"skipped"`) | ✓ VERIFIED | `notify.ts:177` const tuple `["added", "removed", "updated", "failed"]`; type derived at `:199`. `_Assert_MarketplaceStatusValues` + length-4 assertion lock the set. |
 | 6 | `Dependency = "agents" | "mcp"`; required `dependencies: readonly Dependency[]` on `installed`, `updated`, `reinstalled` (SNM-06) | ✓ VERIFIED | Const tuple at `notify.ts:186`; type at `:205`. `dependencies: readonly Dependency[]` REQUIRED on `PluginInstalledMessage:272`, `PluginUpdatedMessage:287`, `PluginReinstalledMessage:298`. Compile-locked by `_Assert_DepsRequired{Installed,Updated,Reinstalled}` + `_Assert_DepsNotOptional*` + 7 negative-presence `@ts-expect-error` blocks (`notify-types.test.ts:306-351`). |
 | 7 | `MarketplaceDetails = { autoupdate: boolean; lastUpdatedAt?: string }` (SNM-07, D-15-05; mirrors `state-io.ts:70`) | ✓ VERIFIED | `notify.ts:218-221` has exactly the two fields. Bidirectional `_Assert_MarketplaceDetailsShape` at `notify-types.test.ts:203-212` locks exact-shape (no extra fields permitted). |
-| 8 | `UsageErrorMessage = { message: string; usage: string }` (SNM-08) — no `cause`, no `severity` | ✓ VERIFIED | `notify.ts:234-237` has exactly the two fields. Bidirectional shape assertion + `@ts-expect-error` negative checks at `notify-types.test.ts:215-235`. |
+| 8 | `UsageErrorMessage = { message: string; usage: string }` (SNM-08) -- no `cause`, no `severity` | ✓ VERIFIED | `notify.ts:234-237` has exactly the two fields. Bidirectional shape assertion + `@ts-expect-error` negative checks at `notify-types.test.ts:215-235`. |
 | 9 | `failed` carries optional `rollbackPartial?: readonly { phase; cause? }[]` (SNM-09); absent from the other 9 variants | ✓ VERIFIED | `notify.ts:368-371` defines the field on `PluginFailedMessage` only. 9 `@ts-expect-error` directives at `notify-types.test.ts:281-298` lock absence on the other variants. (See Warnings below for WR-01.) |
 | 10 | `failed` and `manual recovery` carry optional `cause?: Error` (SNM-10); absent from the other 8 variants | ✓ VERIFIED | `notify.ts:367` (`PluginFailedMessage`) + `notify.ts:402` (`PluginManualRecoveryMessage`). Two positive `_Assert_CauseOn*` blocks + 8 `@ts-expect-error` negative blocks at `notify-types.test.ts:243-266`. Indexed-access pattern is strict. |
 | 11 | `scope?: Scope` present on all variants EXCEPT `available` / `unavailable` (SNM-11; MSG-PL-6 carve-out) | ✓ VERIFIED | `notify.ts:321-325` (`PluginAvailableMessage`) and `:333-338` (`PluginUnavailableMessage`) both omit `scope`. 8 positive `_Assert_ScopeOn*` + 2 negative `@ts-expect-error` blocks at `notify-types.test.ts:425-454`. |
@@ -68,7 +68,7 @@ re_verification:
 
 | Artifact | Data Variable | Source | Produces Real Data | Status |
 |----------|---------------|--------|-------------------|--------|
-| N/A — Phase 15 ships pure type declarations + a compile-time arch test + a markdown ADR | — | — | — | N/A (no runtime data flow; types are not consumed by any call site yet — that's Phase 16-21 by design per Success Criterion #4) |
+| N/A -- Phase 15 ships pure type declarations + a compile-time arch test + a markdown ADR | -- | -- | -- | N/A (no runtime data flow; types are not consumed by any call site yet -- that's Phase 16-21 by design per Success Criterion #4) |
 
 ### Behavioral Spot-Checks
 
@@ -85,28 +85,28 @@ re_verification:
 
 | Probe | Command | Result | Status |
 |-------|---------|--------|--------|
-| N/A — Phase 15 is a type-only / docs-only phase; no probe scripts defined in the plans, and no `scripts/*/tests/probe-*.sh` paths exist in the repository. | — | — | N/A |
+| N/A -- Phase 15 is a type-only / docs-only phase; no probe scripts defined in the plans, and no `scripts/*/tests/probe-*.sh` paths exist in the repository. | -- | -- | N/A |
 
 ### Requirements Coverage
 
 | Requirement | Source Plan | Description | Status | Evidence |
 |-------------|------------|-------------|--------|----------|
 | SNM-01 | 15-01 | `NotificationMessage` shape: only `marketplaces: readonly MarketplaceNotificationMessage[]`; no `severity`/`trailer` | ✓ SATISFIED | `notify.ts:460-462`; bidirectional `_Assert_NotificationMessageShape` + 2 `@ts-expect-error` blocks at `notify-types.test.ts:163-185` |
-| SNM-02 | 15-01 | `MarketplaceNotificationMessage` shape: `{ name; scope; status?; details?; plugins[] }` | ✓ SATISFIED | `notify.ts:439-445`; `_Assert_MarketplaceMessageShape` at `notify-types.test.ts:197-199` (see Warnings WR-02 — unidirectional but still locks core shape) |
+| SNM-02 | 15-01 | `MarketplaceNotificationMessage` shape: `{ name; scope; status?; details?; plugins[] }` | ✓ SATISFIED | `notify.ts:439-445`; `_Assert_MarketplaceMessageShape` at `notify-types.test.ts:197-199` (see Warnings WR-02 -- unidirectional but still locks core shape) |
 | SNM-03 | 15-01 | 10-variant discriminated union on `status` | ✓ SATISFIED | 10 per-variant interfaces `notify.ts:269-403` joined in union `:413-423`; `_Assert_PluginStatusValues` at `notify-types.test.ts:123-138` |
 | SNM-04 | 15-01 | `PluginStatus` derived via indexed access; round-trips with `PluginNotificationMessage["status"]` | ✓ SATISFIED | `notify.ts:193`; bidirectional `_Assert_PluginStatusForward`/`Backward` at `notify-types.test.ts:97-105` |
 | SNM-05 | 15-01 | `MarketplaceStatus = "added" | "removed" | "updated" | "failed"` | ✓ SATISFIED | `notify.ts:177, 199`; `_Assert_MarketplaceStatusValues` at `notify-types.test.ts:141-148` |
 | SNM-06 | 15-01 | `Dependency = "agents" | "mcp"`; required on installed/updated/reinstalled | ✓ SATISFIED | `notify.ts:186, 205`; required on the 3 variants `:272, 287, 298`; locked by 3× `_Assert_DepsRequired*` + 3× `_Assert_DepsNotOptional*` + 7× `@ts-expect-error` |
 | SNM-07 | 15-01 | `MarketplaceDetails = { autoupdate: boolean; lastUpdatedAt?: string }` | ✓ SATISFIED | `notify.ts:218-221`; bidirectional `_Assert_MarketplaceDetailsShape` at `notify-types.test.ts:203-212` |
 | SNM-08 | 15-01 | `UsageErrorMessage = { message: string; usage: string }` | ✓ SATISFIED | `notify.ts:234-237`; bidirectional shape assertion + 2 `@ts-expect-error` at `notify-types.test.ts:215-235` |
-| SNM-09 | 15-01 | `rollbackPartial?` exists only on `PluginFailedMessage` | ✓ SATISFIED | `notify.ts:368-371`; `_Assert_RollbackOnFailed` + 9× `@ts-expect-error` (see Warnings WR-01 — positive assertion uses extends not indexed access, but negatives lock the absence rigorously) |
+| SNM-09 | 15-01 | `rollbackPartial?` exists only on `PluginFailedMessage` | ✓ SATISFIED | `notify.ts:368-371`; `_Assert_RollbackOnFailed` + 9× `@ts-expect-error` (see Warnings WR-01 -- positive assertion uses extends not indexed access, but negatives lock the absence rigorously) |
 | SNM-10 | 15-01 | `cause?: Error` exists only on `failed` and `manual recovery` | ✓ SATISFIED | `notify.ts:367, 402`; 2× `_Assert_CauseOn*` (indexed access) + 8× `@ts-expect-error` at `notify-types.test.ts:243-266` |
 | SNM-11 | 15-01 | `scope?: Scope` absent on `available` and `unavailable` | ✓ SATISFIED | `notify.ts:321-325` + `333-338` omit scope; 8× `_Assert_ScopeOn*` + 2× `@ts-expect-error` at `notify-types.test.ts:425-454` |
 | SNM-21 | 15-03 | ADR v2-001 refreshed: Status flipped Proposed → Accepted; Decision/Consequences/Migration rewritten; Alt-2 flipped; Open Questions deleted | ✓ SATISFIED | `docs/adr/v2-001-structured-notify.md:3` Status line; Title + Context preserved byte-identical; Decision/Consequences/Migration end-to-end rewrite; Alt-2 line 177 ACCEPTED marker; Open Questions section absent |
 
 All 12 requirement IDs from PLAN frontmatter (`SNM-01..SNM-11, SNM-21`) are SATISFIED. No orphaned requirements in REQUIREMENTS.md for Phase 15.
 
-**Tracking note (informational, not a verification gap):** REQUIREMENTS.md still shows SNM-01..SNM-11 + SNM-21 as `[ ]` Pending in the checklist and "Pending" in the per-phase status table. The implementation evidence above is dispositive — this is a tracking-artifact discrepancy that the orchestrator typically resolves post-verification when marking the phase complete. ROADMAP.md already reflects Phase 15 as `[x]` complete (`Phase 15.*completed 2026-05-25`) and 3/3 plans done; the REQUIREMENTS.md status table simply lags. Surfacing for orchestrator attention but not blocking goal achievement.
+**Tracking note (informational, not a verification gap):** REQUIREMENTS.md still shows SNM-01..SNM-11 + SNM-21 as `[ ]` Pending in the checklist and "Pending" in the per-phase status table. The implementation evidence above is dispositive -- this is a tracking-artifact discrepancy that the orchestrator typically resolves post-verification when marking the phase complete. ROADMAP.md already reflects Phase 15 as `[x]` complete (`Phase 15.*completed 2026-05-25`) and 3/3 plans done; the REQUIREMENTS.md status table simply lags. Surfacing for orchestrator attention but not blocking goal achievement.
 
 ### Anti-Patterns Found
 
@@ -115,18 +115,18 @@ All 12 requirement IDs from PLAN frontmatter (`SNM-01..SNM-11, SNM-21`) are SATI
 | `extensions/pi-claude-marketplace/shared/notify.ts` | 150 | String `"manual-recovery"` | ℹ️ Info | Inside JSDoc warning AGAINST using the kebab form. Defensive documentation, not a stub. |
 | `extensions/pi-claude-marketplace/shared/notify.ts` | 389 | String `manual-recovery` | ℹ️ Info | Inside JSDoc prose describing the `(manual recovery)` row as a "manual-recovery anchor row" (hyphenated for English prose). Not a code literal. |
 
-No 🛑 Blockers. No ⚠️ Warnings (no `TODO`/`HACK`/`PLACEHOLDER`/`TBD`/`FIXME`/`XXX` markers across any of the 3 deliverable files). No empty-return / hardcoded-stub patterns. No `eslint-disable` directives added. The 53 `@ts-expect-error` directives in `notify-types.test.ts` are LOAD-BEARING TypeScript directives (not lint disables) that serve as negative-presence proofs — exactly the design contract per D-15-12.
+No 🛑 Blockers. No ⚠️ Warnings (no `TODO`/`HACK`/`PLACEHOLDER`/`TBD`/`FIXME`/`XXX` markers across any of the 3 deliverable files). No empty-return / hardcoded-stub patterns. No `eslint-disable` directives added. The 53 `@ts-expect-error` directives in `notify-types.test.ts` are LOAD-BEARING TypeScript directives (not lint disables) that serve as negative-presence proofs -- exactly the design contract per D-15-12.
 
 ### Code Review Findings (from 15-REVIEW.md, depth=standard)
 
-The code reviewer produced a separate `15-REVIEW.md` with 3 WARNING-class and 4 INFO-class findings — all NON-BLOCKING. Surfacing here for transparency; none invalidate goal achievement:
+The code reviewer produced a separate `15-REVIEW.md` with 3 WARNING-class and 4 INFO-class findings -- all NON-BLOCKING. Surfacing here for transparency; none invalidate goal achievement:
 
 | ID | Severity | Summary | Impact on Phase 15 Goal |
 |----|----------|---------|-------------------------|
 | WR-01 | Warning | `_Assert_RollbackOnFailed` uses `_VFailed extends { rollbackPartial?: ... }` (extends-shape), not indexed access. Optional-field structural subtyping means dropping `rollbackPartial?` from `PluginFailedMessage` would still resolve to `true`. | The TYPE IS PRESENT in `notify.ts:368-371` (verified by direct read), so SNM-09 is satisfied for the current artifact. The negative-presence locks on the other 9 variants use indexed access and are rigorous. The weakness is a future-drift-detection gap, not a current-shape gap. Goal still achieved. |
 | WR-02 | Warning | `_Assert_MarketplaceMessageShape` is unidirectional (asserts `MarketplaceNotificationMessage extends _MarketplaceMessageExpected`, not the reverse). A future addition of an extra required field on `MarketplaceNotificationMessage` would not be caught. | SNM-02's exact-shape requirement is met by the CURRENT artifact (`notify.ts:439-445` has exactly the 5 documented fields). Like WR-01, this is a future-drift-detection gap. Goal still achieved. |
-| WR-03 | Warning | Missing `@ts-expect-error` block confirming `_VUpdated["version"]` is rejected (the symmetric absence proof for D-15-04). | `PluginUpdatedMessage` (`notify.ts:282-289`) does NOT carry `version` — verified by direct read. The symmetric arch-test assertion is missing but the artifact shape is correct. Goal achieved; arch-test could be tightened in a follow-up. |
-| IN-01 | Info | ADR title still advertises "typed wrappers" — the v1.4 design pivot rejected them. | D-15-13 explicitly LOCKED the title as preserved (carve-out). The Decision section (line 20) and Alt-2 flip (line 177) clarify the pivot. Not a goal gap. |
+| WR-03 | Warning | Missing `@ts-expect-error` block confirming `_VUpdated["version"]` is rejected (the symmetric absence proof for D-15-04). | `PluginUpdatedMessage` (`notify.ts:282-289`) does NOT carry `version` -- verified by direct read. The symmetric arch-test assertion is missing but the artifact shape is correct. Goal achieved; arch-test could be tightened in a follow-up. |
+| IN-01 | Info | ADR title still advertises "typed wrappers" -- the v1.4 design pivot rejected them. | D-15-13 explicitly LOCKED the title as preserved (carve-out). The Decision section (line 20) and Alt-2 flip (line 177) clarify the pivot. Not a goal gap. |
 | IN-02 | Info | ADR LoC accounting line uses "~4096" in one place and "~4500" in another. | Internal-consistency nit; net-delta narrative still correct. Not a goal gap. |
 | IN-03 | Info | `notifyError`'s `cause === undefined` early-return is asymmetric with `null` handling. | Touches V1 wrapper code which Phase 15 was forbidden to modify (byte-identical requirement). Not Phase 15's scope. Not a goal gap. |
 | IN-04 | Info | Test file imports `Reason` via inline type query instead of the new re-export from `shared/notify.ts`. | The re-export exists and works (verified at `notify.ts:12`); test discretion documented in file header. Not a goal gap. |
@@ -135,11 +135,11 @@ These code-review observations do not block goal achievement and do not require 
 
 ### Human Verification Required
 
-None. Phase 15 is type-only + docs-only; all verifications are programmatic (compile-time + grep + MD5 + `npm run check`). No UI, no real-time behavior, no external service, no visual appearance, no UX feel to evaluate. The arch test file is a closed-system compile-time proof — drift detection runs at `npm run typecheck` time without human input.
+None. Phase 15 is type-only + docs-only; all verifications are programmatic (compile-time + grep + MD5 + `npm run check`). No UI, no real-time behavior, no external service, no visual appearance, no UX feel to evaluate. The arch test file is a closed-system compile-time proof -- drift detection runs at `npm run typecheck` time without human input.
 
 ### Gaps Summary
 
-None. All 19 observable truths VERIFIED. All 12 requirements (SNM-01..11, SNM-21) SATISFIED. All 3 artifacts pass exists/substantive/wired checks (Level 4 data-flow trace N/A — no runtime data flow by design per Success Criterion #4). All key links wired. `npm run check` GREEN. Byte-equality invariants (V1 wrappers, ADR Context) cryptographically verified via MD5. SC#4 (zero call-site references) holds with word-boundary grep.
+None. All 19 observable truths VERIFIED. All 12 requirements (SNM-01..11, SNM-21) SATISFIED. All 3 artifacts pass exists/substantive/wired checks (Level 4 data-flow trace N/A -- no runtime data flow by design per Success Criterion #4). All key links wired. `npm run check` GREEN. Byte-equality invariants (V1 wrappers, ADR Context) cryptographically verified via MD5. SC#4 (zero call-site references) holds with word-boundary grep.
 
 The code reviewer's 3 WARNING-class findings (WR-01..WR-03) are arch-test assertion-strength gaps, not artifact gaps; the type model itself ships the required shapes, and the arch test catches drift in the load-bearing directions for all 19 must-haves. Surfacing as informational for an optional follow-up tightening pass.
 

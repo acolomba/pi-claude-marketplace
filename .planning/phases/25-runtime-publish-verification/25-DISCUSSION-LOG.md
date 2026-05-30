@@ -1,7 +1,7 @@
 # Phase 25: Runtime Publish & Verification - Discussion Log
 
 > **Audit trail only.** Do not use as input to planning, research, or execution agents.
-> Decisions are captured in CONTEXT.md — this log preserves the alternatives considered.
+> Decisions are captured in CONTEXT.md -- this log preserves the alternatives considered.
 
 **Date:** 2026-05-29
 **Phase:** 25-runtime-publish-verification
@@ -72,7 +72,7 @@
 | **Confirm: lock with all 3 caveats** | Amend + behavioral-smoke SC#1 + G-MIL-07 real-home fallback + publish-validation deferred | ✓ |
 
 **User's choice:** Asked Claude's opinion first ("does it make sense? can the script serve all SNM-37 purposes?"), then locked "Yes, lock it with all 3 caveats."
-**Notes:** Claude's assessment: yes — `scripts/pi.sh` serves all of SNM-37's reproduction-enablement purposes (interactive runtime, companions loaded, /claude:plugin live, behavioral smoke). Three caveats locked: (1) v1.4 identity verified behaviorally not via `pi --version`; (2) G-MIL-07 keeps a real-`~/.pi` fallback to avoid false-refute on a scope-root mismatch; (3) packaged-artifact/real-publish validation recorded as deferred. (D-25-03, D-25-04, D-25-05, D-25-06)
+**Notes:** Claude's assessment: yes -- `scripts/pi.sh` serves all of SNM-37's reproduction-enablement purposes (interactive runtime, companions loaded, /claude:plugin live, behavioral smoke). Three caveats locked: (1) v1.4 identity verified behaviorally not via `pi --version`; (2) G-MIL-07 keeps a real-`~/.pi` fallback to avoid false-refute on a scope-root mismatch; (3) packaged-artifact/real-publish validation recorded as deferred. (D-25-03, D-25-04, D-25-05, D-25-06)
 
 ---
 
@@ -85,5 +85,5 @@
 
 ## Deferred Ideas
 
-- Real `npm publish` / packaged-artifact (release tarball) validation — out of v1.4.1 scope.
-- State migration for already-installed hash-versioned plugins — carried v1.4.1 deferral.
+- Real `npm publish` / packaged-artifact (release tarball) validation -- out of v1.4.1 scope.
+- State migration for already-installed hash-versioned plugins -- carried v1.4.1 deferral.

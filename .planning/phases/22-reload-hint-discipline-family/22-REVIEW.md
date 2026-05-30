@@ -63,7 +63,7 @@ orchestrator's real output.
 **Issue:** The phase updated the **clean** remove state to a name-only row and added
 the explicit rationale at `docs/output-catalog.md:755`: *"The name-only row has no
 `v<version>` token because the `successfullyUnstaged` accumulator is a `string[]`
-of plugin names."* The orchestrator honors this in **both** branches — the partial
+of plugin names."* The orchestrator honors this in **both** branches -- the partial
 branch (`remove.ts:308-314`) maps `successfullyUnstaged` to
 `{ status: "uninstalled", name }` with **no version**, identical to the clean
 branch (`remove.ts:342-347`). Yet the **partial** catalog state still documents the
@@ -166,7 +166,7 @@ end.
 **File:** `extensions/pi-claude-marketplace/shared/notify.ts:124`
 **Issue:** `STATUS_TOKENS` includes `"no plugins"`, but per the catalog
 (`docs/output-catalog.md:87`, `:231`, `:898`) and the renderer, an empty
-`plugins: []` renders as the bare marketplace header alone — the `(no plugins)`
+`plugins: []` renders as the bare marketplace header alone -- the `(no plugins)`
 body line is explicitly never emitted. The token is a documentation/closed-set
 carrier only, not a live render path, which can confuse a reader scanning for where
 `(no plugins)` is produced.

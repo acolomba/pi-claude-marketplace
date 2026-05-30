@@ -87,7 +87,7 @@ _TDD gate sequence: `test(...)` (RED, `d974066`) precedes `feat(...)` (GREEN, `e
 ## Decisions Made
 
 - Followed the plan's D-23-01 / D-23-02 / D-23-03 decisions exactly: reorder (not insert), in-place re-read without widening the NFR-7 union, non-empty-string gate with no SemVer.
-- PRD §11 PI-7 (`docs/prd/...prd.md:257`) already states the chosen order — confirmed correct, no edit (matches the plan's expectation).
+- PRD §11 PI-7 (`docs/prd/...prd.md:257`) already states the chosen order -- confirmed correct, no edit (matches the plan's expectation).
 
 ## Deviations from Plan
 
@@ -95,8 +95,8 @@ _TDD gate sequence: `test(...)` (RED, `d974066`) precedes `feat(...)` (GREEN, `e
 
 **1. [Rule 1 - Bug] Aligned PI-9 and PI-9-corollary fixture plugin.json versions with their entry versions**
 - **Found during:** Task 2 (3-tier reorder)
-- **Issue:** The reorder makes the seed helper's default plugin.json (`version: "0.0.1"`, written when the new knob is `undefined`) the winning tier-1. Two byte-exact tests — `PI-9: happy-path install ...` (entry version `1.0.0`) and `PI-9 corollary: empty plugin ...` (entry version `0.1.0`) — assert the rendered version from the marketplace entry. With plugin.json now winning, both rendered `v0.0.1` and failed their byte assertions (`● hello v0.0.1 (installed) ...`). This is the fixture conflict PATTERNS.md flagged for PI-7 (b), but it also reached these two pipeline/rendering tests.
-- **Fix:** Set `pluginJsonVersion` to match each test's `pluginVersion` (`"1.0.0"` and `"0.1.0"` respectively) so both tiers agree and the byte assertions stay truthful. These tests exercise the install pipeline and reload-hint rendering, not version precedence — the dedicated tier tests (PI-7 (a)/(b), SNM-34) own that.
+- **Issue:** The reorder makes the seed helper's default plugin.json (`version: "0.0.1"`, written when the new knob is `undefined`) the winning tier-1. Two byte-exact tests -- `PI-9: happy-path install ...` (entry version `1.0.0`) and `PI-9 corollary: empty plugin ...` (entry version `0.1.0`) -- assert the rendered version from the marketplace entry. With plugin.json now winning, both rendered `v0.0.1` and failed their byte assertions (`● hello v0.0.1 (installed) ...`). This is the fixture conflict PATTERNS.md flagged for PI-7 (b), but it also reached these two pipeline/rendering tests.
+- **Fix:** Set `pluginJsonVersion` to match each test's `pluginVersion` (`"1.0.0"` and `"0.1.0"` respectively) so both tiers agree and the byte assertions stay truthful. These tests exercise the install pipeline and reload-hint rendering, not version precedence -- the dedicated tier tests (PI-7 (a)/(b), SNM-34) own that.
 - **Files modified:** tests/orchestrators/plugin/install.test.ts
 - **Verification:** `node --test tests/orchestrators/plugin/install.test.ts` -> 41/41 GREEN; `npm run check` -> 1129/1129 GREEN.
 - **Committed in:** `e8a9d88` (Task 2 commit)
@@ -111,21 +111,21 @@ _TDD gate sequence: `test(...)` (RED, `d974066`) precedes `feat(...)` (GREEN, `e
 
 ---
 
-**Total deviations:** 2 auto-fixed (2 Rule 1 bugs — both fixture/lint breakage directly caused by the Task 2 reorder; in scope).
-**Impact on plan:** Both fixes were required to keep the byte-exact and lint gates GREEN after the precedence change. No scope creep — no behavior beyond the plan's 3-tier reorder was added.
+**Total deviations:** 2 auto-fixed (2 Rule 1 bugs -- both fixture/lint breakage directly caused by the Task 2 reorder; in scope).
+**Impact on plan:** Both fixes were required to keep the byte-exact and lint gates GREEN after the precedence change. No scope creep -- no behavior beyond the plan's 3-tier reorder was added.
 
 ## Issues Encountered
 
-- The plan's `<verify>` blocks use `cd /home/acolomba/pi-claude-marketplace` (the main repo). Because this plan ran in a git worktree, that path executes the MAIN-repo copy of the files (stale relative to my edits) and showed an unchanged 40-test run. Resolved by running `node --test ...` / `npm run check` from the worktree cwd (default), which executes the edited files and reports the correct 41/1129 counts. No code impact — purely a verification-cwd correction.
+- The plan's `<verify>` blocks use `cd /home/acolomba/pi-claude-marketplace` (the main repo). Because this plan ran in a git worktree, that path executes the MAIN-repo copy of the files (stale relative to my edits) and showed an unchanged 40-test run. Resolved by running `node --test ...` / `npm run check` from the worktree cwd (default), which executes the edited files and reports the correct 41/1129 counts. No code impact -- purely a verification-cwd correction.
 
 ## Known Stubs
 
-None — no placeholder values, empty data sources, or TODO/FIXME markers introduced.
+None -- no placeholder values, empty data sources, or TODO/FIXME markers introduced.
 
 ## TDD Gate Compliance
 
-- RED gate present: `test(23-01): ...` (`d974066`) — the SNM-34 tier test failed against the 2-tier resolver (recorded a hash, not `1.2.3`).
-- GREEN gate present: `feat(23-01): ...` (`e8a9d88`) — the reorder lands and the test passes.
+- RED gate present: `test(23-01): ...` (`d974066`) -- the SNM-34 tier test failed against the 2-tier resolver (recorded a hash, not `1.2.3`).
+- GREEN gate present: `feat(23-01): ...` (`e8a9d88`) -- the reorder lands and the test passes.
 - REFACTOR gate: not needed (no cleanup required after GREEN).
 
 ## User Setup Required
@@ -135,7 +135,7 @@ None - no external service configuration required.
 ## Next Phase Readiness
 
 - Plan 23-02 (SNM-35: `looksLikeHashVersion` + `formatHashVersionForDisplay` renderer transform in `shared/notify.ts`) is the serialized Wave 2 follow-on. It is file-disjoint from this plan (renderer + catalog/fixtures vs. resolver + install test) and can proceed.
-- SNM-34's reorder fires at the NEXT install/reinstall/update only — no state migration for already-installed hash-versioned plugins (REQUIREMENTS Out of Scope). `marketplace update` will naturally surface those as upgradable.
+- SNM-34's reorder fires at the NEXT install/reinstall/update only -- no state migration for already-installed hash-versioned plugins (REQUIREMENTS Out of Scope). `marketplace update` will naturally surface those as upgradable.
 
 ## Self-Check: PASSED
 

@@ -1,7 +1,7 @@
 # Phase 15: Type Model & ADR Refresh - Discussion Log
 
 > **Audit trail only.** Do not use as input to planning, research, or execution agents.
-> Decisions are captured in CONTEXT.md — this log preserves the alternatives considered.
+> Decisions are captured in CONTEXT.md -- this log preserves the alternatives considered.
 
 **Date:** 2026-05-25
 **Phase:** 15-Type Model & ADR Refresh
@@ -15,8 +15,8 @@
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| Per-variant required: only on the 5 that need it | unavailable/upgradable/skipped/failed/manual recovery carry required `reasons: readonly Reason[]` (empty array allowed). Other 5 omit. Pushes per-variant discipline into the discriminated union — emitting `(installed) {up-to-date}` becomes a compile error. Import Reason from shared/grammar/reasons.ts. | ✓ |
-| Optional `reasons?: readonly Reason[]` on every variant | Uniform optional field. Drawback: structurally allows reasons on success variants where v1.3 never emits them — moves discipline back to renderer. | |
+| Per-variant required: only on the 5 that need it | unavailable/upgradable/skipped/failed/manual recovery carry required `reasons: readonly Reason[]` (empty array allowed). Other 5 omit. Pushes per-variant discipline into the discriminated union -- emitting `(installed) {up-to-date}` becomes a compile error. Import Reason from shared/grammar/reasons.ts. | ✓ |
+| Optional `reasons?: readonly Reason[]` on every variant | Uniform optional field. Drawback: structurally allows reasons on success variants where v1.3 never emits them -- moves discipline back to renderer. | |
 | Drop reasons; fold into `cause?: Error` | Closed Reason set retired in Phase 15. Clashes with SNM-10 scoping cause to Error chains. Loses compile-time enforcement on the 28-phrase closed set. | |
 | You decide / researcher recommends | Defer to researcher. | |
 
@@ -30,7 +30,7 @@
 | Option | Description | Selected |
 |--------|-------------|----------|
 | Absent on all 7 non-success variants | Discriminated union has no `dependencies` field on failed/skipped/uninstalled/available/unavailable/upgradable/manual-recovery. Symmetric with Reason decision. Renderer probe path only reachable from the 3 success arms. | ✓ |
-| Optional `dependencies?: readonly Dependency[]` on all 10 | Uniform field. Re-introduces per-variant drift class — fixture could put `dependencies: ['agents']` on a failed row and trigger a probe. | |
+| Optional `dependencies?: readonly Dependency[]` on all 10 | Uniform field. Re-introduces per-variant drift class -- fixture could put `dependencies: ['agents']` on a failed row and trigger a probe. | |
 | Absent on most; optional on uninstalled only | MSG-SD-3 forbids the marker on uninstalled. Hypothetical. | |
 | You decide / defer | Defer to researcher. | |
 
@@ -73,7 +73,7 @@
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| `{ autoupdate: boolean; lastUpdatedAt?: string }` — minimal, mirrors persistence | autoupdate REQUIRED boolean (record always knows). lastUpdatedAt?: string ISO matches persistence/state-io.ts:70 exactly. | ✓ |
+| `{ autoupdate: boolean; lastUpdatedAt?: string }` -- minimal, mirrors persistence | autoupdate REQUIRED boolean (record always knows). lastUpdatedAt?: string ISO matches persistence/state-io.ts:70 exactly. | ✓ |
 | `{ autoupdate?: boolean; lastUpdatedAt?: string; source?: ParsedSource }` | Adds future-proofing source field. Couples to domain/source.ts. YAGNI for v1.4. | |
 | Split into separate sub-objects | Two-sub-object shape, no behavior payoff. | |
 | You decide / researcher recommends | Defer field set to researcher. | |
@@ -87,7 +87,7 @@
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| Independent optionals — keep SNM-02 as written | Never co-occur in practice; renderer ignores details when status set. Mirrors v1.3 MarketplaceRow's independent status/marker. | ✓ |
+| Independent optionals -- keep SNM-02 as written | Never co-occur in practice; renderer ignores details when status set. Mirrors v1.3 MarketplaceRow's independent status/marker. | ✓ |
 | Split into two named variants | StateChange vs ListEntry discriminated union. Compile error to mix. Two interfaces to maintain. | |
 | Single shape with discriminator field | Add `kind: 'state-change' \| 'list-entry'`. Adds ceremony with no behavior payoff. | |
 | You decide | Defer to planner. | |
@@ -101,12 +101,12 @@
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| Yes — 4 values, no 'skipped' (SNM-05 locked) | v1.4 marketplace-skipped rows re-route through one of 4 statuses with no-op semantics OR disappear. Catalog rewrite in Phase 17 confirms. | ✓ |
-| Add 'skipped' — 5 values total | Would require flagging SNM-05 for amendment. Contradicts locked requirement. | |
+| Yes -- 4 values, no 'skipped' (SNM-05 locked) | v1.4 marketplace-skipped rows re-route through one of 4 statuses with no-op semantics OR disappear. Catalog rewrite in Phase 17 confirms. | ✓ |
+| Add 'skipped' -- 5 values total | Would require flagging SNM-05 for amendment. Contradicts locked requirement. | |
 | 4 values; add reasons[] to marketplace level | Mixes per-row reasons into a level reserved for plugins. | |
 | Defer to researcher | Read output-catalog and revisit. | |
 
-**User's choice:** Yes — 4 values; SNM-05 locked.
+**User's choice:** Yes -- 4 values; SNM-05 locked.
 **Notes:** D-15-07 in CONTEXT.md. Flagged as downstream-verification item for researcher.
 
 ---
@@ -115,7 +115,7 @@
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| Empty array IS the explicit '(no plugins)' rendering | On list surface triggers `(no plugins)` bare token. On state-change paths, empty is the normal case — header alone. Switch branches on status presence. | ✓ |
+| Empty array IS the explicit '(no plugins)' rendering | On list surface triggers `(no plugins)` bare token. On state-change paths, empty is the normal case -- header alone. Switch branches on status presence. | ✓ |
 | Add `plugins: readonly PluginNotificationMessage[] \| null` | null = unknown, [] = explicit empty. Three-state distinction rarely load-bearing. | |
 | Marketplace-level `noPlugins?: true` discriminator | Sentinel field; empty array can express directly. | |
 | You decide / defer | Defer to Phase 16. | |
@@ -173,11 +173,11 @@
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| Yes — ship DEPENDENCIES alongside the other const arrays | Symmetric. Two-line addition. Phase 16 renderer iterates DEPENDENCIES for per-dependency probe; test fixtures iterate to confirm. | ✓ |
-| Type only — literal union, no const array | Smallest surface. No fixture iteration benefit. | |
+| Yes -- ship DEPENDENCIES alongside the other const arrays | Symmetric. Two-line addition. Phase 16 renderer iterates DEPENDENCIES for per-dependency probe; test fixtures iterate to confirm. | ✓ |
+| Type only -- literal union, no const array | Smallest surface. No fixture iteration benefit. | |
 | You decide | Defer to planner. | |
 
-**User's choice:** Yes — ship DEPENDENCIES.
+**User's choice:** Yes -- ship DEPENDENCIES.
 **Notes:** D-15-11 (combined) in CONTEXT.md.
 
 ---
@@ -186,12 +186,12 @@
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| Yes — lock all per-variant invariants | ~10 lines of `type _Assert_<field>_<variant> = ...` blocks. Catches accidental field additions. Mirrors `no-legacy-markers.test.ts`'s enforce-the-rule-once pattern. | ✓ |
-| No — closed-set membership only | Cheaper file, weaker safety net. | |
+| Yes -- lock all per-variant invariants | ~10 lines of `type _Assert_<field>_<variant> = ...` blocks. Catches accidental field additions. Mirrors `no-legacy-markers.test.ts`'s enforce-the-rule-once pattern. | ✓ |
+| No -- closed-set membership only | Cheaper file, weaker safety net. | |
 | Yes for failed/manual-recovery field discipline only; defer the rest | Lock cause?/rollbackPartial? per-variant only. | |
 | You decide | Defer to planner. | |
 
-**User's choice:** Yes — lock all per-variant invariants.
+**User's choice:** Yes -- lock all per-variant invariants.
 **Notes:** D-15-12 in CONTEXT.md.
 
 ---
@@ -230,17 +230,17 @@
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| Yes — replace abstract phases with Phase 16-21 references | Migration becomes a forward reference for downstream planning. REQUIREMENTS.md traceability mitigates drift if numbers change. | ✓ |
+| Yes -- replace abstract phases with Phase 16-21 references | Migration becomes a forward reference for downstream planning. REQUIREMENTS.md traceability mitigates drift if numbers change. | ✓ |
 | Keep abstract phase names; add footnote pointing to ROADMAP.md | Drift-free; more indirection. | |
 | Delete Migration section entirely | ADRs traditionally don't carry execution plans. Loses per-phase rationale. | |
 | You decide / defer | Defer to planner. | |
 
-**User's choice:** Yes — cite Phase 16-21.
+**User's choice:** Yes -- cite Phase 16-21.
 **Notes:** D-15-15 in CONTEXT.md.
 
 ---
 
-### Q4: What happens to 'Alternatives Considered' Alt 2 (single-notify-no-wrappers — now the actual design)?
+### Q4: What happens to 'Alternatives Considered' Alt 2 (single-notify-no-wrappers -- now the actual design)?
 
 | Option | Description | Selected |
 |--------|-------------|----------|
@@ -259,13 +259,13 @@
 - Exact `type _Assert_*` formulation for each per-variant invariant in the compile-check file (multiple valid TS idioms).
 - Naming convention for per-variant interfaces inside `PluginNotificationMessage` union (named exports vs. inline anonymous variants).
 - Whether to re-export `Reason` from `shared/notify.ts` as a single-import convenience.
-- Commit granularity within Phase 15 (one commit for types, one for compile-check, one for ADR — vs. one big commit).
+- Commit granularity within Phase 15 (one commit for types, one for compile-check, one for ADR -- vs. one big commit).
 
 ## Deferred Ideas
 
-- Branded `Version` type with hash-`<12hex>` / semver validation — backlog.
-- `source?: ParsedSource` on `MarketplaceDetails` — YAGNI for v1.4; revisit if Phase 17 catalog rewrite reveals need.
-- Splitting MarketplaceNotificationMessage into discriminated StateChange vs ListEntry variants — rejected per D-15-06; revisit if Phase 16 unit tests find the co-occurrence is a real footgun.
-- Pruning `Reason` to a v1.4-active subset — rejected per D-15-03; revisit in Phase 21 alongside SNM-29 grammar/ retire-or-keep.
-- In-file `type _Assert = ...` block in shared/notify.ts — rejected as primary surface per D-15-10; planner has discretion to use for narrow self-referential claims.
-- Separate `v2-002-notify-single-entrypoint.md` ADR superseding v2-001 — rejected per D-15-13.
+- Branded `Version` type with hash-`<12hex>` / semver validation -- backlog.
+- `source?: ParsedSource` on `MarketplaceDetails` -- YAGNI for v1.4; revisit if Phase 17 catalog rewrite reveals need.
+- Splitting MarketplaceNotificationMessage into discriminated StateChange vs ListEntry variants -- rejected per D-15-06; revisit if Phase 16 unit tests find the co-occurrence is a real footgun.
+- Pruning `Reason` to a v1.4-active subset -- rejected per D-15-03; revisit in Phase 21 alongside SNM-29 grammar/ retire-or-keep.
+- In-file `type _Assert = ...` block in shared/notify.ts -- rejected as primary surface per D-15-10; planner has discretion to use for narrow self-referential claims.
+- Separate `v2-002-notify-single-entrypoint.md` ADR superseding v2-001 -- rejected per D-15-13.

@@ -67,7 +67,7 @@ which the renderer suppresses anyway). Combined into one atomic commit:
 **Applied fix:** When the batch hits a phase-3a aggregate failure (which
 has already fired its own `notifyDirectFailure` inline), emit the
 cascade for the already-accumulated successful outcomes before
-returning. Previously, plugins #1–#3 that successfully updated and
+returning. Previously, plugins #1-#3 that successfully updated and
 committed state to disk inside their own `withStateGuard` closures
 were never reported when plugin #4 hit phase-3a -- the on-disk state
 and the user-visible report diverged. Extracted the discriminator and

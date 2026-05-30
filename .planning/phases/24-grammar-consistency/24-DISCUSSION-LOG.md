@@ -1,7 +1,7 @@
 # Phase 24: Grammar Consistency - Discussion Log
 
 > **Audit trail only.** Do not use as input to planning, research, or execution agents.
-> Decisions are captured in CONTEXT.md — this log preserves the alternatives considered.
+> Decisions are captured in CONTEXT.md -- this log preserves the alternatives considered.
 
 **Date:** 2026-05-29
 **Phase:** 24-grammar-consistency
@@ -16,7 +16,7 @@
 | (a) Closed-set rename | Rename the `REASONS` member; keep manifest-detection substrings camelCase; map `lspServers → <new token>` at the 2 emission seams. Keeps the closed set pure. Matches SC #3. | ✓ |
 | (b) Render-point translation | Keep `"lspServers"` in the closed set; translate only inside `composeReasons` (`notify.ts:863`). Smallest blast radius, but violates SC #3 and re-hides the camelCase smell in the renderer. | |
 
-**User's choice:** Option (a) — with the rendered token changed from the
+**User's choice:** Option (a) -- with the rendered token changed from the
 proposed `"lsp servers"` to **`"lsp"`**.
 **Notes:** User reviewed the full 28-entry `REASONS` closed set on request,
 observed that `lspServers` is the only camelCase outlier (every other reason is
@@ -51,7 +51,7 @@ the grammar docs/comments truthful (D-24-08).
 | Leave to planner | Capture only the principle; let research/planning derive the per-fixture split. | |
 
 **User's choice:** Lock the partition in CONTEXT.md.
-**Notes:** Partition verified against source during discussion — `errors.test.ts:201-208`
+**Notes:** Partition verified against source during discussion -- `errors.test.ts:201-208`
 (PluginShapeError raw reasons + composed `…is not installable: hooks; lspServers`
 message) confirmed as the manifest/error-message layer that STAYS camelCase;
 `catalog-uat.test.ts:246,490` + `install.test.ts:1589,1698,1712` (narrowed
@@ -66,9 +66,9 @@ closed-set output) confirmed as the RENAME side. Full split recorded in D-24-06.
   blanket-rename) is locked.
 - Plan/wave decomposition (single SNM-36, converging on
   notify.ts + list.ts + install.ts + catalog/fixtures).
-- Whether the manifest-side JSDoc at `plugin.ts:46` stays verbatim (D-24-09 —
+- Whether the manifest-side JSDoc at `plugin.ts:46` stays verbatim (D-24-09 --
   default leave, it describes the JSON field, not the rendered reason).
 
 ## Deferred Ideas
 
-None — discussion stayed within (and slightly tightened) phase scope.
+None -- discussion stayed within (and slightly tightened) phase scope.

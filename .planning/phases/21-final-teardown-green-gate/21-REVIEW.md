@@ -47,7 +47,7 @@ However, several pre-existing correctness defects in the orchestrator
 notification paths surface clearly in the consolidated code:
 
 1. `updatePlugins` discards the entire previously-accumulated outcome batch
-   when any mid-batch plugin hits a phase-3a aggregate failure — successful
+   when any mid-batch plugin hits a phase-3a aggregate failure -- successful
    per-plugin updates that already mutated state are committed to disk but
    never reported.
 2. `installPlugin` emits a `PluginFailedMessage` carrying a `scope` field
@@ -93,9 +93,9 @@ disk inside their own `withStateGuard` closure (phase 2 of the 3-phase
 sequence), so the user is left with state changes they never saw acknowledged.
 
 The on-disk state and the user-visible report diverge: if a 5-plugin
-batch update sees plugins #1–#3 update successfully and #4 hit a phase-3a
+batch update sees plugins #1-#3 update successfully and #4 hit a phase-3a
 aggregate, the user only sees the #4 failure row and never learns plugins
-#1–#3 were updated. The reload-hint trailer is also lost for the
+#1-#3 were updated. The reload-hint trailer is also lost for the
 successful updates because the cascade emission is the only site that
 would have driven it.
 
@@ -233,11 +233,11 @@ return;
 **Issue:** Several narrowers default to a closed-set Reason that does NOT
 describe the underlying failure when no narrower predicate matches:
 - `narrowDirectFailReason` (update.ts:1350) returns `"unreadable manifest"`
-  for any unrecognised error — including network-class errors that did
+  for any unrecognised error -- including network-class errors that did
   not trip the `"network"` substring branch, generic FS errors with no
   errno code, etc.
 - `narrowSkipReason` / `narrowFailReason` (update.ts:1440, 1464) return
-  `"not in manifest"` — the operator reads that as a real classification.
+  `"not in manifest"` -- the operator reads that as a real classification.
 - `narrowReason` (reinstall.ts:846) explicitly returns `"not in manifest"`
   as a catch-all with the comment "the most-permissive cascade skip reason
   ... matches the operator mental model 'we couldn't reconcile this row'."
@@ -266,7 +266,7 @@ already returns `""` for an empty array per notify.ts:799-801.
 
 **File:** `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:152-170`
 **Issue:** The `narrowCascadeFailure` helper has a defensive textual
-fallback that the JSDoc itself calls out as "may be dead code — a future
+fallback that the JSDoc itself calls out as "may be dead code -- a future
 audit may show them dead and they can be deleted in a follow-up."
 Carrying defensive-but-possibly-dead substring-matching code with a
 TODO-style hedge in the JSDoc creates a class of code that can never be
@@ -308,14 +308,14 @@ Examples:
 - notify.ts:200,202: "Pattern: shared/grammar/status-tokens.ts:34-52"
 - notify.ts:563: "V2 grammar constants duplicated from
   presentation/compact-line.ts per D-16-04. Phase 21 deletes both copies."
-  — Phase 21 already deleted the `presentation/` copy; the wording reads
+  -- Phase 21 already deleted the `presentation/` copy; the wording reads
   as if the duplication is still live.
 - notify.ts:773: "Mirrors `presentation/compact-line.ts` `composeReasons`
-  (lines 458-479)" — the file is gone.
+  (lines 458-479)" -- the file is gone.
 - errors.ts:42-43: "Located in `shared/errors.ts` because `shared/notify.ts`
   cannot import from `presentation/` (D-11 layering). `presentation/cause-chain.ts`
   re-exports this symbol so presentation-layer consumers reference it via
-  `presentation/`." — the re-export does not exist.
+  `presentation/`." -- the re-export does not exist.
 
 This is a maintenance hazard: a new contributor following these
 references finds nothing, and the `assertNever` / `composeReasons`
@@ -326,7 +326,7 @@ both).
 **Fix:** Sweep the comments to remove dead path references, or rewrite
 them to say "previously in <path>; canonicalised here in Phase 21". A
 search for `presentation/` and `shared/grammar/` across `extensions/`
-yields ~25 occurrences across 5 files — none of those paths exist on
+yields ~25 occurrences across 5 files -- none of those paths exist on
 disk anymore.
 
 ### WR-05: `update.ts` `notifyDirectFailure` always sets a plugin-row `scope` matching the marketplace block's scope
@@ -352,7 +352,7 @@ Every caller passes the SAME `scope` for both the marketplace block and
 the plugin row. Per the IN-04 orphan-fold convention documented in
 install.ts:936-944 and the renderer behavior at notify.ts:743 the
 `row.scope === mp.scope` case is suppressed at render time, but the
-caller is still emitting a structurally redundant field — the same
+caller is still emitting a structurally redundant field -- the same
 defect CR-02 calls out in the install.ts defensive arm, replicated five
 times in update.ts. Same severity reasoning as CR-02 (no byte-output
 difference today; contract divergence from the project's stated
@@ -374,7 +374,7 @@ Update the `notifyBareFormEnumerateFailure` helper (update.ts:1379) the
 same way (it emits `scope: scope ?? "user"` on the row, matching the
 block scope).
 
-### WR-06: `narrowSkipReason` fallback in `marketplace/update.ts` returns `"up-to-date"` for empty-notes path — a SUCCESS Reason for a skipped-with-no-info case
+### WR-06: `narrowSkipReason` fallback in `marketplace/update.ts` returns `"up-to-date"` for empty-notes path -- a SUCCESS Reason for a skipped-with-no-info case
 
 **File:** `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts:531-548`
 **Issue:** The legacy substring-fallback in `narrowSkipReason` ends with:
@@ -388,12 +388,12 @@ if (notes.length === 0) {
 return "up-to-date";
 ```
 
-The function is called to narrow a `PluginUpdateSkippedOutcome` — by
+The function is called to narrow a `PluginUpdateSkippedOutcome` -- by
 construction the plugin was skipped, but `"up-to-date"` is the closed
 Reason emitted for the `(unchanged)` partition (line 478). Reaching this
 fallback means the producer signalled "skipped" without any `reasons`
 or `notes`, and the renderer surfaces `{up-to-date}` to the user. The
-operator reads "skipped — up-to-date" and assumes nothing was wrong,
+operator reads "skipped -- up-to-date" and assumes nothing was wrong,
 when in fact the producer failed to populate its outcome contract.
 
 **Fix:** Throw or assert on the empty-notes / no-substring-match path
@@ -419,13 +419,13 @@ defaults to `"unreadable manifest"` for the empty-notes case.
 
 **File:** `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:296-303`
 **Issue:** The 8-line block comment at uninstall.ts:296 leads with "CMC-24
-/ D-13-05 / D-13-06 legacy comment:" — calling itself a "legacy comment"
+/ D-13-05 / D-13-06 legacy comment:" -- calling itself a "legacy comment"
 in-band is the symptom of a comment that should have been rewritten or
 removed during the teardown. The substance (MSG-SD-3 / no soft-dep
 marker on uninstalled rows) is correct and useful; the V1 CMC-24 /
 D-13-05 / D-13-06 references add nothing for a reader at HEAD.
 **Fix:** Rewrite as: "MSG-SD-3: the uninstalled variant has NO per-row
-soft-dep predicate fields by construction — the renderer cannot emit
+soft-dep predicate fields by construction -- the renderer cannot emit
 `{requires pi-subagents}` / `{requires pi-mcp}` markers on (uninstalled)
 rows." Drop the historical decision numbers.
 
@@ -456,7 +456,7 @@ individual plugin entry whose `plRaw` is non-object. The outer ST-4 /
 ST-5 normalize contract preserves data integrity but silently discards
 malformed plugin records without flagging them. Compare to
 `migrateLegacyMarketplaceRecords` at line 138-143, which at least sets
-`mutated = true` (so the bad shape is overwritten on persist) — the
+`mutated = true` (so the bad shape is overwritten on persist) -- the
 inner-plugin path neither logs nor mutates.
 
 This is a deviation from the file's own "fill / normalize" intent: a
@@ -482,7 +482,7 @@ RH-1..5, PU-1..8, PI-1..15...) and Plan-NN-NN cross-references that
 made sense during active development but now duplicate what
 PROJECT.md / REQUIREMENTS.md / the planning archive carries
 authoritatively. The teardown phase is a natural point to compress
-these to the 5–10 lines that materially describe the file's purpose
+these to the 5-10 lines that materially describe the file's purpose
 to a reader at HEAD.
 
 **Fix:** During a subsequent doc pass, compress each leading comment to

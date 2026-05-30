@@ -49,7 +49,7 @@ inside try/catch.
 One **BLOCKER** stands out: in `update.ts`, the phase-3a aggregate-failure path inside
 `runThreePhaseUpdate` fires `notifyDirectFailure` and **then returns the outcome to
 `updatePlugins`**, which proceeds to push the outcome onto `outcomes[]` and call
-`renderUpdateCascadeAndNotify` — producing **two** notifications for a single
+`renderUpdateCascadeAndNotify` -- producing **two** notifications for a single
 phase-3a aggregate failure. The inline code comment at update.ts:844-846 asserts that
 "the cascade is NOT re-rendered here -- aborting before the cascade walk means there's
 exactly one row to surface," but there is no `return` from `updatePlugins` after this
@@ -68,7 +68,7 @@ inappropriate for non-resolver errors (e.g. state.json load failure); (d) the
 `composeInstallFailureMessage` function declares `marketplace: string` in its args
 type but never reads it; and (e) the update.ts:196-201 enumerate-targets failure
 arm defaults `scope` to `"project"` and uses `targetMarketplaceName(target)` which
-returns the literal string `"(targets)"` for the bare form — both stand-ins surface
+returns the literal string `"(targets)"` for the bare form -- both stand-ins surface
 to the user when state.json corrupts the bare-form enumeration.
 
 Six INFO items cover dead `void` statements, dead conditional spreads on
@@ -92,8 +92,8 @@ it calls `notifyDirectFailure(...)` inline at line 851-866 and then returns
 unconditionally and then invokes `renderUpdateCascadeAndNotify(ctx, pi, outcomes)`
 at line 316, which fires a SECOND notification rendering the cascade body for the
 same failure. The user sees the failure surface twice. The block-comment claim at
-update.ts:844-846 — "The cascade is NOT re-rendered here -- aborting before the
-cascade walk means there's exactly one row to surface" — is contradicted by the code;
+update.ts:844-846 -- "The cascade is NOT re-rendered here -- aborting before the
+cascade walk means there's exactly one row to surface" -- is contradicted by the code;
 no `return` from `updatePlugins` follows the phase-3a path. The PUP-6 phase-3 test
 at update.test.ts:734-790 masks this by joining `notifications.map(n => n.message)`
 into one string before regex-matching, so it neither counts notifications nor
@@ -144,7 +144,7 @@ iterations get the same reference and mutate it via `push`), but the read-then-c
 pattern is non-obvious. A future refactor that converts the conditional `byMp.set` into
 an unconditional set (or rearranges to set-after-push) will silently break the in-place
 mutation invariant on the second iteration only when the `??` fallback hit on the
-first iteration — a hard-to-test path. The reinstall.ts:597-610 group-builder uses a
+first iteration -- a hard-to-test path. The reinstall.ts:597-610 group-builder uses a
 clearer get-existing-or-construct-new shape that does not rely on the map-read
 returning the same object across iterations.
 
@@ -175,7 +175,7 @@ plugin rows under the user-scope block. The fold calls
 returns **all four bucket variants** (installed, upgradable, available, unavailable)
 from the project side. The subsequent `foldedNames` set at line 646-650 only
 captures `installed`/`upgradable` rows for exclusion from the user-side's available
-bucket — `available` and `unavailable` rows from the project-side enumeration are
+bucket -- `available` and `unavailable` rows from the project-side enumeration are
 appended verbatim to the user-scope block via `extraPlugins`. Because both scopes
 read the SAME manifest (cloned `marketplaceRoot`), every manifest-listed plugin that
 is not installed in either scope produces two `(available)` rows under the user-scope
@@ -201,12 +201,12 @@ one row for each manifest entry.
 **Issue:** The orchestrator-level catch path constructs a `PluginFailedMessage` with
 `name: "list"` under a `MarketplaceNotificationMessage` with `name: "(list)"`. The
 synthesized marketplace name `"(list)"` would render in the catalog grammar as
-`● (list) [user]` (or `[project]`), which is operator-confusing — it looks like a
+`● (list) [user]` (or `[project]`), which is operator-confusing -- it looks like a
 real marketplace called "(list)" with parens. The Reason chosen via
 `narrowProbeError(err)` is also inappropriate for orchestrator-level failures:
 `narrowProbeError` falls through to `"unreadable"` for any non-ENOENT/EACCES/SyntaxError,
 which would surface a `loadState` permission error or a state.json schema validation
-error as `{unreadable}` — a Reason that semantically describes a resolver probe
+error as `{unreadable}` -- a Reason that semantically describes a resolver probe
 failure, not a list orchestration failure. The catch path has no test coverage
 (no test in list.test.ts drives `loadPluginListPayload` into throwing).
 
@@ -216,7 +216,7 @@ substring), or (b) document the catalog choice and add an exact-byte test assert
 the produced shape (so a future change cannot drift unnoticed). Prefer (a) plus a
 test. Also rename the synthetic marketplace to something less ambiguous (e.g.
 emit `marketplaces: []` and let the renderer's `(no marketplaces)` sentinel carry
-the failure trailer via a separate channel — though the current
+the failure trailer via a separate channel -- though the current
 `MarketplaceNotificationMessage` shape does not support that, so the cleanest near-term
 fix is the dedicated narrower + test).
 
@@ -229,7 +229,7 @@ references `args.marketplace`. The caller at line 727-736 passes a real marketpl
 name, but it is silently dropped. This is dead data flow: a future change that
 expects the marketplace name to participate in the failure message (e.g., to
 disambiguate a same-named plugin across marketplaces in a cause-chain trailer) will
-add a reference and silently use stale data — there is no compile-time gate.
+add a reference and silently use stale data -- there is no compile-time gate.
 
 **Fix:** Remove `marketplace: string` from the args type:
 ```ts
@@ -341,7 +341,7 @@ switch (err.shape.kind) {
 }
 ```
 But note that `narrowDirectFailReason` returns `Reason` (a closed string union),
-so `assertNever` would need to wrap a `throw` rather than return — adjust the
+so `assertNever` would need to wrap a `throw` rather than return -- adjust the
 return type or restructure. The simpler fix is to rely on `PluginShapeError`'s
 existing exhaustive shape and add the `default: assertNever(...)` after the switch.
 
@@ -372,7 +372,7 @@ prior `resolveInstalledPluginTarget` call at line 152-160 already verified the
 marketplace's existence (when no `explicitScope` is set, it returns `undefined`
 on missing record; when `explicitScope` IS set, it skips state lookup entirely).
 When explicit scope is set and state is empty, the closure's `loadState` returns
-empty state and `mp === undefined` IS reachable — exercised by PU-5 marketplace-
+empty state and `mp === undefined` IS reachable -- exercised by PU-5 marketplace-
 absent at uninstall.test.ts:489. So the branch is reachable, but only via the
 explicit-scope path.
 
@@ -403,7 +403,7 @@ language-independent of the V1 wrappers.
 
 **Fix:** Split the two blocks: keep `orchestrators/plugin/**` ignored for MSG-Block 1
 (the routing rules) but re-enable MSG-Block 1b for the migrated subtree. The block
-already separates the file globs (lines 184-191) — drop
+already separates the file globs (lines 184-191) -- drop
 `orchestrators/plugin/**` from the MSG-Block 1b `ignores` array.
 
 ```js

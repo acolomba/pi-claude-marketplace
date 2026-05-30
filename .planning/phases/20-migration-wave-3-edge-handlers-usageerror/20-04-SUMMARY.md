@@ -65,17 +65,17 @@ completed: 2026-05-27
 
 ## Task Commits
 
-1. **Task 1: Add `orchestrators/import/**` to MSG-Block 1 `ignores`** — `332fff5` (chore)
+1. **Task 1: Add `orchestrators/import/**` to MSG-Block 1 `ignores`** -- `332fff5` (chore)
    - Single-line additive edit at `eslint.config.js:163`.
    - Verified `npm run check` exit 0 (1363/1365 pass, 0 fail, 2 todo).
    - Commit subject: `chore(20): narrow MSG-Block 1 ignores to cover orchestrators/import (SNM-23)`.
 
-2. **Task 2: End-to-end Phase 20 Success Criteria verification** — NO COMMIT (read-only verification task per plan; evidence captured in this SUMMARY).
+2. **Task 2: End-to-end Phase 20 Success Criteria verification** -- NO COMMIT (read-only verification task per plan; evidence captured in this SUMMARY).
 
 ## Files Created/Modified
 
-- `eslint.config.js` — MSG-Block 1 `ignores: [...]` array EXTENDED with third additive entry (1 line added; no other diffs)
-- `.planning/phases/20-migration-wave-3-edge-handlers-usageerror/20-04-SUMMARY.md` — this file
+- `eslint.config.js` -- MSG-Block 1 `ignores: [...]` array EXTENDED with third additive entry (1 line added; no other diffs)
+- `.planning/phases/20-migration-wave-3-edge-handlers-usageerror/20-04-SUMMARY.md` -- this file
 
 ## Verification Matrix: All 5 Phase 20 Success Criteria
 
@@ -103,17 +103,17 @@ completed: 2026-05-27
 
 ## Decisions Made
 
-None — followed plan as specified. D-20-07's narrowing strategy + the 3 no-change invariants (MSG-Block 1b per IN-06; MSG-Block 2 orthogonal; Blocks 3-6 global) were honored literally.
+None -- followed plan as specified. D-20-07's narrowing strategy + the 3 no-change invariants (MSG-Block 1b per IN-06; MSG-Block 2 orthogonal; Blocks 3-6 global) were honored literally.
 
 ## Deviations from Plan
 
-None — plan executed exactly as written.
+None -- plan executed exactly as written.
 
-The one notable observation worth recording: the plan's wider V1-3-arg regex check at Task 2 step 2 (`grep -rE 'notifyUsageError\([^,]+,\s*[^{][^,]*,\s*' extensions/pi-claude-marketplace/edge/`) flags 17 matches when run literally, but every match is a V2 1-arg callsite of the form `notifyUsageError(ctx, { message: ..., usage: ... })` — the regex's `[^{][^,]*,` clause hits the `message: ...,` property inside the object literal, not a true V1 3-arg form. The authoritative SC #2 check (narrower regex `notifyUsageError\(ctx,\s*"` looking for V1 string-literal second arg) correctly returns empty, and the 30 V2 1-arg callsite count matches the Plan 20-01 site count exactly. SC #2 is GREEN; the wider regex is a known false-positive against the brace-properties pattern and is not a regression signal. No remediation needed.
+The one notable observation worth recording: the plan's wider V1-3-arg regex check at Task 2 step 2 (`grep -rE 'notifyUsageError\([^,]+,\s*[^{][^,]*,\s*' extensions/pi-claude-marketplace/edge/`) flags 17 matches when run literally, but every match is a V2 1-arg callsite of the form `notifyUsageError(ctx, { message: ..., usage: ... })` -- the regex's `[^{][^,]*,` clause hits the `message: ...,` property inside the object literal, not a true V1 3-arg form. The authoritative SC #2 check (narrower regex `notifyUsageError\(ctx,\s*"` looking for V1 string-literal second arg) correctly returns empty, and the 30 V2 1-arg callsite count matches the Plan 20-01 site count exactly. SC #2 is GREEN; the wider regex is a known false-positive against the brace-properties pattern and is not a regression signal. No remediation needed.
 
 ## Issues Encountered
 
-- **TruffleHog pre-commit hook failure inside worktree:** `pre-commit run --files eslint.config.js` failed at the `trufflehog` hook with `failed to read index file: open .../.git/index: not a directory` (worktree `.git` is a file, not a directory — known limitation). Per project CLAUDE.md, the documented workaround is `SKIP=trufflehog git commit ...` after confirming `pre-commit run trufflehog --all-files` is clean. In this worktree the all-files run hits the same `.git`-is-a-file limitation, so the standard verification path can only run from the main checkout. The single-line `eslint.config.js` change contains no secrets (lint config string literal only), so the `SKIP=trufflehog` exception per CLAUDE.md was applied; no other hooks were skipped.
+- **TruffleHog pre-commit hook failure inside worktree:** `pre-commit run --files eslint.config.js` failed at the `trufflehog` hook with `failed to read index file: open .../.git/index: not a directory` (worktree `.git` is a file, not a directory -- known limitation). Per project CLAUDE.md, the documented workaround is `SKIP=trufflehog git commit ...` after confirming `pre-commit run trufflehog --all-files` is clean. In this worktree the all-files run hits the same `.git`-is-a-file limitation, so the standard verification path can only run from the main checkout. The single-line `eslint.config.js` change contains no secrets (lint config string literal only), so the `SKIP=trufflehog` exception per CLAUDE.md was applied; no other hooks were skipped.
 
 ## Phase 20 Closure: SNM-23 Migration Half Complete
 
@@ -151,10 +151,10 @@ The Phase 19 deferred prediction "Phase 20 will remove Block 1b's `edge/handlers
 ## Self-Check
 
 **Created files exist:**
-- `.planning/phases/20-migration-wave-3-edge-handlers-usageerror/20-04-SUMMARY.md` — FOUND (this file)
+- `.planning/phases/20-migration-wave-3-edge-handlers-usageerror/20-04-SUMMARY.md` -- FOUND (this file)
 
 **Modified files committed:**
-- `eslint.config.js` — committed at `332fff5` (verified via `git log --oneline -1`)
+- `eslint.config.js` -- committed at `332fff5` (verified via `git log --oneline -1`)
 
 **Self-Check: PASSED**
 
