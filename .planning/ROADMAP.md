@@ -94,7 +94,7 @@ Close the 8 gaps surfaced by the v1.4 milestone-spanning UAT (`.planning/v1.4-MI
 - [x] **Phase 23: Version Display Bundle** -- (a) Add tier-2 `installable.manifest?.version` fallback to `resolvePluginVersion` in `orchestrators/plugin/shared.ts:167` with SemVer shape validation (SNM-34; closes G-MIL-05); (b) Renderer-only transform of hash-version display to `v#<7hex>` git-style short SHA in `shared/notify.ts` (`formatHashVersionForDisplay` helper); update byte-form fixtures in `tests/shared/notify-v2.test.ts`, `tests/architecture/catalog-uat.test.ts`, and `docs/output-catalog.md`. Persistence stays at `hash-<12hex>` (PI-7 intact). (SNM-35; closes G-MIL-08) (completed 2026-05-29)
 - [x] **Phase 24: Grammar Consistency** -- Rename the `"lspServers"` REASON discriminator in the `REASONS` closed-set at `shared/notify.ts:79` to `"lsp"`. The real shape is a single closed-set tuple edit plus a type-driven compile cascade through two detection-vs-emission seams (`list.ts::narrowResolverNotes` and `install.ts::manifestFieldTokenFromNote`, via a `MANIFEST_FIELD_TO_REASON` map) plus the catalog/fixture byte-form lockstep -- detection substrings stay camelCase, only the emitted Reason becomes `"lsp"` (D-24-04). The manifest-side JSON key `lspServers` (in `domain/components/plugin.ts:31` schema + `domain/resolver.ts` references) stays unchanged. (SNM-36; closes G-MIL-04) (completed 2026-05-29)
 - [x] **Phase 25: Runtime Publish & Verification** -- (a) Source-load v0.2.0 (v1.4 source) into a Pi runtime via `scripts/pi.sh` (sandbox home) so v1.4-specific behavior can be exercised live (D-25-01); verify v1.4 identity via a behavioral byte-form smoke (NOT `pi --version`, moot under `-e` source-load per D-25-04) over `/claude:plugin list` -- no `/reload` trailer on read-only list, `v#<7hex>`, `{lsp}`; real-publish validation deferred (D-25-06) (SNM-37; reproduction enabler). (b) Reproduce-or-refute G-MIL-03 (indent ladder 1/3 vs catalog 2/4/6) against the v1.4 runtime; fix or document as not-a-bug per finding (SNM-38). (c) Reproduce-or-refute G-MIL-07 (tab completion for `update @<TAB>` empty) against the v1.4 runtime; fix or defer per root-cause finding (SNM-39). (completed 2026-05-29)
-- [ ] **Phase 26: GREEN Gate Close** -- Final `npm run check` GREEN end-to-end after Phases 22-25 land. Verify the v1.4.1 regression tests added in SNM-33 / SNM-34 / SNM-35 / SNM-36 are in the suite; record milestone-close summary. (SNM-40)
+- [x] **Phase 26: GREEN Gate Close** -- Final `npm run check` GREEN end-to-end after Phases 22-25 land. Verify the v1.4.1 regression tests added in SNM-33 / SNM-34 / SNM-35 / SNM-36 are in the suite; record milestone-close summary. (SNM-40) (completed 2026-05-30)
 
 ## Phase Details
 
@@ -505,10 +505,10 @@ Plans:
 3. The `tests/integration/fold-adoption.test.ts` phase 1 pre-existing failure remains out of scope (it predates v1.4.1 and runs on the separate `npm run test:integration` track, not `npm test`); the v1.4.1 close gate is NOT blocked by it.
 4. Closure narrative is recorded in CHANGELOG and STATE.md / PROJECT.md / REQUIREMENTS.md per the v1.4-close pattern (SNM-32); the milestone is ready for `/gsd-complete-milestone`.
 
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 Plans:
 
-- [ ] 26-01-PLAN.md -- clean-tree GREEN gate (npm run check exit 0 + recorded npm test count) → VERIFICATION.md (SNM-33..36 → test:case inventory) → four-doc closure narrative (CHANGELOG fold to unreleased [0.2.0] + STATE milestone-ready + PROJECT evolution + REQUIREMENTS SNM-23/SNM-40 rows) as one docs(26): commit; no version bump, no archival
+- [x] 26-01-PLAN.md -- clean-tree GREEN gate (npm run check exit 0 + recorded npm test count) → VERIFICATION.md (SNM-33..36 → test:case inventory) → four-doc closure narrative (CHANGELOG fold to unreleased [0.2.0] + STATE milestone-ready + PROJECT evolution + REQUIREMENTS SNM-23/SNM-40 rows) as one docs(26): commit; no version bump, no archival
 
 ## Progress
 
@@ -537,4 +537,4 @@ Plans:
 | 23. Version Display Bundle                                           | v1.4.1    | 2/2 | Complete    | 2026-05-29 |
 | 24. Grammar Consistency                                              | v1.4.1    | 1/1 | Complete    | 2026-05-29 |
 | 25. Runtime Publish & Verification                                   | v1.4.1    | 3/3 | Complete    | 2026-05-29 |
-| 26. GREEN Gate Close                                                 | v1.4.1    | 0/0            | Not started | --         |
+| 26. GREEN Gate Close                                                 | v1.4.1    | 1/1 | Complete    | 2026-05-30 |
