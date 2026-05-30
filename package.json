@@ -14,7 +14,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@earendil-works/pi-coding-agent": "^0.75.3",
-    "@earendil-works/pi-tui": "^0.74.0",
+    "@earendil-works/pi-tui": "^0.78.0",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/proper-lockfile": "^4.1.4",
     "@types/write-file-atomic": "^4.0.3",
