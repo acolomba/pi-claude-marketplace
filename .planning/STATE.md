@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Notification Output Polish
-status: planning
-stopped_at: v1.5 requirements + roadmap written (phases 27-28, UXG-01..UXG-06); ready for `/gsd-plan-phase 27`
-last_updated: "2026-05-30T22:18:17.935Z"
-last_activity: 2026-05-30 -- v1.5 Notification Output Polish started non-destructively (D-UXG-01); PROJECT/REQUIREMENTS/ROADMAP written, phases 27-28, 6 UXG requirements from the UAT sweep
+status: executing
+stopped_at: "Plan 27-01 complete (UXG-06); next: Plan 27-02 (UXG-01 drop <last-updated>)"
+last_updated: "2026-05-30T23:02:42.665Z"
+last_activity: 2026-05-30
 progress:
-  total_phases: 2
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_phases: 16
+  completed_phases: 14
+  total_plans: 55
+  completed_plans: 52
+  percent: 95
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-30)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.5 Notification Output Polish (planning) -- 6 UXG requirements from the 2026-05-30 UAT sweep, phases 27-28; ready for `/gsd-plan-phase 27`. v1.4.1 shipped (in PROJECT `### Validated`), ready for `/gsd-complete-milestone` archival of phase dirs 15-26 post-merge.
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 27 -- marketplace-autoupdate-output-grammar
 
 ## Current Position
 
-Phase: 27 (not started -- defining/planning)
-Plan: --
-Status: v1.5 planning -- requirements + roadmap written (phases 27-28, UXG-01..UXG-06); ready for `/gsd-plan-phase 27`
-Last activity: 2026-05-30 -- v1.5 Notification Output Polish started non-destructively (D-UXG-01); PROJECT/REQUIREMENTS/ROADMAP written. v1.4.1 phases 15-26 left intact (archival post-merge)
+Phase: 27 (marketplace-autoupdate-output-grammar) -- EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-05-30
 
 ## Performance Metrics
 
@@ -88,6 +88,7 @@ Last activity: 2026-05-30 -- v1.5 Notification Output Polish started non-destruc
 | Phase 09 P04 | - | 4 tasks | 4 files |
 | Phase 25 P01 | 14 min | 3 tasks | 4 files |
 | Phase 25 P2 | 5min | 2 tasks | 2 files |
+| Phase 27 P01 | 6 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -140,6 +141,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 25]: SNM-37 gate satisfied via scripts/pi.sh source-load (no npm publish/link, D-25-01) + a tests/shared/snm37-behavioral-smoke.test.ts byte-form smoke proving v1.4 identity at the pre-tui notify boundary (D-25-04; stronger than pi --version, moot under -e source-load). Real-publish validation deferred (D-25-06). SNM-37 text + ROADMAP SC#1 amended in lockstep (D-25-03). Gates SNM-38 (25-02) + SNM-39 (25-03). -- Plan 25-01.
 - [Phase ?]: [Phase 25]: SNM-38 (G-MIL-03 indent ladder) REFUTED by pre-tui byte evidence (D-25-09): notify() emits the catalog-conformant 0/2/4 ladder at ctx.ui.notify (captured indents [0,2,2,2,2,4,0,0,2]); the observed 1/3 visual is a markdown/tui display-layer artifact, not a renderer deviation. Recorded as a docs/output-catalog.md Indentation-discipline clarification + a tests/shared/snm38-indent-ladder.test.ts readability lock (on top of the catalog-uat byte-equality gate). Anchored on notify.ts constants, NOT the UAT 2/4 truth-line misquote. -- Plan 25-02.
 - [Phase 25]: SNM-39 (G-MIL-07 tab completion) DEFER-WITH-FINDING (D-25-10): our provider is correct (TC-6 `update @` -> `["@mp-a","@mp-b"]` GREEN; cause (a) eliminated by v0.2.0 source-load, cause (c) ruled out). Root cause is cause (b) -- host-side `@`-precedence in the GLOBAL `@earendil-works/pi-tui` 0.76.0 that scripts/pi.sh execs (`@`-logic byte-identical to local 0.74.2): `CombinedAutocompleteProvider.getSuggestions:188` checks `extractAtPrefix:191`/`:331` against `PATH_DELIMITERS:6` (no `@`) and routes any `@`-leading token to file-mention completion BEFORE the slash branch `:205`, so our `getArgumentCompletions` is never reached for bare `update @`. LIVE scripts/pi.sh trigger (D-25-08) showed FILE PATHS (not `@<mp>` candidates) -> CONFIRMS the interception (D-25-05 real-home spot-check not triggered). pi-tui-external; defer, do NOT contort the provider (would degrade bare-`@<mp>` UX without fixing the host). Recorded in UAT + a finding comment above TC-6 (provider.test.ts:793). -- Plan 25-03.
+- [Phase 27]: UXG-06 closed doc-only -- catalog github-source prose corrected (marketplace add never auto-enables autoupdate for any source; add.ts:235-244/311-320), autoupdate heading renamed to the real autoupdate|noautoupdate <name> verbs (no disable subcommand), catalog-uat FIXTURES key synced byte-for-byte (loadCatalogExamples sectionRe coupling). catalog-uat + npm run check GREEN. -- Plan 27-01.
 
 ### Pending Todos
 
@@ -189,9 +191,9 @@ Additional v1.4.1-scope deferrals:
 
 ## Session Continuity
 
-Last session: 2026-05-30T02:03:18Z
-Stopped At: Phase 26 complete -- v1.4.1 milestone ready for `/gsd-complete-milestone`
-Resume File: .planning/phases/26-green-gate-close/26-01-SUMMARY.md
+Last session: 2026-05-30T23:02:30.053Z
+Stopped At: Plan 27-01 complete (UXG-06); next: Plan 27-02 (UXG-01 drop <last-updated>)
+Resume File: .planning/phases/27-marketplace-autoupdate-output-grammar/27-01-SUMMARY.md
 
 ## Operator Next Steps
 

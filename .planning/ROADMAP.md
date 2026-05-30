@@ -519,9 +519,9 @@ Plans:
 4. `docs/output-catalog.md` correctly documents that `marketplace add` never auto-enables autoupdate, and the autoupdate heading matches the `autoupdate`/`noautoupdate` verbs.
 5. `npm run check` + catalog-uat GREEN.
 
-**Plans:** 4/4 plans -- run `/gsd-execute-phase 27`. Serialized across 4 waves because all four requirements converge on `shared/notify.ts` + `docs/output-catalog.md`; the catalog-uat byte-equality runner reads the live catalog at test time, so renderer + catalog + fixtures move in lockstep within each plan (no intermediate RED). Research-recommended order: UXG-06 (heading/FIXTURES-key) -> UXG-01 (drop `<last-updated>`) -> UXG-04 (autoupdate markers, Strategy B) -> UXG-05 (manifest content-compare no-op detector).
+**Plans:** 1/4 plans executed
 
-- [ ] 27-01-PLAN.md (Wave 1) -- UXG-06: correct github-source autoupdate-default prose + rename the autoupdate heading to the real `autoupdate`/`noautoupdate` verbs + sync the catalog-uat FIXTURES key byte-for-byte
+- [x] 27-01-PLAN.md (Wave 1) -- UXG-06: correct github-source autoupdate-default prose + rename the autoupdate heading to the real `autoupdate`/`noautoupdate` verbs + sync the catalog-uat FIXTURES key byte-for-byte
 - [ ] 27-02-PLAN.md (Wave 2) -- UXG-01: drop the `<last-updated <iso>>` token from the list-surface renderer + catalog + notify-v2 + catalog-uat + list orchestrator test; retain the `lastUpdatedAt` field in state/type
 - [ ] 27-03-PLAN.md (Wave 3) -- UXG-04: autoupdate flip emits `<autoupdate>`/`<no autoupdate>` markers + idempotent `{already autoupdate}`/`{already no autoupdate}` via Strategy B (rename 2 REASONS, rewrite renderer arms, no MARKETPLACE_STATUSES/MARKERS churn); orchestrator payload + catalog + 3 byte-test surfaces in lockstep
 - [ ] 27-04-PLAN.md (Wave 4) -- UXG-05: manifest content-compare change detector in update.ts; autoupdate-OFF no-op emits `(skipped) {up-to-date}` (warning, no trailer), changed path stays `(updated)`; catalog + byte tests + orchestrator change-detector tests; phase GREEN gate + nyquist sign-off
@@ -569,5 +569,5 @@ Plans:
 | 24. Grammar Consistency                                              | v1.4.1    | 1/1 | Complete    | 2026-05-29 |
 | 25. Runtime Publish & Verification                                   | v1.4.1    | 3/3 | Complete    | 2026-05-29 |
 | 26. GREEN Gate Close                                                 | v1.4.1    | 1/1 | Complete    | 2026-05-30 |
-| 27. Marketplace & Autoupdate Output Grammar                          | v1.5      | 0/4 | Planned     | --         |
+| 27. Marketplace & Autoupdate Output Grammar                          | v1.5      | 1/4 | In Progress|  |
 | 28. Severity Routing & Label Discipline                              | v1.5      | 0/0 | Not started | --         |

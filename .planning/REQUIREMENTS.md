@@ -22,7 +22,7 @@ Refine the v2 `NotificationMessage` output grammar and severity presentation per
 
 ### Documentation
 
-- [ ] **UXG-06**: Correct the output catalog's stale claim that github-source `marketplace add` defaults autoupdate ON. Actual v2 behavior (verified in `orchestrators/marketplace/add.ts` -- no `autoupdate` write for any source): `marketplace add` never enables autoupdate; it is opt-in via `bootstrap` or an explicit `marketplace autoupdate`. Fix the `docs/output-catalog.md` github-source prose and align the `## /claude:plugin marketplace autoupdate <enable|disable>` heading with the real `autoupdate` / `noautoupdate` verbs. Doc-only; no renderer change. Closes UAT Finding 6.
+- [x] **UXG-06**: Correct the output catalog's stale claim that github-source `marketplace add` defaults autoupdate ON. Actual v2 behavior (verified in `orchestrators/marketplace/add.ts` -- no `autoupdate` write for any source): `marketplace add` never enables autoupdate; it is opt-in via `bootstrap` or an explicit `marketplace autoupdate`. Fix the `docs/output-catalog.md` github-source prose and align the `## /claude:plugin marketplace autoupdate <enable|disable>` heading with the real `autoupdate` / `noautoupdate` verbs. Doc-only; no renderer change. Closes UAT Finding 6.
 
 ## v1.4.1 Milestone Goal
 
@@ -185,7 +185,7 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25 (v1.4 rows) and 2026-0
 | UXG-01      | Phase 27 | Pending  |
 | UXG-04      | Phase 27 | Pending  |
 | UXG-05      | Phase 27 | Pending  |
-| UXG-06      | Phase 27 | Pending  |
+| UXG-06      | Phase 27 | Complete |
 | UXG-02      | Phase 28 | Pending  |
 | UXG-03      | Phase 28 | Pending  |
 
