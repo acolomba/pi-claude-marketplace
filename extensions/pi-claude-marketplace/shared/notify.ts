@@ -55,7 +55,7 @@ import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../platform/
  * CMC-11 closed reasons set. Byte-equal to the `reasons:` block in the
  * binding frontmatter at `docs/messaging-style-guide.md`. The set was
  * extended from the original 23 entries to cover the autoupdate-flip
- * idempotent rows (`"already enabled"` / `"already disabled"`) and the
+ * idempotent rows (`"already autoupdate"` / `"already no autoupdate"`) and the
  * failure-class closed Reasons the catalog UAT requires across uninstall /
  * marketplace-remove partial / reinstall / update / marketplace-update rows
  * (`"permission denied"` / `"source missing"` / `"network unreachable"`).
@@ -84,8 +84,8 @@ export const REASONS = [
   "stale clone",
   "duplicate name",
   "lock held",
-  "already enabled",
-  "already disabled",
+  "already autoupdate",
+  "already no autoupdate",
   "permission denied",
   "source missing",
   "network unreachable",
@@ -523,7 +523,7 @@ export type PluginNotificationMessage =
  *
  * `readonly reasons?: readonly Reason[]`: the `"skipped"` mp-status renderer
  * arm consumes this field to compose the `{<reason>, <reason>}` brace (e.g.,
- * `{already enabled}` for idempotent autoupdate flips); other mp-status
+ * `{already autoupdate}` for idempotent autoupdate flips); other mp-status
  * arms ignore the field, per the independent-optionals discipline (the type
  * does not structurally constrain co-occurrence with `status`).
  *
@@ -584,15 +584,23 @@ const ICON_UNINSTALLABLE = "⊘";
  *   "removed"            -> `${ICON_INSTALLED} ${name} [${scope}] (removed)`
  *   "updated"            -> `${ICON_INSTALLED} ${name} [${scope}] (updated)`
  *   "failed"             -> `${ICON_UNINSTALLABLE} ${name} [${scope}] (failed)`
- *   "autoupdate enabled" -> `${ICON_INSTALLED} ${name} [${scope}] (autoupdate enabled)`
- *                           (fresh state-flip; never carries mp.reasons.)
- *   "autoupdate disabled"-> `${ICON_INSTALLED} ${name} [${scope}] (autoupdate disabled)`
- *                           (fresh state-flip; never carries mp.reasons.)
+ *   "autoupdate enabled" -> `${ICON_INSTALLED} ${name} [${scope}] <autoupdate>`
+ *                           (UXG-04 fresh state-flip; marker-as-outcome,
+ *                           never carries mp.reasons.)
+ *   "autoupdate disabled"-> `${ICON_INSTALLED} ${name} [${scope}] <no autoupdate>`
+ *                           (UXG-04 fresh state-flip; explicit off-marker,
+ *                           never carries mp.reasons.)
  *   "skipped"            -> `${ICON_INSTALLED} ${name} [${scope}] (skipped)`
  *                           (+ ` {<reason>,...}` iff `mp.reasons` is defined
  *                           and non-empty, composed via `composeReasons` with
  *                           both soft-dep flags FALSE; mp-level skipped never
- *                           emits soft-dep markers.)
+ *                           emits soft-dep markers.) UXG-04 SPECIAL CASE: when
+ *                           `mp.reasons` contains `"already autoupdate"` /
+ *                           `"already no autoupdate"` the row renders
+ *                           `... <autoupdate> {already autoupdate}` /
+ *                           `... <no autoupdate> {already no autoupdate}`
+ *                           (marker-as-outcome + idempotence brace, no
+ *                           `(skipped)` token).
  *   undefined (list-surface):
  *     SUB-BRANCH A (mp.details === undefined): `${ICON_INSTALLED} ${name} [${scope}]`
  *     SUB-BRANCH B (mp.details !== undefined): `${ICON_INSTALLED} ${name} [${scope}]`
@@ -623,23 +631,42 @@ function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus
     case "failed":
       return `${ICON_UNINSTALLABLE} ${mp.name} [${mp.scope}] (failed)`;
     case "autoupdate enabled":
-      //  + : fresh state-flip. Same shape as
-      // "added"/"removed"/"updated"; does NOT carry mp.reasons.
-      return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (autoupdate enabled)`;
+      // UXG-04: fresh autoupdate-on flip renders the `<autoupdate>` marker as
+      // the outcome (byte-form parity with the `marketplace list` surface),
+      // superseding the Phase 17.1 / D-18-05 `(autoupdate enabled)` status
+      // token. The `autoupdate enabled` discriminator STAYS (Strategy B); only
+      // the emitted bytes change. Does NOT carry mp.reasons.
+      return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] <autoupdate>`;
     case "autoupdate disabled":
-      //  + : fresh state-flip. Same shape as
-      // "added"/"removed"/"updated"; does NOT carry mp.reasons.
-      return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (autoupdate disabled)`;
+      // UXG-04: fresh autoupdate-off flip renders the explicit `<no autoupdate>`
+      // off-marker (`<no autoupdate>` is already a MARKERS member; only its
+      // emission on the flip surface is new), superseding `(autoupdate
+      // disabled)`. Discriminator STAYS (Strategy B). Does NOT carry mp.reasons.
+      return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] <no autoupdate>`;
     case "skipped": {
-      //  + : idempotent autoupdate no-op. The
+      // The "skipped" arm is SHARED across mp-level skips (UXG-05's
+      // `(skipped) {up-to-date}`, the idempotent autoupdate no-ops, etc.). The
       // reasons brace is composed via composeReasons reusing the helper that
-      // backs plugin-level skipped rows. CRITICAL : pass
-      // (false, false) for the two soft-dep declares flags -- mp-level
-      // skipped never emits {requires pi-subagents} / {requires pi-mcp}
-      // markers; those are plugin-row-only. composeReasons returns "" when
-      // mp.reasons is undefined or empty, so the conditional join collapses
-      // cleanly with no trailing space.
+      // backs plugin-level skipped rows. CRITICAL: pass (false, false) for the
+      // two soft-dep declares flags -- mp-level skipped never emits
+      // {requires pi-subagents} / {requires pi-mcp} markers; those are
+      // plugin-row-only. composeReasons returns "" when mp.reasons is undefined
+      // or empty, so the conditional join collapses cleanly with no trailing
+      // space.
       const reasonsBrace = composeReasons(mp.reasons, false, false, probe);
+      // UXG-04: idempotent autoupdate flips render the marker as the outcome
+      // (no `(skipped)` token -- the marker conveys the state, the brace
+      // conveys idempotence) for byte-form parity with the fresh-flip + list
+      // surfaces. Branch ONLY on the autoupdate-idempotent reasons; every other
+      // skipped reason keeps the existing `(skipped) {<reason>}` byte form.
+      if (mp.reasons?.includes("already autoupdate")) {
+        return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] <autoupdate> ${reasonsBrace}`;
+      }
+
+      if (mp.reasons?.includes("already no autoupdate")) {
+        return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] <no autoupdate> ${reasonsBrace}`;
+      }
+
       return reasonsBrace === ""
         ? `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (skipped)`
         : `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (skipped) ${reasonsBrace}`;

@@ -537,7 +537,7 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
 // fires on mp-level status even when a healthy plugin row coexists.
 // ===========================================================================
 
-test("notify renders autoupdate enabled marketplace header alone (info severity, NO reload-hint per SNM-33/D-22-01/D-22-03)", () => {
+test("notify renders autoupdate enabled marketplace header alone (UXG-04 <autoupdate> marker, info severity, NO reload-hint per SNM-33/D-22-01/D-22-03)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -545,13 +545,15 @@ test("notify renders autoupdate enabled marketplace header alone (info severity,
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  // D-22-03 supersedes the reload-trigger half of D-17.1-02: a fresh
-  // autoupdate flip mutates a marketplace record, not a Pi-visible
-  // resource, so NO trailer; no severity arg (info routing).
-  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [`● foo [user] (autoupdate enabled)`]);
+  // UXG-04 supersedes the D-18-05 (autoupdate enabled) status token: the
+  // fresh flip renders the <autoupdate> marker-as-outcome. D-22-03 still
+  // supersedes the reload-trigger half of D-17.1-02: a fresh flip mutates a
+  // marketplace record, not a Pi-visible resource, so NO trailer; no severity
+  // arg (info routing).
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [`● foo [user] <autoupdate>`]);
 });
 
-test("notify renders autoupdate disabled marketplace header alone (info severity, NO reload-hint per SNM-33/D-22-01/D-22-03)", () => {
+test("notify renders autoupdate disabled marketplace header alone (UXG-04 <no autoupdate> off-marker, info severity, NO reload-hint per SNM-33/D-22-01/D-22-03)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -559,36 +561,49 @@ test("notify renders autoupdate disabled marketplace header alone (info severity
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  // D-22-03 supersedes the reload-trigger half of D-17.1-02: a fresh
-  // autoupdate flip mutates a marketplace record, not a Pi-visible
-  // resource, so NO trailer; no severity arg (info routing).
-  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [`● foo [user] (autoupdate disabled)`]);
+  // UXG-04 supersedes the D-18-05 (autoupdate disabled) status token: the
+  // fresh flip renders the explicit <no autoupdate> off-marker. D-22-03 still
+  // suppresses the trailer; no severity arg (info routing).
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [`● foo [user] <no autoupdate>`]);
 });
 
-test("notify renders skipped marketplace header with reasons brace (warning severity, NO reload-hint per D-17.1-05)", () => {
+test("notify renders idempotent-enable marketplace header with <autoupdate> marker + reasons brace (UXG-04, warning severity, NO reload-hint per D-17.1-05)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
-      { name: "foo", scope: "user", status: "skipped", reasons: ["already enabled"], plugins: [] },
+      {
+        name: "foo",
+        scope: "user",
+        status: "skipped",
+        reasons: ["already autoupdate"],
+        plugins: [],
+      },
     ],
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  // Per D-17.1-03 byte form: idempotent flip carries the reasons brace and
-  // routes severity to "warning"; NO reload-hint (no state changed).
+  // UXG-04 byte form: idempotent flip renders the marker-as-outcome plus the
+  // idempotence brace (no `(skipped)` token) and routes severity to "warning";
+  // NO reload-hint (no state changed).
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `● foo [user] (skipped) {already enabled}`,
+    `● foo [user] <autoupdate> {already autoupdate}`,
     "warning",
   ]);
 });
 
-test('notify severity tier mp-skipped: skipped marketplace -> arguments = [..., "warning"] (D-17.1-05 ladder extension)', () => {
+test('notify severity tier mp-skipped: idempotent-disable marketplace renders <no autoupdate> + brace, routes "warning" (UXG-04 / D-17.1-05 ladder)', () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
-      { name: "foo", scope: "user", status: "skipped", reasons: ["already disabled"], plugins: [] },
+      {
+        name: "foo",
+        scope: "user",
+        status: "skipped",
+        reasons: ["already no autoupdate"],
+        plugins: [],
+      },
     ],
   };
   notify(ctx as never, pi as never, msg);
@@ -625,7 +640,7 @@ test("notify mixed-severity payload: mp.skipped coexists with healthy plugin row
         name: "foo",
         scope: "user",
         status: "skipped",
-        reasons: ["already enabled"],
+        reasons: ["already autoupdate"],
         plugins: [
           // "available" is a non-state-changing plugin row (no version,
           // no scope per MSG-PL-6 / SNM-11 carve-out, no reasons). Alone
@@ -647,10 +662,11 @@ test("notify mixed-severity payload: mp.skipped coexists with healthy plugin row
   //     REGARDLESS of the healthy "available" plugin row underneath
   //     (which alone would route to info).
   assert.equal(args[1], "warning");
-  // (b) mp header renders the skipped state with reasons brace.
+  // (b) mp header renders the idempotent-autoupdate state as the UXG-04
+  //     marker-as-outcome plus the idempotence brace.
   const body = args[0] as string;
   assert.ok(
-    body.includes(`● foo [user] (skipped) {already enabled}`),
+    body.includes(`● foo [user] <autoupdate> {already autoupdate}`),
     `expected body to include mp-skipped header, got: ${body}`,
   );
   // (c) Reload-hint is absent. mp.skipped is an idempotent no-op (no

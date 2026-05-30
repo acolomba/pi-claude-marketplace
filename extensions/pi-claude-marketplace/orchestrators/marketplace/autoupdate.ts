@@ -7,14 +7,14 @@
 // the 7-entry MarketplaceStatus grammar (+ optional `reasons?:`):
 //
 //  - enable fresh -> status: "autoupdate enabled"
-//  -> `● <mp> [<scope>] (autoupdate enabled)`
+//  -> `● <mp> [<scope>] <autoupdate>`
 //  - disable fresh -> status: "autoupdate disabled"
-//  -> `● <mp> [<scope>] (autoupdate disabled)`
-//  - enable idempotent -> status: "skipped", reasons: ["already enabled"]
-//  -> `● <mp> [<scope>] (skipped) {already enabled}`
+//  -> `● <mp> [<scope>] <no autoupdate>`
+//  - enable idempotent -> status: "skipped", reasons: ["already autoupdate"]
+//  -> `● <mp> [<scope>] <autoupdate> {already autoupdate}`
 //  severity: "warning"
-//  - disable idempotent -> status: "skipped", reasons: ["already disabled"]
-//  -> `● <mp> [<scope>] (skipped) {already disabled}`
+//  - disable idempotent -> status: "skipped", reasons: ["already no autoupdate"]
+//  -> `● <mp> [<scope>] <no autoupdate> {already no autoupdate}`
 //  severity: "warning"
 //  - failure (not-found) -> status: "failed"
 //  -> `⊘ <mp> [<scope>] (failed)`
@@ -27,12 +27,17 @@
 // status (installed/updated/reinstalled/uninstalled), and an autoupdate flip
 // changes a marketplace record, not a Pi-visible resource (SNM-33).
 //
-// CMC-33 / MSG-GR-5: the marker-as-outcome row form
-// (`● <mp> [<scope>] <autoupdate>` / `<no autoupdate>`) is NOT emitted by
-// this orchestrator. The `<autoupdate>` marker lives ONLY on the
-// marketplace-list surface header; on state-flip results, the outcome is
-// conveyed by the `(autoupdate enabled)` / `(autoupdate disabled)` status
-// token instead.
+// UXG-04 / MSG-GR-5 (reverses the Phase 17.1 / D-18-05 status-token design):
+// the marker-as-outcome row form (`● <mp> [<scope>] <autoupdate>` /
+// `<no autoupdate>`) IS NOW the emitted form on the flip surface, for byte-form
+// parity with the marketplace-list surface header. Fresh flips render the bare
+// marker; idempotent flips render the marker + the `{already autoupdate}` /
+// `{already no autoupdate}` brace. The renderer (shared/notify.ts) owns the
+// byte composition; per CLAUDE.md IL-2 all output still flows through notify().
+// Strategy B: the `autoupdate enabled` / `autoupdate disabled` / `skipped`
+// MarketplaceStatus discriminators are UNCHANGED -- only the emitted bytes and
+// the two renamed REASONS members (`already autoupdate` / `already no
+// autoupdate`) differ.
 //
 // Single orchestrator parameterized by `enable: boolean`. The edge layer maps
 // `marketplace autoupdate` -> enable=true and `marketplace noautoupdate` ->
@@ -222,7 +227,7 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
   //   notify(opts.ctx, opts.pi, ...) call; `plugins: []` is required.
   // - Discriminator: mp.status drawn from { "autoupdate enabled",
   //   "autoupdate disabled", "skipped" }; idempotent flips additionally carry
-  //   `reasons: ["already enabled" | "already disabled"]`.
+  //   `reasons: ["already autoupdate" | "already no autoupdate"]`.
   // - Severity (info / warning) and `/reload to pick up changes` are computed
   //   by notify(); callers MUST NOT compose.
   // - Caller order is honored end-to-end -- the SC-6 scopes-loop order is the
@@ -235,7 +240,7 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
         name: row.name,
         scope: row.scope,
         status: "skipped",
-        reasons: [opts.enable ? "already enabled" : "already disabled"],
+        reasons: [opts.enable ? "already autoupdate" : "already no autoupdate"],
         plugins: [],
       };
     }

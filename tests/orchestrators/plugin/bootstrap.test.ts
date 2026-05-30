@@ -13,7 +13,8 @@
 //   b. Second run, fully idempotent: marketplace already present AND
 //      autoupdate true. The duplicate-name path is swallowed so
 //      addMarketplace does NOT emit; setMarketplaceAutoupdate emits
-//      the single `● <mp> [user] <autoupdate> {already enabled}` row.
+//      the single `● <mp> [user] <autoupdate> {already autoupdate}` row
+//      (UXG-04 marker-as-outcome + idempotence brace).
 //   c. Half-bootstrapped (autoupdate off): autoupdate flips to true,
 //      emits ONE marker-as-outcome row.
 //   d. User scope only: project-scope state file is never created.
@@ -148,10 +149,8 @@ test("bootstrap (clean state): adds marketplace + enables autoupdate; two notifi
     // `setMarketplaceAutoupdate` both inherit the collapsed reload-hint rule.
     assert.equal(notifications.length, 2);
     assert.equal(notifications[0]?.message, "● claude-plugins-official [user] (added)");
-    assert.equal(
-      notifications[1]?.message,
-      "● claude-plugins-official [user] (autoupdate enabled)",
-    );
+    // UXG-04: fresh autoupdate enable renders the `<autoupdate>` marker-as-outcome.
+    assert.equal(notifications[1]?.message, "● claude-plugins-official [user] <autoupdate>");
     // Clone happened exactly once on the clean path.
     assert.equal(gitState.cloneCalls.length, 1);
     assert.equal(
@@ -187,12 +186,13 @@ test("bootstrap (already bootstrapped): swallows duplicate-name, reports idempot
     const after = await loadState(userLocations.extensionRoot);
     assert.deepEqual(after, before);
     // Exactly one notification: the idempotent autoupdate report.
-    // Plan 18-02: V2 catalog form -- `(skipped)` token + `{already
-    // enabled}` reason; severity warning per D-18-05 ladder.
+    // UXG-04 catalog form -- the `<autoupdate>` marker-as-outcome + the
+    // `{already autoupdate}` idempotence brace (no `(skipped)` token);
+    // severity warning per D-18-05 ladder.
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]?.message,
-      "● claude-plugins-official [user] (skipped) {already enabled}",
+      "● claude-plugins-official [user] <autoupdate> {already autoupdate}",
     );
     assert.equal(notifications[0]?.severity, "warning");
     // No `(added)` row in this run.
@@ -224,12 +224,10 @@ test("bootstrap (half-configured: autoupdate off): swallows duplicate-name, flip
     const after = await loadState(userLocations.extensionRoot);
     assert.equal(after.marketplaces["claude-plugins-official"]?.autoupdate, true);
     assert.equal(notifications.length, 1);
-    // SNM-33 / D-22-03: `(autoupdate enabled)` header-only block, NO
-    // `/reload` trailer (the autoupdate flag is not a Pi-visible resource).
-    assert.equal(
-      notifications[0]?.message,
-      "● claude-plugins-official [user] (autoupdate enabled)",
-    );
+    // SNM-33 / D-22-03: UXG-04 `<autoupdate>` marker-as-outcome header-only
+    // block, NO `/reload` trailer (the autoupdate flag is not a Pi-visible
+    // resource).
+    assert.equal(notifications[0]?.message, "● claude-plugins-official [user] <autoupdate>");
     // No `(added)` row in this run.
     assert.equal(
       notifications.some((n) => n.message.includes("(added)")),

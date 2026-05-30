@@ -110,10 +110,8 @@ test("bootstrap handler (no args, clean state): dispatches to orchestrator and e
     // the `/reload` trailer -- a marketplace record and its autoupdate flag
     // are not Pi-visible resources.
     assert.equal(notifications[0]?.message, "● claude-plugins-official [user] (added)");
-    assert.equal(
-      notifications[1]?.message,
-      "● claude-plugins-official [user] (autoupdate enabled)",
-    );
+    // UXG-04: fresh autoupdate enable renders the `<autoupdate>` marker-as-outcome.
+    assert.equal(notifications[1]?.message, "● claude-plugins-official [user] <autoupdate>");
 
     // Clone happened against the canonical Anthropic repo URL.
     assert.equal(gitState.cloneCalls.length, 1);
@@ -141,10 +139,8 @@ test("bootstrap handler (whitespace-only args): treated identically to empty arg
     assert.equal(notifications.length, 2);
     // SNM-33 / D-22-01 / D-22-03: see preceding test for the no-trailer rationale.
     assert.equal(notifications[0]?.message, "● claude-plugins-official [user] (added)");
-    assert.equal(
-      notifications[1]?.message,
-      "● claude-plugins-official [user] (autoupdate enabled)",
-    );
+    // UXG-04: fresh autoupdate enable renders the `<autoupdate>` marker-as-outcome.
+    assert.equal(notifications[1]?.message, "● claude-plugins-official [user] <autoupdate>");
   });
 });
 

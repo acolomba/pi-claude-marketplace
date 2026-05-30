@@ -25,7 +25,7 @@ Every `notify()` output begins with a marketplace header at column 0; plugin row
 | `undefined`, no `details`                  | `● M [S]` (bare label header)                    |
 | `undefined`, `details.autoupdate === true` | `● M [S] <autoupdate>`                           |
 
-The marker token `<autoupdate>` appears ONLY on the list-surface (mp.status === undefined) header form via the `MarketplaceDetails` field. The state-change arms (`added` / `removed` / `updated` / `failed`) carry the status token in `(...)` and never carry the marker token. `<no autoupdate>` is not emitted by `notify()` -- the absence of the `<autoupdate>` marker conveys autoupdate-off. The `details.lastUpdatedAt` field is retained in state/type but is NOT rendered on the list surface (UXG-01 -- the raw ISO timestamp is noise and meaningless for path-source marketplaces).
+On THIS list surface (mp.status === undefined) the marker token `<autoupdate>` appears via the `MarketplaceDetails` field. The state-change arms (`added` / `removed` / `updated` / `failed`) carry the status token in `(...)` and never carry the marker token. On the list surface `<no autoupdate>` is not emitted -- the absence of the `<autoupdate>` marker conveys autoupdate-off. (The explicit `<no autoupdate>` off-marker IS emitted on the separate `marketplace autoupdate` / `noautoupdate` flip surface per UXG-04; see [`## /claude:plugin marketplace autoupdate|noautoupdate <name>`](#claudeplugin-marketplace-autoupdatenoautoupdate-name).) The `details.lastUpdatedAt` field is retained in state/type but is NOT rendered on the list surface (UXG-01 -- the raw ISO timestamp is noise and meaningless for path-source marketplaces).
 
 ### Plugin row shape
 
@@ -76,7 +76,7 @@ Computed by `notify()` from contents via a first-match-wins ladder (D-16-11). Se
 
 ### Autoupdate marker
 
-The `<autoupdate>` marker appears ONLY on the list-surface marketplace-header form (`mp.status === undefined`, `mp.details.autoupdate === true`) -- see "Marketplace header shape" above. The state-change marketplace-header arms (`added` / `removed` / `updated` / `failed`) do not carry the marker. `<no autoupdate>` is not emitted by `notify()` -- the absence of the marker conveys autoupdate-off.
+The `<autoupdate>` marker appears on two surfaces: (1) the list-surface marketplace-header form (`mp.status === undefined`, `mp.details.autoupdate === true`) -- see "Marketplace header shape" above; and (2) the `marketplace autoupdate` / `noautoupdate` flip surface, where UXG-04 renders the marker as the flip outcome. The non-autoupdate state-change marketplace-header arms (`added` / `removed` / `updated` / `failed`) do not carry the marker. The two autoupdate surfaces differ in how they convey autoupdate-off: on the **list** surface `<no autoupdate>` is not emitted -- the absence of the `<autoupdate>` marker conveys autoupdate-off; on the **flip** surface the explicit `<no autoupdate>` off-marker IS emitted (UXG-04).
 
 ### v1.0 → v2.0 dropped surfaces
 
@@ -841,47 +841,47 @@ ______________________________________________________________________
 
 ## `/claude:plugin marketplace autoupdate|noautoupdate <name>`
 
-Marketplace-only flag flip. The orchestrator emits a single marketplace block with no plugin children; the block's `mp.status` discriminates between the V2 outcomes. V2 distinguishes five user-visible states for this surface: fresh-flip enable, fresh-flip disable, idempotent enable (no-op), idempotent disable (no-op), and failure when the marketplace persistence record cannot be found. The per-state catalog blocks below give the exact byte form for each outcome. Cross-reference the list-surface `<autoupdate>` / `<no autoupdate>` markers documented under [`## /claude:plugin marketplace list`](#claudeplugin-marketplace-list); those markers are reserved for the list surface (`mp.status === undefined` + `mp.details.autoupdate`) and are NOT emitted on any state-change arm of this surface.
+Marketplace-only flag flip. The orchestrator emits a single marketplace block with no plugin children; the block's `mp.status` discriminates between the V2 outcomes. V2 distinguishes five user-visible states for this surface: fresh-flip enable, fresh-flip disable, idempotent enable (no-op), idempotent disable (no-op), and failure when the marketplace persistence record cannot be found. The per-state catalog blocks below give the exact byte form for each outcome. UXG-04: the flip surface now renders the autoupdate state as the `<autoupdate>` / `<no autoupdate>` marker (byte-form parity with the list surface), reversing the Phase 17.1 / D-18-05 status-token design; fresh flips render the bare marker, idempotent no-ops render the marker plus an `{already autoupdate}` / `{already no autoupdate}` idempotence brace. This shares byte form with the list-surface markers documented under [`## /claude:plugin marketplace list`](#claudeplugin-marketplace-list), but the two surfaces differ: the **list** surface conveys autoupdate-off by marker _absence_ (it emits `<autoupdate>` iff `mp.details.autoupdate === true`, with no off-marker), whereas this **flip** surface emits the explicit `<no autoupdate>` off-marker. The `<no autoupdate>` off-marker is therefore emitted only on this flip surface, never on the list surface (UXG-04 does not change the list surface).
 
 ### Fresh enable
 
 <!-- catalog-state: enable-fresh -->
 
 ```text
-● foo [user] (autoupdate enabled)
+● foo [user] <autoupdate>
 ```
 
-Fresh state change -- the marketplace record was mutated. `mp.status` = `"autoupdate enabled"`; severity = info (no severity arg). No reload-hint: the autoupdate flag lives on the marketplace record, not on any Pi-visible resource, so a fresh flip does not warrant a `/reload` (SNM-33 / D-22-01 / D-22-03, superseding the reload-trigger half of D-17.1-02).
+Fresh state change -- the marketplace record was mutated. `mp.status` = `"autoupdate enabled"` (Strategy B: the discriminator is unchanged; only the emitted bytes are the `<autoupdate>` marker per UXG-04); severity = info (no severity arg). No reload-hint: the autoupdate flag lives on the marketplace record, not on any Pi-visible resource, so a fresh flip does not warrant a `/reload` (SNM-33 / D-22-01 / D-22-03, superseding the reload-trigger half of D-17.1-02).
 
 ### Fresh disable
 
 <!-- catalog-state: disable-fresh -->
 
 ```text
-● foo [user] (autoupdate disabled)
+● foo [user] <no autoupdate>
 ```
 
-Fresh state change -- the marketplace record was mutated. `mp.status` = `"autoupdate disabled"`; severity = info (no severity arg). No reload-hint: the autoupdate flag lives on the marketplace record, not on any Pi-visible resource, so a fresh flip does not warrant a `/reload` (SNM-33 / D-22-01 / D-22-03, superseding the reload-trigger half of D-17.1-02).
+Fresh state change -- the marketplace record was mutated. `mp.status` = `"autoupdate disabled"` (Strategy B: discriminator unchanged; UXG-04 emits the explicit `<no autoupdate>` off-marker); severity = info (no severity arg). No reload-hint: the autoupdate flag lives on the marketplace record, not on any Pi-visible resource, so a fresh flip does not warrant a `/reload` (SNM-33 / D-22-01 / D-22-03, superseding the reload-trigger half of D-17.1-02).
 
 ### Idempotent enable
 
 <!-- catalog-state: enable-idempotent -->
 
 ```text
-● foo [user] (skipped) {already enabled}
+● foo [user] <autoupdate> {already autoupdate}
 ```
 
-Idempotent no-op -- the flag was already in the requested state. `mp.status` = `"skipped"`; `mp.reasons` = `["already enabled"]`; severity = `"warning"` (consistent with plugin-level skipped per D-16-11); reload-hint suppressed.
+Idempotent no-op -- the flag was already in the requested state. `mp.status` = `"skipped"`; `mp.reasons` = `["already autoupdate"]`; UXG-04 renders the marker-as-outcome plus the `{already autoupdate}` idempotence brace (no `(skipped)` token -- the marker conveys the state, the brace conveys idempotence); severity = `"warning"` (consistent with plugin-level skipped per D-16-11); reload-hint suppressed.
 
 ### Idempotent disable
 
 <!-- catalog-state: disable-idempotent -->
 
 ```text
-● foo [user] (skipped) {already disabled}
+● foo [user] <no autoupdate> {already no autoupdate}
 ```
 
-Idempotent no-op -- the flag was already in the requested state. `mp.status` = `"skipped"`; `mp.reasons` = `["already disabled"]`; severity = `"warning"` (consistent with plugin-level skipped per D-16-11); reload-hint suppressed.
+Idempotent no-op -- the flag was already in the requested state. `mp.status` = `"skipped"`; `mp.reasons` = `["already no autoupdate"]`; UXG-04 renders the explicit `<no autoupdate>` off-marker plus the `{already no autoupdate}` idempotence brace (no `(skipped)` token); severity = `"warning"` (consistent with plugin-level skipped per D-16-11); reload-hint suppressed.
 
 ### Failure -- marketplace not found
 
