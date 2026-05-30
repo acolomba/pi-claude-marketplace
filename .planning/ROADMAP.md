@@ -93,7 +93,7 @@ Close the 8 gaps surfaced by the v1.4 milestone-spanning UAT (`.planning/v1.4-MI
 
 - [x] **Phase 22: Reload-hint Discipline Family** -- Gate marketplace-level transition tokens (`MarketplaceAddedMessage` / `MarketplaceRemovedMessage` / `MarketplaceUpdatedMessage`) on `plugins[].some(state-change)` inside `shouldEmitReloadHint`; add byte-equality regression tests for the three "no plugin state change -> no trailer" cases (SNM-33; closes G-MIL-01 / G-MIL-02 / G-MIL-06) (completed 2026-05-29)
 - [x] **Phase 23: Version Display Bundle** -- (a) Add tier-2 `installable.manifest?.version` fallback to `resolvePluginVersion` in `orchestrators/plugin/shared.ts:167` with SemVer shape validation (SNM-34; closes G-MIL-05); (b) Renderer-only transform of hash-version display to `v#<7hex>` git-style short SHA in `shared/notify.ts` (`formatHashVersionForDisplay` helper); update byte-form fixtures in `tests/shared/notify-v2.test.ts`, `tests/architecture/catalog-uat.test.ts`, and `docs/output-catalog.md`. Persistence stays at `hash-<12hex>` (PI-7 intact). (SNM-35; closes G-MIL-08) (completed 2026-05-29)
-- [x] **Phase 24: Grammar Consistency** -- Rename the `"lspServers"` REASON discriminator in the `REASONS` closed-set at `shared/notify.ts:79` to `"lsp"`. The real shape is a single closed-set tuple edit plus a type-driven compile cascade through two detection-vs-emission seams (`list.ts::narrowResolverNotes` and `install.ts::manifestFieldTokenFromNote`, via a `MANIFEST_FIELD_TO_REASON` map) plus the catalog/fixture byte-form lockstep -- detection substrings stay camelCase, only the emitted Reason becomes `"lsp"` (D-24-04). The manifest-side JSON key `lspServers` (in `domain/components/plugin.ts:31` schema + `domain/resolver.ts` references) stays unchanged. (SNM-36; closes G-MIL-04) (completed 2026-05-29)
+- [x] **Phase 24: Grammar Consistency** -- Rename the `"lspServers"` REASON discriminator in the `REASONS` closed-set at `shared/notify.ts:79` to `"lsp"`. The real shape is a single closed-set tuple edit plus a type-driven compile cascade through two detection-vs-emission seams (`list.ts::narrowResolverNotes` and `install.ts::manifestFieldTokenFromNote`, via a `MANIFEST_FIELD_TO_REASON` map) plus the catalog/fixture byte-form lockstep -- detection substrings stay camelCase, only the emitted Reason renders `lsp` (D-24-04). The manifest-side JSON key `lspServers` (in `domain/components/plugin.ts:31` schema + `domain/resolver.ts` references) stays unchanged. (SNM-36; closes G-MIL-04) (completed 2026-05-29)
 - [x] **Phase 25: Runtime Publish & Verification** -- (a) Source-load v0.2.0 (v1.4 source) into a Pi runtime via `scripts/pi.sh` (sandbox home) so v1.4-specific behavior can be exercised live (D-25-01); verify v1.4 identity via a behavioral byte-form smoke (NOT `pi --version`, moot under `-e` source-load per D-25-04) over `/claude:plugin list` -- no `/reload` trailer on read-only list, `v#<7hex>`, `{lsp}`; real-publish validation deferred (D-25-06) (SNM-37; reproduction enabler). (b) Reproduce-or-refute G-MIL-03 (indent ladder 1/3 vs catalog 2/4/6) against the v1.4 runtime; fix or document as not-a-bug per finding (SNM-38). (c) Reproduce-or-refute G-MIL-07 (tab completion for `update @<TAB>` empty) against the v1.4 runtime; fix or defer per root-cause finding (SNM-39). (completed 2026-05-29)
 - [x] **Phase 26: GREEN Gate Close** -- Final `npm run check` GREEN end-to-end after Phases 22-25 land. Verify the v1.4.1 regression tests added in SNM-33 / SNM-34 / SNM-35 / SNM-36 are in the suite; record milestone-close summary. (SNM-40) (completed 2026-05-30)
 
@@ -101,7 +101,7 @@ Close the 8 gaps surfaced by the v1.4 milestone-spanning UAT (`.planning/v1.4-MI
 
 Refine the v2 `NotificationMessage` output grammar and severity presentation per the 2026-05-30 hands-on UAT sweep (`.planning/v1.4-MILESTONE-UAT.md`); source findings in `.planning/BACKLOG.md` (`## v1.4 UAT findings`). The v1.4 byte-contract is verified-correct as shipped -- these are operator-preference refinements. Most changes converge on `shared/notify.ts` + `docs/output-catalog.md`, gated by the `tests/architecture/catalog-uat.test.ts` byte-equality runner (catalog + renderer + tests move in lockstep). Started non-destructively on the unmerged PR #22 branch (D-UXG-01); phases 15-26 intact, archival via `/gsd-complete-milestone` post-merge.
 
-- [ ] **Phase 27: Marketplace & Autoupdate Output Grammar** -- (a) drop the `<last-updated <iso>>` marker from the `marketplace list` surface (UXG-01); (b) replace `(autoupdate enabled)` / `(autoupdate disabled)` status tokens with `<autoupdate>` / `<no autoupdate>` markers (explicit off-marker), idempotent -> `<autoupdate> {already autoupdate}` (UXG-04); (c) render `marketplace update` no-op as `(skipped) {up-to-date}` not `(updated)` (UXG-05); (d) doc-only catalog fix -- github `marketplace add` never auto-enables autoupdate + `autoupdate`/`noautoupdate` heading nit (UXG-06). Renderer + catalog + catalog-uat in lockstep. (UXG-01, UXG-04, UXG-05, UXG-06)
+- [ ] **Phase 27: Marketplace & Autoupdate Output Grammar** -- (a) drop the `<last-updated <iso>>` marker from the `marketplace list` surface (UXG-01); (b) replace `(autoupdate enabled)` / `(autoupdate disabled)` status tokens with `<autoupdate>` / `<no autoupdate>` markers (explicit off-marker), idempotent -> `<autoupdate> {already autoupdate}` (UXG-04); (c) render `marketplace update` no-op as `(skipped) {up-to-date}` not `(updated)` (UXG-05); (d) doc-only catalog fix -- github `marketplace add` never auto-enables autoupdate + `autoupdate`/`noautoupdate` heading nit (UXG-06). Renderer + catalog + catalog-uat in lockstep. 4 plans across 4 serialized waves (single-file convergence on `shared/notify.ts` + `docs/output-catalog.md`). (UXG-01, UXG-04, UXG-05, UXG-06)
 - [ ] **Phase 28: Severity Routing & Label Discipline** -- (a) refine the first-match severity ladder so benign-only skip cascades (`{up-to-date}` / `{already …}`) compute `info` not `warning` (UXG-02); (b) suppress the host `Error:`/`Warning:` label on multi-line cascade output (keep on single-line, keep color) -- carries a feasibility spike on whether the Pi host can render color without the label or whether an upstream `@earendil-works/pi-coding-agent` change is required; may resolve as an upstream-tracked finding (UXG-03). (UXG-02, UXG-03)
 
 ## Phase Details
@@ -491,32 +491,19 @@ Plans:
 
 - [x] 25-01-PLAN.md -- SNM-37: source-load v0.2.0 via `scripts/pi.sh` (sandbox home) + behavioral byte-form smoke proving v1.4 identity (no `/reload` trailer on read-only list, `v#<7hex>`, `{lsp}`); amend SNM-37 text + SC#1 in lockstep (D-25-03/04); real-publish validation deferred (D-25-06)
 
-**Wave 2 (parallel after the gate)**
-
-- [x] 25-02-PLAN.md -- SNM-38 (G-MIL-03): byte-evidence-first reproduce-or-refute of the indent ladder at the pre-tui `ctx.ui.notify` boundary vs the catalog 0/2(/4/6) ladder (D-25-09); record verdict (expected REFUTE + display-layer catalog clarification) + explicit ladder-locking readability test
-- [x] 25-03-PLAN.md -- SNM-39 (G-MIL-07): root-cause-first reproduce-or-refute of `update @<TAB>` empty; static trace (a/b/c) + LIVE `scripts/pi.sh` interactive trigger (D-25-08, interactive escalation) + recorded verdict (expected defer-with-finding: pi-tui `@`-precedence, D-25-10)
-
-**UI hint**: yes
-
 ### Phase 26: GREEN Gate Close
 
-**Goal:** All v1.4.1 fixes from Phases 22-25 are landed and `npm run check` is GREEN end-to-end across typecheck + ESLint + Prettier + tests; the new regression tests added in the bundle phases (SNM-33 / SNM-34 / SNM-35 / SNM-36) are present in the suite and passing; the milestone is closeable.
+**Goal:** Final `npm run check` GREEN end-to-end after Phases 22-25 land; the v1.4.1 milestone closes with all SNM-33..SNM-40 regression tests confirmed in the suite.
 
 **Depends on:** Phase 25
 
 **Requirements:** SNM-40
 
-**Success Criteria** (what must be TRUE):
-
-1. `npm run check` exits 0 on a clean checkout of the post-Phase-25 tree: TypeScript strict typecheck, ESLint (stock-rules baseline from Phase 21 unchanged), Prettier, and the full `npm test` suite all pass.
-2. The reload-hint regression tests for SNM-33 (3 byte-equality cases in `tests/shared/notify-v2.test.ts`), the version-resolver tier-2 test for SNM-34 (in `tests/orchestrators/plugin/install.test.ts` or sibling), the `v#<7hex>` hash-display fixtures for SNM-35 (across `tests/shared/notify-v2.test.ts` + `tests/architecture/catalog-uat.test.ts`), and the `lsp` rename for SNM-36 (across the catalog UAT fixtures + the impacted unit tests) are all present and GREEN.
-3. The `tests/integration/fold-adoption.test.ts` phase 1 pre-existing failure remains out of scope (it predates v1.4.1 and runs on the separate `npm run test:integration` track, not `npm test`); the v1.4.1 close gate is NOT blocked by it.
-4. Closure narrative is recorded in CHANGELOG and STATE.md / PROJECT.md / REQUIREMENTS.md per the v1.4-close pattern (SNM-32); the milestone is ready for `/gsd-complete-milestone`.
-
 **Plans:** 1/1 plans complete
-Plans:
 
-- [x] 26-01-PLAN.md -- clean-tree GREEN gate (npm run check exit 0 + recorded npm test count) → VERIFICATION.md (SNM-33..36 → test:case inventory) → four-doc closure narrative (CHANGELOG fold to unreleased [0.2.0] + STATE milestone-ready + PROJECT evolution + REQUIREMENTS SNM-23/SNM-40 rows) as one docs(26): commit; no version bump, no archival
+**Wave 1**
+
+- [x] 26-01-PLAN.md -- SNM-40 GREEN gate close
 
 ### Phase 27: Marketplace & Autoupdate Output Grammar
 
@@ -532,7 +519,12 @@ Plans:
 4. `docs/output-catalog.md` correctly documents that `marketplace add` never auto-enables autoupdate, and the autoupdate heading matches the `autoupdate`/`noautoupdate` verbs.
 5. `npm run check` + catalog-uat GREEN.
 
-**Plans:** not yet planned -- run `/gsd-plan-phase 27` (ideally after PR #22 merges + `/gsd-complete-milestone`).
+**Plans:** 4/4 plans -- run `/gsd-execute-phase 27`. Serialized across 4 waves because all four requirements converge on `shared/notify.ts` + `docs/output-catalog.md`; the catalog-uat byte-equality runner reads the live catalog at test time, so renderer + catalog + fixtures move in lockstep within each plan (no intermediate RED). Research-recommended order: UXG-06 (heading/FIXTURES-key) -> UXG-01 (drop `<last-updated>`) -> UXG-04 (autoupdate markers, Strategy B) -> UXG-05 (manifest content-compare no-op detector).
+
+- [ ] 27-01-PLAN.md (Wave 1) -- UXG-06: correct github-source autoupdate-default prose + rename the autoupdate heading to the real `autoupdate`/`noautoupdate` verbs + sync the catalog-uat FIXTURES key byte-for-byte
+- [ ] 27-02-PLAN.md (Wave 2) -- UXG-01: drop the `<last-updated <iso>>` token from the list-surface renderer + catalog + notify-v2 + catalog-uat + list orchestrator test; retain the `lastUpdatedAt` field in state/type
+- [ ] 27-03-PLAN.md (Wave 3) -- UXG-04: autoupdate flip emits `<autoupdate>`/`<no autoupdate>` markers + idempotent `{already autoupdate}`/`{already no autoupdate}` via Strategy B (rename 2 REASONS, rewrite renderer arms, no MARKETPLACE_STATUSES/MARKERS churn); orchestrator payload + catalog + 3 byte-test surfaces in lockstep
+- [ ] 27-04-PLAN.md (Wave 4) -- UXG-05: manifest content-compare change detector in update.ts; autoupdate-OFF no-op emits `(skipped) {up-to-date}` (warning, no trailer), changed path stays `(updated)`; catalog + byte tests + orchestrator change-detector tests; phase GREEN gate + nyquist sign-off
 
 ### Phase 28: Severity Routing & Label Discipline
 
@@ -577,5 +569,5 @@ Plans:
 | 24. Grammar Consistency                                              | v1.4.1    | 1/1 | Complete    | 2026-05-29 |
 | 25. Runtime Publish & Verification                                   | v1.4.1    | 3/3 | Complete    | 2026-05-29 |
 | 26. GREEN Gate Close                                                 | v1.4.1    | 1/1 | Complete    | 2026-05-30 |
-| 27. Marketplace & Autoupdate Output Grammar                          | v1.5      | 0/0 | Not started | --         |
+| 27. Marketplace & Autoupdate Output Grammar                          | v1.5      | 0/4 | Planned     | --         |
 | 28. Severity Routing & Label Discipline                              | v1.5      | 0/0 | Not started | --         |
