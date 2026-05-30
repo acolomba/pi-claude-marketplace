@@ -3,11 +3,11 @@
 // Legacy state.json record migration (ST-4, ST-5) and the SINGLE
 // sanctioned `console-warn` callsite (IL-3).
 //
-// Per Plan 21-01 D-21-04: the IL-3 console.warn callsite is permitted by
-// a block-level files-override in eslint.config.js (BLOCK B-2) that turns
-// no-console + no-restricted-syntax off for this single file. Any other
-// use of `console-warn` in the extension still trips the eslint rule by
-// design, since BLOCK A scopes the prohibition extension-wide.
+// The IL-3 console.warn callsite is permitted by a per-file override in
+// eslint.config.js that turns no-console + no-restricted-syntax off for this
+// single file (the callsite trips both rules). Any other use of
+// `console.warn` in the extension still trips the eslint rule by design,
+// since the extension-wide block scopes the prohibition everywhere else.
 //
 // Per ST-4: missing manifestPath / marketplaceRoot are filled with
 // V1's default-derivation. Per ST-5: missing resources.agents /

@@ -140,10 +140,12 @@ export default tseslint.config(
     },
   },
   {
-    // BLOCK B-2 (D-21-04 SC #3): Per-file override -- migrate.ts emits the
-    // single sanctioned legacy-migration console.warn (IL-3). The block-level
-    // no-console off and no-restricted-syntax off supersede the prior inline
-    // `eslint-disable-next-line` directive at the callsite.
+    // Per-file override -- migrate.ts emits the single sanctioned
+    // legacy-migration console.warn (IL-3). That one callsite trips BOTH
+    // rules: the explicit `console.warn` selector in `no-restricted-syntax`
+    // AND the catch-all `no-console: error`, so both must be disabled for
+    // this file (and only this file). No other console.warn is permitted in
+    // the extension.
     files: ["extensions/pi-claude-marketplace/persistence/migrate.ts"],
     rules: {
       "no-console": "off",

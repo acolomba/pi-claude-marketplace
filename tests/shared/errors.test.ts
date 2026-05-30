@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   appendLeakToError,
   appendLeaks,
+  causeChainTrailer,
   ConcurrentInstallError,
   ConcurrentUninstallError,
   CrossPluginConflictError,
@@ -269,4 +270,63 @@ test("PluginShapeError: readonly fields survive cast to base Error", () => {
     assert.equal(baseRef.kind, "not-installable");
     assert.equal(baseRef.plugin, "p1");
   }
+});
+
+// ---------------------------------------------------------------------------
+// causeChainTrailer MAX_DEPTH=5 bound. The walker renders at most 5 links
+// joined by " -> ", appends " (truncated)" when the chain is deeper, and is
+// cycle-safe so a self-referential .cause cannot loop forever.
+// ---------------------------------------------------------------------------
+
+/** Builds a chain of `depth` Errors linked via Error.cause; returns the head. */
+function buildChain(depth: number): Error {
+  let current = new Error("link0");
+  for (let i = 1; i < depth; i++) {
+    current = new Error(`link${i}`, { cause: current });
+  }
+
+  return current;
+}
+
+test("causeChainTrailer: a 6-deep chain renders 5 links then ' (truncated)'", () => {
+  const trailer = causeChainTrailer(buildChain(6));
+  const body = trailer.replace(/^cause: /, "");
+  const links = body.split(" -> ");
+  assert.equal(links.length, 5);
+  assert.match(trailer, / \(truncated\)$/);
+  // Only the 5th rendered link carries the marker, not the earlier ones.
+  assert.equal(
+    links.slice(0, 4).some((l) => l.includes("(truncated)")),
+    false,
+  );
+});
+
+test("causeChainTrailer: an exactly-5-deep chain renders 5 links with NO truncation marker", () => {
+  const trailer = causeChainTrailer(buildChain(5));
+  const links = trailer.replace(/^cause: /, "").split(" -> ");
+  assert.equal(links.length, 5);
+  assert.doesNotMatch(trailer, /\(truncated\)/);
+});
+
+test("causeChainTrailer: a self-referential cycle terminates at the bound", () => {
+  const cyclic = new Error("loop");
+  (cyclic as { cause?: unknown }).cause = cyclic;
+  const trailer = causeChainTrailer(cyclic);
+  // The walker stops when current.cause === current (no truncation marker,
+  // single rendered link) -- proving it cannot loop forever.
+  assert.equal(trailer, "cause: loop");
+
+  // A 2-node cycle (a -> b -> a -> ...) is bounded by MAX_DEPTH=5.
+  const a = new Error("a");
+  const b = new Error("b", { cause: a });
+  (a as { cause?: unknown }).cause = b;
+  const twoNode = causeChainTrailer(a);
+  const links = twoNode.replace(/^cause: /, "").split(" -> ");
+  assert.equal(links.length, 5);
+  assert.match(twoNode, / \(truncated\)$/);
+});
+
+test("causeChainTrailer: non-Error input returns ''", () => {
+  assert.equal(causeChainTrailer(undefined), "");
+  assert.equal(causeChainTrailer(null), "");
 });
