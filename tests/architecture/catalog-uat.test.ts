@@ -1131,7 +1131,7 @@ const FIXTURES: FixtureMap = {
           {
             name: "alpha",
             scope: "project",
-            details: { autoupdate: true, lastUpdatedAt: "2026-05-25T00:00:00Z" },
+            details: { autoupdate: true },
             plugins: [],
           },
           { name: "alpha", scope: "user", plugins: [] },

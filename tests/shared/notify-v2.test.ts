@@ -61,14 +61,15 @@
  *       `<icon> <mp.name> [<mp.scope>] (<status>)`.
  *     - List-surface arm (mp.status === undefined):
  *       - SUB-BRANCH A (mp.details === undefined): bare header, no
- *         trailing autoupdate/lastUpdatedAt tokens, NO crash. Plan 03's
+ *         trailing autoupdate token, NO crash. Plan 03's
  *         BLOCKER-3 fix explicitly guards `mp.details === undefined` so the
  *         arm cannot crash at runtime. Tests assert this no-crash invariant
  *         (test 17a).
  *       - SUB-BRANCH B (mp.details !== undefined): bare header +
- *         `" <autoupdate>"` iff `details.autoupdate === true` +
- *         `" <last-updated <iso>>"` iff `details.lastUpdatedAt` is defined.
- *         Empty token slots are collapsed by the join discipline.
+ *         `" <autoupdate>"` iff `details.autoupdate === true`. The
+ *         `details.lastUpdatedAt` field is retained in state/type but is
+ *         NOT rendered (UXG-01). Empty token slots are collapsed by the
+ *         join discipline.
  *
  *   BODY COMPOSITION:
  *     - Marketplace header at column 0.
@@ -661,7 +662,7 @@ test("notify mixed-severity payload: mp.skipped coexists with healthy plugin row
   );
 });
 
-test("notify renders SUB-BRANCH B list-surface marketplace header with autoupdate + lastUpdatedAt tokens", () => {
+test("notify renders SUB-BRANCH B list-surface marketplace header with autoupdate token; lastUpdatedAt field persists but is not rendered (UXG-01)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -669,7 +670,8 @@ test("notify renders SUB-BRANCH B list-surface marketplace header with autoupdat
       {
         name: "demo",
         scope: "user",
-        // mp.status omitted (list-surface)
+        // mp.status omitted (list-surface). lastUpdatedAt is supplied to
+        // prove the retained field is no longer rendered (UXG-01).
         details: { autoupdate: true, lastUpdatedAt: "2026-05-25T00:00:00Z" },
         plugins: [],
       },
@@ -677,12 +679,11 @@ test("notify renders SUB-BRANCH B list-surface marketplace header with autoupdat
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  // SUB-BRANCH B byte form per 16-03-SUMMARY: bare header + " <autoupdate>"
-  // + " <last-updated <iso>>" tokens. No reload-hint (no state-changing
-  // status); no severity arg.
-  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `● demo [user] <autoupdate> <last-updated 2026-05-25T00:00:00Z>`,
-  ]);
+  // SUB-BRANCH B byte form per UXG-01: bare header + " <autoupdate>" only.
+  // The `<last-updated <iso>>` token was dropped from the list surface --
+  // `details.lastUpdatedAt` stays in state/type but the renderer no longer
+  // emits it. No reload-hint (no state-changing status); no severity arg.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [`● demo [user] <autoupdate>`]);
 });
 
 // ===========================================================================
@@ -914,7 +915,7 @@ test("notify renders (no marketplaces) sentinel for empty marketplaces array (no
 // `details: undefined` (BOTH absent independently per Phase 15 D-15-06's
 // optional-and-independent typing), `plugins: []`. Expected output: the
 // BARE marketplace header from SUB-BRANCH A of renderMpHeader (no trailing
-// autoupdate/lastUpdatedAt tokens). Critical assertion: the call MUST NOT
+// autoupdate token). Critical assertion: the call MUST NOT
 // throw -- plan 03's `case undefined:` arm explicitly guards
 // `mp.details === undefined` before reading `mp.details.autoupdate`.
 // Reload-hint MUST be suppressed (neither plugin nor marketplace status is
@@ -946,8 +947,7 @@ test("notify renders bare marketplace header when mp.status and mp.details are b
   });
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // SUB-BRANCH A byte form per 16-03-SUMMARY: bare header "● demo [user]"
-  // with NO trailing autoupdate / lastUpdatedAt tokens. No reload-hint, no
-  // severity arg.
+  // with NO trailing autoupdate token. No reload-hint, no severity arg.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [`● demo [user]`]);
 });
 

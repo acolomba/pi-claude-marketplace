@@ -151,15 +151,17 @@ test("CMC-05 / MSG-GR-5: autoupdate=true emits `<autoupdate>` marker", async () 
   });
 });
 
-test("ML-V2 / D-16-12: list surface emits `<last-updated <iso>>` marker when record carries lastUpdatedAt", async () => {
+test("ML-V2 / UXG-01: list surface does NOT render `<last-updated <iso>>`; lastUpdatedAt persists in state but is no longer emitted", async () => {
   // Plan 18-03 backwards-compatible enrichment: the persisted record carries
-  // `lastUpdatedAt` (set at `add`/`update` time per persistence/state-io.ts:70);
-  // V1 list.ts dropped it on the floor at lines 54-60 because the V1 renderer
-  // had no marker for it. V2 catalog (`docs/output-catalog.md:704`) renders
-  // `<last-updated <iso>>` whenever `details.lastUpdatedAt` is defined. This
-  // test binds the byte form against the canonical catalog UAT fixture
-  // `mixed-scopes` at `tests/architecture/catalog-uat.test.ts:1087-1107`
-  // (the `alpha [project]` row).
+  // `lastUpdatedAt` (set at `add`/`update` time per persistence/state-io.ts:70).
+  // V2 originally rendered `<last-updated <iso>>` on the list surface, but
+  // UXG-01 (Plan 27-02) dropped that token -- the raw ISO timestamp is noise
+  // and meaningless for path-source marketplaces. The `lastUpdatedAt` field
+  // STAYS in state/type; only the renderer emission was removed. This test
+  // keeps `lastUpdatedAt` on the persisted record to prove the field still
+  // round-trips through state while the byte form no longer carries the token,
+  // binding against the canonical catalog UAT fixture `mixed-scopes`
+  // (the `alpha [project]` row, now `● ... <autoupdate>` only).
   await withHermeticHome(async ({ cwd }) => {
     const projectLocations = locationsFor("project", cwd);
     await mkdir(projectLocations.extensionRoot, { recursive: true });
@@ -183,10 +185,7 @@ test("ML-V2 / D-16-12: list surface emits `<last-updated <iso>>` marker when rec
     const { ctx, pi, notifications } = makeCtx();
     await listMarketplaces({ ctx, pi, scope: "project", cwd });
     assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      "● test-mp [project] <autoupdate> <last-updated 2026-05-25T00:00:00Z>",
-    );
+    assert.equal(notifications[0]!.message, "● test-mp [project] <autoupdate>");
     // List surface emits info severity (no 2nd arg) per D-16-11.
     assert.equal(notifications[0]!.severity, undefined);
   });

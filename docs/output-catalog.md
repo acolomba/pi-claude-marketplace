@@ -16,17 +16,16 @@ Every `notify()` output begins with a marketplace header at column 0; plugin row
 
 ### Marketplace header shape
 
-| Marketplace status                         | Header byte form (where `M` = name, `S` = scope)                                 |
-| ------------------------------------------ | -------------------------------------------------------------------------------- |
-| `added`                                    | `● M [S] (added)`                                                                |
-| `removed`                                  | `● M [S] (removed)`                                                              |
-| `updated`                                  | `● M [S] (updated)`                                                              |
-| `failed`                                   | `⊘ M [S] (failed)`                                                               |
-| `undefined`, no `details`                  | `● M [S]` (bare label header)                                                    |
-| `undefined`, `details.autoupdate === true` | `● M [S] <autoupdate>`                                                           |
-| `undefined`, `details.lastUpdatedAt` set   | `● M [S] <last-updated <iso>>` (appended after `<autoupdate>` when both present) |
+| Marketplace status                         | Header byte form (where `M` = name, `S` = scope) |
+| ------------------------------------------ | ------------------------------------------------ |
+| `added`                                    | `● M [S] (added)`                                |
+| `removed`                                  | `● M [S] (removed)`                              |
+| `updated`                                  | `● M [S] (updated)`                              |
+| `failed`                                   | `⊘ M [S] (failed)`                               |
+| `undefined`, no `details`                  | `● M [S]` (bare label header)                    |
+| `undefined`, `details.autoupdate === true` | `● M [S] <autoupdate>`                           |
 
-The marker tokens `<autoupdate>` and `<last-updated <iso>>` appear ONLY on the list-surface (mp.status === undefined) header form via the `MarketplaceDetails` field. The state-change arms (`added` / `removed` / `updated` / `failed`) carry the status token in `(...)` and never carry the marker tokens. `<no autoupdate>` is not emitted by `notify()` -- the absence of the `<autoupdate>` marker conveys autoupdate-off.
+The marker token `<autoupdate>` appears ONLY on the list-surface (mp.status === undefined) header form via the `MarketplaceDetails` field. The state-change arms (`added` / `removed` / `updated` / `failed`) carry the status token in `(...)` and never carry the marker token. `<no autoupdate>` is not emitted by `notify()` -- the absence of the `<autoupdate>` marker conveys autoupdate-off. The `details.lastUpdatedAt` field is retained in state/type but is NOT rendered on the list surface (UXG-01 -- the raw ISO timestamp is noise and meaningless for path-source marketplaces).
 
 ### Plugin row shape
 
@@ -695,7 +694,7 @@ ______________________________________________________________________
 
 ## `/claude:plugin marketplace list`
 
-Marketplace-list surface. Each marketplace renders as a list-surface header carrying its `MarketplaceDetails` (`<autoupdate>`, `<last-updated <iso>>` tokens); no plugin children are emitted in this surface.
+Marketplace-list surface. Each marketplace renders as a list-surface header carrying its `MarketplaceDetails` (`<autoupdate>` token); no plugin children are emitted in this surface.
 
 ### Empty
 
@@ -712,7 +711,7 @@ Empty top-level `marketplaces: []` renders the sentinel literal per D-16-17. No 
 <!-- catalog-state: mixed-scopes -->
 
 ```text
-● alpha [project] <autoupdate> <last-updated 2026-05-25T00:00:00Z>
+● alpha [project] <autoupdate>
 
 ● alpha [user]
 
@@ -721,7 +720,7 @@ Empty top-level `marketplaces: []` renders the sentinel literal per D-16-17. No 
 ● zeta [project] <autoupdate>
 ```
 
-Four marketplace blocks joined by one blank line each (D-16-07). Each list-surface header is SUB-BRANCH B (mp.status undefined; details set). `<autoupdate>` appears only when `details.autoupdate === true`; `<last-updated <iso>>` appears only when `details.lastUpdatedAt` is set. Caller-supplied order is preserved (D-16-06); the catalog uses an alphabetic ordering for readability. No reload-hint, no severity arg.
+Four marketplace blocks joined by one blank line each (D-16-07). Each list-surface header is SUB-BRANCH B (mp.status undefined; details set). `<autoupdate>` appears only when `details.autoupdate === true`. The `details.lastUpdatedAt` field is retained in state but is not rendered (UXG-01). Caller-supplied order is preserved (D-16-06); the catalog uses an alphabetic ordering for readability. No reload-hint, no severity arg.
 
 ______________________________________________________________________
 

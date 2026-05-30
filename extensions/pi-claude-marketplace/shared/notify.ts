@@ -598,9 +598,9 @@ const ICON_UNINSTALLABLE = "⊘";
  *     SUB-BRANCH B (mp.details !== undefined): `${ICON_INSTALLED} ${name} [${scope}]`
  *       + " <autoupdate>" iff mp.details.autoupdate === true (marker omitted
  *         entirely when autoupdate is false)
- *       + " <last-updated ${mp.details.lastUpdatedAt}>" iff
- *         mp.details.lastUpdatedAt is defined (following the `<marker>`
- *         angle-bracket convention shape).
+ *       The `mp.details.lastUpdatedAt` field is retained in state/type but is
+ *       NOT rendered on the list surface (UXG-01 -- the raw ISO timestamp is
+ *       noise and meaningless for path-source marketplaces).
  *
  * The icon arms use ICON_AVAILABLE nowhere -- marketplaces are either ok
  * (●) or failure-class (⊘); the open-circle ○ is reserved for available /
@@ -650,7 +650,7 @@ function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus
       // 's (shared/notify.ts:466). Guard explicitly with
       // an early return for SUB-BRANCH A (mp.details === undefined) so the
       // SUB-BRANCH B composition below reads narrowed (non-optional)
-      // mp.details.autoupdate / mp.details.lastUpdatedAt under TS strict.
+      // mp.details.autoupdate under TS strict.
       if (mp.details === undefined) {
         // SUB-BRANCH A: empty-list-surface -- bare header, no trailing tokens.
         return `${ICON_INSTALLED} ${mp.name} [${mp.scope}]`;
@@ -660,11 +660,10 @@ function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus
       // Compose tokens conditionally, then suppress empty slots so the join
       // never emits double-spaces: emit `<autoupdate>` iff
       // `autoupdate === true` (no `<no autoupdate>` counterpart -- absence of
-      // the marker conveys autoupdate-off).
+      // the marker conveys autoupdate-off). `details.lastUpdatedAt` is
+      // retained in state/type (UXG-01) but intentionally not rendered here.
       const autoupdateToken = mp.details.autoupdate ? "<autoupdate>" : "";
-      const lastUpdatedToken =
-        mp.details.lastUpdatedAt === undefined ? "" : `<last-updated ${mp.details.lastUpdatedAt}>`;
-      return [ICON_INSTALLED, mp.name, `[${mp.scope}]`, autoupdateToken, lastUpdatedToken]
+      return [ICON_INSTALLED, mp.name, `[${mp.scope}]`, autoupdateToken]
         .filter((t) => t !== "")
         .join(" ");
     }
