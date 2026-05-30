@@ -4,8 +4,8 @@ milestone: v1.4.1
 milestone_name: Post-ship UAT Patches
 status: completed
 stopped_at: Phase 26 complete -- v1.4.1 milestone ready for `/gsd-complete-milestone`
-last_updated: "2026-05-30T11:15:59.834Z"
-last_activity: 2026-05-30 -- Quick task 260530-7pk complete; PR #22 review findings fixed, all three CI gates GREEN (check 1143/1143, integration 4/4, e2e 14/14)
+last_updated: "2026-05-30T13:47:44.805Z"
+last_activity: 2026-05-30 -- Resolved 4 SonarCloud code smells on PR #22 (S3735/S1871/S3626/S7755); all three CI gates GREEN (check 1143/1143, integration 4/4, e2e 14/14); coverage deferred
 progress:
   total_phases: 14
   completed_phases: 14
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-28)
 Phase: 26 (complete)
 Plan: 26-01 (complete)
 Status: v1.4.1 milestone complete -- ready for `/gsd-complete-milestone`
-Last activity: 2026-05-30 -- Quick task 260530-7pk complete; PR #22 review findings fixed, all three CI gates GREEN (check 1143/1143, integration 4/4, e2e 14/14)
+Last activity: 2026-05-30 -- Resolved 4 SonarCloud code smells on PR #22 (S3735/S1871/S3626/S7755); all three CI gates GREEN (check 1143/1143, integration 4/4, e2e 14/14); coverage deferred
 
 ## Performance Metrics
 
@@ -160,6 +160,7 @@ None yet.
 | 260525-aub | Replace free-text Error.message parsing in install/update/remove orchestrators with typed PluginShapeError dispatch (eliminates SonarCloud S5852 ReDoS hotspot; closes v1.3 pattern hole) | 2026-05-25 | da04709 |          | [260525-aub-replace-free-text-error-message-parsing-](./quick/260525-aub-replace-free-text-error-message-parsing-/) |
 | 260525-cjr | Apply PR #22 review fixes: 5 comment fixes, 2 silent-failure catches, declaresAgents/Mcp required, 4 narrowReason migrations, drift architecture test, plus 10 polish items               | 2026-05-25 | c79b6bc |          | [260525-cjr-apply-pr-22-review-fixes-5-comment-fixes](./quick/260525-cjr-apply-pr-22-review-fixes-5-comment-fixes/) |
 | 260530-7pk | Fix PR #22 review findings: 4 failing CI tests reconciled to V2 output, bootstrap/marketplace error diagnostics surfaced (IL-2/AS-7), comment-rot sweep, reasons-type tightening + resolver dedup, MAX_DEPTH cause-chain tests, NFR-4 Node floor to >=20.19.0, PRD PU-4/AS-6 leak policy | 2026-05-30 | 015e8f6 |          | [260530-7pk-fix-pr-22-review-findings-failing-tests-](./quick/260530-7pk-fix-pr-22-review-findings-failing-tests-/) |
+| 260530-fast | Resolve 4 SonarCloud code smells on PR #22 (S3735 void operator, S1871 duplicate case, S3626 redundant jump, S7755 .at indexing); coverage deferred | 2026-05-30 | a36988d |          | (inline /gsd-fast, no task dir) |
 
 ## Deferred Items
 
