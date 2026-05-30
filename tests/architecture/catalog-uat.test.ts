@@ -1282,7 +1282,7 @@ const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
   // /claude:plugin marketplace autoupdate -- marketplace-only flag flip.
   // -------------------------------------------------------------------------
-  "/claude:plugin marketplace autoupdate <enable|disable> <name>": {
+  "/claude:plugin marketplace autoupdate|noautoupdate <name>": {
     "enable-fresh": {
       pi: piWithBothLoaded(),
       message: {

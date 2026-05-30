@@ -747,7 +747,7 @@ Path-source marketplaces default to autoupdate OFF; the `added` arm does not car
 ● claude-plugins-official [user] (added)
 ```
 
-GitHub-source marketplaces default to autoupdate ON; the persisted record stores `autoupdate: true`. The `added` state-change arm carries `(added)`; subsequent `marketplace list` surfaces will show the `<autoupdate>` marker on the SUB-BRANCH B list-surface header. No reload-hint: a marketplace record is not a Pi-visible resource (SNM-33 / D-22-01).
+`marketplace add` never enables autoupdate for any source kind (github or path); the persisted record stores no `autoupdate` field on add. Autoupdate is opt-in -- enabled later via an explicit `marketplace autoupdate`, or by `bootstrap`. The `added` state-change arm carries `(added)`; subsequent `marketplace list` surfaces show the `<autoupdate>` / `<no autoupdate>` marker on the SUB-BRANCH B list-surface header only once the flag has been set. No reload-hint: a marketplace record is not a Pi-visible resource (SNM-33 / D-22-01).
 
 ### Failure -- unreachable source
 
@@ -840,7 +840,7 @@ Marketplace-level failure with no plugin children evaluated. No reload-hint (fai
 
 ______________________________________________________________________
 
-## `/claude:plugin marketplace autoupdate <enable|disable> <name>`
+## `/claude:plugin marketplace autoupdate|noautoupdate <name>`
 
 Marketplace-only flag flip. The orchestrator emits a single marketplace block with no plugin children; the block's `mp.status` discriminates between the V2 outcomes. V2 distinguishes five user-visible states for this surface: fresh-flip enable, fresh-flip disable, idempotent enable (no-op), idempotent disable (no-op), and failure when the marketplace persistence record cannot be found. The per-state catalog blocks below give the exact byte form for each outcome. Cross-reference the list-surface `<autoupdate>` / `<no autoupdate>` markers documented under [`## /claude:plugin marketplace list`](#claudeplugin-marketplace-list); those markers are reserved for the list surface (`mp.status === undefined` + `mp.details.autoupdate`) and are NOT emitted on any state-change arm of this surface.
 
