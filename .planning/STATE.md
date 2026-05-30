@@ -1,33 +1,33 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.4.1
-milestone_name: Post-ship UAT Patches
-status: completed
-stopped_at: Phase 26 complete -- v1.4.1 milestone ready for `/gsd-complete-milestone`
-last_updated: "2026-05-30T21:54:36.029Z"
-last_activity: 2026-05-30 -- v1.4 milestone full hands-on UAT sweep complete (scripts/pi.sh source-load): v2 byte-contract PASSES end-to-end, zero regressions; 6 UX findings recorded in BACKLOG.md for a follow-up milestone
+milestone: v1.5
+milestone_name: Notification Output Polish
+status: planning
+stopped_at: v1.5 requirements + roadmap written (phases 27-28, UXG-01..UXG-06); ready for `/gsd-plan-phase 27`
+last_updated: "2026-05-30T22:18:17.935Z"
+last_activity: 2026-05-30 -- v1.5 Notification Output Polish started non-destructively (D-UXG-01); PROJECT/REQUIREMENTS/ROADMAP written, phases 27-28, 6 UXG requirements from the UAT sweep
 progress:
-  total_phases: 14
-  completed_phases: 14
-  total_plans: 51
-  completed_plans: 51
-  percent: 100
+  total_phases: 2
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-28)
+See: .planning/PROJECT.md (updated 2026-05-30)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.4.1 milestone closed -- ready for `/gsd-complete-milestone` (operator-initiated archival).
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.5 Notification Output Polish (planning) -- 6 UXG requirements from the 2026-05-30 UAT sweep, phases 27-28; ready for `/gsd-plan-phase 27`. v1.4.1 shipped (in PROJECT `### Validated`), ready for `/gsd-complete-milestone` archival of phase dirs 15-26 post-merge.
 
 ## Current Position
 
-Phase: 26 (complete)
-Plan: 26-01 (complete)
-Status: v1.4.1 milestone complete -- ready for `/gsd-complete-milestone`
-Last activity: 2026-05-30 -- v1.4 milestone full hands-on UAT sweep complete (scripts/pi.sh source-load): v2 byte-contract PASSES end-to-end, zero regressions; 6 UX findings recorded in BACKLOG.md for a follow-up milestone
+Phase: 27 (not started -- defining/planning)
+Plan: --
+Status: v1.5 planning -- requirements + roadmap written (phases 27-28, UXG-01..UXG-06); ready for `/gsd-plan-phase 27`
+Last activity: 2026-05-30 -- v1.5 Notification Output Polish started non-destructively (D-UXG-01); PROJECT/REQUIREMENTS/ROADMAP written. v1.4.1 phases 15-26 left intact (archival post-merge)
 
 ## Performance Metrics
 

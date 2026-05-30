@@ -7,7 +7,8 @@
 - Done **v1.2 Claude Settings Import** -- Phases 10-11 (shipped 2026-05-20)
 - Done **v1.3 Consistent Messaging** -- Phases 12-14.2 (shipped 2026-05-25)
 - Done **v1.4 Structured Notification Messages** -- Phases 15-21 (shipped 2026-05-28)
-- In progress **v1.4.1 Post-ship UAT Patches** -- Phases 22-26 (active)
+- Done **v1.4.1 Post-ship UAT Patches** -- Phases 22-26 (closed 2026-05-30)
+- In progress **v1.5 Notification Output Polish** -- Phases 27-28 (active)
 
 For full details of each milestone, see `.planning/milestones/v[X.Y]-ROADMAP.md` and `.planning/milestones/v[X.Y]-REQUIREMENTS.md`.
 
@@ -78,7 +79,7 @@ Replaced v1.3's string-based notify API + 34-rule ESLint drift-guard plugin with
 
 </details>
 
-### In progress v1.4.1 Post-ship UAT Patches (Phases 22-26)
+### Done v1.4.1 Post-ship UAT Patches (Phases 22-26)
 
 Close the 8 gaps surfaced by the v1.4 milestone-spanning UAT (`.planning/v1.4-MILESTONE-UAT.md`) so v1.4's user-visible message surfaces match the catalog spec and user expectations end-to-end. Three bundles plus a reproduction phase. Most fixes converge on `shared/notify.ts`, `orchestrators/plugin/shared.ts`, and `orchestrators/plugin/list.ts`; phase boundaries respect that convergence to avoid intra-wave merge conflicts.
 
@@ -95,6 +96,13 @@ Close the 8 gaps surfaced by the v1.4 milestone-spanning UAT (`.planning/v1.4-MI
 - [x] **Phase 24: Grammar Consistency** -- Rename the `"lspServers"` REASON discriminator in the `REASONS` closed-set at `shared/notify.ts:79` to `"lsp"`. The real shape is a single closed-set tuple edit plus a type-driven compile cascade through two detection-vs-emission seams (`list.ts::narrowResolverNotes` and `install.ts::manifestFieldTokenFromNote`, via a `MANIFEST_FIELD_TO_REASON` map) plus the catalog/fixture byte-form lockstep -- detection substrings stay camelCase, only the emitted Reason becomes `"lsp"` (D-24-04). The manifest-side JSON key `lspServers` (in `domain/components/plugin.ts:31` schema + `domain/resolver.ts` references) stays unchanged. (SNM-36; closes G-MIL-04) (completed 2026-05-29)
 - [x] **Phase 25: Runtime Publish & Verification** -- (a) Source-load v0.2.0 (v1.4 source) into a Pi runtime via `scripts/pi.sh` (sandbox home) so v1.4-specific behavior can be exercised live (D-25-01); verify v1.4 identity via a behavioral byte-form smoke (NOT `pi --version`, moot under `-e` source-load per D-25-04) over `/claude:plugin list` -- no `/reload` trailer on read-only list, `v#<7hex>`, `{lsp}`; real-publish validation deferred (D-25-06) (SNM-37; reproduction enabler). (b) Reproduce-or-refute G-MIL-03 (indent ladder 1/3 vs catalog 2/4/6) against the v1.4 runtime; fix or document as not-a-bug per finding (SNM-38). (c) Reproduce-or-refute G-MIL-07 (tab completion for `update @<TAB>` empty) against the v1.4 runtime; fix or defer per root-cause finding (SNM-39). (completed 2026-05-29)
 - [x] **Phase 26: GREEN Gate Close** -- Final `npm run check` GREEN end-to-end after Phases 22-25 land. Verify the v1.4.1 regression tests added in SNM-33 / SNM-34 / SNM-35 / SNM-36 are in the suite; record milestone-close summary. (SNM-40) (completed 2026-05-30)
+
+### In progress v1.5 Notification Output Polish (Phases 27-28)
+
+Refine the v2 `NotificationMessage` output grammar and severity presentation per the 2026-05-30 hands-on UAT sweep (`.planning/v1.4-MILESTONE-UAT.md`); source findings in `.planning/BACKLOG.md` (`## v1.4 UAT findings`). The v1.4 byte-contract is verified-correct as shipped -- these are operator-preference refinements. Most changes converge on `shared/notify.ts` + `docs/output-catalog.md`, gated by the `tests/architecture/catalog-uat.test.ts` byte-equality runner (catalog + renderer + tests move in lockstep). Started non-destructively on the unmerged PR #22 branch (D-UXG-01); phases 15-26 intact, archival via `/gsd-complete-milestone` post-merge.
+
+- [ ] **Phase 27: Marketplace & Autoupdate Output Grammar** -- (a) drop the `<last-updated <iso>>` marker from the `marketplace list` surface (UXG-01); (b) replace `(autoupdate enabled)` / `(autoupdate disabled)` status tokens with `<autoupdate>` / `<no autoupdate>` markers (explicit off-marker), idempotent -> `<autoupdate> {already autoupdate}` (UXG-04); (c) render `marketplace update` no-op as `(skipped) {up-to-date}` not `(updated)` (UXG-05); (d) doc-only catalog fix -- github `marketplace add` never auto-enables autoupdate + `autoupdate`/`noautoupdate` heading nit (UXG-06). Renderer + catalog + catalog-uat in lockstep. (UXG-01, UXG-04, UXG-05, UXG-06)
+- [ ] **Phase 28: Severity Routing & Label Discipline** -- (a) refine the first-match severity ladder so benign-only skip cascades (`{up-to-date}` / `{already …}`) compute `info` not `warning` (UXG-02); (b) suppress the host `Error:`/`Warning:` label on multi-line cascade output (keep on single-line, keep color) -- carries a feasibility spike on whether the Pi host can render color without the label or whether an upstream `@earendil-works/pi-coding-agent` change is required; may resolve as an upstream-tracked finding (UXG-03). (UXG-02, UXG-03)
 
 ## Phase Details
 
@@ -510,6 +518,37 @@ Plans:
 
 - [x] 26-01-PLAN.md -- clean-tree GREEN gate (npm run check exit 0 + recorded npm test count) → VERIFICATION.md (SNM-33..36 → test:case inventory) → four-doc closure narrative (CHANGELOG fold to unreleased [0.2.0] + STATE milestone-ready + PROJECT evolution + REQUIREMENTS SNM-23/SNM-40 rows) as one docs(26): commit; no version bump, no archival
 
+### Phase 27: Marketplace & Autoupdate Output Grammar
+
+**Goal:** Bring the marketplace-surface output grammar in line with operator expectations -- drop the noisy `<last-updated>` marker, give autoupdate an explicit marker grammar, fix the misleading `marketplace update` no-op status, and correct the stale catalog autoupdate-default claim.
+
+**Requirements:** UXG-01, UXG-04, UXG-05, UXG-06
+
+**Success criteria:**
+
+1. `marketplace list` renders no `<last-updated <iso>>` marker on any header; catalog + catalog-uat fixtures updated in lockstep and GREEN.
+2. `marketplace autoupdate` / `noautoupdate` render `<autoupdate>` / `<no autoupdate>` markers (fresh flip) and `<autoupdate> {already autoupdate}` / `<no autoupdate> {already no autoupdate}` (idempotent); the `(autoupdate enabled/disabled)` and `(skipped) {already enabled/disabled}` forms are gone.
+3. `marketplace update` with no plugin change renders `(skipped) {up-to-date}`, not `(updated)`.
+4. `docs/output-catalog.md` correctly documents that `marketplace add` never auto-enables autoupdate, and the autoupdate heading matches the `autoupdate`/`noautoupdate` verbs.
+5. `npm run check` + catalog-uat GREEN.
+
+**Plans:** not yet planned -- run `/gsd-plan-phase 27` (ideally after PR #22 merges + `/gsd-complete-milestone`).
+
+### Phase 28: Severity Routing & Label Discipline
+
+**Goal:** Make severity presentation match operator expectations -- stop warning on benign no-ops, and stop the host severity label from breaking multi-line cascade formatting -- while preserving the severity color and the single-line label.
+
+**Requirements:** UXG-02, UXG-03
+
+**Success criteria:**
+
+1. A cascade whose only non-success rows are benign skips (`{up-to-date}` / `{already …}`) computes `info` severity (no severity arg); actionable skips still compute `warning`.
+2. Multi-line cascade notifications render without the `Error:`/`Warning:` host label; single-line messages (usage errors) retain it; severity color retained in both.
+3. UXG-03's feasibility is confirmed via a spike against the Pi host API; if the host cannot render color without the label, UXG-03 is recorded as an upstream-tracked finding with the spike evidence rather than forced in-extension.
+4. `npm run check` + catalog-uat GREEN.
+
+**Plans:** not yet planned -- run `/gsd-plan-phase 28`.
+
 ## Progress
 
 | Phase                                                                | Milestone | Plans Complete | Status      | Completed  |
@@ -538,3 +577,5 @@ Plans:
 | 24. Grammar Consistency                                              | v1.4.1    | 1/1 | Complete    | 2026-05-29 |
 | 25. Runtime Publish & Verification                                   | v1.4.1    | 3/3 | Complete    | 2026-05-29 |
 | 26. GREEN Gate Close                                                 | v1.4.1    | 1/1 | Complete    | 2026-05-30 |
+| 27. Marketplace & Autoupdate Output Grammar                          | v1.5      | 0/0 | Not started | --         |
+| 28. Severity Routing & Label Discipline                              | v1.5      | 0/0 | Not started | --         |

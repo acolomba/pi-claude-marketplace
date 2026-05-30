@@ -1,7 +1,28 @@
-# Requirements: pi-claude-marketplace v1.4.1 -- Post-ship UAT Patches
+# Requirements: pi-claude-marketplace v1.5 -- Notification Output Polish
 
 **Defined:** 2026-05-28
 **Core Value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
+
+## v1.5 Milestone Goal
+
+Refine the v2 `NotificationMessage` output grammar and severity presentation per the 2026-05-30 full hands-on UAT sweep (`.planning/v1.4-MILESTONE-UAT.md`), so marketplace/autoupdate surfaces and severity rendering match operator expectations. The v1.4 byte-contract is verified-correct as shipped; these are operator-preference refinements, not bug fixes. Source: the 6 findings in `.planning/BACKLOG.md` (`## v1.4 UAT findings`).
+
+## v1.5 Requirements (Active)
+
+### Output Grammar
+
+- [ ] **UXG-01**: `/claude:plugin marketplace list` no longer renders the `<last-updated <iso>>` marker on any marketplace header -- the raw ISO timestamp is noise and is meaningless for path-source marketplaces. The renderer drops the marker from the list surface (`MarketplaceDetails.lastUpdatedAt` may remain in state). Catalog (`docs/output-catalog.md`) + `tests/architecture/catalog-uat.test.ts` fixtures move in lockstep. Closes UAT Finding 1.
+- [ ] **UXG-04**: Autoupdate state renders as marker tokens `<autoupdate>` / `<no autoupdate>` (an explicit off-marker is introduced; today "off" is conveyed by marker absence), unifying the `marketplace autoupdate` / `noautoupdate` flip output with the `marketplace list` surface. Fresh flip -> `● <mp> [<scope>] <autoupdate>` / `<no autoupdate>` (replacing `(autoupdate enabled)` / `(autoupdate disabled)`); idempotent no-op -> `● <mp> [<scope>] <autoupdate> {already autoupdate}` / `<no autoupdate> {already no autoupdate}` (replacing `(skipped) {already enabled}` / `{already disabled}`). Touches the `MARKETPLACE_STATUSES` / `MARKERS` / `REASONS` closed sets + renderer + catalog + catalog-uat. Closes UAT Finding 4.
+- [ ] **UXG-05**: `/claude:plugin marketplace update <name>` with no actual plugin change renders the marketplace row as `(skipped) {up-to-date}` instead of `(updated)`, mirroring the plugin-level up-to-date no-op. Requires the marketplace-update orchestrator to distinguish "refreshed, no change" from "changed". Catalog + catalog-uat move in lockstep. Closes UAT Finding 5.
+
+### Severity Presentation
+
+- [ ] **UXG-02**: Benign no-op skips route at `info` severity, not `warning`. The first-match severity ladder in `shared/notify.ts` (D-16-11 "any skipped -> warning") is refined so a cascade whose only non-success rows are benign skips (`{up-to-date}`, `{already enabled}`, `{already disabled}`, `{already installed}`) computes `info` (no severity arg); `warning` is reserved for actionable skips. Closes UAT Finding 2.
+- [ ] **UXG-03**: Multi-line cascade notifications render without the host `Error:`/`Warning:` label prefix (it breaks the 0/2 indent ladder and duplicates the inline per-row status), while single-line messages (usage errors, simple failures) keep the label; the severity color is retained in both cases. The label + color are produced by the Pi host from the `ctx.ui.notify` severity arg, so this likely requires an upstream `@earendil-works/pi-coding-agent` capability (color without label, or a structured-notification mode) -- the phase carries a feasibility spike before committing the approach, and may resolve as an upstream-tracked finding if the host cannot support it. Closes UAT Finding 3.
+
+### Documentation
+
+- [ ] **UXG-06**: Correct the output catalog's stale claim that github-source `marketplace add` defaults autoupdate ON. Actual v2 behavior (verified in `orchestrators/marketplace/add.ts` -- no `autoupdate` write for any source): `marketplace add` never enables autoupdate; it is opt-in via `bootstrap` or an explicit `marketplace autoupdate`. Fix the `docs/output-catalog.md` github-source prose and align the `## /claude:plugin marketplace autoupdate <enable|disable>` heading with the real `autoupdate` / `noautoupdate` verbs. Doc-only; no renderer change. Closes UAT Finding 6.
 
 ## v1.4.1 Milestone Goal
 
@@ -161,6 +182,12 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25 (v1.4 rows) and 2026-0
 | SNM-38      | Phase 25 | Complete |
 | SNM-39      | Phase 25 | Complete |
 | SNM-40      | Phase 26 | Complete |
+| UXG-01      | Phase 27 | Pending  |
+| UXG-04      | Phase 27 | Pending  |
+| UXG-05      | Phase 27 | Pending  |
+| UXG-06      | Phase 27 | Pending  |
+| UXG-02      | Phase 28 | Pending  |
+| UXG-03      | Phase 28 | Pending  |
 
 **Coverage:**
 
@@ -173,6 +200,8 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25 (v1.4 rows) and 2026-0
 - Pending: 0
 - Per-phase distribution (v1.4): Phase 15 (12: SNM-01..11, SNM-21); Phase 16 (8: SNM-12..18, SNM-30); Phase 17 (4: SNM-19, SNM-20, SNM-26, SNM-31); Phase 18 (0: execution phase); Phase 19 (0: execution phase); Phase 20 (1: SNM-23); Phase 21 (7: SNM-22, SNM-24, SNM-25, SNM-27, SNM-28, SNM-29, SNM-32)
 - Per-phase distribution (v1.4.1): Phase 22 (1: SNM-33); Phase 23 (2: SNM-34, SNM-35); Phase 24 (1: SNM-36); Phase 25 (3: SNM-37, SNM-38, SNM-39); Phase 26 (1: SNM-40)
+- v1.5 requirements: 6 total (UXG-01..UXG-06) -- mapped to phases 6, unmapped 0, Pending 6 (none started)
+- Per-phase distribution (v1.5): Phase 27 (4: UXG-01, UXG-04, UXG-05, UXG-06); Phase 28 (2: UXG-02, UXG-03)
 
 **Mapping rationale:**
 
@@ -184,5 +213,5 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25 (v1.4 rows) and 2026-0
 
 ---
 
-_Requirements defined: 2026-05-25 (v1.4 baseline); 2026-05-28 (v1.4.1 patches added)_
-_Last updated: 2026-05-30 -- v1.4.1 milestone closed (Phase 26, SNM-40 GREEN gate). SNM-40 flipped Pending -> Complete; SNM-23 traceability row reconciled Pending -> Complete in the same pass (D-26-05). Coverage now 40/40 Complete, 0 Pending. Earlier: 2026-05-28 -- v1.4.1 traceability populated by `gsd-roadmapper`; SNM-33..SNM-40 mapped across Phases 22-26._
+_Requirements defined: 2026-05-25 (v1.4 baseline); 2026-05-28 (v1.4.1 patches added); 2026-05-30 (v1.5 UXG-01..UXG-06 added)_
+_Last updated: 2026-05-30 -- v1.5 Notification Output Polish requirements added (UXG-01..UXG-06, 6 total) from the 2026-05-30 hands-on UAT sweep; mapped to Phases 27 (UXG-01/04/05/06) and 28 (UXG-02/03), all Pending. Coverage now 46 total (40 Complete v1.4/v1.4.1 + 6 Pending v1.5). Earlier: 2026-05-30 -- v1.4.1 milestone closed (Phase 26, SNM-40 GREEN gate). SNM-40 flipped Pending -> Complete; SNM-23 traceability row reconciled Pending -> Complete in the same pass (D-26-05). Coverage now 40/40 Complete, 0 Pending. Earlier: 2026-05-28 -- v1.4.1 traceability populated by `gsd-roadmapper`; SNM-33..SNM-40 mapped across Phases 22-26._
