@@ -7,11 +7,10 @@
 // The soft-dependency probes (`hasLoadedPiSubagents` /
 // `hasLoadedPiMcpAdapter` / `softDepStatus`) live here because they
 // inspect `pi.getAllTools()`, which belongs to the external Pi API
-// surface. The aggregated trailer helpers (formerly emitted by this
-// module) were DELETED by Phase 13 Plan 13-02c-01 per RESEARCH.md
-// Open Question 3 (D-13-07): every prior callsite migrated to per-row
-// markers via `PluginInlineRow.declaresAgents/Mcp` / `PluginCascadeRow
-// .declaresAgents/Mcp` + the `SoftDepProbe` injected into `renderRow`.
+// surface. `softDepStatus(pi)` returns a `SoftDepStatus` snapshot that
+// `shared/notify.ts` reads once per render to decide whether to append the
+// `requires pi-subagents` / `requires pi-mcp` markers to a plugin row whose
+// `dependencies` declare the kind.
 
 export { getAgentDir } from "@earendil-works/pi-coding-agent";
 

@@ -1,26 +1,16 @@
 // transaction/rollback.ts
 //
-// D-03 single chokepoint for the rollback-partial user-visible message
-// PRESENTATION CONTEXT. Per Plan 14-06 / D-14-04 / RESEARCH.md Pitfall 6
-// (orchestrator-owns-rendering), this layer NO LONGER composes the
-// user-visible `(failed) {rollback partial}` body inline. The body
-// composition moves to the calling orchestrator, which emits the row via
-// the V2 `notify(ctx, NotificationMessage)` path with a
-// `PluginFailedMessage.rollbackPartial` payload (`shared/notify.ts`
-// owns the rendering; the orchestrator-owned `rollbackPartial[]`
-// children block lives there).
+// `formatRollbackError` turns a failed `runPhases` result into structured
+// data; it does NOT compose any user-visible string. The calling
+// orchestrator forwards the `rollbackPartial[]` data into a
+// `PluginFailedMessage.rollbackPartial` payload and the renderer in
+// `shared/notify.ts` emits the `(failed) {rollback partial}` parent line
+// plus its 2-space-indented per-phase children. MSG-RP-1 guards against any
+// re-introduction of a hand-composed literal here.
 //
-// The audit's WARNING finding at the pre-Plan-14-06 line 56-62
-// hand-composed literal site is mitigated: the literal is gone here,
-// MSG-RP-1 (Plan 14-05) catches any re-introduction, and the catalog
-// UAT byte-binding is preserved at the orchestrator render site.
-//
-// `formatRollbackError` returns a structured `RollbackErrorResult`
-// carrying the original Error (wrapped with `cause: originalError` per
-// ES-4 when any rollback partial happened) plus the raw
-// `RollbackPartial[]` data so the orchestrator can compose the parent
-// + indented children block via `renderRollbackPartial` or the bare
-// children helper `composeRollbackPartialChildren`.
+// `formatRollbackError` returns a structured `RollbackErrorResult` carrying
+// the original Error (wrapped with `cause: originalError` per ES-4 when any
+// rollback partial happened) plus the raw `RollbackPartial[]` data.
 //
 // AS-4 requires the per-phase aggregation; ES-4 requires the new
 // Error.cause chain.

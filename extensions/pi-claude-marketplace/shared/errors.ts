@@ -33,15 +33,13 @@ export function assertNever(x: never): never {
  *     (`current` is still non-null/undefined and would have walked further),
  *     append ` (truncated)` to the LAST link.
  *
- * NFR-9 (T-13-05): surfaces only `Error.message` (or `String`/
+ * NFR-9: surfaces only `Error.message` (or `String`/
  * `Object.prototype.toString` fallback for non-Error). No `.stack`, no
- * absolute paths. The `shared/notify.ts::notifyError` body consumes this
- * walker so the trailer lands automatically on every error notification.
+ * absolute paths. `shared/notify.ts` consumes this walker via
+ * `renderIndentedCauseChain` so the trailer lands automatically below every
+ * failed / manual-recovery plugin row.
  *
- * Single canonical implementation in `shared/errors.ts` (D-11 layering;
- * canonicalised here in Phase 21 from the retired
- * `presentation/cause-chain.ts`). The `shared/notify.ts::notifyError`
- * body consumes this walker directly.
+ * Single canonical implementation in `shared/errors.ts` (D-11 layering).
  */
 export function causeChainTrailer(err: unknown): string {
   if (err === undefined || err === null) {
@@ -89,19 +87,15 @@ function linkMessage(c: unknown): string {
 
 /**
  * Compose `errorMessage(err) [\n\n${causeChainTrailer(err)}]` for outcome
- * `notes` aggregated outside the notify path. The V2 `notify` renderer
- * trails the cause chain automatically per the renderPluginRow path; this
- * helper exists for outcome-aggregation callsites
- * (orchestrators/marketplace/update.ts, orchestrators/plugin/reinstall.ts,
- * orchestrators/plugin/update.ts) that need the same text without going
- * through the notify channel.
+ * `notes` aggregated outside the notify path. The `notify` renderer trails
+ * the cause chain automatically below the plugin row; this helper exists for
+ * outcome-aggregation callsites (orchestrators/marketplace/update.ts,
+ * orchestrators/plugin/reinstall.ts, orchestrators/plugin/update.ts) that
+ * need the same text without going through the notify channel.
  *
- * Extracted from three byte-identical private copies in the
- * orchestrator files above (D-21-02; canonicalised here in Phase 21 from
- * the retired `presentation/cause-chain.ts`). The single canonical
- * implementation here is the source of truth -- if the cause-chain trailer
- * contract changes (depth bound, separator, trimming rule), the change
- * lands once.
+ * Single canonical implementation here is the source of truth -- if the
+ * cause-chain trailer contract changes (depth bound, separator, trimming
+ * rule), the change lands once.
  */
 export function composeErrorWithCauseChain(err: unknown): string {
   const trailer = causeChainTrailer(err);
@@ -295,16 +289,17 @@ export class PluginUpdatePhase3Error extends Error {
  * when a rollback of a partially-completed `replace*Internal` swap
  * leaks files / directories the caller must clean up by hand. The
  * manual-recovery anchor is NOT embedded in `.message` -- per
- * MSG-MR-1 / MSG-MR-2 it is composed at the notify boundary via
- * `renderManualRecovery`. Bridges produce STRUCTURED data (`.leaks`);
- * the orchestrator (`orchestrators/plugin/reinstall.ts::narrowReason` and
- * the `outcomeToCascadeRow` mapper) type-checks the Error instead of
- * substring-matching the message text.
+ * MSG-MR-1 / MSG-MR-2 the manual-recovery row is composed at the notify
+ * boundary in `shared/notify.ts`. Bridges produce STRUCTURED data
+ * (`.leaks`); the orchestrator (`orchestrators/plugin/reinstall.ts` reason
+ * narrowing and the cascade-row mapper) type-checks the Error instead of
+ * substring-matching the message text. `shared/notify.ts` reads `.leaks`
+ * directly to name the leaked paths on the rendered row (AS-7).
  *
  * `Error.cause` is set via the standard `ErrorOptions` bag (mirrors the
  * `PluginUpdatePhase3Error` precedent above) so the depth-5
  * `causeChainTrailer` walker surfaces the originating bridge error to the
- * user via the `notifyError` boundary.
+ * user below the manual-recovery row.
  */
 export class ManualRecoveryError extends Error {
   readonly leaks: readonly string[];

@@ -2,8 +2,7 @@
 //
 // Pure async N-phase ledger with reverse-order undo on first throw.
 //
-// Per CONTEXT.md D-01: this is a FUNCTION, not a coordinator-class.
-// Orchestrators (Phase 5) build a literal
+// This is a FUNCTION, not a coordinator-class. Orchestrators build a literal
 // `const PHASES: Phase<InstallCtx>[] = [...]` at every call site.
 // Literal-array call sites are the explicit anti-pattern guard against
 // implicit phase ordering -- a coordinator-with-`add()` API would let
@@ -14,15 +13,12 @@
 // original failing-phase error becomes its cause via a higher-level
 // wrapper.
 //
-// Per AS-4 / CMC-17 / MSG-RP-1 (post Plan 13-02a-02 / commit 64d823f):
-// the user-visible body assembly happens in transaction/rollback.ts
-// (D-03 single chokepoint) and uses the closed-set CMC-11 token
-// vocabulary -- a `(failed) {rollback partial}` parent line followed by
-// 2-space-indented per-phase children of the form
-// `[<phase>] (rollback failed) {rollback partial}`. The legacy
-// `(rollback partial: ...)` ES-5 marker form was retired in the same
-// commit. This file still ships RAW data (RollbackPartial[]);
-// rollback.ts formats.
+// Per AS-4 / CMC-17 / MSG-RP-1: this file ships RAW data
+// (RollbackPartial[]); the user-visible body is assembled by the renderer
+// in shared/notify.ts as a `(failed) {rollback partial}` parent line
+// followed by 2-space-indented per-phase children of the form
+// `[<phase>] (rollback failed)`, using the closed-set CMC-11 token
+// vocabulary.
 
 import { errorMessage } from "../shared/errors.ts";
 import { PathContainmentError } from "../shared/path-safety.ts";
@@ -40,13 +36,12 @@ export interface Phase<C> {
 /**
  * AS-4: aggregated undo failure (one row per failed `undo` call).
  *
- * Task 260525-cjr C1: extended with `cause?: Error` to preserve the
- * original undo throw's `Error.cause` chain. Previously only `msg`
- * (the top-level `errorMessage(undoErr)` text) was recorded, dropping
- * any deeper cause chain attached via `new Error(msg, { cause })`.
- * The presentation layer (`presentation/rollback-partial.ts`) consumes
- * this via the depth-5 `causeChainTrailer` walker to surface the
- * underlying cause to the user.
+ * `cause?: Error` preserves the original undo throw's `Error.cause` chain;
+ * recording only `msg` (the top-level `errorMessage(undoErr)` text) would
+ * drop any deeper cause attached via `new Error(msg, { cause })`. The
+ * renderer surfaces it: `shared/notify.ts` maps each RollbackPartial onto a
+ * `PluginFailedMessage.rollbackPartial[]` child and walks `cause` with the
+ * depth-5 `causeChainTrailer`.
  *
  * `cause` is the ORIGINAL Error instance (not the message text) so the
  * walker can traverse its own `.cause` chain. Set to `undefined` when
@@ -62,8 +57,8 @@ export interface RollbackPartial {
 /**
  * Structured result. `ok: false` means a phase threw; the original error
  * is in `error`, and rollbackPartials lists every undo that ALSO failed.
- * `leaks` is reserved for future cleanup-leak descriptors (AS-5); the
- * Phase 2 implementation never populates it (Phase 5 orchestrators may).
+ * `leaks` is reserved for future cleanup-leak descriptors (AS-5); the ledger
+ * itself never populates it (orchestrators may).
  */
 export interface RunPhasesResult {
   readonly ok: boolean;
@@ -90,12 +85,11 @@ async function rollbackExecuted<C>(
         throw undoErr;
       }
 
-      // Task 260525-cjr C1: preserve the Error instance (not just its
-      // message text) so the depth-5 `causeChainTrailer` walker at the
-      // presentation layer can surface the originating cause to the
-      // user. Falls back to `undefined` when the undo throw was not an
-      // Error subclass (defensive -- bridges should always throw
-      // Errors).
+      // Preserve the Error instance (not just its message text) so the
+      // depth-5 `causeChainTrailer` walker in shared/notify.ts can surface
+      // the originating cause to the user. Falls back to `undefined` when
+      // the undo throw was not an Error subclass (defensive -- bridges
+      // should always throw Errors).
       partials.push({
         phase: done.name,
         msg: errorMessage(undoErr),
@@ -115,9 +109,9 @@ async function rollbackExecuted<C>(
  * NEVER throws on its own; callers inspect `result.ok` and (when false)
  * call `formatRollbackError(result, result.error!)` from
  * `transaction/rollback.ts` to produce a structured `RollbackErrorResult`
- * (`{ error, rollbackPartials }`); the orchestrator then composes the
- * user-visible body via `presentation/rollback-partial.ts` per Plan 14-06
- * (orchestrator-owns-rendering / D-14-04).
+ * (`{ error, rollbackPartials }`); the orchestrator then maps that onto a
+ * `PluginFailedMessage` and the renderer in `shared/notify.ts` composes the
+ * user-visible body.
  *
  * Exception: PI-14 PathContainmentError thrown from an undo step is
  * re-thrown immediately (state corruption is loud). The caller observes
