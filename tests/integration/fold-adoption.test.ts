@@ -201,7 +201,8 @@ test("CMC-21 / D-13-17 phase 1: project-scope plugin installed from user-scope m
     const installOk = installCtx.notifications.some(
       (n) =>
         n.severity === undefined &&
-        /● alpha@official \[project\] v1\.0\.0 \(installed\)/.exec(n.message) !== null,
+        n.message.includes("● official [project]") &&
+        n.message.includes("  ● alpha v1.0.0 (installed)"),
     );
     assert.ok(installOk, `install failed: ${JSON.stringify(installCtx.notifications)}`);
 

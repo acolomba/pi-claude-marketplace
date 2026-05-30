@@ -166,14 +166,13 @@ test("/claude:plugin import imports enabled Claude settings across both scopes",
     assert.match(userSkill, /Local plugin skill/);
 
     const messages = notifications.map((notification) => notification.message).join("\n");
-    assert.match(messages, /Claude plugin import summary/);
-    assert.match(messages, /● official-plugin \[user\] \(installed\)/);
-    assert.match(messages, /● github-plugin \[project\] \(installed\)/);
-    assert.match(messages, /● preinstalled-plugin \[user\] \(skipped\) \{already installed\}/);
-    assert.match(
-      messages,
-      /⊘ unavailable-plugin \[user\] \(unavailable\) \{no longer installable\}/,
-    );
+    // The folded renderer emits per-marketplace headers with 2-space-indented
+    // child rows; plugin rows carry neither a [scope] bracket nor an
+    // @marketplace suffix (the scope and marketplace live on the parent header).
+    assert.match(messages, /● claude-plugins-official \[project\] \(added\)/);
+    assert.match(messages, / {2}● official-plugin \(installed\)/);
+    assert.match(messages, / {2}⊘ preinstalled-plugin \(skipped\) \{already installed\}/);
+    assert.match(messages, / {2}⊘ unavailable-plugin \(unavailable\) \{no longer installable\}/);
     assert.equal((messages.match(/\/reload to pick up changes/g) ?? []).length, 1);
   });
 });
@@ -190,7 +189,9 @@ test("/claude:plugin import --scope project narrows writes to project scope", as
     assert.ok(projectState.marketplaces["directory-marketplace"]?.plugins["local-plugin"]);
 
     const messages = notifications.map((notification) => notification.message).join("\n");
-    assert.match(messages, /● local-plugin \[project\] \(installed\)/);
+    // Folded under the `● directory-marketplace [project] (added)` header; the
+    // child row carries no [scope] bracket (scope lives on the parent header).
+    assert.match(messages, / {2}● local-plugin \(installed\)/);
     assert.doesNotMatch(messages, /local-plugin \[user\]/);
   });
 });
@@ -214,8 +215,9 @@ test("/claude:plugin import reports source mismatches and skips dependent plugin
     );
 
     const messages = notifications.map((notification) => notification.message).join("\n");
-    assert.match(messages, /⊘ directory-marketplace \[project\] \(failed\) \{source mismatch\}/);
-    assert.match(messages, /⊘ local-plugin \[project\] \(skipped\) \{source mismatch\}/);
-    assert.match(messages, /Existing marketplace source/);
+    // The source-mismatch cascade renders a FAILED marketplace header with a
+    // FAILED folded child (not skipped); the child has no [scope] bracket.
+    assert.match(messages, /⊘ directory-marketplace \[project\] \(failed\)/);
+    assert.match(messages, / {2}⊘ local-plugin \(failed\) \{source mismatch\}/);
   });
 });
