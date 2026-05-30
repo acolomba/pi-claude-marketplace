@@ -8,11 +8,16 @@
 // `shared/notify.ts`.
 //
 // Outcomes -> NotificationMessage payloads:
-//  - autoupdate OFF (manifest-only refresh): `{ marketplaces: [{ name,
-//  scope, status: "updated", plugins: [] }] }`. NO reload-hint fires:
-//  `shouldEmitReloadHint` triggers only on a PLUGIN row with a
-//  state-changing status, never on a marketplace status, and this payload
-//  has no plugin rows. Catalog UAT fixture `autoupdate-off-manifest-refresh`.
+//  - autoupdate OFF (manifest-only refresh): UXG-05 distinguishes a no-op from
+//  a real change via a manifest-CONTENT compare (pre/post validated
+//  marketplace.json content; NOT lastUpdatedAt, NOT git SHA). No change ->
+//  `{ marketplaces: [{ name, scope, status: "skipped", reasons:
+//  ["up-to-date"], plugins: [] }] }` (catalog UAT state `update-no-op-skipped`,
+//  warning). Changed -> `{ marketplaces: [{ name, scope, status: "updated",
+//  plugins: [] }] }` (catalog UAT state `manifest-refresh-changed`). NEITHER
+//  fires the reload-hint: `shouldEmitReloadHint` triggers only on a PLUGIN row
+//  with a state-changing status, never on a marketplace status, and these
+//  payloads have no plugin rows.
 //  - autoupdate ON (cascade): `{ marketplaces: [{ name, scope, status:
 //  "updated", plugins: outcomes.map(outcomeToCascadePluginMessage) }] }`.
 //  The per-plugin cause chain rides on `PluginFailedMessage.cause`;
@@ -237,13 +242,47 @@ interface RefreshOneArgs {
   readonly pi: ExtensionAPI;
 }
 
+/**
+ * UXG-05 change-detection seam. Reads the persisted, typebox-validated
+ * `MarketplaceManifest` and returns a stable comparison key (the
+ * canonical-key-ordered JSON of the validated parsed content). Used to compare
+ * the manifest content PRE vs POST refresh so the autoupdate-OFF path can
+ * distinguish a genuine change (`updated`) from a no-op (`skipped {up-to-date}`).
+ *
+ * Compares ONLY post-validation parsed content (T-27-05 mitigation): a tampered
+ * manifest that fails the schema throws inside `loadMarketplaceManifest` and
+ * routes to the `(failed)` path, never to the no-op `(skipped)` decision. typebox
+ * `.Parse` yields a stable key order, so `JSON.stringify` of the parsed value is
+ * a stable comparison key without a field-by-field diff (Don't-Hand-Roll).
+ *
+ * Returns `undefined` when the manifest cannot be read/validated (e.g. the
+ * record has no manifest yet); a `undefined` PRE key compared against a defined
+ * POST key reads as "changed", which is the safe default.
+ */
+async function manifestContentKey(
+  record: ExtensionState["marketplaces"][string],
+): Promise<string | undefined> {
+  try {
+    const parsed = await loadMarketplaceManifest(record.manifestPath);
+    return JSON.stringify(parsed);
+  } catch {
+    return undefined;
+  }
+}
+
 async function refreshRecord(
   record: ExtensionState["marketplaces"][string],
   args: RefreshOneArgs,
-): Promise<void> {
+): Promise<boolean> {
   const { name, locations, gitOps } = args;
   const source = record.source as ParsedSource;
   let cloneAdvanced = false;
+  // UXG-05: capture the PRE-refresh validated-manifest content key BEFORE the
+  // refresh re-validates and re-persists. Read off the currently persisted
+  // `record.manifestPath` (the manifest as the user last saw it). NOT keyed on
+  // `record.lastUpdatedAt` (Pitfall 4 -- it is stamped to `now` every refresh
+  // regardless of content).
+  const preKey = await manifestContentKey(record);
   try {
     if (source.kind === "github") {
       const cloneDir = await locations.sourceCloneDir(name);
@@ -259,7 +298,19 @@ async function refreshRecord(
       );
     }
 
+    // UXG-05: capture the POST-refresh validated-manifest content key AFTER the
+    // refresh re-validates (and `validateManifestAtRoot` repoints
+    // `record.manifestPath` if the root moved). Whole-manifest equality of the
+    // parsed/validated content -- source-kind-uniform (a path source whose local
+    // marketplace.json is unchanged compares equal; a github source whose clone
+    // advanced but yielded byte-identical manifest content also compares equal).
+    const postKey = await manifestContentKey(record);
+    const changed = preKey !== postKey;
+
+    // lastUpdatedAt is stamped on EVERY refresh (used elsewhere); it is
+    // deliberately NOT the change signal (Pitfall 4).
     record.lastUpdatedAt = new Date().toISOString();
+    return changed;
   } catch (err) {
     throw new MarketplaceUpdateError(
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cloneAdvanced is set via callback inside refreshGitHubClone.
@@ -275,6 +326,13 @@ async function refreshRecord(
 interface RefreshSnapshot {
   readonly autoupdate: boolean;
   readonly plugins: readonly string[];
+  /**
+   * UXG-05: true when the refresh changed the validated marketplace.json
+   * content; false when the manifest content was byte-identical pre/post
+   * (the no-op case). Drives the autoupdate-OFF `updated` vs `skipped
+   * {up-to-date}` emission. Source-kind-uniform (path + github).
+   */
+  readonly changed: boolean;
 }
 
 async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapshot> {
@@ -285,10 +343,11 @@ async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapsh
       throw new MarketplaceNotFoundError(name, [scope]);
     }
 
-    await refreshRecord(record, args);
+    const changed = await refreshRecord(record, args);
     return {
       autoupdate: record.autoupdate ?? false,
       plugins: Object.keys(record.plugins),
+      changed,
     };
   });
 }
@@ -608,12 +667,27 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   // "persisted before any plugin cascade runs".
   const outcomes = await cascadeAutoupdates(snapshot, name, scope, pluginUpdate);
 
-  // CMC-32 binding: when autoupdate is OFF (manifest-only refresh) emit the
-  // bare marketplace row. This emits NO reload-hint: `shouldEmitReloadHint`
-  // fires only on a PLUGIN row with a state-changing status, never on a
-  // marketplace status, and this payload has no plugin rows (catalog UAT
-  // fixture `autoupdate-off-manifest-refresh`).
+  // CMC-32 / UXG-05 binding: when autoupdate is OFF (manifest-only refresh) the
+  // autoupdate-OFF path now DISTINGUISHES two outcomes by the change detector:
+  //   - no change (snapshot.changed === false): the validated manifest content
+  //     is byte-identical pre/post -> emit `(skipped) {up-to-date}` (catalog
+  //     state `update-no-op-skipped`). Routes WARNING via computeSeverity
+  //     (mp.status === "skipped"); this is intentional for Phase 27 -- the
+  //     benign-skip -> info softening is UXG-02 in Phase 28, NOT pre-empted here.
+  //   - changed (snapshot.changed === true): emit `(updated)` (catalog state
+  //     `manifest-refresh-changed`).
+  // BOTH emit NO reload-hint: `shouldEmitReloadHint` fires only on a PLUGIN row
+  // with a state-changing status, never on a marketplace status, and this
+  // payload has no plugin rows (plugins:[]). UXG-05 is orthogonal to the
+  // reload-hint discipline.
   if (!snapshot.autoupdate || pluginUpdate === undefined) {
+    if (!snapshot.changed) {
+      notify(ctx, pi, {
+        marketplaces: [{ name, scope, status: "skipped", reasons: ["up-to-date"], plugins: [] }],
+      });
+      return;
+    }
+
     notify(ctx, pi, {
       marketplaces: [{ name, scope, status: "updated", plugins: [] }],
     });

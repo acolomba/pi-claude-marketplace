@@ -800,17 +800,27 @@ ______________________________________________________________________
 
 ## `/claude:plugin marketplace update <name>`
 
-Single marketplace, multi-plugin cascade. The marketplace header carries `(updated)`; plugin rows indent two spaces underneath.
+Single marketplace, multi-plugin cascade. The marketplace header carries `(updated)`; plugin rows indent two spaces underneath. On the autoupdate-OFF path (manifest-only refresh, no plugin cascade) the header distinguishes a no-op from a genuine change: an unchanged manifest renders `(skipped) {up-to-date}` (UXG-05), a changed manifest renders `(updated)`.
 
-### Autoupdate-off manifest refresh (no plugin children)
+### Autoupdate-off manifest refresh -- no change (no-op)
 
-<!-- catalog-state: autoupdate-off-manifest-refresh -->
+<!-- catalog-state: update-no-op-skipped -->
+
+```text
+● local-mp [user] (skipped) {up-to-date}
+```
+
+Manifest-only refresh whose validated `marketplace.json` content was byte-identical pre/post (UXG-05). The autoupdate-OFF path compares the parsed, typebox-validated manifest content (not `lastUpdatedAt`, not the git SHA), so the no-op is source-kind-uniform: a path source whose local manifest is unchanged, and a github source whose clone advanced but yielded byte-identical manifest content, both render this. `mp.status = "skipped"`, `mp.reasons = ["up-to-date"]`; no plugin children (`plugins: []`). Severity: `warning` (any `skipped` → warning per the current severity ladder). The `warning` routing for this benign skip is current-ladder behavior; softening it to `info` is the surface UXG-02 (Phase 28) will later address and is NOT pre-empted here. No reload-hint: with no plugin children there is no Pi-visible resource change, so a manifest-only refresh never warrants a `/reload` (SNM-33 / D-22-01 / G-MIL-06).
+
+### Autoupdate-off manifest refresh -- changed
+
+<!-- catalog-state: manifest-refresh-changed -->
 
 ```text
 ● local-mp [user] (updated)
 ```
 
-Bare marketplace `updated` block (no plugin children; `plugins: []` renders as the bare header alone per D-15-08). No reload-hint: with no plugin children there is no Pi-visible resource change, so a manifest-only refresh does not warrant a `/reload` (SNM-33 / D-22-01 / G-MIL-06).
+Manifest-only refresh whose validated `marketplace.json` content actually changed (UXG-05). Bare marketplace `updated` block (no plugin children; `plugins: []` renders as the bare header alone per D-15-08). `mp.status = "updated"`. No reload-hint: with no plugin children there is no Pi-visible resource change, so a manifest-only refresh does not warrant a `/reload` (SNM-33 / D-22-01 / G-MIL-06).
 
 ### Mixed plugin outcomes
 

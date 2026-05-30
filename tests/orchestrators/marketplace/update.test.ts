@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -160,17 +160,110 @@ test("MU-4 + D-14: github source refreshes via fetch+forceUpdateRef+checkout in 
     assert.ok(fur !== undefined);
     assert.equal(fur.ref, "refs/heads/main");
     assert.equal(fur.value, "abcdef0000000000000000000000000000000001");
-    // Success notification, no failure.
+    // UXG-05: this github-source refresh re-validates the SAME fixture manifest
+    // (the mock git ops advance the clone ref but do NOT change file content),
+    // so the validated marketplace.json content is byte-identical pre/post and
+    // the autoupdate-OFF path renders the no-op `(skipped) {up-to-date}` (NOT
+    // `(updated)`). Source-kind-uniform: the github no-op is detected the same
+    // way as the path-source no-op. Catalog UAT state `update-no-op-skipped`.
     assert.equal(notifications.length, 1);
     const first = notifications[0];
     assert.ok(first !== undefined);
-    assert.notEqual(first.severity, "error");
-    // SNM-33 / D-22-01 (G-MIL-06): an autoupdate-OFF manifest refresh has no
-    // plugin children, so there is no Pi-visible resource change and NO
-    // `/reload` trailer. Catalog UAT fixture `autoupdate-off-manifest-refresh`
-    // in docs/output-catalog.md.
+    // mp.status === "skipped" routes "warning" via computeSeverity (current
+    // ladder; UXG-02 info-softening is Phase 28, not pre-empted here).
+    assert.equal(first.severity, "warning");
+    // SNM-33 / D-22-01 (G-MIL-06): no plugin children -> no Pi-visible resource
+    // change -> NO `/reload` trailer (UXG-05 is orthogonal to the reload-hint).
+    assert.equal(first.message, "● official [project] (skipped) {up-to-date}");
+    assert.equal(first.message.includes("/reload to pick up changes"), false);
+  });
+});
+
+test("UXG-05: github-source refresh whose manifest content CHANGES renders `(updated)` (change detected, source-kind-uniform)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { cloneDir } = await seedGithubMarketplace({ cwd, name: "official", ref: "main" });
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000003" },
+    });
+
+    // Wrap the mock so that AFTER checkout (the point a real fetch+checkout
+    // would have advanced the working tree) the clone dir's marketplace.json
+    // carries DIFFERENT validated content than the pre-refresh persisted
+    // manifest. The change detector compares parsed/validated content pre vs
+    // post, so a genuine content change must render `(updated)`.
+    const manifestPath = path.join(cloneDir, ".claude-plugin", "marketplace.json");
+    const changedGitOps: typeof gitOps = {
+      ...gitOps,
+      async checkout(opts): Promise<void> {
+        await gitOps.checkout(opts);
+        // Overwrite with a schema-valid manifest that differs in content
+        // (an added plugin entry) so the post-refresh content key differs.
+        await writeFile(
+          manifestPath,
+          JSON.stringify({
+            name: "official",
+            plugins: [{ name: "newly-added", source: "./newly-added" }],
+          }),
+          "utf8",
+        );
+      },
+    };
+
+    await updateMarketplace({
+      ctx,
+      pi,
+      name: "official",
+      scope: "project",
+      cwd,
+      gitOps: changedGitOps,
+    });
+
+    assert.equal(notifications.length, 1);
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    // Content changed -> `(updated)`, severity success (undefined), no reload
+    // trailer (no plugin children). Catalog UAT state `manifest-refresh-changed`.
     assert.equal(first.severity, undefined);
     assert.equal(first.message, "● official [project] (updated)");
+    assert.equal(first.message.includes("/reload to pick up changes"), false);
+  });
+});
+
+test("UXG-05: path-source refresh whose local manifest is UNCHANGED renders the no-op `(skipped) {up-to-date}` (warning, no trailer)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const locations = locationsFor("project", cwd);
+    await mkdir(locations.extensionRoot, { recursive: true });
+    // Seed a path-source marketplace pointing at a real on-disk fixture. A
+    // path source never advances a git SHA, so it is ALWAYS a no-op unless the
+    // local marketplace.json file itself changed -- exactly the case UXG-05's
+    // content-compare detects (path sources are the common no-op).
+    const localMpDir = fixtureMarketplaceDir("valid-marketplace");
+    await saveState(locations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: {
+        "local-mp": {
+          name: "local-mp",
+          scope: "project",
+          source: pathSource(localMpDir),
+          addedFromCwd: cwd,
+          manifestPath: path.join(localMpDir, ".claude-plugin", "marketplace.json"),
+          marketplaceRoot: localMpDir,
+          plugins: {},
+        },
+      },
+    });
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps();
+
+    await updateMarketplace({ ctx, pi, name: "local-mp", scope: "project", cwd, gitOps });
+
+    assert.equal(notifications.length, 1);
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    assert.equal(first.severity, "warning");
+    assert.equal(first.message, "● local-mp [project] (skipped) {up-to-date}");
+    assert.equal(first.message.includes("/reload to pick up changes"), false);
   });
 });
 

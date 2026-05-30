@@ -615,6 +615,46 @@ test('notify severity tier mp-skipped: idempotent-disable marketplace renders <n
   assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "warning");
 });
 
+test('UXG-05: marketplace update no-op (mp.skipped + reasons:["up-to-date"], plugins:[]) renders `● <mp> [<scope>] (skipped) {up-to-date}`, routes "warning", emits NO /reload trailer', () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  // The autoupdate-OFF manifest-only refresh whose validated manifest content
+  // did not change. Reuses the SAME mp-level `skipped` arm as the idempotent
+  // autoupdate no-ops, but with the generic `up-to-date` reason -> the
+  // `(skipped) {<reason>}` byte form (NOT the marker-as-outcome autoupdate
+  // branch). `up-to-date` is already a REASONS member; the renderer needs no
+  // change. Locks renderer reuse + severity + trailer-absence in one byte test.
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "local-mp",
+        scope: "user",
+        status: "skipped",
+        reasons: ["up-to-date"],
+        plugins: [],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  const body = args[0] as string;
+  // (a) Byte form: the shared mp-skipped arm renders `(skipped) {up-to-date}`.
+  assert.equal(body, "● local-mp [user] (skipped) {up-to-date}");
+  // (b) Severity: mp.status === "skipped" routes "warning" via computeSeverity.
+  //     (Current-ladder behavior; UXG-02 softening to info is Phase 28, not
+  //     pre-empted here.)
+  assert.equal(args.length, 2);
+  assert.equal(args[1], "warning");
+  // (c) NO reload-hint: plugins:[] means no Pi-visible resource change, so the
+  //     `/reload to pick up changes` trailer is absent (SNM-33 / orthogonal to
+  //     UXG-05).
+  assert.ok(
+    !body.includes("/reload to pick up changes"),
+    `expected body to NOT include reload-hint trailer, got: ${body}`,
+  );
+});
+
 test("notify mixed-severity payload: mp.skipped coexists with healthy plugin row -> first-match severity routing fires on mp.status (D-17.1-05)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();

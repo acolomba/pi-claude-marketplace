@@ -1234,7 +1234,25 @@ const FIXTURES: FixtureMap = {
   // /claude:plugin marketplace update -- marketplace + plugin cascade.
   // -------------------------------------------------------------------------
   "/claude:plugin marketplace update <name>": {
-    "autoupdate-off-manifest-refresh": {
+    // UXG-05: autoupdate-OFF manifest-only refresh splits into a no-op
+    // (`skipped {up-to-date}`, warning) and a changed (`updated`) state.
+    "update-no-op-skipped": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "local-mp",
+            scope: "user",
+            status: "skipped",
+            reasons: ["up-to-date"],
+            plugins: [],
+          },
+        ],
+      },
+    },
+
+    "manifest-refresh-changed": {
       pi: piWithBothLoaded(),
       message: {
         marketplaces: [{ name: "local-mp", scope: "user", status: "updated", plugins: [] }],
