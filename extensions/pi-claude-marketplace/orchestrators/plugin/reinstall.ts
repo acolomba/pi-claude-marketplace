@@ -10,26 +10,16 @@
 // every bridge before physical replacement, then rolls physical resources back
 // if replacement or explicit state persistence fails.
 //
-// Phase 19 / Plan 19-04: this file emits exactly one V2 `notify(ctx, pi, ...)`
-// call per orchestration arm. The V1 severity-named wrappers
-// (notifySuccess/notifyWarning/notifyError) and the presentation/* composers
-// (cascadeSummary / renderManualRecovery / renderRow / appendReloadHint /
-// reloadHint / composeErrorWithCauseChain on the notify path) are GONE for
-// the notify boundary. The V1 dispatch ternary that picked notifyWarning vs
-// notifySuccess based on aggregated cascade severity is REMOVED -- V2
-// notify() owns severity per D-16-11. The separate top-level manual-recovery
-// emission (V1 `renderManualRecovery` + dispatch) is FOLDED INTO the cascade
-// `plugins[]` array as a `PluginManualRecoveryMessage` row per D-19-02.
-// The two V1 post-success notifyWarning loops (bridgeWarnings +
-// maintenanceWarnings) are DROPPED per D-19-01: the V2
-// MarketplaceNotificationMessage type has no field to surface post-success
-// soft warnings; the underlying side effects (dropMarketplaceCache + rm)
-// still run, and the internal `notes` field on `ReinstallPluginOutcome`
-// (orchestrated-mode consumers) still carries the warning strings -- only
-// the standalone-mode user-facing notifyWarning surface is gone.
-//
-// See the construction recipe block-comment above the surviving main-cascade
-// notify() call site for the Plan 19-01 pilot recipe (mirrored here).
+// Each orchestration arm emits exactly one `notify(ctx, pi, ...)` call.
+// notify() owns severity, the reload-hint trailer, and the cause-chain.
+// Manual-recovery rows are folded into the cascade `plugins[]` array as
+// `PluginManualRecoveryMessage` entries rather than emitted separately.
+// Post-success soft warnings (bridge / maintenance) are NOT surfaced:
+// MarketplaceNotificationMessage has no field for them. The underlying side
+// effects (dropMarketplaceCache + rm) still run, and the internal `notes`
+// field on `ReinstallPluginOutcome` (orchestrated-mode consumers) still
+// carries the warning strings -- only the standalone-mode user-facing
+// surface is absent.
 
 import { rm } from "node:fs/promises";
 
@@ -220,31 +210,26 @@ export async function reinstallPlugin(
     return notes.length === 0 ? locked.outcome : { ...locked.outcome, notes };
   }
 
-  // IN-01: the two V1 post-success notifyWarning loops (over
-  // bridgeWarnings + maintenanceWarnings) are DROPPED in V2 per the
-  // D-19-01 precedent (D-18-01 lineage). The underlying side effects
-  // (cache drop + data-dir rm + bridge finalize) still fire above; the
-  // orchestrated-mode `notes` field at the `render === "none"` arm
-  // above still carries the warning strings for consumers outside the
-  // notify path; only the standalone-mode user-visible warning surface
-  // is gone (no clean MarketplaceNotificationMessage representation
-  // for a post-success soft warning). `maintenanceWarnings` is awaited
-  // strictly for its side effects.
+  // IN-01: post-success soft warnings (bridge + maintenance) are NOT
+  // surfaced -- there is no clean MarketplaceNotificationMessage
+  // representation for a post-success soft warning. The underlying side
+  // effects (cache drop + data-dir rm + bridge finalize) still fire above;
+  // the orchestrated-mode `notes` field at the `render === "none"` arm still
+  // carries the warning strings for consumers outside the notify path.
+  // `maintenanceWarnings` is awaited strictly for its side effects.
 
-  // Plan 19-04 / D-19-02: single-plugin reinstall success is a 1-row
-  // cascade carrying a PluginReinstalledMessage variant. The legacy
-  // `cascadeSummary` call at the explicit single-plugin-reinstall surface
-  // is RETIRED -- this branch and the bulk-cascade branch both emit a V2
-  // notify() with structured payloads. Severity (undefined / info) +
-  // `/reload to pick up changes` trailer are computed by notify() per
-  // D-16-11 + D-16-12 (the `reinstalled` status is in the state-changing
-  // variant set, so the reload-hint always fires here).
+  // Single-plugin reinstall success is a 1-row cascade carrying a
+  // PluginReinstalledMessage variant; this branch and the bulk-cascade branch
+  // both emit one notify() call with structured payloads. Severity (undefined
+  // / info) + the `/reload to pick up changes` trailer are computed by
+  // notify() -- the `reinstalled` status is in the state-changing variant set,
+  // so the reload-hint always fires here.
   //
   // Per-row scope is OMITTED (orphan-fold) since it matches the
   // marketplace block's scope on the single-plugin surface.
-  // IN-02: drop the `version !== ""` defensive spread. `resolvePluginVersion`
-  // always returns a non-empty string (see install.ts:914 commit message).
-  // The renderer suppresses the `v<version>` token on undefined / empty
+  // IN-02: no `version !== ""` defensive spread. `resolvePluginVersion`
+  // always returns a non-empty string. The renderer suppresses the
+  // `v<version>` token on undefined / empty
   // anyway, so the behavior is preserved against the legacy-state-with-
   // empty-version case.
   const reinstalledRow: PluginReinstalledMessage = {
@@ -260,16 +245,16 @@ export async function reinstallPlugin(
 }
 
 /**
- * Plan 19-04: handle the single-plugin reinstall failure path. Extracted
+ * handle the single-plugin reinstall failure path. Extracted
  * from `reinstallPlugin` to keep that function's cognitive complexity
  * inside the sonarjs/cognitive-complexity ceiling (15). Produces both
- * the V2 standalone-mode notify() emission (when render !== "none") and
+ * the standalone-mode notify emission (when render !== "none") and
  * the orchestrated-mode `ReinstallFailedOutcome` (always returned).
  *
- * Manual-recovery class is a STRUCTURAL plugin variant per D-19-02
+ * Manual-recovery class is a STRUCTURAL plugin variant
  * (`PluginManualRecoveryMessage`); other failures are
- * `PluginFailedMessage`. Severity + reload-hint computed by notify()
- * per D-16-11 + D-16-12.
+ * `PluginFailedMessage`. Severity + reload-hint computed by notify
+ * .
  */
 function handleSinglePluginFailure(
   opts: ReinstallPluginOptions,
@@ -278,11 +263,10 @@ function handleSinglePluginFailure(
 ): ReinstallFailedOutcome {
   const { ctx, pi, scope, marketplace, plugin } = opts;
 
-  // Plan 19-04: V2 notify() owns the cause-chain trailer via the
-  // PluginFailedMessage / PluginManualRecoveryMessage `cause?` field
-  // per D-16-08. The legacy `composeErrorWithCauseChain(err)` text
-  // still feeds the orchestrated-mode `notes` field below (consumers
-  // outside the notify path).
+  // notify() owns the cause-chain trailer via the PluginFailedMessage /
+  // PluginManualRecoveryMessage `cause?` field. The
+  // `composeErrorWithCauseChain(err)` text still feeds the orchestrated-mode
+  // `notes` field below (consumers outside the notify path).
   const message = composeErrorWithCauseChain(err);
   const causeErr = err instanceof Error ? err : new Error(errorMessage(err));
   const typedReasons = reasonsFromTypedError(err);
@@ -332,19 +316,17 @@ export async function reinstallPlugins(
   try {
     targets = await enumerateReinstallTargets(opts);
   } catch (err) {
-    // Plan 19-04 / D-19-02: enumeration-failure path emits a single V2
-    // notify() call. The failed entity is the targeting layer (no
-    // specific plugin), so the row carries a placeholder name
-    // `"(reinstall)"` and the marketplace block sits under a synthetic
-    // marketplace name derived from the target (or `"(reinstall)"` for
-    // the bare-all form). Severity (`error`) + no reload-hint computed
-    // by notify() per D-16-11 + D-16-12.
+    // The enumeration-failure path emits a single notify() call. The failed
+    // entity is the targeting layer (no specific plugin), so the row carries a
+    // placeholder name `"(reinstall)"` and the marketplace block sits under a
+    // synthetic marketplace name derived from the target (or `"(reinstall)"`
+    // for the bare-all form). Severity (`error`) + no reload-hint are computed
+    // by notify().
     //
-    // Claude's Discretion (CONTEXT line 110): we use a synthetic
-    // PluginFailedMessage rather than a marketplace-level failure shape
-    // because the renderer's failed-row form carries the cause-chain
-    // trailer needed for the underlying MarketplaceNotFoundError text
-    // (V1 surfaced that text via notifyError's auto-appended trailer).
+    // A synthetic PluginFailedMessage is used rather than a marketplace-level
+    // failure shape because the renderer's failed-row form carries the
+    // cause-chain trailer needed for the underlying MarketplaceNotFoundError
+    // text (marketplace-level rows carry no cause per SNM-10).
     const typedReasons = reasonsFromTypedError(err);
     const reasons: readonly Reason[] =
       typedReasons ?? narrowReasons([composeErrorWithCauseChain(err)]);
@@ -364,14 +346,11 @@ export async function reinstallPlugins(
   }
 
   if (targets.length === 0) {
-    // Plan 19-04 / D-19-02: empty-targets renders as the V2
-    // `(no marketplaces)` sentinel via `{ marketplaces: [] }`. This is
-    // a deliberate byte change from V1's `(no plugins)` empty-row form
-    // (renderRow({kind: "empty", token: "no plugins"})) -- V2's
-    // structural shape carries no "(no plugins)" sentinel at the
-    // top-level / standalone-cascade boundary; the closest analog is
-    // the list-surface `(no marketplaces)` rendering at
-    // docs/output-catalog.md:139-145. Severity: undefined (info).
+    // Empty-targets renders as the `(no marketplaces)` sentinel via
+    // `{ marketplaces: [] }`. The structural shape carries no "(no plugins)"
+    // sentinel at the top-level / standalone-cascade boundary; the closest
+    // analog is the list-surface `(no marketplaces)` rendering. Severity:
+    // undefined (info).
     notify(ctx, pi, { marketplaces: [] });
     return [];
   }
@@ -393,12 +372,12 @@ export async function reinstallPlugins(
       );
     } catch (err) {
       // `notes` is consumed outside the notify path; compose the trailer
-      // inline. Plan 13-02a-02 / CMC-16: structural failure-class tag so
+      // inline. CMC-16: structural failure-class tag so
       // the cascade payload maps to `(failed) {rollback partial}` /
       // `(manual recovery) {rollback partial}` without substring-matching
       // the legacy ES-5 marker text in `notes`.
       //
-      // Task 260525-cjr B2: ALSO pre-narrow the closed-set Reason via
+      // ALSO pre-narrow the closed-set Reason via
       // `reasonsFromTypedError(err)` so EACCES / EPERM / ENOENT and the
       // typed error classes (PluginShapeError / ManualRecoveryError /
       // MarketplaceNotFoundError) surface as their precise closed Reason
@@ -541,49 +520,38 @@ function sortReinstallTargets(
 }
 
 /**
- * Plan 19-04 / D-19-02: render the bulk-reinstall outcome cascade as a
- * single V2 `notify(ctx, pi, NotificationMessage)` call per orchestration.
+ * Render the bulk-reinstall outcome cascade as a single
+ * `notify(ctx, pi, NotificationMessage)` call per orchestration.
  *
- * Shape per marketplace (catalog `/claude:plugin reinstall` cascade, see
- * docs/output-catalog.md:380-486 for the 7 binding states):
+ * Shape per marketplace (catalog `/claude:plugin reinstall` cascade):
  *
- *     ● <mp> [<scope>]
- *       ● <plugin> v<version> (reinstalled) [{requires <dep>}]
- *       ⊘ <plugin> (skipped) {<reason>}
- *       ⊘ <plugin> (failed) {<reason>}
- *       ⊘ <plugin> (manual recovery) {rollback partial}
+ *  ● <mp> [<scope>]
+ *    ● <plugin> v<version> (reinstalled) [{requires <dep>}]
+ *    ⊘ <plugin> (skipped) {<reason>}
+ *    ⊘ <plugin> (failed) {<reason>}
+ *    ⊘ <plugin> (manual recovery) {rollback partial}
  *
- *     /reload to pick up changes
+ *  /reload to pick up changes
  *
  * - Marketplace headers carry `status: undefined` (the marketplace itself
  *   was NOT updated by reinstall; the header is a pure label).
  * - Manual-recovery outcomes are folded into the cascade `plugins[]` array
- *   as `PluginManualRecoveryMessage` variants per D-19-02. The V1
- *   separate top-level emission via `renderManualRecovery` is GONE.
- * - Severity + reload-hint computed by notify() per D-16-11 + D-16-12;
- *   the V1 dispatch ternary (aggregatedSeverity ? notifyWarning :
- *   notifySuccess) is REMOVED.
- * - Per-marketplace iteration order honored end-to-end per D-16-06: the
- *   orchestrator pre-sorts via `compareByNameThenScope`; notify() does
- *   NOT sort marketplaces[] or plugins[].
+ *   as `PluginManualRecoveryMessage` variants.
+ * - Severity + reload-hint are computed by notify().
+ * - Per-marketplace iteration order is honored end-to-end: the orchestrator
+ *   pre-sorts via `compareByNameThenScope`; notify() does NOT sort
+ *   marketplaces[] or plugins[].
  */
-// NotificationMessage cascade recipe (Plan 19-01 pilot; Wave 2 mirrors).
-// - One MarketplaceNotificationMessage per affected marketplace, emitted
-//   via a single notify(ctx, pi, ...) call per orchestration.
+// NotificationMessage cascade recipe:
+// - One MarketplaceNotificationMessage per affected marketplace, emitted via
+//   a single notify(ctx, pi, ...) call per orchestration.
 // - plugins: readonly PluginNotificationMessage[] in display order
-//   (orchestrator-controlled iteration per D-16-06; notify() does not sort).
+//   (orchestrator-controlled iteration; notify does not sort).
 // - Discriminators by status: "reinstalled" / "skipped" / "failed" /
-//   "manual recovery" here. Plans 19-02..05 mirror with their own status
-//   sets: installed/updated/reinstalled/failed/skipped/manual recovery/
-//   available/unavailable/upgradable.
-// - Severity + "/reload to pick up changes" trailer are computed by notify()
-//   per D-16-11 + D-16-12; callers MUST NOT compose them.
-// - Reference: catalog UAT plugin-reinstall fixtures at docs/output-catalog.md:380-486.
-//
-// V2 cascade construction mirrors the Plan 19-01 pilot recipe at
-// orchestrators/plugin/uninstall.ts; reinstall.ts substitutes the cascade
-// variant set (reinstalled / skipped / failed / manual recovery) per
-// D-19-02 and folds manual-recovery into the plugins[] array.
+//   "manual recovery".
+// - Severity + "/reload to pick up changes" trailer are computed by notify();
+//   callers MUST NOT compose them.
+// - Reference: catalog UAT plugin-reinstall fixtures.
 function renderReinstallPartitionAndNotify(
   ctx: ExtensionContext,
   pi: ExtensionAPI,
@@ -614,7 +582,7 @@ function renderReinstallPartitionAndNotify(
 
   // Order marketplace blocks via compareByNameThenScope (name primary
   // case-insensitive, scope secondary project-before-user per MSG-GR-3).
-  // D-16-06: the orchestrator owns the sort; notify() does not reorder.
+  // the orchestrator owns the sort; notify does not reorder.
   const sortedBlocks = [...byMp.values()].sort((a, b) =>
     compareByNameThenScope({ name: a.name, scope: a.scope }, { name: b.name, scope: b.scope }),
   );
@@ -630,9 +598,9 @@ function renderReinstallPartitionAndNotify(
 }
 
 /**
- * Plan 19-04 / D-19-02 binding seam: exported under the `__test_*` prefix
+ *  binding seam: exported under the `__test_*` prefix
  * so the cascade-emission regression test in
- * tests/orchestrators/plugin/reinstall.test.ts can verify the V2 cascade
+ * tests/orchestrators/plugin/reinstall.test.ts can verify the cascade
  * payload structure (including the folded-in manual-recovery row) without
  * forcing a real `ManualRecoveryError` through the bridges (which would
  * require fs-permission / saveState dep injection plumbing through
@@ -644,7 +612,7 @@ export { renderReinstallPartitionAndNotify as __test_renderReinstallPartitionAnd
  * Type guard narrowing a `ReinstallPluginOutcome` to the `failed` variant
  * tagged with `failureClass: "manual-recovery"`. Used to route manual-
  * recovery outcomes to the `PluginManualRecoveryMessage` variant instead
- * of `PluginFailedMessage` in the cascade payload per D-19-02.
+ * of `PluginFailedMessage` in the cascade payload.
  */
 function isManualRecoveryOutcome(
   outcome: ReinstallPluginOutcome,
@@ -653,20 +621,17 @@ function isManualRecoveryOutcome(
 }
 
 /**
- * Plan 19-04 / D-19-02: map a `ReinstallPluginOutcome` to its V2
- * `PluginNotificationMessage` representation. Replaces V1's
- * `outcomeToCascadeRow` which produced a `PluginCascadeRow` (presentation-
- * layer V1 row type). The variant set covers `reinstalled` / `skipped` /
- * `failed` / `manual recovery` per the 7 catalog states at
- * docs/output-catalog.md:380-486.
+ * Map a `ReinstallPluginOutcome` to its `PluginNotificationMessage`
+ * representation. The variant set covers `reinstalled` / `skipped` /
+ * `failed` / `manual recovery` per the catalog states.
  *
  * Reason-token mapping precedence (failed/manual-recovery variants):
- *   (1) failureClass=manual-recovery -> `["rollback partial"]`
- *   (2) typed `outcome.reasons` (set at the catch site via
- *       `reasonsFromTypedError(err)`) -> verbatim
- *   (3) substring parse on `notes` via `narrowReasons` -> legacy fallback
+ *  (1) failureClass=manual-recovery -> `["rollback partial"]`
+ *  (2) typed `outcome.reasons` (set at the catch site via
+ *  `reasonsFromTypedError(err)`) -> verbatim
+ *  (3) substring parse on `notes` via `narrowReasons` -> legacy fallback
  *
- * Orphan-fold scope-bracket suppression (Phase 17.2): per-row `scope?` is
+ * Orphan-fold scope-bracket suppression: per-row `scope?` is
  * OMITTED when it matches the marketplace's scope. The renderer's
  * `renderScopeBracket` contract at `shared/notify.ts` suppresses
  * `[<scope>]` brackets when the row's scope is absent.
@@ -678,9 +643,9 @@ function outcomeToPluginMessage(
   const rowScope = outcome.scope === marketplaceScope ? undefined : outcome.scope;
   switch (outcome.partition) {
     case "reinstalled": {
-      // CMC-13 / Task 260525-cjr B1: `declaresAgents` / `declaresMcp` are
-      // required booleans. Map to the V2 `dependencies: Dependency[]`
-      // tuple per SNM-06 / D-15-02. The renderer's per-row soft-dep probe
+      // CMC-13: `declaresAgents` / `declaresMcp` are
+      // required booleans. Map to the `dependencies: Dependency[]`
+      // tuple per SNM-06. The renderer's per-row soft-dep probe
       // fires `{requires pi-subagents}` / `{requires pi-mcp}` markers
       // when the companion extension is unloaded.
       const dependencies = dependenciesFromOutcome(outcome);
@@ -705,18 +670,18 @@ function outcomeToPluginMessage(
     }
 
     case "failed": {
-      // Plan 13-02a-02 / CMC-16: structural failure-class tag supersedes
+      // CMC-16: structural failure-class tag supersedes
       // the legacy substring match on `notes` for the manual-recovery
-      // class. Plan 19-04 / D-19-02 expands this: manual-recovery is
+      // class. expands this: manual-recovery is
       // STRUCTURALLY a `PluginManualRecoveryMessage` variant, NOT a
       // `PluginFailedMessage` with a `{rollback partial}` reason. The
       // status discriminator is the literal `"manual recovery"` WITH a
       // space per shared/grammar/status-tokens.ts:47.
       //
       // Reason precedence (locked):
-      //   (1) failureClass=manual-recovery -> ["rollback partial"]
-      //   (2) typed outcome.reasons        -> verbatim
-      //   (3) narrowReasons(outcome.notes) -> substring fallback
+      //  (1) failureClass=manual-recovery -> ["rollback partial"]
+      //  (2) typed outcome.reasons -> verbatim
+      //  (3) narrowReasons(outcome.notes) -> substring fallback
       const reasons: readonly Reason[] = isManualRecoveryOutcome(outcome)
         ? (["rollback partial"] as const)
         : (outcome.reasons ?? narrowReasons(outcome.notes));
@@ -746,22 +711,20 @@ function outcomeToPluginMessage(
 }
 
 /**
- * Plan 19-04 / D-19-02 binding seam: exported under the `__test_*` prefix
- * for the closed-set Reason mapping regression tests. The mapping covers
- * the same closed-set narrowing rules as V1's `outcomeToCascadeRow`
- * (manual-recovery > typed reasons > narrowReasons fallback) but produces
- * V2 `PluginNotificationMessage` variants instead of V1's
- * `PluginCascadeRow`.
+ * Test seam exported under the `__test_*` prefix for the closed-set Reason
+ * mapping regression tests. The mapping precedence is manual-recovery > typed
+ * reasons > narrowReasons fallback, producing `PluginNotificationMessage`
+ * variants.
  */
 export { outcomeToPluginMessage as __test_outcomeToPluginMessage };
 
 /**
  * Map a `ReinstallReinstalledOutcome`'s `declaresAgents` / `declaresMcp`
- * predicate flags to the V2 `Dependency[]` tuple consumed by
- * `PluginReinstalledMessage.dependencies` per SNM-06 / D-15-02. The
+ * predicate flags to the `Dependency[]` tuple consumed by
+ * `PluginReinstalledMessage.dependencies` per SNM-06. The
  * renderer's per-row soft-dep probe iterates this array to emit
  * `{requires pi-subagents}` / `{requires pi-mcp}` markers when the
- * companion extension is unloaded (MSG-SD-1..2 / D-13-07).
+ * companion extension is unloaded (MSG-SD-1..2).
  */
 function dependenciesFromOutcome(outcome: ReinstallReinstalledOutcome): readonly Dependency[] {
   const deps: Dependency[] = [];
@@ -786,7 +749,7 @@ function dependenciesFromOutcome(outcome: ReinstallReinstalledOutcome): readonly
  * The mapping is intentionally narrow -- production code paths that
  * generate notes have known shapes (`"not installed"`, `"not in
  * manifest"`, `MarketplaceNotFoundError.message`, raw `Error.message`
- * from cached-manifest read). Wave 3 catalog UAT is the binding
+ * from cached-manifest read). catalog UAT is the binding
  * verification that the mapped reason set is sufficient.
  */
 function narrowReasons(notes: readonly string[] | undefined): readonly Reason[] {
@@ -829,13 +792,10 @@ function narrowReason(note: string): Reason {
     return "not found";
   }
 
-  // Plan 13-02a-02 / CMC-16: the legacy substring branches that mapped
-  // the retired manual-recovery marker text to `"rollback partial"` are
-  // RETIRED. The orchestrator's catch blocks now set the structural
-  // `failureClass: "manual-recovery"` tag on the failed outcome
-  // (consumed by `outcomeToCascadeRow`'s closed-set Reason mapping);
-  // see Plan 13-02a-02 Task 2 Step 5. This narrowing path remains for
-  // non-manual-recovery rollback scenarios.
+  // CMC-16: the orchestrator's catch blocks set the structural
+  // `failureClass: "manual-recovery"` tag on the failed outcome, consumed by
+  // `outcomeToPluginMessage`'s closed-set Reason mapping. This narrowing path
+  // remains for non-manual-recovery rollback scenarios.
   if (note.includes("rollback")) {
     return "rollback partial";
   }
@@ -847,15 +807,15 @@ function narrowReason(note: string): Reason {
 }
 
 /**
- * Task 260525-cjr B2: typed-dispatch narrow for thrown errors captured
- * by the reinstall catch sites. Mirrors the
+ * Typed-dispatch narrow for thrown errors captured by the reinstall catch
+ * sites. Mirrors the
  * `orchestrators/marketplace/remove.ts::narrowCascadeFailure` pattern:
  * check the typed `PluginShapeError` / `ManualRecoveryError` /
  * `MarketplaceNotFoundError` shape first, then errno codes
  * (`EACCES`/`EPERM` -> permission denied; `ENOENT`/`ENOTDIR` ->
  * source missing), and only at the bottom fall through to `undefined`
  * (NOT a misleading closed-set member). When `undefined` is returned,
- * the consumer (`outcomeToCascadeRow`) falls back to the legacy
+ * the consumer (`outcomeToPluginMessage`) falls back to the
  * `narrowReasons(notes)` substring parse.
  *
  * Returning `undefined` for unknown shapes is deliberate: the consumer
@@ -865,7 +825,7 @@ function narrowReason(note: string): Reason {
  */
 function reasonsFromTypedError(err: unknown): readonly Reason[] | undefined {
   if (err instanceof PluginShapeError) {
-    // Task 260525-cjr C4: switch on `err.shape.kind` so a future
+    // switch on `err.shape.kind` so a future
     // shape variant addition fails at compile time (the discriminator
     // is the typed shape's field, not the convenience top-level
     // shortcut).
@@ -1118,12 +1078,12 @@ function successOutcome(
   handles: PreparedHandles,
 ): ReinstallReinstalledOutcome {
   const resources = resourcesFromHandles(handles);
-  // Plan 13-02a-01 / CMC-13: surface effective-state per-row soft-dep
+  // CMC-13: surface effective-state per-row soft-dep
   // predicates so cascade rendering can emit `{requires pi-subagents}` /
   // `{requires pi-mcp}` iff (declares AND companion unloaded). The
   // predicate is satisfied iff the plugin's reinstall actually staged
   // resources of that kind (i.e. the resolved manifest declared them AND
-  // they materialized). D-13-07: probing companion-loaded state is the
+  // they materialized). : probing companion-loaded state is the
   // renderer's job via the injected SoftDepProbe.
   return {
     partition: "reinstalled",
@@ -1254,7 +1214,7 @@ async function finalizeReplacement(entry: ReplacementEntry): Promise<readonly st
 }
 
 /**
- * Plan 13-02a-02 / CMC-16: wrap an error with bridge-rollback leak data.
+ * CMC-16: wrap an error with bridge-rollback leak data.
  *
  * Short-circuits to the original error when no leaks accumulated (preserves
  * the pre-migration zero-leak fast path). Otherwise constructs a
@@ -1286,7 +1246,7 @@ function errorWithManualRecovery(err: unknown, leaks: readonly string[]): Error 
 }
 
 /**
- * Plan 13-02a-02 / CMC-16 / F-5 binding seam: exported under the `__test_*`
+ * CMC-16 / F-5 binding seam: exported under the `__test_*`
  * prefix so the dedicated F-5 dedup regression test in
  * tests/orchestrators/plugin/reinstall.test.ts can verify the
  * no-double-count invariant on the merged `.leaks` payload directly
@@ -1299,7 +1259,7 @@ function errorWithManualRecovery(err: unknown, leaks: readonly string[]): Error 
 export { errorWithManualRecovery as __test_errorWithManualRecovery };
 
 /**
- * Plan 13-02a-02 / CMC-16 / WR-01: walk the `Error.cause` chain (bounded to
+ * CMC-16 / WR-01: walk the `Error.cause` chain (bounded to
  * depth 5, mirroring `causeChainTrailer`'s DoS-mitigation budget at
  * `shared/errors.ts::causeChainTrailer`) to find a `ManualRecoveryError`
  * anywhere in the chain.
@@ -1307,7 +1267,7 @@ export { errorWithManualRecovery as __test_errorWithManualRecovery };
  * Why this exists (regression context): `withScopeLock` (in
  * `transaction/with-state-guard.ts:138-143`) wraps a body-thrown error with a
  * plain `new Error(..., { cause: body })` when BOTH the body throw AND
- * `release()` also throw. A bare `err instanceof ManualRecoveryError` at the
+ * `release` also throw. A bare `err instanceof ManualRecoveryError` at the
  * orchestrator catch then sees the plain wrapper and silently downgrades the
  * cascade row's Reason from `{rollback partial}` to `{not in manifest}`
  * (`narrowReason` fallback). Walking `.cause` recovers the class identity
@@ -1335,7 +1295,7 @@ function findManualRecoveryError(err: unknown): ManualRecoveryError | undefined 
 }
 
 /**
- * Plan 13-02a-02 / CMC-16 / WR-01 binding seam: exported under the
+ * CMC-16 / WR-01 binding seam: exported under the
  * `__test_*` prefix so the regression guard in
  * tests/orchestrators/plugin/reinstall.test.ts can directly exercise the
  * release-also-failed wrapping path without standing up a real
