@@ -1,9 +1,9 @@
 ---
 phase: 27
 slug: marketplace-autoupdate-output-grammar
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: complete
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-05-30
 ---
 
@@ -77,11 +77,11 @@ created: 2026-05-30
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers the autoupdate/update orchestrator-test gap
-- [ ] No watch-mode flags
-- [ ] Feedback latency < ~70s (full) / ~5s (quick)
-- [ ] `nyquist_compliant: true` set in frontmatter (after the planner aligns task verify fields)
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers the autoupdate/update orchestrator-test gap
+- [x] No watch-mode flags
+- [x] Feedback latency < ~70s (full) / ~5s (quick)
+- [x] `nyquist_compliant: true` set in frontmatter (after the planner aligns task verify fields)
 
-**Approval:** pending
+**Approval:** approved -- Phase 27 GREEN gate met at Plan 27-04 (last plan). `npm run check` GREEN (1146/1146), `npm run test:integration` GREEN (4/4), `PI_CM_E2E_REF=pinned npm run test:e2e` GREEN (14/14). The pre-existing `fold-adoption.test.ts` phase-1 deferral did NOT recur. Every Phase 27 requirement (UXG-01/04/05/06) carries an `<automated>` verify mapped to its per-requirement test; no 3 consecutive tasks lack automated verify.
