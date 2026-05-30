@@ -57,14 +57,18 @@
 // or DEFAULT_GIT_OPS.
 
 import { locationsFor } from "../../persistence/locations.ts";
-import { MarketplaceNotFoundError } from "../../shared/errors.ts";
+import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
 import { applyAutoupdateFlipInPlace } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { MarketplaceNotificationMessage } from "../../shared/notify.ts";
+import type {
+  MarketplaceNotificationMessage,
+  PluginFailedMessage,
+  Reason,
+} from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface AutoupdateOptions {
@@ -112,6 +116,25 @@ function missingEverywhere(
   );
 }
 
+/**
+ * Builds the synthetic failed-plugin child that carries the underlying
+ * autoupdate-flip error to the user. The marketplace header alone cannot
+ * carry a cause (SNM-10), so the child's `cause` drives the renderer's
+ * depth-5 cause-chain trailer. A held state lock narrows to the `lock held`
+ * reason (its message carries the retry hint); anything else falls back to
+ * the permissive `not found`.
+ */
+function autoupdateFailedRow(name: string, err: unknown): PluginFailedMessage {
+  const reasons: readonly Reason[] =
+    err instanceof StateLockHeldError ? (["lock held"] as const) : (["not found"] as const);
+  return {
+    status: "failed",
+    name,
+    reasons,
+    cause: err instanceof Error ? err : new Error(errorMessage(err)),
+  };
+}
+
 export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise<void> {
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
 
@@ -140,15 +163,13 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
       // lives in the OTHER scope; we collect and only surface if BOTH
       // scopes failed AND no flips happened anywhere.
       if (!shouldCollectNotFound(opts, err)) {
-        // NotificationMessage construction recipe -- see add.ts:160-169
-        // for the Wave 1 pilot recipe; this file uses statuses
-        // [autoupdate enabled, autoupdate disabled, skipped, failed] per
-        // D-18-05. Failure path: status: "failed" + empty plugins[];
-        // severity is computed by notify() to "error" (D-16-11). The
-        // underlying `err` is intentionally not surfaced as a cause chain
-        // -- V2 confines `cause?: Error` to plugin-level variants per
-        // D-16-08; the catalog `failure-not-found` fixture asserts the
-        // rendered byte form only (mp name + scope + `(failed)`).
+        // A non-NotFound autoupdate-flip failure renders as the V2 header
+        // `⊘ <name> [<scope>] (failed)`. The MarketplaceNotificationMessage
+        // shape carries no `cause` (SNM-10 confines `cause` to plugin-level
+        // variants), so surface the underlying error -- notably
+        // StateLockHeldError, whose message carries an actionable retry
+        // hint -- via a synthetic failed-plugin child whose `cause` drives
+        // the depth-5 cause-chain trailer the renderer appends.
         const failureName = opts.name ?? "(unknown)";
         notify(opts.ctx, opts.pi, {
           marketplaces: [
@@ -156,7 +177,7 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
               name: failureName,
               scope,
               status: "failed",
-              plugins: [],
+              plugins: [autoupdateFailedRow(failureName, err)],
             },
           ],
         });

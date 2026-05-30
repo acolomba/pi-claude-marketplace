@@ -113,6 +113,7 @@ import {
   PluginShapeError,
   assertNever,
   composeErrorWithCauseChain,
+  errorMessage,
 } from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
@@ -128,7 +129,11 @@ import type { ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { PluginNotificationMessage, Reason } from "../../shared/notify.ts";
+import type {
+  PluginFailedMessage,
+  PluginNotificationMessage,
+  Reason,
+} from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
   PluginUpdateFailedOutcome,
@@ -606,22 +611,24 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   let snapshot: RefreshSnapshot;
   try {
     snapshot = await snapshotAfterRefresh(args);
-  } catch {
-    // Plan 18-05 / D-18-02: marketplace-level failure renders as the
-    // bare V2 header `⊘ <name> [<scope>] (failed)` (catalog UAT fixture
-    // `mp-failure-network` at docs/output-catalog.md:828-832). The V1
-    // surfaces collapsed here are:
-    //   - the `${errorMessage(err)}\n${err.retryHint}` trailer (D-18-02
-    //     DROPS the retry-hint; `err.retryHint` stays internal to
-    //     `MarketplaceUpdateError` for programmatic inspection), and
-    //   - the marketplace-level cause-chain auto-trailer (V2 confines
-    //     `cause?: Error` to per-plugin variants per D-16-08; no
-    //     mp-level trailer is emitted).
-    // The two former arms (with retry-hint vs without) now produce the
-    // SAME byte output, so the conditional dispatch is gone.
-    // See add.ts (Wave 1 pilot) for the NotificationMessage construction recipe.
+  } catch (err) {
+    // A marketplace refresh failure renders as the V2 header
+    // `⊘ <name> [<scope>] (failed)`. The MarketplaceNotificationMessage
+    // shape carries no `cause` (SNM-10 confines `cause` to plugin-level
+    // variants), so surface the underlying MarketplaceUpdateError cause
+    // (and its retry-hint, carried in the cause chain) via a synthetic
+    // failed-plugin child whose `cause` drives the depth-5 cause-chain
+    // trailer the renderer appends. Mirrors the reinstall synthetic-failed
+    // recipe (orchestrators/plugin/reinstall.ts).
+    const typedReasons = reasonsFromCascadeError(err);
+    const failedRow: PluginFailedMessage = {
+      status: "failed",
+      name,
+      reasons: typedReasons ?? (["network unreachable"] as const),
+      cause: err instanceof Error ? err : new Error(errorMessage(err)),
+    };
     notify(ctx, pi, {
-      marketplaces: [{ name, scope, status: "failed", plugins: [] }],
+      marketplaces: [{ name, scope, status: "failed", plugins: [failedRow] }],
     });
     return;
   }

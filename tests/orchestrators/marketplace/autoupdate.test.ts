@@ -297,15 +297,16 @@ test("single-name cross-scope flip surfaces state lock failures as V2 `(failed)`
       const { ctx, pi, notifications } = makeCtx();
       await setMarketplaceAutoupdate({ ctx, pi, name: "only", enable: true, cwd });
 
-      // Plan 18-02 D-18-06: V2 byte form replaces the V1 cause-message
-      // assertion. Per D-16-08, V2 confines `cause?: Error` to plugin
-      // variants -- mp-level `(failed)` rows do NOT surface the
-      // underlying error message in the rendered byte. The lock-failure
-      // cause is preserved in error logs (V1 carry-forward) but the
-      // user-visible bytes are the catalog `failure-not-found` shape.
+      // The marketplace header carries no cause (SNM-10), so the held-lock
+      // failure is surfaced through a synthetic failed-plugin child whose
+      // cause-chain trailer carries StateLockHeldError's actionable retry
+      // message ("Retry after it completes."). The child narrows to the
+      // `lock held` reason.
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]!.message, "⊘ only [project] (failed)");
-      // D-18-05 severity ladder: failed -> error.
+      assert.match(notifications[0]!.message, /^⊘ only \[project\] \(failed\)$/m);
+      assert.match(notifications[0]!.message, /\{lock held\}/);
+      assert.match(notifications[0]!.message, /cause:.*Retry after it completes\./);
+      // failed -> error severity.
       assert.equal(notifications[0]!.severity, "error");
     } finally {
       await release();

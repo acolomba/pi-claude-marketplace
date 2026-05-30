@@ -272,20 +272,18 @@ test("D-14: SHA-no-longer-exists (checkout throws) surfaces as notifyError with 
 
     await updateMarketplace({ ctx, pi, name: "rewritten", scope: "project", cwd, gitOps });
 
-    // Plan 18-05 / D-18-02: V1 emitted a multi-line error body with the
-    // `${errorMessage(err)}\n${err.retryHint}` retry-anchor trailer; V2
-    // collapses the marketplace-level failure to the bare V2 catalog
-    // shape `⊘ <name> [<scope>] (failed)` (catalog UAT fixture
-    // `mp-failure-network` at docs/output-catalog.md:828-832). The
-    // retry-hint is dropped from the user-visible surface; `err.retryHint`
-    // stays internal to MarketplaceUpdateError for programmatic
-    // inspection. No cause-chain trailer (V2 confines cause? to per-plugin
-    // variants per D-16-08).
+    // The marketplace header carries no cause (SNM-10), so the underlying
+    // MarketplaceUpdateError is surfaced through a synthetic failed-plugin
+    // child whose cause drives the depth-5 cause-chain trailer. The chain
+    // carries the checkout-throw text the user needs to diagnose the
+    // failure (MU-5); `err.retryHint` remains on MarketplaceUpdateError for
+    // programmatic inspection.
     assert.equal(notifications.length, 1);
     const first = notifications[0];
     assert.ok(first !== undefined);
     assert.equal(first.severity, "error");
-    assert.equal(first.message, "⊘ rewritten [project] (failed)");
+    assert.match(first.message, /^⊘ rewritten \[project\] \(failed\)$/m);
+    assert.match(first.message, /cause:.*ref deadbeef no longer exists on remote/);
   });
 });
 
@@ -304,15 +302,14 @@ test("CR-05 / MU-5: pre-fetch failure (gitOps.fetch throws) does NOT append 'Ret
     const first = notifications[0];
     assert.ok(first !== undefined);
     assert.equal(first.severity, "error");
-    // Plan 18-05 / D-18-02: the V1 distinction between "fetch failed
-    // (no retry-hint)" vs "clone advanced then later step failed (retry-
-    // hint emitted)" disappears in V2 -- both produce the same bare V2
-    // failed-marketplace shape. `err.retryHint` stays internal to
-    // MarketplaceUpdateError for programmatic inspection (test still
-    // exercises the cloneAdvanced=false branch via gitOps.fetchThrows;
-    // the difference now surfaces only via MarketplaceUpdateError.retryHint
-    // inspection, not via notify bytes).
-    assert.equal(first.message, "⊘ offline [project] (failed)");
+    // The fetch-throw cause is surfaced through the synthetic failed-plugin
+    // child's cause-chain trailer so the user sees the network failure. The
+    // retry-hint suppression (cloneAdvanced=false on a pre-fetch throw) is a
+    // property of MarketplaceUpdateError.retryHint, not the notify bytes; the
+    // surfaced cause does not include the "Retry the command." anchor.
+    assert.match(first.message, /^⊘ offline \[project\] \(failed\)$/m);
+    assert.match(first.message, /cause:.*ENETUNREACH/);
+    assert.doesNotMatch(first.message, /Retry the command\./);
   });
 });
 
@@ -345,15 +342,18 @@ test("MU-5: clone advances + manifest re-validation fails -- 'Retry the command.
     });
     await updateMarketplace({ ctx, pi, name: "broken", scope: "project", cwd, gitOps });
 
-    // Plan 18-05 / D-18-02: clone advanced + manifest re-read failed used
-    // to emit the retry-hint suffix; V2 collapses to the bare failed-mp
-    // shape (catalog `mp-failure-network`). Retry-hint dropped per
-    // D-18-02 (stays internal to MarketplaceUpdateError).
+    // Clone advanced + manifest re-read failed: the synthetic failed-plugin
+    // child surfaces the underlying MarketplaceUpdateError cause-chain so the
+    // user sees what failed (the "clone advanced but manifest could not be
+    // persisted" diagnostic, MU-5). The literal "Retry the command." anchor
+    // stays on MarketplaceUpdateError.retryHint (a separate field) for
+    // programmatic inspection; the cause chain renders the error message only.
     assert.equal(notifications.length, 1);
     const first = notifications[0];
     assert.ok(first !== undefined);
     assert.equal(first.severity, "error");
-    assert.equal(first.message, "⊘ broken [project] (failed)");
+    assert.match(first.message, /^⊘ broken \[project\] \(failed\)$/m);
+    assert.match(first.message, /cause:.*clone advanced but manifest could not be persisted/);
   });
 });
 
