@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Notification Output Polish
 status: executing
-stopped_at: "Plan 27-02 complete (UXG-01 drop <last-updated>); next: Plan 27-03"
-last_updated: "2026-05-30T23:12:59.266Z"
+stopped_at: "Plan 27-03 complete (UXG-04 autoupdate marker grammar); next: Plan 27-04"
+last_updated: "2026-05-30T23:31:26.150Z"
 last_activity: 2026-05-30
 progress:
   total_phases: 16
   completed_phases: 14
   total_plans: 55
-  completed_plans: 53
-  percent: 96
+  completed_plans: 54
+  percent: 88
 ---
 
 # Project State
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-05-30)
 ## Current Position
 
 Phase: 27 (marketplace-autoupdate-output-grammar) -- EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-05-30
 
@@ -90,6 +90,7 @@ Last activity: 2026-05-30
 | Phase 25 P2 | 5min | 2 tasks | 2 files |
 | Phase 27 P01 | 6 min | 2 tasks | 2 files |
 | Phase 27 P02 | 9 min | 2 tasks | 5 files |
+| Phase 27 P03 | 14 min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -144,6 +145,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 25]: SNM-39 (G-MIL-07 tab completion) DEFER-WITH-FINDING (D-25-10): our provider is correct (TC-6 `update @` -> `["@mp-a","@mp-b"]` GREEN; cause (a) eliminated by v0.2.0 source-load, cause (c) ruled out). Root cause is cause (b) -- host-side `@`-precedence in the GLOBAL `@earendil-works/pi-tui` 0.76.0 that scripts/pi.sh execs (`@`-logic byte-identical to local 0.74.2): `CombinedAutocompleteProvider.getSuggestions:188` checks `extractAtPrefix:191`/`:331` against `PATH_DELIMITERS:6` (no `@`) and routes any `@`-leading token to file-mention completion BEFORE the slash branch `:205`, so our `getArgumentCompletions` is never reached for bare `update @`. LIVE scripts/pi.sh trigger (D-25-08) showed FILE PATHS (not `@<mp>` candidates) -> CONFIRMS the interception (D-25-05 real-home spot-check not triggered). pi-tui-external; defer, do NOT contort the provider (would degrade bare-`@<mp>` UX without fixing the host). Recorded in UAT + a finding comment above TC-6 (provider.test.ts:793). -- Plan 25-03.
 - [Phase 27]: UXG-06 closed doc-only -- catalog github-source prose corrected (marketplace add never auto-enables autoupdate for any source; add.ts:235-244/311-320), autoupdate heading renamed to the real autoupdate|noautoupdate <name> verbs (no disable subcommand), catalog-uat FIXTURES key synced byte-for-byte (loadCatalogExamples sectionRe coupling). catalog-uat + npm run check GREEN. -- Plan 27-01.
 - [Phase 27]: UXG-01 closed -- marketplace list `renderMpHeader` SUB-BRANCH B drops the `<last-updated <iso>>` token (array element removed, not emptied, per Pitfall 2); `MarketplaceDetails.lastUpdatedAt?` (notify.ts:285) + state-io.ts:70 persistence retained so notify-types.test.ts (`_MarketplaceDetailsExpected`) stays untouched/GREEN; renderer + catalog + catalog-uat fixture + notify-v2 byte test + orchestrator list test landed in one atomic commit (lockstep, no intermediate RED). `<autoupdate>` marker byte-unchanged. npm run check GREEN 1143/1143. -- Plan 27-02.
+- [Phase 27]: UXG-04 closed via Strategy B -- autoupdate FLIP surface now renders marker tokens (`<autoupdate>` / `<no autoupdate>`) instead of `(autoupdate enabled)`/`(autoupdate disabled)` status tokens; idempotent flips render the marker plus a `{already autoupdate}`/`{already no autoupdate}` brace (no `(skipped)` token). Renamed two REASONS members (already enabled->already autoupdate, already disabled->already no autoupdate); kept MARKETPLACE_STATUSES (7) and MARKERS (2) membership intact (`<no autoupdate>` already a MARKERS member, only emission is new). Inverted the autoupdate.ts marker-as-outcome header comment (reverses Phase 17.1 / D-18-05) and reconciled the three list-surface `<no autoupdate>`-not-emitted catalog prose statements surface-precisely (list surface unchanged). Renderer+orchestrator+catalog+byte gate+per-variant+orchestrator+2 bootstrap tests landed in one atomic commit (dbd149a); npm run check GREEN 1143/1143. -- Plan 27-03.
 
 ### Pending Todos
 
@@ -193,9 +195,9 @@ Additional v1.4.1-scope deferrals:
 
 ## Session Continuity
 
-Last session: 2026-05-30T23:12:59.249Z
-Stopped At: Plan 27-02 complete (UXG-01 drop <last-updated>); next: Plan 27-03
-Resume File: .planning/phases/27-marketplace-autoupdate-output-grammar/27-02-SUMMARY.md
+Last session: 2026-05-30T23:31:26.132Z
+Stopped At: Plan 27-03 complete (UXG-04 autoupdate marker grammar); next: Plan 27-04
+Resume File: .planning/phases/27-marketplace-autoupdate-output-grammar/27-03-SUMMARY.md
 
 ## Operator Next Steps
 

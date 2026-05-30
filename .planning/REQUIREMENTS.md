@@ -12,7 +12,7 @@ Refine the v2 `NotificationMessage` output grammar and severity presentation per
 ### Output Grammar
 
 - [x] **UXG-01**: `/claude:plugin marketplace list` no longer renders the `<last-updated <iso>>` marker on any marketplace header -- the raw ISO timestamp is noise and is meaningless for path-source marketplaces. The renderer drops the marker from the list surface (`MarketplaceDetails.lastUpdatedAt` may remain in state). Catalog (`docs/output-catalog.md`) + `tests/architecture/catalog-uat.test.ts` fixtures move in lockstep. Closes UAT Finding 1.
-- [ ] **UXG-04**: Autoupdate state renders as marker tokens `<autoupdate>` / `<no autoupdate>` (an explicit off-marker is introduced; today "off" is conveyed by marker absence), unifying the `marketplace autoupdate` / `noautoupdate` flip output with the `marketplace list` surface. Fresh flip -> `● <mp> [<scope>] <autoupdate>` / `<no autoupdate>` (replacing `(autoupdate enabled)` / `(autoupdate disabled)`); idempotent no-op -> `● <mp> [<scope>] <autoupdate> {already autoupdate}` / `<no autoupdate> {already no autoupdate}` (replacing `(skipped) {already enabled}` / `{already disabled}`). Touches the `MARKETPLACE_STATUSES` / `MARKERS` / `REASONS` closed sets + renderer + catalog + catalog-uat. Closes UAT Finding 4.
+- [x] **UXG-04**: Autoupdate state renders as marker tokens `<autoupdate>` / `<no autoupdate>` (an explicit off-marker is introduced; today "off" is conveyed by marker absence), unifying the `marketplace autoupdate` / `noautoupdate` flip output with the `marketplace list` surface. Fresh flip -> `● <mp> [<scope>] <autoupdate>` / `<no autoupdate>` (replacing `(autoupdate enabled)` / `(autoupdate disabled)`); idempotent no-op -> `● <mp> [<scope>] <autoupdate> {already autoupdate}` / `<no autoupdate> {already no autoupdate}` (replacing `(skipped) {already enabled}` / `{already disabled}`). Touches the `MARKETPLACE_STATUSES` / `MARKERS` / `REASONS` closed sets + renderer + catalog + catalog-uat. Closes UAT Finding 4.
 - [ ] **UXG-05**: `/claude:plugin marketplace update <name>` with no actual plugin change renders the marketplace row as `(skipped) {up-to-date}` instead of `(updated)`, mirroring the plugin-level up-to-date no-op. Requires the marketplace-update orchestrator to distinguish "refreshed, no change" from "changed". Catalog + catalog-uat move in lockstep. Closes UAT Finding 5.
 
 ### Severity Presentation
@@ -183,7 +183,7 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25 (v1.4 rows) and 2026-0
 | SNM-39      | Phase 25 | Complete |
 | SNM-40      | Phase 26 | Complete |
 | UXG-01      | Phase 27 | Complete |
-| UXG-04      | Phase 27 | Pending  |
+| UXG-04      | Phase 27 | Complete |
 | UXG-05      | Phase 27 | Pending  |
 | UXG-06      | Phase 27 | Complete |
 | UXG-02      | Phase 28 | Pending  |
