@@ -1,6 +1,6 @@
 import { softDepStatus } from "../platform/pi-api.ts";
 
-import { assertNever, causeChainTrailer } from "./errors.ts";
+import { assertNever, causeChainTrailer, ManualRecoveryError } from "./errors.ts";
 
 import type { Scope } from "./types.ts";
 import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../platform/pi-api.ts";
@@ -1222,10 +1222,37 @@ function composeRollbackPartialLines(p: PluginNotificationMessage): string[] {
 }
 
 /**
+ * AS-7: walk the cause chain (depth-bounded, mirroring causeChainTrailer)
+ * and collect the leaked file paths from the first ManualRecoveryError that
+ * carries any. The bridges produce the leak set as STRUCTURED data on
+ * `ManualRecoveryError.leaks`; this surfaces it on the rendered manual-recovery
+ * row so the user is told which files to clean up by hand. Returns an empty
+ * array when no ManualRecoveryError with leaks is in the chain.
+ */
+function collectManualRecoveryLeaks(cause: unknown): readonly string[] {
+  const MAX_DEPTH = 5;
+  let current: unknown = cause;
+  for (let depth = 0; depth < MAX_DEPTH; depth++) {
+    if (current instanceof ManualRecoveryError && current.leaks.length > 0) {
+      return current.leaks;
+    }
+
+    if (current instanceof Error && current.cause !== undefined && current.cause !== current) {
+      current = current.cause;
+    } else {
+      break;
+    }
+  }
+
+  return [];
+}
+
+/**
  * Compose the multi-line block for a single plugin row: the 2-space-indented
- * plugin row, the optional 4-space-indented cause-chain trailer (D-16-08), and
- * any rollbackPartial child rows + nested phase-cause trailers (D-16-08). The
- * caller pushes these lines into the marketplace block's accumulator in order.
+ * plugin row, the optional 4-space-indented cause-chain trailer, the AS-7
+ * leaked-paths child rows when the cause is a ManualRecoveryError, and any
+ * rollbackPartial child rows + nested phase-cause trailers. The caller pushes
+ * these lines into the marketplace block's accumulator in order.
  */
 function composePluginLines(
   p: PluginNotificationMessage,
@@ -1238,6 +1265,11 @@ function composePluginLines(
     const trailer = renderIndentedCauseChain(p.cause, "    ");
     if (trailer !== "") {
       lines.push(trailer);
+    }
+
+    // AS-7: name the leaked files the user must clean up by hand.
+    for (const leak of collectManualRecoveryLeaks(p.cause)) {
+      lines.push(`    leaked: ${leak}`);
     }
   }
 

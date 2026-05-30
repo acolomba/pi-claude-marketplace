@@ -120,6 +120,7 @@
 import assert from "node:assert/strict";
 import test, { mock } from "node:test";
 
+import { ManualRecoveryError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
   notify,
   notifyUsageError,
@@ -1662,6 +1663,71 @@ test("notify renders manual recovery plugin with cause-chain trailer (warning se
     `● demo [user]\n  ⊘ commit-commands v1.0.0 (manual recovery) {rollback partial}\n    cause: EACCES`,
     "warning",
   ]);
+});
+
+test("AS-7: manual recovery row names the leaked paths from ManualRecoveryError.leaks", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const leaks = [
+    "/home/u/.pi/pi-claude-marketplace/agents-staging/foo.md",
+    "/home/u/.pi/pi-claude-marketplace/agents-index.json",
+  ];
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "manual recovery",
+            name: "commit-commands",
+            version: "1.0.0",
+            reasons: ["rollback partial"],
+            cause: new ManualRecoveryError("agent index rewrite failed", leaks, {
+              cause: new Error("EACCES"),
+            }),
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const [rendered, severity] = ctx.ui.notify.mock.calls[0]!.arguments as [string, string];
+  assert.equal(severity, "warning");
+  // The cause chain surfaces the wrapped errors, and the AS-7 leaked-paths
+  // child rows name each leaked file at the 4-space indent.
+  assert.match(rendered, /cause: agent index rewrite failed -> EACCES/);
+  for (const leak of leaks) {
+    assert.match(rendered, new RegExp(`    leaked: ${leak.replace(/[.]/g, "\\.")}`));
+  }
+});
+
+test("AS-7: manual recovery row with no leaks emits no leaked-paths child row", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "manual recovery",
+            name: "commit-commands",
+            version: "1.0.0",
+            reasons: ["rollback partial"],
+            cause: new ManualRecoveryError("nothing leaked", [], {
+              cause: new Error("EACCES"),
+            }),
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const rendered = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.doesNotMatch(rendered, /leaked:/);
 });
 
 // ===========================================================================
