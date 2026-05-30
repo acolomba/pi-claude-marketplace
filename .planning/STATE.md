@@ -4,8 +4,8 @@ milestone: v1.4.1
 milestone_name: Post-ship UAT Patches
 status: completed
 stopped_at: Phase 26 complete -- v1.4.1 milestone ready for `/gsd-complete-milestone`
-last_updated: "2026-05-30T13:47:44.805Z"
-last_activity: 2026-05-30 -- Resolved 4 SonarCloud code smells on PR #22 (S3735/S1871/S3626/S7755); all three CI gates GREEN (check 1143/1143, integration 4/4, e2e 14/14); coverage deferred
+last_updated: "2026-05-30T21:54:36.029Z"
+last_activity: 2026-05-30 -- v1.4 milestone full hands-on UAT sweep complete (scripts/pi.sh source-load): v2 byte-contract PASSES end-to-end, zero regressions; 6 UX findings recorded in BACKLOG.md for a follow-up milestone
 progress:
   total_phases: 14
   completed_phases: 14
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-28)
 Phase: 26 (complete)
 Plan: 26-01 (complete)
 Status: v1.4.1 milestone complete -- ready for `/gsd-complete-milestone`
-Last activity: 2026-05-30 -- Resolved 4 SonarCloud code smells on PR #22 (S3735/S1871/S3626/S7755); all three CI gates GREEN (check 1143/1143, integration 4/4, e2e 14/14); coverage deferred
+Last activity: 2026-05-30 -- v1.4 milestone full hands-on UAT sweep complete (scripts/pi.sh source-load): v2 byte-contract PASSES end-to-end, zero regressions; 6 UX findings recorded in BACKLOG.md for a follow-up milestone
 
 ## Performance Metrics
 
