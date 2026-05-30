@@ -1,6 +1,6 @@
 // edge/handlers/plugin/bootstrap.ts
 //
-// Quick 260516-02r: thin-shim handler factory for `/claude:plugin bootstrap`.
+// Thin-shim handler factory for `/claude:plugin bootstrap`.
 //
 // Delegates to `bootstrapClaudePlugin`, threading `deps.gitOps` through.
 // Idempotent end-to-end -- both composed orchestrators are idempotent.
@@ -12,19 +12,19 @@
 // is empty, so we parse `args` directly with `parseArgs` and assert
 // `positional.length === 0` ourselves.
 //
-// BLOCK A: zero direct ctx.ui.notify calls -- routes through
-// notifyUsageError via shared/notify.ts. The orchestrator emits the
-// success path through its own composed orchestrators. Per Plan 20-03
-// (D-20-03) the outer try/catch catch-all wrapper was DROPPED -- the
-// inner orchestrators `addMarketplace` + `setMarketplaceAutoupdate`
-// own their own V2 failed-marketplace emission per D-18-02; truly
-// catastrophic uncaught throws bubble to Pi runtime (a stack trace is
-// better for debugging than a polished error message that masks the
-// bug).
+// IL-2: all user-visible output flows through `shared/notify.ts`. The
+// success path is emitted by the composed orchestrators. `addMarketplace`
+// signals failures by THROWING (it does not notify), so the handler wraps
+// `bootstrapClaudePlugin` in a catch that routes a thrown failure through
+// the V2 `notify` path as a failed marketplace row -- a raw stack trace
+// must never reach the user channel.
 
-import { bootstrapClaudePlugin } from "../../../orchestrators/plugin/bootstrap.ts";
+import {
+  bootstrapClaudePlugin,
+  BOOTSTRAP_MARKETPLACE_NAME,
+} from "../../../orchestrators/plugin/bootstrap.ts";
 import { errorMessage } from "../../../shared/errors.ts";
-import { notifyUsageError } from "../../../shared/notify.ts";
+import { notify, notifyUsageError } from "../../../shared/notify.ts";
 import { parseArgs } from "../../args.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
@@ -59,15 +59,30 @@ export function makeBootstrapHandler(
       return;
     }
 
-    await bootstrapClaudePlugin({
-      ctx,
-      pi,
-      cwd: ctx.cwd,
-      gitOps: deps.gitOps,
-    });
-    // No try/catch: inner orchestrators (`addMarketplace` +
-    // `setMarketplaceAutoupdate`) emit V2 failed notifications for
-    // expected failures per D-18-02; catastrophic uncaught throws
-    // bubble to Pi runtime per D-20-03.
+    try {
+      await bootstrapClaudePlugin({
+        ctx,
+        pi,
+        cwd: ctx.cwd,
+        gitOps: deps.gitOps,
+      });
+    } catch {
+      // `addMarketplace` throws on failure (e.g. a first-run GitHub clone
+      // failure) rather than notifying, so route the thrown error through
+      // the V2 notify path as a failed marketplace row (IL-2). notify()
+      // computes `error` severity for a failed marketplace status. The
+      // marketplace-level row carries no cause chain -- SNM-10 confines
+      // `cause` to plugin-level variants.
+      notify(ctx, pi, {
+        marketplaces: [
+          {
+            name: BOOTSTRAP_MARKETPLACE_NAME,
+            scope: "user",
+            status: "failed",
+            plugins: [],
+          },
+        ],
+      });
+    }
   };
 }

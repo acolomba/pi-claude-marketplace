@@ -45,9 +45,11 @@ const BOOTSTRAP_SOURCE = "anthropics/claude-plugins-official";
  * The manifest `name` field for `anthropics/claude-plugins-official`.
  * `addMarketplace` derives this value from the cloned marketplace
  * manifest and records it; `setMarketplaceAutoupdate` reads the same
- * key. Keeping it as a single shared constant prevents drift.
+ * key. The edge handler also names this marketplace on the failed row it
+ * emits when bootstrap throws. Keeping it as a single shared constant
+ * prevents drift.
  */
-const BOOTSTRAP_MARKETPLACE_NAME = "claude-plugins-official";
+export const BOOTSTRAP_MARKETPLACE_NAME = "claude-plugins-official";
 
 export interface BootstrapOptions {
   readonly ctx: ExtensionContext;
