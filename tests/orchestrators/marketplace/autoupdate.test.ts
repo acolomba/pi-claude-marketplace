@@ -121,7 +121,7 @@ test("MAU-1 / UXG-04: enable=false flips true->false and emits V2 `<no autoupdat
   });
 });
 
-test("MAU-3 / UXG-04: idempotent -- already-true + enable=true emits V2 `<autoupdate> {already autoupdate}` at severity warning", async () => {
+test("MAU-3 / UXG-04: idempotent -- already-true + enable=true emits V2 `<autoupdate> {already autoupdate}` at severity info (benign per UXG-02 / D-28-07)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
@@ -140,7 +140,7 @@ test("MAU-3 / UXG-04: idempotent -- already-true + enable=true emits V2 `<autoup
   });
 });
 
-test("MAU-3 / UXG-04: idempotent -- already-false + enable=false emits V2 `<no autoupdate> {already no autoupdate}` at severity warning", async () => {
+test("MAU-3 / UXG-04: idempotent -- already-false + enable=false emits V2 `<no autoupdate> {already no autoupdate}` at severity info (benign per UXG-02 / D-28-07)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
