@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-05-30)
 
 Phase: 28 (complete)
 Plan: 28-02 (complete)
-Status: v1.5 milestone complete -- ready for `/gsd-complete-milestone`. Phase 28 VERIFIED 9/9 (UXG-02 benign-softening severity ladder shipped; UXG-03 host label/color spike REFUTED -> upstream-tracked finding, defer-with-finding per D-28-12).
-Last activity: 2026-05-31 -- Phase 28 complete + VERIFIED; `npm run check` GREEN 1156/1156, catalog-uat byte gate GREEN, no rendered-byte changes
+Status: v1.5 milestone complete + UAT PASSED -- ready for `/gsd-complete-milestone`. Phase 28 VERIFIED 9/9 (UXG-02 benign-softening severity ladder shipped; UXG-03 host label/color spike REFUTED -> upstream-tracked finding, defer-with-finding per D-28-12). Milestone UAT operator-confirmed 2026-05-31 (`.planning/v1.5-MILESTONE-UAT.md`).
+Last activity: 2026-05-31 -- v1.5 milestone UAT PASSED (operator-confirmed); evidence captured at the notify boundary, UXG-01/02/04/05 PASS, UXG-03 finding accepted. Phase 28 verified 9/9; `npm run check` GREEN 1157/1157
 
 ## Performance Metrics
 
@@ -212,4 +212,5 @@ Resume File: None
 
 - Phase 28 complete + VERIFIED 9/9 (`.planning/phases/28-severity-routing-label-discipline/28-VERIFICATION.md`). The v1.5 (Notification Output Polish) milestone is functionally closed: all 16 phases / 58 plans Complete, `npm run check` GREEN 1156/1156 (typecheck + ESLint + Prettier + tests, exit 0). UXG-02 shipped the D-28-06 5-arm benign-softening severity ladder (benign-only skip cascades render `info`, not `warning`; zero rendered-byte changes, catalog-uat byte gate GREEN). UXG-03 resolved as a defer-with-finding: the read-only spike REFUTED host feasibility (`@earendil-works/pi-coding-agent` couples the `Error:`/`Warning:` label and severity color to the single `notify(message, type?)` arg; no color-only param) -- recorded in `UXG-03-FINDING.md` + spike test + UAT + REQUIREMENTS + STATE deferral row; no colorless in-extension workaround shipped (D-28-10).
 - Advisory: Phase 28 code review found 0 Critical / 2 Warning / 4 Info (`28-REVIEW.md`); all non-blocking (stale test titles in `tests/orchestrators/marketplace/autoupdate.test.ts:124,143`; an unpinned empty-`reasons:[]` plugin-skip boundary; doc-drift Info items). Optionally run `/gsd-code-review 28 --fix`.
+- v1.5 milestone UAT PASSED (operator-confirmed 2026-05-31; `.planning/v1.5-MILESTONE-UAT.md`). Evidence captured at the `ctx.ui.notify` boundary against the real `notify()` path: benign no-ops emit `info` (host `showStatus` -> dim, NO `Warning:`/`Error:` label), actionable/failed still emit `warning`/`error` (host adds the label). UXG-01/02/04/05 PASS; UXG-03 accepted as an upstream finding; UXG-06 doc-only. Operator confirmed and noted severity COLOR is not a concern -- the delivered value is the label suppression on benign output.
 - **Next: run `/gsd-complete-milestone`** to archive the v1.5 phase dirs (27-28) -- operator-initiated. Filing the upstream `@earendil-works/pi-coding-agent` UXG-03 issue is the operator's call (D-28-12). The `0.2.0` npm release / git tag remains a separate future effort once bug-free (D-26-01 / D-25-06).
