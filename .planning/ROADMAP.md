@@ -540,7 +540,11 @@ Plans:
 3. UXG-03's feasibility is confirmed via a spike against the Pi host API; if the host cannot render color without the label, UXG-03 is recorded as an upstream-tracked finding with the spike evidence rather than forced in-extension.
 4. `npm run check` + catalog-uat GREEN.
 
-**Plans:** not yet planned -- run `/gsd-plan-phase 28`.
+**Plans:** 2 plans
+
+Plans:
+- [ ] 28-01-PLAN.md -- UXG-02: rewrite computeSeverity as the D-28-06 5-arm benign-softening ladder (+ BENIGN_REASONS, both test gates, ADR/style-guide/catalog prose sync)
+- [ ] 28-02-PLAN.md -- UXG-03: run the host label/color feasibility spike and record the upstream-tracked finding (defer-with-finding per D-28-12)
 
 ## Progress
 
