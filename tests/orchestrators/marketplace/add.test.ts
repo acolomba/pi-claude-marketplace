@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { cp, mkdir, mkdtemp, readdir, rm, unlink, writeFile } from "node:fs/promises";
 import net from "node:net";
-import os from "node:os";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -491,7 +490,7 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
 // Lines 295-296: addPathInGuard throws when stat() reports neither file nor directory.
 test("addPathInGuard: Unix domain socket path throws 'neither a file nor a directory'", async () => {
   await withTmpScope(async ({ cwd }) => {
-    const { ctx } = makeCtx();
+    const { ctx, pi } = makeCtx();
     const socketPath = path.join(tmpdir(), `mp-add-sock-${process.pid}.sock`);
     const server = net.createServer();
     await new Promise<void>((resolve, reject) => {
@@ -501,7 +500,7 @@ test("addPathInGuard: Unix domain socket path throws 'neither a file nor a direc
     try {
       const { gitOps } = makeMockGitOps();
       await assert.rejects(
-        addMarketplace({ ctx, scope: "project", cwd, rawSource: socketPath, gitOps }),
+        addMarketplace({ ctx, pi, scope: "project", cwd, rawSource: socketPath, gitOps }),
         (err: unknown): err is Error =>
           err instanceof Error && err.message.includes("neither a file nor a directory"),
       );
@@ -529,6 +528,7 @@ test("MA-8 (path source): duplicate name in same scope throws MarketplaceDuplica
       const { gitOps: gitOps1 } = makeMockGitOps();
       await addMarketplace({
         ctx: ctx1,
+        pi: makeCtx().pi,
         scope: "project",
         cwd,
         rawSource: localMpDir,
@@ -540,6 +540,7 @@ test("MA-8 (path source): duplicate name in same scope throws MarketplaceDuplica
       await assert.rejects(
         addMarketplace({
           ctx: ctx2,
+          pi: makeCtx().pi,
           scope: "project",
           cwd,
           rawSource: localMpDir,
@@ -557,7 +558,7 @@ test("MA-8 (path source): duplicate name in same scope throws MarketplaceDuplica
 // Lines 326-327: expandTildePath returns os.homedir() exactly when rawSource is bare '~'.
 test("CR-02 / expandTildePath: bare '~' resolves to os.homedir() exactly", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
-    const { ctx } = makeCtx();
+    const { ctx, pi } = makeCtx();
     const originalHome = process.env.HOME;
     const home = await mkdtemp(path.join(tmpdir(), "mp-add-baretilde-"));
     process.env.HOME = home;
@@ -567,7 +568,7 @@ test("CR-02 / expandTildePath: bare '~' resolves to os.homedir() exactly", async
       await cp(fixtureMarketplaceDir("valid-marketplace"), home, { recursive: true });
 
       const { gitOps } = makeMockGitOps();
-      await addMarketplace({ ctx, scope: "project", cwd, rawSource: "~", gitOps });
+      await addMarketplace({ ctx, pi, scope: "project", cwd, rawSource: "~", gitOps });
 
       const persisted = await loadState(locations.extensionRoot);
       assert.ok("valid-marketplace" in persisted.marketplaces);
@@ -581,6 +582,7 @@ test("CR-02 / expandTildePath: bare '~' resolves to os.homedir() exactly", async
       } else {
         process.env.HOME = originalHome;
       }
+
       await rm(home, { recursive: true, force: true });
     }
   });

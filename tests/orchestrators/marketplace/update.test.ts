@@ -1207,7 +1207,7 @@ test("260525-cjr B2: cascadeAutoupdates catch -> generic Error falls through to 
 test("SC-6 / MU-1: updateAllMarketplaces (no scope) processes user-scope marketplace", async () => {
   // Lines 168-170: targets.push() for a marketplace discovered in the
   // user scope during the no-scope-filter iteration path.
-  await withHermeticHome(async ({ home, cwd }) => {
+  await withHermeticHome(async ({ cwd }) => {
     // Seed a marketplace in user scope.  getAgentDir() uses
     // homedir()/.pi/agent on Linux when PI_CODING_AGENT_DIR is not set.
     // withHermeticHome sets HOME so homedir() resolves to `home`.
@@ -1230,13 +1230,13 @@ test("SC-6 / MU-1: updateAllMarketplaces (no scope) processes user-scope marketp
       },
     });
 
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps } = makeMockGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000010" },
     });
 
     // Call without scope filter -- enumerates both scopes (SC-6).
-    await updateAllMarketplaces({ ctx, cwd, gitOps });
+    await updateAllMarketplaces({ ctx, pi, cwd, gitOps });
 
     // At least one notification, and it should mention user-mp.
     assert.ok(notifications.length >= 1);
@@ -1254,10 +1254,10 @@ test("SC-6 / MU-1: updateAllMarketplaces (no scope) with both scopes empty notif
   // uses scope:'project' (single scope); this test exercises the no-filter
   // path that checks both scopes.
   await withHermeticHome(async ({ cwd }) => {
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps } = makeMockGitOps();
 
-    await updateAllMarketplaces({ ctx, cwd, gitOps }); // no scope filter
+    await updateAllMarketplaces({ ctx, pi, cwd, gitOps }); // no scope filter
 
     assert.equal(notifications.length, 1);
     const first = notifications[0];
@@ -1288,7 +1288,7 @@ test("refreshRecord: unsupported source kind surfaces as notifyError (lines 219-
             kind: "unknown",
             raw: "ftp://example.com",
             reason: "unsupported scheme",
-          } as unknown as ReturnType<typeof githubSource>,
+          },
           addedFromCwd: cwd,
           manifestPath: path.join(cwd, ".claude-plugin", "marketplace.json"),
           marketplaceRoot: cwd,
@@ -1297,10 +1297,10 @@ test("refreshRecord: unsupported source kind surfaces as notifyError (lines 219-
       },
     });
 
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps } = makeMockGitOps();
 
-    await updateMarketplace({ ctx, name: "unsupported-mp", scope: "project", cwd, gitOps });
+    await updateMarketplace({ ctx, pi, name: "unsupported-mp", scope: "project", cwd, gitOps });
 
     assert.equal(notifications.length, 1);
     const first = notifications[0];
@@ -1319,10 +1319,10 @@ test("snapshotAfterRefresh: MarketplaceNotFoundError when name absent from state
   // notifyError (the non-MarketplaceUpdateError branch, lines 318-320).
   await withHermeticHome(async ({ cwd }) => {
     // Leave state empty -- no marketplace named "ghost".
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps } = makeMockGitOps();
 
-    await updateMarketplace({ ctx, name: "ghost", scope: "project", cwd, gitOps });
+    await updateMarketplace({ ctx, pi, name: "ghost", scope: "project", cwd, gitOps });
 
     assert.equal(notifications.length, 1);
     const first = notifications[0];
@@ -1364,12 +1364,12 @@ test("validateManifestAtRoot: stale manifestPath and marketplaceRoot are correct
       },
     });
 
-    const { ctx, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps } = makeMockGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000011" },
     });
 
-    await updateMarketplace({ ctx, name: "stale-mp", scope: "project", cwd, gitOps });
+    await updateMarketplace({ ctx, pi, name: "stale-mp", scope: "project", cwd, gitOps });
 
     // No error -- update should have succeeded.
     const errNotif = notifications.find((n) => n.severity === "error");

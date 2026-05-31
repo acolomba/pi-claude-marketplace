@@ -829,7 +829,11 @@ test("narrowCascadeFailure: EACCES maps to 'permission denied' in PluginFailedMe
         const err = Object.assign(new Error("EACCES: permission denied, unlink '/path/to/file'"), {
           code: "EACCES",
         });
-        return Promise.resolve({ ok: false, cause: err });
+        return Promise.resolve({
+          ok: false,
+          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          cause: err,
+        });
       };
 
       const { ctx, pi, notifications } = makeCtx();
@@ -884,7 +888,11 @@ test("narrowCascadeFailure: EPERM maps to 'permission denied' in PluginFailedMes
             code: "EPERM",
           },
         );
-        return Promise.resolve({ ok: false, cause: err });
+        return Promise.resolve({
+          ok: false,
+          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          cause: err,
+        });
       };
 
       const { ctx, pi, notifications } = makeCtx();
@@ -939,7 +947,11 @@ test("narrowCascadeFailure: ENOENT maps to 'source missing' in PluginFailedMessa
             code: "ENOENT",
           },
         );
-        return Promise.resolve({ ok: false, cause: err });
+        return Promise.resolve({
+          ok: false,
+          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          cause: err,
+        });
       };
 
       const { ctx, pi, notifications } = makeCtx();
@@ -991,7 +1003,11 @@ test("narrowCascadeFailure: unknown errno (ETIMEDOUT default branch) maps to 'no
         const err = Object.assign(new Error("ETIMEDOUT: connection timed out"), {
           code: "ETIMEDOUT",
         });
-        return Promise.resolve({ ok: false, cause: err });
+        return Promise.resolve({
+          ok: false,
+          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          cause: err,
+        });
       };
 
       const { ctx, pi, notifications } = makeCtx();
@@ -1045,7 +1061,11 @@ test("narrowCascadeFailure: plain Error (no .code) maps to 'not in manifest' via
         // Plain Error -- no .code property. isErrnoException() returns false
         // so the switch is skipped entirely; narrowCascadeFailure returns
         // "not in manifest" via the final fallthrough at uninstall.ts:121.
-        return Promise.resolve({ ok: false, cause: new Error("plain failure") });
+        return Promise.resolve({
+          ok: false,
+          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          cause: new Error("plain failure"),
+        });
       };
 
       const { ctx, pi, notifications } = makeCtx();
