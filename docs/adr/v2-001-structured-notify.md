@@ -30,15 +30,15 @@ export function notifyUsageError(ctx: ExtensionContext, message: UsageErrorMessa
 // Public types (shipped by Phase 15):
 export type NotificationMessage;            // { marketplaces: readonly MarketplaceNotificationMessage[] }
 export type MarketplaceNotificationMessage; // { name; scope; status?; details?; plugins }
-export type PluginNotificationMessage;      // 10-variant discriminated union on `status`
-export type PluginStatus;                   // 10 literal strings, derived from PLUGIN_STATUSES tuple
+export type PluginNotificationMessage;      // 11-variant discriminated union on `status`
+export type PluginStatus;                   // 11 literal strings, derived from PLUGIN_STATUSES tuple
 export type MarketplaceStatus;              // 7 literal strings, derived from MARKETPLACE_STATUSES tuple
 export type Dependency;                     // "agents" | "mcp", derived from DEPENDENCIES tuple
 export interface MarketplaceDetails;        // { autoupdate: boolean; lastUpdatedAt?: string }
 export interface UsageErrorMessage;         // { message: string; usage: string }
 
 // Runtime tuples shipped alongside the derived literal-union types (D-15-11):
-export const PLUGIN_STATUSES;       // 10 entries
+export const PLUGIN_STATUSES;       // 11 entries
 export const MARKETPLACE_STATUSES;  // 7 entries
 export const DEPENDENCIES;          // 2 entries
 ```
@@ -98,6 +98,7 @@ type PluginNotificationMessage =
   | PluginAvailableMessage // status: "available";   NO scope (SNM-11)
   | PluginUnavailableMessage // status: "unavailable"; reasons (required); NO scope (SNM-11)
   | PluginUpgradableMessage // status: "upgradable";  reasons (required)
+  | PluginPresentMessage // status: "present";     dependencies (required); inventory token (G-21-01)
   | PluginFailedMessage // status: "failed";      reasons (required); cause?; rollbackPartial?
   | PluginSkippedMessage // status: "skipped";     reasons (required)
   | PluginManualRecoveryMessage; // status: "manual recovery"; reasons (required); cause?
@@ -107,7 +108,7 @@ type PluginNotificationMessage =
 
 `MarketplaceNotificationMessage.status?` and `.details?` are independent optionals (SNM-02 + D-15-06) -- they never co-occur in practice (Phase 16 renderer ignores `details` when `status` is set) but the type does not structurally constrain that. An empty `plugins: []` IS the structural representation of the `(no plugins)` rendering on the list surface (D-15-08); on state-change paths an empty `plugins` array is the normal case (renderer emits the marketplace header alone).
 
-The 10-variant `PluginNotificationMessage` discriminated union locks per-variant field carve-outs at compile time (SNM-03 + D-15-12):
+The 11-variant `PluginNotificationMessage` discriminated union locks per-variant field carve-outs at compile time (SNM-03 + D-15-12):
 
 - `reasons: readonly Reason[]` REQUIRED only on `unavailable | upgradable | skipped | failed | manual recovery` (D-15-01). The other 5 variants omit the field entirely so `(installed) {up-to-date}` is a compile error.
 - `dependencies: readonly Dependency[]` REQUIRED only on `installed | updated | reinstalled` (D-15-02 + SNM-06). The other 7 variants omit the field; only those 3 switch arms reach the per-dependency probe path.
