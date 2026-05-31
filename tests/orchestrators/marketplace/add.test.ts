@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, rm, unlink, writeFile } from "node:fs/promises";
+import net from "node:net";
+import os from "node:os";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -483,6 +485,104 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
       return Promise.resolve(["valid-marketplace"]);
     });
     assert.equal(rebuildCount, 2, "post-invalidation read re-invokes rebuild");
+  });
+});
+
+// Lines 295-296: addPathInGuard throws when stat() reports neither file nor directory.
+test("addPathInGuard: Unix domain socket path throws 'neither a file nor a directory'", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx } = makeCtx();
+    const socketPath = path.join(tmpdir(), `mp-add-sock-${process.pid}.sock`);
+    const server = net.createServer();
+    await new Promise<void>((resolve, reject) => {
+      server.on("error", reject);
+      server.listen(socketPath, resolve);
+    });
+    try {
+      const { gitOps } = makeMockGitOps();
+      await assert.rejects(
+        addMarketplace({ ctx, scope: "project", cwd, rawSource: socketPath, gitOps }),
+        (err: unknown): err is Error =>
+          err instanceof Error && err.message.includes("neither a file nor a directory"),
+      );
+    } finally {
+      await new Promise<void>((resolve) => {
+        server.close(() => {
+          resolve();
+        });
+      });
+      await unlink(socketPath).catch(() => {
+        /* already gone */
+      });
+    }
+  });
+});
+
+// Lines 305-306: addPathInGuard throws MarketplaceDuplicateNameError on second path-source add.
+test("MA-8 (path source): duplicate name in same scope throws MarketplaceDuplicateNameError", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx: ctx1 } = makeCtx();
+    const localMpDir = await mkdtemp(path.join(tmpdir(), "mp-dup-path-"));
+    try {
+      await cp(fixtureMarketplaceDir("valid-marketplace"), localMpDir, { recursive: true });
+
+      const { gitOps: gitOps1 } = makeMockGitOps();
+      await addMarketplace({
+        ctx: ctx1,
+        scope: "project",
+        cwd,
+        rawSource: localMpDir,
+        gitOps: gitOps1,
+      });
+
+      const { ctx: ctx2 } = makeCtx();
+      const { gitOps: gitOps2 } = makeMockGitOps();
+      await assert.rejects(
+        addMarketplace({
+          ctx: ctx2,
+          scope: "project",
+          cwd,
+          rawSource: localMpDir,
+          gitOps: gitOps2,
+        }),
+        (err: unknown): err is MarketplaceDuplicateNameError =>
+          err instanceof MarketplaceDuplicateNameError,
+      );
+    } finally {
+      await rm(localMpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// Lines 326-327: expandTildePath returns os.homedir() exactly when rawSource is bare '~'.
+test("CR-02 / expandTildePath: bare '~' resolves to os.homedir() exactly", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    const { ctx } = makeCtx();
+    const originalHome = process.env.HOME;
+    const home = await mkdtemp(path.join(tmpdir(), "mp-add-baretilde-"));
+    process.env.HOME = home;
+    try {
+      // Copy valid-marketplace fixture directly into the hermetic HOME
+      // so '~' (which resolves to home) is the marketplace root.
+      await cp(fixtureMarketplaceDir("valid-marketplace"), home, { recursive: true });
+
+      const { gitOps } = makeMockGitOps();
+      await addMarketplace({ ctx, scope: "project", cwd, rawSource: "~", gitOps });
+
+      const persisted = await loadState(locations.extensionRoot);
+      assert.ok("valid-marketplace" in persisted.marketplaces);
+      const recorded = persisted.marketplaces["valid-marketplace"];
+      assert.ok(recorded);
+      // marketplaceRoot must be the hermetic HOME (os.homedir() at call time).
+      assert.equal(recorded.marketplaceRoot, home);
+    } finally {
+      if (originalHome === undefined) {
+        delete process.env.HOME;
+      } else {
+        process.env.HOME = originalHome;
+      }
+      await rm(home, { recursive: true, force: true });
+    }
   });
 });
 
