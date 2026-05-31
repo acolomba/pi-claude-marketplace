@@ -94,6 +94,36 @@ export const REASONS = [
 export type Reason = (typeof REASONS)[number];
 
 /**
+ * Phase 28 / UXG-02 (D-28-02): the closed set of `Reason` members that mark a
+ * `skipped` row as a BENIGN idempotent no-op -- the resource already matches
+ * the exact state the command requested (D-28-01 classification principle).
+ * A `skipped` cascade whose reasons are ALL drawn from this set routes the
+ * notification to `info` (no 2nd `ctx.ui.notify` arg) via `computeSeverity`;
+ * any non-benign reason (or a missing/empty reason set on an mp-level skip)
+ * routes to `warning`. These four are the idempotent "already in requested
+ * state" reasons; `already autoupdate` / `already no autoupdate` are the
+ * Phase-27/UXG-04-renamed forms of the requirement text's stale
+ * `already enabled` / `already disabled`.
+ */
+const BENIGN_REASONS: ReadonlySet<Reason> = new Set([
+  "up-to-date",
+  "already installed",
+  "already autoupdate",
+  "already no autoupdate",
+]);
+
+/**
+ * Phase 28 / UXG-02 (D-28-06): a skip's reasons are "all benign" iff the set
+ * is NON-EMPTY and every member is in `BENIGN_REASONS`. An empty array returns
+ * `false` -- a no-reason skip cannot be PROVEN benign, so it routes to
+ * `warning` (the D-28-08 safe default for an mp-level `skipped` whose optional
+ * `reasons?` is missing/empty). Shared by the plugin-skip and mp-skip arms.
+ */
+function allBenign(reasons: readonly Reason[] | undefined): boolean {
+  return reasons !== undefined && reasons.length > 0 && reasons.every((r) => BENIGN_REASONS.has(r));
+}
+
+/**
  * CMC-08 closed status-token set. Byte-equal to the `status_tokens:` block
  * in the binding frontmatter at `docs/messaging-style-guide.md`.
  * `(no marketplaces)` and `(no plugins)` are FLAT members of this single
@@ -1075,9 +1105,35 @@ function renderPluginRow(
 /** Reload-hint trailer literal. */
 const RELOAD_HINT_TRAILER = "/reload to pick up changes";
 
-/** Severity ladder per SNM-14. First-match: failed (plugin or marketplace) wins over skipped / manual recovery OR marketplace skipped, wins over success. */
+/**
+ * Severity ladder per SNM-14, refined by Phase 28 / UXG-02
+ * (D-28-06/07/08/09). A first-match ladder with FIVE arms, in this order:
+ *
+ *   1. any `plugin.status === "failed"` OR `mp.status === "failed"` -> "error"
+ *   2. any `plugin.status === "manual recovery"`                    -> "warning"
+ *      (always actionable -- a manual-recovery anchor is never benign)
+ *   3. any `plugin.status === "skipped"` whose REQUIRED `reasons` are NOT all
+ *      benign                                                       -> "warning"
+ *   4. any `mp.status === "skipped"` whose OPTIONAL `reasons?` are NOT all
+ *      benign (missing/empty `reasons?` is NOT all-benign per D-28-08, so a
+ *      no-reason mp-skip routes to warning -- the safe default)      -> "warning"
+ *   5. otherwise                                                    -> undefined (info)
+ *
+ * This SOFTENS the old "any skipped -> warning" rule (the original SNM-14 /
+ * D-16-11 / Phase-17.1 wording): a cascade whose ONLY non-success rows are
+ * BENIGN idempotent no-op skips (every reason in `BENIGN_REASONS`) now
+ * computes `info` and omits the 2nd `ctx.ui.notify` arg. mp-level skips soften
+ * SYMMETRICALLY with plugin-level skips (D-28-07): the UXG-04 idempotent
+ * autoupdate flip and the UXG-05 `marketplace update` no-op are benign -> info,
+ * closing the Plan 27-04 deferral. First-match poisoning is intentional
+ * (D-28-09): a MIXED cascade (one benign skip + one actionable skip, or any
+ * manual-recovery row) routes the whole notification to `warning`. This ladder
+ * is independent of `shouldEmitReloadHint` (SNM-33) -- severity and reload-hint
+ * are separate ladders. NO rendered byte string changes: severity is the
+ * second arg, never part of the body.
+ */
 function computeSeverity(message: NotificationMessage): "warning" | "error" | undefined {
-  // First-match pass: any failed (plugin or marketplace) -> "error".
+  // Arm 1: any failed (plugin or marketplace) -> "error".
   const hasError = message.marketplaces.some(
     (mp) => mp.status === "failed" || mp.plugins.some((p) => p.status === "failed"),
   );
@@ -1085,20 +1141,35 @@ function computeSeverity(message: NotificationMessage): "warning" | "error" | un
     return "error";
   }
 
-  // Second-match pass: any skipped or manual recovery -> "warning". mp-level
-  // "skipped" (idempotent autoupdate flip) routes to warning, consistent with
-  // plugin-level "skipped". The mp.status === "skipped" check on the outer
-  // .some ensures an empty plugins array still triggers the warning route.
-  const hasWarning = message.marketplaces.some(
-    (mp) =>
-      mp.status === "skipped" ||
-      mp.plugins.some((p) => p.status === "skipped" || p.status === "manual recovery"),
+  // Arm 2: any manual-recovery plugin row -> "warning" (always actionable).
+  const hasManualRecovery = message.marketplaces.some((mp) =>
+    mp.plugins.some((p) => p.status === "manual recovery"),
   );
-  if (hasWarning) {
+  if (hasManualRecovery) {
     return "warning";
   }
 
-  // Otherwise success (omit 2nd arg).
+  // Arm 3: any plugin-level "skipped" whose REQUIRED reasons are not all
+  // benign -> "warning" (first-match poisoning per D-28-09 -- one actionable
+  // skip warning-routes the whole cascade).
+  const hasActionablePluginSkip = message.marketplaces.some((mp) =>
+    mp.plugins.some((p) => p.status === "skipped" && !allBenign(p.reasons)),
+  );
+  if (hasActionablePluginSkip) {
+    return "warning";
+  }
+
+  // Arm 4: any mp-level "skipped" whose OPTIONAL reasons? are not all benign
+  // -> "warning". Missing/empty reasons? cannot be proven benign (allBenign
+  // returns false on undefined/empty) -> warning, the D-28-08 safe default.
+  const hasActionableMpSkip = message.marketplaces.some(
+    (mp) => mp.status === "skipped" && !allBenign(mp.reasons),
+  );
+  if (hasActionableMpSkip) {
+    return "warning";
+  }
+
+  // Arm 5: otherwise success / benign-only skip (omit 2nd arg = info).
   return undefined;
 }
 
