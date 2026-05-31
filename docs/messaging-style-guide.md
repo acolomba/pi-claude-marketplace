@@ -96,7 +96,7 @@ Orphan-fold case -- plugin row carries its own `[<scope>]` because `plugin.scope
   ● helper [project] v1.0.0 (installed)
 ```
 
-Skipped plugin with `{up-to-date}` reason, warning severity (per the severity ladder), reload-hint suppressed because no plugin status falls in the state-changing set:
+Skipped plugin with the benign `{up-to-date}` reason, **info** severity (per the severity ladder -- `up-to-date` is in the benign closed set, so an all-benign skip cascade computes info, not warning, per UXG-02 / D-28-06), reload-hint suppressed because no plugin status falls in the state-changing set:
 
 ```text
 ● demo [user]
@@ -105,11 +105,15 @@ Skipped plugin with `{up-to-date}` reason, warning severity (per the severity la
 
 ## Severity Routing
 
-`notify()` computes severity from contents via a first-match-wins ladder (D-16-11):
+`notify()` computes severity from contents via a first-match-wins ladder (D-16-11, refined by UXG-02 / D-28-06):
 
 1. Any plugin or marketplace with `status === "failed"` → **error**.
-2. Any plugin with `status` in `{skipped, manual recovery}` → **warning**.
-3. Otherwise → **info** (success / default).
+2. Any plugin with `status === "manual recovery"` → **warning** (always actionable).
+3. Any plugin `status === "skipped"` whose reasons are **not** all in the benign closed set (`up-to-date`, `already installed`, `already autoupdate`, `already no autoupdate`) → **warning**. An actionable skip such as `{not installed}` (D-28-03) routes here.
+4. Any marketplace `status === "skipped"` whose reasons are not all benign -- **including a `skipped` with missing/empty reasons**, which cannot be proven benign (D-28-08 safe default) → **warning**.
+5. Otherwise → **info** (success / default). A cascade whose **only** non-success rows are benign idempotent no-op skips (every reason in the benign closed set) lands here: e.g. an all-`{up-to-date}` update cascade, or an idempotent `<autoupdate> {already autoupdate}` flip, computes info and omits the second argument.
+
+A benign skip routes to **info**; an actionable skip routes to **warning**. A mixed cascade (one benign skip plus one actionable skip, or any manual-recovery row) routes the whole notification to **warning** -- first-match poisoning is intentional (D-28-09), matching "only non-success rows are benign skips → info".
 
 Severity is dispatched via the Pi API's magic-string second-argument convention on `ctx.ui.notify`:
 

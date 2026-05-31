@@ -96,11 +96,12 @@ ______________________________________________________________________
 
 `notify()` computes severity from contents via a first-match-wins ladder. The severity arg is dispatched via the Pi-API's magic-string second-argument convention on `ctx.ui.notify`.
 
-| Match (first-wins)                                       | Severity arg   | Trigger                                                                   |
-| -------------------------------------------------------- | -------------- | ------------------------------------------------------------------------- |
-| Any plugin or marketplace with `status === "failed"`     | `"error"`      | Failure-class payload (single or cascade).                                |
-| Any plugin with `status` in `{skipped, manual recovery}` | `"warning"`    | Skip or manual-recovery without an outright failure.                      |
-| Otherwise                                                | (omit 2nd arg) | Success / info path -- mirrors V1's `notifySuccess` no-2nd-arg precedent. |
+| Match (first-wins)                                                    | Severity arg   | Trigger                                                                                                                                                                                                             |
+| --------------------------------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Any plugin or marketplace with `status === "failed"`                  | `"error"`      | Failure-class payload (single or cascade).                                                                                                                                                                          |
+| Any plugin with `status === "manual recovery"`                        | `"warning"`    | Manual-recovery anchor (always actionable) without an outright failure.                                                                                                                                             |
+| Any `skipped` row (plugin or mp) whose reasons are **not** all benign | `"warning"`    | An actionable skip (e.g. `{not installed}`, D-28-03), OR an mp-level `skipped` with missing/empty reasons (D-28-08 safe default).                                                                                   |
+| Otherwise (incl. an **all-benign** skip cascade)                      | (omit 2nd arg) | Success / info path. A cascade whose only non-success rows are benign idempotent no-op skips (`up-to-date`, `already installed`, `already autoupdate`, `already no autoupdate`) computes info per UXG-02 / D-28-06. |
 
 `notifyUsageError(ctx, UsageErrorMessage)` is structurally `"error"` severity (always). The on-the-wire string is `${message}\n\n${usage}` (mirrors V1's blank-line discipline).
 
@@ -531,7 +532,7 @@ The `updated` variant emits `<from> → v<to>` (note the asymmetric `v` prefix -
   ⊘ beta (skipped) {up-to-date}
 ```
 
-Skipped-only cascade. No reload-hint (no state-changing status). Severity: `warning` per D-16-11 (skipped triggers warning even without failures).
+Skipped-only cascade. No reload-hint (no state-changing status). Severity: every reason is the benign `up-to-date` (in the benign closed set), so this all-benign skip cascade computes `info` per UXG-02 / D-28-06 -- the second arg is omitted. (A cascade with any actionable skip such as `{not installed}` would instead route to `warning`.)
 
 ### Across multiple marketplaces (bare `update` form)
 
@@ -810,7 +811,7 @@ Single marketplace, multi-plugin cascade. The marketplace header carries `(updat
 ● local-mp [user] (skipped) {up-to-date}
 ```
 
-Manifest-only refresh whose validated `marketplace.json` content was byte-identical pre/post (UXG-05). The autoupdate-OFF path compares the parsed, typebox-validated manifest content (not `lastUpdatedAt`, not the git SHA), so the no-op is source-kind-uniform: a path source whose local manifest is unchanged, and a github source whose clone advanced but yielded byte-identical manifest content, both render this. `mp.status = "skipped"`, `mp.reasons = ["up-to-date"]`; no plugin children (`plugins: []`). Severity: `warning` (any `skipped` → warning per the current severity ladder). The `warning` routing for this benign skip is current-ladder behavior; softening it to `info` is the surface UXG-02 (Phase 28) will later address and is NOT pre-empted here. No reload-hint: with no plugin children there is no Pi-visible resource change, so a manifest-only refresh never warrants a `/reload` (SNM-33 / D-22-01 / G-MIL-06).
+Manifest-only refresh whose validated `marketplace.json` content was byte-identical pre/post (UXG-05). The autoupdate-OFF path compares the parsed, typebox-validated manifest content (not `lastUpdatedAt`, not the git SHA), so the no-op is source-kind-uniform: a path source whose local manifest is unchanged, and a github source whose clone advanced but yielded byte-identical manifest content, both render this. `mp.status = "skipped"`, `mp.reasons = ["up-to-date"]`; no plugin children (`plugins: []`). Severity: `info` -- `up-to-date` is in the benign closed set, so this benign no-op computes info (the second arg is omitted) per UXG-02 / D-28-06/07. No reload-hint: with no plugin children there is no Pi-visible resource change, so a manifest-only refresh never warrants a `/reload` (SNM-33 / D-22-01 / G-MIL-06).
 
 ### Autoupdate-on cascade -- no change (no-op)
 
@@ -820,7 +821,7 @@ Manifest-only refresh whose validated `marketplace.json` content was byte-identi
 ● official [user] (skipped) {up-to-date}
 ```
 
-Autoupdate-ON cascade refresh whose validated `marketplace.json` content was byte-identical pre/post AND whose every cascaded plugin was `unchanged` (up-to-date) (UXG-05). The autoupdate-ON path consults the same content-compare detector as the OFF path (`snapshot.changed === false`) PLUS the cascade outcomes (`outcomes.every(o => o.partition === "unchanged")`); when both hold, the marketplace converges to the SAME `(skipped) {up-to-date}` byte form as the autoupdate-OFF no-op -- the all-`unchanged` cascade rows are dropped (`plugins: []`), so this is byte-identical to the OFF no-op (a distinct mp name, `official`, matches the autoupdate-ON cascade examples in this section). `mp.status = "skipped"`, `mp.reasons = ["up-to-date"]`. Severity: `warning` (any `skipped` → warning per the current severity ladder; UXG-02 info-softening is Phase 28 and is NOT pre-empted here). No reload-hint: with no plugin children there is no Pi-visible resource change (SNM-33 / D-22-01 / G-MIL-06). This is exactly what the Phase 27 UAT Test-3 gap missed: prior to the fix the autoupdate-ON branch emitted `status: "updated"` unconditionally and never consulted `snapshot.changed`, so a true no-op on an autoupdate-ON marketplace (e.g. `claude-plugins-official`) always rendered `(updated)`.
+Autoupdate-ON cascade refresh whose validated `marketplace.json` content was byte-identical pre/post AND whose every cascaded plugin was `unchanged` (up-to-date) (UXG-05). The autoupdate-ON path consults the same content-compare detector as the OFF path (`snapshot.changed === false`) PLUS the cascade outcomes (`outcomes.every(o => o.partition === "unchanged")`); when both hold, the marketplace converges to the SAME `(skipped) {up-to-date}` byte form as the autoupdate-OFF no-op -- the all-`unchanged` cascade rows are dropped (`plugins: []`), so this is byte-identical to the OFF no-op (a distinct mp name, `official`, matches the autoupdate-ON cascade examples in this section). `mp.status = "skipped"`, `mp.reasons = ["up-to-date"]`. Severity: `info` -- `up-to-date` is benign, so this no-op computes info (the second arg is omitted) per UXG-02 / D-28-06/07. No reload-hint: with no plugin children there is no Pi-visible resource change (SNM-33 / D-22-01 / G-MIL-06). This is exactly what the Phase 27 UAT Test-3 gap missed: prior to the fix the autoupdate-ON branch emitted `status: "updated"` unconditionally and never consulted `snapshot.changed`, so a true no-op on an autoupdate-ON marketplace (e.g. `claude-plugins-official`) always rendered `(updated)`.
 
 ### Autoupdate-off manifest refresh -- changed
 
@@ -891,7 +892,7 @@ Fresh state change -- the marketplace record was mutated. `mp.status` = `"autoup
 ● foo [user] <autoupdate> {already autoupdate}
 ```
 
-Idempotent no-op -- the flag was already in the requested state. `mp.status` = `"skipped"`; `mp.reasons` = `["already autoupdate"]`; UXG-04 renders the marker-as-outcome plus the `{already autoupdate}` idempotence brace (no `(skipped)` token -- the marker conveys the state, the brace conveys idempotence); severity = `"warning"` (consistent with plugin-level skipped per D-16-11); reload-hint suppressed.
+Idempotent no-op -- the flag was already in the requested state. `mp.status` = `"skipped"`; `mp.reasons` = `["already autoupdate"]`; UXG-04 renders the marker-as-outcome plus the `{already autoupdate}` idempotence brace (no `(skipped)` token -- the marker conveys the state, the brace conveys idempotence); severity = `info` (`already autoupdate` is in the benign closed set, so this benign no-op computes info -- the second arg is omitted -- per UXG-02 / D-28-06/07); reload-hint suppressed.
 
 ### Idempotent disable
 
@@ -901,7 +902,7 @@ Idempotent no-op -- the flag was already in the requested state. `mp.status` = `
 ● foo [user] <no autoupdate> {already no autoupdate}
 ```
 
-Idempotent no-op -- the flag was already in the requested state. `mp.status` = `"skipped"`; `mp.reasons` = `["already no autoupdate"]`; UXG-04 renders the explicit `<no autoupdate>` off-marker plus the `{already no autoupdate}` idempotence brace (no `(skipped)` token); severity = `"warning"` (consistent with plugin-level skipped per D-16-11); reload-hint suppressed.
+Idempotent no-op -- the flag was already in the requested state. `mp.status` = `"skipped"`; `mp.reasons` = `["already no autoupdate"]`; UXG-04 renders the explicit `<no autoupdate>` off-marker plus the `{already no autoupdate}` idempotence brace (no `(skipped)` token); severity = `info` (`already no autoupdate` is in the benign closed set, so this benign no-op computes info -- the second arg is omitted -- per UXG-02 / D-28-06/07); reload-hint suppressed.
 
 ### Failure -- marketplace not found
 
@@ -913,7 +914,7 @@ Idempotent no-op -- the flag was already in the requested state. `mp.status` = `
 
 Marketplace persistence record lookup failed. `mp.status` = `"failed"`; severity = `"error"`; no reload-hint (failed state-change rolled back; nothing landed).
 
-The five blocks above span two ladders. The severity ladder runs fresh → info, skipped → warning, failed → error (per D-16-11 + Phase 17.1's mp-level skipped extension). The reload-hint ladder is uniform here: every autoupdate flag flip suppresses the trailer (per SNM-33 / D-22-01 / D-22-03). The autoupdate flag lives on a marketplace record, not on any Pi-visible resource, so neither a fresh flip nor an idempotent no-op nor a rolled-back failure contributes to "/reload to pick up changes" -- only a plugin row state change does.
+The five blocks above span two ladders. The severity ladder runs fresh → info, benign skipped → info, failed → error (per D-16-11 + Phase 17.1's mp-level skipped extension, refined by UXG-02 / D-28-06: the two idempotent autoupdate no-ops carry benign reasons -- `already autoupdate` / `already no autoupdate` -- so they compute info, not warning; an mp-level `skipped` with non-benign or missing reasons would still route to warning). The reload-hint ladder is uniform here: every autoupdate flag flip suppresses the trailer (per SNM-33 / D-22-01 / D-22-03). The autoupdate flag lives on a marketplace record, not on any Pi-visible resource, so neither a fresh flip nor an idempotent no-op nor a rolled-back failure contributes to "/reload to pick up changes" -- only a plugin row state change does.
 
 ______________________________________________________________________
 
