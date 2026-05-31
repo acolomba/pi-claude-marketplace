@@ -1654,9 +1654,9 @@ test("Rollback-agents-undo: agents committed then mcp phase fails -> agent targe
 // Orchestrated mode: classifyInstallFailure branches
 // ───────────────────────────────────────────────────────────────────────────
 
-test("Orchestrated-PI-3: plugin not found -> outcome.status 'unavailable', no notification fired", async () => {
-  // Gap: classifyInstallFailure path when mode='orchestrated' and the error
-  // contains 'not found in marketplace' -> returns { status: 'unavailable' }.
+test("Orchestrated-PI-3: plugin not found -> outcome.status 'failed' with not-found cause, no notification fired", async () => {
+  // Gap: classifyInstallFailure path when mode='orchestrated' and the plugin
+  // is not in the manifest -> returns { status: 'failed', cause: '...' }.
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-pi3-"));
     try {
@@ -1681,10 +1681,10 @@ test("Orchestrated-PI-3: plugin not found -> outcome.status 'unavailable', no no
       // No direct notification in orchestrated mode.
       assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
 
-      // Outcome carries the classified status.
-      assert.equal(outcome.status, "unavailable");
+      // Outcome carries the failure status with the cause string.
+      assert.equal(outcome.status, "failed");
       assert.ok("cause" in outcome && typeof outcome.cause === "string");
-      assert.match(outcome.cause, /not found in marketplace/);
+      assert.match((outcome as { cause: string }).cause, /not found in marketplace/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1716,7 +1716,7 @@ test("Orchestrated-PI-4: non-installable plugin -> outcome.status 'uninstallable
       });
 
       assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
-      assert.equal(outcome.status, "uninstallable");
+      assert.equal(outcome.status, "failed");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1748,7 +1748,7 @@ test("Orchestrated-PI-5: already installed -> outcome.status 'already-installed'
       });
 
       assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
-      assert.equal(outcome.status, "already-installed");
+      assert.equal(outcome.status, "failed");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

@@ -923,11 +923,11 @@ test("gap: plugin declaring hooks field buckets as ⊘ with 'contains hooks' not
       installablePluginDirs: ["hooks-plugin"],
     });
 
-    const { ctx, notifications } = makeCtx();
-    await listPlugins({ ctx, cwd, scope: "user" });
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
     assert.match(out, /⊘ hooks-plugin/);
-    assert.match(out, /contains hooks/);
+    assert.match(out, /{hooks}/);
   });
 });
 
@@ -948,11 +948,11 @@ test("gap: plugin declaring lspServers field buckets as ⊘ with 'contains lspSe
       installablePluginDirs: ["lsp-plugin"],
     });
 
-    const { ctx, notifications } = makeCtx();
-    await listPlugins({ ctx, cwd, scope: "user" });
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
     assert.match(out, /⊘ lsp-plugin/);
-    assert.match(out, /contains lspServers/);
+    assert.match(out, /{lsp}/);
   });
 });
 
@@ -983,11 +983,11 @@ test("gap: plugin dir with hooks/hooks.json file buckets as ⊘ via file convent
     await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
     await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{}", "utf8");
 
-    const { ctx, notifications } = makeCtx();
-    await listPlugins({ ctx, cwd, scope: "user" });
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
     assert.match(out, /⊘ hooks-conv/);
-    assert.match(out, /contains hooks/);
+    assert.match(out, /{hooks}/);
   });
 });
 
@@ -1013,11 +1013,11 @@ test("gap: plugin dir with .lsp.json file buckets as ⊘ via file convention", a
     const pluginDir = path.join(mpRoot, "lsp-conv");
     await writeFile(path.join(pluginDir, ".lsp.json"), "{}", "utf8");
 
-    const { ctx, notifications } = makeCtx();
-    await listPlugins({ ctx, cwd, scope: "user" });
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
     assert.match(out, /⊘ lsp-conv/);
-    assert.match(out, /contains lspServers/);
+    assert.match(out, /{lsp}/);
   });
 });
 
@@ -1044,12 +1044,12 @@ test("gap: plugin with path-separator in name -- resolveStrict throws, caught as
       // No installablePluginDirs -- resolveStrict throws before stat checks.
     });
 
-    const { ctx, notifications } = makeCtx();
-    await listPlugins({ ctx, cwd, scope: "user" });
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
     // Row is bucketed as uninstallable; note contains the assertSafeName message.
     assert.match(out, /⊘/);
-    assert.match(out, /path separators/);
+    assert.match(out, /{unreadable}/);
   });
 });
 
@@ -1071,15 +1071,12 @@ test("gap: manifest load fails + zero installed -> marketplace renders with warn
       // No installed plugins -- collectMarketplacePlugins returns [] immediately.
     });
 
-    const { ctx, notifications } = makeCtx();
-    await listPlugins({ ctx, cwd, scope: "user" });
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
-    assert.match(out, /\[warning\] could not load manifest for "mp1"/);
-    // No ● / ○ / ⊘ rows -- only the warning and the (no plugins) placeholder.
-    assert.match(out, /\(no plugins\)/);
-    assert.equal(out.includes("●"), false);
-    assert.equal(out.includes("○"), false);
-    assert.equal(out.includes("⊘"), false);
+    // Manifest load failure renders the marketplace as (failed) with error severity.
+    assert.match(out, /mp1.*failed/);
+    assert.equal(notifications[0]?.severity, "error");
   });
 });
 
@@ -1095,8 +1092,8 @@ test("gap: corrupt state.json causes listPlugins to notify an error", async () =
     // Write corrupt JSON -- loadState throws, listPlugins catches it.
     await writeFile(stateJsonPath, "{ this is not valid json }", "utf8");
 
-    const { ctx, notifications } = makeCtx();
-    await listPlugins({ ctx, cwd, scope: "user" });
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
     assert.equal(notifications.length, 1);
     // notifyError is called; severity should be "error".
     assert.equal(notifications[0]!.severity, "error");

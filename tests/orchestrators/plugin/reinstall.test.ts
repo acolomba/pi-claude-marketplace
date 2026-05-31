@@ -1710,7 +1710,7 @@ test("GAP-05: errorWithManualRecovery instanceof-ManualRecoveryError branch merg
   const inner = new ManualRecoveryError("stage failed", ["agents: old"]);
   const wrapped = __test_errorWithManualRecovery(inner, ["agents: old", "skills: new"]);
   assert.ok(wrapped instanceof ManualRecoveryError);
-  const mre = wrapped as ManualRecoveryError;
+  const mre = wrapped;
   assert.deepEqual([...mre.leaks].sort(), ["agents: old", "skills: new"]);
   assert.equal(mre.message, "stage failed");
   assert.equal(mre.cause, inner);
@@ -1745,6 +1745,7 @@ test("GAP-06: prepareAllHandles catch: MCP collision aborts partial handles and 
       } catch {
         // mcp.json may not exist yet
       }
+
       const mcpServers = (mcpDoc.mcpServers ?? {}) as Record<string, unknown>;
       // Register server1 under a foreign plugin marker so it looks like another plugin owns it.
       mcpServers["server1"] = {
@@ -1791,8 +1792,9 @@ test("GAP-07: reinstallPlugin skipped does not trigger runPostSuccessMaintenance
         marketplace: "mp",
         plugin: "hello",
         __deps: {
-          dropMarketplaceCache: async () => {
+          dropMarketplaceCache: () => {
             maintenanceCalled = true;
+            return Promise.resolve();
           },
         },
       });
@@ -2244,7 +2246,10 @@ test("GAP-19: reinstallPlugin updateStateRecord concurrent-removal detection", a
             loadState: async (extensionRoot) => {
               const state = await loadState(extensionRoot);
               const mp = state.marketplaces["mp"];
-              if (mp === undefined) return state;
+              if (mp === undefined) {
+                return state;
+              }
+
               // Proxy the plugins map so the "hello" plugin exists on first
               // access (the initial null-check in runLockedReinstall) but
               // appears removed on all subsequent accesses (updateStateRecord).
