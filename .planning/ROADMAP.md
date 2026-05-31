@@ -540,10 +540,10 @@ Plans:
 3. UXG-03's feasibility is confirmed via a spike against the Pi host API; if the host cannot render color without the label, UXG-03 is recorded as an upstream-tracked finding with the spike evidence rather than forced in-extension.
 4. `npm run check` + catalog-uat GREEN.
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
 
-- [ ] 28-01-PLAN.md -- UXG-02: rewrite computeSeverity as the D-28-06 5-arm benign-softening ladder (+ BENIGN_REASONS, both test gates, ADR/style-guide/catalog prose sync)
+- [x] 28-01-PLAN.md -- UXG-02: rewrite computeSeverity as the D-28-06 5-arm benign-softening ladder (+ BENIGN_REASONS, both test gates, ADR/style-guide/catalog prose sync)
 - [ ] 28-02-PLAN.md -- UXG-03: run the host label/color feasibility spike and record the upstream-tracked finding (defer-with-finding per D-28-12)
 
 ## Progress
@@ -575,4 +575,4 @@ Plans:
 | 25. Runtime Publish & Verification                                   | v1.4.1    | 3/3 | Complete    | 2026-05-29 |
 | 26. GREEN Gate Close                                                 | v1.4.1    | 1/1 | Complete    | 2026-05-30 |
 | 27. Marketplace & Autoupdate Output Grammar                          | v1.5      | 5/5 | Complete    | 2026-05-31 |
-| 28. Severity Routing & Label Discipline                              | v1.5      | 0/0 | Not started | --         |
+| 28. Severity Routing & Label Discipline                              | v1.5      | 1/2 | In Progress|  |

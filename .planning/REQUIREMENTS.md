@@ -17,7 +17,7 @@ Refine the v2 `NotificationMessage` output grammar and severity presentation per
 
 ### Severity Presentation
 
-- [ ] **UXG-02**: Benign no-op skips route at `info` severity, not `warning`. The first-match severity ladder in `shared/notify.ts` (D-16-11 "any skipped -> warning") is refined so a cascade whose only non-success rows are benign skips (`{up-to-date}`, `{already enabled}`, `{already disabled}`, `{already installed}`) computes `info` (no severity arg); `warning` is reserved for actionable skips. Closes UAT Finding 2.
+- [x] **UXG-02**: Benign no-op skips route at `info` severity, not `warning`. The first-match severity ladder in `shared/notify.ts` (D-16-11 "any skipped -> warning") is refined so a cascade whose only non-success rows are benign skips (`{up-to-date}`, `{already enabled}`, `{already disabled}`, `{already installed}`) computes `info` (no severity arg); `warning` is reserved for actionable skips. Closes UAT Finding 2.
 - [ ] **UXG-03**: Multi-line cascade notifications render without the host `Error:`/`Warning:` label prefix (it breaks the 0/2 indent ladder and duplicates the inline per-row status), while single-line messages (usage errors, simple failures) keep the label; the severity color is retained in both cases. The label + color are produced by the Pi host from the `ctx.ui.notify` severity arg, so this likely requires an upstream `@earendil-works/pi-coding-agent` capability (color without label, or a structured-notification mode) -- the phase carries a feasibility spike before committing the approach, and may resolve as an upstream-tracked finding if the host cannot support it. Closes UAT Finding 3.
 
 ### Documentation
@@ -186,7 +186,7 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25 (v1.4 rows) and 2026-0
 | UXG-04      | Phase 27 | Complete |
 | UXG-05      | Phase 27 | Complete |
 | UXG-06      | Phase 27 | Complete |
-| UXG-02      | Phase 28 | Pending  |
+| UXG-02      | Phase 28 | Complete |
 | UXG-03      | Phase 28 | Pending  |
 
 **Coverage:**
