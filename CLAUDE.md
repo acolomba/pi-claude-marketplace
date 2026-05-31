@@ -12,6 +12,7 @@
 - NEVER use `--no-verify` to skip the hooks.
 - When committing from inside a worktree, prefix the commit with `SKIP=trufflehog`. The trufflehog hook's auto-updater fails to spawn child processes under the worktree sandbox even though the underlying scan succeeds; running `pre-commit run trufflehog --all-files` separately (outside `git commit`) still passes and should be done before the commit to confirm the scan is clean. Do not extend `SKIP=` to other hooks.
 - When writing PR descriptions, use the `humanizer` skill if available.
+- Always use `--squash` when merging PRs (`gh pr merge --squash`). The repository does not allow merge commits or rebase merges.
 
 ### Versioning
 
