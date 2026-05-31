@@ -339,12 +339,15 @@ test("PI-3: plugin name not in marketplace plugins[] -> V2 failed/{not in manife
 
       // V2 byte form matches `docs/output-catalog.md` lines 308-314
       // (`failure-runtime-with-cause`) with the entity-shape `{not in
-      // manifest}` reason. Severity `"error"` per D-16-11.
+      // manifest}` reason. Severity `"error"` per D-16-11. Phase 29 / UXG-07
+      // (D-29-02/03): 1 failed plugin, 0 failed marketplace -> the
+      // "1 plugin operation failed." summary line is prepended.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
         notifications[0]?.message,
-        "● mp [project]\n" +
+        "1 plugin operation failed.\n\n" +
+          "● mp [project]\n" +
           "  ⊘ ghost-plugin (failed) {not in manifest}\n" +
           '    cause: Plugin "ghost-plugin" not found in marketplace "mp".',
       );
@@ -377,9 +380,12 @@ test("PI-3: marketplace itself absent -> V2 failed/{not in manifest}", async () 
 
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
+      // Phase 29 / UXG-07 (D-29-02/03): summary prefix for the single failed
+      // plugin (mp glyph is `●`, not `⊘`, so the marketplace did not fail).
       assert.equal(
         notifications[0]?.message,
-        "● ghost-mp [project]\n" +
+        "1 plugin operation failed.\n\n" +
+          "● ghost-mp [project]\n" +
           "  ⊘ anything (failed) {not in manifest}\n" +
           '    cause: Plugin "anything" not found in marketplace "ghost-mp".',
       );
@@ -475,9 +481,13 @@ test("PI-5: state already has plugin record -> V2 failed/{already installed}", a
       // preInstall state record holds version "0.0.0").
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
+      // Phase 29 / UXG-07 (D-29-02/03): the already-installed case stays
+      // classified as `(failed)` (D-29-05, UXG-09 out of scope); the summary
+      // line "1 plugin operation failed." is prepended.
       assert.equal(
         notifications[0]?.message,
-        "● mp [project]\n" +
+        "1 plugin operation failed.\n\n" +
+          "● mp [project]\n" +
           "  ⊘ hello (failed) {already installed}\n" +
           '    cause: Plugin "hello" is already installed in marketplace "mp".',
       );
@@ -1282,12 +1292,14 @@ test("CMP-4 / PI-16: user-target install cannot source a project-only marketplac
 
       // V2 byte form: same shape as PI-3 (failed/{not in manifest}) --
       // the failed-discriminator entity-shape row plus the cause-chain
-      // trailer that names the marketplace verbatim.
+      // trailer that names the marketplace verbatim. Phase 29 / UXG-07
+      // (D-29-02/03): the "1 plugin operation failed." summary line precedes
+      // the cascade body.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
       assert.match(
         notifications[0]?.message ?? "",
-        /^● mp \[user\]\n {2}⊘ hello \(failed\) \{not in manifest\}\n {4}cause: .*not found in marketplace "mp"/,
+        /^1 plugin operation failed\.\n\n● mp \[user\]\n {2}⊘ hello \(failed\) \{not in manifest\}\n {4}cause: .*not found in marketplace "mp"/,
       );
 
       const userAfter = await loadState(userLocations.extensionRoot);

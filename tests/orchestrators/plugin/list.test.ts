@@ -707,7 +707,9 @@ test("PL-6 / CMC-22: manifest load failure renders the marketplace as a bare V2 
     // Severity is "error" because the synthetic mp has status "failed".
     assert.equal(note.severity, "error");
     // Bare V2 failed header; no `{unparseable}` brace; no cause trailer.
-    assert.equal(note.message, "⊘ mp1 [user] (failed)");
+    // Phase 29 / UXG-07 (D-29-03): 0 failed plugins, 1 failed marketplace
+    // -> the "1 marketplace operation failed." summary line is prepended.
+    assert.equal(note.message, "1 marketplace operation failed.\n\n⊘ mp1 [user] (failed)");
     const out = note.message;
     assert.equal(out.includes("{unparseable}"), false, out);
     assert.equal(out.includes("cause:"), false, out);

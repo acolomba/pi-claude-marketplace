@@ -334,7 +334,12 @@ test("Single-name flip across BOTH scopes when name absent from BOTH scopes: sur
     // SC-6 iteration order ("project" comes before "user"). The
     // failure row carries the scope where the FIRST not-found was
     // observed.
-    assert.equal(notifications[0]!.message, "⊘ absent-zzz-9999 [project] (failed)");
+    // Phase 29 / UXG-07 (D-29-03): 0 failed plugins, 1 failed marketplace
+    // -> the "1 marketplace operation failed." summary line is prepended.
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ absent-zzz-9999 [project] (failed)",
+    );
     // D-18-05 severity ladder: failed -> error.
     assert.equal(notifications[0]!.severity, "error");
   });

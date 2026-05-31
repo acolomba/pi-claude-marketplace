@@ -109,6 +109,17 @@
  *     Pi-API surface: omit-2nd-arg = info severity; pass "warning" / "error"
  *     otherwise.
  *
+ *   SUMMARY-LINE COMPOSITION (Phase 29 / UXG-07 / D-29-02/03/04):
+ *     For `error` and `warning` severity, notify() PREPENDS a summary line
+ *     before the cascade body: `{summary}\n\n{body}` (the reload-hint, if
+ *     any, stays last). The summary counts failed (error) /
+ *     actionable-skip + manual-recovery (warning) plugin and marketplace
+ *     operations: `"N plugin operation(s) <verb>."`,
+ *     `"N marketplace operation(s) <verb>."`, or the mixed
+ *     `"N plugin operation(s) and M marketplace operation(s) <verb>."`;
+ *     verb is "failed" (error) / "skipped" (warning). Info severity carries
+ *     NO summary line -- byte-identical to the pre-Phase-29 behavior.
+ *
  *   NOTIFY-USAGE-ERROR SHAPE (SNM-13 / D-16-02):
  *     `ctx.ui.notify(`${msg.message}\n\n${msg.usage}`, "error")` -- one
  *     blank line between message and usage block; severity always
@@ -463,9 +474,10 @@ test("notify renders failed plugin with reasons only -- no cause, no rollback (e
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // mp.status === "failed" does NOT trigger reload-hint (D-16-12: SNM-15
   // refinement -- failed rollbacks do not trigger). p.status === "failed"
-  // routes severity to "error" per D-16-11.
+  // routes severity to "error" per D-16-11. Phase 29 / UXG-07 (D-29-02/03):
+  // 1 failed plugin + 1 failed marketplace -> mixed-type summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {network unreachable}`,
+    `1 plugin operation and 1 marketplace operation failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {network unreachable}`,
     "error",
   ]);
 });
@@ -525,8 +537,13 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
   // mp.status === "failed" triggers severity "error" per D-16-11 (the
   // severity ladder catches mp.status === "failed" even with no failed
   // plugins). But the reload-hint is suppressed per D-16-12 (failed
-  // marketplace operations roll back; no state landed).
-  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [`⊘ demo [user] (failed)`, "error"]);
+  // marketplace operations roll back; no state landed). Phase 29 / UXG-07
+  // (D-29-03): 0 failed plugins, 1 failed marketplace -> marketplace-only
+  // singular summary prefix.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `1 marketplace operation failed.\n\n⊘ demo [user] (failed)`,
+    "error",
+  ]);
 });
 
 // ===========================================================================
@@ -1434,8 +1451,10 @@ test("notify emits [project] bracket on failed plugin row when p.scope !== mp.sc
   // is NOT one of the four state-change tokens, and the marketplace-status
   // arm is gone -- so NO reload-hint trailer is appended. (Severity routing
   // is independent and still returns "error" for the failed plugin.)
+  // Phase 29 / UXG-07 (D-29-03): 1 failed plugin, 0 failed marketplace
+  // (mp.status is "added", not "failed") -> plugin-only singular summary.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `● demo [user] (added)\n  ⊘ alpha [project] v1.0.0 (failed) {unsupported source}`,
+    `1 plugin operation failed.\n\n● demo [user] (added)\n  ⊘ alpha [project] v1.0.0 (failed) {unsupported source}`,
     "error",
   ]);
 
@@ -1447,7 +1466,9 @@ test("notify emits [project] bracket on failed plugin row when p.scope !== mp.sc
     !body.includes("[undefined]"),
     "D-17.2-07d: row must not contain the literal [undefined] substring",
   );
-  const pluginRow = body.split("\n")[1]!;
+  // The summary line is line 0; the marketplace header is line 2; the plugin
+  // row is line 3 (after the blank line separating summary from cascade).
+  const pluginRow = body.split("\n")[3]!;
   assert.ok(
     pluginRow.includes("[project]"),
     "D-17.2-07d: orphan-fold failed row must contain the [project] bracket",
@@ -1485,9 +1506,10 @@ test("notify renders rollbackPartial child rows at 4-space indent for failed plu
   // Per 16-05-SUMMARY: each rollbackPartial child row is
   // "    [<phase>] (rollback failed)" (4-space indent). No causes -> no
   // 6-space-indent trailers. mp.status === "failed" -> error severity but
-  // no reload-hint (D-16-12).
+  // no reload-hint (D-16-12). Phase 29 / UXG-07 (D-29-02/03): 1 failed
+  // plugin + 1 failed marketplace -> mixed-type summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}\n    [skills] (rollback failed)\n    [agents] (rollback failed)`,
+    `1 plugin operation and 1 marketplace operation failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}\n    [skills] (rollback failed)\n    [agents] (rollback failed)`,
     "error",
   ]);
 });
@@ -1531,8 +1553,10 @@ test("notify renders nested cause chains: per-plugin at 4-space indent, per-phas
   //   col 4 -- rollback child row ([skills] (rollback failed))
   //   col 6 -- per-phase cause-chain trailer (cause: EACCES)
   // mp.status === "failed" -> error severity; reload-hint suppressed.
+  // Phase 29 / UXG-07 (D-29-02/03): 1 failed plugin + 1 failed marketplace
+  // -> mixed-type summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}\n    cause: inner -> root\n    [skills] (rollback failed)\n      cause: EACCES`,
+    `1 plugin operation and 1 marketplace operation failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}\n    cause: inner -> root\n    [skills] (rollback failed)\n      cause: EACCES`,
     "error",
   ]);
 });
@@ -1578,9 +1602,11 @@ test("notify emits per-plugin cause-chain inline below each failed row (multi-ca
   // indent (not aggregated under a single trailer). Under SNM-33 / D-22-01
   // every plugin row is `failed` (no state-change token) and the
   // marketplace-status arm is gone, so NO reload-hint trailer; severity is
-  // "error" per D-16-11 (independent of the reload-hint ladder).
+  // "error" per D-16-11 (independent of the reload-hint ladder). Phase 29 /
+  // UXG-07 (D-29-03): 2 failed plugins, 0 failed marketplace (mp "added")
+  // -> plugin-only plural summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `● demo [user] (added)\n  ⊘ alpha v1.0.0 (failed) {permission denied}\n    cause: alpha-root\n  ⊘ beta v2.0.0 (failed) {network unreachable}\n    cause: beta-root`,
+    `2 plugin operations failed.\n\n● demo [user] (added)\n  ⊘ alpha v1.0.0 (failed) {permission denied}\n    cause: alpha-root\n  ⊘ beta v2.0.0 (failed) {network unreachable}\n    cause: beta-root`,
     "error",
   ]);
 });
@@ -1697,8 +1723,10 @@ test("notify suppresses reload-hint when payload contains only failed statuses (
     !body.includes("/reload to pick up changes"),
     "D-16-12: reload-hint must be suppressed when no state-changing status is present",
   );
+  // Phase 29 / UXG-07 (D-29-02/03): 1 failed plugin + 1 failed marketplace
+  // -> mixed-type summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}`,
+    `1 plugin operation and 1 marketplace operation failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}`,
     "error",
   ]);
 });
@@ -1754,9 +1782,10 @@ test("notify renders manual recovery plugin with cause-chain trailer (warning se
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // status slot is the literal "(manual recovery)" WITH a space. Severity
   // is "warning" per D-16-11. Cause-chain at 4-space indent below the row
-  // per D-16-08.
+  // per D-16-08. Phase 29 / UXG-07 (D-29-04): a manual-recovery row counts
+  // as 1 actionable skip -> "1 plugin operation skipped." summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `● demo [user]\n  ⊘ commit-commands v1.0.0 (manual recovery) {rollback partial}\n    cause: EACCES`,
+    `1 plugin operation skipped.\n\n● demo [user]\n  ⊘ commit-commands v1.0.0 (manual recovery) {rollback partial}\n    cause: EACCES`,
     "warning",
   ]);
 });
@@ -2031,4 +2060,278 @@ test("UXG-02 (D-28-08): mp-level skip with reasons OMITTED computes warning -- s
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   assert.equal(args.length, 2);
   assert.equal(args[1], "warning");
+});
+
+// ===========================================================================
+// 36-43: Phase 29 / UXG-07 summary-line composition (D-29-02/03/04). For
+// `error` and `warning` severity, notify() PREPENDS a human-readable summary
+// line before the cascade body: `{summary}\n\n{cascade body}` (+ optional
+// reload-hint). The summary counts failed (error) / actionable-skip +
+// manual-recovery (warning) plugin and marketplace operations, applying the
+// singular/plural and mixed-type grammar. Info severity is byte-identical to
+// pre-Phase-29 behavior (NO summary line). These tests assert the
+// composition through the public `notify()` surface (buildSummaryLine is
+// file-private).
+// ===========================================================================
+
+test("UXG-07 (D-29-02/03): error -- single failed plugin under failed mp -> '1 plugin operation and 1 marketplace operation failed.' summary prepended", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "failed",
+        plugins: [
+          {
+            status: "failed",
+            name: "commit-commands",
+            version: "1.0.0",
+            reasons: ["network unreachable"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // 1 failed plugin + 1 failed marketplace -> mixed-type sentence.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `1 plugin operation and 1 marketplace operation failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {network unreachable}`,
+    "error",
+  ]);
+});
+
+test("UXG-07 (D-29-03): error -- single failed plugin, non-failed mp -> '1 plugin operation failed.' (single-type singular)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [
+          {
+            status: "failed",
+            name: "alpha",
+            version: "1.0.0",
+            reasons: ["unsupported source"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // 1 failed plugin, 0 failed marketplace -> single-type singular.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `1 plugin operation failed.\n\n● demo [user] (added)\n  ⊘ alpha v1.0.0 (failed) {unsupported source}`,
+    "error",
+  ]);
+});
+
+test("UXG-07 (D-29-03): error -- two failed plugins, non-failed mp -> '2 plugin operations failed.' (single-type plural)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [
+          { status: "failed", name: "alpha", version: "1.0.0", reasons: ["permission denied"] },
+          { status: "failed", name: "beta", version: "2.0.0", reasons: ["network unreachable"] },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.ok(
+    body.startsWith("2 plugin operations failed.\n\n"),
+    "two-failed-plugin cascade summary must read '2 plugin operations failed.'",
+  );
+  assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "error");
+});
+
+test("UXG-07 (D-29-03): error -- failed mp only, no plugin rows -> '1 marketplace operation failed.' (single-type marketplace)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [{ name: "demo", scope: "user", status: "failed", plugins: [] }],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // 0 failed plugins, 1 failed marketplace -> single-type marketplace.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `1 marketplace operation failed.\n\n⊘ demo [user] (failed)`,
+    "error",
+  ]);
+});
+
+test("UXG-07 (D-29-03/04): warning -- single actionable-skip plugin -> '1 plugin operation skipped.'", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "skipped",
+            name: "commit-commands",
+            version: "1.0.0",
+            reasons: ["not installed"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.ok(
+    body.startsWith("1 plugin operation skipped.\n\n"),
+    "single actionable-skip cascade summary must read '1 plugin operation skipped.'",
+  );
+  assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "warning");
+});
+
+test("UXG-07 (D-29-04): warning -- manual-recovery plugin counts as an actionable skip -> '1 plugin operation skipped.'", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "manual recovery",
+            name: "commit-commands",
+            version: "1.0.0",
+            reasons: ["rollback partial"],
+            cause: new Error("EACCES"),
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // manual-recovery row counts toward the skipped/actionable count (D-29-04).
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `1 plugin operation skipped.\n\n● demo [user]\n  ⊘ commit-commands v1.0.0 (manual recovery) {rollback partial}\n    cause: EACCES`,
+    "warning",
+  ]);
+});
+
+test("UXG-07 (D-29-03/04): warning -- two actionable-skip plugins + one actionable-skip mp -> mixed plural summary", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          { status: "skipped", name: "alpha", version: "1.0.0", reasons: ["not installed"] },
+          { status: "skipped", name: "beta", version: "2.0.0", reasons: ["not installed"] },
+        ],
+      },
+      { name: "other", scope: "user", status: "skipped", plugins: [] },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.ok(
+    body.startsWith("2 plugin operations and 1 marketplace operation skipped.\n\n"),
+    "mixed actionable-skip cascade summary must read '2 plugin operations and 1 marketplace operation skipped.'",
+  );
+  assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "warning");
+});
+
+test("UXG-07 (D-29-02): info severity -- NO summary line prepended (byte-identical to pre-Phase-29)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [{ status: "installed", name: "alpha", version: "1.0.0", dependencies: [] }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // Info severity -> single-arg call, NO summary line, byte-identical cascade.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user] (added)\n  ● alpha v1.0.0 (installed)\n\n/reload to pick up changes`,
+  ]);
+});
+
+test("UXG-07 (D-29-02): error -- summary prepended BEFORE cascade body AND reload-hint stays last", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  // A cascade that both fails one plugin AND uninstalls another emits the
+  // reload-hint (uninstalled is a state-change token). The summary line must
+  // be FIRST, the reload-hint LAST: `{summary}\n\n{body}\n\n{reload-hint}`.
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          { status: "uninstalled", name: "alpha", version: "1.0.0" },
+          { status: "failed", name: "beta", version: "2.0.0", reasons: ["permission denied"] },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.ok(
+    body.startsWith("1 plugin operation failed.\n\n"),
+    "summary line must be the first line of the composed string",
+  );
+  assert.ok(
+    body.endsWith("\n\n/reload to pick up changes"),
+    "reload-hint must remain the last trailer after the cascade body",
+  );
+  assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "error");
+});
+
+test("UXG-07 (D-29-02): warning -- benign-only cascade routes to INFO so NO summary line is prepended", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  // A benign `up-to-date` plugin skip computes INFO under the D-28-06 ladder,
+  // so notify() emits a single-arg call with NO summary line -- the summary
+  // composition is gated on error/warning severity only (D-29-02). This pins
+  // the negative: benign no-ops never gain a summary line.
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [{ status: "skipped", name: "alpha", version: "1.0.0", reasons: ["up-to-date"] }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1, "benign-only skip is info severity -- single-arg call, no summary");
+  assert.ok(
+    !(args[0] as string).includes("operation skipped."),
+    "info-severity cascade must NOT carry a summary line",
+  );
 });
