@@ -227,3 +227,206 @@ test("sourceLogical: UnknownSource falls back to raw", () => {
 
   assert.equal(sourceLogical(parsed), "git@github.com:foo/bar.git");
 });
+
+// -- NEW COVERAGE: uncovered paths in source.ts --
+
+// Lines 118-123: githubObjectSource returns unknown when repo string does not parse as github
+test("githubObjectSource: non-github repo string yields unknown with reason", () => {
+  const got = parsePluginSource({ kind: "github", raw: "./local-path" });
+  assert.equal(got.kind, "unknown");
+  if (got.kind === "unknown") {
+    assert.match(got.reason, /github source repo is not owner\/repo/);
+  }
+});
+
+// Lines 132-134: unknownObjectSource wraps an object; missing-field objects reach it
+test("unknownObjectSource: object with missing npm package has JSON raw", () => {
+  const obj = { source: "npm" };
+  const got = parsePluginSource(obj);
+  assert.equal(got.kind, "unknown");
+  if (got.kind === "unknown") {
+    assert.equal(got.raw, JSON.stringify(obj));
+  }
+});
+
+// Lines 147-148: gitSubdirObjectSource -- missing path field
+test("gitSubdirObjectSource: missing path yields unknown with reason", () => {
+  const got = parsePluginSource({ source: "git-subdir", url: "https://example.com/o/r.git" });
+  assert.equal(got.kind, "unknown");
+  if (got.kind === "unknown") {
+    assert.match(got.reason, /git-subdir source is missing url or path/);
+  }
+});
+
+// Lines 147-148: gitSubdirObjectSource -- both url and path missing
+test("gitSubdirObjectSource: missing url and path yields unknown with reason", () => {
+  const got = parsePluginSource({ source: "git-subdir" });
+  assert.equal(got.kind, "unknown");
+  if (got.kind === "unknown") {
+    assert.match(got.reason, /git-subdir source is missing url or path/);
+  }
+});
+
+// Lines 156-157: npmObjectSource -- missing package field
+test("npmObjectSource: missing package yields unknown with reason", () => {
+  const got = parsePluginSource({ source: "npm" });
+  assert.equal(got.kind, "unknown");
+  if (got.kind === "unknown") {
+    assert.match(got.reason, /npm source is missing package/);
+  }
+});
+
+// Lines 187: parseKindObjectSource case 'url' delegates to urlObjectSource
+test("parseKindObjectSource: kind=url routes to urlObjectSource", () => {
+  const got = parsePluginSource({ kind: "url", url: "https://example.com/p.git" });
+  assert.equal(got.kind, "url");
+});
+
+// Lines 190: parseKindObjectSource case 'git-subdir'
+test("parseKindObjectSource: kind=git-subdir routes to gitSubdirObjectSource", () => {
+  const got = parsePluginSource({
+    kind: "git-subdir",
+    url: "https://github.com/o/r.git",
+    path: "plugins/p",
+  });
+  assert.equal(got.kind, "git-subdir");
+});
+
+// Lines 193: parseKindObjectSource case 'npm'
+test("parseKindObjectSource: kind=npm routes to npmObjectSource", () => {
+  const got = parsePluginSource({ kind: "npm", package: "@scope/plugin" });
+  assert.equal(got.kind, "npm");
+});
+
+// Lines 196-200: parseKindObjectSource case 'unknown' reconstructs from stored fields
+test("parseKindObjectSource: kind=unknown reconstructs raw and reason verbatim", () => {
+  const got = parsePluginSource({ kind: "unknown", raw: "stored-raw", reason: "stored-reason" });
+  assert.equal(got.kind, "unknown");
+  if (got.kind === "unknown") {
+    assert.equal(got.raw, "stored-raw");
+    assert.equal(got.reason, "stored-reason");
+  }
+});
+
+// Lines 196-200: parseKindObjectSource case 'unknown' -- non-string reason uses fallback
+test("parseKindObjectSource: kind=unknown with non-string reason falls back", () => {
+  const got = parsePluginSource({ kind: "unknown", raw: "stored-raw", reason: 42 });
+  assert.equal(got.kind, "unknown");
+  if (got.kind === "unknown") {
+    assert.equal(got.raw, "stored-raw");
+    assert.equal(got.reason, "unknown source missing reason");
+  }
+});
+
+// Lines 203: parseKindObjectSource default branch -- unrecognized kind
+test("parseKindObjectSource: unrecognized kind value yields unknown with reason", () => {
+  const got = parsePluginSource({ kind: "future-kind" });
+  assert.equal(got.kind, "unknown");
+  if (got.kind === "unknown") {
+    assert.match(got.reason, /unrecognized source kind: future-kind/);
+  }
+});
+
+// Lines 213-217: parseDiscriminatorObjectSource case 'github' -- missing repo field
+test("parseDiscriminatorObjectSource: source=github missing repo yields unknown", () => {
+  const got = parsePluginSource({ source: "github" });
+  assert.equal(got.kind, "unknown");
+  if (got.kind === "unknown") {
+    assert.match(got.reason, /github source is missing repo/);
+  }
+});
+
+// Lines 229: parseDiscriminatorObjectSource default -- unrecognized source discriminator
+test("parseDiscriminatorObjectSource: unrecognized source value yields unknown", () => {
+  const got = parsePluginSource({ source: "future-discriminator" });
+  assert.equal(got.kind, "unknown");
+  if (got.kind === "unknown") {
+    assert.match(got.reason, /unrecognized source kind: future-discriminator/);
+  }
+});
+
+// Lines 240-241: parseObjectPluginSource -- object with neither kind nor source
+test("parseObjectPluginSource: object without kind or source yields unknown", () => {
+  const got = parsePluginSource({ url: "https://example.com" });
+  assert.equal(got.kind, "unknown");
+  if (got.kind === "unknown") {
+    assert.match(got.reason, /object source is missing source discriminator/);
+  }
+});
+
+// Lines 290-291: owner/repo parse -- empty repo half (e.g. 'foo/')
+test("owner/repo parse: empty repo half yields unknown", () => {
+  const got = parsePluginSource("foo/");
+  assert.equal(got.kind, "unknown");
+  if (got.kind === "unknown") {
+    assert.match(got.reason, /owner\/repo halves must be non-empty/);
+  }
+});
+
+// Lines 340-345: parseGitHubUrl -- path with only one segment (missing repo)
+test("parseGitHubUrl: single-segment path yields unknown with must-be hint", () => {
+  const got = parsePluginSource("https://github.com/onlyone");
+  assert.equal(got.kind, "unknown");
+  if (got.kind === "unknown") {
+    assert.match(got.reason, /must be https:\/\/github\.com\/<owner>\/<repo>/);
+  }
+});
+
+// Lines 400-402: sourceLogical for UrlSource -- with ref suffix
+test("sourceLogical: UrlSource returns url#ref when ref present", () => {
+  const parsed = parsePluginSource({
+    source: "url",
+    url: "https://example.com/p.git",
+    ref: "v1",
+  });
+  assert.equal(parsed.kind, "url");
+  assert.equal(sourceLogical(parsed), "https://example.com/p.git#v1");
+});
+
+// Lines 400-402: sourceLogical for UrlSource -- no ref
+test("sourceLogical: UrlSource returns bare url when ref absent", () => {
+  const parsed = parsePluginSource({ source: "url", url: "https://example.com/p.git" });
+  assert.equal(parsed.kind, "url");
+  assert.equal(sourceLogical(parsed), "https://example.com/p.git");
+});
+
+// Lines 405-407: sourceLogical for GitSubdirSource -- with ref
+test("sourceLogical: GitSubdirSource returns url#ref/path when ref present", () => {
+  const parsed = parsePluginSource({
+    source: "git-subdir",
+    url: "https://github.com/o/r.git",
+    path: "plugins/p",
+    ref: "main",
+  });
+  assert.equal(parsed.kind, "git-subdir");
+  assert.equal(sourceLogical(parsed), "https://github.com/o/r.git#main/plugins/p");
+});
+
+// Lines 405-407: sourceLogical for GitSubdirSource -- no ref
+test("sourceLogical: GitSubdirSource returns url/path when ref absent", () => {
+  const parsed = parsePluginSource({
+    source: "git-subdir",
+    url: "https://github.com/o/r.git",
+    path: "plugins/p",
+  });
+  assert.equal(parsed.kind, "git-subdir");
+  assert.equal(sourceLogical(parsed), "https://github.com/o/r.git/plugins/p");
+});
+
+// Lines 410-412: sourceLogical for NpmSource -- with version
+test("sourceLogical: NpmSource returns npm:<package>@<version> when version present", () => {
+  const parsed = parsePluginSource({
+    source: "npm",
+    package: "@scope/pkg",
+    version: "1.2.3",
+  });
+  assert.equal(parsed.kind, "npm");
+  assert.equal(sourceLogical(parsed), "npm:@scope/pkg@1.2.3");
+});
+
+// Lines 410-412: sourceLogical for NpmSource -- no version
+test("sourceLogical: NpmSource returns npm:<package> when version absent", () => {
+  const parsed = parsePluginSource({ source: "npm", package: "@scope/pkg" });
+  assert.equal(parsed.kind, "npm");
+  assert.equal(sourceLogical(parsed), "npm:@scope/pkg");
+});
