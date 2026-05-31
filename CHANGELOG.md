@@ -1,8 +1,13 @@
 # Changelog
 
-## [0.2.0] -- unreleased
+## [0.2.0] - 2026-05-31
 
-- Consistent messaging.
+- Overhauled operation output: all commands now use a consistent marketplace-header + indented-plugin-rows format with status tokens, cause chains, and soft-dependency markers.
+- The `/reload to pick up changes` hint now only appears when a Pi-visible resource actually changed (no more spurious hints on read-only or no-op operations).
+- Benign no-ops (already up-to-date, idempotent autoupdate flips) render as dim status text instead of yellow Warning: output.
+- `update <plugin>@<marketplace>` for a plugin not in the manifest now reports `(failed) {not in manifest}` matching `install`'s behavior, instead of the misleading `(skipped) {not installed}`.
+- Autoupdate surface: `<autoupdate>` / `<no autoupdate>` marker tokens; `marketplace update` no-op renders `(skipped) {up-to-date}`.
+- Hash-version plugins display as `v#abc1234` (git short SHA) instead of `vhash-2ea95f85703d`; plugin.json declared versions take precedence over content hashes.
 
 ## [0.1.7] - 2026-05-16
 
