@@ -291,14 +291,15 @@ test("PUP-3: version equality -> outcome.partition='unchanged'; no bridge state 
       assert.equal(before, after, "state.json must NOT be rewritten on unchanged path");
 
       // Phase 19 / Plan 19-05: V2 byte form mirrors catalog
-      // `all-up-to-date-noop` (docs/output-catalog.md:528-532). The
-      // `unchanged` partition maps to a `(skipped) {up-to-date}` row
-      // (warning severity per D-16-11). Plugin-row `[<scope>]` bracket
-      // is suppressed by Phase 17.2 orphan-fold (plugin.scope ===
+      // `all-up-to-date-noop` (docs/output-catalog.md). The
+      // `unchanged` partition maps to a `(skipped) {up-to-date}` row.
+      // The benign `up-to-date` reason (in BENIGN_REASONS) routes
+      // severity to info per UXG-02 / D-28-06. Plugin-row `[<scope>]`
+      // bracket is suppressed by Phase 17.2 orphan-fold (plugin.scope ===
       // mp.scope -> renderScopeBracket returns ""). No reload-hint when
       // no plugin row is in the state-changing variant set per D-16-12.
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "warning");
+      assert.equal(notifications[0]?.severity, undefined);
       const body = notifications[0]?.message ?? "";
       assert.equal(body, "● mp [project]\n  ⊘ hello (skipped) {up-to-date}");
       assert.equal(body.includes("Unchanged:"), false);
@@ -610,11 +611,13 @@ test("PUP-1 @mp form: enumerates all installed plugins in the marketplace, parti
           "\n" +
           "/reload to pick up changes",
       );
-      // Severity routes to `error` if any failed; here no failed -> warning
-      // (skipped row present) per D-16-11. Actually warning vs undefined --
-      // any skipped row triggers warning, so the cascade's severity is
-      // `warning` despite the updated row.
-      assert.equal(notifications[0]?.severity, "warning");
+      // Severity routes to `error` if any failed; here no failed and no
+      // manual-recovery. The only skip row is benign (`beta` skipped
+      // `up-to-date`, in BENIGN_REASONS) and the `alpha (updated)` row is a
+      // success, so per UXG-02 / D-28-06 the whole cascade computes info (no
+      // severity arg). (Previously routed to warning under the old
+      // any-skip-is-warning ladder.)
+      assert.equal(notifications[0]?.severity, undefined);
       assert.ok(seeded.marketplaceRoot.length > 0);
     } finally {
       await rm(cwd, { recursive: true, force: true });

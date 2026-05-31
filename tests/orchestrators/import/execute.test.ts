@@ -111,12 +111,13 @@ test("importClaudeSettings skips matching existing marketplaces and already-inst
   // Plan 20-02 / D-20-02: existing marketplace + already-installed plugin
   // renders structurally via the V2 cascade. Marketplace skip maps to
   // (updated); plugin skip carries `{already installed}` reason brace.
-  // Severity: "warning" (skipped plugin row -- D-16-11 second-match
-  // ladder routes to warning per Phase 17.1). Under SNM-33 / D-22-01 the
+  // Severity: the only non-success row is the BENIGN plugin skip
+  // (`already installed` is in BENIGN_REASONS), so per UXG-02 / D-28-06 the
+  // cascade computes info (no severity arg). Under SNM-33 / D-22-01 the
   // only plugin row is `skipped` (no state-change token), so NO reload-hint
   // trailer -- a marketplace `(updated)` alone is not a Pi-visible change.
   assert.equal(notifications.length, 1);
-  assert.equal(notifications[0]?.severity, "warning");
+  assert.equal(notifications[0]?.severity, undefined);
   assert.equal(
     notifications[0]?.message,
     "● mp [user] (updated)\n  ⊘ plugin (skipped) {already installed}",

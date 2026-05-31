@@ -134,8 +134,9 @@ test("MAU-3 / UXG-04: idempotent -- already-true + enable=true emits V2 `<autoup
     const after = await loadState(locations.extensionRoot);
     assert.equal(after.marketplaces["mp"]!.autoupdate, true);
     assert.equal(notifications[0]!.message, "● mp [project] <autoupdate> {already autoupdate}");
-    // D-18-05 severity ladder: skipped -> warning.
-    assert.equal(notifications[0]!.severity, "warning");
+    // UXG-02 / D-28-06/07 severity ladder: the benign idempotent flip reason
+    // `already autoupdate` is in BENIGN_REASONS -> info (no severity arg).
+    assert.equal(notifications[0]!.severity, undefined);
   });
 });
 
@@ -153,8 +154,9 @@ test("MAU-3 / UXG-04: idempotent -- already-false + enable=false emits V2 `<no a
       notifications[0]!.message,
       "● mp [project] <no autoupdate> {already no autoupdate}",
     );
-    // D-18-05 severity ladder: skipped -> warning.
-    assert.equal(notifications[0]!.severity, "warning");
+    // UXG-02 / D-28-06/07 severity ladder: the benign idempotent flip reason
+    // `already no autoupdate` is in BENIGN_REASONS -> info (no severity arg).
+    assert.equal(notifications[0]!.severity, undefined);
   });
 });
 
@@ -192,8 +194,9 @@ test("MAU-4: missing autoupdate field treated as false; enable=false reports V2 
       notifications[0]!.message,
       "● mp [project] <no autoupdate> {already no autoupdate}",
     );
-    // D-18-05 severity ladder: skipped -> warning.
-    assert.equal(notifications[0]!.severity, "warning");
+    // UXG-02 / D-28-06/07 severity ladder: the benign idempotent flip reason
+    // `already no autoupdate` is in BENIGN_REASONS -> info (no severity arg).
+    assert.equal(notifications[0]!.severity, undefined);
   });
 });
 
@@ -241,10 +244,12 @@ test("MAU-2 / CMC-33 (V2): bare form flips every marketplace in scope; one notif
       message.indexOf("● to-flip [project]") < message.indexOf("● already [project]"),
       `expected changed-first ordering (to-flip before already), got: ${message}`,
     );
-    // Mixed-outcome multi-marketplace: severity is the WORST present
-    // (warning > info) per the notify()-computed severity ladder
-    // (D-16-11). Since one row is skipped (warning), overall = warning.
-    assert.equal(notifications[0]!.severity, "warning");
+    // Mixed-outcome multi-marketplace: the only non-success row is the
+    // BENIGN idempotent flip (`already autoupdate` in BENIGN_REASONS) and the
+    // other row is a fresh enable (success), so per UXG-02 / D-28-06 the whole
+    // cascade computes info (no severity arg). The fresh `<autoupdate>` row is
+    // not a skip, so there is no actionable row to poison the routing.
+    assert.equal(notifications[0]!.severity, undefined);
     // SNM-33 / D-22-03: neither row carries a plugin state-change token
     // (autoupdate flips mutate marketplace records only), so NO trailer.
     assert.ok(

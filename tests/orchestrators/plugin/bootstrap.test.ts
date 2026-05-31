@@ -187,14 +187,15 @@ test("bootstrap (already bootstrapped): swallows duplicate-name, reports idempot
     assert.deepEqual(after, before);
     // Exactly one notification: the idempotent autoupdate report.
     // UXG-04 catalog form -- the `<autoupdate>` marker-as-outcome + the
-    // `{already autoupdate}` idempotence brace (no `(skipped)` token);
-    // severity warning per D-18-05 ladder.
+    // `{already autoupdate}` idempotence brace (no `(skipped)` token).
+    // The benign reason `already autoupdate` (in BENIGN_REASONS) routes
+    // severity to info per UXG-02 / D-28-06/07 (no severity arg).
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]?.message,
       "● claude-plugins-official [user] <autoupdate> {already autoupdate}",
     );
-    assert.equal(notifications[0]?.severity, "warning");
+    assert.equal(notifications[0]?.severity, undefined);
     // No `(added)` row in this run.
     assert.equal(
       notifications.some((n) => n.message.includes("(added)")),

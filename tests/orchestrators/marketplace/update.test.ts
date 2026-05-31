@@ -169,9 +169,10 @@ test("MU-4 + D-14: github source refreshes via fetch+forceUpdateRef+checkout in 
     assert.equal(notifications.length, 1);
     const first = notifications[0];
     assert.ok(first !== undefined);
-    // mp.status === "skipped" routes "warning" via computeSeverity (current
-    // ladder; UXG-02 info-softening is Phase 28, not pre-empted here).
-    assert.equal(first.severity, "warning");
+    // mp.status === "skipped" with the benign reason `up-to-date` (in
+    // BENIGN_REASONS) routes to info via computeSeverity (UXG-02 / D-28-06/07
+    // -- the Phase 28 info-softening, now realized).
+    assert.equal(first.severity, undefined);
     // SNM-33 / D-22-01 (G-MIL-06): no plugin children -> no Pi-visible resource
     // change -> NO `/reload` trailer (UXG-05 is orthogonal to the reload-hint).
     assert.equal(first.message, "● official [project] (skipped) {up-to-date}");
@@ -230,7 +231,7 @@ test("UXG-05: github-source refresh whose manifest content CHANGES renders `(upd
   });
 });
 
-test("UXG-05: path-source refresh whose local manifest is UNCHANGED renders the no-op `(skipped) {up-to-date}` (warning, no trailer)", async () => {
+test("UXG-05: path-source refresh whose local manifest is UNCHANGED renders the no-op `(skipped) {up-to-date}` (info per UXG-02 / D-28-06/07, no trailer)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
@@ -261,7 +262,8 @@ test("UXG-05: path-source refresh whose local manifest is UNCHANGED renders the 
     assert.equal(notifications.length, 1);
     const first = notifications[0];
     assert.ok(first !== undefined);
-    assert.equal(first.severity, "warning");
+    // Benign `up-to-date` no-op -> info per UXG-02 / D-28-06/07 (no severity arg).
+    assert.equal(first.severity, undefined);
     assert.equal(first.message, "● local-mp [project] (skipped) {up-to-date}");
     assert.equal(first.message.includes("/reload to pick up changes"), false);
   });
@@ -739,7 +741,7 @@ test("MU-9 + MSG-RH-1: success emits canonical reload hint trailer for updated p
   });
 });
 
-test("UXG-05 (UAT Test-3 gap) + RH-1 + SNM-33 / D-22-01: autoupdate-ON cascade all-unchanged no-op renders `(skipped) {up-to-date}` (warning) and emits NO reload-hint (G-MIL-06)", async () => {
+test("UXG-05 (UAT Test-3 gap) + RH-1 + SNM-33 / D-22-01: autoupdate-ON cascade all-unchanged no-op renders `(skipped) {up-to-date}` (info per UXG-02 / D-28-06/07) and emits NO reload-hint (G-MIL-06)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     await seedGithubMarketplace({
       cwd,
@@ -778,12 +780,13 @@ test("UXG-05 (UAT Test-3 gap) + RH-1 + SNM-33 / D-22-01: autoupdate-ON cascade a
     // output asserting only trailer-absence, which masked the gap). With the
     // fix, snapshot.changed === false AND every cascade outcome is `unchanged`
     // -> the marketplace converges to the SAME no-op byte form as the OFF
-    // no-op: `(skipped) {up-to-date}` at warning severity, all-`unchanged`
-    // cascade rows dropped (plugins:[]).
+    // no-op: `(skipped) {up-to-date}`, all-`unchanged` cascade rows dropped
+    // (plugins:[]). The benign `up-to-date` reason routes severity to info per
+    // UXG-02 / D-28-06/07.
     const first = notifications[0];
     assert.ok(first !== undefined);
     assert.equal(first.message, "● noupd [project] (skipped) {up-to-date}");
-    assert.equal(first.severity, "warning");
+    assert.equal(first.severity, undefined);
     // SNM-33 / D-22-01 (G-MIL-06): no plugin row carries a state-change token
     // (plugins:[]), and a marketplace record is not a Pi-visible resource, so
     // the trailer is suppressed -- shouldEmitReloadHint is plugin-row-driven.
