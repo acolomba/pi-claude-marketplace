@@ -2032,3 +2032,277 @@ test("UXG-02 (D-28-08): mp-level skip with reasons OMITTED computes warning -- s
   assert.equal(args.length, 2);
   assert.equal(args[1], "warning");
 });
+
+// ===========================================================================
+// 36-43: Phase 29 / UXG-07 summary-line composition (D-29-02/03/04). For
+// `error` and `warning` severity, notify() PREPENDS a human-readable summary
+// line before the cascade body: `{summary}\n\n{cascade body}` (+ optional
+// reload-hint). The summary counts failed (error) / actionable-skip +
+// manual-recovery (warning) plugin and marketplace operations, applying the
+// singular/plural and mixed-type grammar. Info severity is byte-identical to
+// pre-Phase-29 behavior (NO summary line). These tests assert the
+// composition through the public `notify()` surface (buildSummaryLine is
+// file-private).
+// ===========================================================================
+
+test("UXG-07 (D-29-02/03): error -- single failed plugin under failed mp -> '1 plugin operation and 1 marketplace operation failed.' summary prepended", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "failed",
+        plugins: [
+          {
+            status: "failed",
+            name: "commit-commands",
+            version: "1.0.0",
+            reasons: ["network unreachable"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // 1 failed plugin + 1 failed marketplace -> mixed-type sentence.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `1 plugin operation and 1 marketplace operation failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {network unreachable}`,
+    "error",
+  ]);
+});
+
+test("UXG-07 (D-29-03): error -- single failed plugin, non-failed mp -> '1 plugin operation failed.' (single-type singular)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [
+          {
+            status: "failed",
+            name: "alpha",
+            version: "1.0.0",
+            reasons: ["unsupported source"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // 1 failed plugin, 0 failed marketplace -> single-type singular.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `1 plugin operation failed.\n\n● demo [user] (added)\n  ⊘ alpha v1.0.0 (failed) {unsupported source}`,
+    "error",
+  ]);
+});
+
+test("UXG-07 (D-29-03): error -- two failed plugins, non-failed mp -> '2 plugin operations failed.' (single-type plural)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [
+          { status: "failed", name: "alpha", version: "1.0.0", reasons: ["permission denied"] },
+          { status: "failed", name: "beta", version: "2.0.0", reasons: ["network unreachable"] },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.ok(
+    body.startsWith("2 plugin operations failed.\n\n"),
+    "two-failed-plugin cascade summary must read '2 plugin operations failed.'",
+  );
+  assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "error");
+});
+
+test("UXG-07 (D-29-03): error -- failed mp only, no plugin rows -> '1 marketplace operation failed.' (single-type marketplace)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [{ name: "demo", scope: "user", status: "failed", plugins: [] }],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // 0 failed plugins, 1 failed marketplace -> single-type marketplace.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `1 marketplace operation failed.\n\n⊘ demo [user] (failed)`,
+    "error",
+  ]);
+});
+
+test("UXG-07 (D-29-03/04): warning -- single actionable-skip plugin -> '1 plugin operation skipped.'", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "skipped",
+            name: "commit-commands",
+            version: "1.0.0",
+            reasons: ["not installed"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.ok(
+    body.startsWith("1 plugin operation skipped.\n\n"),
+    "single actionable-skip cascade summary must read '1 plugin operation skipped.'",
+  );
+  assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "warning");
+});
+
+test("UXG-07 (D-29-04): warning -- manual-recovery plugin counts as an actionable skip -> '1 plugin operation skipped.'", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "manual recovery",
+            name: "commit-commands",
+            version: "1.0.0",
+            reasons: ["rollback partial"],
+            cause: new Error("EACCES"),
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // manual-recovery row counts toward the skipped/actionable count (D-29-04).
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `1 plugin operation skipped.\n\n● demo [user]\n  ⊘ commit-commands v1.0.0 (manual recovery) {rollback partial}\n    cause: EACCES`,
+    "warning",
+  ]);
+});
+
+test("UXG-07 (D-29-03/04): warning -- two actionable-skip plugins + one actionable-skip mp -> mixed plural summary", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          { status: "skipped", name: "alpha", version: "1.0.0", reasons: ["not installed"] },
+          { status: "skipped", name: "beta", version: "2.0.0", reasons: ["not installed"] },
+        ],
+      },
+      { name: "other", scope: "user", status: "skipped", plugins: [] },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.ok(
+    body.startsWith("2 plugin operations and 1 marketplace operation skipped.\n\n"),
+    "mixed actionable-skip cascade summary must read '2 plugin operations and 1 marketplace operation skipped.'",
+  );
+  assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "warning");
+});
+
+test("UXG-07 (D-29-02): info severity -- NO summary line prepended (byte-identical to pre-Phase-29)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [{ status: "installed", name: "alpha", version: "1.0.0", dependencies: [] }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // Info severity -> single-arg call, NO summary line, byte-identical cascade.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user] (added)\n  ● alpha v1.0.0 (installed)\n\n/reload to pick up changes`,
+  ]);
+});
+
+test("UXG-07 (D-29-02): error -- summary prepended BEFORE cascade body AND reload-hint stays last", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  // A cascade that both fails one plugin AND uninstalls another emits the
+  // reload-hint (uninstalled is a state-change token). The summary line must
+  // be FIRST, the reload-hint LAST: `{summary}\n\n{body}\n\n{reload-hint}`.
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          { status: "uninstalled", name: "alpha", version: "1.0.0" },
+          { status: "failed", name: "beta", version: "2.0.0", reasons: ["permission denied"] },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.ok(
+    body.startsWith("1 plugin operation failed.\n\n"),
+    "summary line must be the first line of the composed string",
+  );
+  assert.ok(
+    body.endsWith("\n\n/reload to pick up changes"),
+    "reload-hint must remain the last trailer after the cascade body",
+  );
+  assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "error");
+});
+
+test("UXG-07 (D-29-02): warning -- benign-only cascade routes to INFO so NO summary line is prepended", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  // A benign `up-to-date` plugin skip computes INFO under the D-28-06 ladder,
+  // so notify() emits a single-arg call with NO summary line -- the summary
+  // composition is gated on error/warning severity only (D-29-02). This pins
+  // the negative: benign no-ops never gain a summary line.
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [{ status: "skipped", name: "alpha", version: "1.0.0", reasons: ["up-to-date"] }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1, "benign-only skip is info severity -- single-arg call, no summary");
+  assert.ok(
+    !(args[0] as string).includes("operation skipped."),
+    "info-severity cascade must NOT carry a summary line",
+  );
+});
