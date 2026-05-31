@@ -456,6 +456,40 @@ test("MU-5: clone advances + manifest re-validation fails -- 'Retry the command.
   });
 });
 
+test("WR-02: corrupt pre-existing manifest routes to (failed), never a silent no-op (UAT Test-3 robustness fold-in)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // Seed a valid clone, then overwrite the persisted PRE manifest with
+    // malformed JSON so manifestContentKey's PRE read throws a non-ENOENT
+    // SyntaxError. WR-02 narrows that catch so only ENOENT (no manifest yet)
+    // maps to the changed-safe default; a corrupt pre-existing manifest must
+    // re-throw and route to (failed) -- NOT silently read as a missing PRE key
+    // ("changed") and render (updated). The PRE read sits INSIDE refreshRecord's
+    // try (WR-01), so the throw wraps as MarketplaceUpdateError exactly like a
+    // POST-read failure. Guards against a regression back to
+    // `catch { return undefined; }` (the pre-WR-02 silent-(updated) bug).
+    const { cloneDir } = await seedGithubMarketplace({ cwd, name: "corrupt", ref: "main" });
+    await writeFile(
+      path.join(cloneDir, ".claude-plugin", "marketplace.json"),
+      "{ not valid json",
+      "utf8",
+    );
+
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000123" },
+    });
+    await updateMarketplace({ ctx, pi, name: "corrupt", scope: "project", cwd, gitOps });
+
+    assert.equal(notifications.length, 1);
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    assert.equal(first.severity, "error");
+    assert.match(first.message, /^⊘ corrupt \[project\] \(failed\)/m);
+    assert.doesNotMatch(first.message, /\(updated\)/);
+    assert.doesNotMatch(first.message, /\(skipped\) \{up-to-date\}/);
+  });
+});
+
 test("MU-6 + MU-8: cascade runs ONLY when autoupdate=true; pluginUpdate called once per state plugin (never for new-manifest entries)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // Seed with autoupdate=true and one installed plugin.

@@ -298,13 +298,18 @@ async function refreshRecord(
   const { name, locations, gitOps } = args;
   const source = record.source as ParsedSource;
   let cloneAdvanced = false;
-  // UXG-05: capture the PRE-refresh validated-manifest content key BEFORE the
-  // refresh re-validates and re-persists. Read off the currently persisted
-  // `record.manifestPath` (the manifest as the user last saw it). NOT keyed on
-  // `record.lastUpdatedAt` (Pitfall 4 -- it is stamped to `now` every refresh
-  // regardless of content).
-  const preKey = await manifestContentKey(record);
   try {
+    // UXG-05: capture the PRE-refresh validated-manifest content key BEFORE the
+    // refresh re-validates and re-persists. Read off the currently persisted
+    // `record.manifestPath` (the manifest as the user last saw it). NOT keyed on
+    // `record.lastUpdatedAt` (Pitfall 4 -- it is stamped to `now` every refresh
+    // regardless of content).
+    // WR-01: this read lives INSIDE the try so a non-ENOENT PRE-read failure
+    // (manifestContentKey re-throws per WR-02) is wrapped as MarketplaceUpdateError
+    // exactly like a POST-read failure -- same `(failed)` routing, same cause
+    // chain. Do NOT hoist it back outside the try (that bypasses the wrapper and
+    // surfaces a bare, mislabeled reason).
+    const preKey = await manifestContentKey(record);
     if (source.kind === "github") {
       const cloneDir = await locations.sourceCloneDir(name);
       await refreshGitHubClone(cloneDir, source.ref, gitOps, () => {
@@ -713,8 +718,8 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   // Closes the Phase 27 UAT Test-3 gap (UXG-05, severity major): the
   // autoupdate-ON branch previously emitted `status: "updated"` unconditionally
   // and never consulted `snapshot.changed`, so a true no-op update on an
-  // autoupdate-ON marketplace (e.g. claude-plugins-official) always rendered
-  // `(updated)`. It now mirrors the autoupdate-OFF no-op.
+  // autoupdate-ON marketplace always rendered `(updated)`. It now mirrors the
+  // autoupdate-OFF no-op.
   if (!snapshot.autoupdate || pluginUpdate === undefined) {
     if (!snapshot.changed) {
       notify(ctx, pi, {
