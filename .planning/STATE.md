@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Notification Output Polish
-status: completed
+status: executing
 stopped_at: Phase 29 context gathered
-last_updated: "2026-05-31T17:13:22.683Z"
-last_activity: "2026-05-31 -- v1.5 reopened; Phase 29 added (UXG-07/08). Runtime UAT cases: `install <already-installed>` shows `Error:`; `update <not-installed>` shows `Warning:`; `update <nonexistent>` mis-renders `{not installed}` instead of `{not in manifest}`."
+last_updated: "2026-05-31T17:48:58.312Z"
+last_activity: 2026-05-31 -- Phase 29 planning complete
 progress:
   total_phases: 17
   completed_phases: 16
-  total_plans: 58
+  total_plans: 61
   completed_plans: 58
   percent: 94
 ---
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-05-30)
 
 Phase: 29 (not started)
 Plan: Not started
-Status: v1.5 REOPENED. Phases 27-28 remain complete (UXG-01..06; the milestone UAT passed for those). The 2026-05-31 runtime UAT surfaced 3 cases the boundary capture missed -> Phase 29 added: UXG-07 (suppress the host `Error:`/`Warning:` label on multi-line `notify()` cascades by routing through info, entrypoint-split per D-28-13; supersedes the UXG-03 finding, retires/dormants the UXG-02 ladder) + UXG-08 (`update` of a plugin absent from the manifest -> `{not in manifest}`/`failed`, matching install). Next: `/gsd-discuss-phase 29` (open decisions: retire-vs-dormant `computeSeverity`; whether to add a UXG-09 for install-of-already-installed -> benign).
-Last activity: 2026-05-31 -- v1.5 reopened; Phase 29 added (UXG-07/08). Runtime UAT cases: `install <already-installed>` shows `Error:`; `update <not-installed>` shows `Warning:`; `update <nonexistent>` mis-renders `{not installed}` instead of `{not in manifest}`.
+Status: Ready to execute
+Last activity: 2026-05-31 -- Phase 29 planning complete
 
 ## Performance Metrics
 
