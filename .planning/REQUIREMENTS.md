@@ -18,7 +18,7 @@ Refine the v2 `NotificationMessage` output grammar and severity presentation per
 ### Severity Presentation
 
 - [x] **UXG-02**: Benign no-op skips route at `info` severity, not `warning`. The first-match severity ladder in `shared/notify.ts` (D-16-11 "any skipped -> warning") is refined so a cascade whose only non-success rows are benign skips (`{up-to-date}`, `{already enabled}`, `{already disabled}`, `{already installed}`) computes `info` (no severity arg); `warning` is reserved for actionable skips. Closes UAT Finding 2.
-- [ ] **UXG-03**: Multi-line cascade notifications render without the host `Error:`/`Warning:` label prefix (it breaks the 0/2 indent ladder and duplicates the inline per-row status), while single-line messages (usage errors, simple failures) keep the label; the severity color is retained in both cases. The label + color are produced by the Pi host from the `ctx.ui.notify` severity arg, so this likely requires an upstream `@earendil-works/pi-coding-agent` capability (color without label, or a structured-notification mode) -- the phase carries a feasibility spike before committing the approach, and may resolve as an upstream-tracked finding if the host cannot support it. Closes UAT Finding 3.
+- [x] **UXG-03**: Multi-line cascade notifications render without the host `Error:`/`Warning:` label prefix (it breaks the 0/2 indent ladder and duplicates the inline per-row status), while single-line messages (usage errors, simple failures) keep the label; the severity color is retained in both cases. The label + color are produced by the Pi host from the `ctx.ui.notify` severity arg, so this likely requires an upstream `@earendil-works/pi-coding-agent` capability (color without label, or a structured-notification mode) -- the phase carries a feasibility spike before committing the approach, and may resolve as an upstream-tracked finding if the host cannot support it. Closes UAT Finding 3. **RESOLVED 2026-05-31 (Phase 28 / Plan 28-02) -- DEFER-WITH-FINDING:** the feasibility spike was RUN against the installed `@earendil-works/pi-coding-agent@0.75.5`; feasibility is **REFUTED** -- the host couples label + color to the single `notify(message, type?)` arg (`dist/core/extensions/types.d.ts:75`; label/color co-derived from `type` in `dist/main.js:64-69` and `dist/modes/interactive/interactive-mode.js:1771-1781/2944-2954`), with no color-only param and no severity-color-without-label path. Forcing `info` to drop the label also drops the color and nullifies UXG-02's routing (REJECTED, D-28-11). No colorless in-extension workaround is shipped (D-28-10). Resolved as an upstream-tracked finding mirroring the SNM-39 / G-MIL-07 precedent (D-28-12): see `.planning/phases/28-severity-routing-label-discipline/UXG-03-FINDING.md` + the spike evidence lock `tests/shared/snm-uxg03-label-color-spike.test.ts` + the UAT note. Filing the upstream `@earendil-works/pi-coding-agent` issue is the operator's call.
 
 ### Documentation
 
@@ -187,7 +187,7 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25 (v1.4 rows) and 2026-0
 | UXG-05      | Phase 27 | Complete |
 | UXG-06      | Phase 27 | Complete |
 | UXG-02      | Phase 28 | Complete |
-| UXG-03      | Phase 28 | Pending  |
+| UXG-03      | Phase 28 | Complete |
 
 **Coverage:**
 
@@ -200,7 +200,7 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25 (v1.4 rows) and 2026-0
 - Pending: 0
 - Per-phase distribution (v1.4): Phase 15 (12: SNM-01..11, SNM-21); Phase 16 (8: SNM-12..18, SNM-30); Phase 17 (4: SNM-19, SNM-20, SNM-26, SNM-31); Phase 18 (0: execution phase); Phase 19 (0: execution phase); Phase 20 (1: SNM-23); Phase 21 (7: SNM-22, SNM-24, SNM-25, SNM-27, SNM-28, SNM-29, SNM-32)
 - Per-phase distribution (v1.4.1): Phase 22 (1: SNM-33); Phase 23 (2: SNM-34, SNM-35); Phase 24 (1: SNM-36); Phase 25 (3: SNM-37, SNM-38, SNM-39); Phase 26 (1: SNM-40)
-- v1.5 requirements: 6 total (UXG-01..UXG-06) -- mapped to phases 6, unmapped 0, Pending 6 (none started)
+- v1.5 requirements: 6 total (UXG-01..UXG-06) -- mapped to phases 6, unmapped 0; UXG-03 Complete (Phase 28, defer-with-finding, 2026-05-31), all of UXG-01/02/04/05/06 Complete (Phases 27-28)
 - Per-phase distribution (v1.5): Phase 27 (4: UXG-01, UXG-04, UXG-05, UXG-06); Phase 28 (2: UXG-02, UXG-03)
 
 **Mapping rationale:**
