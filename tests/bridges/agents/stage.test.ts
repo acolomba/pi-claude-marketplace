@@ -972,6 +972,131 @@ test("Phase 8 / PRL-10 readOptionalText (non-ENOENT) -> rethrows from inside rep
   });
 });
 
+test("formatAgentWarnings emits dropped-fields line when agent has unknown frontmatter fields", async () => {
+  // Lines 289-290: droppedFields non-empty -> out.push(`[...] dropped fields: ...`)
+  await withTmpScope(async ({ locations }) => {
+    const tmpPluginRoot = await mkdtemp(path.join(os.tmpdir(), "agents-stage-droppedfields-"));
+    const agentsDir = path.join(tmpPluginRoot, "agents");
+    await mkdir(agentsDir, { recursive: true });
+    // Write an agent with an unsupported frontmatter field `priority` so the
+    // converter records it in droppedFields.
+    await writeFile(
+      path.join(agentsDir, "fancy-bot.md"),
+      "---\nname: fancy-bot\ndescription: A fancy bot\ntools: Read\npriority: high\n---\n\nBody.\n",
+      "utf8",
+    );
+
+    const resolved = makeResolved("acme", tmpPluginRoot);
+    const prepared = await prepareStagePluginAgents({
+      locations,
+      marketplaceName: "mp1",
+      pluginName: "acme",
+      pluginRoot: tmpPluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp1", "acme"),
+      resolved,
+      agentsSourceDir: agentsDir,
+    });
+
+    assert.equal(prepared.kind, "staged");
+    assert.ok(
+      prepared.result.warnings.some((w) => w.includes("dropped fields:")),
+      `expected a 'dropped fields:' warning; got: ${JSON.stringify(prepared.result.warnings)}`,
+    );
+  });
+});
+
+test("formatAgentWarnings emits dropped-tools line when agent has unmapped tool names", async () => {
+  // Lines 293-294: droppedTools non-empty -> out.push(`[...] dropped tools: ...`)
+  await withTmpScope(async ({ locations }) => {
+    const tmpPluginRoot = await mkdtemp(path.join(os.tmpdir(), "agents-stage-droppedtools-"));
+    const agentsDir = path.join(tmpPluginRoot, "agents");
+    await mkdir(agentsDir, { recursive: true });
+    // Include tools that are NOT in TOOL_MAP (e.g., WebFetch, TodoWrite) so
+    // the converter records them in droppedTools.
+    await writeFile(
+      path.join(agentsDir, "tool-bot.md"),
+      "---\nname: tool-bot\ndescription: A tool bot\ntools: Read,WebFetch,TodoWrite\n---\n\nBody.\n",
+      "utf8",
+    );
+
+    const resolved = makeResolved("acme", tmpPluginRoot);
+    const prepared = await prepareStagePluginAgents({
+      locations,
+      marketplaceName: "mp1",
+      pluginName: "acme",
+      pluginRoot: tmpPluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp1", "acme"),
+      resolved,
+      agentsSourceDir: agentsDir,
+    });
+
+    assert.equal(prepared.kind, "staged");
+    assert.ok(
+      prepared.result.warnings.some((w) => w.includes("dropped tools:")),
+      `expected a 'dropped tools:' warning; got: ${JSON.stringify(prepared.result.warnings)}`,
+    );
+  });
+});
+
+test("abortPreparedAgents returns undefined immediately for noop prepared result", async () => {
+  // Lines 379-380: kind === 'noop' -> return undefined
+  await withTmpScope(async ({ locations }) => {
+    const pluginRoot = path.join(FIXTURES, "test-plugin");
+    const resolved = makeResolved("acme", pluginRoot);
+
+    // Empty agentsSourceDir and no prior index entries -> noop.
+    const prepared = await prepareStagePluginAgents({
+      locations,
+      marketplaceName: "mp1",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp1", "acme"),
+      resolved,
+      agentsSourceDir: "",
+    });
+    assert.equal(prepared.kind, "noop");
+
+    const result = await abortPreparedAgents(prepared);
+    assert.equal(result, undefined);
+  });
+});
+
+test("replacePreparedAgents throws when staged target path already exists with non-previous content", async () => {
+  // Lines 434-435: pathExists(pair.to) true -> throws 'Cannot replace agent target...'
+  await withTmpScope(async ({ locations }) => {
+    const pluginRoot = path.join(FIXTURES, "test-plugin");
+    const resolved = makeResolved("acme", pluginRoot);
+
+    const prepared = await prepareStagePluginAgents({
+      locations,
+      marketplaceName: "mp1",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp1", "acme"),
+      resolved,
+      agentsSourceDir: path.join(pluginRoot, "agents"),
+    });
+    assert.equal(prepared.kind, "staged");
+
+    // Place a file at a staged target path that was NOT part of the previous
+    // index -- the backup loop won't have renamed it away, so pathExists on
+    // pair.to will be true and replacePreparedAgents must throw.
+    await mkdir(locations.agentsDir, { recursive: true });
+    const intruder = path.join(locations.agentsDir, "pi-claude-marketplace-acme-bot.md");
+    await writeFile(intruder, "---\nname: intruder\n---\nnot ours\n", "utf8");
+
+    await assert.rejects(
+      () => replacePreparedAgents(prepared),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.match(err.message, /Cannot replace agent target/);
+        assert.match(err.message, /pi-claude-marketplace-acme-bot/);
+        return true;
+      },
+    );
+  });
+});
+
 test("Phase 8 / PRL-10 rollbackAgentsReplacement records leak when restoreAgentsIndex fails", async (t) => {
   // POSIX-only: after replace, chmod the extension root read-only so the
   // rollback's `writeFile` to the agents-index path fails. The catch block
