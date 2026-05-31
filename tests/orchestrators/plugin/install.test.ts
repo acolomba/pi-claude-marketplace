@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -1465,6 +1465,500 @@ test("Sanity: staged agent target carries the AG-5 owned-agent marker", async ()
       assert.ok(
         body.includes(GENERATED_AGENT_MARKER),
         `staged agent must include AG-5 owned-agent marker; got: ${body}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Rollback undo body tests: verify each bridge's undo path removes its
+// staged artefacts when a later phase fails.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("Rollback-skills-undo: skills committed then commands phase fails -> skill target removed", async () => {
+  // Gap: skillsPhase.undo body -- unstagePluginSkills called when skills
+  // committed but a later phase (commands) fails with a non-containment error.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-undo-skills-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        commands: [{ sourceName: "deploy" }],
+      });
+
+      // Pre-create a FILE at commandsStagingDir so that mkdir inside it
+      // fails with ENOTDIR when the commands phase tries to create a UUID
+      // staging sub-directory. This is a non-PathContainmentError, so the
+      // phase ledger triggers rollback of skills (the only phase that ran).
+      await mkdir(path.dirname(locations.commandsStagingDir), { recursive: true });
+      await writeFile(locations.commandsStagingDir, "not-a-dir");
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // Install must fail.
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+
+      // Skills undo: the committed skill dir must have been removed.
+      const skillTarget = path.join(locations.skillsTargetDir, "hello-tool");
+      const { stat } = await import("node:fs/promises");
+      let exists = true;
+      try {
+        await stat(skillTarget);
+      } catch {
+        exists = false;
+      }
+
+      assert.equal(exists, false, "skills undo must remove the committed skill dir");
+
+      // No state record persisted.
+      const after = await loadState(locations.extensionRoot);
+      assert.equal("hello" in (after.marketplaces["mp"]?.plugins ?? {}), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("Rollback-commands-undo: commands committed then agents phase fails -> command target removed", async () => {
+  // Gap: commandsPhase.undo body -- unstagePluginCommands called when
+  // commands committed but a later phase (agents) fails.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-undo-cmds-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        commands: [{ sourceName: "deploy" }],
+        agents: [{ sourceName: "bot" }],
+      });
+
+      // Pre-create a FILE at agentsStagingDir so that mkdir inside it
+      // fails with ENOTDIR when the agents phase tries to create staging.
+      await mkdir(path.dirname(locations.agentsStagingDir), { recursive: true });
+      await writeFile(locations.agentsStagingDir, "not-a-dir");
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // Install must fail.
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+
+      // Commands undo: the committed command file must have been removed.
+      const commandTarget = path.join(locations.promptsTargetDir, "hello:deploy.md");
+      const { stat } = await import("node:fs/promises");
+      let exists = true;
+      try {
+        await stat(commandTarget);
+      } catch {
+        exists = false;
+      }
+
+      assert.equal(exists, false, "commands undo must remove the committed command file");
+
+      // No state record persisted.
+      const after = await loadState(locations.extensionRoot);
+      assert.equal("hello" in (after.marketplaces["mp"]?.plugins ?? {}), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("Rollback-agents-undo: agents committed then mcp phase fails -> agent target removed", async () => {
+  // Gap: agentsPhase.undo body -- unstagePluginAgents called when agents
+  // committed but the mcp phase fails (mcp.json is a directory, so
+  // readFile on it gets EISDIR -- a non-PathContainmentError that causes
+  // the mcp phase to throw and triggers rollback of agents).
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-undo-agents-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        agents: [{ sourceName: "bot" }],
+        mcpServers: { server1: { command: "node" } },
+      });
+
+      // Pre-create a DIRECTORY at mcpJsonPath so readScopedDoc gets
+      // EISDIR (which is not silenced) -- making prepareStageMcpServers
+      // throw a non-PathContainmentError.
+      await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
+      await mkdir(locations.mcpJsonPath, { recursive: true });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // Install must fail.
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+
+      // Agents undo: the committed agent file must have been removed.
+      const agentTarget = path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`);
+      const { stat } = await import("node:fs/promises");
+      let exists = true;
+      try {
+        await stat(agentTarget);
+      } catch {
+        exists = false;
+      }
+
+      assert.equal(exists, false, "agents undo must remove the committed agent file");
+
+      // No state record persisted.
+      const after = await loadState(locations.extensionRoot);
+      assert.equal("hello" in (after.marketplaces["mp"]?.plugins ?? {}), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Orchestrated mode: classifyInstallFailure branches
+// ───────────────────────────────────────────────────────────────────────────
+
+test("Orchestrated-PI-3: plugin not found -> outcome.status 'unavailable', no notification fired", async () => {
+  // Gap: classifyInstallFailure path when mode='orchestrated' and the error
+  // contains 'not found in marketplace' -> returns { status: 'unavailable' }.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-pi3-"));
+    try {
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "real-plugin",
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "ghost-plugin",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // No direct notification in orchestrated mode.
+      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+
+      // Outcome carries the classified status.
+      assert.equal(outcome.status, "unavailable");
+      assert.ok("cause" in outcome && typeof outcome.cause === "string");
+      assert.match(outcome.cause, /not found in marketplace/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("Orchestrated-PI-4: non-installable plugin -> outcome.status 'uninstallable', no notification", async () => {
+  // Gap: classifyInstallFailure path for 'is not installable' branch.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-pi4-"));
+    try {
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        rawSourceOverride: "github:anthropics/some-repo",
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+      assert.equal(outcome.status, "uninstallable");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("Orchestrated-PI-5: already installed -> outcome.status 'already-installed', no notification", async () => {
+  // Gap: classifyInstallFailure path for 'already installed' branch.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-pi5-"));
+    try {
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        preInstall: true,
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+      assert.equal(outcome.status, "already-installed");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("Orchestrated-success: success path returns typed outcome, fires no notifications", async () => {
+  // Gap: orchestrated success path -- no notifySuccess call; outcome has
+  // status='installed' and resourcesChanged=true when resources were staged.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-ok-"));
+    try {
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      assert.equal(notifications.length, 0, "orchestrated mode fires no success notification");
+      assert.equal(outcome.status, "installed");
+      assert.ok("resourcesChanged" in outcome);
+      assert.equal((outcome as { resourcesChanged: boolean }).resourcesChanged, true);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Orchestrated mode: post-commit warning collection
+// ───────────────────────────────────────────────────────────────────────────
+
+test("Orchestrated-cache-drop-failure: dropMarketplaceCache throws -> postCommitWarnings has deferred message", async () => {
+  // Gap: dropMarketplaceCache try/catch in orchestrated mode -- EISDIR from
+  // the unlink call is re-thrown by dropMarketplaceCache (not ENOENT), so the
+  // catch appends the 'completion cache refresh deferred' string to
+  // postCommitWarnings instead of firing notifyWarning.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-cache-"));
+    try {
+      __resetCacheForTests();
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+      });
+
+      // Pre-create a DIRECTORY at the pluginCacheFile path. When
+      // dropMarketplaceCache calls unlink() on it the OS returns EISDIR
+      // (not ENOENT), so dropMarketplaceCache re-throws. The orchestrator
+      // catches it and appends the deferred message to postCommitWarnings.
+      const cacheFilePath = await locations.pluginCacheFile("mp");
+      await mkdir(path.dirname(cacheFilePath), { recursive: true });
+      await mkdir(cacheFilePath, { recursive: true });
+
+      const { ctx, pi } = makeCtx();
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      assert.equal(outcome.status, "installed");
+      const warnings = (outcome as { postCommitWarnings?: readonly string[] }).postCommitWarnings;
+      assert.ok(warnings !== undefined && warnings.length >= 1, "must have postCommitWarnings");
+      assert.ok(
+        warnings?.some((w) => w.includes("completion cache refresh deferred")),
+        `expected 'completion cache refresh deferred' in warnings; got: ${JSON.stringify(warnings)}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("Orchestrated-pluginDataDir-failure: mkdir failure -> postCommitWarnings has deferred message", async () => {
+  // Gap: orchestrated variant of AS-6 -- pluginDataDir mkdir failure appends
+  // 'data dir creation deferred' to postCommitWarnings instead of calling
+  // notifyWarning directly.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-data-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+      });
+
+      // Make the parent of pluginDataDir read-only so mkdir(pluginDataDir)
+      // fails. The parent path is <dataRoot>/mp which we create and chmod.
+      await mkdir(path.join(locations.dataRoot, "mp"), { recursive: true });
+      await chmod(path.join(locations.dataRoot, "mp"), 0o555);
+
+      const { ctx, pi } = makeCtx();
+      let outcome;
+      try {
+        outcome = await installPlugin({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+          notifications: { mode: "orchestrated" },
+        });
+      } finally {
+        // Restore permissions so cleanup can remove the temp dir.
+        await chmod(path.join(locations.dataRoot, "mp"), 0o755);
+      }
+
+      assert.ok(outcome !== undefined);
+      assert.equal(outcome.status, "installed");
+      const warnings = (outcome as { postCommitWarnings?: readonly string[] }).postCommitWarnings;
+      assert.ok(warnings !== undefined && warnings.length >= 1, "must have postCommitWarnings");
+      assert.ok(
+        warnings?.some((w) => w.includes("data dir creation deferred")),
+        `expected 'data dir creation deferred' in warnings; got: ${JSON.stringify(warnings)}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("Orchestrated-agent-foreign: agentForeignFailures -> postCommitWarnings has preserved-file message", async () => {
+  // Gap: agentForeignFailures loop in orchestrated mode -- the AS-7
+  // foreign-content message is appended to postCommitWarnings instead of
+  // firing notifyWarning directly.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-foreign-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        agents: [{ sourceName: "bot" }],
+      });
+
+      // Pre-seed a foreign agent file (no marker) at the target path and
+      // a matching agents-index entry so the bridge's prepare detects it as
+      // a foreign-preserved row.
+      await mkdir(locations.extensionRoot, { recursive: true });
+      await mkdir(locations.agentsDir, { recursive: true });
+      const foreignAgentName = `${GENERATED_AGENT_PREFIX}hello-bot`;
+      const foreignAgentPath = path.join(locations.agentsDir, `${foreignAgentName}.md`);
+      await writeFile(foreignAgentPath, "---\nname: foreign\n---\n\nNo marker.\n");
+
+      await writeFile(
+        locations.agentsIndexPath,
+        JSON.stringify({
+          schemaVersion: 1,
+          agents: [
+            {
+              plugin: "hello",
+              marketplace: "mp",
+              sourceAgent: "bot",
+              generatedName: foreignAgentName,
+              sourcePath: "/orig/bot.md",
+              targetPath: foreignAgentPath,
+              sourceHash: "deadbeef",
+              droppedFields: [],
+              droppedTools: [],
+              warnings: [],
+            },
+          ],
+        }),
+      );
+
+      const { ctx, pi } = makeCtx();
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      assert.equal(outcome.status, "installed");
+      const warnings = (outcome as { postCommitWarnings?: readonly string[] }).postCommitWarnings;
+      assert.ok(warnings !== undefined && warnings.length >= 1, "must have postCommitWarnings");
+      assert.ok(
+        warnings?.some((w) => w.includes("pre-existing agent file")),
+        `expected 'pre-existing agent file' in warnings; got: ${JSON.stringify(warnings)}`,
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
