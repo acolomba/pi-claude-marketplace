@@ -1174,6 +1174,102 @@ function computeSeverity(message: NotificationMessage): "warning" | "error" | un
 }
 
 /**
+ * The plugin/marketplace operation counts that drive the Phase 29 summary line.
+ */
+interface SummaryCounts {
+  readonly plugins: number;
+  readonly marketplaces: number;
+}
+
+/**
+ * `error`-severity counting (D-29-04): failed plugin rows (summed across all
+ * marketplaces) and failed marketplace rows. Mirrors `computeSeverity` arm 1.
+ */
+function countFailedOperations(message: NotificationMessage): SummaryCounts {
+  let plugins = 0;
+  let marketplaces = 0;
+
+  for (const mp of message.marketplaces) {
+    if (mp.status === "failed") {
+      marketplaces++;
+    }
+
+    plugins += mp.plugins.filter((p) => p.status === "failed").length;
+  }
+
+  return { plugins, marketplaces };
+}
+
+/**
+ * `warning`-severity counting (D-29-04): actionable-skip plugin rows
+ * (`skipped` with NON-benign reasons) plus `manual recovery` plugin rows, and
+ * actionable-skip marketplace rows (`skipped` with non-benign `reasons`).
+ * Mirrors `computeSeverity` arms 2-4 / `allBenign`.
+ */
+function countSkippedOperations(message: NotificationMessage): SummaryCounts {
+  let plugins = 0;
+  let marketplaces = 0;
+
+  for (const mp of message.marketplaces) {
+    if (mp.status === "skipped" && !allBenign(mp.reasons)) {
+      marketplaces++;
+    }
+
+    plugins += mp.plugins.filter(
+      (p) => p.status === "manual recovery" || (p.status === "skipped" && !allBenign(p.reasons)),
+    ).length;
+  }
+
+  return { plugins, marketplaces };
+}
+
+/**
+ * D-29-03 pluralization: singular `"operation"` for a count of 1, plural
+ * `"operations"` otherwise.
+ */
+function operationPhrase(count: number, kind: "plugin" | "marketplace"): string {
+  return `${count} ${kind} ${count === 1 ? "operation" : "operations"}`;
+}
+
+/**
+ * Phase 29 / UXG-07 (D-29-02/03/04): build the human-readable summary line that
+ * `notify()` prepends before the cascade body for `error` and `warning`
+ * severity. It gives the host `Error:` / `Warning:` prefix a meaningful,
+ * contextual sentence to introduce ("focus on the operation, not what happened
+ * to each plugin -- the cascade body already shows that").
+ *
+ * Verb is `"failed"` for error severity, `"skipped"` for warning severity.
+ *
+ * Wording (D-29-03): when only one type is non-zero the sentence is
+ * `"N plugin operation(s) <verb>."` or `"N marketplace operation(s) <verb>."`;
+ * when both are non-zero it is
+ * `"N plugin operation(s) and M marketplace operation(s) <verb>."`. When BOTH
+ * counts are zero (an unreachable shape -- `computeSeverity` only returns
+ * error/warning when a matching row exists) the function degrades gracefully to
+ * the plugin-only plural form (`"0 plugin operations <verb>."`) rather than
+ * crashing.
+ */
+function buildSummaryLine(message: NotificationMessage, severity: "error" | "warning"): string {
+  const verb = severity === "error" ? "failed" : "skipped";
+  const counts =
+    severity === "error" ? countFailedOperations(message) : countSkippedOperations(message);
+
+  const pluginPhrase = operationPhrase(counts.plugins, "plugin");
+  const marketplacePhrase = operationPhrase(counts.marketplaces, "marketplace");
+
+  if (counts.plugins > 0 && counts.marketplaces > 0) {
+    return `${pluginPhrase} and ${marketplacePhrase} ${verb}.`;
+  }
+
+  if (counts.marketplaces > 0) {
+    return `${marketplacePhrase} ${verb}.`;
+  }
+
+  // counts.plugins > 0, or the unreachable 0/0 degrade-to-plugin-plural case.
+  return `${pluginPhrase} ${verb}.`;
+}
+
+/**
  * Reload-hint trigger per SNM-33. The trailer is reserved for
  * operations that actually change a Pi-visible resource. The ONLY Pi-visible
  * resources are plugin rows (skill / agent / command / MCP entry); marketplace
@@ -1360,9 +1456,16 @@ export function notify(
   // omitting the 2nd arg is info severity; "warning" / "error" otherwise.
   const severity = computeSeverity(message);
   if (severity === undefined) {
+    // Phase 29 / UXG-07 (D-29-02): info severity is byte-identical to the
+    // pre-Phase-29 behavior -- cascade body only, NO summary line.
     ctx.ui.notify(withHint);
   } else {
-    ctx.ui.notify(withHint, severity);
+    // Phase 29 / UXG-07 (D-29-02): for error/warning severity, PREPEND the
+    // summary line so the host `Error:` / `Warning:` prefix introduces a
+    // meaningful count of the failed/skipped operations. The reload-hint (if
+    // any) stays last: `{summary}\n\n{cascade body}\n\n{reload-hint}`.
+    const summarized = `${buildSummaryLine(message, severity)}\n\n${withHint}`;
+    ctx.ui.notify(summarized, severity);
   }
 }
 
