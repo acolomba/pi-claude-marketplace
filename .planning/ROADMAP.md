@@ -515,16 +515,17 @@ Plans:
 
 1. `marketplace list` renders no `<last-updated <iso>>` marker on any header; catalog + catalog-uat fixtures updated in lockstep and GREEN.
 2. `marketplace autoupdate` / `noautoupdate` render `<autoupdate>` / `<no autoupdate>` markers (fresh flip) and `<autoupdate> {already autoupdate}` / `<no autoupdate> {already no autoupdate}` (idempotent); the `(autoupdate enabled/disabled)` and `(skipped) {already enabled/disabled}` forms are gone.
-3. `marketplace update` with no plugin change renders `(skipped) {up-to-date}`, not `(updated)`.
+3. `marketplace update` with no plugin change renders `(skipped) {up-to-date}`, not `(updated)` -- for both autoupdate-OFF (manifest-only refresh) and autoupdate-ON (cascade) marketplaces.
 4. `docs/output-catalog.md` correctly documents that `marketplace add` never auto-enables autoupdate, and the autoupdate heading matches the `autoupdate`/`noautoupdate` verbs.
 5. `npm run check` + catalog-uat GREEN.
 
-**Plans:** 4/4 plans executed
+**Plans:** 5/5 plans executed (27-05 gap closure)
 
 - [x] 27-01-PLAN.md (Wave 1) -- UXG-06: correct github-source autoupdate-default prose + rename the autoupdate heading to the real `autoupdate`/`noautoupdate` verbs + sync the catalog-uat FIXTURES key byte-for-byte
 - [x] 27-02-PLAN.md (Wave 2) -- UXG-01: drop the `<last-updated <iso>>` token from the list-surface renderer + catalog + notify-v2 + catalog-uat + list orchestrator test; retain the `lastUpdatedAt` field in state/type
 - [x] 27-03-PLAN.md (Wave 3) -- UXG-04: autoupdate flip emits `<autoupdate>`/`<no autoupdate>` markers + idempotent `{already autoupdate}`/`{already no autoupdate}` via Strategy B (rename 2 REASONS, rewrite renderer arms, no MARKETPLACE_STATUSES/MARKERS churn); orchestrator payload + catalog + 3 byte-test surfaces in lockstep
 - [x] 27-04-PLAN.md (Wave 4) -- UXG-05: manifest content-compare change detector in update.ts; autoupdate-OFF no-op emits `(skipped) {up-to-date}` (warning, no trailer), changed path stays `(updated)`; catalog + byte tests + orchestrator change-detector tests; phase GREEN gate + nyquist sign-off
+- [ ] 27-05-PLAN.md (Wave 1, gap closure) -- UXG-05 UAT Test-3 gap: autoupdate-ON `marketplace update` no-op now consults `snapshot.changed` + every-plugin-`unchanged` to emit `(skipped) {up-to-date}` instead of always `(updated)`; folds in WR-01 (correct `.Parse` comment) + WR-02 (ENOENT-narrow PRE-read catch) + WR-03 (autoupdate-ON no-op/changed orchestrator + catalog-uat + notify-v2 coverage)
 
 ### Phase 28: Severity Routing & Label Discipline
 
