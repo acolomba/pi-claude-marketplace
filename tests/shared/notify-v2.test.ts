@@ -405,7 +405,7 @@ test("notify renders upgradable plugin with version and reasons brace", () => {
   ]);
 });
 
-test("notify renders skipped plugin with reasons (warning severity)", () => {
+test("notify renders benign skipped plugin with up-to-date reason (info severity, UXG-02 / D-28-06)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -430,11 +430,12 @@ test("notify renders skipped plugin with reasons (warning severity)", () => {
   // The marketplace-status arm is deleted per SNM-33 / D-22-01, so a
   // `(skipped)` row under an `(added)` marketplace emits NO trailer
   // (`skipped` is not one of installed/updated/reinstalled/uninstalled).
-  // p.status === "skipped" still routes severity to "warning" per D-16-11
-  // (computeSeverity is independent of shouldEmitReloadHint).
+  // Per UXG-02 / D-28-06 the single reason `up-to-date` is in BENIGN_REASONS,
+  // so this all-benign cascade now computes INFO (no 2nd severity arg). The
+  // rendered body string is byte-identical to before -- only the severity arg
+  // moved.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     `● demo [user] (added)\n  ⊘ commit-commands v1.0.0 (skipped) {up-to-date}`,
-    "warning",
   ]);
 });
 
@@ -567,7 +568,7 @@ test("notify renders autoupdate disabled marketplace header alone (UXG-04 <no au
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [`● foo [user] <no autoupdate>`]);
 });
 
-test("notify renders idempotent-enable marketplace header with <autoupdate> marker + reasons brace (UXG-04, warning severity, NO reload-hint per D-17.1-05)", () => {
+test("notify renders idempotent-enable marketplace header with <autoupdate> marker + reasons brace (UXG-04, info severity per UXG-02 / D-28-07, NO reload-hint per D-17.1-05)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -584,15 +585,17 @@ test("notify renders idempotent-enable marketplace header with <autoupdate> mark
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // UXG-04 byte form: idempotent flip renders the marker-as-outcome plus the
-  // idempotence brace (no `(skipped)` token) and routes severity to "warning";
-  // NO reload-hint (no state changed).
+  // idempotence brace (no `(skipped)` token). Per UXG-02 / D-28-07 the mp-level
+  // `skipped` reason `already autoupdate` is in BENIGN_REASONS, so this benign
+  // no-op now computes INFO (no 2nd arg); NO reload-hint (no state changed).
+  // The rendered body string is byte-identical to before -- only the severity
+  // arg moved.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     `● foo [user] <autoupdate> {already autoupdate}`,
-    "warning",
   ]);
 });
 
-test('notify severity tier mp-skipped: idempotent-disable marketplace renders <no autoupdate> + brace, routes "warning" (UXG-04 / D-17.1-05 ladder)', () => {
+test("notify severity tier mp-skipped: idempotent-disable marketplace renders <no autoupdate> + brace, computes info (benign per UXG-02 / D-28-07)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -608,14 +611,14 @@ test('notify severity tier mp-skipped: idempotent-disable marketplace renders <n
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  // Structural assertion of the severity-arg presence; the byte form is
-  // covered by the preceding test. The Pi API surface routes the second
-  // arg as the severity magic-string per D-16-11.
-  assert.equal(ctx.ui.notify.mock.calls[0]!.arguments.length, 2);
-  assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "warning");
+  // Structural assertion of the severity-arg ABSENCE; the byte form is
+  // covered by the preceding test. Per UXG-02 / D-28-07 the mp-level
+  // `skipped` reason `already no autoupdate` is in BENIGN_REASONS, so this
+  // benign no-op computes INFO -- the 2nd arg is omitted (length 1).
+  assert.equal(ctx.ui.notify.mock.calls[0]!.arguments.length, 1);
 });
 
-test('UXG-05: marketplace update no-op (mp.skipped + reasons:["up-to-date"], plugins:[]) renders `● <mp> [<scope>] (skipped) {up-to-date}`, routes "warning", emits NO /reload trailer', () => {
+test('UXG-05: marketplace update no-op (mp.skipped + reasons:["up-to-date"], plugins:[]) renders `● <mp> [<scope>] (skipped) {up-to-date}`, computes info (benign per UXG-02 / D-28-07), emits NO /reload trailer', () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   // The autoupdate-OFF manifest-only refresh whose validated manifest content
@@ -641,11 +644,11 @@ test('UXG-05: marketplace update no-op (mp.skipped + reasons:["up-to-date"], plu
   const body = args[0] as string;
   // (a) Byte form: the shared mp-skipped arm renders `(skipped) {up-to-date}`.
   assert.equal(body, "● local-mp [user] (skipped) {up-to-date}");
-  // (b) Severity: mp.status === "skipped" routes "warning" via computeSeverity.
-  //     (Current-ladder behavior; UXG-02 softening to info is Phase 28, not
-  //     pre-empted here.)
-  assert.equal(args.length, 2);
-  assert.equal(args[1], "warning");
+  // (b) Severity: mp.status === "skipped" with the benign reason `up-to-date`
+  //     (in BENIGN_REASONS) computes INFO via computeSeverity -- the 2nd arg
+  //     is omitted (length 1). This realizes UXG-02 / D-28-07, closing the
+  //     Plan 27-04 deferral.
+  assert.equal(args.length, 1);
   // (c) NO reload-hint: plugins:[] means no Pi-visible resource change, so the
   //     `/reload to pick up changes` trailer is absent (SNM-33 / orthogonal to
   //     UXG-05).
@@ -655,7 +658,7 @@ test('UXG-05: marketplace update no-op (mp.skipped + reasons:["up-to-date"], plu
   );
 });
 
-test('UXG-05 (UAT Test-3 gap): autoupdate-ON no-op payload (mp.skipped + reasons:["up-to-date"], plugins:[]) renders byte-identically to the OFF no-op `● <mp> [<scope>] (skipped) {up-to-date}`, routes "warning", emits NO /reload trailer', () => {
+test('UXG-05 (UAT Test-3 gap): autoupdate-ON no-op payload (mp.skipped + reasons:["up-to-date"], plugins:[]) renders byte-identically to the OFF no-op `● <mp> [<scope>] (skipped) {up-to-date}`, computes info (benign per UXG-02 / D-28-07), emits NO /reload trailer', () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   // The autoupdate-ON cascade no-op: the orchestrator drops the all-`unchanged`
@@ -682,9 +685,10 @@ test('UXG-05 (UAT Test-3 gap): autoupdate-ON no-op payload (mp.skipped + reasons
   const body = args[0] as string;
   // (a) Byte form: same shared mp-skipped arm -> `(skipped) {up-to-date}`.
   assert.equal(body, "● official [user] (skipped) {up-to-date}");
-  // (b) Severity: mp.status === "skipped" routes "warning" via computeSeverity.
-  assert.equal(args.length, 2);
-  assert.equal(args[1], "warning");
+  // (b) Severity: mp.status === "skipped" with the benign reason `up-to-date`
+  //     computes INFO via computeSeverity (UXG-02 / D-28-07) -- 2nd arg
+  //     omitted (length 1).
+  assert.equal(args.length, 1);
   // (c) NO reload-hint: plugins:[] means no Pi-visible resource change.
   assert.ok(
     !body.includes("/reload to pick up changes"),
@@ -692,25 +696,22 @@ test('UXG-05 (UAT Test-3 gap): autoupdate-ON no-op payload (mp.skipped + reasons
   );
 });
 
-test("notify mixed-severity payload: mp.skipped coexists with healthy plugin row -> first-match severity routing fires on mp.status (D-17.1-05)", () => {
+test("notify benign-only cascade: benign mp.skipped coexists with healthy plugin row -> computes info (UXG-02 / D-28-06/07)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
-  // Mixed payload: mp-level "skipped" (idempotent autoupdate flip) sitting
-  // OVER a healthy plugin row. Plan 17.1-02 Task 3 (checker Issue #3
-  // reframing) calls for this test to PROVE the routing semantics that
-  // Tests 3 and 4 above do not cover (those tests use empty plugins).
+  // Benign-only payload: mp-level "skipped" (idempotent autoupdate flip,
+  // reason `already autoupdate` in BENIGN_REASONS) sitting OVER a healthy
+  // plugin row. This proves the benign-softening ladder dominates a
+  // non-empty healthy plugin set: the cascade's ONLY non-success row is a
+  // BENIGN mp-skip, so per UXG-02 / D-28-06 arm 5 it now computes INFO
+  // (previously routed to "warning" under the old Phase-17.1 ladder).
   //
   // The "healthy" plugin row is "available" rather than "installed". Per
   // D-16-12 + the Phase 17.1 amendment to shouldEmitReloadHint, plugin
   // statuses {"installed", "updated", "reinstalled", "uninstalled"} ARE
-  // reload-hint triggers; "available" is NOT. Using "available" lets the
-  // test cleanly isolate the mp.skipped severity routing while honoring
-  // assertion (c) below (no reload-hint trailer). The plan's intent is to
-  // prove "the mp-level routing dominates a non-empty healthy plugin set"
-  // -- the specific healthy variant is unconstrained as long as it routes
-  // to info/no-trigger when alone. (Deviation from plan's "installed"
-  // wording: see SUMMARY for rationale; "installed" would itself trigger
-  // the reload-hint per D-16-12, contradicting assertion (c).)
+  // reload-hint triggers; "available" is NOT. Using "available" keeps
+  // assertion (c) below (no reload-hint trailer) clean while isolating the
+  // benign mp.skip severity routing.
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -735,10 +736,11 @@ test("notify mixed-severity payload: mp.skipped coexists with healthy plugin row
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
-  // (a) Severity ladder: first-match pass routes mp.skipped to "warning"
-  //     REGARDLESS of the healthy "available" plugin row underneath
-  //     (which alone would route to info).
-  assert.equal(args[1], "warning");
+  // (a) Severity ladder: the cascade's ONLY non-success row is the BENIGN
+  //     mp.skip (`already autoupdate`), and the "available" plugin row is
+  //     success -> arm 5 returns undefined (info), so the 2nd arg is
+  //     omitted (length 1).
+  assert.equal(args.length, 1);
   // (b) mp header renders the idempotent-autoupdate state as the UXG-04
   //     marker-as-outcome plus the idempotence brace.
   const body = args[0] as string;
@@ -1607,7 +1609,7 @@ test("notify severity tier info: installed plugin in added marketplace -> argume
   assert.equal(ctx.ui.notify.mock.calls[0]!.arguments.length, 1);
 });
 
-test('notify severity tier warning: single skipped plugin -> arguments = [..., "warning"]', () => {
+test('notify severity tier warning: single actionable skipped plugin -> arguments = [..., "warning"]', () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -1620,7 +1622,7 @@ test('notify severity tier warning: single skipped plugin -> arguments = [..., "
             status: "skipped",
             name: "commit-commands",
             version: "1.0.0",
-            reasons: ["up-to-date"],
+            reasons: ["not installed"],
           },
         ],
       },
@@ -1628,7 +1630,9 @@ test('notify severity tier warning: single skipped plugin -> arguments = [..., "
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  // skipped -> warning severity per D-16-11.
+  // An ACTIONABLE skip (`not installed`, D-28-03) is NOT in BENIGN_REASONS, so
+  // arm 3 of the D-28-06 ladder routes it to "warning" (a benign `up-to-date`
+  // skip would compute info per UXG-02 -- see the dedicated info tests above).
   assert.equal(ctx.ui.notify.mock.calls[0]!.arguments.length, 2);
   assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "warning");
 });
@@ -1918,4 +1922,88 @@ test("notify passes a SemVer version through unchanged -> v1.0.0 (non-hash pass-
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     `● demo [user] (added)\n  ● commit-commands v1.0.0 (installed)\n\n/reload to pick up changes`,
   ]);
+});
+
+// ===========================================================================
+// 33-35: Phase 28 / UXG-02 benign-softening ladder (D-28-06 arms 2-4). The
+// still-`warning` cases that the benign-skip variants above do NOT cover:
+//   (i)  an actionable plugin skip (`reasons:["not installed"]`, D-28-03);
+//   (ii) a MIXED cascade (one benign skip + one actionable skip under the
+//        same marketplace) -- first-match poisoning per D-28-09;
+//   (iii) an mp-level skip with `reasons` OMITTED -- D-28-08 safe default.
+// The benign-only info cases are asserted in-place above (the plugin
+// `up-to-date` skip, the idempotent autoupdate flips, the UXG-05 mp no-ops,
+// the mixed mp.skipped+available cascade, and severity tier info). The
+// manual-recovery -> warning case is asserted by the test at line ~1729.
+// ===========================================================================
+
+test('UXG-02 (D-28-03/06): actionable plugin skip ("not installed") computes warning', () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  // `not installed` is the actionable "can't update/reinstall a plugin that
+  // isn't there" reason (D-28-03); it is NOT in BENIGN_REASONS, so arm 3 of
+  // the D-28-06 ladder routes the cascade to "warning".
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "skipped",
+            name: "commit-commands",
+            version: "1.0.0",
+            reasons: ["not installed"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 2);
+  assert.equal(args[1], "warning");
+});
+
+test("UXG-02 (D-28-09): mixed cascade (benign skip + actionable skip) computes warning -- first-match poisoning", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  // A benign `up-to-date` skip and an actionable `not installed` skip under
+  // the SAME marketplace. Per D-28-09 the actionable row poisons the whole
+  // cascade -> "warning" (the requirement's "*only* non-success rows are
+  // benign skips -> info" is NOT satisfied here).
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          { status: "skipped", name: "alpha", version: "1.0.0", reasons: ["up-to-date"] },
+          { status: "skipped", name: "beta", version: "2.0.0", reasons: ["not installed"] },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 2);
+  assert.equal(args[1], "warning");
+});
+
+test("UXG-02 (D-28-08): mp-level skip with reasons OMITTED computes warning -- safe default", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  // An mp-level `skipped` whose OPTIONAL `reasons?` is missing cannot be
+  // proven benign (allBenign returns false on undefined), so arm 4 of the
+  // D-28-06 ladder routes it to "warning" -- the D-28-08 safe default.
+  const msg: NotificationMessage = {
+    marketplaces: [{ name: "demo", scope: "user", status: "skipped", plugins: [] }],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 2);
+  assert.equal(args[1], "warning");
 });

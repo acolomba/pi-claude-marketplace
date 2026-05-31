@@ -198,9 +198,16 @@ type FixtureMap = Readonly<Record<string, Readonly<Record<string, CatalogFixture
 //     markers (or piWithBothLoaded for states that emit no `{requires
 //     pi-...}` markers).
 //   - `expectedSeverity` is set ONLY when the payload triggers
-//     computeSeverity() to return "warning" or "error" per D-16-11:
+//     computeSeverity() to return "warning" or "error" per the D-28-06
+//     benign-softening ladder (refines D-16-11):
 //       failed-bearing -> "error"
-//       skipped or manual-recovery without failed -> "warning"
+//       manual-recovery (without failed) -> "warning"
+//       skipped (plugin or mp) whose reasons are NOT all in BENIGN_REASONS,
+//         OR an mp-level skip with missing/empty reasons (D-28-08) -> "warning"
+//       an ALL-BENIGN skip cascade (every reason in BENIGN_REASONS:
+//         up-to-date / already installed / already autoupdate /
+//         already no autoupdate) -> omit the field (info, no 2nd arg) per
+//         UXG-02 / D-28-06
 //       otherwise omit the field (info severity, no 2nd arg).
 //   - Plugin variants honor the discriminated-union carve-outs at
 //     `shared/notify.ts` lines 288-448 (required vs absent reasons /
@@ -844,7 +851,8 @@ const FIXTURES: FixtureMap = {
 
     "all-up-to-date-noop": {
       pi: piWithBothLoaded(),
-      expectedSeverity: "warning",
+      // UXG-02 / D-28-06: every reason is `up-to-date` (in BENIGN_REASONS), so
+      // this all-benign skip cascade computes INFO -- no `expectedSeverity`.
       message: {
         marketplaces: [
           {
@@ -1235,10 +1243,11 @@ const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
   "/claude:plugin marketplace update <name>": {
     // UXG-05: autoupdate-OFF manifest-only refresh splits into a no-op
-    // (`skipped {up-to-date}`, warning) and a changed (`updated`) state.
+    // (`skipped {up-to-date}`) and a changed (`updated`) state. Per UXG-02 /
+    // D-28-07 the benign `up-to-date` no-op now computes INFO (no
+    // `expectedSeverity`), closing the Plan 27-04 deferral.
     "update-no-op-skipped": {
       pi: piWithBothLoaded(),
-      expectedSeverity: "warning",
       message: {
         marketplaces: [
           {
@@ -1258,7 +1267,8 @@ const FIXTURES: FixtureMap = {
     // mp name (`official`) so the two fixtures are not confusable.
     "update-autoupdate-noop-skipped": {
       pi: piWithBothLoaded(),
-      expectedSeverity: "warning",
+      // Benign `up-to-date` no-op -> INFO per UXG-02 / D-28-07 (no
+      // `expectedSeverity`); byte form unchanged.
       message: {
         marketplaces: [
           {
@@ -1337,7 +1347,8 @@ const FIXTURES: FixtureMap = {
 
     "enable-idempotent": {
       pi: piWithBothLoaded(),
-      expectedSeverity: "warning",
+      // Benign idempotent flip (`already autoupdate` in BENIGN_REASONS) ->
+      // INFO per UXG-02 / D-28-07 (no `expectedSeverity`); byte form unchanged.
       message: {
         marketplaces: [
           {
@@ -1353,7 +1364,8 @@ const FIXTURES: FixtureMap = {
 
     "disable-idempotent": {
       pi: piWithBothLoaded(),
-      expectedSeverity: "warning",
+      // Benign idempotent flip (`already no autoupdate` in BENIGN_REASONS) ->
+      // INFO per UXG-02 / D-28-07 (no `expectedSeverity`); byte form unchanged.
       message: {
         marketplaces: [
           {
