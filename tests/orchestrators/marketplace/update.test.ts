@@ -408,32 +408,38 @@ test("CR-05 / MU-5: pre-fetch failure (gitOps.fetch throws) does NOT append 'Ret
 
 test("MU-5: clone advances + manifest re-validation fails -- 'Retry the command.' retry hint", async () => {
   await withHermeticHome(async ({ cwd }) => {
-    const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-    const cloneDir = await locations.sourceCloneDir("broken");
-    // Place an INVALID manifest at the cloneDir so re-validation fails.
-    await cp(fixtureMarketplaceDir("invalid-manifest"), cloneDir, { recursive: true });
-    await saveState(locations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: {
-        broken: {
-          name: "broken",
-          scope: "project",
-          source: makeGithubSource(),
-          addedFromCwd: cwd,
-          manifestPath: path.join(cloneDir, ".claude-plugin", "marketplace.json"),
-          marketplaceRoot: cloneDir,
-          plugins: {},
-        },
-      },
-    });
+    // Seed with a VALID manifest so the PRE-read content key resolves cleanly
+    // (WR-02: a malformed PRE manifest would now route to (failed) BEFORE the
+    // clone advances, which is a DIFFERENT diagnostic than this test asserts).
+    // The clone-advanced + POST-revalidation-fails path under test is reached
+    // by overwriting the manifest with INVALID content in the checkout override
+    // (mirrors the UXG-05 "changed" test's checkout-rewrite pattern).
+    const { cloneDir } = await seedGithubMarketplace({ cwd, name: "broken" });
 
     const { ctx, pi, notifications } = makeCtx();
     const { gitOps } = makeMockGitOps({
       remoteRefs: { "refs/remotes/origin/HEAD": "abcdef0000000000000000000000000000000003" },
       localRefs: { HEAD: "abcdef0000000000000000000000000000000003" },
     });
-    await updateMarketplace({ ctx, pi, name: "broken", scope: "project", cwd, gitOps });
+    const brokenGitOps: typeof gitOps = {
+      ...gitOps,
+      async checkout(opts): Promise<void> {
+        await gitOps.checkout(opts);
+        // After the clone advances (fetch + checkout), the working-tree
+        // manifest is INVALID, so the POST re-validation in
+        // validateManifestAtRoot throws -> MarketplaceUpdateError with the
+        // "clone advanced but manifest could not be persisted" diagnostic.
+        await cp(fixtureMarketplaceDir("invalid-manifest"), cloneDir, { recursive: true });
+      },
+    };
+    await updateMarketplace({
+      ctx,
+      pi,
+      name: "broken",
+      scope: "project",
+      cwd,
+      gitOps: brokenGitOps,
+    });
 
     // Clone advanced + manifest re-read failed: the synthetic failed-plugin
     // child surfaces the underlying MarketplaceUpdateError cause-chain so the
@@ -699,7 +705,7 @@ test("MU-9 + MSG-RH-1: success emits canonical reload hint trailer for updated p
   });
 });
 
-test("RH-1 + SNM-33 / D-22-01: cascade all-unchanged emits NO reload-hint (no plugin state-change row; G-MIL-06)", async () => {
+test("UXG-05 (UAT Test-3 gap) + RH-1 + SNM-33 / D-22-01: autoupdate-ON cascade all-unchanged no-op renders `(skipped) {up-to-date}` (warning) and emits NO reload-hint (G-MIL-06)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     await seedGithubMarketplace({
       cwd,
@@ -709,6 +715,9 @@ test("RH-1 + SNM-33 / D-22-01: cascade all-unchanged emits NO reload-hint (no pl
       plugins: { p: makePluginRecord() },
     });
     const { ctx, pi, notifications } = makeCtx();
+    // The mock git ops advance the ref but do NOT rewrite the seeded
+    // `valid-marketplace` fixture, so the refresh re-validates byte-identical
+    // manifest content -> snapshot.changed === false.
     const { gitOps } = makeMockGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000008" },
     });
@@ -730,14 +739,72 @@ test("RH-1 + SNM-33 / D-22-01: cascade all-unchanged emits NO reload-hint (no pl
       gitOps,
       pluginUpdate,
     });
-    // SNM-33 / D-22-01 (G-MIL-06): when every plugin in the cascade is
-    // `unchanged` (renders as `skipped {up-to-date}`), no plugin row carries
-    // a state-change token. The marketplace record refreshed, but a
-    // marketplace record is not a Pi-visible resource, so the trailer is
-    // suppressed -- shouldEmitReloadHint is plugin-row-driven only.
+    // UXG-05 (Phase 27 UAT Test-3 gap): the autoupdate-ON branch previously
+    // emitted `(updated)` unconditionally (this test passed against that buggy
+    // output asserting only trailer-absence, which masked the gap). With the
+    // fix, snapshot.changed === false AND every cascade outcome is `unchanged`
+    // -> the marketplace converges to the SAME no-op byte form as the OFF
+    // no-op: `(skipped) {up-to-date}` at warning severity, all-`unchanged`
+    // cascade rows dropped (plugins:[]).
     const first = notifications[0];
     assert.ok(first !== undefined);
+    assert.equal(first.message, "● noupd [project] (skipped) {up-to-date}");
+    assert.equal(first.severity, "warning");
+    // SNM-33 / D-22-01 (G-MIL-06): no plugin row carries a state-change token
+    // (plugins:[]), and a marketplace record is not a Pi-visible resource, so
+    // the trailer is suppressed -- shouldEmitReloadHint is plugin-row-driven.
     assert.doesNotMatch(first.message, /\/reload to pick up changes/);
+  });
+});
+
+test("UXG-05 (UAT Test-3 gap) regression guard: autoupdate-ON cascade where a plugin UPDATES renders `(updated)` with the per-plugin row + reload-hint (NOT a no-op even when snapshot.changed === false)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    await seedGithubMarketplace({
+      cwd,
+      name: "official",
+      ref: "main",
+      autoupdate: true,
+      plugins: { p: makePluginRecord() },
+    });
+    const { ctx, pi, notifications } = makeCtx();
+    // Same setup as the no-op test: the mock git ops advance the ref but do
+    // NOT rewrite the seeded fixture, so snapshot.changed === false. The ONLY
+    // difference is the cascade outcome -- a plugin actually updated, so
+    // outcomes.every(unchanged) is false and the no-op gate does NOT fire.
+    const { gitOps } = makeMockGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000009" },
+    });
+    const pluginUpdate: PluginUpdateFn = async (plugin) =>
+      Promise.resolve({
+        partition: "updated",
+        name: plugin,
+        fromVersion: "0.0.1",
+        toVersion: "0.0.2",
+        stagedAgents: [],
+        stagedMcpServers: [],
+        declaresAgents: false,
+        declaresMcp: false,
+      });
+    await updateMarketplace({
+      ctx,
+      pi,
+      name: "official",
+      scope: "project",
+      cwd,
+      gitOps,
+      pluginUpdate,
+    });
+    // Condition B (outcomes.every(... "unchanged")) is false because a plugin
+    // updated, so the no-op gate is skipped even though snapshot.changed is
+    // false. The marketplace header stays `(updated)` and the per-plugin
+    // updated row + reload-hint trailer are emitted.
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    assert.ok(
+      first.message.startsWith("● official [project] (updated)"),
+      `expected (updated) header, got: ${first.message}`,
+    );
+    assert.match(first.message, /\/reload to pick up changes/);
   });
 });
 

@@ -655,6 +655,43 @@ test('UXG-05: marketplace update no-op (mp.skipped + reasons:["up-to-date"], plu
   );
 });
 
+test('UXG-05 (UAT Test-3 gap): autoupdate-ON no-op payload (mp.skipped + reasons:["up-to-date"], plugins:[]) renders byte-identically to the OFF no-op `● <mp> [<scope>] (skipped) {up-to-date}`, routes "warning", emits NO /reload trailer', () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  // The autoupdate-ON cascade no-op: the orchestrator drops the all-`unchanged`
+  // cascade rows (plugins:[]) and emits the SAME mp-level `skipped` payload as
+  // the autoupdate-OFF no-op. This locks that the renderer is
+  // autoupdate-flag-agnostic -- the no-op vs changed distinction is purely the
+  // orchestrator's decision; the same shared mp-`skipped` arm composes the byte
+  // form regardless of whether autoupdate was ON or OFF. `up-to-date` is
+  // already a REASONS member; the renderer needs no change.
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        status: "skipped",
+        reasons: ["up-to-date"],
+        plugins: [],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  const body = args[0] as string;
+  // (a) Byte form: same shared mp-skipped arm -> `(skipped) {up-to-date}`.
+  assert.equal(body, "● official [user] (skipped) {up-to-date}");
+  // (b) Severity: mp.status === "skipped" routes "warning" via computeSeverity.
+  assert.equal(args.length, 2);
+  assert.equal(args[1], "warning");
+  // (c) NO reload-hint: plugins:[] means no Pi-visible resource change.
+  assert.ok(
+    !body.includes("/reload to pick up changes"),
+    `expected body to NOT include reload-hint trailer, got: ${body}`,
+  );
+});
+
 test("notify mixed-severity payload: mp.skipped coexists with healthy plugin row -> first-match severity routing fires on mp.status (D-17.1-05)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();

@@ -1252,6 +1252,26 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // UXG-05 (Phase 27 UAT Test-3 gap closure): the autoupdate-ON cascade
+    // no-op converges to the SAME `(skipped) {up-to-date}` byte form as the
+    // OFF no-op (plugins:[], dropped all-`unchanged` cascade rows). Distinct
+    // mp name (`official`) so the two fixtures are not confusable.
+    "update-autoupdate-noop-skipped": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            status: "skipped",
+            reasons: ["up-to-date"],
+            plugins: [],
+          },
+        ],
+      },
+    },
+
     "manifest-refresh-changed": {
       pi: piWithBothLoaded(),
       message: {

@@ -800,7 +800,7 @@ ______________________________________________________________________
 
 ## `/claude:plugin marketplace update <name>`
 
-Single marketplace, multi-plugin cascade. The marketplace header carries `(updated)`; plugin rows indent two spaces underneath. On the autoupdate-OFF path (manifest-only refresh, no plugin cascade) the header distinguishes a no-op from a genuine change: an unchanged manifest renders `(skipped) {up-to-date}` (UXG-05), a changed manifest renders `(updated)`.
+Single marketplace, multi-plugin cascade. The marketplace header carries `(updated)`; plugin rows indent two spaces underneath. On the autoupdate-OFF path (manifest-only refresh, no plugin cascade) the header distinguishes a no-op from a genuine change: an unchanged manifest renders `(skipped) {up-to-date}` (UXG-05), a changed manifest renders `(updated)`. The same no-op vs changed distinction applies on the autoupdate-ON cascade path: when the validated manifest content is unchanged AND every cascaded plugin is `unchanged` (up-to-date), the marketplace converges to the SAME `(skipped) {up-to-date}` byte form (`plugins: []`, no cascade rows) rather than `(updated)`.
 
 ### Autoupdate-off manifest refresh -- no change (no-op)
 
@@ -811,6 +811,16 @@ Single marketplace, multi-plugin cascade. The marketplace header carries `(updat
 ```
 
 Manifest-only refresh whose validated `marketplace.json` content was byte-identical pre/post (UXG-05). The autoupdate-OFF path compares the parsed, typebox-validated manifest content (not `lastUpdatedAt`, not the git SHA), so the no-op is source-kind-uniform: a path source whose local manifest is unchanged, and a github source whose clone advanced but yielded byte-identical manifest content, both render this. `mp.status = "skipped"`, `mp.reasons = ["up-to-date"]`; no plugin children (`plugins: []`). Severity: `warning` (any `skipped` → warning per the current severity ladder). The `warning` routing for this benign skip is current-ladder behavior; softening it to `info` is the surface UXG-02 (Phase 28) will later address and is NOT pre-empted here. No reload-hint: with no plugin children there is no Pi-visible resource change, so a manifest-only refresh never warrants a `/reload` (SNM-33 / D-22-01 / G-MIL-06).
+
+### Autoupdate-on cascade -- no change (no-op)
+
+<!-- catalog-state: update-autoupdate-noop-skipped -->
+
+```text
+● official [user] (skipped) {up-to-date}
+```
+
+Autoupdate-ON cascade refresh whose validated `marketplace.json` content was byte-identical pre/post AND whose every cascaded plugin was `unchanged` (up-to-date) (UXG-05). The autoupdate-ON path consults the same content-compare detector as the OFF path (`snapshot.changed === false`) PLUS the cascade outcomes (`outcomes.every(o => o.partition === "unchanged")`); when both hold, the marketplace converges to the SAME `(skipped) {up-to-date}` byte form as the autoupdate-OFF no-op -- the all-`unchanged` cascade rows are dropped (`plugins: []`), so this is byte-identical to the OFF no-op (a distinct mp name, `official`, matches the autoupdate-ON cascade examples in this section). `mp.status = "skipped"`, `mp.reasons = ["up-to-date"]`. Severity: `warning` (any `skipped` → warning per the current severity ladder; UXG-02 info-softening is Phase 28 and is NOT pre-empted here). No reload-hint: with no plugin children there is no Pi-visible resource change (SNM-33 / D-22-01 / G-MIL-06). This is exactly what the Phase 27 UAT Test-3 gap missed: prior to the fix the autoupdate-ON branch emitted `status: "updated"` unconditionally and never consulted `snapshot.changed`, so a true no-op on an autoupdate-ON marketplace (e.g. `claude-plugins-official`) always rendered `(updated)`.
 
 ### Autoupdate-off manifest refresh -- changed
 
