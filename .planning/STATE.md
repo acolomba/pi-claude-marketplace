@@ -4,8 +4,8 @@ milestone: v1.5
 milestone_name: Notification Output Polish
 status: executing
 stopped_at: Phase 28 context gathered
-last_updated: "2026-05-31T11:45:41.901Z"
-last_activity: 2026-05-31 -- Phase 28 planning complete
+last_updated: "2026-05-31T11:51:47.231Z"
+last_activity: 2026-05-31 -- Phase 28 execution started
 progress:
   total_phases: 16
   completed_phases: 15
@@ -20,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-30)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 28 -- severity-routing-&-label-discipline (Phase 27 complete, incl. UXG-05 autoupdate-ON no-op gap closure)
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 28 -- severity-routing-label-discipline
 
 ## Current Position
 
-Phase: 28
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-31 -- Phase 28 planning complete
+Phase: 28 (severity-routing-label-discipline) -- EXECUTING
+Plan: 1 of 2
+Status: Executing Phase 28
+Last activity: 2026-05-31 -- Phase 28 execution started
 
 ## Performance Metrics
 
