@@ -798,3 +798,350 @@ test("D-03-INV :: uninstall invalidates plugin cache for the target marketplace"
     }
   });
 });
+
+// narrowCascadeFailure errno branches (lines 111-121) -----------------
+// Exercises the EACCES/EPERM -> "permission denied", ENOENT ->
+// "source missing", unknown-errno default -> "not in manifest", and
+// plain-Error (no .code) -> "not in manifest" paths by injecting
+// cascade stubs that return ok:false with the target error as cause.
+
+test("narrowCascadeFailure: EACCES maps to 'permission denied' in PluginFailedMessage", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-ncf-eacces-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: { hello: makePluginRecord() },
+          },
+        },
+      });
+
+      const stubCascade: typeof cascadeUnstagePlugin = () => {
+        const err = Object.assign(new Error("EACCES: permission denied, unlink '/path/to/file'"), {
+          code: "EACCES",
+        });
+        return Promise.resolve({ ok: false, cause: err });
+      };
+
+      const { ctx, pi, notifications } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        cascade: stubCascade,
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.ok(
+        (notifications[0]?.message ?? "").startsWith(
+          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {permission denied}\n",
+        ),
+        `expected 'permission denied' reason; got: "${notifications[0]?.message ?? ""}"`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("narrowCascadeFailure: EPERM maps to 'permission denied' in PluginFailedMessage", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-ncf-eperm-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: { hello: makePluginRecord() },
+          },
+        },
+      });
+
+      const stubCascade: typeof cascadeUnstagePlugin = () => {
+        const err = Object.assign(
+          new Error("EPERM: operation not permitted, unlink '/path/to/file'"),
+          {
+            code: "EPERM",
+          },
+        );
+        return Promise.resolve({ ok: false, cause: err });
+      };
+
+      const { ctx, pi, notifications } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        cascade: stubCascade,
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.ok(
+        (notifications[0]?.message ?? "").startsWith(
+          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {permission denied}\n",
+        ),
+        `expected 'permission denied' reason; got: "${notifications[0]?.message ?? ""}"`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("narrowCascadeFailure: ENOENT maps to 'source missing' in PluginFailedMessage", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-ncf-enoent-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: { hello: makePluginRecord() },
+          },
+        },
+      });
+
+      const stubCascade: typeof cascadeUnstagePlugin = () => {
+        const err = Object.assign(
+          new Error("ENOENT: no such file or directory, unlink '/path/to/file'"),
+          {
+            code: "ENOENT",
+          },
+        );
+        return Promise.resolve({ ok: false, cause: err });
+      };
+
+      const { ctx, pi, notifications } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        cascade: stubCascade,
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.ok(
+        (notifications[0]?.message ?? "").startsWith(
+          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {source missing}\n",
+        ),
+        `expected 'source missing' reason; got: "${notifications[0]?.message ?? ""}"`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("narrowCascadeFailure: unknown errno (ETIMEDOUT default branch) maps to 'not in manifest'", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-ncf-etimedout-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: { hello: makePluginRecord() },
+          },
+        },
+      });
+
+      const stubCascade: typeof cascadeUnstagePlugin = () => {
+        const err = Object.assign(new Error("ETIMEDOUT: connection timed out"), {
+          code: "ETIMEDOUT",
+        });
+        return Promise.resolve({ ok: false, cause: err });
+      };
+
+      const { ctx, pi, notifications } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        cascade: stubCascade,
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      // The switch default break falls through to the final `return "not in
+      // manifest"` at line 121 of uninstall.ts.
+      assert.ok(
+        (notifications[0]?.message ?? "").startsWith(
+          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {not in manifest}\n",
+        ),
+        `expected 'not in manifest' reason; got: "${notifications[0]?.message ?? ""}"`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("narrowCascadeFailure: plain Error (no .code) maps to 'not in manifest' via isErrnoException=false", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-ncf-plain-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: { hello: makePluginRecord() },
+          },
+        },
+      });
+
+      const stubCascade: typeof cascadeUnstagePlugin = () => {
+        // Plain Error -- no .code property. isErrnoException() returns false
+        // so the switch is skipped entirely; narrowCascadeFailure returns
+        // "not in manifest" via the final fallthrough at uninstall.ts:121.
+        return Promise.resolve({ ok: false, cause: new Error("plain failure") });
+      };
+
+      const { ctx, pi, notifications } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        cascade: stubCascade,
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.ok(
+        (notifications[0]?.message ?? "").startsWith(
+          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {not in manifest}\n",
+        ),
+        `expected 'not in manifest' reason; got: "${notifications[0]?.message ?? ""}"`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// Lines 264-270: silent catch after dropMarketplaceCache ---------------
+// Exercises the swallowed EISDIR when the plugin cache path is a
+// directory. The underlying unlink() throws (EISDIR != ENOENT so
+// dropMarketplaceCache re-throws), the catch at line 264 swallows it,
+// and the success notification is still emitted.
+
+test("cache-drop EISDIR swallowed: success notification still emitted, plugin record removed", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-cache-eisdir-"));
+    try {
+      __resetCacheForTests();
+      const locations = locationsFor("project", cwd);
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: { hello: makePluginRecord() },
+          },
+        },
+      });
+
+      // Pre-create the cache file path as a DIRECTORY so unlink() throws
+      // EISDIR (not ENOENT), causing dropMarketplaceCache to re-throw and
+      // hit the catch at uninstall.ts:264 which swallows it silently.
+      const pluginCachePath = await locations.pluginCacheFile("mp");
+      await mkdir(pluginCachePath, { recursive: true });
+
+      const stubCascade: typeof cascadeUnstagePlugin = () =>
+        Promise.resolve({
+          ok: true,
+          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+        });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        cascade: stubCascade,
+      });
+
+      // (1) Exactly one notification with undefined severity (success row).
+      assert.equal(notifications.length, 1, "exactly one notification on cache-drop failure");
+      assert.equal(notifications[0]?.severity, undefined, "notification must be success severity");
+      // (2) Plugin record removed from state.
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(
+        "hello" in (after.marketplaces["mp"]?.plugins ?? {}),
+        false,
+        "plugin record must be removed even when cache drop threw",
+      );
+      // (3) No error notification surfaced.
+      const errNotifications = notifications.filter((n) => n.severity === "error");
+      assert.equal(
+        errNotifications.length,
+        0,
+        "cache-drop EISDIR must be swallowed silently -- no error notification",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
