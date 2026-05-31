@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Notification Output Polish
-status: executing
-stopped_at: v1.5 REOPENED -- Phase 29 (UXG-07/08) added from the 2026-05-31 runtime UAT; ready to plan
-last_updated: "2026-05-31T14:00:00.000Z"
-last_activity: 2026-05-31 -- v1.5 REOPENED: Phase 29 added (UXG-07 host-label suppression on cascades + UXG-08 update-of-nonexistent classification) from the runtime UAT; ready for /gsd-discuss-phase 29
+status: completed
+stopped_at: Phase 29 context gathered
+last_updated: "2026-05-31T17:13:22.683Z"
+last_activity: "2026-05-31 -- v1.5 reopened; Phase 29 added (UXG-07/08). Runtime UAT cases: `install <already-installed>` shows `Error:`; `update <not-installed>` shows `Warning:`; `update <nonexistent>` mis-renders `{not installed}` instead of `{not in manifest}`."
 progress:
   total_phases: 17
   completed_phases: 16
@@ -204,9 +204,9 @@ Additional v1.4.1-scope deferrals:
 
 ## Session Continuity
 
-Last session: 2026-05-31T14:00:00.000Z
-Stopped At: v1.5 REOPENED -- Phase 29 (UXG-07/08) added from the runtime UAT; ready for /gsd-discuss-phase 29
-Resume File: None
+Last session: 2026-05-31T17:13:22.668Z
+Stopped At: Phase 29 context gathered
+Resume File: .planning/phases/29-notification-label-suppression-update-classification/29-CONTEXT.md
 
 ## Operator Next Steps
 
