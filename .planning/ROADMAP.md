@@ -102,7 +102,7 @@ Close the 8 gaps surfaced by the v1.4 milestone-spanning UAT (`.planning/v1.4-MI
 Refine the v2 `NotificationMessage` output grammar and severity presentation per the 2026-05-30 hands-on UAT sweep (`.planning/v1.4-MILESTONE-UAT.md`); source findings in `.planning/BACKLOG.md` (`## v1.4 UAT findings`). The v1.4 byte-contract is verified-correct as shipped -- these are operator-preference refinements. Most changes converge on `shared/notify.ts` + `docs/output-catalog.md`, gated by the `tests/architecture/catalog-uat.test.ts` byte-equality runner (catalog + renderer + tests move in lockstep). Started non-destructively on the unmerged PR #22 branch (D-UXG-01); phases 15-26 intact, archival via `/gsd-complete-milestone` post-merge.
 
 - [x] **Phase 27: Marketplace & Autoupdate Output Grammar** -- (a) drop the `<last-updated <iso>>` marker from the `marketplace list` surface (UXG-01); (b) replace `(autoupdate enabled)` / `(autoupdate disabled)` status tokens with `<autoupdate>` / `<no autoupdate>` markers (explicit off-marker), idempotent -> `<autoupdate> {already autoupdate}` (UXG-04); (c) render `marketplace update` no-op as `(skipped) {up-to-date}` not `(updated)` (UXG-05); (d) doc-only catalog fix -- github `marketplace add` never auto-enables autoupdate + `autoupdate`/`noautoupdate` heading nit (UXG-06). Renderer + catalog + catalog-uat in lockstep. 4 plans across 4 serialized waves (single-file convergence on `shared/notify.ts` + `docs/output-catalog.md`). (UXG-01, UXG-04, UXG-05, UXG-06)
-- [ ] **Phase 28: Severity Routing & Label Discipline** -- (a) refine the first-match severity ladder so benign-only skip cascades (`{up-to-date}` / `{already …}`) compute `info` not `warning` (UXG-02); (b) suppress the host `Error:`/`Warning:` label on multi-line cascade output (keep on single-line, keep color) -- carries a feasibility spike on whether the Pi host can render color without the label or whether an upstream `@earendil-works/pi-coding-agent` change is required; may resolve as an upstream-tracked finding (UXG-03). (UXG-02, UXG-03)
+- [x] **Phase 28: Severity Routing & Label Discipline** -- (a) refine the first-match severity ladder so benign-only skip cascades (`{up-to-date}` / `{already …}`) compute `info` not `warning` (UXG-02); (b) suppress the host `Error:`/`Warning:` label on multi-line cascade output (keep on single-line, keep color) -- carries a feasibility spike on whether the Pi host can render color without the label or whether an upstream `@earendil-works/pi-coding-agent` change is required; may resolve as an upstream-tracked finding (UXG-03). (UXG-02, UXG-03) (completed 2026-05-31)
 
 ## Phase Details
 
@@ -540,11 +540,11 @@ Plans:
 3. UXG-03's feasibility is confirmed via a spike against the Pi host API; if the host cannot render color without the label, UXG-03 is recorded as an upstream-tracked finding with the spike evidence rather than forced in-extension.
 4. `npm run check` + catalog-uat GREEN.
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 
 - [x] 28-01-PLAN.md -- UXG-02: rewrite computeSeverity as the D-28-06 5-arm benign-softening ladder (+ BENIGN_REASONS, both test gates, ADR/style-guide/catalog prose sync)
-- [ ] 28-02-PLAN.md -- UXG-03: run the host label/color feasibility spike and record the upstream-tracked finding (defer-with-finding per D-28-12)
+- [x] 28-02-PLAN.md -- UXG-03: run the host label/color feasibility spike and record the upstream-tracked finding (defer-with-finding per D-28-12)
 
 ## Progress
 
@@ -575,4 +575,4 @@ Plans:
 | 25. Runtime Publish & Verification                                   | v1.4.1    | 3/3 | Complete    | 2026-05-29 |
 | 26. GREEN Gate Close                                                 | v1.4.1    | 1/1 | Complete    | 2026-05-30 |
 | 27. Marketplace & Autoupdate Output Grammar                          | v1.5      | 5/5 | Complete    | 2026-05-31 |
-| 28. Severity Routing & Label Discipline                              | v1.5      | 1/2 | In Progress|  |
+| 28. Severity Routing & Label Discipline                              | v1.5      | 2/2 | Complete   | 2026-05-31 |

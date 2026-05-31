@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Notification Output Polish
 status: executing
-stopped_at: Completed 28-01-PLAN.md
-last_updated: "2026-05-31T12:19:46.498Z"
+stopped_at: Completed 28-02-PLAN.md
+last_updated: "2026-05-31T13:00:00.000Z"
 last_activity: 2026-05-31
 progress:
   total_phases: 16
-  completed_phases: 15
+  completed_phases: 16
   total_plans: 58
-  completed_plans: 57
-  percent: 94
+  completed_plans: 58
+  percent: 100
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-30)
 
 ## Current Position
 
-Phase: 28 (severity-routing-label-discipline) -- EXECUTING
-Plan: 2 of 2
-Status: Executing Phase 28 (Plan 28-01 complete; 28-02 UXG-03 spike next)
-Last activity: 2026-05-31 -- Plan 28-01 complete (UXG-02 benign-softening severity ladder)
+Phase: 28 (severity-routing-label-discipline) -- ALL PLANS COMPLETE
+Plan: 2 of 2 (complete)
+Status: Phase 28 plans complete (28-01 UXG-02 benign-softening ladder; 28-02 UXG-03 spike -> defer-with-finding). Final phase of the v1.5 milestone; pending phase-close/verification.
+Last activity: 2026-05-31 -- Plan 28-02 complete (UXG-03 feasibility spike REFUTED; resolved as upstream-tracked finding)
 
 ## Performance Metrics
 
@@ -94,6 +94,7 @@ Last activity: 2026-05-31 -- Plan 28-01 complete (UXG-02 benign-softening severi
 | Phase 27 P03 | 14 min | 3 tasks | 8 files |
 | Phase 27 P04 | 18 min | 3 tasks | 6 files |
 | Phase 28 P01 | 23 min | 3 tasks | 11 files |
+| Phase 28 P02 | 12 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -151,6 +152,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 27]: UXG-04 closed via Strategy B -- autoupdate FLIP surface now renders marker tokens (`<autoupdate>` / `<no autoupdate>`) instead of `(autoupdate enabled)`/`(autoupdate disabled)` status tokens; idempotent flips render the marker plus a `{already autoupdate}`/`{already no autoupdate}` brace (no `(skipped)` token). Renamed two REASONS members (already enabled->already autoupdate, already disabled->already no autoupdate); kept MARKETPLACE_STATUSES (7) and MARKERS (2) membership intact (`<no autoupdate>` already a MARKERS member, only emission is new). Inverted the autoupdate.ts marker-as-outcome header comment (reverses Phase 17.1 / D-18-05) and reconciled the three list-surface `<no autoupdate>`-not-emitted catalog prose statements surface-precisely (list surface unchanged). Renderer+orchestrator+catalog+byte gate+per-variant+orchestrator+2 bootstrap tests landed in one atomic commit (dbd149a); npm run check GREEN 1143/1143. -- Plan 27-03.
 - [Phase 27]: UXG-05 closed via manifest CONTENT-compare (not git SHA, not lastUpdatedAt -- Pitfall 4). The autoupdate-OFF (manifest-only refresh) path now distinguishes a no-op from a change: `manifestContentKey` loads the post-validation parsed MarketplaceManifest via `loadMarketplaceManifest` and `JSON.stringify`s the validated parse (stable key order; no crypto, no field-by-field diff); pre/post-refresh keys are compared and threaded through `RefreshSnapshot.changed`. No change -> `(skipped) {up-to-date}` (warning, no `/reload` trailer; mirrors the plugin-level up-to-date no-op); changed -> `(updated)`. Source-kind-uniform (path + github). The renderer needed NO change -- the shared mp-level `skipped` arm + `up-to-date` REASONS member already compose the byte form. Severity stays `warning` (UXG-02 info-softening is Phase 28, NOT pre-empted). Catalog `autoupdate-off-manifest-refresh` state split into `update-no-op-skipped` + `manifest-refresh-changed` (net +1, keeps examples.length >= 30). Orchestrator+catalog+catalog-uat+notify-v2+update orchestrator tests in one atomic commit (52f53b9); the pre-existing github MU-4 test naturally became the github no-op fixture. Phase 27 GREEN gate: npm run check 1146/1146 + integration 4/4 + pinned e2e 14/14; nyquist_compliant flipped true (ded3633). -- Plan 27-04. PHASE 27 COMPLETE.
 - [Phase 28]: UXG-02 closed -- computeSeverity rewritten as the D-28-06 5-arm first-match ladder with a BENIGN_REASONS closed set (up-to-date, already installed, already autoupdate, already no autoupdate) + a shared allBenign() predicate (empty/undefined -> false, so a no-reason mp-skip routes to warning per D-28-08). A cascade whose only non-success rows are benign idempotent no-op skips computes info (omits the 2nd ctx.ui.notify arg); actionable skips, mixed cascades, and manual-recovery compute warning (first-match poisoning, D-28-09); failed computes error. Pure severity-arg change -- every rendered byte string byte-identical (catalog-uat byte gate GREEN). Both named gates (notify-v2 + catalog-uat, warning fixtures 6->1) plus 11 downstream orchestrator severity assertions moved in lockstep (Rule 1). ADR v2-001 / messaging-style-guide / output-catalog severity prose synced; the UXG-05 "info-softening is Phase 28" deferral sentences removed (realized), closing the Plan 27-04 hand-off. npm run check GREEN 1152/1152. -- Plan 28-01.
+- [Phase 28]: UXG-03 resolved DEFER-WITH-FINDING -- feasibility spike RUN against the installed host `@earendil-works/pi-coding-agent@0.75.5` REFUTED the colorless-cascade approach: the host couples the `Error:`/`Warning:` label AND the severity color to the single `notify(message, type?)` arg (`dist/core/extensions/types.d.ts:75` has no color-only param; label+color co-derive from `type` in `dist/main.js:64-69` `reportDiagnostics` and `dist/modes/interactive/interactive-mode.js:1771-1781`/`:2944-2954` `showExtensionNotify`->`showError`/`showWarning`, both binding color+label in one `theme.fg` call; the only label-free path `showStatus:2438` also drops the color). The only in-extension lever (forcing `info`) ALSO drops the color and nullifies UXG-02's routing -- REJECTED (D-28-11). No colorless workaround shipped (D-28-10); notify.ts untouched. Resolved as an upstream-tracked finding mirroring SNM-39 / G-MIL-07 (D-28-12): a read-only evidence-lock test (`tests/shared/snm-uxg03-label-color-spike.test.ts`, 4 tests GREEN, runs inside npm run check) + `UXG-03-FINDING.md` + UAT note + REQUIREMENTS note + STATE.md deferral row. Filing the upstream issue is the operator's call. Contingent D-28-13 entrypoint policy recorded for intent (`notify()` suppresses, `notifyUsageError()` keeps; NOT line-count). npm run check GREEN 1156/1156. -- Plan 28-02. PHASE 28 COMPLETE.
 
 ### Pending Todos
 
@@ -201,8 +203,8 @@ Additional v1.4.1-scope deferrals:
 
 ## Session Continuity
 
-Last session: 2026-05-31T12:19:41.250Z
-Stopped At: Completed 28-01-PLAN.md
+Last session: 2026-05-31T13:00:00.000Z
+Stopped At: Completed 28-02-PLAN.md
 Resume File: None
 
 ## Operator Next Steps
