@@ -209,9 +209,15 @@ test("SNM-38 :: full ladder snapshot matches the catalog 0/2(/4) ladder (D-25-09
   // explicit drift lock: any renderer change that perturbs the ladder (e.g. a
   // misguided header->2-space "fix" chasing the UAT 2/4 misquote) trips here AND
   // in catalog-uat.test.ts.
+  //
+  // Phase 29 / UXG-07 (D-29-02): the LIST_MESSAGE fixture carries a `failed`
+  // plugin row (`zeta`), so notify() computes "error" severity and PREPENDS the
+  // "1 plugin operation failed." summary line + blank line. Those two leading
+  // column-0 lines are the first two `0` entries below; the catalog-conformant
+  // 0/2(/4) cascade ladder follows unchanged.
   assert.deepEqual(
     indents,
-    [0, 2, 2, 2, 2, 4, 0, 0, 2],
-    "pre-tui leading-whitespace ladder must be the catalog-conformant 0/2(/4) ladder",
+    [0, 0, 0, 2, 2, 2, 2, 4, 0, 0, 2],
+    "pre-tui leading-whitespace ladder must be the summary line + blank + the catalog-conformant 0/2(/4) ladder",
   );
 });

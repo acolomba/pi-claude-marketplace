@@ -422,9 +422,12 @@ test("PU-3 + PU-7: foreign agent content -> V2 PluginFailedMessage + state recor
       // that Reason per the marketplace/remove.ts precedent).
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
+      // Phase 29 / UXG-07 (D-29-02/03): the "1 plugin operation failed."
+      // summary line is prepended before the cascade body (1 failed plugin,
+      // mp glyph `●` so the marketplace did not fail).
       assert.equal(
         (notifications[0]?.message ?? "").startsWith(
-          "● mp [project]\n  ⊘ hello v0.0.1 (failed) {not in manifest}\n",
+          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {not in manifest}\n",
         ),
         true,
         `V2 failure row prefix mismatch: got "${notifications[0]?.message ?? ""}"`,
