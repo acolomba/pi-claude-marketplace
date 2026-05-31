@@ -44,8 +44,8 @@ human_verification:
       shows (skipped) {not installed} for a plugin that doesn't exist in the manifest.
     why_human: >
       The preflightUpdate fix is unit-tested (PUP-1 pl@mp test), but confirming the
-      live runtime behavior — particularly that the manifest cache is populated correctly
-      before preflightUpdate runs — requires exercising the real command path.
+      live runtime behavior -- particularly that the manifest cache is populated correctly
+      before preflightUpdate runs -- requires exercising the real command path.
 ---
 
 # Phase 29: Notification Label Suppression & Update Classification Verification
@@ -136,14 +136,14 @@ No `scripts/*/tests/probe-*.sh` probes defined for this phase. Step 7c: SKIPPED 
 
 REQUIREMENTS.md traceability rows for UXG-07 and UXG-08 still show `Pending` (checkbox `[ ]`
 and table row `Pending`). This is a documentation update deferred to `/gsd-complete-milestone`
-(not scoped in any of the three plans — consistent with how prior milestones handled requirement
+(not scoped in any of the three plans -- consistent with how prior milestones handled requirement
 closure in REQUIREMENTS.md).
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
-| `update.ts` | 215, 1427, 1448 | `PLACEHOLDER` in `SYNTHETIC_UPDATE_PLACEHOLDER_NAME` | Info | Not a stub — this is a named constant `"(update)"` for a synthetic bare-form failure row. No data rendering concern. |
+| `update.ts` | 215, 1427, 1448 | `PLACEHOLDER` in `SYNTHETIC_UPDATE_PLACEHOLDER_NAME` | Info | Not a stub -- this is a named constant `"(update)"` for a synthetic bare-form failure row. No data rendering concern. |
 
 No `TBD`, `FIXME`, or `XXX` markers found in any phase-modified file.
 

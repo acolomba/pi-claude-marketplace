@@ -13,7 +13,7 @@ surfaces:
   the cascade body for `error` and `warning` severity notifications so the host
   `Error:`/`Warning:` prefix is meaningful and contextual. The summary counts
   failed/skipped operations by type (plugin vs marketplace). `computeSeverity`,
-  severity labels, and colors are all KEPT — this is a message-composition
+  severity labels, and colors are all KEPT -- this is a message-composition
   change, not a severity-suppression change. The REQUIREMENTS.md spec
   (suppress label by routing to `info`) is superseded by the user decision
   captured in D-29-01/02.
@@ -24,7 +24,7 @@ surfaces:
   consulted.
 
 **Not in scope:** suppressing severity labels/colors; reclassifying
-`install <already-installed>` from `failed` to `skipped` (UXG-09 — the
+`install <already-installed>` from `failed` to `skipped` (UXG-09 -- the
 `"plugin operation failed"` summary framing renders the `already installed`
 case correctly without reclassification); any new notification capability;
 any change to `notifyUsageError()` or the reload-hint ladder.
@@ -34,7 +34,7 @@ any change to `notifyUsageError()` or the reload-hint ladder.
 <decisions>
 ## Implementation Decisions
 
-### UXG-07 — Summary line approach (overrides REQUIREMENTS.md spec)
+### UXG-07 -- Summary line approach (overrides REQUIREMENTS.md spec)
 
 - **D-29-01:** **KEEP severity routing.** `computeSeverity` stays active;
   `Error:`/`Warning:` labels and colors are preserved. The REQUIREMENTS.md
@@ -71,7 +71,7 @@ any change to `notifyUsageError()` or the reload-hint ladder.
   why. Reclassifying to `skipped` is a separate behavior change deferred to a
   future phase.
 
-### UXG-07 — Test and catalog lockstep
+### UXG-07 -- Test and catalog lockstep
 
 - **D-29-06:** The `expectedSeverity` field stays on catalog-uat fixtures (it
   still asserts the correct severity arg). The cascade byte forms for
@@ -82,7 +82,7 @@ any change to `notifyUsageError()` or the reload-hint ladder.
   are updated to include the summary line. The catalog commentary on severity
   routing is updated to mention the summary line composition.
 
-### UXG-08 — Update classification fix
+### UXG-08 -- Update classification fix
 
 - **D-29-08:** In `preflightUpdate` (`orchestrators/plugin/update.ts`), the
   fix is to consult the manifest BEFORE concluding `"not installed"`. When the
@@ -123,16 +123,16 @@ any change to `notifyUsageError()` or the reload-hint ladder.
 
 ### Requirements & source findings
 
-- `.planning/REQUIREMENTS.md` — UXG-07 (line 31) and UXG-08 (line 32)
+- `.planning/REQUIREMENTS.md` -- UXG-07 (line 31) and UXG-08 (line 32)
   definitions. **NOTE:** The UXG-07 spec (suppress label via `info` routing)
-  is superseded by D-29-01/02 — read the spec for context but implement per
+  is superseded by D-29-01/02 -- read the spec for context but implement per
   the decisions above.
-- `.planning/v1.4-MILESTONE-UAT.md` — the 2026-05-30/31 hands-on UAT sweeps
+- `.planning/v1.4-MILESTONE-UAT.md` -- the 2026-05-30/31 hands-on UAT sweeps
   that surfaced UXG-07/08.
 
 ### Prior phase context (carry-forward decisions)
 
-- `.planning/phases/28-severity-routing-label-discipline/28-CONTEXT.md` —
+- `.planning/phases/28-severity-routing-label-discipline/28-CONTEXT.md` --
   D-28-11 (host API constraint: no label-without-color path), D-28-13
   (entrypoint split: `notify()` vs `notifyUsageError()`), D-28-06 (5-arm
   ladder), D-28-03 (`not installed` routes to `warning`). All still in effect
@@ -140,36 +140,36 @@ any change to `notifyUsageError()` or the reload-hint ladder.
 
 ### Implementation surface (UXG-07)
 
-- `extensions/pi-claude-marketplace/shared/notify.ts` — `computeSeverity`
-  (line 1135, stays active), `allBenign` + `BENIGN_REASONS` (lines 108–123,
+- `extensions/pi-claude-marketplace/shared/notify.ts` -- `computeSeverity`
+  (line 1135, stays active), `allBenign` + `BENIGN_REASONS` (lines 108-123,
   stay active), `notify` entry (line ~1338, the call site that gains the
   summary composition), `notifyUsageError` (line 198, unchanged).
 
 ### Implementation surface (UXG-08)
 
-- `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts` —
-  `preflightUpdate` function, specifically lines 592–616: the `record ===
-  undefined` check (line 592–601, returns `"not installed"` — to be guarded
-  by a prior manifest check) and the manifest check (line 604–616, returns
-  `"not in manifest"` for skipped — to be promoted to `"failed"` when plugin
+- `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts` --
+  `preflightUpdate` function, specifically lines 592-616: the `record ===
+  undefined` check (line 592-601, returns `"not installed"` -- to be guarded
+  by a prior manifest check) and the manifest check (line 604-616, returns
+  `"not in manifest"` for skipped -- to be promoted to `"failed"` when plugin
   is absent from manifest and not installed).
 
 ### Test gates (move in lockstep)
 
-- `tests/architecture/catalog-uat.test.ts` — byte-equality gate; fixtures
+- `tests/architecture/catalog-uat.test.ts` -- byte-equality gate; fixtures
   with `expectedSeverity: "error"` or `"warning"` need updated expected
   strings to include the summary line.
-- `tests/shared/notify-v2.test.ts` — `ctx.ui.notify` call arg assertions for
+- `tests/shared/notify-v2.test.ts` -- `ctx.ui.notify` call arg assertions for
   error/warning cases need updated expected string (with summary prefix).
 
 ### Spec / contract docs to sync
 
-- `docs/output-catalog.md` — byte forms for error/warning cascades need the
+- `docs/output-catalog.md` -- byte forms for error/warning cascades need the
   summary line prepended; commentary on severity routing updated to mention
   summary composition.
-- `docs/messaging-style-guide.md` — binding contract; any severity-ladder
+- `docs/messaging-style-guide.md` -- binding contract; any severity-ladder
   or message-composition prose that should reflect the summary line addition.
-- `docs/adr/v2-001-structured-notify.md` — note the summary line extension;
+- `docs/adr/v2-001-structured-notify.md` -- note the summary line extension;
   any prose claiming `notify()` emits cascade-only string needs updating.
 
 </canonical_refs>
@@ -179,20 +179,20 @@ any change to `notifyUsageError()` or the reload-hint ladder.
 
 ### Reusable Assets
 
-- `computeSeverity` (`notify.ts:1135`) — stays active; the traversal logic it
+- `computeSeverity` (`notify.ts:1135`) -- stays active; the traversal logic it
   performs (iterating `message.marketplaces` + `mp.plugins`) is the same
   traversal needed to count failed/skipped items for the summary line. A
   `buildSummaryLine` helper can share or mirror this traversal.
-- `allBenign` + `BENIGN_REASONS` (`notify.ts:108–123`) — stay active; the
+- `allBenign` + `BENIGN_REASONS` (`notify.ts:108-123`) -- stay active; the
   "not all benign" predicate is the discriminator for actionable-skip counts
   in the warning summary.
-- `loadCachedMarketplaceManifest` (`update.ts:604`) — already called in
+- `loadCachedMarketplaceManifest` (`update.ts:604`) -- already called in
   `preflightUpdate`; moving the call earlier for the UXG-08 fix uses the
   cached path and does not add net I/O.
 
 ### Established Patterns
 
-- Severity is the *second arg* to `ctx.ui.notify` — the string passed as
+- Severity is the *second arg* to `ctx.ui.notify` -- the string passed as
   the first arg is what the host prepends `Error: ` / `Warning: ` to. The
   summary line therefore appears immediately after the label prefix (no
   newline between `Error:` and the summary text).
@@ -200,14 +200,14 @@ any change to `notifyUsageError()` or the reload-hint ladder.
   Phase 29 for error/warning: `{summary}\n\n{cascade body}\n\n{reload-hint?}`.
   Info: unchanged.
 - `install.ts` uses `partition: "failed"` + `reasons: ["not in manifest"]`
-  for the not-in-manifest case (line 1170–1178). UXG-08 aligns `update.ts`
+  for the not-in-manifest case (line 1170-1178). UXG-08 aligns `update.ts`
   to this same pattern.
 
 ### Integration Points
 
 - `notify()` is the sole cascade call site; all commands that flow through it
   will automatically gain the summary line once `notify()` is updated.
-- `notifyUsageError()` is structurally separate (`notify.ts:198`) — not
+- `notifyUsageError()` is structurally separate (`notify.ts:198`) -- not
   affected by UXG-07; its existing `"error"` arg and message+usage format
   stay unchanged.
 - `preflightUpdate` is the single chokepoint for per-plugin update routing;
@@ -221,7 +221,7 @@ any change to `notifyUsageError()` or the reload-hint ladder.
 - User confirmed the cascade body already conveys per-plugin state
   (`(failed) {already installed}`, `(skipped) {not installed}`, etc.) and the
   summary line's job is to give the `Error:`/`Warning:` prefix something
-  meaningful to introduce — not to restate the cascade body.
+  meaningful to introduce -- not to restate the cascade body.
 - Example the user had in mind:
   ```
   Error: 1 plugin operation failed.
@@ -231,7 +231,7 @@ any change to `notifyUsageError()` or the reload-hint ladder.
        cause: Plugin "up" not found in marketplace "uat-mp".
   ```
 - "Focus on operation (the command) rather than what happened to each plugin,
-  which is going to display its condition anyway." — user framing; this
+  which is going to display its condition anyway." -- user framing; this
   motivates `"plugin operation(s)"` rather than `"plugin(s)"` in the summary.
 
 </specifics>
@@ -240,7 +240,7 @@ any change to `notifyUsageError()` or the reload-hint ladder.
 ## Deferred Ideas
 
 - **UXG-09: Reclassify `install <already-installed>` from `failed` to
-  `skipped`** — the `"plugin operation failed"` summary framing makes this
+  `skipped`** -- the `"plugin operation failed"` summary framing makes this
   acceptable for Phase 29. A future phase could change the partition from
   `failed` to `skipped` for the `already-installed` case if the operator
   finds `(failed) {already installed}` confusing vs `(skipped) {already

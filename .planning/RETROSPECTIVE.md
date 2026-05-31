@@ -2,7 +2,7 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
-## Milestone: v1.5 — Notification Output Polish
+## Milestone: v1.5 -- Notification Output Polish
 
 **Shipped:** 2026-05-31
 **Phases:** 3 (27, 28, 29) | **Plans:** 10 | **Tasks:** ~25
@@ -11,7 +11,7 @@
 ### What Was Built
 
 - **UXG-01/04/05/06** (Phase 27): `<last-updated>` dropped from `marketplace list`; autoupdate `<autoupdate>` / `<no autoupdate>` marker grammar with idempotent braces; `marketplace update` no-op → `(skipped) {up-to-date}`; catalog/heading nits.
-- **UXG-02** (Phase 28): 5-arm benign-softening `computeSeverity` ladder with `BENIGN_REASONS` closed set — benign-only skip cascades route `info` not `warning`.
+- **UXG-02** (Phase 28): 5-arm benign-softening `computeSeverity` ladder with `BENIGN_REASONS` closed set -- benign-only skip cascades route `info` not `warning`.
 - **UXG-03** (Phase 28): Resolved DEFER-WITH-FINDING. Read-only spike refuted host feasibility; `@earendil-works/pi-coding-agent` couples label+color inseparably. Accepted upstream limitation.
 - **UXG-07** (Phase 29): `notify()` prepends a summary line (`N plugin operation(s) failed/skipped.`) for error/warning cascades, giving the `Error:`/`Warning:` host prefix a meaningful sentence.
 - **UXG-08** (Phase 29): `preflightUpdate` restructured to consult the marketplace manifest before the not-installed guard, so `update <nonexistent>@<mp>` → `(failed) {not in manifest}` matching `install`.
@@ -21,7 +21,7 @@
 
 - **Branch gate UAT with pre-provisioned fixture marketplace** (`uat/uat-mp/`) caught the version-arrow asymmetry and confirmed all 8 UXG requirements in one ~30-minute live session. Having the fixture already seeded eliminated setup friction between each test.
 - **catalog-uat byte-equality gate** continued to be the enforcement anchor: every notify() output change required an atomic catalog + test lockstep commit, making regressions impossible to commit accidentally.
-- **D-29-01 decision capture during discuss-phase** (keeping severity routing, adding summary line instead of routing to info) was the right call — it aligned with the user's actual preference after seeing the UXG-03 upstream constraint. The discuss-phase artifact saved a wasted Phase 29 plan.
+- **D-29-01 decision capture during discuss-phase** (keeping severity routing, adding summary line instead of routing to info) was the right call -- it aligned with the user's actual preference after seeing the UXG-03 upstream constraint. The discuss-phase artifact saved a wasted Phase 29 plan.
 
 ### What Was Inefficient
 

@@ -1,7 +1,7 @@
 # Phase 29: Notification Label Suppression & Update Classification - Discussion Log
 
 > **Audit trail only.** Do not use as input to planning, research, or execution agents.
-> Decisions are captured in CONTEXT.md — this log preserves the alternatives considered.
+> Decisions are captured in CONTEXT.md -- this log preserves the alternatives considered.
 
 **Date:** 2026-05-31
 **Phase:** 29-notification-label-suppression-update-classification
@@ -70,4 +70,4 @@
 
 ## Deferred Ideas
 
-- **UXG-09** — reclassify `install <already-installed>` from `failed` to `skipped`. Deferred; "plugin operation failed" summary framing makes Phase 29 acceptable without it. Future phase candidate.
+- **UXG-09** -- reclassify `install <already-installed>` from `failed` to `skipped`. Deferred; "plugin operation failed" summary framing makes Phase 29 acceptable without it. Future phase candidate.

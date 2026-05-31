@@ -5,7 +5,7 @@ milestone_name: Notification Output Polish
 status: Awaiting next milestone
 stopped_at: Phase 29 context gathered
 last_updated: "2026-05-31T20:14:53.854Z"
-last_activity: 2026-05-31 — Milestone v1.5 completed and archived
+last_activity: 2026-05-31 -- Milestone v1.5 completed and archived
 progress:
   total_phases: 17
   completed_phases: 17
@@ -20,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-30)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 29 — notification-label-suppression-update-classification
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 29 -- notification-label-suppression-update-classification
 
 ## Current Position
 
 Phase: Milestone v1.5 complete
-Plan: —
+Plan: --
 Status: Awaiting next milestone
-Last activity: 2026-05-31 — Milestone v1.5 completed and archived
+Last activity: 2026-05-31 -- Milestone v1.5 completed and archived
 
 ## Performance Metrics
 

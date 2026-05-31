@@ -52,7 +52,7 @@ behavior, and minor documentation table gaps.
 
 ## Critical Issues
 
-### CR-01: `catalog-uat.test.ts` silently skips the `usage-error` catalog state — `notifyUsageError` byte form is never byte-checked
+### CR-01: `catalog-uat.test.ts` silently skips the `usage-error` catalog state -- `notifyUsageError` byte form is never byte-checked
 
 **File:** `tests/architecture/catalog-uat.test.ts:82-83`
 **Issue:** The catalog parser's `sectionRe` matches only `` ## `/claude:plugin ...` `` and
@@ -62,7 +62,7 @@ does not match, so `currentSection` is reset to `null` and the immediately follo
 and silently discarded. The condition `pendingState !== null && currentSection !== null` on the
 fence-close path guarantees the example is never added to `examples[]`. As a result, the
 `notifyUsageError` on-the-wire string `${message}\n\n${usage}` at `"error"` severity is not
-covered by the byte-equality UAT gate at all — only by the standalone unit test in
+covered by the byte-equality UAT gate at all -- only by the standalone unit test in
 `tests/shared/notify-v2.test.ts`. Any future renderer drift on the usage-error surface would
 not be caught by the UAT.
 
@@ -102,7 +102,7 @@ planning artifacts.
 
 **Fix:** Align both to the same default. The `"project"` default in `notifyDirectFailure` is the
 better choice because the bare-form `enumerateTargets` failure for the bare `update` form loads
-both scopes, so no single scope is "more right" — but `"project"` is the iteration-order-first
+both scopes, so no single scope is "more right" -- but `"project"` is the iteration-order-first
 scope and is the same default used everywhere else in the direct-path branch. Change line 1456:
 
 ```ts
