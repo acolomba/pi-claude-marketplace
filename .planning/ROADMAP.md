@@ -560,7 +560,16 @@ Plans:
 3. The now-vestigial `computeSeverity` warning/error arms are retired or made dormant (decided in discuss/plan); `shared/notify.ts` + `docs/output-catalog.md` + `tests/architecture/catalog-uat.test.ts` + `tests/shared/notify-v2.test.ts` move in lockstep.
 4. `npm run check` GREEN; catalog-uat byte gate GREEN.
 
-**Plans:** TBD (created by /gsd-plan-phase)
+**Plans:** 3 plans
+
+**Wave 1** *(parallel: plans 01 + 03 have no file overlap)*
+
+- [ ] 29-01-PLAN.md -- UXG-07: add buildSummaryLine helper + update notify() to prepend summary for error/warning severity + notify-v2.test.ts lockstep (D-29-01/02/03/04/06)
+- [ ] 29-03-PLAN.md -- UXG-08: reorder preflightUpdate to consult manifest before not-installed guard; absent-from-manifest + not-installed returns failed {not in manifest} (D-29-08/09)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 29-02-PLAN.md -- UXG-07 lockstep: output-catalog.md byte blocks + catalog-uat.test.ts fixtures + messaging-style-guide.md + ADR amendment (D-29-06/07)
 
 ## Progress
 
@@ -592,4 +601,4 @@ Plans:
 | 26. GREEN Gate Close                                                 | v1.4.1    | 1/1 | Complete    | 2026-05-30 |
 | 27. Marketplace & Autoupdate Output Grammar                          | v1.5      | 5/5 | Complete    | 2026-05-31 |
 | 28. Severity Routing & Label Discipline                              | v1.5      | 2/2 | Complete    | 2026-05-31 |
-| 29. Notification Label Suppression & Update Classification          | v1.5      | 0/0 | Planned     | --         |
+| 29. Notification Label Suppression & Update Classification          | v1.5      | 0/3 | In progress | --         |
