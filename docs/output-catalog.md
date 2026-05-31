@@ -74,6 +74,8 @@ The list-only inventory token `present` (emitted by `/claude:plugin list` for al
 
 Computed by `notify()` from contents via a first-match-wins ladder (D-16-11). See "Severity routing" below.
 
+For `error` and `warning` severity, `notify()` PREPENDS a one-line summary that counts the failed (error) or actionable-skip + manual-recovery (warning) operations before the cascade body (Phase 29 / UXG-07 / D-29-02). The composed body is `{summary}\n\n{cascade body}` -- the summary gives the host `Error:` / `Warning:` prefix a meaningful sentence to introduce. Info-severity cascades carry no summary line. See "Summary line" under "Severity routing" below.
+
 ### Autoupdate marker
 
 The `<autoupdate>` marker appears on two surfaces: (1) the list-surface marketplace-header form (`mp.status === undefined`, `mp.details.autoupdate === true`) -- see "Marketplace header shape" above; and (2) the `marketplace autoupdate` / `noautoupdate` flip surface, where UXG-04 renders the marker as the flip outcome. The non-autoupdate state-change marketplace-header arms (`added` / `removed` / `updated` / `failed`) do not carry the marker. The two autoupdate surfaces differ in how they convey autoupdate-off: on the **list** surface `<no autoupdate>` is not emitted -- the absence of the `<autoupdate>` marker conveys autoupdate-off; on the **flip** surface the explicit `<no autoupdate>` off-marker IS emitted (UXG-04).
@@ -104,6 +106,19 @@ ______________________________________________________________________
 | Otherwise (incl. an **all-benign** skip cascade)                      | (omit 2nd arg) | Success / info path. A cascade whose only non-success rows are benign idempotent no-op skips (`up-to-date`, `already installed`, `already autoupdate`, `already no autoupdate`) computes info per UXG-02 / D-28-06. |
 
 `notifyUsageError(ctx, UsageErrorMessage)` is structurally `"error"` severity (always). The on-the-wire string is `${message}\n\n${usage}` (mirrors V1's blank-line discipline).
+
+### Summary line (error / warning)
+
+For `error` and `warning` severity, `notify()` prepends a human-readable summary line before the cascade body (Phase 29 / UXG-07 / D-29-02/03/04). The composed on-the-wire body is `{summary}\n\n{cascade body}` (the reload-hint, if any, stays last). Info severity emits no summary line -- the cascade body is byte-identical to the pre-Phase-29 form.
+
+The summary counts the operations that drive the severity, by type (plugin vs marketplace), with the verb chosen by severity:
+
+| Severity  | Counts (D-29-04)                                                                                              | Verb        |
+| --------- | ------------------------------------------------------------------------------------------------------------- | ----------- |
+| `error`   | plugin rows with `status === "failed"` + marketplace rows with `status === "failed"`                          | `"failed"`  |
+| `warning` | plugin `skipped` (non-benign reasons) + plugin `manual recovery` + marketplace `skipped` (non-benign reasons) | `"skipped"` |
+
+Wording (D-29-03): singular `"operation"` for a count of 1, plural `"operations"` otherwise. When only one type is non-zero the line is `"N plugin operation(s) <verb>."` or `"N marketplace operation(s) <verb>."`; when both are non-zero it is `"N plugin operation(s) and M marketplace operation(s) <verb>."`. Examples: `"1 plugin operation failed."`, `"2 plugin operations failed."`, `"1 marketplace operation failed."`, `"1 plugin operation and 1 marketplace operation failed."`, `"1 plugin operation skipped."`. The summary is computed structurally from the `NotificationMessage` traversal `computeSeverity` performs -- it is not caller-supplied free text, so it does not violate the "no top-level free text" principle (D-17-09).
 
 ______________________________________________________________________
 
@@ -211,6 +226,8 @@ Each `(installed)` row's `dependencies` field drives the soft-dep probe; the pro
 <!-- catalog-state: unparseable-mp -->
 
 ```text
+1 marketplace operation failed.
+
 ● other-mp [user] <autoupdate>
   ● helper v1.0.0 (installed)
 
@@ -309,6 +326,8 @@ The manifest declares Claude features Pi doesn't support; the `unavailable` vari
 <!-- catalog-state: failure-runtime-with-cause -->
 
 ```text
+1 plugin operation failed.
+
 ● official [user]
   ⊘ helper v1.0.0 (failed) {permission denied}
     cause: state.json at /path/to/state.json is not valid JSON: Unexpected token n in JSON at position 0
@@ -321,6 +340,8 @@ The manifest declares Claude features Pi doesn't support; the `unavailable` vari
 <!-- catalog-state: failure-rollback-partial -->
 
 ```text
+1 plugin operation failed.
+
 ● official [user]
   ⊘ helper v1.0.0 (failed) {rollback partial}
     cause: orchestrator failed mid-staging
@@ -369,6 +390,8 @@ The `uninstalled` variant has no `dependencies` field by construction (D-15-02 /
 <!-- catalog-state: failure-permission-denied -->
 
 ```text
+1 plugin operation failed.
+
 ● official [user]
   ⊘ helper v1.0.0 (failed) {permission denied}
     cause: EACCES: permission denied, unlink '/path/to/file'
@@ -414,6 +437,8 @@ The `reinstalled` variant carries `dependencies` (D-15-02); both markers fire be
 <!-- catalog-state: single-mp-mixed-outcomes -->
 
 ```text
+1 plugin operation failed.
+
 ● official [user]
   ● alpha v1.0.0 (reinstalled)
   ⊘ beta (skipped) {up-to-date}
@@ -429,6 +454,8 @@ Mixed-outcome cascade. Reload-hint fires because at least one plugin status is i
 <!-- catalog-state: single-mp-all-failed -->
 
 ```text
+2 plugin operations failed.
+
 ● official [user]
   ⊘ alpha (failed) {source missing}
   ⊘ beta (failed) {invalid manifest}
@@ -455,6 +482,8 @@ Mixed-outcome cascade. `delta`'s `unavailable` variant has no scope field; row c
 <!-- catalog-state: bare-multi-mp -->
 
 ```text
+1 plugin operation failed.
+
 ● local-mp [project]
   ● helper v0.5.0 (reinstalled)
   ● tool v1.0.0 (reinstalled)
@@ -496,6 +525,8 @@ Multi-plugin cascade. Same shape as `reinstall` with version-arrow rows (`<from>
 <!-- catalog-state: single-mp-mixed -->
 
 ```text
+1 plugin operation failed.
+
 ● official [user]
   ● alpha 0.5.0 → v1.0.0 (updated)
   ⊘ beta (skipped) {up-to-date}
@@ -511,6 +542,8 @@ The `updated` variant emits `<from> → v<to>` (note the asymmetric `v` prefix -
 <!-- catalog-state: failed-with-rollback-partial -->
 
 ```text
+1 plugin operation failed.
+
 ● official [user]
   ⊘ delta v1.0.0 (failed) {rollback partial}
     cause: orchestrator failed mid-staging
@@ -539,6 +572,8 @@ Skipped-only cascade. No reload-hint (no state-changing status). Severity: every
 <!-- catalog-state: bare-multi-mp -->
 
 ```text
+1 plugin operation failed.
+
 ● local-mp [project]
   ● helper 0.5.0 → v1.0.0 (updated)
 
@@ -754,6 +789,8 @@ Path-source marketplaces default to autoupdate OFF; the `added` arm does not car
 <!-- catalog-state: failure-unreachable -->
 
 ```text
+1 marketplace operation failed.
+
 ⊘ unreachable-mp [user] (failed)
 ```
 
@@ -785,6 +822,8 @@ Clean (no-failure) removal carries one `PluginUninstalledMessage` row (`○` gly
 <!-- catalog-state: partial -->
 
 ```text
+1 plugin operation and 1 marketplace operation failed.
+
 ⊘ local-mp [user] (failed)
   ○ helper (uninstalled)
   ⊘ tool (failed) {permission denied}
@@ -838,6 +877,8 @@ Manifest-only refresh whose validated `marketplace.json` content actually change
 <!-- catalog-state: mixed-outcomes -->
 
 ```text
+1 plugin operation failed.
+
 ● official [user] (updated)
   ● alpha 0.5.0 → v1.0.0 (updated)
   ⊘ beta (skipped) {up-to-date}
@@ -853,6 +894,8 @@ Marketplace header carries `(updated)`; plugin rows mix outcomes. Reload-hint fi
 <!-- catalog-state: mp-failure-network -->
 
 ```text
+1 marketplace operation failed.
+
 ⊘ official [user] (failed)
 ```
 
@@ -909,6 +952,8 @@ Idempotent no-op -- the flag was already in the requested state. `mp.status` = `
 <!-- catalog-state: failure-not-found -->
 
 ```text
+1 marketplace operation failed.
+
 ⊘ missing-mp [user] (failed)
 ```
 
@@ -927,6 +972,8 @@ In v2, the manual-recovery surface is the per-plugin `PluginManualRecoveryMessag
 <!-- catalog-state: per-plugin-manual-recovery -->
 
 ```text
+1 plugin operation skipped.
+
 ● official [user]
   ⊘ helper v1.0.0 (manual recovery) {unreadable}
     cause: bridge: agent staging conflict
