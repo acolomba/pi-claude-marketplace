@@ -893,3 +893,214 @@ test("D-04 corollary: list.ts does not use withStateGuard (read-only)", async ()
   const code = stripComments(src);
   assert.equal(code.includes("withStateGuard"), false);
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// Uncovered-path gap tests
+// ──────────────────────────────────────────────────────────────────────────
+
+// Gap 1: hooks unsupported kind via declared field
+// resolveStrict reaches step 9 (addUnsupportedKindNotes) and finds
+// "hooks" in declaresUnsupportedKind; pushes note "contains hooks"; the
+// manifestEntryStatus returns {status:"uninstallable", notes:["contains
+// hooks"]} via the notes.length > 0 branch.
+test("gap: plugin declaring hooks field buckets as ⊘ with 'contains hooks' note", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          // hooks declared at entry level -- declaresUnsupportedKind fires.
+          { name: "hooks-plugin", source: "./hooks-plugin", hooks: ["hooks.json"] },
+        ],
+      },
+      // Source dir must exist so the resolver passes the "dir does not exist"
+      // preflight check and reaches the unsupported-kind step.
+      installablePluginDirs: ["hooks-plugin"],
+    });
+
+    const { ctx, notifications } = makeCtx();
+    await listPlugins({ ctx, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    assert.match(out, /⊘ hooks-plugin/);
+    assert.match(out, /contains hooks/);
+  });
+});
+
+// Gap 2: lspServers unsupported kind via declared field
+// Same path as Gap 1 but for the "lspServers" kind.
+test("gap: plugin declaring lspServers field buckets as ⊘ with 'contains lspServers' note", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "lsp-plugin", source: "./lsp-plugin", lspServers: { "my-ls": {} } }],
+      },
+      installablePluginDirs: ["lsp-plugin"],
+    });
+
+    const { ctx, notifications } = makeCtx();
+    await listPlugins({ ctx, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    assert.match(out, /⊘ lsp-plugin/);
+    assert.match(out, /contains lspServers/);
+  });
+});
+
+// Gap 3: hooks unsupported kind via file convention (UNSUPPORTED_COMPONENT_CONVENTIONS)
+// Plugin dir exists but contains hooks/hooks.json -- detected via
+// hasUnsupportedConvention; resolver returns installable:false with note
+// "contains hooks".
+test("gap: plugin dir with hooks/hooks.json file buckets as ⊘ via file convention", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = path.join(userRoot, "marketplaces", "mp1");
+
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "hooks-conv", source: "./hooks-conv" }],
+      },
+      installablePluginDirs: ["hooks-conv"],
+    });
+
+    // Write hooks/hooks.json inside the plugin source dir AFTER seeding so
+    // resolver's hasUnsupportedConvention probe finds it.
+    const pluginDir = path.join(mpRoot, "hooks-conv");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{}", "utf8");
+
+    const { ctx, notifications } = makeCtx();
+    await listPlugins({ ctx, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    assert.match(out, /⊘ hooks-conv/);
+    assert.match(out, /contains hooks/);
+  });
+});
+
+// Gap 4: lspServers via file convention (.lsp.json)
+test("gap: plugin dir with .lsp.json file buckets as ⊘ via file convention", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = path.join(userRoot, "marketplaces", "mp1");
+
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "lsp-conv", source: "./lsp-conv" }],
+      },
+      installablePluginDirs: ["lsp-conv"],
+    });
+
+    // Write .lsp.json inside the plugin source dir so resolver detects it.
+    const pluginDir = path.join(mpRoot, "lsp-conv");
+    await writeFile(path.join(pluginDir, ".lsp.json"), "{}", "utf8");
+
+    const { ctx, notifications } = makeCtx();
+    await listPlugins({ ctx, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    assert.match(out, /⊘ lsp-conv/);
+    assert.match(out, /contains lspServers/);
+  });
+});
+
+// Gap 5: resolveStrict THROWS -- caught by manifestEntryStatus catch block
+// A plugin name containing "/" passes MARKETPLACE_VALIDATOR (name is
+// Type.String()) but causes resolveStrict to throw via assertSafeName.
+// The catch at manifestEntryStatus lines 149-151 catches it and returns
+// {status:"uninstallable", notes:[errorMessage(err)]}.
+test("gap: plugin with path-separator in name -- resolveStrict throws, caught as ⊘", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          // "/" in name passes TypeBox String() but assertSafeName throws.
+          { name: "bad/name", source: "./badname" },
+        ],
+      },
+      // No installablePluginDirs -- resolveStrict throws before stat checks.
+    });
+
+    const { ctx, notifications } = makeCtx();
+    await listPlugins({ ctx, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    // Row is bucketed as uninstallable; note contains the assertSafeName message.
+    assert.match(out, /⊘/);
+    assert.match(out, /path separators/);
+  });
+});
+
+// Gap 6: collectMarketplacePlugins manifest=undefined with no installed plugins
+// The early-return branch (manifest === undefined) fires and returns [] when
+// the marketplace has no installed records and no loadable manifest.
+// This path confirms zero available rows appear without a manifest even when
+// the marketplace record itself is valid.
+test("gap: manifest load fails + zero installed -> marketplace renders with warning and no plugin rows", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const fakePath = path.join(userRoot, "marketplaces", "mp1", ".claude-plugin", "no-such.json");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifestPathOverride: fakePath,
+      // No installed plugins -- collectMarketplacePlugins returns [] immediately.
+    });
+
+    const { ctx, notifications } = makeCtx();
+    await listPlugins({ ctx, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    assert.match(out, /\[warning\] could not load manifest for "mp1"/);
+    // No ● / ○ / ⊘ rows -- only the warning and the (no plugins) placeholder.
+    assert.match(out, /\(no plugins\)/);
+    assert.equal(out.includes("●"), false);
+    assert.equal(out.includes("○"), false);
+    assert.equal(out.includes("⊘"), false);
+  });
+});
+
+// Gap 7: listPlugins top-level catch -- loadPluginListPayload throws
+// Writing corrupt JSON to state.json causes loadState to throw; the
+// listPlugins try/catch (lines 264-269) catches it and calls notifyError.
+test("gap: corrupt state.json causes listPlugins to notify an error", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const extensionRoot = path.join(userRoot, "pi-claude-marketplace");
+    await mkdir(extensionRoot, { recursive: true });
+    const stateJsonPath = path.join(extensionRoot, "state.json");
+    // Write corrupt JSON -- loadState throws, listPlugins catches it.
+    await writeFile(stateJsonPath, "{ this is not valid json }", "utf8");
+
+    const { ctx, notifications } = makeCtx();
+    await listPlugins({ ctx, cwd, scope: "user" });
+    assert.equal(notifications.length, 1);
+    // notifyError is called; severity should be "error".
+    assert.equal(notifications[0]!.severity, "error");
+    // The error message should reference the JSON parse failure.
+    assert.match(notifications[0]!.message, /state\.json/);
+  });
+});
