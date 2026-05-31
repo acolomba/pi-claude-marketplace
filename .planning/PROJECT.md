@@ -4,54 +4,19 @@
 
 `pi-claude-marketplace` is a Pi extension that gives Pi users access to Claude plugin marketplaces through a `/claude:plugin` command surface intentionally aligned with Claude Code's upstream `/plugin`. It translates Claude plugin artefacts (skills, commands, agents, MCP servers) into the equivalent Pi-native artefacts (Pi skills, Pi prompt templates, pi-subagents agents, pi-mcp-adapter MCP entries) and manages their lifecycle (install, update, uninstall, reinstall, marketplace add/remove/list, import).
 
-Six milestones have shipped: v1.0 (PRD-derived successor architecture), v1.1 (atomic plugin reinstall), v1.2 (Claude settings import), v1.3 (consistent messaging -- every user-visible output conforming to a locked style guide + per-command catalog, structurally enforced by a 34-rule ESLint drift-guard plugin and a byte-equality catalog UAT runner), v1.4 (structured notification messages -- type-driven `NotificationMessage` payload replaces v1.3's string-based notify API; v1.3 drift-guard plugin retired in favor of closed-set type encoding), and v1.4.1 (post-ship UAT patches -- 8 v1.4 milestone-spanning UAT gaps closed: reload-hint discipline, plugin.json version precedence, `v#<7hex>` hash display, `lsp` grammar consistency, plus runtime reproduction of the indent / tab-completion findings). All six are pre-release iterations toward the single unreleased `0.2.0` version (the last real release / git tag is `v0.1.7`).
+Seven milestones have shipped: v1.0 (PRD-derived successor architecture), v1.1 (atomic plugin reinstall), v1.2 (Claude settings import), v1.3 (consistent messaging -- every user-visible output conforming to a locked style guide + per-command catalog, structurally enforced by a 34-rule ESLint drift-guard plugin and a byte-equality catalog UAT runner), v1.4 (structured notification messages -- type-driven `NotificationMessage` payload replaces v1.3's string-based notify API; v1.3 drift-guard plugin retired in favor of closed-set type encoding), v1.4.1 (post-ship UAT patches -- 8 v1.4 milestone-spanning UAT gaps closed: reload-hint discipline, plugin.json version precedence, `v#<7hex>` hash display, `lsp` grammar consistency, plus runtime reproduction of the indent / tab-completion findings), and v1.5 (notification output polish -- 8 UXG output-grammar and severity-presentation refinements: benign no-ops suppressed from `Warning:`, autoupdate marker grammar, update no-op renders `(skipped)`, `<last-updated>` timestamp dropped, summary line prepended to error/warning cascades, update of manifest-absent plugin classifies as `(failed) {not in manifest}`, version arrow symmetric `v`-prefix). All are pre-release iterations toward the single unreleased `0.2.0` version (the last real release / git tag is `v0.1.7`).
 
 ## Core Value
 
 A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
-## Current Milestone: v1.5 Notification Output Polish
+## Current State
 
-**Goal:** Refine the v2 `NotificationMessage` output grammar and severity presentation per the 2026-05-30 hands-on UAT sweep, so marketplace/autoupdate surfaces and severity rendering match operator expectations. The 6 requirements (UXG-01..UXG-06) are detailed in `REQUIREMENTS.md` and phased in `ROADMAP.md` (Phases 27-28); they originate from `.planning/BACKLOG.md` (`## v1.4 UAT findings`), surfaced by the full hands-on sweep documented in `.planning/v1.4-MILESTONE-UAT.md`. Started non-destructively on the unmerged PR #22 branch (D-UXG-01) -- phases 15-26 preserved, no STATE progress-zeroing; the clean `/gsd-complete-milestone` archival of 15-26 still runs post-merge.
+**Status:** v1.5 shipped 2026-05-31. All 7 milestones complete. `gsd/v1.3-replan-catalog` branch ready to merge to `main` as `0.2.0`.
 
-**Target requirements:** UXG-01 drop the `<last-updated <iso>>` marker from `marketplace list`; UXG-02 route benign skips (`{up-to-date}`, `{already …}`) at `info` not `warning`; UXG-03 suppress the `Error:`/`Warning:` label on multi-line cascades (keep it on single-line messages, keep the color -- likely an upstream `@earendil-works/pi-coding-agent` capability, Phase 28 carries a spike); UXG-04 autoupdate `<autoupdate>`/`<no autoupdate>` marker grammar (explicit off-marker); UXG-05 `marketplace update` no-op renders `(skipped) {up-to-date}` not `(updated)`; UXG-06 doc-only catalog fix (github-source `marketplace add` never auto-enables autoupdate) + the `autoupdate`/`noautoupdate` heading nit. Out of scope: new features -- the v1.4 byte-contract is verified-correct as shipped; this milestone only adjusts grammar/severity per operator preference.
+**Test suite:** 1168/1168 pass (typecheck + ESLint + Prettier + tests).
 
-_The historical v1.4.1 goal + target findings below are retained for reference; that milestone is complete (see `### Validated`)._
-
-**v1.4.1 Goal (closed):** Close the 8 gaps surfaced by the v1.4 milestone-spanning UAT (`.planning/v1.4-MILESTONE-UAT.md`) so v1.4's user-visible message surfaces match the catalog spec and user expectations end-to-end. Driven by 2026-05-28 conversational UAT against the user's installed pi-claude-marketplace v0.1.7 runtime; full triage in the UAT file.
-
-**Target findings (8 gaps, organized by bundle):**
-
-1. **Reload-hint discipline family** -- 3 gaps with a single chokepoint fix
-   - G-MIL-01: `marketplace add` of an empty mp emits `/reload to pick up changes` despite zero Pi-visible state change
-   - G-MIL-02: `marketplace remove` of an empty mp emits `/reload to pick up changes` despite zero Pi-visible state change
-   - G-MIL-06: `marketplace update` whose plugin cascade is all no-ops emits `/reload to pick up changes` despite zero plugin state change
-   - Shared root cause: marketplace-level transition tokens (`MarketplaceAddedMessage` / `MarketplaceRemovedMessage` / `MarketplaceUpdatedMessage`) unconditionally trigger `shouldEmitReloadHint`. Fix: gate the marketplace-level arms on `plugins[].some(state-change-discriminator)`. Same SNM-15 family as the G-21-01 fix landed in Plan 21-04.
-
-2. **Version display bundle** -- 2 gaps
-   - G-MIL-05: `resolvePluginVersion` (orchestrators/plugin/shared.ts:167) short-circuits to PI-7 hash-version when `marketplace.json` lacks a `version` for a plugin, even when that plugin's own `<pluginRoot>/.claude-plugin/plugin.json` declares one. Fix: add a tier-2 fallback that consults `installable.manifest?.version` before `computeHashVersion`, with SemVer shape validation.
-   - G-MIL-08: render hash-version as `v#<7hex>` (git-style short SHA) instead of the current `vhash-<12hex>`. Persistence stays at `hash-<12hex>` (PI-7 contract intact, no state migration). Renderer-only transform.
-
-3. **Grammar leak** -- 1 gap
-   - G-MIL-04: `"lspServers"` in the user-rendered REASONS closed-set at `shared/notify.ts:79` is the lone camelCase leak. Either rename the discriminator string to `"lsp"` and update the 13 consumer call-sites in list.ts + install.ts, or insert a renderer-side translation. Preserves manifest-side field name `lspServers`.
-
-4. **Verification needing v1.4 runtime first** -- 2 gaps
-   - G-MIL-03: indent ladder appears 1/3 vs catalog D-16-08 documented 2/4/6 ladder. Needs byte-exact verification against v1.4 build.
-   - G-MIL-07: tab completion for `/claude:plugin update @<TAB>` returns nothing in the runtime, even though the unit test at `tests/edge/completions/provider.test.ts:806` asserts the correct behavior. Needs reproduction in v1.4 build to confirm whether it's a code path or runtime delivery issue.
-
-   Both require a reproduction-first phase that publishes / npm-links v0.2.0 into the user's Pi runtime before triage proceeds.
-
-**Out of scope for 1.4.1:**
-
-- New features. This is a bug-fix milestone scoped strictly to the v1.4 post-ship UAT inventory.
-- v1.4 phase dir archival (v1.4 phases 15-21 remain under `.planning/phases/`; 1.4.1 phases continue numbering at 22+).
-- Migration tooling for already-installed plugins with `version: "hash-<12hex>"` whose plugin.json declares a SemVer. Strategy: marketplace update should surface these as upgradable (less invasive); document as a known transition behavior.
-
-**Key context:**
-
-- All 8 gaps are diagnosed in the UAT file with surface citations, severity, and proposed fix sketches -- no upstream research needed.
-- Most fixes converge on three files: `shared/notify.ts`, `orchestrators/plugin/shared.ts`, `orchestrators/plugin/list.ts`. Plan boundaries should respect this convergence to avoid intra-wave merge conflicts.
-- Catalog spec (`docs/output-catalog.md`) updates accompany the rendering changes (G-MIL-08 hash display, G-MIL-04 grammar). PRD §11 PI-7 wording may need precedence clarification.
+**Next:** `/gsd-new-milestone` when starting v2.0 work.
 
 ## Requirements
 
@@ -59,31 +24,21 @@ _The historical v1.4.1 goal + target findings below are retained for reference; 
 
 <!-- Shipped and confirmed valuable via this GSD project. -->
 
-- ✓ v1.5 Notification Output Polish (Phases 27-28, UXG-01..UXG-06):
-  output-grammar & severity-presentation refinements from the 2026-05-30
-  hands-on UAT sweep. Phase 27 (Marketplace & Autoupdate Output Grammar):
-  dropped the `<last-updated <iso>>` marker from `marketplace list` (UXG-01);
-  replaced `(autoupdate enabled/disabled)` status tokens with `<autoupdate>` /
-  `<no autoupdate>` markers, idempotent flips render `{already …}` braces
-  (UXG-04); `marketplace update` no-op renders `(skipped) {up-to-date}` not
-  `(updated)` via manifest CONTENT-compare (UXG-05); doc-only github-source
-  `marketplace add` autoupdate clarification + `autoupdate`/`noautoupdate`
-  heading nit (UXG-06). Phase 28 (Severity Routing & Label Discipline): the
-  D-28-06 5-arm benign-softening `computeSeverity` ladder + `BENIGN_REASONS`
-  closed set routes benign-only skip cascades (`{up-to-date}` / `{already …}`)
-  at `info` not `warning`; actionable / mixed / manual-recovery stay `warning`,
-  failed stays `error`; zero rendered-byte changes, catalog-uat byte gate GREEN
-  (UXG-02). UXG-03 (suppress the host `Error:`/`Warning:` label on multi-line
-  cascades) resolved DEFER-WITH-FINDING: the read-only spike REFUTED host
-  feasibility (`@earendil-works/pi-coding-agent` couples label + color to the
-  single `notify(message, type?)` arg; no color-only param) -- recorded as an
-  upstream-tracked finding (`UXG-03-FINDING.md` + spike test +
-  `v1.4-MILESTONE-UAT.md` + REQUIREMENTS + STATE deferral row), no colorless
-  in-extension workaround shipped (D-28-10/D-28-12). `npm run check` GREEN
-  1156/1156; Phase 28 verified 9/9 must-haves. (Phases 27-28 / UXG-01..06 are
-  shipped + UAT-passed; the milestone then REOPENED 2026-05-31 for UXG-07/08 --
-  see `### Active` / Phase 29 -- so `/gsd-complete-milestone` archival is
-  deferred until Phase 29 closes.)
+- ✓ v1.5 Notification Output Polish (Phases 27-29, UXG-01..UXG-08, shipped 2026-05-31):
+  8 UXG output-grammar and severity-presentation refinements. Phase 27: dropped
+  `<last-updated>` from `marketplace list` (UXG-01); `<autoupdate>` / `<no
+  autoupdate>` marker grammar with idempotent `{already …}` braces (UXG-04);
+  `marketplace update` no-op renders `(skipped) {up-to-date}` not `(updated)`
+  (UXG-05); catalog / heading nits (UXG-06). Phase 28: 5-arm
+  benign-softening `computeSeverity` ladder -- benign-only skip cascades route
+  `info` not `warning` (UXG-02); UXG-03 resolved DEFER-WITH-FINDING (host
+  couples label+color, no color-only param). Phase 29: `notify()` prepends a
+  summary line (`N plugin operation(s) failed/skipped.`) for error/warning
+  cascades giving the host `Error:`/`Warning:` prefix a meaningful sentence
+  (UXG-07); `preflightUpdate` consults manifest before not-installed guard so
+  `update <nonexistent>@<mp>` → `(failed) {not in manifest}` matching `install`
+  (UXG-08). Also: version arrow symmetric `v`-prefix (`v1.0.0 → v1.1.0`).
+  1168/1168 tests GREEN. UAT: `.planning/v1.5-branch-gate-uat.md` (18/18 pass).
 - ✓ v1.4.1 Post-ship UAT Patches (Phases 22-26, SNM-33..SNM-40): Closed the 8
   gaps surfaced by the v1.4 milestone-spanning UAT. Reload-hint discipline
   (SNM-33 / G-MIL-01/02/06): `shouldEmitReloadHint` collapsed to a purely
@@ -135,9 +90,7 @@ _The historical v1.4.1 goal + target findings below are retained for reference; 
 
 ### Active
 
-<!-- Current scope. Building toward these. Detailed REQ-IDs in REQUIREMENTS.md. -->
-
-- v1.5 Notification Output Polish -- Phase 29 (UXG-07, UXG-08): the milestone REOPENED 2026-05-31 after the operator ran the source-loaded v0.2.0 runtime directly and found the notify-boundary capture had missed 3 real-runtime cases. UXG-07 suppresses the host `Error:`/`Warning:` label on multi-line `notify()` cascades by routing them through info (entrypoint-split: single-line `notifyUsageError` keeps the label) -- the label IS removable in-extension now that severity color is confirmed expendable, superseding the UXG-03 defer-with-finding and making UXG-02's `computeSeverity` warning/error arms vestigial. UXG-08 fixes `update` of a manifest-absent plugin to classify as `{not in manifest}`/`failed` (matching install), not `{not installed}`/`skipped`. Phases 27-28 (UXG-01..06) remain shipped (`### Validated`). Detailed REQ-IDs in `REQUIREMENTS.md`; phased in `ROADMAP.md` (Phase 29). `/gsd-complete-milestone` deferred until Phase 29 closes.
+<!-- No active milestone. Use /gsd-new-milestone to start the next one. -->
 
 ### Out of Scope
 

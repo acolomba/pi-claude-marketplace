@@ -2,6 +2,39 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v1.5 — Notification Output Polish
+
+**Shipped:** 2026-05-31
+**Phases:** 3 (27, 28, 29) | **Plans:** 10 | **Tasks:** ~25
+**Timeline:** 2026-05-30 → 2026-05-31 (~2 days)
+
+### What Was Built
+
+- **UXG-01/04/05/06** (Phase 27): `<last-updated>` dropped from `marketplace list`; autoupdate `<autoupdate>` / `<no autoupdate>` marker grammar with idempotent braces; `marketplace update` no-op → `(skipped) {up-to-date}`; catalog/heading nits.
+- **UXG-02** (Phase 28): 5-arm benign-softening `computeSeverity` ladder with `BENIGN_REASONS` closed set — benign-only skip cascades route `info` not `warning`.
+- **UXG-03** (Phase 28): Resolved DEFER-WITH-FINDING. Read-only spike refuted host feasibility; `@earendil-works/pi-coding-agent` couples label+color inseparably. Accepted upstream limitation.
+- **UXG-07** (Phase 29): `notify()` prepends a summary line (`N plugin operation(s) failed/skipped.`) for error/warning cascades, giving the `Error:`/`Warning:` host prefix a meaningful sentence.
+- **UXG-08** (Phase 29): `preflightUpdate` restructured to consult the marketplace manifest before the not-installed guard, so `update <nonexistent>@<mp>` → `(failed) {not in manifest}` matching `install`.
+- **Version arrow fix** (post-UAT): `composeVersionArrow` changed to symmetric `v`-prefix on both sides (`v1.0.0 → v1.1.0`), surfaced during branch gate UAT.
+
+### What Worked
+
+- **Branch gate UAT with pre-provisioned fixture marketplace** (`uat/uat-mp/`) caught the version-arrow asymmetry and confirmed all 8 UXG requirements in one ~30-minute live session. Having the fixture already seeded eliminated setup friction between each test.
+- **catalog-uat byte-equality gate** continued to be the enforcement anchor: every notify() output change required an atomic catalog + test lockstep commit, making regressions impossible to commit accidentally.
+- **D-29-01 decision capture during discuss-phase** (keeping severity routing, adding summary line instead of routing to info) was the right call — it aligned with the user's actual preference after seeing the UXG-03 upstream constraint. The discuss-phase artifact saved a wasted Phase 29 plan.
+
+### What Was Inefficient
+
+- **v1.5 milestone reopened mid-close** (Phase 29 added after v1.5 was initially marked complete). The 2026-05-31 runtime pass surfaced UXG-07/08 that the notify-boundary capture approach had missed. A full live-runtime UAT earlier in the milestone would have caught these before declaring complete.
+- **SUMMARY.md writing to main tree** (a recurring worktree pattern): agents consistently wrote their SUMMARY.md to the absolute main-repo path rather than their worktree-relative path, blocking each `worktree.cleanup-wave` call. The `rm`-and-recommit workaround is now muscle memory but should be fixed at the agent level.
+
+### Key Lessons
+
+- **Live-runtime UAT is not optional before milestone close.** The notify-boundary capture approach is a useful signal but is not a substitute for actually running the commands against the source-loaded runtime. Add a mandatory `scripts/pi.sh --home /tmp/pi-uat` step to the milestone completion checklist.
+- **Pre-provision UAT fixture marketplaces with the milestone plan.** Having `uat/uat-mp/` in the repo turned the branch gate UAT from "set up fixtures, run tests, document" into "run tests, report pass/fail." 30-minute complete UAT instead of 2+ hours.
+
+---
+
 ## Milestone: v1.3 -- Consistent Messaging
 
 **Shipped:** 2026-05-25

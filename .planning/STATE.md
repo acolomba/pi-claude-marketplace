@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Notification Output Polish
-status: executing
+status: Awaiting next milestone
 stopped_at: Phase 29 context gathered
-last_updated: "2026-05-31T19:22:31.225Z"
-last_activity: 2026-05-31
+last_updated: "2026-05-31T20:14:53.854Z"
+last_activity: 2026-05-31 — Milestone v1.5 completed and archived
 progress:
   total_phases: 17
   completed_phases: 17
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-30)
 
 ## Current Position
 
-Phase: 29
-Plan: Not started
-Status: Executing Phase 29
-Last activity: 2026-05-31
+Phase: Milestone v1.5 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-05-31 — Milestone v1.5 completed and archived
 
 ## Performance Metrics
 
@@ -211,8 +211,4 @@ Resume File: .planning/phases/29-notification-label-suppression-update-classific
 
 ## Operator Next Steps
 
-- Phase 28 complete + VERIFIED 9/9 (`.planning/phases/28-severity-routing-label-discipline/28-VERIFICATION.md`). The v1.5 (Notification Output Polish) milestone is functionally closed: all 16 phases / 58 plans Complete, `npm run check` GREEN 1156/1156 (typecheck + ESLint + Prettier + tests, exit 0). UXG-02 shipped the D-28-06 5-arm benign-softening severity ladder (benign-only skip cascades render `info`, not `warning`; zero rendered-byte changes, catalog-uat byte gate GREEN). UXG-03 resolved as a defer-with-finding: the read-only spike REFUTED host feasibility (`@earendil-works/pi-coding-agent` couples the `Error:`/`Warning:` label and severity color to the single `notify(message, type?)` arg; no color-only param) -- recorded in `UXG-03-FINDING.md` + spike test + UAT + REQUIREMENTS + STATE deferral row; no colorless in-extension workaround shipped (D-28-10).
-- Advisory: Phase 28 code review found 0 Critical / 2 Warning / 4 Info (`28-REVIEW.md`); all non-blocking (stale test titles in `tests/orchestrators/marketplace/autoupdate.test.ts:124,143`; an unpinned empty-`reasons:[]` plugin-skip boundary; doc-drift Info items). Optionally run `/gsd-code-review 28 --fix`.
-- v1.5 milestone UAT PASSED (operator-confirmed 2026-05-31; `.planning/v1.5-MILESTONE-UAT.md`). Evidence captured at the `ctx.ui.notify` boundary against the real `notify()` path: benign no-ops emit `info` (host `showStatus` -> dim, NO `Warning:`/`Error:` label), actionable/failed still emit `warning`/`error` (host adds the label). UXG-01/02/04/05 PASS; UXG-03 accepted as an upstream finding; UXG-06 doc-only. Operator confirmed and noted severity COLOR is not a concern -- the delivered value is the label suppression on benign output.
-- v1.5 REOPENED 2026-05-31: the operator then exercised the source-loaded v0.2.0 runtime directly and surfaced 3 cases the notify-boundary capture could not reach -- `install <already-installed>` renders `Error:`, `update <not-installed>` renders `Warning:`, and `update <nonexistent>` mis-classifies as `{not installed}` (should be `{not in manifest}`/`failed` like install). These became Phase 29 / UXG-07 (suppress the host `Error:`/`Warning:` label on multi-line cascades by routing through info -- the label IS removable in-extension once color is expendable, which the operator confirmed it is; entrypoint-split keeps the single-line `notifyUsageError` label) + UXG-08 (update-of-nonexistent classification). REQUIREMENTS + ROADMAP updated; v1.5 status flipped back to executing.
-- **Next: run `/gsd-discuss-phase 29`** then `/gsd-plan-phase 29` -> `/gsd-execute-phase 29`. Open design decisions for discuss: (1) retire vs keep-dormant `computeSeverity`'s warning/error arms (UXG-07 makes them vestigial); (2) whether to add a UXG-09 reclassifying `install` of an already-installed plugin from `failed`/error to a benign no-op. `/gsd-complete-milestone` is deferred until Phase 29 closes. Filing the upstream `@earendil-works/pi-coding-agent` UXG-03 issue remains the operator's call (D-28-12).
+- Start the next milestone with /gsd-new-milestone
