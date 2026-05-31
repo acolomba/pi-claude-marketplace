@@ -347,7 +347,10 @@ test("PUP-4: source overridden to github-flavored URL -> outcome.partition='skip
       // the installed record (PUP-4 carries `fromVersion: "1.0.0"`).
       // Plugin-row `[<scope>]` bracket suppressed by orphan-fold per
       // Phase 17.2. Severity routes via warning per D-16-11.
-      assert.equal(body, "● mp [project]\n  ⊘ hello v1.0.0 (skipped) {no longer installable}");
+      assert.equal(
+        body,
+        "1 plugin operation skipped.\n\n● mp [project]\n  ⊘ hello v1.0.0 (skipped) {no longer installable}",
+      );
       assert.equal(notifications[0]?.severity, "warning");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -386,7 +389,10 @@ test("PUP-5: refreshed manifest no longer lists entry -> outcome.partition='skip
       // Phase 19 / Plan 19-05: V2 byte form. `(skipped) {not in manifest}`
       // row with the optional `v<fromVersion>` token from the installed
       // record. Plugin-row `[<scope>]` bracket suppressed by orphan-fold.
-      assert.equal(body, "● mp [project]\n  ⊘ hello v1.0.0 (skipped) {not in manifest}");
+      assert.equal(
+        body,
+        "1 plugin operation skipped.\n\n● mp [project]\n  ⊘ hello v1.0.0 (skipped) {not in manifest}",
+      );
       assert.equal(notifications[0]?.severity, "warning");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -869,7 +875,10 @@ test("PUP-1 pl@mp: targeting a plugin not in state -> partition='skipped' (not i
       const body = notifications[0]?.message ?? "";
       // Phase 19 / Plan 19-05: V2 byte form. Plugin-row `[<scope>]`
       // bracket suppressed by orphan-fold. Skipped severity per D-16-11.
-      assert.equal(body, "● mp [project]\n  ⊘ hello (skipped) {not installed}");
+      assert.equal(
+        body,
+        "1 plugin operation skipped.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed}",
+      );
       assert.equal(notifications[0]?.severity, "warning");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -909,7 +918,10 @@ test("PUP-1 pl@mp: targeting a plugin not in state AND not in manifest -> partit
       });
 
       const body = notifications[0]?.message ?? "";
-      assert.equal(body, "● mp [project]\n  ⊘ hello (failed) {not in manifest}");
+      assert.equal(
+        body,
+        "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello (failed) {not in manifest}",
+      );
       assert.equal(notifications[0]?.severity, "error");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -953,7 +965,7 @@ test("PUP-1: targeting an unknown marketplace -> direct-path V2 notify (PluginFa
       // row carrying the parens-wrapped marketplace name (WR-01).
       assert.equal(
         notifications[0]?.message,
-        "● ghost-mp [project]\n" +
+        "1 plugin operation failed.\n\n● ghost-mp [project]\n" +
           "  ⊘ (ghost-mp) (failed) {not found}\n" +
           '    cause: Marketplace "ghost-mp" not found in project scope.',
       );
@@ -992,7 +1004,10 @@ test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback res
       // Phase 19 / Plan 19-05: V2 byte form mirrors the pl@mp
       // not-installed shape (PUP-1 above). Plugin-row `[<scope>]` bracket
       // suppressed by orphan-fold.
-      assert.equal(body, "● mp [project]\n  ⊘ hello (skipped) {not installed}");
+      assert.equal(
+        body,
+        "1 plugin operation skipped.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed}",
+      );
       assert.equal(notifications[0]?.severity, "warning");
     } finally {
       await rm(cwd, { recursive: true, force: true });
