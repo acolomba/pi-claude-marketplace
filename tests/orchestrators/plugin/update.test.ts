@@ -877,6 +877,46 @@ test("PUP-1 pl@mp: targeting a plugin not in state -> partition='skipped' (not i
   });
 });
 
+// ─── PUP-1 pl@mp: not in state AND not in manifest -> partition='failed' ───────
+
+// UXG-08 / D-29-08: `update <plugin>@<mp>` where the plugin is absent from both
+// local state AND the marketplace manifest now classifies as `(failed) {not in
+// manifest}` (matching `install`), not the prior `(skipped) {not installed}`.
+// `preflightUpdate` consults the manifest BEFORE concluding "not installed", so
+// a typo / nonexistent plugin name is distinguished from a real-but-uninstalled
+// plugin.
+test("PUP-1 pl@mp: targeting a plugin not in state AND not in manifest -> partition='failed' (not in manifest)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-pup1-pl-nomanifest-"));
+    try {
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        // Empty manifest: no entry for "hello", and hello is not installed
+        // (no installedVersions). The manifest check must fire before the
+        // "not installed" guard.
+        manifestPlugins: {},
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      const body = notifications[0]?.message ?? "";
+      assert.equal(body, "● mp [project]\n  ⊘ hello (failed) {not in manifest}");
+      assert.equal(notifications[0]?.severity, "error");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ─── PUP-1 missing marketplace -> direct-path V2 notify (PluginFailedMessage) ─
 
 test("PUP-1: targeting an unknown marketplace -> direct-path V2 notify (PluginFailedMessage with cause)", async () => {

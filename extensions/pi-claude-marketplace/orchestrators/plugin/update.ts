@@ -589,8 +589,35 @@ async function preflightUpdate(
     };
   }
 
+  // UXG-08 / D-29-08/09: consult the marketplace manifest BEFORE concluding
+  // "not installed". `loadCachedMarketplaceManifest` is the cached path (also
+  // used below for the installed-but-absent case), so moving the load up adds
+  // no net I/O. A plugin absent from BOTH state and manifest is a typo /
+  // nonexistent name -- it must classify as `(failed) {not in manifest}` like
+  // `install`, not the misleading `(skipped) {not installed}` that the
+  // installed-state-first ordering produced.
+  const manifest = await loadCachedMarketplaceManifest(mp.manifestPath);
+  const entryRaw = manifest.plugins.find((p) => p.name === plugin);
+
   const record = mp.plugins[plugin];
   if (record === undefined) {
+    if (entryRaw === undefined) {
+      // Not installed AND absent from the manifest -> failed {not in manifest}
+      // (matches install.ts's `not-in-manifest` arm). No `fromVersion` since
+      // there is no install record to read a version from.
+      return {
+        partition: "failed",
+        name: plugin,
+        notes: ["not in manifest"],
+        reasons: ["not in manifest"] as const,
+        declaresAgents: false,
+        declaresMcp: false,
+      };
+    }
+
+    // In the manifest but not installed -> skipped {not installed}
+    // (preserved behavior). No manifest-entry validation is needed here
+    // because we return early without resolving the entry.
     return {
       partition: "skipped",
       name: plugin,
@@ -601,9 +628,9 @@ async function preflightUpdate(
     };
   }
 
-  const manifest = await loadCachedMarketplaceManifest(mp.manifestPath);
-  const entryRaw = manifest.plugins.find((p) => p.name === plugin);
   if (entryRaw === undefined) {
+    // Installed but no longer listed in the refreshed manifest -> skipped
+    // {not in manifest} with the recorded `fromVersion` (preserved behavior).
     return {
       partition: "skipped",
       name: plugin,
