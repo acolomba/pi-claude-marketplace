@@ -14,7 +14,10 @@ import {
   updateMarketplace,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import {
+  loadState,
+  saveState,
+} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
   __resetCacheForTests,
   getPluginIndex,
@@ -1196,5 +1199,197 @@ test("260525-cjr B2: cascadeAutoupdates catch -> generic Error falls through to 
     // for an unrecognised error shape and deferred to the back-compat
     // notes path.
     assert.match(composed, /alpha[^\n]*\(failed\)[^\n]*\{unreadable manifest\}/);
+  });
+});
+
+// ── New tests covering previously uncovered paths ────────────────────
+
+test("SC-6 / MU-1: updateAllMarketplaces (no scope) processes user-scope marketplace", async () => {
+  // Lines 168-170: targets.push() for a marketplace discovered in the
+  // user scope during the no-scope-filter iteration path.
+  await withHermeticHome(async ({ home, cwd }) => {
+    // Seed a marketplace in user scope.  getAgentDir() uses
+    // homedir()/.pi/agent on Linux when PI_CODING_AGENT_DIR is not set.
+    // withHermeticHome sets HOME so homedir() resolves to `home`.
+    const userLocations = locationsFor("user", cwd);
+    await mkdir(userLocations.extensionRoot, { recursive: true });
+    const cloneDir = await userLocations.sourceCloneDir("user-mp");
+    await cp(fixtureMarketplaceDir("valid-marketplace"), cloneDir, { recursive: true });
+    await saveState(userLocations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: {
+        "user-mp": {
+          name: "user-mp",
+          scope: "user",
+          source: makeGithubSource("main"),
+          addedFromCwd: cwd,
+          manifestPath: path.join(cloneDir, ".claude-plugin", "marketplace.json"),
+          marketplaceRoot: cloneDir,
+          plugins: {},
+        },
+      },
+    });
+
+    const { ctx, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000010" },
+    });
+
+    // Call without scope filter -- enumerates both scopes (SC-6).
+    await updateAllMarketplaces({ ctx, cwd, gitOps });
+
+    // At least one notification, and it should mention user-mp.
+    assert.ok(notifications.length >= 1);
+    const combined = notifications.map((n) => n.message).join("\n");
+    assert.ok(combined.includes("user-mp"), `expected "user-mp" in notifications: ${combined}`);
+    // No error severity.
+    const errNotif = notifications.find((n) => n.severity === "error");
+    assert.equal(errNotif, undefined, `unexpected error notification: ${errNotif?.message}`);
+  });
+});
+
+test("SC-6 / MU-1: updateAllMarketplaces (no scope) with both scopes empty notifies once", async () => {
+  // Lines 174-177: the empty-targets guard fires when BOTH scopes are
+  // enumerated and neither has any marketplaces.  The existing MU-1 test
+  // uses scope:'project' (single scope); this test exercises the no-filter
+  // path that checks both scopes.
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps();
+
+    await updateAllMarketplaces({ ctx, cwd, gitOps }); // no scope filter
+
+    assert.equal(notifications.length, 1);
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    assert.equal(first.message, "(no marketplaces)");
+    assert.equal(first.message.includes("Run /reload to "), false);
+  });
+});
+
+test("refreshRecord: unsupported source kind surfaces as notifyError (lines 219-222)", async () => {
+  // Lines 219-222: the else branch in refreshRecord throws
+  // `Cannot update marketplace "..." unsupported source kind "..."`.
+  // An `unknown`-kind source stored in state reaches this branch because
+  // normalizeStoredSource passes kind==="unknown" through verbatim, but
+  // refreshRecord only handles "github" and "path".
+  await withHermeticHome(async ({ cwd }) => {
+    const locations = locationsFor("project", cwd);
+    await mkdir(locations.extensionRoot, { recursive: true });
+    await saveState(locations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: {
+        "unsupported-mp": {
+          name: "unsupported-mp",
+          scope: "project",
+          // kind:"unknown" passes STATE_VALIDATOR (source:Type.Unknown())
+          // and passes normalizeStoredSource (kind==="unknown" branch).
+          source: {
+            kind: "unknown",
+            raw: "ftp://example.com",
+            reason: "unsupported scheme",
+          } as unknown as ReturnType<typeof githubSource>,
+          addedFromCwd: cwd,
+          manifestPath: path.join(cwd, ".claude-plugin", "marketplace.json"),
+          marketplaceRoot: cwd,
+          plugins: {},
+        },
+      },
+    });
+
+    const { ctx, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps();
+
+    await updateMarketplace({ ctx, name: "unsupported-mp", scope: "project", cwd, gitOps });
+
+    assert.equal(notifications.length, 1);
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    assert.equal(first.severity, "error");
+    assert.ok(
+      first.message.includes("unsupported source kind"),
+      `expected "unsupported source kind" in: ${first.message}`,
+    );
+  });
+});
+
+test("snapshotAfterRefresh: MarketplaceNotFoundError when name absent from state (lines 244-246)", async () => {
+  // Lines 244-246: withStateGuard loads state, record===undefined, throws
+  // MarketplaceNotFoundError.  refreshOneMarketplace catches it and calls
+  // notifyError (the non-MarketplaceUpdateError branch, lines 318-320).
+  await withHermeticHome(async ({ cwd }) => {
+    // Leave state empty -- no marketplace named "ghost".
+    const { ctx, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps();
+
+    await updateMarketplace({ ctx, name: "ghost", scope: "project", cwd, gitOps });
+
+    assert.equal(notifications.length, 1);
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    assert.equal(first.severity, "error");
+    assert.ok(
+      first.message.includes("ghost"),
+      `expected marketplace name in error message: ${first.message}`,
+    );
+  });
+});
+
+test("validateManifestAtRoot: stale manifestPath and marketplaceRoot are corrected (lines 382-388)", async () => {
+  // Lines 382-388: conditional writes in validateManifestAtRoot update
+  // record.manifestPath and record.marketplaceRoot only when they differ
+  // from the canonical computed values.  Seed with stale paths, run
+  // update, then re-read state and assert both fields were corrected.
+  await withHermeticHome(async ({ cwd }) => {
+    const locations = locationsFor("project", cwd);
+    await mkdir(locations.extensionRoot, { recursive: true });
+    const cloneDir = await locations.sourceCloneDir("stale-mp");
+    await cp(fixtureMarketplaceDir("valid-marketplace"), cloneDir, { recursive: true });
+
+    const staleManifestPath = path.join(cwd, "old-dir", ".claude-plugin", "marketplace.json");
+    const staleMarketplaceRoot = path.join(cwd, "old-dir");
+
+    await saveState(locations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: {
+        "stale-mp": {
+          name: "stale-mp",
+          scope: "project",
+          source: makeGithubSource("main"),
+          addedFromCwd: cwd,
+          manifestPath: staleManifestPath,
+          marketplaceRoot: staleMarketplaceRoot,
+          plugins: {},
+        },
+      },
+    });
+
+    const { ctx, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000011" },
+    });
+
+    await updateMarketplace({ ctx, name: "stale-mp", scope: "project", cwd, gitOps });
+
+    // No error -- update should have succeeded.
+    const errNotif = notifications.find((n) => n.severity === "error");
+    assert.equal(errNotif, undefined, `unexpected error: ${errNotif?.message}`);
+
+    // Re-read state and confirm both stale paths were corrected.
+    const afterState = await loadState(locations.extensionRoot);
+    const record = afterState.marketplaces["stale-mp"];
+    assert.ok(record !== undefined, "stale-mp record must still be in state");
+
+    const expectedManifestPath = path.join(cloneDir, ".claude-plugin", "marketplace.json");
+    assert.equal(
+      record.manifestPath,
+      expectedManifestPath,
+      `manifestPath not updated: got ${record.manifestPath}`,
+    );
+    assert.equal(
+      record.marketplaceRoot,
+      cloneDir,
+      `marketplaceRoot not updated: got ${record.marketplaceRoot}`,
+    );
   });
 });
