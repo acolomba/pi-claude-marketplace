@@ -1992,6 +1992,31 @@ test("UXG-02 (D-28-09): mixed cascade (benign skip + actionable skip) computes w
   assert.equal(args[1], "warning");
 });
 
+test("UXG-02 (D-28-06): plugin skip with empty reasons:[] computes warning (allBenign guard on length)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  // The plugin `skipped` variant's `reasons` is REQUIRED, so a literal empty
+  // `reasons: []` is a structurally reachable input. `allBenign([])` returns
+  // false (the `reasons.length > 0` guard), so arm 3 of the D-28-06 ladder
+  // routes it to "warning" -- empty reasons cannot be proven benign, matching
+  // the D-28-08 safe-default intent. Distinct from the actionable-reason case
+  // (:1940) and the mp-omitted-reasons case (arm 4, below).
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [{ status: "skipped", name: "alpha", version: "1.0.0", reasons: [] }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 2);
+  assert.equal(args[1], "warning");
+});
+
 test("UXG-02 (D-28-08): mp-level skip with reasons OMITTED computes warning -- safe default", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
