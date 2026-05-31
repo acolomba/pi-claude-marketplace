@@ -209,6 +209,17 @@ type FixtureMap = Readonly<Record<string, Readonly<Record<string, CatalogFixture
 //         already no autoupdate) -> omit the field (info, no 2nd arg) per
 //         UXG-02 / D-28-06
 //       otherwise omit the field (info severity, no 2nd arg).
+//     SUMMARY LINE (Phase 29 / UXG-07 / D-29-02): every fixture carrying
+//     `expectedSeverity: "error" | "warning"` has its catalog cascade body
+//     PREFIXED with a one-line summary (`"N plugin operation(s) [and M
+//     marketplace operation(s)] failed|skipped."`) because `notify()` now
+//     prepends that line for error/warning severity. The driver reads the
+//     prefixed byte form from `docs/output-catalog.md` and byte-compares it
+//     against live `notify()` output, so the catalog (Plan 29-02 Task 1) and
+//     the emitted string agree. `expectedSeverity` is KEPT (D-29-06) -- the
+//     severity arg routing is unchanged; only the body string gained the
+//     prefix. Info-severity fixtures (no `expectedSeverity`) carry NO summary
+//     line and are byte-unchanged.
 //   - Plugin variants honor the discriminated-union carve-outs at
 //     `shared/notify.ts` lines 288-448 (required vs absent reasons /
 //     dependencies / scope / version / cause / rollbackPartial fields).
