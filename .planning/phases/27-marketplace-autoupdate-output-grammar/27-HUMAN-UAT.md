@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: resolved
 phase: 27-marketplace-autoupdate-output-grammar
 source: [27-VERIFICATION.md]
 started: 2026-05-31T00:07:43Z
-updated: 2026-05-31T03:25:00Z
+updated: 2026-05-31T10:16:29Z
 ---
 
 ## Current Test
@@ -29,12 +29,17 @@ note: |
   handling is UXG-03. Pre-flagged in 27-REVIEW.md as IN-03 (deferred, not a regression).
 
 ### 3. `marketplace update` no-op renders `(skipped) {up-to-date}` in live output
-expected: Run `/claude:plugin marketplace update <name>` against an unchanged path-source marketplace (autoupdate OFF). The line renders `● <mp> [<scope>] (skipped) {up-to-date}` at `warning` severity with no `/reload` trailer — not `(updated)`. A genuinely-changed update still renders `(updated)`.
-result: issue
+expected: Run `/claude:plugin marketplace update <name>` against an unchanged path-source marketplace (autoupdate OFF). The line renders `● <mp> [<scope>] (skipped) {up-to-date}` at `warning` severity with no `/reload` trailer -- not `(updated)`. A genuinely-changed update still renders `(updated)`.
+result: pass
 reported: "looks good for some (save for the warning), but the claude-plugins-official marketplace always says `● claude-plugins-official [user] (updated)` -- i don't think it can tell when we picked new changes via git"
 severity: major
 note: |
-  PATH-source no-op works (renders `(skipped) {up-to-date}`) — partial pass.
+  RESOLVED by Plan 27-05 (commit 932e405) + code-review follow-up 57068f0: the
+  autoupdate-ON branch now consults `snapshot.changed && cascadeIsNoOp` and renders
+  `(skipped) {up-to-date}` on a true no-op (update.ts:746-751), mirroring the
+  autoupdate-OFF path. Covered by orchestrator + notify-v2 + catalog-uat tests;
+  npm run check GREEN 1149/1149.
+  PATH-source no-op works (renders `(skipped) {up-to-date}`) -- partial pass.
   "save for the warning" = deferred UXG-02/Phase 28 severity-label item (Test 2), NOT this gap.
   CONFIRMED ROOT CAUSE (code-verified): the user's `claude-plugins-official` record has
   `autoupdate: true`. UXG-05's no-op `(skipped) {up-to-date}` rendering was wired ONLY
@@ -50,16 +55,17 @@ note: |
 ## Summary
 
 total: 3
-passed: 2
-issues: 1
+passed: 3
+issues: 0
 pending: 0
 skipped: 0
 blocked: 0
 
 ## Gaps
 
-- truth: "`marketplace update` with no change renders `● <mp> [<scope>] (skipped) {up-to-date}`, not `(updated)` — including autoupdate-ON marketplaces"
-  status: failed
+- truth: "`marketplace update` with no change renders `● <mp> [<scope>] (skipped) {up-to-date}`, not `(updated)` -- including autoupdate-ON marketplaces"
+  status: resolved
+  resolved_by: "27-05 (commit 932e405) + code-review follow-up 57068f0; npm run check GREEN 1149/1149"
   reason: "User reported: looks good for some (save for the warning), but the claude-plugins-official marketplace always says `● claude-plugins-official [user] (updated)` -- i don't think it can tell when we picked new changes via git"
   severity: major
   test: 3
@@ -68,7 +74,7 @@ blocked: 0
     - path: "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts"
       issue: "autoupdate-ON branch (L705-714) hardcodes marketplace status 'updated'; ignores snapshot.changed and the cascade outcomes' no-op-ness"
   missing:
-    - "On the autoupdate-ON path, render marketplace `(skipped) {up-to-date}` when snapshot.changed is false AND every cascaded plugin outcome is a no-op (none updated/installed/failed) — mirroring the autoupdate-OFF no-op and the plugin-level up-to-date no-op"
+    - "On the autoupdate-ON path, render marketplace `(skipped) {up-to-date}` when snapshot.changed is false AND every cascaded plugin outcome is a no-op (none updated/installed/failed) -- mirroring the autoupdate-OFF no-op and the plugin-level up-to-date no-op"
     - "Catalog (output-catalog.md) + catalog-uat coverage for the autoupdate-ON no-op marketplace-update case"
     - "Test that the autoupdate-ON path renders (skipped) {up-to-date} on a true no-op (WR-03-class coverage gap)"
   debug_session: ".planning/debug/uxg05-github-always-updated.md"
