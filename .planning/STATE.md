@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Notification Output Polish
-status: executing
-stopped_at: Completed 28-02-PLAN.md
-last_updated: "2026-05-31T13:00:00.000Z"
-last_activity: 2026-05-31
+status: completed
+stopped_at: Phase 28 complete -- v1.5 milestone ready for `/gsd-complete-milestone`
+last_updated: "2026-05-31T13:15:00.000Z"
+last_activity: 2026-05-31 -- Phase 28 (Severity Routing & Label Discipline) complete + VERIFIED 9/9; UXG-02 benign-softening severity ladder shipped, UXG-03 host label/color spike REFUTED -> upstream-tracked finding; npm run check GREEN 1156/1156
 progress:
   total_phases: 16
   completed_phases: 16
@@ -20,20 +20,20 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-30)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 28 -- severity-routing-label-discipline
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.5 milestone closed -- ready for `/gsd-complete-milestone` (operator-initiated archival).
 
 ## Current Position
 
-Phase: 28 (severity-routing-label-discipline) -- ALL PLANS COMPLETE
-Plan: 2 of 2 (complete)
-Status: Phase 28 plans complete (28-01 UXG-02 benign-softening ladder; 28-02 UXG-03 spike -> defer-with-finding). Final phase of the v1.5 milestone; pending phase-close/verification.
-Last activity: 2026-05-31 -- Plan 28-02 complete (UXG-03 feasibility spike REFUTED; resolved as upstream-tracked finding)
+Phase: 28 (complete)
+Plan: 28-02 (complete)
+Status: v1.5 milestone complete -- ready for `/gsd-complete-milestone`. Phase 28 VERIFIED 9/9 (UXG-02 benign-softening severity ladder shipped; UXG-03 host label/color spike REFUTED -> upstream-tracked finding, defer-with-finding per D-28-12).
+Last activity: 2026-05-31 -- Phase 28 complete + VERIFIED; `npm run check` GREEN 1156/1156, catalog-uat byte gate GREEN, no rendered-byte changes
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 118
+- Total plans completed: 120
 - Average duration: -
 - Total execution time: -
 
@@ -65,6 +65,7 @@ Last activity: 2026-05-31 -- Plan 28-02 complete (UXG-03 feasibility spike REFUT
 | 25 | 3 | - | - |
 | 26 | 1 | - | - |
 | 27 | 5 | - | - |
+| 28 | 2 | - | - |
 
 **Recent Trend:**
 
@@ -203,11 +204,12 @@ Additional v1.4.1-scope deferrals:
 
 ## Session Continuity
 
-Last session: 2026-05-31T13:00:00.000Z
-Stopped At: Completed 28-02-PLAN.md
+Last session: 2026-05-31T13:15:00.000Z
+Stopped At: Phase 28 complete -- v1.5 milestone ready for `/gsd-complete-milestone`
 Resume File: None
 
 ## Operator Next Steps
 
-- Phase 26 complete (SNM-40 / GREEN Gate Close). The v1.4.1 (Post-ship UAT Patches) milestone is closed: `npm run check` GREEN end-to-end on a clean tree (1137/1137 tests, exit 0); SNM-33/34/35/36 regression tests located + re-confirmed GREEN (evidence in `.planning/phases/26-green-gate-close/VERIFICATION.md`); CHANGELOG folded to one unreleased `[0.2.0]`; SNM-23 + SNM-40 traceability rows reconciled (40/40 Complete). `package.json` stays at `0.2.0` (D-26-01; not yet released, not yet bug-free).
-- **Next: run `/gsd-complete-milestone`** to archive the v1.4 + v1.4.1 phase dirs (15-26) -- operator-initiated, intentionally NOT run in Phase 26 (D-26-04; see Deferrals archival row). The `0.2.0` npm release / git tag is a separate future effort once bug-free (D-26-01 / D-25-06).
+- Phase 28 complete + VERIFIED 9/9 (`.planning/phases/28-severity-routing-label-discipline/28-VERIFICATION.md`). The v1.5 (Notification Output Polish) milestone is functionally closed: all 16 phases / 58 plans Complete, `npm run check` GREEN 1156/1156 (typecheck + ESLint + Prettier + tests, exit 0). UXG-02 shipped the D-28-06 5-arm benign-softening severity ladder (benign-only skip cascades render `info`, not `warning`; zero rendered-byte changes, catalog-uat byte gate GREEN). UXG-03 resolved as a defer-with-finding: the read-only spike REFUTED host feasibility (`@earendil-works/pi-coding-agent` couples the `Error:`/`Warning:` label and severity color to the single `notify(message, type?)` arg; no color-only param) -- recorded in `UXG-03-FINDING.md` + spike test + UAT + REQUIREMENTS + STATE deferral row; no colorless in-extension workaround shipped (D-28-10).
+- Advisory: Phase 28 code review found 0 Critical / 2 Warning / 4 Info (`28-REVIEW.md`); all non-blocking (stale test titles in `tests/orchestrators/marketplace/autoupdate.test.ts:124,143`; an unpinned empty-`reasons:[]` plugin-skip boundary; doc-drift Info items). Optionally run `/gsd-code-review 28 --fix`.
+- **Next: run `/gsd-complete-milestone`** to archive the v1.5 phase dirs (27-28) -- operator-initiated. Filing the upstream `@earendil-works/pi-coding-agent` UXG-03 issue is the operator's call (D-28-12). The `0.2.0` npm release / git tag remains a separate future effort once bug-free (D-26-01 / D-25-06).
