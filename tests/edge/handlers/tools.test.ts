@@ -441,3 +441,259 @@ test('pi_claude_marketplace_plugin_list :: scope: "project" filters to project s
     assert.equal(details.plugins[0]!.scope, "project");
   });
 });
+
+// ─── Coverage for uncovered paths in tools.ts ────────────────────────────────
+
+// Lines 173+193+236+315: projectRowStatus 'available' arm, statusLabel
+// '[available]', statusKey 'a', pluginScopeOrFallback fallback for available.
+test("pi_claude_marketplace_plugin_list :: path-source manifest entry -> available row [available] with marketplace scope", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // Build a temporary marketplace root with a real plugin directory so
+    // resolveStrict returns installable: true.
+    const mpRoot = await mkdtemp(path.join(tmpdir(), "mp-avail-"));
+    const pluginDir = path.join(mpRoot, "plugins", "pavail");
+    await mkdir(pluginDir, { recursive: true });
+
+    // Seed state with the marketplace record pointing at mpRoot but no
+    // installed plugins -- the manifest entry is the only source of 'pavail'.
+    const locations = locationsFor("project", cwd);
+    await mkdir(locations.extensionRoot, { recursive: true });
+    const manifestPath = path.join(mpRoot, ".claude-plugin", "marketplace.json");
+    await mkdir(path.join(mpRoot, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        name: "avail-mkt",
+        plugins: [{ name: "pavail", source: "./plugins/pavail" }],
+      }),
+    );
+    await saveState(locations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: {
+        "avail-mkt": {
+          name: "avail-mkt",
+          scope: "project",
+          source: pathSource("./avail-mkt"),
+          addedFromCwd: cwd,
+          manifestPath,
+          marketplaceRoot: mpRoot,
+          plugins: {},
+        },
+      },
+    });
+
+    const { pi, registered } = makeMockPi();
+    registerListPluginsTool(pi);
+    const tool = registered.get("pi_claude_marketplace_plugin_list")!;
+    const ctx = makeCtx(cwd);
+    const out = await tool.execute("call-1", {}, undefined, undefined, ctx);
+
+    // statusLabel('available') -> '[available]' (line 193)
+    assert.match(out.content[0]!.text, /\[available\] pavail/);
+    const details = out.details as {
+      plugins: { name: string; status: string; scope: string }[];
+    };
+    // projectRowStatus returns 'available' (line 173)
+    assert.equal(details.plugins.length, 1);
+    assert.equal(details.plugins[0]!.name, "pavail");
+    assert.equal(details.plugins[0]!.status, "available");
+    // pluginScopeOrFallback returns marketplaceScope for 'available' (line 315)
+    assert.equal(details.plugins[0]!.scope, "project");
+
+    await rm(mpRoot, { recursive: true, force: true });
+  });
+});
+
+// Lines 175+195+238+315+207-208: projectRowStatus 'unavailable' arm,
+// statusLabel '[unavailable]', statusKey 'u', reasons trailer,
+// pluginScopeOrFallback fallback for unavailable.
+test("pi_claude_marketplace_plugin_list :: github-source manifest entry -> unavailable row with reasons trailer", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const mpRoot = await mkdtemp(path.join(tmpdir(), "mp-unavail-"));
+    await mkdir(path.join(mpRoot, ".claude-plugin"), { recursive: true });
+    const manifestPath = path.join(mpRoot, ".claude-plugin", "marketplace.json");
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        name: "unavail-mkt",
+        plugins: [{ name: "pgithub", source: "https://github.com/org/repo" }],
+      }),
+    );
+
+    const locations = locationsFor("project", cwd);
+    await mkdir(locations.extensionRoot, { recursive: true });
+    await saveState(locations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: {
+        "unavail-mkt": {
+          name: "unavail-mkt",
+          scope: "project",
+          source: pathSource("./unavail-mkt"),
+          addedFromCwd: cwd,
+          manifestPath,
+          marketplaceRoot: mpRoot,
+          plugins: {},
+        },
+      },
+    });
+
+    const { pi, registered } = makeMockPi();
+    registerListPluginsTool(pi);
+    const tool = registered.get("pi_claude_marketplace_plugin_list")!;
+    const ctx = makeCtx(cwd);
+    const out = await tool.execute("call-1", {}, undefined, undefined, ctx);
+
+    // statusLabel('unavailable') -> '[unavailable]' (line 195)
+    assert.match(out.content[0]!.text, /\[unavailable\] pgithub/);
+    // renderPluginRow pushes reasons trailer (lines 207-208)
+    assert.match(out.content[0]!.text, /\(unsupported source\)/);
+    const details = out.details as {
+      plugins: { name: string; status: string; scope: string }[];
+    };
+    // projectRowStatus returns 'unavailable' (line 175)
+    assert.equal(details.plugins.length, 1);
+    assert.equal(details.plugins[0]!.name, "pgithub");
+    assert.equal(details.plugins[0]!.status, "unavailable");
+    // pluginScopeOrFallback returns marketplaceScope for 'unavailable' (line 315)
+    assert.equal(details.plugins[0]!.scope, "project");
+
+    await rm(mpRoot, { recursive: true, force: true });
+  });
+});
+
+// Line 337: pluginReasons evaluates p.reasons for 'upgradable' status.
+// An upgradable row has reasons: [] so pluginReasons returns undefined,
+// the row's reasons field is absent, and the tool projects it as 'installed'.
+test("pi_claude_marketplace_plugin_list :: upgradable plugin (manifest version > installed) -> [installed] no reasons", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    await seedMarketplace({
+      cwd,
+      scope: "project",
+      name: "upgrade-mkt",
+      installedPlugins: [{ name: "pupgrade", version: "1.0.0" }],
+      manifestEntries: [{ name: "pupgrade", source: "./plugins/pupgrade", version: "2.0.0" }],
+    });
+
+    const { pi, registered } = makeMockPi();
+    registerListPluginsTool(pi);
+    const tool = registered.get("pi_claude_marketplace_plugin_list")!;
+    const ctx = makeCtx(cwd);
+    const out = await tool.execute("call-1", { installed: true }, undefined, undefined, ctx);
+
+    // upgradable projects to 'installed' on the tool surface
+    assert.match(out.content[0]!.text, /\[installed\] pupgrade/);
+    const details = out.details as {
+      plugins: { name: string; status: string; reasons?: unknown }[];
+    };
+    assert.equal(details.plugins.length, 1);
+    assert.equal(details.plugins[0]!.name, "pupgrade");
+    assert.equal(details.plugins[0]!.status, "installed");
+    // pluginReasons returns undefined for empty reasons[] (line 337)
+    assert.equal(details.plugins[0]!.reasons, undefined);
+  });
+});
+
+// Lines 407-408: renderPluginPayload skips a row when its status bucket is
+// not in the active filter (the continue branch).
+test("pi_claude_marketplace_plugin_list :: installed:true filter skips unavailable github-source row", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const mpRoot = await mkdtemp(path.join(tmpdir(), "mp-filter-"));
+    await mkdir(path.join(mpRoot, ".claude-plugin"), { recursive: true });
+    const manifestPath = path.join(mpRoot, ".claude-plugin", "marketplace.json");
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        name: "filter-mkt",
+        plugins: [{ name: "pghost", source: "https://github.com/org/repo" }],
+      }),
+    );
+
+    const nowIso = new Date().toISOString();
+    const locations = locationsFor("project", cwd);
+    await mkdir(locations.extensionRoot, { recursive: true });
+    await saveState(locations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: {
+        "filter-mkt": {
+          name: "filter-mkt",
+          scope: "project",
+          source: pathSource("./filter-mkt"),
+          addedFromCwd: cwd,
+          manifestPath,
+          marketplaceRoot: mpRoot,
+          plugins: {
+            pinstalled: {
+              version: "1.0.0",
+              resolvedSource: path.join(mpRoot, "plugins", "pinstalled"),
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+              installedAt: nowIso,
+              updatedAt: nowIso,
+            },
+          },
+        },
+      },
+    });
+
+    const { pi, registered } = makeMockPi();
+    registerListPluginsTool(pi);
+    const tool = registered.get("pi_claude_marketplace_plugin_list")!;
+    const ctx = makeCtx(cwd);
+    // installed:true -> only 'i' bucket open; unavailable row hits statusKey('u')
+    // which is false -> continue fires (lines 407-408)
+    const out = await tool.execute("call-1", { installed: true }, undefined, undefined, ctx);
+    const details = out.details as { plugins: { name: string; status: string }[] };
+    assert.equal(details.plugins.length, 1);
+    assert.equal(details.plugins[0]!.name, "pinstalled");
+    assert.equal(details.plugins[0]!.status, "installed");
+
+    await rm(mpRoot, { recursive: true, force: true });
+  });
+});
+
+// Lines 469-481: loadToolPluginPayload throws (corrupt state.json) ->
+// tool returns isError: true with failure message.
+test("pi_claude_marketplace_plugin_list :: corrupt state.json -> isError:true with failure message", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    await seedMarketplace({
+      cwd,
+      scope: "project",
+      name: "err-mkt",
+      installedPlugins: [{ name: "p1", version: "1.0.0" }],
+    });
+
+    // Overwrite both scope state files with invalid JSON so loadState throws.
+    const projectLocations = locationsFor("project", cwd);
+    await writeFile(projectLocations.stateJsonPath, "INVALID");
+
+    const { pi, registered } = makeMockPi();
+    registerListPluginsTool(pi);
+    const tool = registered.get("pi_claude_marketplace_plugin_list")!;
+    const ctx = makeCtx(cwd);
+    const out = await tool.execute("call-1", {}, undefined, undefined, ctx);
+
+    // TC-9: state parse error surfaces as a tool error (lines 469-481)
+    assert.equal(out.isError, true);
+    assert.match(out.content[0]!.text, /Failed to load plugin list/);
+    const details = out.details as { plugins: unknown[] };
+    assert.deepEqual(details.plugins, []);
+  });
+});
+
+// Lines 485-490: rows.length === 0 && payload.length === 0 ->
+// returns 'No marketplaces configured.' (plugin_list with no state).
+test("pi_claude_marketplace_plugin_list :: no marketplaces in state -> No marketplaces configured.", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // Intentionally do NOT call seedMarketplace -- no state.json written,
+    // so loadPluginListPayload returns []. rows is also empty.
+    const { pi, registered } = makeMockPi();
+    registerListPluginsTool(pi);
+    const tool = registered.get("pi_claude_marketplace_plugin_list")!;
+    const ctx = makeCtx(cwd);
+    const out = await tool.execute("call-1", {}, undefined, undefined, ctx);
+
+    assert.equal(out.content[0]!.text, "No marketplaces configured.");
+    const details = out.details as { plugins: unknown[] };
+    assert.deepEqual(details.plugins, []);
+  });
+});
