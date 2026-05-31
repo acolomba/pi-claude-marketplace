@@ -114,3 +114,8 @@ No new security surface introduced.
 
 - `932e405` feat(27-05): render autoupdate-ON no-op as (skipped) {up-to-date}  (Task 1, orchestrator decision + WR-01 + WR-02)
 - `0208dd2` test(27-05): cover autoupdate-ON no-op (UXG-05 UAT Test-3 gap)  (Task 2, four lockstep files)
+- `e12311a` docs(27-05): summarize autoupdate-ON no-op gap closure (UXG-05)  (this SUMMARY)
+
+## Self-Check: PASSED
+
+All 5 modified files + the SUMMARY present on disk; all three commits (`932e405`, `0208dd2`, `e12311a`) found in git history. STATE.md and ROADMAP.md unmodified (orchestrator owns those writes).
