@@ -1,7 +1,7 @@
 ---
 phase: 29-notification-label-suppression-update-classification
 verified: 2026-05-31T19:00:00Z
-status: human_needed
+status: passed
 score: 8/10 must-haves verified (2 roadmap SCs superseded by user decision D-29-01/02)
 overrides_applied: 0
 overrides:
