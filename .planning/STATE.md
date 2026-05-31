@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Notification Output Polish
-status: executing
-stopped_at: "Plan 27-04 complete (UXG-05 marketplace-update no-op grammar); Phase 27 complete -- next: Phase 28 (run /gsd-plan-phase 28)"
-last_updated: "2026-05-30T23:55:00.000Z"
-last_activity: 2026-05-30
+status: completed
+stopped_at: "Phase 27 complete incl. UXG-05 autoupdate-ON no-op gap closure (27-05); next Phase 28 (run /gsd-plan-phase 28)"
+last_updated: "2026-05-31T10:14:12.383Z"
+last_activity: 2026-05-31
 progress:
   total_phases: 16
   completed_phases: 15
-  total_plans: 55
-  completed_plans: 55
-  percent: 90
+  total_plans: 56
+  completed_plans: 56
+  percent: 94
 ---
 
 # Project State
@@ -20,20 +20,20 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-30)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 27 -- marketplace-autoupdate-output-grammar
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 28 -- severity-routing-&-label-discipline (Phase 27 complete, incl. UXG-05 autoupdate-ON no-op gap closure)
 
 ## Current Position
 
-Phase: 27 (marketplace-autoupdate-output-grammar) -- COMPLETE
-Plan: 4 of 4 (complete)
-Status: Phase 27 complete (UXG-01/04/05/06 closed); next Phase 28 (run /gsd-plan-phase 28)
-Last activity: 2026-05-30
+Phase: 28
+Plan: Not started
+Status: Phase 27 complete (UXG-01/04/05/06 closed; 27-05 closed the UXG-05 autoupdate-ON no-op UAT gap); next Phase 28 (run /gsd-plan-phase 28)
+Last activity: 2026-05-31
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 113
+- Total plans completed: 118
 - Average duration: -
 - Total execution time: -
 
@@ -64,6 +64,7 @@ Last activity: 2026-05-30
 | 24    | 1     | -     | -        |
 | 25 | 3 | - | - |
 | 26 | 1 | - | - |
+| 27 | 5 | - | - |
 
 **Recent Trend:**
 

@@ -1,8 +1,18 @@
 ---
-status: diagnosed
+status: resolved
 trigger: "Diagnose UAT issue phase 27 (UXG-05): `/claude:plugin marketplace update <name>` against a github-source marketplace ALWAYS renders `(updated)` even when nothing changed upstream. PATH-source no-op renders `(skipped) {up-to-date}` correctly. Find root cause, do not fix."
 created: 2026-05-31T00:25:01Z
-updated: 2026-05-31T03:10:00Z
+updated: 2026-05-31T10:16:29Z
+resolution: |
+  Closed by Plan 27-05 (commit 932e405) + code-review follow-up 57068f0. This
+  session's intermediate conclusion (detector correct; user's clone merely behind)
+  was SUPERSEDED by the code-verified root cause recorded in 27-HUMAN-UAT.md Test 3:
+  the autoupdate-ON branch (then update.ts:705-714) emitted status "updated"
+  unconditionally and never consulted `snapshot.changed`. 27-05 threads
+  `!snapshot.changed && outcomes.every(o => o.partition === "unchanged")` into that
+  branch so a true no-op renders `(skipped) {up-to-date}` (update.ts:746-751). The
+  WR-02 hardening flagged here also landed (PRE-read inside refreshRecord's try;
+  corrupt PRE manifest routes to `(failed)`). npm run check GREEN 1149/1149.
 ---
 
 ## Current Focus
