@@ -36,7 +36,7 @@ On THIS list surface (mp.status === undefined) the marker token `<autoupdate>` a
 - `<icon>` -- one of `●` / `○` / `⊘` per the effective-state rule above.
 - `<name>` -- the plugin name from `p.name`. The `@<marketplace>` suffix is NEVER emitted on a plugin row in v2; the marketplace is already in the header above.
 - `[<scope>]` -- emitted ONLY in the orphan-fold case (plugin's `scope` field is explicitly set AND differs from the marketplace's scope). Same-scope rows omit the bracket because the header carries it. The `available` and `unavailable` variants have no `scope` field at all (SNM-11 carve-out) and never emit the bracket.
-- `<version-token>` -- `v<version>` on most variants when `version` is set; `<from> → v<to>` on the `updated` variant (required from-/to-fields per D-15-04). A persisted PI-7 hash-version (`hash-<12hex>`) renders as a git-style short SHA `v#<7hex>` -- the `hash-` prefix is stripped and only the first 7 of the 12 hex chars are shown (matching git `--short=7`); e.g. `hash-2ea95f85703d` renders `v#2ea95f8`. Persistence is unchanged (`state.json` keeps the full `hash-<12hex>`, PI-7 intact, no migration); the short form exists only at render time (SNM-35, D-23-04 / D-23-05).
+- `<version-token>` -- `v<version>` on most variants when `version` is set; `v<from> → v<to>` on the `updated` variant (required from-/to-fields per D-15-04). A persisted PI-7 hash-version (`hash-<12hex>`) renders as a git-style short SHA `v#<7hex>` -- the `hash-` prefix is stripped and only the first 7 of the 12 hex chars are shown (matching git `--short=7`); e.g. `hash-2ea95f85703d` renders `v#2ea95f8`. Persistence is unchanged (`state.json` keeps the full `hash-<12hex>`, PI-7 intact, no migration); the short form exists only at render time (SNM-35, D-23-04 / D-23-05).
 - `(<status>)` -- the discriminator literal. `(manual recovery)` includes the space verbatim.
 - `{<reasons>}` -- single brace block, comma-space separated, emitted only on the 5 reason-bearing variants (`unavailable | upgradable | skipped | failed | manual recovery`) and only when the composed reasons list is non-empty.
 
@@ -128,7 +128,7 @@ ______________________________________________________________________
 | ------------------------------------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `(installed)`                               | ●    | Plugin row -- `list` (steady-state inventory via `present` discriminator), install, import cascade, reinstall (rare), update (rare).                                        |
 | `(installed)` (via `present` discriminator) | ●    | Plugin row -- list surface (steady-state inventory). Byte-identical render to the transition `(installed)` token but does not trigger the reload-hint per SNM-15 / G-21-01. |
-| `(updated)`                                 | ●    | Plugin row -- update cascade; carries `<from> → v<to>` version arrow.                                                                                                       |
+| `(updated)`                                 | ●    | Plugin row -- update cascade; carries `v<from> → v<to>` version arrow.                                                                                                      |
 | `(reinstalled)`                             | ●    | Plugin row -- reinstall cascade.                                                                                                                                            |
 | `(uninstalled)`                             | ○    | Plugin row -- uninstall single-plugin, marketplace-remove partial success rows.                                                                                             |
 | `(available)`                               | ○    | Plugin row -- `marketplace list` / plugin-list surface (no scope bracket per MSG-PL-6 / SNM-11).                                                                            |
@@ -518,7 +518,7 @@ ______________________________________________________________________
 
 ## `/claude:plugin update`
 
-Multi-plugin cascade. Same shape as `reinstall` with version-arrow rows (`<from> → v<to>`) per D-15-04 / Phase 16 `composeVersionArrow`.
+Multi-plugin cascade. Same shape as `reinstall` with version-arrow rows (`v<from> → v<to>`) per D-15-04 / Phase 16 `composeVersionArrow`.
 
 ### Single marketplace, mixed
 
@@ -528,14 +528,14 @@ Multi-plugin cascade. Same shape as `reinstall` with version-arrow rows (`<from>
 1 plugin operation failed.
 
 ● official [user]
-  ● alpha 0.5.0 → v1.0.0 (updated)
+  ● alpha v0.5.0 → v1.0.0 (updated)
   ⊘ beta (skipped) {up-to-date}
   ⊘ delta (failed) {network unreachable}
 
 /reload to pick up changes
 ```
 
-The `updated` variant emits `<from> → v<to>` (note the asymmetric `v` prefix -- `from` is rendered bare; only `to` is `v`-prefixed per `composeVersionArrow`). When a side is a PI-7 hash-version it is shortened to git-style `#<7hex>` (bare `from`) / `v#<7hex>` (prefixed `to`), e.g. `#2ea95f8 → v#1c3d9a0` (SNM-35, D-23-05). The `failed` plugin row carries `version?` only (the v2 `PluginFailedMessage` has no `from`/`to` fields per D-15-04 -- `composeVersionArrow` is the `updated` variant's helper alone); `delta` here omits `version` because the orchestrator has no post-failure target version to surface. Severity: `error`. Reload-hint fires because `alpha` was updated.
+The `updated` variant emits `v<from> → v<to>` (both sides carry the `v` prefix per `composeVersionArrow`). When a side is a PI-7 hash-version it is shortened to git-style `v#<7hex>`, e.g. `v#2ea95f8 → v#1c3d9a0` (SNM-35, D-23-05). The `failed` plugin row carries `version?` only (the v2 `PluginFailedMessage` has no `from`/`to` fields per D-15-04 -- `composeVersionArrow` is the `updated` variant's helper alone); `delta` here omits `version` because the orchestrator has no post-failure target version to surface. Severity: `error`. Reload-hint fires because `alpha` was updated.
 
 ### Failed with rollback-partial cause chain
 
@@ -575,10 +575,10 @@ Skipped-only cascade. No reload-hint (no state-changing status). Severity: every
 1 plugin operation failed.
 
 ● local-mp [project]
-  ● helper 0.5.0 → v1.0.0 (updated)
+  ● helper v0.5.0 → v1.0.0 (updated)
 
 ● official [user]
-  ● alpha 0.5.0 → v1.0.0 (updated)
+  ● alpha v0.5.0 → v1.0.0 (updated)
   ⊘ beta (skipped) {up-to-date}
   ⊘ delta (failed) {network unreachable}
 
@@ -593,10 +593,10 @@ Two marketplace blocks. Severity: `error`. Reload-hint fires (two `updated` plug
 
 ```text
 ● official [project]
-  ● alpha 0.9.0 → v1.0.0 (updated)
+  ● alpha v0.9.0 → v1.0.0 (updated)
 
 ● official [user]
-  ● beta 0.5.0 → v1.0.0 (updated)
+  ● beta v0.5.0 → v1.0.0 (updated)
 
 /reload to pick up changes
 ```
@@ -609,12 +609,12 @@ Per-scope blocks; identical lock to `reinstall` -- marketplaces never collapse a
 
 ```text
 ● official [user]
-  ● hashed-plugin #2ea95f8 → v#1c3d9a0 (updated)
+  ● hashed-plugin v#2ea95f8 → v#1c3d9a0 (updated)
 
 /reload to pick up changes
 ```
 
-Both `from` and `to` are PI-7 hash-versions (`hash-2ea95f85703d` -> `hash-1c3d9a0bbef1`); each is shortened to its git-style 7-hex form. The asymmetric `v` prefix is preserved: `from` renders bare (`#2ea95f8`), `to` is `v`-prefixed (`v#1c3d9a0`) per `composeVersionArrow` (SNM-35, D-23-05). Persistence keeps the full `hash-<12hex>` on both sides. Severity: info. Reload-hint fires because `hashed-plugin` was updated.
+Both `from` and `to` are PI-7 hash-versions (`hash-2ea95f85703d` -> `hash-1c3d9a0bbef1`); each is shortened to its git-style 7-hex form with a `v#` prefix (`v#2ea95f8`, `v#1c3d9a0`) per `composeVersionArrow` (SNM-35, D-23-05). Persistence keeps the full `hash-<12hex>` on both sides. Severity: info. Reload-hint fires because `hashed-plugin` was updated.
 
 ______________________________________________________________________
 
@@ -880,7 +880,7 @@ Manifest-only refresh whose validated `marketplace.json` content actually change
 1 plugin operation failed.
 
 ● official [user] (updated)
-  ● alpha 0.5.0 → v1.0.0 (updated)
+  ● alpha v0.5.0 → v1.0.0 (updated)
   ⊘ beta (skipped) {up-to-date}
   ⊘ delta (failed) {network unreachable}
 

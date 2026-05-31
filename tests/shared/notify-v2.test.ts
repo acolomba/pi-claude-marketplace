@@ -276,7 +276,7 @@ test("notify renders updated plugin with version arrow + mcp dep marker", () => 
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `● demo [user] (added)\n  ● commit-commands 1.0.0 → v1.1.0 (updated) {requires pi-mcp}\n\n/reload to pick up changes`,
+    `● demo [user] (added)\n  ● commit-commands v1.0.0 → v1.1.0 (updated) {requires pi-mcp}\n\n/reload to pick up changes`,
   ]);
 });
 
@@ -1399,9 +1399,9 @@ test("notify omits scope bracket on updated plugin row when p.scope === mp.scope
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // Header carries [project]; plugin row has NO bracket between "alpha"
   // and the version-arrow slot. The version-arrow renders as
-  // `<from> → v<to>`.
+  // `v<from> → v<to>`.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `● demo [project] (added)\n  ● alpha 0.9.0 → v1.0.0 (updated)\n\n/reload to pick up changes`,
+    `● demo [project] (added)\n  ● alpha v0.9.0 → v1.0.0 (updated)\n\n/reload to pick up changes`,
   ]);
 
   // Defense-in-depth: no `[undefined]`; plugin row contains no `[...]`
@@ -1894,7 +1894,7 @@ test("notify renders single-version hash row as v#<7hex> via renderVersion choke
   ]);
 });
 
-test("notify renders update arrow with hash on both sides as #<7hex> → v#<7hex> via composeVersionArrow (SNM-35)", () => {
+test("notify renders update arrow with hash on both sides as v#<7hex> → v#<7hex> via composeVersionArrow (SNM-35)", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
@@ -1917,10 +1917,9 @@ test("notify renders update arrow with hash on both sides as #<7hex> → v#<7hex
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  // Asymmetric `v`: `from` rendered bare (`#2ea95f8`), `to` v-prefixed
-  // (`v#1c3d9a0`) per composeVersionArrow / output-catalog.md.
+  // Both sides v-prefixed: `from` = `v#2ea95f8`, `to` = `v#1c3d9a0`.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `● demo [user] (added)\n  ● commit-commands #2ea95f8 → v#1c3d9a0 (updated)\n\n/reload to pick up changes`,
+    `● demo [user] (added)\n  ● commit-commands v#2ea95f8 → v#1c3d9a0 (updated)\n\n/reload to pick up changes`,
   ]);
 });
 

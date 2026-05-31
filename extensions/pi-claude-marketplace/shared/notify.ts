@@ -837,19 +837,18 @@ function renderScopeBracket(pluginScope: Scope | undefined, mpScope: Scope): str
 
 /**
  * Compose the MSG-PL-3 version-transition slot for the `updated` arm
- * (`<from> → v<to>`). Caller precondition: both
+ * (`v<from> → v<to>`). Caller precondition: both
  * `from` and `to` are REQUIRED on the `updated` variant, so the helper
  * is only ever invoked with both values defined. Sole caller is the
  * `updated` arm in renderPluginRow.
  *
- * Both sides route through `formatHashVersionForDisplay`, preserving the
- * asymmetric `v` prefix (bare `from`, `v`-prefixed `to` per
- * `docs/output-catalog.md`): two hashes render `#<7hex> → v#<7hex>`
- * (e.g. `#2ea95f8 → v#1c3d9a0`) while SemVer pairs stay `<from> → v<to>`
- * (SNM-35).
+ * Both sides route through `renderVersion` so both carry the `v` prefix:
+ * SemVer pairs render `v<from> → v<to>` (e.g. `v1.0.0 → v1.1.0`) and
+ * hash pairs render `v#<7hex> → v#<7hex>` (e.g. `v#2ea95f8 → v#1c3d9a0`,
+ * SNM-35).
  */
 function composeVersionArrow(from: string, to: string): string {
-  return `${formatHashVersionForDisplay(from)} → v${formatHashVersionForDisplay(to)}`;
+  return `${renderVersion(from)} → ${renderVersion(to)}`;
 }
 
 /**

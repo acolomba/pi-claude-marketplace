@@ -448,8 +448,8 @@ test("PUP-6 happy: version bump triggers 3-phase swap; state reflects new versio
 
       // Phase 19 / Plan 19-05: V2 byte form mirrors catalog
       // `single-mp-mixed` (docs/output-catalog.md:495-504) version-arrow
-      // discipline at line 499: `<from> → v<to>` with the asymmetric `v`
-      // prefix on `to` only -- the renderer's composeVersionArrow owns
+      // discipline: `v<from> → v<to>` with `v` prefix on both sides --
+      // the renderer's composeVersionArrow owns
       // the formatting per D-15-04 / D-16-04. Plugin-row `[<scope>]`
       // bracket suppressed by orphan-fold. Soft-dep markers emit because
       // the plugin declares agents + mcp but the host's `getAllTools()`
@@ -463,7 +463,7 @@ test("PUP-6 happy: version bump triggers 3-phase swap; state reflects new versio
       assert.equal(
         body,
         "● mp [project]\n" +
-          "  ● hello 1.0.0 → v1.0.1 (updated) {requires pi-subagents, requires pi-mcp}\n" +
+          "  ● hello v1.0.0 → v1.0.1 (updated) {requires pi-subagents, requires pi-mcp}\n" +
           "\n" +
           "/reload to pick up changes",
       );
@@ -612,7 +612,7 @@ test("PUP-1 @mp form: enumerates all installed plugins in the marketplace, parti
       assert.equal(
         body,
         "● mp [project]\n" +
-          "  ● alpha 1.0.0 → v1.0.1 (updated)\n" +
+          "  ● alpha v1.0.0 → v1.0.1 (updated)\n" +
           "  ⊘ beta (skipped) {up-to-date}\n" +
           "\n" +
           "/reload to pick up changes",

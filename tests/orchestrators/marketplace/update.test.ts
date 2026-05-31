@@ -683,7 +683,7 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
     // empty-notes/no-substring-match outcome to `unreadable manifest`;
     // mapping to `up-to-date` would have falsely claimed SUCCESS on a
     // producer-contract violation.
-    const idxA = body.indexOf("  ● a 0.0.1 → v0.0.2 (updated)");
+    const idxA = body.indexOf("  ● a v0.0.1 → v0.0.2 (updated)");
     const idxB = body.indexOf("  ⊘ b (skipped) {up-to-date}");
     const idxC = body.indexOf("  ⊘ c (skipped) {unreadable manifest}");
     const idxD = body.indexOf("  ⊘ d (failed) {unreadable manifest}");
