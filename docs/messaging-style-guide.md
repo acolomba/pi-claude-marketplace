@@ -78,6 +78,7 @@ The Phase 16 renderer enforces these grammar invariants structurally. The list i
 - **Inline per-plugin cause chains.** A `failed` or `manual recovery` plugin variant carrying `cause?: Error` surfaces the cause chain inline beneath the plugin row (4-space indent), one chain per failed plugin (per D-16-08). The v1.3 top-level cascade-summary cause line is retired (per SNM-10): multi-failure cascades surface each plugin's chain independently rather than collapsing into a single trailer.
 - **`rollbackPartial` as a sub-state of `failed`.** A `failed` plugin variant carrying `rollbackPartial` renders per-phase children at 4-space indent beneath the failed row. There is no separate `"rollback failed"` status (per SNM-09) -- rollback-partial is structurally a sub-state of `failed`.
 - **No top-level free text.** `NotificationMessage` has no field for free-text preambles, anchors, or diagnostic augmentations. v1's `Claude plugin import summary` preamble, the `Fix the underlying issue and retry.` retry anchor, and the `source-mismatch` diagnostic line are all retired (per D-17-09): they are not expressible in the type model. The `(no marketplaces)` sentinel is the structural representation of an empty top-level `marketplaces: []` (per D-16-17); an empty per-marketplace `plugins: []` renders the bare header alone (per D-15-08).
+- **Computed summary line (error / warning only).** For `error` and `warning` severity, `notify()` prepends a one-line summary before the cascade body (Phase 29 / UXG-07 / D-29-02): the emitted string is `{summary}\n\n{cascade body}` (the reload-hint, if any, stays last). The summary counts the operations that drive the severity, by type (plugin vs marketplace), with the verb chosen by severity -- `"N plugin operation(s) [and M marketplace operation(s)] failed."` for error, `"... skipped."` for warning. This is NOT a regression of "No top-level free text": the summary is computed structurally from the `NotificationMessage` traversal `computeSeverity` performs (the same arms that pick severity), not supplied by the caller. Info-severity cascades carry no summary line and are byte-identical to the pre-Phase-29 cascade-only body. See §"Severity Routing -- Summary line" below.
 
 The byte-equal rendering shapes live in `docs/output-catalog.md`. Three illustrative forms (full per-command coverage is in the catalog, not here):
 
@@ -125,6 +126,17 @@ Severity is dispatched via the Pi API's magic-string second-argument convention 
 `notifyUsageError()` is structurally error severity (always passes `"error"` as the second argument) -- it is not a field on `UsageErrorMessage`. The on-the-wire string is composed as `${message}\n\n${usage}` mirroring V1's blank-line discipline.
 
 The ladder is first-match-wins by design: a cascade with one `failed` plugin and several `skipped` plugins routes to **error**, not **warning**. The `notify()` switch evaluates the marketplaces and plugins in caller-supplied order (no internal sort per D-16-06), then returns the highest-severity match. Callers that need a different routing decision should adjust the message contents (e.g. drop the `failed` row), not request a severity override -- there is no override.
+
+### Summary line (error / warning)
+
+For **error** and **warning** severity, `notify()` prepends a human-readable summary line before the cascade body so the host `Error:` / `Warning:` prefix introduces a meaningful, contextual sentence (Phase 29 / UXG-07 / D-29-02/03/04). The composed on-the-wire body is `{summary}\n\n{cascade body}`; the reload-hint (when emitted) stays last. **Info** severity emits no summary line -- the body is byte-identical to the pre-Phase-29 cascade-only form.
+
+The summary counts the operations that drove the severity, by type, with the verb keyed to severity:
+
+- **error** verb `failed`: plugin rows with `status === "failed"` + marketplace rows with `status === "failed"` (mirrors ladder arm 1).
+- **warning** verb `skipped`: plugin `skipped` (non-benign reasons) + plugin `manual recovery` + marketplace `skipped` (non-benign reasons) (mirrors arms 2-4 and the benign predicate).
+
+Wording (D-29-03): singular `"operation"` at count 1, plural `"operations"` otherwise; one type non-zero renders `"N plugin operation(s) <verb>."` or `"N marketplace operation(s) <verb>."`; both non-zero renders `"N plugin operation(s) and M marketplace operation(s) <verb>."` (e.g. `"1 plugin operation failed."`, `"2 plugin operations failed."`, `"1 plugin operation and 1 marketplace operation failed."`, `"1 plugin operation skipped."`). Because the summary is derived from the same `NotificationMessage` traversal that `computeSeverity` runs -- not from caller-supplied text -- it does not violate the "No top-level free text" invariant (D-17-09).
 
 PRD section 6.13 IL-2 (single output channel via `ctx.ui.notify`) and IL-3 (single sanctioned `console.warn` at `persistence/migrate.ts`) are reaffirmed unchanged. Direct `process.stdout` / `process.stderr` writes from command or bridge code remain forbidden.
 
