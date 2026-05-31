@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.5
 milestone_name: Notification Output Polish
 status: completed
-stopped_at: "Phase 27 complete incl. UXG-05 autoupdate-ON no-op gap closure (27-05); next Phase 28 (run /gsd-plan-phase 28)"
-last_updated: "2026-05-31T10:14:12.383Z"
+stopped_at: Phase 28 context gathered
+last_updated: "2026-05-31T11:10:57.199Z"
 last_activity: 2026-05-31
 progress:
   total_phases: 16
@@ -198,9 +198,9 @@ Additional v1.4.1-scope deferrals:
 
 ## Session Continuity
 
-Last session: 2026-05-30T23:55:00.000Z
-Stopped At: Plan 27-04 complete (UXG-05 marketplace-update no-op grammar); Phase 27 complete -- next: Phase 28 (run /gsd-plan-phase 28)
-Resume File: .planning/phases/27-marketplace-autoupdate-output-grammar/27-04-SUMMARY.md
+Last session: 2026-05-31T11:10:57.181Z
+Stopped At: Phase 28 context gathered
+Resume File: .planning/phases/28-severity-routing-label-discipline/28-CONTEXT.md
 
 ## Operator Next Steps
 
