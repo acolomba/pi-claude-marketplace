@@ -541,8 +541,8 @@ Plans:
 4. `npm run check` + catalog-uat GREEN.
 
 **Plans:** 2 plans
-
 Plans:
+
 - [ ] 28-01-PLAN.md -- UXG-02: rewrite computeSeverity as the D-28-06 5-arm benign-softening ladder (+ BENIGN_REASONS, both test gates, ADR/style-guide/catalog prose sync)
 - [ ] 28-02-PLAN.md -- UXG-03: run the host label/color feasibility spike and record the upstream-tracked finding (defer-with-finding per D-28-12)
 
