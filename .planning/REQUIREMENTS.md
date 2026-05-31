@@ -24,6 +24,13 @@ Refine the v2 `NotificationMessage` output grammar and severity presentation per
 
 - [x] **UXG-06**: Correct the output catalog's stale claim that github-source `marketplace add` defaults autoupdate ON. Actual v2 behavior (verified in `orchestrators/marketplace/add.ts` -- no `autoupdate` write for any source): `marketplace add` never enables autoupdate; it is opt-in via `bootstrap` or an explicit `marketplace autoupdate`. Fix the `docs/output-catalog.md` github-source prose and align the `## /claude:plugin marketplace autoupdate <enable|disable>` heading with the real `autoupdate` / `noautoupdate` verbs. Doc-only; no renderer change. Closes UAT Finding 6.
 
+### Follow-up (2026-05-31 runtime UAT findings)
+
+Surfaced when the operator exercised the source-loaded v0.2.0 runtime (`scripts/pi.sh`); the v1.5 UAT's deterministic notify-boundary capture could not reach them (it proved the severity-arg mapping with synthetic payloads but never exercised the real `install`/`update` classification path). They reopen the milestone as Phase 29.
+
+- [ ] **UXG-07**: Suppress the host `Error:`/`Warning:` label prefix on multi-line structured `notify()` cascades by routing them through `info` (omit the `ctx.ui.notify` 2nd arg). The host (`@earendil-works/pi-coding-agent`) prepends the label from the severity arg (`showError` -> `Error: `, `showWarning` -> `Warning: `); the only label-free host path (`showStatus`) is also colorless, and the operator has confirmed severity COLOR is not wanted -- so the cascade's self-describing per-row tokens (`(failed)` / `(skipped)` / `{reason}` / `cause:`) carry the meaning and the host label (which also breaks the 0/2 indent ladder by prepending to line 1) is dropped. Entrypoint-split per D-28-13: `notify()` (multi-line cascades) drops the severity arg; the single-line `notifyUsageError()` keeps `"error"` (a one-line `Error: ` reads fine and breaks no indent). Supersedes the UXG-03 defer-with-finding -- the label IS removable in-extension once color is expendable (only "color WITHOUT label" was upstream-infeasible). Makes UXG-02's `computeSeverity` warning/error arms vestigial (retirement vs dormant-keep decided in planning). `shared/notify.ts` + `docs/output-catalog.md` + `tests/architecture/catalog-uat.test.ts` + `tests/shared/notify-v2.test.ts` move in lockstep. Source: runtime UAT 2026-05-31.
+- [ ] **UXG-08**: `/claude:plugin update <plugin>@<marketplace>` of a plugin ABSENT from the marketplace manifest classifies as `{not in manifest}` / `failed` (matching `install`), not `{not installed}` / `skipped`. Root cause: `preflightUpdate` (`orchestrators/plugin/update.ts:592`) checks the installed-state record BEFORE the manifest, so a nonexistent plugin hits the `record === undefined -> "not installed"` branch (`:597`) and never reaches the `entry not in manifest -> "not in manifest"` check (`:606`). Fix: when the plugin is not installed, also consult the cached manifest -- absent => `{not in manifest}` (and `failed`, like install); present-but-not-installed => `{not installed}`. Distinguishes a typo / nonexistent plugin from a real-but-uninstalled one. Source: runtime UAT 2026-05-31.
+
 ## v1.4.1 Milestone Goal
 
 Close the 8 gaps surfaced by the v1.4 milestone-spanning UAT (`.planning/v1.4-MILESTONE-UAT.md`) so v1.4's user-visible message surfaces match the catalog spec and user expectations end-to-end. The UAT was run conversationally on 2026-05-28 against the user's installed pi-claude-marketplace v0.1.7 runtime (V1 wrappers, pre-v1.4) and identified 6 gaps that are already triable in source plus 2 gaps that need a reproduction phase against the not-yet-published v0.2.0 (v1.4) runtime.
@@ -188,6 +195,8 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25 (v1.4 rows) and 2026-0
 | UXG-06      | Phase 27 | Complete |
 | UXG-02      | Phase 28 | Complete |
 | UXG-03      | Phase 28 | Complete |
+| UXG-07      | Phase 29 | Pending  |
+| UXG-08      | Phase 29 | Pending  |
 
 **Coverage:**
 
@@ -200,8 +209,8 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25 (v1.4 rows) and 2026-0
 - Pending: 0
 - Per-phase distribution (v1.4): Phase 15 (12: SNM-01..11, SNM-21); Phase 16 (8: SNM-12..18, SNM-30); Phase 17 (4: SNM-19, SNM-20, SNM-26, SNM-31); Phase 18 (0: execution phase); Phase 19 (0: execution phase); Phase 20 (1: SNM-23); Phase 21 (7: SNM-22, SNM-24, SNM-25, SNM-27, SNM-28, SNM-29, SNM-32)
 - Per-phase distribution (v1.4.1): Phase 22 (1: SNM-33); Phase 23 (2: SNM-34, SNM-35); Phase 24 (1: SNM-36); Phase 25 (3: SNM-37, SNM-38, SNM-39); Phase 26 (1: SNM-40)
-- v1.5 requirements: 6 total (UXG-01..UXG-06) -- mapped to phases 6, unmapped 0; UXG-03 Complete (Phase 28, defer-with-finding, 2026-05-31), all of UXG-01/02/04/05/06 Complete (Phases 27-28)
-- Per-phase distribution (v1.5): Phase 27 (4: UXG-01, UXG-04, UXG-05, UXG-06); Phase 28 (2: UXG-02, UXG-03)
+- v1.5 requirements: 8 total (UXG-01..UXG-08) -- mapped to phases 8, unmapped 0; UXG-01/02/04/05/06 Complete (Phase 27-28), UXG-03 Complete (defer-with-finding), UXG-07/08 Pending (Phase 29, added 2026-05-31 from the runtime UAT)
+- Per-phase distribution (v1.5): Phase 27 (4: UXG-01, UXG-04, UXG-05, UXG-06); Phase 28 (2: UXG-02, UXG-03); Phase 29 (2: UXG-07, UXG-08)
 
 **Mapping rationale:**
 
@@ -213,5 +222,5 @@ Phase mapping populated by `gsd-roadmapper` on 2026-05-25 (v1.4 rows) and 2026-0
 
 ---
 
-_Requirements defined: 2026-05-25 (v1.4 baseline); 2026-05-28 (v1.4.1 patches added); 2026-05-30 (v1.5 UXG-01..UXG-06 added)_
-_Last updated: 2026-05-30 -- v1.5 Notification Output Polish requirements added (UXG-01..UXG-06, 6 total) from the 2026-05-30 hands-on UAT sweep; mapped to Phases 27 (UXG-01/04/05/06) and 28 (UXG-02/03), all Pending. Coverage now 46 total (40 Complete v1.4/v1.4.1 + 6 Pending v1.5). Earlier: 2026-05-30 -- v1.4.1 milestone closed (Phase 26, SNM-40 GREEN gate). SNM-40 flipped Pending -> Complete; SNM-23 traceability row reconciled Pending -> Complete in the same pass (D-26-05). Coverage now 40/40 Complete, 0 Pending. Earlier: 2026-05-28 -- v1.4.1 traceability populated by `gsd-roadmapper`; SNM-33..SNM-40 mapped across Phases 22-26._
+_Requirements defined: 2026-05-25 (v1.4 baseline); 2026-05-28 (v1.4.1 patches added); 2026-05-30 (v1.5 UXG-01..UXG-06 added); 2026-05-31 (v1.5 UXG-07..UXG-08 added)_
+_Last updated: 2026-05-31 -- v1.5 REOPENED post-runtime-UAT: UXG-07 (suppress host `Error:`/`Warning:` label on multi-line `notify()` cascades, entrypoint-split per D-28-13) + UXG-08 (`update` of a plugin absent from the manifest -> `{not in manifest}` / `failed`, matching install) added and mapped to Phase 29 (Pending). Coverage now 48 total (40 Complete v1.4/v1.4.1 + 6 Complete v1.5 Phases 27-28 + 2 Pending v1.5 Phase 29). Earlier: 2026-05-30 -- v1.5 Notification Output Polish requirements added (UXG-01..UXG-06, 6 total) from the 2026-05-30 hands-on UAT sweep; mapped to Phases 27 (UXG-01/04/05/06) and 28 (UXG-02/03), all Pending. Coverage now 46 total (40 Complete v1.4/v1.4.1 + 6 Pending v1.5). Earlier: 2026-05-30 -- v1.4.1 milestone closed (Phase 26, SNM-40 GREEN gate). SNM-40 flipped Pending -> Complete; SNM-23 traceability row reconciled Pending -> Complete in the same pass (D-26-05). Coverage now 40/40 Complete, 0 Pending. Earlier: 2026-05-28 -- v1.4.1 traceability populated by `gsd-roadmapper`; SNM-33..SNM-40 mapped across Phases 22-26._

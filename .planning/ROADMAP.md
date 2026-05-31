@@ -103,6 +103,7 @@ Refine the v2 `NotificationMessage` output grammar and severity presentation per
 
 - [x] **Phase 27: Marketplace & Autoupdate Output Grammar** -- (a) drop the `<last-updated <iso>>` marker from the `marketplace list` surface (UXG-01); (b) replace `(autoupdate enabled)` / `(autoupdate disabled)` status tokens with `<autoupdate>` / `<no autoupdate>` markers (explicit off-marker), idempotent -> `<autoupdate> {already autoupdate}` (UXG-04); (c) render `marketplace update` no-op as `(skipped) {up-to-date}` not `(updated)` (UXG-05); (d) doc-only catalog fix -- github `marketplace add` never auto-enables autoupdate + `autoupdate`/`noautoupdate` heading nit (UXG-06). Renderer + catalog + catalog-uat in lockstep. 4 plans across 4 serialized waves (single-file convergence on `shared/notify.ts` + `docs/output-catalog.md`). (UXG-01, UXG-04, UXG-05, UXG-06)
 - [x] **Phase 28: Severity Routing & Label Discipline** -- (a) refine the first-match severity ladder so benign-only skip cascades (`{up-to-date}` / `{already …}`) compute `info` not `warning` (UXG-02); (b) suppress the host `Error:`/`Warning:` label on multi-line cascade output (keep on single-line, keep color) -- carries a feasibility spike on whether the Pi host can render color without the label or whether an upstream `@earendil-works/pi-coding-agent` change is required; may resolve as an upstream-tracked finding (UXG-03). (UXG-02, UXG-03) (completed 2026-05-31)
+- [ ] **Phase 29: Notification Label Suppression & Update Classification** -- (a) suppress the host `Error:`/`Warning:` label on multi-line `notify()` cascades by routing them through `info` (entrypoint-split: single-line `notifyUsageError` keeps the label) -- supersedes the UXG-03 finding now that severity color is expendable, and retires/dormants the UXG-02 `computeSeverity` warning/error arms (UXG-07); (b) `update` of a plugin absent from the marketplace manifest classifies as `{not in manifest}` / `failed` matching `install`, not `{not installed}` / `skipped` (UXG-08). From the 2026-05-31 runtime UAT; reopens v1.5. (UXG-07, UXG-08)
 
 ## Phase Details
 
@@ -546,6 +547,21 @@ Plans:
 - [x] 28-01-PLAN.md -- UXG-02: rewrite computeSeverity as the D-28-06 5-arm benign-softening ladder (+ BENIGN_REASONS, both test gates, ADR/style-guide/catalog prose sync)
 - [x] 28-02-PLAN.md -- UXG-03: run the host label/color feasibility spike and record the upstream-tracked finding (defer-with-finding per D-28-12)
 
+### Phase 29: Notification Label Suppression & Update Classification
+
+**Goal:** Stop the host `Error:`/`Warning:` label from prefixing multi-line cascade output (the residual UXG-03 pain, now fixable in-extension because severity color is expendable per the operator), and make `update` of a nonexistent plugin report the same `{not in manifest}` / `failed` outcome as `install`. Surfaced by the 2026-05-31 runtime UAT; reopens the v1.5 milestone.
+
+**Requirements:** UXG-07, UXG-08
+
+**Success criteria:**
+
+1. Multi-line structured `notify()` cascades emit NO severity 2nd arg, so the host renders them via `showStatus` -- no `Error:`/`Warning:` label prefix, indent ladder intact. The single-line `notifyUsageError()` retains `"error"` (entrypoint-split, D-28-13).
+2. `update <plugin>@<marketplace>` of a plugin absent from the marketplace manifest renders `(failed) {not in manifest}` (matching `install`), not `(skipped) {not installed}`; a real-but-uninstalled plugin still renders `{not installed}`.
+3. The now-vestigial `computeSeverity` warning/error arms are retired or made dormant (decided in discuss/plan); `shared/notify.ts` + `docs/output-catalog.md` + `tests/architecture/catalog-uat.test.ts` + `tests/shared/notify-v2.test.ts` move in lockstep.
+4. `npm run check` GREEN; catalog-uat byte gate GREEN.
+
+**Plans:** TBD (created by /gsd-plan-phase)
+
 ## Progress
 
 | Phase                                                                | Milestone | Plans Complete | Status      | Completed  |
@@ -576,3 +592,4 @@ Plans:
 | 26. GREEN Gate Close                                                 | v1.4.1    | 1/1 | Complete    | 2026-05-30 |
 | 27. Marketplace & Autoupdate Output Grammar                          | v1.5      | 5/5 | Complete    | 2026-05-31 |
 | 28. Severity Routing & Label Discipline                              | v1.5      | 2/2 | Complete    | 2026-05-31 |
+| 29. Notification Label Suppression & Update Classification          | v1.5      | 0/0 | Planned     | --         |
