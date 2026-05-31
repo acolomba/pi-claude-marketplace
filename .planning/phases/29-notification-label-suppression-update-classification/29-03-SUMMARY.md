@@ -120,6 +120,13 @@ None - no external service configuration required.
 - UXG-08 closed. `update.ts` classification now matches `install.ts` for the manifest-absent case.
 - No blockers. Ready for Phase 29 verification and (once all Phase 29 plans land) `/gsd-complete-milestone`.
 
+## Self-Check: PASSED
+
+- FOUND: `.planning/phases/29-notification-label-suppression-update-classification/29-03-SUMMARY.md`
+- FOUND commit `9e18b83` (fix: `update.ts` preflightUpdate reorder)
+- FOUND commit `6a872d9` (test: `update.test.ts` not-in-manifest case)
+- FOUND commit `0e1b754` (docs: SUMMARY)
+
 ---
 *Phase: 29-notification-label-suppression-update-classification*
 *Completed: 2026-05-31*
