@@ -103,7 +103,7 @@ Refine the v2 `NotificationMessage` output grammar and severity presentation per
 
 - [x] **Phase 27: Marketplace & Autoupdate Output Grammar** -- (a) drop the `<last-updated <iso>>` marker from the `marketplace list` surface (UXG-01); (b) replace `(autoupdate enabled)` / `(autoupdate disabled)` status tokens with `<autoupdate>` / `<no autoupdate>` markers (explicit off-marker), idempotent -> `<autoupdate> {already autoupdate}` (UXG-04); (c) render `marketplace update` no-op as `(skipped) {up-to-date}` not `(updated)` (UXG-05); (d) doc-only catalog fix -- github `marketplace add` never auto-enables autoupdate + `autoupdate`/`noautoupdate` heading nit (UXG-06). Renderer + catalog + catalog-uat in lockstep. 4 plans across 4 serialized waves (single-file convergence on `shared/notify.ts` + `docs/output-catalog.md`). (UXG-01, UXG-04, UXG-05, UXG-06)
 - [x] **Phase 28: Severity Routing & Label Discipline** -- (a) refine the first-match severity ladder so benign-only skip cascades (`{up-to-date}` / `{already …}`) compute `info` not `warning` (UXG-02); (b) suppress the host `Error:`/`Warning:` label on multi-line cascade output (keep on single-line, keep color) -- carries a feasibility spike on whether the Pi host can render color without the label or whether an upstream `@earendil-works/pi-coding-agent` change is required; may resolve as an upstream-tracked finding (UXG-03). (UXG-02, UXG-03) (completed 2026-05-31)
-- [ ] **Phase 29: Notification Label Suppression & Update Classification** -- (a) suppress the host `Error:`/`Warning:` label on multi-line `notify()` cascades by routing them through `info` (entrypoint-split: single-line `notifyUsageError` keeps the label) -- supersedes the UXG-03 finding now that severity color is expendable, and retires/dormants the UXG-02 `computeSeverity` warning/error arms (UXG-07); (b) `update` of a plugin absent from the marketplace manifest classifies as `{not in manifest}` / `failed` matching `install`, not `{not installed}` / `skipped` (UXG-08). From the 2026-05-31 runtime UAT; reopens v1.5. (UXG-07, UXG-08)
+- [x] **Phase 29: Notification Label Suppression & Update Classification** -- (a) suppress the host `Error:`/`Warning:` label on multi-line `notify()` cascades by routing them through `info` (entrypoint-split: single-line `notifyUsageError` keeps the label) -- supersedes the UXG-03 finding now that severity color is expendable, and retires/dormants the UXG-02 `computeSeverity` warning/error arms (UXG-07); (b) `update` of a plugin absent from the marketplace manifest classifies as `{not in manifest}` / `failed` matching `install`, not `{not installed}` / `skipped` (UXG-08). From the 2026-05-31 runtime UAT; reopens v1.5. (UXG-07, UXG-08) (completed 2026-05-31)
 
 ## Phase Details
 
@@ -560,16 +560,16 @@ Plans:
 3. The now-vestigial `computeSeverity` warning/error arms are retired or made dormant (decided in discuss/plan); `shared/notify.ts` + `docs/output-catalog.md` + `tests/architecture/catalog-uat.test.ts` + `tests/shared/notify-v2.test.ts` move in lockstep.
 4. `npm run check` GREEN; catalog-uat byte gate GREEN.
 
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 
 **Wave 1** *(parallel: plans 01 + 03 have no file overlap)*
 
-- [ ] 29-01-PLAN.md -- UXG-07: add buildSummaryLine helper + update notify() to prepend summary for error/warning severity + notify-v2.test.ts lockstep (D-29-01/02/03/04/06)
-- [ ] 29-03-PLAN.md -- UXG-08: reorder preflightUpdate to consult manifest before not-installed guard; absent-from-manifest + not-installed returns failed {not in manifest} (D-29-08/09)
+- [x] 29-01-PLAN.md -- UXG-07: add buildSummaryLine helper + update notify() to prepend summary for error/warning severity + notify-v2.test.ts lockstep (D-29-01/02/03/04/06)
+- [x] 29-03-PLAN.md -- UXG-08: reorder preflightUpdate to consult manifest before not-installed guard; absent-from-manifest + not-installed returns failed {not in manifest} (D-29-08/09)
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 29-02-PLAN.md -- UXG-07 lockstep: output-catalog.md byte blocks + catalog-uat.test.ts fixtures + messaging-style-guide.md + ADR amendment (D-29-06/07)
+- [x] 29-02-PLAN.md -- UXG-07 lockstep: output-catalog.md byte blocks + catalog-uat.test.ts fixtures + messaging-style-guide.md + ADR amendment (D-29-06/07)
 
 ## Progress
 
@@ -601,4 +601,4 @@ Plans:
 | 26. GREEN Gate Close                                                 | v1.4.1    | 1/1 | Complete    | 2026-05-30 |
 | 27. Marketplace & Autoupdate Output Grammar                          | v1.5      | 5/5 | Complete    | 2026-05-31 |
 | 28. Severity Routing & Label Discipline                              | v1.5      | 2/2 | Complete    | 2026-05-31 |
-| 29. Notification Label Suppression & Update Classification          | v1.5      | 0/3 | In progress | --         |
+| 29. Notification Label Suppression & Update Classification          | v1.5      | 3/3 | Complete   | 2026-05-31 |

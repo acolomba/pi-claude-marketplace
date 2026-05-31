@@ -4,8 +4,8 @@ milestone: v1.5
 milestone_name: Notification Output Polish
 status: executing
 stopped_at: Phase 29 context gathered
-last_updated: "2026-05-31T17:48:58.312Z"
-last_activity: 2026-05-31 -- Phase 29 planning complete
+last_updated: "2026-05-31T17:58:41.462Z"
+last_activity: 2026-05-31 -- Phase 29 execution started
 progress:
   total_phases: 17
   completed_phases: 16
@@ -20,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-30)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.5 REOPENED -- Phase 29 (UXG-07 host-label suppression on cascades + UXG-08 update-of-nonexistent classification) added from the 2026-05-31 runtime UAT; discuss -> plan -> execute, then `/gsd-complete-milestone`.
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 29 — notification-label-suppression-update-classification
 
 ## Current Position
 
-Phase: 29 (not started)
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-31 -- Phase 29 planning complete
+Phase: 29 (notification-label-suppression-update-classification) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 29
+Last activity: 2026-05-31 -- Phase 29 execution started
 
 ## Performance Metrics
 
