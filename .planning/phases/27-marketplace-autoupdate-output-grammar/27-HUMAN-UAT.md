@@ -1,9 +1,9 @@
 ---
-status: complete
+status: diagnosed
 phase: 27-marketplace-autoupdate-output-grammar
 source: [27-VERIFICATION.md]
 started: 2026-05-31T00:07:43Z
-updated: 2026-05-31T00:16:00Z
+updated: 2026-05-31T03:25:00Z
 ---
 
 ## Current Test
@@ -35,14 +35,17 @@ reported: "looks good for some (save for the warning), but the claude-plugins-of
 severity: major
 note: |
   PATH-source no-op works (renders `(skipped) {up-to-date}`) — partial pass.
-  GITHUB-source no-op is broken: `claude-plugins-official` (github) always renders
-  `(updated)`, never `(skipped) {up-to-date}`. The "save for the warning" remark is
-  the same deferred UXG-02/Phase 28 severity-label item (Test 2), NOT part of this gap.
-  Suspected root cause (refreshRecord github branch, update.ts:285-313): the manifest
-  content-compare `preKey !== postKey` always reads as changed for github. Prime
-  suspects per 27-REVIEW.md: WR-01 (loadMarketplaceManifest uses raw JSON.parse, not
-  .Parse — no canonical key order), WR-02 (bare `catch {}` makes an unreadable PRE
-  manifest default to "changed"), WR-03 (github no-op was never actually tested).
+  "save for the warning" = deferred UXG-02/Phase 28 severity-label item (Test 2), NOT this gap.
+  CONFIRMED ROOT CAUSE (code-verified): the user's `claude-plugins-official` record has
+  `autoupdate: true`. UXG-05's no-op `(skipped) {up-to-date}` rendering was wired ONLY
+  into the autoupdate-OFF branch (update.ts:683-695). The autoupdate-ON branch
+  (update.ts:705-714) unconditionally emits marketplace `status: "updated"` and never
+  consults `snapshot.changed`, so a no-op update on an autoupdate-ON marketplace always
+  renders `(updated)`. NOT a clone/persistence bug and NOT WR-01/WR-02: the change
+  detector itself is correct (proven via reproduction), it is simply not consulted on
+  the autoupdate-ON path. The live clone advances + persists correctly (tmp/pihome clone
+  went 1a2f18b/172 -> 2a822c0/204, lastUpdatedAt fresh). Earlier "frozen clone" evidence
+  was from the wrong directory (~/.pi/agent stale clone; live home is tmp/pihome).
 
 ## Summary
 
@@ -55,12 +58,17 @@ blocked: 0
 
 ## Gaps
 
-- truth: "`marketplace update` against an unchanged github-source marketplace renders `● <mp> [<scope>] (skipped) {up-to-date}`, not `(updated)`"
+- truth: "`marketplace update` with no change renders `● <mp> [<scope>] (skipped) {up-to-date}`, not `(updated)` — including autoupdate-ON marketplaces"
   status: failed
   reason: "User reported: looks good for some (save for the warning), but the claude-plugins-official marketplace always says `● claude-plugins-official [user] (updated)` -- i don't think it can tell when we picked new changes via git"
   severity: major
   test: 3
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "UXG-05 no-op detection was wired only into the autoupdate-OFF branch (update.ts:683-695). The autoupdate-ON branch (update.ts:705-714) unconditionally emits marketplace status 'updated' and never consults snapshot.changed, so a no-op update on an autoupdate-ON marketplace (e.g. claude-plugins-official) always renders (updated). Change-detector logic is correct but not consulted on this path. Clone advance/persistence is healthy (verified against the real tmp/pihome clone)."
+  artifacts:
+    - path: "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts"
+      issue: "autoupdate-ON branch (L705-714) hardcodes marketplace status 'updated'; ignores snapshot.changed and the cascade outcomes' no-op-ness"
+  missing:
+    - "On the autoupdate-ON path, render marketplace `(skipped) {up-to-date}` when snapshot.changed is false AND every cascaded plugin outcome is a no-op (none updated/installed/failed) — mirroring the autoupdate-OFF no-op and the plugin-level up-to-date no-op"
+    - "Catalog (output-catalog.md) + catalog-uat coverage for the autoupdate-ON no-op marketplace-update case"
+    - "Test that the autoupdate-ON path renders (skipped) {up-to-date} on a true no-op (WR-03-class coverage gap)"
+  debug_session: ".planning/debug/uxg05-github-always-updated.md"
