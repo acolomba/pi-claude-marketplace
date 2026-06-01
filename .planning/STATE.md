@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: GitHub Private Marketplace Authentication
 status: executing
-last_updated: "2026-06-01T11:05:30.066Z"
-last_activity: 2026-06-01 -- Phase 31 planning complete
+last_updated: "2026-06-01T11:06:06.136Z"
+last_activity: 2026-06-01 -- Phase 31 execution started
 progress:
   total_phases: 7
   completed_phases: 1
@@ -19,14 +19,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-30)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Milestone complete
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 31 -- credential-subprocess-layer-auth
 
 ## Current Position
 
-Phase: 30
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-06-01 -- Phase 31 planning complete
+Phase: 31 (credential-subprocess-layer-auth) -- EXECUTING
+Plan: 1 of 2
+Status: Executing Phase 31
+Last activity: 2026-06-01 -- Phase 31 execution started
 
 ## Performance Metrics
 

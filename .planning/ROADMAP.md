@@ -620,11 +620,11 @@ Plans:
 3. The access token never appears in any error message or `ctx.ui.notify` output; architecture-level tests assert no credential field leaks through state write paths.
 4. `npm run check` GREEN; `CredentialOps` interface defined with a `makeMockCredentialOps` test helper following the `GitOps`/`makeMockGitOps` pattern.
 
-**Plans:** 2/2 plans
+**Plans:** 1/2 plans executed
 
 **Wave 1**
 
-- [ ] 31-01-PLAN.md -- Narrow tests/architecture/no-shell-out.test.ts D-21 gate with ALLOWED_CHILD_PROCESS_FILES whitelist (Phase 31 narrowing) + add tests/platform/ to npm test glob (architecture-gate prerequisite for Plan 31-02)
+- [x] 31-01-PLAN.md -- Narrow tests/architecture/no-shell-out.test.ts D-21 gate with ALLOWED_CHILD_PROCESS_FILES whitelist (Phase 31 narrowing) + add tests/platform/ to npm test glob (architecture-gate prerequisite for Plan 31-02)
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -747,7 +747,7 @@ Plans:
 | 28. Severity Routing & Label Discipline                              | v1.5      | 2/2 | Complete    | 2026-05-31 |
 | 29. Notification Label Suppression & Update Classification          | v1.5      | 3/3 | Complete    | 2026-05-31 |
 | 30. Duplicate Type Fix                                               | v1.6      | 1/1 | Complete    | 2026-06-01 |
-| 31. Credential Subprocess Layer                                      | v1.6      | 0/2 | Not started | -          |
+| 31. Credential Subprocess Layer                                      | v1.6      | 1/2 | In Progress|  |
 | 32. Device Flow State Machine                                        | v1.6      | TBD | Not started | -          |
 | 33. git.ts Auth Wiring                                               | v1.6      | TBD | Not started | -          |
 | 34. GitOps Interface Threading                                       | v1.6      | TBD | Not started | -          |
