@@ -111,7 +111,7 @@ On-demand Device Flow auth for private GitHub marketplace sources. Tries `git cr
 
 - [x] Phase 30: Duplicate Type Fix (AUTH-10) (completed 2026-06-01)
 - [x] Phase 31: Credential Subprocess Layer (AUTH-06, AUTH-08, AUTH-09) (completed 2026-06-01)
-- [ ] Phase 32: Device Flow State Machine (AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-07)
+- [x] Phase 32: Device Flow State Machine (AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-07) (completed 2026-06-01)
 - [ ] Phase 33: git.ts Auth Wiring (AUTH-01, AUTH-02)
 - [ ] Phase 34: GitOps Interface Threading (AUTH-01, AUTH-02)
 - [ ] Phase 35: Orchestrator Call Sites & Output Catalog (AUTH-01, AUTH-02, AUTH-03)
@@ -645,7 +645,7 @@ Plans:
 3. `access_denied` and `expired_token` exit the poll loop immediately with a clear, actionable error message (not a raw HTTP error object).
 4. A rejected stored token triggers `git credential reject` eviction before Device Flow re-triggers (`onAuthFailure` path); the `authAttempted` boolean guard prevents an infinite retry loop.
 
-**Plans:** 1/2 plans executed
+**Plans:** 1/2 plans complete
 
 ### Phase 33: git.ts Auth Wiring
 
@@ -748,7 +748,7 @@ Plans:
 | 29. Notification Label Suppression & Update Classification          | v1.5      | 3/3 | Complete    | 2026-05-31 |
 | 30. Duplicate Type Fix                                               | v1.6      | 1/1 | Complete    | 2026-06-01 |
 | 31. Credential Subprocess Layer                                      | v1.6      | 2/2 | Complete   | 2026-06-01 |
-| 32. Device Flow State Machine                                        | v1.6      | 1/2 | In Progress|  |
+| 32. Device Flow State Machine                                        | v1.6      | 1/2 | Complete    | 2026-06-01 |
 | 33. git.ts Auth Wiring                                               | v1.6      | TBD | Not started | -          |
 | 34. GitOps Interface Threading                                       | v1.6      | TBD | Not started | -          |
 | 35. Orchestrator Call Sites & Output Catalog                         | v1.6      | TBD | Not started | -          |
