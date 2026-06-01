@@ -396,6 +396,65 @@ test("Phase 32 initiateDeviceFlow: AUTH-09 notify content negative scan -- no to
   }
 });
 
+test("Phase 32 initiateDeviceFlow: unexpected poll error returns ok:false with error description (WR-03)", async () => {
+  const { http } = makeMockDeviceFlowHttp({
+    deviceCode: {
+      device_code: "MOCK_DEVICE_CODE",
+      user_code: "ABCD-1234",
+      verification_uri: "https://github.com/login/device",
+      expires_in: 900,
+      interval: 0,
+    },
+    pollQueue: [
+      { kind: "unexpected", error: "unsupported_grant_type", description: "grant not supported" },
+    ],
+  });
+  const { credOps } = makeMockCredentialOps();
+  const { notifyFn } = makeNotifyRecorder();
+
+  const result = await initiateDeviceFlow({
+    host: "github.com",
+    credentialOps: credOps,
+    notifyFn,
+    http,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.authAttempted, true);
+  if (!result.ok) {
+    assert.match(result.reason, /unsupported_grant_type/);
+    assert.match(result.reason, /grant not supported/);
+  }
+});
+
+test("Phase 32 initiateDeviceFlow: pollToken throw returns ok:false authAttempted:true (WR-01)", async () => {
+  const { http } = makeMockDeviceFlowHttp({
+    deviceCode: {
+      device_code: "MOCK_DEVICE_CODE",
+      user_code: "ABCD-1234",
+      verification_uri: "https://github.com/login/device",
+      expires_in: 900,
+      interval: 0,
+    },
+    pollQueue: [],
+    pollTokenThrows: new Error("network error in poll"),
+  });
+  const { credOps } = makeMockCredentialOps();
+  const { notifyFn } = makeNotifyRecorder();
+
+  const result = await initiateDeviceFlow({
+    host: "github.com",
+    credentialOps: credOps,
+    notifyFn,
+    http,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.authAttempted, true);
+  if (!result.ok) {
+    assert.match(result.reason, /poll failed/);
+    assert.match(result.reason, /network error in poll/);
+  }
+});
+
 test("Phase 32 initiateDeviceFlow: approveThrows propagates -- Phase 32 does not wrap CredentialOps.approve (A9)", async () => {
   const { http } = makeMockDeviceFlowHttp({
     deviceCode: {

@@ -283,24 +283,26 @@ export const DEFAULT_DEVICE_FLOW_HTTP: DeviceFlowHttp = {
  * D-32-05: authAttempted is true in BOTH branches so Phase 33's
  * onAuthFailure can guard the retry loop.
  */
-export async function initiateDeviceFlow(opts: InitiateDeviceFlowOpts): Promise<DeviceFlowResult> {
-  const http = opts.http ?? DEFAULT_DEVICE_FLOW_HTTP;
-
-  let deviceCode: DeviceCodeResponse;
+async function safePollToken(
+  http: DeviceFlowHttp,
+  deviceCode: string,
+  intervalSec: number,
+): Promise<PollResult | { kind: "poll_error"; reason: string }> {
   try {
-    deviceCode = await http.requestCode(GITHUB_OAUTH_CLIENT_ID, REQUESTED_SCOPE);
+    return await http.pollToken(GITHUB_OAUTH_CLIENT_ID, deviceCode, intervalSec);
   } catch (err) {
     return {
-      ok: false,
-      reason: `Device Flow initialization failed: ${err instanceof Error ? err.message : "unknown error"}`,
-      authAttempted: true,
+      kind: "poll_error",
+      reason: `Device Flow poll failed: ${err instanceof Error ? err.message : "unknown error"}`,
     };
   }
+}
 
-  // AUTH-03 + AUTH-09: ONLY user_code + verification_uri interpolated.
-  // Token is not yet acquired; never appears here.
-  opts.notifyFn(`Open ${deviceCode.verification_uri} and enter: ${deviceCode.user_code}`, "info");
-
+async function runPollLoop(
+  http: DeviceFlowHttp,
+  deviceCode: DeviceCodeResponse,
+  opts: InitiateDeviceFlowOpts,
+): Promise<DeviceFlowResult> {
   let currentIntervalSec = deviceCode.interval;
   const deadlineMs = Date.now() + deviceCode.expires_in * 1000;
 
@@ -315,18 +317,11 @@ export async function initiateDeviceFlow(opts: InitiateDeviceFlowOpts): Promise<
       return { ok: false, reason: "Device Flow cancelled.", authAttempted: true };
     }
 
-    const r = await http.pollToken(
-      GITHUB_OAUTH_CLIENT_ID,
-      deviceCode.device_code,
-      currentIntervalSec,
-    );
+    const r = await safePollToken(http, deviceCode.device_code, currentIntervalSec);
 
     switch (r.kind) {
       case "success": {
-        const cred: GitCredentials = {
-          username: "x-access-token",
-          password: r.accessToken,
-        };
+        const cred: GitCredentials = { username: "x-access-token", password: r.accessToken };
         await opts.credentialOps.approve(opts.host, cred);
         return { ok: true, cred, authAttempted: true };
       }
@@ -350,12 +345,16 @@ export async function initiateDeviceFlow(opts: InitiateDeviceFlowOpts): Promise<
           reason: "Device code expired before authorization. Run the command again to restart.",
           authAttempted: true,
         };
-      case "unexpected":
+      case "poll_error":
+        return { ok: false, reason: r.reason, authAttempted: true };
+      case "unexpected": {
+        const detail = r.description !== undefined ? ` -- ${r.description}` : "";
         return {
           ok: false,
-          reason: `Device Flow failed: ${r.error}${r.description !== undefined ? " -- " + r.description : ""}`,
+          reason: `Device Flow failed: ${r.error}${detail}`,
           authAttempted: true,
         };
+      }
     }
   }
 
@@ -365,4 +364,25 @@ export async function initiateDeviceFlow(opts: InitiateDeviceFlowOpts): Promise<
       "Device Flow timed out before authorization completed. Run the command again to restart.",
     authAttempted: true,
   };
+}
+
+export async function initiateDeviceFlow(opts: InitiateDeviceFlowOpts): Promise<DeviceFlowResult> {
+  const http = opts.http ?? DEFAULT_DEVICE_FLOW_HTTP;
+
+  let deviceCode: DeviceCodeResponse;
+  try {
+    deviceCode = await http.requestCode(GITHUB_OAUTH_CLIENT_ID, REQUESTED_SCOPE);
+  } catch (err) {
+    return {
+      ok: false,
+      reason: `Device Flow initialization failed: ${err instanceof Error ? err.message : "unknown error"}`,
+      authAttempted: true,
+    };
+  }
+
+  // AUTH-03 + AUTH-09: ONLY user_code + verification_uri interpolated.
+  // Token is not yet acquired; never appears here.
+  opts.notifyFn(`Open ${deviceCode.verification_uri} and enter: ${deviceCode.user_code}`, "info");
+
+  return runPollLoop(http, deviceCode, opts);
 }
