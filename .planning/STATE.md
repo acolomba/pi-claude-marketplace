@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: GitHub Private Marketplace Authentication
-status: milestone_complete
-last_updated: 2026-06-01T14:00:49.897Z
-last_activity: 2026-06-01 -- Phase 32 execution started
+status: executing
+last_updated: "2026-06-01T14:39:38.002Z"
+last_activity: 2026-06-01 -- Phase 33 planning complete
 progress:
   total_phases: 7
   completed_phases: 2
-  total_plans: 5
+  total_plans: 6
   completed_plans: 4
   percent: 29
-stopped_at: Milestone complete (Phase 32 was final phase)
 ---
 
 # Project State
@@ -20,14 +19,14 @@ stopped_at: Milestone complete (Phase 32 was final phase)
 
 See: .planning/PROJECT.md (updated 2026-05-30)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Milestone complete
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.6 -- GitHub Private Marketplace Authentication (Phase 33/7)
 
 ## Current Position
 
-Phase: 32
+Phase: 33
 Plan: Not started
-Status: Milestone complete
-Last activity: 2026-06-01
+Status: Ready to execute
+Last activity: 2026-06-01 -- Phase 33 planning complete
 
 ## Performance Metrics
 

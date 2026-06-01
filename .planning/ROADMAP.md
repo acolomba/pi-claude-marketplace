@@ -662,7 +662,11 @@ Plans:
 3. Exceptions from `onAuth`/`onAuthFailure` are caught and return `{ cancel: true }` rather than propagating raw (CP-10).
 4. `npm run check` GREEN; no change to existing clone/fetch call sites yet.
 
-**Plans:** TBD
+**Plans:** 1 plan
+
+**Wave 1**
+
+- [ ] 33-01-PLAN.md -- buildAuthCallbacks + AuthAttemptResult/OnAuthRequiredFn local types in platform/git.ts; CloneOptions/FetchOptions opt-in auth bundle; tests/platform/git-auth-callbacks.test.ts covers fill-hit, fill-miss->DF, CP-9 cancel, CP-10 catch (AUTH-01, AUTH-02)
 
 ### Phase 34: GitOps Interface Threading
 
@@ -749,7 +753,7 @@ Plans:
 | 30. Duplicate Type Fix                                               | v1.6      | 1/1 | Complete    | 2026-06-01 |
 | 31. Credential Subprocess Layer                                      | v1.6      | 2/2 | Complete   | 2026-06-01 |
 | 32. Device Flow State Machine                                        | v1.6      | 1/2 | Complete    | 2026-06-01 |
-| 33. git.ts Auth Wiring                                               | v1.6      | TBD | Not started | -          |
+| 33. git.ts Auth Wiring                                               | v1.6      | 0/1 | Not started | -          |
 | 34. GitOps Interface Threading                                       | v1.6      | TBD | Not started | -          |
 | 35. Orchestrator Call Sites & Output Catalog                         | v1.6      | TBD | Not started | -          |
 | 36. Integration Gate                                                 | v1.6      | TBD | Not started | -          |
