@@ -46,6 +46,11 @@ const GIT_CREDENTIAL_FILE = "extensions/pi-claude-marketplace/platform/git-crede
 
 const GITHUB_AUTH_FILE = "extensions/pi-claude-marketplace/domain/github-auth.ts";
 
+const PHASE_35_ORCHESTRATOR_FILES: ReadonlyArray<string> = [
+  "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts",
+  "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts",
+];
+
 function stripComments(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 }
@@ -127,4 +132,44 @@ test("AUTH-09 (Phase 32): domain/github-auth.ts never interpolates a token in an
     false,
     "Error or notifyFn in domain/github-auth.ts interpolates a token field (AUTH-09 violation)",
   );
+});
+
+test("AUTH-09 (Phase 35): orchestrators/marketplace/{add,update}.ts never interpolate a credential field in an Error or ctx.ui.notify message", async () => {
+  // Closes Phase 33 review WR-02. Phase 35 Plans 35-01 / 35-02 wire
+  // add.ts and update.ts to construct the Device Flow onAuthRequired
+  // closure. The closure captures `credentialOps` by reference -- a
+  // future regression that interpolates
+  // `credentialOps.fill(...).then(c => ctx.ui.notify(\`got ${c.password}\`))`
+  // would be an AUTH-09 violation. This gate scans for that class of
+  // bug in the new orchestrator files.
+  //
+  // The regex mirrors the Phase 32 github-auth.ts gate: forbidden is a
+  // template literal OR string concatenation that interpolates
+  //   - access_token, accessToken
+  //   - cred.<field> (e.g. cred.password)
+  //   - r.accessToken
+  // INSIDE a `new Error(...)` constructor OR a `ctx.ui.notify(...)` call.
+  const forbidden =
+    /(new\s+Error\s*\(|ctx\.ui\.notify\s*\()(?:[^)]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken)|[^)]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken))/i;
+
+  for (const rel of PHASE_35_ORCHESTRATOR_FILES) {
+    const absPath = path.join(REPO_ROOT, rel);
+    const exists = await access(absPath).then(
+      () => true,
+      () => false,
+    );
+    if (!exists) {
+      // Plan 35-01 / 35-02 may land in either order; if a file doesn't
+      // exist yet on disk, this gate is vacuously satisfied for that file.
+      continue;
+    }
+
+    const src = await readFile(absPath, "utf8");
+    const stripped = stripComments(src);
+    assert.equal(
+      forbidden.test(stripped),
+      false,
+      `Error or ctx.ui.notify in ${rel} interpolates a credential field (AUTH-09 violation; closes Phase 33 review WR-02)`,
+    );
+  }
 });
