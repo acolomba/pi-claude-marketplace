@@ -18,10 +18,12 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import {
   __resetCacheForTests,
   getPluginIndex,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { makeMockCredentialOps } from "../../helpers/credential-mock.ts";
 import { fixtureMarketplaceDir, makeMockGitOps } from "../../helpers/git-mock.ts";
 
 import type {
@@ -1391,5 +1393,105 @@ test("validateManifestAtRoot: stale manifestPath and marketplaceRoot are correct
       cloneDir,
       `marketplaceRoot not updated: got ${record.marketplaceRoot}`,
     );
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// AUTH-02: silent-reuse contract + auth bundle forwarding
+//
+// These tests lock the two halves of the AUTH-02 contract for marketplace
+// update:
+//   (a) When credentialOps.fill hits the keychain (post-add scenario),
+//       Device Flow does NOT trigger and no "Open ..." notification is
+//       emitted.
+//   (b) The GitAuthBundle is forwarded by reference into refreshGitHubClone
+//       (recorded on gitOps.fetch.auth), proving no re-bundling occurs.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("AUTH-02 update: credentialOps.fill HIT yields silent reuse -- NO Device Flow notification emitted", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    await seedGithubMarketplace({ cwd, name: "private-mp", ref: "main" });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // Pre-seed the credential store for github.com so fill() returns the
+    // stored token without triggering Device Flow.
+    const { credOps: credentialOps, state: credState } = makeMockCredentialOps({
+      store: new Map([["github.com", { username: "x-access-token", password: "stored-token" }]]),
+    });
+
+    const { gitOps, state } = makeMockGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000020" },
+    });
+
+    await updateMarketplace({
+      ctx,
+      pi,
+      name: "private-mp",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // AUTH-02: Device Flow must NOT fire when credentialOps.fill hits the
+    // keychain. The "Open ..." notification is the Device Flow prompt; its
+    // absence confirms the silent-reuse path.
+    assert.equal(
+      notifications.filter((n) => n.message.startsWith("Open ")).length,
+      0,
+      "AUTH-02: Device Flow notify must NOT fire when credentialOps.fill hits the keychain",
+    );
+
+    // The fetch was called exactly once and the auth bundle was forwarded.
+    assert.equal(state.fetchCalls.length, 1);
+    assert.ok(state.fetchCalls[0]?.auth !== undefined);
+    assert.equal(state.fetchCalls[0]?.auth?.host, "github.com");
+    assert.strictEqual(state.fetchCalls[0]?.auth?.credentialOps, credentialOps);
+
+    // Exercise the closure end-to-end: buildAuthCallbacks reads the stored
+    // credential via credentialOps.fill and returns it as the onAuth result.
+    const fetchAuth = state.fetchCalls[0]?.auth;
+    assert.ok(fetchAuth !== undefined);
+    const cbs = buildAuthCallbacks(fetchAuth);
+    const result = await cbs.onAuth("https://github.com/owner/repo.git");
+    assert.deepEqual(result, { username: "x-access-token", password: "stored-token" });
+    // fill was called once (from the closure exercised above).
+    assert.equal(credState.fillCalls.length, 1);
+  });
+});
+
+test("AUTH-02 update: the GitAuthBundle is forwarded by reference into refreshGitHubClone (recorded on gitOps.fetch)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    await seedGithubMarketplace({ cwd, name: "ref-mp", ref: "main" });
+    const { ctx, pi } = makeCtx();
+
+    // Empty store: fill() returns null. Device Flow would normally trigger
+    // when onAuth is invoked, but gitOps.fetch is a pure stub so the
+    // callbacks are never called -- only the bundle reference is checked.
+    const { credOps: credentialOps } = makeMockCredentialOps();
+
+    const { gitOps, state } = makeMockGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000021" },
+    });
+
+    await updateMarketplace({
+      ctx,
+      pi,
+      name: "ref-mp",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // The auth bundle must be present on the recorded fetch call.
+    assert.equal(state.fetchCalls.length, 1);
+    assert.ok(state.fetchCalls[0]?.auth !== undefined);
+    assert.equal(state.fetchCalls[0]?.auth?.host, "github.com");
+    // Reference equality: the same credentialOps instance passed to
+    // updateMarketplace must appear on the recorded fetch auth bundle --
+    // proves no re-bundling occurred.
+    assert.strictEqual(state.fetchCalls[0]?.auth?.credentialOps, credentialOps);
+    assert.equal(typeof state.fetchCalls[0]?.auth?.onAuthRequired, "function");
   });
 });
