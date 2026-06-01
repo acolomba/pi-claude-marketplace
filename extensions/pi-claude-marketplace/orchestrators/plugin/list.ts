@@ -18,16 +18,9 @@
 //     plugin row carries `scope: "project"` (D-13-18: actual install scope
 //     on every surface).
 //
-// Phase 19 / Plan 19-03 (Wave 2 mirror of Plan 19-01 pilot): V1 severity-named
-// notify wrappers and the V1 list-rendering composers are GONE from this file.
-// The orchestrator builds the V2 `NotificationMessage` payload INLINE and
-// forwards it to a single `notify(ctx, pi, message)` call per orchestration
-// arm. The V1 `notifyWarning` probe-failure summary site is DROPPED entirely
-// per D-19-01 -- the probe-failure information already manifests as per-row
-// `(unavailable)` plugin variants where the underlying probe failure caused
-// the plugin to fail probing; the summary is redundant. The module-level
-// probe-failure capture-buffer and all its push sites are REMOVED along with
-// the dropped warning.
+// Each arm emits one notify() call with the full NotificationMessage payload.
+// Probe failures manifest as per-row (unavailable) variants rather than a
+// separate warning -- the per-row shape already carries the signal.
 //
 // CMC-13 / MSG-SD-1..3 per-row soft-dep markers: each installed-variant
 // `PluginPresentMessage` carries `dependencies: readonly Dependency[]`
@@ -177,8 +170,7 @@ type ListReason =
 
 /**
  * Compute `dependencies: readonly Dependency[]` from boolean declares flags.
- * Mirrors the V1 SoftDepProbe per-row marker logic at notify-time: the
- * renderer probes once and emits `{requires pi-subagents}` / `{requires
+ * The renderer probes once and emits `{requires pi-subagents}` / `{requires
  * pi-mcp}` when (declares AND companion unloaded). Empty array elides both
  * markers structurally (D-15-02).
  */
@@ -199,9 +191,7 @@ function dependenciesFromDeclares(declaresAgents: boolean, declaresMcp: boolean)
  * Build a `PluginPresentMessage` (or `PluginUpgradableMessage` when the
  * manifest version differs from the installed record's version per PL-5
  * string compare) for an INSTALLED plugin record. `dependencies` derives
- * from the installed record's `resources` (state-recorded counts). The
- * V1 `description` field is dropped on the V2 surface (catalog `list`
- * states do not render descriptions; the renderer has no body line).
+ * from the installed record's `resources` (state-recorded counts).
  *
  * `pluginScope`: the actual install scope of this plugin record. Passed
  * through to the V2 row only when it differs from the owning marketplace's

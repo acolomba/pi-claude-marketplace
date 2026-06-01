@@ -2,38 +2,19 @@
 //
 // MR-1..8 + RH-1/RH-5 composition + NFR-5 (no network).
 //
-// Phase 18 / Plan 18-04: V1 -> V2 migration. User-visible surface is now
-// a single `notify(opts.ctx, opts.pi, ...)` call per outcome:
 //
-//   - CLEAN success: one `MarketplaceNotificationMessage{ status:"removed",
-//     plugins: [...] }` carrying one `PluginUninstalledMessage` (○ icon) per
-//     successfully unstaged plugin (D-22-02). The `/reload to pick up changes`
-//     trailer is computed by `notify()` per D-22-01 and fires iff >=1 plugin
-//     was unstaged (an `uninstalled` row is the only Pi-visible state change).
-//     An empty remove is header-only (`plugins: []`) with no trailer
-//     (G-MIL-02). Severity = info (no 2nd arg).
-//   - PARTIAL failure (D-18-03 cascade restructure): one
-//     `MarketplaceNotificationMessage{ status:"failed", plugins: [...] }`
-//     whose `plugins[]` mixes `PluginUninstalledMessage` (the successful
-//     unstages, ○ icon) and `PluginFailedMessage{ cause?: Error }` (the
-//     failed unstages, ⊘ icon). Per-plugin `cause` MOVES from V1's
-//     marketplace-level `causeChainTrailer(err)` body to per-row
-//     `PluginFailedMessage.cause`, rendered at 4-space indent below each
-//  failed plugin row. The V1 free-text retry-anchor
-//     trailer ("Fix the underlying issue and retry.") is DROPPED per
-//     D-17-09 (already excluded by the Phase 17 catalog rewrite).
-//  Severity = error (any plugin/mp failed). Reload-hint
-//     fires because at least one plugin status is `"uninstalled"` per
-// .
-//   - Post-state cleanup leaks (MR-6) and completion-cache cleanup leaks:
-//     DROPPED per D-18-01 (parallel to D-17-09 + add.ts pilot). The
-//     underlying `rm()` calls inside the try/catch blocks STILL RUN
-//     (correctness preserved); only the user-visible `notifyWarning`
-//     vanishes because the V2 `MarketplaceNotificationMessage` type has
-//     no field representing "cleanup leak after successful state
-//     mutation" (folding into `status: "failed"` would misrepresent the
-//     operation; a second `notify()` call after the primary would double
-//     severity routing without a catalog fixture to gate against).
+// Notification shape per outcome:
+//   - Clean success: MarketplaceNotificationMessage{ status:"removed",
+//     plugins: [...] } with one PluginUninstalledMessage (○) per unstaged
+//     plugin. Reload-hint fires iff >=1 plugin was unstaged (D-22-02).
+//     An empty remove (no plugins staged) is header-only with no trailer.
+//   - Partial failure: MarketplaceNotificationMessage{ status:"failed" }
+//     mixing PluginUninstalledMessage and PluginFailedMessage{ cause? }
+//     rows. Per-plugin cause rendered at 4-space indent (D-16-08).
+//   - Post-state cleanup and cache-refresh failures are swallowed (MR-6 /
+//     D-18-01): the underlying rm() calls still run; only the warning
+//     disappears, as there is no clean notification shape for
+//     "cleanup leak after a successful state mutation".
 //
 // Flow:
 //   1. resolveScopeFromState(name, userLocs, projectLocs) when --scope omitted (MR-1).
@@ -98,8 +79,7 @@ async function removePath(pathPromise: Promise<string>): Promise<void> {
   // call still runs (correctness preserved); failures are swallowed
   // silently because the V2 `MarketplaceNotificationMessage` type has no
   // field to surface "cleanup leak after successful state mutation".
-  // The `label` accumulator that V1 fed into a second `notifyWarning`
-  // call is gone; nothing surfaces these failures to the user.
+  // Nothing surfaces these cleanup failures to the user.
   try {
     await rm(await pathPromise, { recursive: true, force: true });
   } catch {
@@ -248,12 +228,9 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
   // unlinked because the marketplace set changed and this marketplace is gone.
   // Cache cleanup is a hygienic concern, not a contract.
   //
-  // D-18-01 precedent (Plan 18-04 cleanup-leak DROP): cache-refresh
-  // failures are swallowed silently in V2. The underlying `dropMarketplaceCache`
-  // / `invalidateMarketplaceNames` calls STILL RUN (correctness preserved);
-  // only the user-facing V1 `notifyWarning("...cache cleanup deferred...")`
-  // disappears because the V2 `MarketplaceNotificationMessage` type has no
-  // field to surface "cleanup leak after successful state mutation".
+  // Cache-refresh failures are swallowed. The underlying calls still run;
+  // there is no notification shape for "cache failure after a successful
+  // state mutation".
   try {
     await invalidateMarketplaceNames(locations.marketplaceNamesCacheFile, resolved.scope);
     const cachePath = await locations.pluginCacheFile(opts.name);

@@ -5,14 +5,9 @@
 // Also reached via the `ls` alias through edge/router.ts.
 //
 // Plan 18-00 (Wave 0, D-18-08 amendment): converted from the previous
-// plain `handleMarketplaceList(args, ctx)` function into a
-// `makeMarketplaceListHandler(pi)` factory that returns the same
-// `(args, ctx) => Promise<void>` shape. The `pi` reference is threaded
-// down to `listMarketplaces`'s required `pi` field so subsequent
-// Wave 1/2 plans can swap V1 notify-wrappers for V2 `notify(ctx, pi,
-// message)` calls without touching this shim again. The factory naming
-// follows the sibling `makeAddHandler` / `makeAutoupdateHandler` /
-// `makeRemoveHandler` convention.
+// `makeMarketplaceListHandler(pi)` factory threads `pi` down to
+// `listMarketplaces`, following the `makeAddHandler` /
+// `makeAutoupdateHandler` / `makeRemoveHandler` convention.
 
 import { listMarketplaces } from "../../../orchestrators/marketplace/list.ts";
 import { notifyUsageError } from "../../../shared/notify.ts";

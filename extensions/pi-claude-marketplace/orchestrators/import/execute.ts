@@ -284,19 +284,10 @@ function pushDiagnostic(
   });
 }
 
-// Plan 20-02 / D-20-02 (strict D-19-02 mirror): the V1 cascade composition
-// (the V1 import-summary composer + its exported test-formatter + the
-// composed-import alias + the source-mismatch splice helper + the orphan
-// diagnostic line helper + the V1 preamble constant) is RETIRED entirely.
-// The V2 cascade construction lives inline in importClaudeSettings via
-// buildImportNotificationMarketplaces below; notify() owns severity
-// , reload-hint, and soft-dep markers (
-// ).
-//
-// Locked V1 -> V2 outcome mapping (A1-A3 from 20-RESEARCH.md):
-//   A1 (ImportWarningOutcome marketplace-failed / unmappable-marketplace-source) -> DROP
-//   A2 (orphan diagnostics)                                                       -> DROP
-//   A3 ("Already up to date" + PREAMBLE)                                          -> DROP
+// Advisory warnings (marketplace-failed / unmappable-marketplace-source /
+// orphan diagnostics) are dropped: the marketplace status row already
+// carries the structural signal. notify() owns severity, reload-hint,
+// and soft-dep markers.
 
 interface MarketplaceBlock {
   readonly key: string;
@@ -355,41 +346,21 @@ function dependenciesFromInstalled(o: PluginInstalledOutcome): readonly Dependen
 }
 
 /**
- * Plan 20-02 / D-20-02 (strict D-19-02 mirror): pivot the linear outcome
- * arrays in `ClaudeImportExecutionResult` into the V2 cascade payload
- * tree `MarketplaceNotificationMessage[]`. The orchestrator owns iteration
- * order (`compareByNameThenScope` -- name primary
- * case-insensitive, scope secondary project-before-user); `notify()` does
- * NOT sort.
+ * Converts a `ClaudeImportExecutionResult` into the
+ * `MarketplaceNotificationMessage[]` payload for `notify()`.
  *
- * Per-plugin `scope?` is OMITTED (Phase 17.2 orphan-fold contract) -- the
- * import cascade groups plugins by their owning scope, so every row's
- * scope matches its marketplace's scope by construction.
+ * Outcome mapping: added -> "added"; already-present -> "updated";
+ * marketplace failure or source mismatch -> "failed"; installed plugin ->
+ * PluginInstalledMessage; already-installed plugin -> PluginSkippedMessage
+ * with "already installed"; failed/unavailable plugin -> PluginFailedMessage
+ * or PluginUnavailableMessage. Advisory-only warnings and orphan diagnostics
+ * are silently dropped (the marketplace status row already carries the
+ * structural signal).
  *
- * V1 -> V2 mapping (locked in PLAN frontmatter):
- *   - MarketplaceAddedOutcome                          -> status: "added"
- *   - MarketplaceSkipOutcome (already-present)         -> status: "updated"
- *     (no-op accepted partition; the marketplace was already registered)
- *   - MarketplaceFailureOutcome                        -> status: "failed", plugins: []
- *     (free-text cause LOST per D-18-02 precedent -- no cause? field on
- *     MarketplaceNotificationMessage)
- *   - SourceMismatchOutcome                            -> status: "failed",
- *     reasons: ["source mismatch"] (Phase 17.1 reasons?: field; per-plugin
- *     failed rows accumulate under the marketplace header)
- *   - PluginInstalledOutcome                           -> PluginInstalledMessage
- *     with `dependencies` derived from declaresAgents + declaresMcp
- *   - PluginSkipOutcome                                -> PluginSkippedMessage
- *     reasons: ["already installed"]
- *   - UnexpectedPluginFailureOutcome                   -> PluginFailedMessage
- *     reasons: ["not in manifest"], cause: undefined (V1 free-text cause
- *     was non-rendered per A5 precedent; preserves V1 behavior)
- *   - ImportWarningOutcome (unavailable / uninstallable) -> PluginUnavailableMessage
- *     reasons: ["no longer installable"]
- *   - ImportWarningOutcome (marketplace-failed / unmappable-marketplace-source)
- *     -> DROP entirely (A1; the failing marketplace's own status carries
- *     the structural signal, or it was an advisory-only warning)
- *   - result.diagnostics (orphan / per-marketplace)    -> DROP entirely (A2;
- *     in-memory record stays, user-facing surfacing is silenced)
+ * Iteration order: `compareByNameThenScope` (name primary
+ * case-insensitive, scope secondary project-before-user). Per-plugin
+ * `scope?` is omitted -- every row's scope matches its marketplace's scope
+ * by construction, so `notify()` orphan-folds the bracket.
  */
 function buildImportNotificationMarketplaces(
   result: ClaudeImportExecutionResult,
@@ -794,15 +765,9 @@ export async function importClaudeSettings(
   // mirrors the Plan 19-04 reinstall.ts recipe at
   // orchestrators/plugin/reinstall.ts; execute.ts substitutes the
   // import-cascade variant set (added / updated / failed marketplaces
-  // crossed with installed / skipped / failed / unavailable plugins) per
-  // D-20-02 + D-19-02 strict mirror. Severity, reload-hint
-  // , and soft-dep markers are computed by
-  // notify(). The V1 outer try/catch and the catastrophic-error path
-  // (V1 notifyError with the legacy import-failed prefix) are DROPPED
-  // per A3 + D-20-03 extension; truly catastrophic throws bubble to Pi
-  // runtime (BETTER for debugging than a polished V1 message that masks
-  // the bug). The inner executeScopedPlan per-scope try/catch already
-  // covers expected loadState failures.
+  // Truly catastrophic throws bubble to Pi runtime -- better for debugging
+  // than a polished error message that masks the bug. The inner
+  // executeScopedPlan try/catch covers expected loadState failures.
   const marketplaces = buildImportNotificationMarketplaces(result);
   notify(opts.ctx, opts.pi, { marketplaces });
 

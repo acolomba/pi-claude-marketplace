@@ -26,15 +26,12 @@
 // boolean. Presence of `mp.plugins[name]` === installed. Per-marketplace
 // plugin count for the list tool is `Object.keys(mp.plugins).length`.
 //
-// Phase 19 / Plan 19-03 migration: the plugin-list payload is now the V2
-// `MarketplaceNotificationMessage[]` shape (one per marketplace, with
-// `plugins: readonly PluginNotificationMessage[]`). The LLM tool's
-// structured surface translates the V2 payload into its V1-style flat-line
-// projection; the slash-command surface uses the V2 grammar via
-// `notify(ctx, pi, message)` directly (orchestrators/plugin/list.ts).
-// The `(upgradable)` plugin variant maps onto the tool's `[installed]`
-// projection (the plugin IS installed; the upgrade status is internal to
-// the slash-command surface per MSG-PL-4).
+// The LLM tool translates the `MarketplaceNotificationMessage[]` payload
+// from `loadPluginListPayload` into a flat-line projection for the structured
+// tool surface. The slash-command surface uses `notify()` directly.
+// The `(upgradable)` plugin variant maps to `[installed]` on the tool surface
+// (the plugin IS installed; the upgrade status is for the slash-command
+// surface per MSG-PL-4).
 
 import Type from "typebox";
 
@@ -162,9 +159,8 @@ interface PluginRow {
 function projectRowStatus(status: PluginNotificationMessage["status"]): ToolPluginStatus {
   switch (status) {
     // UAT G-21-01: the list orchestrator emits the list-only `present`
-    // token for steady-state inventory rows in place of the cascade
-    // `installed` token. Both project to the same `installed` tool
-    // surface so the tool consumer sees no V1->V2 semantic change.
+    // token for steady-state inventory rows; both `present` and `installed`
+    // project to the same `installed` tool surface.
     case "present":
     case "installed":
     case "upgradable":
@@ -327,29 +323,14 @@ function pluginScopeOrFallback(
 /**
  * Read `p.reasons` defensively. Only a subset of plugin variants carry the
  * field (D-15-01); for list-surface variants `available` / `installed`
- * omit `reasons` entirely. The reduced V2 shape collapses to the same
- * V1-style projection on the tool surface (omit when undefined or empty).
+ * omit `reasons` entirely (omit when undefined or empty).
  */
 function pluginReasons(p: PluginNotificationMessage): readonly string[] | undefined {
-  switch (p.status) {
-    case "unavailable":
-    case "upgradable":
-      return p.reasons.length > 0 ? p.reasons : undefined;
-    // UAT G-21-01: `present` mirrors `installed` -- no `reasons` field
-    // structurally.
-    case "present":
-    case "installed":
-    case "available":
-      return undefined;
-    case "updated":
-    case "reinstalled":
-    case "uninstalled":
-    case "failed":
-    case "skipped":
-    case "manual recovery":
-      // Unreachable on the list surface.
-      return undefined;
+  if (p.status === "unavailable" || p.status === "upgradable") {
+    return p.reasons.length > 0 ? p.reasons : undefined;
   }
+
+  return undefined;
 }
 
 /**

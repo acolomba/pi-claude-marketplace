@@ -17,18 +17,10 @@
 //   PU-8 reload hint: computed by notify() from PluginUninstalledMessage
 //  (uninstalled is in the state-changing variant set).
 //
-// Phase 19 / Plan 19-01: success and failure notifications are a single V2
-//   notify(opts.ctx, opts.pi, { marketplaces: [{ ..., plugins: [<row>] }] })
-// call per orchestration arm. The V1 severity-named wrappers
-// (notifySuccess/notifyWarning/notifyError) and the presentation/* composers
-// (renderRow / appendReloadHint / reloadHint) are GONE. The two V1
-// post-state-commit notifyWarning sites (cache-refresh failure + data-dir
-// cleanup-leak) are DROPPED per D-19-01: the V2
-// MarketplaceNotificationMessage type has no field to surface "cleanup leak
-// after successful state mutation"; the underlying rm() / dropMarketplaceCache
-// calls STILL RUN (correctness preserved); only the user-facing warning
-// disappears. See the construction recipe block-comment above the surviving
-// notify() call site for the full Wave 2 mirror template.
+// Each outcome arm emits one notify() call with a single
+// MarketplaceNotificationMessage. Post-state cleanup failures (cache-refresh,
+// data-dir rm) are swallowed: the underlying calls still run; there is no
+// notification shape for "cleanup leak after a successful state mutation".
 //
 // Cycle break (D-11): orchestrators/plugin/ may import named exports from
 // orchestrators/marketplace/shared.ts ONLY (NOT from add.ts/remove.ts/etc).

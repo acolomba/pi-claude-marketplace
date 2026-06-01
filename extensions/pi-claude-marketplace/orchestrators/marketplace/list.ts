@@ -34,9 +34,7 @@ import type { Scope } from "../../shared/types.ts";
 export interface ListMarketplacesOptions {
   readonly ctx: ExtensionContext;
   /**
-   * Factory `pi` reference. Plumbed in Plan 18-00 (Wave 0); consumed
-   * by the V2 `notify(ctx, pi, message)` call below (Plan 18-03 lands
-   * the V1 -> V2 migration on this surface).
+   * Required by `notify(ctx, pi, message)` for soft-dep probing.
    */
   readonly pi: ExtensionAPI;
   /** When omitted, SC-6 mandates enumeration of BOTH scopes. */

@@ -773,16 +773,13 @@ export async function resolveLoose(
 }
 
 /**
- * PR-6: narrow to installable-or-throw. Used by Phase 5 install/update.
+ * PR-6: narrow to installable-or-throw.
  *
- * Quick task 260525-aub: throws `PluginShapeError` (typed discriminated
- * carrier) so the catch site dispatches on `instanceof PluginShapeError`
- * + `.kind` instead of substring-matching `.message`. The `.message`
- * text is byte-equal to the legacy `new Error("Plugin "X" is [no longer
- * ]installable: <notes>")` form so existing `.message.includes(...)`
- * assertions stay green unchanged. `r.notes` is passed through as the
- * `reasons` array (free-form strings; the closed `Reason` narrowing
- * happens at the renderer boundary in `classifyEntityShapeError`).
+ * Throws `PluginShapeError` (typed discriminated carrier) so catch sites
+ * dispatch on `instanceof PluginShapeError` + `.kind` rather than
+ * substring-matching `.message`. `r.notes` is passed through as the
+ * `reasons` array (free-form strings; closed `Reason` narrowing happens
+ * at the renderer boundary in `classifyEntityShapeError`).
  */
 export function requireInstallable(
   r: ResolvedPlugin,

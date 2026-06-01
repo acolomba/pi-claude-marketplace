@@ -76,12 +76,7 @@ import type { Scope } from "../../shared/types.ts";
 export interface AddMarketplaceOptions {
   readonly ctx: ExtensionContext;
   /**
-   * Factory `pi` reference. Plumbed in Plan 18-00 (Wave 0) so subsequent
-   * Wave 1/2 migrations can swap V1 notify-wrappers for V2
-   * `notify(ctx, pi, message)` calls without re-touching this signature
-   * or `edge/register.ts`. Today this orchestrator does not yet read `pi`
-   * (the V1 wrappers handle severity routing); the migration to V2 lands
-   * in Plan 18-01.
+   * Required by `notify(ctx, pi, message)` for soft-dep probing.
    */
   readonly pi: ExtensionAPI;
   /** SC-5: edge layer (Phase 6) defaults this to "user"; orchestrator receives a fully resolved Scope. */
@@ -148,25 +143,15 @@ export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void>
       recordedName,
     );
   } catch {
-    // D-18-01 precedent (Plan 18-01): cache-refresh failures are swallowed
-    // silently in V2. The V1 cache-leak warning surface has no clean
-    // MarketplaceNotificationMessage representation (it is neither a
-    // failed marketplace nor a state-changing success), and emitting a
-    // second `notify()` after the primary would double severity routing
-    // without a catalog fixture to gate against. The state mutation
-    // already succeeded; only the user-facing warning disappears.
+    // Cache-refresh failures are swallowed: there is no clean notification
+    // shape for "cache failure after a successful state mutation" and
+    // emitting a second notify() would double severity routing. The state
+    // mutation already succeeded; only the completion-cache is stale.
   }
 
-  // NotificationMessage construction recipe (Plan 18-01 pilot; Wave 2 mirrors).
-  // - One MarketplaceNotificationMessage per outcome, emitted via one
-  //   notify(opts.ctx, opts.pi, ...) call; `plugins: []` is required.
-  // - Discriminator here: `mp.status === "added"` (github + path collapse
-  //   to one V2 shape; V1 `<autoupdate>` marker moved to the list surface).
-  // - Severity (info; no 2nd arg) and `/reload to pick up changes` are
-  //  computed by notify; callers MUST NOT compose.
-  // - Reference: catalog UAT `path-source` + `github-source` fixtures at
-  //   tests/architecture/catalog-uat.test.ts:1113-1133. Per D-18-08-amend,
-  //   Wave 2 (18-02..05) mirrors this with its own mp.status values.
+  // Emit one MarketplaceNotificationMessage per outcome. Severity and
+  // reload-hint are computed by notify(); callers MUST NOT compose them.
+  // Catalog: `path-source` + `github-source` fixtures in catalog-uat.test.ts.
   notify(opts.ctx, opts.pi, {
     marketplaces: [
       {

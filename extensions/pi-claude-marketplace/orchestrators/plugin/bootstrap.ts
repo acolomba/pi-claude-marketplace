@@ -56,10 +56,8 @@ export interface BootstrapOptions {
   /**
    * Factory `pi` reference. Plumbed in Plan 18-00 (Wave 0) so the composed
    * `addMarketplace` / `setMarketplaceAutoupdate` orchestrators -- which
-   * now require `pi` as part of the Wave 0 plumbing -- can be invoked
-   * without a downstream compile break. Bootstrap itself does not yet
-   * read `pi`; future V2 migrations will use it for `notify(ctx, pi,
-   * message)` routing.
+   * now require `pi` -- can be invoked without a downstream compile break.
+   * Bootstrap itself does not read `pi` directly.
    */
   readonly pi: ExtensionAPI;
   readonly cwd: string;
