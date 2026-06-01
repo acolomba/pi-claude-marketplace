@@ -113,7 +113,7 @@ On-demand Device Flow auth for private GitHub marketplace sources. Tries `git cr
 - [x] Phase 31: Credential Subprocess Layer (AUTH-06, AUTH-08, AUTH-09) (completed 2026-06-01)
 - [x] Phase 32: Device Flow State Machine (AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-07) (completed 2026-06-01)
 - [x] Phase 33: git.ts Auth Wiring (AUTH-01, AUTH-02) (completed 2026-06-01)
-- [ ] Phase 34: GitOps Interface Threading (AUTH-01, AUTH-02)
+- [x] Phase 34: GitOps Interface Threading (AUTH-01, AUTH-02) (completed 2026-06-01)
 - [ ] Phase 35: Orchestrator Call Sites & Output Catalog (AUTH-01, AUTH-02, AUTH-03)
 - [ ] Phase 36: Integration Gate (all AUTH)
 
@@ -683,13 +683,13 @@ Plans:
 3. Existing tests that use `makeMockGitOps` remain GREEN with no changes (backward-compatible optional field).
 4. `npm run check` GREEN.
 
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
 
 **Wave 1**
 
-- [ ] 34-01-PLAN.md -- Widen GitOps.clone/fetch + refreshGitHubClone with optional `auth?: GitAuthBundle` bundle; verify DEFAULT_GIT_OPS structural pass-through; lock auth-threading via 3 new shared.test.ts unit tests (AUTH-01, AUTH-02)
+- [x] 34-01-PLAN.md -- Widen GitOps.clone/fetch + refreshGitHubClone with optional `auth?: GitAuthBundle` bundle; verify DEFAULT_GIT_OPS structural pass-through; lock auth-threading via 3 new shared.test.ts unit tests (AUTH-01, AUTH-02)
 
 ### Phase 35: Orchestrator Call Sites & Output Catalog
 
@@ -760,6 +760,6 @@ Plans:
 | 31. Credential Subprocess Layer                                      | v1.6      | 2/2 | Complete   | 2026-06-01 |
 | 32. Device Flow State Machine                                        | v1.6      | 1/2 | Complete    | 2026-06-01 |
 | 33. git.ts Auth Wiring                                               | v1.6      | 1/1 | Complete   | 2026-06-01 |
-| 34. GitOps Interface Threading                                       | v1.6      | 0/1 | Planned     | -          |
+| 34. GitOps Interface Threading                                       | v1.6      | 1/1 | Complete   | 2026-06-01 |
 | 35. Orchestrator Call Sites & Output Catalog                         | v1.6      | TBD | Not started | -          |
 | 36. Integration Gate                                                 | v1.6      | TBD | Not started | -          |
