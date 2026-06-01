@@ -214,4 +214,6 @@ export interface GitCredentials {
   username?: string;
   password?: string;
   headers?: Record<string, string>;
+  /** Set true to throw UserCanceledError instead of HttpError. */
+  cancel?: boolean;
 }
