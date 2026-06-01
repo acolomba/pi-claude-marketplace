@@ -71,7 +71,10 @@ test("no child_process imports outside the Phase 31 whitelist (D-21 + Phase 31 n
   const offenders: string[] = [];
   for await (const file of walkTsFiles(EXTENSION_ROOT)) {
     const rel = path.relative(REPO_ROOT, file);
-    if (ALLOWED_CHILD_PROCESS_FILES.has(rel)) continue;
+    if (ALLOWED_CHILD_PROCESS_FILES.has(rel)) {
+      continue;
+    }
+
     const source = await readFile(file, "utf8");
     for (const pat of FORBIDDEN_PATTERNS) {
       if (pat.test(source)) {
