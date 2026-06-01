@@ -738,7 +738,7 @@ Plans:
 | 27. Marketplace & Autoupdate Output Grammar                          | v1.5      | 5/5 | Complete    | 2026-05-31 |
 | 28. Severity Routing & Label Discipline                              | v1.5      | 2/2 | Complete    | 2026-05-31 |
 | 29. Notification Label Suppression & Update Classification          | v1.5      | 3/3 | Complete    | 2026-05-31 |
-| 30. Duplicate Type Fix                                               | v1.6      | 1/1 | Complete   | 2026-06-01 |
+| 30. Duplicate Type Fix                                               | v1.6      | 1/1 | Complete    | 2026-06-01 |
 | 31. Credential Subprocess Layer                                      | v1.6      | TBD | Not started | -          |
 | 32. Device Flow State Machine                                        | v1.6      | TBD | Not started | -          |
 | 33. git.ts Auth Wiring                                               | v1.6      | TBD | Not started | -          |
