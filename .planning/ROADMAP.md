@@ -599,7 +599,11 @@ Plans:
 1. `platform/git.ts` compiles without the duplicate `GitCredentials` type error; `npm run check` exits 0.
 2. No functional change to clone/fetch behavior; all existing tests remain GREEN.
 
-**Plans:** TBD
+**Plans:** 1 plan
+
+**Wave 1**
+
+- [ ] 30-01-PLAN.md -- Export canonical GitCredentials type to platform/git.ts; npm run check GREEN gate (AUTH-10)
 
 ### Phase 31: Credential Subprocess Layer
 
