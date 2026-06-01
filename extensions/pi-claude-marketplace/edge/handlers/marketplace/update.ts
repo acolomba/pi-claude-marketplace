@@ -35,7 +35,7 @@ export function makeMarketplaceUpdateHandler(
         usage: USAGE,
       },
       (message) => {
-        // Phase 13 Plan 13-02c-01 / MSG-NC-2: argument-parsing failure
+        // Argument-parsing failure:
         // -> sentence + Usage block via notifyUsageError.
         notifyUsageError(ctx, {
           message: message === USAGE ? "Missing required argument." : message,

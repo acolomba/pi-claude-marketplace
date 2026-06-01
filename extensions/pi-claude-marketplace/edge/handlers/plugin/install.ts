@@ -9,7 +9,7 @@
 // boolean flag(s), then split the remaining single non-flag positional via
 // `splitPluginMarketplaceRef`.
 //
-// Phase 13 sub-wave 2b (Plan 13-02b-01 / D-13-05): argument-parsing failures
+// Argument-parsing failures
 // route through `notifyUsageError` per MSG-NC-2 / MSG-SR-7 (sentence form
 // preserved; Usage block appended after a blank line). Entity-shape errors
 // (PI-3 / PI-4 / PI-5) are emitted by the orchestrator (installPlugin) as

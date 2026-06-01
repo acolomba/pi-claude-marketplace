@@ -4,7 +4,6 @@
 // `/claude:plugin marketplace <list|ls> [--scope user|project]`.
 // Also reached via the `ls` alias through edge/router.ts.
 //
-// Plan 18-00 (Wave 0, D-18-08 amendment): converted from the previous
 // `makeMarketplaceListHandler(pi)` factory threads `pi` down to
 // `listMarketplaces`, following the `makeAddHandler` /
 // `makeAutoupdateHandler` / `makeRemoveHandler` convention.

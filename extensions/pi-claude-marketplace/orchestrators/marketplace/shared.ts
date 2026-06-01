@@ -215,8 +215,8 @@ export function renderPartition(
 
   lines.push(`${label}:`);
   for (const o of [...outcomes].sort((a, b) => a.name.localeCompare(b.name))) {
-    // Task 260525-cjr C2: narrow on the discriminated partition before
-    // reading partition-specific fields. The renderer's `withVersions`
+    // Narrow on the discriminated partition before reading partition-specific
+    // fields. The renderer's `withVersions`
     // gate maps to the (updated)/(unchanged) partitions that carry
     // `fromVersion` + `toVersion`; the notes-bearing branch maps to
     // (skipped)/(failed). The bare-row fallback is the (updated) +
@@ -475,12 +475,9 @@ export async function loadVisibleMarketplaces(opts: {
   return out;
 }
 
-// Phase 13 / D-CMC-12 (refreshed Phase 18 / SNM-22): the depth-5 cause-chain
-// walker lives at `shared/errors.ts::causeChainTrailer` with the MSG-CC-1
-// rendered shape (`cause: <l1> -> <l2> -> ... [(truncated)]`). Marketplace
-// callers now route errors through the V2 `notify(ctx, "error", ...)`
-// chokepoint (see `shared/notify.ts` and 18-01-SUMMARY.md): they pass the
-// failure facts and let `notify` compose the trailer via `causeChainTrailer`.
+// The depth-5 cause-chain walker lives at `shared/errors.ts::causeChainTrailer`
+// and renders as `cause: <l1> -> <l2> -> ... [(truncated)]`. Callers pass
+// failure facts to `notify()`; the renderer composes the trailer internally.
 // Callers that need the trailer outside the notify path compose it inline via
 // `causeChainTrailer(err)` imported from `shared/errors.ts` (canonicalised
 // there in Phase 21 from the retired `presentation/cause-chain.ts`).

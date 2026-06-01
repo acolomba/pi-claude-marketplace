@@ -369,11 +369,9 @@ export type PluginShapeErrorKind = PluginShapeErrorShape["kind"];
 
 export class PluginShapeError extends Error {
   /**
-   * Task 260525-cjr C4: the FULL discriminated shape is exposed as a
-   * single `readonly` field so consumers can narrow on `e.shape.kind`
-   * without non-null-asserting `e.marketplace!` / `e.reasons!` (those
-   * optional mirror fields existed ONLY because the constructor copied
-   * shape-specific data into top-level optional properties; the shape
+   * The full discriminated shape is exposed as a single `readonly` field
+   * so consumers narrow on `e.shape.kind` without non-null assertions.
+   * The shape
    * itself was discarded). The pre-C4 mirror fields are retired.
    *
    * Reading `e.shape` returns the same object the constructor received,

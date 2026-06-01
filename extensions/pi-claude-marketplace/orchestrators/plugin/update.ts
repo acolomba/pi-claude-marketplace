@@ -430,13 +430,10 @@ export const updateSinglePlugin: PluginUpdateFn = async (plugin, marketplace, sc
     // without aborting the whole batch. `notes` is consumed outside the
     // notify path so the MSG-CC-1 trailer is composed inline here.
     //
-    // Quick task : pre-narrow the closed-set `Reason` here so the
-    // cascade consumer (`marketplace/update.ts::outcomeToCascadePluginMessage`) reads
-    // `outcome.reasons[0]` directly instead of re-deriving from the
-    // free-text `notes` blob. Today the only typed throw we recognize on
-    // the cascade path is `PluginShapeError` (from `requireInstallable`
-    // during preflight). All other typed errors leave `reasons` undefined
-    // so the consumer falls back to the legacy substring-narrow path.
+    // Pre-narrow to a closed-set `Reason` so the cascade consumer reads
+    // `outcome.reasons[0]` directly. Only `PluginShapeError` (from
+    // `requireInstallable` during preflight) is recognized; other errors
+    // leave `reasons` undefined and the consumer falls back to substring-narrow.
     const typedReasons = reasonsFromTypedError(err);
     const base: PluginUpdateOutcome = {
       partition: "failed",
@@ -453,12 +450,10 @@ export const updateSinglePlugin: PluginUpdateFn = async (plugin, marketplace, sc
 };
 
 /**
- * Quick task : typed-error -> closed-set `Reason[]` narrowing for
- * cascade-failure outcomes. Returns `undefined` when no recognized typed
- * error is present so the consumer falls back to the legacy substring-
- * narrow path on `notes`. Today only `PluginShapeError` carries enough
- * structure to map directly; other typed errors leave the narrow to the
- * consumer.
+ * Map a typed error to a closed-set `Reason[]` for cascade-failure outcomes.
+ * Returns `undefined` when no recognized typed error is present; the consumer
+ * then falls back to substring-narrowing on `notes`. Only `PluginShapeError`
+ * carries enough structure to map directly.
  */
 function reasonsFromTypedError(err: unknown): readonly Reason[] | undefined {
   if (err instanceof PluginShapeError) {
@@ -571,10 +566,8 @@ async function preflightUpdate(
   const state = await loadState(locations.extensionRoot);
   const mp = state.marketplaces[marketplace];
   if (mp === undefined) {
-    // Quick task : pre-narrow `reasons` to the closed-set Reason
-    // so the cascade consumer reads it directly instead of regex-parsing
-    // `notes`. Producer-side narrowing replaces the catch-site substring
-    // dispatch in `marketplace/update.ts::narrowSkipReason`.
+    // Pre-narrow to a closed-set Reason so the cascade consumer reads it
+    // directly instead of regex-parsing `notes`.
     //
     // required `boolean` predicates -- skipped
     // outcomes do NOT render the soft-dep marker (MSG-SD-3), so the
@@ -661,13 +654,11 @@ async function preflightUpdate(
     requireInstallable(resolved, "update");
     installable = resolved;
   } catch (err) {
-    // Quick task : `requireInstallable` now throws
-    // `PluginShapeError` with `kind === "no-longer-installable"` for the
-    // update verb. Pre-narrow to the closed Reason so the cascade row
-    // catalog form `(skipped) {no longer installable}` is produced
-    // without substring-matching the message text. Preserve `notes`
-    // verbatim for the cause-chain trailer. `resolveStrict` itself
-    // never throws (returns a not-installable variant), so the only
+    // `requireInstallable` throws `PluginShapeError` with
+    // `kind === "no-longer-installable"`. Pre-narrow to the closed Reason
+    // so the cascade row renders `(skipped) {no longer installable}`
+    // without substring-matching. `resolveStrict` itself never throws
+    // (returns a not-installable variant), so the only
     // typed-throw producer in this block is `requireInstallable`.
     return {
       partition: "skipped",
@@ -982,12 +973,10 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
       fromVersion,
       toVersion,
       notes: [aggregateMsg, ...phase3aFailures.map((f) => `${f.phase}: ${f.msg}`)],
-      // Quick task : pre-narrow the closed Reason for the
-      // cascade consumer (`marketplace/update.ts::outcomeToCascadePluginMessage`)
-      // -- phase-3 aggregate failures always render as `(failed)
-      // {rollback partial}` per the catalog at
-      // docs/output-catalog.md L330. The plugin/update.ts-local
-      // `outcomeToCascadePluginMessage` short-circuits on `phaseFailures.length
+      // Pre-narrow to `{rollback partial}` -- phase-3 aggregate failures
+      // always render as `(failed) {rollback partial}` per the catalog
+      // (docs/output-catalog.md). The local `outcomeToCascadePluginMessage`
+      // short-circuits on `phaseFailures.length
       // > 0` and ignores `reasons`; the marketplace cascade consumer
       // reads `reasons[0]` directly.
       reasons: ["rollback partial"] as const,

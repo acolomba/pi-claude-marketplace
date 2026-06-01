@@ -313,9 +313,8 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
     name: plugin,
     ...(removedVersion !== undefined && { version: removedVersion }),
   };
-  // NotificationMessage cascade recipe (Plan 19-01 pilot; Wave 2 mirrors).
-  // - One MarketplaceNotificationMessage per affected marketplace, emitted
-  //   via a single notify(opts.ctx, opts.pi, ...) call per orchestration.
+  // One MarketplaceNotificationMessage per affected marketplace, emitted
+  // via a single notify(opts.ctx, opts.pi, ...) call per orchestration.
   // - plugins: readonly PluginNotificationMessage[] in display order
   //  (orchestrator-controlled iteration; notify does not sort).
   // - Discriminators by status: "uninstalled" here. Plans 19-02..05 mirror

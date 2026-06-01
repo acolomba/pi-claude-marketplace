@@ -176,21 +176,12 @@ export type InstallPluginOutcome =
     }
   | {
       /**
-       * Task 260525-cjr C3: collapsed failure variant. The pre-C3 shape
-       * had four `status` values (`"already-installed"` /
-       * `"unavailable"` / `"uninstallable"` / `"unexpected-failure"`)
-       * each carrying a re-stringified `cause: string`. Consumers
-       * dispatched on the string status and lost access to the typed
-       * error. The collapsed shape carries the original `Error`
-       * instance directly so consumers can narrow on
-       * `instanceof PluginShapeError` (and, after C4, on
-       * `error.shape.kind`) to recover the precise failure class
-       * without re-parsing the formatted cause text.
-       *
-       * `cause` is preserved as the formatted user-visible text so
-       * callers that previously read it for rendering (orchestrated
-       * mode in `import/execute.ts`) keep working without rewiring.
-       * The `error` field is the load-bearing dispatch surface.
+       * Collapsed failure shape. All failure variants (`already-installed`,
+       * `unavailable`, `uninstallable`, `unexpected-failure`) map here.
+       * `error` is the typed dispatch surface -- consumers narrow on
+       * `instanceof PluginShapeError` and `.shape.kind` to recover the
+       * specific failure class. `cause` preserves the formatted user-visible
+       * text for callers in orchestrated mode that render it directly.
        */
       readonly status: "failed";
       readonly error: Error;
@@ -747,13 +738,10 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     });
 
     if (opts.notifications?.mode === "orchestrated") {
-      // Orchestrated-mode preserves the V1 string `cause` contract for the
-      // import cascade's existing dispatchFailedOutcome consumer. Compose
-      // the formatted-cause string from the underlying error's message +
-      // depth-5 cause-chain walker so consumers that previously read
-      // `outcome.cause` for rendering keep working. The typed Error
-      // remains the dispatch surface (Task 260525-cjr C3) so callers
-      // continue to narrow on `instanceof PluginShapeError`.
+      // Orchestrated mode: compose the formatted-cause string so callers
+      // reading `outcome.cause` for rendering keep working. The typed
+      // Error remains the dispatch surface; narrow on `instanceof
+      // PluginShapeError` to recover the specific failure kind.
       return classifyInstallFailure(err, formatOrchestratedCause(err));
     }
 
@@ -766,11 +754,8 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
         },
       ],
     });
-    // Task 260525-cjr C3: collapsed `status: "failed"` carries the
-    // typed Error so even the standalone-mode return point preserves
-    // the dispatch surface. `cause` is the formatted text the
-    // orchestrated path would have produced -- preserved here for
-    // byte-equivalence on the InstallPluginOutcome contract.
+    // Collapsed failure: `error` is the dispatch surface; `cause` is the
+    // formatted text for callers that render it directly.
     const wrapped = err instanceof Error ? err : new Error(errorMessage(err));
     return { status: "failed", error: wrapped, cause: formatOrchestratedCause(err) };
   }
@@ -1133,26 +1118,15 @@ function formatOrchestratedCause(err: unknown): string {
  * The `is not installable` notes are split on `; ` and each segment narrowed
  * to a closed `Reason`: manifest field names (`hooks` / `lspServers` etc.)
  * pass verbatim per the MSG-GR-4 manifest-field carve-out; the catch-all
- * is `unsupported source` (closed REASONS member). When no segment narrows
- * cleanly the row carries a single `not installable` ... but that's not in
- * the closed set; falls back to `unsupported source` which is the closest
- * in-set Reason. Wave 3 catalog UAT verifies the user-visible shape.
+ * is `unsupported source` (closed REASONS member).
  */
 function classifyEntityShapeError(
   err: unknown,
   ctx: { plugin: string; marketplace: string; scope: Scope },
 ): EntityErrorRow | undefined {
-  // Quick task 260525-aub: dispatch on `instanceof PluginShapeError` +
-  // `.kind` instead of `.message.includes(...)` and the deleted
-  // SonarCloud S5852 ReDoS regex (`/is not installable:\s*(.+)$/`).
-  // The resolver/install throw sites carry their structural classification
-  // verbatim, so the catch site no longer reparses the message string.
-  //
-  // Task 260525-cjr C4: switch on `err.shape.kind` and read the
-  // shape-specific `reasons` field directly through `err.shape`. The
-  // pre-C4 `err.reasons?` optional mirror field is gone -- the
-  // discriminator + the typed shape narrow it without a non-null
-  // assertion.
+  // Dispatch on `instanceof PluginShapeError` + `.shape.kind` rather than
+  // substring-matching `.message`. The throw sites carry their structural
+  // classification verbatim, so the catch site does not need to reparse text.
   if (!(err instanceof PluginShapeError)) {
     return undefined;
   }
@@ -1227,12 +1201,11 @@ const MANIFEST_FIELD_TO_REASON: Readonly<Record<string, Reason>> = {
 };
 
 /**
- * Task 260525-cjr C5: extract the bare manifest-field token from a
- * resolver `"contains <kind>"` note and map it to the emitted closed-set
- * `Reason`. Returns `undefined` for any note that does not start with the
- * prefix OR whose extracted token has no entry in `MANIFEST_FIELD_TO_REASON`.
- * The detection token (camelCase) and the emitted Reason can differ -- see
- * the SNM-36 / D-24-04 seam note above.
+ * Extract the bare manifest-field token from a resolver `"contains <kind>"`
+ * note and map it to the emitted closed-set `Reason`. Returns `undefined`
+ * when the note does not start with the prefix or the token has no mapping.
+ * Detection token (camelCase) and emitted Reason can differ -- see the
+ * SNM-36 / D-24-04 seam note above.
  */
 function manifestFieldTokenFromNote(note: string): Reason | undefined {
   if (!note.startsWith(MANIFEST_FIELD_NOTE_PREFIX)) {
@@ -1252,27 +1225,15 @@ function manifestFieldTokenFromNote(note: string): Reason | undefined {
 }
 
 /**
- * Quick task 260525-aub: narrow resolver `r.notes` (free-form strings)
- * to the closed `Reason` set for renderer consumption. Mirrors the legacy
- * `narrowNotInstallableReasons` behavior but operates on the structural
- * `PluginShapeError.reasons` field; no message-text re-parse.
- *
- * Task 260525-cjr B2: extended typed-dispatch path. Previously the
- * function silently dropped any note that wasn't a manifest-field
- * carve-out token (`hooks` / `lspServers`) or a "source"-substring
- * unsupported-source marker, then fell through to `unsupported source`
- * for the empty-out fallback. That hid permission-denied / EACCES /
- * EIO / JSON-parse-failure causes behind the misleading
- * `{unsupported source}` reason on `(failed)` rows. The new ordering:
- * (1) manifest-field carve-out, (2) "source" substring,
- * (3) errno-like substrings (EACCES / EPERM / ENOENT / SyntaxError),
- * (4) the final permissive `unsupported source` fallback only when no
- * other classifier matched. The errno-substring path is a DEFENSIVE
- * fallback -- the preferred path is for upstream code to throw a
- * typed errno-bearing Error which a separate orchestrator-level
- * catch can dispatch on `.code` directly. The substring fallback
- * here catches notes that were already serialised into the
- * `r.notes` array by a deeper helper.
+ * Narrow resolver `r.notes` (free-form strings) to the closed `Reason` set
+ * for renderer consumption. Classification order:
+ *   1. manifest-field carve-out (`contains hooks` / `contains lspServers`)
+ *   2. "source" substring -> `unsupported source`
+ *   3. errno-like substrings (EACCES / EPERM / ENOENT / SyntaxError)
+ *   4. permissive fallback: `unsupported source`
+ * Steps 3-4 are defensive for notes already serialised by deeper helpers;
+ * the preferred path is typed errno-bearing Errors dispatched at the
+ * orchestrator catch site via `.code`.
  */
 function narrowResolverReasons(reasons: readonly string[]): readonly Reason[] {
   const out: Reason[] = [];
@@ -1281,10 +1242,8 @@ function narrowResolverReasons(reasons: readonly string[]): readonly Reason[] {
       continue;
     }
 
-    // Task 260525-cjr C5: the resolver emits `"contains hooks"` /
-    // `"contains lspServers"` (NOT bare `"hooks"` / `"lspServers"`)
-    // for the manifest-field carve-out. Extract the bare token via the
-    // typed helper so the MSG-GR-4 carve-out path actually runs.
+    // The resolver emits `"contains hooks"` / `"contains lspServers"` --
+    // extract the bare token via the typed helper for the MSG-GR-4 carve-out.
     const manifestFieldToken = manifestFieldTokenFromNote(reason);
     if (manifestFieldToken !== undefined) {
       out.push(manifestFieldToken);
@@ -1326,25 +1285,19 @@ function narrowResolverReasons(reasons: readonly string[]): readonly Reason[] {
 }
 
 function classifyInstallFailure(err: unknown, formattedCause: string): InstallPluginOutcome {
-  // Task 260525-cjr C3: collapse the four pre-C3 error variants into a
-  // single `{ status: "failed"; error; cause }` shape. The typed `error`
-  // is the dispatch surface (consumers narrow on `instanceof
-  // PluginShapeError` to recover `kind`); `cause` preserves the
-  // formatted user-visible text for callers that previously read the
-  // `cause` field. `ConcurrentInstallError` is preserved as a distinct
-  // typed branch (PI-15 race); non-Error inputs are wrapped so the
-  // contract guarantees `error instanceof Error`.
+  // All failure variants collapse to `{ status: "failed"; error; cause }`.
+  // `error` is the dispatch surface (narrow on `instanceof PluginShapeError`
+  // to recover `.shape.kind`); `cause` is the formatted user-visible text.
+  // `ConcurrentInstallError` is preserved as a distinct typed branch (PI-15);
+  // non-Error inputs are wrapped so the contract guarantees `error instanceof Error`.
   const wrapped = err instanceof Error ? err : new Error(formattedCause);
   return { status: "failed", error: wrapped, cause: formattedCause };
 }
 
 /**
- * Quick task 260525-aub: test seam for the catch-site dispatch helpers.
- * Mirrors the `__test_outcomeToCascadeRow` re-export precedent in
- * `orchestrators/plugin/reinstall.ts`: the helpers stay private to the
- * orchestrator while the tests still get a direct exercise surface for
- * the discriminated `instanceof PluginShapeError` + `.kind` dispatch
- * branches.
+ * Test seam for the catch-site dispatch helpers. Helpers stay private to
+ * the orchestrator; tests exercise the `instanceof PluginShapeError` +
+ * `.kind` dispatch branches directly via this re-export.
  */
 export { classifyEntityShapeError as __test_classifyEntityShapeError };
 export { classifyInstallFailure as __test_classifyInstallFailure };

@@ -4,7 +4,7 @@
 // `/claude:plugin marketplace add <source> [--scope user|project]`.
 // Delegates to `addMarketplace` orchestrator, threading deps.gitOps through.
 //
-// Phase 13 sub-wave 2c (Plan 13-02c-01 / MSG-NC-2 / MSG-SR-7):
+// Argument-parsing failures route through `notifyUsageError` (sentence + Usage block).
 // argument-parsing failures route through `notifyUsageError` so the
 // rendered surface is `${message}\n\n${USAGE}` (sentence form +
 // blank-line + Usage block). Entity-shape errors

@@ -54,9 +54,7 @@ export const BOOTSTRAP_MARKETPLACE_NAME = "claude-plugins-official";
 export interface BootstrapOptions {
   readonly ctx: ExtensionContext;
   /**
-   * Factory `pi` reference. Plumbed in Plan 18-00 (Wave 0) so the composed
-   * `addMarketplace` / `setMarketplaceAutoupdate` orchestrators -- which
-   * now require `pi` -- can be invoked without a downstream compile break.
+   * Required by `addMarketplace` / `setMarketplaceAutoupdate` orchestrators.
    * Bootstrap itself does not read `pi` directly.
    */
   readonly pi: ExtensionAPI;

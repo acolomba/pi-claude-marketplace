@@ -2,7 +2,6 @@
 //
 // PL-1..7 top-level plugin list. D-06 orchestrator half -- READ-ONLY.
 //
-// Phase 13 Wave 2 sub-wave 2d (Plan 13-02d-01): CMC-22 / CMC-21 / D-13-17..19.
 // The orchestrator reads BOTH scopes' state (user + project) regardless of
 // which scope the caller requested, computes the orphan-fold per
 // D-13-17..D-13-19, and constructs a `NotificationMessage` of

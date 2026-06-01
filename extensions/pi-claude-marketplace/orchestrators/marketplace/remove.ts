@@ -92,24 +92,20 @@ async function removePath(pathPromise: Promise<string>): Promise<void> {
  * Narrow a per-plugin cascade Error.cause to a closed-set Reason for
  * the failed-plugin children block.
  *
- * Quick task 260525-aub: dispatch on the typed cause (`AgentsUnstageFailureError`
- * or `NodeJS.ErrnoException.code`) instead of substring-matching the
- * `.message` text. The closed-set `"permission denied"` / `"source missing"`
- * Reasons are members added in Phase 13 Wave 3 plan 13-03-01 per the
- * catalog UAT precedent. The fallback is `"not in manifest"` as the
- * documented permissive default. Bridges that throw bare `Error` with
- * `unreadable`/`unparseable` substrings still surface via the legacy
- * text fallback as a defensive last resort; if a future deviation shows
- * those substring branches are dead code they can be deleted in a
- * follow-up.
+ * Narrow a per-plugin cascade Error.cause to a closed-set Reason by
+ * dispatching on the typed cause (`AgentsUnstageFailureError` or
+ * `NodeJS.ErrnoException.code`) rather than substring-matching message text.
+ * Falls back to `"not in manifest"` as the permissive default when no
+ * typed case matches; bare-Error substring branches are a defensive last
+ * resort for cases where the error was already serialised into a notes string.
  */
 function narrowCascadeFailure(cause: Error): Reason {
   if (cause instanceof AgentsUnstageFailureError) {
     // No closed-set Reason captures the per-agent foreign-content
     // failure mode today; map to the documented permissive fallback
     // until the catalog UAT shows a new REASONS member is justified
-    // (per Phase 13 D-CMC-11 the addition requires a frontmatter +
-    // grammar drift sync).
+    // No closed-set Reason maps to this failure mode yet; the fallback
+    // requires a catalog UAT precedent + grammar sync before a new member is added.
     return "not in manifest";
   }
 
@@ -256,13 +252,11 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
     }
   }
 
-  // NotificationMessage construction recipe (Plan 18-04; mirrors the
-  // Wave 1 pilot at orchestrators/marketplace/add.ts:160-169).
-  // - One MarketplaceNotificationMessage per outcome, emitted via one
-  //   notify(opts.ctx, opts.pi, ...) call; `plugins[]` carries one
-  //   PluginUninstalledMessage per successfully unstaged plugin (D-22-02).
-  // - V2 cascade per D-18-03: per-plugin `PluginFailedMessage.cause`
-  //  renders at 4-space indent via renderPluginRow. The V1
+  // One MarketplaceNotificationMessage per outcome, emitted via one
+  // notify(opts.ctx, opts.pi, ...) call; `plugins[]` carries one
+  // PluginUninstalledMessage per successfully unstaged plugin (D-22-02).
+  // Per-plugin `PluginFailedMessage.cause` renders at 4-space indent via
+  // renderPluginRow. The
   //   marketplace-level `causeChainTrailer(err)` body is GONE.
   // - V1 `RETRY_ANCHOR` ("Fix the underlying issue and retry.") is
   //   DROPPED per D-17-09 (already excluded by the Phase 17 catalog).

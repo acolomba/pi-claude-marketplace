@@ -659,14 +659,10 @@ async function executeScopedPlan(
 
         break;
       case "failed":
-        // Task 260525-cjr C3: the collapsed `status: "failed"` carries
-        // the typed Error directly. Recover the legacy semantic
-        // dispatch (already-installed / unavailable / uninstallable /
-        // unexpected-failure) by narrowing on `instanceof
-        // PluginShapeError` and reading `.kind`; everything else
-        // (including `ConcurrentInstallError`) falls through to the
-        // unexpected-failure bucket so the user surface matches the
-        // pre-C3 behavior.
+        // Collapsed `status: "failed"` carries the typed Error directly.
+        // Narrow on `instanceof PluginShapeError` + `.kind` to recover
+        // the specific failure class; everything else falls through to
+        // the unexpected-failure bucket.
         dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause);
         break;
     }
@@ -674,10 +670,9 @@ async function executeScopedPlan(
 }
 
 /**
- * Task 260525-cjr C3: recover the pre-C3 semantic dispatch by narrowing
- * on the typed `Error` carried by the collapsed `status: "failed"`
- * outcome. `PluginShapeError.kind === "already-installed"` and the
- * legacy `ConcurrentInstallError` both route to the skip bucket;
+ * Recover the semantic dispatch from the typed `Error` in the collapsed
+ * `status: "failed"` outcome. `PluginShapeError.kind === "already-installed"`
+ * and `ConcurrentInstallError` both route to the skip bucket;
  * `not-in-manifest` and `(no-)not-installable` route to the
  * unavailable / uninstallable warnings; everything else lands in
  * `unexpectedPluginFailures`.
@@ -701,9 +696,7 @@ function dispatchFailedOutcome(
   }
 
   if (error instanceof PluginShapeError) {
-    // Task 260525-cjr C4: switch on `error.shape.kind` for
-    // compile-time exhaustiveness against the typed discriminated
-    // union.
+    // Switch on `error.shape.kind` for compile-time exhaustiveness.
     switch (error.shape.kind) {
       case "already-installed":
         result.skippedExistingPlugins.push({

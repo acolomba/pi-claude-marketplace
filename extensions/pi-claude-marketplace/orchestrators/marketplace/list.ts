@@ -1,6 +1,6 @@
 // orchestrators/marketplace/list.ts
 //
-// ML-1..4 + SC-6 + NFR-5; Phase 13 CMC-03 / CMC-07 / CMC-10 / CMC-29.
+// ML-1..4 + SC-6 + NFR-5.
 //
 // READ-ONLY: NO withStateGuard (D-04 corollary). NO manifest reads
 // (ML-3 -- `loadState` reads only state.json; the V2 `notify()` is a

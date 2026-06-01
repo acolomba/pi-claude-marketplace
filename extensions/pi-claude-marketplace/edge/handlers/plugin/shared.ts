@@ -1,6 +1,6 @@
 // edge/handlers/plugin/shared.ts
 //
-// Phase 13 sub-wave 2b (Plan 13-02b-01): argument-parsing failures route
+// Argument-parsing failures route
 // through `notifyUsageError` per MSG-NC-2 / MSG-SR-7 (sentence form
 // preserved; Usage block appended after a blank line). Entity-shape errors
 // live in the orchestrator layer and surface as `EntityErrorRow` compact

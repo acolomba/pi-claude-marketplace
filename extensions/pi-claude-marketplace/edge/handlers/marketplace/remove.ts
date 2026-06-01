@@ -8,7 +8,7 @@
 // `removeMarketplace` orchestrator requires a `pi: ExtensionAPI` reference
 // for the RH-5 soft-dep probes; the shim factory takes it as a dependency.
 //
-// Phase 13 sub-wave 2c (Plan 13-02c-01 / MSG-NC-2 / MSG-SR-7):
+// Argument-parsing failures route through `notifyUsageError` (sentence + Usage block).
 // argument-parsing failures route through `notifyUsageError`. The
 // CMC-31 / CMC-15 conditional remove form is emitted by the
 // orchestrator -- this shim only delegates after validating the
