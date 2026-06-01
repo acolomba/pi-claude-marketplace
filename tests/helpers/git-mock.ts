@@ -21,7 +21,10 @@
 import { cp, mkdir } from "node:fs/promises";
 import path from "node:path";
 
-import type { GitOps } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type {
+  GitAuthBundle,
+  GitOps,
+} from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 
 export interface MockGitState {
   /** Map: 'refs/remotes/origin/<branch>' -> SHA. Mutate to simulate force-push. */
@@ -45,8 +48,14 @@ export interface MockGitState {
    * the default localRefs (or undefined if none).
    */
   currentBranchOverride?: string | null;
-  cloneCalls: { dir: string; url: string; ref?: string; singleBranch?: boolean }[];
-  fetchCalls: { dir: string; remote?: string; ref?: string }[];
+  cloneCalls: {
+    dir: string;
+    url: string;
+    ref?: string;
+    singleBranch?: boolean;
+    auth?: GitAuthBundle;
+  }[];
+  fetchCalls: { dir: string; remote?: string; ref?: string; auth?: GitAuthBundle }[];
   forceUpdateRefCalls: { dir: string; ref: string; value: string }[];
   checkoutCalls: { dir: string; ref: string }[];
   resolveRefCalls: { dir: string; ref: string }[];
