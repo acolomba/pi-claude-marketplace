@@ -706,7 +706,17 @@ Plans:
 3. The Device Flow user-code prompt (`user_code` + `verification_uri`) appears in `docs/output-catalog.md` with a catalog-uat fixture proving the byte form.
 4. `npm run check` GREEN; catalog-uat byte gate GREEN.
 
-**Plans:** TBD
+**Plans:** 4/4 plans
+
+**Wave 0** *(pre-cleanup -- unblocks Wave 1 parallel execution)*
+
+- [ ] 35-00-PLAN.md -- Widen `tests/helpers/git-mock.ts` `cloneCalls` + `fetchCalls` element types with `auth?: GitAuthBundle` so Plans 35-01 + 35-02 are file-disjoint in Wave 1. Runtime push form (`{ ...opts }`) byte-unchanged; type-only widening (AUTH-01, AUTH-02)
+
+**Wave 1** *(parallel-safe: Plan 03 has no Wave 0 dependency; Plans 01 + 02 depend on Wave 0's helper widening but touch disjoint orchestrator + test files relative to each other and to Plan 03)*
+
+- [ ] 35-01-PLAN.md -- Wire Device Flow `onAuthRequired` closure into `addGithubInGuard`; forward `GitAuthBundle` to `gitOps.clone`; optional `credentialOps?` + test-seam `deviceFlowHttp?` on `AddMarketplaceOptions`; 3 new tests in `add.test.ts` covering fill-hit silent reuse, fill-miss triggers Device Flow, by-reference forwarding (AUTH-01)
+- [ ] 35-02-PLAN.md -- Wire Device Flow `onAuthRequired` closure into `refreshRecord`; forward `GitAuthBundle` as 5th positional arg of `refreshGitHubClone`; optional `credentialOps?` + test-seam `deviceFlowHttp?` on `UpdateMarketplaceOptions` + `UpdateAllMarketplacesOptions`; 2 new tests in `update.test.ts` covering AUTH-02 silent reuse + by-reference forwarding (AUTH-02)
+- [ ] 35-03-PLAN.md -- Document the Device Flow user-code prompt in `docs/output-catalog.md` as a new `## Out-of-band notifications` H2 section; new byte-form lock test at `tests/shared/device-flow-prompt.test.ts`; extend AUTH-09 architecture gate to scan `add.ts` + `update.ts` (closes Phase 33 review WR-02) (AUTH-03)
 
 ### Phase 36: Integration Gate
 
@@ -761,5 +771,5 @@ Plans:
 | 32. Device Flow State Machine                                        | v1.6      | 1/2 | Complete    | 2026-06-01 |
 | 33. git.ts Auth Wiring                                               | v1.6      | 1/1 | Complete   | 2026-06-01 |
 | 34. GitOps Interface Threading                                       | v1.6      | 1/1 | Complete    | 2026-06-01 |
-| 35. Orchestrator Call Sites & Output Catalog                         | v1.6      | TBD | Not started | -          |
+| 35. Orchestrator Call Sites & Output Catalog                         | v1.6      | 0/4 | Planned     | -          |
 | 36. Integration Gate                                                 | v1.6      | TBD | Not started | -          |
