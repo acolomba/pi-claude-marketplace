@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: GitHub Private Marketplace Authentication
 status: executing
-last_updated: "2026-06-01T11:06:06.136Z"
-last_activity: 2026-06-01 -- Phase 31 execution started
+last_updated: "2026-06-01T12:00:00.000Z"
+last_activity: 2026-06-01 -- Phase 31 complete (7/7 verified, review clean)
 progress:
   total_phases: 7
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 1
-  percent: 14
+  completed_phases: 2
+  total_plans: 5
+  completed_plans: 5
+  percent: 29
 ---
 
 # Project State
@@ -19,14 +19,13 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-30)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 31 -- credential-subprocess-layer-auth
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 32 -- device-flow-state-machine-auth
 
 ## Current Position
 
-Phase: 31 (credential-subprocess-layer-auth) -- EXECUTING
-Plan: 1 of 2
-Status: Executing Phase 31
-Last activity: 2026-06-01 -- Phase 31 execution started
+Phase: 32 (device-flow-state-machine-auth) -- PLANNING
+Status: Phase 31 complete; advancing to Phase 32
+Last activity: 2026-06-01 -- Phase 31 complete (7/7 verified, review clean)
 
 ## Performance Metrics
 
@@ -67,7 +66,7 @@ Last activity: 2026-06-01 -- Phase 31 execution started
 | 28 | 2 | - | - |
 | 29 | 3 | - | - |
 | 30 | 1 | - | - |
-| 31 | TBD | - | - |
+| 31 | 2 | - | - |
 | 32 | TBD | - | - |
 | 33 | TBD | - | - |
 | 34 | TBD | - | - |
@@ -218,4 +217,4 @@ Resume File: .planning/ROADMAP.md (Phase 30 next)
 
 ## Operator Next Steps
 
-- Begin Phase 30 with /gsd-plan-phase 30
+- Begin Phase 32 with /gsd-plan-phase 32
