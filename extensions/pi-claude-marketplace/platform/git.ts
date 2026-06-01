@@ -50,16 +50,6 @@ export interface FetchOptions {
   ref?: string;
 }
 
-export interface PullOptions {
-  dir: string;
-  /** Default "origin". */
-  remote?: string;
-  /** Author for any merge commit (isomorphic-git requires it on pull). */
-  author: { name: string; email: string };
-  /** Optional ref. */
-  ref?: string;
-}
-
 export interface CheckoutOptions {
   dir: string;
   /** Branch, tag, or SHA. */
@@ -112,17 +102,6 @@ export async function fetch(opts: FetchOptions): Promise<git.FetchResult> {
     fs,
     http,
     dir: opts.dir,
-    ...(opts.remote !== undefined && { remote: opts.remote }),
-    ...(opts.ref !== undefined && { ref: opts.ref }),
-  });
-}
-
-export async function pull(opts: PullOptions): Promise<void> {
-  await git.pull({
-    fs,
-    http,
-    dir: opts.dir,
-    author: opts.author,
     ...(opts.remote !== undefined && { remote: opts.remote }),
     ...(opts.ref !== undefined && { ref: opts.ref }),
   });
