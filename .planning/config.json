@@ -25,7 +25,7 @@
     "text_mode": false,
     "research_before_questions": false,
     "discuss_mode": "discuss",
-    "skip_discuss": false,
+    "skip_discuss": true,
     "code_review": true,
     "code_review_depth": "standard",
     "_auto_chain_active": false
