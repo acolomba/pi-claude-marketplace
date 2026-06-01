@@ -1014,6 +1014,28 @@ The exact wording is renderer-/orchestrator-specific; the contract is that `noti
 
 ______________________________________________________________________
 
+## Out-of-band notifications
+
+Notifications emitted directly via `ctx.ui.notify(message, severity?)` from outside the structured `notify(ctx, pi, NotificationMessage)` entrypoint. These bypass the renderer's severity / reload-hint / soft-dep pipeline and are reserved for surfaces that pre-date the `NotificationMessage` payload contract (e.g. interactive Device Flow prompts where the message is produced by a domain-tier state machine, not an orchestrator-tier outcome).
+
+The byte form is locked by per-surface unit tests (NOT by `tests/architecture/catalog-uat.test.ts`, whose driver only knows the structured `notify()` entrypoint). The `<!-- catalog-state: -->` annotations below are for human-readable discoverability; the catalog-uat parser intentionally skips this section because its H2 title is not a `/claude:plugin` command header.
+
+### Device Flow user-code prompt (AUTH-03)
+
+<!-- catalog-state: device-flow-prompt -->
+
+```text
+Open https://github.com/login/device and enter: ABCD-1234
+```
+
+Emitted exactly once by `initiateDeviceFlow` (in `extensions/pi-claude-marketplace/domain/github-auth.ts`) after a successful `POST /login/device/code` and before the poll loop starts. The literal example shows GitHub's standard verification URL plus a mock user code; the production string interpolates `deviceCode.verification_uri` and `deviceCode.user_code` from the GitHub response. Severity: `info` (the second arg to `ctx.ui.notify` is the magic string `"info"`).
+
+AUTH-03 contract: the user is shown a one-time code (`user_code`) AND a verification URL (`verification_uri`) so they can authorize the OAuth App from any browser. AUTH-09 contract: the access token is NOT yet acquired when this notification fires (the poll loop runs AFTER), so `access_token` / `accessToken` / `cred.password` are NOT interpolatable into this message. The byte form is locked by `tests/shared/device-flow-prompt.test.ts` -- any change to the emission string requires a lockstep update of the catalog AND the byte-form lock test.
+
+Triggers: `marketplace add <owner>/<private-repo>` (first access; Phase 35 Plan 35-01) and -- rarely -- `marketplace update <name>` when the stored credential has been evicted from the OS keychain (Phase 35 Plan 35-02). The post-Phase-35-01 happy path on `marketplace update` is silent reuse (AUTH-02): the stored token in the keychain hits on `credentialOps.fill`, no Device Flow runs, no notification fires.
+
+______________________________________________________________________
+
 ## Cross-references
 
 - [`docs/messaging-style-guide.md`](messaging-style-guide.md) -- v2.0 thin-pointer style guide; binding closed-set authority via `as const` tuples in `shared/notify.ts`.
