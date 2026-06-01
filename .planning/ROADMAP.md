@@ -110,7 +110,7 @@ Closed the 8 gaps surfaced by the v1.4 milestone-spanning UAT: reload-hint suppr
 On-demand Device Flow auth for private GitHub marketplace sources. Tries `git credential fill` first (silent reuse); triggers Device Flow only on a cache miss or 401; stores the resulting token via `git credential approve`; evicts via `git credential reject` on `onAuthFailure`. No env vars required. Two new modules (`platform/git-credential.ts`, `domain/github-auth.ts`) plus targeted wiring changes. 10/10 AUTH requirements.
 
 - [x] Phase 30: Duplicate Type Fix (AUTH-10) (completed 2026-06-01)
-- [ ] Phase 31: Credential Subprocess Layer (AUTH-06, AUTH-08, AUTH-09)
+- [x] Phase 31: Credential Subprocess Layer (AUTH-06, AUTH-08, AUTH-09) (completed 2026-06-01)
 - [ ] Phase 32: Device Flow State Machine (AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-07)
 - [ ] Phase 33: git.ts Auth Wiring (AUTH-01, AUTH-02)
 - [ ] Phase 34: GitOps Interface Threading (AUTH-01, AUTH-02)
@@ -620,7 +620,7 @@ Plans:
 3. The access token never appears in any error message or `ctx.ui.notify` output; architecture-level tests assert no credential field leaks through state write paths.
 4. `npm run check` GREEN; `CredentialOps` interface defined with a `makeMockCredentialOps` test helper following the `GitOps`/`makeMockGitOps` pattern.
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 **Wave 1**
 
@@ -628,7 +628,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 31-02-PLAN.md -- Implement extensions/pi-claude-marketplace/platform/git-credential.ts (CredentialOps interface + DEFAULT_CREDENTIAL_OPS spawn-based impl) + tests/helpers/credential-mock.ts (makeMockCredentialOps) + tests/platform/git-credential.test.ts + tests/architecture/no-credential-leak.test.ts (AUTH-09 architecture gate) + README entry (AUTH-06, AUTH-08, AUTH-09)
+- [x] 31-02-PLAN.md -- Implement extensions/pi-claude-marketplace/platform/git-credential.ts (CredentialOps interface + DEFAULT_CREDENTIAL_OPS spawn-based impl) + tests/helpers/credential-mock.ts (makeMockCredentialOps) + tests/platform/git-credential.test.ts + tests/architecture/no-credential-leak.test.ts (AUTH-09 architecture gate) + README entry (AUTH-06, AUTH-08, AUTH-09)
 
 ### Phase 32: Device Flow State Machine
 
@@ -747,7 +747,7 @@ Plans:
 | 28. Severity Routing & Label Discipline                              | v1.5      | 2/2 | Complete    | 2026-05-31 |
 | 29. Notification Label Suppression & Update Classification          | v1.5      | 3/3 | Complete    | 2026-05-31 |
 | 30. Duplicate Type Fix                                               | v1.6      | 1/1 | Complete    | 2026-06-01 |
-| 31. Credential Subprocess Layer                                      | v1.6      | 1/2 | In Progress|  |
+| 31. Credential Subprocess Layer                                      | v1.6      | 2/2 | Complete   | 2026-06-01 |
 | 32. Device Flow State Machine                                        | v1.6      | TBD | Not started | -          |
 | 33. git.ts Auth Wiring                                               | v1.6      | TBD | Not started | -          |
 | 34. GitOps Interface Threading                                       | v1.6      | TBD | Not started | -          |
