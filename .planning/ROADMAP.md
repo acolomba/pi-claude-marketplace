@@ -645,7 +645,7 @@ Plans:
 3. `access_denied` and `expired_token` exit the poll loop immediately with a clear, actionable error message (not a raw HTTP error object).
 4. A rejected stored token triggers `git credential reject` eviction before Device Flow re-triggers (`onAuthFailure` path); the `authAttempted` boolean guard prevents an infinite retry loop.
 
-**Plans:** TBD
+**Plans:** 2 plans (Wave 1: operator checkpoint + AUTH-09 gate; Wave 2: state machine + tests)
 
 ### Phase 33: git.ts Auth Wiring
 

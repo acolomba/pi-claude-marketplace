@@ -1034,7 +1034,7 @@ test("AUTH-09 (Phase 32): domain/github-auth.ts never interpolates a token in an
 | A8 | Setting `credentialOps.approve` inside `initiateDeviceFlow` is the right place (vs. caller-side) | Architectural Responsibility Map; Anti-Patterns | [ASSUMED -- discretion call] LOW. Both placements satisfy AUTH-06. In-machine pairs persistence atomically with success. Caller-side approve would require returning the unpersisted credential and adding an extra Phase 33 line. The discretion call in CONTEXT.md is "Whether `PollResult` is a discriminated union or throws on terminal errors" -- placement of approve was not explicitly enumerated but falls within Claude's discretion. |
 | A9 | Phase 32 does NOT need to handle a `credentialOps.approve` exception | Architectural Responsibility Map | [VERIFIED: Phase 31 RESEARCH Pattern 3 "approve/reject swallow subprocess errors"] LOW. The Phase 31 default impl is best-effort silent; even if approve throws (a mock might), the state machine treats it as a terminal best-effort failure -- the user is already authenticated, the token is in hand. The current operation succeeds; only keychain reuse is lost. Decision: do NOT wrap approve in try/catch in Phase 32 -- if the default impl silently no-ops on failure, no wrapping is needed; if a mock throws, that's a test artefact, not a production concern. Document this in Example 3. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 > All numbered questions from CONTEXT.md `<specifics>` are resolved in the body above.
 > The remaining unresolved item is the OAuth App registration operator action (P32-7),
@@ -1043,12 +1043,12 @@ test("AUTH-09 (Phase 32): domain/github-auth.ts never interpolates a token in an
 1. **GitHub OAuth App client_id discovery (P32-7).**
    - What we know: The `client_id` is registered out-of-band on github.com. It is public; safe to commit.
    - What's unclear: Whether an OAuth App has already been registered for pi-claude-marketplace at this milestone, OR whether Phase 32 introduces the first registration.
-   - Recommendation: The Phase 32 plan inserts a `checkpoint:human-verify` task FIRST that prompts the operator to register the OAuth App (or supply the existing client_id). The implementation task then writes the value to the `GITHUB_OAUTH_CLIENT_ID` constant. Unit tests use the mock and assert the constant flows through.
+   - RESOLVED: The Phase 32 plan inserts a `checkpoint:human-verify` task FIRST that prompts the operator to register the OAuth App (or supply the existing client_id). The implementation task then writes the value to the `GITHUB_OAUTH_CLIENT_ID` constant. Unit tests use the mock and assert the constant flows through.
 
 2. **Caller responsibility for the `unexpected` reason rendering.**
    - What we know: Phase 32 returns `{ ok: false, reason: "..." }` strings. The caller (Phase 33/35) decides whether to route through `shared/notify.ts` chokepoint or call `notifyFn` directly.
    - What's unclear: Whether the catalog (`docs/output-catalog.md`) needs Device Flow-failure variants (one per terminal reason) at Phase 32 plan time.
-   - Recommendation: Phase 32 ships only the user-code PROMPT to `notifyFn` (matches the catalog entry the Phase 35 plan introduces). All `ok: false` reason strings are RETURNED to the caller; the caller routes them. The catalog entry for Device Flow failure rendering is a Phase 35 concern, not Phase 32. Phase 32's RESEARCH.md flags this to keep Phase 35 plan-time honest.
+   - RESOLVED: Phase 32 ships only the user-code PROMPT to `notifyFn` (matches the catalog entry the Phase 35 plan introduces). All `ok: false` reason strings are RETURNED to the caller; the caller routes them. The catalog entry for Device Flow failure rendering is a Phase 35 concern, not Phase 32. Phase 32's RESEARCH.md flags this to keep Phase 35 plan-time honest.
 
 ## Environment Availability
 
