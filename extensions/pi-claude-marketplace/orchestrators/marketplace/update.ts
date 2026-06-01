@@ -96,9 +96,11 @@
 
 import path from "node:path";
 
+import { initiateDeviceFlow } from "../../domain/github-auth.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
+import { DEFAULT_CREDENTIAL_OPS } from "../../platform/git-credential.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   MarketplaceNotFoundError,
@@ -108,19 +110,23 @@ import {
   composeErrorWithCauseChain,
   errorMessage,
 } from "../../shared/errors.ts";
-import { notify } from "../../shared/notify.ts";
+import { makeRawNotifyFn, notify } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
 import {
   DEFAULT_GIT_OPS,
   refreshGitHubClone,
   resolveScopeFromState,
+  type GitAuthBundle,
   type GitOps,
 } from "./shared.ts";
 
+import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { CredentialOps } from "../../platform/git-credential.ts";
+import type { AuthAttemptResult, OnAuthRequiredFn } from "../../platform/git.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
   PluginFailedMessage,
@@ -154,6 +160,20 @@ export interface UpdateMarketplaceOptions {
    * the renderer threads `softDepStatus(pi)` internally at notify-time.
    */
   readonly pi: ExtensionAPI;
+  /**
+   * AUTH-02 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
+   * wraps `git credential fill/approve/reject` via subprocess. Tests
+   * inject makeMockCredentialOps() from tests/helpers/credential-mock.ts
+   * so the developer's OS keychain is never touched.
+   */
+  readonly credentialOps?: CredentialOps;
+  /**
+   * Phase 35 test seam for Device Flow integration tests. Production
+   * callers omit this field and get DEFAULT_DEVICE_FLOW_HTTP
+   * (real github.com fetch) inside the orchestrator's onAuthRequired
+   * closure.
+   */
+  readonly deviceFlowHttp?: DeviceFlowHttp;
 }
 
 export interface UpdateAllMarketplacesOptions {
@@ -164,11 +184,26 @@ export interface UpdateAllMarketplacesOptions {
   readonly pluginUpdate?: PluginUpdateFn;
   /** See `UpdateMarketplaceOptions.pi`. */
   readonly pi: ExtensionAPI;
+  /**
+   * AUTH-02 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
+   * wraps `git credential fill/approve/reject` via subprocess. Tests
+   * inject makeMockCredentialOps() from tests/helpers/credential-mock.ts
+   * so the developer's OS keychain is never touched.
+   */
+  readonly credentialOps?: CredentialOps;
+  /**
+   * Phase 35 test seam for Device Flow integration tests. Production
+   * callers omit this field and get DEFAULT_DEVICE_FLOW_HTTP
+   * (real github.com fetch) inside the orchestrator's onAuthRequired
+   * closure.
+   */
+  readonly deviceFlowHttp?: DeviceFlowHttp;
 }
 
 /** MU-1 single-name form. */
 export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise<void> {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
+  const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
   const userLocations = locationsFor("user", opts.cwd);
   const projectLocations = locationsFor("project", opts.cwd);
   const resolved =
@@ -186,6 +221,8 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
     scope: resolved.scope,
     locations: resolved.locations,
     gitOps,
+    credentialOps,
+    ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
     ...(opts.pluginUpdate !== undefined && { pluginUpdate: opts.pluginUpdate }),
   });
 }
@@ -196,6 +233,7 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
  */
 export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions): Promise<void> {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
+  const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
   // Iteration order is project-first per MSG-GR-3 / compareByNameThenScope
   // so same-name cross-scope stable-sort ties render project-before-user.
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
@@ -227,6 +265,8 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
       scope: t.scope,
       locations: t.locations,
       gitOps,
+      credentialOps,
+      ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
       ...(opts.pluginUpdate !== undefined && { pluginUpdate: opts.pluginUpdate }),
     });
   }
@@ -240,6 +280,8 @@ interface RefreshOneArgs {
   readonly gitOps: GitOps;
   readonly pluginUpdate?: PluginUpdateFn;
   readonly pi: ExtensionAPI;
+  readonly credentialOps: CredentialOps;
+  readonly deviceFlowHttp?: DeviceFlowHttp;
 }
 
 /**
@@ -312,9 +354,41 @@ async function refreshRecord(
     const preKey = await manifestContentKey(record);
     if (source.kind === "github") {
       const cloneDir = await locations.sourceCloneDir(name);
-      await refreshGitHubClone(cloneDir, source.ref, gitOps, () => {
-        cloneAdvanced = true;
-      });
+      // AUTH-02: bind the Device Flow trigger as the onAuthRequired
+      // closure for this fetch. Phase 33's
+      // platform/git.ts::buildAuthCallbacks first consults
+      // credentialOps.fill(host); on a hit (the post-add common case)
+      // the stored token is returned and Device Flow does NOT trigger
+      // -- this is the AUTH-02 silent-reuse contract. AUTH-09: the
+      // closure interpolates ONLY user_code + verification_uri inside
+      // initiateDeviceFlow's notifyFn (domain/github-auth.ts:385) -- the
+      // access token is acquired later in the poll loop and never
+      // passed back to a notify or Error.
+      //
+      // host is the bare hostname; Phase 35 scope is GitHub-only so the
+      // literal "github.com" is correct here. A future AUTH-D02
+      // (deferred) would parameterize this from the source.
+      const host = "github.com";
+      const { ctx, credentialOps, deviceFlowHttp } = args;
+      const notifyFn = makeRawNotifyFn(ctx);
+      const onAuthRequired: OnAuthRequiredFn = async (): Promise<AuthAttemptResult> =>
+        initiateDeviceFlow({
+          host,
+          credentialOps,
+          notifyFn,
+          ...(deviceFlowHttp !== undefined && { http: deviceFlowHttp }),
+        });
+      const auth: GitAuthBundle = { credentialOps, host, onAuthRequired };
+
+      await refreshGitHubClone(
+        cloneDir,
+        source.ref,
+        gitOps,
+        () => {
+          cloneAdvanced = true;
+        },
+        auth,
+      );
       await validateManifestAtRoot(record, cloneDir);
     } else if (source.kind === "path") {
       await validateManifestAtRoot(record, record.marketplaceRoot);
