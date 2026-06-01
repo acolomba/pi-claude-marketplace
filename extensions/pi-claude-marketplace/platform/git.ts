@@ -203,3 +203,15 @@ export async function listRemotes(
     ...(opts.gitdir !== undefined && { gitdir: opts.gitdir }),
   });
 }
+
+/**
+ * Credential shape consumed by isomorphic-git's onAuth / onAuthFailure callbacks.
+ * Matches isomorphic-git's GitAuth; re-exported here so Phase 31+
+ * consumers import from platform/git.ts (D-13 boundary) rather than
+ * directly from isomorphic-git.
+ */
+export interface GitCredentials {
+  username?: string;
+  password?: string;
+  headers?: Record<string, string>;
+}
