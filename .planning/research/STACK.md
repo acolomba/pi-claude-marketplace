@@ -1,59 +1,105 @@
-# Research pass: STACK for v1.1 `/claude:plugin reinstall`
+# Stack Research: v1.6 GitHub Device Flow Authentication
 
-## Recommended stack / technology reuse
+**Researched:** 2026-06-01
+**Confidence:** HIGH
 
-- **No new runtime dependencies or version bumps are recommended.** Current stack is enough:
-  - TypeScript strict / ESM (`package.json` scripts use `tsc`, ESLint, Prettier, `node --test`).
-  - `proper-lockfile@^4.1.2` indirectly through `withStateGuard` for per-scope cross-process locking.
-  - `write-file-atomic@^7.0.1` indirectly through existing JSON writers for `state.json`, `mcp.json`, and `agents-index.json`.
-  - `isomorphic-git@^1.37.6` exists but **must not be used** by reinstall.
-- Reuse existing orchestrator/bridge primitives, but expect a **small transaction-shape addition** for replacement-safe rollback:
-  - Current bridge `prepare*` APIs are valuable for staging new resources into temp locations.
-  - Current bridge `commitPrepared*` APIs are **not sufficient as-is** for reinstall's preserve-old-on-failure contract because they remove previous targets before renaming new resources.
-  - Prefer new helper(s) built from existing `fs/promises` + existing atomic JSON writers to backup old resources, commit replacements, and restore backups on failure. No library needed.
+## Summary
 
-## Evidence and relevant existing patterns
+No new npm runtime dependencies needed. isomorphic-git's async callbacks support the
+full Device Flow polling loop. `git credential` subprocess integration is ~50 lines
+of built-in Node.js code. One prerequisite type-fix before auth work begins.
 
-- Milestone requirements explicitly require cached manifests, no sync, atomic preservation, and post-success data cleanup (`.planning/PROJECT.md:13-25`, active requirements at `:41-46`).
-- Existing update has the right **target model** (`all`, `marketplace`, `plugin`) and scope handling (`extensions/.../orchestrators/plugin/update.ts:119-132`, enumeration around `:147-230`), but it is not reusable directly because it runs GitHub refresh (`:165-193`) and skips when target version equals recorded version (`:374-378`). Reinstall must force replacement and keep recorded version.
-- Existing install uses `runPhases` + reverse undo (`install.ts:292-502`; ledger in `transaction/phase-ledger.ts:24-111`) and soft-dep/reload-hint notification patterns (`install.ts:577-609`). Useful patterns, but install rejects already-installed plugins (`install.ts:187-198`).
-- Existing uninstall has the post-state data-dir cleanup pattern to reuse (`uninstall.ts:167-185`) but uninstall+install composition is explicitly unsafe for reinstall because a failed install would leave the plugin absent.
-- Existing update prepare/commit sequence (`update.ts:415-465`, `:560-680`) proves reusable staging mechanics, but its state-before-physical-replace recovery model intentionally only emits a reinstall recovery hint on phase-3 failure (`:643-665`); v1.1 requires stronger preservation.
-- `withStateGuard` currently owns load/mutate/save and lock release (`with-state-guard.ts:55-100`). Reinstall should use the same lock boundary, but if physical rollback must react to `saveState` failure, a small extension/lower-level helper may be needed because callers cannot hook after `saveState` inside current `withStateGuard`.
+## Findings
 
-## Integration points
+### isomorphic-git async callback support
 
-- Add `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts`.
-  - Target type can mirror/refactor `UpdatePluginsTarget`.
-  - Reuse `locationsFor`, `loadState`, `withStateGuard` or a lock-preserving variant, `loadMarketplaceManifest`, `PLUGIN_ENTRY_VALIDATOR`, `resolveStrict`, `requireInstallable`, `assertNoCrossPluginConflicts`, `pickAgentsSourceDir`, bridge `prepare*`/`abort*`, soft-dep warning helpers, reload-hint helpers, and notify wrappers.
-  - Preserve recorded install version from state; do not call `resolvePluginVersion` except possibly only for diagnostics.
-- Export from `orchestrators/plugin/index.ts` and top-level `orchestrators/index.ts`.
-- Add edge shim analogous to `edge/handlers/plugin/update.ts` (`Usage: /claude:plugin reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]`).
-- Wire router/register/completions:
-  - `SubcommandHandlers`, `TOP_LEVEL_USAGE`, and router switch need `reinstall` (`edge/router.ts:31-50`, `:92-103`).
-  - `register.ts` handler map needs `reinstall` next to update (`edge/register.ts:72-84`).
-  - Completion top-level list and plugin-ref branch need `reinstall`, with status filtering like `update`/`uninstall` and marketplace-only form allowed (`edge/completions/provider.ts:43-50`, `:197-217`).
-- Add tests near existing update tests and edge update shim tests; reuse their hermetic HOME/cwd fixture style.
+`AuthFailureCallback` returns `Promise<GitAuth | void>` -- isomorphic-git awaits it
+before retrying. A full Device Flow polling loop is valid inside `onAuthFailure`.
+No internal auth-callback timeout. The `onAuth` pre-fill path (try keychain first,
+trigger flow only on miss) is cleaner than relying solely on `onAuthFailure`.
 
-## What NOT to add
+### GitHub Device Flow API
 
-- Do **not** add a new package for transactions, backups, locking, or atomic writes.
-- Do **not** add network/git integration, `gitOps`, `DEFAULT_GIT_OPS`, or `refreshGitHubClone` to reinstall.
-- Do **not** add mutating LLM tools for reinstall; current project scope keeps mutation on slash commands only.
-- Do **not** implement reinstall as uninstall followed by install.
-- Do **not** change Pi peer dependencies or TypeScript/runtime versions for this feature.
+**Step 1 -- Request device code:**
+```
+POST https://github.com/login/device/code
+Content-Type: application/x-www-form-urlencoded
+client_id=<CLIENT_ID>&scope=repo
+```
+Response: `{ device_code, user_code, verification_uri, expires_in: 900, interval: 5 }`
 
-## Validation implications
+**Step 2 -- Poll for token:**
+```
+POST https://github.com/login/oauth/access_token
+client_id=<CLIENT_ID>&device_code=<device_code>&grant_type=urn:ietf:params:oauth:grant-type:device_code
+```
 
-- Unit tests should prove all three forms: bare, `@marketplace`, and `plugin@marketplace`, with `--scope` at any position.
-- Add an architectural/source-grep test similar to no-network install/list guard: `reinstall.ts` must not import `platform/git`, `DEFAULT_GIT_OPS`, `refreshGitHubClone`, or expose `gitOps`.
-- Critical failure tests:
-  - Prepare failure leaves old state and all old resources intact.
-  - Physical replace failure restores old skills/prompts/agents/MCP and leaves state unchanged.
-  - State-save failure path is explicitly covered or the design documents why it cannot strand new physical resources.
-  - Plugin data dir is **not** deleted on any failure, and is deleted only after successful replacement; cleanup failure should warn, not convert success to failure.
-- Existing `npm run check` remains the final validation gate.
+| Error code | Required action |
+|---|---|
+| `authorization_pending` | Sleep `interval` seconds and retry |
+| `slow_down` | Add 5 to current interval (cumulative), sleep, retry |
+| `expired_token` | Abort -- 900s window elapsed |
+| `access_denied` | Abort -- user cancelled |
 
-## Confidence
+Success: `{ access_token: "ghu_...", token_type: "bearer", scope }`
 
-High that no stack/library changes are needed. Medium-high on implementation shape: existing update/install code provides most pieces, but reinstall's stronger atomic-preserve contract requires careful backup/restore or a transaction primitive extension beyond current bridge commit APIs.
+Pass to isomorphic-git as `{ username: "x-access-token", password: access_token }`.
+
+### git credential wire format
+
+Subprocess: `spawn("git", ["credential", "fill|approve|reject"])`. Always set
+`GIT_TERMINAL_PROMPT=0` to prevent interactive fallback.
+
+Stdin format (blank line terminates):
+```
+protocol=https
+host=github.com
+username=x-access-token   (for approve/reject only)
+password=ghu_xxx           (for approve/reject only)
+                           (blank line)
+```
+
+`fill` stdout: same `key=value` format. Parse with
+`stdout.split("\n").filter(l => l.includes("=")).map(l => l.split("=", 2))`.
+
+### npm packages
+
+`git-credential-node` (2022, execa 0.6.x, no types, no ESM) -- **DO NOT USE**.
+Hand-roll ~50 lines in `platform/git-credential.ts`. Zero external deps.
+
+### git binary PATH requirement
+
+Reintroduces the `git not on PATH` failure mode that D-21 eliminated. Mitigation:
+catch ENOENT on spawn and degrade gracefully (in-memory token, no keychain storage,
+no user-visible warning unless the failure affects the operation).
+
+### OAuth App token lifetime
+
+OAuth App tokens do not expire by default. No refresh token handling needed for v1.6.
+
+## Recommendations
+
+### New: `platform/git-credential.ts`
+Three async functions: `gitCredentialFill(host)`, `gitCredentialApprove(host, creds)`,
+`gitCredentialReject(host, creds)`. `node:child_process` spawn, no external deps.
+Graceful ENOENT degradation.
+
+### New: `platform/github-device-flow.ts`
+Self-contained async polling loop. Takes `clientId`, `onUserCode` callback
+(routes to `ctx.ui.notify`), optional `AbortSignal`. Returns token string or null.
+Uses global `fetch` (Node >= 18) or `node:https`. No external deps.
+
+### Prerequisite: fix duplicate GitCredentials type
+Fix before any auth work begins to avoid type-check failures.
+
+### No new npm runtime dependencies
+
+All implementation uses Node.js built-ins: `node:child_process`, global `fetch`,
+`node:timers/promises`.
+
+## Sources
+
+- isomorphic-git `index.d.ts` in repo `node_modules`
+- [GitHub Device Flow -- OAuth Apps](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#device-flow)
+- [git credential wire format](https://git-scm.com/docs/git-credential)
+- [isomorphic-git authentication](https://isomorphic-git.org/docs/en/authentication)

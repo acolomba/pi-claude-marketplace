@@ -1,76 +1,123 @@
-# Research Summary: pi-claude-marketplace v1.1 Reinstall Command
+# Research Summary: pi-claude-marketplace v1.6 GitHub Private Marketplace Authentication
 
-**Domain:** Pi extension plugin lifecycle management
-**Researched:** 2026-05-13
-**Overall confidence:** HIGH
+**Project:** pi-claude-marketplace v1.6
+**Domain:** GitHub Device Flow OAuth + OS keychain credential management in a Node.js Pi extension
+**Researched:** 2026-06-01
+**Confidence:** HIGH
 
 ## Executive Summary
 
-The v1.1 `reinstall` feature should be implemented as a dedicated plugin lifecycle path, not as a composition of `uninstall` and `install` and not as a thin wrapper around `update`. `uninstall` intentionally removes resources/state before cleanup, and `install` refuses already-installed records; composing them would violate the core milestone requirement that a failed reinstall must not leave the plugin absent. Existing `update` has useful target enumeration, scope resolution, staging, and presentation patterns, but its state-first physical replacement/recovery model is weaker than reinstall's required preservation contract.
+v1.6 adds private GitHub marketplace support by wiring GitHub Device Flow OAuth into
+the existing `marketplace add` and `marketplace update` git operations. The approach:
+try `git credential fill` first (silent reuse from OS keychain); trigger Device Flow
+only on a cache miss or 401; store the resulting token via `git credential approve`;
+evict via `git credential reject` on `onAuthFailure`.
 
-No new dependencies or stack changes are needed. The current TypeScript/ESM stack, `proper-lockfile`-backed state lock, atomic JSON writers, bridge staging APIs, and reload/soft-dependency presentation helpers are sufficient. The main implementation work is a replacement-safe transaction shape: prepare new bridge resources first, replace old resources using backup/restore-capable bridge helpers, save state atomically, rollback physical replacements if state save fails, and delete plugin data only after success.
+No new npm runtime dependencies needed. Two new files
+(`platform/git-credential.ts`, `domain/github-auth.ts`) plus targeted changes to
+`platform/git.ts`, `orchestrators/marketplace/shared.ts`, `add.ts`, and `update.ts`.
 
-The safest roadmap is two phases: first land the atomic replacement primitives and single-plugin orchestrator semantics, then wire user-facing edge surfaces, batch target forms, completions, docs, and validation. The critical pitfall is underestimating multi-file atomicity: there is no portable Node API for a true all-or-nothing swap across skills, commands, agents, MCP, agents-index, and state. The implementation must therefore define and test a fail-clean rollback contract, with manual-recovery surfacing only if rollback itself fails.
+The codebase's existing `GitOps` injection seam is the correct extension point. Auth
+callbacks thread as an optional `onAuthRequired` field through the interface.
+All keychain side-effects live in `platform/git.ts`; all OAuth protocol logic lives
+in `domain/github-auth.ts`, consistent with the existing zone model.
 
-## Key Findings
+## Stack Additions
 
-**Stack:** No new runtime dependency, peer dependency, or version bump is required. Reuse existing TypeScript strict mode, `proper-lockfile`, `write-file-atomic`, bridge staging modules, and node:test suite. `isomorphic-git` must not be used by reinstall.
+No new npm runtime dependencies.
 
-**Features:** Table stakes are: top-level `/claude:plugin reinstall`, three update-analogous target forms (`plugin@marketplace`, `@marketplace`, bare), `--scope` anywhere, installed-only behavior, cached manifest reads only, recorded-version preservation, per-plugin atomic replacement, post-success data cleanup, refresh reload hints, soft-dependency warnings, and installed-plugin completions.
+**New modules (hand-rolled, ~50 lines each):**
+- `platform/git-credential.ts` -- `git credential fill/approve/reject` subprocess wrapper using `pi.exec`; graceful ENOENT degradation when `git` is not on PATH
+- `domain/github-auth.ts` -- Device Flow state machine using global `fetch`; injectable `DeviceFlowHttp` + `CredentialOps` seams for tests
 
-**Architecture:** Add a dedicated `orchestrators/plugin/reinstall.ts`, a small lock/manual-save transaction helper or equivalent lock-held flow, and bridge-level backup/restore replacement helpers for skills, commands, agents, and MCP. Wire `edge/handlers/plugin/reinstall.ts`, router/register, completions provider/data, docs, and tests. Reinstall should reuse update's target enumeration and scope resolution but not update's sync/version-bump behavior.
+**Prerequisite (must land first):**
+- Fix duplicate `GitCredentials` type declaration in `platform/git.ts`
 
-**Critical pitfall:** Existing bridge commit helpers can remove previous resources before staged replacements are fully committed. Reinstall must not call them in a way that can strand the old plugin absent; use backup-capable replacement or another proven preservation mechanism.
+**isomorphic-git async callback support confirmed:**
+- `onAuth` and `onAuthFailure` return `Promise<GitAuth | void>` -- isomorphic-git awaits them; a full Device Flow polling loop is valid inside either
+- No internal auth-callback timeout; loop contract: "keep retrying while credentials returned; return `{ cancel: true }` or `void` to stop"
 
-## Implications for Roadmap
+**OAuth App token lifetime:** OAuth App tokens do not expire -- no refresh handling needed for v1.6.
 
-Suggested phase structure:
+## Feature Table Stakes
 
-1. **Phase 8: Atomic Reinstall Core** - establish the transaction/bridge/orchestrator contract that makes single-plugin reinstall preserve old state/resources on failure.
-   - Addresses: target plugin preflight, cached manifest reads, recorded-version preservation, backup/restore bridge replacement, state save rollback, post-success data cleanup, no-network architecture guard.
-   - Avoids: unsafe uninstall+install composition, update's weaker recovery model, deleting data too early, recomputing versions.
+| Feature | Notes |
+|---------|-------|
+| `git credential fill` check before Device Flow | Silent reuse; Device Flow only on miss |
+| Display `user_code` + `verification_uri` + expiry hint | Via `ctx.ui.notify` only |
+| Non-blocking poll loop respecting server `interval` | Async; `slow_down` adds 5 s cumulatively |
+| Handle `expired_token` and `access_denied` | Exit loop; actionable error message |
+| `git credential approve` on success | OS keychain persistence |
+| `git credential reject` on `onAuthFailure` | Evict stale token before re-auth |
+| Both `clone` (add) and `fetch` (update) paths wired | `add.ts` and `update.ts` call sites |
+| No env-var dependency | Current env-var path removed |
+| Fix duplicate `GitCredentials` type | `npm run check` must stay green |
 
-2. **Phase 9: Reinstall Edge & Bulk UX** - expose the command and batch target forms through the Pi command surface with completions, output, docs, and e2e-style validation.
-   - Addresses: router/register/handler wiring, `reinstall @marketplace` and bare `reinstall`, `--scope` parity, completion parity, reload/soft-dep messaging, README usage.
-   - Avoids: edge/router omissions, ambiguous scope behavior, noisy or unstable batch output.
+## Feature Differentiators (deferred from v1.6)
 
-**Phase ordering rationale:** Atomic single-plugin semantics must come first because every batch form depends on per-plugin fail-clean behavior. Edge and completion work can safely follow once the core API and result model are stable.
+| Feature | Deferral Reason |
+|---------|-----------------|
+| `marketplace auth logout` subcommand | Useful but adds surface area |
+| Clipboard copy of `user_code` | OS-detection complexity |
+| Automatic browser open | URL already visible in notification |
 
-**Research flags for phases:**
-- Phase 8 should receive deeper phase planning attention for bridge backup/restore details and rollback-failure/manual-recovery semantics.
-- Phase 9 follows existing update/edge patterns and likely does not need external research.
+**Anti-features to avoid:** PAT fallback prompt, token in URLs, token in `state.json`,
+token in `ctx.ui.notify` output, OAuth web flow (requires redirect server), silent
+re-auth on every command.
 
-## Confidence Assessment
+## Architecture Overview
 
-| Area | Confidence | Notes |
-| ---- | ---------- | ----- |
-| Stack | HIGH | Existing dependencies and primitives cover the feature; no new library is justified. |
-| Features | HIGH | User clarified the key semantics; update provides direct UX precedent. |
-| Architecture | MEDIUM-HIGH | Integration points are clear, but backup/restore details need careful plan-phase design. |
-| Pitfalls | HIGH | Failure modes are directly evidenced by existing install/update/uninstall code and tests. |
+**New components:**
+1. `platform/git-credential.ts` -- subprocess wrapper; depends only on `pi.exec`
+2. `domain/github-auth.ts` -- Device Flow state machine; accepts injectable `DeviceFlowHttp` + `CredentialOps`; `notifyFn: (msg: string) => void` callback keeps domain ignorant of full `ctx` type and avoids Block A ESLint zone widening
 
-## Gaps to Resolve During Requirements/Planning
+**Modified components:**
+- `platform/git.ts` -- add optional auth callbacks to `CloneOptions`/`FetchOptions`; add `buildAuthCallbacks` helper; delete duplicate type
+- `orchestrators/marketplace/shared.ts` -- add optional `onAuthRequired` to `GitOps.clone`/`fetch`; thread through `DEFAULT_GIT_OPS` and `refreshGitHubClone`
+- `orchestrators/marketplace/add.ts` -- construct and pass auth closure in `addGithubInGuard`
+- `orchestrators/marketplace/update.ts` -- pass auth closure in `refreshRecord`
 
-- Whether batch reinstall should continue after per-plugin failure and render partitions like update. Research recommends yes: per-plugin atomic continuation with deterministic success/failure partitions.
-- Exact direct-target behavior when the installed record exists but the cached manifest entry is missing or no longer installable. Research recommends direct target error and batch skipped/failed partition, always preserving old install.
-- Exact manual-recovery marker/message if rollback of a physical replacement fails. Prefer existing marker constants and error-formatting discipline rather than new strings unless necessary.
-- Whether successful reinstall should recreate an empty plugin data directory after deletion. Requirement only says delete after replacement; planning should decide based on current install/data semantics.
+**Output catalog impact:** one new `ctx.ui.notify` message pattern for the Device
+Flow prompt must be registered in `docs/output-catalog.md` and the catalog UAT fixture.
+
+**Build order:**
+A (type fix) → B (git-credential) → C (github-auth) → D (git.ts wiring) → E (GitOps threading) → F (orchestrators + catalog) → G (green gate)
+
+## Critical Pitfalls
+
+1. **`slow_down` interval is cumulative (CP-1)** -- Each `slow_down` adds 5 s to `currentInterval` permanently. Use `let currentInterval = initial` and `currentInterval += 5` per slow-down. Test: two consecutive slow-downs produce `initial + 10` on third poll.
+
+2. **`onAuthFailure` infinite loop (CP-9)** -- isomorphic-git retries as long as the callback returns credentials. Guard with a `boolean authAttempted` flag in the closure: first failure triggers Device Flow; second failure returns `{ cancel: true }` after `git credential reject`.
+
+3. **`git credential` stdin hang (CP-5)** -- Write blank-line terminator AND call `child.stdin.end()` explicitly. Missing either hangs the subprocess indefinitely.
+
+4. **`CredentialOps` test injection required (TI-1)** -- Tests without a mock call the developer's live OS keychain. Define `CredentialOps` interface before the first test. Follow the `GitOps`/`makeMockGitOps` pattern.
+
+5. **Token security (SEC-1, SEC-3)** -- Token must never appear in `state.json`, error messages, or `ctx.ui.notify`. Only `user_code` and `verification_uri` go through notify. Architecture test: no credential field in state write functions.
+
+**Additional:**
+- CP-6: `git credential fill` exits non-zero with empty stdout when no credential stored -- return `null`, not empty `GitAuth`
+- CP-10: exceptions from `onAuth`/`onAuthFailure` propagate raw -- wrap in `try/catch`; return `{ cancel: true }` on unexpected errors
+- SEC-2: isomorphic-git error messages include repo URL -- strip URL from errors forwarded to `ctx.ui.notify`
+- SEC-4: always call `git credential reject` before re-triggering Device Flow; skipping leaves a broken credential permanently
+
+## Open Questions
+
+1. **OAuth App `client_id`:** A GitHub OAuth App must be registered before v1.6 ships. The constant in `domain/github-auth.ts` will be a placeholder until then. Operational gap.
+
+2. **Block A ESLint zone:** Pre-bound `notifyFn` callback (recommended) vs. widening the Block A exemption list for `domain/github-auth.ts`. Resolve in Phase F planning.
+
+3. **CP-8 macOS keychain duplicate entries:** Defensive mitigation already specified (`reject` before `approve` on rotation). Validate during manual integration testing on macOS.
 
 ## Sources
 
-- `.planning/PROJECT.md`
-- `.planning/REQUIREMENTS.md`
-- `.planning/ROADMAP.md`
-- `README.md`
-- `docs/prd/pi-claude-marketplace-prd.md`
-- `extensions/pi-claude-marketplace/orchestrators/plugin/install.ts`
-- `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts`
-- `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts`
-- `extensions/pi-claude-marketplace/edge/router.ts`
-- `extensions/pi-claude-marketplace/edge/register.ts`
-- `extensions/pi-claude-marketplace/edge/completions/provider.ts`
-- `extensions/pi-claude-marketplace/transaction/with-state-guard.ts`
-- `extensions/pi-claude-marketplace/transaction/phase-ledger.ts`
-- `tests/orchestrators/plugin/update.test.ts`
-- `tests/orchestrators/plugin/install.test.ts`
-- `tests/orchestrators/plugin/uninstall.test.ts`
+- [GitHub Device Flow -- OAuth Apps](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#device-flow)
+- [git credential wire format](https://git-scm.com/docs/git-credential)
+- [isomorphic-git authentication](https://isomorphic-git.org/docs/en/authentication)
+- `node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts`
+- `extensions/pi-claude-marketplace/platform/git.ts` (codebase)
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts` (codebase)
+
+---
+*Research completed: 2026-06-01*
+*Ready for roadmap: yes*
