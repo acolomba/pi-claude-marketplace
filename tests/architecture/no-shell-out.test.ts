@@ -23,7 +23,30 @@ const EXTENSION_ROOT = path.join(REPO_ROOT, "extensions/pi-claude-marketplace");
  *   - `from "child_process"`
  *   - `require("child_process")`
  *   - `require("node:child_process")`
+ *
+ * Phase 31 narrowing (AUTH-06, AUTH-08, AUTH-09):
+ * D-21 retired the V1 execFile("git", [...]) clone/fetch shell-out. Phase 31
+ * (AUTH-06/08/09) reintroduces child_process ONLY for the `git credential`
+ * subprocess in extensions/pi-claude-marketplace/platform/git-credential.ts,
+ * which is fundamentally different from a clone shell-out:
+ *   - it never executes git clone/fetch/pull/etc.
+ *   - it accesses the OS keychain via git's helper chain (osxkeychain,
+ *     manager-core, libsecret), which has no pure-JS equivalent (keytar
+ *     adds native deps; see Phase 31 RESEARCH.md "Don't Hand-Roll").
+ *   - the missing-git-binary failure mode is non-fatal (degrades to
+ *     "no credential reuse"; the current operation still works via Device
+ *     Flow). The MA-7 "git CLI not found" hard-fail concern is therefore
+ *     not reintroduced by this narrowing.
+ *
+ * The ALLOWED_CHILD_PROCESS_FILES whitelist below is the SOLE permitted use
+ * of node:child_process in the extension tree. Adding a second file MUST
+ * require an explicit edit here AND an update to the sibling
+ * "exactly one file" assertion below, so silent widening is caught in CI.
  */
+
+const ALLOWED_CHILD_PROCESS_FILES: ReadonlySet<string> = new Set([
+  "extensions/pi-claude-marketplace/platform/git-credential.ts",
+]);
 
 async function* walkTsFiles(dir: string): AsyncGenerator<string> {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -44,13 +67,18 @@ const FORBIDDEN_PATTERNS: ReadonlyArray<RegExp> = [
   /require\(\s*["']node:child_process["']\s*\)/,
 ];
 
-test("no child_process imports anywhere in extensions/pi-claude-marketplace/ (D-21)", async () => {
+test("no child_process imports outside the Phase 31 whitelist (D-21 + Phase 31 narrowing)", async () => {
   const offenders: string[] = [];
   for await (const file of walkTsFiles(EXTENSION_ROOT)) {
+    const rel = path.relative(REPO_ROOT, file);
+    if (ALLOWED_CHILD_PROCESS_FILES.has(rel)) {
+      continue;
+    }
+
     const source = await readFile(file, "utf8");
     for (const pat of FORBIDDEN_PATTERNS) {
       if (pat.test(source)) {
-        offenders.push(`${path.relative(REPO_ROOT, file)} matches ${String(pat)}`);
+        offenders.push(`${rel} matches ${String(pat)}`);
       }
     }
   }
@@ -58,6 +86,18 @@ test("no child_process imports anywhere in extensions/pi-claude-marketplace/ (D-
   assert.deepEqual(
     offenders,
     [],
-    `D-21 violation: child_process import detected in the extension tree:\n  ${offenders.join("\n  ")}\n  (MA-7's "git CLI not found" failure mode is superseded by isomorphic-git; reintroducing child_process would re-open the supersession)`,
+    `D-21 violation: child_process import detected outside the Phase 31 whitelist:\n  ${offenders.join("\n  ")}\n  (MA-7's "git CLI not found" failure mode is superseded by isomorphic-git for clone/fetch/pull; only platform/git-credential.ts is permitted to spawn git subprocesses, and only for OS keychain access per AUTH-06/08/09. Reintroducing child_process anywhere else would re-open the supersession)`,
   );
+});
+
+// Phase 31 NEW assertion (AUTH-06/08/09): the whitelist is exactly
+// platform/git-credential.ts -- nobody silently widened it. If a future
+// phase needs another file with node:child_process, it MUST update both
+// ALLOWED_CHILD_PROCESS_FILES above AND this assertion's expected array
+// in the same commit, with a phase-level justification recorded in the
+// docstring header.
+test("Phase 31 whitelist: exactly one file may import node:child_process", () => {
+  assert.deepEqual([...ALLOWED_CHILD_PROCESS_FILES].sort(), [
+    "extensions/pi-claude-marketplace/platform/git-credential.ts",
+  ]);
 });
