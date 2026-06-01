@@ -40,6 +40,8 @@ import { MarketplaceNotFoundError } from "../../shared/errors.ts";
 import type { UnstageAgentFailure } from "../../bridges/agents/types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { CredentialOps } from "../../platform/git-credential.ts";
+import type { OnAuthRequiredFn } from "../../platform/git.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateOutcome } from "../types.ts";
 
@@ -60,6 +62,23 @@ export class AgentsUnstageFailureError extends Error {
 }
 
 /**
+ * Phase 34 (v1.6): optional auth bundle passed through GitOps.clone /
+ * GitOps.fetch and refreshGitHubClone. Mirrors the shape accepted by
+ * platform/git.ts `CloneOptions.auth?` / `FetchOptions.auth?`. When
+ * undefined, every call site behaves identically to the pre-v1.6
+ * public-only path.
+ *
+ * D-13 boundary: this re-exports only TYPES from the platform tier
+ * (`CredentialOps`, `OnAuthRequiredFn`) -- no isomorphic-git symbol
+ * crosses into the orchestrator tier.
+ */
+export interface GitAuthBundle {
+  readonly credentialOps: CredentialOps;
+  readonly host: string;
+  readonly onAuthRequired: OnAuthRequiredFn;
+}
+
+/**
  * D-12, D-13: marketplace orchestrator git surface.
  *
  * Six primitives. The 5 base primitives (clone / fetch / forceUpdateRef
@@ -73,12 +92,25 @@ export class AgentsUnstageFailureError extends Error {
  * No `pull` -- D-14 requires the three-step force-overwrite path
  * (fetch → forceUpdateRef → checkout) that `pull --ff-only` cannot
  * express because the local branch may diverge from the remote SHA.
+ *
+ * Phase 34 (v1.6): `clone` and `fetch` each accept an optional `auth`
+ * bundle. When provided, `DEFAULT_GIT_OPS` forwards it to
+ * `platform/git.ts`, which builds the isomorphic-git
+ * `onAuth`/`onAuthFailure` callbacks via `buildAuthCallbacks`. When
+ * omitted, both primitives behave identically to the pre-v1.6
+ * public-only path (NFR-5 surfaces untouched).
  */
 export interface GitOps {
   /** MA-5: clone url into dir, optional ref, single-branch when ref is set. */
-  clone(opts: { dir: string; url: string; ref?: string; singleBranch?: boolean }): Promise<void>;
+  clone(opts: {
+    dir: string;
+    url: string;
+    ref?: string;
+    singleBranch?: boolean;
+    auth?: GitAuthBundle;
+  }): Promise<void>;
   /** D-14 step 1: refresh remote refs (no merge, no working-tree changes). */
-  fetch(opts: { dir: string; remote?: string; ref?: string }): Promise<void>;
+  fetch(opts: { dir: string; remote?: string; ref?: string; auth?: GitAuthBundle }): Promise<void>;
   /** D-14 step 2 (symbolic HEAD): force-set local branch ref to remote SHA. */
   forceUpdateRef(opts: { dir: string; ref: string; value: string }): Promise<void>;
   /** D-14 step 3: move HEAD to ref/SHA. */
@@ -101,6 +133,10 @@ export interface GitOps {
  * dependency" boundary is now enforced statically.
  */
 export const DEFAULT_GIT_OPS: GitOps = {
+  // Phase 34 (v1.6): the `auth?` field added to GitOps.clone / .fetch is
+  // structurally compatible with platform/git.ts CloneOptions.auth? /
+  // FetchOptions.auth?. No wrapper code change is required -- the
+  // bound function references already accept the widened opts shape.
   clone: defaultGit.clone,
   fetch: async (o): Promise<void> => {
     await defaultGit.fetch(o);
@@ -133,17 +169,25 @@ function isGitNotFoundError(err: unknown): boolean {
  *   - storedRef is a tag/SHA (detached HEAD):
  *       fetch + checkout (resolveRef of refs/remotes/origin/<ref> fails, then
  *       checkout throws if the SHA no longer exists).
+ *
+ * Phase 34 (v1.6): the optional `auth` parameter is forwarded to
+ * `gitOps.fetch` so private-repository refreshes can trigger Device
+ * Flow on a credential miss. `gitOps.clone` is not called from here
+ * (Phase 35's `add.ts` is the only caller of clone); the auth bundle
+ * therefore only flows into the fetch primitive within this helper.
  */
 export async function refreshGitHubClone(
   cloneDir: string,
   storedRef: string | undefined,
   gitOps: GitOps,
   onFetchSucceeded?: () => void,
+  auth?: GitAuthBundle,
 ): Promise<void> {
   await gitOps.fetch({
     dir: cloneDir,
     remote: "origin",
     ...(storedRef !== undefined && { ref: storedRef }),
+    ...(auth !== undefined && { auth }),
   });
   onFetchSucceeded?.();
 
