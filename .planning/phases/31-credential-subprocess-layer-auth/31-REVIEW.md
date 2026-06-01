@@ -12,10 +12,10 @@ files_reviewed_list:
   - extensions/pi-claude-marketplace/platform/README.md
 findings:
   critical: 0
-  warning: 4
+  warning: 0
   info: 4
-  total: 8
-status: issues_found
+  total: 4
+status: clean
 ---
 
 # Phase 31: Code Review Report
@@ -23,15 +23,134 @@ status: issues_found
 **Reviewed:** 2026-06-01T00:00:00Z
 **Depth:** standard
 **Files Reviewed:** 6
-**Status:** issues_found
+**Status:** clean (after iteration 2 fixes)
 
 ## Summary
 
-Phase 31 introduces the `CredentialOps` seam (`git-credential.ts`) for OS-keychain access via `git credential fill/approve/reject`, a mock helper for tests, and two architecture gates (no-shell-out and no-credential-leak). The implementation is structurally sound and the error-handling discipline for subprocess failures is correct. No blockers. Four warnings and four info items, centered on missing input validation in the wire-format builder, incomplete regex coverage in the AUTH-09 gate, a gap in the dynamic-import arm of the architecture gate, and documentation stale state.
+Phase 31 introduces the `CredentialOps` seam (`git-credential.ts`) for OS-keychain access via `git credential fill/approve/reject`, a mock helper for tests, and two architecture gates (no-shell-out and no-credential-leak). All four warnings from the initial review (WR-01 through WR-04) were correctly resolved. No new issues were introduced by the fixes. Four info items (IN-01 through IN-04) remain open; they were explicitly out of scope for auto-fix mode.
 
 ## Narrative Findings (AI reviewer)
 
 ## Warnings
+
+_(None -- all four warnings resolved in iteration 2. See original findings below and re-review section for disposition.)_
+
+## Info
+
+### IN-01: Architecture gate does not assert the whitelisted file exists and actually uses `child_process`
+
+**File:** `tests/architecture/no-shell-out.test.ts:99-103`
+**Issue:** The "exactly one file" assertion validates only the in-memory `ALLOWED_CHILD_PROCESS_FILES` Set literal, not the filesystem. If `platform/git-credential.ts` is deleted:
+
+- Test 1 (`no child_process imports outside the whitelist`) passes because `walkTsFiles` never yields the deleted file, so the `ALLOWED_CHILD_PROCESS_FILES.has(rel)` skip never fires and no offenders are found.
+- Test 2 (`exactly one file`) passes because it checks the hardcoded Set, not the disk.
+- The `no-credential-leak` test 2 also passes vacuously (it has an explicit `if (!exists) return` guard).
+
+The gate therefore gives a false-green signal if the whitelisted file is accidentally removed or renamed.
+
+**Fix:** Add a third assertion that reads `git-credential.ts` from disk and verifies it contains a `child_process` import:
+```typescript
+test("Phase 31 whitelist: platform/git-credential.ts exists and imports node:child_process", async () => {
+  const abs = path.join(
+    REPO_ROOT,
+    "extensions/pi-claude-marketplace/platform/git-credential.ts",
+  );
+  const src = await readFile(abs, "utf8");
+  assert.ok(
+    /from\s+["']node:child_process["']/.test(src),
+    "platform/git-credential.ts must import node:child_process (whitelist integrity check)",
+  );
+});
+```
+
+---
+
+### IN-02: README.md checklist item for `pi-api.ts` is stale
+
+**File:** `extensions/pi-claude-marketplace/platform/README.md:15`
+**Issue:** The checklist entry reads `- [ ] pi-api.ts` (not done), but the file exists on disk and the prose on line 5 says "Phase 7 added `pi-api.ts`". The checkbox should be `[x]`.
+
+**Fix:** Change line 15 from `- [ ]` to `- [x]`.
+
+---
+
+### IN-03: Test 8 comment overstates what it proves
+
+**File:** `tests/platform/git-credential.test.ts:139-149`
+**Issue:** The test comment claims to prove that "the seam never widens its contract to include `path`/`username`/etc. on a fill query." What it actually asserts is that the mock's call-log record for a `fill` call contains only `{ host }` -- which is the shape of `MockCredentialState.fillCalls`, a test fixture. It does not exercise the production `buildAttributeBlock` function at all; the wire format is an implementation detail invisible to the mock. The comment misleads a reader into thinking production behavior is covered.
+
+**Fix:** Adjust the comment to accurately describe what is being tested:
+```typescript
+// Asserts that the CredentialOps.fill interface contract presents only `host`
+// to callers -- the attribute block construction is an implementation detail
+// of the production fill, not part of the seam. A separate integration or
+// real-subprocess test (e.g., Test 7) would be needed to verify the
+// production wire format excludes path=.
+```
+
+---
+
+### IN-04: Mock `approve`/`reject` throw behavior is undocumented relative to the production contract
+
+**File:** `tests/helpers/credential-mock.ts:36-39`
+**Issue:** `approveThrows` and `rejectThrows` cause the mock to throw, but the production `credentialApprove` and `credentialReject` are guaranteed to never throw (they swallow all errors). Test 3 in `git-credential.test.ts` explicitly documents the `fillThrows` / production-null-return divergence for `fill`, but no equivalent note appears for `approve` and `reject`. Phase 32+ test authors who reach for `approveThrows` / `rejectThrows` to simulate subprocess failure will be testing a code path (try/catch around `approve`) that never fires against the real implementation.
+
+**Fix:** Add a comment to the `approveThrows`/`rejectThrows` fields explaining the contract divergence:
+```typescript
+/**
+ * Optional override hooks -- simulate subprocess errors for callers that wrap
+ * approve/reject in try/catch.
+ *
+ * NOTE: the production credentialApprove/credentialReject NEVER throw; they
+ * silently no-op on all subprocess errors (Pitfall 7 / Pattern 3). Use these
+ * overrides only to test caller-side try/catch logic if it is explicitly
+ * present; do NOT assume Phase 32+ callers need to guard against throws from
+ * approve or reject.
+ */
+approveThrows?: Error;
+rejectThrows?: Error;
+```
+
+---
+
+## Re-Review (Iteration 2)
+
+**Re-reviewed:** 2026-06-01T00:00:00Z
+**Scope:** WR-01 through WR-04 from initial review. IN-01 through IN-04 not in scope for `--fix` auto mode.
+
+### WR-01 -- RESOLVED
+
+`sanitizeAttrValue(value: string, field: string): string` added at `git-credential.ts:122-128`. Checks `/[\r\n\0]/` and throws `new Error("git-credential attribute '${field}' contains a control character")`. Called from `buildAttributeBlock` for `host` (line 141), `cred.username` (line 143), and `cred.password` (line 147). The error message interpolates only the hardcoded `field` argument (always `"host"`, `"username"`, or `"password"`), never a credential value -- AUTH-09 compliant. The throw propagates through `gitCredentialIO` into the `try/catch` in each public function: `credentialFill` returns `null`, `credentialApprove`/`credentialReject` silently no-op. Behavior contract unchanged; injection vector closed.
+
+### WR-02 -- RESOLVED
+
+`parseCredentialOutput` at line 169 now reads `line.slice(eq + 1).replace(/\r$/, "")`. Trailing `\r` stripped before storing the value. One-line fix; no behavioral change on LF-only systems.
+
+### WR-03 -- RESOLVED
+
+`errorWithCred` regex at `no-credential-leak.test.ts:89` extended to:
+```
+/new\s+Error\s*\((?:[^)]*\$\{[^}]*(password|access_token|cred\.[a-z]+)|[^)]*\+\s*(password|access_token|cred\.[a-z]+))/i
+```
+The `+` concatenation branch (`[^)]*\+\s*(password|access_token|cred\.[a-z]+)`) is present. Both template-literal and concatenation forms are now caught.
+
+### WR-04 -- RESOLVED
+
+`FORBIDDEN_PATTERNS` in `no-shell-out.test.ts` extended from 4 to 6 entries (lines 63-70). The two new patterns cover dynamic imports:
+- `/import\s*\(\s*["']node:child_process["']\s*\)/`
+- `/import\s*\(\s*["']child_process["']\s*\)/`
+
+D-21 + Phase 31 narrowing gate now covers static imports, `require()`, and dynamic `import()`.
+
+### New issues from fixes
+
+None. No new imports, no new exports, no behavior-changing logic introduced. The `sanitizeAttrValue` helper is file-private. The test file changes are purely additive.
+
+---
+
+## Original Findings (Iteration 1)
+
+### Warnings (all resolved in iteration 2)
 
 ### WR-01: `buildAttributeBlock` does not sanitize newlines in `host` or credential fields
 
@@ -133,84 +252,7 @@ const FORBIDDEN_PATTERNS: ReadonlyArray<RegExp> = [
 
 ---
 
-## Info
-
-### IN-01: Architecture gate does not assert the whitelisted file exists and actually uses `child_process`
-
-**File:** `tests/architecture/no-shell-out.test.ts:99-103`
-**Issue:** The "exactly one file" assertion validates only the in-memory `ALLOWED_CHILD_PROCESS_FILES` Set literal, not the filesystem. If `platform/git-credential.ts` is deleted:
-
-- Test 1 (`no child_process imports outside the whitelist`) passes because `walkTsFiles` never yields the deleted file, so the `ALLOWED_CHILD_PROCESS_FILES.has(rel)` skip never fires and no offenders are found.
-- Test 2 (`exactly one file`) passes because it checks the hardcoded Set, not the disk.
-- The `no-credential-leak` test 2 also passes vacuously (it has an explicit `if (!exists) return` guard).
-
-The gate therefore gives a false-green signal if the whitelisted file is accidentally removed or renamed.
-
-**Fix:** Add a third assertion that reads `git-credential.ts` from disk and verifies it contains a `child_process` import:
-```typescript
-test("Phase 31 whitelist: platform/git-credential.ts exists and imports node:child_process", async () => {
-  const abs = path.join(
-    REPO_ROOT,
-    "extensions/pi-claude-marketplace/platform/git-credential.ts",
-  );
-  const src = await readFile(abs, "utf8");
-  assert.ok(
-    /from\s+["']node:child_process["']/.test(src),
-    "platform/git-credential.ts must import node:child_process (whitelist integrity check)",
-  );
-});
-```
-
----
-
-### IN-02: README.md checklist item for `pi-api.ts` is stale
-
-**File:** `extensions/pi-claude-marketplace/platform/README.md:15`
-**Issue:** The checklist entry reads `- [ ] pi-api.ts` (not done), but the file exists on disk and the prose on line 5 says "Phase 7 added `pi-api.ts`". The checkbox should be `[x]`.
-
-**Fix:** Change line 15 from `- [ ]` to `- [x]`.
-
----
-
-### IN-03: Test 8 comment overstates what it proves
-
-**File:** `tests/platform/git-credential.test.ts:139-149`
-**Issue:** The test comment claims to prove that "the seam never widens its contract to include `path`/`username`/etc. on a fill query." What it actually asserts is that the mock's call-log record for a `fill` call contains only `{ host }` -- which is the shape of `MockCredentialState.fillCalls`, a test fixture. It does not exercise the production `buildAttributeBlock` function at all; the wire format is an implementation detail invisible to the mock. The comment misleads a reader into thinking production behavior is covered.
-
-**Fix:** Adjust the comment to accurately describe what is being tested:
-```typescript
-// Asserts that the CredentialOps.fill interface contract presents only `host`
-// to callers -- the attribute block construction is an implementation detail
-// of the production fill, not part of the seam. A separate integration or
-// real-subprocess test (e.g., Test 7) would be needed to verify the
-// production wire format excludes path=.
-```
-
----
-
-### IN-04: Mock `approve`/`reject` throw behavior is undocumented relative to the production contract
-
-**File:** `tests/helpers/credential-mock.ts:36-39`
-**Issue:** `approveThrows` and `rejectThrows` cause the mock to throw, but the production `credentialApprove` and `credentialReject` are guaranteed to never throw (they swallow all errors). Test 3 in `git-credential.test.ts` explicitly documents the `fillThrows` / production-null-return divergence for `fill`, but no equivalent note appears for `approve` and `reject`. Phase 32+ test authors who reach for `approveThrows` / `rejectThrows` to simulate subprocess failure will be testing a code path (try/catch around `approve`) that never fires against the real implementation.
-
-**Fix:** Add a comment to the `approveThrows`/`rejectThrows` fields explaining the contract divergence:
-```typescript
-/**
- * Optional override hooks -- simulate subprocess errors for callers that wrap
- * approve/reject in try/catch.
- *
- * NOTE: the production credentialApprove/credentialReject NEVER throw; they
- * silently no-op on all subprocess errors (Pitfall 7 / Pattern 3). Use these
- * overrides only to test caller-side try/catch logic if it is explicitly
- * present; do NOT assume Phase 32+ callers need to guard against throws from
- * approve or reject.
- */
-approveThrows?: Error;
-rejectThrows?: Error;
-```
-
----
-
 _Reviewed: 2026-06-01T00:00:00Z_
+_Re-reviewed (iteration 2): 2026-06-01T00:00:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
