@@ -97,7 +97,7 @@ Commands and skill names use Pi's colon form:
 | `foo`       | `foo-bar`             | `/foo:bar` |
 | `foo`       | `foo`                 | `/foo:foo` |
 
-Skills additionally use hyphenated generated names after the `/skill:` prefix:
+Skills are also registered with hyphenated names after the `/skill:` prefix:
 
 | Plugin name | Skill name | Pi name          |
 | ----------- | ---------- | ---------------- |
@@ -107,11 +107,11 @@ Skills additionally use hyphenated generated names after the `/skill:` prefix:
 
 MCP server names are not prefixed or rewritten. The server name is the key from the plugin's `mcpServers` object. If another MCP config already uses that name, the plugin install or update fails.
 
-| Plugin name | `mcpServers` key | Pi MCP server name               |
-| ----------- | ---------------- | -------------------------------- |
-| `foo`       | `api`            | `api`                            |
-| `foo`       | `foo-api`        | `foo-api`                        |
-| `bar`       | `api`            | conflict if `api` already exists |
+| Plugin name | `mcpServers` key | Pi MCP server name                 |
+| ----------- | ---------------- | ---------------------------------- |
+| `foo`       | `api`            | `api`                              |
+| `foo`       | `foo-api`        | `foo-api`                          |
+| `bar`       | `api`            | _conflict if `api` already exists_ |
 
 ### Scoping
 
@@ -275,7 +275,7 @@ This is equivalent to running.
 
 ```text
 /claude:plugin marketplace add anthropics/claude-plugins-marketplace
-/claude:plugin marketplace autoupdate anthropics/claude-plugins-marketplace
+/claude:plugin marketplace autoupdate claude-plugins-official
 ```
 
 ### Import

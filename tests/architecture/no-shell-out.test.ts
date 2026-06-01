@@ -65,6 +65,8 @@ const FORBIDDEN_PATTERNS: ReadonlyArray<RegExp> = [
   /from\s+["']child_process["']/,
   /require\(\s*["']child_process["']\s*\)/,
   /require\(\s*["']node:child_process["']\s*\)/,
+  /import\s*\(\s*["']node:child_process["']\s*\)/,
+  /import\s*\(\s*["']child_process["']\s*\)/,
 ];
 
 test("no child_process imports outside the Phase 31 whitelist (D-21 + Phase 31 narrowing)", async () => {

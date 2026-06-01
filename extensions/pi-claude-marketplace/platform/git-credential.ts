@@ -116,6 +116,18 @@ function gitCredentialIO(
 }
 
 /**
+ * WR-01: Reject values containing control characters that would corrupt the
+ * git-credential wire format (newline-injected extra attribute lines).
+ */
+function sanitizeAttrValue(value: string, field: string): string {
+  if (/[\r\n\0]/.test(value)) {
+    throw new Error(`git-credential attribute '${field}' contains a control character`);
+  }
+
+  return value;
+}
+
+/**
  * Build the git-credential wire-format attribute block.
  *
  * Wire format: `key=value` lines separated by `\n`, terminated by a blank
@@ -126,13 +138,13 @@ function gitCredentialIO(
  * different keychain key than fill reads from.
  */
 function buildAttributeBlock(host: string, cred?: GitCredentials): string {
-  const lines = [`protocol=https`, `host=${host}`];
+  const lines = [`protocol=https`, `host=${sanitizeAttrValue(host, "host")}`];
   if (cred?.username !== undefined) {
-    lines.push(`username=${cred.username}`);
+    lines.push(`username=${sanitizeAttrValue(cred.username, "username")}`);
   }
 
   if (cred?.password !== undefined) {
-    lines.push(`password=${cred.password}`);
+    lines.push(`password=${sanitizeAttrValue(cred.password, "password")}`);
   }
 
   return lines.join("\n") + "\n\n";
@@ -154,7 +166,7 @@ function parseCredentialOutput(stdout: string): Record<string, string> {
     }
 
     const key = line.slice(0, eq);
-    const value = line.slice(eq + 1);
+    const value = line.slice(eq + 1).replace(/\r$/, "");
     out[key] = value;
   }
 

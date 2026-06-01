@@ -83,9 +83,10 @@ test("AUTH-09: platform/git-credential.ts never interpolates a password in an Er
 
   const src = await readFile(absPath, "utf8");
   const stripped = stripComments(src);
-  // Forbidden: template literal that interpolates `password`, `access_token`,
-  // or any `cred.<field>` reference inside an Error(...) constructor.
-  const errorWithCred = /new\s+Error\s*\([^)]*\$\{[^}]*(password|access_token|cred\.[a-z]+)/i;
+  // Forbidden: template literal OR string concatenation that puts `password`,
+  // `access_token`, or `cred.<field>` inside an Error(...) constructor.
+  const errorWithCred =
+    /new\s+Error\s*\((?:[^)]*\$\{[^}]*(password|access_token|cred\.[a-z]+)|[^)]*\+\s*(password|access_token|cred\.[a-z]+))/i;
   assert.equal(
     errorWithCred.test(stripped),
     false,
