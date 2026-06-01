@@ -236,9 +236,10 @@ test("AUTH-07 reject-evict-reflow: onAuthFailure evicts cred, next fill-miss re-
   // onAuthFailure does NOT emit a Device Flow prompt.
   assert.equal(notifyCalls.length, 0, "onAuthFailure must not emit a Device Flow prompt");
 
-  // Second round: dfHttp1.pollQueue is drained; create a fresh mock set so
-  // the second onAuth call can complete its own Device Flow independently.
-  const { http: dfHttp2 } = makeMockDeviceFlowHttp({
+  // Second round: dfHttp1 was never called (onAuthFailure does not go through
+  // Device Flow; it only evicts and cancels). Create a fresh mock with a
+  // distinct user_code so the round-2 notify assertion is unambiguous.
+  const { http: dfHttp2, state: dfState2 } = makeMockDeviceFlowHttp({
     pollQueue: [
       {
         kind: "success",
@@ -249,7 +250,7 @@ test("AUTH-07 reject-evict-reflow: onAuthFailure evicts cred, next fill-miss re-
     ],
     deviceCode: {
       device_code: "MOCK_DEVICE_CODE_2",
-      user_code: "ABCD-1234",
+      user_code: "WXYZ-5678",
       verification_uri: "https://github.com/login/device",
       expires_in: 900,
       interval: 0,
@@ -268,14 +269,18 @@ test("AUTH-07 reject-evict-reflow: onAuthFailure evicts cred, next fill-miss re-
   // Second onAuth: store is empty (evicted), so fill MISS -> Device Flow re-triggered.
   const result2 = await onAuth2("https://github.com/repo.git");
 
-  // Fresh token returned.
+  // Fresh credential returned with correct username and token.
+  assert.equal(result2.username, "x-access-token");
   assert.equal(result2.password, "gho_fresh_token_e2e");
 
-  // Device Flow prompt fired once during the second round.
+  // dfHttp2 was actually used (pollQueue drained).
+  assert.equal(dfState2.pollTokenCalls.length, 1, "dfHttp2 must have been polled once");
+
+  // Device Flow prompt fired once during the second round, with dfHttp2's user_code.
   assert.equal(notifyCalls.length, 1, "exactly one Device Flow prompt after re-flow");
   assert.equal(
     notifyCalls[0]!.message,
-    "Open https://github.com/login/device and enter: ABCD-1234",
+    "Open https://github.com/login/device and enter: WXYZ-5678",
   );
   assert.equal(notifyCalls[0]!.severity, "info");
 

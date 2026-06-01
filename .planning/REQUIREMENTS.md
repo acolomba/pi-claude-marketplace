@@ -65,6 +65,7 @@ that never blocks the install.
 | AUTH-04 | Phase 32 | Satisfied |
 | AUTH-05 | Phase 32 | Satisfied |
 | AUTH-07 | Phase 32 | Satisfied |
+| AUTH-01..AUTH-10 (integration gate) | Phase 36 | Satisfied |
 
 **Coverage:**
 - v1.6 requirements: 10 total
