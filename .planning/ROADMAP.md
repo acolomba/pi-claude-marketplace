@@ -733,7 +733,11 @@ Plans:
 3. All Device Flow failure paths have unit coverage: `slow_down` cumulative interval, `access_denied` early exit, `expired_token` early exit, `onAuthFailure` `authAttempted` cancel guard, `git credential fill` miss (null return), `git credential reject` before re-auth.
 4. Architecture test confirms no credential field in state write functions (SEC-1/SEC-3); token-absence spot-check passes.
 
-**Plans:** TBD
+**Plans:** 1 plan
+
+**Wave 1**
+
+- [ ] 36-01-PLAN.md -- Integration test (auth-e2e.test.ts: 3 tests) + REQUIREMENTS.md AUTH-01..AUTH-10 marked [x]
 
 ## Progress
 
@@ -771,5 +775,5 @@ Plans:
 | 32. Device Flow State Machine                                        | v1.6      | 1/2 | Complete    | 2026-06-01 |
 | 33. git.ts Auth Wiring                                               | v1.6      | 1/1 | Complete   | 2026-06-01 |
 | 34. GitOps Interface Threading                                       | v1.6      | 1/1 | Complete    | 2026-06-01 |
-| 35. Orchestrator Call Sites & Output Catalog                         | v1.6      | 2/4 | In Progress|  |
-| 36. Integration Gate                                                 | v1.6      | TBD | Not started | -          |
+| 35. Orchestrator Call Sites & Output Catalog                         | v1.6      | 4/4 | Complete    | 2026-06-01 |
+| 36. Integration Gate                                                 | v1.6      | 0/1 | In Progress | -          |
