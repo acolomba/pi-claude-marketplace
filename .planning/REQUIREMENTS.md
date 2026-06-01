@@ -56,21 +56,21 @@ that never blocks the install.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | AUTH-10 | Phase 30 | Pending |
-| AUTH-08 | Phase 31 | Pending |
 | AUTH-06 | Phase 31 | Pending |
+| AUTH-08 | Phase 31 | Pending |
 | AUTH-09 | Phase 31 | Pending |
 | AUTH-01 | Phase 32 | Pending |
 | AUTH-02 | Phase 32 | Pending |
-| AUTH-03 | Phase 33 | Pending |
-| AUTH-04 | Phase 33 | Pending |
-| AUTH-05 | Phase 33 | Pending |
-| AUTH-07 | Phase 33 | Pending |
+| AUTH-03 | Phase 32 | Pending |
+| AUTH-04 | Phase 32 | Pending |
+| AUTH-05 | Phase 32 | Pending |
+| AUTH-07 | Phase 32 | Pending |
 
 **Coverage:**
 - v1.6 requirements: 10 total
-- Mapped to phases: 10
-- Unmapped: 0 (to be confirmed by roadmapper)
+- Mapped to phases: 10 (100%)
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-06-01*
-*Last updated: 2026-06-01 after initial definition*
+*Last updated: 2026-06-01 -- traceability finalized by gsd-roadmapper (Phases 30-36)*

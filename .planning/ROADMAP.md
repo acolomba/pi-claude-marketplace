@@ -9,6 +9,7 @@
 - Done **v1.4 Structured Notification Messages** -- Phases 15-21 (shipped 2026-05-28)
 - Done **v1.4.1 Post-ship UAT Patches** -- Phases 22-26 (closed 2026-05-30)
 - Done **v1.5 Notification Output Polish** -- Phases 27-29 (shipped 2026-05-31)
+- **v1.6 GitHub Private Marketplace Authentication** -- Phases 30-36 (in progress)
 
 For full details of each milestone, see `.planning/milestones/v[X.Y]-ROADMAP.md` and `.planning/milestones/v[X.Y]-REQUIREMENTS.md`.
 
@@ -100,6 +101,21 @@ Closed the 8 gaps surfaced by the v1.4 milestone-spanning UAT: reload-hint suppr
 - [x] Phase 27: Marketplace & Autoupdate Output Grammar (5/5 plans) -- completed 2026-05-31
 - [x] Phase 28: Severity Routing & Label Discipline (2/2 plans) -- completed 2026-05-31
 - [x] Phase 29: Notification Label Suppression & Update Classification (3/3 plans) -- completed 2026-05-31
+
+</details>
+
+<details>
+<summary>v1.6 GitHub Private Marketplace Authentication (Phases 30-36) -- IN PROGRESS</summary>
+
+On-demand Device Flow auth for private GitHub marketplace sources. Tries `git credential fill` first (silent reuse); triggers Device Flow only on a cache miss or 401; stores the resulting token via `git credential approve`; evicts via `git credential reject` on `onAuthFailure`. No env vars required. Two new modules (`platform/git-credential.ts`, `domain/github-auth.ts`) plus targeted wiring changes. 10/10 AUTH requirements.
+
+- [ ] Phase 30: Duplicate Type Fix (AUTH-10)
+- [ ] Phase 31: Credential Subprocess Layer (AUTH-06, AUTH-08, AUTH-09)
+- [ ] Phase 32: Device Flow State Machine (AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-07)
+- [ ] Phase 33: git.ts Auth Wiring (AUTH-01, AUTH-02)
+- [ ] Phase 34: GitOps Interface Threading (AUTH-01, AUTH-02)
+- [ ] Phase 35: Orchestrator Call Sites & Output Catalog (AUTH-01, AUTH-02, AUTH-03)
+- [ ] Phase 36: Integration Gate (all AUTH)
 
 </details>
 
@@ -569,6 +585,124 @@ Plans:
 
 - [x] 29-02-PLAN.md -- UXG-07 lockstep: output-catalog.md byte blocks + catalog-uat.test.ts fixtures + messaging-style-guide.md + ADR amendment (D-29-06/07)
 
+
+### Phase 30: Duplicate Type Fix
+
+**Goal:** Remove the duplicate `GitCredentials` type declaration from `platform/git.ts` so `npm run check` passes clean -- this is the prerequisite gate that unblocks all auth wiring.
+
+**Depends on:** Phase 29 (v1.5 complete)
+
+**Requirements:** AUTH-10
+
+**Success Criteria** (what must be TRUE):
+
+1. `platform/git.ts` compiles without the duplicate `GitCredentials` type error; `npm run check` exits 0.
+2. No functional change to clone/fetch behavior; all existing tests remain GREEN.
+
+**Plans:** TBD
+
+### Phase 31: Credential Subprocess Layer
+
+**Goal:** `platform/git-credential.ts` wraps `git credential fill/approve/reject` as injectable `CredentialOps` interface so tests never touch the developer's OS keychain.
+
+**Depends on:** Phase 30
+
+**Requirements:** AUTH-06, AUTH-08, AUTH-09
+
+**Success Criteria** (what must be TRUE):
+
+1. `git credential fill` returns a `GitAuth`-shaped credential on a hit and `null` on a miss (non-zero exit / empty stdout); no hang on missing blank-line terminator + `stdin.end()`.
+2. `git credential approve` persists a credential to the OS keychain; `git credential reject` evicts it -- both confirmed by the `CredentialOps` interface contract and unit tests with a mock implementation.
+3. The access token never appears in any error message or `ctx.ui.notify` output; architecture-level tests assert no credential field leaks through state write paths.
+4. `npm run check` GREEN; `CredentialOps` interface defined with a `makeMockCredentialOps` test helper following the `GitOps`/`makeMockGitOps` pattern.
+
+**Plans:** TBD
+
+### Phase 32: Device Flow State Machine
+
+**Goal:** `domain/github-auth.ts` implements the full GitHub Device Flow loop with injectable `DeviceFlowHttp` + `CredentialOps` seams -- poll, slow_down handling, timeout/access_denied error paths, and `ctx.ui.notify` via a pre-bound `notifyFn` callback.
+
+**Depends on:** Phase 31
+
+**Requirements:** AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-07
+
+**Success Criteria** (what must be TRUE):
+
+1. Device Flow displays `user_code` + `verification_uri` via `ctx.ui.notify` only (no `process.stdout` writes); the token itself never appears in any notification.
+2. `slow_down` responses increment `currentInterval` cumulatively by 5 s per occurrence; two consecutive `slow_down` responses produce `initial + 10` on the third poll.
+3. `access_denied` and `expired_token` exit the poll loop immediately with a clear, actionable error message (not a raw HTTP error object).
+4. A rejected stored token triggers `git credential reject` eviction before Device Flow re-triggers (`onAuthFailure` path); the `authAttempted` boolean guard prevents an infinite retry loop.
+
+**Plans:** TBD
+
+### Phase 33: git.ts Auth Wiring
+
+**Goal:** `platform/git.ts` `CloneOptions`/`FetchOptions` accept optional auth callbacks and `buildAuthCallbacks` assembles the `onAuth`/`onAuthFailure` closure pair that isomorphic-git needs.
+
+**Depends on:** Phase 32
+
+**Requirements:** AUTH-01, AUTH-02
+
+**Success Criteria** (what must be TRUE):
+
+1. `buildAuthCallbacks` returns an `onAuth` that calls `credentialOps.fill` first; only on a miss does it invoke the Device Flow `onAuthRequired` handler.
+2. `onAuthFailure` calls `credentialOps.reject` then returns `{ cancel: true }` when `authAttempted` is already true (second failure), preventing the isomorphic-git infinite-retry loop (CP-9).
+3. Exceptions from `onAuth`/`onAuthFailure` are caught and return `{ cancel: true }` rather than propagating raw (CP-10).
+4. `npm run check` GREEN; no change to existing clone/fetch call sites yet.
+
+**Plans:** TBD
+
+### Phase 34: GitOps Interface Threading
+
+**Goal:** `GitOps.clone` and `GitOps.fetch` gain an optional `onAuthRequired` field threaded through `shared.ts`, `DEFAULT_GIT_OPS`, and `refreshGitHubClone` so orchestrators can inject auth without knowing the git platform internals.
+
+**Depends on:** Phase 33
+
+**Requirements:** AUTH-01, AUTH-02
+
+**Success Criteria** (what must be TRUE):
+
+1. `GitOps` interface `clone`/`fetch` signatures accept an optional `onAuthRequired` callback; `DEFAULT_GIT_OPS` wires `buildAuthCallbacks` from `platform/git.ts` when the callback is provided.
+2. `refreshGitHubClone` threads `onAuthRequired` from its options bag into the `clone`/`fetch` calls.
+3. Existing tests that use `makeMockGitOps` remain GREEN with no changes (backward-compatible optional field).
+4. `npm run check` GREEN.
+
+**Plans:** TBD
+
+### Phase 35: Orchestrator Call Sites & Output Catalog
+
+**Goal:** `marketplace/add.ts` and `marketplace/update.ts` construct and pass the auth closure; the Device Flow `ctx.ui.notify` prompt pattern is registered in `docs/output-catalog.md` and the catalog UAT fixture.
+
+**Depends on:** Phase 34
+
+**Requirements:** AUTH-01, AUTH-02, AUTH-03
+
+**Success Criteria** (what must be TRUE):
+
+1. `addGithubInGuard` constructs the `onAuthRequired` closure (pre-binding `ctx` + `notifyFn`) and passes it to `refreshGitHubClone`; private-repo `marketplace add` triggers Device Flow on first access.
+2. `refreshRecord` in `update.ts` passes the `onAuthRequired` closure; subsequent `marketplace update` against the same host reuses the stored token silently (no Device Flow prompt).
+3. The Device Flow user-code prompt (`user_code` + `verification_uri`) appears in `docs/output-catalog.md` with a catalog-uat fixture proving the byte form.
+4. `npm run check` GREEN; catalog-uat byte gate GREEN.
+
+**Plans:** TBD
+
+### Phase 36: Integration Gate
+
+**Goal:** All AUTH requirements are demonstrably satisfied: `npm run check` GREEN, all failure paths tested (slow_down, timeout, access_denied, reject-evict, cancel guard), and the env-var credential path removed.
+
+**Depends on:** Phase 35
+
+**Requirements:** AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-06, AUTH-07, AUTH-08, AUTH-09, AUTH-10
+
+**Success Criteria** (what must be TRUE):
+
+1. `npm run check` exits 0 with all existing tests GREEN; no regression in test count from Phase 30 baseline.
+2. The old env-var credential path is removed from `platform/git.ts` and any call sites; NFR-5 (no network on non-add/update commands) is unaffected.
+3. All Device Flow failure paths have unit coverage: `slow_down` cumulative interval, `access_denied` early exit, `expired_token` early exit, `onAuthFailure` `authAttempted` cancel guard, `git credential fill` miss (null return), `git credential reject` before re-auth.
+4. Architecture test confirms no credential field in state write functions (SEC-1/SEC-3); token-absence spot-check passes.
+
+**Plans:** TBD
+
 ## Progress
 
 | Phase                                                                | Milestone | Plans Complete | Status      | Completed  |
@@ -600,3 +734,10 @@ Plans:
 | 27. Marketplace & Autoupdate Output Grammar                          | v1.5      | 5/5 | Complete    | 2026-05-31 |
 | 28. Severity Routing & Label Discipline                              | v1.5      | 2/2 | Complete    | 2026-05-31 |
 | 29. Notification Label Suppression & Update Classification          | v1.5      | 3/3 | Complete    | 2026-05-31 |
+| 30. Duplicate Type Fix                                               | v1.6      | TBD | Not started | -          |
+| 31. Credential Subprocess Layer                                      | v1.6      | TBD | Not started | -          |
+| 32. Device Flow State Machine                                        | v1.6      | TBD | Not started | -          |
+| 33. git.ts Auth Wiring                                               | v1.6      | TBD | Not started | -          |
+| 34. GitOps Interface Threading                                       | v1.6      | TBD | Not started | -          |
+| 35. Orchestrator Call Sites & Output Catalog                         | v1.6      | TBD | Not started | -          |
+| 36. Integration Gate                                                 | v1.6      | TBD | Not started | -          |
