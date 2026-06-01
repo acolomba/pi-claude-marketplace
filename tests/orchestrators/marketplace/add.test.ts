@@ -8,6 +8,7 @@ import test from "node:test";
 import { addMarketplace } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import {
   __resetCacheForTests,
   getMarketplaceNames,
@@ -17,6 +18,8 @@ import {
   StaleSourceCloneError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { makeMockCredentialOps } from "../../helpers/credential-mock.ts";
+import { makeMockDeviceFlowHttp } from "../../helpers/device-flow-mock.ts";
 import { fixtureMarketplaceDir, makeMockGitOps } from "../../helpers/git-mock.ts";
 
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -645,4 +648,179 @@ test("CMP-1: same marketplace name in user scope and project scope are independe
 
     await rm(hermeticHome, { recursive: true, force: true });
   }
+});
+
+// -----------------------------------------------------------------------
+// AUTH-01 auth-wiring tests (Plan 35-01)
+// -----------------------------------------------------------------------
+
+test("AUTH-01 add: credentialOps.fill HIT bypasses Device Flow and clones with the auth bundle", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx, pi, notifications } = makeCtx();
+
+    // Pre-seed a stored credential for github.com so fill returns a HIT.
+    const { credOps: credentialOps, state: credState } = makeMockCredentialOps({
+      store: new Map([["github.com", { username: "x-access-token", password: "stored-token" }]]),
+    });
+
+    const { gitOps, state } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      credentialOps,
+    });
+
+    // auth bundle must be forwarded to gitOps.clone.
+    assert.equal(state.cloneCalls.length, 1);
+    assert.ok(state.cloneCalls[0]?.auth !== undefined, "auth bundle must be present on clone call");
+
+    // Verify bundle shape.
+    const recordedAuth = state.cloneCalls[0].auth;
+    assert.equal(recordedAuth.host, "github.com");
+    assert.equal(
+      recordedAuth.credentialOps,
+      credentialOps,
+      "credentialOps should be reference-equal",
+    );
+
+    // Exercise the recorded auth bundle: fill HIT returns the stored credential.
+    const cbs = buildAuthCallbacks(recordedAuth);
+    const result = await cbs.onAuth("https://github.com/owner/repo.git");
+    assert.deepEqual(result, { username: "x-access-token", password: "stored-token" });
+
+    // fill consulted exactly once via the onAuth call above.
+    assert.equal(credState.fillCalls.length, 1);
+    assert.equal(credState.fillCalls[0]?.host, "github.com");
+
+    // No Device Flow prompt emitted: only the post-add success notification.
+    assert.equal(
+      notifications.filter((n) => n.message.startsWith("Open ")).length,
+      0,
+      "Device Flow notifyFn must NOT fire on a fill HIT",
+    );
+  });
+});
+
+test("AUTH-01 add: credentialOps.fill MISS triggers Device Flow which produces a token via initiateDeviceFlow", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx, pi, notifications } = makeCtx();
+
+    // Empty store -> fill returns null (MISS).
+    const { credOps: credentialOps, state: credState } = makeMockCredentialOps();
+
+    // Device Flow http mock: immediate success poll.
+    const { http: deviceFlowHttp } = makeMockDeviceFlowHttp({
+      deviceCode: {
+        device_code: "MOCK_DEVICE_CODE",
+        user_code: "ABCD-1234",
+        verification_uri: "https://github.com/login/device",
+        expires_in: 900,
+        interval: 0,
+      },
+      pollQueue: [
+        {
+          kind: "success",
+          accessToken: "gho_test_token_AUTH01",
+          tokenType: "bearer",
+          scope: "repo",
+        },
+      ],
+    });
+
+    const { gitOps, state } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      credentialOps,
+      deviceFlowHttp,
+    });
+
+    // auth bundle must be forwarded.
+    assert.equal(state.cloneCalls.length, 1);
+    const recordedAuth = state.cloneCalls[0]?.auth;
+    assert.ok(recordedAuth !== undefined, "auth bundle must be forwarded to gitOps.clone");
+
+    // Exercise the miss path: buildAuthCallbacks -> fill miss -> onAuthRequired
+    // -> initiateDeviceFlow (with the injected http mock) -> success.
+    const cbs = buildAuthCallbacks(recordedAuth);
+    const result = await cbs.onAuth("https://github.com/owner/repo.git");
+    assert.equal(
+      result.password,
+      "gho_test_token_AUTH01",
+      "Device Flow must produce the mocked token",
+    );
+
+    // Device Flow notifyFn must have emitted the byte-exact catalog prompt.
+    assert.ok(
+      notifications.some(
+        (n) =>
+          n.message === "Open https://github.com/login/device and enter: ABCD-1234" &&
+          n.severity === "info",
+      ),
+      "Device Flow must emit the exact catalog byte-form prompt with info severity",
+    );
+
+    // approve called once by initiateDeviceFlow on success.
+    assert.equal(
+      credState.approveCalls.length,
+      1,
+      "credentialOps.approve must be called on success",
+    );
+
+    // fill called once (the onAuth miss that triggered Device Flow).
+    assert.equal(credState.fillCalls.length, 1, "fill called once on the onAuth miss");
+    assert.equal(credState.fillCalls[0]?.host, "github.com");
+  });
+});
+
+test("AUTH-01 add: the GitAuthBundle is forwarded by reference into gitOps.clone (no re-bundling)", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx, pi } = makeCtx();
+
+    const { credOps: credentialOps } = makeMockCredentialOps();
+
+    const { http: deviceFlowHttp } = makeMockDeviceFlowHttp();
+
+    const { gitOps, state } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      credentialOps,
+      deviceFlowHttp,
+    });
+
+    assert.equal(state.cloneCalls.length, 1);
+    assert.equal(state.cloneCalls[0]?.auth?.host, "github.com");
+    assert.equal(
+      state.cloneCalls[0]?.auth?.credentialOps,
+      credentialOps,
+      "credentialOps must be reference-equal (no re-bundling)",
+    );
+    assert.equal(
+      typeof state.cloneCalls[0]?.auth?.onAuthRequired,
+      "function",
+      "onAuthRequired must be a function",
+    );
+  });
 });
