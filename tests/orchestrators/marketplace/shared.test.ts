@@ -7,16 +7,24 @@
 // any other failure (EACCES, corrupted git dir, programming bug in a
 // `GitOps` stub) must propagate so the caller surfaces the real cause
 // instead of silently falling back to stale local state.
+//
+// Phase 34 (v1.6): three additional tests lock the auth-threading
+// contract on refreshGitHubClone (AUTH-01, AUTH-02).
 
 import assert from "node:assert/strict";
 import test from "node:test";
 
 import { refreshGitHubClone } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import { makeMockCredentialOps } from "../../helpers/credential-mock.ts";
 
-import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type {
+  GitAuthBundle,
+  GitOps,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 
 interface CallLog {
-  fetch: number;
+  fetch: { dir: string; remote?: string; ref?: string; auth?: GitAuthBundle }[];
   resolveRef: { dir: string; ref: string }[];
   forceUpdateRef: { dir: string; ref: string; value: string }[];
   checkout: { dir: string; ref: string }[];
@@ -29,7 +37,7 @@ function makeStubGitOps(opts: { resolveRefThrows?: Error; resolveRefReturns?: st
   log: CallLog;
 } {
   const log: CallLog = {
-    fetch: 0,
+    fetch: [],
     resolveRef: [],
     forceUpdateRef: [],
     checkout: [],
@@ -42,8 +50,8 @@ function makeStubGitOps(opts: { resolveRefThrows?: Error; resolveRefReturns?: st
       log.clone++;
       await Promise.resolve();
     },
-    async fetch(): Promise<void> {
-      log.fetch++;
+    async fetch(args): Promise<void> {
+      log.fetch.push({ ...args });
       await Promise.resolve();
     },
     async forceUpdateRef(args): Promise<void> {
@@ -86,7 +94,7 @@ test("refreshGitHubClone: NotFoundError on resolveRef falls back to detached che
   // resolveRef threw NotFoundError -> remoteSha undefined -> detached-HEAD
   // checkout against the storedRef directly. forceUpdateRef must NOT be
   // called in this path.
-  assert.equal(log.fetch, 1);
+  assert.equal(log.fetch.length, 1);
   assert.equal(log.resolveRef.length, 1);
   assert.equal(log.resolveRef[0]?.ref, "refs/remotes/origin/v1.0.0");
   assert.equal(log.forceUpdateRef.length, 0);
@@ -108,7 +116,7 @@ test("refreshGitHubClone: non-NotFoundError on resolveRef propagates", async () 
     return true;
   });
 
-  assert.equal(log.fetch, 1);
+  assert.equal(log.fetch.length, 1);
   assert.equal(log.resolveRef.length, 1);
   // The fallback paths (checkout / forceUpdateRef) must NOT have run.
   assert.equal(log.forceUpdateRef.length, 0);
@@ -123,11 +131,79 @@ test("refreshGitHubClone: resolveRef returns SHA -> forceUpdateRef + checkout", 
 
   await refreshGitHubClone("/tmp/clone-dir", "main", gitOps);
 
-  assert.equal(log.fetch, 1);
+  assert.equal(log.fetch.length, 1);
   assert.equal(log.resolveRef.length, 1);
   assert.equal(log.forceUpdateRef.length, 1);
   assert.equal(log.forceUpdateRef[0]?.ref, "refs/heads/main");
   assert.equal(log.forceUpdateRef[0]?.value, sha);
   assert.equal(log.checkout.length, 1);
   assert.equal(log.checkout[0]?.ref, "main");
+});
+
+// Phase 34 (v1.6) auth-threading tests (AUTH-01, AUTH-02).
+
+test("refreshGitHubClone: without auth omits the auth field on gitOps.fetch", async () => {
+  // Proves the pre-v1.6 4-arg calling convention is preserved:
+  // the new optional auth parameter does NOT inject a field when omitted.
+  const sha = "1111111111111111111111111111111111111111";
+  const { gitOps, log } = makeStubGitOps({ resolveRefReturns: sha });
+
+  await refreshGitHubClone("/tmp/clone-dir", "main", gitOps);
+
+  assert.equal(log.fetch.length, 1);
+  // The spread `...(auth !== undefined && { auth })` must NOT add the
+  // field when auth is undefined.
+  assert.equal(log.fetch[0]?.auth, undefined);
+});
+
+test("refreshGitHubClone: with auth bundle forwards the same bundle into gitOps.fetch", async () => {
+  // Proves the bundle is threaded BY REFERENCE (strictEqual) without
+  // re-bundling. AUTH-09: no real credential material in the test.
+  const sha = "2222222222222222222222222222222222222222";
+  const { gitOps, log } = makeStubGitOps({ resolveRefReturns: sha });
+
+  const { credOps: credentialOps } = makeMockCredentialOps();
+  let onAuthRequiredCalls = 0;
+  const onAuthRequired = async (): Promise<AuthAttemptResult> => {
+    onAuthRequiredCalls++;
+    return Promise.resolve({ ok: false, reason: "not invoked", authAttempted: true });
+  };
+
+  const auth: GitAuthBundle = { credentialOps, host: "github.com", onAuthRequired };
+
+  await refreshGitHubClone("/tmp/clone-dir", "main", gitOps, undefined, auth);
+
+  assert.equal(log.fetch.length, 1);
+  // Reference equality: the exact same bundle object was forwarded.
+  assert.strictEqual(log.fetch[0]?.auth, auth);
+  // Lock each component.
+  assert.equal(log.fetch[0]?.auth?.host, "github.com");
+  assert.strictEqual(log.fetch[0]?.auth?.credentialOps, credentialOps);
+  assert.strictEqual(log.fetch[0]?.auth?.onAuthRequired, onAuthRequired);
+  // The stub fetch does not consult the bundle; onAuthRequired must NOT fire.
+  assert.equal(onAuthRequiredCalls, 0);
+});
+
+test("refreshGitHubClone: with auth bundle invokes onFetchSucceeded after gitOps.fetch", async () => {
+  // Proves that passing both the 4th and 5th optional args together works.
+  const sha = "3333333333333333333333333333333333333333";
+  const { gitOps, log } = makeStubGitOps({ resolveRefReturns: sha });
+
+  const { credOps: credentialOps } = makeMockCredentialOps();
+  const onAuthRequired = async (): Promise<AuthAttemptResult> =>
+    Promise.resolve({ ok: false, reason: "not invoked", authAttempted: true });
+  const auth: GitAuthBundle = { credentialOps, host: "github.com", onAuthRequired };
+
+  let fetchSucceededCount = 0;
+  const onFetchSucceeded = () => {
+    fetchSucceededCount++;
+  };
+
+  await refreshGitHubClone("/tmp/clone-dir", "main", gitOps, onFetchSucceeded, auth);
+
+  // onFetchSucceeded fires after gitOps.fetch returns.
+  assert.equal(fetchSucceededCount, 1);
+  assert.equal(log.fetch.length, 1);
+  // Auth bundle forwarded by reference.
+  assert.strictEqual(log.fetch[0]?.auth, auth);
 });
