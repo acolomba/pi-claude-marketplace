@@ -791,21 +791,21 @@ test("AUTH-09: platform/git-credential.ts never interpolates a password in an Er
 | A4 | The new `tests/architecture/no-credential-leak.test.ts` regex coverage is sufficient | Example 4 | [ASSUMED] MEDIUM. A determined call chain (`JSON.stringify({secret: token})` via a generic object) could leak under the static gate. Mitigation: code review at the Phase 32-35 boundaries; the static gate catches the obvious accidental cases (template literal interpolation, direct field name reference). |
 | A5 | `cancel` field on the returned `GitCredentials` type from Phase 30 is acceptable but unused by `CredentialOps.fill()` | Example 2 | LOW. The optional field is part of the type; fill() returns objects without it; isomorphic-git's onAuth callback in Phase 33 sets it on rejection. No conflict. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should the `host` parameter to `CredentialOps` be a string or a parsed `URL`?**
+   - RESOLVED: `host: string`. The interface matches the git credential wire format. Per Plan 31-02 `CredentialOps` interface definition.
    - What we know: The git credential wire format is `host=<value>`, and `<value>` can include a port (`example.com:8443`). All real callers in this codebase pass `"github.com"` -- the only supported host per SP-3.
-   - What's unclear: Whether to type `host: string` (simple, matches the wire format) or `host: URL` (forces the caller to construct a URL object, less convenient but stronger typing).
    - Recommendation: `host: string`. The interface matches the wire format. The caller's responsibility is to pass a syntactically-valid host. A typo (`"github.con"`) is detected by the resulting miss, not by a type error. Document in the docstring that `host` is the bare hostname (no scheme, optional port).
 
 2. **Should `fill` return `null` or `undefined` on miss?**
+   - RESOLVED: `null`. `fill` signature is `fill(host: string): Promise<GitCredentials | null>` per Plan 31-02.
    - What we know: TypeScript distinguishes them; this codebase uses `?? undefined` in many places (e.g. `platform/git.ts::currentBranch`).
-   - What's unclear: Convention preference.
-   - Recommendation: `null`. The semantic is "we asked, the answer was 'no credential'". `undefined` reads like "not asked yet" or "field was omitted". `null` is the affirmative no-result. Existing code uses `null` in `tests/helpers/git-mock.ts::currentBranchOverride: null` for the same reason (explicit none). The planner may choose otherwise -- this is style, not correctness.
+   - Recommendation: `null`. The semantic is "we asked, the answer was 'no credential'". `undefined` reads like "not asked yet" or "field was omitted". `null` is the affirmative no-result. Existing code uses `null` in `tests/helpers/git-mock.ts::currentBranchOverride: null` for the same reason (explicit none).
 
 3. **Should the `git-credential.ts` file expose a `lookupHost(url: string): string` helper?**
+   - RESOLVED: No -- deferred to Phase 33. Phase 31 ships only the credential primitives per Plan 31-02 scope.
    - What we know: Phase 33 will translate `https://github.com/owner/repo.git` → `"github.com"` for the credentialOps.fill call.
-   - What's unclear: Whether the URL parsing belongs in Phase 31's file or in Phase 33's buildAuthCallbacks.
    - Recommendation: Phase 33. Phase 31 ships ONLY the credential primitives. URL parsing is a Phase 33 concern (along with assembling the closures). Keep `git-credential.ts` to the bare CredentialOps surface.
 
 ## Environment Availability
