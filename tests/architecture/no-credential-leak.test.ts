@@ -44,6 +44,8 @@ const FORBIDDEN_STATE_FIELDS = /\b(password|access_token|githubToken|gitToken)\b
 
 const GIT_CREDENTIAL_FILE = "extensions/pi-claude-marketplace/platform/git-credential.ts";
 
+const GITHUB_AUTH_FILE = "extensions/pi-claude-marketplace/domain/github-auth.ts";
+
 function stripComments(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 }
@@ -91,5 +93,38 @@ test("AUTH-09: platform/git-credential.ts never interpolates a password in an Er
     errorWithCred.test(stripped),
     false,
     "Error constructor in git-credential.ts interpolates a credential field (AUTH-09 violation)",
+  );
+});
+
+test("AUTH-09 (Phase 32): domain/github-auth.ts never interpolates a token in an Error or notifyFn message", async () => {
+  const absPath = path.join(REPO_ROOT, GITHUB_AUTH_FILE);
+  const exists = await access(absPath).then(
+    () => true,
+    () => false,
+  );
+  if (!exists) {
+    // Plan 32-01 lands before Plan 32-02; until domain/github-auth.ts is
+    // authored, this gate is vacuously satisfied. Plan 32-02's file creation
+    // activates the gate automatically.
+    assert.ok(
+      true,
+      "domain/github-auth.ts not yet authored; AUTH-09 Phase-32 gate inactive until Plan 32-02",
+    );
+    return;
+  }
+
+  const src = await readFile(absPath, "utf8");
+  const stripped = stripComments(src);
+  // Forbidden: template literal OR string concatenation that interpolates
+  //   - access_token, accessToken
+  //   - cred.<field> (e.g. cred.password, cred.access_token)
+  //   - r.accessToken (from the PollResult success branch)
+  // INSIDE a `new Error(...)` constructor OR a `notifyFn(...)` call.
+  const errorOrNotifyWithToken =
+    /(new\s+Error\s*\(|notifyFn\s*\()(?:[^)]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken)|[^)]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken))/i;
+  assert.equal(
+    errorOrNotifyWithToken.test(stripped),
+    false,
+    "Error or notifyFn in domain/github-auth.ts interpolates a token field (AUTH-09 violation)",
   );
 });
