@@ -97,8 +97,8 @@ export async function clone(opts: CloneOptions): Promise<void> {
   });
 }
 
-export async function fetch(opts: FetchOptions): Promise<git.FetchResult> {
-  return git.fetch({
+export async function fetch(opts: FetchOptions): Promise<void> {
+  await git.fetch({
     fs,
     http,
     dir: opts.dir,
