@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: GitHub Private Marketplace Authentication
 status: executing
-last_updated: "2026-06-01T16:04:25.757Z"
-last_activity: 2026-06-01 -- Phase 35 execution started
+last_updated: "2026-06-01T17:10:00.000Z"
+last_activity: 2026-06-01 -- Phase 35 complete (4/4 plans), advancing to Phase 36
 progress:
   total_phases: 7
-  completed_phases: 4
-  total_plans: 11
-  completed_plans: 6
-  percent: 55
+  completed_phases: 5
+  total_plans: 15
+  completed_plans: 10
+  percent: 71
 ---
 
 # Project State
@@ -19,14 +19,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-30)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 35 -- Orchestrator Call Sites & Output Catalog
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 36 -- Integration Gate
 
 ## Current Position
 
-Phase: 35 (Orchestrator Call Sites & Output Catalog) -- EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 35
-Last activity: 2026-06-01 -- Phase 35 execution started
+Phase: 36 (Integration Gate) -- NEXT
+Plan: 0 of TBD
+Status: Phase 35 complete; Phase 36 planning pending
+Last activity: 2026-06-01 -- Phase 35 complete (4/4 plans merged, 1312 tests passing)
 
 ## Performance Metrics
 

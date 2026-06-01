@@ -114,7 +114,7 @@ On-demand Device Flow auth for private GitHub marketplace sources. Tries `git cr
 - [x] Phase 32: Device Flow State Machine (AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-07) (completed 2026-06-01)
 - [x] Phase 33: git.ts Auth Wiring (AUTH-01, AUTH-02) (completed 2026-06-01)
 - [x] Phase 34: GitOps Interface Threading (AUTH-01, AUTH-02) (completed 2026-06-01)
-- [ ] Phase 35: Orchestrator Call Sites & Output Catalog (AUTH-01, AUTH-02, AUTH-03)
+- [x] Phase 35: Orchestrator Call Sites & Output Catalog (AUTH-01, AUTH-02, AUTH-03)
 - [ ] Phase 36: Integration Gate (all AUTH)
 
 </details>
@@ -706,7 +706,7 @@ Plans:
 3. The Device Flow user-code prompt (`user_code` + `verification_uri`) appears in `docs/output-catalog.md` with a catalog-uat fixture proving the byte form.
 4. `npm run check` GREEN; catalog-uat byte gate GREEN.
 
-**Plans:** 2/4 plans executed
+**Plans:** 4/4 plans executed
 
 **Wave 0** *(pre-cleanup -- unblocks Wave 1 parallel execution)*
 
@@ -714,8 +714,8 @@ Plans:
 
 **Wave 1** *(parallel-safe: Plan 03 has no Wave 0 dependency; Plans 01 + 02 depend on Wave 0's helper widening but touch disjoint orchestrator + test files relative to each other and to Plan 03)*
 
-- [ ] 35-01-PLAN.md -- Wire Device Flow `onAuthRequired` closure into `addGithubInGuard`; forward `GitAuthBundle` to `gitOps.clone`; optional `credentialOps?` + test-seam `deviceFlowHttp?` on `AddMarketplaceOptions`; 3 new tests in `add.test.ts` covering fill-hit silent reuse, fill-miss triggers Device Flow, by-reference forwarding (AUTH-01)
-- [ ] 35-02-PLAN.md -- Wire Device Flow `onAuthRequired` closure into `refreshRecord`; forward `GitAuthBundle` as 5th positional arg of `refreshGitHubClone`; optional `credentialOps?` + test-seam `deviceFlowHttp?` on `UpdateMarketplaceOptions` + `UpdateAllMarketplacesOptions`; 2 new tests in `update.test.ts` covering AUTH-02 silent reuse + by-reference forwarding (AUTH-02)
+- [x] 35-01-PLAN.md -- Wire Device Flow `onAuthRequired` closure into `addGithubInGuard`; forward `GitAuthBundle` to `gitOps.clone`; optional `credentialOps?` + test-seam `deviceFlowHttp?` on `AddMarketplaceOptions`; 3 new tests in `add.test.ts` covering fill-hit silent reuse, fill-miss triggers Device Flow, by-reference forwarding (AUTH-01)
+- [x] 35-02-PLAN.md -- Wire Device Flow `onAuthRequired` closure into `refreshRecord`; forward `GitAuthBundle` as 5th positional arg of `refreshGitHubClone`; optional `credentialOps?` + test-seam `deviceFlowHttp?` on `UpdateMarketplaceOptions` + `UpdateAllMarketplacesOptions`; 2 new tests in `update.test.ts` covering AUTH-02 silent reuse + by-reference forwarding (AUTH-02)
 - [x] 35-03-PLAN.md -- Document the Device Flow user-code prompt in `docs/output-catalog.md` as a new `## Out-of-band notifications` H2 section; new byte-form lock test at `tests/shared/device-flow-prompt.test.ts`; extend AUTH-09 architecture gate to scan `add.ts` + `update.ts` (closes Phase 33 review WR-02) (AUTH-03)
 
 ### Phase 36: Integration Gate
