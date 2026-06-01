@@ -4,19 +4,21 @@
 
 `pi-claude-marketplace` is a Pi extension that gives Pi users access to Claude plugin marketplaces through a `/claude:plugin` command surface intentionally aligned with Claude Code's upstream `/plugin`. It translates Claude plugin artefacts (skills, commands, agents, MCP servers) into the equivalent Pi-native artefacts (Pi skills, Pi prompt templates, pi-subagents agents, pi-mcp-adapter MCP entries) and manages their lifecycle (install, update, uninstall, reinstall, marketplace add/remove/list, import).
 
-Seven milestones have shipped: v1.0 (PRD-derived successor architecture), v1.1 (atomic plugin reinstall), v1.2 (Claude settings import), v1.3 (consistent messaging -- every user-visible output conforming to a locked style guide + per-command catalog, structurally enforced by a 34-rule ESLint drift-guard plugin and a byte-equality catalog UAT runner), v1.4 (structured notification messages -- type-driven `NotificationMessage` payload replaces v1.3's string-based notify API; v1.3 drift-guard plugin retired in favor of closed-set type encoding), v1.4.1 (post-ship UAT patches -- 8 v1.4 milestone-spanning UAT gaps closed: reload-hint discipline, plugin.json version precedence, `v#<7hex>` hash display, `lsp` grammar consistency, plus runtime reproduction of the indent / tab-completion findings), and v1.5 (notification output polish -- 8 UXG output-grammar and severity-presentation refinements: benign no-ops suppressed from `Warning:`, autoupdate marker grammar, update no-op renders `(skipped)`, `<last-updated>` timestamp dropped, summary line prepended to error/warning cascades, update of manifest-absent plugin classifies as `(failed) {not in manifest}`, version arrow symmetric `v`-prefix). All are pre-release iterations toward the single unreleased `0.2.0` version (the last real release / git tag is `v0.1.7`).
+Eight milestones have shipped: v1.0 (PRD-derived successor architecture), v1.1 (atomic plugin reinstall), v1.2 (Claude settings import), v1.3 (consistent messaging -- every user-visible output conforming to a locked style guide + per-command catalog, structurally enforced by a 34-rule ESLint drift-guard plugin and a byte-equality catalog UAT runner), v1.4 (structured notification messages -- type-driven `NotificationMessage` payload replaces v1.3's string-based notify API; v1.3 drift-guard plugin retired in favor of closed-set type encoding), v1.4.1 (post-ship UAT patches -- 8 v1.4 milestone-spanning UAT gaps closed: reload-hint discipline, plugin.json version precedence, `v#<7hex>` hash display, `lsp` grammar consistency, plus runtime reproduction of the indent / tab-completion findings), and v1.5 (notification output polish -- 8 UXG output-grammar and severity-presentation refinements: benign no-ops suppressed from `Warning:`, autoupdate marker grammar, update no-op renders `(skipped)`, `<last-updated>` timestamp dropped, summary line prepended to error/warning cascades, update of manifest-absent plugin classifies as `(failed) {not in manifest}`, version arrow symmetric `v`-prefix), and v1.6 (GitHub private marketplace authentication -- on-demand Device Flow auth for private GitHub marketplace sources with OS keychain storage; no env vars required). All are pre-release iterations toward the single unreleased `0.2.0` version (the last real release / git tag is `v0.1.7`).
 
 ## Core Value
 
 A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
-## Current State
+## Current Milestone: v1.6 GitHub Private Marketplace Authentication
 
-**Status:** v1.5 shipped 2026-05-31. All 7 milestones complete. `gsd/v1.3-replan-catalog` branch ready to merge to `main` as `0.2.0`.
+**Goal:** Enable `marketplace add` and `marketplace update` to authenticate against private GitHub repos on demand using GitHub Device Flow -- no env vars or pre-configuration. OS keychain stores the resulting token via `git credential`; subsequent operations reuse it silently.
 
-**Test suite:** 1168/1168 pass (typecheck + ESLint + Prettier + tests).
-
-**Next:** `/gsd-new-milestone` when starting v2.0 work.
+**Target features:**
+- On-demand GitHub Device Flow triggered by a 401 response during clone/fetch
+- `ctx.ui` shows `user_code` + `verification_uri`; background poll resolves access token
+- `git credential fill` / `approve` / `reject` for cross-platform OS keychain storage
+- Fix: duplicate `GitCredentials` type declaration in `platform/git.ts`
 
 ## Requirements
 
@@ -90,7 +92,10 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 
 ### Active
 
-<!-- No active milestone. Use /gsd-new-milestone to start the next one. -->
+- [ ] On-demand GitHub Device Flow triggered by 401 on private GitHub sources
+- [ ] OS keychain credential storage via `git credential approve/fill/reject`
+- [ ] `ctx.ui` presents `user_code` + `verification_uri`; background poll resolves token
+- [ ] Fix duplicate `GitCredentials` type in `platform/git.ts`
 
 ### Out of Scope
 
