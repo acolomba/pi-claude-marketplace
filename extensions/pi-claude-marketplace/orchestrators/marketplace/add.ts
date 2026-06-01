@@ -51,9 +51,11 @@ import { mkdir, rename, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import { initiateDeviceFlow } from "../../domain/github-auth.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
+import { DEFAULT_CREDENTIAL_OPS } from "../../platform/git-credential.ts";
 import { dropMarketplaceCache, invalidateMarketplaceNames } from "../../shared/completion-cache.ts";
 import {
   MarketplaceDuplicateNameError,
@@ -62,14 +64,17 @@ import {
   errorMessage,
 } from "../../shared/errors.ts";
 import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
-import { notify } from "../../shared/notify.ts";
+import { makeRawNotifyFn, notify } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
-import { DEFAULT_GIT_OPS, type GitOps } from "./shared.ts";
+import { DEFAULT_GIT_OPS, type GitAuthBundle, type GitOps } from "./shared.ts";
 
+import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
 import type { GitHubSource, PathSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { CredentialOps } from "../../platform/git-credential.ts";
+import type { AuthAttemptResult } from "../../platform/git.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
 
@@ -87,10 +92,24 @@ export interface AddMarketplaceOptions {
   readonly rawSource: string;
   /** D-12 injection seam. Defaults to DEFAULT_GIT_OPS (which wraps platform/git.ts). */
   readonly gitOps?: GitOps;
+  /**
+   * AUTH-01 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
+   * wraps `git credential fill/approve/reject` via subprocess. Tests
+   * inject makeMockCredentialOps() from tests/helpers/credential-mock.ts
+   * so the developer's OS keychain is never touched.
+   */
+  readonly credentialOps?: CredentialOps;
+  /**
+   * Phase 35 test seam; production callers omit and get the default
+   * github.com fetch. When provided, threads into the onAuthRequired
+   * closure so tests can drive Device Flow end-to-end without network.
+   */
+  readonly deviceFlowHttp?: DeviceFlowHttp;
 }
 
 export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void> {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
+  const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
   const locations = locationsFor(opts.scope, opts.cwd);
   const source = parsePluginSource(opts.rawSource);
 
@@ -109,10 +128,13 @@ export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void>
   await withStateGuard(locations, async (state) => {
     if (source.kind === "github") {
       recordedName = await addGithubInGuard({
+        ctx: opts.ctx,
         state,
         locations,
         source,
         gitOps,
+        credentialOps,
+        ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
         cwd: opts.cwd,
       });
     } else {
@@ -165,15 +187,42 @@ export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void>
 }
 
 async function addGithubInGuard(args: {
+  ctx: ExtensionContext;
   state: ExtensionState;
   locations: ScopedLocations;
   source: GitHubSource;
   gitOps: GitOps;
+  credentialOps: CredentialOps;
+  deviceFlowHttp?: DeviceFlowHttp;
   cwd: string;
 }): Promise<string> {
-  const { state, locations, source, gitOps, cwd } = args;
+  const { ctx, state, locations, source, gitOps, credentialOps, deviceFlowHttp, cwd } = args;
   const stagingDir = await locations.sourcesStagingDir(randomUUID());
   const cloneUrl = `https://github.com/${source.owner}/${source.repo}.git`;
+
+  // AUTH-01: bind the Device Flow trigger as the onAuthRequired closure
+  // for this clone. Phase 33's platform/git.ts::buildAuthCallbacks first
+  // consults credentialOps.fill(host); only on a miss does it invoke
+  // this closure. AUTH-09: the closure interpolates ONLY user_code +
+  // verification_uri (via initiateDeviceFlow's notifyFn at
+  // domain/github-auth.ts:385) -- the access token is acquired LATER in
+  // the poll loop and is never passed back to a notify or Error.
+  //
+  // host is the bare hostname; Phase 35 scope is GitHub-only so the
+  // literal "github.com" is correct here (matches the GitHubSource
+  // parser's contract at domain/source.ts -- every github source resolves
+  // to https://github.com/<owner>/<repo>). A future AUTH-D02 (deferred)
+  // would parameterize this from the source.
+  const host = "github.com";
+  const notifyFn = makeRawNotifyFn(ctx);
+  const onAuthRequired = async (): Promise<AuthAttemptResult> =>
+    initiateDeviceFlow({
+      host,
+      credentialOps,
+      notifyFn,
+      ...(deviceFlowHttp !== undefined && { http: deviceFlowHttp }),
+    });
+  const auth: GitAuthBundle = { credentialOps, host, onAuthRequired };
 
   // 1. Clone into staging (NFR-5: only github branch reaches gitOps.clone).
   try {
@@ -181,6 +230,7 @@ async function addGithubInGuard(args: {
       dir: stagingDir,
       url: cloneUrl,
       ...(source.ref !== undefined && { ref: source.ref, singleBranch: true }),
+      auth,
     });
   } catch (err) {
     // Clone itself failed -- there is no staging dir to clean up beyond a

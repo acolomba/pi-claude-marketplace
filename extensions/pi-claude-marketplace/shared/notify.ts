@@ -1518,3 +1518,23 @@ export function compareByNameThenScope(a: Sortable, b: Sortable): number {
 
   return a.scope === "project" ? -1 : 1;
 }
+
+/**
+ * AUTH-01 seam: create a raw notify callback bound to ctx.ui.notify for
+ * use with domain-tier functions (e.g. initiateDeviceFlow) that require a
+ * simple `(message, severity?) => void` callback rather than the structured
+ * NotificationMessage surface. This is the ONLY sanctioned way to derive
+ * a raw callback from ctx.ui.notify outside of shared/notify.ts itself --
+ * all other code must use notify(ctx, pi, NotificationMessage) directly.
+ */
+export function makeRawNotifyFn(
+  ctx: ExtensionContext,
+): (message: string, severity?: "info" | "warning" | "error") => void {
+  return (message: string, severity?: "info" | "warning" | "error"): void => {
+    if (severity === undefined) {
+      ctx.ui.notify(message);
+    } else {
+      ctx.ui.notify(message, severity);
+    }
+  };
+}
