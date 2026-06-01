@@ -109,7 +109,7 @@ Closed the 8 gaps surfaced by the v1.4 milestone-spanning UAT: reload-hint suppr
 
 On-demand Device Flow auth for private GitHub marketplace sources. Tries `git credential fill` first (silent reuse); triggers Device Flow only on a cache miss or 401; stores the resulting token via `git credential approve`; evicts via `git credential reject` on `onAuthFailure`. No env vars required. Two new modules (`platform/git-credential.ts`, `domain/github-auth.ts`) plus targeted wiring changes. 10/10 AUTH requirements.
 
-- [ ] Phase 30: Duplicate Type Fix (AUTH-10)
+- [x] Phase 30: Duplicate Type Fix (AUTH-10) (completed 2026-06-01)
 - [ ] Phase 31: Credential Subprocess Layer (AUTH-06, AUTH-08, AUTH-09)
 - [ ] Phase 32: Device Flow State Machine (AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-07)
 - [ ] Phase 33: git.ts Auth Wiring (AUTH-01, AUTH-02)
@@ -599,11 +599,11 @@ Plans:
 1. `platform/git.ts` compiles without the duplicate `GitCredentials` type error; `npm run check` exits 0.
 2. No functional change to clone/fetch behavior; all existing tests remain GREEN.
 
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 **Wave 1**
 
-- [ ] 30-01-PLAN.md -- Export canonical GitCredentials type to platform/git.ts; npm run check GREEN gate (AUTH-10)
+- [x] 30-01-PLAN.md -- Export canonical GitCredentials type to platform/git.ts; npm run check GREEN gate (AUTH-10)
 
 ### Phase 31: Credential Subprocess Layer
 
@@ -738,7 +738,7 @@ Plans:
 | 27. Marketplace & Autoupdate Output Grammar                          | v1.5      | 5/5 | Complete    | 2026-05-31 |
 | 28. Severity Routing & Label Discipline                              | v1.5      | 2/2 | Complete    | 2026-05-31 |
 | 29. Notification Label Suppression & Update Classification          | v1.5      | 3/3 | Complete    | 2026-05-31 |
-| 30. Duplicate Type Fix                                               | v1.6      | TBD | Not started | -          |
+| 30. Duplicate Type Fix                                               | v1.6      | 1/1 | Complete   | 2026-06-01 |
 | 31. Credential Subprocess Layer                                      | v1.6      | TBD | Not started | -          |
 | 32. Device Flow State Machine                                        | v1.6      | TBD | Not started | -          |
 | 33. git.ts Auth Wiring                                               | v1.6      | TBD | Not started | -          |
