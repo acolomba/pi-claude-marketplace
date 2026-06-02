@@ -824,7 +824,11 @@ owned orphan targets, while preserving the PI-6 foreign-content guard.
    preserves the phase-3a aggregation contract if the file test is retired.
 6. `npm run check` GREEN; no regression from Phase 37 baseline.
 
-**Plans:** TBD
+**Plans:** 1 plan
+
+**Wave 1**
+
+- [ ] 38-01-PLAN.md -- TR-01 + TR-05 + TR-06: export removeOrphanIfPresent helper (kind-strict (file|tree)); sequentialize commitPreparedAgents + commitPreparedCommands step-2 with completedRenames[] reverse-walk rollback + appendLeaks; replacePrepared{Skills,Agents,Commands} adopt 3-arm owned/foreign/empty policy via removeOrphanIfPresent; preserve PI-6 + PUP-6 verbatim
 
 ### Phase 39: Cascade Ghost Record
 
@@ -956,7 +960,7 @@ comments explaining the WHY, and each has a behavior-asserting regression test.
 | 35. Orchestrator Call Sites & Output Catalog                         | v1.6      | 4/4 | Complete    | 2026-06-01 |
 | 36. Integration Gate                                                 | v1.6      | 1/1 | Complete   | 2026-06-01 |
 | 37. Phase-Ledger Undo Gap                                            | v1.7      | 1/1 | Complete   | 2026-06-02 |
-| 38. Sequential Commit Loops + Orphan Tolerance                       | v1.7      | TBD | Pending    |            |
+| 38. Sequential Commit Loops + Orphan Tolerance                       | v1.7      | 0/1 | Pending    |            |
 | 39. Cascade Ghost Record                                             | v1.7      | TBD | Pending    |            |
 | 40. Update State-Before-Commit Reorder                               | v1.7      | TBD | Pending    |            |
 | 41. Documentation and Test Closeout                                  | v1.7      | TBD | Pending    |            |
