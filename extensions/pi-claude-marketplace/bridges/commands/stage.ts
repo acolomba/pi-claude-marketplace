@@ -34,7 +34,12 @@ import {
   errorMessage,
   ManualRecoveryError,
 } from "../../shared/errors.ts";
-import { cleanupStaging, pathExists, rollbackReplacementCommon } from "../../shared/fs-utils.ts";
+import {
+  cleanupStaging,
+  pathExists,
+  removeOrphanIfPresent,
+  rollbackReplacementCommon,
+} from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { substituteClaudeVars } from "../../shared/vars.ts";
 
@@ -300,9 +305,20 @@ export async function replacePreparedCommands(
       backups.push({ name, from: target, to: backup });
     }
 
+    // TR-06: 3-arm policy at the rename loop. ownedNames is the basename
+    // membership set derived from state.json (via _previousNames). When a
+    // pre-existing target shares an owned basename, it is treated as an
+    // orphan from a prior partial install and pre-removed via the
+    // kind-strict helper. Foreign content (basename NOT in ownedNames)
+    // still triggers the existing PI-6 "non-previous content" rejection
+    // verbatim. Command targets are .md files -> mode "file".
+    const ownedNames = new Set<string>(prepared._previousNames);
     await mkdir(prepared.locations.promptsTargetDir, { recursive: true });
     for (const pair of prepared._renamePairs) {
-      if (await pathExists(pair.to)) {
+      const targetName = path.basename(pair.to, ".md");
+      if (ownedNames.has(targetName)) {
+        await removeOrphanIfPresent(pair.to, "file");
+      } else if (await pathExists(pair.to)) {
         throw new Error(`Cannot replace command target with non-previous content at ${pair.to}`);
       }
 

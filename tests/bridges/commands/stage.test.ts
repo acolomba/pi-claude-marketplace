@@ -761,3 +761,45 @@ test("TR-05 commitPreparedCommands rollback rename failure surfaces via appendLe
     await scope.cleanup();
   }
 });
+
+// TR-06 orphan tolerance in replacePreparedCommands ---------------------
+
+test("TR-06 replacePreparedCommands tolerates owned orphan file from prior partial install", async () => {
+  // A previous partial install left an orphan command file at the target.
+  // Because the basename matches an owned previousCommandName, the 3-arm
+  // policy proceeds (either via the backup loop or via the helper at the
+  // rename loop). The new staged content lands; the orphan bytes are
+  // overwritten.
+  const scope = await tmpScope();
+
+  try {
+    // Pre-create an orphan file at one of the targets we will stage.
+    await mkdir(scope.loc.promptsTargetDir, { recursive: true });
+    const orphanTarget = path.join(scope.loc.promptsTargetDir, "acme:deploy.md");
+    await writeFile(orphanTarget, "orphan-prompt\n", "utf8");
+
+    const prepared = await prepareStageCommands({
+      locations: scope.loc,
+      marketplaceName: "test-mp",
+      pluginName: "acme",
+      pluginRoot: FIXTURE_PLUGIN_ROOT,
+      pluginDataDir: "/tmp/pi-data/test-mp/acme",
+      resolved: makeResolved(FIXTURE_PLUGIN_ROOT, "commands"),
+      // Mark this generatedName as owned (in the index) so the orphan is
+      // tolerated rather than rejected as foreign content.
+      previousCommandNames: ["acme:deploy"],
+    });
+
+    const replacement = await replacePreparedCommands(prepared);
+    assert.equal(replacement.kind, "replaced");
+
+    const replacedBody = await readFile(orphanTarget, "utf8");
+    assert.notEqual(replacedBody, "orphan-prompt\n");
+    assert.ok(
+      replacedBody.length > 0 && !replacedBody.includes("orphan-prompt"),
+      "replacement body must not contain the orphan bytes",
+    );
+  } finally {
+    await scope.cleanup();
+  }
+});

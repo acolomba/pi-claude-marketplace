@@ -573,3 +573,51 @@ test("Phase 8 / PRL-10 replacePreparedSkills skips backup when previous skill di
     assert.deepEqual([...leaks], []);
   });
 });
+
+// TR-06 orphan tolerance in replacePreparedSkills ------------------------
+
+test("TR-06 replacePreparedSkills tolerates owned orphan dir from prior partial install", async () => {
+  // A previous partial install left an orphan skill dir at the target.
+  // Because the basename matches an owned previousSkillName, the 3-arm
+  // policy pre-removes the orphan via removeOrphanIfPresent and proceeds
+  // with the rename. The new staged content lands; the orphan bytes are
+  // overwritten.
+  await withTmpScope(async ({ locations }) => {
+    const orphanDir = path.join(locations.skillsTargetDir, "acme-knowledge");
+    await mkdir(orphanDir, { recursive: true });
+    await writeFile(path.join(orphanDir, "SKILL.md"), "orphan-bytes\n");
+    await writeFile(path.join(orphanDir, "leftover.txt"), "from-prior-attempt\n");
+
+    const pluginRoot = path.join(FIXTURES, "test-plugin");
+    const skillsDir = path.join(pluginRoot, "skills");
+    const resolved = makeResolved("acme", pluginRoot, skillsDir);
+
+    const prepared = await prepareStageSkills({
+      locations,
+      marketplaceName: "mp",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
+      resolved,
+      previousSkillNames: ["acme-knowledge"],
+    });
+
+    const replacement = await replacePreparedSkills(prepared);
+    assert.equal(replacement.kind, "replaced");
+
+    // The orphan dir was removed (its leftover.txt is gone), and the new
+    // staged content (with rewritten frontmatter) landed in its place.
+    const replacedSkillMd = await readFile(
+      path.join(locations.skillsTargetDir, "acme-knowledge", "SKILL.md"),
+      "utf8",
+    );
+    assert.notEqual(replacedSkillMd, "orphan-bytes\n");
+    assert.equal(
+      await stat(path.join(locations.skillsTargetDir, "acme-knowledge", "leftover.txt")).catch(
+        () => null,
+      ),
+      null,
+      "orphan leftover.txt must be gone (helper rm -r the whole owned orphan dir)",
+    );
+  });
+});
