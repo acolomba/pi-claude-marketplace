@@ -778,13 +778,65 @@ async function abortHandles(handles: PrepHandles): Promise<(string | undefined)[
   return leaks;
 }
 
-async function swapStateRecord(
+// ─────────────────────────────────────────────────────────────────────────────
+// TR-04 (Phase 40): intent-mark + finalize helpers replacing swapStateRecord.
+//
+// Module-level constants:
+//  - UPDATE_IN_PROGRESS_NOTE: the load-bearing marker text written into
+//    `compatibility.notes` during the intent-mark window. A static string
+//    keeps the cross-process contract simple to grep + assert; a future GC
+//    sweeper can use `sRecord.updatedAt` (already in the schema) for
+//    staleness (RESEARCH Open Q5 RESOLVED).
+//  - PHASE3_FAILURE_PHASES + Phase3Phase: closed-set tuple for the per-bridge
+//    finalize gating. `Phase3Failure.phase` is already declared as the closed
+//    union `"skills" | "commands" | "agents" | "mcp"` in shared/errors.ts, so
+//    the tuple here is a runtime mirror of the type for explicit Set<Phase3Phase>
+//    construction inside `finalizeUpdateRecord`. A future fifth bridge surfaces
+//    here as a TS error.
+//
+// A1 spot-check (RESEARCH Assumptions): grep of shared/notify.ts for
+// `compatibility.notes` returns zero hits; the only extension consumer is
+// reinstall.ts:1349 (record copy, not rendering). The intent-mark marker is
+// internal-only -- no notify-rendering test is at risk.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const UPDATE_IN_PROGRESS_NOTE = "update-in-progress";
+
+const PHASE3_FAILURE_PHASES = ["skills", "commands", "agents", "mcp"] as const;
+type Phase3Phase = (typeof PHASE3_FAILURE_PHASES)[number];
+
+/**
+ * TR-04 Pattern 1 (Phase 40): pre-commit intent-mark.
+ *
+ * Runs INSIDE a `withStateGuard` BEFORE phase-3a commits begin. Re-reads
+ * the per-marketplace per-plugin state record, performs the ST-9
+ * stale-version check (moved here from the retired `swapStateRecord`),
+ * and writes the intent-mark `compatibility = { installable: false,
+ * notes: [UPDATE_IN_PROGRESS_NOTE], supported: <carry-forward>,
+ * unsupported: <carry-forward> }`.
+ *
+ * Cross-process contract: a SECOND process observing
+ * `installable: false` + `notes: [UPDATE_IN_PROGRESS_NOTE]` MUST treat
+ * this plugin as in-flight; the next `update` call from any process is
+ * the recovery path. ST-9 lives here; `finalizeUpdateRecord` does NOT
+ * re-check ST-9 (Open Q1 RESOLVED: a finalize-time ST-9 check would
+ * over-fire on the legitimate same-process intent-mark -> commits ->
+ * finalize sequence because intent-mark does not bump the version).
+ *
+ * Pitfall 7: `compatibility.supported` and `compatibility.unsupported`
+ * carry forward UNCHANGED from the pre-update sRecord. They are the
+ * truthful current view during the intent-mark window; `finalizeUpdateRecord`
+ * rewrites them on the all-success branch.
+ *
+ * No mutation to `sRecord.version`, `sRecord.resources`, `sRecord.resolvedSource`,
+ * or `sRecord.updatedAt` -- those are the finalize step's responsibility.
+ */
+async function markUpdateInProgress(
   args: ThreePhaseArgs,
   preflight: PluginPreflight,
-  handles: PrepHandles,
 ): Promise<void> {
   const { plugin, marketplace, locations } = args;
-  const { installable, fromVersion, toVersion } = preflight;
+  const { fromVersion } = preflight;
   await withStateGuard(locations, (s) => {
     const sMp = s.marketplaces[marketplace];
     if (sMp === undefined) {
@@ -798,26 +850,117 @@ async function swapStateRecord(
       throw new Error(`Plugin "${plugin}" was concurrently uninstalled.`);
     }
 
+    // ST-9: stale-version check (moved from the retired swapStateRecord).
     if (sRecord.version !== fromVersion) {
       throw new Error(
         `Plugin "${plugin}" was concurrently updated; expected version "${fromVersion}", found "${sRecord.version}".`,
       );
     }
 
-    sRecord.version = toVersion;
-    sRecord.resources = {
-      skills: handles.skills.result.recorded.map((r) => r.generatedName),
-      prompts: handles.commands.result.recorded.map((r) => r.generatedName),
-      agents: handles.agents.result.recorded.map((r) => r.generatedName),
-      mcpServers: handles.mcp.result.recorded.map((r) => r.generatedName),
-    };
     sRecord.compatibility = {
-      installable: true,
-      notes: [...installable.notes],
-      supported: [...installable.supported],
-      unsupported: [...installable.unsupported],
+      installable: false,
+      notes: [UPDATE_IN_PROGRESS_NOTE],
+      // Pitfall 7: carry forward from EXISTING sRecord, NOT from
+      // preflight.installable -- the pre-update arrays are the truthful
+      // view during the intent-mark window.
+      supported: [...sRecord.compatibility.supported],
+      unsupported: [...sRecord.compatibility.unsupported],
     };
-    sRecord.resolvedSource = installable.pluginRoot;
+  });
+}
+
+/**
+ * TR-04 Pattern 2 (Phase 40): post-commit finalize.
+ *
+ * Runs INSIDE a SECOND `withStateGuard` AFTER phase-3a. Mutation policy
+ * has TWO distinct failure semantics:
+ *
+ * 1. PER-BRIDGE (independent across bridges): for each of skills /
+ *    commands / agents / mcp, if `!failedPhases.has(bridge)` then write
+ *    `sRecord.resources.<schemaField> = handles.<bridge>.result.recorded
+ *    .map(r => r.generatedName)`. CONTEXT.md SC#2 + Pitfall 1: do NOT
+ *    gate per-bridge writes on `phase3aFailures.length === 0`; the
+ *    independent per-bridge gate is the load-bearing structural contract.
+ *
+ *    Bridge -> schema-field mapping (locked, mirrors Phase 39 / TR-03):
+ *      skills    -> resources.skills
+ *      commands  -> resources.prompts   (asymmetric, schema-locked)
+ *      agents    -> resources.agents
+ *      mcp       -> resources.mcpServers
+ *
+ * 2. ALL-OR-NOTHING (version bump + installable flip + resolvedSource):
+ *    only when `phase3aFailures.length === 0`. On any failure the
+ *    `compatibility` block stays at the intent-mark values
+ *    (`installable: false`, `notes: [UPDATE_IN_PROGRESS_NOTE]`),
+ *    `version` stays at `fromVersion`, and `resolvedSource` stays at
+ *    the pre-update install path.
+ *
+ * `sRecord.updatedAt` is set on BOTH branches: even a failed finalize
+ * is a truthful "we touched this record" stamp.
+ */
+async function finalizeUpdateRecord(
+  args: ThreePhaseArgs,
+  preflight: PluginPreflight,
+  handles: PrepHandles,
+  phase3aFailures: readonly Phase3Failure[],
+): Promise<void> {
+  const { plugin, marketplace, locations } = args;
+  const { installable, toVersion } = preflight;
+  await withStateGuard(locations, (s) => {
+    const sMp = s.marketplaces[marketplace];
+    if (sMp === undefined) {
+      throw new Error(
+        `Marketplace "${marketplace}" disappeared from state during finalize of "${plugin}".`,
+      );
+    }
+
+    const sRecord = sMp.plugins[plugin];
+    if (sRecord === undefined) {
+      throw new Error(`Plugin "${plugin}" was concurrently uninstalled during finalize.`);
+    }
+
+    // Anchor the per-bridge gating against the runtime tuple of known
+    // phases. The Set is initialized from PHASE3_FAILURE_PHASES so a
+    // future fifth bridge would force an explicit tuple update before
+    // landing here.
+    const failedPhases = new Set<Phase3Phase>(
+      phase3aFailures.map((f) => f.phase).filter((p) => PHASE3_FAILURE_PHASES.includes(p)),
+    );
+
+    // SC#2 per-bridge orthogonality: each successful bridge writes its
+    // new generated names INDEPENDENTLY of other bridges' outcomes.
+    // The commands -> prompts asymmetry mirrors Phase 39 (TR-03).
+    if (!failedPhases.has("skills")) {
+      sRecord.resources.skills = handles.skills.result.recorded.map((r) => r.generatedName);
+    }
+
+    if (!failedPhases.has("commands")) {
+      sRecord.resources.prompts = handles.commands.result.recorded.map((r) => r.generatedName);
+    }
+
+    if (!failedPhases.has("agents")) {
+      sRecord.resources.agents = handles.agents.result.recorded.map((r) => r.generatedName);
+    }
+
+    if (!failedPhases.has("mcp")) {
+      sRecord.resources.mcpServers = handles.mcp.result.recorded.map((r) => r.generatedName);
+    }
+
+    // SC#2 all-or-nothing: version bump + installable=true + resolvedSource
+    // happen ONLY on the all-success path. On failure the intent-mark
+    // `compatibility` set by `markUpdateInProgress` carries forward
+    // (the truthful "we did not complete the swap" view).
+    if (phase3aFailures.length === 0) {
+      sRecord.version = toVersion;
+      sRecord.compatibility = {
+        installable: true,
+        notes: [...installable.notes],
+        supported: [...installable.supported],
+        unsupported: [...installable.unsupported],
+      };
+      sRecord.resolvedSource = installable.pluginRoot;
+    }
+
     sRecord.updatedAt = new Date().toISOString();
   });
 }
@@ -852,22 +995,24 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   assertNoCrossPluginConflicts(scope, generatedNames, stateForGuard);
   const handles = await prepareUpdateHandles(args, preflight, generatedNames.agentsSourceDir);
 
-  // ─── : state-guard swap (with old-resource snapshot) ───────────────
+  // ─── Phase 2a: pre-commit intent-mark (TR-04 / Phase 40) ──────────────────
   //
-  // ST-9 stale-version check INSIDE the closure: if another process updated
-  // this plugin between our pre-phase load and the guard's fresh load,
-  // record.version !== fromVersion -> throw. The guard does NOT save (ST-7).
+  // The intent-mark window writes `compatibility.installable = false` +
+  // `notes: [UPDATE_IN_PROGRESS_NOTE]` BEFORE phase-3a commits. ST-9
+  // stale-version detection lives here (moved from the retired
+  // `swapStateRecord`). The intent-mark survives a process crash mid-commit
+  // so the next `/reload` + retry sees the truthful prior version and the
+  // `RECOVERY_PLUGIN_REINSTALL_PREFIX` recovery hint is structurally mirrored
+  // on disk.
   //
-  // The closure mutates the plugin record in-place; the guard atomically
-  // saves on no-throw. After the guard returns successfully, state.json on
-  // disk reflects the NEW version + NEW resources; phase 3a then performs
-  // the physical replace -- bridge commits write under <scopeRoot>/agents/,
-  // <extensionRoot>/resources/skills/, etc.
+  // No version/resources/resolvedSource mutation in this window -- those
+  // are the post-phase-3a `finalizeUpdateRecord` step's responsibility.
 
   try {
-    await swapStateRecord(args, preflight, handles);
+    await markUpdateInProgress(args, preflight);
   } catch (err) {
-    //  failure: abort all prep handles + rethrow.
+    // Intent-mark failure (typically ST-9 stale-version): abort all prep
+    // handles + rethrow.
     throw appendLeaks(err, await abortHandles(handles));
   }
 
@@ -920,6 +1065,37 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
     await commitPreparedMcp(handles.mcp);
   } catch (err) {
     phase3aFailures.push({ phase: "mcp", msg: errorMessage(err), cause: err });
+  }
+
+  // ─── Phase 2b: finalize state (TR-04 / Phase 40) ──────────────────────────
+  //
+  // The finalize window writes per-bridge resource updates for every
+  // bridge whose commit succeeded (independent of other bridges' outcomes),
+  // and bumps `version` + `installable=true` + `resolvedSource` ONLY when
+  // all four bridges succeeded.
+  //
+  // Order discipline: finalize MUST run BEFORE the phase-3b recovery-hint
+  // emission. If finalize ran AFTER the recovery-hint emission on a success
+  // path that flips to finalize-failure, the user would see a success
+  // notification then a stale state -- worst of both worlds. The synthetic
+  // 'mcp' push inside the finalize catch (below) trips the phase-3b branch
+  // so the recovery hint fires.
+  //
+  // Pitfall 4 + Assumption A3: a finalize throw routes through
+  // `phase3aFailures` as a synthetic `phase: "mcp"` entry so the existing
+  // `notifyDirectFailure` recovery-hint pipeline fires unchanged. The
+  // `msg` field carries the explicit `state finalize failed:` text so
+  // operator diagnostics see the truthful cause. A dedicated
+  // `phase: "finalize"` Phase3Failure member is deferred to v1.8
+  // (RESEARCH Open Q3 RESOLVED).
+  try {
+    await finalizeUpdateRecord(args, preflight, handles, phase3aFailures);
+  } catch (finalizeErr) {
+    phase3aFailures.push({
+      phase: "mcp",
+      msg: `state finalize failed: ${errorMessage(finalizeErr)}`,
+      cause: finalizeErr,
+    });
   }
 
   // ─── Phase 3b: aggregate error path with recovery hint, OR success ────────
