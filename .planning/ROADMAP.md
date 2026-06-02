@@ -131,7 +131,7 @@ dependencies; no user-visible behavior changes on the happy path.
 
 - [x] Phase 37: Phase-Ledger Undo Gap (TR-02)
 - [x] Phase 38: Sequential Commit Loops + Orphan Tolerance (TR-01, TR-05, TR-06)
-- [ ] Phase 39: Cascade Ghost Record (TR-03)
+- [x] Phase 39: Cascade Ghost Record (TR-03)
 - [ ] Phase 40: Update State-Before-Commit Reorder (TR-04)
 - [ ] Phase 41: Documentation and Test Closeout (TR-07, TR-08)
 
@@ -856,7 +856,11 @@ on disk (ghost record) or dropping the entire record (data loss).
    the AG-5 cause and asserts the full row is preserved.
 5. `npm run check` GREEN; no regression from Phase 38 baseline.
 
-**Plans:** TBD
+**Plans:** 1 plan
+
+**Wave 1**
+
+- [ ] 39-01-PLAN.md -- TR-03: uninstall.ts hybrid AG-5-throw / non-AG-5-sentinel-filter (sRecord.resources.* by outcome.dropped.* with dropped.commands -> resources.prompts asymmetry); remove.ts per-plugin loop else-arm filter with same mapping + AG-5 carve-out; cascade primitive stays read-only; 4 new regression tests (2 per fix site)
 
 ### Phase 40: Update State-Before-Commit Reorder
 
@@ -961,6 +965,6 @@ comments explaining the WHY, and each has a behavior-asserting regression test.
 | 36. Integration Gate                                                 | v1.6      | 1/1 | Complete   | 2026-06-01 |
 | 37. Phase-Ledger Undo Gap                                            | v1.7      | 1/1 | Complete   | 2026-06-02 |
 | 38. Sequential Commit Loops + Orphan Tolerance                       | v1.7      | 1/1 | Complete   | 2026-06-02 |
-| 39. Cascade Ghost Record                                             | v1.7      | TBD | Pending    |            |
+| 39. Cascade Ghost Record                                             | v1.7      | 1/1 | Complete   | 2026-06-02 |
 | 40. Update State-Before-Commit Reorder                               | v1.7      | TBD | Pending    |            |
 | 41. Documentation and Test Closeout                                  | v1.7      | TBD | Pending    |            |
