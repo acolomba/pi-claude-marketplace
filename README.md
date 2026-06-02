@@ -133,6 +133,9 @@ Add a marketplace from a GitHub repository `owner/repo` shorthand.
 /claude:plugin marketplace add upstash/context7
 ```
 
+> [!NOTE]
+> Private repositories may trigger a Device Flow authentication if Git is not already authenticated.
+
 Add the same marketplace from a GitHub URL.
 
 ```text
