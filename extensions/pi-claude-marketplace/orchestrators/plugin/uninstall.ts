@@ -53,7 +53,6 @@ import { resolveInstalledPluginTarget } from "./shared.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { PluginFailedMessage, PluginUninstalledMessage, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { UnstageOutcome } from "../marketplace/shared.ts";
 
 /**
  * PU-1..8 options bundle. `scope` + `cwd` together resolve a `ScopedLocations`
@@ -153,11 +152,15 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
   const { scope, locations } = resolved;
 
   let alreadyGone = false;
-  let outcome: UnstageOutcome | undefined;
   // Lifted from inside the guard closure so the post-guard success path can
   // populate the PluginUninstalledMessage.version slot without re-reading
   // state. Undefined when alreadyGone (no row to render in that case).
   let removedVersion: string | undefined;
+  // Phase 39 TR-03: captured outside the guard so the post-guard branch can
+  // emit the PluginFailedMessage for non-AG-5 cascade failures AFTER the
+  // shrunken-row save has committed. AG-5 still throws (preserves row);
+  // non-AG-5 mutates resources.* in place and surfaces via this sentinel.
+  let cascadeFailure: Error | undefined;
 
   try {
     await withStateGuard(locations, async (state) => {
@@ -193,15 +196,51 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
 
       // PU-1 ordering enforced INSIDE cascadeUnstagePlugin (Phase 4 D-03
       // corollary: skills -> commands -> agents -> mcp).
-      outcome = await cascade(plugin, marketplace, locations, installed);
+      const localOutcome = await cascade(plugin, marketplace, locations, installed);
 
-      // PU-7: cascade returns ok=false with chained AgentsUnstageFailureError
-      // when foreign content detected at an agent target file. Re-throw to
-      // abort the state commit (the marketplace record + plugin record stay
-      // intact for retry).
-      if (!outcome.ok) {
+      // Phase 39 TR-03: split the failure handling by cause type.
+      //   - AG-5 (AgentsUnstageFailureError): foreign content owned by
+      //     another process. Re-throw to abort the save -- the row stays
+      //     intact for manual recovery / retry (preserves PU-3+PU-7).
+      //   - Non-AG-5 partial failure: the cascade dropped some artifacts
+      //     before throwing. Filter sRecord.resources.* by outcome.dropped.*
+      //     so the persisted row reflects only artifacts still on disk
+      //     (no ghost record). Surface the failure via the cascadeFailure
+      //     sentinel so the post-guard branch can fire the
+      //     PluginFailedMessage AFTER the shrunken-row save commits.
+      //
+      // CRITICAL field-name mapping: dropped.commands populates from
+      // resources.prompts (cascade primitive at shared.ts:339), so the
+      // filter MUST wire dropped.commands -> resources.prompts. The other
+      // three axes are name-identical (skills, agents, mcpServers).
+      if (!localOutcome.ok) {
         // outcome.cause is non-undefined when ok=false (Phase 4 D-03 contract).
-        throw outcome.cause ?? new Error(`Cascade unstage failed for plugin "${plugin}".`);
+        const cause =
+          localOutcome.cause ?? new Error(`Cascade unstage failed for plugin "${plugin}".`);
+        if (cause instanceof AgentsUnstageFailureError) {
+          // AG-5 carve-out: preserve the row intact (ST-7 abort-save).
+          throw cause;
+        }
+
+        // Non-AG-5: filter resources.* by dropped.* in place. The mutation
+        // persists via the guard's trailing saveState because we return
+        // normally (no throw) from the closure.
+        const sRecord = installed; // alias for clarity; same object as mp.plugins[plugin]
+        const dropped = localOutcome.dropped;
+        sRecord.resources.skills = sRecord.resources.skills.filter(
+          (n) => !dropped.skills.includes(n),
+        );
+        sRecord.resources.prompts = sRecord.resources.prompts.filter(
+          (n) => !dropped.commands.includes(n),
+        );
+        sRecord.resources.agents = sRecord.resources.agents.filter(
+          (n) => !dropped.agents.includes(n),
+        );
+        sRecord.resources.mcpServers = sRecord.resources.mcpServers.filter(
+          (n) => !dropped.mcpServers.includes(n),
+        );
+        cascadeFailure = cause;
+        return;
       }
 
       // State commit: remove the plugin record. The guard saves atomically
@@ -244,6 +283,32 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
   //
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- `alreadyGone` is mutated inside the withStateGuard closure above; TS flow analysis cannot prove the closure executed, so it sees the variable as still `false`. The check is required at runtime.
   if (alreadyGone) {
+    return;
+  }
+
+  // Phase 39 TR-03: non-AG-5 cascade partial-failure surface. The guard
+  // already saved the SHRUNKEN sRecord.resources.* (filtered by
+  // outcome.dropped.* in place). Now emit the PluginFailedMessage so the
+  // user sees the failure. Pitfall 4: this branch MUST return BEFORE the
+  // post-state cleanup (cache-drop, data-dir rm, PluginUninstalledMessage)
+  // -- those run only on full success.
+  if (cascadeFailure !== undefined) {
+    const failedRow: PluginFailedMessage = {
+      status: "failed",
+      name: plugin,
+      reasons: [narrowCascadeFailure(cascadeFailure)],
+      ...(removedVersion !== undefined && { version: removedVersion }),
+      cause: cascadeFailure,
+    };
+    notify(ctx, pi, {
+      marketplaces: [
+        {
+          name: marketplace,
+          scope,
+          plugins: [failedRow],
+        },
+      ],
+    });
     return;
   }
 

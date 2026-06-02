@@ -9,7 +9,10 @@ import {
   GENERATED_AGENT_PREFIX,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { cascadeUnstagePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import {
+  AgentsUnstageFailureError,
+  cascadeUnstagePlugin,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import { uninstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import { loadAgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -1159,6 +1162,243 @@ test("cache-drop EISDIR swallowed: success notification still emitted, plugin re
         errNotifications.length,
         0,
         "cache-drop EISDIR must be swallowed silently -- no error notification",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// Phase 39 / TR-03: cascade ghost-record correctness ---------------------
+//
+// Two regression tests cover the partial-cascade-failure surface:
+//
+//   (a) non-AG-5 partial failure: cascade dropped {skill1, cmd1} before
+//       throwing; the persisted state row MUST have resources.skills/
+//       prompts shrunken so they reference only artifacts still on disk
+//       (no ghost record). The remaining axes (agents, mcpServers) stay
+//       intact because the cascade did not advance past commands.
+//   (b) AG-5 cause (AgentsUnstageFailureError): the persisted state row
+//       MUST be preserved INTACT -- foreign content owned by another
+//       process must not cause data loss. The cascade primitive itself
+//       reports dropped.skills/.commands, but the orchestrator MUST
+//       discard the filter on the AG-5 path so a retry has the complete
+//       resources.* history.
+//
+// Both tests stub the cascade (no real filesystem race needed) and
+// re-load state from disk after the orchestrator call to verify the
+// mutation persisted (Pitfall 3: in-memory-only mutations are silent
+// regressions if not checked against disk).
+
+test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sRecord shrunk on disk", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-tr03-partial-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      // Seed a record with TWO of each resource so the filter is visible.
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: {
+              hello: makePluginRecord({
+                skills: ["skill1", "skill2"],
+                prompts: ["cmd1", "cmd2"],
+                agents: ["agent1", "agent2"],
+                mcpServers: ["mcp1", "mcp2"],
+              }),
+            },
+          },
+        },
+      });
+
+      // Stub: cascade dropped {skill1} + {cmd1} then threw a non-AG-5 cause
+      // (an EACCES on the agents axis). The orchestrator must filter
+      // resources.skills (remove skill1), resources.prompts (remove cmd1
+      // -- CRITICAL field-name mapping dropped.commands -> resources.prompts),
+      // and leave resources.agents + resources.mcpServers untouched (the
+      // cascade did not advance to them).
+      const stubCascade: typeof cascadeUnstagePlugin = () => {
+        const err = Object.assign(new Error("EACCES on agent unlink"), { code: "EACCES" });
+        return Promise.resolve({
+          ok: false,
+          dropped: {
+            skills: ["skill1"],
+            commands: ["cmd1"],
+            agents: [],
+            mcpServers: [],
+          },
+          cause: err,
+        });
+      };
+
+      const { ctx, pi, notifications } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        cascade: stubCascade,
+      });
+
+      // (1) Re-load state from disk. The shrunken-row contract requires
+      // saveState to have committed; Pitfall 3 catches in-memory-only
+      // mutations that never reach state.json.
+      const after = await loadState(locations.extensionRoot);
+      const sRecord = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(sRecord !== undefined, "plugin record retained (partial failure -> shrunken row)");
+      // (2) Filtered axes -- dropped artifact names removed.
+      assert.deepEqual(
+        sRecord.resources.skills,
+        ["skill2"],
+        "resources.skills filtered: skill1 dropped, skill2 retained",
+      );
+      assert.deepEqual(
+        sRecord.resources.prompts,
+        ["cmd2"],
+        "resources.prompts filtered via dropped.commands -> resources.prompts mapping",
+      );
+      // (3) Un-advanced axes -- nothing in outcome.dropped, nothing filtered.
+      assert.deepEqual(
+        sRecord.resources.agents,
+        ["agent1", "agent2"],
+        "resources.agents untouched (cascade did not advance past commands)",
+      );
+      assert.deepEqual(
+        sRecord.resources.mcpServers,
+        ["mcp1", "mcp2"],
+        "resources.mcpServers untouched (cascade did not advance past commands)",
+      );
+
+      // (4) Exactly one notification, severity=error, V2 failure surface.
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.ok(
+        (notifications[0]?.message ?? "").startsWith(
+          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {permission denied}\n",
+        ),
+        `TR-03 partial: expected failure row; got "${notifications[0]?.message ?? ""}"`,
+      );
+      // (5) No reload-hint trailer on failure (Pitfall 4: cleanup branch
+      // skipped; the (uninstalled) variant never reached the notify call).
+      assert.equal(
+        (notifications[0]?.message ?? "").includes("/reload to pick up changes"),
+        false,
+        "TR-03 partial: failed uninstall must not emit reload-hint trailer",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("TR-03 (AG-5 cause): full row preserved intact when cause instanceof AgentsUnstageFailureError", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-tr03-ag5-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      // Seed a record with TWO of each resource so the AG-5 preservation
+      // is unambiguously visible (any filter would shrink the row).
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: {
+              hello: makePluginRecord({
+                skills: ["skill1", "skill2"],
+                prompts: ["cmd1", "cmd2"],
+                agents: ["agent1", "agent2"],
+                mcpServers: ["mcp1", "mcp2"],
+              }),
+            },
+          },
+        },
+      });
+
+      // Stub: cascade dropped {skill1} + {cmd1} then threw an
+      // AgentsUnstageFailureError (AG-5 foreign content). The orchestrator
+      // MUST throw out of the guard (ST-7 abort-save) so the row stays
+      // intact -- foreign content owned by another process must not cause
+      // data loss.
+      const stubCascade: typeof cascadeUnstagePlugin = () => {
+        const err = new AgentsUnstageFailureError("foreign content at agent1", [
+          { generatedName: "agent1", targetPath: "/agents/agent1.md", reason: "missing marker" },
+        ]);
+        return Promise.resolve({
+          ok: false,
+          dropped: {
+            skills: ["skill1"],
+            commands: ["cmd1"],
+            agents: [],
+            mcpServers: [],
+          },
+          cause: err,
+        });
+      };
+
+      const { ctx, pi, notifications } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        cascade: stubCascade,
+      });
+
+      // (1) Re-load state from disk. AG-5 must preserve the FULL row.
+      const after = await loadState(locations.extensionRoot);
+      const sRecord = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(sRecord !== undefined, "plugin record retained (AG-5 preserves row)");
+      // (2) Every axis untouched -- the cascade reported dropped.skills
+      // + dropped.commands, but the orchestrator MUST discard the filter
+      // on the AG-5 path (the row must be a faithful pre-cascade snapshot
+      // so a retry has the complete resources.* history).
+      assert.deepEqual(
+        sRecord.resources.skills,
+        ["skill1", "skill2"],
+        "AG-5: resources.skills UNCHANGED (filter discarded on AG-5 cause)",
+      );
+      assert.deepEqual(
+        sRecord.resources.prompts,
+        ["cmd1", "cmd2"],
+        "AG-5: resources.prompts UNCHANGED (filter discarded on AG-5 cause)",
+      );
+      assert.deepEqual(
+        sRecord.resources.agents,
+        ["agent1", "agent2"],
+        "AG-5: resources.agents UNCHANGED",
+      );
+      assert.deepEqual(
+        sRecord.resources.mcpServers,
+        ["mcp1", "mcp2"],
+        "AG-5: resources.mcpServers UNCHANGED",
+      );
+
+      // (3) AG-5 still emits the existing V2 PluginFailedMessage via the
+      // outer catch block (PU-3 + PU-7 invariant preserved).
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.ok(
+        (notifications[0]?.message ?? "").startsWith(
+          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {not in manifest}\n",
+        ),
+        `TR-03 AG-5: expected failure row; got "${notifications[0]?.message ?? ""}"`,
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
