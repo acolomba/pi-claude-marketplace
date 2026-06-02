@@ -18,7 +18,7 @@
 // callers cannot enter a cleanup retry loop. Bounded by single
 // rm({recursive:true,force:true}) call.
 
-import { lstat, mkdir, rename, rm } from "node:fs/promises";
+import { lstat, mkdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { errorMessage } from "./errors.ts";
@@ -66,6 +66,55 @@ export async function pathExists(p: string): Promise<boolean> {
     }
 
     throw err;
+  }
+}
+
+/**
+ * TR-06: Pre-remove an orphan target before a planned rename. Kind-strict --
+ * mode `"tree"` only removes the target when it is a directory; mode `"file"`
+ * only removes it when it is a regular file. A kind mismatch (e.g. mode
+ * `"tree"` on a file, or mode `"file"` on a directory) leaves the target
+ * alone -- the caller's subsequent `rename` will surface `ENOTDIR` /
+ * `ENOTEMPTY` with full context. ENOENT on the initial `stat` is silently
+ * swallowed (target already absent -- no-op).
+ *
+ * Caller-owns-containment (NFR-10): the CALLER must have already
+ * `assertPathInside`-d `target` before invoking this helper. This helper
+ * performs raw `rm` on the supplied path -- calling it on an uncontained
+ * path is an NFR-10 violation. The three `replacePrepared*` call sites in
+ * `bridges/{skills,commands,agents}/stage.ts` already pass each rename pair
+ * through `assertPathInside` during the prepare phase; the helper is invoked
+ * on the same pre-validated path.
+ *
+ * Caller-owns-ownership (PI-6 guard): this helper does NOT verify that the
+ * target is owned by the current install. It removes the target
+ * unconditionally when the kind matches. The caller is responsible for
+ * checking that `basename(target)` represents a name this install owns
+ * (i.e. basename ∈ `_previousNames` for skills/commands, or
+ * basename ∈ `_previousEntries.map(e => e.generatedName)` for agents).
+ * Skipping the ownership pre-check would silently enable cross-plugin
+ * overwrite -- exactly the PI-6 vector the existing
+ * `Cannot replace ... with non-previous content` rejection prevents.
+ *
+ * ENOENT discipline: a missing target on the initial `stat` is a no-op (the
+ * caller's rename will create the target fresh). Any other error code is
+ * re-thrown verbatim so the caller can surface the IO failure with full
+ * context.
+ */
+export async function removeOrphanIfPresent(target: string, mode: "file" | "tree"): Promise<void> {
+  try {
+    const s = await stat(target);
+    if (mode === "tree" && s.isDirectory()) {
+      await rm(target, { recursive: true, force: true });
+    } else if (mode === "file" && s.isFile()) {
+      await rm(target);
+    }
+    // Mismatched kind: leave alone. Subsequent rename will surface
+    // ENOTDIR/ENOTEMPTY -- preserves PUP-6 phase-3 failure trigger.
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw e;
+    }
   }
 }
 

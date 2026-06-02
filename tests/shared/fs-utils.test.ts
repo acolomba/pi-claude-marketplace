@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   cleanupStaging,
   pathExists,
+  removeOrphanIfPresent,
   rollbackReplacementCommon,
 } from "../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
@@ -287,4 +288,83 @@ test("rollbackReplacementCommon honors beforeCleanup hook output", async () => {
   });
 
   assert.deepEqual([...leaks], ["hook leak 1", "hook leak 2"]);
+});
+
+// TR-06 removeOrphanIfPresent kind-strict matrix --------------------------
+
+test("removeOrphanIfPresent mode='tree' rms directory target", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "fs-utils-test-"));
+  try {
+    const dir = path.join(tmp, "victim");
+    await mkdir(dir);
+    await writeFile(path.join(dir, "leaf.txt"), "x");
+
+    await removeOrphanIfPresent(dir, "tree");
+
+    await assert.rejects(
+      () => stat(dir),
+      (err: unknown) => (err as NodeJS.ErrnoException).code === "ENOENT",
+    );
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("removeOrphanIfPresent mode='tree' leaves file target alone (kind mismatch)", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "fs-utils-test-"));
+  try {
+    const file = path.join(tmp, "victim.txt");
+    await writeFile(file, "preserve-me");
+
+    await removeOrphanIfPresent(file, "tree");
+
+    const s = await stat(file);
+    assert.ok(s.isFile(), "kind mismatch must leave the file target alone");
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("removeOrphanIfPresent mode='file' rms file target", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "fs-utils-test-"));
+  try {
+    const file = path.join(tmp, "victim.md");
+    await writeFile(file, "x");
+
+    await removeOrphanIfPresent(file, "file");
+
+    await assert.rejects(
+      () => stat(file),
+      (err: unknown) => (err as NodeJS.ErrnoException).code === "ENOENT",
+    );
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("removeOrphanIfPresent mode='file' leaves directory target alone (kind mismatch)", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "fs-utils-test-"));
+  try {
+    const dir = path.join(tmp, "victim");
+    await mkdir(dir);
+
+    await removeOrphanIfPresent(dir, "file");
+
+    const s = await stat(dir);
+    assert.ok(s.isDirectory(), "kind mismatch must leave the directory target alone");
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("removeOrphanIfPresent swallows ENOENT for missing target", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "fs-utils-test-"));
+  try {
+    const missing = path.join(tmp, "never-existed");
+    // Both modes must no-op on ENOENT; neither call should throw.
+    await removeOrphanIfPresent(missing, "tree");
+    await removeOrphanIfPresent(missing, "file");
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
 });
