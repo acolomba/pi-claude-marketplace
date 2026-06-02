@@ -144,7 +144,7 @@ const GITHUB_ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
  * client_id before the first production smoke test. Unit tests pass the
  * constant through to mocks; they do not validate its value.
  */
-const GITHUB_OAUTH_CLIENT_ID = "GITHUB_OAUTH_APP_CLIENT_ID_PLACEHOLDER";
+const GITHUB_OAUTH_CLIENT_ID = "Ov23liNcyK08uGdU0mMl";
 
 /** P32-8: full control of private repositories. */
 const REQUESTED_SCOPE = "repo";
