@@ -16,7 +16,7 @@ state records, or silently skips undo.
 
 ### Phase-Ledger Correctness
 
-- [ ] **TR-02**: `runPhases` in `transaction/phase-ledger.ts` invokes the failing
+- [x] **TR-02**: `runPhases` in `transaction/phase-ledger.ts` invokes the failing
       phase's own `undo` before reverse-walking `executed[]`; failing phase's undo
       is called exactly once as a separate catch-block call site, never via
       `executed[]` addition (prevents double-rollback); Phase interface JSDoc
@@ -24,18 +24,18 @@ state records, or silently skips undo.
 
 ### Bridge Commit Atomicity
 
-- [ ] **TR-01**: `commitPreparedAgents` in `bridges/agents/stage.ts` replaces the
+- [x] **TR-01**: `commitPreparedAgents` in `bridges/agents/stage.ts` replaces the
       `Promise.all` rename loop with a sequential `for...of` loop that tracks
       completed renames and reverse-walks them on throw; rollback adopts the shape
       of `rollbackReplacementCommon` (spread-copy before reverse, ENOENT-tolerant,
       leaks surface via `appendLeakToError`, never throws from rollback loop).
-- [ ] **TR-05**: `commitPreparedCommands` in `bridges/commands/stage.ts` adds
+- [x] **TR-05**: `commitPreparedCommands` in `bridges/commands/stage.ts` adds
       `completedRenames[]` tracking to its existing sequential rename loop and
       reverse-walks on throw; same rollback shape as TR-01.
 
 ### Orphan Tolerance
 
-- [ ] **TR-06**: `replacePreparedSkills`, `replacePreparedCommands`, and
+- [x] **TR-06**: `replacePreparedSkills`, `replacePreparedCommands`, and
       `replacePreparedAgents` replace the `if (pathExists(pair.to)) throw` guard
       with `removeOrphanIfPresent(pair.to, mode)` -- a new export in
       `shared/fs-utils.ts` -- that pre-removes a target only when state.json
@@ -46,12 +46,12 @@ state records, or silently skips undo.
 
 ### State-Record Coherence
 
-- [ ] **TR-03**: `orchestrators/plugin/uninstall.ts` and
+- [x] **TR-03**: `orchestrators/plugin/uninstall.ts` and
       `orchestrators/marketplace/remove.ts` materialize `outcome.dropped.*` into
       a partial `sRecord.resources.*` filter on `outcome.ok === false`; the cascade
       primitive (`cascadeUnstagePlugin`) stays read-only on state; the AG-5
       foreign-content cause preserves the full state row rather than stripping it.
-- [ ] **TR-04**: `runThreePhaseUpdate` in `orchestrators/plugin/update.ts` splits
+- [x] **TR-04**: `runThreePhaseUpdate` in `orchestrators/plugin/update.ts` splits
       `swapStateRecord` into `markUpdateInProgress` (sets `installable:false` as
       intent-mark before phase-3a commits) and `finalizeUpdateRecord` (per-bridge
       resource-record update regardless of other bridges' outcomes; version bump
@@ -62,12 +62,12 @@ state records, or silently skips undo.
 
 ### Documentation and Test Coverage
 
-- [ ] **TR-07**: `commitPreparedAgents` step-1 parallel `rm` loop in
+- [x] **TR-07**: `commitPreparedAgents` step-1 parallel `rm` loop in
       `bridges/agents/stage.ts` carries an inline comment explaining the
       ENOENT-tolerant idempotency contract; one behavior-asserting regression test
       (not implementation-asserting) drives prepare → partial-commit-injection →
       re-prepare → commit and asserts clean final disk state.
-- [ ] **TR-08**: The post-state-commit cache-drop swallow in `list.ts` carries an
+- [x] **TR-08**: The post-state-commit cache-drop swallow in `list.ts` carries an
       inline comment referencing the D-19-01 decision (probe-buffer retirement);
       one regression test asserts no module-level `PROBE_FAILURES`-style state
       accumulation in `list.ts`.
@@ -96,14 +96,14 @@ state records, or silently skips undo.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TR-02 | Phase 37 | Pending |
-| TR-01 | Phase 38 | Pending |
-| TR-05 | Phase 38 | Pending |
-| TR-06 | Phase 38 | Pending |
-| TR-03 | Phase 39 | Pending |
-| TR-04 | Phase 40 | Pending |
-| TR-07 | Phase 41 | Pending |
-| TR-08 | Phase 41 | Pending |
+| TR-02 | Phase 37 | Complete |
+| TR-01 | Phase 38 | Complete |
+| TR-05 | Phase 38 | Complete |
+| TR-06 | Phase 38 | Complete |
+| TR-03 | Phase 39 | Complete |
+| TR-04 | Phase 40 | Complete |
+| TR-07 | Phase 41 | Complete |
+| TR-08 | Phase 41 | Complete |
 
 **Coverage:**
 - v1.7 requirements: 8 total
