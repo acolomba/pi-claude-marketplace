@@ -122,7 +122,7 @@ export async function clone(opts: CloneOptions): Promise<void> {
   // runtime shapes are identical. `onAuth` does not need the cast because
   // it only takes the `url: string` parameter -- no contravariant
   // GitAuth-typed slot.
-  const authCbs = opts.auth !== undefined ? buildAuthCallbacks(opts.auth) : undefined;
+  const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
   await git.clone({
     fs,
     http,
@@ -139,7 +139,7 @@ export async function clone(opts: CloneOptions): Promise<void> {
 }
 
 export async function fetch(opts: FetchOptions): Promise<void> {
-  const authCbs = opts.auth !== undefined ? buildAuthCallbacks(opts.auth) : undefined;
+  const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
   await git.fetch({
     fs,
     http,
@@ -327,24 +327,15 @@ export function buildAuthCallbacks(opts: BuildAuthCallbacksOpts): {
   // Device Flow inline from this seam would re-enter the same code path
   // (isomorphic-git's next call invokes onAuth, which falls through to
   // Device Flow naturally on a fill miss).
-  let deviceFlowAttempted = false;
-
-  async function onAuth(url: string): Promise<GitCredentials> {
-    // isomorphic-git supplies the remote URL; we authenticate against
-    // opts.host (the orchestrator's URL parser already normalized this).
-    void url;
+  async function onAuth(_url: string): Promise<GitCredentials> {
     try {
       const filled = await opts.credentialOps.fill(opts.host);
       if (filled !== null) {
-        // AUTH-02 silent reuse: do NOT set deviceFlowAttempted -- Device
-        // Flow has not yet run; the stored credential came from a prior
-        // session's approve().
         return filled;
       }
 
       const result = await opts.onAuthRequired();
       if (result.ok) {
-        deviceFlowAttempted = true;
         return result.cred;
       }
 
@@ -359,11 +350,7 @@ export function buildAuthCallbacks(opts: BuildAuthCallbacksOpts): {
     }
   }
 
-  async function onAuthFailure(url: string, cred: GitCredentials): Promise<GitCredentials> {
-    void url;
-    // Read the flag once so the closure capture is unambiguous to future
-    // readers; current implementation returns cancel unconditionally.
-    void deviceFlowAttempted;
+  async function onAuthFailure(_url: string, cred: GitCredentials): Promise<GitCredentials> {
     try {
       await opts.credentialOps.reject(opts.host, cred);
     } catch {

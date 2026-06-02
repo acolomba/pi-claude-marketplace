@@ -174,7 +174,7 @@ async function requestCodeImpl(clientId: string, scope: string): Promise<DeviceC
     typeof data.expires_in !== "number" ||
     typeof data.interval !== "number"
   ) {
-    throw new Error("Device code response missing required fields");
+    throw new TypeError("Device code response missing required fields");
   }
 
   return data;
@@ -183,14 +183,8 @@ async function requestCodeImpl(clientId: string, scope: string): Promise<DeviceC
 async function pollTokenImpl(
   clientId: string,
   deviceCode: string,
-  intervalSec: number,
+  _intervalSec: number,
 ): Promise<PollResult> {
-  // intervalSec is informational only at this seam (the caller's state
-  // machine drives the sleep cadence on the local clock; GitHub's slow_down
-  // response is what we react to). We accept it to satisfy the
-  // DeviceFlowHttp.pollToken signature and reference it once so the lint
-  // rule does not fire (the value itself is not used by the HTTP call).
-  void intervalSec;
   const body = new URLSearchParams({
     client_id: clientId,
     device_code: deviceCode,
@@ -311,7 +305,7 @@ async function runPollLoop(
       await sleepMs(
         currentIntervalSec * 1000,
         undefined,
-        opts.signal !== undefined ? { signal: opts.signal } : undefined,
+        opts.signal === undefined ? undefined : { signal: opts.signal },
       );
     } catch {
       return { ok: false, reason: "Device Flow cancelled.", authAttempted: true };
@@ -348,7 +342,7 @@ async function runPollLoop(
       case "poll_error":
         return { ok: false, reason: r.reason, authAttempted: true };
       case "unexpected": {
-        const detail = r.description !== undefined ? ` -- ${r.description}` : "";
+        const detail = r.description === undefined ? "" : ` -- ${r.description}`;
         return {
           ok: false,
           reason: `Device Flow failed: ${r.error}${detail}`,
