@@ -1,16 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.7
-milestone_name: Transaction Resilience Hardening
-status: executing
-last_updated: "2026-06-02T12:09:47.433Z"
-last_activity: 2026-06-02 -- Phase 38 planning complete
+milestone_name: milestone
+status: completed
+stopped_at: v1.6 roadmap created
+last_updated: "2026-06-02T12:46:53.804Z"
+last_activity: 2026-06-02 -- Phase 38 marked complete
 progress:
-  total_phases: 5
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 1
-  percent: 20
+  total_phases: 29
+  completed_phases: 8
+  total_plans: 14
+  completed_plans: 13
+  percent: 28
 ---
 
 # Project State
@@ -19,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-30)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.7 Transaction Resilience Hardening (8 correctness fixes, phases 37-41)
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 38 -- Sequential Commit Loops + Orphan Tolerance
 
 ## Current Position
 
-Phase: 37 -- COMPLETE
-Plan: --
-Status: Ready to execute
-Last activity: 2026-06-02 -- Phase 38 planning complete
+Phase: 38 -- COMPLETE
+Plan: 1 of 1
+Status: Phase 38 complete
+Last activity: 2026-06-02 -- Phase 38 marked complete
 
 ## Performance Metrics
 
