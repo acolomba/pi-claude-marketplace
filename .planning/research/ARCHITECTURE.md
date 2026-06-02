@@ -1,436 +1,268 @@
-# Architecture Research: v1.6 GitHub Device Flow Integration
-
-**Researched:** 2026-05-31
-**Milestone context:** SUBSEQUENT MILESTONE -- adding Device Flow auth to existing
-marketplace add/update flows.
-
+---
+title: Architecture Research -- v1.7 Transaction Resilience Hardening
+project: pi-claude-marketplace
+milestone: v1.7
+researched: 2026-06-02
 ---
 
-## Summary
+# Architecture Research: Transaction Resilience Hardening Integration
 
-The existing clone/fetch call sites in `orchestrators/marketplace/add.ts` and
-`update.ts` reach git operations exclusively through the `GitOps` interface
-injected via `opts.gitOps ?? DEFAULT_GIT_OPS`. `platform/git.ts` wraps
-isomorphic-git and is the only file that imports it (D-13 boundary). Neither
-orchestrator nor `shared.ts` carries any auth logic today; the comment block in
-`platform/git.ts` explicitly marks "No onAuth (public)" as the V1 limitation.
+**Project:** pi-claude-marketplace v1.7 Transaction Resilience Hardening
+**Mode:** Project Research (architecture for integrating rollback correctness)
+**Confidence:** HIGH (all findings grounded in actual source reads)
 
-Device Flow must produce a `{ username: string; password: string }` credential
-(the isomorphic-git `onAuth` callback shape) before the clone/fetch attempt and
-cache it via `git credential approve` (OS keychain) so subsequent operations skip
-the interactive prompt. The 401 trigger comes from isomorphic-git's `onAuthFailure`
-callback, which fires after the server returns HTTP 401.
+## Executive Summary
 
-The clean integration point is a new `domain/github-auth.ts` module that owns the
-Device Flow state machine, plus a new `platform/git-credential.ts` module that
-wraps the `git credential fill/approve/reject` subprocess calls. The `GitOps`
-interface gains an `onAuthRequired` callback slot that orchestrators inject; the
-default implementation (bound in `shared.ts` as `DEFAULT_GIT_OPS`) uses the real
-auth modules. Tests keep injecting a custom `GitOps` stub with no auth behavior
-and add a separate `onAuthRequired` mock.
+The 8 fixes (TR-01..TR-08) cluster into three architectural surfaces that already exist and need targeted, in-place corrections rather than new components. No new files are required for the load-bearing fixes. All changes are localized to existing modules. The build order is dictated by one fact: **TR-04 (update.ts state-before-commit) depends on TR-01 and TR-05 being available**, because once update.ts reorders commits-before-state-write, the bridges become the rollback boundary that update.ts leans on.
 
-The duplicate `GitCredentials` type declaration in `platform/git.ts` is a
-standalone fix that lands before the auth work.
+The fixes follow three patterns already in the codebase:
 
----
+1. **Atomic ledger semantics (TR-02):** One-line change to `runPhases` -- push to `executed` BEFORE `phase.do` runs.
+2. **Sequential rename loops with reverse-rename rollback (TR-01, TR-05):** Exact pattern used in `replacePreparedAgents`/`replacePreparedCommands` and `rollbackReplacementCommon` already exists.
+3. **State invariant ownership at orchestrator boundaries (TR-03, TR-04, TR-06):** Orchestrator-tier policy bugs about WHEN state is written relative to physical commits.
 
-## Integration Points
+## Integration Points: New vs Modified
 
-### 1. `platform/git.ts` -- isomorphic-git `onAuth` / `onAuthFailure` callback slots
+| Component | New / Modified | Surface | Notes |
+|---|---|---|---|
+| `transaction/phase-ledger.ts :: runPhases` | **MODIFIED** | 1-line reorder of `executed.push(phase)` | TR-02. No type changes. |
+| `bridges/agents/stage.ts :: commitPreparedAgents` | **MODIFIED** | Replace step-2 `Promise.all` with tracked sequential loop + reverse rollback | TR-01. Uses existing `_stagedFilePaths` shape. |
+| `bridges/commands/stage.ts :: commitPreparedCommands` | **MODIFIED** | Add `renamed[]` tracking + reverse rollback to sequential loop | TR-05. Uses existing `_renamePairs` shape. |
+| `shared/fs-utils.ts :: removeOrphanIfPresent` | **NEW** | Extract stat-based orphan-rm from `commitPreparedSkills` | TR-06. Shared by all replace + commit paths. |
+| `bridges/skills/stage.ts :: replacePreparedSkills` | **MODIFIED** | Replace `pathExists` guard with `removeOrphanIfPresent(pair.to, "tree")` | TR-06. |
+| `bridges/commands/stage.ts :: replacePreparedCommands` | **MODIFIED** | Replace `pathExists` guard with `removeOrphanIfPresent(pair.to, "file")` | TR-06. |
+| `bridges/agents/stage.ts :: replacePreparedAgents` | **MODIFIED** | Replace `pathExists` guard with `removeOrphanIfPresent(pair.to, "file")` | TR-06. |
+| `bridges/skills/stage.ts :: commitPreparedSkills` | **NO CHANGE** | Already correct; donor of the pattern | Reference impl. |
+| `orchestrators/marketplace/shared.ts :: cascadeUnstagePlugin` | **NO CHANGE** | The `dropped` contract is already adequate | TR-03 fix lives in orchestrators. |
+| `orchestrators/plugin/uninstall.ts` (inside `withStateGuard`) | **MODIFIED** | NEW branch: on `outcome.ok === false`, filter `sRecord.resources.*` by `outcome.dropped.*` | TR-03 primary fix. |
+| `orchestrators/marketplace/remove.ts` (inside per-plugin `withStateGuard`) | **MODIFIED** | Same NEW branch | TR-03 second fix site. |
+| `orchestrators/marketplace/shared.ts :: applyPartialUnstageToRecord` | **NEW (optional)** | Helper extracted to dedupe between uninstall.ts + remove.ts | Lift if duplication offends; ~12 lines. |
+| `orchestrators/plugin/update.ts :: runThreePhaseUpdate` | **MODIFIED -- STRUCTURAL** | Split single `withStateGuard` into intent-mark + finalize bracketing physical commits | TR-04. Largest change. |
+| `orchestrators/plugin/update.ts :: swapStateRecord` | **REFACTORED** into `markUpdateInProgress` + `finalizeUpdateRecord` | Existing `preflight.record` snapshot reused | TR-04. |
+| Test files for TR-07, TR-08 | **NEW** | Two test files under `tests/bridges/` and `tests/orchestrators/plugin/` | LOW priority. |
 
-**Current state:** `clone()` and `fetch()` pass neither `onAuth` nor
-`onAuthFailure` to isomorphic-git. The comment block explicitly states "No onAuth
-(public)."
+## Data Flow: Before vs After v1.7
 
-**Required change:** Both `git.clone({...})` and `git.fetch({...})` must accept
-optional `onAuth` and `onAuthFailure` callbacks forwarded from the caller. The
-isomorphic-git type for `onAuth` is:
+### Pre-v1.7 (current, buggy):
 
-```ts
-onAuth?: (url: string, auth: GitAuth) => GitAuth | void | Promise<GitAuth | void>
-onAuthFailure?: (url: string, auth: GitAuth) => GitAuth | void | Promise<GitAuth | void>
-onAuthSuccess?: (url: string, auth: GitAuth) => void | Promise<void>
+```
+install/update/uninstall orchestrator
+  runPhases([prepare, swap-state, commit])
+    prepare OK, push to executed
+    swap-state OK, push to executed
+    commit THROWS
+      undo walks [prepare, swap-state] -- commit own undo SKIPPED [TR-02 bug]
+
+cascadeUnstagePlugin(plugin)
+  skills.unstage OK, commands.unstage OK, agents.unstage THROWS
+  caller sees ok:false, does NOT touch state record [TR-03 bug -> ghost]
+
+update.runThreePhaseUpdate
+  prepare -> swapStateRecord (writes NEW state) -> phase-3a commits
+  skills commit FAILS, commands/agents/mcp OK
+  state.json: NEW. Disk: skills=OLD, commands+agents+mcp=NEW [TR-04 divergence]
+
+agents.commitPreparedAgents
+  Promise.all(K renames): one fails, K-1 orphans [TR-01 bug]
+
+replacePreparedSkills
+  if (pathExists(pair.to)) throw -- blocks legacy orphan recovery [TR-06 bug]
 ```
 
-where `GitAuth = { username?: string; password?: string; headers?: Record<string, string> }`.
+### Post-v1.7 (fixed):
 
-`platform/git.ts` must expose `CloneOptions` and `FetchOptions` with optional
-`onAuth`, `onAuthFailure`, and `onAuthSuccess` fields. The real implementation
-pipes them into the isomorphic-git call. Tests can omit them (public repos) or
-inject stubs.
+```
+install/update/uninstall orchestrator
+  runPhases([prepare, swap-state, commit])
+    push to executed, run prepare OK
+    push to executed, run swap-state OK
+    push to executed, run commit THROWS
+      undo walks [commit, swap-state, prepare] -- commit own undo RUNS [TR-02 fixed]
 
-**Duplicate fix (prerequisite):** `GitCredentials` is currently declared twice in
-`platform/git.ts`. One declaration must be deleted before the auth fields are
-added so TypeScript does not see conflicting definitions.
+cascadeUnstagePlugin(plugin) -- unchanged
+  skills.unstage OK -> dropped.skills = [s1, s2]
+  commands.unstage OK -> dropped.commands = [p1]
+  agents.unstage THROWS, returns {ok:false, dropped:{...}, cause}
+  uninstall orchestrator: filter sRecord.resources.* by dropped.* [TR-03 fixed]
 
-### 2. `orchestrators/marketplace/shared.ts` -- `GitOps` interface and `DEFAULT_GIT_OPS`
+update.runThreePhaseUpdate
+  prepare
+  intent-mark: sRecord.compatibility.installable=false [TR-04 fixed]
+  phase-3a commits (continue-on-failure preserved per D-03):
+    skills FAIL -> bridge reverse-rename restores staging [TR-01]
+    commands OK, agents OK, mcp OK
+  finalize: all-success -> write NEW record; any-failure -> leave incomplete marker
 
-**Current state:** The `GitOps` interface has six methods (clone / fetch /
-forceUpdateRef / checkout / resolveRef / currentBranch). `DEFAULT_GIT_OPS` binds
-them to `platform/git.ts` implementations. No auth.
+agents.commitPreparedAgents [TR-01 fixed]
+  mkdir
+  for-loop rename + push to renamed[]
+  if throw: reverse-rename renamed[] back to staging
+  leaks if reverse-rename fails -> appendLeakToError
 
-**Required change:** Add an optional `onAuthRequired` callback to both `clone` and
-`fetch` option shapes inside `GitOps`:
+replacePreparedSkills [TR-06 fixed]
+  for each pair: removeOrphanIfPresent(pair.to, "tree")
+  rename(from, to), push to renamed[]
+```
 
-```ts
-export interface GitOps {
-  clone(opts: {
-    dir: string; url: string; ref?: string; singleBranch?: boolean;
-    onAuthRequired?: OnAuthRequiredCallback;
-  }): Promise<void>;
-  fetch(opts: {
-    dir: string; remote?: string; ref?: string;
-    onAuthRequired?: OnAuthRequiredCallback;
-  }): Promise<void>;
-  // ... forceUpdateRef / checkout / resolveRef / currentBranch unchanged
+## Q1: Minimal Change to `phase-ledger.ts` (TR-02)
+
+**Current bug (`transaction/phase-ledger.ts:120-141`):**
+```typescript
+for (const phase of phases) {
+  try {
+    await phase.do(ctx);
+    executed.push(phase);   // only pushed on success
+  } catch (err) {
+    const partials = await rollbackExecuted(executed, ctx);
+    // executed does NOT include failing phase, so its undo never runs
+  }
 }
 ```
 
-Where `OnAuthRequiredCallback` is a type defined in `platform/git.ts` (or
-re-exported from `domain/github-auth.ts`) with the signature the platform module
-uses to wire `onAuth` / `onAuthFailure` on behalf of the caller.
+**Minimal fix:** Move `executed.push(phase)` to before `await phase.do(ctx)`. The failing phase's `undo` is then included in the reverse-walk.
 
-`DEFAULT_GIT_OPS.clone` and `DEFAULT_GIT_OPS.fetch` thread `onAuthRequired`
-through to the `platform/git.ts` wrappers. The `platform/git.ts` wrappers build
-the isomorphic-git `onAuth` / `onAuthFailure` closures from it.
+**Why this is safe:**
+- `Phase<C>.undo` is optional (phase-ledger.ts:30-34) and idempotent in practice (ENOENT-tolerant).
+- `rollbackExecuted` checks `if (!done.undo) continue;` (line 77-79), so a phase without undo is a no-op.
+- `rollbackExecuted` traverses in REVERSE order (line 76), so the failing phase's undo runs FIRST -- correct semantics.
+- `PathContainmentError` re-throw at line 84-86 still wins.
 
-Tests that inject a custom `GitOps` stub continue to ignore the new field without
-any changes to `MockGitState` or `makeMockGitOps`. The field is optional.
+**Consumer impact:** All existing call sites (install.ts, uninstall.ts, reinstall.ts) get the fix transparently.
 
-### 3. `orchestrators/marketplace/add.ts` -- call site at `addGithubInGuard`
+## Q2: Rollback Surface for Promise.all Conversion (TR-01)
 
-**Current state:** `gitOps.clone({ dir, url, ref, singleBranch })` at line 180.
+**Architecture for the fix** -- structurally identical to the `replacePreparedAgents` rollback already in the same file (lines 410-471), which tracks `renamed: { from, to }[]` and calls `rollbackReplacementCommon` to reverse on throw:
 
-**Required change:** Pass `onAuthRequired` when the URL is a GitHub source. The
-orchestrator receives `ctx` (which carries `ctx.ui.input` and `ctx.ui.notify`)
-from its options. Build an `onAuthRequired` callback that delegates to
-`domain/github-auth.ts::initiateDeviceFlow(ctx, pi)` and stores the resulting
-token via `platform/git-credential.ts::credentialApprove`. The orchestrator does
-NOT need to know the Device Flow internals; it passes a closure.
-
-The `AddMarketplaceOptions` interface gains no new fields for auth -- the auth
-callback is constructed internally from the already-present `ctx` and `pi`.
-
-### 4. `orchestrators/marketplace/update.ts` -- call site in `refreshRecord`
-
-**Current state:** `refreshGitHubClone(cloneDir, source.ref, gitOps, callback)` at
-line 315, which internally calls `gitOps.fetch(...)`.
-
-**Required change:** `refreshGitHubClone` in `shared.ts` gains an optional
-`onAuthRequired` parameter (or it is threaded through the `GitOps` `fetch` opts
-that `refreshGitHubClone` already constructs). The `refreshRecord` function in
-`update.ts` builds and passes the same auth callback closure from its `args.ctx`
-and `args.pi`. `UpdateMarketplaceOptions` gains no new fields.
-
-### 5. `orchestrators/marketplace/shared.ts::refreshGitHubClone`
-
-**Current state:** calls `gitOps.fetch({ dir, remote, ref })` directly.
-
-**Required change:** threads `onAuthRequired` from a new optional parameter into
-the `gitOps.fetch` call:
-
-```ts
-export async function refreshGitHubClone(
-  cloneDir: string,
-  storedRef: string | undefined,
-  gitOps: GitOps,
-  onFetchSucceeded?: () => void,
-  onAuthRequired?: OnAuthRequiredCallback,  // NEW
-): Promise<void>
-```
-
----
-
-## New Components
-
-### A. `platform/git-credential.ts`
-
-**Purpose:** Cross-platform OS keychain access via the `git credential` subprocess.
-Three entry points:
-
-- `credentialFill(host: string, pi: ExtensionAPI): Promise<GitAuth | undefined>`
-  Calls `git credential fill` over stdin with `protocol=https\nhost=<host>\n\n`.
-  Parses stdout `username=...\npassword=...` lines into `{ username, password }`.
-  Returns `undefined` on subprocess failure (missing git binary, empty output).
-  Uses `pi.exec("git", ["credential", "fill"], { stdin })`.
-
-- `credentialApprove(host: string, auth: GitAuth, pi: ExtensionAPI): Promise<void>`
-  Calls `git credential approve` with the same protocol/host/username/password input.
-  Swallows subprocess errors (credential store unavailable is non-fatal).
-
-- `credentialReject(host: string, auth: GitAuth, pi: ExtensionAPI): Promise<void>`
-  Calls `git credential reject` to evict a bad credential from the cache.
-  Swallows subprocess errors.
-
-**Why `pi.exec` not `node:child_process`:** `pi.exec` is available on `ExtensionAPI`
-(confirmed in `@earendil-works/pi-coding-agent@0.75.x`
-`ExtensionAPI.exec(command, args, options?): Promise<ExecResult>`). Using it
-respects the extension sandbox model and avoids a direct `child_process` import
-inside extension code, keeping the dependency surface auditable. The `pi` reference
-is already required by every orchestrator call site.
-
-**Containment:** writes only to the OS credential store via git's own credential
-helper chain; does not touch any path under `<scopeRoot>/pi-claude-marketplace/`.
-NFR-10 is unaffected.
-
-**No-network requirement (NFR-5):** path-source `marketplace add` and install/
-uninstall/list never call `platform/git-credential.ts`; only the github-source
-clone/fetch paths invoke it.
-
-### B. `domain/github-auth.ts`
-
-**Purpose:** GitHub Device Flow state machine. Single entry point:
-
-```ts
-export async function initiateDeviceFlow(
-  ctx: ExtensionContext,
-  pi: ExtensionAPI,
-): Promise<GitAuth>
-```
-
-Sequence:
-1. POST `https://github.com/login/device/code` with `client_id` and
-   `scope=repo` (read-only; clone/fetch need `repo` for private repos).
-   Accept `application/json`.
-2. Show `user_code` and `verification_uri` to user via
-   `ctx.ui.notify(\`Open ${verification_uri} and enter code: ${user_code}\`)`.
-3. Poll POST `https://github.com/login/oauth/access_token` with
-   `grant_type=urn:ietf:params:oauth:grant-type:device_code` at the
-   server-specified `interval`. Handle:
-   - `authorization_pending`: continue polling.
-   - `slow_down`: increase interval by 5 s and continue.
-   - `access_denied`: throw `DeviceFlowCancelledError`.
-   - `expired_token`: throw `DeviceFlowExpiredError`.
-   - Success: return `{ username: "x-access-token", password: access_token }`.
-4. Uses `node:https` or `node:http` for the HTTP calls (built-in; no new dep).
-   Alternatively uses `isomorphic-git/http/node`'s underlying fetch if it is
-   exported, but `node:https` is simpler and avoids coupling.
-
-**Client ID:** a GitHub OAuth app client ID for pi-claude-marketplace. This is a
-V1 PUBLIC client (no secret needed for Device Flow; the flow is secret-free by
-design). The constant is hard-coded in `domain/github-auth.ts` or read from a
-`GITHUB_CLIENT_ID` constant in `shared/constants/`.
-
-**Error types:** `DeviceFlowCancelledError` (user pressed Cancel) and
-`DeviceFlowExpiredError` (15-minute window elapsed). Both extend `Error` and are
-exported so orchestrator catch blocks can classify them for user-visible messages
-via the existing `Reason` closed set (`"access denied"` for cancelled, `"network
-unreachable"` for expired or network errors).
-
-**Why domain not platform:** Device Flow is application-level logic (OAuth state
-machine, user interaction, error types) rather than an OS/runtime primitive. It
-belongs in `domain/` alongside `source.ts`, `manifest.ts`, and `version.ts` per
-the existing zone model. `platform/` is reserved for runtime wrappers (isomorphic-
-git, Pi extension API).
-
-**Why not platform/git.ts:** `platform/git.ts` wraps isomorphic-git; embedding the
-Device Flow there would mix the git transport concern with an OAuth protocol
-concern and would also pull `ctx`/`pi` dependencies into a file that today has no
-knowledge of the extension API.
-
-**Why not orchestrator concern:** the `onAuth`/`onAuthFailure` callbacks fire
-inside isomorphic-git's HTTP stack, which is deep inside the `gitOps.clone` /
-`gitOps.fetch` await. The orchestrator's async call to `clone/fetch` is already
-awaited; it cannot observe the mid-call auth callbacks from outside. The auth
-module must be invokable from within the callback. Keeping it in `domain/` means
-both orchestrators can import it without creating a cross-zone dependency violation
-(orchestrators already import from `domain/`).
-
-### C. Type: `OnAuthRequiredCallback`
-
-Defined in `platform/git.ts` (exported) or `domain/github-auth.ts`:
-
-```ts
-export type OnAuthRequiredCallback = (
-  url: string,
-) => Promise<GitAuth | undefined>
-```
-
-The callback receives the URL being cloned/fetched; the real implementation calls
-`credentialFill(host, pi)` first (silent reuse of existing token), then
-`initiateDeviceFlow(ctx, pi)` if `credentialFill` returns undefined (first-time
-auth). Returns `undefined` to fall back to anonymous access (public repo).
-
-The `platform/git.ts` wrappers construct the isomorphic-git `onAuth` and
-`onAuthFailure` callbacks from a single `OnAuthRequiredCallback`:
-
-- `onAuth(url)`: invoke `onAuthRequired(url)`.
-- `onAuthFailure(url)`: call `credentialReject` to evict the stale token, then
-  invoke `onAuthRequired(url)` again (re-auth after rejection).
-- `onAuthSuccess(url, auth)`: call `credentialApprove` to persist the token.
-
-This keeps all keychain side effects inside `platform/git.ts`; `domain/github-
-auth.ts` only knows about the OAuth flow.
-
----
-
-## Modified Components
-
-| File | Change |
-|------|--------|
-| `platform/git.ts` | Delete duplicate `GitCredentials` declaration. Add optional `onAuth`, `onAuthFailure`, `onAuthSuccess` fields to `CloneOptions` and `FetchOptions`. Thread them into `git.clone` and `git.fetch` calls. Export `OnAuthRequiredCallback` type. Add `buildAuthCallbacks(onAuthRequired, pi)` private helper that builds the three isomorphic-git callbacks. |
-| `orchestrators/marketplace/shared.ts` | Add optional `onAuthRequired?: OnAuthRequiredCallback` to `GitOps.clone` and `GitOps.fetch` option shapes. Thread it through `DEFAULT_GIT_OPS.clone` and `DEFAULT_GIT_OPS.fetch`. Add optional `onAuthRequired` parameter to `refreshGitHubClone`. |
-| `orchestrators/marketplace/add.ts` | In `addGithubInGuard`, construct and pass an `onAuthRequired` closure (using `ctx` and `pi` from the outer function) into `gitOps.clone`. |
-| `orchestrators/marketplace/update.ts` | In `refreshRecord`, pass an `onAuthRequired` closure into `refreshGitHubClone`. |
-
-No changes required to: `domain/source.ts`, `persistence/`, `shared/notify.ts`,
-`transaction/`, `bridges/`, `edge/`. The auth concern is entirely contained within
-the platform → domain → orchestrator/marketplace chain.
-
----
-
-## Build Order
-
-Dependencies drive the order. Each component only builds once its dependencies are
-built and tested.
-
-**Phase A (prerequisites, no new files):**
-1. Fix the duplicate `GitCredentials` declaration in `platform/git.ts`.
-   Prerequisite for all type-checked work that follows.
-
-**Phase B (new platform module -- no orchestrator dependency):**
-2. `platform/git-credential.ts` with unit tests
-   (`tests/platform/git-credential.test.ts`).
-   Depends only on `pi.exec` (mocked in tests). No domain or orchestrator imports.
-
-**Phase C (new domain module -- depends on B):**
-3. `domain/github-auth.ts` with unit tests
-   (`tests/domain/github-auth.test.ts`).
-   Imports `OnAuthRequiredCallback` type from `platform/git.ts` (already exists
-   after Phase A). Depends on `ctx.ui.notify` (mocked). HTTP calls are mockable
-   via a fetch-override seam.
-
-**Phase D (platform/git.ts auth wiring -- depends on A, B, C):**
-4. Extend `CloneOptions` / `FetchOptions` in `platform/git.ts` with the optional
-   auth callback fields. Add `buildAuthCallbacks` helper that constructs
-   `onAuth`/`onAuthFailure`/`onAuthSuccess` from an `OnAuthRequiredCallback`.
-   Tests: `tests/platform/git.test.ts` if it exists; otherwise covered by mock
-   test at the orchestrator tier.
-
-**Phase E (GitOps interface and refreshGitHubClone -- depends on D):**
-5. Extend `GitOps.clone` / `GitOps.fetch` option shapes in `shared.ts`. Update
-   `DEFAULT_GIT_OPS` to thread `onAuthRequired` through. Add `onAuthRequired`
-   parameter to `refreshGitHubClone`. Existing mock `makeMockGitOps` in
-   `tests/helpers/git-mock.ts` requires a one-line audit to confirm `clone` and
-   `fetch` option spreads remain compatible with the new optional field.
-
-**Phase F (orchestrator call sites -- depends on E):**
-6. Wire auth closures in `add.ts::addGithubInGuard` and
-   `update.ts::refreshRecord`. Tests for the auth-triggered path: inject a `GitOps`
-   stub that fires `onAuthRequired`, verify `domain/github-auth.ts` is called and
-   `ctx.ui.notify` emits the user code.
-
-**Phase G (integration + green gate):**
-7. `npm run check` green. Add/update output catalog entries if new notification
-   messages are introduced for the auth prompt. Verify existing add/update tests
-   still pass unmodified (the new `onAuthRequired` field is optional; all existing
-   mock call sites spread opts verbatim and will simply never see the field).
-
----
-
-## Test Seams
-
-### Existing seam: `GitOps` mock (`tests/helpers/git-mock.ts`)
-
-The `makeMockGitOps` factory already implements the full `GitOps` interface and
-supports `cloneThrows` / `fetchThrows` override hooks for failure injection. The
-new optional `onAuthRequired` field in the `clone` / `fetch` option shapes does
-NOT break the existing mock because:
-
-- `MockGitState` does not need to store `onAuthRequired`; it is a callback the
-  caller passes in, not state the mock tracks.
-- The mock's `clone` and `fetch` implementations spread their incoming `opts` into
-  the call log. The new optional field passes through transparently.
-- No existing test passes `onAuthRequired`, so all existing tests remain unmodified.
-
-**New `MockGitState` field:** add `onAuthRequiredCalls: string[]` to record URLs
-for which the mock was invoked with a non-undefined `onAuthRequired`. Tests that
-exercise the auth-triggered path use a `gitOps` stub where `clone` calls
-`opts.onAuthRequired?.(url)` so the domain module fires in test.
-
-### New seam: `domain/github-auth.ts` HTTP fetch override
-
-`initiateDeviceFlow` makes two types of HTTP calls (device code request and
-polling). Tests must not hit the real GitHub API. Inject via a constructor
-parameter or module-level override:
-
-```ts
-export interface DeviceFlowHttp {
-  postDeviceCode(clientId: string, scope: string): Promise<DeviceCodeResponse>;
-  pollAccessToken(clientId: string, deviceCode: string): Promise<PollResponse>;
+```typescript
+const renamed: { from: string; to: string }[] = [];
+try {
+  await mkdir(prepared.locations.agentsDir, { recursive: true });
+  for (const pair of prepared._stagedFilePaths) {
+    await rename(pair.from, pair.to);
+    renamed.push(pair);
+  }
+} catch (err) {
+  for (const pair of renamed.slice().reverse()) {
+    try { await rename(pair.to, pair.from); } catch { /* best-effort */ }
+  }
+  throw appendLeakToError(
+    err,
+    await cleanupStaging(prepared.stagingDir, "agents staging directory"),
+  );
 }
-
-export async function initiateDeviceFlow(
-  ctx: ExtensionContext,
-  pi: ExtensionAPI,
-  http?: DeviceFlowHttp,  // defaults to real HTTPS implementation
-): Promise<GitAuth>
 ```
 
-Tests inject a `DeviceFlowHttp` stub that returns deterministic responses for each
-poll state (`authorization_pending` x N, then success / `access_denied` /
-`expired_token`).
+**Boundary clarifications:**
+- Step 1 (`rm` of previous targets, lines 321-332) **stays parallel** -- ENOENT-tolerant, no orphan risk.
+- Agents-index save (step 3, lines 355-362) **stays AFTER renames** -- self-heal on retry.
+- `commitPreparedCommands` (TR-05) gets the same pattern; loop is already sequential, just add `renamed[]` tracking.
 
-### New seam: `platform/git-credential.ts` subprocess override
+## Q3: cascadeUnstage Ghost Record (TR-03)
 
-`pi.exec` is already injectable in tests via the `ExtensionAPI` mock (same pattern
-as existing tests: `{ exec: async (cmd, args, opts) => mockResult }`). Tests
-verify the exact command line built (`["credential", "fill"]`, `["credential",
-"approve"]`, `["credential", "reject"]`) and the stdin payload format.
+**Fix at the orchestrator boundary, not inside the cascade:**
 
-### Existing seam: `ctx.ui.notify` / `ctx.ui.input`
+`cascadeUnstagePlugin` already populates `dropped.*` as-it-goes (lines 331, 337, 342, 349, 367 of shared.ts). On `ok: false`, the orchestrator can use these arrays to filter the state record:
 
-The `ExtensionContext` mock pattern already in use:
-```ts
-const ctx = {
-  ui: { notify: (msg, sev?) => notifications.push({msg, sev}) }
-} as unknown as ExtensionContext;
+```typescript
+if (outcome.ok) {
+  // existing: delete the plugin record from state
+} else {
+  // NEW: filter sRecord.resources.* by outcome.dropped.*
+  if (outcome.dropped.skills.length > 0 || outcome.dropped.commands.length > 0
+      || outcome.dropped.agents.length > 0 || outcome.dropped.mcpServers.length > 0) {
+    sRecord.resources.skills = sRecord.resources.skills.filter(
+      n => !outcome.dropped.skills.includes(n));
+    // same for prompts, agents, mcpServers
+  }
+  // surface partial-failure to user as before
+}
 ```
 
-The Device Flow prompt uses `ctx.ui.notify` (not `ctx.ui.input`) to display the
-user code, consistent with IL-2 (all user-visible messages through `ctx.ui.notify`)
-and the fact that the user acts externally (opens the verification URI in a
-browser); the extension does not need to capture a typed response.
+**Touchpoints:**
+- `orchestrators/plugin/uninstall.ts` -- NEW branch inside `withStateGuard`
+- `orchestrators/marketplace/remove.ts` -- same NEW branch in per-plugin loop
+- Optional: extract `applyPartialUnstageToRecord` helper to `orchestrators/marketplace/shared.ts`
 
-### Output catalog impact
+## Q4: update.ts State-Before-Commit Reorder (TR-04)
 
-One new user-visible message pattern for the Device Flow prompt must be added to
-`docs/output-catalog.md` and the byte-equality catalog UAT fixture in
-`tests/architecture/catalog-uat.test.ts`. The message shape is:
+**Two-guard "intent-mark" approach:**
+
 ```
-Open https://github.com/login/device and enter: XXXX-XXXX
+Phase A: prepareUpdateHandles  (unchanged)
+Phase B: intent-mark in withStateGuard:
+           sRecord.compatibility = { installable: false, notes: ["update-in-progress"] }
+           guard saves state
+Phase C: physical commits (continue-on-failure, D-03 unchanged)
+Phase D: finalize in withStateGuard:
+           all-success -> write new version + new resources + installable=true
+           any-failure -> leave installable=false + notes; user notified of rollback partial
 ```
-routed via `notify(ctx, pi, ...)` -- it does not fit the existing
-`NotificationMessage` discriminated union (which is plugin/marketplace lifecycle
-output). This is a new direct `ctx.ui.notify` call inside `domain/github-auth.ts`,
-not via the `shared/notify.ts` chokepoint. BLOCK A in `eslint.config.js` forbids
-direct `ctx.ui.notify` calls outside the chokepoint zone. The Block A exemption
-list or the zone boundary must be extended to permit the direct call in
-`domain/github-auth.ts`, or `github-auth.ts` must receive a pre-bound `notifyFn`
-callback so the direct call does not cross the BLOCK A boundary.
 
----
+**Why this preserves D-03:** All 4 bridge commits still run with failures aggregated. The `(failed) {rollback partial}` cascade at line 940-963 is unchanged. The `RECOVERY_PLUGIN_REINSTALL_PREFIX` hint becomes truthful: state genuinely is in "needs reinstall" condition, marked as such on disk.
 
-## Sources
+**Depends on TR-01 + TR-05:** Once bridges own their own rename rollback, the intent-mark→commit→finalize sequence has a coherent failure model.
 
-- `extensions/pi-claude-marketplace/platform/git.ts` (read 2026-05-31): confirmed
-  no `onAuth`/`onAuthFailure` callbacks in existing `clone`/`fetch`; "No onAuth
-  (public)" comment block.
-- `extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts`
-  (read 2026-05-31): confirmed `GitOps` interface (6 methods), `DEFAULT_GIT_OPS`
-  shape, `refreshGitHubClone` signature.
-- `extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts`
-  (read 2026-05-31): confirmed `gitOps.clone` call site in `addGithubInGuard`.
-- `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts`
-  (read 2026-05-31): confirmed `refreshGitHubClone` call site in `refreshRecord`.
-- `tests/helpers/git-mock.ts` (read 2026-05-31): confirmed `MockGitState` shape,
-  `makeMockGitOps` API, and call-log pattern.
-- `node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts`
-  (read 2026-05-31): confirmed `ExtensionAPI.exec`, `ctx.ui.notify`,
-  `ctx.ui.input`, `ctx.ui.confirm` signatures.
-- GitHub Device Flow docs (fetched 2026-05-31):
-  https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps
-  Confirmed: `POST https://github.com/login/device/code`,
-  `POST https://github.com/login/oauth/access_token`, error codes
-  `authorization_pending` / `slow_down` / `expired_token` / `access_denied`,
-  `grant_type=urn:ietf:params:oauth:grant-type:device_code`.
+## Q5: replacePrepared* Orphan Blocking (TR-06)
+
+**Lift the stat-based orphan-rm pattern from `commitPreparedSkills` (lines 232-247) into a shared helper:**
+
+```typescript
+// shared/fs-utils.ts (new export)
+export async function removeOrphanIfPresent(
+  target: string,
+  mode: "file" | "tree",
+): Promise<void> {
+  try {
+    const s = await stat(target);
+    if (mode === "tree" && s.isDirectory()) {
+      await rm(target, { recursive: true, force: true });
+    } else if (mode === "file" && s.isFile()) {
+      await rm(target);
+    }
+    // mismatched kind -> leave alone; rename will surface ENOTDIR/ENOTEMPTY as real error
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") { throw e; }
+  }
+}
+```
+
+Replace `if (await pathExists(pair.to)) throw ...` in all three `replacePrepared*` functions with `removeOrphanIfPresent(pair.to, "tree" | "file")`.
+
+**Why this is safe:** The `_previousNames` loop above already moved LEGITIMATE previous targets to backup. Anything still at `pair.to` after that loop is definitionally NOT a tracked previous-target. PI-6 conflict detection ran before staging, so a legitimate other-plugin owner would have aborted earlier.
+
+## Suggested Build Order (with Dependencies)
+
+### Wave 1 -- Independent foundations (parallel ok):
+- **Phase A:** TR-02 (phase-ledger.ts push reorder). Lowest risk, foundational.
+- **Phase B:** TR-01 (agents commit sequential + reverse). Independent.
+- **Phase C:** TR-05 (commands commit sequential + reverse). Independent.
+- **Phase D:** TR-06 (replacePrepared* orphan tolerance + extract `removeOrphanIfPresent`). Independent.
+
+### Wave 2 -- State-record-coherence fixes:
+- **Phase E:** TR-03 (cascadeUnstage ghost record). Modify uninstall.ts + remove.ts.
+
+### Wave 3 -- Structural reorder (depends on Wave 1):
+- **Phase F:** TR-04 (update.ts intent-mark + finalize). Largest change; depends on TR-01 + TR-05 bridge rollback being available.
+
+### Wave 4 -- Documentation + test-coverage closeout:
+- **Phase G:** TR-07 + TR-08 (docs + tests for LOW findings). Independent.
+
+## Open Questions for the Planner
+
+1. **TR-04 schema piggyback on `installable: false`:** Verify persistence schema allows `installable: false` with `notes` field without breaking `list` command rendering.
+2. **TR-03 helper extraction:** Decide whether to extract `applyPartialUnstageToRecord` to dedupe (vs. keep duplicated for locality).
+3. **TR-01/TR-05 leak shape:** When reverse-rename itself fails, `appendLeakToError` accepts a single leak string. With K failures, confirm concat or array shape suffices.
+4. **TR-04 test surface:** Expect ~10-15 test rewrites in `tests/orchestrators/plugin/update.test.ts`.
+
+## Source Files Referenced
+
+- `extensions/pi-claude-marketplace/transaction/phase-ledger.ts` -- TR-02 fix site (line 121-137)
+- `extensions/pi-claude-marketplace/bridges/agents/stage.ts` -- TR-01 fix site (line 340-349), TR-06 fix site (line 432-438)
+- `extensions/pi-claude-marketplace/bridges/commands/stage.ts` -- TR-05 fix site, TR-06 commands variant
+- `extensions/pi-claude-marketplace/bridges/skills/stage.ts` -- TR-06 skills variant (already correct at commitPreparedSkills)
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts` -- TR-03 fix (dropped contract already adequate)
+- `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts` -- TR-03 primary call site
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts` -- TR-03 second call site
+- `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts` -- TR-04 fix site
+- `extensions/pi-claude-marketplace/shared/fs-utils.ts` -- `removeOrphanIfPresent` new export (TR-06)
+- `extensions/pi-claude-marketplace/bridges/agents/marker.ts` -- `isOwnedAgentFile` (TR-06 reference)

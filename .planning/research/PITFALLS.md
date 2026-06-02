@@ -1,535 +1,800 @@
-# Pitfalls Research: v1.6 GitHub Private Marketplace Authentication
+# Pitfalls Research: v1.7 Transaction Resilience Hardening
 
-**Domain:** GitHub Device Flow + git credential helper integration in a Node.js TypeScript Pi extension
-**Researched:** 2026-05-31
-**Overall confidence:** HIGH (Device Flow protocol behavior from GitHub official docs; isomorphic-git onAuth from Context7 + official docs; credential subprocess behavior from git-scm.com official docs; test isolation patterns from codebase inspection)
+**Domain:** Adding rollback correctness, sequential loops, phase-undo ordering, and TOCTOU guards to an existing two-phase plugin manager that already implements `withStateGuard`, `runPhases`, replacement helpers, and ENOENT-tolerant cascades.
+**Researched:** 2026-06-02
+**Overall confidence:** HIGH (Source-anchored to `transaction/phase-ledger.ts`, `bridges/{agents,commands,skills}/stage.ts`, `orchestrators/plugin/update.ts`, `orchestrators/marketplace/shared.ts`, and the PUP-6 / phase3a tests in `tests/orchestrators/plugin/update.test.ts`).
 
 ---
 
 ## Summary
 
-Adding Device Flow authentication to an existing codebase that already has a clean
-GitOps mock interface and atomic state management introduces five distinct failure
-surfaces that do not interact naturally with each other:
+These eight TR-* fixes look small in isolation. Each one is a 5-20 line edit to a
+single file. But every one of them threads through at least three other guarantees
+the code already makes -- and the existing tests deliberately depend on those
+guarantees through indirect side-effects (e.g. the PUP-6 test seeds a FILE at the
+target path to make rename throw ENOTDIR, and any fix that "tidies up" that obstacle
+mid-rollback or pre-stage removes the test's only failure trigger and renders it
+GREEN-for-wrong-reasons).
 
-1. **Device Flow polling state machine** -- The GitHub protocol has strict interval
-   semantics and multiple error codes that require careful cumulative bookkeeping.
-   Getting the polling loop wrong ranges from silent rate-limit bans to a process
-   that never exits.
+The pitfalls cluster into five integration classes:
 
-2. **git credential subprocess** -- Spawning `git credential fill/approve/reject` is
-   the only cross-platform OS keychain abstraction that works without a native
-   Node module, but the subprocess protocol has stdin-closure, PATH, and output
-   format edge cases that cause hangs or silent failures.
+1. **Reverse-iteration rollback** -- looks correct, but breaks on ENOENT-tolerant
+   forward passes (you must undo only what you proved succeeded, not what you
+   attempted), and the existing `rollbackReplacementCommon` already does this
+   right -- new sequential commit code MUST adopt the same shape.
 
-3. **isomorphic-git onAuth/onAuthFailure callbacks** -- These callbacks are called
-   from inside the library's HTTP layer; any exception thrown from them propagates
-   as an unhandled error from `clone`/`fetch`, not as a structured auth failure.
-   The "keep retrying while you return credentials" contract means a naive
-   implementation loops until expiry.
+2. **Phase-ledger semantics** -- "register for undo after `do` returns" is what the
+   v1.7 fix targets, but the boundary "did the phase succeed enough to deserve undo"
+   is ambiguous when a phase has internal partial commits (e.g. half the renames
+   landed before throwing). The ledger's `executed.push(phase)` AFTER `await phase.do`
+   already encodes the answer -- the fix is to widen the catch to invoke the failing
+   phase's own `undo` ONCE before re-throwing, NOT to push it onto `executed` (that
+   would cause double-rollback when the reverse walk also touches it).
 
-4. **Test isolation** -- The credential store is global OS state. Tests that touch
-   the system git credential store leave persistent side effects and require a
-   real `git` binary on PATH.
+3. **State/disk ordering** -- moving state.json AFTER commits in update.ts looks
+   like an obvious correctness fix, but the existing phase 3a contract explicitly
+   continues on partial failure (`phase3aFailures: Phase3Failure[]` is appended-to,
+   never thrown-from). If state writes only happen "after all commits succeed,"
+   ANY phase 3a failure means state.json is never written -- a regression that
+   loses the successful sub-bridges from state. The right shape is to write state
+   AFTER each commit's success is observed, never before any commit ran.
 
-5. **Security surface** -- Tokens acquired via Device Flow must never appear in
-   `ctx.ui.notify` output, in error messages surfaced to the user, or in
-   `state.json`. isomorphic-git error messages include the repository URL; a token
-   embedded in the URL would be exposed.
+4. **Ghost state records** -- cascadeUnstagePlugin already fail-fasts (D-03), so
+   `dropped.*` captures only what unstaged BEFORE the throw. The pitfall is in
+   the CALLER (update.ts, remove.ts, uninstall.ts): partial cascade success means
+   some on-disk artifacts are gone but the index/state row still claims they
+   exist. Fixing this requires the caller to materialize `dropped.*` into a
+   state-mutation, not just observe it for messaging.
+
+5. **TOCTOU on pre-rename target removal** -- The `replacePrepared*` helpers
+   explicitly REFUSE to overwrite a target with non-previous content
+   (`throw new Error("Cannot replace ... with non-previous content")`). This is
+   the PI-6 cross-plugin collision guard. The TR-06 fix "remove orphan targets
+   before rename" reverses this guarantee -- you MUST distinguish "orphan we
+   created in a prior partial install" from "another plugin's artifact" before
+   removing, or the fix becomes a silent cross-plugin data-loss vector.
+
+The test-breakage class is the single largest integration risk: every fix
+in TR-01..TR-06 touches code that is already test-pinned through a specific
+failure injection (PUP-6's ENOTDIR file, phase3a-commands-fail's directory
+obstacle, the `non-previous content` rejection at `stage.ts:411`). The
+roadmap MUST surface "what failure injection does this test currently use,
+and does the fix change the trigger" as a per-phase planning question.
 
 ---
 
 ## Critical Pitfalls
 
-### CP-1: `slow_down` adds 5 seconds CUMULATIVELY, not a one-time increase
+These can cause silent data loss, double-rollback, or render existing tests
+green-for-wrong-reasons.
 
-**What goes wrong:** Every `slow_down` response from GitHub's token endpoint
-(`https://github.com/login/oauth/access_token`) means the polling interval
-must be permanently increased by 5 seconds FOR THAT POLL LOOP, not reset to
-`initial_interval + 5`. An implementation that sets `interval = initial + 5`
-on the first `slow_down` and ignores subsequent slow-downs will over-poll and
-accumulate further `slow_down` responses, eventually hitting a rate-limit ban.
+### Pitfall 1: Sequential rename loop without rollback-tracking
+**Affects:** TR-01 (agents `commitPreparedAgents`), TR-05 (commands `commitPreparedCommands`)
 
-**Root cause:** Misreading the spec. RFC 8628 §3.5 and GitHub's docs both say
-"adds 5 extra seconds to the minimum interval" -- this is cumulative. Each
-slow-down adds another 5 on top of whatever the current interval already is.
-
-**Consequences:** Silent throttling that looks like "Device Flow never completes"
-in testing; potential temporary ban from GitHub's OAuth endpoints for the app.
-
-**Prevention:** Maintain a mutable `currentInterval` variable, initialized from
-the `interval` field in the device code response. On `slow_down`: `currentInterval
-+= 5`. Use `currentInterval` (not the original `interval`) for every `setTimeout`
-call in the polling loop.
+**What goes wrong:** Converting `Promise.all(_stagedFilePaths.map(({from, to}) => rename(from, to)))` to a sequential `for` loop with rollback looks like a one-line refactor. The classic bug is to capture the failing pair only:
 
 ```typescript
-let currentInterval = deviceCodeResponse.interval; // seconds, typically 5
-// ...
-if (error === "slow_down") {
-  currentInterval += 5; // cumulative
-  await sleep(currentInterval * 1000);
-  continue;
-}
-if (error === "authorization_pending") {
-  await sleep(currentInterval * 1000);
-  continue;
-}
-```
-
-**Detection:** A test that simulates `slow_down` twice in a row should assert
-the third poll fires after `initial + 10` seconds, not `initial + 5`.
-
-**Phase:** Core Device Flow polling loop (polling module unit tests).
-
----
-
-### CP-2: `authorization_pending` must NOT advance the interval; only `slow_down` does
-
-**What goes wrong:** Some implementations increment the interval on
-`authorization_pending` as a conservative backoff. This is incorrect -- only
-`slow_down` modifies the interval. Incrementing on `authorization_pending` means
-the user gets ~10-30 extra seconds of wait time before the token is picked up,
-which degrades UX noticeably since Device Flow already has a 5-second minimum
-poll gap.
-
-**Root cause:** Conflating "keep waiting" with "slow down". They are distinct states.
-
-**Prevention:** Treat `authorization_pending` as a pure retry signal -- wait
-`currentInterval` seconds and poll again. Do not touch `currentInterval`.
-
-**Phase:** Polling loop design.
-
----
-
-### CP-3: `expired_token` during poll means the Device Code expired, NOT the access token
-
-**What goes wrong:** The polling loop receives `expired_token` and the handler
-either treats it as a generic auth error (causing a confusing `ctx.ui.notify`
-about an invalid token) or silently swallows it. In either case the user sees
-no actionable guidance.
-
-**Root cause:** The error code name is misleading -- it means the *device code*
-(valid 15 minutes from issuance) expired while waiting for the user, not that
-an access token is invalid.
-
-**Consequences:** User is left staring at a "please visit X and enter Y" prompt
-that has already expired; the extension appears hung.
-
-**Prevention:** Explicitly handle `expired_token` as a terminal polling state:
-exit the loop, emit a `ctx.ui.notify` with severity `error` and a message like
-`Device code expired. Run the command again to restart authorization.`
-
-**Phase:** Polling loop error handling. Add a dedicated test case asserting the
-user-visible message and that the loop terminates.
-
----
-
-### CP-4: Polling timer keeps the process alive unless cleared or unreferenced
-
-**What goes wrong:** The Device Flow polling loop uses `setTimeout` (or
-`setInterval`) to schedule the next poll. If the Pi extension process exits
-for any reason while a poll is in-flight, Node.js will not exit cleanly -- it
-will wait for the timer to fire. In test suites run with `node --test`, an
-unreferenced timer keeps the test process alive past the test's end, causing
-`node:test` to report a hanging process or a timeout.
-
-**Root cause:** Node.js event loop stays alive for any scheduled `setTimeout` that
-has not been cleared or `.unref()`-ed.
-
-**Prevention:**
-- Keep a reference to every `setTimeout` call in the polling loop.
-- Always call `clearTimeout(handle)` when exiting the loop (success, error,
-  cancellation, or expiry).
-- For the test harness: use `after()` hooks to abort any in-progress poll
-  via an `AbortController` signal. The polling function should accept an
-  `AbortSignal` and call `clearTimeout` + throw `AbortError` when the signal fires.
-
-**Phase:** Polling module design + test isolation.
-
----
-
-### CP-5: `git credential` subprocess hangs if stdin is not explicitly closed after writing
-
-**What goes wrong:** `git credential fill` reads a key-value block from stdin
-terminated by a blank line. If the Node.js code writes the key-value pairs but
-never writes the terminating blank line, OR writes the blank line but never calls
-`child.stdin.end()`, the `git credential` subprocess waits indefinitely for more
-input and the parent `await` never resolves.
-
-**Root cause:** `git credential` expects the stdin stream to signal EOF (or a blank
-line) before it proceeds. Node's `child.stdin.write()` does not automatically close
-the stream.
-
-**Consequences:** The `marketplace add` / `marketplace update` command appears to
-hang with no output. No timeout is applied by default. In tests that do not mock
-the credential subprocess, the test runner hangs.
-
-**Prevention:**
-```typescript
-// Correct pattern for git credential fill:
-child.stdin.write(`protocol=https\nhost=github.com\n\n`); // blank line required
-child.stdin.end(); // explicit EOF -- required even after blank line
-```
-The blank line (`\n\n` at the end) signals end of the attribute block per the
-git-credential wire format. `child.stdin.end()` closes the pipe, preventing the
-subprocess from blocking on further input.
-
-**Detection:** A test that spawns a real `git credential fill` process without
-the blank line + `.end()` and asserts the promise resolves within 2 seconds will
-hang. Use this as an integration regression guard.
-
-**Phase:** git credential subprocess wrapper implementation.
-
----
-
-### CP-6: `git credential fill` exits non-zero and emits no output when no credential is stored
-
-**What goes wrong:** When the OS keychain has no stored credential matching the
-query, `git credential fill` exits with code 1 and produces no output on stdout.
-An implementation that `await`s the subprocess and checks `stdout` will receive an
-empty string and may either throw a parse error, interpret it as "username=\npassword=\n",
-or silently proceed with empty credentials.
-
-**Root cause:** The git credential protocol does not distinguish "not found" from
-error via a structured response -- it uses the exit code and empty stdout.
-
-**Prevention:** Treat exit code !== 0 AND empty stdout as the "no credential found"
-signal. Return `null` or `undefined` (not an empty `GitAuth` object) so the caller
-can trigger Device Flow. A nonempty stdout with exit code 0 is a valid credential.
-
-```typescript
-if (exitCode !== 0 || stdout.trim() === "") {
-  return null; // No credential found -- trigger Device Flow
-}
-```
-
-**Phase:** git credential subprocess wrapper.
-
----
-
-### CP-7: `git credential approve` must receive the SAME `protocol=` and `host=` attributes as the `fill` query, or it stores to the wrong key
-
-**What goes wrong:** The credential is stored under a key that combines `protocol`,
-`host`, and optionally `path`. If `approve` is called with a different combination
-(e.g., omitting `path`, or using `http` instead of `https`), the OS keychain stores
-a new entry rather than overwriting the one that `fill` found. Subsequent `fill` calls
-then return the old (rejected) credential instead of the newly approved one.
-
-**Root cause:** git credential helpers match credentials by exact attribute set.
-Adding or removing attributes changes the match key.
-
-**Prevention:** Use a single constant attribute set for all three operations
-(`fill`, `approve`, `reject`). For GitHub, the minimal correct set is:
-```
-protocol=https
-host=github.com
-```
-Do not add `path=` unless you intend per-repo isolation.
-
-**Phase:** git credential subprocess wrapper + integration test with a dummy keychain.
-
----
-
-### CP-8: `git credential reject` called with stale credentials leaves a phantom entry on macOS Keychain
-
-**What goes wrong:** macOS Keychain stores multiple entries for the same service+account
-combination if `approve` is called more than once. When `reject` is called, it deletes
-the FIRST matching entry, leaving duplicates. Subsequent `fill` calls then return a
-stale (deleted) credential from the remaining entry.
-
-**Root cause:** macOS Keychain and `git-credential-osxkeychain` do not deduplicate
-on store; they append. The git credential protocol's `reject` action only removes
-the first match.
-
-**Prevention:**
-- Always call `reject` before a new `approve` when rotating a token, not just `approve`.
-- In tests, do not call `approve` against the real system keychain. Always mock the
-  credential subprocess in unit and integration tests.
-
-**Confidence:** MEDIUM -- observed in community bug reports; not documented in official
-git-scm.com docs. Apply defensively.
-
-**Phase:** git credential wrapper + test isolation (see TI-1 below).
-
----
-
-### CP-9: isomorphic-git `onAuthFailure` loops indefinitely if it always returns credentials
-
-**What goes wrong:** isomorphic-git's documentation explicitly states: "As long as
-your `onAuthFailure` function returns credentials, it will keep trying." If the
-callback unconditionally calls `git credential fill` and always gets a credential
-back (even a stale one), the loop will run until the OS blocks the repo host or
-the process is killed. There is no built-in retry cap.
-
-**Root cause:** The loop-until-cancel design is intentional (it is a feature for
-interactive UIs that prompt users repeatedly), but it requires the caller to return
-`{ cancel: true }` -- or `void` -- to stop.
-
-**Prevention:**
-- Track whether Device Flow has already been attempted for this URL in the current
-  operation. If `onAuthFailure` fires after a Device Flow was completed and the new
-  credential was approved, return `{ cancel: true }` rather than re-entering Device
-  Flow.
-- Pattern: keep a `boolean` flag `authAttempted` in the closure. On first failure:
-  run Device Flow, call `git credential approve`, return the new credential. On
-  second failure (the new credential also failed): call `git credential reject`,
-  return `{ cancel: true }`.
-
-```typescript
-let authAttempted = false;
-const onAuthFailure = async (url: string) => {
-  if (authAttempted) {
-    await rejectStoredCredential(url);
-    return { cancel: true }; // prevent infinite loop
+// WRONG
+const completed: typeof prepared._stagedFilePaths = [];
+for (const pair of prepared._stagedFilePaths) {
+  try {
+    await rename(pair.from, pair.to);
+    completed.push(pair);
+  } catch (err) {
+    // rollback `completed` by renaming each `to` back to `from`
+    for (const done of completed.reverse()) {
+      await rename(done.to, done.from);  // BUG #1: mutating completed in place
+    }
+    throw err;
   }
-  authAttempted = true;
-  const token = await runDeviceFlow(url);
-  await approveCredential(url, token);
-  return { username: token, password: "x-oauth-basic" };
-};
+}
 ```
 
-**Phase:** isomorphic-git wrapper layer (the new `clone`/`fetch` wrappers that
-accept `onAuth`/`onAuthFailure`).
+There are three bugs hiding here:
+
+1. **`completed.reverse()` mutates `completed`** -- if anything reads `completed`
+   after the catch (logs, leaks array), it sees the reversed order. Use
+   `[...completed].reverse()` (the existing `rollbackReplacementCommon` at
+   `shared/fs-utils.ts:142` does this correctly).
+
+2. **Each rollback rename can ALSO fail** -- the staging file's parent (`stagingDir`)
+   may have been cleaned up by a concurrent abort, or the rename source may now be
+   on a different inode after a partial unlink. The shape must accumulate
+   rollback-failures into `leaks: string[]` and `appendLeakToError` them onto the
+   original throw, like `rollbackReplacementCommon` does.
+
+3. **The staging file may not exist anymore at `pair.from`** -- because step 1 of
+   `commitPreparedAgents` already `rm`'d the `_previousEntries[i].targetPath`, and
+   if rename succeeded for entries 1..k then the staging file at index k+1 is
+   still in staging, but the `to` path may have been overwritten by a concurrent
+   process holding NO lock at all (the agents bridge has no `withStateGuard`
+   around its rename phase; the state lock is held only by the orchestrator).
+
+**Warning sign (looks right but isn't):** The pre-step (`rm` previous targets at
+agents `stage.ts:322-332`) uses `Promise.all`. If TR-01 only converts the
+RENAME loop to sequential but leaves the PRE-STEP parallel, then a partial pre-step
+failure leaves some old targets removed and others present, and the rollback can't
+restore them (it never backed them up -- `commitPreparedAgents` is the "commit"
+path, not the `replacePreparedAgents` "backup" path). The fix must either
+serialize BOTH or accept that the pre-step's `Promise.all` is unsymmetric with
+the new sequential rename (the failure semantics are different: pre-step is
+ENOENT-tolerant deletion of OLD targets; rename is creation of NEW targets).
+
+**Prevention strategy:**
+1. **Adopt the shape of `rollbackReplacementCommon`** -- it already does
+   `for (const pair of [...input.renamed].reverse())`, accumulates leaks into a
+   `string[]`, never throws from the rollback loop itself, and returns
+   `readonly string[]` for the caller to surface via `appendLeakToError`. The
+   commit-path rollback should be the same shape with a different name.
+2. **Do NOT roll back the pre-step deletions** -- they were ENOENT-tolerant
+   forward passes; the bridge owns no backup for them. Document explicitly that
+   commit-path rollback restores the new-rename pairs only, not the
+   pre-step-rm'd previous targets. Cross-link this to TR-06 (which DOES need to
+   back up "orphan" targets before removing them).
+3. **Distinguish `_stagedFilePaths` (a snapshot from prepare) from "renames I
+   actually completed"** -- the rolled-back set is a subset of `_stagedFilePaths`.
+   Name the local variable accordingly (`completedRenames`, not `done` or
+   `executed`).
+
+**Phase to address it:** TR-01 (agents) and TR-05 (commands) in the same phase,
+because the shape is identical and divergence between the two bridges is a future
+maintenance hazard. Extract a shared `commitWithRollback` helper into
+`shared/fs-utils.ts` if the second bridge would otherwise copy-paste 30 lines.
 
 ---
 
-### CP-10: isomorphic-git `onAuthFailure` does NOT receive a structured "401" signal -- it receives the failed GitAuth object; throwing from it propagates as a clone/fetch rejection
+### Pitfall 2: Phase-ledger undo includes the failing phase (TR-02 over-correction)
+**Affects:** TR-02 (phase-ledger undo gap fix)
 
-**What goes wrong:** If the `onAuthFailure` callback throws (e.g., Device Flow
-throws because `ctx.ui` is unavailable, or `git credential` subprocess throws),
-the exception propagates directly from `git.clone()` or `git.fetch()` as an
-untyped error. The caller in the marketplace orchestrator receives an unexpected
-error, bypassing the `MarketplaceAuthError` path and surfacing a raw error to
-the user via the generic catch block.
+**What goes wrong:** The current ledger (`transaction/phase-ledger.ts:120-141`)
+ONLY calls undo on previously-executed phases. The reverse-walk skips the
+failing phase entirely because `executed.push(phase)` runs AFTER `await phase.do(ctx)`
+returns successfully -- a throw aborts the push. So the bug is real: a phase
+that does work, then throws, leaves its work uncleaned-by-the-ledger (the phase
+is expected to throw a "clean" error, but if it can't clean up internally then
+the ledger never gives it the chance via its own `undo`).
 
-**Root cause:** isomorphic-git does not wrap callback exceptions in a structured
-error type. Any exception thrown in a callback is re-thrown as-is from the git
-operation.
+The over-correction is to ADD the failing phase to `executed` before the catch:
 
-**Prevention:**
-- Wrap the entire body of `onAuth` and `onAuthFailure` in `try/catch`.
-- On catch: log the error for debugging (not via `ctx.ui.notify`), then return
-  `{ cancel: true }` so isomorphic-git throws a predictable `UserCanceledError`.
-- The marketplace orchestrator should explicitly handle `UserCanceledError` and
-  surface a user-friendly message: `Authentication canceled.`
+```typescript
+// WRONG -- causes double-undo of every phase
+try {
+  await phase.do(ctx);
+} catch (err) {
+  executed.push(phase);  // BUG: this phase didn't fully succeed
+  const partials = await rollbackExecuted(executed, ctx);
+  // ...
+}
+```
 
-**Phase:** isomorphic-git wrapper + marketplace add/update orchestrators.
+This causes the failing phase's `undo` to be called, but then EVERY subsequent
+phase in the reverse walk is also called -- which is the existing correct
+behavior. The bug here is that `rollbackExecuted` already walks `executed.slice().reverse()`,
+so pushing the failing phase puts it at the FRONT of the reverse walk: it gets
+undone first, which is correct. But the failing phase's `undo` may itself have
+been written ASSUMING `do` ran to completion. If the failing phase's `undo`
+encounters its own no-op preconditions (e.g. "if X exists, rm X" where X never
+got written because `do` threw early), it must be ENOENT-tolerant -- and the
+new contract is now silently load-bearing on that.
 
----
+The other over-correction is to call the failing phase's `undo` SEPARATELY,
+then walk `executed` for the prior phases:
 
-## Test Isolation Pitfalls
+```typescript
+// WRONG -- double-rollback if executed already includes phase
+if (phase.undo) {
+  try { await phase.undo(ctx); } catch (undoErr) { partials.push(...) }
+}
+const partials2 = await rollbackExecuted(executed, ctx);
+```
 
-### TI-1: Tests that call real `git credential` interact with the developer's OS keychain
+This is correct ONLY if `executed` definitely does NOT contain `phase` (which
+is the current state, since push happens after await). But a future refactor
+that moves the push BEFORE the await (to make `executed` track "attempted")
+would silently double-invoke the failing phase's undo.
 
-**What goes wrong:** Any test that does not mock the credential subprocess will
-call the real `git credential fill/approve/reject` binary. On macOS this touches
-the Keychain; on Linux it touches the Secret Service or plaintext store; on Windows
-it touches the Credential Manager. This causes:
-- Stored test credentials that persist after the test run.
-- False positives: a developer with a real GitHub token stored for `github.com`
-  will see tests pass that should test the "no credential found" path.
-- Test pollution: `approve` in one test inserts an entry that `fill` returns in a
-  different test.
+**Warning sign (looks right but isn't):** A test that asserts
+`undo` was called exactly N times for an N-phase ledger. If the fix adds the
+failing phase's undo, the test count becomes N+1 -- but a buggy fix that
+double-invokes makes it N+2, and an "off by one" assertion change that
+hard-codes the expected count masks the regression silently.
 
-**Prevention:**
-- The credential subprocess must be injectable, the same way `GitOps` is injectable
-  in the existing marketplace orchestrators.
-- Define a `CredentialOps` interface (analogous to `GitOps`) with `fill`, `approve`,
-  and `reject` methods. The default implementation spawns `git credential`. Tests
-  pass an in-memory mock.
-- `makeMockGitOps` in `tests/helpers/git-mock.ts` should be extended with a
-  `makeMockCredentialOps` factory following the same pattern (call log + behavior
-  overrides).
+**Prevention strategy:**
+1. **Make the boundary explicit in code:** the failing phase's undo is invoked
+   from the CATCH block, BEFORE `rollbackExecuted(executed, ctx)`, and the
+   reverse walk of `executed` does NOT include the failing phase. The two
+   undo invocations are SEPARATE call sites with separate error capture, so
+   the structural invariant "every phase's undo is invoked at most once" is
+   readable.
+2. **Document the new undo contract on `Phase<C>.undo`:** the undo MUST be
+   ENOENT/no-op tolerant when called after a partial-do throw -- it cannot
+   assume `do` ran to completion. Add this to the JSDoc on the `Phase<C>`
+   interface.
+3. **Order the partials correctly:** if the failing phase's undo throws, its
+   `RollbackPartial` row appears FIRST in the result (consistent with reverse
+   order of execution: the failing phase is "most recent"). The user-visible
+   rollback-partial cascade reads top-down newest-first.
+4. **PathContainmentError discipline:** the existing rule (lines 84-86) that
+   undo PathContainmentError re-throws immediately MUST also apply to the
+   failing phase's own undo. Apply the same `if (err instanceof PathContainmentError) throw err`
+   guard at the new call site.
 
-**Phase:** Interface design in the new auth module. Must be in place before the
-first test that touches credential behavior.
-
----
-
-### TI-2: Mocking `onAuth`/`onAuthFailure` at the GitOps layer, not the isomorphic-git layer
-
-**What goes wrong:** If tests mock `git.clone` at the isomorphic-git import level
-(e.g., via `node:test`'s `mock.module`), the `onAuth`/`onAuthFailure` callbacks
-in the real `platform/git.ts` are never invoked. Tests then only exercise the
-happy path and miss the auth-failure-triggers-Device-Flow contract.
-
-**Prevention:** The existing `GitOps` mock (`tests/helpers/git-mock.ts`) is the
-right interception point for happy-path tests. For auth-specific tests:
-- Either extend `MockGitState` with `cloneThrows: new HttpError(401, ...)` and
-  observe the orchestrator's response, OR
-- Add a separate `cloneWithAuth` method to the `GitOps` interface that wraps
-  the real `git.clone` with `onAuth`/`onAuthFailure` callbacks, injectable for
-  testing.
-- The second approach is preferred: it keeps auth logic in one testable place
-  rather than scattered across every operation.
-
-**Phase:** GitOps interface extension + test helper update.
-
----
-
-### TI-3: Device Flow polling loop tests must mock the GitHub token endpoint, not the whole network
-
-**What goes wrong:** Tests that mock `fetch` globally (e.g., via `mock.fn()` on
-`globalThis.fetch`) can accidentally suppress error responses intended for
-isomorphic-git's HTTP layer when both run in the same test context. The Device
-Flow polling calls GitHub's REST API (`https://github.com/login/oauth/access_token`);
-isomorphic-git calls GitHub's Git smart HTTP protocol (`https://github.com/<owner>/<repo>.git/info/refs`).
-These are entirely different endpoints and must be mocked independently.
-
-**Prevention:** Isolate Device Flow polling in its own module that accepts an
-injectable `fetch`-like function. Do not mock `globalThis.fetch` in tests; mock
-the injected function. The isomorphic-git HTTP layer uses its own `http` plugin
-(`isomorphic-git/http/node`), which is already replaced by `MockGitOps` in existing
-tests -- there is no conflict as long as the injected fetch is scoped.
-
-**Phase:** Device Flow module design.
+**Phase to address it:** TR-02 standalone. Add a test that asserts the SPECIFIC
+undo-call sequence (failing-phase-undo, then phase-(N-1)-undo, then phase-(N-2)-undo,
+...) so the contract is locked. Cite the test from RollbackPartial[] ordering
+in `shared/notify.ts` rendering -- the renderer assumes newest-first.
 
 ---
 
-### TI-4: `node --test` worker isolation does not prevent timer leaks from polling loops
+### Pitfall 3: Cascade success observation without state mutation (TR-03 ghost records)
+**Affects:** TR-03 (cascadeUnstage ghost record)
 
-**What goes wrong:** `node:test` runs tests in the same process by default
-(no worker isolation). A polling loop that escapes from a test (e.g., the test
-threw before the loop cleanup ran) keeps the Node.js event loop alive past the
-test file's last test, causing `node:test` to report `# pending` handles and
-eventually time out the CI step.
+**What goes wrong:** `cascadeUnstagePlugin` (in `orchestrators/marketplace/shared.ts:317-395`)
+fail-fasts on the first bridge throw (D-03), but its `dropped.*` fields
+accumulate the successful drops BEFORE the throw. The current consumer pattern
+(at every call site) does one of two things:
 
-**Prevention:**
-- Every test that creates a polling loop must use `after()` or `afterEach()` to
-  abort the loop via the `AbortController` pattern described in CP-4.
-- Use `t.mock.timers` (available in `node:test` v21+) to fake `setTimeout` in
-  polling tests rather than relying on real timers. This eliminates the timer-leak
-  problem entirely for unit tests.
-- For integration tests that need real timing, set a hard test timeout
-  (`{ timeout: 30_000 }`) and rely on the AbortController cleanup in `after()`.
+- **`uninstall.ts` / `remove.ts`:** drop the state row regardless of `outcome.ok`,
+  because uninstall semantics is "delete the row even on partial disk failure --
+  next reinstall self-heals."
+- **`update.ts`:** never calls cascadeUnstagePlugin at the failure path; the
+  replace handles own their own rollback.
 
-**Phase:** All Device Flow polling tests.
+The TR-03 ghost-record bug is: when cascade fails after `dropped.skills` is full
+but before agents finish, the caller drops the WHOLE state row including
+`resources.skills` -- but the index records the skills as still attached. If the
+caller leaves the row in place instead (the obvious "fix"), then the state row
+LIES about the on-disk content: state says skills=[a,b,c] but a,b,c were
+successfully unstaged. Next `update` reads stale resources.skills, tries to
+`commitPreparedSkills` with `previousSkillNames=[a,b,c]`, and ENOENT-tolerates
+its way to a "successful" commit -- but the user sees no `(skills dropped)`
+row anywhere because the state-row delta is zero.
 
----
+**Warning sign (looks right but isn't):** A test that asserts cascade failure
+preserves the state row (e.g. "after cascade throws, state.marketplaces[mp].plugins[p]
+is unchanged"). This is the SHAPE of the ghost record -- a test that "passes"
+because the row is preserved is documenting the bug, not preventing it.
 
-## Security Pitfalls
+**Prevention strategy:**
+1. **Materialize `dropped.*` into a partial state update.** The caller, holding
+   the state lock, must mutate `installedPlugin.resources.skills = filter(out
+   what dropped)`, then either delete the row (uninstall semantics) or leave
+   the SHRUNK row (update semantics). The cascade primitive itself stays
+   read-only on state -- only the orchestrator owns the mutation.
+2. **Add a typed partial-success return shape** -- `UnstageOutcome.ok === false`
+   carries `dropped.*`, which IS the set the caller should remove from state.
+   Document: "the caller MUST treat `dropped.*` as a state-mutation directive,
+   not a notification-only payload."
+3. **Distinguish "cascade failed, partial disk delete" from "cascade failed,
+   nothing deleted."** The current shape doesn't structurally distinguish them
+   -- `dropped.skills = []` could mean either "skills succeeded but agents
+   threw" (no, dropped.skills would be populated then) or "skills threw first"
+   (dropped.skills empty AND cause references skills). Add a `phaseReached:
+   "skills" | "commands" | "agents" | "mcp" | "complete"` field if the
+   semantics aren't already reconstructible from `dropped.*` non-emptiness.
 
-### SEC-1: GitHub token MUST NOT be stored in `state.json`
-
-**What goes wrong:** `state.json` is the extension's primary persistence file,
-written atomically via `write-file-atomic`. It lives at
-`<scopeRoot>/pi-claude-marketplace/state.json` which is a user-readable file
-with no special permissions. Storing a GitHub access token there exposes it to
-any process that can read the user's home directory (log scrapers, backup tools,
-accident `cat` invocations).
-
-**Root cause:** It is tempting to cache the token in `state.json` alongside the
-marketplace record to avoid re-running `git credential fill` on every operation.
-
-**Prevention:** Tokens must never be written to `state.json` or any file under
-`<scopeRoot>/pi-claude-marketplace/`. The ONLY accepted token storage is the OS
-keychain via `git credential approve`. `git credential fill` is called at operation
-time (on each `clone`/`fetch`) and its result is used in-memory only for the
-duration of the single git operation.
-
-**Phase:** Auth module design review. Add an architecture test (analogous to the
-existing NFR-5 no-network test) that grep-asserts no call to state write functions
-carries a credential field.
-
----
-
-### SEC-2: isomorphic-git error messages include the repository URL; tokens embedded in URLs leak to `ctx.ui.notify`
-
-**What goes wrong:** If a token is ever placed in the repository URL
-(e.g., `https://token@github.com/owner/repo`), isomorphic-git's `HTTPError` and
-`NotFoundError` messages include the full URL as their message text. The
-marketplace orchestrators catch these errors and surface them via `ctx.ui.notify`,
-which is the user-visible output channel. This leaks the token to:
-- The Pi UI output that the user sees
-- Any logging layer the host may apply to `ctx.ui.notify` calls
-
-**Root cause:** The temptation to use URL-embedded credentials as a convenience
-shortcut, combined with isomorphic-git's URL-preserving error messages.
-
-**Prevention:**
-- NEVER embed a token in the repository URL.
-- ALWAYS pass credentials via `onAuth` returning `{ username: token, password: 'x-oauth-basic' }`.
-- When catching errors from isomorphic-git operations and forwarding to
-  `ctx.ui.notify`, strip the URL from the error message or replace it with the
-  display name of the marketplace.
-
-**Phase:** isomorphic-git wrapper layer + error handling in marketplace orchestrators.
+**Phase to address it:** TR-03 standalone. The fix must touch BOTH the cascade
+primitive (to document the partial-success contract) AND every caller
+(uninstall.ts, remove.ts, possibly the cascade pathway in update.ts) -- a
+roadmap that addresses TR-03 only in `shared.ts` will leave a silent caller
+bug.
 
 ---
 
-### SEC-3: The Device Flow `user_code` is safe to display, but the `access_token` is not -- do not conflate them
+### Pitfall 4: State-before-commit reversal breaks continue-on-partial-failure (TR-04)
+**Affects:** TR-04 (update.ts state-before-commit fix)
 
-**What goes wrong:** The Device Flow protocol produces two distinct strings:
-`user_code` (the short code the user types, e.g., `ABCD-1234`) which is safe and
-intended for display, and `access_token` (the OAuth token) which must be treated
-as a secret. An implementation that logs both via `ctx.ui.notify` for debugging,
-or that stores both in a progress object visible to tests, leaks the token.
+**What goes wrong:** The current `runThreePhaseUpdate` (in `orchestrators/plugin/update.ts:867-923`):
 
-**Prevention:**
-- The `user_code` and `verification_uri` are the ONLY Device Flow values that
-  go through `ctx.ui.notify`.
-- The `access_token` must stay in a local variable and be written only to
-  `git credential approve`. It must never be assigned to a field named `token`
-  on any object that is passed to notification, logging, or state functions.
-- In tests: mock the Device Flow HTTP call to return a deterministic but obviously
-  fake token like `"MOCK_TOKEN"`. Do not use a real GitHub token in any test
-  fixture committed to the repo.
+1. `swapStateRecord(args, preflight, handles)` mutates state.json to the NEW
+   version + NEW resources.
+2. Phase 3a runs four bridge commits, accumulating failures into
+   `phase3aFailures: Phase3Failure[]` -- explicitly NOT throwing on partial
+   failure (continue-on-failure semantics).
+3. If `phase3aFailures.length > 0`, emit aggregate error WITHOUT rolling back
+   state. State.json now claims version=NEW with resources=NEW, but disk
+   may have version=OLD bytes for some subset.
 
-**Phase:** Device Flow module + `ctx.ui` integration.
+The obvious fix is to move state.json mutation to AFTER all four commits
+succeed. But "all four commits succeed" is not a thing in the current contract
+-- the contract is "all four commits ATTEMPT, then aggregate failures." If
+state.json only writes when failures.length === 0, then ANY phase 3a failure
+means state.json is NEVER written -- which loses the records for the
+sub-bridges that DID succeed (e.g. skills committed but agents threw; state
+still claims OLD skills resources, but disk has NEW skills bytes -- ghost
+records from the other direction).
+
+The deeper issue: state.json mutation needs to reflect "what's on disk after
+phase 3a," which means writing state INSIDE the per-bridge loop, recording
+each bridge's success individually. The shape is:
+
+```typescript
+const stateUpdates: Array<(rec: PluginRecord) => void> = [];
+try {
+  await commitPreparedSkills(handles.skills);
+  stateUpdates.push((rec) => { rec.resources.skills = newSkillNames; });
+} catch (err) { phase3aFailures.push(...); }
+// ... commands, agents, mcp ...
+
+// AFTER all four commits, apply stateUpdates inside withStateGuard
+await withStateGuard(locations, (state) => {
+  const rec = state.marketplaces[mp].plugins[plugin];
+  for (const upd of stateUpdates) upd(rec);
+  if (phase3aFailures.length === 0) {
+    rec.version = toVersion;  // only bump version when ALL succeed
+  }
+});
+```
+
+But this is a substantial refactor of swap+phase3a into a single state-guarded
+block. The naive "just move the write" misses that the version bump and the
+resources update have DIFFERENT failure semantics: resources update is
+per-bridge, version bump is all-or-nothing.
+
+**Warning sign (looks right but isn't):** A fix that moves `swapStateRecord`
+to AFTER the four commits but does not partition the state-mutation per-bridge
+will pass the happy-path tests (PUP-6 happy at line 406, WR-04 at line 817)
+because they don't exercise partial-success. The PUP-6 phase-3 failure test
+at line 744 will ALSO pass because the test only asserts ONE notification with
+the recovery-hint -- it doesn't check state.json contents post-failure. The
+bug surfaces only in a synthetic "skills commits, commands throws" scenario.
+
+**Prevention strategy:**
+1. **Define the state contract for each phase 3a outcome explicitly.** Four
+   bridges × {success, fail} = 16 cases; the state mutation in each case must
+   be enumerated. The current code has effectively one case ("all attempts
+   complete; state was set optimistically before") and TR-04 needs to define
+   16.
+2. **Split version bump from resource record update.** Version bump is the
+   transactional "this update succeeded" marker -- it bumps iff all four
+   bridges succeed. Resource record update is per-bridge -- it records each
+   bridge's actual on-disk state regardless of other bridges' outcomes.
+3. **Test the partial-failure matrix.** Add 4 tests (one per bridge throwing
+   while the others succeed) and assert state.json after each: version=OLD,
+   but resources reflect the partial commit. Without these, the "fix" can
+   regress to "state.json never written" silently.
+4. **Coordinate with TR-03.** Cascade-pathway and direct-pathway failures
+   both need consistent state semantics. The cascade-pathway uses
+   `cascadeUnstagePlugin`, which produces `dropped.*` -- the direct-pathway
+   uses `phase3aFailures`, which produces nothing structural. Unify the
+   shape so the state mutation is the same in both.
+
+**Phase to address it:** TR-04, after TR-03. TR-03 establishes the partial-
+success state-mutation pattern; TR-04 applies it to update.ts's direct
+pathway. Splitting these phases lets the roadmap test the cascade-pathway
+fix in isolation before the more complex direct-pathway refactor.
 
 ---
 
-### SEC-4: `git credential reject` must be called when a stored token is known-invalid; skipping it leaves a broken credential in the OS keychain forever
+### Pitfall 5: PI-6 collision guard bypassed by orphan-target removal (TR-06)
+**Affects:** TR-06 (replacePrepared* orphan blocking fix)
 
-**What goes wrong:** When isomorphic-git calls `onAuthFailure` with the credentials
-that failed, those credentials came from `git credential fill`. If the code returns
-`{ cancel: true }` without calling `git credential reject`, the invalid token stays
-in the OS keychain. Every subsequent `git credential fill` for `github.com` returns
-the same invalid token, and every `marketplace add` / `marketplace update` for any
-private GitHub marketplace immediately fails with a 401 without triggering Device
-Flow (because `onAuth` returned a credential).
+**What goes wrong:** `replacePreparedSkills`, `replacePreparedAgents`,
+`replacePreparedCommands` all share the same shape:
 
-**Root cause:** `git credential reject` is the required cleanup step when `onAuthFailure`
-fires, analogous to `forgetSavedPassword` in isomorphic-git's own documentation example.
+```typescript
+// agents stage.ts:432-434
+for (const pair of prepared._stagedFilePaths) {
+  if (await pathExists(pair.to)) {
+    throw new Error(`Cannot replace agent target with non-previous content at ${pair.to}`);
+  }
+  await rename(pair.from, pair.to);
+}
+```
 
-**Prevention:** The `onAuthFailure` callback MUST call `git credential reject` with
-the failed credential before either returning new credentials or canceling. The
-sequence is:
-1. `git credential reject` (remove the bad token from keychain)
-2. Run Device Flow (or return `{ cancel: true }` if Device Flow is not applicable)
-3. `git credential approve` (store the new token)
-4. Return the new `GitAuth`
+This is the PI-6 cross-plugin collision guard: refuse to overwrite a target that
+isn't in `previousNames` (since those got backed up in the prior loop). It's the
+SAME mechanism the test at `tests/bridges/skills/stage.test.ts:388-421` exercises:
+"replacePreparedSkills restores backups if an unrelated target blocks rename"
+-- the test pre-creates `acme-helper` (an unrelated target) and asserts the
+replace throws with `/non-previous content/`.
 
-**Phase:** isomorphic-git wrapper layer. Add a test asserting `reject` is called
-before Device Flow on the second auth attempt.
+The TR-06 fix "remove orphan targets before rename" wants to handle the case
+where a PRIOR install partially succeeded and left orphan content at the target,
+blocking reinstall. But the existing guard cannot distinguish "orphan from our
+own prior partial install" from "another plugin's artifact that happens to
+collide on generated name." If TR-06 removes ANY pre-existing target, then:
+
+1. A user with plugin-A installing skill `acme-helper` and plugin-B installing
+   skill `acme-helper` (same generated name, different plugins) will silently
+   overwrite each other on reinstall. This is the EXACT scenario PI-6 is
+   designed to prevent.
+2. The test at `stage.test.ts:388` (which seeds `acme-helper` as "manual helper
+   bytes" and expects rejection) will RED. A "fix" that updates the test to
+   accept the new behavior is destroying the PI-6 contract.
+3. PUP-6 phase-3 failure test at `update.test.ts:744` seeds a FILE at
+   `skillsTargetDir/hello-tool` to force rename-into-file ENOTDIR. If TR-06's
+   pre-removal step `rm`s that file before the rename, the rename succeeds,
+   and the test goes GREEN-for-wrong-reasons (it was supposed to exercise the
+   phase 3a failure aggregation path, not the happy path).
+
+**Warning sign (looks right but isn't):** The "natural" TOCTOU window: between
+`pathExists(pair.to)` and `rename(pair.from, pair.to)`, another process could
+create `pair.to`. This SOUNDS like the bug TR-06 is fixing, but it's not --
+the actual TR-06 problem is the ABSENCE of pre-removal in the happy-path
+reinstall when there's a leftover from a prior install. A roadmap that frames
+TR-06 as "fix the TOCTOU" will write the wrong fix.
+
+**Prevention strategy:**
+1. **Distinguish "orphan we own" from "third-party content."** The agents
+   bridge already has `isOwnedAgentFile` (`bridges/agents/stage.ts:194`) for
+   exactly this distinction -- it inspects file content for an ownership
+   marker. Skills and commands don't have an ownership marker today; the only
+   ownership signal is the agents-index.json (for agents) and state.json (for
+   skills/commands). The TR-06 fix MUST consult state.json's
+   `installs[plugin].resources.{skills,prompts}` to decide "this target is
+   ours, pre-rm it" vs "this target is foreign, throw the existing error."
+2. **Do NOT pre-remove in the catch-all case.** The narrow case TR-06 targets
+   is "we tried to install but partially failed; on reinstall, the orphan
+   blocks us." The fix is to ALSO inspect state.json: if the plugin's record
+   says skills=[a,b,c] but on disk a,b,c+d are present, then d is the orphan
+   from a prior partial install (we recorded the success before disk
+   finalized, OR vice versa per TR-04). Pre-remove d, NOT pre-remove the
+   contents at a,b,c (those should already be in `_previousNames` and going
+   through the backup path).
+3. **Preserve the PUP-6 test's failure trigger.** The test at update.test.ts:776
+   seeds a FILE (not a directory) at `hello-tool`. The TR-06 logic must check
+   either (a) "the file is in state.json's skills list" -- it's not, so the
+   throw stays, OR (b) "the file matches our ownership pattern" -- it doesn't
+   (it's `"obstacle"` text, not a SKILL.md tree). The fix only pre-removes
+   what state-or-marker confirms as ours. Re-run PUP-6 after the fix and
+   verify the trigger still fires.
+4. **Audit `replacePrepared*` test inventory.** Three tests at
+   `stage.test.ts:309/351/388` depend on the existing collision behavior:
+   the rollback path, the finalize path, and the rejection path. The TR-06
+   fix must preserve all three -- specifically, the rejection test (line 388)
+   must continue to RED-reject a foreign `acme-helper`. Add a NEW test for
+   the orphan case to prove the new behavior.
+
+**Phase to address it:** TR-06 standalone. This is the highest-risk fix because
+its happy-path looks like a simplification ("just rm before rename") that
+silently re-enables cross-plugin overwrite. Stage the work as: (1) add the
+orphan-vs-foreign distinction; (2) add the orphan-detection test; (3) preserve
+the rejection test; (4) only then change the replace* path.
+
+---
+
+## Moderate Pitfalls
+
+These cause subtle correctness regressions but are easier to catch in review or
+in the existing test suite.
+
+### Pitfall 6: ENOENT tolerance hides a "your target moved" race
+**Affects:** TR-01, TR-05 (sequential rename loop)
+
+**What goes wrong:** The existing pre-step `rm` loops (agents `stage.ts:322-332`,
+commands `stage.ts:202-213`) tolerate ENOENT because "previous target already
+gone is a no-op." After TR-01/TR-05 introduce sequential per-rename rollback,
+the rollback loop's reverse-walk MUST also tolerate ENOENT: if the rollback's
+`rename(pair.to, pair.from)` finds `pair.to` already gone (because another
+process raced in and removed it), the rollback can't restore it. Falling
+through with a leak is correct; throwing from the rollback loop poisons the
+catch and may double-invoke the outer rollback (in the orchestrator's
+state-guard frame).
+
+**Warning sign:** A rollback loop without ENOENT handling that "looks
+defensive" -- ENOENT inside rollback isn't an error condition, it's the
+expected race outcome.
+
+**Prevention strategy:** Copy the shape from `rollbackReplacementCommon`
+(`shared/fs-utils.ts:135-177`): every rollback rename is in a try/catch that
+captures `errorMessage(err)` into `leaks[]` -- including ENOENT, since the
+caller decides whether to surface the leak. Return readonly `string[]`, never
+throw from the rollback.
+
+**Phase to address it:** TR-01 and TR-05 (same shape, same phase).
+
+---
+
+### Pitfall 7: Phase-ledger undo + replacePrepared* both rolling back the same disk delta
+**Affects:** TR-02, TR-06 (when reinstall.ts uses the ledger AND replacePrepared*)
+
+**What goes wrong:** `reinstall.ts` uses `replacePrepared*` for atomicity, which
+has its own rollback path (`rollbackPrepared*Replacement`). If reinstall.ts ALSO
+wraps the replace step inside a `runPhases` ledger, then a later phase's throw
+triggers the ledger's reverse-walk, which invokes the replace step's `undo` --
+which in turn calls `rollbackPrepared*Replacement`. Fine so far. But if the
+REPLACE step itself failed and was rolled back internally via the catch at
+`stage.ts:445`, the ledger's reverse-walk would then try to undo a step that
+already self-cleaned, leading to "rollback the rollback" / double-rollback
+exceptions.
+
+**Warning sign:** A phase whose `do` already catches and rolls back internally
+-- the corresponding `undo` becomes ambiguous (is it idempotent? does it
+detect the prior internal rollback?).
+
+**Prevention strategy:** A phase that does its own internal rollback on
+throw MUST throw a typed error that the ledger's `undo` can recognize and
+no-op on. Alternatively, the phase should not be wrapped in `runPhases` at all
+-- it owns its own transaction. Document this in the `Phase<C>` JSDoc: "if
+your `do` rolls back internally on throw, your `undo` is only invoked for
+do-success-then-later-phase-throw scenarios, NOT for do-throw scenarios."
+
+**Phase to address it:** TR-02. Audit every call site of `runPhases` for
+"phases whose do catches" -- the agents/commands/skills replace functions
+fit this pattern.
+
+---
+
+### Pitfall 8: Aggregating leaks from rollback into the wrong error
+**Affects:** TR-01, TR-05 (catch-and-rollback path)
+
+**What goes wrong:** The rollback loop accumulates leaks; the catch then needs
+to surface those leaks alongside the ORIGINAL error. The existing pattern uses
+`appendLeakToError` (`shared/errors.ts`), which appends leak strings to the
+error message. The pitfall is to wrap the original error in `ManualRecoveryError`
+(which `replacePrepared*` does at `stage.ts:454` and `stage.ts:286`) when only
+the COMMIT path actually has manual-recovery semantics. Wrapping the original
+phase-3a-style continue-on-failure throws in `ManualRecoveryError` will route
+them through the manual-recovery cascade in `shared/notify.ts`, which is the
+WRONG presentation for a transient commit-time IO error.
+
+**Warning sign:** A commit-path catch that does `throw new ManualRecoveryError(
+errorMessage(err), leaks, { cause: err })` by copy-paste from the
+`replacePrepared*` pattern.
+
+**Prevention strategy:** Use `appendLeakToError(err, leaks)` for commit-path
+leaks (existing pattern at stage.ts:242, :334, :346). Reserve
+`ManualRecoveryError` for replacement-path leaks where the user must take
+action to restore prior state. The user-visible difference is the
+`⊘ <resource> (manual recovery) {<reason>}` marker vs the
+`{rollback partial}` body -- both per the v1.3 style guide §15.
+
+**Phase to address it:** TR-01, TR-05 in review.
+
+---
+
+### Pitfall 9: Replacement WeakMap leak when rollback throws inside its own catch
+**Affects:** TR-02 (phase-ledger integration with replacePrepared*)
+
+**What goes wrong:** `replacePreparedAgents` stores internals in a WeakMap
+keyed by the returned `replacement` object. If the catch at line 445 throws
+(via `ManualRecoveryError`), the function never returns the `replacement`
+object, but if the catch's `rollbackAgentsReplacementInternal` ALSO throws
+(violating the "never throws" contract), the WeakMap entry is never created.
+That's actually fine -- no caller holds the key. BUT if a future refactor
+under TR-02 reorders the calls so the WeakMap insertion happens BEFORE the
+try block, then a throw leaves a WeakMap entry pointing at internals whose
+backupRoot has already been cleaned up by a finalize call from another
+code path -- a logical use-after-free.
+
+**Warning sign:** Moving `agentsReplacementInternals.set(replacement, ...)`
+or `commandsReplacementInternals.set(replacement, ...)` outside the try block
+to "simplify the happy path."
+
+**Prevention strategy:** Keep WeakMap insertion as the LAST statement before
+return (existing position at stage.ts:464). Add a JSDoc comment noting that
+the WeakMap entry's lifetime is intentionally bound to successful return.
+
+**Phase to address it:** TR-02 review checklist.
+
+---
+
+### Pitfall 10: Pre-existing `agentsResult.failed.length > 0` cascade throw
+**Affects:** TR-03 (cascade ghost record fix)
+
+**What goes wrong:** `cascadeUnstagePlugin` at lines 350-365 throws when
+`agentsResult.failed.length > 0` -- this is the AG-5 foreign-content
+soft-fail aggregator. The TR-03 fix to materialize `dropped.*` into state
+mutation must NOT silently swallow this throw, because foreign-content
+failures specifically should NOT result in state-row removal (the user has
+foreign content that they own; we don't want to drop the state row that
+remembers our prior install).
+
+**Warning sign:** A TR-03 fix that always strips `dropped.*` from state on
+cascade failure -- the AG-5 case needs to KEEP the row.
+
+**Prevention strategy:** Inspect `cause` in `UnstageOutcome.ok === false`.
+If `cause instanceof AgentsUnstageFailureError`, the row stays (foreign
+content marker). For other throws, materialize `dropped.*` as a partial
+removal. Add a test that drives a foreign-content scenario and asserts the
+state row is preserved with the original resources array.
+
+**Phase to address it:** TR-03, integrated with the agents-bridge AG-5
+contract documentation.
+
+---
+
+### Pitfall 11: PUP-6 test trigger removal masks regression
+**Affects:** TR-06 (replacePrepared* orphan removal)
+
+**What goes wrong:** PUP-6 phase-3 failure test at `update.test.ts:744-813`
+seeds a FILE at `skillsTargetDir/hello-tool` as the obstacle. The PUP-6 test
+relies on rename(staged-dir, target-file) failing with ENOTDIR. The test's
+comment at line 749 says "rename(dir -> file) returns ENOTDIR on Linux/macOS."
+
+A TR-06 fix that pre-removes orphans before rename would `rm` the file at
+`hello-tool`, the rename would succeed, the test would expect "1 notification
+with recovery hint" but would observe "1 notification of success" -- which
+the assertion `assert.match(allText, /plugin-uninstall \+ plugin-install/)`
+would fail on, so the test would RED. The hazard is updating the test to
+match the new behavior (e.g. seeding a DIFFERENT obstacle, like a non-empty
+directory with content the orphan-detection would refuse to remove) -- this
+documents the new behavior but loses the original ENOTDIR-failure-aggregation
+coverage.
+
+**Warning sign:** A PR that modifies BOTH the source and the PUP-6 test in
+the same commit, with the test change being "replace the file obstacle with
+something the orphan-removal won't touch."
+
+**Prevention strategy:**
+1. Identify the test's REAL purpose: phase 3a failure aggregation, not the
+   specific ENOTDIR trigger. Replace the file obstacle with a synthetic
+   bridge-commit injection (e.g. a stub `commitPreparedSkills` that throws)
+   so the test exercises the aggregation path independently of the
+   filesystem-level failure mode.
+2. Keep BOTH tests: the ENOTDIR-via-file test (renamed and scoped to "the
+   pre-existing file at target is treated as foreign and triggers phase 3a
+   failure") AND the synthetic-throw test (covering aggregation contract).
+3. Document the test's intent in a comment so future refactors don't
+   "simplify" the obstacle setup.
+
+**Phase to address it:** TR-06, alongside the source fix in the same phase.
+
+---
+
+### Pitfall 12: State write before all bridge commits leaves stale resources on retry
+**Affects:** TR-04 (state-before-commit fix)
+
+**What goes wrong:** The current order is `swapStateRecord` then four
+commits; if the user retries `update` after a phase 3a failure, the
+`preflightUpdate` reads state.json with `version=NEW` and computes
+"already up to date" -- short-circuiting the retry. So the user must run
+`reinstall`, which is the recovery hint at line 928.
+
+If TR-04 moves state.json write to AFTER all commits and partitions per-bridge,
+then a retry sees `version=OLD` but `resources.skills=NEW` (partial). The
+preflight may now compute "version drift, do the update" -- and the second
+update tries to re-commit skills that are already on disk. If the bridges
+are idempotent on re-commit (skills bridge does `rm <target>` then `rename`,
+which works whether or not target exists -- but the `_previousNames` came
+from state.json's OLD skills, not NEW), then the re-commit will rm the
+OLD-named targets (which were already replaced with NEW-named) -- ENOENT
+no-op -- then rename NEW staging into NEW target -- which already has NEW
+bytes -- ENOTDIR if target is a dir? success if rename overwrites? depends on
+OS and on the bridge's specific shape.
+
+**Warning sign:** A TR-04 fix that doesn't add a retry test.
+
+**Prevention strategy:** Add a test that: (1) seeds a partial-success state
+(version=OLD, resources.skills=NEW, disk skills=NEW); (2) runs `update`
+again; (3) asserts version=NEW after the retry, no notification of
+unexpected work. This exercises the re-entrant contract that TR-04's
+partitioning enables.
+
+**Phase to address it:** TR-04, with the retry test as a success criterion.
+
+---
+
+## Minor Pitfalls
+
+These are documentation/test-coverage gaps with low blast radius.
+
+### Pitfall 13: TR-07 documentation drift
+**Affects:** TR-07 (agents step-1 self-healing rm)
+
+**What goes wrong:** The agents bridge step 1 (`stage.ts:322-332`) does
+`rm` on `_previousEntries[i].targetPath` with ENOENT tolerance. The
+"self-heal" claim is documented at lines 11-13: "if commit fails after
+writing files but before persisting the index, the next unstage's ENOENT
+tolerance plus the index showing OLD targetPaths self-heals." TR-07 asks
+for a test of this property. The hazard is writing a test that asserts
+the IMPLEMENTATION (calls to rm) instead of the BEHAVIOR (retry succeeds
+without ghost records). An implementation-asserting test breaks every
+refactor.
+
+**Prevention strategy:** Drive the test through `prepareStagePluginAgents`
++ partial-commit-injection + `commitPreparedAgents`, then re-run the same
+sequence, and assert FINAL state on disk + index. Don't assert intermediate
+function calls.
+
+**Phase to address it:** TR-07.
+
+---
+
+### Pitfall 14: TR-08 cache-drop swallow rationale documentation
+**Affects:** TR-08 (D-19-01 cache-drop swallow)
+
+**What goes wrong:** D-19-01 documents that list.ts's `PROBE_FAILURES`
+buffer was removed in Phase 19; cache-drop failures are intentionally
+swallowed. The risk in TR-08 is documenting WHAT was changed without
+documenting WHY -- the rationale ("probe failures during list are
+diagnostic noise, not actionable user errors") is what protects future
+refactors from "fixing" the swallow.
+
+**Prevention strategy:** Inline the WHY into the source comment (not just
+the ADR). Add an architecture test that asserts no `PROBE_FAILURES`-style
+module-level state in `list.ts`.
+
+**Phase to address it:** TR-08.
 
 ---
 
 ## Phase-Specific Warnings
 
 | Phase Topic | Likely Pitfall | Mitigation |
-|---|---|---|
-| Device Flow polling module | CP-1, CP-2, CP-3 (slow_down cumulative, pending vs slow, expiry) | Implement all error codes in a single `switch`; test each code path with fake fetch |
-| Process lifecycle / cleanup | CP-4 (timer leak) + TI-4 | Accept `AbortSignal`; use `t.mock.timers` in unit tests |
-| git credential subprocess | CP-5 (stdin hang), CP-6 (empty output), CP-7 (attribute set mismatch) | Use `CredentialOps` interface; test with mock before integrating real subprocess |
-| isomorphic-git wrapper | CP-9 (infinite loop), CP-10 (callback throws) | `authAttempted` flag; `try/catch` wrapping entire callback body |
-| Test suite isolation | TI-1, TI-2, TI-3 | `CredentialOps` injectable interface; never call real `git credential` in unit tests |
-| Auth module design | SEC-1, SEC-3 | Architecture test: no token field in state; no token in notify call |
-| Error message handling | SEC-2 | Scrub URL from isomorphic-git error messages before `ctx.ui.notify` |
-| Token invalidation flow | SEC-4 + CP-8 | Always `reject` before `approve` on rotation; document and test the sequence |
+|-------------|---------------|------------|
+| TR-01 / TR-05 (sequential rename) | Pitfall 1 (rollback bugs), Pitfall 6 (ENOENT in rollback), Pitfall 8 (wrong error type) | Extract `commitWithRollback` helper into `fs-utils.ts`; copy shape from `rollbackReplacementCommon`; use `appendLeakToError` not `ManualRecoveryError` |
+| TR-02 (phase-ledger undo gap) | Pitfall 2 (failing-phase undo boundary), Pitfall 7 (double-rollback with replacePrepared*) | Two SEPARATE call sites in the catch (failing phase undo, then `rollbackExecuted`); document undo's "may be called after partial-do" contract |
+| TR-03 (cascade ghost record) | Pitfall 3 (state mutation per dropped.*), Pitfall 10 (AG-5 foreign content carve-out) | Caller materializes `dropped.*` into state mutation; AG-5 cause preserves the row; add cause-discrimination test |
+| TR-04 (state-before-commit) | Pitfall 4 (partial-failure state matrix), Pitfall 12 (re-entrant retry) | Split version bump from resources update; 4-bridge × 2-outcome failure matrix tests; retry test |
+| TR-06 (replacePrepared* orphan) | Pitfall 5 (PI-6 cross-plugin), Pitfall 11 (PUP-6 trigger preservation) | Orphan vs foreign distinction via state.json + ownership marker; preserve `non-previous content` rejection test; add synthetic-throw PUP-6 variant |
+| TR-07 / TR-08 (documentation) | Pitfall 13 (impl vs behavior testing), Pitfall 14 (WHY in source) | Behavior-asserting tests; inline rationale comments; architecture test for cache-drop swallow |
+
+---
+
+## Integration Pitfall: Test Suite Co-Adaptation
+
+The single highest-risk integration class is "tests pinned through specific
+failure injection." The PUP-6 test (`update.test.ts:744`), the phase3a-commands-fail
+test (line 1584), and the agents-target-is-directory test (line 1641) all use
+SPECIFIC filesystem-level obstacles to trigger commit failures. The fixes in
+TR-01, TR-03, TR-04, TR-06 all touch the code paths these tests exercise. A
+"green tests after the fix" assertion is NOT proof of correctness -- the
+tests may be passing because the fix silently disabled the failure trigger.
+
+**Prevention strategy:** For each TR-* fix, the planning doc MUST enumerate
+which tests depend on the failure-trigger AND verify the trigger still fires
+under the fix. If the trigger no longer fires, add a synthetic injection
+(stub bridge that throws) as a parallel test so the failure-aggregation
+contract is still covered.
+
+**Phase to address it:** All TR-* phases. The roadmap's per-phase success
+criteria should include: "the [list of impacted tests] still trigger
+phase-N failure path after the fix." Cite the test:line for each.
 
 ---
 
 ## Sources
 
-**HIGH confidence -- verified against official documentation:**
-- GitHub Docs: [Authorizing OAuth Apps -- Device Flow](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps) -- `slow_down` adds 5 seconds cumulatively; `authorization_pending` requires waiting `interval` seconds; `expired_token` is a terminal polling state; device code expires after 900 seconds
-- isomorphic-git official docs via Context7 `/isomorphic-git/isomorphic-git`: `onAuthFailure` "will keep trying as long as it returns credentials"; `{ cancel: true }` stops the loop and throws `UserCanceledError`; `onAuth` returns `{ username, password }`
-- git-scm.com: [git-credential Documentation](https://git-scm.com/docs/git-credential) -- key-value wire format; blank-line terminator; `approve`/`reject` produce no output; `fill` returns stdout key-value or exits non-zero when not found
+### Authoritative (HIGH confidence, source-anchored)
 
-**MEDIUM confidence -- multiple sources agree, behavior observed in community:**
-- Node.js child_process docs: stdin not closing causes subprocess hang; `.end()` required
-- httptoolkit.com "Unblocking Node With Unref()": unreferenced `setTimeout` keeps process alive
-- macOS Keychain duplicate-entry behavior on `git credential approve` (community reports, CP-8)
-- panva/node-openid-client PR #357: `AbortController` pattern for Device Flow polling cancellation
+- `extensions/pi-claude-marketplace/transaction/phase-ledger.ts` (current
+  ledger shape: `executed.push(phase)` after await, reverse-walk only over
+  successful phases, PathContainmentError re-throw discipline, AS-4
+  RollbackPartial shape with cause-preservation).
+- `extensions/pi-claude-marketplace/bridges/agents/stage.ts` (commit Step 1
+  `Promise.all` rm with ENOENT tolerance at lines 322-332; Step 2 parallel
+  rename at line 343; foreign-content preservation; `replacePreparedAgents`
+  backup loop + non-previous-content rejection at lines 432-434).
+- `extensions/pi-claude-marketplace/bridges/commands/stage.ts` (sequential
+  ENOENT-tolerant unlink at lines 202-213; sequential rename at lines
+  219-221; `replacePreparedCommands` non-previous-content rejection at
+  line 277).
+- `extensions/pi-claude-marketplace/bridges/skills/stage.ts` (similar
+  shape; existing test pinned at `tests/bridges/skills/stage.test.ts:388-421`
+  for the rejection contract).
+- `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts:825-950`
+  (the three-phase update: swapStateRecord BEFORE phase 3a, continue-on-failure
+  semantics with `phase3aFailures: Phase3Failure[]`, aggregate error path
+  with recovery hint).
+- `extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:317-395`
+  (cascadeUnstagePlugin D-03 fail-fast with partial `dropped.*` accumulation;
+  AG-5 throw at lines 350-365).
+- `extensions/pi-claude-marketplace/shared/fs-utils.ts:135-177`
+  (rollbackReplacementCommon: the existing reference shape for sequential
+  reverse-walk rollback with leaks aggregation).
+- `tests/orchestrators/plugin/update.test.ts:744-813` (PUP-6 phase-3
+  failure test, ENOTDIR-via-file obstacle, CR-01 `notifications.length === 1`
+  assertion).
+- `tests/orchestrators/plugin/update.test.ts:1584-1640` (phase3a-commands-fail
+  test, directory obstacle pattern).
+- `tests/bridges/skills/stage.test.ts:388-421` (Phase 8 / PRL-10 unrelated-
+  target rejection test -- the test TR-06 is most likely to break).
+- `.planning/PROJECT.md` (v1.7 milestone scope, TR-01..TR-08 active
+  requirements, NFR-1 atomicity contract, NFR-2 recoverability without
+  restart, NFR-3 retry-safety, the v1.3 messaging style guide marker
+  vocabulary `{rollback partial}` / `(manual recovery)`).
+
+### Cross-referencing (MEDIUM confidence)
+
+- `.planning/research/ARCHITECTURE.md` and `.planning/research/STACK.md`
+  (predecessor milestone research; unchanged for TR-* scope but consulted
+  for the `withStateGuard` / `appendLeakToError` patterns).
+- `extensions/pi-claude-marketplace/shared/errors.ts` (PluginUpdatePhase3Error,
+  ManualRecoveryError, appendLeakToError -- the error-routing contract that
+  determines user-visible presentation).
+- `docs/messaging-style-guide.md` v1.0 §15 (the `{rollback partial}` and
+  `(manual recovery)` marker contract that distinguishes commit-path leaks
+  from replacement-path leaks; constrains Pitfall 8's "wrong error type"
+  warning).
