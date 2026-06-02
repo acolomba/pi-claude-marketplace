@@ -783,7 +783,13 @@ throws gets exactly one compensation call -- not zero (current bug) and not two
    (reverse walk) -- each invoked exactly once.
 5. `npm run check` GREEN; existing install/uninstall/reinstall tests unchanged.
 
-**Plans:** TBD
+**Plans:** 1 plan
+
+Plans:
+
+**Wave 1**
+
+- [ ] 37-01-FIX-PHASE-LEDGER-PLAN.md -- TR-02: restructure runPhases catch block to invoke failing-phase undo as separate call site before rollbackExecuted (PathContainmentError re-throw preserved, failing-phase RollbackPartial prepended for newest-first ordering); amend Phase<C>.undo JSDoc in place to document partial-do tolerance; append 3 regression tests to phase-ledger.test.ts (TR-02 sequence, PI-14 failing-phase-undo, AS-4 newest-first ordering)
 
 ### Phase 38: Sequential Commit Loops + Orphan Tolerance
 
