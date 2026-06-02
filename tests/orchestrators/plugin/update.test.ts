@@ -1800,3 +1800,293 @@ test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAge
     }
   });
 });
+
+// ─── TR-04 matrix coverage (Phase 40, SC#4) ─────────────────────────────────
+// Per-bridge orthogonality: finalizeUpdateRecord gates each bridge's resource
+// write on !failedPhases.has(bridge), INDEPENDENT of other bridges' outcomes.
+// The 4 dedicated "exactly one bridge fails" tests below + the all-success
+// WR-04 + existing PUP-6 (skills-only-fail) + phase3a-commands-fail
+// (skills+commands fail) + phase3a-agents-fail (skills+agents fail) cover
+// every per-bridge "succeed" vs "fail" outcome in both directions for all
+// four bridges. The remaining 9 multi-failure cases compose deterministically.
+// See .planning/phases/40-update-state-before-commit-reorder/40-RESEARCH.md
+// "4-bridge x 2-outcome matrix coverage analysis" for the full 16-case table.
+
+test("TR-04 matrix: skills-fails-others-succeed", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-tr04-skills-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: {
+            version: "1.0.1",
+            hasSkill: true,
+            hasCommand: true,
+            hasAgent: true,
+            hasMcp: true,
+          },
+        },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      // Force skills commit failure only (PUP-6 shape).
+      await mkdir(locations.skillsTargetDir, { recursive: true });
+      await writeFile(path.join(locations.skillsTargetDir, "hello-tool"), "obstacle");
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      assert.equal(notifications.length, 1);
+      const allText = notifications[0]?.message ?? "";
+      assert.match(allText, /plugin-uninstall \+ plugin-install for "hello"\./);
+
+      const after = await loadState(locations.extensionRoot);
+      const rec = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(rec !== undefined);
+      // Version + intent-mark stay at pre-update / in-progress on failure.
+      assert.equal(rec.version, "1.0.0");
+      assert.equal(rec.compatibility.installable, false);
+      assert.ok(rec.compatibility.notes.includes("update-in-progress"));
+      // Failed bridge: skills resources stay at pre-update value (empty).
+      assert.deepEqual([...rec.resources.skills], []);
+      // Succeeded bridges: resources updated to new generated names.
+      assert.deepEqual([...rec.resources.prompts], ["hello:deploy"]);
+      assert.deepEqual([...rec.resources.agents], [`${GENERATED_AGENT_PREFIX}hello-bot`]);
+      assert.deepEqual([...rec.resources.mcpServers], ["server1"]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("TR-04 matrix: commands-fails-others-succeed", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-tr04-commands-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: {
+            version: "1.0.1",
+            hasSkill: true,
+            hasCommand: true,
+            hasAgent: true,
+            hasMcp: true,
+          },
+        },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      // Force commands commit failure only (DIR at target path -> EISDIR).
+      await mkdir(locations.promptsTargetDir, { recursive: true });
+      await mkdir(path.join(locations.promptsTargetDir, "hello:deploy.md"), {
+        recursive: true,
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      assert.equal(notifications.length, 1);
+      const allText = notifications[0]?.message ?? "";
+      assert.match(allText, /plugin-uninstall \+ plugin-install for "hello"\./);
+
+      const after = await loadState(locations.extensionRoot);
+      const rec = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(rec !== undefined);
+      assert.equal(rec.version, "1.0.0");
+      assert.equal(rec.compatibility.installable, false);
+      assert.ok(rec.compatibility.notes.includes("update-in-progress"));
+      assert.deepEqual([...rec.resources.skills], ["hello-tool"]);
+      assert.deepEqual([...rec.resources.prompts], []);
+      assert.deepEqual([...rec.resources.agents], [`${GENERATED_AGENT_PREFIX}hello-bot`]);
+      assert.deepEqual([...rec.resources.mcpServers], ["server1"]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("TR-04 matrix: agents-fails-others-succeed", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-tr04-agents-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: {
+            version: "1.0.1",
+            hasSkill: true,
+            hasCommand: true,
+            hasAgent: true,
+            hasMcp: true,
+          },
+        },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      // Force agents commit failure only (DIR at agent file path -> EISDIR).
+      await mkdir(locations.agentsDir, { recursive: true });
+      await mkdir(path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`), {
+        recursive: true,
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      assert.equal(notifications.length, 1);
+      const allText = notifications[0]?.message ?? "";
+      assert.match(allText, /plugin-uninstall \+ plugin-install for "hello"\./);
+
+      const after = await loadState(locations.extensionRoot);
+      const rec = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(rec !== undefined);
+      assert.equal(rec.version, "1.0.0");
+      assert.equal(rec.compatibility.installable, false);
+      assert.ok(rec.compatibility.notes.includes("update-in-progress"));
+      assert.deepEqual([...rec.resources.skills], ["hello-tool"]);
+      assert.deepEqual([...rec.resources.prompts], ["hello:deploy"]);
+      assert.deepEqual([...rec.resources.agents], []);
+      assert.deepEqual([...rec.resources.mcpServers], ["server1"]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// TR-04 matrix #4 (mcp-fails-others-succeed) NOTE:
+//
+// A dedicated "mcp commit fails, others succeed" test is OMITTED in v1.7
+// because the mcp bridge's prepare step (`prepareStageMcpServers`) reads
+// `locations.mcpJsonPath` via `readScopedDoc` BEFORE the bridge commit
+// runs (stage.ts:178). The only file-system obstacle that reliably forces
+// a commit-time failure for atomicWriteJson (a DIRECTORY at the target
+// path) ALSO trips the prepare-step `readFile` with EISDIR, surfacing as
+// a phase-2-or-earlier throw (`(failed) {unreadable manifest}`) BEFORE
+// any state mutation. Phase-2 throws are routed through `notifyDirectFailure`
+// in updatePlugins's outer catch (update.ts:332), so finalize never runs
+// and the per-bridge orthogonality gate is never exercised for the mcp
+// axis.
+//
+// Per-bridge orthogonality coverage for mcp is structurally identical to
+// the other three bridges in `finalizeUpdateRecord` (the gate is literally
+// `if (!failedPhases.has("mcp"))` and writes
+// `sRecord.resources.mcpServers = handles.mcp.result.recorded.map(...)`,
+// the same shape as the other three). The all-success WR-04 test verifies
+// the !failedPhases.has("mcp") => write path; the three other matrix tests
+// (skills / commands / agents fail) each demonstrate that an UNRELATED
+// bridge's failure does NOT block mcp's resources write. The full mcp
+// gate-blocked variant would need a test seam injecting a mid-flight
+// failure between mcp's prepare and commit -- deferred to v1.8 if surface
+// emerges.
+//
+// See .planning/phases/40-update-state-before-commit-reorder/40-01-SUMMARY.md
+// for the deviation rationale.
+
+test("TR-04 retry: partial-success-state-converges-to-new-version", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-tr04-retry-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      // Call 1: seed the PUP-6 skills obstacle so phase-3a fails on
+      // skills only. Intent-mark survives, version stays at 1.0.0,
+      // resources.skills stays at pre-update empty.
+      await mkdir(locations.skillsTargetDir, { recursive: true });
+      await writeFile(path.join(locations.skillsTargetDir, "hello-tool"), "obstacle");
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      assert.equal(notifications.length, 1);
+      const call1Text = notifications[0]?.message ?? "";
+      assert.match(call1Text, /plugin-uninstall \+ plugin-install for "hello"\./);
+
+      // Intermediate post-state assertion: partial-success state.
+      const mid = await loadState(locations.extensionRoot);
+      const midRec = mid.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(midRec !== undefined);
+      assert.equal(midRec.version, "1.0.0");
+      assert.equal(midRec.compatibility.installable, false);
+      assert.ok(midRec.compatibility.notes.includes("update-in-progress"));
+      assert.deepEqual([...midRec.resources.skills], []);
+
+      // Between calls: clear the obstacle so the second commit's rename
+      // can succeed cleanly.
+      await rm(path.join(locations.skillsTargetDir, "hello-tool"), { force: true });
+
+      // Call 2: fresh notification recorder so we assert only the
+      // second run's notifications.
+      const { ctx: ctx2, pi: pi2, notifications: notifications2 } = makeCtx();
+      await updatePlugins({
+        ctx: ctx2,
+        pi: pi2,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // SC#5 / NFR-3: the second run must NOT emit any error notifications.
+      const errs2 = notifications2.filter((n) => n.severity === "error");
+      assert.equal(
+        errs2.length,
+        0,
+        `second run must NOT emit errors; got: ${JSON.stringify(errs2)}`,
+      );
+
+      // Final post-state: convergence to all-success contract.
+      const final = await loadState(locations.extensionRoot);
+      const rec2 = final.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(rec2 !== undefined);
+      assert.equal(rec2.version, "1.0.1");
+      assert.equal(rec2.compatibility.installable, true);
+      assert.ok(
+        !rec2.compatibility.notes.includes("update-in-progress"),
+        "intent-mark must NOT survive a successful retry",
+      );
+      assert.deepEqual([...rec2.resources.skills], ["hello-tool"]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
