@@ -647,3 +647,220 @@ test("narrowCascadeFailure: arbitrary bare Error with no recognizable text -> {n
   const err = new Error("something else");
   assert.equal(__test_narrowCascadeFailure(err), "not in manifest");
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+// Phase 39 / TR-03: cascade ghost-record correctness in the multi-plugin
+// per-loop arm of removeMarketplace.
+//
+// Two regression tests cover the per-plugin partial-cascade-failure surface:
+//   (a) non-AG-5 partial failure on one plugin while another succeeds:
+//       the failed plugin's resources.* MUST be shrunken by outcome.dropped.*
+//       and the record retained; the successful plugin MUST be deleted.
+//   (b) AG-5 cause: the failed plugin's row MUST be preserved INTACT --
+//       foreign content owned by another process must not cause data loss.
+//
+// Both tests stub the cascade and re-load state from disk after the
+// orchestrator call to verify the mutation persisted.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("TR-03 (non-AG-5 partial): failed plugin row filtered by outcome.dropped.*; successful plugin deleted", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "remove-tr03-partial-"));
+    try {
+      const { ctx, pi } = makeCtx();
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+
+      // Seed two plugins; the FAILED plugin has 2 of each resource so the
+      // filter is unambiguously observable, the SUCCESSFUL plugin has none.
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: {
+              "plugin-fail": makePluginRecord({
+                skills: ["skill1", "skill2"],
+                prompts: ["cmd1", "cmd2"],
+                agents: ["agent1", "agent2"],
+                mcpServers: ["mcp1", "mcp2"],
+              }),
+              "plugin-ok": makePluginRecord(),
+            },
+          },
+        },
+      });
+
+      // Stub: plugin-fail drops {skill1} + {cmd1} then throws a non-AG-5
+      // EACCES cause; plugin-ok succeeds with empty dropped.
+      const stubCascade: typeof cascadeUnstagePlugin = (pluginName) => {
+        if (pluginName === "plugin-fail") {
+          const err = Object.assign(new Error("EACCES on agent unlink"), { code: "EACCES" });
+          return Promise.resolve({
+            ok: false,
+            dropped: {
+              skills: ["skill1"],
+              commands: ["cmd1"],
+              agents: [],
+              mcpServers: [],
+            },
+            cause: err,
+          });
+        }
+
+        return Promise.resolve({
+          ok: true,
+          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+        });
+      };
+
+      await removeMarketplace({
+        ctx,
+        pi,
+        name: "mp",
+        scope: "project",
+        cwd,
+        cascade: stubCascade,
+      });
+
+      // (1) Re-load state from disk -- the marketplace record is RETAINED
+      // (MR-7: any plugin failed -> marketplace stays). plugin-ok deleted;
+      // plugin-fail kept as a SHRUNKEN row.
+      const after = await loadState(locations.extensionRoot);
+      const mp = after.marketplaces["mp"];
+      assert.ok(mp !== undefined, "marketplace record retained when any plugin failed (MR-7)");
+      assert.equal(
+        "plugin-ok" in mp.plugins,
+        false,
+        "successful plugin deleted from record.plugins",
+      );
+      const failed = mp.plugins["plugin-fail"];
+      assert.ok(failed !== undefined, "failed plugin row retained (shrunken)");
+      // (2) Filtered axes -- dropped artifact names removed.
+      assert.deepEqual(
+        failed.resources.skills,
+        ["skill2"],
+        "resources.skills filtered: skill1 dropped, skill2 retained",
+      );
+      assert.deepEqual(
+        failed.resources.prompts,
+        ["cmd2"],
+        "resources.prompts filtered via dropped.commands -> resources.prompts mapping",
+      );
+      // (3) Un-advanced axes -- nothing in outcome.dropped, nothing filtered.
+      assert.deepEqual(
+        failed.resources.agents,
+        ["agent1", "agent2"],
+        "resources.agents untouched (cascade did not advance past commands)",
+      );
+      assert.deepEqual(
+        failed.resources.mcpServers,
+        ["mcp1", "mcp2"],
+        "resources.mcpServers untouched (cascade did not advance past commands)",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("TR-03 (AG-5 cause): failed plugin row preserved INTACT in remove.ts per-plugin loop", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "remove-tr03-ag5-"));
+    try {
+      const { ctx, pi } = makeCtx();
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+
+      // Seed: same shape as the partial test so the AG-5 preservation is
+      // unambiguously visible vs. the partial-filter test above.
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: {
+              "plugin-fail": makePluginRecord({
+                skills: ["skill1", "skill2"],
+                prompts: ["cmd1", "cmd2"],
+                agents: ["agent1", "agent2"],
+                mcpServers: ["mcp1", "mcp2"],
+              }),
+            },
+          },
+        },
+      });
+
+      // Stub: cascade reports dropped {skill1, cmd1} but throws AG-5 --
+      // the orchestrator MUST discard the filter and preserve the full
+      // row (data-loss carve-out for foreign content).
+      const stubCascade: typeof cascadeUnstagePlugin = () => {
+        const err = new AgentsUnstageFailureError("foreign content at agent1", [
+          { generatedName: "agent1", targetPath: "/agents/agent1.md", reason: "missing marker" },
+        ]);
+        return Promise.resolve({
+          ok: false,
+          dropped: {
+            skills: ["skill1"],
+            commands: ["cmd1"],
+            agents: [],
+            mcpServers: [],
+          },
+          cause: err,
+        });
+      };
+
+      await removeMarketplace({
+        ctx,
+        pi,
+        name: "mp",
+        scope: "project",
+        cwd,
+        cascade: stubCascade,
+      });
+
+      // (1) Re-load state from disk. AG-5 must preserve the FULL row.
+      const after = await loadState(locations.extensionRoot);
+      const mp = after.marketplaces["mp"];
+      assert.ok(mp !== undefined, "marketplace record retained when any plugin failed (MR-7)");
+      const failed = mp.plugins["plugin-fail"];
+      assert.ok(failed !== undefined, "plugin row retained (AG-5 preserves row)");
+      // (2) Every axis untouched -- the cascade reported dropped.skills
+      // + dropped.commands, but the orchestrator MUST discard the filter
+      // on the AG-5 path (the row must be a faithful pre-cascade snapshot
+      // so a retry has the complete resources.* history).
+      assert.deepEqual(
+        failed.resources.skills,
+        ["skill1", "skill2"],
+        "AG-5: resources.skills UNCHANGED (filter discarded on AG-5 cause)",
+      );
+      assert.deepEqual(
+        failed.resources.prompts,
+        ["cmd1", "cmd2"],
+        "AG-5: resources.prompts UNCHANGED (filter discarded on AG-5 cause)",
+      );
+      assert.deepEqual(
+        failed.resources.agents,
+        ["agent1", "agent2"],
+        "AG-5: resources.agents UNCHANGED",
+      );
+      assert.deepEqual(
+        failed.resources.mcpServers,
+        ["mcp1", "mcp2"],
+        "AG-5: resources.mcpServers UNCHANGED",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});

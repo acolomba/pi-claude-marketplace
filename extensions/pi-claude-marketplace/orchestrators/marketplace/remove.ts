@@ -209,6 +209,35 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
       } else {
         // D-03: outcome.cause is set when ok===false (see UnstageOutcome).
         const cause = outcome.cause ?? new Error(`unknown cascade failure for ${pluginName}`);
+
+        // Phase 39 TR-03: non-AG-5 partial-failure path filters
+        // plugin.resources.* by outcome.dropped.* so the persisted row
+        // reflects only artifacts still on disk (no ghost record).
+        // AG-5 (AgentsUnstageFailureError) preserves the row INTACT --
+        // foreign content owned by another process must not cause data
+        // loss. The loop never throws; the guard's trailing saveState
+        // commits the shrunken record alongside successfully-removed
+        // plugin deletes.
+        //
+        // CRITICAL field-name mapping: dropped.commands populates from
+        // resources.prompts (cascade primitive shared.ts:339), so the
+        // filter MUST wire dropped.commands -> resources.prompts.
+        if (!(cause instanceof AgentsUnstageFailureError)) {
+          const dropped = outcome.dropped;
+          plugin.resources.skills = plugin.resources.skills.filter(
+            (n) => !dropped.skills.includes(n),
+          );
+          plugin.resources.prompts = plugin.resources.prompts.filter(
+            (n) => !dropped.commands.includes(n),
+          );
+          plugin.resources.agents = plugin.resources.agents.filter(
+            (n) => !dropped.agents.includes(n),
+          );
+          plugin.resources.mcpServers = plugin.resources.mcpServers.filter(
+            (n) => !dropped.mcpServers.includes(n),
+          );
+        }
+
         failedPlugins.push({ name: pluginName, cause });
       }
     }
