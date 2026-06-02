@@ -22,8 +22,10 @@
  * approve/reject swallow all subprocess errors so they never escape.
  *
  * Non-interactive guarantee (Pitfall 2): env carries `GIT_TERMINAL_PROMPT=0`
- * so a credential-helper miss never falls through to a TTY prompt that
- * would hang the subprocess.
+ * so a credential-helper miss never falls through to a TTY prompt, and
+ * `GCM_INTERACTIVE=never` so Git Credential Manager returns null on a
+ * cache miss rather than opening a browser OAuth flow. Pi shows the
+ * Device Flow URL + code in its own UI via `initiateDeviceFlow` instead.
  *
  * stdin EOF guarantee (Pitfall 3): both `child.stdin.write(input)` AND
  * `child.stdin.end()` are called -- the trailing blank line in the input
@@ -82,6 +84,7 @@ function gitCredentialIO(
       env: {
         ...process.env,
         GIT_TERMINAL_PROMPT: "0",
+        GCM_INTERACTIVE: "never",
       },
       stdio: ["pipe", "pipe", "pipe"],
     });
