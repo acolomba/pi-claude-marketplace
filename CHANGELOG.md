@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0] - 2026-06-01
+
+- GitHub private marketplace authentication via Device Flow (RFC 8628). On first access to a private GitHub marketplace, Pi shows a one-time code and verification URL via `ctx.ui.notify`; the user authorizes from any browser. Subsequent add/update reuse the stored token silently via `git credential fill`.
+- Credentials stored in the OS keychain (macOS Keychain / Windows Credential Manager / Linux gnome-keyring) via `git credential approve`. No token ever appears in state.json, error messages, or UI output.
+- Git Credential Manager users: `GCM_INTERACTIVE=never` ensures Pi's own Device Flow UI is used instead of GCM's browser flow.
+- Stale token automatically evicted via `git credential reject` and Device Flow re-triggered on auth failure.
+
 ## [0.2.0] - 2026-05-31
 
 - Overhauled operation output: all commands now use a consistent marketplace-header + indented-plugin-rows format with status tokens, cause chains, and soft-dependency markers.
