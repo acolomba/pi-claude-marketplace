@@ -204,6 +204,10 @@ function dependenciesFromDeclares(declaresAgents: boolean, declaresMcp: boolean)
  * arm for `"present"` is byte-identical to the `"installed"` arm so the
  * human-visible row text `● <name> [<scope>] v<ver> (installed)` is
  * preserved.
+ *
+ * PL-4: `description` is sourced from the manifest entry (when available).
+ * The installed state record does not carry description; if the manifest is
+ * unavailable (load failure), description is simply absent from the row.
  */
 function installedRowMessage(
   pluginName: string,
@@ -224,6 +228,9 @@ function installedRowMessage(
   const scopeField: { readonly scope?: Scope } =
     pluginScope === marketplaceScope ? {} : { scope: pluginScope };
 
+  const descriptionField: { readonly description?: string } =
+    manifestEntry?.description !== undefined ? { description: manifestEntry.description } : {};
+
   if (upgradable) {
     // V1 emitted (upgradable) rows WITHOUT a typed reason brace; the V2
     // PluginUpgradableMessage type structurally requires `reasons` per
@@ -237,6 +244,7 @@ function installedRowMessage(
       reasons: [],
       version: record.version,
       ...scopeField,
+      ...descriptionField,
     };
   }
 
@@ -246,6 +254,7 @@ function installedRowMessage(
     dependencies: dependenciesFromDeclares(declaresAgents, declaresMcp),
     version: record.version,
     ...scopeField,
+    ...descriptionField,
   };
 }
 
@@ -363,6 +372,11 @@ async function availableRowMessage(
   manifestEntry: MarketplaceManifest["plugins"][number],
   marketplaceRoot: string,
 ): Promise<PluginAvailableMessage | PluginUnavailableMessage> {
+  // PL-4: description flows from the manifest entry onto the row for both
+  // available and unavailable variants.
+  const descriptionField: { readonly description?: string } =
+    manifestEntry.description !== undefined ? { description: manifestEntry.description } : {};
+
   try {
     const resolved = await resolveStrict(manifestEntry, { marketplaceRoot });
     if (resolved.installable) {
@@ -370,6 +384,7 @@ async function availableRowMessage(
         status: "available",
         name: manifestEntry.name,
         ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
+        ...descriptionField,
       };
     }
 
@@ -378,6 +393,7 @@ async function availableRowMessage(
       name: manifestEntry.name,
       reasons: narrowResolverNotes(resolved.notes),
       ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
+      ...descriptionField,
     };
   } catch (probeErr) {
     // The previous implementation routed EVERY throw through
@@ -399,6 +415,7 @@ async function availableRowMessage(
       name: manifestEntry.name,
       reasons: [reason],
       ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
+      ...descriptionField,
     };
   }
 }

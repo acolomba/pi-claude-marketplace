@@ -278,6 +278,24 @@ Three marketplace blocks; each joined by one blank line (D-16-07). `zeta-mp` is 
 
 The plugin's persisted version is the PI-7 content hash `hash-2ea95f85703d`; the list row renders it as the git-style short SHA `v#2ea95f8` (first 7 of the 12 hex chars). Persistence is unchanged -- `state.json` retains the full `hash-2ea95f85703d` (PI-7 intact, no migration); the short form is renderer-only (SNM-35, D-23-04). The `present` inventory discriminator carries no `/reload` trailer.
 
+### Description lines (PL-4)
+
+<!-- catalog-state: description-lines -->
+
+```text
+● official [user] <autoupdate>
+  ● alpha v1.0.0 (installed)
+    A short description of the alpha plugin.
+  ● beta v1.0.0 (upgradable) {stale clone}
+    A longer description that is exactly sixty-three characters lon...
+  ○ gamma v2.0.0 (available)
+    Installable plugin with a description.
+  ⊘ delta (unavailable) {hooks}
+    Unavailable plugin that still surfaces its description.
+```
+
+PL-4: when the manifest entry carries a non-empty `description` field, the renderer emits it on a second line indented four spaces beneath the plugin row. Descriptions longer than 66 characters are truncated to 63 characters and suffixed with `"..."` (landing exactly at column 66). The four list-surface variants (`present`, `upgradable`, `available`, `unavailable`) all support the description field; cascade-only variants (`installed`, `updated`, `reinstalled`, `uninstalled`) do not. The renderer emits the description line only when the field is defined and non-empty.
+
 ______________________________________________________________________
 
 ## `/claude:plugin install <plugin>@<marketplace>`
