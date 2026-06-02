@@ -229,7 +229,7 @@ function installedRowMessage(
     pluginScope === marketplaceScope ? {} : { scope: pluginScope };
 
   const descriptionField: { readonly description?: string } =
-    manifestEntry?.description !== undefined ? { description: manifestEntry.description } : {};
+    manifestEntry?.description === undefined ? {} : { description: manifestEntry.description };
 
   if (upgradable) {
     // V1 emitted (upgradable) rows WITHOUT a typed reason brace; the V2
@@ -375,7 +375,7 @@ async function availableRowMessage(
   // PL-4: description flows from the manifest entry onto the row for both
   // available and unavailable variants.
   const descriptionField: { readonly description?: string } =
-    manifestEntry.description !== undefined ? { description: manifestEntry.description } : {};
+    manifestEntry.description === undefined ? {} : { description: manifestEntry.description };
 
   try {
     const resolved = await resolveStrict(manifestEntry, { marketplaceRoot });
