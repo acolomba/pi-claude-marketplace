@@ -305,3 +305,105 @@ test("260525-cjr C1: undo throw of a non-Error (defensive) leaves RollbackPartia
   assert.ok(first !== undefined);
   assert.equal(first.cause, undefined);
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+// Phase 37 / TR-02: failing-phase own-undo invocation (separate catch-block
+// call site). The failing phase's undo runs FIRST in the catch block, BEFORE
+// rollbackExecuted walks executed[] in reverse. PathContainmentError still
+// re-throws (PI-14). Failing-phase RollbackPartial sorts to index 0 (AS-4).
+// ───────────────────────────────────────────────────────────────────────────
+
+test("TR-02 runPhases: failing-phase undo runs BEFORE reverse-walk, exactly once each", async () => {
+  const ctx: TraceCtx = { trace: [] };
+  const phases: Phase<TraceCtx>[] = [
+    {
+      name: "p0",
+      do: (c) => {
+        c.trace.push("do:p0");
+        return Promise.resolve();
+      },
+      undo: (c) => {
+        c.trace.push("undo:p0");
+        return Promise.resolve();
+      },
+    },
+    {
+      name: "p1",
+      do: (c) => {
+        c.trace.push("do:p1");
+        return Promise.resolve();
+      },
+      undo: (c) => {
+        c.trace.push("undo:p1");
+        return Promise.resolve();
+      },
+    },
+    {
+      name: "p2",
+      do: (c) => {
+        c.trace.push("do:p2");
+        throw new Error("boom");
+      },
+      undo: (c) => {
+        c.trace.push("undo:p2");
+        return Promise.resolve();
+      },
+    },
+  ];
+  const result = await runPhases(phases, ctx);
+  assert.equal(result.ok, false);
+  assert.equal(result.error?.message, "boom");
+  // EXACT expected sequence: failing phase's own undo FIRST, then reverse
+  // walk over executed[] = [p0, p1]. Each undo invoked EXACTLY ONCE (no
+  // double-rollback per Pitfall 2 over-correction guard).
+  assert.deepEqual(
+    ctx.trace,
+    ["do:p0", "do:p1", "do:p2", "undo:p2", "undo:p1", "undo:p0"],
+    "failing-phase undo first, then reverse-walk over executed[], each exactly once",
+  );
+  assert.equal(result.rollbackPartials.length, 0);
+});
+
+test("PI-14 runPhases: PathContainmentError from FAILING phase's own undo is RE-THROWN", async () => {
+  const phases: Phase<object>[] = [
+    {
+      name: "p1",
+      do: noopAsync,
+      undo: noopAsync,
+    },
+    {
+      name: "p2",
+      do: throwAsync("boom"),
+      undo: () =>
+        Promise.reject(new PathContainmentError("/parent", "/parent/../escape", "p2 undo")),
+    },
+  ];
+  await assert.rejects(
+    () => runPhases(phases, {}),
+    (err: unknown) => err instanceof PathContainmentError,
+  );
+});
+
+test("AS-4 runPhases: failing-phase undo failure is FIRST in rollbackPartials[]", async () => {
+  const phases: Phase<object>[] = [
+    { name: "p0", do: noopAsync, undo: throwAsync("p0 undo failed") },
+    { name: "p1", do: noopAsync, undo: throwAsync("p1 undo failed") },
+    { name: "p2", do: throwAsync("boom"), undo: throwAsync("p2 undo failed") },
+  ];
+  const result = await runPhases(phases, {});
+  assert.equal(result.ok, false);
+  assert.equal(result.error?.message, "boom");
+  assert.equal(result.rollbackPartials.length, 3);
+  // Newest first: failing phase (p2), then reverse-walk (p1, p0).
+  const [zero, one, two] = result.rollbackPartials;
+  assert.ok(zero !== undefined && one !== undefined && two !== undefined);
+  assert.equal(zero.phase, "p2");
+  assert.equal(zero.msg, "p2 undo failed");
+  assert.ok(zero.cause instanceof Error);
+  assert.equal(one.phase, "p1");
+  assert.equal(one.msg, "p1 undo failed");
+  assert.ok(one.cause instanceof Error);
+  assert.equal(two.phase, "p0");
+  assert.equal(two.msg, "p0 undo failed");
+  assert.ok(two.cause instanceof Error);
+});
