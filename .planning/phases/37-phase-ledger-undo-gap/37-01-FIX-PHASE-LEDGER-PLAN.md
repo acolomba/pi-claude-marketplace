@@ -153,7 +153,7 @@ JSDoc amendment), one test file appended (three new tests using existing helpers
     - [ ] Test file contains exactly three new tests with names starting "TR-02 runPhases:", "PI-14 runPhases: PathContainmentError from FAILING", and "AS-4 runPhases: failing-phase undo failure is FIRST".
     - [ ] Grep returns the three expected counts: `grep -c "TR-02 runPhases:" tests/transaction/phase-ledger.test.ts` -> 1; `grep -c "PI-14 runPhases: PathContainmentError from FAILING" tests/transaction/phase-ledger.test.ts` -> 1; `grep -c "AS-4 runPhases: failing-phase undo failure is FIRST" tests/transaction/phase-ledger.test.ts` -> 1.
     - [ ] `node --test tests/transaction/phase-ledger.test.ts` reports 12 tests total (9 pass + 3 fail) -- the RED gate is satisfied.
-    - [ ] The 9 existing tests are byte-unchanged outside whitespace normalization (`git diff -U0 tests/transaction/phase-ledger.test.ts -- tests/transaction/phase-ledger.test.ts | grep -cE "^-" returns the count of removed lines; any non-empty deletions must be limited to trailing whitespace or final-newline normalization).
+    - [ ] The 9 existing tests are byte-unchanged outside whitespace normalization: `git diff -U0 HEAD~1 -- tests/transaction/phase-ledger.test.ts | grep -E "^-[^-]" | wc -l` reports 0 (or only trailing-whitespace lines normalized by prettier).
     - [ ] `pre-commit run --files tests/transaction/phase-ledger.test.ts` exits 0 after up to one re-stage cycle.
     - [ ] Single commit with title `test(transaction): add TR-02 failing-phase undo regression tests` (verify with `git log -1 --pretty=%s` matches the expected title and is <=72 chars).
   </acceptance_criteria>

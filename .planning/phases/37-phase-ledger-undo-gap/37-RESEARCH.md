@@ -631,35 +631,29 @@ A2 (no orchestrator adaptation) should be re-verified by the planner with a
 targeted read of `install.ts` lines 463-600 in context with the runtime
 `stagedSkillNames` assignment ordering.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Should the failing-phase undo invocation be inlined or extracted into a
-   helper?**
+1. **RESOLVED: Inline. The failing-phase undo invocation is implemented inline
+   in the `runPhases` catch block, NOT extracted into a helper.**
    - What we know: The existing `rollbackExecuted` is a separate function. Adding
      a parallel `invokeFailingPhaseUndo` helper would mirror that style but is
      ~12 lines of code for one call site.
-   - What's unclear: Whether the planner / verifier prefers minimal-diff
-     (inline the try/catch directly in `runPhases`) or symmetry (extract a
-     helper).
-   - Recommendation: Inline. The catch block grows by ~12 lines; the file stays
-     <160 lines; the structural invariant ("two call sites in the catch") is more
-     obvious when both are visible at the call site. Helper extraction adds
-     navigation overhead with no behavioral gain.
+   - Adopted by PLAN.md Task 2 action ("DO NOT extract a helper function like
+     `invokeFailingPhaseUndo`"). The catch block grows by ~12 lines; the file
+     stays <160 lines; the structural invariant ("two call sites in the catch")
+     is more obvious when both are visible at the call site.
 
-2. **Should the JSDoc amendment go on `Phase<C>.undo` (the optional field) or on
-   the whole `Phase<C>` interface?**
+2. **RESOLVED: Amend the existing `Phase<C>` interface JSDoc in place (lines
+   26-29 of `phase-ledger.ts`), NOT a dedicated field-level JSDoc.**
    - What we know: The current JSDoc at lines 26-29 of `phase-ledger.ts` says
      "`do` runs forward; `undo` (optional) is invoked in reverse order if a
      later phase throws."
-   - What's unclear: Whether to amend the existing interface JSDoc in place
-     (extend the existing sentence) or add a dedicated field-level JSDoc above
-     the `undo` declaration.
-   - Recommendation: Amend in place. Replace "is invoked in reverse order if a
-     later phase throws" with "is invoked in reverse order when a later phase
-     throws AND also for the throwing phase itself (failing-phase own-undo runs
-     first). MUST tolerate being called after a partial-do throw -- cannot
-     assume `do` ran to completion." This preserves the single-JSDoc-per-interface
-     style already used.
+   - Adopted by PLAN.md Task 2 action ("amend the single interface-level JSDoc
+     in place"). The existing sentence is extended to add: "is invoked in
+     reverse order when a later phase throws AND also for the throwing phase
+     itself (failing-phase own-undo runs first). MUST tolerate being called
+     after a partial-do throw -- cannot assume `do` ran to completion." This
+     preserves the single-JSDoc-per-interface style already used.
 
 ## Environment Availability
 

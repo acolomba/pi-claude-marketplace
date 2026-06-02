@@ -41,7 +41,7 @@ created: 2026-06-02
 | 37-01-01 | 01 | 1 | TR-02 | -- | failing-phase undo runs exactly once before rollback walk | unit | `npm run test -- tests/transaction/phase-ledger.test.ts` | ✅ | ⬜ pending |
 | 37-01-02 | 01 | 1 | TR-02 | -- | reverse-walk excludes failing phase (no double rollback) | unit | `npm run test -- tests/transaction/phase-ledger.test.ts` | ✅ | ⬜ pending |
 | 37-01-03 | 01 | 1 | TR-02 | -- | PathContainmentError from failing-phase undo re-throws | unit | `npm run test -- tests/transaction/phase-ledger.test.ts` | ✅ | ⬜ pending |
-| 37-01-04 | 01 | 1 | TR-02 | -- | Phase<C>.undo JSDoc documents partial-do tolerance | static | `npm run typecheck && grep -E "tolerate|partial-do|ENOENT" extensions/pi-claude-marketplace/transaction/phase-ledger.ts` | ✅ | ⬜ pending |
+| 37-01-04 | 01 | 1 | TR-02 | -- | Phase<C>.undo JSDoc documents partial-do tolerance | static | `npm run typecheck && grep -cE "tolerate" extensions/pi-claude-marketplace/transaction/phase-ledger.ts \| awk '$1>=1{rc=0} END{exit rc=rc?rc:1}' && grep -cE "partial-do" extensions/pi-claude-marketplace/transaction/phase-ledger.ts \| awk '$1>=1{rc=0} END{exit rc=rc?rc:1}'` | ✅ | ⬜ pending |
 | 37-01-05 | 01 | 1 | TR-02 | -- | full check passes, no regression | integration | `npm run check` | ✅ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
