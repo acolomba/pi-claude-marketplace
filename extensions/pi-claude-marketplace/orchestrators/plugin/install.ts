@@ -470,12 +470,13 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
             resolved: c.resolved,
           });
           c.skillsPrep = prep;
+          // Set before commit so undo can remove any dirs that were placed if
+          // commit fails mid-loop (partial rename success leaves K orphans).
+          c.stagedSkillNames = prep.result.recorded.map((r) => r.generatedName);
           const leak = await commitPreparedSkills(prep);
           if (leak !== undefined) {
             c.bridgeWarnings.push(leak);
           }
-
-          c.stagedSkillNames = prep.result.recorded.map((r) => r.generatedName);
         },
         undo: async (c) => {
           if (c.skillsPrep === undefined) {
@@ -503,12 +504,12 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
             resolved: c.resolved,
           });
           c.commandsPrep = prep;
+          // Set before commit for the same reason as stagedSkillNames above.
+          c.stagedCommandNames = prep.result.recorded.map((r) => r.generatedName);
           const leak = await commitPreparedCommands(prep);
           if (leak !== undefined) {
             c.bridgeWarnings.push(leak);
           }
-
-          c.stagedCommandNames = prep.result.recorded.map((r) => r.generatedName);
         },
         undo: async (c) => {
           if (c.commandsPrep === undefined) {
