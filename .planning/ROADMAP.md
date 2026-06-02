@@ -129,7 +129,7 @@ on partial cascade unstage, update.ts state-before-commit divergence, reinstall 
 on orphan targets, and inline documentation for two already-safe patterns. No new
 dependencies; no user-visible behavior changes on the happy path.
 
-- [ ] Phase 37: Phase-Ledger Undo Gap (TR-02)
+- [x] Phase 37: Phase-Ledger Undo Gap (TR-02)
 - [ ] Phase 38: Sequential Commit Loops + Orphan Tolerance (TR-01, TR-05, TR-06)
 - [ ] Phase 39: Cascade Ghost Record (TR-03)
 - [ ] Phase 40: Update State-Before-Commit Reorder (TR-04)
@@ -955,7 +955,7 @@ comments explaining the WHY, and each has a behavior-asserting regression test.
 | 34. GitOps Interface Threading                                       | v1.6      | 1/1 | Complete    | 2026-06-01 |
 | 35. Orchestrator Call Sites & Output Catalog                         | v1.6      | 4/4 | Complete    | 2026-06-01 |
 | 36. Integration Gate                                                 | v1.6      | 1/1 | Complete   | 2026-06-01 |
-| 37. Phase-Ledger Undo Gap                                            | v1.7      | TBD | Pending    |            |
+| 37. Phase-Ledger Undo Gap                                            | v1.7      | 1/1 | Complete   | 2026-06-02 |
 | 38. Sequential Commit Loops + Orphan Tolerance                       | v1.7      | TBD | Pending    |            |
 | 39. Cascade Ghost Record                                             | v1.7      | TBD | Pending    |            |
 | 40. Update State-Before-Commit Reorder                               | v1.7      | TBD | Pending    |            |
