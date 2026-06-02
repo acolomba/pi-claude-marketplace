@@ -926,7 +926,10 @@ comments explaining the WHY, and each has a behavior-asserting regression test.
    accumulation in `list.ts` after a failed cache-drop.
 5. `npm run check` GREEN; no regression from Phase 40 baseline.
 
-**Plans:** TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 41-01-PLAN.md -- TR-07 inline WHY comment + behavior-asserting test at commitPreparedAgents step-1 (stage.ts:328) + TR-08 augmented WHY comment + source-grep test at availableRowMessage probe-failure catch (list.ts:382-403); npm run check GREEN gate (1366 -> 1368)
 
 ## Progress
 
@@ -970,4 +973,4 @@ comments explaining the WHY, and each has a behavior-asserting regression test.
 | 38. Sequential Commit Loops + Orphan Tolerance                       | v1.7      | 1/1 | Complete   | 2026-06-02 |
 | 39. Cascade Ghost Record                                             | v1.7      | 1/1 | Complete   | 2026-06-02 |
 | 40. Update State-Before-Commit Reorder                               | v1.7      | 1/1 | Complete   | 2026-06-02 |
-| 41. Documentation and Test Closeout                                  | v1.7      | TBD | Pending    |            |
+| 41. Documentation and Test Closeout                                  | v1.7      | 0/1 | Pending    |            |

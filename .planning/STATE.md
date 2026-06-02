@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.7
-milestone_name: milestone
-status: completed
-stopped_at: v1.6 roadmap created
-last_updated: "2026-06-02T14:28:24.110Z"
-last_activity: 2026-06-02 -- Phase 40 marked complete
+milestone_name: Transaction Resilience Hardening
+status: executing
+last_updated: "2026-06-02T14:44:37.499Z"
+last_activity: 2026-06-02 -- Phase 41 execution started
 progress:
-  total_phases: 29
-  completed_phases: 10
-  total_plans: 16
-  completed_plans: 15
-  percent: 34
+  total_phases: 5
+  completed_phases: 4
+  total_plans: 5
+  completed_plans: 4
+  percent: 80
 ---
 
 # Project State
@@ -20,14 +19,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-30)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 40 -- Update State-Before-Commit Reorder
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 41 -- Documentation and Test Closeout
 
 ## Current Position
 
-Phase: 40 -- COMPLETE
+Phase: 41 (Documentation and Test Closeout) -- EXECUTING
 Plan: 1 of 1
-Status: Phase 40 complete
-Last activity: 2026-06-02 -- Phase 40 marked complete
+Status: Executing Phase 41
+Last activity: 2026-06-02 -- Phase 41 execution started
 
 ## Performance Metrics
 
