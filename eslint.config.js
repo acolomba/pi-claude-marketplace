@@ -44,6 +44,7 @@ export default tseslint.config(
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
       ],
+      "@typescript-eslint/no-empty-function": ["error", { allow: ["arrowFunctions"] }],
       "@typescript-eslint/explicit-module-boundary-types": "error",
       // Pure-style rules I do not want to enforce: `Array<T>` vs `T[]` is
       // either-or, and template-literal expressions on numbers are normal.

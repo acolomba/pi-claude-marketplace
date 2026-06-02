@@ -113,6 +113,11 @@ function gitCredentialIO(
       resolve({ stdout, stderr, code: code ?? -1 });
     });
 
+    // Swallow EPIPE: the credential helper may exit before reading all
+    // input (e.g. non-zero exit on approve/reject with no helper). Without
+    // this listener the 'error' event on child.stdin becomes an unhandled
+    // exception.
+    child.stdin.on("error", () => {});
     child.stdin.write(input);
     child.stdin.end();
   });

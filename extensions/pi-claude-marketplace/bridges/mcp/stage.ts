@@ -262,7 +262,6 @@ export async function commitPreparedMcp(
  * so there is nothing to roll back. Exists for symmetry with the agent
  * and skill bridges' prepare/commit/abort triplet.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function abortPreparedMcp(_prepared: PreparedMcpStaging): void {
   // No-op: nothing was written outside memory pre-commit.
 }
