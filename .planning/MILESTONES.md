@@ -1,5 +1,15 @@
 # Milestones: pi-claude-marketplace
 
+## v1.7 Transaction Resilience Hardening (Shipped: 2026-06-02)
+
+**Phases completed:** 5 phases, 5 plans, 9 tasks
+
+**Key accomplishments:**
+
+- Closed TR-02 by restructuring runPhases catch block so the failing phase's own undo runs FIRST (separate call site, via new invokeFailingPhaseUndo helper) BEFORE the reverse-walk over executed[]; PathContainmentError still re-throws (PI-14); failing-phase RollbackPartial prepends to reverse-walk partials (AS-4 newest-first); Phase<C>.undo JSDoc amended in place to document the tolerate-partial-do-throw contract.
+
+---
+
 ## v1.5 Notification Output Polish (Shipped: 2026-05-31)
 
 **Phases completed:** 17 phases, 61 plans, 116 tasks
