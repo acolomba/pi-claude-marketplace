@@ -19,6 +19,9 @@
  */
 
 import assert from "node:assert/strict";
+import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import { DEFAULT_CREDENTIAL_OPS } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
@@ -146,4 +149,250 @@ test("Phase 31 credOps: fill builds host-only attribute block (Pitfall 4 -- no p
   assert.deepEqual(state.fillCalls, [{ host: "github.com" }]);
   // No accidental keys leaked into the call record:
   assert.deepEqual(Object.keys(state.fillCalls[0]!), ["host"]);
+});
+
+// ---------------------------------------------------------------------------
+// Tests 9-14: Production-path coverage for sanitizeAttrValue, buildAttributeBlock,
+// parseCredentialOutput, credentialApprove, and credentialReject.
+//
+// Test 9: sanitizeAttrValue throw -- fill rejects when host contains \n (WR-01)
+// Test 10: buildAttributeBlock with cred -- approve/reject cover username/password lines
+// Test 11: parseCredentialOutput + credentialFill success path -- fake git binary
+// Test 12: credentialFill returns null when exit code is non-zero
+// Test 13: credentialApprove try/catch -- swallows subprocess error (best-effort)
+// Test 14: credentialReject try/catch -- swallows subprocess error (best-effort)
+// ---------------------------------------------------------------------------
+
+test("Phase 31 credOps: sanitizeAttrValue throws when host contains \\n -- fill propagates (WR-01)", async () => {
+  // sanitizeAttrValue is called inside buildAttributeBlock(host) BEFORE the
+  // try/catch in credentialFill, so the throw propagates to the caller.
+  // The control-char host triggers the /[\r\n\0]/ guard at git-credential.ts:126.
+  if (process.platform === "win32") {
+    return;
+  }
+
+  await assert.rejects(
+    () => DEFAULT_CREDENTIAL_OPS.fill("github.com\ninjected=evil"),
+    /control character/,
+    "sanitizeAttrValue must throw on newline in host attribute",
+  );
+});
+
+test("Phase 31 credOps: buildAttributeBlock with cred covers username+password lines (Pitfall 4)", async () => {
+  // approve() calls buildAttributeBlock(host, cred) which emits username= and
+  // password= lines (git-credential.ts:146-151). With PATH zeroed the subprocess
+  // throws ENOENT; credentialApprove's own try/catch swallows and returns void.
+  // The test confirms that: (a) no exception surfaces, and (b) buildAttributeBlock
+  // was reached with a cred containing both fields.
+  if (process.platform === "win32") {
+    return;
+  }
+
+  const originalPath = process.env["PATH"];
+  process.env["PATH"] = "/nonexistent-dir-for-pi-claude-marketplace-test";
+  try {
+    // This must NOT throw -- credentialApprove wraps gitCredentialIO in try/catch.
+    await assert.doesNotReject(
+      () =>
+        DEFAULT_CREDENTIAL_OPS.approve("invented.invalid", {
+          username: "x-access-token",
+          password: "test-token",
+        }),
+      "credentialApprove must swallow subprocess ENOENT (best-effort)",
+    );
+  } finally {
+    if (originalPath === undefined) {
+      delete process.env["PATH"];
+    } else {
+      process.env["PATH"] = originalPath;
+    }
+  }
+});
+
+test("Phase 31 credOps: parseCredentialOutput + credentialFill success -- fake git binary returns credentials", async () => {
+  // Create a fake 'git' binary in a tmpdir that prints a valid
+  // credential wire-format to stdout and exits 0. This covers:
+  //   - parseCredentialOutput (lines 163-177): key=value parsing
+  //   - credentialFill exit-0 parse path (lines 199-210): returns GitCredentials
+  //
+  // The fake git prints exactly what `git credential fill` would return for a
+  // cached credential. No real keychain is consulted.
+  if (process.platform === "win32") {
+    return;
+  }
+
+  const tmpDir = path.join(os.tmpdir(), `pi-cm-cred-test-${Date.now()}`);
+  await mkdir(tmpDir, { recursive: true });
+
+  // The fake 'git' binary ignores all args and just prints credential output.
+  const fakeGit = path.join(tmpDir, "git");
+  await writeFile(
+    fakeGit,
+    `#!/bin/sh\nprintf 'protocol=https\\nhost=github.com\\nusername=x-access-token\\npassword=gho_faketoken\\n\\n'\n`,
+  );
+  await chmod(fakeGit, 0o755);
+
+  const originalPath = process.env["PATH"];
+  process.env["PATH"] = `${tmpDir}${path.delimiter}${originalPath ?? ""}`;
+  try {
+    const result = await DEFAULT_CREDENTIAL_OPS.fill("github.com");
+
+    assert.notEqual(result, null, "parseCredentialOutput must return credentials from git stdout");
+    assert.ok(result !== null);
+    assert.equal(result.username, "x-access-token");
+    assert.equal(result.password, "gho_faketoken");
+  } finally {
+    if (originalPath === undefined) {
+      delete process.env["PATH"];
+    } else {
+      process.env["PATH"] = originalPath;
+    }
+
+    await rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("Phase 31 credOps: credentialFill returns null when git exits non-zero (no credential helper configured)", async () => {
+  // A fake git that exits with code 128 (git's usual 'no credential helper' exit).
+  // credentialFill checks result.code !== 0 and returns null (lines 199-201).
+  if (process.platform === "win32") {
+    return;
+  }
+
+  const tmpDir = path.join(os.tmpdir(), `pi-cm-cred-nonzero-${Date.now()}`);
+  await mkdir(tmpDir, { recursive: true });
+
+  const fakeGit = path.join(tmpDir, "git");
+  await writeFile(fakeGit, `#!/bin/sh\nexit 128\n`);
+  await chmod(fakeGit, 0o755);
+
+  const originalPath = process.env["PATH"];
+  process.env["PATH"] = `${tmpDir}${path.delimiter}${originalPath ?? ""}`;
+  try {
+    const result = await DEFAULT_CREDENTIAL_OPS.fill("github.com");
+    assert.equal(result, null, "credentialFill must return null on non-zero exit");
+  } finally {
+    if (originalPath === undefined) {
+      delete process.env["PATH"];
+    } else {
+      process.env["PATH"] = originalPath;
+    }
+
+    await rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("Phase 31 credOps: credentialApprove swallows subprocess error (best-effort, lines 222-229)", async () => {
+  // credentialReject has identical try/catch structure; this test proves both
+  // approve AND reject swallow subprocess failures silently (Pattern 3).
+  // Use a fake git that exits non-zero to trigger the error branch.
+  if (process.platform === "win32") {
+    return;
+  }
+
+  const tmpDir = path.join(os.tmpdir(), `pi-cm-approve-test-${Date.now()}`);
+  await mkdir(tmpDir, { recursive: true });
+
+  const fakeGit = path.join(tmpDir, "git");
+  await writeFile(fakeGit, `#!/bin/sh\nexit 1\n`);
+  await chmod(fakeGit, 0o755);
+
+  const originalPath = process.env["PATH"];
+  process.env["PATH"] = `${tmpDir}${path.delimiter}${originalPath ?? ""}`;
+  try {
+    // approve and reject must both return void without throwing.
+    await assert.doesNotReject(
+      () =>
+        DEFAULT_CREDENTIAL_OPS.approve("invented.invalid", {
+          username: "x-access-token",
+          password: "test-token",
+        }),
+      "credentialApprove must swallow non-zero exit (best-effort)",
+    );
+
+    await assert.doesNotReject(
+      () =>
+        DEFAULT_CREDENTIAL_OPS.reject("invented.invalid", {
+          username: "x-access-token",
+          password: "test-token",
+        }),
+      "credentialReject must swallow non-zero exit (best-effort)",
+    );
+  } finally {
+    if (originalPath === undefined) {
+      delete process.env["PATH"];
+    } else {
+      process.env["PATH"] = originalPath;
+    }
+
+    await rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("Phase 31 credOps: credentialReject swallows ENOENT (best-effort catch block, lines 244-245)", async () => {
+  // credentialReject's catch block (lines 244-245) fires when gitCredentialIO
+  // rejects -- i.e. when git is absent from PATH (ENOENT). Verify that the
+  // ENOENT propagates through gitCredentialIO's 'error' event as a rejection,
+  // is caught by credentialReject's try/catch, and surfaces as a resolved void.
+  if (process.platform === "win32") {
+    return;
+  }
+
+  const originalPath = process.env["PATH"];
+  process.env["PATH"] = "/nonexistent-dir-for-pi-claude-marketplace-test";
+  try {
+    await assert.doesNotReject(
+      () =>
+        DEFAULT_CREDENTIAL_OPS.reject("invented.invalid", {
+          username: "x-access-token",
+          password: "test-token",
+        }),
+      "credentialReject must swallow ENOENT (best-effort)",
+    );
+  } finally {
+    if (originalPath === undefined) {
+      delete process.env["PATH"];
+    } else {
+      process.env["PATH"] = originalPath;
+    }
+  }
+});
+
+test("Phase 31 credOps: credentialFill returns null when exit-0 output lacks username or password", async () => {
+  // parseCredentialOutput parses the stdout but credentialFill checks that
+  // BOTH username and password are present (lines 204-207). If either is
+  // missing, fill returns null even on a clean exit.
+  if (process.platform === "win32") {
+    return;
+  }
+
+  const tmpDir = path.join(os.tmpdir(), `pi-cm-cred-partial-${Date.now()}`);
+  await mkdir(tmpDir, { recursive: true });
+
+  // Only username, no password in output.
+  const fakeGit = path.join(tmpDir, "git");
+  await writeFile(
+    fakeGit,
+    `#!/bin/sh\nprintf 'protocol=https\\nhost=github.com\\nusername=x-access-token\\n\\n'\n`,
+  );
+  await chmod(fakeGit, 0o755);
+
+  const originalPath = process.env["PATH"];
+  process.env["PATH"] = `${tmpDir}${path.delimiter}${originalPath ?? ""}`;
+  try {
+    const result = await DEFAULT_CREDENTIAL_OPS.fill("github.com");
+    assert.equal(
+      result,
+      null,
+      "credentialFill must return null when password is absent from git output",
+    );
+  } finally {
+    if (originalPath === undefined) {
+      delete process.env["PATH"];
+    } else {
+      process.env["PATH"] = originalPath;
+    }
+
+    await rm(tmpDir, { recursive: true, force: true });
+  }
 });

@@ -27,6 +27,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  DEFAULT_DEVICE_FLOW_HTTP,
   initiateDeviceFlow,
   type PollResult,
 } from "../../extensions/pi-claude-marketplace/domain/github-auth.ts";
@@ -452,6 +453,278 @@ test("Phase 32 initiateDeviceFlow: pollToken throw returns ok:false authAttempte
   if (!result.ok) {
     assert.match(result.reason, /poll failed/);
     assert.match(result.reason, /network error in poll/);
+  }
+});
+
+test("Phase 32 initiateDeviceFlow: AbortSignal cancels poll loop mid-sleep (opts.signal path)", async () => {
+  // opts.signal abort path: runPollLoop wraps sleepMs with the signal. When the
+  // signal fires while the loop is sleeping, the sleepMs rejects with an
+  // AbortError which the catch block converts to { ok: false, reason: "Device
+  // Flow cancelled." } (github-auth.ts:311-312).
+  //
+  // The controller is aborted immediately after initiateDeviceFlow() starts;
+  // with interval: 5 the loop is sleeping when the abort fires.
+  const controller = new AbortController();
+
+  const { http } = makeMockDeviceFlowHttp({
+    deviceCode: {
+      device_code: "MOCK_DEVICE_CODE",
+      user_code: "ABCD-1234",
+      verification_uri: "https://github.com/login/device",
+      expires_in: 900,
+      // Non-zero interval: the loop actually sleeps, giving the abort time to fire.
+      interval: 60,
+    },
+    pollQueue: [],
+  });
+  const { credOps } = makeMockCredentialOps();
+  const { notifyFn } = makeNotifyRecorder();
+
+  // Abort immediately after submitting -- the notify call fires synchronously
+  // before the first sleep, so we abort after a tick.
+  const flowPromise = initiateDeviceFlow({
+    host: "github.com",
+    credentialOps: credOps,
+    notifyFn,
+    http,
+    signal: controller.signal,
+  });
+
+  // Allow the synchronous notify to fire, then abort.
+  await Promise.resolve();
+  controller.abort();
+
+  const result = await flowPromise;
+
+  assert.equal(result.ok, false);
+  assert.equal(result.authAttempted, true);
+  if (!result.ok) {
+    assert.ok(
+      result.reason.toLowerCase().includes("cancel"),
+      `abort reason should mention cancel: got "${result.reason}"`,
+    );
+  }
+});
+
+test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.requestCode: throws on HTTP error status (lines 162-167)", async () => {
+  // requestCodeImpl is the real implementation behind DEFAULT_DEVICE_FLOW_HTTP.
+  // Covering it requires intercepting globalThis.fetch. We temporarily replace
+  // fetch with a stub that returns a non-ok response, then restore it.
+  //
+  // AUTH-09: the throw message includes only the status code, never the body.
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (_url: string | URL | Request, _init?: RequestInit): Promise<Response> => {
+    return Promise.resolve(new Response(JSON.stringify({ error: "ignored" }), { status: 401 }));
+  };
+
+  try {
+    await assert.rejects(
+      () => DEFAULT_DEVICE_FLOW_HTTP.requestCode("test-client-id", "repo"),
+      /Device code request failed: HTTP 401/,
+      "requestCodeImpl must throw with HTTP status on non-ok response",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.requestCode: throws TypeError on missing required fields (lines 170-180)", async () => {
+  // requestCodeImpl validates the response shape; a response missing required
+  // fields (e.g. no device_code) must throw TypeError.
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (): Promise<Response> => {
+    return Promise.resolve(
+      new Response(JSON.stringify({ user_code: "ABCD" /* missing fields */ }), { status: 200 }),
+    );
+  };
+
+  try {
+    await assert.rejects(
+      () => DEFAULT_DEVICE_FLOW_HTTP.requestCode("test-client-id", "repo"),
+      TypeError,
+      "requestCodeImpl must throw TypeError when required fields are absent",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.requestCode: returns DeviceCodeResponse on success (lines 152-181)", async () => {
+  // Happy path: fetch returns 200 with a valid device code response.
+  const originalFetch = globalThis.fetch;
+  const fakeDeviceCode = {
+    device_code: "MOCK_DC",
+    user_code: "ABCD-1234",
+    verification_uri: "https://github.com/login/device",
+    expires_in: 900,
+    interval: 5,
+  };
+  globalThis.fetch = (): Promise<Response> => {
+    return Promise.resolve(new Response(JSON.stringify(fakeDeviceCode), { status: 200 }));
+  };
+
+  try {
+    const result = await DEFAULT_DEVICE_FLOW_HTTP.requestCode("test-client-id", "repo");
+    assert.equal(result.device_code, "MOCK_DC");
+    assert.equal(result.user_code, "ABCD-1234");
+    assert.equal(result.expires_in, 900);
+    assert.equal(result.interval, 5);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns success PollResult when access_token present (lines 229-237)", async () => {
+  // pollTokenImpl parses the response body for access_token; when present,
+  // returns { kind: 'success', accessToken, tokenType, scope }.
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (): Promise<Response> => {
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          access_token: "gho_fake",
+          token_type: "bearer",
+          scope: "repo",
+        }),
+        { status: 200 },
+      ),
+    );
+  };
+
+  try {
+    const result = await DEFAULT_DEVICE_FLOW_HTTP.pollToken("test-client-id", "DC", 0);
+    assert.equal(result.kind, "success");
+    if (result.kind === "success") {
+      assert.equal(result.accessToken, "gho_fake");
+      assert.equal(result.tokenType, "bearer");
+      assert.equal(result.scope, "repo");
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns pending on authorization_pending error (lines 241-242)", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (): Promise<Response> => {
+    return Promise.resolve(
+      new Response(JSON.stringify({ error: "authorization_pending" }), { status: 200 }),
+    );
+  };
+
+  try {
+    const result = await DEFAULT_DEVICE_FLOW_HTTP.pollToken("test-client-id", "DC", 0);
+    assert.equal(result.kind, "pending");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns slow_down on slow_down error (lines 243-244)", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (): Promise<Response> => {
+    return Promise.resolve(new Response(JSON.stringify({ error: "slow_down" }), { status: 200 }));
+  };
+
+  try {
+    const result = await DEFAULT_DEVICE_FLOW_HTTP.pollToken("test-client-id", "DC", 0);
+    assert.equal(result.kind, "slow_down");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns access_denied on access_denied error (lines 245-246)", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (): Promise<Response> => {
+    return Promise.resolve(
+      new Response(JSON.stringify({ error: "access_denied" }), { status: 200 }),
+    );
+  };
+
+  try {
+    const result = await DEFAULT_DEVICE_FLOW_HTTP.pollToken("test-client-id", "DC", 0);
+    assert.equal(result.kind, "access_denied");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns expired_token on expired_token error (lines 247-248)", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (): Promise<Response> => {
+    return Promise.resolve(
+      new Response(JSON.stringify({ error: "expired_token" }), { status: 200 }),
+    );
+  };
+
+  try {
+    const result = await DEFAULT_DEVICE_FLOW_HTTP.pollToken("test-client-id", "DC", 0);
+    assert.equal(result.kind, "expired_token");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns unexpected on unknown error code (lines 249-256)", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (): Promise<Response> => {
+    return Promise.resolve(
+      new Response(JSON.stringify({ error: "unknown_grant", error_description: "not supported" }), {
+        status: 200,
+      }),
+    );
+  };
+
+  try {
+    const result = await DEFAULT_DEVICE_FLOW_HTTP.pollToken("test-client-id", "DC", 0);
+    assert.equal(result.kind, "unexpected");
+    if (result.kind === "unexpected") {
+      assert.equal(result.error, "unknown_grant");
+      assert.equal(result.description, "not supported");
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns network_error unexpected on fetch throw (lines 204-209)", async () => {
+  // When fetch itself throws (network error), pollTokenImpl catches and
+  // returns { kind: 'unexpected', error: 'network_error', description: String(err) }.
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (): Promise<Response> => {
+    return Promise.reject(new TypeError("Failed to fetch"));
+  };
+
+  try {
+    const result = await DEFAULT_DEVICE_FLOW_HTTP.pollToken("test-client-id", "DC", 0);
+    assert.equal(result.kind, "unexpected");
+    if (result.kind === "unexpected") {
+      assert.equal(result.error, "network_error");
+      assert.ok(result.description?.includes("Failed to fetch"));
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns invalid_json unexpected on malformed body (lines 214-218)", async () => {
+  // When res.json() throws (malformed JSON body), pollTokenImpl catches and
+  // returns { kind: 'unexpected', error: 'invalid_json', description: 'HTTP <status>' }.
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (): Promise<Response> => {
+    return Promise.resolve(new Response("not json at all", { status: 200 }));
+  };
+
+  try {
+    const result = await DEFAULT_DEVICE_FLOW_HTTP.pollToken("test-client-id", "DC", 0);
+    assert.equal(result.kind, "unexpected");
+    if (result.kind === "unexpected") {
+      assert.equal(result.error, "invalid_json");
+      assert.ok(result.description?.startsWith("HTTP"));
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
   }
 });
 
