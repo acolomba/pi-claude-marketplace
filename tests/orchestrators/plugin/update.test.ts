@@ -443,6 +443,17 @@ test("PUP-6 happy: version bump triggers 3-phase swap; state reflects new versio
       assert.deepEqual([...record.resources.agents], [`${GENERATED_AGENT_PREFIX}hello-bot`]);
       assert.deepEqual([...record.resources.mcpServers], ["server1"]);
 
+      // TR-04 (Phase 40) SC#2 all-success finalize contract: the
+      // intent-mark `compatibility = { installable: false, notes:
+      // [update-in-progress] }` set by `markUpdateInProgress` must be
+      // overwritten by `finalizeUpdateRecord` on the all-success path.
+      // Pitfall 6 + WR-04 alignment: lock the no-leak assertion.
+      assert.equal(record.compatibility.installable, true);
+      assert.ok(
+        !record.compatibility.notes.includes("update-in-progress"),
+        "intent-mark must NOT leak into success state",
+      );
+
       // Disk state: skill SKILL.md exists at target.
       const skillTarget = path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md");
       assert.ok((await readFile(skillTarget, "utf8")).length > 0, "skill must exist on disk");
@@ -806,6 +817,48 @@ test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'pl
         /plugin-uninstall \+ plugin-install for "hello"\./,
         `expected RECOVERY_PLUGIN_REINSTALL_PREFIX hint in notification:\n${allText}`,
       );
+
+      // TR-04 (Phase 40) SC#1/SC#2 post-state: PUP-6 phase-3 failure is
+      // a skills-only-fail; commands + agents + mcp succeed (the seed
+      // declares no entries for those bridges so they each produce an
+      // empty `recorded[]` array). The intent-mark survives on failure;
+      // version stays at fromVersion; failed bridge's resources stay at
+      // pre-update value; successful bridges still hit the
+      // `!failedPhases.has(bridge)` write path producing empty arrays
+      // (byte-identical to pre-update but exercising the gate).
+      const after = await loadState(locations.extensionRoot);
+      const rec = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(rec !== undefined, "plugin record must survive partial failure");
+      assert.equal(rec.version, "1.0.0", "version must NOT bump on failure");
+      assert.equal(
+        rec.compatibility.installable,
+        false,
+        "installable must be false during/after failure",
+      );
+      assert.ok(
+        rec.compatibility.notes.includes("update-in-progress"),
+        "intent-mark marker must survive failure",
+      );
+      assert.deepEqual(
+        [...rec.resources.skills],
+        [],
+        "failed bridge resources stay at pre-update value",
+      );
+      assert.deepEqual(
+        [...rec.resources.prompts],
+        [],
+        "commands had no manifest entry -> empty array (succeeded bridge wrote [])",
+      );
+      assert.deepEqual(
+        [...rec.resources.agents],
+        [],
+        "agents had no manifest entry -> empty array",
+      );
+      assert.deepEqual(
+        [...rec.resources.mcpServers],
+        [],
+        "mcp had no manifest entry -> empty array",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -842,6 +895,24 @@ test("WR-04: successful update populates stagedAgents + stagedMcpServers on outc
       } finally {
         process.chdir(prevCwd);
       }
+
+      // TR-04 (Phase 40) Pitfall 6: outcome-shape assertions don't
+      // exercise on-disk state, so lock the all-success finalize contract
+      // explicitly. Load state via the project-scope locations resolved
+      // from the same cwd that drove updateSinglePlugin.
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      const rec = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(rec !== undefined);
+      assert.equal(rec.version, "1.0.1");
+      assert.equal(rec.compatibility.installable, true);
+      assert.ok(
+        !rec.compatibility.notes.includes("update-in-progress"),
+        "intent-mark marker must NOT leak into the all-success state",
+      );
+      assert.deepEqual([...rec.resources.skills], ["hello-tool"]);
+      assert.deepEqual([...rec.resources.agents], [`${GENERATED_AGENT_PREFIX}hello-bot`]);
+      assert.deepEqual([...rec.resources.mcpServers], ["server1"]);
 
       assert.ok(seeded.marketplaceRoot.length > 0);
     } finally {
@@ -1630,6 +1701,24 @@ test("phase3a-commands-fail: command target occupied by directory -> phase3aFail
         /plugin-uninstall \+ plugin-install for "hello"\./,
         `expected RECOVERY_PLUGIN_REINSTALL_PREFIX hint somewhere in:\n${allText}`,
       );
+
+      // TR-04 (Phase 40) SC#1/SC#2 post-state: skills + commands FAILED;
+      // agents + mcp SUCCEEDED (seed declares no entries for those
+      // bridges so each writes an empty `recorded[]` array via the
+      // !failedPhases.has(bridge) gate). Version stays at fromVersion;
+      // intent-mark survives; failed bridges' resources stay at
+      // pre-update value; succeeded bridges still hit the per-bridge
+      // write path.
+      const after = await loadState(locations.extensionRoot);
+      const rec = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(rec !== undefined);
+      assert.equal(rec.version, "1.0.0");
+      assert.equal(rec.compatibility.installable, false);
+      assert.ok(rec.compatibility.notes.includes("update-in-progress"));
+      assert.deepEqual([...rec.resources.skills], []);
+      assert.deepEqual([...rec.resources.prompts], []);
+      assert.deepEqual([...rec.resources.agents], []);
+      assert.deepEqual([...rec.resources.mcpServers], []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1688,6 +1777,24 @@ test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAge
         /plugin-uninstall \+ plugin-install for "hello"\./,
         `expected RECOVERY_PLUGIN_REINSTALL_PREFIX hint somewhere in:\n${allText}`,
       );
+
+      // TR-04 (Phase 40) SC#1/SC#2 post-state: skills + agents FAILED;
+      // commands + mcp SUCCEEDED (seed declares no entries for commands
+      // or mcp so each writes an empty `recorded[]` via the
+      // !failedPhases.has(bridge) gate). Version unchanged; intent-mark
+      // survives; resources untouched for failed bridges; empty for
+      // succeeded bridges (byte-identical to pre-update but exercises
+      // the per-bridge orthogonality gate).
+      const after = await loadState(locations.extensionRoot);
+      const rec = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(rec !== undefined);
+      assert.equal(rec.version, "1.0.0");
+      assert.equal(rec.compatibility.installable, false);
+      assert.ok(rec.compatibility.notes.includes("update-in-progress"));
+      assert.deepEqual([...rec.resources.skills], []);
+      assert.deepEqual([...rec.resources.prompts], []);
+      assert.deepEqual([...rec.resources.agents], []);
+      assert.deepEqual([...rec.resources.mcpServers], []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
