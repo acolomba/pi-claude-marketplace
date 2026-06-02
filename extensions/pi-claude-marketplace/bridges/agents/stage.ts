@@ -33,7 +33,12 @@ import writeFileAtomic from "write-file-atomic";
 import { assertSafeName } from "../../domain/name.ts";
 import { loadAgentsIndex, saveAgentsIndex } from "../../persistence/agents-index-io.ts";
 import { AgentOwnershipConflictError } from "../../shared/errors-bridges.ts";
-import { appendLeakToError, errorMessage, ManualRecoveryError } from "../../shared/errors.ts";
+import {
+  appendLeakToError,
+  appendLeaks,
+  errorMessage,
+  ManualRecoveryError,
+} from "../../shared/errors.ts";
 import { cleanupStaging, pathExists, rollbackReplacementCommon } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
@@ -337,15 +342,42 @@ export async function commitPreparedAgents(
     );
   }
 
-  // Step 2: mkdir <scopeRoot>/agents/ + parallel rename staged -> target.
+  // Step 2: mkdir <scopeRoot>/agents/ + sequential rename staged -> target.
+  // TR-01: Sequential so we can track completed renames and reverse them on
+  // a partial failure -- mirrors the rollback shape in
+  // `rollbackReplacementCommon` (shared/fs-utils.ts:135-177): spread-before-
+  // reverse to avoid in-place mutation, per-pair try/catch into a leaks[]
+  // string array, and the rollback loop NEVER throws (Pitfall 1).
+  const completedRenames: { from: string; to: string }[] = [];
   try {
     await mkdir(prepared.locations.agentsDir, { recursive: true });
-    await Promise.all(prepared._stagedFilePaths.map(({ from, to }) => rename(from, to)));
+    for (const pair of prepared._stagedFilePaths) {
+      await rename(pair.from, pair.to);
+      completedRenames.push(pair);
+    }
   } catch (err) {
-    throw appendLeakToError(
-      err,
+    // Reverse-walk completed renames -- restore each back to staging. The
+    // rollback loop NEVER throws; rollback failures accumulate into
+    // rollbackLeaks[] for surfacing via appendLeaks below.
+    const rollbackLeaks: string[] = [];
+    for (const pair of [...completedRenames].reverse()) {
+      try {
+        await rename(pair.to, pair.from);
+      } catch (rollbackErr) {
+        rollbackLeaks.push(
+          `failed to roll back agent rename ${pair.to} -> ${pair.from}: ${errorMessage(rollbackErr)}`,
+        );
+      }
+    }
+
+    // Surface BOTH original err AND rollback leaks AND staging-cleanup leak
+    // via appendLeaks (sequential-cause chain; preserves Error.cause for the
+    // depth-5 walker in shared/notify.ts). Pitfall 8: use appendLeaks here,
+    // NOT ManualRecoveryError -- commit-path leaks are transient IO.
+    throw appendLeaks(err, [
+      ...rollbackLeaks,
       await cleanupStaging(prepared.stagingDir, "agents staging directory"),
-    );
+    ]);
   }
 
   // Step 3: persist new index (LAST step before cleanup -- RESEARCH

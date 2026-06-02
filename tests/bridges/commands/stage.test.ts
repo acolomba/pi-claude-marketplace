@@ -617,3 +617,147 @@ test("Phase 8 / PRL-10 replacePreparedCommands skips backup when previous comman
     await scope.cleanup();
   }
 });
+
+// TR-05 sequential commit rollback (commands) ---------------------------
+
+test("TR-05 commitPreparedCommands sequential commit rolls back completed renames on throw", async () => {
+  // 2 staged commands (acme:deploy sorts before acme:status). Pre-seed
+  // `acme:status.md` target as a non-empty directory so the second forward
+  // rename fails with ENOTEMPTY/EISDIR. The first rename succeeds; the
+  // catch reverse-walks completedRenames and restores `acme:deploy.md` to
+  // the staging root.
+  const scope = await tmpScope();
+
+  try {
+    const prepared = await prepareStageCommands({
+      locations: scope.loc,
+      marketplaceName: "test-mp",
+      pluginName: "acme",
+      pluginRoot: FIXTURE_PLUGIN_ROOT,
+      pluginDataDir: "/tmp/pi-data/test-mp/acme",
+      resolved: makeResolved(FIXTURE_PLUGIN_ROOT, "commands"),
+    });
+    assert.equal(prepared.kind, "staged");
+    if (prepared.kind !== "staged") {
+      throw new Error("prepared.kind must be 'staged' for this test");
+    }
+
+    // Pre-seed the promptsTargetDir + obstacle directory for pair #2.
+    await mkdir(scope.loc.promptsTargetDir, { recursive: true });
+    const obstacleDir = path.join(scope.loc.promptsTargetDir, "acme:status.md");
+    await mkdir(obstacleDir, { recursive: true });
+    await writeFile(path.join(obstacleDir, "blocker.txt"), "non-empty");
+
+    assert.equal(prepared._renamePairs.length, 2);
+    const deployPair = prepared._renamePairs.find((p) => p.to.endsWith("acme:deploy.md"));
+    assert.ok(deployPair, "expected an acme:deploy staged pair");
+
+    await assert.rejects(
+      () => commitPreparedCommands(prepared),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        return true;
+      },
+    );
+
+    // Key observable: after rollback + cleanup, the promptsTargetDir
+    // contains ONLY the pre-seeded obstacle directory -- no acme:deploy.md
+    // file landed (rolled back) and no acme:status.md file landed (forward
+    // #2 never succeeded). Without TR-05 rollback, the deploy file would
+    // have been left at the target as a partial-commit orphan.
+    assert.equal(
+      await pathExists(path.join(scope.loc.promptsTargetDir, "acme:deploy.md")),
+      false,
+      "rollback must have removed deploy from the target",
+    );
+    // Staging root is cleaned up by the catch's final cleanupStaging.
+    assert.equal(
+      await pathExists(prepared.stagingRoot),
+      false,
+      "staging root must be cleaned up after the failed commit",
+    );
+    // Sanity reference to deployPair to keep it tied to the test.
+    void deployPair;
+  } finally {
+    await scope.cleanup();
+  }
+});
+
+test("TR-05 commitPreparedCommands rollback rename failure surfaces via appendLeaks", async () => {
+  // Same shape as the previous test (pair #2 target pre-seeded as non-empty
+  // dir to force ENOTEMPTY on forward rename #2). Additionally, mutate
+  // pair #1's `from` getter so the second access (rollback's
+  // `rename(pair.to, pair.from)`) reads a path that is itself a non-empty
+  // directory -- forcing the rollback rename to fail. The bridge catches
+  // the rollback failure into rollbackLeaks[] and surfaces it via
+  // appendLeaks, NOT ManualRecoveryError.
+  const scope = await tmpScope();
+
+  try {
+    const prepared = await prepareStageCommands({
+      locations: scope.loc,
+      marketplaceName: "test-mp",
+      pluginName: "acme",
+      pluginRoot: FIXTURE_PLUGIN_ROOT,
+      pluginDataDir: "/tmp/pi-data/test-mp/acme",
+      resolved: makeResolved(FIXTURE_PLUGIN_ROOT, "commands"),
+    });
+    assert.equal(prepared.kind, "staged");
+    if (prepared.kind !== "staged") {
+      throw new Error("prepared.kind must be 'staged' for this test");
+    }
+
+    // Force rename #2 to throw ENOTEMPTY by pre-seeding its target as a
+    // non-empty directory.
+    await mkdir(scope.loc.promptsTargetDir, { recursive: true });
+    const obstacleDir = path.join(scope.loc.promptsTargetDir, "acme:status.md");
+    await mkdir(obstacleDir, { recursive: true });
+    await writeFile(path.join(obstacleDir, "blocker.txt"), "non-empty");
+
+    // Pre-create a non-empty directory at a fresh path that will be used as
+    // the rollback destination for pair #1 (acme:deploy.md).
+    const rollbackBlocker = path.join(prepared.stagingRoot, "rollback-blocker.md");
+    await mkdir(rollbackBlocker, { recursive: true });
+    await writeFile(path.join(rollbackBlocker, "child.txt"), "non-empty");
+
+    // Mutate pair #1 so `pair.from` returns the real staging path on first
+    // access (forward rename) and the non-empty blocker dir path on second
+    // access (rollback rename).
+    const deployPair = prepared._renamePairs.find((p) => p.to.endsWith("acme:deploy.md")) as
+      | { from: string; to: string }
+      | undefined;
+    assert.ok(deployPair, "expected an acme:deploy staged pair");
+
+    const realFrom = deployPair.from;
+    let fromAccessCount = 0;
+    const mutablePair = deployPair;
+    delete (mutablePair as Partial<typeof mutablePair>).from;
+    Object.defineProperty(mutablePair, "from", {
+      get() {
+        fromAccessCount += 1;
+        return fromAccessCount === 1 ? realFrom : rollbackBlocker;
+      },
+      configurable: true,
+      enumerable: true,
+    });
+
+    await assert.rejects(
+      () => commitPreparedCommands(prepared),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.ok(
+          err.name !== "ManualRecoveryError",
+          "commit catch must NOT use ManualRecoveryError",
+        );
+        assert.match(
+          err.message,
+          /\(additionally: failed to roll back command rename/,
+          `expected appendLeaks rollback chain in message, got: ${err.message}`,
+        );
+        return true;
+      },
+    );
+  } finally {
+    await scope.cleanup();
+  }
+});

@@ -28,7 +28,12 @@ import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
-import { appendLeakToError, errorMessage, ManualRecoveryError } from "../../shared/errors.ts";
+import {
+  appendLeakToError,
+  appendLeaks,
+  errorMessage,
+  ManualRecoveryError,
+} from "../../shared/errors.ts";
 import { cleanupStaging, pathExists, rollbackReplacementCommon } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { substituteClaudeVars } from "../../shared/vars.ts";
@@ -212,12 +217,36 @@ export async function commitPreparedCommands(
     }
   }
 
-  // Lazy-create the target dir; only happens when we have at least one
-  // rename to do (the noop branch already returned above).
-  await mkdir(prepared.locations.promptsTargetDir, { recursive: true });
+  // Lazy-create the target dir + sequential rename staged -> target with
+  // TR-05 reverse-walk rollback tracking. Mirrors the
+  // `commitPreparedAgents` step-2 shape (Phase 38 / TR-01): track each
+  // successful rename in completedRenames[]; on a partial failure, reverse-
+  // walk the spread copy and rename each back into the staging root. The
+  // rollback loop NEVER throws; failures accumulate into rollbackLeaks[]
+  // surfaced via appendLeaks (Pitfall 1, Pitfall 8).
+  const completedRenames: { from: string; to: string }[] = [];
+  try {
+    await mkdir(prepared.locations.promptsTargetDir, { recursive: true });
+    for (const pair of prepared._renamePairs) {
+      await rename(pair.from, pair.to);
+      completedRenames.push(pair);
+    }
+  } catch (err) {
+    const rollbackLeaks: string[] = [];
+    for (const pair of [...completedRenames].reverse()) {
+      try {
+        await rename(pair.to, pair.from);
+      } catch (rollbackErr) {
+        rollbackLeaks.push(
+          `failed to roll back command rename ${pair.to} -> ${pair.from}: ${errorMessage(rollbackErr)}`,
+        );
+      }
+    }
 
-  for (const pair of prepared._renamePairs) {
-    await rename(pair.from, pair.to);
+    throw appendLeaks(err, [
+      ...rollbackLeaks,
+      await cleanupStaging(prepared.stagingRoot, "commands staging directory"),
+    ]);
   }
 
   return cleanupStaging(prepared.stagingRoot, "commands staging directory");

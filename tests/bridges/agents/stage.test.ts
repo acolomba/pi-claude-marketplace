@@ -1156,3 +1156,171 @@ test("Phase 8 / PRL-10 rollbackAgentsReplacement records leak when restoreAgents
     }
   });
 });
+
+// TR-01 sequential commit rollback (agents) ------------------------------
+
+test("TR-01 commitPreparedAgents sequential commit rolls back completed renames on throw", async () => {
+  // 2 staged agents (acme-helper sorts before bot). Pre-seed pair #2's
+  // target (`pi-claude-marketplace-acme-bot.md`) as a non-empty directory
+  // so the second forward rename fails with ENOTEMPTY/EISDIR. The first
+  // rename should succeed; the catch reverse-walks completedRenames and
+  // restores the helper file to staging.
+  await withTmpScope(async ({ locations }) => {
+    const pluginRoot = path.join(FIXTURES, "test-plugin");
+    const resolved = makeResolved("acme", pluginRoot);
+
+    const prepared = await prepareStagePluginAgents({
+      locations,
+      marketplaceName: "mp1",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp1", "acme"),
+      resolved,
+      agentsSourceDir: path.join(pluginRoot, "agents"),
+    });
+    assert.equal(prepared.kind, "staged");
+    if (prepared.kind !== "staged") {
+      throw new Error("prepared.kind must be 'staged' for this test");
+    }
+
+    // Pre-seed the agentsDir + obstacle directory for pair #2 (bot.md).
+    await mkdir(locations.agentsDir, { recursive: true });
+    const obstacleDir = path.join(locations.agentsDir, "pi-claude-marketplace-acme-bot.md");
+    await mkdir(obstacleDir, { recursive: true });
+    await writeFile(path.join(obstacleDir, "blocker.txt"), "non-empty");
+
+    // Sanity: 2 staged files; the helper sorts before the bot.
+    assert.equal(prepared._stagedFilePaths.length, 2);
+    const helperPair = prepared._stagedFilePaths.find((p) =>
+      p.to.endsWith("pi-claude-marketplace-acme-helper.md"),
+    );
+    assert.ok(helperPair, "expected an acme-helper staged pair");
+
+    await assert.rejects(
+      () => commitPreparedAgents(prepared),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        // Original error surfaces (ENOTEMPTY/EISDIR/etc). The exact errno
+        // text varies by platform; just confirm we got SOME error.
+        return true;
+      },
+    );
+
+    // Key observable: after rollback + cleanup, the agentsDir contains
+    // ONLY the pre-seeded obstacle directory -- no acme-helper.md file
+    // landed (rolled back) and no bot.md file landed (forward #2 never
+    // succeeded). Without TR-01 rollback, the helper file would have been
+    // left at the target as a partial-commit orphan.
+    const helperAtTargetStat = await stat(
+      path.join(locations.agentsDir, "pi-claude-marketplace-acme-helper.md"),
+    ).catch(() => null);
+    assert.equal(
+      helperAtTargetStat,
+      null,
+      "rollback must have removed the helper file from the target",
+    );
+
+    // The pre-seeded obstacle dir is still in place (untouched by rollback).
+    const obstacleStat = await stat(obstacleDir);
+    assert.ok(obstacleStat.isDirectory(), "pre-seeded obstacle dir survives");
+
+    // Staging dir is cleaned up by the catch's final cleanupStaging.
+    assert.equal(
+      await pathExists(prepared.stagingDir),
+      false,
+      "staging dir must be cleaned up after the failed commit",
+    );
+
+    // Silence unused-variable lint for helperPair (only used as a sanity
+    // check that the sort order matches our pre-seed key).
+    void helperPair;
+  });
+});
+
+test("TR-01 commitPreparedAgents rollback rename failure surfaces via appendLeaks", async () => {
+  // Same shape as the previous test (pair #2 target pre-seeded as non-empty
+  // dir to force ENOTEMPTY on forward rename #2). Additionally, mutate
+  // pair #1's `from` getter so the second access (rollback's
+  // `rename(pair.to, pair.from)`) reads a path that is itself a non-empty
+  // directory -- forcing the rollback rename to fail with ENOTEMPTY too.
+  // The bridge catches the rollback failure into rollbackLeaks[] and
+  // surfaces it via appendLeaks, NOT ManualRecoveryError.
+  await withTmpScope(async ({ locations }) => {
+    const pluginRoot = path.join(FIXTURES, "test-plugin");
+    const resolved = makeResolved("acme", pluginRoot);
+
+    const prepared = await prepareStagePluginAgents({
+      locations,
+      marketplaceName: "mp1",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp1", "acme"),
+      resolved,
+      agentsSourceDir: path.join(pluginRoot, "agents"),
+    });
+    assert.equal(prepared.kind, "staged");
+    if (prepared.kind !== "staged") {
+      throw new Error("prepared.kind must be 'staged' for this test");
+    }
+
+    // Force rename #2 to throw ENOTEMPTY by pre-seeding its target as a
+    // non-empty directory.
+    await mkdir(locations.agentsDir, { recursive: true });
+    const obstacleDir = path.join(locations.agentsDir, "pi-claude-marketplace-acme-bot.md");
+    await mkdir(obstacleDir, { recursive: true });
+    await writeFile(path.join(obstacleDir, "blocker.txt"), "non-empty");
+
+    // Pre-create a non-empty directory at a fresh path that will be used as
+    // the rollback destination for pair #1.
+    const rollbackBlocker = path.join(prepared.stagingDir, "rollback-blocker.md");
+    await mkdir(rollbackBlocker, { recursive: true });
+    await writeFile(path.join(rollbackBlocker, "child.txt"), "non-empty");
+
+    // Mutate pair #1 (helper) so `pair.from` returns the real staging path
+    // on the first access (forward rename) and the non-empty blocker dir
+    // path on the second access (rollback rename). This forces rollback
+    // rename to fail with ENOTEMPTY/EISDIR, exercising the rollbackLeaks[]
+    // accumulation + appendLeaks chain in the catch block.
+    const helperPair = prepared._stagedFilePaths.find((p) =>
+      p.to.endsWith("pi-claude-marketplace-acme-helper.md"),
+    ) as { from: string; to: string } | undefined;
+    assert.ok(helperPair, "expected an acme-helper staged pair");
+
+    const realFrom = helperPair.from;
+    let fromAccessCount = 0;
+    // Inner object isn't frozen (only the outer array is); we can redefine
+    // `from` as a getter. The narrowed type is already mutable -- delete
+    // via Partial<> cast so strict-mode delete-of-required is permitted.
+    const mutablePair = helperPair;
+    delete (mutablePair as Partial<typeof mutablePair>).from;
+    Object.defineProperty(mutablePair, "from", {
+      get() {
+        fromAccessCount += 1;
+        // Access #1: forward rename source. Access #2: rollback rename dest.
+        return fromAccessCount === 1 ? realFrom : rollbackBlocker;
+      },
+      configurable: true,
+      enumerable: true,
+    });
+
+    await assert.rejects(
+      () => commitPreparedAgents(prepared),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        // The bridge MUST use appendLeaks (not ManualRecoveryError) on the
+        // commit-path catch (Pitfall 8).
+        assert.ok(
+          err.name !== "ManualRecoveryError",
+          "commit catch must NOT use ManualRecoveryError",
+        );
+        // The rollback leak must appear in the user-visible message.
+        assert.match(
+          err.message,
+          /\(additionally: failed to roll back agent rename/,
+          `expected appendLeaks rollback chain in message, got: ${err.message}`,
+        );
+        return true;
+      },
+    );
+  });
+});
