@@ -22,7 +22,7 @@
 //   - MSG-PL-6 carve-out: (available) / (unavailable) rows OMIT [<scope>]
 //   - Marketplace header: ● <name> [<scope>] [<marker>]
 //   - Description on a second 4-space indented line (when present),
-//     truncated to col 66 with U+2026 (catalog binding)
+//     truncated to col 66 with "..." suffix (63 chars + "...")
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
