@@ -25,7 +25,12 @@ import { PathContainmentError } from "../shared/path-safety.ts";
 
 /**
  * A single ledger phase. `do` runs forward; `undo` (optional) is invoked
- * in reverse order if a later phase throws.
+ * in reverse order over successfully-completed phases AND on the throwing
+ * phase itself (failing-phase own-undo runs first from the catch block,
+ * before the reverse walk -- TR-02). `undo` MUST tolerate being called
+ * after a partial-do throw -- it cannot assume `do` ran to completion;
+ * gate on context-set sentinels (cf. install.ts:481-492, :514-523,
+ * :560-572, :590-600) and keep bridge cleanup helpers ENOENT-tolerant.
  */
 export interface Phase<C> {
   readonly name: string;
@@ -101,6 +106,34 @@ async function rollbackExecuted<C>(
   return partials;
 }
 
+// Failing-phase own-undo invocation. Mirrors rollbackExecuted's inner
+// try/catch (PI-14 PathContainmentError re-throw; non-Path errors captured
+// as a RollbackPartial row). Extracted to keep runPhases under the
+// project's cognitive-complexity bar.
+async function invokeFailingPhaseUndo<C>(
+  phase: Phase<C>,
+  ctx: C,
+): Promise<RollbackPartial | undefined> {
+  if (phase.undo === undefined) {
+    return undefined;
+  }
+
+  try {
+    await phase.undo(ctx);
+    return undefined;
+  } catch (undoErr) {
+    if (undoErr instanceof PathContainmentError) {
+      throw undoErr;
+    }
+
+    return {
+      phase: phase.name,
+      msg: errorMessage(undoErr),
+      ...(undoErr instanceof Error && { cause: undoErr }),
+    };
+  }
+}
+
 /**
  * Run an ordered ledger of phases. On the first throw, walk the executed
  * phases in REVERSE ORDER calling each phase's `undo` (if present),
@@ -125,15 +158,14 @@ export async function runPhases<C>(phases: readonly Phase<C>[], ctx: C): Promise
       executed.push(phase);
     } catch (err) {
       const original = err instanceof Error ? err : new Error(String(err));
-      // Reverse-order undo of every phase that DID succeed.
-      const partials = await rollbackExecuted(executed, ctx);
-
-      return {
-        ok: false,
-        error: original,
-        rollbackPartials: partials,
-        leaks: [],
-      };
+      // Failing-phase own undo FIRST (TR-02 / saga "started -> eligible for
+      // compensation"), then reverse-walk over executed[]. Newest-first per
+      // AS-4 / MSG-RP-1: failing-phase partial prepends to index 0.
+      const failingPartial = await invokeFailingPhaseUndo(phase, ctx);
+      const reversePartials = await rollbackExecuted(executed, ctx);
+      const rollbackPartials: RollbackPartial[] =
+        failingPartial === undefined ? reversePartials : [failingPartial, ...reversePartials];
+      return { ok: false, error: original, rollbackPartials, leaks: [] };
     }
   }
 
