@@ -9,7 +9,8 @@
 - Done **v1.4 Structured Notification Messages** -- Phases 15-21 (shipped 2026-05-28)
 - Done **v1.4.1 Post-ship UAT Patches** -- Phases 22-26 (closed 2026-05-30)
 - Done **v1.5 Notification Output Polish** -- Phases 27-29 (shipped 2026-05-31)
-- **v1.6 GitHub Private Marketplace Authentication** -- Phases 30-36 (in progress)
+- Done **v1.6 GitHub Private Marketplace Authentication** -- Phases 30-36 (shipped 2026-06-01)
+- **v1.7 Transaction Resilience Hardening** -- Phases 37-41 (in progress)
 
 For full details of each milestone, see `.planning/milestones/v[X.Y]-ROADMAP.md` and `.planning/milestones/v[X.Y]-REQUIREMENTS.md`.
 
@@ -105,7 +106,7 @@ Closed the 8 gaps surfaced by the v1.4 milestone-spanning UAT: reload-hint suppr
 </details>
 
 <details>
-<summary>v1.6 GitHub Private Marketplace Authentication (Phases 30-36) -- IN PROGRESS</summary>
+<summary>Done v1.6 GitHub Private Marketplace Authentication (Phases 30-36) -- SHIPPED 2026-06-01</summary>
 
 On-demand Device Flow auth for private GitHub marketplace sources. Tries `git credential fill` first (silent reuse); triggers Device Flow only on a cache miss or 401; stores the resulting token via `git credential approve`; evicts via `git credential reject` on `onAuthFailure`. No env vars required. Two new modules (`platform/git-credential.ts`, `domain/github-auth.ts`) plus targeted wiring changes. 10/10 AUTH requirements.
 
@@ -116,6 +117,23 @@ On-demand Device Flow auth for private GitHub marketplace sources. Tries `git cr
 - [x] Phase 34: GitOps Interface Threading (AUTH-01, AUTH-02) (completed 2026-06-01)
 - [x] Phase 35: Orchestrator Call Sites & Output Catalog (AUTH-01, AUTH-02, AUTH-03)
 - [x] Phase 36: Integration Gate (all AUTH) (completed 2026-06-01)
+
+</details>
+
+<details>
+<summary>v1.7 Transaction Resilience Hardening (Phases 37-41) -- IN PROGRESS</summary>
+
+Eight correctness fixes to the existing saga/two-phase-commit infrastructure: phase-ledger
+undo gap, parallel-rename orphan leaks in agents and commands bridges, ghost state records
+on partial cascade unstage, update.ts state-before-commit divergence, reinstall blocking
+on orphan targets, and inline documentation for two already-safe patterns. No new
+dependencies; no user-visible behavior changes on the happy path.
+
+- [ ] Phase 37: Phase-Ledger Undo Gap (TR-02)
+- [ ] Phase 38: Sequential Commit Loops + Orphan Tolerance (TR-01, TR-05, TR-06)
+- [ ] Phase 39: Cascade Ghost Record (TR-03)
+- [ ] Phase 40: Update State-Before-Commit Reorder (TR-04)
+- [ ] Phase 41: Documentation and Test Closeout (TR-07, TR-08)
 
 </details>
 
@@ -739,6 +757,160 @@ Plans:
 
 - [x] 36-01-PLAN.md -- Integration test (auth-e2e.test.ts: 3 tests) + REQUIREMENTS.md AUTH-01..AUTH-10 marked [x]
 
+### Phase 37: Phase-Ledger Undo Gap
+
+**Goal:** `runPhases` in `transaction/phase-ledger.ts` correctly invokes the failing
+phase's own `undo` before walking `executed[]` in reverse, so every phase whose `do`
+throws gets exactly one compensation call -- not zero (current bug) and not two
+(over-correction pitfall).
+
+**Depends on:** Phase 36 (v1.6 complete)
+
+**Requirements:** TR-02
+
+**Success Criteria** (what must be TRUE):
+
+1. In `runPhases`, when `phase.do(ctx)` throws, the failing phase's `undo(ctx)` is
+   called exactly once from the catch block BEFORE `rollbackExecuted(executed, ctx)`;
+   `executed[]` does NOT contain the failing phase (prevents double-rollback by the
+   reverse walk).
+2. `Phase<C>.undo` JSDoc documents that undo must tolerate being called after a
+   partial-do throw (ENOENT-tolerant, no-op if nothing to clean up).
+3. `PathContainmentError` from the failing phase's `undo` re-throws immediately, matching
+   the existing discipline at `phase-ledger.ts:84-86`.
+4. A regression test asserts the exact undo-call sequence for a 3-phase ledger where
+   phase 2 throws: `phase2.undo`, then `phase1.undo` (reverse walk), `phase0.undo`
+   (reverse walk) -- each invoked exactly once.
+5. `npm run check` GREEN; existing install/uninstall/reinstall tests unchanged.
+
+**Plans:** TBD
+
+### Phase 38: Sequential Commit Loops + Orphan Tolerance
+
+**Goal:** The agents and commands bridge commit paths are atomic at rename granularity:
+a partial failure rolls back completed renames instead of leaving orphans. The
+`replacePrepared*` helpers unblock reinstall after prior partial install by pre-removing
+owned orphan targets, while preserving the PI-6 foreign-content guard.
+
+**Depends on:** Phase 37
+
+**Requirements:** TR-01, TR-05, TR-06
+
+**Success Criteria** (what must be TRUE):
+
+1. `commitPreparedAgents` iterates `_stagedFilePaths` sequentially; on a rename throw,
+   it reverse-walks completed renames (`[...completedRenames].reverse()`) to restore
+   them to staging; rollback failures accumulate into `leaks[]` surfaced via
+   `appendLeakToError`; rollback loop never throws.
+2. `commitPreparedCommands` adds the same `completedRenames[]` tracking to its
+   existing sequential loop; reverse-walk shape is identical to agents.
+3. `shared/fs-utils.ts` exports `removeOrphanIfPresent(target, mode: "file" | "tree")`
+   that pre-removes a target only when state.json confirms it is an owned artifact from
+   a prior partial install; ENOENT is silently swallowed; mismatched kind (file where
+   tree expected) leaves the target alone so rename fails loudly.
+4. `replacePreparedSkills`, `replacePreparedAgents`, and `replacePreparedCommands`
+   call `removeOrphanIfPresent` instead of `if (pathExists(pair.to)) throw`; the
+   PI-6 `stage.test.ts:388` non-previous-content rejection test remains RED for
+   foreign artifacts not in state.json.
+5. PUP-6 phase-3 failure test (`update.test.ts:744`) still triggers its failure path
+   (the file obstacle at `hello-tool` is not in state.json's skills list, so the
+   orphan guard leaves it alone); alternatively, a synthetic bridge-throw variant
+   preserves the phase-3a aggregation contract if the file test is retired.
+6. `npm run check` GREEN; no regression from Phase 37 baseline.
+
+**Plans:** TBD
+
+### Phase 39: Cascade Ghost Record
+
+**Goal:** When `cascadeUnstagePlugin` partially succeeds (e.g. skills and commands
+unstaged but agents throws), the orchestrators filter `sRecord.resources.*` by
+`outcome.dropped.*` rather than leaving the full record pointing at files no longer
+on disk (ghost record) or dropping the entire record (data loss).
+
+**Depends on:** Phase 38
+
+**Requirements:** TR-03
+
+**Success Criteria** (what must be TRUE):
+
+1. In `orchestrators/plugin/uninstall.ts`, on `outcome.ok === false`, the code filters
+   `sRecord.resources.skills`, `.prompts`, `.agents`, `.mcpServers` by removing names
+   present in `outcome.dropped.*`; the cascade primitive itself (`cascadeUnstagePlugin`)
+   makes no state mutation.
+2. `orchestrators/marketplace/remove.ts` applies the same filter in its per-plugin loop.
+3. When `outcome.ok === false` and `cause instanceof AgentsUnstageFailureError` (AG-5
+   foreign-content), the state row is preserved intact (not filtered) -- foreign content
+   owned by another process must not cause data loss.
+4. A regression test drives cascade-failure-after-partial-success and asserts
+   `sRecord.resources.*` reflects only the artifacts still on disk; a second test drives
+   the AG-5 cause and asserts the full row is preserved.
+5. `npm run check` GREEN; no regression from Phase 38 baseline.
+
+**Plans:** TBD
+
+### Phase 40: Update State-Before-Commit Reorder
+
+**Goal:** `runThreePhaseUpdate` in `orchestrators/plugin/update.ts` writes state AFTER
+physical commits, not before: an intent-mark (`installable: false`) brackets phase-3a
+commits, and a `finalizeUpdateRecord` call after all commits writes per-bridge resource
+updates (regardless of other bridges' outcomes) plus an all-or-nothing version bump.
+D-03 continue-on-failure semantics are preserved. A retry on partial-success state
+reaches the correct final state.
+
+**Depends on:** Phase 38 (bridge rollback validated)
+
+**Requirements:** TR-04
+
+**Success Criteria** (what must be TRUE):
+
+1. `markUpdateInProgress` sets `sRecord.compatibility = { installable: false,
+   notes: ["update-in-progress"] }` before phase-3a commits; this is the only
+   state write before commits begin.
+2. `finalizeUpdateRecord` applies per-bridge resource updates for every bridge that
+   succeeded (independent of other bridges' outcomes); version bump (`sRecord.version`)
+   occurs only when all four bridges succeed.
+3. D-03 continue-on-failure contract is preserved: all four bridge commits attempt
+   regardless of individual failures; `phase3aFailures[]` accumulates them; the
+   existing recovery-hint emission at line ~928 fires on any failure.
+4. A 4-bridge x 2-outcome failure matrix: for each bridge individually throwing while
+   the other three succeed, the post-run `state.json` reflects the correct per-bridge
+   resources update (committed bridges updated, failing bridge resources unchanged) and
+   version unchanged.
+5. A retry test seeds partial-success state (`version=OLD, resources.skills=NEW,
+   disk skills=NEW`) and runs update again; the second run reaches `version=NEW`
+   without unexpected notifications.
+6. `npm run check` GREEN; `update.test.ts` test count change accounted for
+   (~10-15 test rewrites expected).
+
+**Plans:** TBD
+
+### Phase 41: Documentation and Test Closeout
+
+**Goal:** The two LOW-priority patterns -- agents step-1 parallel `rm` self-healing
+and the D-19-01 post-state-commit cache-drop swallow -- are documented with inline
+comments explaining the WHY, and each has a behavior-asserting regression test.
+
+**Depends on:** Phase 40
+
+**Requirements:** TR-07, TR-08
+
+**Success Criteria** (what must be TRUE):
+
+1. The `commitPreparedAgents` step-1 `rm` loop carries an inline comment explaining
+   ENOENT-tolerant idempotency: "pre-rm old targets; ENOENT = already gone (retry-safe)".
+2. A behavior-asserting regression test (TR-07) drives
+   `prepareStagePluginAgents` + partial-commit-injection + re-prepare + full commit
+   and asserts clean final disk state; the test does NOT assert intermediate function
+   call counts.
+3. The post-state-commit cache-drop swallow in `list.ts` carries an inline comment
+   referencing D-19-01: "best-effort cache invalidation; per D-19-01, probe failures
+   during list are diagnostic noise, not actionable errors".
+4. A regression test (TR-08) asserts no module-level `PROBE_FAILURES`-style state
+   accumulation in `list.ts` after a failed cache-drop.
+5. `npm run check` GREEN; no regression from Phase 40 baseline.
+
+**Plans:** TBD
+
 ## Progress
 
 | Phase                                                                | Milestone | Plans Complete | Status      | Completed  |
@@ -777,3 +949,8 @@ Plans:
 | 34. GitOps Interface Threading                                       | v1.6      | 1/1 | Complete    | 2026-06-01 |
 | 35. Orchestrator Call Sites & Output Catalog                         | v1.6      | 4/4 | Complete    | 2026-06-01 |
 | 36. Integration Gate                                                 | v1.6      | 1/1 | Complete   | 2026-06-01 |
+| 37. Phase-Ledger Undo Gap                                            | v1.7      | TBD | Pending    |            |
+| 38. Sequential Commit Loops + Orphan Tolerance                       | v1.7      | TBD | Pending    |            |
+| 39. Cascade Ghost Record                                             | v1.7      | TBD | Pending    |            |
+| 40. Update State-Before-Commit Reorder                               | v1.7      | TBD | Pending    |            |
+| 41. Documentation and Test Closeout                                  | v1.7      | TBD | Pending    |            |

@@ -1,77 +1,115 @@
-# Requirements: pi-claude-marketplace v1.6
+# Requirements: pi-claude-marketplace v1.7
 
-**Defined:** 2026-06-01
+**Defined:** 2026-06-02
 **Core Value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and,
 after `/reload`, have every supported Claude plugin component appear as a working
 Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation
 that never blocks the install.
 
-## v1.6 Requirements
+## v1.7 Requirements
 
-### Authentication
+Pure correctness milestone. All eight requirements are defect fixes in existing
+saga/two-phase-commit infrastructure. No user-visible behavior changes on the
+happy path; the fixes surface only on failure paths (partial commit, partial
+unstage, interrupted update) where the current code produces orphan files, ghost
+state records, or silently skips undo.
 
-- [x] **AUTH-01**: User can run `marketplace add <private-github-url>` with no
-      pre-configuration; Device Flow triggers automatically on first access
-- [x] **AUTH-02**: User can run `marketplace update <name>` against a private GitHub
-      marketplace without re-authenticating when a valid token is already stored
-- [x] **AUTH-03**: During Device Flow, user is shown a one-time code and a verification
-      URL via ctx.ui.notify so they can authorize from any browser
-- [x] **AUTH-04**: Device Flow polling respects the server-specified interval;
-      slow_down responses increase the poll interval cumulatively
-- [x] **AUTH-05**: Device Flow timeout or access_denied produces a clear, actionable
-      error message (not a raw HTTP error)
-- [x] **AUTH-06**: Successful Device Flow stores the token in the OS keychain
-      (macOS Keychain / Windows Credential Manager / Linux gnome-keyring) via
-      `git credential approve`
-- [x] **AUTH-07**: A rejected stored token is evicted from the OS keychain via
-      `git credential reject` and Device Flow is re-triggered automatically
-- [x] **AUTH-08**: Subsequent add/update against the same host reuse the stored
-      token via `git credential fill` without triggering Device Flow again
-- [x] **AUTH-09**: The access token never appears in state.json, error messages,
-      or any ctx.ui.notify output
-- [x] **AUTH-10**: `npm run check` stays green; duplicate GitCredentials type
-      in platform/git.ts removed as a prerequisite
+### Phase-Ledger Correctness
+
+- [ ] **TR-02**: `runPhases` in `transaction/phase-ledger.ts` invokes the failing
+      phase's own `undo` before reverse-walking `executed[]`; failing phase's undo
+      is called exactly once as a separate catch-block call site, never via
+      `executed[]` addition (prevents double-rollback); Phase interface JSDoc
+      documents that `undo` must tolerate being called after a partial-do throw.
+
+### Bridge Commit Atomicity
+
+- [ ] **TR-01**: `commitPreparedAgents` in `bridges/agents/stage.ts` replaces the
+      `Promise.all` rename loop with a sequential `for...of` loop that tracks
+      completed renames and reverse-walks them on throw; rollback adopts the shape
+      of `rollbackReplacementCommon` (spread-copy before reverse, ENOENT-tolerant,
+      leaks surface via `appendLeakToError`, never throws from rollback loop).
+- [ ] **TR-05**: `commitPreparedCommands` in `bridges/commands/stage.ts` adds
+      `completedRenames[]` tracking to its existing sequential rename loop and
+      reverse-walks on throw; same rollback shape as TR-01.
+
+### Orphan Tolerance
+
+- [ ] **TR-06**: `replacePreparedSkills`, `replacePreparedCommands`, and
+      `replacePreparedAgents` replace the `if (pathExists(pair.to)) throw` guard
+      with `removeOrphanIfPresent(pair.to, mode)` -- a new export in
+      `shared/fs-utils.ts` -- that pre-removes a target only when state.json
+      confirms it is an owned orphan from a prior partial install; foreign
+      artifacts (not in state.json's resources list) still trigger the existing
+      PI-6 rejection error; the `stage.test.ts:388` non-previous-content
+      rejection test remains RED after the fix.
+
+### State-Record Coherence
+
+- [ ] **TR-03**: `orchestrators/plugin/uninstall.ts` and
+      `orchestrators/marketplace/remove.ts` materialize `outcome.dropped.*` into
+      a partial `sRecord.resources.*` filter on `outcome.ok === false`; the cascade
+      primitive (`cascadeUnstagePlugin`) stays read-only on state; the AG-5
+      foreign-content cause preserves the full state row rather than stripping it.
+- [ ] **TR-04**: `runThreePhaseUpdate` in `orchestrators/plugin/update.ts` splits
+      `swapStateRecord` into `markUpdateInProgress` (sets `installable:false` as
+      intent-mark before phase-3a commits) and `finalizeUpdateRecord` (per-bridge
+      resource-record update regardless of other bridges' outcomes; version bump
+      only on all-success); D-03 continue-on-failure semantics preserved; the
+      4-bridge x 2-outcome failure matrix (16 cases) is covered by tests, including
+      a retry test that seeds partial-success state and verifies a second update
+      reaches the correct final state.
+
+### Documentation and Test Coverage
+
+- [ ] **TR-07**: `commitPreparedAgents` step-1 parallel `rm` loop in
+      `bridges/agents/stage.ts` carries an inline comment explaining the
+      ENOENT-tolerant idempotency contract; one behavior-asserting regression test
+      (not implementation-asserting) drives prepare → partial-commit-injection →
+      re-prepare → commit and asserts clean final disk state.
+- [ ] **TR-08**: The post-state-commit cache-drop swallow in `list.ts` carries an
+      inline comment referencing the D-19-01 decision (probe-buffer retirement);
+      one regression test asserts no module-level `PROBE_FAILURES`-style state
+      accumulation in `list.ts`.
 
 ## Deferred Requirements
 
-### Authentication
+### Transaction Infrastructure
 
-- **AUTH-D01**: `marketplace auth logout` subcommand evicts stored credentials for a host
-- **AUTH-D02**: Non-GitHub HTTPS hosts (GitLab, Bitbucket, generic) authenticate
-      via PAT prompt using ctx.ui.input
-- **AUTH-D03**: Automatic browser open to verification URL (OS-specific)
+- **TR-D01**: WAL-style audit trail or transaction IDs on `state.json` writes
+- **TR-D02**: Result-type migration (`neverthrow`) across bridges and orchestrators
+- **TR-D03**: `applyPartialUnstageToRecord` extraction as a shared helper between
+      `uninstall.ts` and `remove.ts` (optional dedup; locality preferred for v1.7)
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| env-var credential path | Removed; on-demand Device Flow replaces it |
-| OAuth web flow (redirect URI) | Requires a local HTTP server; Device Flow is the correct CLI pattern |
-| GitHub App tokens | OAuth App tokens simpler (no expiry); GitHub App support deferred |
-| Token refresh / rotation | OAuth App tokens do not expire by default |
-| Non-GitHub hosts | Scoped to GitHub for v1.6; other hosts deferred (AUTH-D02) |
+| New npm dependencies | STACK verdict: all 8 fixes stay within existing node:fs/promises + write-file-atomic patterns |
+| saga libraries (node-sagas, Temporal) | Wrong shape: these fixes go sequential, not more concurrent |
+| result-type migration (neverthrow) | Milestone-wide refactor; deferred to TR-D02 |
+| `applyPartialUnstageToRecord` extraction | Optional dedup; Phase 3 planner decides; default is locality |
+| Per-bridge locking | Cross-process lock (`proper-lockfile`) already held at orchestrator level |
+| Any new user-visible commands or output | Pure correctness milestone; no new command surface |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTH-10 | Phase 30 | Satisfied |
-| AUTH-06 | Phase 31 | Satisfied |
-| AUTH-08 | Phase 31 | Satisfied |
-| AUTH-09 | Phase 31 | Satisfied |
-| AUTH-01 | Phase 32 | Satisfied |
-| AUTH-02 | Phase 32 | Satisfied |
-| AUTH-03 | Phase 32 | Satisfied |
-| AUTH-04 | Phase 32 | Satisfied |
-| AUTH-05 | Phase 32 | Satisfied |
-| AUTH-07 | Phase 32 | Satisfied |
-| AUTH-01..AUTH-10 (integration gate) | Phase 36 | Satisfied |
+| TR-02 | Phase 37 | Pending |
+| TR-01 | Phase 38 | Pending |
+| TR-05 | Phase 38 | Pending |
+| TR-06 | Phase 38 | Pending |
+| TR-03 | Phase 39 | Pending |
+| TR-04 | Phase 40 | Pending |
+| TR-07 | Phase 41 | Pending |
+| TR-08 | Phase 41 | Pending |
 
 **Coverage:**
-- v1.6 requirements: 10 total
-- Mapped to phases: 10 (100%)
-- Unmapped: 0
+- v1.7 requirements: 8 total
+- Mapped to phases: 8
+- Unmapped: 0 ✓
 
 ---
-*Requirements defined: 2026-06-01*
-*Last updated: 2026-06-01 -- traceability finalized by gsd-roadmapper (Phases 30-36)*
+*Requirements defined: 2026-06-02*
+*Last updated: 2026-06-02 after initial definition*
