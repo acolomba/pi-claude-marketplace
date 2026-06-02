@@ -865,40 +865,30 @@ shape.
   SC list names only agents (SC#1) and commands (SC#2); strict reading says skills
   is out of scope.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Should `commitPreparedSkills` step-2 also get TR-01-style sequential rollback?**
-   - What we know: SC#1 names `commitPreparedAgents`. SC#2 names `commitPreparedCommands`.
-     Skills is not named. The skills commit-path already does sequential rename
-     (line 248-249 of stage.ts) but does NOT track `completedRenames[]` for rollback.
-   - What's unclear: Whether the SC list is "comprehensive" or "the minimum
-     bound". The Phase 37/38 split puts skills in neither phase explicitly.
-   - Recommendation: ASK in the plan-check. If the answer is "yes, include skills",
-     plan a fourth modification site. If "no, defer", document as a follow-up
-     in `.planning/BACKLOG.md`. Default: defer (skills commit-path is the most
-     defensive of the three already -- it has the orphan pre-rm at line 238-247).
+1. **RESOLVED -- DEFERRED: `commitPreparedSkills` step-2 does NOT get TR-01-style
+   sequential rollback in this phase.**
+   - SC#1 names `commitPreparedAgents`. SC#2 names `commitPreparedCommands`. Skills
+     is not named. The skills commit-path already does sequential rename (line 248-249
+     of stage.ts) but does NOT track `completedRenames[]` for rollback.
+   - Adopted by PLAN.md must_haves: skills commit-loop rollback is documented as a
+     follow-up in `.planning/BACKLOG.md` (future v1.8). The skills commit-path is the
+     most defensive of the three already -- it has the orphan pre-rm at line 238-247.
 
-2. **Should the `commitPreparedSkills` inline stat+rm at lines 238-247 be refactored
-   to call `removeOrphanIfPresent`?**
-   - What we know: The shapes are identical. Refactor is a 6-line code-dedup.
-   - What's unclear: Whether the refactor is worth the risk of changing behavior
-     in a path the PUP-6 test exercises.
-   - Recommendation: Apply the refactor only if Task 4 verifies PUP-6 still RED
-     (i.e., the test still triggers ENOTDIR via the file obstacle). If PUP-6 stays
-     GREEN after refactor + verification, this is a safe code-dedup win. Default:
-     apply.
+2. **RESOLVED -- DEFERRED: the `commitPreparedSkills` inline stat+rm at lines 238-247
+   is NOT refactored to call `removeOrphanIfPresent` in this phase.**
+   - The shapes are identical and refactoring is a 6-line code-dedup win, but it lies
+     on the PUP-6 path and is orthogonal to the SC contract. Deferred to a follow-up
+     pass after Phase 38 lands. Plan must_haves call this out explicitly.
 
-3. **Should `removeOrphanIfPresent` take an `ownedNames: readonly string[]` arg to
-   internalize the call-site policy?**
-   - What we know: Doing so would prevent miscoded call sites from forgetting the
-     ownership check; the helper would also throw the PI-6 rejection error on
-     foreign content.
-   - What's unclear: Whether the helper becomes too cohesive with the specific
-     `replacePrepared*` policy (mixing "what to rm" with "what to reject").
-   - Recommendation: Keep helper minimal at `(target, mode)`. Document the ownership
-     contract in JSDoc. The call-site repeats the 4-line policy three times -- that's
-     acceptable for explicit-control-flow ergonomics. Premature abstraction would be
-     harder to refactor when (e.g.) a fourth bridge appears.
+3. **RESOLVED -- REJECTED: `removeOrphanIfPresent` does NOT take an `ownedNames` arg.
+   The helper signature stays minimal `(target, mode)` with the ownership check at
+   the call site.**
+   - Adopted by PLAN.md Task 1 action and must_haves: the 4-line ownership policy is
+     repeated at the three call sites in `replacePrepared*` for explicit-control-flow
+     ergonomics. Premature abstraction would be harder to refactor when (e.g.) a
+     fourth bridge appears.
 
 ## Environment Availability
 

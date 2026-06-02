@@ -38,11 +38,11 @@ created: 2026-06-02
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 38-01-01 | 01 | 1 | TR-05 | -- | removeOrphanIfPresent kind-strict matrix (file/tree/mismatched/ENOENT) | unit | `npm run test -- tests/shared/fs-utils.test.ts` | ✅ | ⬜ pending |
+| 38-01-01 | 01 | 1 | TR-06 | -- | removeOrphanIfPresent kind-strict matrix (file/tree/mismatched/ENOENT) | unit | `npm run test -- tests/shared/fs-utils.test.ts` | ✅ | ⬜ pending |
 | 38-01-02 | 01 | 1 | TR-01 | -- | commitPreparedAgents sequential rollback on rename throw | unit | `npm run test -- tests/bridges/agents/stage.test.ts` | ✅ | ⬜ pending |
-| 38-01-03 | 01 | 1 | TR-01 | -- | commitPreparedCommands sequential rollback on rename throw | unit | `npm run test -- tests/bridges/commands/stage.test.ts` | ✅ | ⬜ pending |
+| 38-01-03 | 01 | 1 | TR-05 | -- | commitPreparedCommands sequential rollback on rename throw | unit | `npm run test -- tests/bridges/commands/stage.test.ts` | ✅ | ⬜ pending |
 | 38-01-04 | 01 | 1 | TR-06 | -- | replacePrepared* helpers pre-remove owned orphans via helper; PI-6 foreign-content guard intact | unit | `npm run test -- tests/bridges/skills/stage.test.ts tests/bridges/agents/stage.test.ts tests/bridges/commands/stage.test.ts` | ✅ | ⬜ pending |
-| 38-01-05 | 01 | 1 | TR-01,TR-05,TR-06 | -- | PUP-6 phase-3 failure path unchanged; PI-6 collision rejection unchanged | integration | `npm run test -- tests/transaction/update.test.ts tests/bridges/skills/stage.test.ts` | ✅ | ⬜ pending |
+| 38-01-05 | 01 | 1 | TR-01,TR-05,TR-06 | -- | PUP-6 phase-3 failure path unchanged; PI-6 collision rejection unchanged | integration | `npm run test -- tests/orchestrators/plugin/update.test.ts tests/bridges/skills/stage.test.ts` | ✅ | ⬜ pending |
 | 38-01-06 | 01 | 1 | -- | -- | full check passes, no regression | integration | `npm run check` | ✅ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
