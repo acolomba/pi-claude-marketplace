@@ -325,9 +325,19 @@ export async function commitPreparedAgents(
     return undefined;
   }
 
-  // Step 1: rm ONLY safe-to-overwrite previous target files. The
-  // _foreignPreservedEntries list is INTENTIONALLY excluded -- those
-  // targets stay untouched on disk and their rows stay in the index.
+  // TR-07 / Phase 41: Step 1 is retry-safe by construction. The Promise.all
+  // rm loop pre-removes OLD plugin-owned targets; ENOENT means "already gone"
+  // -- the only way ENOENT can fire is if a prior partial commit already
+  // removed the target before crashing, in which case the second pass is a
+  // no-op and step 2 proceeds with the new rename. This is the self-heal
+  // property documented at the function JSDoc above (the index pointing at
+  // the OLD targetPaths plus step-1 ENOENT tolerance closes the retry loop).
+  // The loop stays parallel here because step 1 has no source to roll back
+  // to -- those files were never backed up (commitPreparedAgents is the
+  // commit path, not the replacePreparedAgents backup path); rollback would
+  // have nothing to restore. _foreignPreservedEntries is INTENTIONALLY
+  // excluded -- those targets stay untouched on disk and their rows stay
+  // in the index.
   try {
     await Promise.all(
       prepared._previousEntries.map(async (entry) => {

@@ -1394,3 +1394,70 @@ test("TR-06 replacePreparedAgents tolerates owned orphan file from prior partial
     );
   });
 });
+
+// TR-07 step-1 ENOENT-tolerance regression test ----------------
+
+test("TR-07 commitPreparedAgents step-1 ENOENT-tolerance enables retry-safe self-heal", async () => {
+  // A previous commit landed the bot target file, but partial-commit drift
+  // (e.g., an out-of-band cleanup or a crash between file delete and index
+  // save) removed the on-disk file while the index still references the
+  // OLD targetPath. On the next prepare + commit cycle, step 1 attempts
+  // `rm` on the already-gone target; the ENOENT swallow lets step 2 proceed
+  // with the new rename. Final disk state is clean: the bot file is at its
+  // target exactly once, the index reflects truth, and the second staging
+  // dir is cleaned up. This test asserts ONLY the final state -- it does
+  // NOT spy on rm calls, count Promise.all iterations, or otherwise pin
+  // implementation details (Pitfall 13).
+  await withTmpScope(async ({ locations }) => {
+    const pluginRoot = path.join(FIXTURES, "test-plugin");
+    const resolved = makeResolved("acme", pluginRoot);
+
+    // Cycle 1: full prepare + commit.
+    const prepared1 = await prepareStagePluginAgents({
+      locations,
+      marketplaceName: "mp1",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp1", "acme"),
+      resolved,
+      agentsSourceDir: path.join(pluginRoot, "agents"),
+    });
+    assert.equal(prepared1.kind, "staged");
+    await commitPreparedAgents(prepared1);
+
+    // Inject partial-commit drift: the bot target file is gone, but the
+    // index still references its targetPath. Step-1 ENOENT-tolerance is
+    // designed to self-heal exactly this scenario.
+    const targetPath = path.join(locations.agentsDir, "pi-claude-marketplace-acme-bot.md");
+    assert.ok(await pathExists(targetPath), "expected cycle-1 commit to land bot.md");
+    await rm(targetPath);
+
+    // Cycle 2: re-prepare + commit. Step 1 attempts `rm` on the
+    // already-gone target; the ENOENT swallow lets step 2 proceed.
+    const prepared2 = await prepareStagePluginAgents({
+      locations,
+      marketplaceName: "mp1",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp1", "acme"),
+      resolved,
+      agentsSourceDir: path.join(pluginRoot, "agents"),
+    });
+    assert.equal(prepared2.kind, "staged");
+    await commitPreparedAgents(prepared2);
+
+    // Behavior assertion: final disk + index state is clean.
+    assert.ok(await pathExists(targetPath), "bot.md must exist at target after retry");
+    const indexJson = JSON.parse(await readFile(locations.agentsIndexPath, "utf8")) as AgentsIndex;
+    assert.equal(
+      indexJson.agents.filter((a) => a.generatedName === "pi-claude-marketplace-acme-bot").length,
+      1,
+      "index has exactly one row for the bot agent after retry",
+    );
+    assert.equal(
+      prepared2.kind === "staged" ? await pathExists(prepared2.stagingDir) : true,
+      false,
+      "staging dir cleaned up after retry",
+    );
+  });
+});
