@@ -380,7 +380,15 @@ async function availableRowMessage(
       ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
     };
   } catch (probeErr) {
-    // The previous implementation routed EVERY throw through
+    // TR-08 / D-19-01: per-row probe-failure narrowing. Probe failures
+    // during list are diagnostic noise, NOT actionable user errors --
+    // the user sees the cause class on the `(unavailable)` row's
+    // `reasons[]` and decides whether to act. The V1 PROBE_FAILURES
+    // module-level capture-buffer + summary `notifyWarning` was retired
+    // by Plan 19-03 (the buffer had no other consumer; the summary was
+    // redundant with the per-row signal).
+    //
+    // Historical: the previous implementation routed EVERY throw through
     // `narrowResolverNotes`, which only recognises the strings `hooks`
     // and `lspServers` and silently degrades everything else to
     // `{unsupported source}`. That hid EACCES, JSON parse failures,
@@ -389,10 +397,10 @@ async function availableRowMessage(
     // is `resolveStrict` returning NotInstallable with structured notes
     // -- already handled above on the `installable === false` branch),
     // and route thrown probe failures through `narrowProbeError` so the
-    // row reports the actual cause class. Plan 19-03 D-19-01: the V1
-    // probe-failure capture-buffer + summary `notifyWarning` is GONE;
-    // the per-row `(unavailable) {<reason>}` carries the cause class
-    // at row granularity -- the redundant summary is dropped.
+    // row reports the actual cause class.
+    //
+    // TR-08 architecture test at tests/orchestrators/plugin/list.test.ts
+    // asserts no module-level `PROBE_FAILURES`-style state may reappear.
     const reason = narrowProbeError(probeErr);
     return {
       status: "unavailable",

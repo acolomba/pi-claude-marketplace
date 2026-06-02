@@ -894,6 +894,41 @@ test("D-04 corollary: list.ts does not use withStateGuard (read-only)", async ()
   assert.equal(code.includes("withStateGuard"), false);
 });
 
+test("TR-08 / D-19-01: list.ts has no module-level PROBE_FAILURES-style accumulator", async () => {
+  // D-19-01 retired the V1 PROBE_FAILURES module-level capture-buffer +
+  // drain notifyWarning. Probe failures now manifest at row granularity
+  // via the per-row `(unavailable) {<narrowed-reason>}` discriminator.
+  // This test locks the retirement with defense-in-depth: a direct
+  // identifier match (caught if anyone reintroduces by name) AND a
+  // top-level mutable-state heuristic (caught if anyone reintroduces by
+  // shape under a different name).
+  const src = await readFile(
+    "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
+    "utf8",
+  );
+  const code = stripComments(src);
+
+  // Assertion A -- direct identifier match.
+  assert.equal(
+    code.includes("PROBE_FAILURES"),
+    false,
+    "list.ts must not contain a PROBE_FAILURES identifier",
+  );
+
+  // Assertion B -- generic top-level mutable-state heuristic. Match
+  // top-of-line `let|var <identifier>`. `const` is INTENTIONALLY omitted:
+  // const SYNTHETIC_LIST_FAILURE_MARKETPLACE_NAME = "(list)" is a
+  // legitimate module-level constant (deliberate, immutable, non-
+  // accumulating); only let/var declarations at module scope are the
+  // anti-pattern this guard targets.
+  const topLevelLetVar = code.match(/^(let|var)\s+\w+/gm) ?? [];
+  assert.equal(
+    topLevelLetVar.length,
+    0,
+    `list.ts must not have top-level let/var module state, found: ${topLevelLetVar.join(", ")}`,
+  );
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // Uncovered-path gap tests
 // ──────────────────────────────────────────────────────────────────────────
