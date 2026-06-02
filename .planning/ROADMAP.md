@@ -132,7 +132,7 @@ dependencies; no user-visible behavior changes on the happy path.
 - [x] Phase 37: Phase-Ledger Undo Gap (TR-02)
 - [x] Phase 38: Sequential Commit Loops + Orphan Tolerance (TR-01, TR-05, TR-06)
 - [x] Phase 39: Cascade Ghost Record (TR-03)
-- [ ] Phase 40: Update State-Before-Commit Reorder (TR-04)
+- [x] Phase 40: Update State-Before-Commit Reorder (TR-04)
 - [ ] Phase 41: Documentation and Test Closeout (TR-07, TR-08)
 
 </details>
@@ -969,5 +969,5 @@ comments explaining the WHY, and each has a behavior-asserting regression test.
 | 37. Phase-Ledger Undo Gap                                            | v1.7      | 1/1 | Complete   | 2026-06-02 |
 | 38. Sequential Commit Loops + Orphan Tolerance                       | v1.7      | 1/1 | Complete   | 2026-06-02 |
 | 39. Cascade Ghost Record                                             | v1.7      | 1/1 | Complete   | 2026-06-02 |
-| 40. Update State-Before-Commit Reorder                               | v1.7      | TBD | Pending    |            |
+| 40. Update State-Before-Commit Reorder                               | v1.7      | 1/1 | Complete   | 2026-06-02 |
 | 41. Documentation and Test Closeout                                  | v1.7      | TBD | Pending    |            |
