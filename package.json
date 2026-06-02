@@ -73,16 +73,16 @@
     "format:check": "prettier --check \"**/*.{js,json,ts}\"",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "node --test \"tests/{architecture,bridges,domain,edge,helpers,orchestrators,persistence,platform,shared,transaction}/**/*.test.ts\"",
+    "test": "node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} \"tests/{architecture,bridges,domain,edge,helpers,orchestrators,persistence,platform,shared,transaction}/**/*.test.ts\"",
     "test:coverage": "rm -rf coverage && mkdir -p coverage && npm run test:coverage:unit && npm run test:coverage:integration && npm run test:coverage:e2e",
-    "test:coverage:e2e": "PI_CM_E2E_REF=pinned node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/e2e.lcov \"tests/e2e/**/*.test.ts\"",
-    "test:coverage:integration": "node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/integration.lcov \"tests/integration/**/*.test.ts\"",
-    "test:coverage:unit": "node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/unit.lcov \"tests/{architecture,bridges,domain,edge,helpers,orchestrators,persistence,platform,shared,transaction}/**/*.test.ts\"",
-    "test:e2e": "PI_CM_E2E_REF=pinned node --test \"tests/e2e/**/*.test.ts\"",
-    "test:e2e:nightly": "PI_CM_E2E_REF=main node --test \"tests/e2e/**/*.test.ts\"",
-    "test:integration": "node --test \"tests/integration/**/*.test.ts\"",
+    "test:coverage:e2e": "PI_CM_E2E_REF=pinned node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/e2e.lcov \"tests/e2e/**/*.test.ts\"",
+    "test:coverage:integration": "node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/integration.lcov \"tests/integration/**/*.test.ts\"",
+    "test:coverage:unit": "node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/unit.lcov \"tests/{architecture,bridges,domain,edge,helpers,orchestrators,persistence,platform,shared,transaction}/**/*.test.ts\"",
+    "test:e2e": "PI_CM_E2E_REF=pinned node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} \"tests/e2e/**/*.test.ts\"",
+    "test:e2e:nightly": "PI_CM_E2E_REF=main node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} \"tests/e2e/**/*.test.ts\"",
+    "test:integration": "node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} \"tests/integration/**/*.test.ts\"",
     "typecheck": "tsc --noEmit"
   },
   "type": "module",
-  "version": "0.3.0"
+  "version": "0.3.1"
 }

@@ -449,6 +449,51 @@ const FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // PL-4: description on all four list-surface variants. Beta's description
+    // is 80 chars (> 66) so it truncates to 63 + "..." = 66 chars rendered.
+    "description-lines": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            details: { autoupdate: true },
+            plugins: [
+              {
+                status: "present",
+                name: "alpha",
+                version: "1.0.0",
+                dependencies: [],
+                description: "A short description of the alpha plugin.",
+              },
+              {
+                status: "upgradable",
+                name: "beta",
+                version: "1.0.0",
+                reasons: ["stale clone"],
+                // 80 chars -- truncated to 63 + "..." = 66 displayed.
+                description:
+                  "A longer description that is exactly sixty-three characters longer than expected.",
+              },
+              {
+                status: "available",
+                name: "gamma",
+                version: "2.0.0",
+                description: "Installable plugin with a description.",
+              },
+              {
+                status: "unavailable",
+                name: "delta",
+                reasons: ["hooks"],
+                description: "Unavailable plugin that still surfaces its description.",
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 
   // -------------------------------------------------------------------------

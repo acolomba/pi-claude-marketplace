@@ -409,32 +409,37 @@ export interface PluginUninstalledMessage {
  * `(available)` -- list-surface row for installable, not-yet-installed
  * plugins. NO `scope` (SNM-11 carve-out: MSG-PL-6 omits `[<scope>]`
  * brackets on available rows); no `reasons`; no `dependencies`
- * .
+ * . PL-4: optional `description` rendered as a second
+ * 4-space-indented line, truncated at column 66.
  */
 export interface PluginAvailableMessage {
   readonly status: "available";
   readonly name: string;
   readonly version?: string;
+  readonly description?: string;
 }
 
 /**
  * `(unavailable)` -- list-surface row for plugins whose manifest exists
  * but cannot be installed under the current Pi environment (missing host
  * features). Carries REQUIRED `reasons`; NO `scope` (SNM-11);
- * no `dependencies`.
+ * no `dependencies`. PL-4: optional `description` rendered as a second
+ * 4-space-indented line, truncated at column 66.
  */
 export interface PluginUnavailableMessage {
   readonly status: "unavailable";
   readonly name: string;
   readonly reasons: readonly Reason[];
   readonly version?: string;
+  readonly description?: string;
 }
 
 /**
  * `(upgradable)` -- list-surface row for installed plugins with a newer
  * version available upstream. STRUCTURALLY constrained to the list surface
  * per MSG-PL-4 / CMC-09 (never emitted on cascade rows). Carries REQUIRED
- * `reasons`; no `dependencies`.
+ * `reasons`; no `dependencies`. PL-4: optional `description` rendered as
+ * a second 4-space-indented line, truncated at column 66.
  */
 export interface PluginUpgradableMessage {
   readonly status: "upgradable";
@@ -442,6 +447,7 @@ export interface PluginUpgradableMessage {
   readonly reasons: readonly Reason[];
   readonly version?: string;
   readonly scope?: Scope;
+  readonly description?: string;
 }
 
 /**
@@ -461,7 +467,8 @@ export interface PluginUpgradableMessage {
  * to the `installed` arm -- the human-visible row text
  * `● <name> [<scope>] v<ver> (installed)` is preserved; only the trailing
  * `/reload to pick up changes` line that the inventory case was misfiring
- * is removed by virtue of the new discriminator.
+ * is removed by virtue of the new discriminator. PL-4: optional `description`
+ * rendered as a second 4-space-indented line, truncated at column 66.
  */
 export interface PluginPresentMessage {
   readonly status: "present";
@@ -469,6 +476,7 @@ export interface PluginPresentMessage {
   readonly dependencies: readonly Dependency[];
   readonly version?: string;
   readonly scope?: Scope;
+  readonly description?: string;
 }
 
 /**
@@ -602,6 +610,21 @@ export interface NotificationMessage {
 const ICON_INSTALLED = "●";
 const ICON_AVAILABLE = "○";
 const ICON_UNINSTALLABLE = "⊘";
+
+/**
+ * PL-4 column-66 description truncation. Strings longer than 66 chars are
+ * sliced to 63 chars and suffixed with `"..."`, landing exactly at column 66.
+ * The column limit applies to the description TEXT; the 4-space indent prefix
+ * is NOT counted. File-private; only used in `composePluginLines`.
+ */
+const DESCRIPTION_MAX_COLS = 66;
+function truncateDescription(s: string): string {
+  if (s.length <= DESCRIPTION_MAX_COLS) {
+    return s;
+  }
+
+  return s.slice(0, DESCRIPTION_MAX_COLS - 3) + "...";
+}
 
 /**
  * Renders the marketplace header line. SOLE site for marketplace-header
@@ -1390,6 +1413,21 @@ function composePluginLines(
   mpScope: Scope,
 ): string[] {
   const lines: string[] = [`  ${renderPluginRow(p, probe, mpScope)}`];
+
+  // PL-4: emit description as a 4-space-indented second line when present and
+  // non-empty. Only the four list-surface variants carry the field; the type
+  // narrowing is intentionally structural (switch on status) so the compiler
+  // rejects any future attempt to add description to a cascade-only variant.
+  if (
+    (p.status === "present" ||
+      p.status === "upgradable" ||
+      p.status === "available" ||
+      p.status === "unavailable") &&
+    p.description !== undefined &&
+    p.description.length > 0
+  ) {
+    lines.push(`    ${truncateDescription(p.description)}`);
+  }
 
   if (p.status === "failed" || p.status === "manual recovery") {
     const trailer = renderIndentedCauseChain(p.cause, "    ");

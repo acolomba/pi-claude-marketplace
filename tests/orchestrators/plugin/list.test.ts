@@ -22,7 +22,7 @@
 //   - MSG-PL-6 carve-out: (available) / (unavailable) rows OMIT [<scope>]
 //   - Marketplace header: ● <name> [<scope>] [<marker>]
 //   - Description on a second 4-space indented line (when present),
-//     truncated to col 66 with U+2026 (catalog binding)
+//     truncated to col 66 with "..." suffix (63 chars + "...")
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -1050,6 +1050,100 @@ test("gap: plugin with path-separator in name -- resolveStrict throws, caught as
     // Row is bucketed as uninstallable; note contains the assertSafeName message.
     assert.match(out, /⊘/);
     assert.match(out, /{unreadable}/);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// PL-4: description flows from manifest entry onto rendered output
+// ──────────────────────────────────────────────────────────────────────────
+
+test("PL-4: manifest description appears as 4-space-indented second line on installed, available, and unavailable rows", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          // installed (will render as "present"); has description
+          {
+            name: "alpha",
+            source: "./alpha",
+            version: "1.0.0",
+            description: "Alpha is an installed plugin.",
+          },
+          // not-installed dir present -> available; has description
+          {
+            name: "beta",
+            source: "./beta",
+            version: "2.0.0",
+            description: "Beta is an available plugin.",
+          },
+          // not-installed, no dir -> unavailable; has description
+          {
+            name: "gamma",
+            source: "./gamma",
+            version: "3.0.0",
+            description: "Gamma is an unavailable plugin.",
+          },
+        ],
+      },
+      installed: { alpha: { version: "1.0.0" } },
+      installablePluginDirs: ["alpha", "beta"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+
+    // Installed row (present) -> description indented 4 spaces below it.
+    assert.ok(
+      out.includes("● alpha v1.0.0 (installed)\n    Alpha is an installed plugin."),
+      `alpha description missing; got: ${out}`,
+    );
+    // Available row -> description indented 4 spaces below it.
+    assert.ok(
+      out.includes("○ beta v2.0.0 (available)\n    Beta is an available plugin."),
+      `beta description missing; got: ${out}`,
+    );
+    // Unavailable row -> description indented 4 spaces below it.
+    assert.ok(
+      out.includes("⊘ gamma v3.0.0 (unavailable)"),
+      `gamma unavailable row missing; got: ${out}`,
+    );
+    assert.ok(
+      out.includes("    Gamma is an unavailable plugin."),
+      `gamma description missing; got: ${out}`,
+    );
+  });
+});
+
+test("PL-4: manifest entry without description renders no second line", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }],
+      },
+      installed: { alpha: { version: "1.0.0" } },
+      installablePluginDirs: ["alpha"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    // Only the plugin row -- no second line follows the (installed) token.
+    assert.ok(out.includes("● alpha v1.0.0 (installed)"), `plugin row missing; got: ${out}`);
+    // No 4-space indent anywhere (no description).
+    assert.ok(!out.includes("    "), `unexpected indented second line; got: ${out}`);
   });
 });
 
