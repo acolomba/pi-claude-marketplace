@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-06-02T10:08:29.777Z"
 last_activity: 2026-06-02
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -19,14 +19,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-30)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.6 milestone COMPLETE
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.7 Transaction Resilience Hardening (8 correctness fixes, phases 37-41)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Not started (Phase 37 next)
 Plan: --
-Status: Defining requirements
-Last activity: 2026-06-02 -- Milestone v1.7 started
+Status: Ready to plan Phase 37
+Last activity: 2026-06-02 -- Requirements and roadmap defined (TR-01..TR-08, Phases 37-41)
 
 ## Performance Metrics
 
