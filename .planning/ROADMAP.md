@@ -896,7 +896,10 @@ reaches the correct final state.
 6. `npm run check` GREEN; `update.test.ts` test count change accounted for
    (~10-15 test rewrites expected).
 
-**Plans:** TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 40-01-PLAN.md -- TR-04 state-write-before-commit reorder: split swapStateRecord into markUpdateInProgress (pre-commit intent-mark) + finalizeUpdateRecord (post-commit per-bridge + all-or-nothing version bump); rewire runThreePhaseUpdate; augment 4 existing tests with post-state assertions + append 4-bridge matrix + retry tests
 
 ### Phase 41: Documentation and Test Closeout
 
