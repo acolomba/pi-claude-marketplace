@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.7
 milestone_name: Transaction Resilience Hardening
-status: Awaiting next milestone
-last_updated: "2026-06-02T15:08:21.638Z"
-last_activity: 2026-06-02 -- Milestone v1.7 completed and archived
+status: "v1.7 shipped -- PR #30"
+last_updated: "2026-06-03T00:49:12.622Z"
+last_activity: "2026-06-02 -- v1.7 PR #30 created"
 progress:
   total_phases: 5
   completed_phases: 5
@@ -25,8 +25,8 @@ See: .planning/PROJECT.md (updated 2026-05-30)
 
 Phase: Milestone v1.7 complete
 Plan: --
-Status: Awaiting next milestone
-Last activity: 2026-06-02 -- Milestone v1.7 completed and archived
+Status: v1.7 shipped -- PR #30
+Last activity: 2026-06-02 -- v1.7 PR #30 created
 
 ## Performance Metrics
 
