@@ -896,6 +896,199 @@ test("UAT G-21-01: cascade-shaped message with status: 'installed' plugin row co
 });
 
 // ===========================================================================
+// PL-4: description second line (4-space indent, truncated at column 66).
+// Tests cover all four list-surface variants (present / upgradable /
+// available / unavailable) and the truncation boundary.
+// ===========================================================================
+
+test("PL-4: present row with description emits a 4-space-indented second line", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "present",
+            name: "alpha",
+            version: "1.0.0",
+            dependencies: [],
+            description: "A short description of the alpha plugin.",
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.equal(
+    body,
+    "● official [user]\n  ● alpha v1.0.0 (installed)\n    A short description of the alpha plugin.",
+  );
+});
+
+test("PL-4: upgradable row with description emits description line", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "upgradable",
+            name: "beta",
+            version: "1.0.0",
+            reasons: [],
+            description: "Beta plugin description.",
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.equal(
+    body,
+    "● official [user]\n  ● beta v1.0.0 (upgradable)\n    Beta plugin description.",
+  );
+});
+
+test("PL-4: available row with description emits description line", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "available",
+            name: "gamma",
+            version: "2.0.0",
+            description: "Installable plugin with a description.",
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.equal(
+    body,
+    "● official [user]\n  ○ gamma v2.0.0 (available)\n    Installable plugin with a description.",
+  );
+});
+
+test("PL-4: unavailable row with description emits description line", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "unavailable",
+            name: "delta",
+            reasons: ["hooks"],
+            description: "Unavailable plugin that still surfaces its description.",
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.equal(
+    body,
+    "● official [user]\n  ⊘ delta (unavailable) {hooks}\n    Unavailable plugin that still surfaces its description.",
+  );
+});
+
+test("PL-4: description absent -- no second line emitted", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [{ status: "available", name: "gamma", version: "2.0.0" }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  // Exactly one line under the header; no trailing newline or second indent.
+  assert.equal(body, "● official [user]\n  ○ gamma v2.0.0 (available)");
+});
+
+test("PL-4: description exactly 66 chars -- emitted verbatim (no truncation)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const exactly66 = "A".repeat(66);
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [{ status: "available", name: "gamma", description: exactly66 }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.ok(
+    body.includes(`    ${exactly66}`),
+    `expected 66-char description verbatim, got: ${body}`,
+  );
+});
+
+test("PL-4: description 67 chars -- truncated to 63 + '...' (column 66)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const over = "B".repeat(67);
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [{ status: "available", name: "gamma", description: over }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.ok(
+    body.includes(`    ${"B".repeat(63)}...`),
+    `expected truncated description, got: ${body}`,
+  );
+});
+
+test("PL-4: empty string description -- no second line emitted", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [{ status: "available", name: "gamma", description: "" }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.equal(body, "● official [user]\n  ○ gamma (available)");
+});
+
+// ===========================================================================
 // 16c-16g: D-22-04 reload-trailer discipline (SNM-33). Three NEGATIVE
 // regressions lock the G-MIL-01/02/06 gaps (a marketplace-status-only
 // operation with no plugin state-change row emits NO trailer); two POSITIVE
