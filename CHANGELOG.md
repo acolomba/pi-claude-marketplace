@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.2] - 2026-06-02
+
+Transaction resilience hardening. Eight correctness fixes to the saga/two-phase-commit infrastructure that previously produced orphan files, ghost state records, or silently skipped undo on failure paths. No user-visible behavior changes on the happy path; the fixes surface only when something goes wrong.
+
+- Phase-ledger compensation gap: when a phase's `do` throws, `runPhases` now invokes that phase's own `undo` exactly once before reverse-walking previously-executed phases. Previously the failing phase's undo was silently skipped.
+- Bridge commit atomicity: agents and commands bridges now track completed renames during commit and reverse-walk them on throw, so a partial-commit failure no longer leaves orphan files at the target.
+- Orphan tolerance on reinstall: `replacePrepared*` paths now pre-remove targets that state.json confirms are owned orphans from a prior partial install, unblocking reinstall without weakening the PI-6 foreign-content guard. New `removeOrphanIfPresent` helper is kind-strict (file/tree) and ENOENT-tolerant.
+- Cascade ghost-record fix: when partial cascade unstage drops some resources, `uninstall` and `marketplace remove` now filter the state record by what was actually dropped instead of leaving the full record pointing at vanished files. Foreign-content (AG-5) failures preserve the row intact.
+- Update state-write reorder: `runThreePhaseUpdate` now writes state AFTER physical commits, not before. An intent-mark (`installable: false`) brackets phase-3a commits; per-bridge resource updates land for every bridge that succeeded; version bump only on all-success. A second update run on partial-success state converges to the new version cleanly.
+- Documentation and behavior tests for two LOW-priority patterns: agents step-1 ENOENT idempotency (commit retry-safety) and the `availableRowMessage` probe-failure swallow (per D-19-01 -- probe failures during list are diagnostic noise, not actionable errors).
+
 ## [0.3.1] - 2026-06-02
 
 - `/claude:plugin list` now shows each plugin's description (when present in the marketplace manifest) on a second indented line below the plugin row, truncated at 66 characters. Restores PRD §5.3.1 PL-4 behavior that was inadvertently dropped during the v1.4 structured-notification migration.
