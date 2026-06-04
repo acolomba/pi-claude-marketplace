@@ -260,6 +260,16 @@ Limit reinstall to one scope with `--scope user` or `--scope project`. The flag 
 /claude:plugin reinstall @claude-plugins-official --scope user
 ```
 
+The `--scope` flag selects which installed plugin records and generated resources are reinstalled; the marketplace reference identifies the source marketplace. For an explicit plugin target, reinstall reports `not installed` in the selected scope instead of failing just because that marketplace is configured in another scope.
+
+Use `--force` only when reinstalling a plugin whose own previous agent files were manually edited or otherwise look foreign. `--force` can overwrite that plugin's previous agent content, but it does not override other-plugin ownership conflicts, unsafe names, path-containment failures, or MCP server name collisions:
+
+```text
+/claude:plugin reinstall pr-review-toolkit@claude-plugins-official --force
+```
+
+Reinstall targets installed plugins only. If no installed plugins match the selected target set, the command reports `No plugins installed.` and does not emit a reload hint. Plugin data directories are deleted only after replacement resources and `state.json` commit successfully; if reinstall fails, the previous plugin state, resources, and data remain available.
+
 > [!NOTE]
 > Agent definitions in plugins may include a preferred model for running the agent, e.g. "sonnet", "opus", etc. These are discarded by default, but the `--map-model` option for `install` can be used to make a best-effort attempt at mapping these models to Pi models.
 
