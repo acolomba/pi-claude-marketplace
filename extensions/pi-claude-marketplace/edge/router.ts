@@ -35,10 +35,8 @@ export interface SubcommandHandlers {
   update: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   reinstall: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   list: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  // Phase 44 / INFO-02: the top-level `info <plugin>@<marketplace>`
-  // verb. Named `pluginInfo` (NOT `info`) to disambiguate from
-  // `marketplaceInfo`. The router dispatches the `"info"` head to
-  // this slot.
+  // Named `pluginInfo` (NOT `info`) to disambiguate from
+  // `marketplaceInfo`. The router dispatches `"info"` here.
   pluginInfo: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   import: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   marketplaceAdd: (args: string, ctx: ExtensionCommandContext) => Promise<void>;

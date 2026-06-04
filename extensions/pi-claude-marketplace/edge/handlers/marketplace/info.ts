@@ -2,16 +2,10 @@
 //
 // Thin-shim handler factory for
 // `/claude:plugin marketplace info <name> [--scope user|project]`.
-//
-// Phase 43 / INFO-01 + INFO-03 + INFO-04 + INFO-06.
-//
-// `getMarketplaceInfo` orchestrator requires a `pi: ExtensionAPI`
-// reference for `notify()` (the info surface does not consume the
-// soft-dep probe, but the call shape is shared with the cascade arm);
-// the shim factory takes it as a dependency. Argument-parsing failures
-// route through `notifyUsageError`. The orchestrator handles the per-
-// scope projection, fan-out, and the INFO-04 `{not added}` carve-out.
-// This shim only validates the positional/scope shape and delegates.
+// Argument-parsing failures route through `notifyUsageError`; the
+// orchestrator handles per-scope projection, fan-out, and the
+// `{not added}` carve-out. This shim validates the positional/scope
+// shape and delegates.
 
 import { getMarketplaceInfo } from "../../../orchestrators/marketplace/info.ts";
 import { notifyUsageError } from "../../../shared/notify.ts";

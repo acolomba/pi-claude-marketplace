@@ -2,19 +2,10 @@
 //
 // Thin-shim handler factory for
 // `/claude:plugin info <plugin>@<marketplace> [--scope user|project]`.
-//
-// Phase 44 / INFO-02 + INFO-03 + INFO-04 + INFO-05 + INFO-06.
-//
-// `getPluginInfo` orchestrator requires a `pi: ExtensionAPI` reference
-// for `notify()` (the info surface does not consume the soft-dep probe,
-// but the call shape is shared with the cascade arm); the shim factory
-// takes it as a dependency. Argument-parsing failures route through
-// `notifyUsageError`. The orchestrator handles the per-scope projection,
-// fan-out, and the INFO-04 `{not added}` carve-out (both the bare
-// `--scope` mismatch row and the absent-from-both shape) AND the
-// `{not in manifest}` carve-out for a missing plugin in a known
-// marketplace. This shim only validates the positional/scope shape and
-// delegates.
+// Argument-parsing failures route through `notifyUsageError`; the
+// orchestrator handles per-scope projection, fan-out, the `{not added}`
+// carve-out, and the `{not in manifest}` carve-out. This shim validates
+// the positional/scope shape and delegates.
 
 import { getPluginInfo } from "../../../orchestrators/plugin/info.ts";
 import { errorMessage } from "../../../shared/errors.ts";
@@ -29,9 +20,8 @@ const USAGE = "Usage: /claude:plugin info <plugin>@<marketplace> [--scope user|p
 
 /**
  * Factory: returns the async handler closed over `pi` (required by
- * `getPluginInfo` for the soft-dep probe at `notify()` time). Phase 44
- * wires this factory into `register.ts` via the `SubcommandHandlers`
- * map under the `pluginInfo` key.
+ * `notify()` for the soft-dep probe). `register.ts` wires this into
+ * the `SubcommandHandlers` map under the `pluginInfo` key.
  */
 export function makePluginInfoHandler(
   pi: ExtensionAPI,

@@ -19,17 +19,15 @@
 // `domain/manifest.ts` and threads it through `getArgumentCompletions`.
 // Tests construct mock resolvers inline.
 //
-// CMP-6..8 / D-26 status filtering:
-//   - mode = "install"   -> target-scope/source-scope visibility, keep only
-//                           status === "available" rows, and exclude plugins
-//                           already installed in the target scope.
-//   - mode = "uninstall" -> keep status === "installed".
-//   - mode = "update"    -> keep status === "installed".
-//   - mode = "reinstall" -> keep status === "installed".
-//   - mode = "info"      -> Phase 44 / INFO-02 + INFO-06: union of every
-//                           plugin row (installed + available + unavailable)
-//                           across BOTH scopes; NO install-state exclusion
-//                           (info surfaces all plugins regardless of state).
+// Status filtering per mode:
+//   - install   -> target/source-scope visibility, keep only `available`,
+//                  exclude plugins already installed in the target scope.
+//   - uninstall -> keep `installed`.
+//   - update    -> keep `installed`.
+//   - reinstall -> keep `installed`.
+//   - info      -> union of every plugin row across BOTH scopes, NO
+//                  install-state exclusion. The info surface accepts any
+//                  known plugin.
 
 import { getPluginIndex, ManifestSoftFailError } from "../../shared/completion-cache.ts";
 import { SCOPES } from "../../shared/types.ts";
@@ -343,13 +341,11 @@ async function getInstalledPluginToMarketplacesMap(
 }
 
 /**
- * Phase 44 / INFO-02 + INFO-06: union of EVERY (plugin, marketplace)
- * row across both scopes -- NO `row.status` filter. Info surfaces
- * installed + available + unavailable plugins in one union (the
- * `info` command is a read-only detail surface that accepts any
- * known plugin). The orchestrator handles scope mismatches at
- * execution time via the INFO-04 `{not added}` row, so the
- * `explicitScope` filter does NOT narrow the candidate set here.
+ * Union of every (plugin, marketplace) row across both scopes with NO
+ * `row.status` filter -- `info` is a read-only detail surface that
+ * accepts any known plugin. The orchestrator handles scope mismatches
+ * at execution time via the `{not added}` row, so explicit scope does
+ * NOT narrow the candidate set here.
  */
 async function getInfoPluginToMarketplacesMap(
   resolver: LocationsResolver,
@@ -373,10 +369,10 @@ async function getInfoPluginToMarketplacesMap(
 }
 
 /**
- * Map plugin name -> [marketplaces] that carry the plugin under the given
- * mode's target-scope rules. CMP-7 makes install completion available-only.
- * Reinstall mode flows through the installed-only path. Phase 44 / INFO-02
- * adds the `info` mode -- union of every status across both scopes.
+ * Map plugin name -> [marketplaces] that carry the plugin under the
+ * given mode's target-scope rules. Install completion is available-only;
+ * reinstall flows through the installed-only path; info is the union
+ * of every status across both scopes.
  */
 export async function getPluginToMarketplacesMap(
   mode: PluginRefCompletionMode,
