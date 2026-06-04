@@ -702,6 +702,103 @@ test("WR-03: marketplace.json missing on disk surfaces `{source missing}` failur
 });
 
 // ---------------------------------------------------------------------------
+// Component-discovery failure propagation. ENOENT/ENOTDIR on a declared
+// component dir is the legitimate "no components in this kind" state
+// and yields an empty bucket. Every other readdir failure (EACCES, EPERM,
+// EIO, ...) propagates so the row builder can classify via
+// `narrowProbeError`. Locks the row catch arms that prevent a
+// permission-denied component dir from silently rendering as
+// "no components". POSIX-only -- chmod-based fault injection does not
+// reproduce on Windows.
+// ---------------------------------------------------------------------------
+
+test("readdir EACCES on installed plugin's skills dir surfaces `{permission denied}` (POSIX)", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("chmod-based EACCES fault injection is POSIX-only");
+    return;
+  }
+
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "p", source: "./p", version: "1.0.0", skills: "skills" }],
+      },
+      installed: { p: { version: "1.0.0" } },
+      installablePluginDirs: ["p"],
+      componentDirs: { p: ["skills/s1"] },
+    });
+
+    // chmod 000 the skills dir so readdir raises EACCES. Component
+    // discovery propagates the throw up through composeResolvedComponents
+    // into buildInstalledRow's outer catch, which classifies via
+    // narrowProbeError.
+    const { chmod } = await import("node:fs/promises");
+    const skillsDir = path.join(mpRoot, "p", "skills");
+    await chmod(skillsDir, 0o000);
+
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "p", scope: "user", cwd });
+      assert.equal(notifications.length, 1);
+      const msg = notifications[0]!.message;
+      assert.match(msg, /\(installed\) \{permission denied\}/);
+      // Anti-regression: row must NOT render byte-identically to a
+      // deliberate INFO-05 external-source defer (no reason brace).
+      assert.doesNotMatch(msg, /\(installed\)\n {4}components: not resolved$/);
+    } finally {
+      await chmod(skillsDir, 0o755).catch(() => undefined);
+    }
+  });
+});
+
+test("readdir EACCES on available plugin's skills dir surfaces `{permission denied}` (POSIX)", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("chmod-based EACCES fault injection is POSIX-only");
+    return;
+  }
+
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "p", source: "./p", version: "1.0.0", skills: "skills" }],
+      },
+      // Not installed -> goes through buildNotInstalledRow ->
+      // buildAvailableRow (resolvable: true) -> composeResolvedComponents
+      // throws EACCES on the chmod'd skills dir -> buildAvailableRow's
+      // catch fires and surfaces `{permission denied}`.
+      installablePluginDirs: ["p"],
+      componentDirs: { p: ["skills/s1"] },
+    });
+
+    const { chmod } = await import("node:fs/promises");
+    const skillsDir = path.join(mpRoot, "p", "skills");
+    await chmod(skillsDir, 0o000);
+
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "p", scope: "user", cwd });
+      assert.equal(notifications.length, 1);
+      const msg = notifications[0]!.message;
+      assert.match(msg, /\(available\) \{permission denied\}/);
+    } finally {
+      await chmod(skillsDir, 0o755).catch(() => undefined);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // (j-S-3) normalizeDependencies: non-array shapes (object, empty array)
 // return undefined -> renderer omits `dependencies:` line entirely.
 // ---------------------------------------------------------------------------
