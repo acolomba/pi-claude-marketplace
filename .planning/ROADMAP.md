@@ -11,6 +11,7 @@
 - Done **v1.5 Notification Output Polish** -- Phases 27-29 (shipped 2026-05-31)
 - Done **v1.6 GitHub Private Marketplace Authentication** -- Phases 30-36 (shipped 2026-06-01)
 - Done **v1.7 Transaction Resilience Hardening** -- Phases 37-41 (shipped 2026-06-02)
+- Active **v1.8 Plugin and Marketplace Info Commands** -- Phases 42-44 (started 2026-06-03)
 
 For full details of each milestone, see `.planning/milestones/v[X.Y]-ROADMAP.md` and `.planning/milestones/v[X.Y]-REQUIREMENTS.md`.
 
@@ -136,6 +137,14 @@ dependencies; no user-visible behavior changes on the happy path.
 - [x] Phase 41: Documentation and Test Closeout (TR-07, TR-08)
 
 </details>
+
+**Active v1.8 Plugin and Marketplace Info Commands (Phases 42-44)**
+
+Two new read-only detail-surface commands (`/claude:plugin marketplace info <name>` and `/claude:plugin info <plugin>@<marketplace>`) picking up the PRD-deferred `info` subcommand. Both work on uninstalled, installed, and unavailable targets, support `--scope user|project` filtering, render per-scope when no scope is given, read existing local data only (preserves NFR-5), and lock byte-form via the catalog UAT.
+
+- [ ] **Phase 42: Type Model & Render Seam Foundations** -- Land `MarketplaceInfoMessage` / `PluginInfoMessage` discriminated-union variants in `shared/notify.ts`, the `wrapDescription(text, indentCol, wrapCol)` renderer helper, and the new `"not added"` REASON in the closed-set tuple -- in one atomic commit alongside the first catalog state and UAT fixture that consume them.
+- [ ] **Phase 43: Marketplace Info Command** -- Edge handler + orchestrator + completion + catalog states + UAT fixtures for `marketplace info <name> [--scope user|project]`; closes the marketplace half of per-scope rendering, completion plumbing, and catalog UAT coverage.
+- [ ] **Phase 44: Plugin Info Command** -- Edge handler + orchestrator + per-scope rendering + completion mode + `components: not resolved` marker + catalog states + UAT fixtures for `plugin info <plugin>@<marketplace> [--scope user|project]`; closes the milestone with the second info surface.
 
 ## Phase Details
 
@@ -757,6 +766,60 @@ Plans:
 
 - [x] 36-01-PLAN.md -- Integration test (auth-e2e.test.ts: 3 tests) + REQUIREMENTS.md AUTH-01..AUTH-10 marked [x]
 
+### Phase 42: Type Model & Render Seam Foundations
+
+**Goal:** The complete v1.8 info-surface type model lives in `shared/notify.ts` with the new `"not added"` REASON closed-set member and the `wrapDescription` renderer helper -- all landed atomically with the first catalog state and UAT fixture that consume them, per the v1.3 retrospective atomic-supersession lesson. Phases 43 and 44 then build their command surfaces on top of this contract without further closed-set churn.
+
+**Depends on:** v1.7 Phase 41 complete
+
+**Requirements:** INFO-04, INFO-08
+
+**Success Criteria** (what must be TRUE):
+
+1. `shared/notify.ts` exports two new discriminated-union variants reachable from `NotificationMessage`: `MarketplaceInfoMessage` (carries marketplace header + source-kind detail line + optional `last_updated` + optional `description`, with NO plugin rows) and `PluginInfoMessage` (carries marketplace header + plugin row with status `installed`/`available`/`unavailable`/`failed`, plus either a resolved-components shape with sorted per-kind component arrays and an optional `dependencies` field OR an unresolved-marker shape encoding the `components: not resolved` state via a `componentsResolved: false` discriminator -- the renderer's switch chooses between the two shapes via discriminated-union exhaustiveness per NFR-7).
+2. `REASONS` tuple in `shared/notify.ts` contains the new entry `"not added"`; `tests/architecture/notify-types.test.ts` length lock and closed-set proof are updated to the new count and the new member; rendering a row with `reason: "not added"` produces the byte form `⊘ <name> [<scope>] (failed) {not added}` at column 0 with severity `error`. This change lands in ONE commit alongside the first catalog state that consumes it (`docs/output-catalog.md` `--scope` mismatch fixture) and the matching `tests/architecture/catalog-uat.test.ts` fixture.
+3. A new file-private `wrapDescription(text: string, indentCol: number, wrapCol: number): string[]` helper in `shared/notify.ts` hard-wraps a description at the requested column count (no ellipsis), preserving word boundaries and emitting one line per wrap segment indented at `indentCol`; per-status unit tests in `tests/shared/notify-v2.test.ts` lock the behavior at the 4-col-indent / 66-col-total used by `plugin info`.
+4. The renderer switch in `notify()` has new arms for both info variants gated by exhaustive `assertNever` defaults; the existing 10-arm plugin status + 7-arm marketplace status surfaces are byte-unchanged for all non-info call sites (Phase 42 produces zero behavior change for any v1.0-v1.7 command).
+5. `npm run check` exits 0; catalog UAT byte-equality remains GREEN; the atomic-supersession commit contains the REASON tuple addition, the new types, the new helper, the new fixture(s) for `--scope` mismatch, and the catalog state(s) -- nothing else.
+
+**Plans:** TBD
+
+### Phase 43: Marketplace Info Command
+
+**Goal:** `/claude:plugin marketplace info <name> [--scope user|project]` lands as a working read-only command with byte-locked render, per-scope fan-out when no `--scope` is given, argument completion via the TC-5 union pattern, and full catalog UAT coverage of every status/scope state -- exercising the Phase 42 type model and `{not added}` REASON end-to-end.
+
+**Depends on:** Phase 42
+
+**Requirements:** INFO-01, INFO-03, INFO-06, INFO-07
+
+**Success Criteria** (what must be TRUE):
+
+1. Running `/claude:plugin marketplace info <name>` against a marketplace present in only one scope renders a single block: per-scope header `● <name> [<scope>]` with the `<autoupdate>` / `<no autoupdate>` marker, followed by `github: <owner>/<repo>` (with `#<ref>` suffix only when `ref` was originally specified) OR `path: <abs-path>`, optionally `last_updated: <ISO8601>` for github sources only, and optionally `description: <text>` when `marketplace.json` carries one. No plugin rows. No `/reload to pick up changes` trailer.
+2. Running the same command against a marketplace present in both scopes (no `--scope` filter) renders two marketplace blocks separated by one blank line, project-scope first then user-scope, each conforming to the per-block byte form in SC #1 (per-scope fan-out via the existing `composeBlock` ordering in `shared/notify.ts`).
+3. Running `/claude:plugin marketplace info <missing-name>` renders `⊘ <name> (failed) {not added}` and exits with error severity; running `/claude:plugin marketplace info <name> --scope <wrong-scope>` where the marketplace is present in the other scope renders `⊘ <name> [<wrong-scope>] (failed) {not added}` with error severity (`{not added}` REASON sourced from Phase 42).
+4. `marketplace info <TAB>` returns the union of marketplace names across both scopes (TC-5 pattern matching `marketplace remove` / `marketplace update` / `marketplace autoupdate`); a new entry in the completion provider's TC-5 surface covers the verb.
+5. `docs/output-catalog.md` gains a new H2 section `` ## `/claude:plugin marketplace info <name>` `` enumerating every state (github single-scope, path single-scope, github both-scopes, path both-scopes, `{not added}` missing-marketplace, `{not added}` `--scope` mismatch); each fenced byte block is paired with a fixture in `tests/architecture/catalog-uat.test.ts` FIXTURES map and byte-equality is GREEN.
+
+**Plans:** TBD
+
+### Phase 44: Plugin Info Command
+
+**Goal:** `/claude:plugin info <plugin>@<marketplace> [--scope user|project]` lands as a working read-only command using the install-cascade always-marketplace-header form, with status-aware plugin rows, hard-wrapped descriptions at col 4 indent / 66-col total, sorted-by-kind component lists, the `components: not resolved` marker for unsynced external sources, plugin-info argument completion in a new TC-6 mode, and full catalog UAT coverage -- closing the v1.8 milestone.
+
+**Depends on:** Phase 43
+
+**Requirements:** INFO-02, INFO-05
+
+**Success Criteria** (what must be TRUE):
+
+1. Running `/claude:plugin info <plugin>@<marketplace>` renders the marketplace header at column 0 (matching the install cascade form) followed by an indented plugin row with status `(installed)`, `(available)`, or `(unavailable)`; the row is followed by a description block hard-wrapped at col 4 indent / 66-col total width with no ellipsis (via the Phase 42 `wrapDescription` helper); component lists by kind appear sorted alphabetically by kind name (`agents`, `commands`, `mcp`, `skills`) with per-kind names sorted alphabetically; `dependencies: <plugin>@<marketplace>, ...` appears last when the plugin declares dependencies.
+2. Running the command against a plugin whose `plugin.json` lives at an unsynced external source (separate git repo, npm, etc.) renders the marker line `components: not resolved` in place of the per-kind component lists; this state is driven by the Phase 42 `componentsResolved: false` discriminator on the `PluginInfoMessage` variant (no network access -- preserves NFR-5).
+3. Running the command against a plugin present in both scopes (no `--scope` filter) renders two plugin blocks under their per-scope marketplace headers, separated by one blank line, in the existing per-scope ordering (project first, user second).
+4. Running `/claude:plugin info <missing-plugin>@<known-marketplace>` renders `(failed) {not in manifest}` (existing reason); running against an unknown marketplace renders `{not added}` (Phase 42 REASON); running with `--scope` mismatch renders `{not added}` at the marketplace level.
+5. `plugin info <TAB>` returns `<plugin>@<marketplace>` combos for all known plugins (installed + available + unavailable) across both scopes via a new `"info"` mode of the TC-6 plugin-ref completer; `docs/output-catalog.md` gains a new H2 section `` ## `/claude:plugin info <plugin>@<marketplace>` `` enumerating every state (installed single-scope, available single-scope, unavailable single-scope, installed-both-scopes, components-not-resolved, `{not in manifest}` missing-plugin, `{not added}` missing-marketplace, `{not added}` `--scope` mismatch); each fenced byte block is paired with a `catalog-uat.test.ts` fixture and byte-equality is GREEN; `npm run check` exits 0 -- v1.8 milestone closes.
+
+**Plans:** TBD
+
 ## Progress
 
 | Phase                                                                | Milestone | Plans Complete | Status      | Completed  |
@@ -800,3 +863,6 @@ Plans:
 | 39. Cascade Ghost Record                                             | v1.7      | 1/1 | Complete   | 2026-06-02 |
 | 40. Update State-Before-Commit Reorder                               | v1.7      | 1/1 | Complete   | 2026-06-02 |
 | 41. Documentation and Test Closeout                                  | v1.7      | 1/1 | Complete   | 2026-06-02 |
+| 42. Type Model & Render Seam Foundations                             | v1.8      | TBD | Not started | -          |
+| 43. Marketplace Info Command                                         | v1.8      | TBD | Not started | -          |
+| 44. Plugin Info Command                                              | v1.8      | TBD | Not started | -          |

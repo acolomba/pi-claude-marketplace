@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v1.8
 milestone_name: Plugin and Marketplace Info Commands
 status: planning
-last_updated: "2026-06-04T01:14:43.148Z"
-last_activity: 2026-06-04
+last_updated: "2026-06-03T00:00:00.000Z"
+last_activity: 2026-06-03
 progress:
-  total_phases: 0
+  total_phases: 3
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -23,10 +23,10 @@ See: .planning/PROJECT.md (updated 2026-05-30)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 42 (planned, not started)
 Plan: --
-Status: Defining requirements
-Last activity: 2026-06-04 -- Milestone v1.8 started
+Status: Roadmap created -- ready for /gsd-plan-phase 42
+Last activity: 2026-06-03 -- v1.8 roadmap created (Phases 42-44, 8/8 INFO requirements mapped)
 
 ## Performance Metrics
 
@@ -155,6 +155,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 25]: SNM-37 gate satisfied via scripts/pi.sh source-load (no npm publish/link, D-25-01) + a tests/shared/snm37-behavioral-smoke.test.ts byte-form smoke proving v1.4 identity at the pre-tui notify boundary (D-25-04; stronger than pi --version, moot under -e source-load). Real-publish validation deferred (D-25-06). SNM-37 text + ROADMAP SC#1 amended in lockstep (D-25-03). Gates SNM-38 (25-02) + SNM-39 (25-03). -- Plan 25-01.
 - [Phase ?]: [Phase 25]: SNM-38 (G-MIL-03 indent ladder) REFUTED by pre-tui byte evidence (D-25-09): notify() emits the catalog-conformant 0/2/4 ladder at ctx.ui.notify (captured indents [0,2,2,2,2,4,0,0,2]); the observed 1/3 visual is a markdown/tui display-layer artifact, not a renderer deviation. Recorded as a docs/output-catalog.md Indentation-discipline clarification + a tests/shared/snm38-indent-ladder.test.ts readability lock (on top of the catalog-uat byte-equality gate). Anchored on notify.ts constants, NOT the UAT 2/4 truth-line misquote. -- Plan 25-02.
 - [Phase 25]: SNM-39 (G-MIL-07 tab completion) DEFER-WITH-FINDING (D-25-10): our provider is correct (TC-6 `update @` -> `["@mp-a","@mp-b"]` GREEN; cause (a) eliminated by v0.2.0 source-load, cause (c) ruled out). Root cause is cause (b) -- host-side `@`-precedence in the GLOBAL `@earendil-works/pi-tui` 0.76.0 that scripts/pi.sh execs (`@`-logic byte-identical to local 0.74.2): `CombinedAutocompleteProvider.getSuggestions:188` checks `extractAtPrefix:191`/`:331` against `PATH_DELIMITERS:6` (no `@`) and routes any `@`-leading token to file-mention completion BEFORE the slash branch `:205`, so our `getArgumentCompletions` is never reached for bare `update @`. LIVE scripts/pi.sh trigger (D-25-08) showed FILE PATHS (not `@<mp>` candidates) -> CONFIRMS the interception (D-25-05 real-home spot-check not triggered). pi-tui-external; defer, do NOT contort the provider (would degrade bare-`@<mp>` UX without fixing the host). Recorded in UAT + a finding comment above TC-6 (provider.test.ts:793). -- Plan 25-03.
+- [Roadmap v1.8]: 3-phase split (42-44) created by `gsd-roadmapper` 2026-06-03. All 8 INFO-* requirements mapped: INFO-04 + INFO-08 -> Phase 42 (Type Model & Render Seam Foundations -- MarketplaceInfoMessage/PluginInfoMessage variants + wrapDescription helper + new `not added` REASON in one atomic commit per v1.3 supersession lesson); INFO-01 + INFO-03 + INFO-06 + INFO-07 -> Phase 43 (Marketplace Info Command -- handler/orchestrator/TC-5 completion/catalog states+UAT for marketplace info; first phase to deliver per-scope rendering end-to-end, completion plumbing, and catalog UAT entries); INFO-02 + INFO-05 -> Phase 44 (Plugin Info Command -- handler/orchestrator/install-cascade form/wrap-at-col-66 description/TC-6 info mode/components: not resolved marker). Each requirement assigned to ONE phase via the first-phase-that-could-deliver rule; cross-cutting INFO-03/06/07 anchored to Phase 43 because that's where they first become user-observable end-to-end. Phase boundaries respect the v1.3 atomic-supersession lesson by colocating the REASONS extension (INFO-08) with its first catalog state usage (INFO-04) in Phase 42's single commit.
 - [Roadmap v1.6]: 7-phase split (30-36) from research build-order A-G: Phase 30 (A) duplicate GitCredentials type fix (AUTH-10); Phase 31 (B) platform/git-credential.ts + CredentialOps interface (AUTH-06/08/09); Phase 32 (C) domain/github-auth.ts Device Flow state machine with injectable HTTP seam (AUTH-01..05/07); Phase 33 (D) platform/git.ts buildAuthCallbacks + authAttempted guard (AUTH-01/02); Phase 34 (E) GitOps interface threading through shared.ts + DEFAULT_GIT_OPS + refreshGitHubClone (AUTH-01/02); Phase 35 (F) orchestrator call sites add.ts + update.ts + output catalog Device Flow prompt (AUTH-01/02/03); Phase 36 (G) integration gate -- npm run check GREEN, all failure paths tested (all AUTH). No npm runtime deps added. Two new files: platform/git-credential.ts, domain/github-auth.ts.
 - [Phase 27]: UXG-06 closed doc-only -- catalog github-source prose corrected (marketplace add never auto-enables autoupdate for any source; add.ts:235-244/311-320), autoupdate heading renamed to the real autoupdate|noautoupdate <name> verbs (no disable subcommand), catalog-uat FIXTURES key synced byte-for-byte (loadCatalogExamples sectionRe coupling). catalog-uat + npm run check GREEN. -- Plan 27-01.
 - [Phase 27]: UXG-01 closed -- marketplace list `renderMpHeader` SUB-BRANCH B drops the `<last-updated <iso>>` token (array element removed, not emptied, per Pitfall 2); `MarketplaceDetails.lastUpdatedAt?` (notify.ts:285) + state-io.ts:70 persistence retained so notify-types.test.ts (`_MarketplaceDetailsExpected`) stays untouched/GREEN; renderer + catalog + catalog-uat fixture + notify-v2 byte test + orchestrator list test landed in one atomic commit (lockstep, no intermediate RED). `<autoupdate>` marker byte-unchanged. npm run check GREEN 1143/1143. -- Plan 27-02.
@@ -212,10 +213,10 @@ Additional v1.4.1-scope deferrals:
 
 ## Session Continuity
 
-Last session: 2026-06-01T00:00:00.000Z
-Stopped At: v1.6 roadmap created
-Resume File: .planning/ROADMAP.md (Phase 30 next)
+Last session: 2026-06-03T00:00:00.000Z
+Stopped At: v1.8 roadmap created
+Resume File: .planning/ROADMAP.md (Phase 42 next)
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Start v1.8 Phase 42 with /gsd-plan-phase 42

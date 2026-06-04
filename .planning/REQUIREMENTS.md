@@ -51,20 +51,25 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFO-01 | TBD | Pending |
-| INFO-02 | TBD | Pending |
-| INFO-03 | TBD | Pending |
-| INFO-04 | TBD | Pending |
-| INFO-05 | TBD | Pending |
-| INFO-06 | TBD | Pending |
-| INFO-07 | TBD | Pending |
-| INFO-08 | TBD | Pending |
+| INFO-01 | Phase 43 | Pending |
+| INFO-02 | Phase 44 | Pending |
+| INFO-03 | Phase 43 | Pending |
+| INFO-04 | Phase 42 | Pending |
+| INFO-05 | Phase 44 | Pending |
+| INFO-06 | Phase 43 | Pending |
+| INFO-07 | Phase 43 | Pending |
+| INFO-08 | Phase 42 | Pending |
 
 **Coverage:**
 - v1.8 requirements: 8 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 8 (filled by roadmapper)
+- Mapped to phases: 8 (100%)
+- Unmapped: 0
+
+**Phase mapping rationale:**
+- **Phase 42 (Type Model & Render Seam Foundations):** INFO-04 + INFO-08. The new `"not added"` REASON closed-set extension (INFO-08) and the `--scope` mismatch render contract that first consumes it (INFO-04) land atomically here alongside the new `MarketplaceInfoMessage` / `PluginInfoMessage` type variants and the `wrapDescription` helper -- single commit per the v1.3 atomic-supersession lesson.
+- **Phase 43 (Marketplace Info Command):** INFO-01 + INFO-03 + INFO-06 + INFO-07. Lands `marketplace info` end-to-end (INFO-01); first phase to deliver per-scope fan-out user-observably (INFO-03), argument completion plumbing (INFO-06 -- TC-5 marketplace-name surface), and catalog UAT entries (INFO-07 -- `marketplace info` H2 section + fixtures). Plugin-info reuses the same `composeBlock` per-scope rendering, TC-6 completion mode shape, and catalog UAT pattern in Phase 44 without re-closing these requirements.
+- **Phase 44 (Plugin Info Command):** INFO-02 + INFO-05. Lands `plugin info` end-to-end with install-cascade always-marketplace-header form and the `wrapDescription`-driven description block (INFO-02); the `components: not resolved` marker for unsynced external sources (INFO-05) drives the `componentsResolved: false` discriminator on `PluginInfoMessage`.
 
 ---
 *Requirements defined: 2026-06-03*
-*Last updated: 2026-06-03 -- initial definition for v1.8 info commands milestone*
+*Last updated: 2026-06-03 -- traceability filled by roadmapper; 8/8 requirements mapped to Phases 42-44*
