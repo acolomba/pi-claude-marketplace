@@ -1,292 +1,80 @@
 # Project Research Summary
 
-**Project:** pi-claude-marketplace v1.7 Transaction Resilience Hardening
-**Domain:** Atomic commit correctness, phase-ledger undo ordering, sequential rename loops with rollback
-**Researched:** 2026-06-02
-**Confidence:** HIGH
+**Project:** pi-claude-marketplace v1.8 Plugin and Marketplace Info Commands
+**Domain:** Internal spec consistency for two new read-only detail-surface commands
+**Researched:** 2026-06-03
+**Scope:** This research was deliberately constrained to the project's own specs (catalog, style guide, closed sets, render seams) -- no external CLI ecosystem research. Goal: ensure the new commands' message shapes align with existing conventions, save for the documented additions (one new reason `{not added}`).
 
-## Executive Summary
+## Compliance Verdict
 
-v1.7 is a pure correctness milestone: eight structural defects in already-hand-rolled
-saga/two-phase-commit infrastructure. The codebase already has the right abstractions
-(`runPhases`, `withStateGuard`, `rollbackReplacementCommon`, `write-file-atomic`,
-`proper-lockfile`) -- the bugs are in sequencing and ordering at specific call sites,
-not in missing primitives. The STACK verdict is unambiguous: add no new dependencies.
-All eight fixes are hand-rolled using existing `node:fs/promises` + `write-file-atomic@^8`
-patterns already validated across 1312 tests and six prior milestones.
+Both proposed commands fit cleanly into the existing v1.4 `NotificationMessage` architecture with **one new closed-set member** required: `"not added"` added to the `REASONS` tuple in `extensions/pi-claude-marketplace/shared/notify.ts:63-92`.
 
-The eight findings cluster into three root patterns. First, sequential-loop discipline
-is broken in two bridge commit functions: `commitPreparedAgents` and
-`commitPreparedCommands` both use `Promise.all` for renames, making partial-completion
-bookkeeping impossible. Second, the phase-ledger undo scope is too narrow: `runPhases`
-pushes to `executed[]` AFTER `phase.do` returns, so a partially-applied phase that
-throws never gets its own undo called. Third, state-record mutations at orchestrator
-boundaries occur in the wrong order relative to physical commits, producing ghost records
-(TR-03, TR-04) and orphan-blocking reinstalls (TR-06).
+All other artifacts (status tokens, markers, severity routing, reload-hint gate, scope-bracket rules, catalog UAT byte-equality, completion provider) extend without contract changes.
 
-The primary integration risk is test co-adaptation: PUP-6 (`update.test.ts:744`),
-the skills collision guard (`stage.test.ts:388`), and the phase-3a failure tests all
-pin through specific filesystem-level obstacles that the TR-* fixes could silently
-disable. Every planning phase document must enumerate which existing tests exercise
-its failure path and verify the trigger still fires after the fix.
+## Conventions the Info Commands Must Honor
 
-## Key Findings
+### 1. Closed Sets (`shared/notify.ts`)
 
-### Recommended Stack
+- `STATUS_TOKENS` (15 entries, lines 133-149): Reuse `"installed"`, `"available"`, `"unavailable"` for plugin rows. **No new status tokens needed.**
+- `REASONS` (29 entries, lines 63-92): Reuse `"not in manifest"` for missing-plugin case. **Add `"not added"`** for missing-marketplace and `--scope` mismatch cases. This is the *only* closed-set extension v1.8 requires.
+- `MARKERS` (2 entries, line 159): Reuse `"autoupdate"` / `"no autoupdate"` for marketplace info header.
+- `PATTERN_CLASSES`: No additions; docs-only labels.
+- Drift enforcement: v1.3 ESLint plugin retired in v1.4 (SNM-24/27/28); current lock is the `as const` tuple compiled types + `tests/architecture/notify-types.test.ts` + `catalog-uat.test.ts` byte-equality. Adding a reason requires updating the tuple and the catalog atomically in one commit (the v1.3 retrospective lesson: atomic user-contract boundary).
 
-No new dependencies. All eight fixes stay within `extensions/pi-claude-marketplace/`.
-Every npm alternative surveyed -- saga libraries (`node-sagas`, `@nestjs/cqrs`,
-`redux-saga`, Temporal), transactional FS wrappers (`fs-extra`, `transactional-fs`,
-`graceful-fs`), result-type libraries (`neverthrow`, `effect`), and concurrency
-primitives (`p-queue`, `p-limit`) -- is either the wrong shape, unmaintained, or would
-require a milestone-wide refactor. The fixes go from parallel TO sequential for F1/F5,
-which makes concurrency primitives precisely the wrong direction.
+### 2. Catalog Structure (`docs/output-catalog.md` + `tests/architecture/catalog-uat.test.ts`)
 
-**Core technologies (carry forward, no changes):**
-- `node:fs/promises` (built-in): F1/F5/F6 rename loops; F3 cascade unstage; `fs.rm({force:true})` orphan cleanup
-- `write-file-atomic@^8.0.0`: F4 state write already through this; F3 ghost-record fix reuses the same write path
-- `proper-lockfile@^4.1.2`: Cross-process scope lock -- all F2/F3/F4 fixes run inside this lock
-- `node:test` (built-in): Regression tests for all eight findings
-- `memfs@^4.57.2`: Already in dev deps; rollback-path unit tests; no upgrade needed
+- Every command has an H2 section: `` ## `/claude:plugin <verb> [<args>]` ``.
+- Per-state byte form lives in `` ```text ... ``` `` fences, each preceded by a `<!-- catalog-state: STATE -->` annotation.
+- UAT fixture map keys by `(section, state)`; driver calls `notify(mockCtx, mockPi, message)` and asserts byte-equality plus severity-arg shape.
+- **New sections to add:** `` ## `/claude:plugin marketplace info <name>` `` and `` ## `/claude:plugin info <plugin>@<marketplace>` `` with all status/scope/error variants enumerated.
 
-### Expected Features (Patterns per Finding Cluster)
+### 3. Messaging Style Guide (`docs/messaging-style-guide.md`)
 
-All eight TR-* findings map to five fix patterns:
+- MSG-PL-6 scope bracket: emit `[<scope>]` on plugin rows only when `plugin.scope !== marketplace.scope`. Info commands follow this verbatim.
+- MSG-RH-1 reload-hint gate: only state-changing tokens trigger; info commands emit no state-change, so no `/reload to pick up changes` trailer.
+- MSG-SR ladder: info commands emit info severity (no 2nd arg to `ctx.ui.notify`) on success; error severity only on read-time failures (missing marketplace, missing plugin, parse errors).
+- MSG-GR-5: markers/reasons stored without braces or chevrons; renderer composes them.
 
-**Must have (correctness fixes, TR-01 through TR-06):**
-- Sequential-loop-with-rollback (F1/F5): Replace `Promise.all(renames)` with `for...of`
-  + append-only `completedRenames[]` + reverse-walk on throw; extract shared
-  `commitWithRollback` helper into `shared/fs-utils.ts`; use `appendLeakToError` not
-  `ManualRecoveryError` for commit-path leaks
-- Phase-ledger push-before-do (F2): Move `executed.push(phase)` to BEFORE
-  `await phase.do(ctx)`; invoke failing phase's undo as a SEPARATE call site in catch
-  BEFORE `rollbackExecuted(executed, ctx)` -- not by adding the phase to `executed[]`
-  (prevents double-rollback); document ENOENT-tolerant undo contract on `Phase<C>`
-- State-after-physical-commits (F3/F4): For cascade teardown (F3), caller materializes
-  `dropped.*` into a partial state-record filter -- cascade primitive stays read-only on
-  state; for update (F4), split `swapStateRecord` into `markUpdateInProgress`
-  (sets `installable:false`) bracketing phase-3a commits, then `finalizeUpdateRecord` --
-  version bump is all-or-nothing, resource-record update is per-bridge
-- Orphan-tolerance on reinstall (F6): Replace `if (await pathExists(pair.to)) throw`
-  with `removeOrphanIfPresent(pair.to, mode)` that distinguishes owned orphans
-  (state.json claims them + ownership marker) from foreign artifacts (PI-6 guard stays
-  intact for those); extract helper to `shared/fs-utils.ts`
+### 4. Edge Layer (`edge/handlers/{plugin,marketplace}/`, `edge/args-schema.ts`)
 
-**Should have (docs + tests, TR-07/TR-08):**
-- Agents step-1 parallel rm self-healing (F7): Inline comment explaining ENOENT-tolerant
-  idempotency; one behavior-asserting regression test (not implementation-asserting)
-- D-19-01 cache-drop swallow rationale (F8): Inline WHY comment referencing D-19-01
-  probe-buffer retirement; one regression test asserting no module-level
-  `PROBE_FAILURES`-style state
+- Handler factory pattern: `makeXxxHandler(pi)` returns `(args, ctx) => Promise<void>`.
+- Arg parsing via `parseCommandArgs<Spec>` with positional schema + `--scope` flag.
+- On parse failure: `notifyUsageError(ctx, { message, usage: USAGE })`.
+- New handlers: `edge/handlers/marketplace/info.ts`, `edge/handlers/plugin/info.ts`. Schema for plugin info: single `<plugin>@<marketplace>` positional, split via `splitPluginMarketplaceRef` from `plugin/shared.ts` (matches `install`).
 
-**Defer to v1.8+:**
-- WAL-style audit trail / transaction IDs on state.json (out of scope; TR-04 is ordering fix only)
-- Result-type migration (`neverthrow`): worthwhile future investment, wrong scope here
-- `applyPartialUnstageToRecord` extraction: optional dedup helper; defers to implementation team
+### 5. Orchestrator Layer (`orchestrators/{plugin,marketplace}/`)
 
-### Architecture Approach
+- Standard shape: options interface `{ ctx, pi, cwd, scope?, ...args }`; single async function; constructs `NotificationMessage`; calls `notify(ctx, pi, message)` exactly once.
+- Closest analog for marketplace info: `orchestrators/marketplace/list.ts` (read-only state + manifest read).
+- Closest analog for plugin info: `orchestrators/plugin/list.ts` (state + manifest + soft-dep probe).
+- Both new orchestrators are read-only (no `withStateGuard` / `withLockedStateTransaction` needed) -- preserves NFR-5.
 
-No new files required for the load-bearing fixes. All changes are localized to existing
-modules. Two new exports only: `removeOrphanIfPresent` in `shared/fs-utils.ts` (~12 lines)
-for TR-06, and an optional `applyPartialUnstageToRecord` in
-`orchestrators/marketplace/shared.ts` to deduplicate TR-03 between `uninstall.ts` and
-`remove.ts`. The structural constraint shaping build order: TR-04 depends on TR-01 +
-TR-05 bridge rollback being stable, because once update.ts defers the state write to
-after commits, the bridges become the rollback boundary update.ts leans on.
+### 6. Completion Provider (`edge/completions/provider.ts`)
 
-**Modified files:**
-1. `transaction/phase-ledger.ts::runPhases` -- TR-02: one-line push reorder; no type changes
-2. `bridges/agents/stage.ts::commitPreparedAgents` -- TR-01: `Promise.all` → sequential loop + reverse rollback; TR-06: `replacePreparedAgents` orphan guard
-3. `bridges/commands/stage.ts::commitPreparedCommands` -- TR-05: add `renamed[]` tracking + reverse rollback; TR-06: `replacePreparedCommands` orphan guard
-4. `bridges/skills/stage.ts::replacePreparedSkills` -- TR-06: orphan guard (commit path already correct; donor of the pattern)
-5. `orchestrators/plugin/uninstall.ts` -- TR-03: NEW branch materializing `dropped.*` into state filter on `outcome.ok === false`
-6. `orchestrators/marketplace/remove.ts` -- TR-03: same NEW branch
-7. `orchestrators/plugin/update.ts::runThreePhaseUpdate` -- TR-04: structural reorder; split `swapStateRecord` into intent-mark + finalize; largest change in milestone
+- TC-5 pattern (marketplace names): used by `marketplace remove`, `marketplace update`, `marketplace autoupdate`. `marketplace info <TAB>` adopts this -- union of both scopes' marketplace names from `getMarketplaceNamesAcrossScopes()`.
+- TC-6 pattern (`<plugin>@<marketplace>` combos with status-aware filter): used by `install`, `uninstall`, `reinstall`, `update`. `plugin info <TAB>` adopts this with a new mode that includes `available + installed + unavailable` (info is exploratory; show everything).
+- Host-side `@`-precedence (G-MIL-07 finding): pi-tui intercepts `@<TAB>` before reaching the provider for bare `@<mp>` tab completion. Our provider returns the correct candidates for `<plugin>@<TAB>` (post-`@`), but bare `@<TAB>` may still be host-broken. Accept this as out of v1.8 scope (same constraint affects existing commands).
 
-**New exports:**
-1. `shared/fs-utils.ts::removeOrphanIfPresent(target, mode: "file"|"tree")` -- TR-06 shared helper
-2. `orchestrators/marketplace/shared.ts::applyPartialUnstageToRecord` -- TR-03 optional dedup (~12 lines)
+### 7. State and Manifest Read Seams
 
-### Critical Pitfalls
+- `persistence/state-io.ts`: `loadState(locations)` returns `State` typed against `MARKETPLACE_RECORD_SCHEMA` (lines 63-73) and `PLUGIN_INSTALL_RECORD_SCHEMA` (lines 38-55). Source kind, autoupdate, lastUpdatedAt, version, resources, timestamps -- all present.
+- `domain/manifest.ts`: `loadMarketplaceManifest(manifestPath)` returns `MarketplaceManifest` validated against `MARKETPLACE_SCHEMA`. Per-plugin entries carry name/version/description/components/dependencies.
+- `domain/components/plugin.ts`: plugin entry schema with full component arrays.
+- For uninstalled-but-known plugins, the marketplace entry is sufficient for description/dependencies; `plugin.json` is needed for component names. If unreachable (external source not synced), surface `components: not resolved`.
 
-1. **Double-rollback in TR-02 (phase-ledger fix)** -- The over-correction is pushing the
-   failing phase onto `executed[]` before the catch, causing `rollbackExecuted`'s reverse
-   walk AND a separate explicit undo call to both invoke it. Prevention: invoke failing
-   phase's undo as a SEPARATE catch-block call site FIRST, then call
-   `rollbackExecuted(executed, ctx)` for prior phases. `executed` never contains the
-   failing phase. Add a test asserting the exact undo-call sequence.
+### 8. Source Display Format
 
-2. **PUP-6 test trigger erasure in TR-06 (orphan removal)** -- `update.test.ts:744` seeds
-   a FILE at `skillsTargetDir/hello-tool` to force `ENOTDIR`. A TR-06 fix that pre-removes
-   any pre-existing target will `rm` that file; the rename succeeds; the test goes
-   GREEN-for-wrong-reasons. Prevention: orphan detection MUST check state.json ownership
-   (the obstacle file `"obstacle"` text is not in state.json's skills list). After the
-   source fix, verify PUP-6 still REDs; add a synthetic-injection variant to preserve
-   phase-3a aggregation coverage.
+- `domain/source.ts:31-52`: `GitHubSource { kind, owner, repo, ref? }` and `PathSource { kind, path }`. The `ref?` field is populated only when the user originally specified `#<ref>` in the add form. **Render the compact form `github: <owner>/<repo>` when `ref` is undefined; `github: <owner>/<repo>#<ref>` when set.** Matches the user's intent that `#main` is omitted unless explicit.
 
-3. **PI-6 collision guard bypass in TR-06 (replacePrepared* orphan removal)** -- Naively
-   removing any pre-existing target before rename silently enables one plugin to overwrite
-   another's artifact on reinstall. Prevention: the narrow case TR-06 targets is "orphan
-   from our own prior partial install" -- detected by state.json `resources.*` listing the
-   target as ours. Foreign artifacts still throw the existing error. The `stage.test.ts:388`
-   rejection test MUST remain RED after the fix.
+## Watch Out For
 
-4. **Sequential-loop rollback bugs in TR-01/TR-05** -- Three classic mistakes: (a)
-   `completed.reverse()` mutates in place -- use `[...completed].reverse()` per
-   `rollbackReplacementCommon`; (b) rollback renames can also fail -- accumulate into
-   `leaks[]` and `appendLeakToError`, never throw from the rollback loop; (c) the
-   pre-step `Promise.all` rm loop is ENOENT-tolerant and stays parallel -- only the
-   RENAME loop converts to sequential.
-
-5. **State-before-commit partial-failure matrix in TR-04** -- Moving state write to after
-   commits but only writing on "all-success" loses state for bridges that DID succeed.
-   Resources update is per-bridge; version bump is all-or-nothing. The fix must enumerate
-   4-bridge × 2-outcome behavior. Without a retry test seeding `version=OLD,
-   resources.skills=NEW, disk skills=NEW` and re-running update, the fix can silently
-   regress to "state.json never written."
-
-## Implications for Roadmap
-
-Based on research, suggested phase structure (5 build phases):
-
-### Phase 1: Phase-Ledger Undo Gap (TR-02)
-
-**Rationale:** Lowest risk, foundational, most impact per line changed. One-line reorder
-in `phase-ledger.ts` unlocks correct undo behavior for all orchestrators. All subsequent
-fixes depend on the ledger working correctly.
-**Delivers:** Every phase whose `do` throws now gets its own `undo` invoked; the failing
-phase's undo runs first (correct reverse-order semantics).
-**Addresses:** F2 (phase-ledger push-before-do)
-**Avoids:** Double-rollback -- failing phase undo is a SEPARATE catch-block call site
-BEFORE `rollbackExecuted(executed, ctx)`, never via `executed[]` addition.
-**Research flag:** Standard patterns -- `rollbackExecuted` contract fully documented in
-source; no deeper research needed.
-
-### Phase 2: Sequential Commit Loops + Orphan Tolerance (TR-01, TR-05, TR-06)
-
-**Rationale:** TR-01, TR-05, and TR-06 all implement the same sequential-rename-loop-with-reverse
-shape. Grouping enables extracting `commitWithRollback` and `removeOrphanIfPresent` shared
-helpers once, avoiding bridge divergence. TR-06 must land in this phase because its orphan
-guard interacts directly with the renamed-pair tracking added by TR-01/TR-05.
-**Delivers:** Bridge commit paths atomic at rename granularity; reinstall after partial
-commit no longer blocks on orphan targets; PI-6 cross-plugin guard preserved.
-**Addresses:** F1 (agents commit), F5 (commands commit), F6 (replacePrepared* orphan blocking)
-**Avoids:** Rollback mutation bug; ENOENT-in-rollback poison; `ManualRecoveryError` vs
-`appendLeakToError` misuse; PI-6 guard bypass; PUP-6 trigger erasure.
-**Research flag:** Standard patterns -- `rollbackReplacementCommon` is the reference shape;
-extract and adapt.
-
-### Phase 3: Cascade Ghost Record (TR-03)
-
-**Rationale:** After bridge rollback is stable (Phase 2), the orchestrator-side state
-mutation for partial cascade can be implemented correctly. Must be isolated from TR-04
-to allow testing the cascade-pathway fix before the more complex direct-pathway refactor.
-**Delivers:** On partial cascade unstage, callers filter `sRecord.resources.*` by
-`outcome.dropped.*` rather than dropping or preserving the whole record; AG-5
-foreign-content carve-out keeps the row for that cause.
-**Addresses:** F3 (cascadeUnstage ghost record)
-**Avoids:** Cascade primitive mutating state -- only the orchestrator mutates; AG-5 cause
-discrimination test required.
-**Research flag:** Standard patterns -- `dropped.*` accumulation contract already adequate;
-fix is at the caller boundary.
-
-### Phase 4: Update State-Before-Commit Reorder (TR-04)
-
-**Rationale:** Largest structural change in the milestone. Depends on TR-01 + TR-05
-bridge rollback being validated (Phase 2). After TR-03 establishes the partial-success
-state-mutation pattern, TR-04 applies it to the direct-pathway in update.ts.
-**Delivers:** `runThreePhaseUpdate` split into intent-mark (`installable:false`) +
-physical commits (D-03 continue-on-failure preserved) + finalize (per-bridge resource
-update + all-or-nothing version bump); retry after partial failure sees truthful state.
-**Addresses:** F4 (update.ts state-before-commit)
-**Avoids:** "All-success-only state write" trap; resources-vs-version split must be
-explicit; 4-bridge × 2-outcome failure matrix tests; retry test required.
-**Research flag:** Needs careful planning -- 4-bridge failure matrix and retry test are
-non-trivial; ~10-15 test rewrites in `update.test.ts` expected. Planner should draft the
-state-contract table (16 cases) before writing the implementation spec.
-
-### Phase 5: Documentation and Test Closeout (TR-07, TR-08)
-
-**Rationale:** LOW-priority findings; correctness-OK today. Final phase after all
-structural fixes are stable so inline comments reference the final post-fix contracts.
-**Delivers:** Inline ADR comments for self-healing parallel rm and D-19-01 cache-drop
-swallow rationale; two behavior-asserting regression tests.
-**Addresses:** F7 (agents step-1 parallel rm), F8 (D-19-01 cache-drop swallow)
-**Avoids:** Implementation-asserting tests; missing WHY in source.
-**Research flag:** Standard patterns -- no research needed; reference D-19-01 in source.
-
-### Phase Ordering Rationale
-
-- TR-02 first: ledger foundation; all orchestrators run inside `runPhases` and benefit
-  immediately; lowest blast radius for a mistake.
-- TR-01/TR-05/TR-06 together: same sequential-rename-loop-with-reverse shape; extract
-  helpers once; bridges share the pattern and must not diverge.
-- TR-03 before TR-04: cascade-pathway fix establishes the partial-success state-mutation
-  pattern that TR-04's direct-pathway refactor must mirror; lets cascade be tested in
-  isolation first.
-- TR-04 last among structural fixes: most invasive change (split `withStateGuard`,
-  ~10-15 test rewrites); depends on bridge rollback (Phase 2) being validated.
-- TR-07/TR-08 last: docs + tests only; reference final contracts.
-
-### Research Flags
-
-Phases likely needing deeper research during planning:
-- **Phase 4 (TR-04):** 4-bridge × 2-outcome failure matrix has 16 cases; per-bridge vs.
-  all-or-nothing state split needs explicit enumeration before coding. Verify persistence
-  schema allows `installable: false` with `notes` field without breaking `list` rendering.
-
-Phases with standard patterns (skip research-phase):
-- **Phase 1 (TR-02):** One-line reorder; `rollbackExecuted` contract fully documented in source.
-- **Phase 2 (TR-01/TR-05/TR-06):** `rollbackReplacementCommon` is the verified reference shape.
-- **Phase 3 (TR-03):** `dropped.*` accumulation contract already adequate; fix is at caller boundary.
-- **Phase 5 (TR-07/TR-08):** Docs + tests only; D-19-01 reference established.
-
-## Confidence Assessment
-
-| Area | Confidence | Notes |
-|------|------------|-------|
-| Stack | HIGH | npm registry queried 2026-06-02; project source confirmed no new dep needed; all alternatives surveyed and rejected |
-| Features/Patterns | HIGH | All eight patterns sourced from actual source reads of `phase-ledger.ts`, `bridges/*/stage.ts`, `update.ts`, `shared.ts`; `rollbackReplacementCommon` is the verified reference shape |
-| Architecture | HIGH | All touchpoints confirmed from line-level source reads; pre/post-v1.7 data-flow diagrams cross-checked |
-| Pitfalls | HIGH | All five critical pitfalls sourced from actual test files (`update.test.ts:744`, `stage.test.ts:388`) and current buggy code paths |
-
-**Overall confidence:** HIGH
-
-### Gaps to Address
-
-- **TR-04 failure matrix:** 4-bridge × 2-outcome cases must be enumerated in the Phase 4
-  planning doc before implementation. Verify persistence schema allows `installable: false`
-  with `notes` field without breaking `list` rendering.
-- **TR-03 helper extraction:** `applyPartialUnstageToRecord` is optional; Phase 3 planner
-  decides locality vs. deduplication.
-- **TR-01/TR-05 leak shape:** Confirm `appendLeakToError` concat shape handles K rollback
-  failures (not just 1). Flag for Phase 2 planner.
-- **TR-06 ownership marker for skills/commands:** Skills and commands have no per-file
-  ownership marker (only agents have `isOwnedAgentFile`); orphan-detection falls back to
-  state.json membership check only. Document as a design decision in Phase 2 planning.
-
-## Sources
-
-### Primary (HIGH confidence)
-
-- Project source: `extensions/pi-claude-marketplace/transaction/phase-ledger.ts` -- TR-02 fix site; push-after-await bug at line 121; `Phase<C>`, `runPhases`, `rollbackExecuted` exports
-- Project source: `extensions/pi-claude-marketplace/bridges/agents/stage.ts` -- TR-01 fix site (step-2 parallel rename line 343); TR-06 fix site (line 432-434); `rollbackReplacementCommon` reference shape (lines 135-177)
-- Project source: `extensions/pi-claude-marketplace/bridges/commands/stage.ts` -- TR-05 fix site; TR-06 commands variant
-- Project source: `extensions/pi-claude-marketplace/bridges/skills/stage.ts` -- TR-06 skills variant; donor of correct `commitPreparedSkills` pattern
-- Project source: `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts:867-923` -- TR-04 fix site; `swapStateRecord` before phase-3a; continue-on-failure contract
-- Project source: `extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:317-395` -- TR-03 fix; `dropped.*` accumulation; AG-5 foreign-content throw at lines 350-365
-- Project source: `tests/orchestrators/plugin/update.test.ts:744` -- PUP-6 phase-3 failure test; FILE obstacle; ENOTDIR trigger contract
-- Project source: `tests/bridges/skills/stage.test.ts:388-421` -- PI-6 collision rejection test; the test TR-06 is most likely to break
-- npm registry (2026-06-02): `write-file-atomic@8.0.0`, `proper-lockfile@4.1.2`, `neverthrow@8.2.0` -- all confirmed current; no action needed
-- Node.js official docs -- `fs.rename`, `fs.rm({force:true})` semantics; `Promise.allSettled` cascade pattern
-
-### Secondary (MEDIUM confidence)
-
-- Microsoft Azure Compensating Transaction Pattern -- push-before-await invariant for "started → eligible for compensation"
-- Temporal Saga Compensating Transactions -- saga discipline for post-commit best-effort cleanup
-- CWE-367: TOCTOU -- framing for TR-06 orphan-vs-foreign distinction
-- `rollbackReplacementCommon` (`shared/fs-utils.ts:135-177`) -- confirmed as the project's authoritative reference shape for reverse-walk rollback with leaks
+- **Adding `"not added"` to REASONS** must land in ONE atomic commit with: (a) the tuple addition, (b) the catalog states using it, (c) any UAT fixtures referencing it. Per v1.3 retrospective lesson, splitting the change across commits guarantees a RED intermediate.
+- **PI-7 hash version display**: persisted `hash-<12hex>` renders as `v#<7hex>` via existing `formatHashVersionForDisplay`. Info commands reuse this -- no new render path needed.
+- **Description hard-wrap at col 66**: catalog PL-4 (lines 281-297) defines col-66 truncation for `list` (single-line, ellipsis). For `info`, hard-wrap at col 66 with no ellipsis -- this is a NEW renderer helper (`wrapDescription(text, indentCol, wrapCol)`) that the plugin-info renderer calls.
+- **`components: not resolved`** is a render-time marker, not a closed-set member. Decide whether to encode this as a typed field on the plugin info variant (e.g., `componentsResolved: false`) or as a literal string emitted when the orchestrator can't resolve. Type-encoding is safer (compile-time exhaustiveness via discriminated-union).
+- **Marketplace info has NO plugin rows** per user decision. The renderer needs a code path that emits the marketplace header alone followed by 3 indented detail lines (`github:`/`path:`, `last_updated:`, `description:`) -- this is a NEW marketplace-block shape not currently in the catalog. Encode via a new message variant `MarketplaceInfoMessage` or extend `MarketplaceNotificationMessage` with optional info-detail fields. Type-encoding preferred (NFR-7 discriminated-union discipline).
+- **`{not added}` reason placement**: on `marketplace info <missing>`, the failure is at the marketplace level; the byte form is `⊘ <name> [<scope>] (failed) {not added}`. On `--scope` mismatch, the same byte form applies. The closed-set `"not added"` reason serves both surfaces; the same reason will support a future install-error misattribution fix (BACKLOG) where install/uninstall/update/reinstall encounter a missing marketplace and need to surface the precondition failure instead of `{not in manifest}` on a phantom plugin row.
 
 ---
-*Research completed: 2026-06-02*
-*Ready for roadmap: yes*
+
+*Spec-consistency summary written 2026-06-03 for v1.8 roadmap planning.*

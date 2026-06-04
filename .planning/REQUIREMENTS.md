@@ -1,0 +1,70 @@
+# Requirements: pi-claude-marketplace v1.8 Plugin and Marketplace Info Commands
+
+**Defined:** 2026-06-03
+**Core Value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
+
+## Milestone v1.8 Requirements
+
+Two new read-only detail-surface commands that pick up the PRD-deferred `info` subcommand. Both work on uninstalled, installed, and unavailable targets, support `--scope user|project` filtering, render per-scope when no scope is given, read existing local data only (preserves NFR-5), and lock byte-form via the catalog UAT.
+
+### Info Commands
+
+- [ ] **INFO-01**: `/claude:plugin marketplace info <name> [--scope user|project]` command lands with byte-locked render: per-scope marketplace header (`● <name> [<scope>]` with `<autoupdate>` / `<no autoupdate>` marker); `github: <owner>/<repo>` line (with `#<ref>` suffix only when ref was originally specified) OR `path: <abs-path>` line; `last_updated: <ISO8601>` line (github sources only); `description: <text>` line (when `marketplace.json` carries one).
+
+- [ ] **INFO-02**: `/claude:plugin info <plugin>@<marketplace> [--scope user|project]` command lands with byte-locked render: always-marketplace-header form (mirrors install cascade); plugin row with status `(installed)` / `(available)` / `(unavailable)`; description hard-wrapped at col 4 indent / 66-col total width with no ellipsis; component lists by kind sorted alphabetically by kind name (`agents`, `commands`, `mcp`, `skills`); per-kind names sorted alphabetically; `dependencies: <plugin>@<marketplace>, ...` last.
+
+- [ ] **INFO-03**: Per-scope rendering when target exists in both scopes and no `--scope` filter is given. Two marketplace blocks (or two plugin blocks under per-scope marketplace headers) separated by one blank line. Project-scope block renders first, user-scope second (matches existing list-surface ordering per `composeBlock` in `shared/notify.ts`).
+
+### Closed-Set Extension
+
+- [ ] **INFO-04**: `--scope` mismatch fails with `{not added}` reason: a request for a scope where the marketplace is not present (e.g., `marketplace info my-mp --scope user` when only in project, or `plugin info foo@mp --scope user` when `mp` is only in project) renders `⊘ <name> [<scope>] (failed) {not added}` at column 0; severity `error`. New reason `"not added"` added to the `REASONS` tuple in `shared/notify.ts`.
+
+- [ ] **INFO-05**: Plugins whose `plugin.json` lives at an unsynced external source (separate git repo, npm, etc.) render the marker line `components: not resolved` instead of per-kind component lists. Encoded as a typed field on the plugin info variant (NFR-7 discriminated-union discipline) -- the renderer's switch chooses between the resolved-components shape and the unresolved-marker shape.
+
+### Completion
+
+- [ ] **INFO-06**: Argument completion for both commands -- `marketplace info <TAB>` returns the union of marketplace names across both scopes (TC-5 pattern); `plugin info <TAB>` returns `<plugin>@<marketplace>` combos for all known plugins (installed + available + unavailable) across both scopes in a new `"info"` mode of the TC-6 plugin-ref completer.
+
+### Catalog & Tests
+
+- [ ] **INFO-07**: Catalog UAT entries cover all status/scope combinations for both commands. New H2 sections in `docs/output-catalog.md`: `` ## `/claude:plugin marketplace info <name>` `` and `` ## `/claude:plugin info <plugin>@<marketplace>` ``. Each section enumerates: success states (github single-scope, path single-scope, both-scopes for marketplace info; installed, available, unavailable, installed-both-scopes, components-not-resolved for plugin info) and error states (`{not added}` for both, `{not in manifest}` for plugin info). Each fenced byte block paired with a fixture in the `catalog-uat.test.ts` FIXTURES map; byte-equality enforced.
+
+- [ ] **INFO-08**: `STATUS_TOKENS` unchanged (no new statuses needed -- `installed`/`available`/`unavailable`/`failed` cover the surface); `REASONS` extended with the single new entry `"not added"`. Closed-set change lands in ONE atomic commit alongside the catalog state(s) that consume it and the matching UAT fixture(s) -- per the v1.3 retrospective atomic-supersession lesson.
+
+## Out of Scope
+
+Explicitly excluded from v1.8. Documented to prevent scope creep.
+
+| Feature | Reason |
+|---------|--------|
+| Install/uninstall/update/reinstall fix for missing-marketplace error misattribution | Tracked in BACKLOG; defer the orchestrator-level precondition fix to a future milestone. v1.8 lands the `{not added}` reason that the future fix will reuse, no orchestrator changes outside info handlers. |
+| JSON / `--verbose` / `--quiet` output modes | Backlog (PRD §11). v1.8 ships text-only canonical byte form. |
+| Network re-resolution of `plugin.json` for external-source plugins | Preserves NFR-5; surface `components: not resolved` instead of fetching. |
+| Marketplace plugin list (count or names) in `marketplace info` | User decision: `marketplace list` and `plugin list @<mp>` already serve this. Info focuses on marketplace-level metadata only. |
+| Plugin source line in `plugin info` | User decision: the marketplace header carries the relevant source context; per-plugin source would mostly duplicate the marketplace's source for the common case (path-relative-to-marketplace-repo). |
+| Author / keywords / homepage fields from `plugin.json` | Not in current `MARKETPLACE_SCHEMA` or `PLUGIN_ENTRY_SCHEMA`; would require schema widening orthogonal to the info-surface goal. |
+| Bare `@<TAB>` host-side completion fix | G-MIL-07 finding -- host-side `@`-precedence in `@earendil-works/pi-tui` 0.76.0 intercepts before reaching our provider. v1.8 inherits the existing constraint; `<plugin>@<TAB>` (post-`@`) works correctly. |
+
+## Traceability
+
+Which phases cover which requirements. Updated during roadmap creation.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| INFO-01 | TBD | Pending |
+| INFO-02 | TBD | Pending |
+| INFO-03 | TBD | Pending |
+| INFO-04 | TBD | Pending |
+| INFO-05 | TBD | Pending |
+| INFO-06 | TBD | Pending |
+| INFO-07 | TBD | Pending |
+| INFO-08 | TBD | Pending |
+
+**Coverage:**
+- v1.8 requirements: 8 total
+- Mapped to phases: 0 (pending roadmap)
+- Unmapped: 8 (filled by roadmapper)
+
+---
+*Requirements defined: 2026-06-03*
+*Last updated: 2026-06-03 -- initial definition for v1.8 info commands milestone*
