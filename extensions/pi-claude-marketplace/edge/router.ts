@@ -35,6 +35,11 @@ export interface SubcommandHandlers {
   update: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   reinstall: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   list: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
+  // Phase 44 / INFO-02: the top-level `info <plugin>@<marketplace>`
+  // verb. Named `pluginInfo` (NOT `info`) to disambiguate from
+  // `marketplaceInfo`. The router dispatches the `"info"` head to
+  // this slot.
+  pluginInfo: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   import: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   marketplaceAdd: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   marketplaceRemove: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
@@ -57,6 +62,7 @@ export const TOP_LEVEL_SUBCOMMANDS = [
   "reinstall",
   "list",
   "ls",
+  "info",
   "import",
   "marketplace",
 ] as const;
@@ -78,15 +84,16 @@ export const MARKETPLACE_SUBCOMMANDS = [
 ] as const;
 
 export const TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <bootstrap|install|uninstall|update|reinstall|list|ls|import|marketplace> ...\n" +
+  "Usage: /claude:plugin <bootstrap|install|uninstall|update|reinstall|list|ls|info|import|marketplace> ...\n" +
   "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project]\n" +
   "  update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
   "  reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--force]\n" +
   "  list [<marketplace>] [--scope user|project]   (alias: ls)\n" +
+  "  info <plugin>@<marketplace> [--scope user|project]\n" +
   "  import [--scope user|project]\n" +
-  "  marketplace <add|remove|rm|list|ls|update|autoupdate|noautoupdate> ...";
+  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...";
 
 export const MARKETPLACE_USAGE =
   "Usage: /claude:plugin marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
@@ -143,6 +150,8 @@ export async function routeClaudePlugin(
     case "list":
     case "ls":
       return handlers.list(rest, ctx);
+    case "info":
+      return handlers.pluginInfo(rest, ctx);
     case "import":
       return handlers.import(rest, ctx);
     case "marketplace":

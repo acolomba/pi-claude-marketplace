@@ -3072,6 +3072,265 @@ test("Phase 43 / INFO-03 + INFO-01: single-block fan-out (path source, minimal) 
   assert.equal(args.length, 1);
 });
 
+// ===========================================================================
+// Phase 44 / INFO-02 + INFO-03 -- PluginInfoCascadeMessage fan-out variant.
+//
+// Per-status byte tests for the new 5th NotificationMessage arm. The
+// fan-out wrapper carries one or more PluginInfoMessage blocks; the
+// renderer joins per-block bodies with `\n\n` (mirrors Phase 43's
+// MarketplaceInfoCascadeMessage AND the install-cascade
+// composeMarketplaceBlock `\n\n` join). Severity is ALWAYS info (no
+// failure surface on the fan-out wrapper itself -- the orchestrator
+// routes `{not added}` through PluginInfoMessage); reload-hint NEVER
+// fires (info surface, read-only). The single-block case is byte-
+// identical to a bare PluginInfoMessage so the wrapper composes via
+// reuse of `renderPluginInfo` rather than re-implementing the per-block
+// renderer (Phase 42 SC#4 + Phase 43 byte-equality carried forward).
+// ===========================================================================
+
+test("Phase 44 / INFO-02: plugin-info-cascade with empty blocks renders the empty string", () => {
+  // Defensive edge case: the orchestrator MUST NOT construct an empty
+  // fan-out for the user-facing path (it routes to PluginInfoMessage
+  // `{not added}` instead), but the renderer keeps the edge case
+  // deterministic. Empty `blocks` -> `[].map(...).join("\n\n")` -> "".
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "plugin-info-cascade",
+    blocks: [],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args[0], "");
+  assert.equal(args.length, 1);
+});
+
+test("Phase 44 / INFO-02: plugin-info-cascade with a single block byte-equals the bare plugin-info render", () => {
+  // The single-block case is the SAME byte form as the bare
+  // PluginInfoMessage variant -- no extra blank line, no header
+  // decoration. Locks the composition discipline: the wrapper is just a
+  // `renderPluginInfo` map + `\n\n` join.
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "plugin-info-cascade",
+    blocks: [
+      {
+        kind: "plugin-info",
+        marketplaceName: "mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "foo",
+          version: "1.0.0",
+          componentsResolved: true,
+          components: { skills: ["s1"] },
+        },
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(
+    args[0],
+    ["● mp [user] <no autoupdate>", "  ● foo v1.0.0 (installed)", "    skills: s1"].join("\n"),
+  );
+  assert.equal(args.length, 1);
+});
+
+test("Phase 44 / INFO-02 + INFO-03: plugin-info-cascade with two blocks renders project-first then user, joined by one blank line", () => {
+  // The orchestrator iterates project-first per MSG-GR-3 / INFO-03; the
+  // renderer honors caller-supplied order (no internal sort). Lock the
+  // `\n\n` separator + project-first ordering. Each block carries its
+  // own marketplace header (mirrors install-cascade `\n\n` join).
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "plugin-info-cascade",
+    blocks: [
+      {
+        kind: "plugin-info",
+        marketplaceName: "mp",
+        marketplaceScope: "project",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          status: "installed",
+          name: "foo",
+          version: "1.0.0",
+          componentsResolved: true,
+          components: { skills: ["s1"] },
+        },
+      },
+      {
+        kind: "plugin-info",
+        marketplaceName: "mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "foo",
+          version: "2.0.0",
+          componentsResolved: true,
+          components: { agents: ["a1"] },
+        },
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(
+    args[0],
+    [
+      "● mp [project] <autoupdate>",
+      "  ● foo v1.0.0 (installed)",
+      "    skills: s1",
+      "",
+      "● mp [user] <no autoupdate>",
+      "  ● foo v2.0.0 (installed)",
+      "    agents: a1",
+    ].join("\n"),
+  );
+});
+
+test("Phase 44 / INFO-02: plugin-info-cascade severity is always info (no second arg) and no reload-hint", () => {
+  // No failure can be expressed on the fan-out wrapper -- computeSeverity
+  // routes the variant to undefined (info / no 2nd arg). The dispatcher
+  // omits the 2nd arg accordingly. Reload-hint never fires (info surface).
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "plugin-info-cascade",
+    blocks: [
+      {
+        kind: "plugin-info",
+        marketplaceName: "mp",
+        marketplaceScope: "project",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          status: "installed",
+          name: "foo",
+          version: "1.0.0",
+          componentsResolved: true,
+          components: { skills: ["s1"] },
+        },
+      },
+      {
+        kind: "plugin-info",
+        marketplaceName: "mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "foo",
+          version: "2.0.0",
+          componentsResolved: true,
+          components: { agents: ["a1"] },
+        },
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1, "info severity must omit the 2nd arg");
+  assert.ok(
+    !(args[0] as string).includes("/reload"),
+    "info-surface plugin-info-cascade must NOT carry the reload-hint trailer",
+  );
+});
+
+test("Phase 44 / INFO-02: plugin-info-cascade single block installed with resolved components + dependencies renders full INFO-02 happy path", () => {
+  // INFO-02 happy path through the new fan-out wrapper: marketplace
+  // header at column 0; plugin row at 2-space indent (status glyph +
+  // name + version + (status)); description wrapped at col 4 / 66; the
+  // per-kind component lines at 4-space indent in `agents, commands,
+  // mcp, skills` order (COMPONENT_KINDS tuple); the `dependencies:`
+  // line LAST. Severity info; no reload-hint.
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "plugin-info-cascade",
+    blocks: [
+      {
+        kind: "plugin-info",
+        marketplaceName: "official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          status: "installed",
+          name: "commit-commands",
+          version: "1.2.0",
+          description: "Helpful git commit commands for everyday use.",
+          componentsResolved: true,
+          components: {
+            agents: ["review-bot"],
+            commands: ["c1", "c2"],
+            skills: ["commit-summary"],
+          },
+          dependencies: ["helper@utils-mp"],
+        },
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(
+    args[0],
+    [
+      "● official [user] <autoupdate>",
+      "  ● commit-commands v1.2.0 (installed)",
+      "    Helpful git commit commands for everyday use.",
+      "    agents: review-bot",
+      "    commands: c1, c2",
+      "    skills: commit-summary",
+      "    dependencies: helper@utils-mp",
+    ].join("\n"),
+  );
+  assert.equal(args.length, 1);
+});
+
+test("Phase 44 / INFO-05: plugin-info-cascade single block components-not-resolved emits the marker line at col 4", () => {
+  // INFO-05 through the new fan-out wrapper: an external-source plugin
+  // surfaces the marker line `    components: not resolved` at 4-space
+  // indent in place of the per-kind component lists. The orchestrator
+  // deliberately does NOT fetch external sources (NFR-5 preserved).
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "plugin-info-cascade",
+    blocks: [
+      {
+        kind: "plugin-info",
+        marketplaceName: "remote-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "remote-plugin",
+          version: "1.0.0",
+          description: "Remote plugin sourced from an external npm package.",
+          componentsResolved: false,
+        },
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(
+    args[0],
+    [
+      "● remote-mp [user] <no autoupdate>",
+      "  ● remote-plugin v1.0.0 (installed)",
+      "    Remote plugin sourced from an external npm package.",
+      "    components: not resolved",
+    ].join("\n"),
+  );
+  assert.equal(args.length, 1);
+});
+
 test('Phase 42 / Migration Strategy #2: cascade payload WITHOUT `kind` field byte-equals payload WITH `kind: "cascade"`', () => {
   // The Phase 42 dispatcher uses `message.kind ?? \"cascade\"` so v1.0-v1.7
   // call sites that omit `kind` continue to route through the cascade arm

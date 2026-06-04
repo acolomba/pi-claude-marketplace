@@ -94,16 +94,19 @@ async function emptyFixture(): Promise<Fixture> {
 // TC-1 -- top-level subcommand keywords.
 // ---------------------------------------------------------------------------
 
-test("TC-1 :: first positional surfaces top-level keywords (bootstrap/install/uninstall/update/reinstall/list/ls/import/marketplace)", async () => {
+test("TC-1 :: first positional surfaces top-level keywords (bootstrap/install/uninstall/update/reinstall/list/ls/info/import/marketplace)", async () => {
   __resetCacheForTests();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("", f.resolver);
     assert.ok(items !== null);
     const labels = items.map((i) => i.label);
+    // Phase 44 / INFO-02: `info` added to TOP_LEVEL_SUBCOMMANDS for
+    // the new `info <plugin>@<marketplace>` top-level verb.
     assert.deepEqual([...labels].sort(), [
       "bootstrap",
       "import",
+      "info",
       "install",
       "list",
       "ls",
@@ -1112,6 +1115,95 @@ test("TC-6 :: multi-marketplace plugin yields name@ without trailing space", asy
       false,
       "multi-mp plugin must NOT include trailing space",
     );
+  } finally {
+    await f.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Phase 44 / Plan 44-01 / INFO-02 + INFO-06: TC-6 `info` mode --
+// `<plugin>@<marketplace>` token completion across the union of
+// installed + available + unavailable rows from BOTH scopes (no
+// install-state exclusion; scope filter does NOT narrow the candidate
+// set -- the orchestrator handles scope mismatches via the INFO-04
+// `{not added}` row).
+// ---------------------------------------------------------------------------
+
+test("TC-6 / INFO-02 :: info <here> returns union of installed + available + unavailable refs across both scopes", async () => {
+  __resetCacheForTests();
+  const f = await makeFixture({
+    state: {
+      user: { mp: {} },
+      project: { mp2: {} },
+    },
+    manifests: {
+      user: {
+        mp: [
+          { name: "foo", status: "installed" },
+          { name: "bar", status: "available" },
+          { name: "qux", status: "unavailable" },
+        ],
+      },
+      project: { mp2: [{ name: "baz", status: "installed" }] },
+    },
+  });
+  try {
+    const items = await getArgumentCompletions("info ", f.resolver);
+    assert.ok(items !== null);
+    const labels = items.map((i) => i.label);
+    assert.deepEqual([...labels].sort(), ["bar@mp", "baz@mp2", "foo@mp", "qux@mp"]);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("TC-6 / INFO-02 :: info foo@<here> narrows to marketplaces carrying foo", async () => {
+  __resetCacheForTests();
+  const f = await makeFixture({
+    state: { user: { "mp-a": {}, "mp-b": {} }, project: {} },
+    manifests: {
+      user: {
+        "mp-a": [{ name: "foo", status: "available" }],
+        "mp-b": [{ name: "other", status: "available" }],
+      },
+      project: {},
+    },
+  });
+  try {
+    const items = await getArgumentCompletions("info foo@", f.resolver);
+    assert.ok(items !== null);
+    assert.deepEqual(
+      items.map((i) => i.label),
+      ["foo@mp-a"],
+    );
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("TC-6 / INFO-02 :: info --scope project <here> returns the SAME union (scope filter does NOT narrow set)", async () => {
+  __resetCacheForTests();
+  // Marketplace lives in USER scope only; with `--scope project` the
+  // completion still surfaces every known plugin. The orchestrator
+  // handles the mismatch at execution time via the INFO-04
+  // `{not added}` row.
+  const f = await makeFixture({
+    state: { user: { mp: {} }, project: {} },
+    manifests: {
+      user: {
+        mp: [
+          { name: "foo", status: "installed" },
+          { name: "bar", status: "available" },
+        ],
+      },
+      project: {},
+    },
+  });
+  try {
+    const items = await getArgumentCompletions("info --scope project ", f.resolver);
+    assert.ok(items !== null);
+    const labels = items.map((i) => i.label);
+    assert.deepEqual([...labels].sort(), ["bar@mp", "foo@mp"]);
   } finally {
     await f.cleanup();
   }

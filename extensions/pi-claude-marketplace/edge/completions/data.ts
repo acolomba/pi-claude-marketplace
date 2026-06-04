@@ -26,6 +26,10 @@
 //   - mode = "uninstall" -> keep status === "installed".
 //   - mode = "update"    -> keep status === "installed".
 //   - mode = "reinstall" -> keep status === "installed".
+//   - mode = "info"      -> Phase 44 / INFO-02 + INFO-06: union of every
+//                           plugin row (installed + available + unavailable)
+//                           across BOTH scopes; NO install-state exclusion
+//                           (info surfaces all plugins regardless of state).
 
 import { getPluginIndex, ManifestSoftFailError } from "../../shared/completion-cache.ts";
 import { SCOPES } from "../../shared/types.ts";
@@ -34,7 +38,7 @@ import type { PluginIndexRow } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 
-type PluginRefCompletionMode = "install" | "uninstall" | "update" | "reinstall";
+type PluginRefCompletionMode = "install" | "uninstall" | "update" | "reinstall" | "info";
 
 // ---------------------------------------------------------------------------
 // LocationsResolver -- the edge/ -> persistence/ injection seam.
@@ -311,7 +315,7 @@ async function getInstallPluginToMarketplacesMap(
 }
 
 async function getInstalledPluginToMarketplacesMap(
-  _mode: Exclude<PluginRefCompletionMode, "install">,
+  _mode: Exclude<PluginRefCompletionMode, "install" | "info">,
   resolver: LocationsResolver,
   explicitScope: Scope | undefined,
 ): Promise<Map<string, string[]>> {
@@ -339,15 +343,50 @@ async function getInstalledPluginToMarketplacesMap(
 }
 
 /**
+ * Phase 44 / INFO-02 + INFO-06: union of EVERY (plugin, marketplace)
+ * row across both scopes -- NO `row.status` filter. Info surfaces
+ * installed + available + unavailable plugins in one union (the
+ * `info` command is a read-only detail surface that accepts any
+ * known plugin). The orchestrator handles scope mismatches at
+ * execution time via the INFO-04 `{not added}` row, so the
+ * `explicitScope` filter does NOT narrow the candidate set here.
+ */
+async function getInfoPluginToMarketplacesMap(
+  resolver: LocationsResolver,
+): Promise<Map<string, string[]>> {
+  const result = new Map<string, string[]>();
+  for (const scope of SCOPES) {
+    const names = await marketplaceNamesForScope(resolver, scope);
+    for (const mp of names) {
+      const cachePath = await resolver.pluginCachePath(scope, mp);
+      const rows = await getPluginIndex(cachePath, scope, mp, () =>
+        rebuildPluginIndex(resolver, scope, mp),
+      );
+      for (const row of rows) {
+        // NO status filter -- info surfaces every known plugin.
+        addMapping(result, row.name, mp);
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
  * Map plugin name -> [marketplaces] that carry the plugin under the given
  * mode's target-scope rules. CMP-7 makes install completion available-only.
- * Reinstall mode flows through the installed-only path.
+ * Reinstall mode flows through the installed-only path. Phase 44 / INFO-02
+ * adds the `info` mode -- union of every status across both scopes.
  */
 export async function getPluginToMarketplacesMap(
   mode: PluginRefCompletionMode,
   resolver: LocationsResolver,
   options: PluginMapOptions = {},
 ): Promise<Map<string, string[]>> {
+  if (mode === "info") {
+    return getInfoPluginToMarketplacesMap(resolver);
+  }
+
   if (mode === "install") {
     return getInstallPluginToMarketplacesMap(resolver, options.targetScope ?? "user");
   }

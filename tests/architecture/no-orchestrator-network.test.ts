@@ -19,6 +19,14 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
  *   - extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts
  *     MUST NOT import `gitOps` / `platform/git` / `DEFAULT_GIT_OPS` or reference
  *     `refreshGitHubClone` (PRL-07: reinstall uses cached manifests only).
+ *   - extensions/pi-claude-marketplace/orchestrators/plugin/info.ts
+ *     MUST NOT import `gitOps` / `platform/git` / `DEFAULT_GIT_OPS` (Phase 44 /
+ *     INFO-02 + NFR-5: info is a read-only seam over the local state + on-disk
+ *     marketplace manifests; no network).
+ *   - extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts
+ *     MUST NOT import `gitOps` / `platform/git` / `DEFAULT_GIT_OPS` (Phase 43 /
+ *     INFO-01 + NFR-5: marketplace info is read-only against local state +
+ *     marketplace.json; no network).
  *
  * Exempt files (do NOT add):
  *   - orchestrators/plugin/update.ts
@@ -44,6 +52,8 @@ const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
+  "extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts",
 ];
 
 const FORBIDDEN_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> = [

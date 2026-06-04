@@ -66,6 +66,7 @@ import type {
   MarketplaceNotificationMessage,
   MarketplaceStatus,
   NotificationMessage,
+  PluginInfoCascadeMessage,
   PluginInfoMessage,
   PluginInfoRow,
   PluginNotificationMessage,
@@ -852,6 +853,62 @@ type _Assert_NotifFourArms =
           ? never
           : true;
 export const _l9b: _Assert_NotifFourArms = true;
+
+// ============================================================================
+// Phase 44 / INFO-02 / INFO-03: PluginInfoCascadeMessage variant proofs
+//
+// The `NotificationMessage` union now exposes a fifth variant --
+// `PluginInfoCascadeMessage` -- emitted by `getPluginInfo` when no
+// `--scope` is supplied and the requested `<plugin>@<marketplace>` pair
+// is present in BOTH scopes. The fan-out wrapper carries one or more
+// `PluginInfoMessage` blocks in caller order; `notify()` joins their
+// per-block bodies with `\n\n` (mirrors Phase 43's
+// `MarketplaceInfoCascadeMessage` and the install-cascade
+// `composeMarketplaceBlock` join). Three proofs:
+//
+//   - `_l10`  -- the union exposes the new arm via Extract on the kind
+//                 discriminator (non-`never`).
+//   - `_l10a` -- bidirectional shape proof: the variant carries EXACTLY
+//                 `kind: "plugin-info-cascade"` and
+//                 `blocks: readonly PluginInfoMessage[]`.
+//   - `_l10b` -- union arity proof: all FIVE arms (cascade |
+//                 marketplace-info | plugin-info | marketplace-info-cascade
+//                 | plugin-info-cascade) are simultaneously reachable.
+//                 Any future regression that drops one of the five arms
+//                 from the union collapses the conjunction to `never`.
+// ============================================================================
+
+type _Assert_PluginInfoCascadeKind =
+  Extract<NotificationMessage, { kind: "plugin-info-cascade" }> extends never ? never : true;
+export const _l10: _Assert_PluginInfoCascadeKind = true;
+
+interface _PluginInfoCascadeExpected {
+  readonly kind: "plugin-info-cascade";
+  readonly blocks: readonly PluginInfoMessage[];
+}
+type _Assert_PluginInfoCascadeShape = PluginInfoCascadeMessage extends _PluginInfoCascadeExpected
+  ? _PluginInfoCascadeExpected extends PluginInfoCascadeMessage
+    ? true
+    : never
+  : never;
+export const _l10a: _Assert_PluginInfoCascadeShape = true;
+
+// Union arity: prove all FIVE arms are simultaneously reachable. The
+// cascade arm is reached via its structural `marketplaces` field; the
+// four info arms via their REQUIRED `kind` discriminator literals.
+type _Assert_NotifFiveArms =
+  Extract<NotificationMessage, { marketplaces: readonly unknown[] }> extends never
+    ? never
+    : Extract<NotificationMessage, { kind: "marketplace-info" }> extends never
+      ? never
+      : Extract<NotificationMessage, { kind: "plugin-info" }> extends never
+        ? never
+        : Extract<NotificationMessage, { kind: "marketplace-info-cascade" }> extends never
+          ? never
+          : Extract<NotificationMessage, { kind: "plugin-info-cascade" }> extends never
+            ? never
+            : true;
+export const _l10b: _Assert_NotifFiveArms = true;
 
 // ============================================================================
 // Phase 42 drift guards (re-stated explicitly -- the pre-existing length-locks

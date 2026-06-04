@@ -12,12 +12,14 @@ export { assertNoCrossPluginConflicts } from "./shared.ts";
 export type { CrossPluginGeneratedNames } from "./shared.ts";
 
 // Per-subcommand entry points.
+export { getPluginInfo } from "./info.ts";
 export { installPlugin } from "./install.ts";
 export { listPlugins } from "./list.ts";
 export { reinstallPlugin, reinstallPlugins } from "./reinstall.ts";
 export { uninstallPlugin } from "./uninstall.ts";
 export { updatePlugins, updateSinglePlugin } from "./update.ts";
 
+export type { GetPluginInfoOptions } from "./info.ts";
 export type { InstallPluginOptions } from "./install.ts";
 export type { ListPluginsOptions } from "./list.ts";
 export type {

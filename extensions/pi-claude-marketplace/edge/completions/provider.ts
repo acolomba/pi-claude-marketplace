@@ -15,9 +15,13 @@
 //      "list").
 //   3. TC-2 -- head === "marketplace" && tokens.length === 1 -> nested
 //      marketplace subcommand keywords, including aliases (`rm`, `ls`).
-//   4. TC-6 -- head in {install, uninstall, update, reinstall} && tokens.length === 1
+//   4. TC-6 -- head in {install, uninstall, update, reinstall, info} && tokens.length === 1
 //      -> `<plugin>@<marketplace>` via getPluginRefCompletions (status-
-//      aware filter per D-03).
+//      aware filter per D-03). The `info` mode (Phase 44 / INFO-02 +
+//      INFO-06) unions installed + available + unavailable plugin-refs
+//      across both scopes with NO install-state exclusion (the
+//      orchestrator handles scope-mismatch at execution time via the
+//      INFO-04 `{not added}` row).
 //   5. TC-5 -- (head in {list, ls} && tokens.length === 1) ||
 //             (head === "marketplace" && tokens.length === 2 && verb in
 //              {remove, rm, info, update, autoupdate, noautoupdate}) ->
@@ -173,7 +177,7 @@ function marketplaceNameWanted(positionals: readonly string[]): boolean {
   );
 }
 
-type PluginRefMode = "install" | "uninstall" | "update" | "reinstall";
+type PluginRefMode = "install" | "uninstall" | "update" | "reinstall" | "info";
 
 interface PluginRefBranchConfig {
   readonly mode: PluginRefMode;
@@ -204,6 +208,17 @@ function pluginRefBranchConfig(
       return {
         mode: "reinstall",
         allowMarketplaceOnly: true,
+        ...(explicitScope !== undefined && { targetScope: explicitScope }),
+      };
+    case "info":
+      // Phase 44 / INFO-02 + INFO-06: `info` requires both halves of
+      // the `<plugin>@<marketplace>` ref (no bare `@<marketplace>`
+      // form). The `--scope` filter does NOT narrow the completion
+      // candidate set -- the orchestrator handles scope mismatches at
+      // execution time via the INFO-04 `{not added}` row.
+      return {
+        mode: "info",
+        allowMarketplaceOnly: false,
         ...(explicitScope !== undefined && { targetScope: explicitScope }),
       };
     default:

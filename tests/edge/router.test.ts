@@ -12,6 +12,7 @@ import { test } from "node:test";
 import {
   MARKETPLACE_USAGE,
   routeClaudePlugin,
+  TOP_LEVEL_SUBCOMMANDS,
   TOP_LEVEL_USAGE,
   type SubcommandHandlers,
 } from "../../extensions/pi-claude-marketplace/edge/router.ts";
@@ -56,6 +57,7 @@ function makeHandlers(): { handlers: SubcommandHandlers; calls: HandlerCall[] } 
     update: mk("update"),
     reinstall: mk("reinstall"),
     list: mk("list"),
+    pluginInfo: mk("pluginInfo"),
     import: mk("import"),
     marketplaceAdd: mk("marketplaceAdd"),
     marketplaceRemove: mk("marketplaceRemove"),
@@ -164,6 +166,25 @@ test("routeClaudePlugin :: dispatches list to handlers.list", async () => {
   await routeClaudePlugin("list bar", handlers, ctx);
   assert.deepEqual(calls, [{ name: "list", args: "bar" }]);
   assert.deepEqual(notifications, []);
+});
+
+test("routeClaudePlugin :: dispatches info to handlers.pluginInfo (Phase 44 / INFO-02)", async () => {
+  const { ctx, notifications } = makeCtx();
+  const { handlers, calls } = makeHandlers();
+  await routeClaudePlugin("info foo@mp", handlers, ctx);
+  assert.deepEqual(calls, [{ name: "pluginInfo", args: "foo@mp" }]);
+  assert.deepEqual(notifications, []);
+});
+
+test("router :: TOP_LEVEL_SUBCOMMANDS includes `info` (Phase 44 / INFO-02)", () => {
+  assert.ok(
+    (TOP_LEVEL_SUBCOMMANDS as readonly string[]).includes("info"),
+    `TOP_LEVEL_SUBCOMMANDS missing "info" -- got ${TOP_LEVEL_SUBCOMMANDS.join(", ")}`,
+  );
+});
+
+test("router :: TOP_LEVEL_USAGE contains the `info <plugin>@<marketplace>` usage line", () => {
+  assert.match(TOP_LEVEL_USAGE, /info <plugin>@<marketplace> \[--scope user\|project\]/);
 });
 
 test("routeClaudePlugin :: dispatches import to handlers.import", async () => {
