@@ -787,7 +787,11 @@ Plans:
 4. The renderer switch in `notify()` has new arms for both info variants gated by exhaustive `assertNever` defaults; the existing 10-arm plugin status + 7-arm marketplace status surfaces are byte-unchanged for all non-info call sites (Phase 42 produces zero behavior change for any v1.0-v1.7 command).
 5. `npm run check` exits 0; catalog UAT byte-equality remains GREEN; the atomic-supersession commit contains the REASON tuple addition, the new types, the new helper, the new fixture(s) for `--scope` mismatch, and the catalog state(s) -- nothing else.
 
-**Plans:** TBD
+**Plans:** 1 plan
+
+**Wave 1**
+
+- [ ] 42-01-PLAN.md -- Atomic-supersession commit: extend NotificationMessage to a 3-arm discriminated union (CascadeNotificationMessage + MarketplaceInfoMessage + PluginInfoMessage); add `"not added"` to REASONS (length-lock + closed-set proof at 29); add file-private `wrapDescription` helper + renderMarketplaceInfo + renderPluginInfo; rewrite `notify()` dispatcher on `message.kind ?? "cascade"` with assertNever; add first catalog state (`scope-mismatch-not-added`) under new `## /claude:plugin marketplace info <name>` H2 + catalog-uat FIXTURES entry; per-status tests for wrapDescription + new render arms + cascade backward-compat; zero behavior change for any v1.0-v1.7 cascade call site (INFO-04, INFO-08)
 
 ### Phase 43: Marketplace Info Command
 
@@ -868,6 +872,6 @@ Plans:
 | 39. Cascade Ghost Record                                             | v1.7      | 1/1 | Complete   | 2026-06-02 |
 | 40. Update State-Before-Commit Reorder                               | v1.7      | 1/1 | Complete   | 2026-06-02 |
 | 41. Documentation and Test Closeout                                  | v1.7      | 1/1 | Complete   | 2026-06-02 |
-| 42. Type Model & Render Seam Foundations                             | v1.8      | TBD | Not started | -          |
+| 42. Type Model & Render Seam Foundations                             | v1.8      | 1   | Planned     | -          |
 | 43. Marketplace Info Command                                         | v1.8      | TBD | Not started | -          |
 | 44. Plugin Info Command                                              | v1.8      | TBD | Not started | -          |
