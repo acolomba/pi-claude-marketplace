@@ -820,11 +820,84 @@ ______________________________________________________________________
 
 ## `/claude:plugin marketplace info <name>`
 
-Read-only detail surface (Phases 42-43). Renders the marketplace header at column 0 carrying the `<autoupdate>` or `<no autoupdate>` marker, followed by per-attribute lines (`github:` or `path:`; optional `last_updated:` for github sources; optional `description:` when `marketplace.json` carries one). The full INFO-01 catalog state set (github / path / both-scopes / with-description) lands in Phase 43; Phase 42 ships only the INFO-04 `{not added}` failure state below to anchor the new section under the catalog UAT.
+Read-only detail surface (Phases 42-43). Renders the marketplace header at column 0 carrying the `<autoupdate>` or `<no autoupdate>` marker, followed by per-attribute lines (`github:` or `path:`; optional `last_updated:` for github sources; optional `description:` when `marketplace.json` carries one). Phase 43 / INFO-01 + INFO-03 + INFO-04 + INFO-07 lock the full state set below.
+
+Severity routing: every success state is `info` (no second arg to `ctx.ui.notify`); the two `{not added}` failure states route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
+
+### Success -- github source with all optional fields
+
+Triggered by `marketplace info <name> [--scope ...]` against a github-sourced marketplace present in the requested scope, with `autoupdate` enabled, a persisted `lastUpdatedAt` ISO timestamp, and a `marketplace.json` that carries a `description` field. Four-line body: the header (with `<autoupdate>` marker), the `github: <owner>/<repo>[#<ref>]` source line (with `#<ref>` suffix only when the ref was originally specified), the `last_updated:` line (github-only per INFO-01), and the single-attribute `description:` line. Severity `info`; no reload-hint.
+
+<!-- catalog-state: github-single-scope-full -->
+
+```text
+● claude-plugins-official [user] <autoupdate>
+github: anthropics/claude-plugins-official#main
+last_updated: 2026-06-03T00:00:00Z
+description: Official Claude plugin marketplace.
+```
+
+### Success -- github source, minimal (no ref, no lastUpdatedAt, no description)
+
+Triggered by the same command against a github-sourced marketplace whose persisted record carries `autoupdate: false` (or omitted), no ref fragment in the source URL, no `lastUpdatedAt`, and a `marketplace.json` without a `description`. Two-line body: header with `<no autoupdate>` marker (INFO-01 emits BOTH `<autoupdate>` and `<no autoupdate>` markers, unlike the list surface's absence-conveys-off rule), and the `github:` line with NO `#<ref>` suffix. The `last_updated:` line is omitted (no source data); the `description:` line is omitted (no manifest data). Severity `info`.
+
+<!-- catalog-state: github-single-scope-minimal -->
+
+```text
+● community-mp [user] <no autoupdate>
+github: someuser/community-mp
+```
+
+### Success -- path source, minimal
+
+Triggered against a path-sourced marketplace with `autoupdate: false` and no `marketplace.json` description. Two-line body: header with `<no autoupdate>` marker, and the `path: <abs-path>` source line. Path sources NEVER emit a `last_updated:` line (the renderer gates that on `source.sourceKind === "github"` per INFO-01); without a description on the manifest the `description:` line is omitted too. Severity `info`.
+
+<!-- catalog-state: path-single-scope -->
+
+```text
+● local-mp [project] <no autoupdate>
+path: /home/user/marketplaces/local-mp
+```
+
+### Success -- path source with description
+
+Triggered against a path-sourced marketplace whose `marketplace.json` carries a `description` field. The `description:` line is INDEPENDENT of source kind (it appears on both github and path arms when the manifest provides one); the `last_updated:` line still does NOT appear because it is gated on the github-source arm. Three-line body: header with `<autoupdate>` marker, `path:` source line, and the single-attribute `description:` line. Severity `info`.
+
+<!-- catalog-state: path-single-scope-with-description -->
+
+```text
+● dev-mp [user] <autoupdate>
+path: /home/user/src/dev-mp
+description: Local development marketplace; experimental plugins.
+```
+
+### Multi-scope fan-out -- both scopes hold the marketplace name
+
+Triggered by `marketplace info <name>` with NO `--scope` filter when the requested marketplace name is present in BOTH the project scope AND the user scope (Phase 43 / INFO-03). The orchestrator emits a `MarketplaceInfoCascadeMessage` whose `blocks` array carries the per-scope `MarketplaceInfoMessage` payloads in project-first order (matches the existing list-surface row-order policy via MSG-GR-3 / Phase 18's `compareByNameThenScope` project-before-user tie-break). The renderer joins per-block bodies with `\n\n` (one blank line). Each block is byte-identical to what the same payload would produce as a standalone `marketplace-info` render -- the wrapper does not add any per-block decoration. Severity `info`.
+
+<!-- catalog-state: both-scopes-fan-out -->
+
+```text
+● my-mp [project] <autoupdate>
+path: /repo/path/my-mp
+
+● my-mp [user] <no autoupdate>
+github: someuser/my-mp
+```
+
+### Failure -- absent from both scopes
+
+Triggered when `marketplace info <name>` (no `--scope` filter) is invoked against a marketplace name that is NOT present in EITHER scope. The orchestrator emits the Phase 42 INFO-04 `{not added}` `PluginInfoMessage` with `plugin.scope` OMITTED (because the marketplace is in neither scope -- emitting a `[user]` or `[project]` bracket would be misleading). The renderer's bracket short-circuit suppresses the `[scope]` token, leaving the bare `⊘ <name> (failed) {not added}` row at column 0. Distinct from `scope-mismatch-not-added` below: this state has NO scope bracket because the marketplace is in neither scope; the scope-mismatch state DOES have a bracket because the user asked for a specific scope. Severity `error`; no reload-hint.
+
+<!-- catalog-state: absent-from-both -->
+
+```text
+⊘ ghost-mp (failed) {not added}
+```
 
 ### Failure -- `--scope` mismatch (`{not added}`)
 
-Surfaced when `marketplace info <name> --scope <wrong-scope>` is invoked against a marketplace present only in the OTHER scope (e.g., requesting `--scope user` when `my-mp` lives only in `project`). The new `{not added}` REASON (Phase 42 / INFO-04) distinguishes this from a truly-absent marketplace name and uniquely identifies the scope-mismatch surface. The renderer emits a bare plugin row at column 0 (no marketplace header above it -- the marketplace IS the thing that is not added in the requested scope). Severity `error`; no reload-hint (info surfaces are read-only per SNM-33).
+Surfaced when `marketplace info <name> --scope <wrong-scope>` is invoked against a marketplace present only in the OTHER scope (e.g., requesting `--scope user` when `my-mp` lives only in `project`). The new `{not added}` REASON (Phase 42 / INFO-04) distinguishes this from a truly-absent marketplace name and uniquely identifies the scope-mismatch surface. The renderer emits a bare plugin row at column 0 (no marketplace header above it -- the marketplace IS the thing that is not added in the requested scope). The `[user]` bracket is present because the user explicitly asked for a specific scope; the `absent-from-both` state above omits the bracket to avoid misleading the user when the marketplace is in NEITHER scope. Severity `error`; no reload-hint (info surfaces are read-only per SNM-33).
 
 <!-- catalog-state: scope-mismatch-not-added -->
 

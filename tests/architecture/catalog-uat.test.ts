@@ -1253,14 +1253,128 @@ const FIXTURES: FixtureMap = {
   },
 
   // -------------------------------------------------------------------------
-  // /claude:plugin marketplace info -- Phase 42 / INFO-04 / INFO-08 first
-  // catalog state. The `{not added}` --scope mismatch is constructed as a
-  // PluginInfoMessage with status:"failed" + reasons:["not added"] +
-  // componentsResolved:false; the renderer's INFO-04 carve-out emits the
-  // bare plugin row at column 0 (no marketplace header above it). Phase 43
-  // adds the full INFO-01 success-state fixture set under this same key.
+  // /claude:plugin marketplace info -- Phase 42 / INFO-04 / INFO-08
+  // anchored the first catalog state (`scope-mismatch-not-added`), and
+  // Phase 43 / Plan 43-02 / INFO-07 closes full catalog state coverage
+  // for the marketplace info command surface:
+  //
+  //   - Success states:
+  //     * github-single-scope-full       (INFO-01 github + all optionals)
+  //     * github-single-scope-minimal    (INFO-01 github, no ref/lastUpdated/desc)
+  //     * path-single-scope              (INFO-01 path, minimal)
+  //     * path-single-scope-with-description (INFO-01 path + description)
+  //   - Multi-scope fan-out:
+  //     * both-scopes-fan-out            (INFO-03 project-first fan-out)
+  //   - Failure states:
+  //     * absent-from-both               (no [scope] bracket; INFO-04 + D-03)
+  //     * scope-mismatch-not-added       (Phase 42 anchor; PRESERVED byte-identical)
+  //
+  // Severity routing: every success + fan-out state is `info` (omits
+  // `expectedSeverity`); the two `{not added}` failure states route to
+  // `"error"`. The Phase 42 `scope-mismatch-not-added` fixture
+  // (annotation, fence body, payload, severity) is preserved
+  // byte-identical -- Plan 43-02 additions are purely additive.
   // -------------------------------------------------------------------------
   "/claude:plugin marketplace info <name>": {
+    // Phase 43 / Plan 43-02 / INFO-07: full catalog state coverage for marketplace info.
+    "github-single-scope-full": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "marketplace-info",
+        name: "claude-plugins-official",
+        scope: "user",
+        details: { autoupdate: true, lastUpdatedAt: "2026-06-03T00:00:00Z" },
+        source: {
+          sourceKind: "github",
+          owner: "anthropics",
+          repo: "claude-plugins-official",
+          ref: "main",
+        },
+        description: "Official Claude plugin marketplace.",
+      } satisfies NotificationMessage,
+    },
+
+    "github-single-scope-minimal": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "marketplace-info",
+        name: "community-mp",
+        scope: "user",
+        details: { autoupdate: false },
+        source: { sourceKind: "github", owner: "someuser", repo: "community-mp" },
+      } satisfies NotificationMessage,
+    },
+
+    "path-single-scope": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "marketplace-info",
+        name: "local-mp",
+        scope: "project",
+        details: { autoupdate: false },
+        source: { sourceKind: "path", absPath: "/home/user/marketplaces/local-mp" },
+      } satisfies NotificationMessage,
+    },
+
+    "path-single-scope-with-description": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "marketplace-info",
+        name: "dev-mp",
+        scope: "user",
+        details: { autoupdate: true },
+        source: { sourceKind: "path", absPath: "/home/user/src/dev-mp" },
+        description: "Local development marketplace; experimental plugins.",
+      } satisfies NotificationMessage,
+    },
+
+    "both-scopes-fan-out": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "marketplace-info-cascade",
+        blocks: [
+          {
+            kind: "marketplace-info",
+            name: "my-mp",
+            scope: "project",
+            details: { autoupdate: true },
+            source: { sourceKind: "path", absPath: "/repo/path/my-mp" },
+          },
+          {
+            kind: "marketplace-info",
+            name: "my-mp",
+            scope: "user",
+            details: { autoupdate: false },
+            source: { sourceKind: "github", owner: "someuser", repo: "my-mp" },
+          },
+        ],
+      } satisfies NotificationMessage,
+    },
+
+    "absent-from-both": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "ghost-mp",
+        // Unused placeholder per the INFO-04 carve-out (renderer skips
+        // the header on the bare `{not added}` row); supply a default.
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "failed",
+          name: "ghost-mp",
+          // D-03: `plugin.scope` OMITTED so the renderer's bracket
+          // short-circuit emits no `[scope]` token. Absent-from-both
+          // states have no [scope] bracket because the marketplace is
+          // in NEITHER scope -- emitting one would be misleading.
+          reasons: ["not added"],
+          componentsResolved: false,
+        },
+      } satisfies NotificationMessage,
+    },
+
+    // Phase 42 anchor preserved byte-identical. DO NOT modify.
     "scope-mismatch-not-added": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
