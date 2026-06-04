@@ -148,6 +148,9 @@ Two new read-only detail-surface commands (`/claude:plugin marketplace info <nam
 
 ## Phase Details
 
+<details>
+<summary>Shipped milestones -- Phases 15-41 historical details (v1.4 → v1.7)</summary>
+
 ### Phase 15: Type Model & ADR Refresh
 
 **Goal:** The complete v1.4 type model is defined in `shared/notify.ts` with zero runtime impact, and the source-of-truth ADR matches the locked design so all later phases consume one consistent contract.
@@ -765,6 +768,8 @@ Plans:
 **Wave 1**
 
 - [x] 36-01-PLAN.md -- Integration test (auth-e2e.test.ts: 3 tests) + REQUIREMENTS.md AUTH-01..AUTH-10 marked [x]
+
+</details>
 
 ### Phase 42: Type Model & Render Seam Foundations
 
