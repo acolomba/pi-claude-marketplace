@@ -2,26 +2,17 @@
 
 ## [0.4.0] - 2026-06-04
 
-Plugin and marketplace info commands. Two new read-only detail-surface commands that work on uninstalled, installed, and unavailable targets, support `--scope user|project` filtering, render per-scope when no scope is given, and read existing local data only (preserves the no-network invariant for read-only surfaces).
-
-- `/claude:plugin marketplace info <name> [--scope user|project]` -- per-scope marketplace header with `<autoupdate>` / `<no autoupdate>` marker; `github: <owner>/<repo>` (with `#<ref>` only when originally specified) or `path: <abs-path>`; `last_updated: <ISO8601>` for github sources; `description: <text>` when `marketplace.json` carries one.
-- `/claude:plugin info <plugin>@<marketplace> [--scope user|project]` -- always-marketplace-header form; `(installed)` / `(available)` / `(unavailable)` status; description hard-wrapped at col 4 / 66-col width; component lists sorted by kind (`agents`, `commands`, `mcp`, `skills`) then by name; `dependencies: ...` line last.
-- Per-scope fan-out: when target exists in both scopes and no `--scope` is given, project block renders first, user block second, separated by one blank line.
-- New `{not added}` reason for `--scope` mismatches: `⊘ <name> [<scope>] (failed) {not added}` at column 0 with severity `error`.
-- External-source plugins (separate git repo, npm, etc.) render `components: not resolved` instead of attempting a network fetch -- encoded as a typed discriminated-union variant rather than a sentinel string.
-- Argument completion: `marketplace info <TAB>` returns the union of marketplace names; `plugin info <TAB>` returns `<plugin>@<marketplace>` combos across all statuses and scopes.
-- Post-audit hardening from PR review: surface manifest read failures via `narrowProbeError` classification instead of swallowing to `description: undefined`; tighten fan-out `blocks` to a non-empty tuple (`readonly [T, ...T[]]`) so empty fan-outs are compile errors; propagate non-ENOENT readdir errors so a permission-denied component directory cannot silently render as "no components"; align both info orchestrators on the same destructure-and-fail-clean pattern.
+- New Plugin and marketplace info commands. `/claude:plugin marketplace info` and `/claude:plugin info` show detailed information about a given marketplace or plugin.
 
 ## [0.3.2] - 2026-06-02
 
-Transaction resilience hardening. Eight correctness fixes to the saga/two-phase-commit infrastructure that previously produced orphan files, ghost state records, or silently skipped undo on failure paths. No user-visible behavior changes on the happy path; the fixes surface only when something goes wrong.
-
-- Phase-ledger compensation gap: when a phase's `do` throws, `runPhases` now invokes that phase's own `undo` exactly once before reverse-walking previously-executed phases. Previously the failing phase's undo was silently skipped.
-- Bridge commit atomicity: agents and commands bridges now track completed renames during commit and reverse-walk them on throw, so a partial-commit failure no longer leaves orphan files at the target.
-- Orphan tolerance on reinstall: `replacePrepared*` paths now pre-remove targets that state.json confirms are owned orphans from a prior partial install, unblocking reinstall without weakening the PI-6 foreign-content guard. New `removeOrphanIfPresent` helper is kind-strict (file/tree) and ENOENT-tolerant.
-- Cascade ghost-record fix: when partial cascade unstage drops some resources, `uninstall` and `marketplace remove` now filter the state record by what was actually dropped instead of leaving the full record pointing at vanished files. Foreign-content (AG-5) failures preserve the row intact.
-- Update state-write reorder: `runThreePhaseUpdate` now writes state AFTER physical commits, not before. An intent-mark (`installable: false`) brackets phase-3a commits; per-bridge resource updates land for every bridge that succeeded; version bump only on all-success. A second update run on partial-success state converges to the new version cleanly.
-- Documentation and behavior tests for two LOW-priority patterns: agents step-1 ENOENT idempotency (commit retry-safety) and the `availableRowMessage` probe-failure swallow (per D-19-01 -- probe failures during list are diagnostic noise, not actionable errors).
+- Transaction resilience hardening. Eight correctness fixes to the saga/two-phase-commit infrastructure that previously produced orphan files, ghost state records, or silently skipped undo on failure paths. No user-visible behavior changes on the happy path; the fixes surface only when something goes wrong.
+  - Phase-ledger compensation gap: when a phase's `do` throws, `runPhases` now invokes that phase's own `undo` exactly once before reverse-walking previously-executed phases. Previously the failing phase's undo was silently skipped.
+  - Bridge commit atomicity: agents and commands bridges now track completed renames during commit and reverse-walk them on throw, so a partial-commit failure no longer leaves orphan files at the target.
+  - Orphan tolerance on reinstall: `replacePrepared*` paths now pre-remove targets that state.json confirms are owned orphans from a prior partial install, unblocking reinstall without weakening the PI-6 foreign-content guard. New `removeOrphanIfPresent` helper is kind-strict (file/tree) and ENOENT-tolerant.
+  - Cascade ghost-record fix: when partial cascade unstage drops some resources, `uninstall` and `marketplace remove` now filter the state record by what was actually dropped instead of leaving the full record pointing at vanished files. Foreign-content (AG-5) failures preserve the row intact.
+  - Update state-write reorder: `runThreePhaseUpdate` now writes state AFTER physical commits, not before. An intent-mark (`installable: false`) brackets phase-3a commits; per-bridge resource updates land for every bridge that succeeded; version bump only on all-success. A second update run on partial-success state converges to the new version cleanly.
+  - Documentation and behavior tests for two LOW-priority patterns: agents step-1 ENOENT idempotency (commit retry-safety) and the `availableRowMessage` probe-failure swallow (per D-19-01 -- probe failures during list are diagnostic noise, not actionable errors).
 
 ## [0.3.1] - 2026-06-02
 
