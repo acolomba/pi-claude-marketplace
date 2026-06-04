@@ -21,9 +21,11 @@ export { removeMarketplace } from "./remove.ts";
 export { listMarketplaces } from "./list.ts";
 export { updateAllMarketplaces, updateMarketplace } from "./update.ts";
 export { setMarketplaceAutoupdate } from "./autoupdate.ts";
+export { getMarketplaceInfo } from "./info.ts";
 
 export type { AddMarketplaceOptions } from "./add.ts";
 export type { RemoveMarketplaceOptions } from "./remove.ts";
 export type { ListMarketplacesOptions } from "./list.ts";
 export type { UpdateAllMarketplacesOptions, UpdateMarketplaceOptions } from "./update.ts";
 export type { AutoupdateOptions } from "./autoupdate.ts";
+export type { GetMarketplaceInfoOptions } from "./info.ts";

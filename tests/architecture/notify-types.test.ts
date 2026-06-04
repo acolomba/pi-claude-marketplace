@@ -61,6 +61,7 @@ import type {
   CascadeNotificationMessage,
   Dependency,
   MarketplaceDetails,
+  MarketplaceInfoCascadeMessage,
   MarketplaceInfoMessage,
   MarketplaceNotificationMessage,
   MarketplaceStatus,
@@ -794,6 +795,63 @@ type _Assert_RowUnresolvedNoComponents = "components" extends keyof _RowUnresolv
 export const _l8e: _Assert_RowUnresolvedNoComponents = true;
 // @ts-expect-error -- INFO-05: componentsResolved:false arm has NO components field
 export type _NoComponentsOnUnresolved = _RowUnresolved["components"];
+
+// ============================================================================
+// Phase 43 / INFO-03 / SC#1: MarketplaceInfoCascadeMessage variant proofs
+//
+// The `NotificationMessage` union now exposes a fourth variant --
+// `MarketplaceInfoCascadeMessage` -- emitted by `getMarketplaceInfo` when no
+// `--scope` is supplied and the requested marketplace name is present in
+// BOTH scopes. The fan-out wrapper carries one or more
+// `MarketplaceInfoMessage` blocks in caller order; `notify()` joins their
+// per-block bodies with `\n\n`. Three proofs:
+//
+//   - `_l9`  -- the union exposes the new arm via Extract on the kind
+//                discriminator (non-`never`).
+//   - `_l9a` -- bidirectional shape proof: the variant carries EXACTLY
+//                `kind: "marketplace-info-cascade"` and
+//                `blocks: readonly MarketplaceInfoMessage[]`.
+//   - `_l9b` -- union arity proof: the four arms (cascade |
+//                marketplace-info | plugin-info | marketplace-info-cascade)
+//                are simultaneously reachable. Any future regression that
+//                drops one of the four arms from the union (e.g. an
+//                accidental `Omit`) collapses the conjunction to `never`.
+// ============================================================================
+
+type _Assert_CascadeInfoKind =
+  Extract<NotificationMessage, { kind: "marketplace-info-cascade" }> extends never ? never : true;
+export const _l9: _Assert_CascadeInfoKind = true;
+
+interface _MarketplaceInfoCascadeExpected {
+  readonly kind: "marketplace-info-cascade";
+  readonly blocks: readonly MarketplaceInfoMessage[];
+}
+type _Assert_MarketplaceInfoCascadeShape =
+  MarketplaceInfoCascadeMessage extends _MarketplaceInfoCascadeExpected
+    ? _MarketplaceInfoCascadeExpected extends MarketplaceInfoCascadeMessage
+      ? true
+      : never
+    : never;
+export const _l9a: _Assert_MarketplaceInfoCascadeShape = true;
+
+// Union arity: prove all FOUR arms are simultaneously reachable. The
+// cascade arm is reached via its structural `marketplaces` field (its
+// `kind?` is OPTIONAL so Extract on `{ kind: "cascade" }` does not narrow
+// it -- the cascade arm permits absent kind for the v1.0-v1.7 migration
+// path). The three info arms are reached via their REQUIRED `kind`
+// discriminator literals. Any future regression that drops one of the four
+// arms from the union collapses the conjunction to `never`.
+type _Assert_NotifFourArms =
+  Extract<NotificationMessage, { marketplaces: readonly unknown[] }> extends never
+    ? never
+    : Extract<NotificationMessage, { kind: "marketplace-info" }> extends never
+      ? never
+      : Extract<NotificationMessage, { kind: "plugin-info" }> extends never
+        ? never
+        : Extract<NotificationMessage, { kind: "marketplace-info-cascade" }> extends never
+          ? never
+          : true;
+export const _l9b: _Assert_NotifFourArms = true;
 
 // ============================================================================
 // Phase 42 drift guards (re-stated explicitly -- the pre-existing length-locks

@@ -60,6 +60,7 @@ function makeHandlers(): { handlers: SubcommandHandlers; calls: HandlerCall[] } 
     marketplaceAdd: mk("marketplaceAdd"),
     marketplaceRemove: mk("marketplaceRemove"),
     marketplaceList: mk("marketplaceList"),
+    marketplaceInfo: mk("marketplaceInfo"),
     marketplaceUpdate: mk("marketplaceUpdate"),
     marketplaceAutoupdate: mk("marketplaceAutoupdate"),
     marketplaceNoautoupdate: mk("marketplaceNoautoupdate"),

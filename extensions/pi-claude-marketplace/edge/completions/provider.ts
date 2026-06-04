@@ -20,8 +20,13 @@
 //      aware filter per D-03).
 //   5. TC-5 -- (head in {list, ls} && tokens.length === 1) ||
 //             (head === "marketplace" && tokens.length === 2 && verb in
-//              {remove, rm, update, autoupdate, noautoupdate}) ->
-//      marketplace names union across both scopes.
+//              {remove, rm, info, update, autoupdate, noautoupdate}) ->
+//      marketplace names union across both scopes. Phase 43 / INFO-06
+//      adds `info` to the verbs-with-name-arg set so `marketplace info
+//      <TAB>` surfaces the union of marketplace names regardless of any
+//      `--scope` filter (the filter does not narrow the completion
+//      candidate set -- the orchestrator handles scope-mismatch at
+//      execution time via the INFO-04 `{not added}` row).
 //
 // Returns `null` when no completion makes sense at the cursor position --
 // Pi-tui contract; NOT `[]` (06-RESEARCH line 493).
@@ -50,11 +55,14 @@ import type { AutocompleteItem } from "@earendil-works/pi-tui";
  * Verbs (after `marketplace`) that take a marketplace-name positional.
  * `add` and `list` are excluded (`add` takes a source URL; `list` has no
  * positional). `rm` is accepted as the router alias for `remove` and still
- * takes the same marketplace-name positional.
+ * takes the same marketplace-name positional. Phase 43 / INFO-06 adds
+ * `info` so `marketplace info <TAB>` (and `marketplace info --scope user
+ * <TAB>`) surface the TC-5 marketplace-name completion union.
  */
 const MARKETPLACE_VERBS_WITH_NAME_ARG = new Set([
   "remove",
   "rm",
+  "info",
   "update",
   "autoupdate",
   "noautoupdate",

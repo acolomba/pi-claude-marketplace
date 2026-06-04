@@ -39,6 +39,7 @@ export interface SubcommandHandlers {
   marketplaceAdd: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   marketplaceRemove: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   marketplaceList: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
+  marketplaceInfo: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   marketplaceUpdate: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   marketplaceAutoupdate: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   marketplaceNoautoupdate: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
@@ -70,6 +71,7 @@ export const MARKETPLACE_SUBCOMMANDS = [
   "rm",
   "list",
   "ls",
+  "info",
   "update",
   "autoupdate",
   "noautoupdate",
@@ -87,10 +89,11 @@ export const TOP_LEVEL_USAGE =
   "  marketplace <add|remove|rm|list|ls|update|autoupdate|noautoupdate> ...";
 
 export const MARKETPLACE_USAGE =
-  "Usage: /claude:plugin marketplace <add|remove|rm|list|ls|update|autoupdate|noautoupdate> ...\n" +
+  "Usage: /claude:plugin marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
   "  add <source> [--scope user|project]\n" +
   "  remove <name> [--scope user|project]   (alias: rm)\n" +
   "  list [--scope user|project]            (alias: ls)\n" +
+  "  info <name> [--scope user|project]\n" +
   "  update [<name>] [--scope user|project]\n" +
   "  autoupdate [<name>] [--scope user|project]\n" +
   "  noautoupdate [<name>] [--scope user|project]";
@@ -174,6 +177,8 @@ export async function routeMarketplace(
     case "list":
     case "ls":
       return handlers.marketplaceList(rest, ctx);
+    case "info":
+      return handlers.marketplaceInfo(rest, ctx);
     case "update":
       return handlers.marketplaceUpdate(rest, ctx);
     case "autoupdate":

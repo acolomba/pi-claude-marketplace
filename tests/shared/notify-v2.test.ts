@@ -2860,6 +2860,218 @@ test("Phase 42 / INFO-05: renderPluginInfo (componentsResolved:false emits the `
   assert.equal(args.length, 1);
 });
 
+// ===========================================================================
+// Phase 43 / INFO-03 -- MarketplaceInfoCascadeMessage fan-out variant.
+//
+// Per-status byte tests for the new 4th NotificationMessage arm. The
+// fan-out wrapper carries one or more MarketplaceInfoMessage blocks; the
+// renderer joins per-block bodies with `\n\n` (mirrors the cascade
+// composeMarketplaceBlock `\n\n` join). Severity is ALWAYS info (no
+// failure surface on the fan-out wrapper itself -- the orchestrator routes
+// `{not added}` through PluginInfoMessage); reload-hint NEVER fires (info
+// surface, read-only). The single-block case is byte-identical to a bare
+// MarketplaceInfoMessage so the wrapper composes via reuse of
+// `renderMarketplaceInfo` rather than re-implementing the per-block
+// renderer (Phase 42 SC#4 byte-equality carried forward).
+// ===========================================================================
+
+test("Phase 43 / INFO-03: marketplace-info-cascade with empty blocks renders the empty string", () => {
+  // Defensive edge case: the orchestrator MUST NOT construct an empty
+  // fan-out for the user-facing path (it routes to PluginInfoMessage
+  // `{not added}` instead), but the renderer keeps the edge case
+  // deterministic. Empty `blocks` -> `[].map(...).join("\n\n")` -> "".
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "marketplace-info-cascade",
+    blocks: [],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args[0], "");
+  assert.equal(args.length, 1);
+});
+
+test("Phase 43 / INFO-03: marketplace-info-cascade with a single block byte-equals the bare marketplace-info render", () => {
+  // The single-block case is the SAME byte form as the bare
+  // MarketplaceInfoMessage variant -- no extra blank line, no header
+  // decoration. Locks the composition discipline: the wrapper is just a
+  // `renderMarketplaceInfo` map + `\n\n` join.
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "marketplace-info-cascade",
+    blocks: [
+      {
+        kind: "marketplace-info",
+        name: "official",
+        scope: "user",
+        details: { autoupdate: true, lastUpdatedAt: "2026-06-03T00:00:00Z" },
+        source: {
+          sourceKind: "github",
+          owner: "anthropics",
+          repo: "claude-plugins-official",
+          ref: "main",
+        },
+        description: "Official Claude plugin marketplace.",
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(
+    args[0],
+    [
+      "● official [user] <autoupdate>",
+      "github: anthropics/claude-plugins-official#main",
+      "last_updated: 2026-06-03T00:00:00Z",
+      "description: Official Claude plugin marketplace.",
+    ].join("\n"),
+  );
+  assert.equal(args.length, 1);
+});
+
+test("Phase 43 / INFO-03: marketplace-info-cascade with two blocks renders project-first then user, joined by one blank line", () => {
+  // The orchestrator iterates project-first per MSG-GR-3 / INFO-03; the
+  // renderer honors caller-supplied order (no internal sort). Lock the
+  // `\n\n` separator + project-first ordering.
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "marketplace-info-cascade",
+    blocks: [
+      {
+        kind: "marketplace-info",
+        name: "my-mp",
+        scope: "project",
+        details: { autoupdate: true },
+        source: { sourceKind: "path", absPath: "/repo/path/my-mp" },
+      },
+      {
+        kind: "marketplace-info",
+        name: "my-mp",
+        scope: "user",
+        details: { autoupdate: false },
+        source: { sourceKind: "github", owner: "someuser", repo: "my-mp" },
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(
+    args[0],
+    [
+      "● my-mp [project] <autoupdate>",
+      "path: /repo/path/my-mp",
+      "",
+      "● my-mp [user] <no autoupdate>",
+      "github: someuser/my-mp",
+    ].join("\n"),
+  );
+});
+
+test("Phase 43 / INFO-03: marketplace-info-cascade severity is always info (no second arg) and no reload-hint", () => {
+  // No failure can be expressed on the fan-out wrapper -- computeSeverity
+  // routes the variant to undefined (info / no 2nd arg). The dispatcher
+  // omits the 2nd arg accordingly. Reload-hint never fires (info surface).
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "marketplace-info-cascade",
+    blocks: [
+      {
+        kind: "marketplace-info",
+        name: "my-mp",
+        scope: "project",
+        details: { autoupdate: true },
+        source: { sourceKind: "path", absPath: "/repo/path/my-mp" },
+      },
+      {
+        kind: "marketplace-info",
+        name: "my-mp",
+        scope: "user",
+        details: { autoupdate: false },
+        source: { sourceKind: "github", owner: "someuser", repo: "my-mp" },
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1, "info severity must omit the 2nd arg");
+  assert.ok(
+    !(args[0] as string).includes("/reload"),
+    "info-surface marketplace-info-cascade must NOT carry the reload-hint trailer",
+  );
+});
+
+test("Phase 43 / INFO-03 + INFO-01: single-block fan-out (github source, all optional fields) byte form", () => {
+  // INFO-01 full github happy path through the new fan-out wrapper. The
+  // single-block case proves the wrapper does not add any per-block
+  // decoration beyond `renderMarketplaceInfo`.
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "marketplace-info-cascade",
+    blocks: [
+      {
+        kind: "marketplace-info",
+        name: "claude-plugins-official",
+        scope: "user",
+        details: { autoupdate: true, lastUpdatedAt: "2026-05-01T12:34:56Z" },
+        source: {
+          sourceKind: "github",
+          owner: "anthropics",
+          repo: "claude-plugins-official",
+          ref: "main",
+        },
+        description: "The official Claude plugin marketplace.",
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(
+    args[0],
+    [
+      "● claude-plugins-official [user] <autoupdate>",
+      "github: anthropics/claude-plugins-official#main",
+      "last_updated: 2026-05-01T12:34:56Z",
+      "description: The official Claude plugin marketplace.",
+    ].join("\n"),
+  );
+  assert.equal(args.length, 1);
+});
+
+test("Phase 43 / INFO-03 + INFO-01: single-block fan-out (path source, minimal) byte form omits last_updated and description", () => {
+  // INFO-01 path-source arm: NO `last_updated:` (gated on github source);
+  // NO `description:` when undefined. The fan-out wrapper preserves the
+  // bare two-line body verbatim.
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "marketplace-info-cascade",
+    blocks: [
+      {
+        kind: "marketplace-info",
+        name: "local-mp",
+        scope: "project",
+        details: { autoupdate: false },
+        source: { sourceKind: "path", absPath: "/home/user/projects/local-mp" },
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(
+    args[0],
+    ["● local-mp [project] <no autoupdate>", "path: /home/user/projects/local-mp"].join("\n"),
+  );
+  assert.equal(args.length, 1);
+});
+
 test('Phase 42 / Migration Strategy #2: cascade payload WITHOUT `kind` field byte-equals payload WITH `kind: "cascade"`', () => {
   // The Phase 42 dispatcher uses `message.kind ?? \"cascade\"` so v1.0-v1.7
   // call sites that omit `kind` continue to route through the cascade arm

@@ -41,6 +41,7 @@ import {
 import { getArgumentCompletions } from "./completions/provider.ts";
 import { makeAddHandler } from "./handlers/marketplace/add.ts";
 import { makeAutoupdateHandler } from "./handlers/marketplace/autoupdate.ts";
+import { makeMarketplaceInfoHandler } from "./handlers/marketplace/info.ts";
 import { makeMarketplaceListHandler } from "./handlers/marketplace/list.ts";
 import { makeRemoveHandler } from "./handlers/marketplace/remove.ts";
 import { makeMarketplaceUpdateHandler } from "./handlers/marketplace/update.ts";
@@ -84,6 +85,7 @@ export function registerClaudePluginCommand(pi: ExtensionAPI, deps: EdgeDeps): v
     marketplaceAdd: makeAddHandler(pi, deps),
     marketplaceRemove: makeRemoveHandler(pi),
     marketplaceList: makeMarketplaceListHandler(pi),
+    marketplaceInfo: makeMarketplaceInfoHandler(pi),
     marketplaceUpdate: makeMarketplaceUpdateHandler(pi, deps),
     marketplaceAutoupdate: makeAutoupdateHandler(pi, true),
     marketplaceNoautoupdate: makeAutoupdateHandler(pi, false),

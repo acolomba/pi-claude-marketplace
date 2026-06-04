@@ -749,10 +749,30 @@ interface PluginInfoComponentsUnresolved {
 }
 
 /**
+ * Phase 43 / INFO-03: fan-out wrapper used by `getMarketplaceInfo` when no
+ * `--scope` is given and the requested marketplace name exists in BOTH
+ * scopes. The wrapper carries one or more `MarketplaceInfoMessage` blocks
+ * in caller order; `renderMarketplaceInfoCascade` joins their per-block
+ * bodies with `\n\n` (mirrors the cascade `composeMarketplaceBlock` join
+ * semantics). Iteration order is the orchestrator's responsibility
+ * (project-first per MSG-GR-3 / INFO-03). Reload-hint NEVER fires;
+ * severity is always info (no failure can be expressed on a fan-out
+ * payload -- the orchestrator routes the INFO-04 `{not added}` failure
+ * surface through the sibling `PluginInfoMessage` variant). Empty `blocks`
+ * renders to the empty string -- the orchestrator MUST NOT construct an
+ * empty fan-out for the user-facing path, but the renderer keeps the edge
+ * case deterministic.
+ */
+export interface MarketplaceInfoCascadeMessage {
+  readonly kind: "marketplace-info-cascade";
+  readonly blocks: readonly MarketplaceInfoMessage[];
+}
+
+/**
  * Top-level discriminated-union envelope consumed by `notify(ctx, pi,
  * NotificationMessage)` (SNM-01). Discriminated on the optional `kind`
  * field: the cascade arm omits `kind` (or sets it to `"cascade"`) per the
- * Phase-42 migration strategy; the two info-surface arms set `kind`
+ * Phase-42 migration strategy; the three info-surface arms set `kind`
  * explicitly. The `notify()` dispatcher narrows via
  * `message.kind ?? "cascade"` with an `assertNever` default arm so every
  * future variant addition becomes a compile-time error at the switch
@@ -761,7 +781,8 @@ interface PluginInfoComponentsUnresolved {
 export type NotificationMessage =
   | CascadeNotificationMessage
   | MarketplaceInfoMessage
-  | PluginInfoMessage;
+  | PluginInfoMessage
+  | MarketplaceInfoCascadeMessage;
 
 // ---------------------------------------------------------------------------
 // Grammar rendering helpers -- file-private.
@@ -1379,13 +1400,16 @@ const RELOAD_HINT_TRAILER = "/reload to pick up changes";
  * second arg, never part of the body.
  */
 function computeSeverity(message: NotificationMessage): "warning" | "error" | undefined {
-  // Phase 42 / INFO-04 / SC#2: info-surface kinds take precedence over the
-  // cascade severity ladder. `marketplace-info` payloads carry no failure
-  // state and route to info (undefined 2nd arg); `plugin-info` payloads
-  // route to `"error"` ONLY when the embedded plugin row is `(failed)` (the
-  // `{not added}` --scope mismatch row is the canonical example), else
-  // info. The cascade arm executes the existing first-match ladder below.
-  if (message.kind === "marketplace-info") {
+  // Phase 42 / INFO-04 / SC#2 + Phase 43 / INFO-03: info-surface kinds take
+  // precedence over the cascade severity ladder. `marketplace-info` payloads
+  // carry no failure state and route to info (undefined 2nd arg);
+  // `plugin-info` payloads route to `"error"` ONLY when the embedded plugin
+  // row is `(failed)` (the `{not added}` --scope mismatch row is the
+  // canonical example), else info; `marketplace-info-cascade` payloads route
+  // to info unconditionally -- no failure can be expressed on the fan-out
+  // wrapper (the orchestrator routes `{not added}` through `PluginInfoMessage`
+  // instead). The cascade arm executes the existing first-match ladder below.
+  if (message.kind === "marketplace-info" || message.kind === "marketplace-info-cascade") {
     return undefined;
   }
 
@@ -1515,14 +1539,18 @@ function operationPhrase(count: number, kind: "plugin" | "marketplace"): string 
  * crashing.
  */
 function buildSummaryLine(message: NotificationMessage, severity: "error" | "warning"): string {
-  // Phase 42 / RESEARCH A6: info-surface kinds NEVER carry a Phase-29 summary
-  // line (the operation-count semantics of "N plugin operations failed" do
-  // not apply to read-only query results -- the `notify()` dispatcher only
-  // invokes `buildSummaryLine` from the cascade arm). This defensive
-  // short-circuit returns the empty string so a future mistaken call still
-  // produces benign output instead of accessing `message.marketplaces` on a
-  // narrowed-away variant.
-  if (message.kind === "marketplace-info" || message.kind === "plugin-info") {
+  // Phase 42 / RESEARCH A6 + Phase 43 / INFO-03: info-surface kinds NEVER
+  // carry a Phase-29 summary line (the operation-count semantics of
+  // "N plugin operations failed" do not apply to read-only query results --
+  // the `notify()` dispatcher only invokes `buildSummaryLine` from the
+  // cascade arm). This defensive short-circuit returns the empty string so a
+  // future mistaken call still produces benign output instead of accessing
+  // `message.marketplaces` on a narrowed-away variant.
+  if (
+    message.kind === "marketplace-info" ||
+    message.kind === "plugin-info" ||
+    message.kind === "marketplace-info-cascade"
+  ) {
     return "";
   }
 
@@ -1571,12 +1599,19 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
  * the `uninstalled` token while an empty remove (header-only) does not.
  */
 function shouldEmitReloadHint(message: NotificationMessage): boolean {
-  // Phase 42 / RESEARCH "Don't Hand-Roll: Reload-hint trailer on info messages":
-  // info-surface kinds NEVER trigger the reload-hint trailer. The info
-  // commands (`marketplace info`, `plugin info`) are read-only surfaces that
-  // do not change a Pi-visible resource; the trailer would mislead the user
-  // into running `/reload` for no reason.
-  if (message.kind === "marketplace-info" || message.kind === "plugin-info") {
+  // Phase 42 / RESEARCH "Don't Hand-Roll: Reload-hint trailer on info messages"
+  // + Phase 43 / INFO-03: info-surface kinds NEVER trigger the reload-hint
+  // trailer. The info commands (`marketplace info`, `plugin info`) are
+  // read-only surfaces that do not change a Pi-visible resource; the trailer
+  // would mislead the user into running `/reload` for no reason. The
+  // fan-out wrapper inherits this short-circuit -- a fan-out of N
+  // marketplace-info blocks is N read-only queries composed; it remains
+  // structurally read-only.
+  if (
+    message.kind === "marketplace-info" ||
+    message.kind === "plugin-info" ||
+    message.kind === "marketplace-info-cascade"
+  ) {
     return false;
   }
 
@@ -1779,6 +1814,32 @@ function renderMarketplaceInfo(message: MarketplaceInfoMessage, _probe: SoftDepS
 }
 
 /**
+ * Phase 43 / INFO-03: render a `MarketplaceInfoCascadeMessage` to its
+ * single-string body by composing `renderMarketplaceInfo` over each block
+ * in caller order and joining the per-block bodies with `\n\n` (one blank
+ * line between blocks). Mirrors the cascade `composeMarketplaceBlock` join
+ * semantics so the fan-out byte form matches the existing project-first /
+ * user-second list-surface convention.
+ *
+ * The renderer does NOT sort blocks -- caller-supplied order is honored
+ * end-to-end (`getMarketplaceInfo` is responsible for the project-first
+ * iteration per MSG-GR-3 / INFO-03). An empty `blocks` array returns the
+ * empty string (the orchestrator MUST NOT construct an empty fan-out for
+ * the user-facing path, but the renderer keeps the edge case
+ * deterministic).
+ *
+ * `probe` is unused on info surfaces but accepted for signature parity
+ * with `renderMarketplaceInfo` (and forwarded to each per-block render).
+ * File-private; sole caller is `notify()` dispatcher.
+ */
+function renderMarketplaceInfoCascade(
+  message: MarketplaceInfoCascadeMessage,
+  probe: SoftDepStatus,
+): string {
+  return message.blocks.map((b) => renderMarketplaceInfo(b, probe)).join("\n\n");
+}
+
+/**
  * File-private: map a `PluginInfoRow` status literal to its rendering
  * glyph. `installed` -> `●`, `available` -> `○`,
  * `unavailable | failed` -> `⊘`. Extracted from `renderPluginInfo` to
@@ -1975,6 +2036,48 @@ function composeMarketplaceBlock(mp: MarketplaceNotificationMessage, probe: Soft
 }
 
 /**
+ * File-private dispatcher for the info-surface arms of `notify()`.
+ * Centralizes the three-arm body computation + the severity-aware
+ * `ctx.ui.notify(body[, severity])` call so the public `notify()`
+ * dispatcher stays under the project's cognitive-complexity budget.
+ * Returns the computed body+severity so `notify()`'s arms can return
+ * after this helper executes the single sanctioned ctx.ui.notify call
+ * (IL-2 preserved -- one call per `notify()` invocation; the dispatch
+ * arms are mutually-exclusive). Phase 42 / SC#1 + Phase 43 / INFO-03.
+ */
+function dispatchInfoMessage(
+  ctx: ExtensionContext,
+  message: MarketplaceInfoMessage | PluginInfoMessage | MarketplaceInfoCascadeMessage,
+  probe: SoftDepStatus,
+): void {
+  // Body composition per variant. The three info renderers share the
+  // same `(message, probe) => string` shape; severity is computed off
+  // the discriminator via the shared `computeSeverity` ladder.
+  let body: string;
+  switch (message.kind) {
+    case "marketplace-info":
+      body = renderMarketplaceInfo(message, probe);
+      break;
+    case "plugin-info":
+      body = renderPluginInfo(message, probe);
+      break;
+    case "marketplace-info-cascade":
+      body = renderMarketplaceInfoCascade(message, probe);
+      break;
+    default:
+      assertNever(message);
+      return;
+  }
+
+  const severity = computeSeverity(message);
+  if (severity === undefined) {
+    ctx.ui.notify(body);
+  } else {
+    ctx.ui.notify(body, severity);
+  }
+}
+
+/**
  * Structured-notification entry point. Sole public surface for state-change
  * notifications (SNM-12). Severity, reload-hint, and soft-dep probe are
  * computed from contents at notify time (SNM-14, SNM-15, SNM-16).
@@ -1990,64 +2093,38 @@ export function notify(
   // -- info messages never emit soft-dep markers per RESEARCH Anti-Patterns).
   const probe = softDepStatus(pi);
 
-  // Phase 42 / SC#1: dispatch on the discriminated-union `kind` field via
-  // an if/else-if ladder. TypeScript narrows `message` on each arm via the
-  // `kind` discriminator literal; the `kind ?? "cascade"` coalescing in a
-  // switch discriminant does NOT narrow under TS strict (the runtime
-  // expression is correct, but TS can't follow it back to the source
-  // variant). After the two info-kind arms below the explicit
-  // `assertNever(message)` exhaustiveness gate (further down) narrows
-  // `message` to `CascadeNotificationMessage` and forces any future 4th
-  // variant addition to compile-error here (RESEARCH Pitfall 3 / NFR-7).
-  if (message.kind === "marketplace-info") {
-    // Phase 42 / INFO-01: info-surface render. NO reload-hint (read-only
-    // surface; `shouldEmitReloadHint` short-circuits false). NO summary
-    // line (info messages never carry one per RESEARCH A6 / "Don't
-    // Hand-Roll: Summary line on info messages"). Severity computed via
-    // `computeSeverity`'s info-kind arms: `marketplace-info` is always
-    // info severity (no failure can be expressed on a marketplace-info
-    // message itself; failures use plugin-info per INFO-04).
-    const body = renderMarketplaceInfo(message, probe);
-    const severity = computeSeverity(message);
-    if (severity === undefined) {
-      ctx.ui.notify(body);
-    } else {
-      ctx.ui.notify(body, severity);
-    }
-
-    return;
-  }
-
-  if (message.kind === "plugin-info") {
-    // Phase 42 / INFO-02 / INFO-04: info-surface render. Severity is
-    // `"error"` when the embedded plugin row is `(failed)` (the
-    // `{not added}` --scope mismatch row is the canonical case), else
-    // info. NO reload-hint, NO summary line (same rationale as
-    // `marketplace-info` arm above).
-    const body = renderPluginInfo(message, probe);
-    const severity = computeSeverity(message);
-    if (severity === undefined) {
-      ctx.ui.notify(body);
-    } else {
-      ctx.ui.notify(body, severity);
-    }
-
+  // Phase 42 / SC#1 + Phase 43 / INFO-03: dispatch info-surface kinds
+  // through `dispatchInfoMessage` (extracted helper) so the cascade arm
+  // below stays under the cognitive-complexity budget. The helper performs
+  // exactly ONE `ctx.ui.notify` call per invocation (IL-2). NO reload-hint
+  // and NO summary line are composed for any info kind (the helper does
+  // not invoke `shouldEmitReloadHint` or `buildSummaryLine` -- both
+  // short-circuit on info kinds anyway, but skipping them here keeps the
+  // dispatcher narrow). After this branch, TypeScript narrows `message`
+  // to `CascadeNotificationMessage` via the exhaustiveness switch below.
+  if (
+    message.kind === "marketplace-info" ||
+    message.kind === "plugin-info" ||
+    message.kind === "marketplace-info-cascade"
+  ) {
+    dispatchInfoMessage(ctx, message, probe);
     return;
   }
 
   // Exhaustiveness gate (RESEARCH Pitfall 3 / NFR-7 -- the load-bearing
-  // discipline). Today's NotificationMessage union has 3 arms
-  // (cascade | marketplace-info | plugin-info); the two info arms returned
-  // above, so the only legal residual `message.kind` values are `undefined`
-  // (v1.0-v1.7 migration-strategy #2 path) or the explicit literal
-  // `"cascade"`. We switch on `message.kind` so that any future 4th `kind`
-  // literal (e.g. `"foo-info"`) added to the union WITHOUT extending this
-  // dispatcher compile-errors at the `assertNever(message)` default arm:
-  // TS would reach the default with `message` narrowed to the new variant
-  // (NOT `never`) and reject the call with TS2345 -- forcing the
-  // contributor to add a matching arm above. This is the canonical
-  // exhaustiveness pattern already used by `renderPluginRow`,
-  // `renderMpHeader`, and `renderPluginInfo` further up in this file.
+  // discipline). Today's NotificationMessage union has 4 arms
+  // (cascade | marketplace-info | plugin-info | marketplace-info-cascade);
+  // the three info arms returned above, so the only legal residual
+  // `message.kind` values are `undefined` (v1.0-v1.7 migration-strategy #2
+  // path) or the explicit literal `"cascade"`. We switch on `message.kind`
+  // so that any future 5th `kind` literal (e.g. `"foo-info"`) added to the
+  // union WITHOUT extending this dispatcher compile-errors at the
+  // `assertNever(message)` default arm: TS would reach the default with
+  // `message` narrowed to the new variant (NOT `never`) and reject the call
+  // with TS2345 -- forcing the contributor to add a matching arm above.
+  // This is the canonical exhaustiveness pattern already used by
+  // `renderPluginRow`, `renderMpHeader`, and `renderPluginInfo` further up
+  // in this file.
   switch (message.kind) {
     case undefined:
     case "cascade":
