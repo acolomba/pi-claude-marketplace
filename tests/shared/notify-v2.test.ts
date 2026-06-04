@@ -2639,6 +2639,36 @@ test("Phase 42 / wrapDescription: whitespace collapsed (tabs, newlines, double s
   assert.deepEqual(tail, ["    hello world foo", "    components: not resolved"]);
 });
 
+test("Phase 42 / WR-05 / wrapDescription: whitespace-only description reaches wrapDescription and returns no body lines", () => {
+  // WR-05: the renderer's short-circuit at `description.length > 0` only
+  // catches the empty-string case. A whitespace-only string (e.g. "   ")
+  // has length > 0, so wrapDescription IS called -- it splits on /\s+/,
+  // filters empty tokens, ends up with `words.length === 0`, and returns
+  // []. This locks the wrapDescription empty-token-filter + empty-return
+  // branch via end-to-end render: the body collapses to just the
+  // marketplace header + plugin row + the components-not-resolved marker
+  // (no description block).
+  const tail = pluginInfoDescriptionBlock("   ");
+  assert.deepEqual(tail, ["    components: not resolved"]);
+});
+
+test("Phase 42 / WR-05 / wrapDescription: two words whose `current.length + 1 + word.length === wrapCol` stay on one line (boundary-equality)", () => {
+  // WR-05: the greedy accumulator's boundary predicate is
+  // `current.length + 1 + word.length <= wrapCol`. Exercise the equality
+  // (<=) branch with two words whose joined length is EXACTLY 66 chars.
+  // Compose: word A is 32 chars + " " (1) + word B 33 chars = 66 chars.
+  // Both must end up on the same line (the predicate <= holds with =).
+  const a = "a".repeat(32);
+  const b = "b".repeat(33);
+  assert.equal(
+    a.length + 1 + b.length,
+    66,
+    "fixture precondition: joined width must be exactly 66",
+  );
+  const tail = pluginInfoDescriptionBlock(`${a} ${b}`);
+  assert.deepEqual(tail, [`    ${a} ${b}`, "    components: not resolved"]);
+});
+
 test("Phase 42 / INFO-04: {not added} row renders as bare column-0 plugin row with error severity", () => {
   // The INFO-04 carve-out: a plugin-info payload whose plugin row is
   // status:"failed" + reasons:["not added"] renders ONLY the bare plugin
@@ -2703,9 +2733,12 @@ test("Phase 42 / INFO-01: renderMarketplaceInfo (github source + ref + lastUpdat
     kind: "marketplace-info",
     name: "official",
     scope: "user",
+    // Phase 42 / WR-04: timestamp lives ONLY on `details.lastUpdatedAt`
+    // (single source of truth -- the parallel top-level `lastUpdated?`
+    // field was removed). Renderer reads it from `details` on the
+    // github-source arm.
     details: { autoupdate: true, lastUpdatedAt: "2026-05-01T12:34:56Z" },
     source: { sourceKind: "github", owner: "acolombo", repo: "official", ref: "main" },
-    lastUpdated: "2026-05-01T12:34:56Z",
     description: "The official Claude plugin marketplace.",
   };
   notify(ctx as never, pi as never, msg);

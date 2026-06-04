@@ -622,17 +622,20 @@ export interface CascadeNotificationMessage {
  * Phase 42 / INFO-01 / INFO-04: top-level info-surface variant emitted by
  * the (Phase 43) `/claude:plugin marketplace info <name>` command. Carries
  * the marketplace identifier (`name`, `scope`), the persisted
- * `MarketplaceDetails` for the `<autoupdate>` / `<no autoupdate>` marker,
- * the source-kind detail (`github: <owner>/<repo>[#<ref>]` vs
- * `path: <abs-path>`), and optional `lastUpdated` (ISO8601; github sources
- * only per INFO-01) + `description` (marketplace.json description, optional)
- * lines.
+ * `MarketplaceDetails` for the `<autoupdate>` / `<no autoupdate>` marker
+ * AND for the `last_updated:` ISO8601 line (read from
+ * `details.lastUpdatedAt` -- single source of truth; Phase 42 / WR-04
+ * removed a parallel top-level `lastUpdated?` field that duplicated the
+ * same datum), the source-kind detail (`github: <owner>/<repo>[#<ref>]`
+ * vs `path: <abs-path>`), and optional `description` (marketplace.json
+ * description, optional) line. The `last_updated:` line renders only on
+ * the github-source arm (INFO-01).
  *
  * Phase 42's only catalog state under this variant is the INFO-04 `{not
  * added}` `--scope` mismatch row (which is emitted via the sibling
  * `PluginInfoMessage` per INFO-04's byte form -- see that interface). The
- * Phase 43 catalog will exercise the github + path + lastUpdated +
- * description rendering paths.
+ * Phase 43 catalog will exercise the github + path +
+ * details.lastUpdatedAt + description rendering paths.
  */
 export interface MarketplaceInfoMessage {
   readonly kind: "marketplace-info";
@@ -647,7 +650,6 @@ export interface MarketplaceInfoMessage {
         readonly ref?: string;
       }
     | { readonly sourceKind: "path"; readonly absPath: string };
-  readonly lastUpdated?: string;
   readonly description?: string;
 }
 
@@ -1748,8 +1750,14 @@ function renderMarketplaceInfo(message: MarketplaceInfoMessage, _probe: SoftDepS
       const refSuffix = message.source.ref !== undefined ? `#${message.source.ref}` : "";
       lines.push(`github: ${message.source.owner}/${message.source.repo}${refSuffix}`);
 
-      if (message.lastUpdated !== undefined) {
-        lines.push(`last_updated: ${message.lastUpdated}`);
+      // Phase 42 / WR-04: read the timestamp from the persisted
+      // `MarketplaceDetails.lastUpdatedAt` rather than a duplicate
+      // top-level `lastUpdated` field. The `details` record already carries
+      // this value through state-io; a parallel top-level field would mean
+      // two sources of truth that callers have to keep in sync. Github-
+      // source gate is enforced on the renderer side (INFO-01).
+      if (message.details.lastUpdatedAt !== undefined) {
+        lines.push(`last_updated: ${message.details.lastUpdatedAt}`);
       }
 
       break;
@@ -1771,16 +1779,91 @@ function renderMarketplaceInfo(message: MarketplaceInfoMessage, _probe: SoftDepS
 }
 
 /**
+ * File-private: map a `PluginInfoRow` status literal to its rendering
+ * glyph. `installed` -> `●`, `available` -> `○`,
+ * `unavailable | failed` -> `⊘`. Extracted from `renderPluginInfo` to
+ * keep that function's cognitive complexity under the project budget.
+ */
+function pluginInfoStatusGlyph(status: PluginInfoRow["status"]): string {
+  // Phase 42 / WR-02: exhaustive switch + assertNever mirrors the cascade
+  // `renderPluginRow` discipline. If the inline status union in
+  // `PluginInfoRowBase` ever grows a 5th member, the default arm becomes
+  // a compile-time error here (TS2345 at the assertNever call) -- forcing
+  // the contributor to add a matching glyph mapping rather than silently
+  // defaulting to the uninstallable glyph.
+  switch (status) {
+    case "installed":
+      return ICON_INSTALLED;
+    case "available":
+      return ICON_AVAILABLE;
+    case "unavailable":
+    case "failed":
+      // Both use the prohibited-symbol glyph.
+      return ICON_UNINSTALLABLE;
+    default:
+      assertNever(status);
+      return "";
+  }
+}
+
+// Phase 42 / WR-03: derive the tuple's element type from the interface
+// so the two declarations cannot drift. The tuple is sized exactly
+// (4 entries) so adding a 5th key to `PluginInfoComponentsResolved.components`
+// without also extending this tuple breaks the typecheck here -- TS will
+// reject the literal `["agents", "commands", "mcp", "skills"]` because
+// its `ComponentKind` member type would no longer cover every keyof the
+// interface. Without the explicit tuple length, the renderer would
+// silently omit the new kind from the output. The four kinds (agents,
+// commands, mcp, skills) are rendered in this alphabetical order by
+// `appendResolvedComponentLines` below.
+type ComponentKind = keyof PluginInfoComponentsResolved["components"];
+const COMPONENT_KINDS: readonly [ComponentKind, ComponentKind, ComponentKind, ComponentKind] = [
+  "agents",
+  "commands",
+  "mcp",
+  "skills",
+];
+
+/**
+ * File-private: append the per-kind component lines + optional dependencies
+ * line for a resolved `PluginInfoRow`. Per-kind order is alphabetical
+ * (`agents`, `commands`, `mcp`, `skills`); within each kind, names render
+ * in the caller-supplied order (RESEARCH Pitfall 5: the orchestrator
+ * pre-sorts; the renderer does NOT). Extracted from `renderPluginInfo`
+ * to keep that function's cognitive complexity under budget.
+ */
+function appendResolvedComponentLines(
+  lines: string[],
+  components: PluginInfoComponentsResolved["components"],
+  dependencies: readonly string[] | undefined,
+): void {
+  for (const kind of COMPONENT_KINDS) {
+    const names = components[kind];
+    if (names !== undefined && names.length > 0) {
+      lines.push(`    ${kind}: ${names.join(", ")}`);
+    }
+  }
+
+  if (dependencies !== undefined && dependencies.length > 0) {
+    lines.push(`    dependencies: ${dependencies.join(", ")}`);
+  }
+}
+
+/**
  * Phase 42 / INFO-02 / INFO-04 / INFO-05: render a `PluginInfoMessage` to
  * its single-string body.
  *
  * INFO-04 CARVE-OUT (`{not added}`): when the embedded plugin row has
- * `status === "failed"` AND `reasons` includes `"not added"`, the marketplace
- * being queried is not present in the requested scope (there is no real
- * marketplace to head), so the renderer emits ONLY the bare plugin row at
- * column 0: `⊘ <name> [<scope>] (failed) {not added}`. No marketplace
- * header line precedes the row (INFO-04 byte form). This is the canonical
- * `--scope` mismatch surface.
+ * `status === "failed"` AND `reasons` is EXACTLY `["not added"]` (sole
+ * reason, per Phase 42 / WR-01), the marketplace being queried is not
+ * present in the requested scope (there is no real marketplace to head),
+ * so the renderer emits ONLY the bare plugin row at column 0:
+ * `⊘ <name> [<scope>] (failed) {not added}`. No marketplace header line
+ * precedes the row (INFO-04 byte form). This is the canonical `--scope`
+ * mismatch surface. Any `failed` row whose reasons contain `"not added"`
+ * AS WELL AS other reasons routes through the standard header form (the
+ * sole-reason guard surfaces the additional failure context instead of
+ * silently hiding it).
  *
  * INFO-02 STANDARD PATH: every other plugin-info row renders the
  * always-marketplace-header form (mirrors the install cascade):
@@ -1805,62 +1888,22 @@ function renderMarketplaceInfo(message: MarketplaceInfoMessage, _probe: SoftDepS
  * `probe` accepted for signature parity with `composeMarketplaceBlock` but
  * unused -- see `composeReasons` calls below.
  */
-/**
- * File-private: map a `PluginInfoRow` status literal to its rendering
- * glyph. `installed` -> `●`, `available` -> `○`,
- * `unavailable | failed` -> `⊘`. Extracted from `renderPluginInfo` to
- * keep that function's cognitive complexity under the project budget.
- */
-function pluginInfoStatusGlyph(status: PluginInfoRow["status"]): string {
-  if (status === "installed") {
-    return ICON_INSTALLED;
-  }
-
-  if (status === "available") {
-    return ICON_AVAILABLE;
-  }
-
-  // `unavailable | failed` -- both use the prohibited-symbol glyph
-  // (mirrors the cascade `renderPluginRow` discipline).
-  return ICON_UNINSTALLABLE;
-}
-
-/**
- * File-private: append the per-kind component lines + optional dependencies
- * line for a resolved `PluginInfoRow`. Per-kind order is alphabetical
- * (`agents`, `commands`, `mcp`, `skills`); within each kind, names render
- * in the caller-supplied order (RESEARCH Pitfall 5: the orchestrator
- * pre-sorts; the renderer does NOT). Extracted from `renderPluginInfo`
- * to keep that function's cognitive complexity under budget.
- */
-const COMPONENT_KINDS: readonly ("agents" | "commands" | "mcp" | "skills")[] = [
-  "agents",
-  "commands",
-  "mcp",
-  "skills",
-];
-function appendResolvedComponentLines(
-  lines: string[],
-  components: PluginInfoComponentsResolved["components"],
-  dependencies: readonly string[] | undefined,
-): void {
-  for (const kind of COMPONENT_KINDS) {
-    const names = components[kind];
-    if (names !== undefined && names.length > 0) {
-      lines.push(`    ${kind}: ${names.join(", ")}`);
-    }
-  }
-
-  if (dependencies !== undefined && dependencies.length > 0) {
-    lines.push(`    dependencies: ${dependencies.join(", ")}`);
-  }
-}
-
 function renderPluginInfo(message: PluginInfoMessage, probe: SoftDepStatus): string {
   const plugin = message.plugin;
 
-  // INFO-04 carve-out: bare row at column 0 -- no marketplace header.
-  if (plugin.status === "failed" && plugin.reasons?.includes("not added")) {
+  // INFO-04 carve-out: bare row at column 0 -- no marketplace header. The
+  // predicate demands `"not added"` be the SOLE reason on the row (Phase 42
+  // / WR-01): if a future caller bug constructs e.g.
+  // `reasons: ["not added", "permission denied"]`, the additional failure
+  // reason and the marketplace context would be silently suppressed by the
+  // bare-row carve-out. Requiring length === 1 keeps the carve-out scoped
+  // to the catalog-state semantics (the `--scope` mismatch row IS the
+  // message; any other reason mix routes through the standard header form).
+  if (
+    plugin.status === "failed" &&
+    plugin.reasons?.length === 1 &&
+    plugin.reasons[0] === "not added"
+  ) {
     return joinTokens([
       ICON_UNINSTALLABLE,
       plugin.name,

@@ -700,7 +700,10 @@ interface _MarketplaceInfoExpected {
         readonly ref?: string;
       }
     | { readonly sourceKind: "path"; readonly absPath: string };
-  readonly lastUpdated?: string;
+  // Phase 42 / WR-04: no parallel top-level `lastUpdated?` field. The ISO
+  // timestamp lives ONLY on `details.lastUpdatedAt` (single source of truth
+  // mirroring persistence/state-io.ts); the renderer reads it from there
+  // on the github-source arm.
   readonly description?: string;
 }
 type _Assert_MarketplaceInfoShape = MarketplaceInfoMessage extends _MarketplaceInfoExpected
