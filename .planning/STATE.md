@@ -1,10 +1,11 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.8
-milestone_name: Plugin and Marketplace Info Commands
-status: Awaiting next milestone
-last_updated: "2026-06-04T09:23:35.422Z"
-last_activity: 2026-06-04 -- Milestone v1.8 completed and archived
+milestone_name: milestone closes.
+status: "PR #36 open for review"
+stopped_at: v1.8 roadmap created
+last_updated: "2026-06-04T11:26:38.351Z"
+last_activity: "2026-06-04 -- Milestone v1.8 PR #36 opened"
 progress:
   total_phases: 3
   completed_phases: 0
@@ -25,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-05-30)
 
 Phase: Milestone v1.8 complete
 Plan: --
-Status: Awaiting next milestone
-Last activity: 2026-06-04 -- Milestone v1.8 completed and archived
+Status: PR #36 open for review
+Last activity: 2026-06-04 -- Milestone v1.8 PR #36 opened
 
 ## Performance Metrics
 
