@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.8
 milestone_name: Plugin and Marketplace Info Commands
-status: planning
-last_updated: "2026-06-03T00:00:00.000Z"
-last_activity: 2026-06-03
+status: Awaiting next milestone
+last_updated: "2026-06-04T09:23:35.422Z"
+last_activity: 2026-06-04 -- Milestone v1.8 completed and archived
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 0
+  total_plans: 5
   completed_plans: 0
   percent: 0
 ---
@@ -23,10 +23,10 @@ See: .planning/PROJECT.md (updated 2026-05-30)
 
 ## Current Position
 
-Phase: 42 (planned, not started)
+Phase: Milestone v1.8 complete
 Plan: --
-Status: Roadmap created -- ready for /gsd-plan-phase 42
-Last activity: 2026-06-03 -- v1.8 roadmap created (Phases 42-44, 8/8 INFO requirements mapped)
+Status: Awaiting next milestone
+Last activity: 2026-06-04 -- Milestone v1.8 completed and archived
 
 ## Performance Metrics
 
@@ -219,4 +219,4 @@ Resume File: .planning/ROADMAP.md (Phase 42 next)
 
 ## Operator Next Steps
 
-- Start v1.8 Phase 42 with /gsd-plan-phase 42
+- Start the next milestone with /gsd-new-milestone

@@ -1,5 +1,15 @@
 # Milestones: pi-claude-marketplace
 
+## v1.8 Plugin and Marketplace Info Commands (Shipped: 2026-06-04)
+
+**Phases completed:** 3 phases, 5 plans, 0 tasks
+
+**Key accomplishments:**
+
+- (none recorded)
+
+---
+
 ## v1.7 Transaction Resilience Hardening (Shipped: 2026-06-02)
 
 **Phases completed:** 5 phases, 5 plans, 9 tasks
