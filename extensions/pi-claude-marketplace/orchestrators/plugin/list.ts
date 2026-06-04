@@ -59,6 +59,10 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
+import {
+  narrowProbeError as sharedNarrowProbeError,
+  narrowResolverNotes as sharedNarrowResolverNotes,
+} from "../../shared/probe-classifiers.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
@@ -259,94 +263,18 @@ function installedRowMessage(
 }
 
 /**
- * Narrow the resolver `notes` array to closed-set REASONS members. The
- * manifest field carve-out (MSG-GR-4) passes `hooks` verbatim and maps the
- * manifest-field detection token `lspServers` to the emitted Reason `lsp`;
- * any other unsupported-source note falls through to
- * `unsupported source`. Empty notes -> empty reasons array (the row is
- * `(unavailable)` without an explicit reason; uncommon path).
- */
-function narrowResolverNotes(
-  notes: readonly string[],
-): readonly ("hooks" | "lsp" | "unsupported source")[] {
-  const out: ("hooks" | "lsp" | "unsupported source")[] = [];
-  const seen = new Set<string>();
-  for (const note of notes) {
-    // Scan the note for known manifest-field carve-outs in order.
-    if (note.includes("hooks") && !seen.has("hooks")) {
-      out.push("hooks");
-      seen.add("hooks");
-      continue;
-    }
-
-    // DETECT on the camelCase manifest-field token the resolver writes into
-    // the note (`contains lspServers`); EMIT the closed-set Reason `lsp`.
-    if (note.includes("lspServers") && !seen.has("lsp")) {
-      out.push("lsp");
-      seen.add("lsp");
-      continue;
-    }
-
-    if (!seen.has("unsupported source")) {
-      out.push("unsupported source");
-      seen.add("unsupported source");
-    }
-  }
-
-  return out;
-}
-
-/**
- * Classify a thrown `resolveStrict` failure to a closed-set `ListReason`.
+ * Local wrapper that preserves the per-row probe-failure naming at this
+ * call site. Delegates to the shared classifier so the body cannot
+ * drift from `marketplace/info.ts` and `plugin/info.ts`.
  *
- * Errno-bearing Node FS errors map to the matching closed Reason
- * (`EACCES` -> `permission denied`; `ENOENT` -> `source missing`;
- * `EIO`/other IO -> `unreadable`). `SyntaxError` (thrown by JSON.parse
- * inside the resolver / manifest read path) maps to `unparseable`. Any
- * other thrown shape falls through to `unreadable`, which is the closed
- * Reason that means "we could not read enough of the source to decide".
- *
- * This replaces the previous behavior of substring-matching every
- * caught error through `narrowResolverNotes` -- which only recognises
- * `hooks` / `lspServers` and silently degraded EVERY OTHER throw to
- * `{unsupported source}`, hiding real failure causes from the user.
+ * Distinct from `narrowListFailReason` below: this helper classifies
+ * per-row resolver probe failures (`unreadable` means "could not read
+ * the plugin source"); the other classifies orchestrator-level list
+ * failures (`unreadable` means "could not load state.json or walk the
+ * marketplace records"). Same underlying ladder, two semantic names.
  */
 function narrowProbeError(err: unknown): ListReason {
-  return narrowErrnoLikeError(err);
-}
-
-/**
- * WR-03 shared core: errno-first + SyntaxError + permissive fallback
- * classifier. Both `narrowProbeError` (per-row resolver probe failures)
- * and `narrowListFailReason` (orchestrator-level list failures) share
- * this implementation -- the classifier ladder for a Node FS / JSON
- * throw is the same regardless of which surface caught it. The two
- * named wrappers exist for documentation (different callers, different
- * semantic meaning of "unreadable") and to provide stable test seams
- * (`__test_narrowProbeError` / `__test_narrowListFailReason`).
- *
- * Keeping the function bodies distinct would trip
- * `sonarjs/no-identical-functions`; collapsing the two named functions
- * would lose the semantic distinction documented at the call sites.
- * The shared-core indirection threads the needle.
- */
-function narrowErrnoLikeError(err: unknown): ListReason {
-  if (err instanceof SyntaxError) {
-    return "unparseable";
-  }
-
-  if (err instanceof Error) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === "EACCES" || code === "EPERM") {
-      return "permission denied";
-    }
-
-    if (code === "ENOENT" || code === "ENOTDIR") {
-      return "source missing";
-    }
-  }
-
-  return "unreadable";
+  return sharedNarrowProbeError(err);
 }
 
 /**
@@ -391,7 +319,7 @@ async function availableRowMessage(
     return {
       status: "unavailable",
       name: manifestEntry.name,
-      reasons: narrowResolverNotes(resolved.notes),
+      reasons: sharedNarrowResolverNotes(resolved.notes),
       ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
       ...descriptionField,
     };
@@ -861,7 +789,7 @@ function sortPluginsInBlock(
  * loadManifest / cross-scope walk throws).
  */
 function narrowListFailReason(err: unknown): ListReason {
-  return narrowErrnoLikeError(err);
+  return sharedNarrowProbeError(err);
 }
 
 /**

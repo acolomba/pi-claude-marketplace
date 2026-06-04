@@ -14,6 +14,7 @@ import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { notify } from "../../shared/notify.ts";
+import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -32,37 +33,6 @@ export interface GetMarketplaceInfoOptions {
 }
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
-
-/**
- * Probe-failure classifier mirroring
- * `orchestrators/plugin/info.ts::narrowProbeError` and
- * `orchestrators/plugin/list.ts::narrowProbeError`. The three copies MUST
- * stay in lockstep -- read-only surfaces over the same persistence layer
- * must surface the same closed-set Reason for the same underlying failure.
- * Lives here (not imported from `plugin/`) because `shared/` is the only
- * sanctioned cross-orchestrator import surface; duplicating is the
- * project-sanctioned alternative to a cross-package import.
- */
-function narrowProbeError(
-  err: unknown,
-): "permission denied" | "source missing" | "unparseable" | "unreadable" {
-  if (err instanceof SyntaxError) {
-    return "unparseable";
-  }
-
-  if (err instanceof Error) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === "EACCES" || code === "EPERM") {
-      return "permission denied";
-    }
-
-    if (code === "ENOENT" || code === "ENOTDIR") {
-      return "source missing";
-    }
-  }
-
-  return "unreadable";
-}
 
 /**
  * Project a single persisted marketplace record into a

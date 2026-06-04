@@ -22,6 +22,7 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { assertNever } from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
+import { narrowProbeError, narrowResolverNotes } from "../../shared/probe-classifiers.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
@@ -49,76 +50,6 @@ export interface GetPluginInfoOptions {
 }
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
-
-/**
- * Narrow resolver `notes` strings to closed-set REASONS members. Mirror
- * of `orchestrators/plugin/list.ts:narrowResolverNotes` -- the two read-
- * only surfaces must surface the same closed-set Reason for the same
- * underlying resolver note. `hooks` passes verbatim; `lspServers` maps
- * to the emitted Reason `lsp`; everything else falls through to
- * `unsupported source`. Empty notes -> empty reasons array.
- */
-function narrowResolverNotes(
-  notes: readonly string[],
-): readonly ("hooks" | "lsp" | "unsupported source")[] {
-  const out: ("hooks" | "lsp" | "unsupported source")[] = [];
-  const seen = new Set<string>();
-  for (const note of notes) {
-    if (note.includes("hooks") && !seen.has("hooks")) {
-      out.push("hooks");
-      seen.add("hooks");
-      continue;
-    }
-
-    if (note.includes("lspServers") && !seen.has("lsp")) {
-      out.push("lsp");
-      seen.add("lsp");
-      continue;
-    }
-
-    if (!seen.has("unsupported source")) {
-      out.push("unsupported source");
-      seen.add("unsupported source");
-    }
-  }
-
-  return out;
-}
-
-/**
- * Probe-failure classifier mirroring
- * `orchestrators/plugin/list.ts::narrowProbeError` and
- * `orchestrators/marketplace/info.ts::narrowProbeError`. The three
- * read-only surfaces must surface the same closed-set Reason for the
- * same underlying failure. Lives here (not imported) because `shared/`
- * is the only sanctioned cross-orchestrator import surface; the three
- * copies MUST stay in lockstep.
- *
- *   - `SyntaxError`           -> `unparseable`
- *   - `EACCES` / `EPERM`      -> `permission denied`
- *   - `ENOENT` / `ENOTDIR`    -> `source missing`
- *   - any other thrown shape  -> `unreadable` (permissive fallback)
- */
-function narrowProbeError(
-  err: unknown,
-): "permission denied" | "source missing" | "unparseable" | "unreadable" {
-  if (err instanceof SyntaxError) {
-    return "unparseable";
-  }
-
-  if (err instanceof Error) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === "EACCES" || code === "EPERM") {
-      return "permission denied";
-    }
-
-    if (code === "ENOENT" || code === "ENOTDIR") {
-      return "source missing";
-    }
-  }
-
-  return "unreadable";
-}
 
 /**
  * A `"path"` source (relative to the marketplace root) is locally
@@ -275,7 +206,7 @@ async function composeResolvedComponents(
     "commands",
   );
   const skills = await discoverComponentNames(pluginRoot, resolved.componentPaths.skills, "skills");
-  const mcp = [...Object.keys(resolved.mcpServers)].sort((a, b) =>
+  const mcp = Object.keys(resolved.mcpServers).sort((a, b) =>
     a.localeCompare(b, undefined, { sensitivity: "base" }),
   );
 
@@ -670,8 +601,7 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   notify(opts.ctx, opts.pi, message);
 }
 
-// Test-only re-export -- the classifier MUST stay in lockstep with
-// `orchestrators/plugin/list.ts`'s equivalent and
-// `orchestrators/marketplace/info.ts`'s equivalent. Mirrors the
-// `__test_narrowProbeError` pattern in `list.ts`.
+// Test-only re-export of the shared classifier so callers exercising
+// this orchestrator's behavior can verify the closed-set ladder without
+// reaching into `shared/probe-classifiers.ts` directly.
 export { narrowProbeError as __test_narrowProbeError };

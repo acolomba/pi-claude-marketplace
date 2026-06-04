@@ -1800,7 +1800,7 @@ function renderMarketplaceInfo(message: MarketplaceInfoMessage, _probe: SoftDepS
 
   switch (message.source.sourceKind) {
     case "github": {
-      const refSuffix = message.source.ref !== undefined ? `#${message.source.ref}` : "";
+      const refSuffix = message.source.ref === undefined ? "" : `#${message.source.ref}`;
       lines.push(`github: ${message.source.owner}/${message.source.repo}${refSuffix}`);
 
       // Phase 42 / WR-04: read the timestamp from the persisted
@@ -1993,7 +1993,7 @@ function renderPluginInfo(message: PluginInfoMessage, probe: SoftDepStatus): str
     return joinTokens([
       ICON_UNINSTALLABLE,
       plugin.name,
-      plugin.scope !== undefined ? `[${plugin.scope}]` : "",
+      plugin.scope === undefined ? "" : `[${plugin.scope}]`,
       renderVersion(plugin.version),
       "(failed)",
       composeReasons(plugin.reasons, false, false, probe),
