@@ -9,27 +9,27 @@ Two new read-only detail-surface commands that pick up the PRD-deferred `info` s
 
 ### Info Commands
 
-- [ ] **INFO-01**: `/claude:plugin marketplace info <name> [--scope user|project]` command lands with byte-locked render: per-scope marketplace header (`● <name> [<scope>]` with `<autoupdate>` / `<no autoupdate>` marker); `github: <owner>/<repo>` line (with `#<ref>` suffix only when ref was originally specified) OR `path: <abs-path>` line; `last_updated: <ISO8601>` line (github sources only); `description: <text>` line (when `marketplace.json` carries one).
+- [x] **INFO-01**: `/claude:plugin marketplace info <name> [--scope user|project]` command lands with byte-locked render: per-scope marketplace header (`● <name> [<scope>]` with `<autoupdate>` / `<no autoupdate>` marker); `github: <owner>/<repo>` line (with `#<ref>` suffix only when ref was originally specified) OR `path: <abs-path>` line; `last_updated: <ISO8601>` line (github sources only); `description: <text>` line (when `marketplace.json` carries one).
 
-- [ ] **INFO-02**: `/claude:plugin info <plugin>@<marketplace> [--scope user|project]` command lands with byte-locked render: always-marketplace-header form (mirrors install cascade); plugin row with status `(installed)` / `(available)` / `(unavailable)`; description hard-wrapped at col 4 indent / 66-col total width with no ellipsis; component lists by kind sorted alphabetically by kind name (`agents`, `commands`, `mcp`, `skills`); per-kind names sorted alphabetically; `dependencies: <plugin>@<marketplace>, ...` last.
+- [x] **INFO-02**: `/claude:plugin info <plugin>@<marketplace> [--scope user|project]` command lands with byte-locked render: always-marketplace-header form (mirrors install cascade); plugin row with status `(installed)` / `(available)` / `(unavailable)`; description hard-wrapped at col 4 indent / 66-col total width with no ellipsis; component lists by kind sorted alphabetically by kind name (`agents`, `commands`, `mcp`, `skills`); per-kind names sorted alphabetically; `dependencies: <plugin>@<marketplace>, ...` last.
 
-- [ ] **INFO-03**: Per-scope rendering when target exists in both scopes and no `--scope` filter is given. Two marketplace blocks (or two plugin blocks under per-scope marketplace headers) separated by one blank line. Project-scope block renders first, user-scope second (matches existing list-surface ordering per `composeBlock` in `shared/notify.ts`).
+- [x] **INFO-03**: Per-scope rendering when target exists in both scopes and no `--scope` filter is given. Two marketplace blocks (or two plugin blocks under per-scope marketplace headers) separated by one blank line. Project-scope block renders first, user-scope second (matches existing list-surface ordering per `composeBlock` in `shared/notify.ts`).
 
 ### Closed-Set Extension
 
-- [ ] **INFO-04**: `--scope` mismatch fails with `{not added}` reason: a request for a scope where the marketplace is not present (e.g., `marketplace info my-mp --scope user` when only in project, or `plugin info foo@mp --scope user` when `mp` is only in project) renders `⊘ <name> [<scope>] (failed) {not added}` at column 0; severity `error`. New reason `"not added"` added to the `REASONS` tuple in `shared/notify.ts`.
+- [x] **INFO-04**: `--scope` mismatch fails with `{not added}` reason: a request for a scope where the marketplace is not present (e.g., `marketplace info my-mp --scope user` when only in project, or `plugin info foo@mp --scope user` when `mp` is only in project) renders `⊘ <name> [<scope>] (failed) {not added}` at column 0; severity `error`. New reason `"not added"` added to the `REASONS` tuple in `shared/notify.ts`.
 
-- [ ] **INFO-05**: Plugins whose `plugin.json` lives at an unsynced external source (separate git repo, npm, etc.) render the marker line `components: not resolved` instead of per-kind component lists. Encoded as a typed field on the plugin info variant (NFR-7 discriminated-union discipline) -- the renderer's switch chooses between the resolved-components shape and the unresolved-marker shape.
+- [x] **INFO-05**: Plugins whose `plugin.json` lives at an unsynced external source (separate git repo, npm, etc.) render the marker line `components: not resolved` instead of per-kind component lists. Encoded as a typed field on the plugin info variant (NFR-7 discriminated-union discipline) -- the renderer's switch chooses between the resolved-components shape and the unresolved-marker shape.
 
 ### Completion
 
-- [ ] **INFO-06**: Argument completion for both commands -- `marketplace info <TAB>` returns the union of marketplace names across both scopes (TC-5 pattern); `plugin info <TAB>` returns `<plugin>@<marketplace>` combos for all known plugins (installed + available + unavailable) across both scopes in a new `"info"` mode of the TC-6 plugin-ref completer.
+- [x] **INFO-06**: Argument completion for both commands -- `marketplace info <TAB>` returns the union of marketplace names across both scopes (TC-5 pattern); `plugin info <TAB>` returns `<plugin>@<marketplace>` combos for all known plugins (installed + available + unavailable) across both scopes in a new `"info"` mode of the TC-6 plugin-ref completer.
 
 ### Catalog & Tests
 
-- [ ] **INFO-07**: Catalog UAT entries cover all status/scope combinations for both commands. New H2 sections in `docs/output-catalog.md`: `` ## `/claude:plugin marketplace info <name>` `` and `` ## `/claude:plugin info <plugin>@<marketplace>` ``. Each section enumerates: success states (github single-scope, path single-scope, both-scopes for marketplace info; installed, available, unavailable, installed-both-scopes, components-not-resolved for plugin info) and error states (`{not added}` for both, `{not in manifest}` for plugin info). Each fenced byte block paired with a fixture in the `catalog-uat.test.ts` FIXTURES map; byte-equality enforced.
+- [x] **INFO-07**: Catalog UAT entries cover all status/scope combinations for both commands. New H2 sections in `docs/output-catalog.md`: `` ## `/claude:plugin marketplace info <name>` `` and `` ## `/claude:plugin info <plugin>@<marketplace>` ``. Each section enumerates: success states (github single-scope, path single-scope, both-scopes for marketplace info; installed, available, unavailable, installed-both-scopes, components-not-resolved for plugin info) and error states (`{not added}` for both, `{not in manifest}` for plugin info). Each fenced byte block paired with a fixture in the `catalog-uat.test.ts` FIXTURES map; byte-equality enforced.
 
-- [ ] **INFO-08**: `STATUS_TOKENS` unchanged (no new statuses needed -- `installed`/`available`/`unavailable`/`failed` cover the surface); `REASONS` extended with the single new entry `"not added"`. Closed-set change lands in ONE atomic commit alongside the catalog state(s) that consume it and the matching UAT fixture(s) -- per the v1.3 retrospective atomic-supersession lesson.
+- [x] **INFO-08**: `STATUS_TOKENS` unchanged (no new statuses needed -- `installed`/`available`/`unavailable`/`failed` cover the surface); `REASONS` extended with the single new entry `"not added"`. Closed-set change lands in ONE atomic commit alongside the catalog state(s) that consume it and the matching UAT fixture(s) -- per the v1.3 retrospective atomic-supersession lesson.
 
 ## Out of Scope
 
@@ -51,14 +51,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFO-01 | Phase 43 | Pending |
-| INFO-02 | Phase 44 | Pending |
-| INFO-03 | Phase 43 | Pending |
-| INFO-04 | Phase 42 | Pending |
-| INFO-05 | Phase 44 | Pending |
-| INFO-06 | Phase 43 | Pending |
-| INFO-07 | Phase 43 | Pending |
-| INFO-08 | Phase 42 | Pending |
+| INFO-01 | Phase 43 | Complete |
+| INFO-02 | Phase 44 | Complete |
+| INFO-03 | Phase 43 | Complete |
+| INFO-04 | Phase 42 | Complete |
+| INFO-05 | Phase 44 | Complete |
+| INFO-06 | Phase 43 | Complete |
+| INFO-07 | Phase 43 | Complete |
+| INFO-08 | Phase 42 | Complete |
 
 **Coverage:**
 - v1.8 requirements: 8 total
