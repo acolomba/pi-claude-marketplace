@@ -168,6 +168,13 @@ List configured marketplaces.
 /claude:plugin marketplace ls
 ```
 
+Show details for one marketplace: source, last update, description. When the marketplace is configured in both scopes, both blocks render unless `--scope` narrows the lookup.
+
+```text
+/claude:plugin marketplace info context7-marketplace
+/claude:plugin marketplace info context7-marketplace --scope user
+```
+
 Update one marketplace, or all marketplaces if a name is omitted.
 
 ```text
@@ -204,6 +211,13 @@ Filter the list by plugin status, installed, available for installation, or unav
 /claude:plugin list --installed
 /claude:plugin list --available
 /claude:plugin list --unavailable
+```
+
+Show details for one plugin: status, description, components, declared dependencies. When the plugin is present in both scopes, both blocks render unless `--scope` narrows the lookup. External-source plugins (separate git repo, npm, etc.) render `components: not resolved` instead of the per-kind component lists.
+
+```text
+/claude:plugin info pr-review-toolkit@claude-plugins-official
+/claude:plugin info pr-review-toolkit@claude-plugins-official --scope user
 ```
 
 Install a plugin, using the `<plugin>@<marketplace>` format.
