@@ -907,6 +907,132 @@ Surfaced when `marketplace info <name> --scope <wrong-scope>` is invoked against
 
 ______________________________________________________________________
 
+## `/claude:plugin info <plugin>@<marketplace>`
+
+Read-only detail surface (Phase 44). Renders the install-cascade always-marketplace-header form (mirrors `install`'s shape per INFO-02) with a per-plugin row at 2-space indent, optional description block hard-wrapped at col 4 / 66-col text width, then either per-kind component lists (sorted: `agents`, `commands`, `mcp`, `skills`) with an optional `dependencies:` line LAST, OR the `components: not resolved` marker (INFO-05). Phase 44 / INFO-02 + INFO-05 + INFO-07 lock the full state set below.
+
+Severity routing: every success state (installed / available / unavailable / installed-both-scopes / components-not-resolved) is `info` severity (no second arg to `ctx.ui.notify`); the three `(failed)` states (`{not added}` missing-marketplace, `{not added}` --scope mismatch, `{not in manifest}` missing-plugin) route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
+
+### Success -- installed single scope
+
+Triggered by `plugin info <plugin>@<marketplace> --scope user` against an installed plugin in the user scope whose manifest entry declares per-kind components (skills/commands/agents/mcpServers) reachable from a path-source marketplace clone. Body: marketplace header at column 0 with `<autoupdate>` marker; plugin row at 2-space indent (status glyph `●` + name + `v<version>` + `(installed)`); description at 4-space indent (hard-wrapped via `wrapDescription(text, 4, 66)`); per-kind component lines at 4-space indent in the fixed `agents, commands, mcp, skills` order (alphabetical kind order; alphabetical within each kind). Severity `info`; no reload-hint.
+
+<!-- catalog-state: installed-single-scope -->
+
+```text
+● claude-plugins-official [user] <autoupdate>
+  ● commit-commands v1.2.0 (installed)
+    Helpful git commit commands for everyday use.
+    agents: review-bot
+    commands: c1, c2
+    skills: commit-summary
+```
+
+### Success -- installed single scope with dependencies
+
+Same as above but with a `dependencies: <plugin>@<marketplace>, ...` line emitted LAST (after every per-kind component line) per INFO-02. PI-13 keeps the field opaque at the manifest layer; when it contains an array of `<plugin>@<marketplace>` strings the orchestrator passes them through (sorted alphabetically). Severity `info`.
+
+<!-- catalog-state: installed-single-scope-with-dependencies -->
+
+```text
+● claude-plugins-official [user] <autoupdate>
+  ● commit-commands v1.2.0 (installed)
+    Helpful git commit commands for everyday use.
+    agents: review-bot
+    commands: c1, c2
+    skills: commit-summary
+    dependencies: helper@utils-mp
+```
+
+### Success -- available single scope
+
+Triggered by `plugin info <plugin>@<marketplace>` against a plugin declared in `marketplace.json` but NOT installed in the requested scope. The status glyph switches to `○` (per `pluginInfoStatusGlyph` in `shared/notify.ts`) and the row reads `(available)`. Components remain rendered for path-source plugins because the marketplace clone is local and the plugin entry's source can be resolved without a fetch. Severity `info` (only the `failed` plugin-info row routes to error).
+
+<!-- catalog-state: available-single-scope -->
+
+```text
+● community-mp [user] <no autoupdate>
+  ○ chat-helper v0.5.0 (available)
+    Quick chat helper plugin; experimental.
+    commands: chat
+    skills: chat-init
+```
+
+### Success -- unavailable single scope
+
+Triggered when `resolveStrict` returns `installable: false` for the plugin entry (typically because the manifest declares an unsupported component such as `hooks` or `lspServers`). The status glyph is `⊘`; the row reads `(unavailable)` followed by a closed-set REASON brace (`{hooks}` / `{lsp}` / `{unsupported source}` per `narrowResolverNotes`). The renderer's `componentsResolved: false` switch arm fires for the unavailable arm, emitting the `components: not resolved` marker line in place of per-kind component lists -- the plugin is not installable so its component layout is moot. Severity `info` (unavailable is not a failure on the info surface; only `failed` routes to error).
+
+<!-- catalog-state: unavailable-single-scope -->
+
+```text
+● community-mp [user] <no autoupdate>
+  ⊘ legacy-plugin v0.1.0 (unavailable) {hooks}
+    Old plugin that declares hooks; not installable in Pi.
+    components: not resolved
+```
+
+### Multi-scope fan-out -- both scopes hold the plugin
+
+Triggered by `plugin info <plugin>@<marketplace>` with NO `--scope` filter when the marketplace name is present in BOTH the project scope AND the user scope AND each scope's state records the plugin (the install orchestrator clones the marketplace record across scopes when a plugin is installed cross-scope). The orchestrator emits a `PluginInfoCascadeMessage` whose `blocks` array carries the per-scope `PluginInfoMessage` payloads in project-first order (matches the existing list-surface row-order policy via MSG-GR-3 / Phase 18's `compareByNameThenScope` project-before-user tie-break). The renderer joins per-block bodies with `\n\n` (one blank line). Each block carries its own marketplace header at column 0 (mirrors the install-cascade `composeMarketplaceBlock` join). Severity `info`.
+
+<!-- catalog-state: installed-both-scopes-fan-out -->
+
+```text
+● mp [project] <autoupdate>
+  ● foo v1.0.0 (installed)
+    skills: s1
+
+● mp [user] <no autoupdate>
+  ● foo v2.0.0 (installed)
+    agents: a1
+```
+
+### Components not resolved (external source)
+
+Triggered when the plugin entry's `source` field parses as `npm` / `git-subdir` / `url` (any non-`path` kind). Per INFO-05 + NFR-5 the orchestrator deliberately does NOT fetch the external source; the renderer emits the marker line `components: not resolved` at 4-space indent (column 4) in place of per-kind component lists. The plugin row still carries its status (`installed` / `available`) and description; the marker is the structural signal that the component layout lives at an unsynced external location. Severity `info`.
+
+<!-- catalog-state: components-not-resolved -->
+
+```text
+● remote-mp [user] <no autoupdate>
+  ● remote-plugin v1.0.0 (installed)
+    Remote plugin sourced from an external npm package.
+    components: not resolved
+```
+
+### Failure -- plugin not in manifest
+
+Triggered when the marketplace IS added in the requested scope but its `marketplace.json` does NOT contain a plugin entry with the requested name. The orchestrator emits a `PluginInfoMessage` with `plugin.status: "failed"` + `reasons: ["not in manifest"]`; the renderer composes the marketplace header at column 0 followed by the failed plugin row at 2-space indent. The `{not in manifest}` REASON is the same closed-set member that `update.ts` uses post-Phase 29 / UXG-08 for the same failure semantics; this catalog state extends its surface to the new `plugin info` command. Severity `error`; no reload-hint (info surfaces are read-only per SNM-33).
+
+<!-- catalog-state: missing-plugin-not-in-manifest -->
+
+```text
+● mp [user] <no autoupdate>
+  ⊘ ghost-plugin (failed) {not in manifest}
+```
+
+### Failure -- missing marketplace (no `--scope` filter)
+
+Triggered when `plugin info <plugin>@<marketplace>` is invoked against a marketplace name that is NOT present in EITHER scope. The orchestrator emits the Phase 42 INFO-04 `{not added}` `PluginInfoMessage` with `plugin.name` set to the MARKETPLACE name (not the plugin name -- the user-facing failure is "the marketplace is not added", not "the plugin doesn't exist"); `plugin.scope` is OMITTED so the renderer's bracket short-circuit suppresses the `[scope]` token (D-03: absent-from-both states have no scope bracket because the marketplace is in neither scope). The renderer's `{not added}` predicate at `shared/notify.ts:renderPluginInfo` early-returns and emits the bare row at column 0 with no marketplace header. Severity `error`; no reload-hint.
+
+<!-- catalog-state: missing-marketplace-not-added-absent-from-both -->
+
+```text
+⊘ ghost-mp (failed) {not added}
+```
+
+### Failure -- missing marketplace (`--scope` mismatch)
+
+Triggered when `plugin info <plugin>@<marketplace> --scope <wrong-scope>` is invoked against a marketplace present only in the OTHER scope. The renderer emits the same bare-row form as the absent-from-both variant above, but WITH the `[scope]` bracket because the user explicitly asked for a specific scope. This is the plugin-info-surface mirror of the Phase 42 `scope-mismatch-not-added` state under `marketplace info`; the distinction from `missing-marketplace-not-added-absent-from-both` is the bracket presence (no bracket when neither scope holds the marketplace; bracket present when a specific scope was requested). Severity `error`; no reload-hint.
+
+<!-- catalog-state: missing-marketplace-not-added-scope-mismatch -->
+
+```text
+⊘ ghost-mp [user] (failed) {not added}
+```
+
+______________________________________________________________________
+
 ## `/claude:plugin marketplace remove <name>`
 
 Single-marketplace command that cascades plugin unstaging.

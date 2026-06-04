@@ -1399,6 +1399,233 @@ const FIXTURES: FixtureMap = {
   },
 
   // -------------------------------------------------------------------------
+  // Phase 44 / Plan 44-02 / INFO-02 + INFO-05 + INFO-07: full catalog state
+  // coverage for `/claude:plugin info <plugin>@<marketplace>`. Mirrors the
+  // Phase 43 marketplace-info entry above.
+  //
+  //   - Success states:
+  //     * installed-single-scope                       (INFO-02 happy path)
+  //     * installed-single-scope-with-dependencies     (INFO-02 + dependencies line)
+  //     * available-single-scope                       (INFO-02 available bucket)
+  //     * unavailable-single-scope                     (INFO-02 unavailable + {hooks})
+  //   - Multi-scope fan-out:
+  //     * installed-both-scopes-fan-out                (INFO-03 project-first fan-out)
+  //   - Components arm (INFO-05):
+  //     * components-not-resolved                      (external-source marker)
+  //   - Failure states:
+  //     * missing-plugin-not-in-manifest               ({not in manifest})
+  //     * missing-marketplace-not-added-absent-from-both  ({not added}, no [scope])
+  //     * missing-marketplace-not-added-scope-mismatch    ({not added}, with [scope])
+  //
+  // Severity routing: every success + fan-out + components-not-resolved
+  // state is `info` (omits `expectedSeverity`); the three `{not added}` /
+  // `{not in manifest}` failure states route to `"error"`.
+  // -------------------------------------------------------------------------
+  "/claude:plugin info <plugin>@<marketplace>": {
+    "installed-single-scope": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          status: "installed",
+          name: "commit-commands",
+          version: "1.2.0",
+          description: "Helpful git commit commands for everyday use.",
+          componentsResolved: true,
+          components: {
+            agents: ["review-bot"],
+            commands: ["c1", "c2"],
+            skills: ["commit-summary"],
+          },
+        },
+      } satisfies NotificationMessage,
+    },
+
+    "installed-single-scope-with-dependencies": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          status: "installed",
+          name: "commit-commands",
+          version: "1.2.0",
+          description: "Helpful git commit commands for everyday use.",
+          componentsResolved: true,
+          components: {
+            agents: ["review-bot"],
+            commands: ["c1", "c2"],
+            skills: ["commit-summary"],
+          },
+          dependencies: ["helper@utils-mp"],
+        },
+      } satisfies NotificationMessage,
+    },
+
+    "available-single-scope": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "available",
+          name: "chat-helper",
+          version: "0.5.0",
+          description: "Quick chat helper plugin; experimental.",
+          componentsResolved: true,
+          components: {
+            commands: ["chat"],
+            skills: ["chat-init"],
+          },
+        },
+      } satisfies NotificationMessage,
+    },
+
+    "unavailable-single-scope": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "unavailable",
+          name: "legacy-plugin",
+          version: "0.1.0",
+          description: "Old plugin that declares hooks; not installable in Pi.",
+          reasons: ["hooks"],
+          componentsResolved: false,
+        },
+      } satisfies NotificationMessage,
+    },
+
+    "installed-both-scopes-fan-out": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info-cascade",
+        blocks: [
+          {
+            kind: "plugin-info",
+            marketplaceName: "mp",
+            marketplaceScope: "project",
+            marketplaceDetails: { autoupdate: true },
+            plugin: {
+              status: "installed",
+              name: "foo",
+              version: "1.0.0",
+              componentsResolved: true,
+              components: { skills: ["s1"] },
+            },
+          },
+          {
+            kind: "plugin-info",
+            marketplaceName: "mp",
+            marketplaceScope: "user",
+            marketplaceDetails: { autoupdate: false },
+            plugin: {
+              status: "installed",
+              name: "foo",
+              version: "2.0.0",
+              componentsResolved: true,
+              components: { agents: ["a1"] },
+            },
+          },
+        ],
+      } satisfies NotificationMessage,
+    },
+
+    "components-not-resolved": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "remote-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "remote-plugin",
+          version: "1.0.0",
+          description: "Remote plugin sourced from an external npm package.",
+          componentsResolved: false,
+        },
+      } satisfies NotificationMessage,
+    },
+
+    "missing-plugin-not-in-manifest": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "failed",
+          name: "ghost-plugin",
+          reasons: ["not in manifest"],
+          // The renderer's standard-body path runs the components switch
+          // unconditionally; use `componentsResolved: true` with empty
+          // components so no `components: not resolved` marker appears
+          // (the failed row is its own structural signal; INFO-05's
+          // marker is reserved for installed/available external sources).
+          componentsResolved: true,
+          components: {},
+        },
+      } satisfies NotificationMessage,
+    },
+
+    "missing-marketplace-not-added-absent-from-both": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "ghost-mp",
+        // Unused placeholder per the INFO-04 carve-out (renderer skips
+        // the header on the bare `{not added}` row); supply a default.
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "failed",
+          // The MARKETPLACE name (not the plugin name) -- the
+          // user-facing failure is "the marketplace is not added".
+          name: "ghost-mp",
+          // D-03: `plugin.scope` OMITTED so the renderer's bracket
+          // short-circuit emits no `[scope]` token.
+          reasons: ["not added"],
+          componentsResolved: false,
+        },
+      } satisfies NotificationMessage,
+    },
+
+    "missing-marketplace-not-added-scope-mismatch": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "ghost-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "failed",
+          name: "ghost-mp",
+          // `--scope user` was requested explicitly -> renderer emits
+          // `[user]` bracket.
+          scope: "user",
+          reasons: ["not added"],
+          componentsResolved: false,
+        },
+      } satisfies NotificationMessage,
+    },
+  },
+
+  // -------------------------------------------------------------------------
   // /claude:plugin marketplace remove -- marketplace + cascade.
   // -------------------------------------------------------------------------
   "/claude:plugin marketplace remove <name>": {
