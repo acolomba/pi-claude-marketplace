@@ -494,6 +494,169 @@ test("UXG-08: missing plugin in known marketplace emits `⊘ <plugin> (failed) {
 });
 
 // ---------------------------------------------------------------------------
+// (h-WR-01) WR-01 (Phase 44 review): the `narrowProbeError` classifier
+// in `info.ts` must stay in lockstep with `list.ts::narrowProbeError`.
+// Pre-fix the orchestrator silently dropped the probe error and
+// emitted a bare `componentsResolved: false` row that rendered
+// IDENTICALLY to a deliberate INFO-05 external-source defer. Post-fix
+// it threads the SAME closed-set Reason ladder that list.ts uses, so
+// the user sees `{permission denied}` / `{source missing}` /
+// `{unparseable}` / `{unreadable}` on the `(installed)` row instead
+// of being silently misled.
+//
+// Unit-tests the ladder via the `__test_narrowProbeError` re-export
+// (mirrors `tests/orchestrators/plugin/list.test.ts:771-799`). An
+// end-to-end integration of the THROW branch through the real
+// resolver requires an FS-level fault injection that is not portable
+// across CI sandboxes; the orchestrator-level `(c) install bucket
+// throws` arm is exercised via the WR-01 NotInstallable test below
+// (the `!installable` path runs through the SAME row-construction
+// code as the throw branch).
+// ---------------------------------------------------------------------------
+
+test("WR-01: narrowProbeError -> EACCES classifies as `permission denied`", async () => {
+  const mod =
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
+  const err = new Error("EACCES: permission denied, open '/foo/plugin.json'");
+  (err as NodeJS.ErrnoException).code = "EACCES";
+  assert.equal(mod.__test_narrowProbeError(err), "permission denied");
+});
+
+test("WR-01: narrowProbeError -> ENOENT classifies as `source missing`", async () => {
+  const mod =
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
+  const err = new Error("ENOENT: no such file");
+  (err as NodeJS.ErrnoException).code = "ENOENT";
+  assert.equal(mod.__test_narrowProbeError(err), "source missing");
+});
+
+test("WR-01: narrowProbeError -> SyntaxError classifies as `unparseable`", async () => {
+  const mod =
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
+  const err = new SyntaxError("Unexpected token");
+  assert.equal(mod.__test_narrowProbeError(err), "unparseable");
+});
+
+test("WR-01: narrowProbeError -> generic Error falls through to `unreadable` (NOT `unsupported source`)", async () => {
+  const mod =
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
+  // Pre-fix: the catch handler hardcoded `unreadable` for the
+  // not-installed path and gave NO reason at all on the installed
+  // path, both of which hid the actual failure class. Post-fix: the
+  // permissive fallback returns `unreadable`, but only AFTER trying
+  // SyntaxError + errno classification first. Hardcoding `unreadable`
+  // would pass this test but FAIL the SyntaxError / EACCES tests
+  // above.
+  const err = new Error("something broke");
+  assert.equal(mod.__test_narrowProbeError(err), "unreadable");
+});
+
+// ---------------------------------------------------------------------------
+// (h-WR-01b) WR-01: an INSTALLED plugin whose manifest declares
+// `hooks` (resolveStrict returns NotInstallable with notes) must
+// forward `narrowResolverNotes(notes)` as reasons on the `(installed)`
+// row instead of swallowing them silently.
+// ---------------------------------------------------------------------------
+
+test("WR-01: installed plugin whose manifest declares hooks surfaces `{hooks}` on the (installed) row", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "legacy",
+            source: "./legacy",
+            version: "0.1.0",
+            // Declares hooks -> resolveStrict returns NotInstallable
+            // with a note like "contains hooks" that
+            // `narrowResolverNotes` maps to the `hooks` Reason.
+            hooks: { path: "./hooks.json" },
+          },
+        ],
+      },
+      installed: { legacy: { version: "0.1.0" } },
+      installablePluginDirs: ["legacy"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● legacy v0.1.0 (installed) {hooks}",
+        "    components: not resolved",
+      ].join("\n"),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (h-WR-02) WR-02 (Phase 44 review): the NOT-installed catch path
+// must classify the probe throw via the SAME `narrowProbeError` ladder
+// as `list.ts`, not hardcode `"unreadable"`. We exercise the
+// `unparseable` arm by writing a malformed `plugin.json` so the
+// resolver's JSON.parse throws SyntaxError -- which the new ladder
+// must map to the `unparseable` Reason (pre-fix would emit
+// `{unreadable}`).
+// ---------------------------------------------------------------------------
+
+test("WR-02: not-installed plugin with malformed plugin.json surfaces `{unparseable}` (not `{unreadable}`)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "broken", source: "./broken", version: "1.0.0" }],
+      },
+      // NOT installed -> available/unavailable branch.
+      installablePluginDirs: ["broken"],
+    });
+
+    // Write a malformed plugin.json under the plugin source dir so the
+    // resolver's JSON.parse path throws SyntaxError.
+    await mkdir(path.join(mpRoot, "broken", ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(mpRoot, "broken", ".claude-plugin", "plugin.json"),
+      "{ not valid json",
+      "utf8",
+    );
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "broken", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    // Pre-fix: `{unreadable}`. Post-fix: `{unparseable}` because the
+    // SyntaxError is now correctly distinguished by the ladder.
+    // Either outcome of `resolveStrict` (throws SyntaxError, or
+    // catches internally and returns NotInstallable with a malformed-
+    // JSON note) is acceptable -- the test locks the WR-02 invariant
+    // that the orchestrator MUST NOT hardcode `unreadable` when the
+    // underlying failure is parse-related. The renderer body must
+    // include `(unavailable)` and EITHER an `unparseable` or
+    // `unsupported source` reason brace (depending on which path the
+    // resolver chose), but NEVER a bare `unreadable` brace alone.
+    const msg = notifications[0]!.message;
+    assert.match(msg, /\(unavailable\)/);
+    assert.doesNotMatch(
+      msg,
+      /\(unavailable\) \{unreadable\}/,
+      "post-fix: probe-throw must classify SyntaxError as `unparseable`, not the hardcoded `unreadable`",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // (i) NFR-5 import discipline: no network surface.
 // ---------------------------------------------------------------------------
 

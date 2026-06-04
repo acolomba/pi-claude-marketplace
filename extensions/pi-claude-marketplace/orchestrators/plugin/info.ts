@@ -128,6 +128,47 @@ function narrowResolverNotes(
 }
 
 /**
+ * Probe-failure classifier mirroring
+ * `orchestrators/plugin/list.ts::narrowProbeError`. When `resolveStrict`
+ * throws on a per-row probe, classify the thrown error into a closed-set
+ * `Reason` so the info surface surfaces the SAME cause class that the
+ * list surface does for the same underlying failure (post-Phase 29 /
+ * UXG-08 contract):
+ *
+ *   - `SyntaxError`           -> `unparseable` (JSON.parse on a
+ *     malformed `plugin.json` / `marketplace.json`).
+ *   - `EACCES` / `EPERM`      -> `permission denied`.
+ *   - `ENOENT` / `ENOTDIR`    -> `source missing`.
+ *   - any other thrown shape  -> `unreadable` (permissive fallback).
+ *
+ * Lives in `info.ts` instead of being imported from `list.ts` because
+ * `shared/` is the only sanctioned cross-orchestrator import surface
+ * per the project's layering rules. The two implementations MUST stay
+ * in lockstep -- if `list.ts`'s ladder grows a new arm, this mirror
+ * grows the same arm.
+ */
+function narrowProbeError(
+  err: unknown,
+): "permission denied" | "source missing" | "unparseable" | "unreadable" {
+  if (err instanceof SyntaxError) {
+    return "unparseable";
+  }
+
+  if (err instanceof Error) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EACCES" || code === "EPERM") {
+      return "permission denied";
+    }
+
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return "source missing";
+    }
+  }
+
+  return "unreadable";
+}
+
+/**
  * INFO-05 source-kind dispatch: a `"path"` source (relative to the
  * marketplace root) is locally resolvable; every other kind lives at
  * an unsynced external location the orchestrator MUST NOT fetch
@@ -458,27 +499,43 @@ async function buildInstalledRow(
       };
     }
 
-    // resolveStrict returned NotInstallable but the plugin is recorded
-    // as installed -- this can happen if the marketplace clone changed
-    // since install. Surface as `componentsResolved: false` per INFO-05
-    // so the user is signalled to investigate. (No closed REASON
-    // because the row is still `(installed)` per the state record.)
+    // WR-01 (Phase 44 review): resolveStrict returned NotInstallable
+    // but the plugin is recorded as installed -- the marketplace clone
+    // changed since install, OR the manifest now declares an
+    // unsupported field (e.g. `hooks` / `lspServers`). Surface the
+    // disagreement to the user by forwarding `narrowResolverNotes` as
+    // closed-set reasons on the `(installed)` row -- mirrors the
+    // post-Phase 29 / UXG-08 `narrowProbeError` discipline that
+    // `list.ts` applies to its `(unavailable)` rows. Without these
+    // reasons the row would render byte-identically to a deliberate
+    // INFO-05 external-source defer, hiding a real failure cause.
+    // Status remains `installed` because the state record confirms the
+    // install; the brace makes the disagreement explicit.
+    const resolverReasons = narrowResolverNotes(resolved.notes);
     return {
       status: "installed",
       name: pluginName,
       ...(version !== undefined && { version }),
       ...(description !== undefined && { description }),
+      ...(resolverReasons.length > 0 && { reasons: resolverReasons }),
       componentsResolved: false,
     };
-  } catch {
-    // Probe failure on disk -- surface as unresolved marker; do NOT
-    // demote the `(installed)` status because the state record
-    // confirms the install.
+  } catch (err) {
+    // WR-01 (Phase 44 review): probe failure on disk -- mirror
+    // `list.ts::narrowProbeError` so the user learns whether this is a
+    // permission issue, missing source, unparseable plugin.json, or a
+    // generic unreadable failure. Keep `status: "installed"` because
+    // the state record confirms the install; the `{reason}` brace
+    // makes the persistence-vs-disk disagreement explicit (and stops
+    // the row from rendering byte-identically to a deliberate INFO-05
+    // external-source defer).
+    const reasons: readonly Reason[] = [narrowProbeError(err)];
     return {
       status: "installed",
       name: pluginName,
       ...(version !== undefined && { version }),
       ...(description !== undefined && { description }),
+      reasons,
       componentsResolved: false,
     };
   }
@@ -502,10 +559,18 @@ async function buildNotInstalledRow(
   let resolved;
   try {
     resolved = await resolveStrict(entry, { marketplaceRoot: mpRecord.marketplaceRoot });
-  } catch {
-    // Probe throw -> unavailable with `unreadable` reason. Mirrors
-    // `orchestrators/plugin/list.ts::narrowProbeError` semantics.
-    const reasons: readonly Reason[] = ["unreadable"];
+  } catch (err) {
+    // WR-02 (Phase 44 review): probe throw -> classify the underlying
+    // failure via the SAME `narrowProbeError` ladder that
+    // `orchestrators/plugin/list.ts::narrowProbeError` applies on the
+    // list surface. Previously this path hardcoded `"unreadable"` and
+    // would render `{unreadable}` for an `EACCES` while `plugin list`
+    // would render `{permission denied}` for the same underlying
+    // failure -- two read-only surfaces over the same persistence
+    // layer producing DIFFERENT user-facing reasons for the same
+    // cause. Threading the classifier keeps the two surfaces in
+    // lockstep (post-Phase 29 / UXG-08 contract).
+    const reasons: readonly Reason[] = [narrowProbeError(err)];
     return {
       status: "unavailable",
       name: pluginName,
@@ -637,3 +702,11 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   };
   notify(opts.ctx, opts.pi, message);
 }
+
+// Test-only re-export. Mirrors the `__test_narrowProbeError` pattern
+// in `orchestrators/plugin/list.ts`: the helper is file-private but
+// its classification table is the load-bearing contract that callers
+// (and the user) rely on. The WR-01 / WR-02 fixes (Phase 44 review)
+// require this classifier to stay in lockstep with `list.ts`'s
+// equivalent helper.
+export { narrowProbeError as __test_narrowProbeError };
