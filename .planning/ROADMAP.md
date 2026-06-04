@@ -835,7 +835,15 @@ Plans:
 4. Running `/claude:plugin info <missing-plugin>@<known-marketplace>` renders `(failed) {not in manifest}` (existing reason); running against an unknown marketplace renders `{not added}` (Phase 42 REASON); running with `--scope` mismatch renders `{not added}` at the marketplace level.
 5. `plugin info <TAB>` returns `<plugin>@<marketplace>` combos for all known plugins (installed + available + unavailable) across both scopes via a new `"info"` mode of the TC-6 plugin-ref completer; `docs/output-catalog.md` gains a new H2 section `` ## `/claude:plugin info <plugin>@<marketplace>` `` enumerating every state (installed single-scope, available single-scope, unavailable single-scope, installed-both-scopes, components-not-resolved, `{not in manifest}` missing-plugin, `{not added}` missing-marketplace, `{not added}` `--scope` mismatch); each fenced byte block is paired with a `catalog-uat.test.ts` fixture and byte-equality is GREEN; `npm run check` exits 0 -- v1.8 milestone closes.
 
-**Plans:** TBD
+**Plans:** 2 plans
+
+**Wave 1**
+
+- [ ] 44-01-PLAN.md -- Orchestrator + edge handler + TC-6 `info` completion mode + `PluginInfoCascadeMessage` fan-out variant + per-status notify-v2 byte tests + orchestrator/handler/completion/router integration tests; NFR-5 grep-gate on info.ts (INFO-02, INFO-05)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 44-02-PLAN.md -- Catalog states (`installed-single-scope`, `installed-single-scope-with-dependencies`, `available-single-scope`, `unavailable-single-scope`, `installed-both-scopes-fan-out`, `components-not-resolved`, `missing-plugin-not-in-manifest`, `missing-marketplace-not-added-absent-from-both`, `missing-marketplace-not-added-scope-mismatch`) + paired catalog-uat FIXTURES under new `## /claude:plugin info <plugin>@<marketplace>` H2; preserves Phase 42 + Phase 43 fixtures byte-identical (INFO-02, INFO-05; extends INFO-07 plugin-info catalog coverage)
 
 ## Progress
 
@@ -882,4 +890,4 @@ Plans:
 | 41. Documentation and Test Closeout                                  | v1.7      | 1/1 | Complete   | 2026-06-02 |
 | 42. Type Model & Render Seam Foundations                             | v1.8      | 1   | Planned     | -          |
 | 43. Marketplace Info Command                                         | v1.8      | 0/2 | Planned     | -          |
-| 44. Plugin Info Command                                              | v1.8      | TBD | Not started | -          |
+| 44. Plugin Info Command                                              | v1.8      | 0/2 | Planned     | -          |
