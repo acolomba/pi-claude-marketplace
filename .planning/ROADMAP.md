@@ -809,7 +809,15 @@ Plans:
 4. `marketplace info <TAB>` returns the union of marketplace names across both scopes (TC-5 pattern matching `marketplace remove` / `marketplace update` / `marketplace autoupdate`); a new entry in the completion provider's TC-5 surface covers the verb.
 5. `docs/output-catalog.md` gains a new H2 section `` ## `/claude:plugin marketplace info <name>` `` enumerating every state (github single-scope, path single-scope, github both-scopes, path both-scopes, `{not added}` missing-marketplace, `{not added}` `--scope` mismatch); each fenced byte block is paired with a fixture in `tests/architecture/catalog-uat.test.ts` FIXTURES map and byte-equality is GREEN.
 
-**Plans:** TBD
+**Plans:** 2 plans
+
+**Wave 1**
+
+- [ ] 43-01-PLAN.md -- Orchestrator + edge handler + TC-5 completion extension + `MarketplaceInfoCascadeMessage` fan-out variant; per-status notify-v2 byte tests + orchestrator/handler/completion integration tests; NFR-5 grep-gate on info.ts (INFO-01, INFO-03, INFO-06)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 43-02-PLAN.md -- Catalog states (`github-single-scope-full`, `github-single-scope-minimal`, `path-single-scope`, `path-single-scope-with-description`, `both-scopes-fan-out`, `absent-from-both`) + paired catalog-uat FIXTURES; preserves Phase 42's `scope-mismatch-not-added` byte-identical (INFO-07)
 
 ### Phase 44: Plugin Info Command
 
@@ -873,5 +881,5 @@ Plans:
 | 40. Update State-Before-Commit Reorder                               | v1.7      | 1/1 | Complete   | 2026-06-02 |
 | 41. Documentation and Test Closeout                                  | v1.7      | 1/1 | Complete   | 2026-06-02 |
 | 42. Type Model & Render Seam Foundations                             | v1.8      | 1   | Planned     | -          |
-| 43. Marketplace Info Command                                         | v1.8      | TBD | Not started | -          |
+| 43. Marketplace Info Command                                         | v1.8      | 0/2 | Planned     | -          |
 | 44. Plugin Info Command                                              | v1.8      | TBD | Not started | -          |
