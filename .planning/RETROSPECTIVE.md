@@ -2,6 +2,52 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v1.8 -- Plugin and Marketplace Info Commands
+
+**Shipped:** 2026-06-04
+**Phases:** 3 (42, 43, 44) | **Plans:** 5
+**Timeline:** 2026-06-03 → 2026-06-04 (~24 hours wall-clock; autonomous run)
+
+### What Was Built
+
+- Phase 42 (Type Model & Render Seam Foundations): `MarketplaceInfoMessage` + `PluginInfoMessage` discriminated-union variants + `wrapDescription` helper + `"not added"` REASON closed-set member -- single atomic-supersession commit per the v1.3 lesson.
+- Phase 43 (Marketplace Info Command): `/claude:plugin marketplace info <name>` end-to-end (orchestrator + edge handler + TC-5 completion + new `MarketplaceInfoCascadeMessage` variant for per-scope fan-out + 6 catalog states).
+- Phase 44 (Plugin Info Command): `/claude:plugin info <plugin>@<marketplace>` end-to-end (orchestrator + edge handler + new TC-6 `info` mode + `PluginInfoCascadeMessage` variant + 9 catalog states + `components: not resolved` marker for unsynced external sources).
+
+Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT coverage for both new info surfaces.
+
+### What Worked
+
+- **Architecture intel folded into the planner prompt** when the gsd-phase-researcher agent stalled twice on Phase 43. Investigating code areas inline myself (TC-5/TC-6 patterns, orchestrator analogs) and citing exact file:line references in the planner prompt got Phase 43 unblocked without retrying a flaky agent. This was strictly faster than a third research retry.
+- **Phase 44 explicitly learned from Phase 43 review findings.** The Phase 44 planner prompt referenced 43-REVIEW.md and asked the planner to fold WR-01/WR-02/IN-01/IN-04 mitigations into the new orchestrator. Phase 44 shipped with those mitigations baked in (destructure pattern instead of `found.length === 1`, typed `switch (src.kind)` with `assertNever`, all touched test files enumerated in `files_modified`). Phase 44 also retroactively extended the architecture grep-gate to cover `marketplace/info.ts` -- closing a Phase 43 oversight.
+- **Atomic-supersession discipline held** for Phase 42's closed-set extension. Five files in one commit, GREEN tests at every commit boundary. The planner correctly refused to split.
+- **Byte-equality carry-forward** through three phases. Phase 42's `scope-mismatch-not-added` anchor stayed byte-identical at HEAD across Phase 43 and Phase 44 work -- locked structurally by the catalog UAT runner.
+- **Code review + fixer chain caught real regressions.** Phase 42's CR-01 (missing `assertNever` exhaustiveness gate -- the if-ladder claimed it but didn't actually have one) and Phase 44's WR-01/WR-02 (Phase 29 `narrowProbeError` discipline regression) were both legitimate defects that would have been tech debt without the review step.
+
+### What Was Inefficient
+
+- **gsd-phase-researcher stalled twice on Phase 43** with 600s watchdog timeouts. Both stalls were at the file-write step, not investigation. Workaround was to skip the standalone research and fold intel into the planner. Phase 44 followed the same skip-research pattern proactively. Worth surfacing as a flake to investigate before relying on the researcher in future autonomous runs.
+- **ROADMAP analyzer false-positive at autonomous startup**: discovered 27 incomplete phases because the historical Phase Details section (15-41) wasn't wrapped in `<details>`. The analyzer's `extractCurrentMilestone` strips `<details>` blocks but parses bare `### Phase N` headers. Required a structural cleanup commit before autonomous could discover the correct 3-phase scope. Worth surfacing for the analyzer to handle this corner case directly.
+- **Em-dash auto-conversion forced multiple re-commits.** The pre-commit `fix-unicode-dashes` hook converts `--` to `--` in markdown files after staging. Every plan doc and commit message containing em-dashes required a re-stage + retry. Worth either pre-converting in the prompt template or amending the hook to skip planning artifacts.
+
+### Patterns Established
+
+- **Inline-intel planning** when the researcher stalls: gather architecture pointers (file paths, line ranges, analog files, requirement table extracts) inline via Read/Grep, then dispatch the planner with `<architecture_intel_gathered>` blocks embedded in the prompt. Strictly faster than re-trying a flaky researcher.
+- **Carry-forward findings between phases.** Phase N+1's planner prompt should explicitly reference Phase N's REVIEW.md and ask the planner to fold mitigations into the new code. This compounds review value across the milestone.
+- **`<details>`-wrap historical Phase Details** in ROADMAP.md so the active-milestone analyzer only sees the current milestone's phases. Apply at every milestone close (or have the analyzer infer it from the milestone summary checkboxes).
+
+### Key Lessons
+
+- **Atomic-supersession is non-negotiable for closed-set changes.** Phase 42's contract -- REASONS tuple + first consumer + tests + catalog state + fixture in ONE commit -- meant `npm run check` was GREEN at every commit boundary, no transient RED states. Phases 43 and 44 inherited a stable foundation and never had to fight a half-shipped closed-set.
+- **Code review surfaces correctness bugs, not just style.** CR-01 in Phase 42 (missing exhaustiveness gate) and WR-01/WR-02 in Phase 44 (narrowProbeError regression) were not cosmetic. The fixer agent has positive ROI when severity policy is set per-finding rather than blanket-applied.
+- **Skipping discuss saves time when the ROADMAP phase description is precise.** All three phases used `workflow.skip_discuss=true` and auto-generated minimal CONTEXT.md from the ROADMAP goal. None of the planners blocked on missing context.
+
+### Cost Observations
+
+- Model mix: ~100% opus for researchers / planners / fixers / executor; sonnet for plan-checker + code-reviewer. Mostly intended by config defaults.
+- Background agents: ~12 dispatched, ~10 succeeded first try. Two researcher stalls (Phase 43) cost ~20 min of wall-clock with no output. Net positive impact: workaround pattern (inline intel) was reusable for Phase 44.
+- Pre-commit hook fix-cycle was the largest non-agent time cost: most commits required 2 attempts due to em-dash auto-conversion.
+
 ## Milestone: v1.5 -- Notification Output Polish
 
 **Shipped:** 2026-05-31
