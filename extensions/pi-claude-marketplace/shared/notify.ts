@@ -1952,10 +1952,10 @@ export function notify(
   // `kind` discriminator literal; the `kind ?? "cascade"` coalescing in a
   // switch discriminant does NOT narrow under TS strict (the runtime
   // expression is correct, but TS can't follow it back to the source
-  // variant). The final `else` arm narrows to `CascadeNotificationMessage`
-  // because every non-cascade variant is matched above; the
-  // `assertNever` exhaustiveness check lives on a hypothetical fourth
-  // arm via control-flow narrowing (see comment below).
+  // variant). After the two info-kind arms below the explicit
+  // `assertNever(message)` exhaustiveness gate (further down) narrows
+  // `message` to `CascadeNotificationMessage` and forces any future 4th
+  // variant addition to compile-error here (RESEARCH Pitfall 3 / NFR-7).
   if (message.kind === "marketplace-info") {
     // Phase 42 / INFO-01: info-surface render. NO reload-hint (read-only
     // surface; `shouldEmitReloadHint` short-circuits false). NO summary
@@ -1992,15 +1992,29 @@ export function notify(
     return;
   }
 
-  // Cascade arm: `message.kind` is either `undefined` (v1.0-v1.7 migration-
-  // strategy #2 path) or the explicit literal `"cascade"`. TypeScript
-  // narrows `message` to `CascadeNotificationMessage` here because every
-  // other discriminator literal was handled above. The `assertNever`
-  // exhaustiveness gate sits below the cascade body so a future variant
-  // addition (a 4th `kind` literal) compile-errors: control flow would
-  // reach `assertNever(message)` with a non-`never` argument, and TS would
-  // reject the call (RESEARCH Pitfall 3 -- NFR-7 discipline).
-  //
+  // Exhaustiveness gate (RESEARCH Pitfall 3 / NFR-7 -- the load-bearing
+  // discipline). Today's NotificationMessage union has 3 arms
+  // (cascade | marketplace-info | plugin-info); the two info arms returned
+  // above, so the only legal residual `message.kind` values are `undefined`
+  // (v1.0-v1.7 migration-strategy #2 path) or the explicit literal
+  // `"cascade"`. We switch on `message.kind` so that any future 4th `kind`
+  // literal (e.g. `"foo-info"`) added to the union WITHOUT extending this
+  // dispatcher compile-errors at the `assertNever(message)` default arm:
+  // TS would reach the default with `message` narrowed to the new variant
+  // (NOT `never`) and reject the call with TS2345 -- forcing the
+  // contributor to add a matching arm above. This is the canonical
+  // exhaustiveness pattern already used by `renderPluginRow`,
+  // `renderMpHeader`, and `renderPluginInfo` further up in this file.
+  switch (message.kind) {
+    case undefined:
+    case "cascade":
+      // Cascade body falls through below.
+      break;
+    default:
+      assertNever(message);
+      return;
+  }
+
   // Cascade body unchanged -- moved verbatim into this arm so v1.0-v1.7
   // byte forms remain identical across the 60+ catalog UAT fixtures
   // (RESEARCH Pitfall 1). Caller-supplied order honored end-to-end (no
