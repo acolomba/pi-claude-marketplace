@@ -312,6 +312,9 @@ async function buildBlock(
   }
 
   // (d) / (e) Not installed -> resolve to classify available / unavailable.
+  // `resolvable` is not threaded: the `(unavailable)` arm catches every
+  // non-path source because `resolveStrict` returns `installable: false`
+  // for them, so the `(available)` arm is reached only with path sources.
   const row = await buildNotInstalledRow(
     pluginName,
     manifestVersion,
@@ -319,7 +322,6 @@ async function buildBlock(
     dependencies,
     entry,
     mpRecord,
-    resolvable,
   );
   return wrapBlock(marketplace, scope, marketplaceDetails, row);
 }
@@ -425,7 +427,6 @@ async function buildNotInstalledRow(
   dependencies: readonly string[] | undefined,
   entry: MarketplaceManifest["plugins"][number],
   mpRecord: MarketplaceRecord,
-  resolvable: boolean,
 ): Promise<PluginInfoRow> {
   let resolved;
   try {
@@ -458,6 +459,11 @@ async function buildNotInstalledRow(
     };
   }
 
+  // Non-path sources reach the `(unavailable)` arm above because
+  // `resolveStrict` returns `installable: false` for them -- so by the
+  // time control gets here the source is path-resolvable and
+  // `composeResolvedComponents` is safe to call without an external-
+  // source short-circuit. The `resolvable` parameter is informational.
   return buildAvailableRow({
     pluginName,
     version,
@@ -465,16 +471,15 @@ async function buildNotInstalledRow(
     dependencies,
     pluginRoot: resolved.pluginRoot,
     resolvedForComponents: resolved,
-    resolvable,
   });
 }
 
 /**
- * `(available)` row constructor. Locally resolvable -> resolved
- * components arm; external sources -> the `components: not resolved`
- * marker. A non-ENOENT readdir failure during component discovery
- * propagates here and is classified via `narrowProbeError` so a
- * permission-denied directory cannot silently render as
+ * `(available)` row constructor for a path-source plugin (the only
+ * locally-resolvable kind). Walks `composeResolvedComponents` to gather
+ * per-kind names; a non-ENOENT readdir failure during component
+ * discovery propagates here and is classified via `narrowProbeError`
+ * so a permission-denied directory cannot silently render as
  * "no components".
  */
 async function buildAvailableRow(opts: {
@@ -484,18 +489,8 @@ async function buildAvailableRow(opts: {
   readonly dependencies: readonly string[] | undefined;
   readonly pluginRoot: string;
   readonly resolvedForComponents: Parameters<typeof composeResolvedComponents>[1];
-  readonly resolvable: boolean;
 }): Promise<PluginInfoRow> {
-  const { pluginName, version, description, dependencies, resolvable } = opts;
-  if (!resolvable) {
-    return {
-      status: "available",
-      name: pluginName,
-      ...(version !== undefined && { version }),
-      ...(description !== undefined && { description }),
-      componentsResolved: false,
-    };
-  }
+  const { pluginName, version, description, dependencies } = opts;
 
   try {
     const components = await composeResolvedComponents(opts.pluginRoot, opts.resolvedForComponents);
