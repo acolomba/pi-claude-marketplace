@@ -1253,6 +1253,38 @@ const FIXTURES: FixtureMap = {
   },
 
   // -------------------------------------------------------------------------
+  // /claude:plugin marketplace info -- Phase 42 / INFO-04 / INFO-08 first
+  // catalog state. The `{not added}` --scope mismatch is constructed as a
+  // PluginInfoMessage with status:"failed" + reasons:["not added"] +
+  // componentsResolved:false; the renderer's INFO-04 carve-out emits the
+  // bare plugin row at column 0 (no marketplace header above it). Phase 43
+  // adds the full INFO-01 success-state fixture set under this same key.
+  // -------------------------------------------------------------------------
+  "/claude:plugin marketplace info <name>": {
+    "scope-mismatch-not-added": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "my-mp",
+        marketplaceScope: "user",
+        // Minimal MarketplaceDetails -- the carve-out renderer does not
+        // emit a marketplace header for this catalog state, so the
+        // autoupdate marker is never composed; supply the required
+        // `autoupdate` field with a default value.
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "failed",
+          name: "my-mp",
+          scope: "user",
+          reasons: ["not added"],
+          componentsResolved: false,
+        },
+      } satisfies NotificationMessage,
+    },
+  },
+
+  // -------------------------------------------------------------------------
   // /claude:plugin marketplace remove -- marketplace + cascade.
   // -------------------------------------------------------------------------
   "/claude:plugin marketplace remove <name>": {

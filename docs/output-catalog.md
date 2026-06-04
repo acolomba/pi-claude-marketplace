@@ -818,6 +818,22 @@ Bare `failed` marketplace header at column 0; no plugin children. Severity: `err
 
 ______________________________________________________________________
 
+## `/claude:plugin marketplace info <name>`
+
+Read-only detail surface (Phases 42-43). Renders the marketplace header at column 0 carrying the `<autoupdate>` or `<no autoupdate>` marker, followed by per-attribute lines (`github:` or `path:`; optional `last_updated:` for github sources; optional `description:` when `marketplace.json` carries one). The full INFO-01 catalog state set (github / path / both-scopes / with-description) lands in Phase 43; Phase 42 ships only the INFO-04 `{not added}` failure state below to anchor the new section under the catalog UAT.
+
+### Failure -- `--scope` mismatch (`{not added}`)
+
+Surfaced when `marketplace info <name> --scope <wrong-scope>` is invoked against a marketplace present only in the OTHER scope (e.g., requesting `--scope user` when `my-mp` lives only in `project`). The new `{not added}` REASON (Phase 42 / INFO-04) distinguishes this from a truly-absent marketplace name and uniquely identifies the scope-mismatch surface. The renderer emits a bare plugin row at column 0 (no marketplace header above it -- the marketplace IS the thing that is not added in the requested scope). Severity `error`; no reload-hint (info surfaces are read-only per SNM-33).
+
+<!-- catalog-state: scope-mismatch-not-added -->
+
+```text
+⊘ my-mp [user] (failed) {not added}
+```
+
+______________________________________________________________________
+
 ## `/claude:plugin marketplace remove <name>`
 
 Single-marketplace command that cascades plugin unstaging.
