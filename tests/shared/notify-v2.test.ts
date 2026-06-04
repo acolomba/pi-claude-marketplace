@@ -2875,24 +2875,6 @@ test("Phase 42 / INFO-05: renderPluginInfo (componentsResolved:false emits the `
 // renderer (Phase 42 SC#4 byte-equality carried forward).
 // ===========================================================================
 
-test("Phase 43 / INFO-03: marketplace-info-cascade with empty blocks renders the empty string", () => {
-  // Defensive edge case: the orchestrator MUST NOT construct an empty
-  // fan-out for the user-facing path (it routes to PluginInfoMessage
-  // `{not added}` instead), but the renderer keeps the edge case
-  // deterministic. Empty `blocks` -> `[].map(...).join("\n\n")` -> "".
-  const ctx = makeCtx();
-  const pi = piWithBothLoaded();
-  const msg: NotificationMessage = {
-    kind: "marketplace-info-cascade",
-    blocks: [],
-  };
-  notify(ctx as never, pi as never, msg);
-  assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  const args = ctx.ui.notify.mock.calls[0]!.arguments;
-  assert.equal(args[0], "");
-  assert.equal(args.length, 1);
-});
-
 test("Phase 43 / INFO-03: marketplace-info-cascade with a single block byte-equals the bare marketplace-info render", () => {
   // The single-block case is the SAME byte form as the bare
   // MarketplaceInfoMessage variant -- no extra blank line, no header
@@ -3087,24 +3069,6 @@ test("Phase 43 / INFO-03 + INFO-01: single-block fan-out (path source, minimal) 
 // reuse of `renderPluginInfo` rather than re-implementing the per-block
 // renderer (Phase 42 SC#4 + Phase 43 byte-equality carried forward).
 // ===========================================================================
-
-test("Phase 44 / INFO-02: plugin-info-cascade with empty blocks renders the empty string", () => {
-  // Defensive edge case: the orchestrator MUST NOT construct an empty
-  // fan-out for the user-facing path (it routes to PluginInfoMessage
-  // `{not added}` instead), but the renderer keeps the edge case
-  // deterministic. Empty `blocks` -> `[].map(...).join("\n\n")` -> "".
-  const ctx = makeCtx();
-  const pi = piWithBothLoaded();
-  const msg: NotificationMessage = {
-    kind: "plugin-info-cascade",
-    blocks: [],
-  };
-  notify(ctx as never, pi as never, msg);
-  assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  const args = ctx.ui.notify.mock.calls[0]!.arguments;
-  assert.equal(args[0], "");
-  assert.equal(args.length, 1);
-});
 
 test("Phase 44 / INFO-02: plugin-info-cascade with a single block byte-equals the bare plugin-info render", () => {
   // The single-block case is the SAME byte form as the bare

@@ -657,6 +657,121 @@ test("WR-02: not-installed plugin with malformed plugin.json surfaces `{unparsea
 });
 
 // ---------------------------------------------------------------------------
+// (h-WR-03) End-to-end: manifest read failure (missing marketplace.json on
+// disk) surfaces a `(failed) {<reason>}` row under the marketplace header
+// rather than throwing. Locks the orchestrator-level catch path that
+// `narrowProbeError` classifies against ENOENT.
+// ---------------------------------------------------------------------------
+
+test("WR-03: marketplace.json missing on disk surfaces `{source missing}` failure row", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const locations = locationsFor("user", cwd);
+    await mkdir(locations.extensionRoot, { recursive: true });
+
+    const mpRoot = path.join(userRoot, "marketplaces", "mp");
+    const manifestPath = path.join(mpRoot, ".claude-plugin", "marketplace.json");
+    // Intentionally do NOT write the manifest file -- the state record
+    // points at a path that does not exist.
+    await mkdir(path.dirname(manifestPath), { recursive: true });
+
+    await saveState(locations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: {
+        mp: {
+          name: "mp",
+          scope: "user",
+          source: pathSource("./mp-src"),
+          addedFromCwd: cwd,
+          manifestPath,
+          marketplaceRoot: mpRoot,
+          plugins: {},
+        },
+      },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "x", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    // The orchestrator catches the ENOENT from `loadMarketplaceManifest`
+    // and classifies via `narrowProbeError` -> `source missing` reason.
+    const msg = notifications[0]!.message;
+    assert.match(msg, /\(failed\) \{source missing\}/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (j-S-3) normalizeDependencies: non-array shapes (object, empty array)
+// return undefined -> renderer omits `dependencies:` line entirely.
+// ---------------------------------------------------------------------------
+
+test("normalizeDependencies: object-shaped `dependencies` field omits the line", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "p",
+            source: "./p",
+            version: "1.0.0",
+            skills: "skills",
+            // Object shape, not string[] -- normalizer returns undefined.
+            dependencies: { foo: "1.0.0", bar: "2.0.0" },
+          },
+        ],
+      },
+      installed: { p: { version: "1.0.0" } },
+      installablePluginDirs: ["p"],
+      componentDirs: { p: ["skills/s1"] },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "p", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.doesNotMatch(notifications[0]!.message, /dependencies:/);
+  });
+});
+
+test("normalizeDependencies: empty `dependencies: []` array omits the line", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "p",
+            source: "./p",
+            version: "1.0.0",
+            skills: "skills",
+            dependencies: [],
+          },
+        ],
+      },
+      installed: { p: { version: "1.0.0" } },
+      installablePluginDirs: ["p"],
+      componentDirs: { p: ["skills/s1"] },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "p", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.doesNotMatch(notifications[0]!.message, /dependencies:/);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // (i) NFR-5 import discipline: no network surface.
 // ---------------------------------------------------------------------------
 

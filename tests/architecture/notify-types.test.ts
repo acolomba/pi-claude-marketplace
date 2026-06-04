@@ -825,7 +825,7 @@ export const _l9: _Assert_CascadeInfoKind = true;
 
 interface _MarketplaceInfoCascadeExpected {
   readonly kind: "marketplace-info-cascade";
-  readonly blocks: readonly MarketplaceInfoMessage[];
+  readonly blocks: readonly [MarketplaceInfoMessage, ...MarketplaceInfoMessage[]];
 }
 type _Assert_MarketplaceInfoCascadeShape =
   MarketplaceInfoCascadeMessage extends _MarketplaceInfoCascadeExpected
@@ -884,7 +884,7 @@ export const _l10: _Assert_PluginInfoCascadeKind = true;
 
 interface _PluginInfoCascadeExpected {
   readonly kind: "plugin-info-cascade";
-  readonly blocks: readonly PluginInfoMessage[];
+  readonly blocks: readonly [PluginInfoMessage, ...PluginInfoMessage[]];
 }
 type _Assert_PluginInfoCascadeShape = PluginInfoCascadeMessage extends _PluginInfoCascadeExpected
   ? _PluginInfoCascadeExpected extends PluginInfoCascadeMessage
@@ -909,6 +909,21 @@ type _Assert_NotifFiveArms =
             ? never
             : true;
 export const _l10b: _Assert_NotifFiveArms = true;
+
+// The `CascadeNotificationMessage` arm declares `kind?: "cascade"` as
+// OPTIONAL (back-compat for v1.0-v1.7 call sites that construct cascades
+// without a `kind` field). Because `kind?: "cascade"` is NOT assignable
+// to `kind: "cascade"` (the optional field could be `undefined`),
+// `Extract<NotificationMessage, { kind: "cascade" }>` evaluates to
+// `never` -- it CANNOT be used to narrow to the cascade arm. Callers
+// must narrow via the structural `marketplaces` field instead (see
+// `_l9b` / `_l10b` above). This lock makes the pitfall loud: a future
+// contributor who "fixes" the union by promoting `kind` to required
+// would start matching this Extract and the assertion would flip from
+// `true` to `never`, surfacing the breaking change.
+type _Assert_ExtractCascadeByOptionalKindIsNever =
+  Extract<NotificationMessage, { kind: "cascade" }> extends never ? true : never;
+export const _l11: _Assert_ExtractCascadeByOptionalKindIsNever = true;
 
 // ============================================================================
 // Phase 42 drift guards (re-stated explicitly -- the pre-existing length-locks

@@ -377,6 +377,116 @@ test("D-03: absent from BOTH scopes with no --scope renders `(failed) {not added
   });
 });
 
+// ---------------------------------------------------------------------------
+// Source-coerce fallback (NFR-12 forward-compat): non-github source kinds
+// (`url`, `git-subdir`, `npm`, `unknown`) coerce to the `path` arm with
+// `record.marketplaceRoot` as the absolute path.
+// ---------------------------------------------------------------------------
+
+test('NFR-12: forward-compat `kind: "unknown"` source coerces to the `path:` arm with marketplaceRoot', async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const userLocations = locationsFor("user", cwd);
+    await mkdir(userLocations.extensionRoot, { recursive: true });
+    const manifestPath = path.join(userLocations.extensionRoot, "unknown-mp.json");
+    await writeMarketplaceJson(manifestPath, "unknown-mp");
+
+    await saveState(userLocations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: {
+        "unknown-mp": {
+          name: "unknown-mp",
+          scope: "user",
+          // Forward-compat tail: `normalizeStoredSource` accepts
+          // `kind: "unknown"` records verbatim. The orchestrator must
+          // coerce non-github discriminators to the `path:` arm so a
+          // future source kind still renders rather than silently
+          // throwing on a missing discriminator branch.
+          source: { kind: "unknown", raw: "npm:foo@1.0.0", reason: "future kind" },
+          addedFromCwd: cwd,
+          manifestPath,
+          marketplaceRoot: "/abs/path/to/unknown-mp",
+          plugins: {},
+        },
+      },
+    } as unknown as Parameters<typeof saveState>[1]);
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getMarketplaceInfo({ ctx, pi, name: "unknown-mp", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /^path: \/abs\/path\/to\/unknown-mp$/m);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Manifest read/parse failures surface as `(failed) {<reason>}` rows
+// instead of silently swallowing to `description: undefined`. Mirrors
+// the `plugin/info.ts` discipline.
+// ---------------------------------------------------------------------------
+
+test("Manifest missing on disk surfaces `(failed) {source missing}` row, not silent success", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const userLocations = locationsFor("user", cwd);
+    await mkdir(userLocations.extensionRoot, { recursive: true });
+    const manifestPath = path.join(userLocations.extensionRoot, "missing-mp.json");
+    // Intentionally do NOT write the manifest -- ENOENT on read.
+
+    await saveState(userLocations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: {
+        "missing-mp": {
+          name: "missing-mp",
+          scope: "user",
+          source: pathSource("./missing-src"),
+          addedFromCwd: cwd,
+          manifestPath,
+          marketplaceRoot: "/abs/missing-mp",
+          plugins: {},
+        },
+      },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getMarketplaceInfo({ ctx, pi, name: "missing-mp", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    // ENOENT classifier -> `source missing`. The pre-fix body would
+    // have been the success body without a `description:` line, with
+    // info severity -- silent.
+    assert.match(notifications[0]!.message, /\(failed\) \{source missing\}/);
+  });
+});
+
+test("Manifest with malformed JSON surfaces `(failed) {unparseable}` row, not silent success", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const userLocations = locationsFor("user", cwd);
+    await mkdir(userLocations.extensionRoot, { recursive: true });
+    const manifestPath = path.join(userLocations.extensionRoot, "bad-mp.json");
+    await mkdir(path.dirname(manifestPath), { recursive: true });
+    await writeFile(manifestPath, "{ not valid json", "utf8");
+
+    await saveState(userLocations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: {
+        "bad-mp": {
+          name: "bad-mp",
+          scope: "user",
+          source: pathSource("./bad-src"),
+          addedFromCwd: cwd,
+          manifestPath,
+          marketplaceRoot: "/abs/bad-mp",
+          plugins: {},
+        },
+      },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getMarketplaceInfo({ ctx, pi, name: "bad-mp", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.match(notifications[0]!.message, /\(failed\) \{unparseable\}/);
+  });
+});
+
 test("NFR-5: info.ts has zero imports from platform/git, DEFAULT_GIT_OPS, or refreshGitHubClone", async () => {
   const src = await readFile(
     "extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts",

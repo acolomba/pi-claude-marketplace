@@ -654,21 +654,21 @@ export interface MarketplaceInfoMessage {
 }
 
 /**
- * Phase 42 / INFO-02 / INFO-04 / INFO-05: top-level info-surface variant
- * emitted by the (Phase 44) `/claude:plugin info <plugin>@<marketplace>`
- * command. Carries the parent marketplace identifier so the renderer can
- * compose the always-marketplace-header form (mirrors the install cascade
- * shape per INFO-02), and a `PluginInfoRow` whose `componentsResolved`
- * discriminator chooses between the resolved-components shape (per-kind
- * sorted arrays + optional `dependencies`) and the unresolved-marker shape
- * (renders `components: not resolved` per INFO-05).
+ * Top-level info-surface variant emitted by `/claude:plugin info
+ * <plugin>@<marketplace>`. Carries the parent marketplace identifier
+ * so the renderer can compose the always-marketplace-header form
+ * (mirrors the install cascade shape), and a `PluginInfoRow` whose
+ * `componentsResolved` discriminator chooses between resolved-components
+ * (per-kind sorted arrays + optional dependencies) and the
+ * `components: not resolved` marker (external sources cannot be
+ * resolved without fetching, which would violate NFR-5).
  *
- * INFO-04: a `--scope` mismatch row is constructed as a `PluginInfoRow`
+ * `{not added}` carve-out: a `--scope` mismatch row is constructed
  * with `status: "failed"`, `name: <marketplace-name>`,
- * `reasons: ["not added"]`, and `componentsResolved: false`; the renderer
- * emits the bare `⊘ <name> [<scope>] (failed) {not added}` row at column 0
- * with severity `"error"` and NO marketplace header (the row IS the
- * message). See `renderPluginInfo` for the carve-out.
+ * `reasons: ["not added"]`, `componentsResolved: false`. The renderer
+ * emits the bare `⊘ <name> [<scope>] (failed) {not added}` row at
+ * column 0 with severity `"error"` and NO marketplace header (the row
+ * IS the message). See `renderPluginInfo`.
  */
 export interface PluginInfoMessage {
   readonly kind: "plugin-info";
@@ -679,13 +679,12 @@ export interface PluginInfoMessage {
 }
 
 /**
- * Phase 42 / INFO-02 / INFO-05: per-plugin row carried by
- * `PluginInfoMessage`. Discriminated on `componentsResolved: true | false`
- * (NFR-7 discriminated-union discipline) so the renderer's switch is
- * exhaustive via `assertNever` -- the resolved arm carries the per-kind
- * component arrays + optional `dependencies`, the unresolved arm carries
- * no component data and triggers the `components: not resolved` marker
- * line per INFO-05.
+ * Per-plugin row carried by `PluginInfoMessage`. Discriminated on
+ * `componentsResolved: true | false` so the renderer's switch is
+ * exhaustive via `assertNever`. The resolved arm carries per-kind
+ * component arrays + optional `dependencies`; the unresolved arm
+ * carries no component data and triggers the
+ * `components: not resolved` marker.
  */
 export type PluginInfoRow =
   | (PluginInfoRowBase & PluginInfoComponentsResolved)
@@ -694,15 +693,15 @@ export type PluginInfoRow =
 /**
  * Shared base for both `PluginInfoRow` arms.
  *
- * `status: "installed" | "available" | "unavailable" | "failed"` is the
- * 4-member closed set used on the info surface (INFO-02 + INFO-04). The
- * literal-union is inlined here rather than added to `PLUGIN_STATUSES`
- * because info messages are a SIBLING concept to cascades (RESEARCH
- * Anti-Pattern: "Mutating PLUGIN_STATUSES to add an info-surface status").
+ * `status: "installed" | "available" | "unavailable" | "failed"` is
+ * the 4-member closed set used on the info surface. The literal-union
+ * is inlined here rather than added to `PLUGIN_STATUSES` because info
+ * messages are a SIBLING concept to cascades and must not contaminate
+ * the cascade closed set.
  *
- * `reasons?: readonly Reason[]` is populated when `status` is `"unavailable"`
- * or `"failed"` (e.g., `["not added"]` for the INFO-04 `--scope` mismatch
- * row, `["not in manifest"]` for an unknown-plugin failure).
+ * `reasons?: readonly Reason[]` is populated when `status` is
+ * `"unavailable"` or `"failed"` (e.g., `["not added"]` for the
+ * `--scope` mismatch row, `["not in manifest"]` for an unknown plugin).
  */
 interface PluginInfoRowBase {
   readonly status: "installed" | "available" | "unavailable" | "failed";
@@ -714,16 +713,15 @@ interface PluginInfoRowBase {
 }
 
 /**
- * `componentsResolved: true` arm of `PluginInfoRow`. The renderer emits
- * the per-kind component lists in alphabetical order (`agents`, `commands`,
- * `mcp`, `skills`) followed by an optional `dependencies:` line in
- * `<plugin>@<marketplace>` form (INFO-02).
+ * `componentsResolved: true` arm. The renderer emits per-kind component
+ * lists in alphabetical order (`agents`, `commands`, `mcp`, `skills`)
+ * followed by an optional `dependencies:` line in
+ * `<plugin>@<marketplace>` form.
  *
- * RESEARCH Pitfall 5 PRECONDITION: the per-kind arrays AND the
- * `dependencies` array MUST be pre-sorted alphabetically at message-
- * construction time (Phase 44 orchestrator responsibility). The renderer
- * assumes sorted input and does NOT sort defensively -- defensive sorting
- * would hide downstream caller bugs by masking the contract violation.
+ * PRECONDITION: per-kind arrays and the `dependencies` array MUST be
+ * pre-sorted alphabetically at construction time. The renderer assumes
+ * sorted input and does NOT sort defensively -- defensive sorting
+ * would mask caller contract violations.
  */
 interface PluginInfoComponentsResolved {
   readonly componentsResolved: true;
@@ -737,11 +735,10 @@ interface PluginInfoComponentsResolved {
 }
 
 /**
- * `componentsResolved: false` arm of `PluginInfoRow`. The renderer emits
- * the single marker line `    components: not resolved` instead of any
- * per-kind component lists (INFO-05). The marker carries NO data -- it is
- * a structural signal that the plugin's `plugin.json` lives at an unsynced
- * external source (separate git repo, npm, etc.) and Phase 44's
+ * `componentsResolved: false` arm. The renderer emits the single
+ * marker line `    components: not resolved` instead of per-kind
+ * component lists. The marker is a structural signal that the
+ * plugin's `plugin.json` lives at an unsynced external source and the
  * orchestrator deliberately does NOT fetch it (preserves NFR-5).
  */
 interface PluginInfoComponentsUnresolved {
@@ -749,56 +746,46 @@ interface PluginInfoComponentsUnresolved {
 }
 
 /**
- * Phase 43 / INFO-03: fan-out wrapper used by `getMarketplaceInfo` when no
- * `--scope` is given and the requested marketplace name exists in BOTH
- * scopes. The wrapper carries one or more `MarketplaceInfoMessage` blocks
- * in caller order; `renderMarketplaceInfoCascade` joins their per-block
- * bodies with `\n\n` (mirrors the cascade `composeMarketplaceBlock` join
- * semantics). Iteration order is the orchestrator's responsibility
- * (project-first per MSG-GR-3 / INFO-03). Reload-hint NEVER fires;
- * severity is always info (no failure can be expressed on a fan-out
- * payload -- the orchestrator routes the INFO-04 `{not added}` failure
- * surface through the sibling `PluginInfoMessage` variant). Empty `blocks`
- * renders to the empty string -- the orchestrator MUST NOT construct an
- * empty fan-out for the user-facing path, but the renderer keeps the edge
- * case deterministic.
+ * Fan-out wrapper used by `getMarketplaceInfo` when no `--scope` is
+ * given and the requested marketplace name exists in BOTH scopes.
+ * `renderMarketplaceInfoCascade` joins per-block bodies with `\n\n`.
+ * Iteration order is the orchestrator's responsibility (project-first
+ * per MSG-GR-3). Reload-hint NEVER fires; severity is always info (no
+ * failure can be expressed on a fan-out payload -- the orchestrator
+ * routes the `{not added}` failure surface through the sibling
+ * `PluginInfoMessage` variant).
+ *
+ * The `blocks` tuple is non-empty (`readonly [T, ...T[]]`) so an empty
+ * fan-out is a compile-time error rather than a documented "renderer
+ * keeps it deterministic" carve-out.
  */
 export interface MarketplaceInfoCascadeMessage {
   readonly kind: "marketplace-info-cascade";
-  readonly blocks: readonly MarketplaceInfoMessage[];
+  readonly blocks: readonly [MarketplaceInfoMessage, ...MarketplaceInfoMessage[]];
 }
 
 /**
- * Phase 44 / INFO-02 + INFO-03: fan-out wrapper used by `getPluginInfo`
- * when no `--scope` is given and the requested plugin+marketplace pair
- * exists in BOTH scopes. The wrapper carries one or more
- * `PluginInfoMessage` blocks in caller order;
- * `renderPluginInfoCascade` joins their per-block bodies with `\n\n`
- * (mirrors the cascade `composeMarketplaceBlock` join semantics AND
- * Phase 43's `renderMarketplaceInfoCascade`). Iteration order is the
- * orchestrator's responsibility (project-first per MSG-GR-3 / INFO-03).
- * Reload-hint NEVER fires; severity is always info (no failure can be
- * expressed on a fan-out payload -- the orchestrator routes the
- * INFO-04 `{not added}` failure surface through the sibling
- * `PluginInfoMessage` variant instead). Empty `blocks` renders to the
- * empty string -- the orchestrator MUST NOT construct an empty fan-out
- * for the user-facing path, but the renderer keeps the edge case
- * deterministic.
+ * Fan-out wrapper used by `getPluginInfo` when no `--scope` is given
+ * and the requested plugin+marketplace pair exists in BOTH scopes.
+ * `renderPluginInfoCascade` joins per-block bodies with `\n\n`.
+ * Iteration order is the orchestrator's responsibility (project-first
+ * per MSG-GR-3). Reload-hint NEVER fires; severity is always info.
+ *
+ * The `blocks` tuple is non-empty (`readonly [T, ...T[]]`) so an empty
+ * fan-out is a compile-time error.
  */
 export interface PluginInfoCascadeMessage {
   readonly kind: "plugin-info-cascade";
-  readonly blocks: readonly PluginInfoMessage[];
+  readonly blocks: readonly [PluginInfoMessage, ...PluginInfoMessage[]];
 }
 
 /**
  * Top-level discriminated-union envelope consumed by `notify(ctx, pi,
- * NotificationMessage)` (SNM-01). Discriminated on the optional `kind`
- * field: the cascade arm omits `kind` (or sets it to `"cascade"`) per the
- * Phase-42 migration strategy; the four info-surface arms set `kind`
- * explicitly. The `notify()` dispatcher narrows via
- * `message.kind ?? "cascade"` with an `assertNever` default arm so every
- * future variant addition becomes a compile-time error at the switch
- * (RESEARCH Pitfall 3 -- NFR-7 discipline).
+ * NotificationMessage)`. The cascade arm omits `kind` (or sets it to
+ * `"cascade"`) for back-compat with v1.0-v1.7 call sites; the four
+ * info-surface arms set `kind` explicitly. The dispatcher narrows
+ * with an `assertNever` default arm so every future variant addition
+ * becomes a compile-time error at the switch.
  */
 export type NotificationMessage =
   | CascadeNotificationMessage
@@ -1895,18 +1882,14 @@ function renderPluginInfoCascade(message: PluginInfoCascadeMessage, probe: SoftD
 }
 
 /**
- * File-private: map a `PluginInfoRow` status literal to its rendering
- * glyph. `installed` -> `●`, `available` -> `○`,
- * `unavailable | failed` -> `⊘`. Extracted from `renderPluginInfo` to
- * keep that function's cognitive complexity under the project budget.
+ * Map a `PluginInfoRow` status literal to its rendering glyph.
+ * `installed` -> `●`, `available` -> `○`,
+ * `unavailable | failed` -> `⊘`. Exhaustive switch + `assertNever`
+ * so a 5th status member in `PluginInfoRowBase` would be a compile-
+ * time error here rather than silently defaulting to the uninstallable
+ * glyph.
  */
 function pluginInfoStatusGlyph(status: PluginInfoRow["status"]): string {
-  // Phase 42 / WR-02: exhaustive switch + assertNever mirrors the cascade
-  // `renderPluginRow` discipline. If the inline status union in
-  // `PluginInfoRowBase` ever grows a 5th member, the default arm becomes
-  // a compile-time error here (TS2345 at the assertNever call) -- forcing
-  // the contributor to add a matching glyph mapping rather than silently
-  // defaulting to the uninstallable glyph.
   switch (status) {
     case "installed":
       return ICON_INSTALLED;
@@ -1922,16 +1905,13 @@ function pluginInfoStatusGlyph(status: PluginInfoRow["status"]): string {
   }
 }
 
-// Phase 42 / WR-03: derive the tuple's element type from the interface
-// so the two declarations cannot drift. The tuple is sized exactly
-// (4 entries) so adding a 5th key to `PluginInfoComponentsResolved.components`
-// without also extending this tuple breaks the typecheck here -- TS will
-// reject the literal `["agents", "commands", "mcp", "skills"]` because
-// its `ComponentKind` member type would no longer cover every keyof the
-// interface. Without the explicit tuple length, the renderer would
-// silently omit the new kind from the output. The four kinds (agents,
-// commands, mcp, skills) are rendered in this alphabetical order by
-// `appendResolvedComponentLines` below.
+// Derive the tuple's element type from the interface so the two
+// declarations cannot drift. The tuple is sized exactly (4 entries):
+// adding a 5th key to `PluginInfoComponentsResolved.components` without
+// extending this tuple breaks the typecheck here -- TS rejects the
+// literal because `ComponentKind` would no longer cover every keyof
+// the interface. Without the explicit tuple length, the renderer
+// would silently omit the new kind from output.
 type ComponentKind = keyof PluginInfoComponentsResolved["components"];
 const COMPONENT_KINDS: readonly [ComponentKind, ComponentKind, ComponentKind, ComponentKind] = [
   "agents",
@@ -1941,12 +1921,11 @@ const COMPONENT_KINDS: readonly [ComponentKind, ComponentKind, ComponentKind, Co
 ];
 
 /**
- * File-private: append the per-kind component lines + optional dependencies
- * line for a resolved `PluginInfoRow`. Per-kind order is alphabetical
- * (`agents`, `commands`, `mcp`, `skills`); within each kind, names render
- * in the caller-supplied order (RESEARCH Pitfall 5: the orchestrator
- * pre-sorts; the renderer does NOT). Extracted from `renderPluginInfo`
- * to keep that function's cognitive complexity under budget.
+ * Append the per-kind component lines + optional dependencies line
+ * for a resolved `PluginInfoRow`. Per-kind order is alphabetical
+ * (`agents`, `commands`, `mcp`, `skills`); within each kind, names
+ * render in the caller-supplied order. The orchestrator pre-sorts;
+ * the renderer does not.
  */
 function appendResolvedComponentLines(
   lines: string[],
@@ -1966,55 +1945,46 @@ function appendResolvedComponentLines(
 }
 
 /**
- * Phase 42 / INFO-02 / INFO-04 / INFO-05: render a `PluginInfoMessage` to
- * its single-string body.
+ * Render a `PluginInfoMessage` to its single-string body.
  *
- * INFO-04 CARVE-OUT (`{not added}`): when the embedded plugin row has
+ * `{not added}` carve-out: when the embedded plugin row has
  * `status === "failed"` AND `reasons` is EXACTLY `["not added"]` (sole
- * reason, per Phase 42 / WR-01), the marketplace being queried is not
- * present in the requested scope (there is no real marketplace to head),
- * so the renderer emits ONLY the bare plugin row at column 0:
- * `⊘ <name> [<scope>] (failed) {not added}`. No marketplace header line
- * precedes the row (INFO-04 byte form). This is the canonical `--scope`
- * mismatch surface. Any `failed` row whose reasons contain `"not added"`
- * AS WELL AS other reasons routes through the standard header form (the
- * sole-reason guard surfaces the additional failure context instead of
- * silently hiding it).
+ * reason), the marketplace being queried is not present in the
+ * requested scope -- the renderer emits ONLY the bare plugin row at
+ * column 0 (`⊘ <name> [<scope>] (failed) {not added}`). No
+ * marketplace header. Any `failed` row whose reasons contain
+ * `"not added"` AS WELL AS other reasons routes through the standard
+ * header form so the additional failure context surfaces.
  *
- * INFO-02 STANDARD PATH: every other plugin-info row renders the
- * always-marketplace-header form (mirrors the install cascade):
- *   - marketplace header at column 0 (`composeMpInfoHeader`),
- *   - plugin row at 2-space indent (status glyph + name + optional scope
- *     bracket + optional version + (status) + optional reasons brace),
- *   - optional description block wrapped via `wrapDescription(text, 4, 66)`,
- *   - then either the per-kind component lists at 4-space indent + optional
- *     `dependencies:` line (componentsResolved: true), or the single
- *     marker line `    components: not resolved` (componentsResolved: false
- *     per INFO-05).
+ * Standard path: every other plugin-info row renders the
+ * always-marketplace-header form: marketplace header at col 0;
+ * plugin row at 2-space indent (status glyph + name + optional scope
+ * bracket + version + (status) + optional reasons brace); optional
+ * description block wrapped via `wrapDescription(text, 4, 66)`; then
+ * either per-kind component lists at 4-space indent + optional
+ * `dependencies:` line (componentsResolved: true), or the single
+ * marker line `    components: not resolved` (componentsResolved:
+ * false).
  *
- * Per-status glyph: `installed` -> `●`, `available` -> `○`,
- * `unavailable | failed` -> `⊘`. Reasons brace via `composeReasons` with
- * both soft-dep declares-flags FALSE (info messages NEVER emit soft-dep
- * markers per RESEARCH Anti-Pattern).
+ * Reasons brace via `composeReasons` with both declares-flags FALSE
+ * -- info messages NEVER emit soft-dep markers.
  *
- * Sort precondition (RESEARCH Pitfall 5): per-kind component arrays AND the
- * `dependencies` array MUST be pre-sorted at message construction time
- * (Phase 44 orchestrator responsibility). The renderer does NOT sort.
+ * SORT PRECONDITION: per-kind arrays and `dependencies` MUST be
+ * pre-sorted at message construction. The renderer does not sort.
  *
- * `probe` accepted for signature parity with `composeMarketplaceBlock` but
- * unused -- see `composeReasons` calls below.
+ * `probe` is accepted for signature parity with
+ * `composeMarketplaceBlock` but unused on the info path.
  */
 function renderPluginInfo(message: PluginInfoMessage, probe: SoftDepStatus): string {
   const plugin = message.plugin;
 
-  // INFO-04 carve-out: bare row at column 0 -- no marketplace header. The
-  // predicate demands `"not added"` be the SOLE reason on the row (Phase 42
-  // / WR-01): if a future caller bug constructs e.g.
-  // `reasons: ["not added", "permission denied"]`, the additional failure
-  // reason and the marketplace context would be silently suppressed by the
-  // bare-row carve-out. Requiring length === 1 keeps the carve-out scoped
-  // to the catalog-state semantics (the `--scope` mismatch row IS the
-  // message; any other reason mix routes through the standard header form).
+  // `{not added}` carve-out: bare row at column 0, no marketplace
+  // header. The predicate demands `"not added"` be the SOLE reason:
+  // a future caller bug constructing
+  // `reasons: ["not added", "permission denied"]` must NOT silently
+  // suppress the additional reason and marketplace context. Sole-
+  // reason scoping keeps the carve-out at the catalog state and routes
+  // every other reason mix through the standard header form.
   if (
     plugin.status === "failed" &&
     plugin.reasons?.length === 1 &&
@@ -2091,14 +2061,11 @@ function composeMarketplaceBlock(mp: MarketplaceNotificationMessage, probe: Soft
 }
 
 /**
- * File-private dispatcher for the info-surface arms of `notify()`.
- * Centralizes the three-arm body computation + the severity-aware
- * `ctx.ui.notify(body[, severity])` call so the public `notify()`
- * dispatcher stays under the project's cognitive-complexity budget.
- * Returns the computed body+severity so `notify()`'s arms can return
- * after this helper executes the single sanctioned ctx.ui.notify call
- * (IL-2 preserved -- one call per `notify()` invocation; the dispatch
- * arms are mutually-exclusive). Phase 42 / SC#1 + Phase 43 / INFO-03.
+ * Dispatcher for the info-surface arms of `notify()`. Centralizes the
+ * four-arm body computation + the severity-aware `ctx.ui.notify()`
+ * call so the public `notify()` dispatcher stays under the cognitive-
+ * complexity budget. IL-2: one `ctx.ui.notify` call per invocation
+ * (arms are mutually exclusive).
  */
 function dispatchInfoMessage(
   ctx: ExtensionContext,
@@ -2155,16 +2122,12 @@ export function notify(
   // -- info messages never emit soft-dep markers per RESEARCH Anti-Patterns).
   const probe = softDepStatus(pi);
 
-  // Phase 42 / SC#1 + Phase 43 / INFO-03 + Phase 44 / INFO-02: dispatch
-  // info-surface kinds through `dispatchInfoMessage` (extracted helper)
-  // so the cascade arm below stays under the cognitive-complexity budget.
-  // The helper performs exactly ONE `ctx.ui.notify` call per invocation
-  // (IL-2). NO reload-hint and NO summary line are composed for any info
-  // kind (the helper does not invoke `shouldEmitReloadHint` or
-  // `buildSummaryLine` -- both short-circuit on info kinds anyway, but
-  // skipping them here keeps the dispatcher narrow). After this branch,
-  // TypeScript narrows `message` to `CascadeNotificationMessage` via the
-  // exhaustiveness switch below.
+  // Dispatch info-surface kinds through `dispatchInfoMessage` so the
+  // cascade arm below stays under the cognitive-complexity budget.
+  // The helper performs exactly ONE `ctx.ui.notify` call per
+  // invocation (IL-2). No reload-hint, no summary line for any info
+  // kind. After this branch, TypeScript narrows `message` to
+  // `CascadeNotificationMessage` via the exhaustiveness switch below.
   if (
     message.kind === "marketplace-info" ||
     message.kind === "plugin-info" ||
@@ -2175,20 +2138,11 @@ export function notify(
     return;
   }
 
-  // Exhaustiveness gate (RESEARCH Pitfall 3 / NFR-7 -- the load-bearing
-  // discipline). Today's NotificationMessage union has 5 arms
-  // (cascade | marketplace-info | plugin-info | marketplace-info-cascade
-  // | plugin-info-cascade); the four info arms returned above, so the
-  // only legal residual `message.kind` values are `undefined` (v1.0-v1.7
-  // migration-strategy #2 path) or the explicit literal `"cascade"`. We
-  // switch on `message.kind` so that any future 6th `kind` literal (e.g.
-  // `"foo-info"`) added to the union WITHOUT extending this dispatcher
-  // compile-errors at the `assertNever(message)` default arm: TS would
-  // reach the default with `message` narrowed to the new variant (NOT
-  // `never`) and reject the call with TS2345 -- forcing the contributor
-  // to add a matching arm above. This is the canonical exhaustiveness
-  // pattern already used by `renderPluginRow`, `renderMpHeader`, and
-  // `renderPluginInfo` further up in this file.
+  // Exhaustiveness gate. After the info-arm return above, the only
+  // legal residual `message.kind` values are `undefined` (back-compat)
+  // or the explicit `"cascade"`. The switch + `assertNever` ensures a
+  // future 6th `kind` literal added without extending this dispatcher
+  // becomes a compile error here.
   switch (message.kind) {
     case undefined:
     case "cascade":

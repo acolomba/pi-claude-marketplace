@@ -235,6 +235,14 @@ test("routeMarketplace :: dispatches list to handlers.marketplaceList", async ()
   assert.deepEqual(notifications, []);
 });
 
+test("routeMarketplace :: dispatches info to handlers.marketplaceInfo", async () => {
+  const { ctx, notifications } = makeCtx();
+  const { handlers, calls } = makeHandlers();
+  await routeClaudePlugin("marketplace info my-mp --scope user", handlers, ctx);
+  assert.deepEqual(calls, [{ name: "marketplaceInfo", args: "my-mp --scope user" }]);
+  assert.deepEqual(notifications, []);
+});
+
 test("routeMarketplace :: dispatches ls alias to handlers.marketplaceList", async () => {
   const { ctx, notifications } = makeCtx();
   const { handlers, calls } = makeHandlers();
