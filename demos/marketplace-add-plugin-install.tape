@@ -16,8 +16,10 @@ Enter
 Sleep 3000ms
 Show
 
+Sleep 1800ms
+
 Sleep 1400ms
-Type "/claude:p"
+Type "/plu"
 Sleep 170ms
 Tab
 Sleep 170ms
@@ -35,7 +37,24 @@ Enter
 
 Sleep 1800ms
 
-Type "/claude:p"
+Sleep 1400ms
+Type "/plu"
+Sleep 170ms
+Tab
+Sleep 170ms
+Type "ls"
+Sleep 170ms
+Tab
+Sleep 170ms
+Type "--a"
+Sleep 170ms
+Tab
+Sleep 1800ms
+Enter
+
+Sleep 1800ms
+
+Type "/plu"
 Sleep 170ms
 Tab
 Sleep 170ms
@@ -52,6 +71,22 @@ Enter
 Sleep 1400ms
 
 Type "/reload"
+Sleep 1800ms
+Enter
+
+Sleep 1400ms
+
+Type "/plu"
+Sleep 170ms
+Tab
+Sleep 170ms
+Type "ls"
+Sleep 170ms
+Tab
+Sleep 170ms
+Type "--i"
+Sleep 170ms
+Tab
 Sleep 1800ms
 Enter
 
