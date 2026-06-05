@@ -69,7 +69,6 @@ Enter
 
 Sleep 1400ms
 
-Sleep 1400ms
 Type "/plu"
 Sleep 170ms
 Tab
