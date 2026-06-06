@@ -5,7 +5,7 @@
 // and
 // `/claude:plugin marketplace noautoupdate [<name>] [--scope user|project]`.
 //
-// Phase 4 D-01 ships a SINGLE `setMarketplaceAutoupdate` orchestrator
+// D-01 ships a SINGLE `setMarketplaceAutoupdate` orchestrator
 // parameterized by `enable: boolean`. The edge layer maps the two slash
 // subcommands onto this single factory via `makeAutoupdateHandler(true)` and
 // `makeAutoupdateHandler(false)`.

@@ -5,7 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 /**
- * AUTH-09 architecture gate (Phase 31).
+ * AUTH-09 architecture gate.
  *
  * Two static-grep assertions that together prevent the most common
  * credential-leak surfaces:
@@ -18,11 +18,11 @@ import { fileURLToPath } from "node:url";
  *   2. The platform/git-credential.ts module (which legitimately handles
  *      credentials) MUST NOT interpolate a credential field into an Error
  *      constructor. Error messages reference operation name + exit code or
- *      timeout-ms only (per RESEARCH.md Pitfall 8).
+ *      timeout-ms only (Pitfall 8).
  *
- * Test (2) is forward-compatible with Task 1's pre-Task-2 state: when
- * platform/git-credential.ts does not yet exist on disk, the test passes
- * vacuously. Task 2's authoring of the production file activates the test;
+ * Test (2) passes vacuously when
+ * platform/git-credential.ts does not exist on disk; the file's
+ * presence activates the test, and
  * the file-header docstring + Error-message discipline ensure it stays
  * GREEN once active.
  *
@@ -79,8 +79,8 @@ test("AUTH-09: platform/git-credential.ts never interpolates a password in an Er
     () => false,
   );
   if (!exists) {
-    // Task 1 lands before Task 2; until git-credential.ts is authored, this
-    // gate is vacuously satisfied. Task 2's file creation activates it.
+    // Until git-credential.ts is authored, this
+    // gate is vacuously satisfied. The file's creation activates it.
     assert.ok(
       true,
       "platform/git-credential.ts not yet authored; AUTH-09 Error-interpolation gate inactive until Task 2",
@@ -108,8 +108,8 @@ test("AUTH-09 (Phase 32): domain/github-auth.ts never interpolates a token in an
     () => false,
   );
   if (!exists) {
-    // Plan 32-01 lands before Plan 32-02; until domain/github-auth.ts is
-    // authored, this gate is vacuously satisfied. Plan 32-02's file creation
+    // Until domain/github-auth.ts is
+    // authored, this gate is vacuously satisfied. The file's creation
     // activates the gate automatically.
     assert.ok(
       true,
@@ -135,15 +135,14 @@ test("AUTH-09 (Phase 32): domain/github-auth.ts never interpolates a token in an
 });
 
 test("AUTH-09 (Phase 35): orchestrators/marketplace/{add,update}.ts never interpolate a credential field in an Error or ctx.ui.notify message", async () => {
-  // Closes Phase 33 review WR-02. Phase 35 Plans 35-01 / 35-02 wire
-  // add.ts and update.ts to construct the Device Flow onAuthRequired
-  // closure. The closure captures `credentialOps` by reference -- a
-  // future regression that interpolates
+  // Closes review WR-02. add.ts and update.ts construct the Device Flow
+  // onAuthRequired closure. The closure captures `credentialOps` by
+  // reference -- a future regression that interpolates
   // `credentialOps.fill(...).then(c => ctx.ui.notify(\`got ${c.password}\`))`
   // would be an AUTH-09 violation. This gate scans for that class of
-  // bug in the new orchestrator files.
+  // bug in the orchestrator files.
   //
-  // The regex mirrors the Phase 32 github-auth.ts gate: forbidden is a
+  // The regex mirrors the github-auth.ts gate: forbidden is a
   // template literal OR string concatenation that interpolates
   //   - access_token, accessToken
   //   - cred.<field> (e.g. cred.password)
@@ -159,8 +158,8 @@ test("AUTH-09 (Phase 35): orchestrators/marketplace/{add,update}.ts never interp
       () => false,
     );
     if (!exists) {
-      // Plan 35-01 / 35-02 may land in either order; if a file doesn't
-      // exist yet on disk, this gate is vacuously satisfied for that file.
+      // If a file doesn't exist yet on disk, this gate is vacuously
+      // satisfied for that file.
       continue;
     }
 

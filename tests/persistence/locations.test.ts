@@ -98,12 +98,12 @@ test("SC-3 ScopedLocations is frozen (cannot mutate scope after construction)", 
   }, /Cannot assign to read only property|object is not extensible/);
 });
 
-// Plan 05-03 D-07 corollary: assertSafeName is now the upstream gate inside
-// each helper (Rule 2 mitigation for T-5-09). Names containing path
-// separators "/" / "\", traversal segments "." / "..", or control chars
-// are rejected at the input boundary BEFORE assertPathInside fires. The
-// downstream PathContainmentError is therefore unreachable for these
-// particular escape inputs; the upstream Error suffices to refuse.
+// D-07 corollary: assertSafeName is the upstream gate inside each helper
+// (Rule 2 mitigation for T-5-09). Names containing path separators "/" /
+// "\", traversal segments "." / "..", or control chars are rejected at the
+// input boundary BEFORE assertPathInside fires. The downstream
+// PathContainmentError is therefore unreachable for these particular escape
+// inputs; the upstream Error suffices to refuse.
 test("SC-7 pluginDataDir('../escape', 'p') throws (upstream assertSafeName rejects '..' name)", async () => {
   const loc = locationsFor("project", "/p");
   await assert.rejects(
@@ -136,7 +136,7 @@ test("SC-7 pluginDataDir('mp', 'plugin') happy path returns under dataRoot", asy
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Plan 05-03 T-5-09: pluginDataDir name-input containment coverage.
+// T-5-09: pluginDataDir name-input containment coverage.
 //
 // assertPathInside alone does NOT catch a plugin name like "p/sub" because
 // path.join("dataRoot", "mp", "p/sub") -> "dataRoot/mp/p/sub" -- which
@@ -200,9 +200,8 @@ test("SC-7 sourceCloneDir('mp') happy path returns under sourcesDir", async () =
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Phase 3 (Plan 03-01): bridge-target paths added to ScopedLocations.
-// agentsIndexPath, skillsStagingDir, commandsStagingDir, skillsTargetDir,
-// promptsTargetDir.
+// Bridge-target paths on ScopedLocations: agentsIndexPath, skillsStagingDir,
+// commandsStagingDir, skillsTargetDir, promptsTargetDir.
 // ──────────────────────────────────────────────────────────────────────────
 
 test("D-07 locationsFor('user') sets agentsIndexPath to <extensionRoot>/agents-index.json", () => {
@@ -288,7 +287,7 @@ test("Phase 3 bridge-target dirs are all under extensionRoot (defense-in-depth)"
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Phase 6 (Plan 06-02) D-03 completion-cache path helpers:
+// D-03 completion-cache path helpers:
 // cacheDir, marketplaceNamesCacheFile, pluginCacheFile.
 // ──────────────────────────────────────────────────────────────────────────
 

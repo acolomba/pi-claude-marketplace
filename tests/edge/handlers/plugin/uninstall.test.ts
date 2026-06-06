@@ -1,4 +1,4 @@
-// Plan 06-04 Task 1: uninstall handler shim tests.
+// uninstall handler shim tests.
 //
 // Pattern mirrors install.test.ts. Uninstall has a special silent-converge
 // semantic (PU-5) -- when the plugin is absent the orchestrator emits NO

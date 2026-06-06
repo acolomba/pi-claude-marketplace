@@ -37,10 +37,9 @@
 // `PluginInstalledMessage` / `PluginReinstalledMessage`, threaded through the
 // notify-time `softDepStatus(pi)` probe.
 //
-// MU-2 and MU-3 are SUPERSEDED by the "follow upstream blindly" contract --
+// MU-2 and MU-3 do not apply under the "follow upstream blindly" contract --
 // the local marketplace clone is read-only, so the pull --ff-only
-// choreography and non-fast-forward divergence detection no longer apply.
-// The supersession is recorded in REQUIREMENTS.md and PROJECT.md.
+// choreography and non-fast-forward divergence detection have no role.
 //
 // Flow:
 //  1. Resolve scope(s):
@@ -49,7 +48,7 @@
 //  - opts.name + opts.scope set → use it directly
 //
 //  2. For each (scope, marketplaceName) pair:
-//  a. OUTER GUARD (+ -- wraps refresh + persist, NOT cascade):
+//  a. OUTER GUARD (wraps refresh + persist, NOT cascade):
 //  withStateGuard(locations, async (state) => {
 //  record = state.marketplaces[name]
 //  if (record.source.kind === "github"):
@@ -87,12 +86,11 @@
 //  the catalog UAT fixtures bound to each shape). Empty targets,
 //  mp-level failure, autoupdate-OFF success, and autoupdate-ON
 //  cascade each map to a distinct NotificationMessage shape;
-//  severity and reload-hint are renderer-computed (
-// ) and MUST NOT be composed by callers.
+//  severity and reload-hint are renderer-computed and MUST NOT be
+//  composed by callers.
 //
-//  sequence : fetch + (symbolic HEAD)
-// forceUpdateRef + checkout, OR (detached HEAD) checkout directly.
-// NO `pull`.
+//  D-14 sequence: fetch + (symbolic HEAD) forceUpdateRef + checkout, OR
+//  (detached HEAD) checkout directly. NO `pull`.
 
 import path from "node:path";
 
@@ -168,10 +166,9 @@ export interface UpdateMarketplaceOptions {
    */
   readonly credentialOps?: CredentialOps;
   /**
-   * Phase 35 test seam for Device Flow integration tests. Production
-   * callers omit this field and get DEFAULT_DEVICE_FLOW_HTTP
-   * (real github.com fetch) inside the orchestrator's onAuthRequired
-   * closure.
+   * Test seam for Device Flow integration tests. Production callers omit
+   * this field and get DEFAULT_DEVICE_FLOW_HTTP (real github.com fetch)
+   * inside the orchestrator's onAuthRequired closure.
    */
   readonly deviceFlowHttp?: DeviceFlowHttp;
 }
@@ -192,10 +189,9 @@ export interface UpdateAllMarketplacesOptions {
    */
   readonly credentialOps?: CredentialOps;
   /**
-   * Phase 35 test seam for Device Flow integration tests. Production
-   * callers omit this field and get DEFAULT_DEVICE_FLOW_HTTP
-   * (real github.com fetch) inside the orchestrator's onAuthRequired
-   * closure.
+   * Test seam for Device Flow integration tests. Production callers omit
+   * this field and get DEFAULT_DEVICE_FLOW_HTTP (real github.com fetch)
+   * inside the orchestrator's onAuthRequired closure.
    */
   readonly deviceFlowHttp?: DeviceFlowHttp;
 }
@@ -234,8 +230,8 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
 export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions): Promise<void> {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
   const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
-  // Iteration order is project-first per MSG-GR-3 / compareByNameThenScope
-  // so same-name cross-scope stable-sort ties render project-before-user.
+  // Iteration order is project-first per MSG-GR-3 so same-name cross-scope
+  // stable-sort ties render project-before-user.
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
 
   // Collect (scope, marketplaceName) pairs from a single fresh state read per scope.
@@ -256,7 +252,7 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
     return;
   }
 
-  // Process sequentially per CONTEXT.md (parallel refresh is a deferred perf optimization).
+  // Process sequentially.
   for (const t of targets) {
     await refreshOneMarketplace({
       ctx: opts.ctx,
@@ -344,8 +340,8 @@ async function refreshRecord(
     // UXG-05: capture the PRE-refresh validated-manifest content key BEFORE the
     // refresh re-validates and re-persists. Read off the currently persisted
     // `record.manifestPath` (the manifest as the user last saw it). NOT keyed on
-    // `record.lastUpdatedAt` (Pitfall 4 -- it is stamped to `now` every refresh
-    // regardless of content).
+    // `record.lastUpdatedAt` -- it is stamped to `now` every refresh
+    // regardless of content.
     // WR-01: this read lives INSIDE the try so a non-ENOENT PRE-read failure
     // (manifestContentKey re-throws per WR-02) is wrapped as MarketplaceUpdateError
     // exactly like a POST-read failure -- same `(failed)` routing, same cause
@@ -355,19 +351,17 @@ async function refreshRecord(
     if (source.kind === "github") {
       const cloneDir = await locations.sourceCloneDir(name);
       // AUTH-02: bind the Device Flow trigger as the onAuthRequired
-      // closure for this fetch. Phase 33's
-      // platform/git.ts::buildAuthCallbacks first consults
-      // credentialOps.fill(host); on a hit (the post-add common case)
-      // the stored token is returned and Device Flow does NOT trigger
+      // closure for this fetch. platform/git.ts::buildAuthCallbacks first
+      // consults credentialOps.fill(host); on a hit (the post-add common
+      // case) the stored token is returned and Device Flow does NOT trigger
       // -- this is the AUTH-02 silent-reuse contract. AUTH-09: the
       // closure interpolates ONLY user_code + verification_uri inside
-      // initiateDeviceFlow's notifyFn (domain/github-auth.ts:385) -- the
-      // access token is acquired later in the poll loop and never
-      // passed back to a notify or Error.
+      // initiateDeviceFlow's notifyFn -- the access token is acquired later
+      // in the poll loop and never passed back to a notify or Error.
       //
-      // host is the bare hostname; Phase 35 scope is GitHub-only so the
-      // literal "github.com" is correct here. A future AUTH-D02
-      // (deferred) would parameterize this from the source.
+      // host is the bare hostname; the supported scope is GitHub-only so the
+      // literal "github.com" is correct here. AUTH-D02 parameterizes this
+      // from the source.
       const host = "github.com";
       const { ctx, credentialOps, deviceFlowHttp } = args;
       const notifyFn = makeRawNotifyFn(ctx);
@@ -408,7 +402,7 @@ async function refreshRecord(
     const changed = preKey !== postKey;
 
     // lastUpdatedAt is stamped on EVERY refresh (used elsewhere); it is
-    // deliberately NOT the change signal (Pitfall 4).
+    // deliberately NOT the change signal.
     record.lastUpdatedAt = new Date().toISOString();
     return changed;
   } catch (err) {
@@ -647,7 +641,7 @@ function narrowSkipReason(outcome: PluginUpdateSkippedOutcome): Reason {
     return firstReason;
   }
 
-  // Fallback: legacy substring parse of `notes`. Retained for backward
+  // Fallback: substring parse of `notes`. Retained for backward
   // compatibility with notes-only outcome fixtures.
   //
   // WR-06: a `partition: "skipped"` outcome with no reasons AND no notes
@@ -694,7 +688,7 @@ function narrowFailReason(outcome: PluginUpdateFailedOutcome): Reason {
     return firstReason;
   }
 
-  // Fallback: legacy substring parse of `notes`. Retained for backward
+  // Fallback: substring parse of `notes`. Retained for backward
   // compatibility with notes-only outcome fixtures.
   const notes = outcome.notes;
   if (notes.length === 0) {
@@ -775,8 +769,8 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   //     (`partition === "unchanged"`) -> emit `(skipped) {up-to-date}` (catalog
   //     state `update-no-op-skipped` / `update-autoupdate-noop-skipped`).
   //     Routes WARNING via computeSeverity (mp.status === "skipped"); this is
-  //     intentional for Phase 27 -- the benign-skip -> info softening is UXG-02
-  //     in Phase 28, NOT pre-empted here.
+  //     intentional -- the benign-skip -> info softening is UXG-02, NOT
+  //     pre-empted here.
   //   - changed: the manifest content changed OR any plugin actually
   //     updated/installed/reinstalled/uninstalled/failed (i.e. NOT every
   //     outcome is `unchanged`) -> emit `(updated)` (catalog state
@@ -788,12 +782,6 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   // PLUGIN row with a state-changing status, never on a marketplace status, and
   // these payloads have no plugin rows (plugins:[]). UXG-05 is orthogonal to
   // the reload-hint discipline.
-  //
-  // Closes the Phase 27 UAT Test-3 gap (UXG-05, severity major): the
-  // autoupdate-ON branch previously emitted `status: "updated"` unconditionally
-  // and never consulted `snapshot.changed`, so a true no-op update on an
-  // autoupdate-ON marketplace always rendered `(updated)`. It now mirrors the
-  // autoupdate-OFF no-op.
   if (!snapshot.autoupdate || pluginUpdate === undefined) {
     if (!snapshot.changed) {
       notify(ctx, pi, {
@@ -808,7 +796,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     return;
   }
 
-  // Autoupdate-ON no-op gate (Phase 27 UAT Test-3): a true no-op requires BOTH
+  // Autoupdate-ON no-op gate: a true no-op requires BOTH
   // (A) the validated manifest content is unchanged (snapshot.changed === false)
   // AND (B) every cascaded plugin outcome is `unchanged`. `updated` / `skipped`
   // (e.g. a source-mismatch skip) / `failed` outcomes are NOT no-ops -- a
@@ -850,13 +838,12 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
  * given root. Throws on read or validation failure -- the caller wraps
  * as `MarketplaceUpdateError`.
  *
- * WR-03: previously named `refreshManifestPointer` and unconditionally
- * wrote `record.manifestPath` and `record.marketplaceRoot`. For path
- * sources the caller already passes `record.marketplaceRoot`, and for
- * github sources `cloneDir === record.marketplaceRoot` after `add`. The
- * writes were no-ops that obscured the function's actual purpose (just
- * validate). Writes are now gated on a real change so a future
- * "did anything change?" optimization can rely on identity.
+ * WR-03: for path sources the caller already passes
+ * `record.marketplaceRoot`, and for github sources
+ * `cloneDir === record.marketplaceRoot` after `add`, so the
+ * `record.manifestPath` / `record.marketplaceRoot` writes are gated on a
+ * real change. This keeps the function's purpose (validate) clear and lets
+ * a "did anything change?" optimization rely on identity.
  */
 async function validateManifestAtRoot(
   record: ExtensionState["marketplaces"][string],

@@ -29,8 +29,8 @@ import { PathContainmentError } from "../shared/path-safety.ts";
  * phase itself (failing-phase own-undo runs first from the catch block,
  * before the reverse walk -- TR-02). `undo` MUST tolerate being called
  * after a partial-do throw -- it cannot assume `do` ran to completion;
- * gate on context-set sentinels (cf. install.ts:481-492, :514-523,
- * :560-572, :590-600) and keep bridge cleanup helpers ENOENT-tolerant.
+ * gate on context-set sentinels and keep bridge cleanup helpers
+ * ENOENT-tolerant.
  */
 export interface Phase<C> {
   readonly name: string;

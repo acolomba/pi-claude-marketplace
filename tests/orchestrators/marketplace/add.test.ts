@@ -32,7 +32,7 @@ interface NotifyRecord {
 
 function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: NotifyRecord[] } {
   const notifications: NotifyRecord[] = [];
-  // Plan 18-00: `pi` is required on every marketplace orchestrator's
+  // `pi` is required on every marketplace orchestrator's
   // `*Options` interface. Mirror the production wiring shape so tests
   // can pass the same value the edge layer would. The empty
   // `getAllTools()` mirrors the existing makeCtx pattern (D-18-06).
@@ -91,15 +91,14 @@ test("MA-5: github source clones, validates, renames, mutates state, emits V2 su
     assert.ok(recorded);
     assert.equal(recorded.scope, "project");
 
-    // Exactly one notification, V2 byte-for-byte; default severity (info; no
+    // Exactly one notification, byte-for-byte; default severity (info; no
     // 2nd arg per D-16-11).
     assert.equal(notifications.length, 1);
     const note = notifications[0];
     assert.ok(note);
-    // SNM-33 / D-22-01: V2 catalog `<!-- catalog-state: github-source -->`
-    // collapses github + path source onto one `(added)` shape. A marketplace
-    // record is not a Pi-visible resource, so NO `/reload` trailer. The V1
-    // `<autoupdate>` marker has moved off this surface onto the list header.
+    // SNM-33 / D-22-01: the catalog collapses github + path source onto one
+    // `(added)` shape. A marketplace record is not a Pi-visible resource, so
+    // NO `/reload` trailer.
     assert.equal(note.message, "● valid-marketplace [project] (added)");
     assert.equal(note.severity, undefined);
     // SNM-33 / D-22-01: empty-plugins add never triggers the reload-hint.
@@ -308,11 +307,10 @@ test("NFR-5: path-source add never calls gitOps", async () => {
       assert.ok("valid-marketplace" in persisted.marketplaces);
       const note = notifications[0];
       assert.ok(note);
-      // SNM-33 / D-22-01: V2 catalog `<!-- catalog-state: path-source -->`
-      // emits the same `(added)` shape as github-source, with NO
-      // `/reload` trailer (a marketplace record is not a Pi-visible
-      // resource). The `<autoupdate>` marker is irrelevant here -- it no
-      // longer appears on the (added) arm at all in V2.
+      // SNM-33 / D-22-01: a path-source add emits the same `(added)` shape
+      // as github-source, with NO `/reload` trailer (a marketplace record is
+      // not a Pi-visible resource). The `<autoupdate>` marker is irrelevant
+      // here -- it does not appear on the (added) arm.
       assert.equal(note.message, "● valid-marketplace [project] (added)");
     } finally {
       await rm(localMpDir, { recursive: true, force: true });
@@ -398,7 +396,7 @@ test("CR-02 / MA-4: ~/path is expanded against $HOME for the on-disk probe; sour
 
       const note = notifications[0];
       assert.ok(note);
-      // SNM-33 / D-22-01: V2 collapses path-source onto the canonical
+      // SNM-33 / D-22-01: path-source collapses onto the canonical
       // `(added)` shape; empty-plugins add never emits the reload-hint.
       assert.equal(note.message, "● valid-marketplace [project] (added)");
     } finally {
@@ -414,7 +412,7 @@ test("CR-02 / MA-4: ~/path is expanded against $HOME for the on-disk probe; sour
 });
 
 test("MA-2 / SC-5 / CMC-30: orchestrator accepts scope='project'; success row carries `[project]` scope bracket", async () => {
-  // The edge layer (Phase 6) defaults --scope to "user". This test
+  // The edge layer defaults --scope to "user". This test
   // confirms the orchestrator threads the value through verbatim.
   await withTmpScope(async ({ cwd }) => {
     const { ctx, pi, notifications } = makeCtx();
@@ -432,8 +430,8 @@ test("MA-2 / SC-5 / CMC-30: orchestrator accepts scope='project'; success row ca
 });
 
 test("D-03-INV :: add invalidates marketplace-names cache for the new scope", async () => {
-  // Plan 06-05 wires invalidateMarketplaceNames + invalidateMarketplaceCache
-  // into addMarketplace's post-state-commit window. To prove the invalidation
+  // addMarketplace wires invalidateMarketplaceNames + invalidateMarketplaceCache
+  // into its post-state-commit window. To prove the invalidation
   // fires, we:
   //   1. __resetCacheForTests() to isolate from prior test pollution.
   //   2. Warm the in-memory marketplace-names map by calling
@@ -490,7 +488,7 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
   });
 });
 
-// Lines 295-296: addPathInGuard throws when stat() reports neither file nor directory.
+// addPathInGuard throws when stat() reports neither file nor directory.
 test("addPathInGuard: Unix domain socket path throws 'neither a file nor a directory'", async () => {
   await withTmpScope(async ({ cwd }) => {
     const { ctx, pi } = makeCtx();
@@ -520,7 +518,7 @@ test("addPathInGuard: Unix domain socket path throws 'neither a file nor a direc
   });
 });
 
-// Lines 305-306: addPathInGuard throws MarketplaceDuplicateNameError on second path-source add.
+// addPathInGuard throws MarketplaceDuplicateNameError on second path-source add.
 test("MA-8 (path source): duplicate name in same scope throws MarketplaceDuplicateNameError", async () => {
   await withTmpScope(async ({ cwd }) => {
     const { ctx: ctx1 } = makeCtx();
@@ -558,7 +556,7 @@ test("MA-8 (path source): duplicate name in same scope throws MarketplaceDuplica
   });
 });
 
-// Lines 326-327: expandTildePath returns os.homedir() exactly when rawSource is bare '~'.
+// expandTildePath returns os.homedir() exactly when rawSource is bare '~'.
 test("CR-02 / expandTildePath: bare '~' resolves to os.homedir() exactly", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     const { ctx, pi } = makeCtx();
@@ -651,7 +649,7 @@ test("CMP-1: same marketplace name in user scope and project scope are independe
 });
 
 // -----------------------------------------------------------------------
-// AUTH-01 auth-wiring tests (Plan 35-01)
+// AUTH-01 auth-wiring tests
 // -----------------------------------------------------------------------
 
 test("AUTH-01 add: credentialOps.fill HIT bypasses Device Flow and clones with the auth bundle", async () => {

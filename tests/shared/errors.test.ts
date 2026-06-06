@@ -15,7 +15,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 /**
- * AS-5 -- error helpers. Verbatim V1 port (Plan 02). Tests verify the
+ * AS-5 -- error helpers. Tests verify the
  * Error.cause chain semantics and the user-visible message format.
  */
 
@@ -57,7 +57,7 @@ test("appendLeaks accumulates multiple leaks via repeated cause-chaining", () =>
 });
 
 /**
- * Phase 5 plan 05-01 Task 2 -- four new error classes consumed by the plugin
+ * Four error classes consumed by the plugin
  * orchestrators (install/uninstall/update). Each smoke test covers:
  *   - `extends Error` instanceof contract
  *   - `name` property set verbatim (matters for `err.name === "..."` callsites)
@@ -119,14 +119,13 @@ test("PluginUpdatePhase3Error: PUP-6 aggregate with cause + failures payload", (
 });
 
 /**
- * Plan 13-02a-02 / CMC-16 -- ManualRecoveryError shape contract.
+ * CMC-16 -- ManualRecoveryError shape contract.
  *
  * The bridges (`bridges/{skills,commands,agents}/stage.ts`) throw this when
  * a rollback of a partially-completed replacement swap leaks files. The
- * legacy MSG-MR-1 / ES-5 marker-prefixed message form (retired in Wave 2
- * sub-wave 2a continuation) is NOT embedded in `.message`; the leak payload
- * lives structurally on `.leaks` so the orchestrator can type-check the
- * Error instead of substring-matching the message.
+ * MSG-MR-1 / ES-5 marker-prefixed message form is NOT embedded in `.message`;
+ * the leak payload lives structurally on `.leaks` so the orchestrator can
+ * type-check the Error instead of substring-matching the message.
  */
 
 test("ManualRecoveryError: message is the bare original text (no legacy ES-5 marker prefix)", () => {
@@ -157,13 +156,11 @@ test("ManualRecoveryError: instanceof both ManualRecoveryError and Error", () =>
 });
 
 /**
- * Quick task 260525-aub: PluginShapeError discriminated typed error class
- * replaces free-text `Error.message` parsing in install/update/remove
- * orchestrators. Byte-equal `.message` text to the legacy
- * `new Error("Plugin "X" ...")` throws is the contract that keeps the
- * existing `.message.includes(...)` assertions in
+ * PluginShapeError discriminated typed error class, consumed in
+ * install/update/remove orchestrators. Byte-equal `.message` text is the
+ * contract that keeps the `.message.includes(...)` assertions in
  * `tests/orchestrators/plugin/install.test.ts` and
- * `tests/domain/resolver-strict.test.ts` green unchanged.
+ * `tests/domain/resolver-strict.test.ts` green.
  */
 
 test("PluginShapeError: kind=not-in-manifest -> byte-equal install.ts:263/294 message", () => {
@@ -171,7 +168,7 @@ test("PluginShapeError: kind=not-in-manifest -> byte-equal install.ts:263/294 me
   assert.equal(err.message, 'Plugin "p" not found in marketplace "mp".');
   assert.equal(err.kind, "not-in-manifest");
   assert.equal(err.plugin, "p");
-  // Task 260525-cjr C4: shape-specific data is read via `err.shape`,
+  // Shape-specific data is read via `err.shape`,
   // not via top-level mirror fields. Narrow on `shape.kind` first.
   if (err.shape.kind === "not-in-manifest") {
     assert.equal(err.shape.marketplace, "mp");

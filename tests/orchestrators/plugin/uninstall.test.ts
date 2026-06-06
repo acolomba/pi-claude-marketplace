@@ -33,27 +33,27 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 
 // PU-1..8 + AS-6 (post-commit cleanup leaks) + NFR-5 (no network).
 //
-// Phase 19 / Plan 19-01 V2 migration: every notification assertion is now
-// byte-exact against the V2 catalog forms at docs/output-catalog.md:336-378.
-// Per D-19-01 the V1 post-state-commit `notifyWarning` sites at uninstall.ts
-// lines 179 (cache-refresh failure) and 200 (data-dir cleanup-leak) are
-// DROPPED entirely -- the surrounding try/catch retains the side-effecting
-// rm() / dropMarketplaceCache calls; only the user-facing warning surface
-// is gone. Test consequences:
+// Every notification assertion is byte-exact against the catalog forms
+// at docs/output-catalog.md:336-378. Per D-19-01 the post-state-commit
+// `notifyWarning` sites in uninstall.ts (cache-refresh failure and
+// data-dir cleanup-leak) are DROPPED entirely -- the surrounding
+// try/catch retains the side-effecting rm() / dropMarketplaceCache
+// calls; only the user-facing warning surface is gone. Test
+// consequences:
 //   - PU-2+PU-4 still asserts state-record removal under a cleanup leak,
-//     but the second-notification warning assertion is gone; the only
-//     notification is the V2 success row.
-//   - PU-8 (b) flips: V2 reload-hint is per-variant (uninstalled is
-//     state-changing per D-16-12) and no longer gated on cascade-resource
+//     but there is no second-notification warning assertion; the only
+//     notification is the success row.
+//   - PU-8 (b): reload-hint is per-variant (uninstalled is
+//     state-changing per D-16-12), not gated on cascade-resource
 //     drop count.
 //
 // Test taxonomy (PRD §5.2.2 PU-1..8):
 //   PU-1: order skills -> commands -> agents -> mcp (covered by end-state assertion;
-//         the order is encoded inside cascadeUnstagePlugin per Phase 4 D-03 corollary)
+//         the order is encoded inside cascadeUnstagePlugin per the D-03 corollary)
 //   PU-2: state commit BEFORE pluginDataDir cleanup (state mutation still asserted;
-//         the V1 warning surface is dropped per D-19-01)
+//         the warning surface is dropped per D-19-01)
 //   PU-3: failures earlier than data-dir cleanup abort the state commit
-//   PU-4: (DROPPED per D-19-01) -- data-dir cleanup leak is no longer a user surface;
+//   PU-4: (DROPPED per D-19-01) -- data-dir cleanup leak is not a user surface;
 //         the rm() call still runs.
 //   PU-5: silent converge -- record already absent -> no notification
 //   PU-6: legacy state migration (resources.agents / resources.mcpServers absent) -> normalized to []
@@ -249,7 +249,7 @@ test("PU-1: cascade order observable end-state -- all four bridges' resources re
       const after = await loadState(locations.extensionRoot);
       assert.equal("hello" in (after.marketplaces["mp"]?.plugins ?? {}), false);
 
-      // Phase 19 / Plan 19-01: V2 byte form per docs/output-catalog.md:344-348
+      // V2 byte form per docs/output-catalog.md:344-348
       // (catalog-state `success`). The marketplace header is a bare label
       // row (status omitted -- plugin-uninstall surface uses SUB-BRANCH A
       // of renderMpHeader). Plugin row uses ICON_AVAILABLE (`○`) per
@@ -267,10 +267,10 @@ test("PU-1: cascade order observable end-state -- all four bridges' resources re
   });
 });
 
-// PU-2 (state commit BEFORE data-dir cleanup; cleanup leaks SWALLOWED in V2
+// PU-2 (state commit BEFORE data-dir cleanup; cleanup leaks SWALLOWED
 // per D-19-01 -- the rm() still runs; only the user-visible warning surface
-// is gone). The pre-19 PU-4 warning assertion is removed; PU-2's state-record
-// removal under a cleanup leak is still the binding behavior.
+// is gone). There is no PU-4 warning assertion; PU-2's state-record
+// removal under a cleanup leak is the binding behavior.
 
 test("PU-2: pluginDataDir rm failure leaves state record removed; cleanup leak SWALLOWED per D-19-01", async () => {
   await withHermeticHome(async () => {
@@ -328,8 +328,8 @@ test("PU-2: pluginDataDir rm failure leaves state record removed; cleanup leak S
         notifications[0]?.message,
         "● mp [project]\n  ○ hello v0.0.1 (uninstalled)\n\n/reload to pick up changes",
       );
-      // Defense-in-depth: the dropped V1 warning content (the leaked
-      // dataDir path) MUST NOT appear in any V2 notification.
+      // Defense-in-depth: the dropped warning content (the leaked
+      // dataDir path) MUST NOT appear in any notification.
       assert.equal(
         (notifications[0]?.message ?? "").includes(dataDir),
         false,
@@ -418,14 +418,14 @@ test("PU-3 + PU-7: foreign agent content -> V2 PluginFailedMessage + state recor
       assert.equal(loadedIdx.agents.length, 1, "agents-index row retained");
       assert.equal(loadedIdx.agents[0]?.generatedName, agentName);
 
-      // Phase 19 / Plan 19-01: V2 byte form per docs/output-catalog.md:370-374
+      // V2 byte form per docs/output-catalog.md:370-374
       // (catalog-state `failure-permission-denied` shape -- the closed-set
       // Reason here is `"not in manifest"` because the cause is an
       // AgentsUnstageFailureError, which narrowCascadeFailure() maps to
       // that Reason per the marketplace/remove.ts precedent).
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
-      // Phase 29 / UXG-07 (D-29-02/03): the "1 plugin operation failed."
+      // UXG-07 (D-29-02/03): the "1 plugin operation failed."
       // summary line is prepended before the cascade body (1 failed plugin,
       // mp glyph `●` so the marketplace did not fail).
       assert.equal(
@@ -437,7 +437,7 @@ test("PU-3 + PU-7: foreign agent content -> V2 PluginFailedMessage + state recor
       );
       // The 4-space-indent `cause:` trailer surfaces the AgentsUnstageFailureError
       // message verbatim per D-16-08; the regex below confirms the underlying
-      // bridge text is still present after the V2 rendering layer change.
+      // bridge text is present.
       assert.match(notifications[0]?.message ?? "", /Failed to remove .* agent/i);
       // No reload-hint on failure -- a failed uninstall did not remove
       // anything per docs/output-catalog.md:376.
@@ -527,7 +527,7 @@ test("PU-6: legacy state record missing resources.agents/mcpServers loads + unin
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 
-      // Hand-write a state.json in V1-legacy shape: resources missing the
+      // Hand-write a state.json in legacy shape: resources missing the
       // agents + mcpServers fields. saveState would reject this; we go
       // around it to simulate a legacy on-disk artifact.
       const legacyState = {
@@ -548,7 +548,7 @@ test("PU-6: legacy state record missing resources.agents/mcpServers loads + unin
                 resources: {
                   skills: [],
                   prompts: [],
-                  // agents + mcpServers absent -- migrate.ts (Phase 2 ST-5)
+                  // agents + mcpServers absent -- migrate.ts (ST-5)
                   // normalizes to [] at load time.
                 },
                 installedAt: "2025-01-01T00:00:00.000Z",
@@ -583,7 +583,7 @@ test("PU-6: legacy state record missing resources.agents/mcpServers loads + unin
   });
 });
 
-// PU-8 reload-hint gating (V2: per-variant trigger ladder per D-16-12) ----------
+// PU-8 reload-hint gating (per-variant trigger ladder per D-16-12) ----------
 
 test("PU-8 (a): uninstalled variant -> reload-hint always emitted by notify() per D-16-12", async () => {
   // Already covered by PU-1 test above; this assertion is the explicit gate.
@@ -676,10 +676,10 @@ test("PU-8 (b): V2 per-variant reload-hint -- emitted on uninstalled even with z
 
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined);
-      // V2 contract per D-16-12: reload-hint trigger is per-variant
+      // Contract per D-16-12: reload-hint trigger is per-variant
       // (uninstalled is state-changing) NOT per-cascade-resource-count.
-      // The V1 "zero dropped suppresses hint" gate is gone -- V2 emits
-      // the hint structurally from the PluginUninstalledMessage status.
+      // There is no "zero dropped suppresses hint" gate -- the hint is
+      // emitted structurally from the PluginUninstalledMessage status.
       assert.equal(
         notifications[0]?.message,
         "● mp [project]\n  ○ empty v0.0.1 (uninstalled)\n\n/reload to pick up changes",
@@ -753,7 +753,7 @@ test("NFR-5: uninstall.ts has zero git surface (no platform/git, no DEFAULT_GIT_
 });
 
 test("D-03-INV :: uninstall invalidates plugin cache for the target marketplace", async () => {
-  // Plan 06-05 wires invalidateMarketplaceCache into uninstallPlugin's
+  // invalidateMarketplaceCache runs in uninstallPlugin's
   // post-state-commit window (after withStateGuard closes, before
   // pluginDataDir rm). The plugin moves from status="installed" ->
   // status="available", so the cached plugin index for this (scope,
@@ -1169,7 +1169,7 @@ test("cache-drop EISDIR swallowed: success notification still emitted, plugin re
   });
 });
 
-// Phase 39 / TR-03: cascade ghost-record correctness ---------------------
+// TR-03: cascade ghost-record correctness ---------------------
 //
 // Two regression tests cover the partial-cascade-failure surface:
 //

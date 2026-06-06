@@ -353,7 +353,7 @@ test("MC-3 prepare preserves non-mcp top-level fields in mcp.json", async () => 
 });
 
 // ---------------------------------------------------------------------------
-// Phase 8 replacement rollback
+// replacement rollback
 // ---------------------------------------------------------------------------
 
 test("Phase 8 / PRL-10 replacePreparedMcp rollback restores previous mcp.json bytes", async () => {
@@ -517,7 +517,7 @@ test("Phase 8 / PRL-10 finalizeMcpReplacement throws on unknown replacement hand
 test("Phase 8 / PRL-10 replacePreparedMcp rollback records leak when restore fails", async (t) => {
   // POSIX-only: chmod the mcp.json parent dir read-only so the rollback's
   // writeFile fails. The catch block accumulates a leak message rather
-  // than throwing, exercising lines 300-303.
+  // than throwing.
   if (process.platform === "win32") {
     t.skip("POSIX-only chmod 0 failure path");
     return;

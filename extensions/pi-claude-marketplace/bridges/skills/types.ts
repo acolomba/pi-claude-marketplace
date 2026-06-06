@@ -1,15 +1,14 @@
 // bridges/skills/types.ts
 //
-// Type contracts for the skills bridge (Phase 3 Plan 03-03).
+// Type contracts for the skills bridge.
 //
-// Discriminated union `PreparedSkillsStaging = noop | staged` shape carries
-// V1's prepare/commit/abort discipline (V1 `agent/stage.ts` lines 322-468) but
-// localizes the staging dir to the bridge per D-04 (per-skill atomic dir
-// rename at commit instead of orchestrator-level tree rename).
+// Discriminated union `PreparedSkillsStaging = noop | staged` follows the
+// prepare/commit/abort discipline but localizes the staging dir to the
+// bridge per D-04 (per-skill atomic dir rename at commit instead of
+// orchestrator-level tree rename).
 //
-// W-05 fix: StageSkillsCommitResult exposes `recorded: StagedSkillRecord[]`
-// so Phase 5 orchestrators can populate state.json without re-discovering
-// skills (CONTEXT.md "Integration Points" line 192).
+// W-05: StageSkillsCommitResult exposes `recorded: StagedSkillRecord[]`
+// so orchestrators can populate state.json without re-discovering skills.
 
 import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -42,7 +41,7 @@ export interface StageSkillsInput {
 
 /**
  * One row in `StageSkillsCommitResult.recorded` -- the source/target pair the
- * Phase 5 orchestrator reads to populate state.json.
+ * orchestrator reads to populate state.json.
  */
 export interface StagedSkillRecord {
   readonly generatedName: string;
@@ -55,7 +54,7 @@ export interface StagedSkillRecord {
 /** Result returned by `commitPreparedSkills` and embedded in the noop variant. */
 export interface StageSkillsCommitResult {
   readonly stagedNames: readonly string[];
-  /** W-05: Phase 5 reads `recorded` to populate state.json. */
+  /** W-05: callers read `recorded` to populate state.json. */
   readonly recorded: readonly StagedSkillRecord[];
   readonly warnings: readonly string[];
 }

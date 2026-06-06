@@ -1,9 +1,7 @@
-// tests/domain/resolver-strict.test.ts
-//
-// Strict-mode resolver coverage. Per Open Question 5: 1:1 mapping between
-// PR-2 cases and tests (9 tests for the 9 cases). Plus PR-3 multi, PR-4
-// implicit-by-convention (positive + negative), PR-5 dependencies, PR-6
-// requireInstallable narrowing/throwing, and one MM-5 happy path.
+// Strict-mode resolver coverage. 1:1 mapping between PR-2 cases and tests
+// (9 tests for the 9 cases). Plus PR-3 multi, PR-4 implicit-by-convention
+// (positive + negative), PR-5 dependencies, PR-6 requireInstallable
+// narrowing/throwing, and one MM-5 happy path.
 
 import assert from "node:assert/strict";
 import path from "node:path";
@@ -233,10 +231,10 @@ test("PR-2(8) escaping component path (skills: '../outside') -> notInstallable",
   );
 });
 
-// D-07 (COMP-01) narrows PR-2(9): top-level arrays of strings are now LEGAL.
+// D-07 (COMP-01) narrows PR-2(9): top-level arrays of strings are LEGAL.
 // Only non-string elements (or nested arrays) inside the array are rejected
-// at the element level. The error note now reads "is not a string" (from
-// PR-2 case 7) or "contains nested array element" rather than "array-form".
+// at the element level. The error note reads "is not a string" (from
+// PR-2 case 7) or "contains nested array element".
 test("PR-2(9) [D-07 narrowed] array containing non-string element -> notInstallable", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r = await resolveStrict(basicEntry({ source: "./local", skills: [42] }), ctx);
@@ -276,11 +274,9 @@ test("PR-3 multiple unsupported components both surface as notes", async () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// PR-4 [D-07/COMP-01 SUPERSEDED]: implicit-by-convention now SUPPLEMENTS
-// declared paths rather than acting as a fallback-only short-circuit. The
-// strict-resolver Step 7 computes the UNION of declared + implicit; first-
-// wins dedup preserves declared-first ordering. The supersession docs land
-// in Plan 05-10; the behavior change lands here.
+// PR-4 [D-07/COMP-01]: implicit-by-convention SUPPLEMENTS declared paths.
+// The strict-resolver Step 7 computes the UNION of declared + implicit;
+// first-wins dedup preserves declared-first ordering.
 // ──────────────────────────────────────────────────────────────────────────
 
 test("PR-4 implicit-by-convention populates componentPaths.skills when neither entry nor manifest declares it", async () => {

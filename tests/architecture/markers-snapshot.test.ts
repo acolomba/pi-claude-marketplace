@@ -10,28 +10,13 @@ import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence
 import * as markers from "../../extensions/pi-claude-marketplace/shared/markers.ts";
 
 /**
- * The original D-09 / ES-5 byte-equality assertions (extracting the 5
- * backtick-quoted literals from PRD §6.12 ES-5 and comparing against
- * shared/markers.ts exports) have been retired in the v1.3 ES-5
- * supersession (Plan 13-03-02 / D-13-03 / D-13-11). The legacy ES-5
- * marker exports were deleted from shared/markers.ts in the same atomic
- * commit that rewrote PRD §6.12 ES-5 to a brief pointer to
- * docs/messaging-style-guide.md §15. The remaining AG-5 / PUP-6 / D-08
- * snapshot assertions below are Phase 5/7 extensions outside the
- * superseded ES-5 set and continue to enforce drift on the
- * still-exported markers.
+ * The AG-5 / PUP-6 / D-08 snapshot assertions below enforce drift on the
+ * exported markers in shared/markers.ts.
  *
  * Re-introductions of any of the 5 superseded ES-5 literals anywhere in
  * the codebase are blocked by tests/architecture/no-legacy-markers.test.ts
- * (Plan 13-01-03 / D-13-12), which pins the literals in its own body and
- * runs under `npm run check` for the rest of the codebase's lifetime.
- *
- * IN-05 cleanup: the prior `extractEs5MarkerLiterals throws if PRD §6.12
- * ES-5 row is missing` test was removed alongside its helper
- * `tests/helpers/prd-extract.ts`. The helper had no production consumers
- * and one test consumer (that single negative-throw test); the static-audit
- * gate at `tests/architecture/no-legacy-markers.test.ts` is the actual
- * defense against ES-5 marker re-introduction and remains untouched.
+ * (D-13-12), which pins the literals in its own body and
+ * runs under `npm run check`.
  */
 
 /**
@@ -52,10 +37,9 @@ test("AG-5 GENERATED_AGENT_PREFIX is byte-for-byte 'pi-claude-marketplace-'", ()
 });
 
 /**
- * PUP-6 recovery-hint prefix (Phase 5 extension beyond ES-5).
+ * PUP-6 recovery-hint prefix.
  *
- * D-04: This constant is INTENTIONALLY a Phase 5 extension beyond the
- * (now-superseded) ES-5 marker set. The PRD §5.2.3 PUP-6 row specifies the
+ * D-04: The PRD §5.2.3 PUP-6 row specifies the
  * user-visible composition as `plugin-uninstall + plugin-install for
  * "<plugin-name>".`. The runtime callsite supplies the leading space +
  * quoted name, so the exported prefix is byte-for-byte the substring up
@@ -66,10 +50,9 @@ test("PUP-6 recovery-hint prefix is byte-for-byte 'plugin-uninstall + plugin-ins
 });
 
 /**
- * D-08 state-lock marker (Phase 7 extension beyond ES-5).
+ * D-08 state-lock marker.
  *
- * This constant is intentionally a Phase 7 extension beyond the
- * (now-superseded) ES-5 marker set. It is a user-contract prefix for
+ * It is a user-contract prefix for
  * fail-fast cross-process lock contention.
  */
 test("D-08 state-lock-held prefix is byte-for-byte 'Another pi-claude-marketplace operation is in progress for'", () => {

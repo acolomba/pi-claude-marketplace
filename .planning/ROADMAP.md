@@ -739,7 +739,7 @@ Plans:
 3. The Device Flow user-code prompt (`user_code` + `verification_uri`) appears in `docs/output-catalog.md` with a catalog-uat fixture proving the byte form.
 4. `npm run check` GREEN; catalog-uat byte gate GREEN.
 
-**Plans:** 4/4 plans executed
+**Plans:** 4/4 plans complete
 
 **Wave 0** *(pre-cleanup -- unblocks Wave 1 parallel execution)*
 
@@ -788,11 +788,11 @@ Plans:
 4. The renderer switch in `notify()` has new arms for both info variants gated by exhaustive `assertNever` defaults; the existing 10-arm plugin status + 7-arm marketplace status surfaces are byte-unchanged for all non-info call sites (Phase 42 produces zero behavior change for any v1.0-v1.7 command).
 5. `npm run check` exits 0; catalog UAT byte-equality remains GREEN; the atomic-supersession commit contains the REASON tuple addition, the new types, the new helper, the new fixture(s) for `--scope` mismatch, and the catalog state(s) -- nothing else.
 
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 **Wave 1**
 
-- [ ] 42-01-PLAN.md -- Atomic-supersession commit: extend NotificationMessage to a 3-arm discriminated union (CascadeNotificationMessage + MarketplaceInfoMessage + PluginInfoMessage); add `"not added"` to REASONS (length-lock + closed-set proof at 29); add file-private `wrapDescription` helper + renderMarketplaceInfo + renderPluginInfo; rewrite `notify()` dispatcher on `message.kind ?? "cascade"` with assertNever; add first catalog state (`scope-mismatch-not-added`) under new `## /claude:plugin marketplace info <name>` H2 + catalog-uat FIXTURES entry; per-status tests for wrapDescription + new render arms + cascade backward-compat; zero behavior change for any v1.0-v1.7 cascade call site (INFO-04, INFO-08)
+- [x] 42-01-PLAN.md -- Atomic-supersession commit: extend NotificationMessage to a 3-arm discriminated union (CascadeNotificationMessage + MarketplaceInfoMessage + PluginInfoMessage); add `"not added"` to REASONS (length-lock + closed-set proof at 29); add file-private `wrapDescription` helper + renderMarketplaceInfo + renderPluginInfo; rewrite `notify()` dispatcher on `message.kind ?? "cascade"` with assertNever; add first catalog state (`scope-mismatch-not-added`) under new `## /claude:plugin marketplace info <name>` H2 + catalog-uat FIXTURES entry; per-status tests for wrapDescription + new render arms + cascade backward-compat; zero behavior change for any v1.0-v1.7 cascade call site (INFO-04, INFO-08)
 
 ### Phase 43: Marketplace Info Command
 
@@ -810,15 +810,15 @@ Plans:
 4. `marketplace info <TAB>` returns the union of marketplace names across both scopes (TC-5 pattern matching `marketplace remove` / `marketplace update` / `marketplace autoupdate`); a new entry in the completion provider's TC-5 surface covers the verb.
 5. `docs/output-catalog.md` gains a new H2 section `` ## `/claude:plugin marketplace info <name>` `` enumerating every state (github single-scope, path single-scope, github both-scopes, path both-scopes, `{not added}` missing-marketplace, `{not added}` `--scope` mismatch); each fenced byte block is paired with a fixture in `tests/architecture/catalog-uat.test.ts` FIXTURES map and byte-equality is GREEN.
 
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 **Wave 1**
 
-- [ ] 43-01-PLAN.md -- Orchestrator + edge handler + TC-5 completion extension + `MarketplaceInfoCascadeMessage` fan-out variant; per-status notify-v2 byte tests + orchestrator/handler/completion integration tests; NFR-5 grep-gate on info.ts (INFO-01, INFO-03, INFO-06)
+- [x] 43-01-PLAN.md -- Orchestrator + edge handler + TC-5 completion extension + `MarketplaceInfoCascadeMessage` fan-out variant; per-status notify-v2 byte tests + orchestrator/handler/completion integration tests; NFR-5 grep-gate on info.ts (INFO-01, INFO-03, INFO-06)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 43-02-PLAN.md -- Catalog states (`github-single-scope-full`, `github-single-scope-minimal`, `path-single-scope`, `path-single-scope-with-description`, `both-scopes-fan-out`, `absent-from-both`) + paired catalog-uat FIXTURES; preserves Phase 42's `scope-mismatch-not-added` byte-identical (INFO-07)
+- [x] 43-02-PLAN.md -- Catalog states (`github-single-scope-full`, `github-single-scope-minimal`, `path-single-scope`, `path-single-scope-with-description`, `both-scopes-fan-out`, `absent-from-both`) + paired catalog-uat FIXTURES; preserves Phase 42's `scope-mismatch-not-added` byte-identical (INFO-07)
 
 ### Phase 44: Plugin Info Command
 
@@ -836,15 +836,15 @@ Plans:
 4. Running `/claude:plugin info <missing-plugin>@<known-marketplace>` renders `(failed) {not in manifest}` (existing reason); running against an unknown marketplace renders `{not added}` (Phase 42 REASON); running with `--scope` mismatch renders `{not added}` at the marketplace level.
 5. `plugin info <TAB>` returns `<plugin>@<marketplace>` combos for all known plugins (installed + available + unavailable) across both scopes via a new `"info"` mode of the TC-6 plugin-ref completer; `docs/output-catalog.md` gains a new H2 section `` ## `/claude:plugin info <plugin>@<marketplace>` `` enumerating every state (installed single-scope, available single-scope, unavailable single-scope, installed-both-scopes, components-not-resolved, `{not in manifest}` missing-plugin, `{not added}` missing-marketplace, `{not added}` `--scope` mismatch); each fenced byte block is paired with a `catalog-uat.test.ts` fixture and byte-equality is GREEN; `npm run check` exits 0 -- v1.8 milestone closes.
 
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 **Wave 1**
 
-- [ ] 44-01-PLAN.md -- Orchestrator + edge handler + TC-6 `info` completion mode + `PluginInfoCascadeMessage` fan-out variant + per-status notify-v2 byte tests + orchestrator/handler/completion/router integration tests; NFR-5 grep-gate on info.ts (INFO-02, INFO-05)
+- [x] 44-01-PLAN.md -- Orchestrator + edge handler + TC-6 `info` completion mode + `PluginInfoCascadeMessage` fan-out variant + per-status notify-v2 byte tests + orchestrator/handler/completion/router integration tests; NFR-5 grep-gate on info.ts (INFO-02, INFO-05)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 44-02-PLAN.md -- Catalog states (`installed-single-scope`, `installed-single-scope-with-dependencies`, `available-single-scope`, `unavailable-single-scope`, `installed-both-scopes-fan-out`, `components-not-resolved`, `missing-plugin-not-in-manifest`, `missing-marketplace-not-added-absent-from-both`, `missing-marketplace-not-added-scope-mismatch`) + paired catalog-uat FIXTURES under new `## /claude:plugin info <plugin>@<marketplace>` H2; preserves Phase 42 + Phase 43 fixtures byte-identical (INFO-02, INFO-05; extends INFO-07 plugin-info catalog coverage)
+- [x] 44-02-PLAN.md -- Catalog states (`installed-single-scope`, `installed-single-scope-with-dependencies`, `available-single-scope`, `unavailable-single-scope`, `installed-both-scopes-fan-out`, `components-not-resolved`, `missing-plugin-not-in-manifest`, `missing-marketplace-not-added-absent-from-both`, `missing-marketplace-not-added-scope-mismatch`) + paired catalog-uat FIXTURES under new `## /claude:plugin info <plugin>@<marketplace>` H2; preserves Phase 42 + Phase 43 fixtures byte-identical (INFO-02, INFO-05; extends INFO-07 plugin-info catalog coverage)
 
 </details>
 

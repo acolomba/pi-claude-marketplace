@@ -12,14 +12,10 @@ import type { RunPhasesResult } from "../../extensions/pi-claude-marketplace/tra
 /**
  * D-03 / AS-4 / ES-4 / D-14-04 -- formatRollbackError structured result.
  *
- * Plan 14-06 refactor (orchestrator-owns-rendering per RESEARCH.md
- * Pitfall 6): formatRollbackError no longer composes the user-visible
- * body. It returns a structured `RollbackErrorResult` -- the original
- * (or cause-wrapped) Error PLUS the raw `RollbackPartial[]` data so the
- * orchestrator can render via the V2 `notify` path.
- *
- * The pre-Plan-14-06 hand-composed `(failed) {rollback partial}` body
- * is gone from the transaction-layer code.
+ * Orchestrator-owns-rendering: formatRollbackError does not compose the
+ * user-visible body. It returns a structured `RollbackErrorResult` -- the
+ * original (or cause-wrapped) Error PLUS the raw `RollbackPartial[]` data so
+ * the orchestrator can render via the `notify` path.
  *
  * Tests verify (a) zero-partial fast path returns the original Error
  * instance unwrapped with an empty partials array, (b) the cause-wrapped
@@ -28,10 +24,7 @@ import type { RunPhasesResult } from "../../extensions/pi-claude-marketplace/tra
  * / SymlinkRefusedError bypass returns the original instance verbatim
  * with an empty partials array.
  *
- * The byte-equivalent rendering of the children block was historically
- * tested here against the V1 `composeRollbackPartialChildren` helper
- * (Plan 14-06); Phase 21 deletes that helper alongside the rest of the
- * V1 rendering surface, and the V2 byte form is enforced by
+ * The byte-equivalent rendering of the children block is enforced by
  * `tests/architecture/catalog-uat.test.ts` against the renderer in
  * `shared/notify.ts`.
  */
@@ -96,8 +89,8 @@ test("D-03 formatRollbackError: 1 partial returns cause-wrapped Error + single-e
   assert.strictEqual(got.error.cause, original);
   assert.equal(got.rollbackPartials.length, 1);
   assert.equal(got.rollbackPartials[0]?.phase, "p1");
-  // F-4 (case-insensitive guard): no legacy free-text prose with a
-  // colon-prefixed marker form (retired ES-5 shape) seeps back into the
+  // F-4 (case-insensitive guard): no free-text prose with a
+  // colon-prefixed marker form (the ES-5 shape) seeps back into the
   // wrapper Error's message. The token vocabulary is the closed CMC-11
   // set composed on the orchestrator side, not in the wrapper.
   assert.ok(
@@ -131,8 +124,7 @@ test("D-14-04 orchestrator-owns-rendering: transaction layer no longer composes 
   };
   const got = formatRollbackError(result, original);
   // The transaction-layer chokepoint MUST NOT include the parent token
-  // or child rendering -- those are the orchestrator's responsibility
-  // (Plan 14-06 / RESEARCH.md Pitfall 6).
+  // or child rendering -- those are the orchestrator's responsibility.
   assert.ok(
     !got.error.message.includes("(failed) {rollback partial}"),
     `parent token leaked into transaction-layer wrapper Error: "${got.error.message}"`,
@@ -146,14 +138,13 @@ test("D-14-04 orchestrator-owns-rendering: transaction layer no longer composes 
 /**
  * D-02 / PI-14 -- formatRollbackError MUST short-circuit when the
  * originalError is a PathContainmentError (or its SymlinkRefusedError
- * subclass per Phase 1 D-17). The violation surfaces verbatim instead
+ * subclass per D-17). The violation surfaces verbatim instead
  * of being folded into the rollback-partial body, so every mutating
  * orchestrator (install / update / uninstall) inherits PI-14 compliance
  * from this single chokepoint.
  *
- * These tests deliberately pass a non-empty `rollbackPartials` array so
- * the pre-D-02 code path would compose the body; the bypass MUST
- * suppress it -- in the D-14-04 refactor, suppression means returning
+ * These tests deliberately pass a non-empty `rollbackPartials` array;
+ * the bypass MUST suppress it (D-14-04) -- suppression means returning
  * the originalError reference + an EMPTY partials array so the
  * orchestrator skips rendering entirely.
  */
@@ -199,7 +190,7 @@ test("PI-14 / D-02: SymlinkRefusedError (subclass) bypasses rollback-partial wra
   assert.deepEqual(got.rollbackPartials, [], "expected empty partials array under bypass");
   assert.equal(got.error.name, "SymlinkRefusedError");
   // Subclass relationship intact -- one instanceof at the chokepoint
-  // catches both (Phase 1 D-17 contract).
+  // catches both (D-17 contract).
   assert.ok(
     got.error instanceof PathContainmentError,
     "SymlinkRefusedError must remain an instance of PathContainmentError",
@@ -207,10 +198,6 @@ test("PI-14 / D-02: SymlinkRefusedError (subclass) bypasses rollback-partial wra
   assert.ok(got.error instanceof SymlinkRefusedError);
 });
 
-// Plan 14-06's V1 byte-equivalence tests for the rollback children block
-// previously lived here, invoking `composeRollbackPartialChildren` from
-// the retired `presentation/rollback-partial.ts`. Phase 21 (D-21-02) deletes
-// that V1 helper alongside the rest of the V1 rendering layer; the V2
-// `composeRollbackPartialLines` in `shared/notify.ts` now owns the
-// children-block grammar, and `tests/architecture/catalog-uat.test.ts`
-// asserts byte-equality against the v1.4 catalog fixtures.
+// D-21-02: `composeRollbackPartialLines` in `shared/notify.ts` owns the
+// rollback children-block grammar, and `tests/architecture/catalog-uat.test.ts`
+// asserts byte-equality against the catalog fixtures.

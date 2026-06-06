@@ -1,9 +1,6 @@
 // tests/platform/pi-api.test.ts
 //
-// Phase 13 sub-wave 2c (Plan 13-02c-01 / D-13-07 / RESEARCH.md Open
-// Question 3): the legacy aggregated soft-dep trailer helpers have
-// been DELETED from `platform/pi-api.ts` -- their tests are removed
-// alongside. The three surviving exports are the probe helpers
+// D-13-07: the three exports under test are the probe helpers
 // (`hasLoadedPiSubagents` / `hasLoadedPiMcpAdapter` / `softDepStatus`),
 // which feed the `SoftDepProbe` injected into `renderRow`.
 
@@ -18,9 +15,9 @@ import {
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-// Phase 17.2 Plan 03 (WR-04 / D-17.2-08): `name` relaxed to optional so the
-// `tool.name === undefined` boundary case (Test 6) can be constructed without
-// a cast. Mirrors the `MockTool` shape in tests/shared/notify-v2.test.ts.
+// WR-04 / D-17.2-08: `name` is optional so the `tool.name === undefined`
+// boundary case (Test 6) can be constructed without a cast. Mirrors the
+// `MockTool` shape in tests/shared/notify-v2.test.ts.
 interface ToolStub {
   name?: string;
   sourceInfo?: { source?: unknown };
@@ -65,9 +62,9 @@ test("softDepStatus composes the SoftDepProbe shape from the two probes", () => 
 });
 
 // -----------------------------------------------------------------------------
-// Phase 17.2 Plan 03 -- WR-04 / D-17.2-08 boundary coverage.
+// WR-04 / D-17.2-08 boundary coverage.
 //
-// The three previously-thin or uncovered branches of `hasLoadedPiSubagents` /
+// Three branches of `hasLoadedPiSubagents` /
 // `hasLoadedPiMcpAdapter` (at platform/pi-api.ts:51-78) are locked below:
 //   (a) `pi-mcp-adapter` `sourceInfo.source` substring boundary
 //   (b) try/catch fallback when `getAllTools()` throws or a tool accessor
@@ -159,7 +156,7 @@ test("platform pi-api: probes return false when getAllTools() throws or a tool a
 });
 
 // WR-04 branch (c): `tool.name === undefined` boundary. This is the real
-// coverage gap -- the existing ToolStub previously forbade omitting `name`.
+// coverage gap.
 test("platform pi-api: probes do not crash on tool.name === undefined; fall through to source-substring or false", () => {
   // Subagent probe: undefined === "subagent" is false; no crash, no spurious true.
   assert.equal(hasLoadedPiSubagents(makePi([{}])), false);

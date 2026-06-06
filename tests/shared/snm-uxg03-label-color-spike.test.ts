@@ -1,6 +1,6 @@
 // tests/shared/snm-uxg03-label-color-spike.test.ts
 //
-// Phase 28 Plan 28-02 -- UXG-03 feasibility spike (the D-28-10/D-28-11
+// UXG-03 feasibility spike (the D-28-10/D-28-11
 // label/color-coupling EVIDENCE LOCK).
 //
 // WHAT THIS PROVES (D-28-11): the installed Pi host
@@ -13,7 +13,7 @@
 // lever is REJECTED per D-28-11, and UXG-03 resolves as an upstream-tracked
 // finding (D-28-10/D-28-12), NOT a colorless in-extension workaround.
 //
-// WHY THE `@earendil-works` HOST, NOT `@mariozechner` (CONTEXT Specific Ideas):
+// WHY THE `@earendil-works` HOST, NOT `@mariozechner`:
 // the extension API *contract* is `@mariozechner/pi-coding-agent` (peer dep per
 // CLAUDE.md), but the installed *runtime* host that actually renders the label
 // and color is `@earendil-works/pi-coding-agent` (+ `@earendil-works/pi-tui`).
@@ -103,7 +103,7 @@ test("UXG-03 spike :: host notify(message, type?) signature has NO color-only / 
 
   const notifyDecl = lines[notifyIdx]!;
 
-  // The canonical evidence ref from the CONTEXT / PLAN is line 75. We assert the
+  // We assert the
   // exact signature byte-for-byte rather than a brittle line number, but record
   // the observed 1-based line for the finding doc.
   const observedLine = notifyIdx + 1;

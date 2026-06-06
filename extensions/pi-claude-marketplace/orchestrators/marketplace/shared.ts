@@ -1,6 +1,6 @@
 // orchestrators/marketplace/shared.ts
 //
-// Cross-subcommand helpers (Phase 4 D-01 -- shared.ts cap ~300 LOC).
+// Cross-subcommand helpers (D-01 -- shared.ts cap ~300 LOC).
 //
 //   - GitOps interface + DEFAULT_GIT_OPS (D-12, D-13). Five primitives:
 //     clone + fetch + forceUpdateRef + checkout + resolveRef.
@@ -11,12 +11,11 @@
 //   - cascadeUnstagePlugin (D-02, D-03): per-plugin hand-rolled
 //     try/catch envelope that composes the 4 bridge unstage*
 //     primitives in PU-1 order (skills → commands → agents → mcp).
-//     Phase 5 reuses this when it ships plugin uninstall -- preserve
-//     the public signature.
+//     Reused by plugin uninstall -- preserve the public signature.
 //
 //   - resolveScopeFromState (MR-1): cross-scope ambiguity funnel.
 //     Throws MarketplaceNotFoundError or MarketplaceAmbiguousScopeError
-//     (both already exported by shared/errors.ts via Plan 04-01).
+//     (both exported by shared/errors.ts).
 //
 //   - applyAutoupdateFlipInPlace (MAU-1..4): single helper used by
 //     autoupdate.ts. Idempotent -- already-matching marketplaces land
@@ -47,10 +46,10 @@ import type { PluginUpdateOutcome } from "../types.ts";
 
 /**
  * CR-06: AG-5 foreign-content failure carries the structured per-agent
- * `failed[]` from the agents bridge so downstream consumers (Phase 5
- * partial-success removal, diagnostics, tests) can read individual
- * failure reasons WITHOUT re-parsing the textual message. The message
- * formatting is preserved for the user-visible surface.
+ * `failed[]` from the agents bridge so downstream consumers (partial-success
+ * removal, diagnostics, tests) can read individual failure reasons WITHOUT
+ * re-parsing the textual message. The message formatting is preserved for the
+ * user-visible surface.
  */
 export class AgentsUnstageFailureError extends Error {
   readonly failedAgents: readonly UnstageAgentFailure[];
@@ -62,11 +61,10 @@ export class AgentsUnstageFailureError extends Error {
 }
 
 /**
- * Phase 34 (v1.6): optional auth bundle passed through GitOps.clone /
- * GitOps.fetch and refreshGitHubClone. Mirrors the shape accepted by
- * platform/git.ts `CloneOptions.auth?` / `FetchOptions.auth?`. When
- * undefined, every call site behaves identically to the pre-v1.6
- * public-only path.
+ * Optional auth bundle passed through GitOps.clone / GitOps.fetch and
+ * refreshGitHubClone. Mirrors the shape accepted by platform/git.ts
+ * `CloneOptions.auth?` / `FetchOptions.auth?`. When undefined, every call
+ * site behaves identically to the public-only path.
  *
  * D-13 boundary: this re-exports only TYPES from the platform tier
  * (`CredentialOps`, `OnAuthRequiredFn`) -- no isomorphic-git symbol
@@ -93,12 +91,11 @@ export interface GitAuthBundle {
  * (fetch → forceUpdateRef → checkout) that `pull --ff-only` cannot
  * express because the local branch may diverge from the remote SHA.
  *
- * Phase 34 (v1.6): `clone` and `fetch` each accept an optional `auth`
- * bundle. When provided, `DEFAULT_GIT_OPS` forwards it to
- * `platform/git.ts`, which builds the isomorphic-git
- * `onAuth`/`onAuthFailure` callbacks via `buildAuthCallbacks`. When
- * omitted, both primitives behave identically to the pre-v1.6
- * public-only path (NFR-5 surfaces untouched).
+ * `clone` and `fetch` each accept an optional `auth` bundle. When
+ * provided, `DEFAULT_GIT_OPS` forwards it to `platform/git.ts`, which
+ * builds the isomorphic-git `onAuth`/`onAuthFailure` callbacks via
+ * `buildAuthCallbacks`. When omitted, both primitives behave identically
+ * to the public-only path (NFR-5 surfaces untouched).
  */
 export interface GitOps {
   /** MA-5: clone url into dir, optional ref, single-branch when ref is set. */
@@ -133,10 +130,10 @@ export interface GitOps {
  * dependency" boundary is now enforced statically.
  */
 export const DEFAULT_GIT_OPS: GitOps = {
-  // Phase 34 (v1.6): the `auth?` field added to GitOps.clone / .fetch is
-  // structurally compatible with platform/git.ts CloneOptions.auth? /
-  // FetchOptions.auth?. No wrapper code change is required -- the
-  // bound function references already accept the widened opts shape.
+  // The `auth?` field on GitOps.clone / .fetch is structurally compatible
+  // with platform/git.ts CloneOptions.auth? / FetchOptions.auth?. No wrapper
+  // code change is required -- the bound function references already accept
+  // the widened opts shape.
   clone: defaultGit.clone,
   fetch: async (o): Promise<void> => {
     await defaultGit.fetch(o);
@@ -170,11 +167,11 @@ function isGitNotFoundError(err: unknown): boolean {
  *       fetch + checkout (resolveRef of refs/remotes/origin/<ref> fails, then
  *       checkout throws if the SHA no longer exists).
  *
- * Phase 34 (v1.6): the optional `auth` parameter is forwarded to
- * `gitOps.fetch` so private-repository refreshes can trigger Device
- * Flow on a credential miss. `gitOps.clone` is not called from here
- * (Phase 35's `add.ts` is the only caller of clone); the auth bundle
- * therefore only flows into the fetch primitive within this helper.
+ * The optional `auth` parameter is forwarded to `gitOps.fetch` so
+ * private-repository refreshes can trigger Device Flow on a credential
+ * miss. `gitOps.clone` is not called from here (`add.ts` is the only caller
+ * of clone); the auth bundle therefore only flows into the fetch primitive
+ * within this helper.
  */
 export async function refreshGitHubClone(
   cloneDir: string,
@@ -264,7 +261,7 @@ export function renderPartition(
     // gate maps to the (updated)/(unchanged) partitions that carry
     // `fromVersion` + `toVersion`; the notes-bearing branch maps to
     // (skipped)/(failed). The bare-row fallback is the (updated) +
-    // !withVersions case (typically the legacy unchanged-row form).
+    // !withVersions case.
     if (withVersions && (o.partition === "updated" || o.partition === "unchanged")) {
       lines.push(`  - ${o.name} (${o.fromVersion} → ${o.toVersion})`);
       continue;
@@ -305,14 +302,14 @@ export interface UnstageOutcome {
  * D-02: hand-rolled per-plugin cascade. PU-1 order (skills → commands →
  * agents → MCP). D-03 fail-fast: the FIRST bridge throw halts THIS
  * plugin and the plugin lands in failedPlugins[] in the caller; already
- * unstaged resources stay unstaged (bridges are idempotent). Phase 5's
- * plugin uninstall reuses this primitive -- preserve the signature.
+ * unstaged resources stay unstaged (bridges are idempotent). Plugin
+ * uninstall reuses this primitive -- preserve the signature.
  *
- * AG-5 foreign-content (Pitfall 8): the agents bridge does NOT throw
- * on foreign content -- it preserves the index row and reports via
- * `result.failed[]`. The cascade primitive opts into strict semantics
- * by throwing when failed.length > 0, so the per-plugin try/catch
- * lands the plugin in failedPlugins[].
+ * AG-5 foreign-content: the agents bridge does NOT throw on foreign
+ * content -- it preserves the index row and reports via `result.failed[]`.
+ * The cascade primitive opts into strict semantics by throwing when
+ * failed.length > 0, so the per-plugin try/catch lands the plugin in
+ * failedPlugins[].
  */
 export async function cascadeUnstagePlugin(
   plugin: string,
@@ -352,7 +349,7 @@ export async function cascadeUnstagePlugin(
       // surface as plugin failure so MR-3 aggregation runs.
       //
       // CR-06: preserve the structured `failed[]` array on the thrown
-      // error so downstream consumers (Phase 5 partial-success removal,
+      // error so downstream consumers (partial-success removal,
       // diagnostics, tests) can read per-agent reasons WITHOUT having
       // to re-parse the textual message. The textual message remains
       // the same so the existing user-visible surface is unchanged.
@@ -403,7 +400,7 @@ export interface AutoupdateFlipResult {
 }
 
 /**
- * MAU-1..4 / RESEARCH Pattern 7: idempotent autoupdate-flip.
+ * MAU-1..4: idempotent autoupdate-flip.
  * - When `name` is undefined, flip every marketplace in this scope's
  *   state (MAU-2 bare form).
  * - When `name` is given but missing, throw MarketplaceNotFoundError
@@ -489,7 +486,7 @@ export async function resolveScopeFromState(
 }
 
 /**
- * Plan 06-04 D-02: structural loader for the LLM-tool surface. Walks
+ * D-02: structural loader for the LLM-tool surface. Walks
  * loadState across the requested scope set (or both scopes when undefined)
  * and returns a flat array of {scope, record} tuples. Read-only: no
  * notifications, no mutation. Used by `edge/handlers/tools.ts` to feed
@@ -504,8 +501,8 @@ export async function loadVisibleMarketplaces(opts: {
   /** When undefined, enumerate BOTH scopes (SC-6). */
   readonly scope?: Scope;
 }): Promise<readonly { scope: Scope; record: ExtensionState["marketplaces"][string] }[]> {
-  // Iteration order is project-first per MSG-GR-3 / compareByNameThenScope
-  // so same-name cross-scope stable-sort ties render project-before-user.
+  // Iteration order is project-first per MSG-GR-3 so same-name cross-scope
+  // stable-sort ties render project-before-user.
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
   const out: { scope: Scope; record: ExtensionState["marketplaces"][string] }[] = [];
   for (const scope of scopes) {
@@ -523,5 +520,4 @@ export async function loadVisibleMarketplaces(opts: {
 // and renders as `cause: <l1> -> <l2> -> ... [(truncated)]`. Callers pass
 // failure facts to `notify()`; the renderer composes the trailer internally.
 // Callers that need the trailer outside the notify path compose it inline via
-// `causeChainTrailer(err)` imported from `shared/errors.ts` (canonicalised
-// there in Phase 21 from the retired `presentation/cause-chain.ts`).
+// `causeChainTrailer(err)` imported from `shared/errors.ts`.

@@ -21,8 +21,8 @@ interface NotifyRecord {
 
 function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: NotifyRecord[] } {
   const notifications: NotifyRecord[] = [];
-  // Plan 18-00: `pi` required on ListMarketplacesOptions; mirror
-  // production wiring shape (D-18-06 preserved).
+  // `pi` required on ListMarketplacesOptions; mirror
+  // production wiring shape (D-18-06).
   const pi = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
   const ctx = {
     ui: {
@@ -152,16 +152,15 @@ test("CMC-05 / MSG-GR-5: autoupdate=true emits `<autoupdate>` marker", async () 
 });
 
 test("ML-V2 / UXG-01: list surface does NOT render `<last-updated <iso>>`; lastUpdatedAt persists in state but is no longer emitted", async () => {
-  // Plan 18-03 backwards-compatible enrichment: the persisted record carries
-  // `lastUpdatedAt` (set at `add`/`update` time per persistence/state-io.ts:70).
-  // V2 originally rendered `<last-updated <iso>>` on the list surface, but
-  // UXG-01 (Plan 27-02) dropped that token -- the raw ISO timestamp is noise
-  // and meaningless for path-source marketplaces. The `lastUpdatedAt` field
-  // STAYS in state/type; only the renderer emission was removed. This test
-  // keeps `lastUpdatedAt` on the persisted record to prove the field still
-  // round-trips through state while the byte form no longer carries the token,
-  // binding against the canonical catalog UAT fixture `mixed-scopes`
-  // (the `alpha [project]` row, now `● ... <autoupdate>` only).
+  // The persisted record carries `lastUpdatedAt` (set at `add`/`update`
+  // time in persistence/state-io.ts). UXG-01: the list surface does not
+  // render the `<last-updated <iso>>` token -- the raw ISO timestamp is
+  // noise and meaningless for path-source marketplaces. The `lastUpdatedAt`
+  // field STAYS in state/type; only the renderer emission is absent. This
+  // test keeps `lastUpdatedAt` on the persisted record to prove the field
+  // still round-trips through state while the byte form does not carry the
+  // token, binding against the canonical catalog UAT fixture `mixed-scopes`
+  // (the `alpha [project]` row, `● ... <autoupdate>` only).
   await withHermeticHome(async ({ cwd }) => {
     const projectLocations = locationsFor("project", cwd);
     await mkdir(projectLocations.extensionRoot, { recursive: true });

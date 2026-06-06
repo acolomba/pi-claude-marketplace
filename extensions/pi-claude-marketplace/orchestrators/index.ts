@@ -1,16 +1,15 @@
 // orchestrators/index.ts
 //
-// Top-level orchestrators barrel. Phase 4 shipped the `marketplace`
-// per-subcommand barrel; Phase 5 adds the `plugin` per-subcommand barrel
-// and the cross-orchestrator `types.ts` shapes. Phase 6 edge router
-// imports from here.
+// Top-level orchestrators barrel. Forwards the `marketplace` and `plugin`
+// per-subcommand barrels and the cross-orchestrator `types.ts` shapes; the
+// edge router imports from here.
 //
 // Each per-subcommand barrel uses prefix-distinct exported names
 // (`addMarketplace`, `installPlugin`, etc.) so there are no symbol-name
 // collisions at this top-level surface. The barrel forwards EVERY named
 // export from the two per-subcommand barrels plus the cross-orchestrator
-// type contracts that Phase 4's autoupdate cascade (and Phase 5's
-// `updateSinglePlugin` impl that satisfies it) depend on.
+// type contracts that the autoupdate cascade (and the `updateSinglePlugin`
+// impl that satisfies it) depend on.
 
 export {
   addMarketplace,

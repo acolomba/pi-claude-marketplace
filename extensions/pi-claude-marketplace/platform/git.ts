@@ -8,32 +8,28 @@ import type { CredentialOps } from "./git-credential.ts";
 /**
  * platform/git.ts -- isomorphic-git wrapper (D-18, D-19, D-20).
  *
- * Drops V1's `execFile("git", [...])` shell-out and replaces with pure-JS
- * `isomorphic-git`. Removes the `git not found on PATH` failure mode
- * entirely (which is why D-21 supersedes MA-7 in REQUIREMENTS.md).
+ * Uses pure-JS `isomorphic-git`, so there is no `git not found on PATH`
+ * failure mode (D-21, MA-7).
  *
  * Pins `fs` (Node's built-in) and `http` (`isomorphic-git/http/node`) so
- * Phase 4's marketplace orchestrators don't thread them through every call.
+ * the marketplace orchestrators don't thread them through every call.
  *
- * The `listRemotes` wrapper (W-4) is exposed here in Phase 1 even though
- * Phase 4 is the consumer -- shipping it now keeps the import-x boundary
- * verification surface complete and avoids a Phase 4 plan needing to
- * touch this file.
+ * The `listRemotes` wrapper (W-4) is exposed here even though the
+ * marketplace orchestrators are the consumers -- keeping the import-x
+ * boundary verification surface complete.
  *
  * NOT exposed:
  *   - sparse checkout (PRD §11 deferred; isomorphic-git also doesn't support it)
- *   - shallow clones / depth (deferred until needed; V1 keeps full history)
- *   - submodules (V1 doesn't follow git submodules)
- *   - custom auth surface beyond the v1.6 optional `opts.auth` bundle
- *     (Phase 33 ships the `buildAuthCallbacks` factory + `CloneOptions.auth?`
- *     / `FetchOptions.auth?` ledge; Phase 35 wires the GitHub Device Flow
- *     orchestrator at the call sites). When `opts.auth` is omitted, clone
- *     and fetch behave exactly as the pre-v1.6 public-only path.
+ *   - shallow clones / depth (deferred until needed; full history is kept)
+ *   - submodules (git submodules are not followed)
+ *   - custom auth surface beyond the optional `opts.auth` bundle
+ *     (the `buildAuthCallbacks` factory + `CloneOptions.auth?` /
+ *     `FetchOptions.auth?` ledge; the GitHub Device Flow orchestrator
+ *     wires it at the call sites). When `opts.auth` is omitted, clone
+ *     and fetch behave as the public-only path.
  *
- * Phase 1 ships the wrapper as the canonical platform-git surface;
- * Phase 4 became its first caller; Phase 33 extends it with the
- * optional-auth callbacks consumed by isomorphic-git's onAuth /
- * onAuthFailure hooks.
+ * The wrapper is the canonical platform-git surface; the optional-auth
+ * callbacks are consumed by isomorphic-git's onAuth / onAuthFailure hooks.
  */
 
 export interface CloneOptions {
@@ -42,17 +38,17 @@ export interface CloneOptions {
    * parent if the caller plans to atomic-rename a clone into place.
    */
   dir: string;
-  /** Remote URL -- V1 accepts only https://github.com/<owner>/<repo>[.git] (SP-3). */
+  /** Remote URL -- only https://github.com/<owner>/<repo>[.git] is accepted (SP-3). */
   url: string;
   /** Optional ref (branch/tag/SHA) to check out. If omitted, the default branch. */
   ref?: string;
   /** If a specific ref is given, fetch only that branch -- saves bandwidth. */
   singleBranch?: boolean;
   /**
-   * Phase 33 (v1.6) optional auth bundle. When provided, clone() builds
+   * Optional auth bundle. When provided, clone() builds
    * isomorphic-git `onAuth` / `onAuthFailure` callbacks via
    * `buildAuthCallbacks` and threads them into the underlying `git.clone`
-   * call. When omitted, clone() behaves identically to the pre-v1.6
+   * call. When omitted, clone() behaves identically to the
    * public-only path (no network policy change for public clones; NFR-5
    * surfaces untouched).
    */
@@ -61,8 +57,8 @@ export interface CloneOptions {
 
 export interface FetchOptions {
   /**
-   * Phase 33 (v1.6) optional auth bundle. Same shape as `CloneOptions.auth`;
-   * fetch() builds the callbacks when present and behaves as the pre-v1.6
+   * Optional auth bundle. Same shape as `CloneOptions.auth`;
+   * fetch() builds the callbacks when present and behaves as the
    * public-only path when omitted.
    */
   auth?: { credentialOps: CredentialOps; host: string; onAuthRequired: OnAuthRequiredFn };
@@ -104,14 +100,14 @@ export interface ListBranchesOptions {
 
 export interface ListRemotesOptions {
   dir: string;
-  /** Optional gitdir (defaults to `<dir>/.git`). Phase 4 typically omits. */
+  /** Optional gitdir (defaults to `<dir>/.git`); typically omitted. */
   gitdir?: string;
 }
 
 export async function clone(opts: CloneOptions): Promise<void> {
-  // Phase 33: when opts.auth is provided, build the isomorphic-git callbacks
+  // When opts.auth is provided, build the isomorphic-git callbacks
   // up-front and conditionally spread them. When omitted, the public-only
-  // path stays byte-identical to the pre-v1.6 surface.
+  // path stays byte-identical.
   //
   // The `onAuthFailure as git.AuthFailureCallback` cast bridges to
   // isomorphic-git's AuthFailureCallback, whose `auth: GitAuth` parameter
@@ -134,7 +130,7 @@ export async function clone(opts: CloneOptions): Promise<void> {
       onAuth: authCbs.onAuth,
       onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
     }),
-    // No depth (V1 keeps full history). No corsProxy (Node only).
+    // No depth (full history is kept). No corsProxy (Node only).
   });
 }
 
@@ -172,7 +168,7 @@ export async function resolveRef(opts: ResolveRefOptions): Promise<string> {
 
 /**
  * D-14 step 2 (symbolic HEAD): force-set a local ref to a given SHA.
- * Wraps isomorphic-git's `writeRef({ force: true })`. Phase 4
+ * Wraps isomorphic-git's `writeRef({ force: true })`. The
  * orchestrators call this via the GitOps interface; exposing it here
  * keeps orchestrator-tier code from importing isomorphic-git directly
  * (D-13).
@@ -231,8 +227,8 @@ export async function listRemotes(
 
 /**
  * Credential shape consumed by isomorphic-git's onAuth / onAuthFailure callbacks.
- * Matches isomorphic-git's GitAuth; re-exported here so Phase 31+
- * consumers import from platform/git.ts (D-13 boundary) rather than
+ * Matches isomorphic-git's GitAuth; re-exported here so consumers
+ * import from platform/git.ts (D-13 boundary) rather than
  * directly from isomorphic-git.
  */
 export interface GitCredentials {
@@ -244,7 +240,7 @@ export interface GitCredentials {
 }
 
 /**
- * Phase 33 (v1.6) discriminated result returned by an `onAuthRequired`
+ * Discriminated result returned by an `onAuthRequired`
  * closure. Both arms carry `authAttempted: true` so downstream onAuthFailure
  * logic can detect that an interactive auth attempt has already happened
  * (CP-9 retry-loop guard).
@@ -252,7 +248,7 @@ export interface GitCredentials {
  * Structurally identical to `domain/github-auth.ts::DeviceFlowResult`.
  * Declared LOCALLY in platform/git.ts so this module honors the
  * platform → domain import prohibition (`platform/README.md`: platform/
- * may import from shared/ and sibling platform/ files only). Phase 35
+ * may import from shared/ and sibling platform/ files only). The
  * orchestrators pass `initiateDeviceFlow` directly as `onAuthRequired` and
  * TypeScript's structural typing accepts the assignment with no adapter --
  * no shared type declaration is needed across tiers.
@@ -263,9 +259,9 @@ export type AuthAttemptResult =
 
 /**
  * Caller-supplied closure invoked by `buildAuthCallbacks` when
- * `credentialOps.fill` returns null (no stored credential). Phase 35 binds
- * `host`, `credentialOps`, and `notifyFn` at the orchestrator call site so
- * this seam takes no parameters.
+ * `credentialOps.fill` returns null (no stored credential). The
+ * orchestrator binds `host`, `credentialOps`, and `notifyFn` at the call
+ * site so this seam takes no parameters.
  */
 export type OnAuthRequiredFn = () => Promise<AuthAttemptResult>;
 

@@ -22,15 +22,15 @@
 //
 // PARSER PRESERVATION (D-17-05, D-17-06): the catalog-walking logic
 // (`loadCatalogExamples` + the section/state regular expressions + the
-// `currentSection = sectionMatch[2] ?? "manual-recovery-anchors"` fallback)
-// is preserved VERBATIM from v1. The catalog convention is unchanged: a
+// `currentSection = sectionMatch[2] ?? "manual-recovery-anchors"` fallback).
+// The catalog convention: a
 // `<!-- catalog-state: STATE -->` comment is paired with the next fenced
 // block inside a per-command H2 section.
 //
 // BINDING USER-CONTRACT GATE: byte-equality between `notify()`'s output
-// and the v2.0 catalog (`docs/output-catalog.md` rewritten by Plan 17-02)
-// is the closed-loop SNM-31 gate. After this plan lands, every byte change
-// in either side must agree, structurally enforcing the v1.4 user
+// and the catalog (`docs/output-catalog.md`)
+// is the closed-loop SNM-31 gate. Every byte change
+// in either side must agree, structurally enforcing the user
 // contract.
 
 import assert from "node:assert/strict";
@@ -45,7 +45,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
 
 // ---------------------------------------------------------------------------
-// Catalog extraction (preserved VERBATIM from v1 per D-17-05 + D-17-06)
+// Catalog extraction (D-17-05 + D-17-06)
 // ---------------------------------------------------------------------------
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -132,8 +132,7 @@ function loadCatalogExamples(catalog: string): readonly CatalogExample[] {
 }
 
 // ---------------------------------------------------------------------------
-// Mock helpers -- inline duplication of `tests/shared/notify-v2.test.ts`
-// lines 136-179 per RESEARCH.md Q1 Option 1 recommendation.
+// Mock helpers.
 // ---------------------------------------------------------------------------
 
 interface MockCtx {
@@ -175,7 +174,7 @@ function piWithNothingLoaded(): MockPi {
 }
 
 // ---------------------------------------------------------------------------
-// Fixture map shape (D-17-05 + RESEARCH.md Pitfall 6).
+// Fixture map shape (D-17-05 + Pitfall 6).
 // ---------------------------------------------------------------------------
 
 interface CatalogFixture {
@@ -187,7 +186,7 @@ interface CatalogFixture {
 type FixtureMap = Readonly<Record<string, Readonly<Record<string, CatalogFixture>>>>;
 
 // ---------------------------------------------------------------------------
-// FIXTURES -- one entry per `(section, state)` tuple parsed from the v2
+// FIXTURES -- one entry per `(section, state)` tuple parsed from the
 // catalog. Outer-map keys are the 12 per-command H2 strings plus the
 // `manual-recovery-anchors` fallback key (per the parser's
 // `currentSection = sectionMatch[2] ?? "manual-recovery-anchors"` fallback).
@@ -199,7 +198,7 @@ type FixtureMap = Readonly<Record<string, Readonly<Record<string, CatalogFixture
 //     pi-...}` markers).
 //   - `expectedSeverity` is set ONLY when the payload triggers
 //     computeSeverity() to return "warning" or "error" per the D-28-06
-//     benign-softening ladder (refines D-16-11):
+//     benign-softening ladder (D-16-11):
 //       failed-bearing -> "error"
 //       manual-recovery (without failed) -> "warning"
 //       skipped (plugin or mp) whose reasons are NOT all in BENIGN_REASONS,
@@ -209,19 +208,19 @@ type FixtureMap = Readonly<Record<string, Readonly<Record<string, CatalogFixture
 //         already no autoupdate) -> omit the field (info, no 2nd arg) per
 //         UXG-02 / D-28-06
 //       otherwise omit the field (info severity, no 2nd arg).
-//     SUMMARY LINE (Phase 29 / UXG-07 / D-29-02): every fixture carrying
+//     SUMMARY LINE (UXG-07 / D-29-02): every fixture carrying
 //     `expectedSeverity: "error" | "warning"` has its catalog cascade body
 //     PREFIXED with a one-line summary (`"N plugin operation(s) [and M
-//     marketplace operation(s)] failed|skipped."`) because `notify()` now
+//     marketplace operation(s)] failed|skipped."`) because `notify()`
 //     prepends that line for error/warning severity. The driver reads the
 //     prefixed byte form from `docs/output-catalog.md` and byte-compares it
-//     against live `notify()` output, so the catalog (Plan 29-02 Task 1) and
+//     against live `notify()` output, so the catalog and
 //     the emitted string agree. `expectedSeverity` is KEPT (D-29-06) -- the
 //     severity arg routing is unchanged; only the body string gained the
 //     prefix. Info-severity fixtures (no `expectedSeverity`) carry NO summary
-//     line and are byte-unchanged.
-//   - Plugin variants honor the discriminated-union carve-outs at
-//     `shared/notify.ts` lines 288-448 (required vs absent reasons /
+//     line.
+//   - Plugin variants honor the discriminated-union carve-outs in
+//     `shared/notify.ts` (required vs absent reasons /
 //     dependencies / scope / version / cause / rollbackPartial fields).
 // ---------------------------------------------------------------------------
 
@@ -368,7 +367,7 @@ const FIXTURES: FixtureMap = {
             scope: "user",
             status: "failed",
             // Empty plugins[] -- the bare failed marketplace header is the
-            // entire block. The v2 type model does not carry cause on
+            // entire block. The type model does not carry cause on
             // marketplace headers; orchestrators wanting to surface the
             // parse error must include a per-plugin failed/manual-recovery
             // row carrying the diagnostic as `cause?: Error`.
@@ -1253,10 +1252,8 @@ const FIXTURES: FixtureMap = {
   },
 
   // -------------------------------------------------------------------------
-  // /claude:plugin marketplace info -- Phase 42 / INFO-04 / INFO-08
-  // anchored the first catalog state (`scope-mismatch-not-added`), and
-  // Phase 43 / Plan 43-02 / INFO-07 closes full catalog state coverage
-  // for the marketplace info command surface:
+  // /claude:plugin marketplace info -- INFO-04 / INFO-08 / INFO-07: full
+  // catalog state coverage for the marketplace info command surface:
   //
   //   - Success states:
   //     * github-single-scope-full       (INFO-01 github + all optionals)
@@ -1267,16 +1264,16 @@ const FIXTURES: FixtureMap = {
   //     * both-scopes-fan-out            (INFO-03 project-first fan-out)
   //   - Failure states:
   //     * absent-from-both               (no [scope] bracket; INFO-04 + D-03)
-  //     * scope-mismatch-not-added       (Phase 42 anchor; PRESERVED byte-identical)
+  //     * scope-mismatch-not-added       (anchor; byte-identical)
   //
   // Severity routing: every success + fan-out state is `info` (omits
   // `expectedSeverity`); the two `{not added}` failure states route to
-  // `"error"`. The Phase 42 `scope-mismatch-not-added` fixture
-  // (annotation, fence body, payload, severity) is preserved
-  // byte-identical -- Plan 43-02 additions are purely additive.
+  // `"error"`. The `scope-mismatch-not-added` fixture
+  // (annotation, fence body, payload, severity) is
+  // byte-identical.
   // -------------------------------------------------------------------------
   "/claude:plugin marketplace info <name>": {
-    // Phase 43 / Plan 43-02 / INFO-07: full catalog state coverage for marketplace info.
+    // INFO-07: full catalog state coverage for marketplace info.
     "github-single-scope-full": {
       pi: piWithBothLoaded(),
       message: {
@@ -1374,7 +1371,7 @@ const FIXTURES: FixtureMap = {
       } satisfies NotificationMessage,
     },
 
-    // Phase 42 anchor preserved byte-identical. DO NOT modify.
+    // Anchor preserved byte-identical. DO NOT modify.
     "scope-mismatch-not-added": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
@@ -1399,9 +1396,8 @@ const FIXTURES: FixtureMap = {
   },
 
   // -------------------------------------------------------------------------
-  // Phase 44 / Plan 44-02 / INFO-02 + INFO-05 + INFO-07: full catalog state
-  // coverage for `/claude:plugin info <plugin>@<marketplace>`. Mirrors the
-  // Phase 43 marketplace-info entry above.
+  // INFO-02 + INFO-05 + INFO-07: full catalog state
+  // coverage for `/claude:plugin info <plugin>@<marketplace>`.
   //
   //   - Success states:
   //     * installed-single-scope                       (INFO-02 happy path)
@@ -1673,8 +1669,8 @@ const FIXTURES: FixtureMap = {
   "/claude:plugin marketplace update <name>": {
     // UXG-05: autoupdate-OFF manifest-only refresh splits into a no-op
     // (`skipped {up-to-date}`) and a changed (`updated`) state. Per UXG-02 /
-    // D-28-07 the benign `up-to-date` no-op now computes INFO (no
-    // `expectedSeverity`), closing the Plan 27-04 deferral.
+    // D-28-07 the benign `up-to-date` no-op computes INFO (no
+    // `expectedSeverity`).
     "update-no-op-skipped": {
       pi: piWithBothLoaded(),
       message: {
@@ -1690,7 +1686,7 @@ const FIXTURES: FixtureMap = {
       },
     },
 
-    // UXG-05 (Phase 27 UAT Test-3 gap closure): the autoupdate-ON cascade
+    // UXG-05: the autoupdate-ON cascade
     // no-op converges to the SAME `(skipped) {up-to-date}` byte form as the
     // OFF no-op (plugins:[], dropped all-`unchanged` cascade rows). Distinct
     // mp name (`official`) so the two fixtures are not confusable.
@@ -1915,7 +1911,7 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
       });
     }
 
-    // Severity-arg assertion per RESEARCH.md Pitfall 6.
+    // Severity-arg assertion per Pitfall 6.
     if (fixture.expectedSeverity !== undefined) {
       if (callArgs.length !== 2 || callArgs[1] !== fixture.expectedSeverity) {
         failures.push({

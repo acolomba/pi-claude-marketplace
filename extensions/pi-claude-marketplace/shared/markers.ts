@@ -1,10 +1,9 @@
 // shared/markers.ts
 //
-// Stable user-contract prefixes (PUP-6). The PRD §6.12 ES-5 marker strings
-// have been superseded by the compact-line grammar in
-// docs/messaging-style-guide.md (Supersession of ES-5). The extension markers
-// below are NOT part of ES-5 and remain the canonical user-contract prefixes
-// for their respective surfaces. They are drift-guarded by
+// Stable user-contract prefixes (PUP-6). The compact-line grammar lives in
+// docs/messaging-style-guide.md. The extension markers below are NOT part of
+// ES-5 and are the canonical user-contract prefixes for their respective
+// surfaces. They are drift-guarded by
 // tests/architecture/markers-snapshot.test.ts.
 
 /**

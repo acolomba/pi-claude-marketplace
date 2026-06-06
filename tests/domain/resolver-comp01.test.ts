@@ -1,6 +1,4 @@
-// tests/domain/resolver-comp01.test.ts
-//
-// D-07 (COMP-01) fixture coverage. The strict-resolver Step 7 now computes
+// D-07 (COMP-01) fixture coverage. The strict-resolver Step 7 computes
 // the UNION of declared (entry > manifest) + implicit-by-convention paths
 // with first-wins dedup. Three fixtures lock the contract:
 //
@@ -12,10 +10,6 @@
 //   (c) BOTH:         manifest declares `["custom/skills"]` AND default
 //       `<pluginRoot>/skills/` exists. UNION yields BOTH paths with
 //       declared-first ordering.
-//
-// PR-4 short-circuit semantics are SUPERSEDED by this contract; the
-// docs (REQUIREMENTS.md strikethrough + PROJECT.md row + CHANGELOG entry)
-// land in Plan 05-10, not here.
 
 import assert from "node:assert/strict";
 import path from "node:path";

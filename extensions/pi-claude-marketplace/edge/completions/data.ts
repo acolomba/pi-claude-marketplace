@@ -1,21 +1,20 @@
 // edge/completions/data.ts
 //
-// Cache-backed completion data accessors + V1 pure helpers carried forward.
-// Two responsibilities:
+// Cache-backed completion data accessors + pure helpers. Two
+// responsibilities:
 //
-//   1. Pure helpers ported verbatim from V1 (`completions.ts`):
+//   1. Pure helpers:
 //      `buildItem`, `splitCompletionInput`, `extractPositionals`,
 //      `getScopeCompletions`, `getMarketplaceCompletions`.
 //
-//   2. Cache-backed read-through helpers that replace V1's per-keystroke
-//      loadState/loadMarketplaceManifest reads:
+//   2. Cache-backed read-through helpers:
 //      `getMarketplaceNamesAcrossScopes`, `getPluginToMarketplacesMap`,
 //      `getPluginRefCompletions` (status-aware per D-03 corollary).
 //
 // Architecture seam: data.ts MUST NOT import from `persistence/` (ESLint
 // BLOCK C: edge/ -> persistence/ forbidden). The `LocationsResolver`
-// interface is the indirection. `register.ts` (Plan 06-05) constructs the
-// resolver from `persistence/locations.ts` + `persistence/state-io.ts` +
+// interface is the indirection. `register.ts` constructs the resolver from
+// `persistence/locations.ts` + `persistence/state-io.ts` +
 // `domain/manifest.ts` and threads it through `getArgumentCompletions`.
 // Tests construct mock resolvers inline.
 //
@@ -44,9 +43,9 @@ type PluginRefCompletionMode = "install" | "uninstall" | "update" | "reinstall" 
 
 /**
  * Injection surface that lets edge/completions reach into persistence/state
- * + domain/manifest WITHOUT importing them (Phase 1 D-11 / ESLint BLOCK C
- * keeps edge/ from importing persistence/). Constructed by edge/register.ts
- * (Plan 06-05) and threaded through getArgumentCompletions.
+ * + domain/manifest WITHOUT importing them (D-11 / ESLint BLOCK C keeps
+ * edge/ from importing persistence/). Constructed by edge/register.ts and
+ * threaded through getArgumentCompletions.
  *
  * The two rebuild-callback resolvers (loadStateForScope,
  * loadManifestForMarketplace) MUST throw to signal failure -- the cache layer
@@ -73,7 +72,7 @@ export interface MarketplaceStateRecord {
 }
 
 // ---------------------------------------------------------------------------
-// Pure helpers ported verbatim from V1.
+// Pure helpers.
 // ---------------------------------------------------------------------------
 
 /**
@@ -163,7 +162,7 @@ export function extractScope(tokens: readonly string[]): Scope | undefined {
   return undefined;
 }
 
-/** V1 `getScopeCompletions` -- emits `--scope user` / `--scope project` suggestions. */
+/** Emits `--scope user` / `--scope project` suggestions. */
 export function getScopeCompletions(argumentTextPrefix: string): AutocompleteItem[] {
   return [
     {
@@ -177,7 +176,7 @@ export function getScopeCompletions(argumentTextPrefix: string): AutocompleteIte
   ];
 }
 
-/** V1 `getMarketplaceCompletions` -- filters names by `currentPrefix` and emits trailing-space terminals. */
+/** Filters names by `currentPrefix` and emits trailing-space terminals. */
 export function getMarketplaceCompletions(
   names: readonly string[],
   currentPrefix: string,
@@ -442,7 +441,7 @@ async function getMarketplaceOnlyCompletions(
  *
  *   - `currentPrefix` is `@…`: complete marketplace name only. Gated by
  *     `allowMarketplaceOnly` (true for `update` only -- accepts the bare
- *     `@<marketplace>` form per V1).
+ *     `@<marketplace>` form).
  *
  *   - `currentPrefix` is `name@…`: complete only marketplaces carrying
  *     `name`.

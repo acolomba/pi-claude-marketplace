@@ -11,8 +11,7 @@ import {
 // MC-5 -- per-server `_piClaudeMarketplace` marker shape and ownership.
 
 test("MC-5 CLAUDE_MARKETPLACE_MARKER_KEY === '_piClaudeMarketplace' (user contract snapshot)", () => {
-  // This is byte-for-byte user contract -- a V1 mcp.json must remain
-  // readable by the successor. Snapshot the literal.
+  // This is byte-for-byte user contract. Snapshot the literal.
   assert.equal(CLAUDE_MARKETPLACE_MARKER_KEY, "_piClaudeMarketplace");
 });
 

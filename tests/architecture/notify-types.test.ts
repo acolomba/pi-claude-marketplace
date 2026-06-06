@@ -1,7 +1,7 @@
 // tests/architecture/notify-types.test.ts
 //
-// Phase 15 / SNM-01..SNM-11 / D-15-10..D-15-12 -- closed-system compile-time
-// proof of the v1.4 structured notification type model shipped by Plan 15-01
+// SNM-01..SNM-11 / D-15-10..D-15-12 -- closed-system compile-time
+// proof of the structured notification type model
 // in `extensions/pi-claude-marketplace/shared/notify.ts`.
 //
 // Type-level `_Assert_*` types resolve to `true` when the locked invariants
@@ -12,8 +12,8 @@
 // exports are inert: nothing imports this file at runtime; node:test executes
 // it directly.)
 //
-// Negative-presence assertions use `// @ts-expect-error` per RESEARCH §"Pitfall
-// 3" / §"Pattern 3" so a future commit that mistakenly ADDS the absent field
+// Negative-presence assertions use `// @ts-expect-error` per Pitfall
+// 3 / Pattern 3 so a future commit that mistakenly ADDS the absent field
 // fires "Unused @ts-expect-error" at typecheck, surfacing the regression.
 // The directive suppresses ONLY the immediately-following line; to keep the
 // negative-presence indexed access on a single line below the directive (so
@@ -25,7 +25,7 @@
 //
 // The trailing `test(...)` block with a trivial identity-assert body anchors
 // the file to `node:test` so the runner counts it in `npm run check` output
-// (D-15-10; mirrors `tests/architecture/grammar-frontmatter.test.ts`).
+// (D-15-10).
 // Failures of the type-level `_Assert_*` blocks surface through `npm run
 // typecheck` (the `check` script's first step), not through `node --test`.
 //
@@ -33,9 +33,9 @@
 // `PLUGIN_STATUSES` tuple and the variant `status` literals fall out of sync
 // (e.g., typo `status: "instaled"` in `PluginInstalledMessage`) breaks the
 // bidirectional `_Assert_PluginStatusForward` / `_Assert_PluginStatusBackward`
-// round-trip and fails `npm run typecheck` (RESEARCH §"Pitfall 1").
+// round-trip and fails `npm run typecheck` (Pitfall 1).
 //
-// Discretion (CONTEXT.md "Claude's Discretion"):
+// Discretion:
 //   - One named `_Assert_*` block per invariant (vs. a single conjunction
 //     block) -- a single failing block names the broken variant for easier
 //     diagnosis instead of a 6-level-deep nested `extends` chain.
@@ -88,10 +88,10 @@ type _VUpgradable = Extract<PluginNotificationMessage, { status: "upgradable" }>
 type _VFailed = Extract<PluginNotificationMessage, { status: "failed" }>;
 type _VSkipped = Extract<PluginNotificationMessage, { status: "skipped" }>;
 type _VManualRecovery = Extract<PluginNotificationMessage, { status: "manual recovery" }>;
-// UAT G-21-01 / 21-04-REVIEW.md WR-01: PluginPresentMessage is the 11th
-// variant (list-only inventory token introduced to close the reload-hint
+// UAT G-21-01 / WR-01: PluginPresentMessage is the 11th
+// variant (list-only inventory token that closes the reload-hint
 // misfire). Its per-variant invariants mirror the `_VInstalled` blocks
-// verbatim (dependencies REQUIRED, version OPTIONAL, scope OPTIONAL; no
+// (dependencies REQUIRED, version OPTIONAL, scope OPTIONAL; no
 // cause / rollbackPartial / reasons / from / to).
 type _VPresent = Extract<PluginNotificationMessage, { status: "present" }>;
 
@@ -106,7 +106,7 @@ type _Reason = import("../../extensions/pi-claude-marketplace/shared/notify.ts")
 // SNM-04 round-trip: `PluginStatus` IS exactly `PluginNotificationMessage["status"]`.
 // BOTH directions are load-bearing -- dropping either side silently allows the
 // `PLUGIN_STATUSES` tuple and the variant `status` literals to drift apart
-// (RESEARCH §"Pitfall 1").
+// (Pitfall 1).
 type _Assert_PluginStatusForward = PluginStatus extends PluginNotificationMessage["status"]
   ? true
   : never;
@@ -118,12 +118,12 @@ type _Assert_PluginStatusBackward = PluginNotificationMessage["status"] extends 
 export const _pb: _Assert_PluginStatusBackward = true;
 
 // D-15-11: PLUGIN_STATUSES tuple length is exactly 11.
-// UAT G-21-01: tuple grew from 10 to 11 entries with the addition of the
+// UAT G-21-01: the tuple includes the
 // list-only `"present"` inventory token (SNM-15 surface tightening).
 type _Assert_PluginStatusesLen = (typeof PLUGIN_STATUSES)["length"] extends 11 ? true : never;
 export const _l1: _Assert_PluginStatusesLen = true;
 
-// D-17.1-01 (supersedes D-15-07) + D-15-11: MARKETPLACE_STATUSES tuple length is exactly 7.
+// D-17.1-01 + D-15-11: MARKETPLACE_STATUSES tuple length is exactly 7.
 type _Assert_MarketplaceStatusesLen = (typeof MARKETPLACE_STATUSES)["length"] extends 7
   ? true
   : never;
@@ -156,7 +156,7 @@ type _Assert_PluginStatusValues = _PluginStatusExpected extends PluginStatus
   : never;
 export const _psv: _Assert_PluginStatusValues = true;
 
-// SNM-05 + D-17.1-01 (supersedes D-15-07): `MarketplaceStatus` is EXACTLY the 7 expected literals.
+// SNM-05 + D-17.1-01: `MarketplaceStatus` is EXACTLY the 7 expected literals.
 type _MarketplaceStatusExpected =
   | "added"
   | "removed"
@@ -185,13 +185,13 @@ export const _dv: _Assert_DependencyValues = true;
 // Top-level shape proofs (SNM-01, SNM-02, SNM-07, SNM-08, D-15-05, D-15-06)
 // ============================================================================
 
-// SNM-01 (Phase 42 amendment): `NotificationMessage` is the discriminated
+// SNM-01: `NotificationMessage` is the discriminated
 // union `CascadeNotificationMessage | MarketplaceInfoMessage |
 // PluginInfoMessage`. The cascade arm preserves the SNM-01 single-shape
 // envelope contract (`marketplaces: readonly MarketplaceNotificationMessage[]`
-// and an optional `kind?: "cascade"` discriminator per Phase 42 / RESEARCH
+// and an optional `kind?: "cascade"` discriminator per
 // Migration Strategy #2). Lock the cascade arm's shape exactly here; the
-// new info-surface arms are locked further down.
+// info-surface arms are locked further down.
 interface _CascadeMessageExpected {
   readonly kind?: "cascade";
   readonly marketplaces: readonly MarketplaceNotificationMessage[];
@@ -203,12 +203,11 @@ type _Assert_CascadeMessageShape = CascadeNotificationMessage extends _CascadeMe
   : never;
 export const _nms: _Assert_CascadeMessageShape = true;
 
-// Phase 42 / Migration Strategy #2 backward-compat proof: a value with
+// Migration Strategy #2 backward-compat proof: a value with
 // `{ marketplaces: [...] }` and NO `kind` field MUST still type-check as a
 // `NotificationMessage`. This locks the optional-`kind?`-on-cascade
-// discipline so v1.0-v1.7 call sites (90+ orchestrator / test / fixture
-// sites that construct `{ marketplaces: [...] }`) continue to compile
-// without migration after the discriminated-union conversion.
+// discipline so call sites (orchestrator / test / fixture
+// sites that construct `{ marketplaces: [...] }`) continue to compile.
 type _Assert_CascadeNoKind = {
   readonly marketplaces: readonly MarketplaceNotificationMessage[];
 } extends NotificationMessage
@@ -217,7 +216,7 @@ type _Assert_CascadeNoKind = {
 export const _l6: _Assert_CascadeNoKind = true;
 
 // SNM-01: CascadeNotificationMessage has NO `severity` field (severity is
-// computed structurally by the Phase 16 renderer; never embedded as a field
+// computed structurally by the renderer; never embedded as a field
 // per PRD §6.12 ES-2).
 // @ts-expect-error -- SNM-01: CascadeNotificationMessage has NO severity field
 export type _NoSeverityOnNotificationMessage = CascadeNotificationMessage["severity"];
@@ -228,7 +227,7 @@ export type _NoSeverityOnNotificationMessage = CascadeNotificationMessage["sever
 // @ts-expect-error -- SNM-01: CascadeNotificationMessage has NO trailer field
 export type _NoTrailerOnNotificationMessage = CascadeNotificationMessage["trailer"];
 
-// SNM-02 + D-15-06 + Phase 17.1 D-17.1-01 reasons? amendment:
+// SNM-02 + D-15-06 + D-17.1-01 reasons? amendment:
 // `MarketplaceNotificationMessage` carries name + scope + optional status +
 // optional details + optional reasons + plugins. `status?`, `details?`, and
 // `reasons?` are independent optionals.
@@ -385,7 +384,7 @@ type _Assert_DepsNotOptionalReinstalled = undefined extends _VReinstalled["depen
   : true;
 export const _dnR: _Assert_DepsNotOptionalReinstalled = true;
 
-// UAT G-21-01 (21-04-REVIEW.md WR-01): PluginPresentMessage carries REQUIRED
+// UAT G-21-01 (WR-01): PluginPresentMessage carries REQUIRED
 // `dependencies: readonly Dependency[]` so the soft-dep marker injection
 // (D-16-15) still applies on list-surface inventory rows. The renderer arm
 // for `present` is byte-identical to the `installed` arm, which structurally
@@ -513,7 +512,7 @@ type _Assert_ScopeOnManualRecovery = _VManualRecovery["scope"] extends _Scope | 
   : never;
 export const _scMR: _Assert_ScopeOnManualRecovery = true;
 
-// UAT G-21-01 (21-04-REVIEW.md WR-01): PluginPresentMessage carries OPTIONAL
+// UAT G-21-01 (WR-01): PluginPresentMessage carries OPTIONAL
 // `scope?: Scope` mirroring PluginInstalledMessage; the orphan-fold rule
 // (D-16-17 / D-13-18) emits the cross-scope `[<scope>]` bracket when the
 // plugin's actual scope differs from the owning marketplace block's scope.
@@ -528,7 +527,7 @@ export type _NoScopeOnUnavailable = _VUnavailable["scope"];
 // ============================================================================
 // Per-variant: from / to (D-15-04 + D-15-12)
 //
-// REQUIRED ONLY on `updated` (mirrors v1.3 `v1.0 → v1.2` arrow rendering).
+// REQUIRED ONLY on `updated` (the `v1.0 → v1.2` arrow rendering).
 // Absent on the other 9 variants.
 // ============================================================================
 
@@ -631,26 +630,25 @@ type _Assert_VersionOnManualRecovery = _VManualRecovery["version"] extends strin
   : never;
 export const _vMR: _Assert_VersionOnManualRecovery = true;
 
-// UAT G-21-01 (21-04-REVIEW.md WR-01): PluginPresentMessage carries OPTIONAL
+// UAT G-21-01 (WR-01): PluginPresentMessage carries OPTIONAL
 // `version?: string` mirroring PluginInstalledMessage (the installed record's
 // version is captured at install time and carries through to the inventory row).
 type _Assert_VersionOnPresent = _VPresent["version"] extends string | undefined ? true : never;
 export const _vP: _Assert_VersionOnPresent = true;
 
 // ============================================================================
-// Phase 42 / INFO-04 / INFO-08: REASONS closed-set extension + length lock
+// INFO-04 / INFO-08: REASONS closed-set + length lock
 //
-// The REASONS tuple grew from 28 to 29 entries with the addition of the new
-// `"not added"` literal that the new info-surface variants emit on the
+// The REASONS tuple is 29 entries, including the
+// `"not added"` literal that the info-surface variants emit on the
 // `--scope` mismatch row (INFO-04). The length-lock + closed-set membership
-// proof catch the two drift modes the atomic-supersession commit must not
-// regress: (i) accidental removal / rename / reorder of the new entry, and
-// (ii) silent shrinkage of the tuple back to 28 entries.
+// proof catch two drift modes:
+// (i) accidental removal / rename / reorder of the entry, and
+// (ii) silent shrinkage of the tuple to 28 entries.
 //
-// Pattern: mirrors the existing `_l1` / `_l2` / `_l3` length-lock blocks
+// Pattern: mirrors the `_l1` / `_l2` / `_l3` length-lock blocks
 // above (PLUGIN_STATUSES at 11, MARKETPLACE_STATUSES at 7, DEPENDENCIES at
-// 2) -- those re-stated drift guards remain byte-identical; Phase 42 added
-// `_l4` / `_l4b` here and `_l5..._l9` for the new info variants below.
+// 2); `_l4` / `_l4b` here and `_l5..._l9` cover the info variants below.
 // ============================================================================
 
 type _Assert_ReasonsLen = (typeof REASONS)["length"] extends 29 ? true : never;
@@ -660,11 +658,11 @@ type _Assert_NotAddedMember = "not added" extends (typeof REASONS)[number] ? tru
 export const _l4b: _Assert_NotAddedMember = true;
 
 // ============================================================================
-// Phase 42 / SC#1: 3-arm discriminated `NotificationMessage` union reachable
+// SC#1: 3-arm discriminated `NotificationMessage` union reachable
 //
-// The exported `NotificationMessage` type alias is now a 3-arm discriminated
+// The exported `NotificationMessage` type alias is a 3-arm discriminated
 // union (`CascadeNotificationMessage | MarketplaceInfoMessage |
-// PluginInfoMessage`); the two new info-surface arms are reachable by their
+// PluginInfoMessage`); the info-surface arms are reachable by their
 // `kind` discriminator via `Extract<NotificationMessage, { kind: "..." }>`.
 // SC#1 wording: "MarketplaceInfoMessage / PluginInfoMessage reachable from
 // NotificationMessage via the kind discriminator." This proof is the
@@ -680,7 +678,7 @@ type _Assert_NotifKinds =
 export const _l5: _Assert_NotifKinds = true;
 
 // ============================================================================
-// Phase 42 / SC#1: MarketplaceInfoMessage shape proof
+// SC#1: MarketplaceInfoMessage shape proof
 //
 // Bidirectional `extends` proves set-equality between the exported variant
 // type and an `_MarketplaceInfoExpected` literal mirroring the six fields
@@ -702,7 +700,7 @@ interface _MarketplaceInfoExpected {
         readonly ref?: string;
       }
     | { readonly sourceKind: "path"; readonly absPath: string };
-  // Phase 42 / WR-04: no parallel top-level `lastUpdated?` field. The ISO
+  // WR-04: no parallel top-level `lastUpdated?` field. The ISO
   // timestamp lives ONLY on `details.lastUpdatedAt` (single source of truth
   // mirroring persistence/state-io.ts); the renderer reads it from there
   // on the github-source arm.
@@ -716,7 +714,7 @@ type _Assert_MarketplaceInfoShape = MarketplaceInfoMessage extends _MarketplaceI
 export const _l7: _Assert_MarketplaceInfoShape = true;
 
 // ============================================================================
-// Phase 42 / SC#1: PluginInfoMessage + PluginInfoRow discriminated-shape proof
+// SC#1: PluginInfoMessage + PluginInfoRow discriminated-shape proof
 //
 // `PluginInfoMessage` carries `marketplaceName` / `marketplaceScope` /
 // `marketplaceDetails` plus a `plugin: PluginInfoRow` whose
@@ -765,8 +763,8 @@ export const _l8b: _Assert_RowUnresolvedBase = true;
 
 // Resolved arm: components carries the four optional per-kind arrays, plus
 // optional dependencies. Locks the "renderer assumes pre-sorted input"
-// precondition's shape (the precondition itself is enforced by Phase 44's
-// orchestrator -- see RESEARCH Pitfall 5).
+// precondition's shape (the precondition itself is enforced by the
+// orchestrator -- see Pitfall 5).
 interface _ComponentsExpected {
   readonly agents?: readonly string[];
   readonly commands?: readonly string[];
@@ -798,9 +796,9 @@ export const _l8e: _Assert_RowUnresolvedNoComponents = true;
 export type _NoComponentsOnUnresolved = _RowUnresolved["components"];
 
 // ============================================================================
-// Phase 43 / INFO-03 / SC#1: MarketplaceInfoCascadeMessage variant proofs
+// INFO-03 / SC#1: MarketplaceInfoCascadeMessage variant proofs
 //
-// The `NotificationMessage` union now exposes a fourth variant --
+// The `NotificationMessage` union exposes a fourth variant --
 // `MarketplaceInfoCascadeMessage` -- emitted by `getMarketplaceInfo` when no
 // `--scope` is supplied and the requested marketplace name is present in
 // BOTH scopes. The fan-out wrapper carries one or more
@@ -838,8 +836,8 @@ export const _l9a: _Assert_MarketplaceInfoCascadeShape = true;
 // Union arity: prove all FOUR arms are simultaneously reachable. The
 // cascade arm is reached via its structural `marketplaces` field (its
 // `kind?` is OPTIONAL so Extract on `{ kind: "cascade" }` does not narrow
-// it -- the cascade arm permits absent kind for the v1.0-v1.7 migration
-// path). The three info arms are reached via their REQUIRED `kind`
+// it -- the cascade arm permits absent kind). The three info arms are
+// reached via their REQUIRED `kind`
 // discriminator literals. Any future regression that drops one of the four
 // arms from the union collapses the conjunction to `never`.
 type _Assert_NotifFourArms =
@@ -855,14 +853,14 @@ type _Assert_NotifFourArms =
 export const _l9b: _Assert_NotifFourArms = true;
 
 // ============================================================================
-// Phase 44 / INFO-02 / INFO-03: PluginInfoCascadeMessage variant proofs
+// INFO-02 / INFO-03: PluginInfoCascadeMessage variant proofs
 //
-// The `NotificationMessage` union now exposes a fifth variant --
+// The `NotificationMessage` union exposes a fifth variant --
 // `PluginInfoCascadeMessage` -- emitted by `getPluginInfo` when no
 // `--scope` is supplied and the requested `<plugin>@<marketplace>` pair
 // is present in BOTH scopes. The fan-out wrapper carries one or more
 // `PluginInfoMessage` blocks in caller order; `notify()` joins their
-// per-block bodies with `\n\n` (mirrors Phase 43's
+// per-block bodies with `\n\n` (mirrors
 // `MarketplaceInfoCascadeMessage` and the install-cascade
 // `composeMarketplaceBlock` join). Three proofs:
 //
@@ -911,7 +909,7 @@ type _Assert_NotifFiveArms =
 export const _l10b: _Assert_NotifFiveArms = true;
 
 // The `CascadeNotificationMessage` arm declares `kind?: "cascade"` as
-// OPTIONAL (back-compat for v1.0-v1.7 call sites that construct cascades
+// OPTIONAL (back-compat for call sites that construct cascades
 // without a `kind` field). Because `kind?: "cascade"` is NOT assignable
 // to `kind: "cascade"` (the optional field could be `undefined`),
 // `Extract<NotificationMessage, { kind: "cascade" }>` evaluates to
@@ -926,26 +924,19 @@ type _Assert_ExtractCascadeByOptionalKindIsNever =
 export const _l11: _Assert_ExtractCascadeByOptionalKindIsNever = true;
 
 // ============================================================================
-// Phase 42 drift guards (re-stated explicitly -- the pre-existing length-locks
-// `_l1` / `_l2` / `_l3` above remain byte-identical at 11 / 7 / 2).
-//
-// Verified at Phase 42 commit time:
-//   - PLUGIN_STATUSES.length === 11 (UAT G-21-01; unchanged since `present`
-//     was added in Phase 21).
-//   - MARKETPLACE_STATUSES.length === 7 (D-17.1-01; unchanged since Phase 17.1
-//     supersession landed the autoupdate flip discriminators).
-//   - DEPENDENCIES.length === 2 (SNM-06; unchanged since Phase 15).
-//
-// Phase 42 only extends REASONS (28 → 29 via the `"not added"` addition);
-// the other three closed sets are untouched.
+// Drift guards (the length-locks `_l1` / `_l2` / `_l3` above lock 11 / 7 / 2):
+//   - PLUGIN_STATUSES.length === 11 (UAT G-21-01; includes `present`).
+//   - MARKETPLACE_STATUSES.length === 7 (D-17.1-01; the autoupdate flip
+//     discriminators).
+//   - DEPENDENCIES.length === 2 (SNM-06).
+//   - REASONS.length === 29 (includes the `"not added"` literal).
 // ============================================================================
 
 // ============================================================================
 // node:test anchor
 //
 // The type-level `_Assert_*` assignments above carry the proof; this body
-// exists so node:test counts the file in `npm run check` output (D-15-10;
-// mirrors `tests/architecture/grammar-frontmatter.test.ts` precedent).
+// exists so node:test counts the file in `npm run check` output (D-15-10).
 // Failures of the type assertions surface through `npm run typecheck`, not
 // through this trivial runtime assert.
 // ============================================================================

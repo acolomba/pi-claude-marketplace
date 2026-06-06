@@ -1,6 +1,6 @@
 // tests/edge/handlers/plugin/info.test.ts
 //
-// Phase 44 / Plan 44-01 / Task 3: plugin info handler shim tests.
+// plugin info handler shim tests.
 //
 // Mirrors `tests/edge/handlers/plugin/install.test.ts`. The shim parses
 // one required `<plugin>@<marketplace>` positional + the optional

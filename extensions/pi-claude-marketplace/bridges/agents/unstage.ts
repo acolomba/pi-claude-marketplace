@@ -2,8 +2,7 @@
 //
 // Plugin-scoped removal. Foreign-content / read / delete failures are NOT
 // treated as removed: their index rows are preserved (NOT dropped) and
-// failed[] surfaces the reason. This is V1's `unstagePluginAgents` shape
-// verbatim (V1 lines 591-663) -- the per-entry Outcome union pattern lets
+// failed[] surfaces the reason. The per-entry Outcome union pattern lets
 // commit batch all rms in parallel and then partition outcomes into
 // removed[] vs preserved[].
 //
@@ -43,9 +42,9 @@ type Outcome =
  *   - warnings: load-time per-row corruption messages from
  *     loadAgentsIndex (AG-4 soft-fail discipline).
  *
- * Idempotency: ENOENT on the targetPath is treated as "removed" (V1
- * behavior). After this returns, calling it again with the same input
- * is a no-op modulo the index state.
+ * Idempotency: ENOENT on the targetPath is treated as "removed". After this
+ * returns, calling it again with the same input is a no-op modulo the index
+ * state.
  */
 export async function unstagePluginAgents(input: UnstageAgentsInput): Promise<UnstageAgentsResult> {
   const { locations, marketplaceName, pluginName } = input;

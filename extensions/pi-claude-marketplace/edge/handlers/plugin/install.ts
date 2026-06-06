@@ -2,12 +2,10 @@
 //
 // Thin-shim handler factory for `/claude:plugin install <plugin>@<marketplace>`.
 //
-// Plan 260516-08j: the previous `parseRequiredPluginMarketplaceRef` delegation
-// only understands `--scope`. With the introduction of the boolean
-// `--map-model` opt-in (AG-7), the shim now follows the `list` handler's
-// pattern: call `parseArgs` directly, then scan `parsed.positional` for the
-// boolean flag(s), then split the remaining single non-flag positional via
-// `splitPluginMarketplaceRef`.
+// To support the boolean `--map-model` opt-in (AG-7), the shim follows the
+// `list` handler's pattern: call `parseArgs` directly, then scan
+// `parsed.positional` for the boolean flag(s), then split the remaining
+// single non-flag positional via `splitPluginMarketplaceRef`.
 //
 // Argument-parsing failures
 // route through `notifyUsageError` per MSG-NC-2 / MSG-SR-7 (sentence form
@@ -36,8 +34,8 @@ const USAGE =
 
 /**
  * Factory: returns the async handler closed over `pi` (required by
- * `installPlugin` for soft-dep probes). Phase 6 Plan 05 wires this factory
- * into `register.ts` via the `SubcommandHandlers` map.
+ * `installPlugin` for soft-dep probes). `register.ts` wires this factory
+ * into the `SubcommandHandlers` map.
  */
 export function makeInstallHandler(
   pi: ExtensionAPI,
@@ -72,9 +70,8 @@ export function makeInstallHandler(
     const ref = splitPluginMarketplaceRef(positional);
     if (ref === undefined) {
       // PI-1 invalid `<plugin>@<marketplace>` token (no `@`, leading `@`,
-      // trailing `@`) -- per the plan's task 3 note this is a USAGE ERROR,
-      // not an entity-shape error: the ref string never anchored to a real
-      // plugin/marketplace pair.
+      // trailing `@`) -- this is a USAGE ERROR, not an entity-shape error:
+      // the ref string never anchored to a real plugin/marketplace pair.
       notifyUsageError(ctx, {
         message: `Invalid <plugin>@<marketplace> ref: "${positional}".`,
         usage: USAGE,

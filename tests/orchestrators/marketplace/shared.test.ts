@@ -8,8 +8,8 @@
 // `GitOps` stub) must propagate so the caller surfaces the real cause
 // instead of silently falling back to stale local state.
 //
-// Phase 34 (v1.6): three additional tests lock the auth-threading
-// contract on refreshGitHubClone (AUTH-01, AUTH-02).
+// Three additional tests lock the auth-threading contract on
+// refreshGitHubClone (AUTH-01, AUTH-02).
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -140,11 +140,11 @@ test("refreshGitHubClone: resolveRef returns SHA -> forceUpdateRef + checkout", 
   assert.equal(log.checkout[0]?.ref, "main");
 });
 
-// Phase 34 (v1.6) auth-threading tests (AUTH-01, AUTH-02).
+// Auth-threading tests (AUTH-01, AUTH-02).
 
 test("refreshGitHubClone: without auth omits the auth field on gitOps.fetch", async () => {
-  // Proves the pre-v1.6 4-arg calling convention is preserved:
-  // the new optional auth parameter does NOT inject a field when omitted.
+  // Proves the 4-arg calling convention is preserved: the optional auth
+  // parameter does NOT inject a field when omitted.
   const sha = "1111111111111111111111111111111111111111";
   const { gitOps, log } = makeStubGitOps({ resolveRefReturns: sha });
 

@@ -16,7 +16,7 @@
 // success path is emitted by the composed orchestrators. `addMarketplace`
 // signals failures by THROWING (it does not notify), so the handler wraps
 // `bootstrapClaudePlugin` in a catch that routes a thrown failure through
-// the V2 `notify` path as a failed marketplace row -- a raw stack trace
+// the `notify` path as a failed marketplace row -- a raw stack trace
 // must never reach the user channel.
 
 import {
@@ -69,7 +69,7 @@ export function makeBootstrapHandler(
     } catch {
       // `addMarketplace` throws on failure (e.g. a first-run GitHub clone
       // failure) rather than notifying, so route the thrown error through
-      // the V2 notify path as a failed marketplace row (IL-2). notify()
+      // the notify path as a failed marketplace row (IL-2). notify()
       // computes `error` severity for a failed marketplace status. The
       // marketplace-level row carries no cause chain -- SNM-10 confines
       // `cause` to plugin-level variants.

@@ -1,12 +1,12 @@
 // transaction/with-state-guard.ts
 //
-// Cross-process state lifecycle wrapper (ST-7 + Phase 7 D-06). Phase 8 adds
-// withLockedStateTransaction for callers that need explicit save control.
+// Cross-process state lifecycle wrapper (ST-7 + D-06). withLockedStateTransaction
+// serves callers that need explicit save control.
 //
 // Concurrency scope:
-//   Phase 7 D-06 adds a per-scope proper-lockfile lock around the full
-//   load -> mutate -> save critical section. write-file-atomic remains the
-//   byte-safety layer; this guard now prevents cross-process state/disk drift
+//   D-06 provides a per-scope proper-lockfile lock around the full
+//   load -> mutate -> save critical section. write-file-atomic is the
+//   byte-safety layer; this guard prevents cross-process state/disk drift
 //   caused by last-writer-wins state.json writes.
 //
 // ST-8 (concurrent install hard-fail) and ST-9 (update concurrent
@@ -21,7 +21,7 @@
 //     // ... mutate ...
 //   });
 //
-// Per CONTEXT.md D-02, withStateGuard wraps runPhases (outer guard,
+// Per D-02, withStateGuard wraps runPhases (outer guard,
 // inner ledger):
 //
 //   await withStateGuard(loc, async (state) => {
@@ -50,10 +50,10 @@ export interface LockedStateTransactionDeps {
 /**
  * ST-7: load fresh state, hand to closure, save only on no-throw.
  *
- * Concurrency scope: Phase 7 D-06 acquires a per-scope proper-lockfile
+ * Concurrency scope: D-06 acquires a per-scope proper-lockfile
  * lock before loadState and releases it after saveState (or after any
  * mutate/save throw) so two Pi processes cannot last-writer-wins state.json
- * into state/disk drift. write-file-atomic remains the byte-level safety
+ * into state/disk drift. write-file-atomic is the byte-level safety
  * layer for the final write.
  *
  * @param locations  ScopedLocations for the target scope (`locationsFor(scope, cwd)`)
@@ -76,7 +76,7 @@ export async function withStateGuard<T>(
 }
 
 /**
- * Phase 8 / PRL-10: hold the per-scope state lock while callers explicitly
+ * PRL-10: hold the per-scope state lock while callers explicitly
  * choose when to save. Reinstall uses this to rollback already-swapped
  * physical resources if state persistence fails.
  */

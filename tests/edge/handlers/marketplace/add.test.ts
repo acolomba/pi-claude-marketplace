@@ -1,4 +1,4 @@
-// Plan 06-04 Task 1: marketplace add handler shim tests.
+// marketplace add handler shim tests.
 //
 // The shim takes `deps: EdgeDeps` carrying `gitOps`. We use the
 // `makeMockGitOps` helper to build a stub git surface and a no-op
@@ -41,7 +41,7 @@ function makeCtx(cwd: string): { ctx: ExtensionCommandContext; notifications: No
   return { ctx, notifications };
 }
 
-// Plan 18-00 (Wave 0): `makeAddHandler(pi, deps)` requires `pi` as first
+// `makeAddHandler(pi, deps)` requires `pi` as first
 // positional arg. Edge shim tests mirror the production wiring shape.
 function makePi(): ExtensionAPI {
   return {

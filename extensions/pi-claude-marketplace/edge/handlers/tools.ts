@@ -4,7 +4,7 @@
 //
 //   1. pi_claude_marketplace_list -- empty params; returns one line per
 //      marketplace in `[<scope>] <name> -- <N> plugin(s) -- <source.logical>`
-//      format (V1 verbatim), plus structured `details.marketplaces`.
+//      format, plus structured `details.marketplaces`.
 //
 //   2. pi_claude_marketplace_plugin_list -- D-02 extended params: optional
 //      marketplace + scope + installed/available/unavailable filter booleans
@@ -22,7 +22,7 @@
 // `AgentToolResult` -- the agent surfaces results via its own UI channel,
 // not the slash-command notify channel.
 //
-// Status semantics (Phase 2 D-09): state.json has NO plugin.installed
+// Status semantics (D-09): state.json has NO plugin.installed
 // boolean. Presence of `mp.plugins[name]` === installed. Per-marketplace
 // plugin count for the list tool is `Object.keys(mp.plugins).length`.
 //
@@ -81,7 +81,7 @@ export function registerListMarketplacesTool(pi: ExtensionAPI): void {
     parameters: LIST_MARKETPLACES_PARAMS,
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       // BLOCK C boundary: loadVisibleMarketplaces is the
-      // orchestrators/marketplace/shared.ts helper added in Plan 06-04.
+      // orchestrators/marketplace/shared.ts helper.
       // Returns {scope, record}[] across the requested scope set (both
       // here -- no scope filter on this tool).
       const visible = await loadVisibleMarketplaces({ cwd: ctx.cwd });
@@ -104,7 +104,7 @@ export function registerListMarketplacesTool(pi: ExtensionAPI): void {
         const source = record.source as ParsedSource;
         const pluginCount = Object.keys(record.plugins).length;
         const logical = sourceLogical(source);
-        // V1 verbatim line shape (D-02 carry-forward):
+        // Line shape (D-02):
         //   [<scope>] <name> -- <N> plugin(s) -- <source.logical>
         lines.push(
           `[${scope}] ${record.name} -- ${pluginCount.toString()} plugin(s) -- ${logical}`,
@@ -144,7 +144,7 @@ interface PluginRow {
 }
 
 /**
- * Project the V2 PluginNotificationMessage status set onto the tool's
+ * Project the PluginNotificationMessage status set onto the tool's
  * three-bucket projection. The list-surface variants are
  * `installed | upgradable | available | unavailable`; only this subset
  * appears inside the `loadPluginListPayload` return shape (the orchestrator
@@ -281,7 +281,7 @@ async function loadToolPluginPayload(
 }
 
 /**
- * Read `p.scope` defensively from the V2 PluginNotificationMessage union.
+ * Read `p.scope` defensively from the PluginNotificationMessage union.
  * The `available` / `unavailable` variants OMIT the `scope` field by
  * construction (SNM-11); the other list-surface variants carry an OPTIONAL
  * `scope` that is present only when the plugin's install scope differs
@@ -374,9 +374,7 @@ function renderPluginPayload(
 
     // Unparseable-manifest marketplace block (status: "failed", plugins: [])
     // and zero-plugin manifest blocks both render as the bare-header form
-    // followed by the "(no plugins)" body line. The V1 `causeTrailer` was
-    // dropped in V2 (catalog `unparseable-mp`); the tool surface keeps
-    // the V1-style "(no plugins)" line for shape stability.
+    // followed by the "(no plugins)" body line for shape stability.
     if (mp.plugins.length === 0) {
       lines.push("  (no plugins)");
       continue;

@@ -1,10 +1,10 @@
 // tests/bridges/integration-materialization-gate.test.ts
 //
-// Phase 3 capstone -- AS-8 + AS-9 noop materialization gate, end-to-end.
+// AS-8 + AS-9 noop materialization gate, end-to-end.
 //
-// Verifies ROADMAP success criterion 4: when a plugin declares no MCP
-// servers (AS-8) the bridge must NOT materialize an mcp.json; when a plugin
-// has an empty agents/ source dir (AS-9) the bridge must NOT materialize
+// When a plugin declares no MCP servers (AS-8) the bridge must NOT
+// materialize an mcp.json; when a plugin has an empty agents/ source dir
+// (AS-9) the bridge must NOT materialize
 // either the scoped agents/ dir or agents-index.json. Each bridge's noop
 // branch is independent of the others -- exercising one bridge does not
 // drag the others into materializing files (cross-bridge isolation, D-01).
@@ -101,7 +101,7 @@ describe("integration: materialization gate", () => {
         supported: ["agents"],
         unsupported: [],
         notes: [],
-        // D-07: componentPaths.* are now `readonly string[]`.
+        // D-07: componentPaths.* are `readonly string[]`.
         componentPaths: { skills: [], commands: [], agents: ["agents"] },
         mcpServers: {},
       };

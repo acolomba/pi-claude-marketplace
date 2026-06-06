@@ -8,9 +8,8 @@
 //   - `@<marketplace>`     -> target = { kind: "marketplace", marketplace }
 //   - `<plugin>@<marketplace>` -> target = { kind: "plugin", plugin, marketplace }
 //
-// Plan 260516-08j: the boolean `--map-model` opt-in (AG-7) requires the
-// raw `parseArgs` + manual positional scan pattern from `list.ts`. The
-// previous `parseCommandArgs` wrapper only understood `--scope`.
+// The boolean `--map-model` opt-in (AG-7) requires the raw `parseArgs` +
+// manual positional scan pattern from `list.ts`.
 
 import { updatePlugins } from "../../../orchestrators/plugin/update.ts";
 import { errorMessage } from "../../../shared/errors.ts";

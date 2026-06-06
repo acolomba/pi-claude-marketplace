@@ -339,7 +339,7 @@ test("PI-3: plugin name not in marketplace plugins[] -> V2 failed/{not in manife
 
       // V2 byte form matches `docs/output-catalog.md` lines 308-314
       // (`failure-runtime-with-cause`) with the entity-shape `{not in
-      // manifest}` reason. Severity `"error"` per D-16-11. Phase 29 / UXG-07
+      // manifest}` reason. Severity `"error"` per D-16-11. UXG-07
       // (D-29-02/03): 1 failed plugin, 0 failed marketplace -> the
       // "1 plugin operation failed." summary line is prepended.
       assert.equal(notifications.length, 1);
@@ -380,7 +380,7 @@ test("PI-3: marketplace itself absent -> V2 failed/{not in manifest}", async () 
 
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
-      // Phase 29 / UXG-07 (D-29-02/03): summary prefix for the single failed
+      // UXG-07 (D-29-02/03): summary prefix for the single failed
       // plugin (mp glyph is `●`, not `⊘`, so the marketplace did not fail).
       assert.equal(
         notifications[0]?.message,
@@ -396,7 +396,7 @@ test("PI-3: marketplace itself absent -> V2 failed/{not in manifest}", async () 
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// PI-4 -- non-installable plugin (e.g. github source in V1 is not installable)
+// PI-4 -- non-installable plugin (e.g. github source is not installable)
 // ───────────────────────────────────────────────────────────────────────────
 
 test("PI-4: non-path source -> V2 unavailable/{unsupported source}", async () => {
@@ -408,7 +408,7 @@ test("PI-4: non-path source -> V2 unavailable/{unsupported source}", async () =>
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         pluginName: "hello",
-        // MM-3 / PR-2: only path sources are installable in V1; "github:foo/bar"
+        // MM-3 / PR-2: only path sources are installable; "github:foo/bar"
         // classifies as github and the resolver returns the not-installable
         // variant.
         rawSourceOverride: "github:anthropics/some-repo",
@@ -481,7 +481,7 @@ test("PI-5: state already has plugin record -> V2 failed/{already installed}", a
       // preInstall state record holds version "0.0.0").
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
-      // Phase 29 / UXG-07 (D-29-02/03): the already-installed case stays
+      // UXG-07 (D-29-02/03): the already-installed case stays
       // classified as `(failed)` (D-29-05, UXG-09 out of scope); the summary
       // line "1 plugin operation failed." is prepended.
       assert.equal(
@@ -855,9 +855,8 @@ test("PI-11 / RH-3: staged agents + pi.getAllTools has no 'subagent' -> success 
 
       // CMC-13 / MSG-SD-1: per-row soft-dep marker `{requires pi-subagents}`
       // fires when (declaresAgents AND !piSubagentsLoaded). The renderer
-      // composes the marker into the reasons block of the PluginInlineRow,
-      // retiring the legacy aggregated PI_SUBAGENTS_NOT_LOADED trailer per
-      // D-13-07.
+      // composes the marker into the reasons block of the PluginInlineRow
+      // per D-13-07.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined);
       assert.match(
@@ -898,8 +897,7 @@ test("PI-12 / RH-4: staged mcp + pi.getAllTools has no 'mcp' -> success message 
       });
 
       // CMC-13 / MSG-SD-2: per-row soft-dep marker `{requires pi-mcp}`
-      // fires when (declaresMcp AND !piMcpAdapterLoaded). Legacy aggregated
-      // PI_MCP_ADAPTER_NOT_LOADED trailer retired per D-13-07.
+      // fires when (declaresMcp AND !piMcpAdapterLoaded) per D-13-07.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined);
       assert.match(
@@ -940,14 +938,14 @@ test("PI-13: entry declares dependencies -> V2 dropped per D-19-01 (no PR-5 trai
         plugin: "hello",
       });
 
-      // Plan 19-02 D-19-01: the V1 PI-13 follow-up notifyWarning (PR-5
+      // D-19-01: the PI-13 follow-up notifyWarning (PR-5
       // manual-install free-form trailer) is DROPPED entirely in
       // standalone mode. The resolver still detects the deps note and
       // appends it to `installable.notes` so downstream surfaces (e.g.
       // `/claude:plugin list`) can continue to consume it; the
-      // standalone-mode user-visible warning is gone (no clean V2
+      // standalone-mode user-visible warning is gone (no clean
       // MarketplaceNotificationMessage representation for the PR-5 free
-      // prose). Only the canonical V2 success notification fires.
+      // prose). Only the canonical success notification fires.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined);
       assert.match(notifications[0]?.message ?? "", /● hello v\S+ \(installed\)/);
@@ -1085,9 +1083,8 @@ test("AS-6: pluginDataDir mkdir failure post-state-commit -> V2 drops warning pe
       // the existing dirs without issue; the leaf "hello" doesn't exist so
       // lstat reports ENOENT -> walk returns OK). State commit then succeeds.
       // POST-state-commit, mkdir(dataRoot/mp/hello, {recursive: true}) fails
-      // EACCES because the parent is not writable. In V1 this surfaced via
-      // AS-6 notifyWarning; in V2 the warning is DROPPED per D-19-01
-      // (D-18-01 lineage) -- the side effect still runs inside its
+      // EACCES because the parent is not writable. The AS-6 warning is
+      // DROPPED per D-19-01 -- the side effect still runs inside its
       // try/catch but the user-visible warning surface is gone.
       await mkdir(path.join(locations.dataRoot, "mp"), { recursive: true });
       const { chmod } = await import("node:fs/promises");
@@ -1109,16 +1106,15 @@ test("AS-6: pluginDataDir mkdir failure post-state-commit -> V2 drops warning pe
       }
 
       // The state record IS committed (state save happens BEFORE the mkdir).
-      // AS-6's core invariant -- state-commit precedes data-dir creation --
-      // is unchanged in V2.
+      // AS-6's core invariant: state-commit precedes data-dir creation.
       const after = await loadState(locations.extensionRoot);
       assert.ok(
         "hello" in (after.marketplaces["mp"]?.plugins ?? {}),
         "state record must be persisted (mkdir failure is post-commit)",
       );
 
-      // Plan 19-02 D-19-01: no warning notification fires in V2 standalone
-      // mode. Only the canonical V2 success notification is emitted; the
+      // D-19-01: no warning notification fires in standalone
+      // mode. Only the canonical success notification is emitted; the
       // "data dir creation deferred" phrase MUST NOT appear on any
       // notification.
       assert.equal(notifications.length, 1);
@@ -1153,9 +1149,8 @@ test("AS-7: pre-existing foreign agent file under target name -> V2 drops warnin
 
       // Pre-seed the agents-index with a row for hello/bot pointing at a
       // foreign file (no marker in body) at the target. The agents bridge
-      // SOFT-FAILS this row via `failed[]` -- the install proceeds. In V1
-      // the orchestrator routed the failed rows to notifyWarning; in V2
-      // the warning surface is DROPPED per D-19-01 (D-18-01 lineage). The
+      // SOFT-FAILS this row via `failed[]` -- the install proceeds. The
+      // warning surface is DROPPED per D-19-01. The
       // underlying agents-index state still records the foreign-row
       // preservation; only the user-visible warning is gone.
       await mkdir(locations.extensionRoot, { recursive: true });
@@ -1201,9 +1196,9 @@ test("AS-7: pre-existing foreign agent file under target name -> V2 drops warnin
       const after = await loadState(locations.extensionRoot);
       assert.ok("hello" in (after.marketplaces["mp"]?.plugins ?? {}));
 
-      // Plan 19-02 D-19-01: no warning notification fires in V2 standalone
+      // D-19-01: no warning notification fires in standalone
       // mode -- the AS-7 foreign-agent warning surface is dropped. Only
-      // the canonical V2 success notification is emitted, and the
+      // the canonical success notification is emitted, and the
       // "pre-existing agent file" phrase MUST NOT appear on it.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined);
@@ -1292,7 +1287,7 @@ test("CMP-4 / PI-16: user-target install cannot source a project-only marketplac
 
       // V2 byte form: same shape as PI-3 (failed/{not in manifest}) --
       // the failed-discriminator entity-shape row plus the cause-chain
-      // trailer that names the marketplace verbatim. Phase 29 / UXG-07
+      // trailer that names the marketplace verbatim. UXG-07
       // (D-29-02/03): the "1 plugin operation failed." summary line precedes
       // the cascade body.
       assert.equal(notifications.length, 1);
@@ -1414,10 +1409,9 @@ test("PI-9 corollary: empty plugin (no skills/commands/agents/mcp) -> V2 emits r
       assert.deepEqual([...record.resources.agents], []);
       assert.deepEqual([...record.resources.mcpServers], []);
 
-      // V1->V2 behavior change (mirrors Plan 19-01 pilot's PU-8 (b)
-      // behavior flip): V2 emits the reload-hint structurally from the
-      // `installed` status per D-16-12; the V1 MSG-RH-1 noop-gate
-      // ("suppress when nothing was staged") is GONE. The trigger ladder
+      // The reload-hint is emitted structurally from the
+      // `installed` status per D-16-12; there is no MSG-RH-1 noop-gate
+      // ("suppress when nothing was staged"). The trigger ladder
       // is per-variant, not per-cascade-outcome resource count. The
       // resourcesChanged field on InstallPluginOutcome still tracks
       // whether anything was staged for downstream cascade consumers.
@@ -1967,7 +1961,7 @@ test("Orchestrated-agent-foreign: agentForeignFailures -> postCommitWarnings has
 });
 
 test("D-03-INV :: install invalidates plugin cache for the target marketplace", async () => {
-  // Plan 06-05 wires invalidateMarketplaceCache into installPlugin's
+  // invalidateMarketplaceCache runs in installPlugin's
   // post-state-commit window (after the AS-6 pluginDataDir mkdir, before
   // AS-7 surfaces foreign-content rows). The plugin moves from
   // status="available" -> status="installed", so the cached plugin index
@@ -2024,12 +2018,11 @@ test("D-03-INV :: install invalidates plugin cache for the target marketplace", 
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// Quick task 260525-aub: discriminated-dispatch regression guards on the
+// Discriminated-dispatch regression guards on the
 // catch-site classifiers. Locks in the `instanceof PluginShapeError` +
 // `.kind` dispatch so a future refactor cannot regress to message-text
-// substring matching. The S5852 ReDoS regex previously at install.ts:902
-// is DELETED; these tests guarantee the typed dispatch produces the same
-// closed-set `Reason[]` output without re-parsing `.message`.
+// substring matching. These tests guarantee the typed dispatch produces
+// the same closed-set `Reason[]` output without re-parsing `.message`.
 // ───────────────────────────────────────────────────────────────────────────
 
 test("classifyEntityShapeError dispatches on kind=already-installed -> failed/{already installed}", async () => {
@@ -2071,14 +2064,11 @@ test("classifyEntityShapeError dispatches on kind=not-in-manifest -> failed/{not
 test("classifyEntityShapeError dispatches on kind=not-installable -> unavailable + manifest-field reasons preserved verbatim", async () => {
   const { PluginShapeError } =
     await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
-  // Task 260525-cjr C5: the resolver's `r.notes` carry the
-  // `"contains <kind>"` prefix (see resolver.ts:685
-  // `addUnsupportedKindNotes`); the carve-out in
-  // `narrowResolverReasons` strips the prefix and emits the bare
-  // token as the Reason. Pre-C5 the test built bare-token reasons
-  // directly because the dead predicate accepted them; after C5 the
-  // test matches the actual upstream form so we exercise the live
-  // code path.
+  // The resolver's `r.notes` carry the
+  // `"contains <kind>"` prefix (via `addUnsupportedKindNotes`); the
+  // carve-out in `narrowResolverReasons` strips the prefix and emits
+  // the bare token as the Reason. The test matches the actual upstream
+  // form so we exercise the live code path.
   const err = new PluginShapeError({
     kind: "not-installable",
     plugin: "p",
@@ -2131,12 +2121,12 @@ test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "fail
   const { PluginShapeError } =
     await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
 
-  // Task 260525-cjr C3: the four pre-C3 error variants
+  // The four error variants
   // (already-installed / unavailable / uninstallable /
   // unexpected-failure) collapse into a single
   // `{ status: "failed"; error; cause }` shape. The typed Error is
   // the dispatch surface; consumers narrow on `instanceof
-  // PluginShapeError` and read `.kind` to recover the legacy
+  // PluginShapeError` and read `.kind` to recover the
   // semantic class.
   const notInManifestErr = new PluginShapeError({
     kind: "not-in-manifest",
@@ -2188,17 +2178,16 @@ test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "fail
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// Task 260525-cjr B2: narrowResolverReasons no longer silently degrades
+// narrowResolverReasons does not silently degrade
 // non-resolver causes to `{unsupported source}`. EACCES / EPERM / ENOENT /
-// SyntaxError substrings now map to their precise closed Reasons; the
+// SyntaxError substrings map to their precise closed Reasons; the
 // `unsupported source` fallback runs only when no classifier matched.
 // ───────────────────────────────────────────────────────────────────────────
 
 test("260525-cjr B2 / C5: narrowResolverReasons -> `contains hooks` extracts the bare `hooks` Reason", () => {
-  // Pre-C5 the test passed a bare `"hooks"` string (matching the
-  // dead predicate); C5 aligned the predicate with the resolver's
-  // actual emission form (`"contains hooks"`). The user-visible
-  // catalog row shape (`(unavailable) {hooks}`) is unchanged.
+  // The predicate matches the resolver's actual emission form
+  // (`"contains hooks"`). The user-visible catalog row shape
+  // (`(unavailable) {hooks}`) is unchanged.
   assert.deepEqual([...__test_narrowResolverReasons(["contains hooks"])], ["hooks"]);
 });
 
@@ -2208,15 +2197,13 @@ test("260525-cjr B2 / C5: narrowResolverReasons -> `contains lspServers` extract
 
 test("260525-cjr C5: narrowResolverReasons recognises the resolver's `contains hooks` prefix and emits bare `hooks`", () => {
   // The resolver's `addUnsupportedKindNotes` writes
-  // `partial.notes.push("contains " + kind)` (resolver.ts:685) for
-  // every UNSUPPORTED_COMPONENT_KINDS member. Before this fix the
-  // `MANIFEST_FIELD_REASONS.has(reason)` predicate compared the WHOLE
-  // string against the bare set, so `"contains hooks"` never matched
-  // and the row degraded to `{unsupported source}`. The fix strips
-  // the `contains ` prefix and re-checks; the mapped Reason is emitted,
-  // matching the catalog's `(unavailable) {hooks}` /
-  // `(unavailable) {lsp}` forms (the `lspServers` detection token maps to
-  // the `lsp` Reason per SNM-36 / D-24-04).
+  // `partial.notes.push("contains " + kind)` for
+  // every UNSUPPORTED_COMPONENT_KINDS member. The narrower strips
+  // the `contains ` prefix and re-checks `MANIFEST_FIELD_REASONS`; the
+  // mapped Reason is emitted, matching the catalog's
+  // `(unavailable) {hooks}` / `(unavailable) {lsp}` forms (the
+  // `lspServers` detection token maps to the `lsp` Reason per
+  // SNM-36 / D-24-04).
   assert.deepEqual([...__test_narrowResolverReasons(["contains hooks"])], ["hooks"]);
   assert.deepEqual([...__test_narrowResolverReasons(["contains lspServers"])], ["lsp"]);
 });

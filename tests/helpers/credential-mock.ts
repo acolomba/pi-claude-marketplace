@@ -1,15 +1,14 @@
 /**
- * tests/helpers/credential-mock.ts -- in-memory CredentialOps stub for Phase 31+ tests.
+ * In-memory CredentialOps stub for tests.
  *
  * Sibling of tests/helpers/git-mock.ts; mirrors the makeMockGitOps shape:
  * closure-scoped state, per-method call logs, optional throws overrides.
  * The mock is pure in-memory: no filesystem ops, no environment mutation,
- * no subprocess spawn (per RESEARCH.md Pitfall 9 -- credential mocks do
- * NOT need a real keychain backend; callers receive the GitCredentials
- * object directly).
+ * no subprocess spawn -- credential mocks do NOT need a real keychain
+ * backend; callers receive the GitCredentials object directly.
  *
- * Phase 32+ buildAuthCallbacks tests will inject this mock the same way
- * Phase 4 add/update tests inject makeMockGitOps.
+ * buildAuthCallbacks tests inject this mock the same way add/update tests
+ * inject makeMockGitOps.
  *
  * Type-only import for CredentialOps so the helper file does not import
  * the production module at runtime (the platform import boundary in

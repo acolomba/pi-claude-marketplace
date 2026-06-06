@@ -19,12 +19,10 @@ import type { ScopedLocations } from "../../extensions/pi-claude-marketplace/per
  *
  * Each test creates an isolated tmpdir representing the project-scope
  * cwd; `locationsFor("project", cwd)` produces a fully-realized
- * ScopedLocations whose `extensionRoot` lands under that tmpdir. That
- * keeps the tests free of any reliance on Plan 03-01's pending
- * `agentsIndexPath` field -- the IO layer derives the path from
- * `extensionRoot` (see implementation note in agents-index-io.ts).
+ * ScopedLocations whose `extensionRoot` lands under that tmpdir. The IO
+ * layer derives the path from `extensionRoot`.
  *
- * Test names prefixed with REQ-IDs (Phase 2 convention -- grep-able).
+ * Test names prefixed with REQ-IDs (grep-able).
  */
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));

@@ -1,7 +1,6 @@
 // tests/edge/completions/normalize.test.ts
 //
-// TC-7 coverage for normalizeCompletionWhitespace + isClaudePluginCommandLine
-// (both ported verbatim from V1 completions.ts in Plan 06-02).
+// TC-7 coverage for normalizeCompletionWhitespace + isClaudePluginCommandLine.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";

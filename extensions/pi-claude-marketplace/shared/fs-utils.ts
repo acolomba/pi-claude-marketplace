@@ -1,6 +1,6 @@
 // shared/fs-utils.ts
 //
-// Filesystem helpers used by Phase 3 bridges. Three helpers:
+// Filesystem helpers used by the bridges. Three helpers:
 //
 //   - cleanupStaging: best-effort recursive rm of a staging tree, returning
 //     a leak-message string on failure rather than throwing. Lets callers
@@ -52,8 +52,8 @@ export async function cleanupStaging(dir: string, label: string): Promise<string
  * lstat-based existence predicate. ENOENT/ENOTDIR -> false; any other
  * error propagates. Does NOT follow symlinks (consistent with PS-1).
  *
- * Phase 3 Plan 03-03 (skills discover.ts) imports this rather than
- * inlining lstat so the symlink-non-following semantics live in one place.
+ * The skills `discover.ts` imports this rather than inlining lstat so the
+ * symlink-non-following semantics live in one place.
  */
 export async function pathExists(p: string): Promise<boolean> {
   try {

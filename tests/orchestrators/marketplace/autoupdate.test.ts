@@ -24,8 +24,8 @@ interface NotifyRecord {
 
 function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: NotifyRecord[] } {
   const notifications: NotifyRecord[] = [];
-  // Plan 18-00: `pi` required on AutoupdateOptions; mirror production
-  // wiring shape (D-18-06 preserved). Plan 18-02: `pi` is now actively
+  // `pi` required on AutoupdateOptions; mirror production
+  // wiring shape (D-18-06). `pi` is actively
   // consumed by the orchestrator to drive notify()'s soft-dep probe
   // (D-16-14); the stub still satisfies the ExtensionAPI surface.
   const pi = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
@@ -219,7 +219,7 @@ test("MAU-2 / CMC-33 (V2): bare form flips every marketplace in scope; one notif
     assert.equal(after.marketplaces["already"]!.autoupdate, true);
     assert.equal(after.marketplaces["to-flip"]!.autoupdate, true);
 
-    // V2 catalog forms: one notification carries both rows.
+    // Catalog forms: one notification carries both rows.
     // D-16-06: caller-order honored (no alphabetic sort at the
     // orchestrator). The orchestrator's accumulator pushes
     // `result.changed[]` rows BEFORE `result.unchanged[]` rows (see
@@ -264,7 +264,7 @@ test("CMC-10 + SC-6: bare form across both empty scopes succeeds with `(no marke
     const { ctx, pi, notifications } = makeCtx();
     await setMarketplaceAutoupdate({ ctx, pi, enable: true, cwd }); // no name, no scope
     // D-16-17: empty marketplaces[] -> notify() emits the sentinel
-    // verbatim. The V1 byte form is identical to V2.
+    // verbatim.
     assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });
@@ -334,7 +334,7 @@ test("Single-name flip across BOTH scopes when name absent from BOTH scopes: sur
     // SC-6 iteration order ("project" comes before "user"). The
     // failure row carries the scope where the FIRST not-found was
     // observed.
-    // Phase 29 / UXG-07 (D-29-03): 0 failed plugins, 1 failed marketplace
+    // UXG-07 (D-29-03): 0 failed plugins, 1 failed marketplace
     // -> the "1 marketplace operation failed." summary line is prepended.
     assert.equal(
       notifications[0]!.message,

@@ -42,10 +42,8 @@ async function loadZones(): Promise<RestrictedPathsZone[] | null> {
 }
 
 const EXTENSION_ROOT = "./extensions/pi-claude-marketplace";
-// Phase 21 (D-21-02) retired the presentation/ folder, dropping the 9-zone
-// configuration down to 8 zones. Edge/ may now import domain/ directly
-// (the prior cross-zone re-export hack via the retired rendering layer is
-// gone); accordingly `edge`'s forbidden set no longer includes `domain`.
+// D-21-02: 8-zone configuration. Edge/ may import domain/ directly;
+// accordingly `edge`'s forbidden set does not include `domain`.
 const FOLDERS = [
   "edge",
   "orchestrators",
@@ -163,7 +161,7 @@ test(
     // fixture's directory and forbidding imports from the extension's
     // bridges/ folder. The fixture's `import` statement then trips the
     // synthetic zone, ruleId === "import-x/no-restricted-paths" fires, and
-    // because bridges/index.ts exists (Plan 03 placeholder), no
+    // because bridges/index.ts exists, no
     // import-x/no-unresolved is emitted.
     const { ESLint } = (await import("eslint")) as {
       ESLint: new (opts: {

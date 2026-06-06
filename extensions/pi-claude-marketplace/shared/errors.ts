@@ -19,8 +19,7 @@ export function assertNever(x: never): never {
  * `undefined` or `null` so callers can compose `body + (trailer === "" ? "" :
  * "\n\n" + trailer)` without extra guards.
  *
- * Walker contract (relocated from orchestrators/marketplace/shared.ts's
- * legacy depth-5 walker):
+ * Walker contract:
  *   - Depth bound 5 prevents pathological cycles (T-13-04 DoS mitigation).
  *   - Cycle detection: `current.cause !== current` -- an Error whose own
  *     `.cause` is itself terminates the walk at depth 1.
@@ -204,7 +203,7 @@ export class CrossPluginConflictError extends Error {
  * `runPhases` result unwinds the staged resources via the ledger's
  * `undo` chain; `formatRollbackError` returns the structured rollback
  * result and the orchestrator composes the final user message via the
- * V2 `notify(ctx, NotificationMessage)` path (`shared/notify.ts`).
+ * `notify(ctx, NotificationMessage)` path (`shared/notify.ts`).
  */
 export class ConcurrentInstallError extends Error {
   readonly plugin: string;
@@ -311,13 +310,9 @@ export class ManualRecoveryError extends Error {
 }
 
 /**
- * Discriminated typed error replacing the free-text `Error.message`
- * parsing previously used in install / update / remove / reinstall catch
- * sites. Closes the systemic v1.3 pattern hole that the
- * `ManualRecoveryError` refactor missed in additional catch sites beyond
- * install, and eliminates the SonarCloud `typescript:S5852` ReDoS hotspot
- * at the legacy regex (previously `/is not installable:\s*(.+)$/`) that
- * has since been removed.
+ * Discriminated typed error for the install / update / remove / reinstall
+ * catch sites. Consumers narrow on `kind` instead of parsing free-text
+ * `Error.message`.
  *
  * Discriminated by `kind`:
  *   - `"not-in-manifest"`     -- PI-3, thrown from `installPlugin`
@@ -371,8 +366,6 @@ export class PluginShapeError extends Error {
   /**
    * The full discriminated shape is exposed as a single `readonly` field
    * so consumers narrow on `e.shape.kind` without non-null assertions.
-   * The shape
-   * itself was discarded). The pre-C4 mirror fields are retired.
    *
    * Reading `e.shape` returns the same object the constructor received,
    * including the discriminator and every shape-specific field

@@ -52,7 +52,7 @@ export function makeImportHandler(
     // No try/catch: importClaudeSettings wraps loadState (in executeScopedPlan's
     // state-load try block), addMarketplace (in executeScopedPlan's
     // marketplacesToEnsure loop), and installPlugin (in executeScopedPlan's
-    // pluginsToInstall loop, per Plan 20-05 WR-02 gap closure) per-scope;
+    // pluginsToInstall loop, per WR-02) per-scope;
     // expected installPlugin failures already route through the discriminated
     // {status: "failed"} return. With WR-02 in place, unexpected installPlugin
     // throws are ALSO caught and routed to result.unexpectedPluginFailures; the

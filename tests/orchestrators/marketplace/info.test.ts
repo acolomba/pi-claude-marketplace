@@ -1,9 +1,9 @@
 // tests/orchestrators/marketplace/info.test.ts
 //
-// Phase 43 / Plan 43-01 / Task 2: integration tests for the read-only
-// `getMarketplaceInfo` orchestrator. Hermetic HOME + tmp cwd + saveState
-// fixtures; the orchestrator is the SOLE site that projects local
-// marketplace state into the Phase 42 info-message variants.
+// Integration tests for the read-only `getMarketplaceInfo` orchestrator.
+// Hermetic HOME + tmp cwd + saveState fixtures; the orchestrator is the
+// SOLE site that projects local marketplace state into the info-message
+// variants.
 //
 // Coverage:
 //   (a) single-scope github + autoupdate + lastUpdatedAt + description
@@ -82,7 +82,7 @@ async function withHermeticHome<T>(
 /**
  * Write a minimal `marketplace.json` at the given path. Optional
  * `description` is appended as a top-level field (the schema permits
- * additional properties per Phase 43 info-surface conventions).
+ * additional properties per the info-surface conventions).
  */
 async function writeMarketplaceJson(
   manifestPath: string,
@@ -449,9 +449,7 @@ test("Manifest missing on disk surfaces `(failed) {source missing}` row, not sil
     await getMarketplaceInfo({ ctx, pi, name: "missing-mp", scope: "user", cwd });
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
-    // ENOENT classifier -> `source missing`. The pre-fix body would
-    // have been the success body without a `description:` line, with
-    // info severity -- silent.
+    // ENOENT classifier -> `source missing`.
     assert.match(notifications[0]!.message, /\(failed\) \{source missing\}/);
   });
 });

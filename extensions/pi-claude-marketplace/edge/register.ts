@@ -1,8 +1,8 @@
 // edge/register.ts
 //
-// Plan 06-05 D-04: two registration helpers Phase 7's `index.ts` will
-// call to wire the `/claude:plugin` slash-command surface and the two
-// read-only LLM tools onto the Pi extension API.
+// D-04: two registration helpers `index.ts` calls to wire the
+// `/claude:plugin` slash-command surface and the two read-only LLM tools
+// onto the Pi extension API.
 //
 //   - registerClaudePluginCommand(pi, deps):
 //       * pi.registerCommand("claude:plugin", { handler, getArgumentCompletions, description })
@@ -15,10 +15,9 @@
 //   - registerClaudeMarketplaceTools(pi):
 //       * delegates to registerListMarketplacesTool + registerListPluginsTool.
 //
-// Pitfall 3 (06-RESEARCH §pitfalls): `process.cwd()` is acceptable here
-// at the registration glue layer -- this is the one site in Phase 6
-// where it is sanctioned. The cwd captured here is per-command-registration,
-// matching V1's behavior.
+// Pitfall 3: `process.cwd()` is acceptable here at the registration glue
+// layer -- this is the one site where it is sanctioned. The cwd captured
+// here is per-command-registration.
 //
 // BLOCK C: this file imports from edge/* (sibling), orchestrators/* (one
 // allowed up-import), shared/* (leaf), and the Pi peer dep. The
@@ -68,11 +67,10 @@ const COMMAND_DESCRIPTION =
  * Wire the `/claude:plugin` slash command + the TC-7 autocomplete
  * normalization onto `pi`. Idempotency: Pi's extension API does NOT
  * dedupe; callers MUST invoke this exactly once per session lifecycle
- * (Phase 7's `index.ts` is the single call site).
+ * (`index.ts` is the single call site).
  *
  * `deps.gitOps` and `deps.pluginUpdate` are threaded into the marketplace
- * add/update/remove handlers per D-04 EdgeDeps; Phase 7 supplies the live
- * implementations.
+ * add/update/remove handlers per D-04 EdgeDeps.
  */
 export function registerClaudePluginCommand(pi: ExtensionAPI, deps: EdgeDeps): void {
   const handlers: SubcommandHandlers = {
@@ -96,18 +94,18 @@ export function registerClaudePluginCommand(pi: ExtensionAPI, deps: EdgeDeps): v
   pi.registerCommand("claude:plugin", {
     description: COMMAND_DESCRIPTION,
     handler: (args, ctx) => routeClaudePlugin(args, handlers, ctx),
-    // Pitfall 3: this `process.cwd()` is the single sanctioned site in
-    // Phase 6. Captured at registration time; threads through every
-    // keystroke's completion lookup via the closed-over resolver.
+    // Pitfall 3: this `process.cwd()` is the single sanctioned site.
+    // Captured at registration time; threads through every keystroke's
+    // completion lookup via the closed-over resolver.
     getArgumentCompletions: (prefix) =>
       getArgumentCompletions(prefix, makeLocationsResolver(process.cwd())),
   });
 
-  // TC-7 autocomplete wrapper (V1 carry-forward, 06-PATTERNS §register).
-  // V1 installs the wrapper unconditionally on every session_start;
-  // `normalizeCompletionWhitespace` is idempotent so re-installation is
-  // harmless. Scoped to lines matching isClaudePluginCommandLine to keep
-  // other extensions' completions untouched.
+  // TC-7 autocomplete wrapper. Installed unconditionally on every
+  // session_start; `normalizeCompletionWhitespace` is idempotent so
+  // re-installation is harmless. Scoped to lines matching
+  // isClaudePluginCommandLine to keep other extensions' completions
+  // untouched.
   pi.on("session_start", (_event, ctx) => {
     ctx.ui.addAutocompleteProvider((current) => ({
       getSuggestions: (lines, line, col, options) =>
@@ -130,7 +128,7 @@ export function registerClaudePluginCommand(pi: ExtensionAPI, deps: EdgeDeps): v
 /**
  * Wire the two read-only LLM tools (`pi_claude_marketplace_list` +
  * `pi_claude_marketplace_plugin_list`) onto `pi`. Same idempotency
- * contract as the slash command -- Phase 7 calls this exactly once.
+ * contract as the slash command -- called exactly once.
  */
 export function registerClaudeMarketplaceTools(pi: ExtensionAPI): void {
   registerListMarketplacesTool(pi);

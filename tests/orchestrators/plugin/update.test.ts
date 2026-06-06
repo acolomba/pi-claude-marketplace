@@ -38,12 +38,12 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 //          updatePlugins surfaces phase-2-or-earlier throws via V2
 //          notify() with a synthetic PluginFailedMessage carrying cause).
 //
-// Phase 19 / Plan 19-05: byte-exact assertions match the V2 catalog forms
-// at docs/output-catalog.md:489-568 (plugin update). The V1 `[<scope>]`
-// plugin-row bracket is suppressed by Phase 17.2 orphan-fold (plugin.scope
+// Byte-exact assertions match the catalog forms at
+// docs/output-catalog.md:489-568 (plugin update). The `[<scope>]`
+// plugin-row bracket is suppressed by orphan-fold (plugin.scope
 // === mp.scope -> renderScopeBracket returns ""). Empty-targets renders
-// `(no marketplaces)` via notify({ marketplaces: [] }) per the Wave 1
-// precedent (orchestrators/marketplace/update.ts:230). Direct-path
+// `(no marketplaces)` via notify({ marketplaces: [] }), mirroring
+// orchestrators/marketplace/update.ts. Direct-path
 // failures (enumerate / syncClone / runThreePhaseUpdate / phase-3
 // aggregate) surface as synthetic PluginFailedMessage rows with cause
 // threaded for the 4-space cause-chain trailer per D-16-08.
@@ -247,12 +247,9 @@ test("PUP-1: bare form against empty state -> '(no marketplaces)' silent success
       await updatePlugins({ ctx, pi, scope: "project", cwd, target: { kind: "all" } });
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined);
-      // Phase 19 / Plan 19-05: V2 empty-targets shape mirrors the Wave 1
-      // precedent at orchestrators/marketplace/update.ts:230 --
+      // Empty-targets shape mirrors orchestrators/marketplace/update.ts --
       // notify({ marketplaces: [] }) renders the renderer's
-      // `(no marketplaces)` sentinel per D-16-17. The legacy
-      // EmptyToken "(no plugins)" rendering retires alongside the V1
-      // renderRow / compact-line composer.
+      // `(no marketplaces)` sentinel per D-16-17.
       assert.equal(notifications[0]?.message, "(no marketplaces)");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -291,12 +288,12 @@ test("PUP-3: version equality -> outcome.partition='unchanged'; no bridge state 
       const after = await readFile(stateJsonPath, "utf8");
       assert.equal(before, after, "state.json must NOT be rewritten on unchanged path");
 
-      // Phase 19 / Plan 19-05: V2 byte form mirrors catalog
+      // V2 byte form mirrors catalog
       // `all-up-to-date-noop` (docs/output-catalog.md). The
       // `unchanged` partition maps to a `(skipped) {up-to-date}` row.
       // The benign `up-to-date` reason (in BENIGN_REASONS) routes
       // severity to info per UXG-02 / D-28-06. Plugin-row `[<scope>]`
-      // bracket is suppressed by Phase 17.2 orphan-fold (plugin.scope ===
+      // bracket is suppressed by orphan-fold (plugin.scope ===
       // mp.scope -> renderScopeBracket returns ""). No reload-hint when
       // no plugin row is in the state-changing variant set per D-16-12.
       assert.equal(notifications.length, 1);
@@ -325,7 +322,7 @@ test("PUP-4: source overridden to github-flavored URL -> outcome.partition='skip
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
-        // MM-3 / PR-2: github-source plugin entry is not installable in V1.
+        // MM-3 / PR-2: github-source plugin entry is not installable.
         manifestPlugins: {
           hello: { version: "1.1.0", hasSkill: true, rawSourceOverride: "github:owner/repo" },
         },
@@ -343,11 +340,11 @@ test("PUP-4: source overridden to github-flavored URL -> outcome.partition='skip
 
       assert.equal(notifications.length, 1);
       const body = notifications[0]?.message ?? "";
-      // Phase 19 / Plan 19-05: V2 byte form. `(skipped) {no longer
+      // V2 byte form. `(skipped) {no longer
       // installable}` row with the optional `v<fromVersion>` token from
       // the installed record (PUP-4 carries `fromVersion: "1.0.0"`).
-      // Plugin-row `[<scope>]` bracket suppressed by orphan-fold per
-      // Phase 17.2. Severity routes via warning per D-16-11.
+      // Plugin-row `[<scope>]` bracket suppressed by orphan-fold.
+      // Severity routes via warning per D-16-11.
       assert.equal(
         body,
         "1 plugin operation skipped.\n\n● mp [project]\n  ⊘ hello v1.0.0 (skipped) {no longer installable}",
@@ -387,7 +384,7 @@ test("PUP-5: refreshed manifest no longer lists entry -> outcome.partition='skip
 
       assert.equal(notifications.length, 1);
       const body = notifications[0]?.message ?? "";
-      // Phase 19 / Plan 19-05: V2 byte form. `(skipped) {not in manifest}`
+      // V2 byte form. `(skipped) {not in manifest}`
       // row with the optional `v<fromVersion>` token from the installed
       // record. Plugin-row `[<scope>]` bracket suppressed by orphan-fold.
       assert.equal(
@@ -443,7 +440,7 @@ test("PUP-6 happy: version bump triggers 3-phase swap; state reflects new versio
       assert.deepEqual([...record.resources.agents], [`${GENERATED_AGENT_PREFIX}hello-bot`]);
       assert.deepEqual([...record.resources.mcpServers], ["server1"]);
 
-      // TR-04 (Phase 40) SC#2 all-success finalize contract: the
+      // TR-04 SC#2 all-success finalize contract: the
       // intent-mark `compatibility = { installable: false, notes:
       // [update-in-progress] }` set by `markUpdateInProgress` must be
       // overwritten by `finalizeUpdateRecord` on the all-success path.
@@ -458,7 +455,7 @@ test("PUP-6 happy: version bump triggers 3-phase swap; state reflects new versio
       const skillTarget = path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md");
       assert.ok((await readFile(skillTarget, "utf8")).length > 0, "skill must exist on disk");
 
-      // Phase 19 / Plan 19-05: V2 byte form mirrors catalog
+      // V2 byte form mirrors catalog
       // `single-mp-mixed` (docs/output-catalog.md:495-504) version-arrow
       // discipline: `v<from> → v<to>` with `v` prefix on both sides --
       // the renderer's composeVersionArrow owns
@@ -613,7 +610,7 @@ test("PUP-1 @mp form: enumerates all installed plugins in the marketplace, parti
       });
 
       const body = notifications[0]?.message ?? "";
-      // Phase 19 / Plan 19-05: V2 byte form combines `single-mp-mixed`
+      // V2 byte form combines `single-mp-mixed`
       // catalog shape (docs/output-catalog.md:495-504): alpha (updated)
       // + beta (skipped {up-to-date}) under one marketplace header in
       // caller-order (D-16-06 -- orchestrator iterates in the
@@ -633,8 +630,7 @@ test("PUP-1 @mp form: enumerates all installed plugins in the marketplace, parti
       // manual-recovery. The only skip row is benign (`beta` skipped
       // `up-to-date`, in BENIGN_REASONS) and the `alpha (updated)` row is a
       // success, so per UXG-02 / D-28-06 the whole cascade computes info (no
-      // severity arg). (Previously routed to warning under the old
-      // any-skip-is-warning ladder.)
+      // severity arg).
       assert.equal(notifications[0]?.severity, undefined);
       assert.ok(seeded.marketplaceRoot.length > 0);
     } finally {
@@ -796,14 +792,12 @@ test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'pl
       });
 
       // CR-01: phase-3a aggregate failure must fire EXACTLY ONE
-      // notification. Previously this test joined all notifications via
-      // `.join("\n")` before regex-matching, which silently masked the
-      // duplicate emission (one from the inline `notifyDirectFailure`
-      // inside `runThreePhaseUpdate`, a second from the cascade
-      // `renderUpdateCascadeAndNotify` walk after the outcome fell through
-      // to `outcomes[]`). The fix in `update.ts::updatePlugins` early-
-      // returns when the outcome carries `phaseFailures`, so a regression
-      // would surface here as `notifications.length === 2`.
+      // notification. A duplicate emission would be one from the inline
+      // `notifyDirectFailure` inside `runThreePhaseUpdate`, a second from
+      // the cascade `renderUpdateCascadeAndNotify` walk after the outcome
+      // fell through to `outcomes[]`. `update.ts::updatePlugins`
+      // early-returns when the outcome carries `phaseFailures`, so a
+      // regression would surface here as `notifications.length === 2`.
       assert.equal(
         notifications.length,
         1,
@@ -818,7 +812,7 @@ test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'pl
         `expected RECOVERY_PLUGIN_REINSTALL_PREFIX hint in notification:\n${allText}`,
       );
 
-      // TR-04 (Phase 40) SC#1/SC#2 post-state: PUP-6 phase-3 failure is
+      // TR-04 SC#1/SC#2 post-state: PUP-6 phase-3 failure is
       // a skills-only-fail; commands + agents + mcp succeed (the seed
       // declares no entries for those bridges so they each produce an
       // empty `recorded[]` array). The intent-mark survives on failure;
@@ -896,7 +890,7 @@ test("WR-04: successful update populates stagedAgents + stagedMcpServers on outc
         process.chdir(prevCwd);
       }
 
-      // TR-04 (Phase 40) Pitfall 6: outcome-shape assertions don't
+      // TR-04 Pitfall 6: outcome-shape assertions don't
       // exercise on-disk state, so lock the all-success finalize contract
       // explicitly. Load state via the project-scope locations resolved
       // from the same cwd that drove updateSinglePlugin.
@@ -945,7 +939,7 @@ test("PUP-1 pl@mp: targeting a plugin not in state -> partition='skipped' (not i
       });
 
       const body = notifications[0]?.message ?? "";
-      // Phase 19 / Plan 19-05: V2 byte form. Plugin-row `[<scope>]`
+      // V2 byte form. Plugin-row `[<scope>]`
       // bracket suppressed by orphan-fold. Skipped severity per D-16-11.
       assert.equal(
         body,
@@ -1016,7 +1010,7 @@ test("PUP-1: targeting an unknown marketplace -> direct-path V2 notify (PluginFa
         target: { kind: "marketplace", marketplace: "ghost-mp" },
       });
 
-      // Phase 19 / Plan 19-05: V2 direct-path failure (Option B) -- the
+      // V2 direct-path failure (Option B) -- the
       // enumerate-targets throw surfaces via a single notify(ctx, pi,
       // { marketplaces: [{ name, scope, plugins: [PluginFailedMessage] }] })
       // call. The synthetic failed-row identity is the marketplace name
@@ -1027,13 +1021,13 @@ test("PUP-1: targeting an unknown marketplace -> direct-path V2 notify (PluginFa
       // ...` mirrors the SYNTHETIC_UPDATE_PLACEHOLDER_NAME = "(update)"
       // bare-form precedent and is visually distinguishable from the mp
       // header). The renderer composes the 4-space cause-chain trailer per
-      // D-16-08 from PluginFailedMessage.cause, preserving the V1
+      // D-16-08 from PluginFailedMessage.cause, preserving the
       // error-text `Marketplace "ghost-mp" not found in project scope.`.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
-      // Cause-chain trailer text preserves the V1 error message.
+      // Cause-chain trailer text preserves the error message.
       assert.match(notifications[0]?.message ?? "", /not found in project scope/);
-      // V2 byte form -- bare marketplace header + a synthetic failed plugin
+      // Bare marketplace header + a synthetic failed plugin
       // row carrying the parens-wrapped marketplace name (WR-01).
       assert.equal(
         notifications[0]?.message,
@@ -1073,7 +1067,7 @@ test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback res
       });
 
       const body = notifications[0]?.message ?? "";
-      // Phase 19 / Plan 19-05: V2 byte form mirrors the pl@mp
+      // V2 byte form mirrors the pl@mp
       // not-installed shape (PUP-1 above). Plugin-row `[<scope>]` bracket
       // suppressed by orphan-fold.
       assert.equal(
@@ -1388,7 +1382,7 @@ test("dropCache-fail: cache path is a directory -> notifyWarning emitted after s
       const errs = notifications.filter((n) => n.severity === "error");
       assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
 
-      // Cache drop errors are swallowed in V2; update still succeeds.
+      // Cache drop errors are swallowed; update still succeeds.
       const successes = notifications.filter((n) => n.severity === undefined);
       assert.ok(successes.length >= 1, "expected success notification for the update");
       assert.match(successes[0]?.message ?? "", /updated/);
@@ -1702,7 +1696,7 @@ test("phase3a-commands-fail: command target occupied by directory -> phase3aFail
         `expected RECOVERY_PLUGIN_REINSTALL_PREFIX hint somewhere in:\n${allText}`,
       );
 
-      // TR-04 (Phase 40) SC#1/SC#2 post-state: skills + commands FAILED;
+      // TR-04 SC#1/SC#2 post-state: skills + commands FAILED;
       // agents + mcp SUCCEEDED (seed declares no entries for those
       // bridges so each writes an empty `recorded[]` array via the
       // !failedPhases.has(bridge) gate). Version stays at fromVersion;
@@ -1778,7 +1772,7 @@ test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAge
         `expected RECOVERY_PLUGIN_REINSTALL_PREFIX hint somewhere in:\n${allText}`,
       );
 
-      // TR-04 (Phase 40) SC#1/SC#2 post-state: skills + agents FAILED;
+      // TR-04 SC#1/SC#2 post-state: skills + agents FAILED;
       // commands + mcp SUCCEEDED (seed declares no entries for commands
       // or mcp so each writes an empty `recorded[]` via the
       // !failedPhases.has(bridge) gate). Version unchanged; intent-mark
@@ -1801,7 +1795,7 @@ test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAge
   });
 });
 
-// ─── TR-04 matrix coverage (Phase 40, SC#4) ─────────────────────────────────
+// ─── TR-04 matrix coverage (SC#4) ─────────────────────────────────
 // Per-bridge orthogonality: finalizeUpdateRecord gates each bridge's resource
 // write on !failedPhases.has(bridge), INDEPENDENT of other bridges' outcomes.
 // The 4 dedicated "exactly one bridge fails" tests below + the all-success
@@ -1809,8 +1803,6 @@ test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAge
 // (skills+commands fail) + phase3a-agents-fail (skills+agents fail) cover
 // every per-bridge "succeed" vs "fail" outcome in both directions for all
 // four bridges. The remaining 9 multi-failure cases compose deterministically.
-// See .planning/phases/40-update-state-before-commit-reorder/40-RESEARCH.md
-// "4-bridge x 2-outcome matrix coverage analysis" for the full 16-case table.
 
 test("TR-04 matrix: skills-fails-others-succeed", async () => {
   await withHermeticHome(async () => {
@@ -1983,7 +1975,7 @@ test("TR-04 matrix: agents-fails-others-succeed", async () => {
 
 // TR-04 matrix #4 (mcp-fails-others-succeed) NOTE:
 //
-// A dedicated "mcp commit fails, others succeed" test is OMITTED in v1.7
+// A dedicated "mcp commit fails, others succeed" test is OMITTED
 // because the mcp bridge's prepare step (`prepareStageMcpServers`) reads
 // `locations.mcpJsonPath` via `readScopedDoc` BEFORE the bridge commit
 // runs (stage.ts:178). The only file-system obstacle that reliably forces
@@ -2004,11 +1996,7 @@ test("TR-04 matrix: agents-fails-others-succeed", async () => {
 // (skills / commands / agents fail) each demonstrate that an UNRELATED
 // bridge's failure does NOT block mcp's resources write. The full mcp
 // gate-blocked variant would need a test seam injecting a mid-flight
-// failure between mcp's prepare and commit -- deferred to v1.8 if surface
-// emerges.
-//
-// See .planning/phases/40-update-state-before-commit-reorder/40-01-SUMMARY.md
-// for the deviation rationale.
+// failure between mcp's prepare and commit.
 
 test("TR-04 retry: partial-success-state-converges-to-new-version", async () => {
   await withHermeticHome(async () => {

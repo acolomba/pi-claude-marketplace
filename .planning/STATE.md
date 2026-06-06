@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.8
-milestone_name: milestone closes.
-status: "PR #36 open for review"
-stopped_at: v1.8 roadmap created
-last_updated: "2026-06-04T11:26:38.351Z"
-last_activity: "2026-06-04 -- Milestone v1.8 PR #36 opened"
+milestone_name: Plugin and Marketplace Info Commands
+status: "v1.8 shipped (PR #36 merged 2026-06-04)"
+stopped_at: v1.8 milestone shipped
+last_updated: "2026-06-06T01:20:06.108Z"
+last_activity: "2026-06-05 -- v1.8 reconciled to shipped (quick 260605-tmr)"
 progress:
   total_phases: 3
-  completed_phases: 0
+  completed_phases: 3
   total_plans: 5
-  completed_plans: 0
-  percent: 0
+  completed_plans: 5
+  percent: 100
 ---
 
 # Project State
@@ -26,84 +26,65 @@ See: .planning/PROJECT.md (updated 2026-05-30)
 
 Phase: Milestone v1.8 complete
 Plan: --
-Status: PR #36 open for review
-Last activity: 2026-06-04 -- Milestone v1.8 PR #36 opened
+Status: v1.8 shipped (PR #36 merged 2026-06-04, commit 47a63f7)
+Last activity: 2026-06-05 -- v1.8 reconciled to shipped (quick 260605-tmr)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 127
-- Average duration: -
-- Total execution time: -
+- Total plans completed: 156 (sum of recorded phase counts below; some early v1.0-v1.2 phases were archived without a recorded plan count)
 
-**By Phase:**
+**Plans by phase:**
 
-| Phase | Plans | Total | Avg/Plan |
-| ----- | ----- | ----- | -------- |
-| 01    | 7     | -     | -        |
-| 02    | 6     | -     | -        |
-| 04    | 10    | -     | -        |
-| 05    | 10    | -     | -        |
-| 07    | 6     | -     | -        |
-| 08    | 4     | -     | -        |
-| 12    | 4     | -     | -        |
-| 13    | 10    | -     | -        |
-| 14.1  | 2     | -     | -        |
-| 14    | 6     | -     | -        |
-| 14.2  | 5     | -     | -        |
-| 15    | 3     | -     | -        |
-| 16    | 6     | -     | -        |
-| 17.2  | 4     | -     | -        |
-| 18    | 7     | -     | -        |
-| 19    | 6     | -     | -        |
-| 20    | 6     | -     | -        |
-| 21    | 4     | -     | -        |
-| 22    | 1     | -     | -        |
-| 23    | 2     | -     | -        |
-| 24    | 1     | -     | -        |
-| 25 | 3 | - | - |
-| 26 | 1 | - | - |
-| 27 | 5 | - | - |
-| 28 | 2 | - | - |
-| 29 | 3 | - | - |
-| 30 | 1 | - | - |
-| 31 | 2 | - | - |
-| 32 | 1 | - | - |
-| 33 | 1 | - | - |
-| 34 | 1 | - | - |
-| 35 | TBD | - | - |
-| 36 | TBD | - | - |
+| Phase | Plans | Milestone |
+| ----- | ----- | --------- |
+| 01 | 7 | v1.0 |
+| 02 | 6 | v1.0 |
+| 04 | 10 | v1.0 |
+| 05 | 10 | v1.0 |
+| 07 | 6 | v1.0 |
+| 08 | 4 | v1.1 |
+| 09 | 4 | v1.1 |
+| 12 | 4 | v1.3 |
+| 13 | 10 | v1.3 |
+| 14 | 6 | v1.3 |
+| 14.1 | 2 | v1.3 |
+| 14.2 | 5 | v1.3 |
+| 15 | 3 | v1.4 |
+| 16 | 6 | v1.4 |
+| 17 | 3 | v1.4 |
+| 17.1 | 4 | v1.4 |
+| 17.2 | 4 | v1.4 |
+| 18 | 7 | v1.4 |
+| 19 | 6 | v1.4 |
+| 20 | 6 | v1.4 |
+| 21 | 4 | v1.4 |
+| 22 | 1 | v1.4.1 |
+| 23 | 2 | v1.4.1 |
+| 24 | 1 | v1.4.1 |
+| 25 | 3 | v1.4.1 |
+| 26 | 1 | v1.4.1 |
+| 27 | 5 | v1.5 |
+| 28 | 2 | v1.5 |
+| 29 | 3 | v1.5 |
+| 30 | 1 | v1.6 |
+| 31 | 2 | v1.6 |
+| 32 | 1 | v1.6 |
+| 33 | 1 | v1.6 |
+| 34 | 1 | v1.6 |
+| 35 | 4 | v1.6 |
+| 36 | 1 | v1.6 |
+| 37 | 1 | v1.7 |
+| 38 | 1 | v1.7 |
+| 39 | 1 | v1.7 |
+| 40 | 1 | v1.7 |
+| 41 | 1 | v1.7 |
+| 42 | 1 | v1.8 |
+| 43 | 2 | v1.8 |
+| 44 | 2 | v1.8 |
 
-**Recent Trend:**
-
-- Last 5 plans: -
-- Trend: -
-
-<!-- Updated after each plan completion -->
-
-| Phase 07 P01 | 9 min | 3 tasks | 29 files |
-| Phase 07 P02 | 4 min | 3 tasks | 9 files |
-| Phase 07 P03 | 6 min | 2 tasks | 5 files |
-| Phase 07 P04 | 11 min | 3 tasks | 10 files |
-| Phase 07 P05 | 7 min | 3 tasks | 20 files |
-| Phase 07 P06 | 2 min | 2 tasks | 4 files |
-| Phase 08 P01 | 10 min | 2 tasks | 4 files |
-| Phase 08 P02 | 12 min | 2 tasks | 8 files |
-| Phase 08 P03 | 12 min | 2 tasks | 8 files |
-| Phase 08 P04 | 23 min | 3 tasks | 5 files |
-| Phase 09 P01 | 45 min | 3 tasks | 4 files |
-| Phase 09 P02 | 35 min | 3 tasks | 6 files |
-| Phase 09 P03 | 20 min | 3 tasks | 3 files |
-| Phase 09 P04 | - | 4 tasks | 4 files |
-| Phase 25 P01 | 14 min | 3 tasks | 4 files |
-| Phase 25 P2 | 5min | 2 tasks | 2 files |
-| Phase 27 P01 | 6 min | 2 tasks | 2 files |
-| Phase 27 P02 | 9 min | 2 tasks | 5 files |
-| Phase 27 P03 | 14 min | 3 tasks | 8 files |
-| Phase 27 P04 | 18 min | 3 tasks | 6 files |
-| Phase 28 P01 | 23 min | 3 tasks | 11 files |
-| Phase 28 P02 | 12 min | 2 tasks | 5 files |
+<!-- Plan counts for v1.4+ derived from .planning/milestones/<milestone>-phases/. Early-milestone (v1.0-v1.3) phase dirs were archived; their counts are the last recorded values, and some early phases have no recorded count. Counts are completed plans: Phase 32 shipped 1 of its 2 planned plans (32-01 folded). -->
 
 ## Accumulated Context
 
@@ -154,7 +135,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 24]: SNM-36 closed via D-24-04 detection-vs-emission seam: REASONS member `lspServers` -> `lsp` (shared/notify.ts:79); detection substrings stay camelCase (resolver-note match), only the emitted Reason renders `lsp`. install.ts seam uses a typed `MANIFEST_FIELD_TO_REASON` map (D-24-05) gating on the retained camelCase `MANIFEST_FIELD_REASONS` set, removing the `as Reason` cast. Catalog/fixture/doc byte forms + spec wording (`lsp servers` -> `lsp`) amended in the same atomic commit (D-24-03/07); SC#4 manifest surface (`plugin.ts:31`, `resolver.ts:142,160`) byte-unchanged. -- Plan 24-01.
 - [Roadmap v1.4.1]: 5-phase split (22-26): reload-hint discipline -> version display bundle -> grammar consistency -> runtime publish & verification -> GREEN gate close. Phase boundaries respect the shared/notify.ts convergence (SNM-33 / SNM-35 / SNM-36 all touch the same file) by serializing them across phases rather than parallel waves. Phase 25 is operational + investigation: SNM-37 (publish/npm-link) is an operator-action checkpoint that gates SNM-38 (G-MIL-03 indent reproduction) and SNM-39 (G-MIL-07 completion reproduction); SNM-38/39 can run in parallel after SNM-37 lands. State migration for already-installed hash-versioned plugins is out of scope (REQUIREMENTS Out of Scope) -- marketplace update will naturally surface those as upgradable once SNM-34 ships.
 - [Phase 25]: SNM-37 gate satisfied via scripts/pi.sh source-load (no npm publish/link, D-25-01) + a tests/shared/snm37-behavioral-smoke.test.ts byte-form smoke proving v1.4 identity at the pre-tui notify boundary (D-25-04; stronger than pi --version, moot under -e source-load). Real-publish validation deferred (D-25-06). SNM-37 text + ROADMAP SC#1 amended in lockstep (D-25-03). Gates SNM-38 (25-02) + SNM-39 (25-03). -- Plan 25-01.
-- [Phase ?]: [Phase 25]: SNM-38 (G-MIL-03 indent ladder) REFUTED by pre-tui byte evidence (D-25-09): notify() emits the catalog-conformant 0/2/4 ladder at ctx.ui.notify (captured indents [0,2,2,2,2,4,0,0,2]); the observed 1/3 visual is a markdown/tui display-layer artifact, not a renderer deviation. Recorded as a docs/output-catalog.md Indentation-discipline clarification + a tests/shared/snm38-indent-ladder.test.ts readability lock (on top of the catalog-uat byte-equality gate). Anchored on notify.ts constants, NOT the UAT 2/4 truth-line misquote. -- Plan 25-02.
+- [Phase 25]: SNM-38 (G-MIL-03 indent ladder) REFUTED by pre-tui byte evidence (D-25-09): notify() emits the catalog-conformant 0/2/4 ladder at ctx.ui.notify (captured indents [0,2,2,2,2,4,0,0,2]); the observed 1/3 visual is a markdown/tui display-layer artifact, not a renderer deviation. Recorded as a docs/output-catalog.md Indentation-discipline clarification + a tests/shared/snm38-indent-ladder.test.ts readability lock (on top of the catalog-uat byte-equality gate). Anchored on notify.ts constants, NOT the UAT 2/4 truth-line misquote. -- Plan 25-02.
 - [Phase 25]: SNM-39 (G-MIL-07 tab completion) DEFER-WITH-FINDING (D-25-10): our provider is correct (TC-6 `update @` -> `["@mp-a","@mp-b"]` GREEN; cause (a) eliminated by v0.2.0 source-load, cause (c) ruled out). Root cause is cause (b) -- host-side `@`-precedence in the GLOBAL `@earendil-works/pi-tui` 0.76.0 that scripts/pi.sh execs (`@`-logic byte-identical to local 0.74.2): `CombinedAutocompleteProvider.getSuggestions:188` checks `extractAtPrefix:191`/`:331` against `PATH_DELIMITERS:6` (no `@`) and routes any `@`-leading token to file-mention completion BEFORE the slash branch `:205`, so our `getArgumentCompletions` is never reached for bare `update @`. LIVE scripts/pi.sh trigger (D-25-08) showed FILE PATHS (not `@<mp>` candidates) -> CONFIRMS the interception (D-25-05 real-home spot-check not triggered). pi-tui-external; defer, do NOT contort the provider (would degrade bare-`@<mp>` UX without fixing the host). Recorded in UAT + a finding comment above TC-6 (provider.test.ts:793). -- Plan 25-03.
 - [Roadmap v1.8]: 3-phase split (42-44) created by `gsd-roadmapper` 2026-06-03. All 8 INFO-* requirements mapped: INFO-04 + INFO-08 -> Phase 42 (Type Model & Render Seam Foundations -- MarketplaceInfoMessage/PluginInfoMessage variants + wrapDescription helper + new `not added` REASON in one atomic commit per v1.3 supersession lesson); INFO-01 + INFO-03 + INFO-06 + INFO-07 -> Phase 43 (Marketplace Info Command -- handler/orchestrator/TC-5 completion/catalog states+UAT for marketplace info; first phase to deliver per-scope rendering end-to-end, completion plumbing, and catalog UAT entries); INFO-02 + INFO-05 -> Phase 44 (Plugin Info Command -- handler/orchestrator/install-cascade form/wrap-at-col-66 description/TC-6 info mode/components: not resolved marker). Each requirement assigned to ONE phase via the first-phase-that-could-deliver rule; cross-cutting INFO-03/06/07 anchored to Phase 43 because that's where they first become user-observable end-to-end. Phase boundaries respect the v1.3 atomic-supersession lesson by colocating the REASONS extension (INFO-08) with its first catalog state usage (INFO-04) in Phase 42's single commit.
 - [Roadmap v1.6]: 7-phase split (30-36) from research build-order A-G: Phase 30 (A) duplicate GitCredentials type fix (AUTH-10); Phase 31 (B) platform/git-credential.ts + CredentialOps interface (AUTH-06/08/09); Phase 32 (C) domain/github-auth.ts Device Flow state machine with injectable HTTP seam (AUTH-01..05/07); Phase 33 (D) platform/git.ts buildAuthCallbacks + authAttempted guard (AUTH-01/02); Phase 34 (E) GitOps interface threading through shared.ts + DEFAULT_GIT_OPS + refreshGitHubClone (AUTH-01/02); Phase 35 (F) orchestrator call sites add.ts + update.ts + output catalog Device Flow prompt (AUTH-01/02/03); Phase 36 (G) integration gate -- npm run check GREEN, all failure paths tested (all AUTH). No npm runtime deps added. Two new files: platform/git-credential.ts, domain/github-auth.ts.
@@ -185,6 +166,7 @@ None yet.
 | 260525-cjr | Apply PR #22 review fixes: 5 comment fixes, 2 silent-failure catches, declaresAgents/Mcp required, 4 narrowReason migrations, drift architecture test, plus 10 polish items               | 2026-05-25 | c79b6bc |          | [260525-cjr-apply-pr-22-review-fixes-5-comment-fixes](./quick/260525-cjr-apply-pr-22-review-fixes-5-comment-fixes/) |
 | 260530-7pk | Fix PR #22 review findings: 4 failing CI tests reconciled to V2 output, bootstrap/marketplace error diagnostics surfaced (IL-2/AS-7), comment-rot sweep, reasons-type tightening + resolver dedup, MAX_DEPTH cause-chain tests, NFR-4 Node floor to >=20.19.0, PRD PU-4/AS-6 leak policy | 2026-05-30 | 015e8f6 |          | [260530-7pk-fix-pr-22-review-findings-failing-tests-](./quick/260530-7pk-fix-pr-22-review-findings-failing-tests-/) |
 | 260530-fast | Resolve 4 SonarCloud code smells on PR #22 (S3735 void operator, S1871 duplicate case, S3626 redundant jump, S7755 .at indexing); coverage deferred | 2026-05-30 | a36988d |          | (inline /gsd-fast, no task dir) |
+| 260605-tmr | Reconcile v1.8 shipped state (STATE.md frontmatter/body/session-continuity) and prune resolved v1.4-UAT section from BACKLOG.md | 2026-06-05 | 0a11ba3 | Verified | [260605-tmr-reconcile-v1-8-shipped-state-and-prune-s](./quick/260605-tmr-reconcile-v1-8-shipped-state-and-prune-s/) |
 
 ## Deferred Items
 
@@ -214,9 +196,9 @@ Additional v1.4.1-scope deferrals:
 
 ## Session Continuity
 
-Last session: 2026-06-03T00:00:00.000Z
-Stopped At: v1.8 roadmap created
-Resume File: .planning/ROADMAP.md (Phase 42 next)
+Last session: 2026-06-05T00:00:00.000Z
+Stopped At: v1.8 milestone shipped (PR #36 merged)
+Resume File: none -- start the next milestone with /gsd-new-milestone
 
 ## Operator Next Steps
 

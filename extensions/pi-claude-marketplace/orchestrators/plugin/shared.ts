@@ -1,6 +1,6 @@
 // extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts
 //
-// Phase 5 shared helpers for the plugin orchestrator family. Mirrors
+// Shared helpers for the plugin orchestrator family. Mirrors
 // orchestrators/marketplace/shared.ts in spirit: pure-function helpers
 // that the install / update / uninstall / list orchestrators import to
 // satisfy a single named requirement.
@@ -168,7 +168,7 @@ export async function resolveInstalledMarketplaceTarget(opts: {
  * PI-7 / PUP-3 / SNM-34 version precedence (3 tiers, highest first):
  *   1. The plugin's own `<pluginRoot>/.claude-plugin/plugin.json` `version`
  *      (D-23-01: "If also set in the marketplace entry, `plugin.json` wins.").
- *   2. The marketplace `entry.version` (formerly tier 1; moved below plugin.json).
+ *   2. The marketplace `entry.version`.
  *   3. The PI-7 `computeHashVersion` content hash, as a last resort.
  *
  * Each declared `version` is accepted iff it is a non-empty string (the same
@@ -279,7 +279,7 @@ function collectConflicts(
  * stable ordering means UI diff tooling (and tests) can assert message
  * content byte-for-byte.
  *
- * Cross-scope independence (Phase 2 D-10): the caller passes exactly one
+ * Cross-scope independence (D-10): the caller passes exactly one
  * scope's state. Other-scope plugins owning the same name do NOT trigger
  * conflicts here -- they are independent installations. The `scope`
  * parameter is retained for diagnostic-message enrichment and symmetry

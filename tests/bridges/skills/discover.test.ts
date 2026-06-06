@@ -18,7 +18,7 @@ function makeResolved(
   pluginRoot: string,
   skillsDirAbs: string | undefined,
 ): ResolvedPluginInstallable {
-  // D-07: componentPaths.skills is now `readonly string[]`. Tests pass the
+  // D-07: componentPaths.skills is `readonly string[]`. Tests pass the
   // absolute fixture dir directly (verbatim element); the bridge accepts
   // both absolute and relative-to-pluginRoot elements.
   return {

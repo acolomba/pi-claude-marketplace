@@ -79,5 +79,5 @@ export function makeListHandler(
   };
 }
 
-// Export for potential reuse by completions provider in Plan 06-03.
+// Export for potential reuse by completions provider.
 export { BOOLEAN_FLAGS };

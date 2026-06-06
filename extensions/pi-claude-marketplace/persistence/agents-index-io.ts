@@ -1,25 +1,21 @@
 // persistence/agents-index-io.ts
 //
-// AG-2 / AG-4 / D-07: load + save for agents-index.json. Mirrors the
-// Phase 2 state-io.ts structural template -- ENOENT-on-missing returns
-// an empty index, file-level corruption throws, per-row corruption
+// AG-2 / AG-4 / D-07: load + save for agents-index.json. ENOENT-on-missing
+// returns an empty index, file-level corruption throws, per-row corruption
 // drops the row + accumulates messages into corruptions[] for the
 // caller to surface (IL-3 sanctioned warn path).
 //
-// AG-4 discipline (verbatim from 03-PATTERNS.md lines 707-748):
+// AG-4 discipline:
 //   File-level (parse fail / missing schemaVersion / schemaVersion ≠ 1
 //                / missing or non-array `agents` field) -> THROW.
 //   Per-row (TypeBox Check fails on a single row) -> DROP row, push
 //                                                    corruption message.
 //
-// Wire field name `agents:` is preserved from V1; see agents-index-schema.ts
-// for the rationale and AGENTS_INDEX_VALIDATOR rejection of `entries:`.
+// Wire field name `agents:`; see agents-index-schema.ts for the rationale
+// and AGENTS_INDEX_VALIDATOR rejection of `entries:`.
 //
 // IMPLEMENTATION NOTE: this module derives the on-disk path from
-// `loc.extensionRoot` rather than `loc.agentsIndexPath` to avoid
-// coupling to Plan 03-01's parallel-wave ScopedLocations extension.
-// Once 03-01 merges, a trivial follow-up can swap in `loc.agentsIndexPath`
-// directly. See SUMMARY.md "Open Questions" for tracking.
+// `loc.extensionRoot` rather than `loc.agentsIndexPath`.
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -40,7 +36,7 @@ import type { ScopedLocations } from "./locations.ts";
  * In-memory shape returned by loadAgentsIndex.
  *
  * Adds `corruptions` -- a frozen, per-row warning list the caller
- * surfaces via warnings[] in the bridge CommitResult (Plan 03-05).
+ * surfaces via warnings[] in the bridge CommitResult.
  *
  * `corruptions` is NOT persisted. saveAgentsIndex accepts AgentsIndex
  * (the on-disk shape), not LoadedAgentsIndex.
@@ -80,7 +76,7 @@ function firstEntryErrorDetail(value: unknown): string {
  *
  * Returned arrays are frozen so the caller cannot accidentally mutate
  * the loaded view (defense-in-depth around the AG-3 cross-owner
- * preservation invariant in Plan 03-05).
+ * preservation invariant).
  */
 export async function loadAgentsIndex(loc: ScopedLocations): Promise<LoadedAgentsIndex> {
   const indexPath = agentsIndexPathFor(loc);
@@ -151,10 +147,9 @@ export async function loadAgentsIndex(loc: ScopedLocations): Promise<LoadedAgent
  * AG-2 / NFR-1: save agents-index.json atomically.
  *
  * Validates the full document against AGENTS_INDEX_VALIDATOR before
- * write -- refuses on schema violation rather than persisting bad data
- * (mirrors Phase 2 saveState pre-write Check, state-io.ts line 212).
+ * write -- refuses on schema violation rather than persisting bad data.
  * The atomic write itself goes through `atomicWriteJson`, which uses
- * write-file-atomic@^7 (tmp + fsync + rename + concurrent-write queue).
+ * write-file-atomic (tmp + fsync + rename + concurrent-write queue).
  */
 export async function saveAgentsIndex(loc: ScopedLocations, index: AgentsIndex): Promise<void> {
   if (!AGENTS_INDEX_VALIDATOR.Check(index)) {

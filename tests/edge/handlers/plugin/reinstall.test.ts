@@ -1,4 +1,4 @@
-// Plan 09-02 Task 1: reinstall handler shim tests.
+// reinstall handler shim tests.
 //
 // Reinstall mirrors update's three target forms but adds a command-specific
 // `--force` flag. These tests verify the thin edge parser reaches the bulk
@@ -147,12 +147,8 @@ test("shim :: bare reinstall with no positional calls reinstallPlugins target al
     await handler("", ctx);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]?.severity, undefined);
-    // Plan 19-04 / D-19-02 byte change: V2 empty-targets renders as the
-    // `(no marketplaces)` sentinel via `{ marketplaces: [] }`. V1's
-    // `(no plugins)` empty-row form is RETIRED -- V2's structural shape
-    // carries no "(no plugins)" sentinel at the top-level / standalone-
-    // cascade boundary; the closest analog is the list-surface
-    // `(no marketplaces)` rendering at docs/output-catalog.md:139-145.
+    // D-19-02: empty-targets renders as the
+    // `(no marketplaces)` sentinel via `{ marketplaces: [] }`.
     assert.equal(notifications[0]?.message ?? "", "(no marketplaces)");
   });
 });
@@ -187,8 +183,8 @@ test("shim :: --scope works before and after reinstall ref", async () => {
     const first = makeCtx(cwd);
     await handler("--scope project", first.ctx);
     assert.equal(first.notifications.length, 1);
-    // Plan 19-04 / D-19-02 byte change: empty-targets renders as
-    // `(no marketplaces)` per the V2 structural shape (see test
+    // D-19-02: empty-targets renders as
+    // `(no marketplaces)` per the structural shape (see test
     // `shim :: bare reinstall ...` above for details).
     assert.equal(first.notifications[0]?.message ?? "", "(no marketplaces)");
     assert.doesNotMatch(first.notifications[0]?.message ?? "", /Usage: \/claude:plugin reinstall/);
@@ -196,10 +192,10 @@ test("shim :: --scope works before and after reinstall ref", async () => {
     const second = makeCtx(cwd);
     await handler("myplug@mymkt --scope project", second.ctx);
     assert.equal(second.notifications.length, 1);
-    // Plan 19-04 / D-19-02: skipped row in plugins[] tips severity to
+    // D-19-02: skipped row in plugins[] tips severity to
     // `warning` per D-16-11 (notify() content-derived ladder).
     assert.equal(second.notifications[0]?.severity, "warning");
-    // V2 cascade row carries `(skipped) {not installed}`; per-row scope
+    // Cascade row carries `(skipped) {not installed}`; per-row scope
     // orphan-folded (matches marketplace scope).
     assert.match(
       second.notifications[0]?.message ?? "",
@@ -219,11 +215,11 @@ test("shim :: --force works before and after reinstall ref", async () => {
     const handler = makeReinstallHandler(makePi());
     const defaultAttempt = makeCtx(cwd);
     await handler("hello@mp --scope project", defaultAttempt.ctx);
-    // Plan 19-04 / D-19-02: V2 cascade with a failed row tips severity
+    // D-19-02: a cascade with a failed row tips severity
     // to `error` per D-16-11 (notify() content-derived ladder; failed
-    // beats warning in first-match order). The V1 MSG-SR-6 ban on
-    // `notifyError` for cascade summaries is GONE -- V2 owns severity
-    // from contents. The per-row reason is derived structurally via the
+    // beats warning in first-match order). Per MSG-SR-6, severity is
+    // owned by the cascade contents. The per-row reason is derived
+    // structurally via the
     // failed outcome's `failureClass` tag (set by the orchestrator catch
     // when the bridge throws a ManualRecoveryError); in THIS scenario
     // (`replacePreparedAgents` rejects foreign content before any backup
@@ -240,7 +236,7 @@ test("shim :: --force works before and after reinstall ref", async () => {
       forceAfter.notifications.some((n) => n.severity === "error"),
       false,
     );
-    // Plan 19-04 / D-19-02: V2 single-plugin reinstall success renders as
+    // D-19-02: single-plugin reinstall success renders as
     // a 1-row cascade carrying PluginReinstalledMessage; per-row scope
     // orphan-folded (matches marketplace scope).
     assert.match(

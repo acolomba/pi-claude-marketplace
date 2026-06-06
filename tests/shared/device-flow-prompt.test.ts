@@ -3,7 +3,7 @@
 // Byte-form lock for the AUTH-03 Device Flow user-code prompt.
 //
 // The prompt is the out-of-band ctx.ui.notify call emitted by
-// initiateDeviceFlow (domain/github-auth.ts:385) after a successful
+// initiateDeviceFlow (domain/github-auth.ts) after a successful
 // POST /login/device/code and before the poll loop starts. The catalog
 // documents the byte form at `docs/output-catalog.md`'s
 // `## Out-of-band notifications` -> `### Device Flow user-code prompt`
@@ -11,7 +11,7 @@
 // initiateDeviceFlow with a fully-controlled mock http + mock
 // credentialOps + a recording notifyFn, then asserts the EXACT prompt
 // string + severity match the catalog byte form. Any change to the
-// emission string at github-auth.ts:385 requires a lockstep update of
+// emission string in github-auth.ts requires a lockstep update of
 // BOTH the catalog AND this test (mirrors the
 // tests/shared/snm38-indent-ladder.test.ts contract).
 //
@@ -81,7 +81,7 @@ test("Phase 35 AUTH-03: Device Flow prompt byte form matches docs/output-catalog
   // Any change here requires a lockstep edit of:
   //   docs/output-catalog.md -> ## Out-of-band notifications ->
   //     ### Device Flow user-code prompt (catalog-state: device-flow-prompt)
-  //   extensions/pi-claude-marketplace/domain/github-auth.ts:385
+  //   extensions/pi-claude-marketplace/domain/github-auth.ts
   assert.equal(
     promptCall.message,
     "Open https://github.com/login/device and enter: ABCD-1234",
@@ -89,7 +89,7 @@ test("Phase 35 AUTH-03: Device Flow prompt byte form matches docs/output-catalog
   );
 
   // SEVERITY LOCK: the severity arg MUST be "info" per the catalog
-  // and the emission site (github-auth.ts:385).
+  // and the emission site (github-auth.ts).
   assert.equal(promptCall.severity, "info", 'AUTH-03 severity lock: severity must be "info"');
 });
 

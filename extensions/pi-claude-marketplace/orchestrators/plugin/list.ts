@@ -5,7 +5,7 @@
 // The orchestrator reads BOTH scopes' state (user + project) regardless of
 // which scope the caller requested, computes the orphan-fold per
 // D-13-17..D-13-19, and constructs a `NotificationMessage` of
-// `MarketplaceNotificationMessage`s for the V2 renderer at
+// `MarketplaceNotificationMessage`s for the renderer at
 // `shared/notify.ts`. The fold rule:
 //   - For each marketplace `<mp>` that exists in PROJECT scope: emit a
 //     `<mp>[project]` header block with the plugins installed under that
@@ -23,7 +23,7 @@
 //
 // CMC-13 / MSG-SD-1..3 per-row soft-dep markers: each installed-variant
 // `PluginPresentMessage` carries `dependencies: readonly Dependency[]`
-// derived from the plugin's installed resources (state-recorded). V2's
+// derived from the plugin's installed resources (state-recorded).
 // `notify` owns the single softDepStatus(pi) probe per call
 // and emits the `{requires pi-subagents}` / `{requires pi-mcp}` markers
 // when (declares AND companion unloaded). UAT G-21-01 (SNM-15 surface
@@ -32,7 +32,7 @@
 // installed token, so `shouldEmitReloadHint` does NOT fire the
 // `/reload to pick up changes` trailer on plain list invocations.
 //
-// Contract (from PRD §5.3.1 + Plan 05-08, preserved):
+// Contract (from PRD §5.3.1):
 //   - PL-1 filter union semantics: when NO filter flags (--installed /
 //     --available / --unavailable) are set, every bucket is shown. When any
 //     one flag is set, show UNION of selected buckets.
@@ -43,7 +43,7 @@
 //   - PL-6 manifest soft-fail: per-marketplace manifest load failure
 //     surfaces as a `(failed)` MarketplaceNotificationMessage with
 //     `status: "failed"` and `plugins: []`. No marketplace-level cause
-//     trailer in V2 (catalog `unparseable-mp` at docs/output-catalog.md:
+//     trailer (catalog `unparseable-mp` at docs/output-catalog.md:
 //     215-226). Installed plugins still render under their normal header
 //     when the manifest parses.
 //
@@ -80,7 +80,7 @@ import type { Scope } from "../../shared/types.ts";
 /**
  * PluginRenderStatus retained as an internal alias to keep the orchestrator's
  * bucketing logic (present / upgradable / available / unavailable) typed.
- * Maps 1:1 onto the V2 PluginNotificationMessage list-surface discriminator
+ * Maps 1:1 onto the PluginNotificationMessage list-surface discriminator
  * subset per shared/notify.ts. UAT G-21-01: the installed bucket emits the
  * list-only `present` token instead of the cascade-context `installed`
  * token so `shouldEmitReloadHint` does not misfire on steady-state list
@@ -90,10 +90,10 @@ import type { Scope } from "../../shared/types.ts";
 type PluginRenderStatus = "present" | "upgradable" | "available" | "unavailable";
 
 /**
- * Options bag for {@link listPlugins}. Phase 6 edge layer constructs this
+ * Options bag for {@link listPlugins}. The edge layer constructs this
  * from `/claude:plugin list` argv parsing.
  *
- * `pi` is REQUIRED -- the V2 `notify(ctx, pi, message)` call consumes it
+ * `pi` is REQUIRED -- the `notify(ctx, pi, message)` call consumes it
  * for the single softDepStatus(pi) probe per invocation. The
  * renderer derives per-row soft-dep markers from each
  * `PluginPresentMessage.dependencies` field plus the probe result.
@@ -197,7 +197,7 @@ function dependenciesFromDeclares(declaresAgents: boolean, declaresMcp: boolean)
  * from the installed record's `resources` (state-recorded counts).
  *
  * `pluginScope`: the actual install scope of this plugin record. Passed
- * through to the V2 row only when it differs from the owning marketplace's
+ * through to the row only when it differs from the owning marketplace's
  * scope -- the renderer's MSG-PL-6 orphan-fold rule suppresses
  * the `[<scope>]` bracket when `p.scope === mp.scope`.
  *
@@ -236,9 +236,8 @@ function installedRowMessage(
     manifestEntry?.description === undefined ? {} : { description: manifestEntry.description };
 
   if (upgradable) {
-    // V1 emitted (upgradable) rows WITHOUT a typed reason brace; the V2
-    // PluginUpgradableMessage type structurally requires `reasons` per
-    // D-15-01. Use the empty-array sentinel -- the renderer's
+    // The PluginUpgradableMessage type structurally requires `reasons`
+    // per D-15-01. Use the empty-array sentinel -- the renderer's
     // composeReasons helper returns "" for an empty reasons array, so the
     // emitted byte form remains `● <name> [<scope>] v<ver> (upgradable)`
     // without a trailing `{...}` brace.
@@ -278,7 +277,7 @@ function narrowProbeError(err: unknown): ListReason {
 }
 
 /**
- * Resolve a not-yet-installed manifest entry into a V2
+ * Resolve a not-yet-installed manifest entry into a
  * `PluginAvailableMessage` or `PluginUnavailableMessage`.
  *
  * `resolveStrict` succeeds + `installable: true` -> `(available)`; the
@@ -293,8 +292,7 @@ function narrowProbeError(err: unknown): ListReason {
  * via `narrowProbeError` into a closed-set Reason and threaded onto the
  * `(unavailable)` row's `reasons` array. The user sees the cause CLASS on
  * the per-row line -- there is NO separate trailing summary notification
- * per D-19-01 (the V1 probe-failure capture-buffer and its drain warning
- * are removed in this plan).
+ * per D-19-01.
  */
 async function availableRowMessage(
   manifestEntry: MarketplaceManifest["plugins"][number],
@@ -327,21 +325,15 @@ async function availableRowMessage(
     // TR-08 / D-19-01: per-row probe-failure narrowing. Probe failures
     // during list are diagnostic noise, NOT actionable user errors --
     // the user sees the cause class on the `(unavailable)` row's
-    // `reasons[]` and decides whether to act. The V1 PROBE_FAILURES
-    // module-level capture-buffer + summary `notifyWarning` was retired
-    // by Plan 19-03 (the buffer had no other consumer; the summary was
-    // redundant with the per-row signal).
+    // `reasons[]` and decides whether to act. There is no module-level
+    // capture-buffer or summary warning.
     //
-    // Historical: the previous implementation routed EVERY throw through
-    // `narrowResolverNotes`, which only recognises the strings `hooks`
-    // and `lspServers` and silently degrades everything else to
-    // `{unsupported source}`. That hid EACCES, JSON parse failures,
-    // and programming bugs behind a misleading reason. Route resolver
-    // notes through `narrowResolverNotes` (the path that produces them
-    // is `resolveStrict` returning NotInstallable with structured notes
-    // -- already handled above on the `installable === false` branch),
-    // and route thrown probe failures through `narrowProbeError` so the
-    // row reports the actual cause class.
+    // Resolver notes route through `narrowResolverNotes` (the path that
+    // produces them is `resolveStrict` returning NotInstallable with
+    // structured notes -- handled above on the `installable === false`
+    // branch); thrown probe failures route through `narrowProbeError` so
+    // the row reports the actual cause class (EACCES, JSON parse failures,
+    // and programming bugs are not hidden behind `{unsupported source}`).
     //
     // TR-08 architecture test at tests/orchestrators/plugin/list.test.ts
     // asserts no module-level `PROBE_FAILURES`-style state may reappear.
@@ -365,7 +357,7 @@ async function availableRowMessage(
  * `mpRecord` is the marketplace record from `<pluginScope>`'s state;
  * `pluginScope` is the scope under which the plugins are installed (the
  * `[<scope>]` bracket on each plugin row reflects this -- D-13-18 -- via
- * the V2 renderer's orphan-fold rule).
+ * the renderer's orphan-fold rule).
  *
  * `marketplaceScope` is the scope of the OWNING marketplace block. When
  * `pluginScope === marketplaceScope` the plugin row OMITS its `scope`
@@ -498,9 +490,9 @@ async function buildMarketplaceMessage(args: {
   const { opts, mpName, mpScope, mpRecord, extraPlugins, excludeFromAvailable } = args;
   const { manifest, loadError } = await loadMarketplaceManifestSoftly(mpRecord);
 
-  // Unparseable manifest: V2 catalog `unparseable-mp` form (lines 215-226)
-  // -- bare `(failed)` marketplace header with `plugins: []`. The V1
-  // `causeTrailer` is DROPPED per the catalog "notify() does not emit a
+  // Unparseable manifest: catalog `unparseable-mp` form (lines 215-226)
+  // -- bare `(failed)` marketplace header with `plugins: []`. No
+  // `causeTrailer` per the catalog "notify() does not emit a
   // marketplace-level cause: trailer for failed marketplaces with empty
   // plugins: []" contract. The autoupdate detail also drops on failure --
   // the renderer's failed-status arm at shared/notify.ts:593 emits a
@@ -528,19 +520,16 @@ async function buildMarketplaceMessage(args: {
   );
   const merged: readonly PluginNotificationMessage[] = [...ownPlugins, ...extraPlugins];
 
-  // `details` is OPTIONAL and INDEPENDENT of status per D-15-06. The V1
-  // plugin-list surface only carried the `autoupdate` marker via
-  // `MarketplaceRow.marker` (see the V1 `makeMarketplaceHeader` at
-  // orchestrators/plugin/list.ts pre-Plan-19-03); `lastUpdatedAt` was
-  // NOT surfaced on the plugin-list rendering (it lives on the
-  // marketplace-list surface only). Per the plan's "no expansion of
-  // detail surface in Phase 19" guard (19-03-PLAN.md must_haves), V2
-  // mirrors this: include `details` ONLY when `autoupdate === true`,
-  // and inside `details` carry ONLY `autoupdate`. `lastUpdatedAt` is
-  // intentionally omitted so the renderer's `<last-updated <iso>>`
-  // token never emits on this surface. Catalog reference: every
-  // `/claude:plugin list` fixture at docs/output-catalog.md:139-263
-  // has `details: { autoupdate: true }` -- no `lastUpdatedAt` field.
+  // `details` is OPTIONAL and INDEPENDENT of status per D-15-06. The
+  // plugin-list surface carries only the `autoupdate` marker;
+  // `lastUpdatedAt` is NOT surfaced on the plugin-list rendering (it lives
+  // on the marketplace-list surface only). Include `details` ONLY when
+  // `autoupdate === true`, and inside `details` carry ONLY `autoupdate`.
+  // `lastUpdatedAt` is intentionally omitted so the renderer's
+  // `<last-updated <iso>>` token never emits on this surface. Catalog
+  // reference: every `/claude:plugin list` fixture at
+  // docs/output-catalog.md:139-263 has `details: { autoupdate: true }` --
+  // no `lastUpdatedAt` field.
   const detailsField: { readonly details?: { autoupdate: boolean } } =
     mpRecord.autoupdate === true ? { details: { autoupdate: true } } : {};
 
@@ -556,7 +545,7 @@ async function buildMarketplaceMessage(args: {
 }
 
 /**
- * Plan 06-04 D-02 extraction: pure payload builder for the cross-scope
+ * D-02: pure payload builder for the cross-scope
  * plugin list. Reads BOTH scopes' state regardless of `opts.scope` -- the
  * fold rule needs visibility into both; final scope-filtering applies AFTER
  * the blocks are constructed.
@@ -632,16 +621,13 @@ export async function loadPluginListPayload(
         "user",
         manifest,
       );
-      // UAT G-21-01: after the inventory-vs-transition discriminator split,
-      // `installedRowMessage` emits `status: "present"` (list-only) for the
-      // steady-state inventory row, not the cascade-context `"installed"`
-      // token. The carry-over filter MUST discriminate on `"present"` (plus
-      // the unchanged `"upgradable"` arm) so orphan-folded rows survive.
-      // The prior `r.status === "installed"` half of the predicate was
-      // structurally unreachable post-split and silently dropped every
-      // folded inventory row (CR-01 / 21-04-REVIEW.md). The integration
-      // regression for this fold lives at tests/integration/fold-adoption.test.ts
-      // phase 2; the orchestrator-level reproduction is in
+      // UAT G-21-01: `installedRowMessage` emits `status: "present"`
+      // (list-only) for the steady-state inventory row, not the
+      // cascade-context `"installed"` token. The carry-over filter MUST
+      // discriminate on `"present"` (plus the `"upgradable"` arm) so
+      // orphan-folded rows survive (CR-01). The integration regression for
+      // this fold lives at tests/integration/fold-adoption.test.ts; the
+      // orchestrator-level reproduction is in
       // tests/orchestrators/plugin/list.test.ts ("CR-01 / G-21-01 fold-carryover...").
       folded = projectSideRows.filter((r) => r.status === "present" || r.status === "upgradable");
       // Record the folded plugin names so the user-scope manifest's
@@ -727,10 +713,10 @@ function sortPluginsInBlock(
   // is the only safe access path under TS strict. UAT G-21-01: the list
   // orchestrator emits `present` (list-only inventory token) for
   // steady-state inventory rows; `installed` is the cascade-context
-  // transition token. WR-02 (21-04-REVIEW.md): keep `installed` in the
-  // scope-bearing arm alongside `present` / `upgradable`. The body
+  // transition token. WR-02: keep `installed` in the scope-bearing arm
+  // alongside `present` / `upgradable`. The body
   // `return p.scope ?? marketplaceScope` is correct for both the
-  // (post-fix) unreachable list-surface case AND any future regression
+  // unreachable list-surface case AND any future regression
   // that re-routes a cascade-context `installed` row through the list
   // orchestrator -- the cross-scope orphan-fold scope on a
   // `PluginInstalledMessage` (SNM-11 / D-13-18) is preserved instead of
@@ -794,9 +780,9 @@ function narrowListFailReason(err: unknown): ListReason {
 
 /**
  * D-06 orchestrator entrypoint. Read-only listing of plugins. Constructs
- * the V2 `NotificationMessage` payload inline and forwards it to a single
+ * the `NotificationMessage` payload inline and forwards it to a single
  * `notify(ctx, pi, message)` call per orchestration arm (success or
- * failure). V2's `notify()` owns the single softDepStatus(pi) probe per
+ * failure). `notify()` owns the single softDepStatus(pi) probe per
  * invocation and emits per-row `{requires pi-subagents}` /
  * `{requires pi-mcp}` markers when (declares AND companion unloaded).
  */
@@ -804,7 +790,7 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
   const { ctx, pi } = opts;
   try {
     const marketplaces = await loadPluginListPayload(opts);
-    // V2 notify() call mirrors the Plan 19-01 pilot recipe at
+    // notify() call mirrors the recipe at
     // orchestrators/plugin/uninstall.ts; list.ts substitutes the
     // list-surface plugin variants (available / unavailable / upgradable
     // / installed) per D-19-02. Severity (info; omitted 2nd arg) and
@@ -815,10 +801,10 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
     notify(ctx, pi, { marketplaces });
   } catch (err) {
     // Aggregate list-failure path. The list surface has no dedicated
-    // catalog state for orchestrator-level failure (D-19-03 Claude's
-    // Discretion per Plan 19-03 step 4 Option B): construct a synthetic
+    // catalog state for orchestrator-level failure (D-19-03 Option B):
+    // construct a synthetic
     // `MarketplaceNotificationMessage` carrying a single
-    // `PluginFailedMessage` so the V2 renderer's 4-space-indent cause
+    // `PluginFailedMessage` so the renderer's 4-space-indent cause
     // chain surfaces the diagnostic verbatim. Severity is
     // computed as "error" by notify (any failed plugin row
     // -> error); no reload-hint (failed is not in the
@@ -840,15 +826,12 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
       cause,
     };
     const mp: MarketplaceNotificationMessage = {
-      // WR-03: the V1 synthetic marketplace name `"(list)"` rendered as
-      // `● (list) [user]` -- visually indistinguishable from a real
-      // marketplace called "(list)". The current
-      // `MarketplaceNotificationMessage` shape does not support a
-      // failure-trailer channel separate from the marketplace-row form,
-      // so keep the synthetic placeholder but use a more conspicuously-
-      // synthetic name (mirrors the `(reinstall)` / `(targets)` precedent
-      // in reinstall.ts / update.ts). The cause-chain trailer carries
-      // the actual diagnostic text via the failedRow's `cause` field.
+      // WR-03: the `MarketplaceNotificationMessage` shape does not support
+      // a failure-trailer channel separate from the marketplace-row form,
+      // so use a conspicuously-synthetic placeholder name (mirrors the
+      // `(reinstall)` / `(update)` precedent in reinstall.ts / update.ts).
+      // The cause-chain trailer carries the actual diagnostic text via the
+      // failedRow's `cause` field.
       name: SYNTHETIC_LIST_FAILURE_MARKETPLACE_NAME,
       scope: opts.scope ?? "user",
       plugins: [failedRow],
@@ -861,7 +844,7 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
  * WR-03: synthetic identities used by the list-orchestration catch path.
  * Held as module-level constants so tests can assert against them and
  * future changes are gated behind a single edit point. Both render under
- * the V2 cascade grammar as parens-wrapped tokens -- the renderer does
+ * the cascade grammar as parens-wrapped tokens -- the renderer does
  * not special-case parens, so the visual marker reads as "synthetic
  * placeholder" to an operator scanning output.
  */

@@ -187,10 +187,9 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
 // ──────────────────────────────────────────────────────────────────────────
 
 test("CMC-10: empty state in both scopes renders V2 `(no marketplaces)` sentinel", async () => {
-  // V1->V2 byte change: V1 emitted `(no plugins)` for an empty list; V2
-  // emits `(no marketplaces)` because the top-level
+  // Emits `(no marketplaces)` because the top-level
   // `marketplaces: []` array is the structural empty sentinel
-  // (D-16-17 / shared/notify.ts:1158). Catalog reference:
+  // (D-16-17). Catalog reference:
   // docs/output-catalog.md:139-145 -- `<!-- catalog-state: empty -->`.
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, pi, notifications } = makeCtx();
@@ -231,17 +230,15 @@ test("PL-1: no flags = every bucket (installed, available, unavailable)", async 
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     assert.equal(notifications.length, 1);
     const out = notifications[0]!.message;
-    // V1->V2 byte form: per D-16-17 / shared/notify.ts:719 orphan-fold rule
-    // the renderer suppresses `[<scope>]` on a plugin row when
-    // `p.scope === mp.scope`. Here mp.scope and the installed plugin's
-    // scope are both "user", so the bracket is omitted on the alpha row.
+    // Per D-16-17 orphan-fold rule the renderer suppresses `[<scope>]`
+    // on a plugin row when `p.scope === mp.scope`. Here mp.scope and the
+    // installed plugin's scope are both "user", so the bracket is
+    // omitted on the alpha row.
     // SNM-11: `available` / `unavailable` rows never carry a `scope`
     // field by construction, so their brackets are always absent.
     // UAT G-21-01: list-surface inventory row emits no reload-hint
-    // trailer; the previous trailer was the misfire shouldEmitReloadHint
-    // produced because installedRowMessage emitted the cascade-context
-    // `status: "installed"` discriminator. Now it emits `status:
-    // "present"` (list-only) and the trailer is correctly absent.
+    // trailer; installedRowMessage emits `status: "present"` (list-only)
+    // so the trailer is correctly absent.
     assert.equal(
       out,
       [
@@ -276,7 +273,7 @@ test("PL-1: --installed alone shows only installed plugins", async () => {
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
     const out = notifications[0]!.message;
-    // V2: plugin.scope === mp.scope (both "user") -> bracket suppressed
+    // plugin.scope === mp.scope (both "user") -> bracket suppressed
     // per D-16-17. The installed alpha row is `● alpha v1.0.0 (installed)`,
     // not `● alpha [user] v1.0.0 (installed)`. The `[user]` marker
     // appears on the marketplace header only.
@@ -423,8 +420,8 @@ test("CMC-21 / D-13-17 / D-13-19: same-name marketplace in BOTH scopes renders T
     const projIdx = out.indexOf("● official [project]");
     const userIdx = out.indexOf("● official [user]");
     assert.ok(projIdx < userIdx, `expected project header first: ${out}`);
-    // V1->V2 byte form (catalog `same-plugin-both-scopes` at
-    // docs/output-catalog.md:168-182): the plugin scope equals each
+    // Catalog `same-plugin-both-scopes` at
+    // docs/output-catalog.md:168-182: the plugin scope equals each
     // marketplace block's scope, so the renderer's D-16-17 orphan-fold
     // rule SUPPRESSES the `[<scope>]` bracket on each row. Plugin rows
     // are `● alpha v0.9.0 (installed)` (under project header) and
@@ -437,7 +434,7 @@ test("CMC-21 / D-13-17 / D-13-19: same-name marketplace in BOTH scopes renders T
 });
 
 test("CR-01 / G-21-01: project-scope plugin under a CLONED user marketplace folds under the user-scope header (carry-over filter must discriminate on `present`)", async () => {
-  // Regression for 21-04-REVIEW.md CR-01 (closes the orphan-fold filter
+  // Regression for CR-01 (the orphan-fold filter
   // gap). Setup: seed a user-scope marketplace `mp1` AND a project-scope
   // marketplace `mp1` whose state record points at the SAME
   // `marketplaceRoot` directory -- this is the on-disk shape produced by
@@ -446,13 +443,10 @@ test("CR-01 / G-21-01: project-scope plugin under a CLONED user marketplace fold
   // marketplace. `isCloneOfUserMarketplace` returns true on
   // `marketplaceRoot` equality, which routes the project-side
   // enumeration through the orphan-fold filter at
-  // `loadPluginListPayload`. Pre-fix, that filter discriminated on the
-  // (now-unreachable) cascade-context `status: "installed"` arm and
-  // silently dropped every `status: "present"` row, re-emitting the
-  // plugin as `(available)` under the user header. Post-fix it
-  // discriminates on `"present"` (plus the unchanged `"upgradable"`
-  // arm), so the folded row appears under the user-scope header with
-  // the cross-scope `[project]` bracket per D-13-18 / D-16-17.
+  // `loadPluginListPayload`. That filter discriminates on
+  // `"present"` (plus the `"upgradable"` arm), so the folded row appears
+  // under the user-scope header with the cross-scope `[project]` bracket
+  // per D-13-18 / D-16-17.
   //
   // The integration counterpart for this regression is
   // tests/integration/fold-adoption.test.ts phase 2 (CMC-21 phase 2).
@@ -523,18 +517,16 @@ test("CR-01 / G-21-01: project-scope plugin under a CLONED user marketplace fold
     const out = notifications[0]!.message;
 
     // The orphan-fold row appears under the user-scope header with the
-    // cross-scope `[project]` bracket -- this is the assertion the
-    // CR-01 regression breaks pre-fix.
+    // cross-scope `[project]` bracket -- this is the CR-01 assertion.
     assert.match(
       out,
       /● mp1 \[user\][\s\S]*● alpha \[project\] v1\.0\.0 \(installed\)/,
       `expected orphan-folded alpha row under mp1 [user] header: ${out}`,
     );
 
-    // The duplicate `(available)` row that the pre-fix regression
-    // emitted (when the filter dropped the `present` row and the
-    // user-side enumeration re-emitted alpha from the manifest) MUST
-    // NOT appear under the user-scope block.
+    // The duplicate `(available)` row that would appear if the filter
+    // dropped the `present` row and the user-side enumeration re-emitted
+    // alpha from the manifest MUST NOT appear under the user-scope block.
     assert.equal(
       /● mp1 \[user\][\s\S]*○ alpha v1\.0\.0 \(available\)/.test(out),
       false,
@@ -616,7 +608,7 @@ test("PL-5: installed version differs from manifest version -> upgradable", asyn
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
-    // V1->V2 byte form: CMC-09 (upgradable) carries the ● effective-state
+    // CMC-09 (upgradable) carries the ● effective-state
     // icon. D-16-17: `[<scope>]` suppressed when `p.scope === mp.scope`.
     assert.match(out, /● plug v1\.0\.0 \(upgradable\)/);
     assert.equal(out.includes("● plug [user]"), false, out);
@@ -642,7 +634,7 @@ test("PL-5: installed version equals manifest version -> NOT upgradable", async 
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
-    // V1->V2: D-16-17 suppresses `[<scope>]` bracket on same-scope rows.
+    // D-16-17 suppresses `[<scope>]` bracket on same-scope rows.
     assert.match(out, /● plug v1\.0\.0 \(installed\)/);
     assert.equal(out.includes("● plug [user]"), false, out);
     assert.equal(out.includes("upgradable"), false);
@@ -677,17 +669,14 @@ test("PL-5: hash-* versions string-compare (any difference -> upgradable; NOT se
 // ──────────────────────────────────────────────────────────────────────────
 
 test("PL-6 / CMC-22: manifest load failure renders the marketplace as a bare V2 failed header (no `{unparseable}` brace; no cause trailer)", async () => {
-  // V1->V2 byte form (catalog `unparseable-mp` at
-  // docs/output-catalog.md:215-226): the V1 rendering surfaced
-  // `(failed) {unparseable}` plus a 2-space-indented `cause: <message>`
-  // trailer. V2 emits a BARE `(failed)` header (no reasons brace, no
-  // cause trailer) because the v2 type model places `cause?: Error`
-  // on plugin variants only -- not marketplace headers -- and the
-  // orchestrator constructs the unparseable mp with `status: "failed"`
-  // + `plugins: []` per the catalog reference. Severity: "error"
-  // computed by notify() per D-16-11 (any mp.status === "failed"
-  // routes to error). No reload-hint (failed is not in the
-  // state-changing variant set per D-16-12).
+  // Catalog `unparseable-mp` at docs/output-catalog.md:215-226: emits a
+  // BARE `(failed)` header (no reasons brace, no cause trailer) because
+  // the type model places `cause?: Error` on plugin variants only -- not
+  // marketplace headers -- and the orchestrator constructs the
+  // unparseable mp with `status: "failed"` + `plugins: []` per the
+  // catalog reference. Severity: "error" computed by notify() per
+  // D-16-11 (any mp.status === "failed" routes to error). No reload-hint
+  // (failed is not in the state-changing variant set per D-16-12).
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     const fakePath = path.join(userRoot, "marketplaces", "mp1", ".claude-plugin", "no-such.json");
@@ -707,7 +696,7 @@ test("PL-6 / CMC-22: manifest load failure renders the marketplace as a bare V2 
     // Severity is "error" because the synthetic mp has status "failed".
     assert.equal(note.severity, "error");
     // Bare V2 failed header; no `{unparseable}` brace; no cause trailer.
-    // Phase 29 / UXG-07 (D-29-03): 0 failed plugins, 1 failed marketplace
+    // UXG-07 (D-29-03): 0 failed plugins, 1 failed marketplace
     // -> the "1 marketplace operation failed." summary line is prepended.
     assert.equal(note.message, "1 marketplace operation failed.\n\n⊘ mp1 [user] (failed)");
     const out = note.message;
@@ -764,7 +753,7 @@ test("PL-7 / CMC-05: marketplace with autoupdate=false (or undefined) does NOT r
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Task 260525-cjr A3: probe-error classification + non-`{unsupported source}`
+// Probe-error classification + non-`{unsupported source}`
 // surface for unexpected `resolveStrict` throws inside `availableRowComputation`.
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -792,9 +781,8 @@ test("260525-cjr A3: narrowProbeError -> SyntaxError classifies as `unparseable`
 });
 
 test("260525-cjr A3: narrowProbeError -> generic Error falls through to `unreadable` (NOT `unsupported source`)", () => {
-  // The pre-fix behavior was to substring-match the message through
-  // `narrowResolverNotes`, which would degrade ANY unrecognized throw
-  // to `unsupported source`. The fix routes it to `unreadable`.
+  // An unrecognized throw routes to `unreadable`, not `unsupported
+  // source`.
   const err = new Error("something went wrong probing this plugin");
   const reason = __test_narrowProbeError(err);
   assert.equal(reason, "unreadable");
@@ -807,9 +795,9 @@ test("260525-cjr A3: narrowProbeError -> generic Error falls through to `unreada
 // (chmod 000 behaves differently as root, on tmpfs, on macOS APFS, etc.).
 // The unit tests above exercise every classifier branch directly through
 // the `__test_narrowProbeError` re-export; the orchestrator wiring is a
-// straightforward pass-through. The pre-fix call site is documented in
-// the commit message; the binding contract is that `narrowProbeError`
-// returns the closed-set Reason the user sees on the row.
+// straightforward pass-through. The binding contract is that
+// `narrowProbeError` returns the closed-set Reason the user sees on the
+// row.
 
 // ──────────────────────────────────────────────────────────────────────────
 // WR-03: narrowListFailReason -- dedicated narrower for orchestrator-level
@@ -856,7 +844,7 @@ test("WR-03: narrowListFailReason -> non-Error throw falls through to `unreadabl
 // Source-grep self-tests (NFR-5 / PI-2 / PL-3 defense-in-depth)
 //
 // Redundant with tests/architecture/no-orchestrator-network.test.ts
-// (Plan 05-02) but lives here so a future contributor of list logic
+// but lives here so a future contributor of list logic
 // reads the constraint at the same file they are editing.
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -895,10 +883,10 @@ test("D-04 corollary: list.ts does not use withStateGuard (read-only)", async ()
 });
 
 test("TR-08 / D-19-01: list.ts has no module-level PROBE_FAILURES-style accumulator", async () => {
-  // D-19-01 retired the V1 PROBE_FAILURES module-level capture-buffer +
-  // drain notifyWarning. Probe failures now manifest at row granularity
+  // D-19-01: there is no PROBE_FAILURES module-level capture-buffer +
+  // drain notifyWarning. Probe failures manifest at row granularity
   // via the per-row `(unavailable) {<narrowed-reason>}` discriminator.
-  // This test locks the retirement with defense-in-depth: a direct
+  // This test locks that with defense-in-depth: a direct
   // identifier match (caught if anyone reintroduces by name) AND a
   // top-level mutable-state heuristic (caught if anyone reintroduces by
   // shape under a different name).

@@ -1,4 +1,4 @@
-// Plan 06-04 Task 2: pi_claude_marketplace_list + pi_claude_marketplace_plugin_list
+// pi_claude_marketplace_list + pi_claude_marketplace_plugin_list
 // LLM-tool tests.
 //
 // The tools are registered via `pi.registerTool({...})`. We build a mock pi

@@ -1,6 +1,6 @@
 // orchestrators/marketplace/add.ts
 //
-// MA-1..6, MA-8..11 (MA-7 superseded by Phase 1 D-21 -- isomorphic-git
+// MA-1..6, MA-8..11 (MA-7 does not apply per D-21 -- isomorphic-git
 // eliminates the "git not found on PATH" failure mode entirely).
 //
 // Flow (D-04 outer guard wraps the ENTIRE flow including network IO):
@@ -24,18 +24,17 @@
 //       state.marketplaces[derivedName] = { ... }            // NFR-5: NO gitOps calls
 //   })
 //
-//   // Phase 18 / Plan 18-01: success notification is a single V2
+//   // The success notification is a single
 //   //   notify(opts.ctx, opts.pi, { marketplaces: [{ status: "added", ... }] })
-//   // call. Both github and path source kinds collapse to the same V2
-//   // payload (the V1 `<autoupdate>` marker has moved off the (added) arm
-//   // onto the list-surface header per D-17.1-01 / D-18-04). The
-//   // `/reload to pick up changes` trailer is computed by `notify()` per
-//  (mp.status `"added"` is state-changing); callers MUST NOT
-//   // append it. See the construction recipe block-comment above the
-//   // notify() call site for the full Wave 2 mirror template.
+//   // call. Both github and path source kinds collapse to the same
+//   // payload (the `<autoupdate>` marker lives on the list-surface header
+//   // per D-17.1-01 / D-18-04). The `/reload to pick up changes` trailer
+//   // is computed by `notify()` (mp.status `"added"` is state-changing);
+//   // callers MUST NOT append it. See the construction recipe block-comment
+//   // above the notify() call site for the full mirror template.
 //
-// V1 carry-forward shape only (D-09 staging dir, D-12 GitOps injection,
-// D-14 follow-upstream-blindly all supersede V1 specifics).
+// Staging via D-09, GitOps injection via D-12, follow-upstream-blindly via
+// D-14.
 //
 // WR-05 trade-off note: the MA-8 duplicate-name check for github sources
 // runs AFTER the clone fills `stagingDir`. We accept the cost of one
@@ -84,7 +83,7 @@ export interface AddMarketplaceOptions {
    * Required by `notify(ctx, pi, message)` for soft-dep probing.
    */
   readonly pi: ExtensionAPI;
-  /** SC-5: edge layer (Phase 6) defaults this to "user"; orchestrator receives a fully resolved Scope. */
+  /** SC-5: the edge layer defaults this to "user"; orchestrator receives a fully resolved Scope. */
   readonly scope: Scope;
   /** Used to compute project-scope locations (`<cwd>/.pi`). Ignored when scope === "user". */
   readonly cwd: string;
@@ -100,9 +99,9 @@ export interface AddMarketplaceOptions {
    */
   readonly credentialOps?: CredentialOps;
   /**
-   * Phase 35 test seam; production callers omit and get the default
-   * github.com fetch. When provided, threads into the onAuthRequired
-   * closure so tests can drive Device Flow end-to-end without network.
+   * Test seam; production callers omit and get the default github.com
+   * fetch. When provided, threads into the onAuthRequired closure so tests
+   * can drive Device Flow end-to-end without network.
    */
   readonly deviceFlowHttp?: DeviceFlowHttp;
 }
@@ -152,7 +151,7 @@ export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void>
     throw new Error("addMarketplace: internal error -- guard returned without recording a name");
   }
 
-  // D-03-INV (Plan 06-05): post-state-commit completion-cache invalidation.
+  // D-03-INV: post-state-commit completion-cache invalidation.
   // The marketplace-names cache for this scope and the plugin index for the
   // newly recorded marketplace are both stale-by-construction. Cache cleanup
   // runs after the state commit so a cache hiccup never rolls back the user's
@@ -201,18 +200,17 @@ async function addGithubInGuard(args: {
   const cloneUrl = `https://github.com/${source.owner}/${source.repo}.git`;
 
   // AUTH-01: bind the Device Flow trigger as the onAuthRequired closure
-  // for this clone. Phase 33's platform/git.ts::buildAuthCallbacks first
-  // consults credentialOps.fill(host); only on a miss does it invoke
-  // this closure. AUTH-09: the closure interpolates ONLY user_code +
-  // verification_uri (via initiateDeviceFlow's notifyFn at
-  // domain/github-auth.ts:385) -- the access token is acquired LATER in
-  // the poll loop and is never passed back to a notify or Error.
+  // for this clone. platform/git.ts::buildAuthCallbacks first consults
+  // credentialOps.fill(host); only on a miss does it invoke this closure.
+  // AUTH-09: the closure interpolates ONLY user_code + verification_uri
+  // (via initiateDeviceFlow's notifyFn) -- the access token is acquired
+  // LATER in the poll loop and is never passed back to a notify or Error.
   //
-  // host is the bare hostname; Phase 35 scope is GitHub-only so the
+  // host is the bare hostname; the supported scope is GitHub-only so the
   // literal "github.com" is correct here (matches the GitHubSource
   // parser's contract at domain/source.ts -- every github source resolves
-  // to https://github.com/<owner>/<repo>). A future AUTH-D02 (deferred)
-  // would parameterize this from the source.
+  // to https://github.com/<owner>/<repo>). AUTH-D02 parameterizes this
+  // from the source.
   const host = "github.com";
   const notifyFn = makeRawNotifyFn(ctx);
   const onAuthRequired = async (): Promise<AuthAttemptResult> =>
@@ -304,11 +302,9 @@ async function addPathInGuard(args: {
   // MA-3: source.resolved may point at a directory OR directly at a
   // marketplace.json file. Probe and dispatch.
   //
-  // Note: domain/source.ts PathSource currently exposes `raw` and `logical`
-  // (no `resolved` field yet -- the resolved-path layer is deferred to
-  // Phase 4 location/index helpers). We use `source.logical` here since
-  // it equals `raw` verbatim (SP-7) and is the on-disk lookup key for
-  // path-source `add`.
+  // Note: domain/source.ts PathSource exposes `raw` and `logical` (no
+  // `resolved` field). We use `source.logical` here since it equals `raw`
+  // verbatim (SP-7) and is the on-disk lookup key for path-source `add`.
   //
   // CR-02 (SP-7 / MA-4): Node's fs APIs do NOT perform shell tilde
   // expansion -- stat("~/...") returns ENOENT against a literal "~"

@@ -108,7 +108,7 @@ test("importClaudeSettings skips matching existing marketplaces and already-inst
   assert.deepEqual(installed, []);
   assert.equal(result.skippedExistingMarketplaces[0]?.reason, "already-present");
   assert.equal(result.skippedExistingPlugins[0]?.reason, "already-installed");
-  // Plan 20-02 / D-20-02: existing marketplace + already-installed plugin
+  // D-20-02: existing marketplace + already-installed plugin
   // renders structurally via the V2 cascade. Marketplace skip maps to
   // (updated); plugin skip carries `{already installed}` reason brace.
   // Severity: the only non-success row is the BENIGN plugin skip
@@ -329,7 +329,7 @@ test("importClaudeSettings marketplace add failure skips only dependent plugins"
   assert.deepEqual(installed, ["b@mp-b"]);
   assert.equal(result.marketplaceFailures[0]?.marketplace, "mp-a");
   assert.equal(result.warnings.find((w) => w.ref === "a@mp-a")?.reason, "marketplace-failed");
-  // Plan 20-02 / D-20-02 + A1 DROP: marketplace-failed warning maps to no
+  // D-20-02: marketplace-failed warning maps to no
   // V2 plugin row (the failing marketplace's own status: "failed" carries
   // the structural signal). mp-a renders as (failed) with no plugin rows;
   // mp-b renders as (added) with the successfully installed plugin row.
@@ -377,10 +377,8 @@ test("importClaudeSettings classifies unavailable and unexpected plugin failures
       installPlugin: async (opts) => {
         attempted.push(opts.plugin);
         if (opts.plugin === "missing") {
-          // Task 260525-cjr C3: collapsed failure shape -- the
-          // import consumer narrows on `error instanceof
-          // PluginShapeError` and reads `.kind` to recover the
-          // pre-C3 semantic dispatch.
+          // collapsed failure shape -- the import consumer narrows on
+          // `error instanceof PluginShapeError` and reads `.kind`.
           return {
             status: "failed",
             error: new PluginShapeError({
@@ -413,7 +411,7 @@ test("importClaudeSettings classifies unavailable and unexpected plugin failures
   assert.deepEqual(attempted, ["missing", "boom", "ok"]);
   assert.equal(result.warnings.find((w) => w.ref === "missing@mp")?.cause, "not found");
   assert.equal(result.unexpectedPluginFailures[0]?.cause, "disk full");
-  // Plan 20-02 / D-20-02: missing -> PluginUnavailableMessage
+  // D-20-02: missing -> PluginUnavailableMessage
   // {no longer installable}; boom -> PluginFailedMessage {not in
   // manifest}; ok -> PluginInstalledMessage. Severity: "error" because
   // the cascade contains a failed plugin row per D-16-11. Reload-hint
@@ -428,7 +426,7 @@ test("importClaudeSettings classifies unavailable and unexpected plugin failures
 });
 
 test("importClaudeSettings catches unexpected installPlugin throws and surfaces a partial cascade row (WR-02)", async () => {
-  // Plan 20-05 WR-02 gap closure: when installPlugin throws an unexpected
+  // WR-02: when installPlugin throws an unexpected
   // host-side error (not a structured {status: "failed"} return), the
   // executeScopedPlan try/catch MUST (a) keep iterating the per-plugin loop,
   // (b) record the throw in result.unexpectedPluginFailures matching the
@@ -508,12 +506,11 @@ test("importClaudeSettings catches unexpected installPlugin throws and surfaces 
 });
 
 test("importClaudeSettings continues to next scope after unexpected installPlugin throw on prior scope (WR-02 cross-scope)", async () => {
-  // Plan 20-06 WR-02 cross-scope sibling: locks that an unexpected
+  // WR-02 cross-scope: locks that an unexpected
   // installPlugin throw on scope A does NOT abort the outer
   // for (const scopePlan of plan.scopes) loop. Scope B still runs to
   // completion and a SINGLE merged notify() emits the combined cascade
-  // for both scopes (the in-scope sibling at line 429 only covers
-  // per-plugin loop continuation within a single scope).
+  // for both scopes.
   const { ctx, pi, notifications } = makeCtx();
   const attempted: string[] = [];
 
@@ -618,7 +615,7 @@ test("importClaudeSettings classifies uninstallable plugins as warnings without 
       installPlugin: async (opts) => {
         attempted.push(opts.plugin);
         if (opts.plugin === "blocked") {
-          // Task 260525-cjr C3: collapsed failure shape -- uninstallable
+          // collapsed failure shape -- uninstallable
           // is recovered from `error.shape.kind === "not-installable"`.
           return {
             status: "failed",
@@ -840,7 +837,7 @@ test("importClaudeSettings emits the canonical reload-hint trailer on fresh inst
 
   assert.equal(notifications.length, 1);
   const message = notifications[0]?.message ?? "";
-  // Plan 20-02 / D-20-02: cascade renders mp header + plugin row; the
+  // D-20-02: cascade renders mp header + plugin row; the
   // reload-hint trailer fires because installed/added are in the
   // state-changing set per D-16-12. Severity: info (omitted).
   assert.match(message, /\/reload to pick up changes/);
@@ -881,7 +878,7 @@ test("importClaudeSettings handles already-installed outcome from installPlugin 
       }),
       addMarketplace: async () => undefined,
       installPlugin: async () => ({
-        // Task 260525-cjr C3: collapsed failure shape -- already-installed
+        // collapsed failure shape -- already-installed
         // surfaces as `PluginShapeError({kind: "already-installed", ...})`
         // which the import consumer routes to the skip bucket.
         status: "failed",
@@ -897,7 +894,7 @@ test("importClaudeSettings handles already-installed outcome from installPlugin 
 
   assert.equal(result.skippedExistingPlugins[0]?.reason, "already-installed");
   assert.equal(result.skippedExistingPlugins[0]?.ref, "plugin@mp");
-  // Plan 20-02 / D-20-02: marketplace already present (skippedExistingMarketplaces)
+  // D-20-02: marketplace already present (skippedExistingMarketplaces)
   // renders as (updated). Plugin already-installed via concurrent-install
   // race surfaces as (skipped) {already installed} cascade row. Under
   // SNM-33 / D-22-01 the only plugin row is `skipped` (no state-change

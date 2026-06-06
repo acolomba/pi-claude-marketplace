@@ -1,24 +1,21 @@
 // bridges/agents/discover.ts
 //
 // AG-1 / AG-6: discover and parse <pluginRoot>/agents/*.md (non-recursive).
-// Carries V1's discoverPluginAgents (was co-located in agent/convert.ts) and
-// hoists into a dedicated module so convert.ts stays pure.
+// Lives in a dedicated module so convert.ts stays pure.
 //
 // sourceHash is computed over RAW BYTES (not utf8 text) so the digest
-// survives BOM and line-ending normalization. This is one of V1's
-// "got right" properties (RESEARCH.md "What V1 got right" #5).
+// survives BOM and line-ending normalization.
 //
 // T-03-27 mitigation: lstat + isSymbolicLink() skip on every .md entry
 // before reading, plus dotfile skip. Refuses symlinked .md files outright
 // rather than following them (consistent with PS-1).
 //
-// D-07 (COMP-01): signature flips from `agentsDir: string` to `agentsDirs:
-// readonly string[]` for symmetry with the skills/commands bridges. The
-// inner read loop is unchanged. First-wins dedup by generated agent name
-// across array elements; the second occurrence surfaces in `warnings[]`.
-// RN-4 cross-marketplace agent ownership conflicts remain enforced in
-// `bridges/agents/stage.ts::prepareStagePluginAgents` (NOT duplicated
-// here -- that's the wrong layer; this module knows nothing about
+// D-07 (COMP-01): the signature is `agentsDirs: readonly string[]` for
+// symmetry with the skills/commands bridges. First-wins dedup by generated
+// agent name across array elements; the second occurrence surfaces in
+// `warnings[]`. RN-4 cross-marketplace agent ownership conflicts are
+// enforced in `bridges/agents/stage.ts::prepareStagePluginAgents` (NOT
+// duplicated here -- that's the wrong layer; this module knows nothing about
 // marketplace ownership).
 
 import { createHash } from "node:crypto";
@@ -96,14 +93,14 @@ export async function discoverPluginAgents(input: {
     for (const entry of sorted) {
       const sourcePath = path.join(agentsDir, entry.name);
       // T-03-27: refuse symlinks before reading the file. lstat-based check
-      // (does NOT follow). Symlinks discovered here are skipped silently
-      // (V1 behavior); a malicious plugin can't escape via symlink.
+      // (does NOT follow). Symlinks discovered here are skipped silently;
+      // a malicious plugin can't escape via symlink.
       if (!(await isAgentFile(agentsDir, entry))) {
         continue;
       }
 
       // Hash raw bytes (not utf8 text) so the digest survives BOM and
-      // line-ending normalization (RESEARCH "What V1 got right" #5).
+      // line-ending normalization.
       const bytes = await readFile(sourcePath);
       const sourceHash = createHash("sha256").update(bytes).digest("hex");
       const text = bytes.toString("utf8");

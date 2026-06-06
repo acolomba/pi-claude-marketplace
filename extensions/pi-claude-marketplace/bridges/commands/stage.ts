@@ -1,18 +1,15 @@
 // bridges/commands/stage.ts
 //
-// CommandsBridge: prepare/commit/abort + RN-6 collision detection, plus Phase 8
+// CommandsBridge: prepare/commit/abort + RN-6 collision detection, plus
 // replacement exports: replacePreparedCommands, rollbackCommandsReplacement,
 // finalizeCommandsReplacement.
-// Pattern carry-forward from V1 `resource/stage.ts` (commands branch of
-// `stagePluginResources`) for the body-substitute + per-file rename
-// logic; prepare/commit/abort discipline mirrors V1 `agent/stage.ts`.
 //
 // Storage layout:
 //   - Staging:   <extensionRoot>/commands-staging/<uuid>/<plugin>:<command>.md
 //   - Target:    <extensionRoot>/resources/prompts/<plugin>:<command>.md
 //
 // Filenames carry the literal colon (`:`) in the basename. POSIX targets
-// allow this; Phase 3 explicitly does not target Windows (RESEARCH).
+// allow this; Windows is explicitly not targeted.
 //
 // Atomicity: per-file `rename` from staging into the target dir is atomic
 // on the same filesystem (NFR-1). Staging dir lives under
@@ -224,11 +221,11 @@ export async function commitPreparedCommands(
 
   // Lazy-create the target dir + sequential rename staged -> target with
   // TR-05 reverse-walk rollback tracking. Mirrors the
-  // `commitPreparedAgents` step-2 shape (Phase 38 / TR-01): track each
+  // `commitPreparedAgents` step-2 shape (TR-01): track each
   // successful rename in completedRenames[]; on a partial failure, reverse-
   // walk the spread copy and rename each back into the staging root. The
   // rollback loop NEVER throws; failures accumulate into rollbackLeaks[]
-  // surfaced via appendLeaks (Pitfall 1, Pitfall 8).
+  // surfaced via appendLeaks.
   const completedRenames: { from: string; to: string }[] = [];
   try {
     await mkdir(prepared.locations.promptsTargetDir, { recursive: true });

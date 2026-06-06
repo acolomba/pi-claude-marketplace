@@ -22,7 +22,7 @@ import type { RollbackPartial, RunPhasesResult } from "./phase-ledger.ts";
 /**
  * Structured result from {@link formatRollbackError}. Orchestrators
  * destructure this and forward the `rollbackPartials[]` into a
- * `PluginFailedMessage.rollbackPartial` payload consumed by the V2
+ * `PluginFailedMessage.rollbackPartial` payload consumed by the
  * `notify()` renderer in `shared/notify.ts`.
  *
  * `error` is either the original Error (zero-partial fast path and
@@ -39,11 +39,11 @@ export interface RollbackErrorResult {
  * Format a RunPhasesResult into a structured rollback-error result.
  *
  * The transaction layer does NOT compose the user-visible body -- that
- * responsibility moves to the calling orchestrator, which routes the
- * payload through the V2 `notify()` path in `shared/notify.ts`. The
+ * responsibility belongs to the calling orchestrator, which routes the
+ * payload through the `notify()` path in `shared/notify.ts`. The
  * `transaction/` layer remains presentation-free.
  *
- * - PathContainmentError (and SymlinkRefusedError subclass, Phase 1 D-17):
+ * - PathContainmentError (and SymlinkRefusedError subclass, D-17):
  *   `{ error: originalError, rollbackPartials: [] }` -- the bypass per
  *   D-02 / PI-14; the original error surfaces VERBATIM and the
  *   rollback-partial framing is suppressed.
@@ -54,7 +54,7 @@ export interface RollbackErrorResult {
  *   -- ES-4 cause-chain preserved; the orchestrator emits the
  *   `(failed) {rollback partial}` parent + indented per-phase children
  *   by routing the data through a `PluginFailedMessage.rollbackPartial`
- *   payload in `shared/notify.ts` (V2 renderer owns the byte form).
+ *   payload in `shared/notify.ts` (the renderer owns the byte form).
  */
 export function formatRollbackError(
   result: RunPhasesResult,

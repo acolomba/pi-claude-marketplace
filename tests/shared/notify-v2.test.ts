@@ -1,11 +1,10 @@
 /**
- * tests/shared/notify-v2.test.ts -- Per-status unit suite for the V2
- * `notify()` and `notifyUsageError()` entry points landed by Phase 16 plans
- * 02-05. This file IS the de facto v2 spec until Phase 17 lifts the grammar
- * into the output catalog (SNM-19 / SNM-20 / SNM-31).
+ * tests/shared/notify-v2.test.ts -- Per-status unit suite for the
+ * `notify()` and `notifyUsageError()` entry points
+ * (SNM-19 / SNM-20 / SNM-31).
  *
  * ===========================================================================
- * V2 grammar mini-spec (Phase 16 binding contract; D-16-04 authority)
+ * notify grammar mini-spec (binding contract; D-16-04 authority)
  * ===========================================================================
  *
  *   ICON DISPATCH (MSG-IC-1..3, duplicated inline in shared/notify.ts per
@@ -26,10 +25,10 @@
  *     `[<mp.scope>]` bracket still appears.
  *
  *   SCOPE-BRACKET PLACEMENT (conditional emission on the 8 scope-bearing
- *   variants, BLOCKER-1 fix from plan 04):
+ *   variants):
  *     For `installed` | `updated` | `reinstalled` | `uninstalled` |
  *     `upgradable` | `skipped` | `failed` | `manual recovery`, the
- *     `scope?: Scope` field is OPTIONAL (Phase 15 D-15-02/D-15-04). The
+ *     `scope?: Scope` field is OPTIONAL (D-15-02/D-15-04). The
  *     `[<scope>]` bracket is emitted ONLY when `p.scope !== undefined`.
  *     The typical case (cascade rows inheriting the marketplace's scope via
  *     the header) leaves `p.scope` undefined and emits NO bracket on the
@@ -53,7 +52,7 @@
  *     dep AND the probe says it is not loaded. The two markers are
  *     `requires pi-subagents` (for the `"agents"` dep) and `requires pi-mcp`
  *     (for the `"mcp"` dep). Only the 3 dep-bearing arms (installed,
- *     updated, reinstalled) carry `dependencies?` per Phase 15 D-15-02; the
+ *     updated, reinstalled) carry `dependencies?` per D-15-02; the
  *     other 7 arms cannot emit the markers.
  *
  *   MARKETPLACE HEADER SHAPE:
@@ -61,8 +60,8 @@
  *       `<icon> <mp.name> [<mp.scope>] (<status>)`.
  *     - List-surface arm (mp.status === undefined):
  *       - SUB-BRANCH A (mp.details === undefined): bare header, no
- *         trailing autoupdate token, NO crash. Plan 03's
- *         BLOCKER-3 fix explicitly guards `mp.details === undefined` so the
+ *         trailing autoupdate token, NO crash. The renderer
+ *         explicitly guards `mp.details === undefined` so the
  *         arm cannot crash at runtime. Tests assert this no-crash invariant
  *         (test 17a).
  *       - SUB-BRANCH B (mp.details !== undefined): bare header +
@@ -81,12 +80,12 @@
  *     - `failed.rollbackPartial[]` child rows at 4-space indent
  *       (`    [<phase>] (rollback failed)`); each phase emits an optional
  *       6-space-indented cause-chain trailer when `phase.cause` is set
- *       (D-16-08; planner pick byte form from 16-05-SUMMARY).
+ *       (D-16-08).
  *
  *   EMPTY-LIST SENTINELS:
  *     - Empty `marketplaces: []` at the top level: the body is exactly the
  *       17 bytes `"(no marketplaces)"` -- no leading icon, no trailing
- *       newline, no reload-hint, no severity arg (planner pick per 16-05).
+ *       newline, no reload-hint, no severity arg.
  *     - Empty `plugins: []` on a per-marketplace block: bare header alone
  *       (no `(no plugins)` sentinel inside the body; D-15-08).
  *
@@ -109,7 +108,7 @@
  *     Pi-API surface: omit-2nd-arg = info severity; pass "warning" / "error"
  *     otherwise.
  *
- *   SUMMARY-LINE COMPOSITION (Phase 29 / UXG-07 / D-29-02/03/04):
+ *   SUMMARY-LINE COMPOSITION (UXG-07 / D-29-02/03/04):
  *     For `error` and `warning` severity, notify() PREPENDS a summary line
  *     before the cascade body: `{summary}\n\n{body}` (the reload-hint, if
  *     any, stays last). The summary counts failed (error) /
@@ -118,15 +117,15 @@
  *     `"N marketplace operation(s) <verb>."`, or the mixed
  *     `"N plugin operation(s) and M marketplace operation(s) <verb>."`;
  *     verb is "failed" (error) / "skipped" (warning). Info severity carries
- *     NO summary line -- byte-identical to the pre-Phase-29 behavior.
+ *     NO summary line.
  *
  *   NOTIFY-USAGE-ERROR SHAPE (SNM-13 / D-16-02):
  *     `ctx.ui.notify(`${msg.message}\n\n${msg.usage}`, "error")` -- one
  *     blank line between message and usage block; severity always
  *     "error" (structural, not a field).
  *
- * Authority: this file is the de facto v2 spec until Phase 17 lifts it into
- * the output catalog (SNM-19 / SNM-20 / SNM-31).
+ * Authority: this file is the de facto spec for the notify grammar
+ * (SNM-19 / SNM-20 / SNM-31).
  */
 
 import assert from "node:assert/strict";
@@ -442,9 +441,7 @@ test("notify renders benign skipped plugin with up-to-date reason (info severity
   // `(skipped)` row under an `(added)` marketplace emits NO trailer
   // (`skipped` is not one of installed/updated/reinstalled/uninstalled).
   // Per UXG-02 / D-28-06 the single reason `up-to-date` is in BENIGN_REASONS,
-  // so this all-benign cascade now computes INFO (no 2nd severity arg). The
-  // rendered body string is byte-identical to before -- only the severity arg
-  // moved.
+  // so this all-benign cascade computes INFO (no 2nd severity arg).
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     `● demo [user] (added)\n  ⊘ commit-commands v1.0.0 (skipped) {up-to-date}`,
   ]);
@@ -474,7 +471,7 @@ test("notify renders failed plugin with reasons only -- no cause, no rollback (e
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // mp.status === "failed" does NOT trigger reload-hint (D-16-12: SNM-15
   // refinement -- failed rollbacks do not trigger). p.status === "failed"
-  // routes severity to "error" per D-16-11. Phase 29 / UXG-07 (D-29-02/03):
+  // routes severity to "error" per D-16-11. UXG-07 (D-29-02/03):
   // 1 failed plugin + 1 failed marketplace -> mixed-type summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     `1 plugin operation and 1 marketplace operation failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {network unreachable}`,
@@ -537,7 +534,7 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
   // mp.status === "failed" triggers severity "error" per D-16-11 (the
   // severity ladder catches mp.status === "failed" even with no failed
   // plugins). But the reload-hint is suppressed per D-16-12 (failed
-  // marketplace operations roll back; no state landed). Phase 29 / UXG-07
+  // marketplace operations roll back; no state landed). UXG-07
   // (D-29-03): 0 failed plugins, 1 failed marketplace -> marketplace-only
   // singular summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -547,8 +544,8 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
 });
 
 // ===========================================================================
-// 15a-15e (Phase 17.1 D-17.1-05.2): five new tests covering the autoupdate
-// surface added by D-17.1-02 / D-18-05. Three per-arm byte-equality tests
+// 15a-15e (D-17.1-05.2): tests covering the autoupdate
+// surface (D-17.1-02 / D-18-05). Three per-arm byte-equality tests
 // (autoupdate enabled, autoupdate disabled, skipped + reasons) lock the
 // renderer arms; two ladder tests structurally lock the severity ladder
 // (mp.skipped -> "warning") and prove the first-match severity routing
@@ -563,9 +560,9 @@ test("notify renders autoupdate enabled marketplace header alone (UXG-04 <autoup
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  // UXG-04 supersedes the D-18-05 (autoupdate enabled) status token: the
-  // fresh flip renders the <autoupdate> marker-as-outcome. D-22-03 still
-  // supersedes the reload-trigger half of D-17.1-02: a fresh flip mutates a
+  // UXG-04 governs the autoupdate-enabled status token: the
+  // fresh flip renders the <autoupdate> marker-as-outcome. D-22-03 governs
+  // the reload-trigger: a fresh flip mutates a
   // marketplace record, not a Pi-visible resource, so NO trailer; no severity
   // arg (info routing).
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [`● foo [user] <autoupdate>`]);
@@ -579,8 +576,8 @@ test("notify renders autoupdate disabled marketplace header alone (UXG-04 <no au
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  // UXG-04 supersedes the D-18-05 (autoupdate disabled) status token: the
-  // fresh flip renders the explicit <no autoupdate> off-marker. D-22-03 still
+  // UXG-04 governs the autoupdate-disabled status token: the
+  // fresh flip renders the explicit <no autoupdate> off-marker. D-22-03
   // suppresses the trailer; no severity arg (info routing).
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [`● foo [user] <no autoupdate>`]);
 });
@@ -604,9 +601,7 @@ test("notify renders idempotent-enable marketplace header with <autoupdate> mark
   // UXG-04 byte form: idempotent flip renders the marker-as-outcome plus the
   // idempotence brace (no `(skipped)` token). Per UXG-02 / D-28-07 the mp-level
   // `skipped` reason `already autoupdate` is in BENIGN_REASONS, so this benign
-  // no-op now computes INFO (no 2nd arg); NO reload-hint (no state changed).
-  // The rendered body string is byte-identical to before -- only the severity
-  // arg moved.
+  // no-op computes INFO (no 2nd arg); NO reload-hint (no state changed).
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     `● foo [user] <autoupdate> {already autoupdate}`,
   ]);
@@ -663,8 +658,7 @@ test('UXG-05: marketplace update no-op (mp.skipped + reasons:["up-to-date"], plu
   assert.equal(body, "● local-mp [user] (skipped) {up-to-date}");
   // (b) Severity: mp.status === "skipped" with the benign reason `up-to-date`
   //     (in BENIGN_REASONS) computes INFO via computeSeverity -- the 2nd arg
-  //     is omitted (length 1). This realizes UXG-02 / D-28-07, closing the
-  //     Plan 27-04 deferral.
+  //     is omitted (length 1). This realizes UXG-02 / D-28-07.
   assert.equal(args.length, 1);
   // (c) NO reload-hint: plugins:[] means no Pi-visible resource change, so the
   //     `/reload to pick up changes` trailer is absent (SNM-33 / orthogonal to
@@ -720,11 +714,10 @@ test("notify benign-only cascade: benign mp.skipped coexists with healthy plugin
   // reason `already autoupdate` in BENIGN_REASONS) sitting OVER a healthy
   // plugin row. This proves the benign-softening ladder dominates a
   // non-empty healthy plugin set: the cascade's ONLY non-success row is a
-  // BENIGN mp-skip, so per UXG-02 / D-28-06 arm 5 it now computes INFO
-  // (previously routed to "warning" under the old Phase-17.1 ladder).
+  // BENIGN mp-skip, so per UXG-02 / D-28-06 arm 5 it computes INFO.
   //
   // The "healthy" plugin row is "available" rather than "installed". Per
-  // D-16-12 + the Phase 17.1 amendment to shouldEmitReloadHint, plugin
+  // D-16-12, plugin
   // statuses {"installed", "updated", "reinstalled", "uninstalled"} ARE
   // reload-hint triggers; "available" is NOT. Using "available" keeps
   // assertion (c) below (no reload-hint trailer) clean while isolating the
@@ -783,7 +776,7 @@ test("notify renders SUB-BRANCH B list-surface marketplace header with autoupdat
         name: "demo",
         scope: "user",
         // mp.status omitted (list-surface). lastUpdatedAt is supplied to
-        // prove the retained field is no longer rendered (UXG-01).
+        // prove the retained field is not rendered (UXG-01).
         details: { autoupdate: true, lastUpdatedAt: "2026-05-25T00:00:00Z" },
         plugins: [],
       },
@@ -792,9 +785,9 @@ test("notify renders SUB-BRANCH B list-surface marketplace header with autoupdat
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // SUB-BRANCH B byte form per UXG-01: bare header + " <autoupdate>" only.
-  // The `<last-updated <iso>>` token was dropped from the list surface --
-  // `details.lastUpdatedAt` stays in state/type but the renderer no longer
-  // emits it. No reload-hint (no state-changing status); no severity arg.
+  // The list surface carries no `<last-updated <iso>>` token --
+  // `details.lastUpdatedAt` stays in state/type but the renderer does not
+  // emit it. No reload-hint (no state-changing status); no severity arg.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [`● demo [user] <autoupdate>`]);
 });
 
@@ -1197,8 +1190,8 @@ test("D-22-04 POSITIVE: `marketplace update` with >=1 changed plugin emits the /
 });
 
 // ===========================================================================
-// 17: Empty top-level marketplaces -- the "(no marketplaces)" sentinel per
-// 16-05-SUMMARY. No reload-hint, no severity.
+// 17: Empty top-level marketplaces -- the "(no marketplaces)" sentinel.
+// No reload-hint, no severity.
 // ===========================================================================
 
 test("notify renders (no marketplaces) sentinel for empty marketplaces array (no reload-hint, no severity)", () => {
@@ -1209,19 +1202,19 @@ test("notify renders (no marketplaces) sentinel for empty marketplaces array (no
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // Bare sentinel; no leading icon, no trailing newline, no reload-hint, no
   // severity arg (no state-changing or failure-class statuses in the
-  // payload). Planner pick per 16-05-SUMMARY: 17 bytes "(no marketplaces)".
+  // payload). 17 bytes "(no marketplaces)".
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [`(no marketplaces)`]);
 });
 
 // ===========================================================================
-// 17a: BLOCKER-COVERAGE (locks in plan-03 BLOCKER-3 fix).
+// 17a: BLOCKER-3 coverage.
 //
 // Empty-list-surface payload: single marketplace with `status: undefined`,
-// `details: undefined` (BOTH absent independently per Phase 15 D-15-06's
+// `details: undefined` (BOTH absent independently per D-15-06's
 // optional-and-independent typing), `plugins: []`. Expected output: the
 // BARE marketplace header from SUB-BRANCH A of renderMpHeader (no trailing
 // autoupdate token). Critical assertion: the call MUST NOT
-// throw -- plan 03's `case undefined:` arm explicitly guards
+// throw -- the `case undefined:` arm explicitly guards
 // `mp.details === undefined` before reading `mp.details.autoupdate`.
 // Reload-hint MUST be suppressed (neither plugin nor marketplace status is
 // in the trigger set).
@@ -1237,7 +1230,7 @@ test("notify renders bare marketplace header when mp.status and mp.details are b
         scope: "user",
         // status: undefined (omitted) AND details: undefined (omitted).
         // BOTH absent independently per D-15-06 -- this is the empty-list-
-        // surface payload that test 17a guards against the plan-03
+        // surface payload that test 17a guards against the
         // BLOCKER-3 regression (runtime crash when reading mp.details
         // .autoupdate without a guard).
         plugins: [],
@@ -1251,7 +1244,7 @@ test("notify renders bare marketplace header when mp.status and mp.details are b
     notify(ctx as never, pi as never, msg);
   });
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  // SUB-BRANCH A byte form per 16-03-SUMMARY: bare header "● demo [user]"
+  // SUB-BRANCH A byte form: bare header "● demo [user]"
   // with NO trailing autoupdate token. No reload-hint, no severity arg.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [`● demo [user]`]);
 });
@@ -1395,7 +1388,7 @@ test("notify emits inline [scope] bracket on plugin row when p.scope set (orphan
 });
 
 // ===========================================================================
-// 21a: BLOCKER-COVERAGE (locks in plan-04 BLOCKER-1 fix).
+// 21a: BLOCKER-1 coverage.
 //
 // Orphan-fold ABSENT: the same `installed` plugin payload as test 21 BUT
 // with `p.scope` OMITTED (undefined). Expected output: the plugin row
@@ -1463,14 +1456,14 @@ test("notify omits scope bracket on plugin row when p.scope is undefined (non-or
 });
 
 // ===========================================================================
-// 21b-21e: Post-CR-01 orphan-fold contract locks (Phase 17.2 D-17.2-07)
+// 21b-21e: orphan-fold contract locks (D-17.2-07)
 //
-// These four tests lock the corrected 2-arg `renderScopeBracket(pluginScope,
+// These four tests lock the 2-arg `renderScopeBracket(pluginScope,
 // mpScope)` contract at the renderer level, independent of the catalog UAT.
 // Coverage spans `installed` (same-scope + orphan-fold), `updated`
 // (same-scope), and `failed` (orphan-fold) so the 8 scope-bearing variants
 // are exercised across both dep-bearing and error-class arms. Each test
-// inherits the defense-in-depth assertions from test 21a (lines 957-973):
+// inherits the defense-in-depth assertions from test 21a:
 // the body MUST NOT contain `[undefined]`; the plugin row MUST NOT leak
 // the marketplace header's bracket.
 // ===========================================================================
@@ -1644,7 +1637,7 @@ test("notify emits [project] bracket on failed plugin row when p.scope !== mp.sc
   // is NOT one of the four state-change tokens, and the marketplace-status
   // arm is gone -- so NO reload-hint trailer is appended. (Severity routing
   // is independent and still returns "error" for the failed plugin.)
-  // Phase 29 / UXG-07 (D-29-03): 1 failed plugin, 0 failed marketplace
+  // UXG-07 (D-29-03): 1 failed plugin, 0 failed marketplace
   // (mp.status is "added", not "failed") -> plugin-only singular summary.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     `1 plugin operation failed.\n\n● demo [user] (added)\n  ⊘ alpha [project] v1.0.0 (failed) {unsupported source}`,
@@ -1670,7 +1663,7 @@ test("notify emits [project] bracket on failed plugin row when p.scope !== mp.sc
 
 // ===========================================================================
 // 22: Failed plugin with rollbackPartial (no causes) -- assert the
-// 4-space-indented child rows per phase per 16-05-SUMMARY byte form.
+// 4-space-indented child rows per phase byte form.
 // ===========================================================================
 
 test("notify renders rollbackPartial child rows at 4-space indent for failed plugin (no causes)", () => {
@@ -1696,10 +1689,10 @@ test("notify renders rollbackPartial child rows at 4-space indent for failed plu
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  // Per 16-05-SUMMARY: each rollbackPartial child row is
+  // Each rollbackPartial child row is
   // "    [<phase>] (rollback failed)" (4-space indent). No causes -> no
   // 6-space-indent trailers. mp.status === "failed" -> error severity but
-  // no reload-hint (D-16-12). Phase 29 / UXG-07 (D-29-02/03): 1 failed
+  // no reload-hint (D-16-12). UXG-07 (D-29-02/03): 1 failed
   // plugin + 1 failed marketplace -> mixed-type summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     `1 plugin operation and 1 marketplace operation failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}\n    [skills] (rollback failed)\n    [agents] (rollback failed)`,
@@ -1709,9 +1702,9 @@ test("notify renders rollbackPartial child rows at 4-space indent for failed plu
 
 // ===========================================================================
 // 23: Failed plugin with cause + rollbackPartial-with-cause -- assert the
-// full nested indent shape (PATTERNS.md "Indent shape worked example"
-// pattern). Per-plugin cause-chain at 4-space indent; rollback child rows
-// at 4-space indent; per-phase cause-chain at 6-space indent.
+// full nested indent shape. Per-plugin cause-chain at 4-space indent;
+// rollback child rows at 4-space indent; per-phase cause-chain at
+// 6-space indent.
 // ===========================================================================
 
 test("notify renders nested cause chains: per-plugin at 4-space indent, per-phase rollback cause at 6-space indent (D-16-08)", () => {
@@ -1746,7 +1739,7 @@ test("notify renders nested cause chains: per-plugin at 4-space indent, per-phas
   //   col 4 -- rollback child row ([skills] (rollback failed))
   //   col 6 -- per-phase cause-chain trailer (cause: EACCES)
   // mp.status === "failed" -> error severity; reload-hint suppressed.
-  // Phase 29 / UXG-07 (D-29-02/03): 1 failed plugin + 1 failed marketplace
+  // UXG-07 (D-29-02/03): 1 failed plugin + 1 failed marketplace
   // -> mixed-type summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     `1 plugin operation and 1 marketplace operation failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}\n    cause: inner -> root\n    [skills] (rollback failed)\n      cause: EACCES`,
@@ -1795,7 +1788,7 @@ test("notify emits per-plugin cause-chain inline below each failed row (multi-ca
   // indent (not aggregated under a single trailer). Under SNM-33 / D-22-01
   // every plugin row is `failed` (no state-change token) and the
   // marketplace-status arm is gone, so NO reload-hint trailer; severity is
-  // "error" per D-16-11 (independent of the reload-hint ladder). Phase 29 /
+  // "error" per D-16-11 (independent of the reload-hint ladder).
   // UXG-07 (D-29-03): 2 failed plugins, 0 failed marketplace (mp "added")
   // -> plugin-only plural summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -1916,7 +1909,7 @@ test("notify suppresses reload-hint when payload contains only failed statuses (
     !body.includes("/reload to pick up changes"),
     "D-16-12: reload-hint must be suppressed when no state-changing status is present",
   );
-  // Phase 29 / UXG-07 (D-29-02/03): 1 failed plugin + 1 failed marketplace
+  // UXG-07 (D-29-02/03): 1 failed plugin + 1 failed marketplace
   // -> mixed-type summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     `1 plugin operation and 1 marketplace operation failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}`,
@@ -1946,7 +1939,7 @@ test("notifyUsageError emits ${msg.message}\\n\\n${msg.usage} with 'error' sever
 // ===========================================================================
 // 30: Manual-recovery plugin -- the 10th PluginNotificationMessage variant.
 // Discriminator literal includes the space ("manual recovery"); status slot
-// emits it verbatim per shared/grammar/status-tokens.ts:47. Carries optional
+// emits it verbatim per shared/grammar/status-tokens.ts. Carries optional
 // cause (D-16-08 inline cause-chain trailer at 4-space indent below the
 // row); severity routes to "warning" per D-16-11.
 // ===========================================================================
@@ -1975,7 +1968,7 @@ test("notify renders manual recovery plugin with cause-chain trailer (warning se
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // status slot is the literal "(manual recovery)" WITH a space. Severity
   // is "warning" per D-16-11. Cause-chain at 4-space indent below the row
-  // per D-16-08. Phase 29 / UXG-07 (D-29-04): a manual-recovery row counts
+  // per D-16-08. UXG-07 (D-29-04): a manual-recovery row counts
   // as 1 actionable skip -> "1 plugin operation skipped." summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     `1 plugin operation skipped.\n\n● demo [user]\n  ⊘ commit-commands v1.0.0 (manual recovery) {rollback partial}\n    cause: EACCES`,
@@ -2146,7 +2139,7 @@ test("notify passes a SemVer version through unchanged -> v1.0.0 (non-hash pass-
 });
 
 // ===========================================================================
-// 33-35: Phase 28 / UXG-02 benign-softening ladder (D-28-06 arms 2-4). The
+// 33-35: UXG-02 benign-softening ladder (D-28-06 arms 2-4). The
 // still-`warning` cases that the benign-skip variants above do NOT cover:
 //   (i)  an actionable plugin skip (`reasons:["not installed"]`, D-28-03);
 //   (ii) a MIXED cascade (one benign skip + one actionable skip under the
@@ -2155,7 +2148,7 @@ test("notify passes a SemVer version through unchanged -> v1.0.0 (non-hash pass-
 // The benign-only info cases are asserted in-place above (the plugin
 // `up-to-date` skip, the idempotent autoupdate flips, the UXG-05 mp no-ops,
 // the mixed mp.skipped+available cascade, and severity tier info). The
-// manual-recovery -> warning case is asserted by the test at line ~1729.
+// manual-recovery -> warning case is asserted by the manual-recovery test above.
 // ===========================================================================
 
 test('UXG-02 (D-28-03/06): actionable plugin skip ("not installed") computes warning', () => {
@@ -2221,7 +2214,7 @@ test("UXG-02 (D-28-06): plugin skip with empty reasons:[] computes warning (allB
   // false (the `reasons.length > 0` guard), so arm 3 of the D-28-06 ladder
   // routes it to "warning" -- empty reasons cannot be proven benign, matching
   // the D-28-08 safe-default intent. Distinct from the actionable-reason case
-  // (:1940) and the mp-omitted-reasons case (arm 4, below).
+  // and the mp-omitted-reasons case (arm 4, below).
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2255,13 +2248,13 @@ test("UXG-02 (D-28-08): mp-level skip with reasons OMITTED computes warning -- s
 });
 
 // ===========================================================================
-// 36-43: Phase 29 / UXG-07 summary-line composition (D-29-02/03/04). For
+// 36-43: UXG-07 summary-line composition (D-29-02/03/04). For
 // `error` and `warning` severity, notify() PREPENDS a human-readable summary
 // line before the cascade body: `{summary}\n\n{cascade body}` (+ optional
 // reload-hint). The summary counts failed (error) / actionable-skip +
 // manual-recovery (warning) plugin and marketplace operations, applying the
-// singular/plural and mixed-type grammar. Info severity is byte-identical to
-// pre-Phase-29 behavior (NO summary line). These tests assert the
+// singular/plural and mixed-type grammar. Info severity carries
+// NO summary line. These tests assert the
 // composition through the public `notify()` surface (buildSummaryLine is
 // file-private).
 // ===========================================================================
@@ -2529,17 +2522,15 @@ test("UXG-07 (D-29-02): warning -- benign-only cascade routes to INFO so NO summ
 });
 
 // ===========================================================================
-// Phase 42 / INFO-04 / INFO-08 -- info-message variants + `wrapDescription`
+// INFO-04 / INFO-08 -- info-message variants + `wrapDescription`
 //
-// The Phase 42 atomic-supersession commit lands two new top-level
-// NotificationMessage variants (`MarketplaceInfoMessage`,
-// `PluginInfoMessage`), the new `"not added"` REASON closed-set entry, and
+// Two top-level NotificationMessage variants (`MarketplaceInfoMessage`,
+// `PluginInfoMessage`), the `"not added"` REASON closed-set entry, and
 // the file-private `wrapDescription` helper. The tests below lock:
 //   - wrapDescription edge cases (6 tests covering empty, short, exact-fit,
 //     long, over-length single word, whitespace normalization) -- driven
 //     end-to-end through `notify()` with a `plugin-info` payload whose
-//     description exercises each case, per RESEARCH Anti-Pattern: do NOT
-//     export wrapDescription.
+//     description exercises each case (do NOT export wrapDescription).
 //   - The INFO-04 `{not added}` --scope mismatch byte form + severity.
 //   - renderMarketplaceInfo: github source with ref + lastUpdated +
 //     description; path source without lastUpdated and without description.
@@ -2733,9 +2724,9 @@ test("Phase 42 / INFO-01: renderMarketplaceInfo (github source + ref + lastUpdat
     kind: "marketplace-info",
     name: "official",
     scope: "user",
-    // Phase 42 / WR-04: timestamp lives ONLY on `details.lastUpdatedAt`
-    // (single source of truth -- the parallel top-level `lastUpdated?`
-    // field was removed). Renderer reads it from `details` on the
+    // WR-04: timestamp lives ONLY on `details.lastUpdatedAt`
+    // (single source of truth -- there is no parallel top-level
+    // `lastUpdated?` field). Renderer reads it from `details` on the
     // github-source arm.
     details: { autoupdate: true, lastUpdatedAt: "2026-05-01T12:34:56Z" },
     source: { sourceKind: "github", owner: "acolombo", repo: "official", ref: "main" },
@@ -2753,7 +2744,7 @@ test("Phase 42 / INFO-01: renderMarketplaceInfo (github source + ref + lastUpdat
     ].join("\n"),
   );
   // marketplace-info routes to info severity (no failure surface on the
-  // variant itself per Phase 42 / computeSeverity).
+  // variant itself per computeSeverity).
   assert.equal(args.length, 1);
 });
 
@@ -2786,7 +2777,7 @@ test("Phase 42 / INFO-02 / INFO-05: renderPluginInfo (componentsResolved:true wi
   // wrapped description (4-space indent, 66-col text width) + per-kind
   // component lines (alphabetical by kind: agents, commands, mcp, skills)
   // + dependencies line last. The renderer assumes pre-sorted per-kind name
-  // arrays (RESEARCH Pitfall 5 -- the orchestrator sorts at construction).
+  // arrays (the orchestrator sorts at construction).
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
@@ -2861,9 +2852,9 @@ test("Phase 42 / INFO-05: renderPluginInfo (componentsResolved:false emits the `
 });
 
 // ===========================================================================
-// Phase 43 / INFO-03 -- MarketplaceInfoCascadeMessage fan-out variant.
+// INFO-03 -- MarketplaceInfoCascadeMessage fan-out variant.
 //
-// Per-status byte tests for the new 4th NotificationMessage arm. The
+// Per-status byte tests for the 4th NotificationMessage arm. The
 // fan-out wrapper carries one or more MarketplaceInfoMessage blocks; the
 // renderer joins per-block bodies with `\n\n` (mirrors the cascade
 // composeMarketplaceBlock `\n\n` join). Severity is ALWAYS info (no
@@ -2872,7 +2863,7 @@ test("Phase 42 / INFO-05: renderPluginInfo (componentsResolved:false emits the `
 // surface, read-only). The single-block case is byte-identical to a bare
 // MarketplaceInfoMessage so the wrapper composes via reuse of
 // `renderMarketplaceInfo` rather than re-implementing the per-block
-// renderer (Phase 42 SC#4 byte-equality carried forward).
+// renderer (SC#4 byte-equality).
 // ===========================================================================
 
 test("Phase 43 / INFO-03: marketplace-info-cascade with a single block byte-equals the bare marketplace-info render", () => {
@@ -3055,11 +3046,11 @@ test("Phase 43 / INFO-03 + INFO-01: single-block fan-out (path source, minimal) 
 });
 
 // ===========================================================================
-// Phase 44 / INFO-02 + INFO-03 -- PluginInfoCascadeMessage fan-out variant.
+// INFO-02 + INFO-03 -- PluginInfoCascadeMessage fan-out variant.
 //
-// Per-status byte tests for the new 5th NotificationMessage arm. The
+// Per-status byte tests for the 5th NotificationMessage arm. The
 // fan-out wrapper carries one or more PluginInfoMessage blocks; the
-// renderer joins per-block bodies with `\n\n` (mirrors Phase 43's
+// renderer joins per-block bodies with `\n\n` (mirrors the
 // MarketplaceInfoCascadeMessage AND the install-cascade
 // composeMarketplaceBlock `\n\n` join). Severity is ALWAYS info (no
 // failure surface on the fan-out wrapper itself -- the orchestrator
@@ -3067,7 +3058,7 @@ test("Phase 43 / INFO-03 + INFO-01: single-block fan-out (path source, minimal) 
 // fires (info surface, read-only). The single-block case is byte-
 // identical to a bare PluginInfoMessage so the wrapper composes via
 // reuse of `renderPluginInfo` rather than re-implementing the per-block
-// renderer (Phase 42 SC#4 + Phase 43 byte-equality carried forward).
+// renderer (SC#4 byte-equality).
 // ===========================================================================
 
 test("Phase 44 / INFO-02: plugin-info-cascade with a single block byte-equals the bare plugin-info render", () => {
@@ -3296,8 +3287,8 @@ test("Phase 44 / INFO-05: plugin-info-cascade single block components-not-resolv
 });
 
 test('Phase 42 / Migration Strategy #2: cascade payload WITHOUT `kind` field byte-equals payload WITH `kind: "cascade"`', () => {
-  // The Phase 42 dispatcher uses `message.kind ?? \"cascade\"` so v1.0-v1.7
-  // call sites that omit `kind` continue to route through the cascade arm
+  // The dispatcher uses `message.kind ?? \"cascade\"` so call sites
+  // that omit `kind` continue to route through the cascade arm
   // byte-identically. Lock the equivalence end-to-end: invoke notify() with
   // both shapes and assert byte equality.
   const ctxNoKind = makeCtx();

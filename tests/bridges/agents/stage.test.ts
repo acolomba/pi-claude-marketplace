@@ -26,7 +26,7 @@ import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-ma
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 
 // AG-1 / AG-2 / AG-3 / AG-5 / AG-7 / AG-9 / AS-9: end-to-end prepare +
-// commit + abort tests. tmpScope pattern from skills/stage.test.ts.
+// commit + abort tests.
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.resolve(HERE, "..", "_fixtures");
@@ -39,7 +39,7 @@ function makeResolved(name: string, pluginRoot: string): ResolvedPluginInstallab
     supported: ["agents"],
     unsupported: [],
     notes: [],
-    // D-07: componentPaths.agents is now `readonly string[]`.
+    // D-07: componentPaths.agents is `readonly string[]`.
     componentPaths: { skills: [], commands: [], agents: ["agents"] },
     mcpServers: {},
   };
@@ -78,7 +78,7 @@ test("AG-1 commitPreparedAgents lands files at <scopeRoot>/agents/pi-claude-mark
       "pi-claude-marketplace-acme-bot",
       "pi-claude-marketplace-acme-helper",
     ]);
-    // recorded[] populated for Phase 5 state.json.installs.
+    // recorded[] populated for state.json.installs.
     assert.equal(prepared.result.recorded.length, 2);
 
     await commitPreparedAgents(prepared);
@@ -846,9 +846,9 @@ test("Phase 8 / PRL-10 replacePreparedAgents internal rename failure rolls back 
 
 test("AG-1 prepare/replace skips backup loop entries that vanish between prepare and replace", async (t) => {
   // The replace path's backup loop has a "skip if target doesn't exist"
-  // branch (lines 420-421). To trigger it: stage agents, then between
-  // prepare and replace remove the target file out-of-band. The backup
-  // loop should `continue` past the missing entry without throwing.
+  // branch. To trigger it: stage agents, then between prepare and replace
+  // remove the target file out-of-band. The backup loop should `continue`
+  // past the missing entry without throwing.
   if (process.platform === "win32") {
     t.skip("POSIX-only file manipulation");
     return;
@@ -923,7 +923,7 @@ test("Phase 8 / PRL-10 replacePreparedAgents rollback removes new agents-index w
 test("Phase 8 / PRL-10 readOptionalText (non-ENOENT) -> rethrows from inside replacePreparedAgents", async (t) => {
   // POSIX-only: chmod a previous agents-index.json to 0 so the
   // readOptionalText call inside replacePreparedAgents hits the
-  // non-ENOENT branch (lines 561-566), which rethrows.
+  // non-ENOENT branch, which rethrows.
   if (process.platform === "win32") {
     t.skip("POSIX-only chmod 0 failure path");
     return;
@@ -973,7 +973,7 @@ test("Phase 8 / PRL-10 readOptionalText (non-ENOENT) -> rethrows from inside rep
 });
 
 test("formatAgentWarnings emits dropped-fields line when agent has unknown frontmatter fields", async () => {
-  // Lines 289-290: droppedFields non-empty -> out.push(`[...] dropped fields: ...`)
+  // droppedFields non-empty -> out.push(`[...] dropped fields: ...`)
   await withTmpScope(async ({ locations }) => {
     const tmpPluginRoot = await mkdtemp(path.join(os.tmpdir(), "agents-stage-droppedfields-"));
     const agentsDir = path.join(tmpPluginRoot, "agents");
@@ -1006,7 +1006,7 @@ test("formatAgentWarnings emits dropped-fields line when agent has unknown front
 });
 
 test("formatAgentWarnings emits dropped-tools line when agent has unmapped tool names", async () => {
-  // Lines 293-294: droppedTools non-empty -> out.push(`[...] dropped tools: ...`)
+  // droppedTools non-empty -> out.push(`[...] dropped tools: ...`)
   await withTmpScope(async ({ locations }) => {
     const tmpPluginRoot = await mkdtemp(path.join(os.tmpdir(), "agents-stage-droppedtools-"));
     const agentsDir = path.join(tmpPluginRoot, "agents");
@@ -1039,7 +1039,7 @@ test("formatAgentWarnings emits dropped-tools line when agent has unmapped tool 
 });
 
 test("abortPreparedAgents returns undefined immediately for noop prepared result", async () => {
-  // Lines 379-380: kind === 'noop' -> return undefined
+  // kind === 'noop' -> return undefined
   await withTmpScope(async ({ locations }) => {
     const pluginRoot = path.join(FIXTURES, "test-plugin");
     const resolved = makeResolved("acme", pluginRoot);
@@ -1062,7 +1062,7 @@ test("abortPreparedAgents returns undefined immediately for noop prepared result
 });
 
 test("replacePreparedAgents throws when staged target path already exists with non-previous content", async () => {
-  // Lines 434-435: pathExists(pair.to) true -> throws 'Cannot replace agent target...'
+  // pathExists(pair.to) true -> throws 'Cannot replace agent target...'
   await withTmpScope(async ({ locations }) => {
     const pluginRoot = path.join(FIXTURES, "test-plugin");
     const resolved = makeResolved("acme", pluginRoot);
@@ -1308,7 +1308,7 @@ test("TR-01 commitPreparedAgents rollback rename failure surfaces via appendLeak
       (err: unknown) => {
         assert.ok(err instanceof Error);
         // The bridge MUST use appendLeaks (not ManualRecoveryError) on the
-        // commit-path catch (Pitfall 8).
+        // commit-path catch.
         assert.ok(
           err.name !== "ManualRecoveryError",
           "commit catch must NOT use ManualRecoveryError",
@@ -1352,7 +1352,7 @@ test("TR-06 replacePreparedAgents tolerates owned orphan file from prior partial
 
     // Step 2: out-of-band, replace the bot target file with orphan bytes
     // (simulating a prior partial install having left a file at the same
-    // basename). The orphan body carries the V1 generated-agent marker so
+    // basename). The orphan body carries the generated-agent marker so
     // the AG-5 foreign-content check still classifies it as owned and the
     // replace path proceeds. The index still claims ownership of this
     // generatedName.
@@ -1386,7 +1386,7 @@ test("TR-06 replacePreparedAgents tolerates owned orphan file from prior partial
       !replacedBody.includes("orphan-agent"),
       "orphan-agent bytes must be gone after replace",
     );
-    // The new agent body must carry the V1 generated marker (this is
+    // The new agent body must carry the generated marker (this is
     // the regenerated content, not the orphan).
     assert.ok(
       replacedBody.includes("generated by pi-claude-marketplace"),
@@ -1407,7 +1407,7 @@ test("TR-07 commitPreparedAgents step-1 ENOENT-tolerance enables retry-safe self
   // target exactly once, the index reflects truth, and the second staging
   // dir is cleaned up. This test asserts ONLY the final state -- it does
   // NOT spy on rm calls, count Promise.all iterations, or otherwise pin
-  // implementation details (Pitfall 13).
+  // implementation details.
   await withTmpScope(async ({ locations }) => {
     const pluginRoot = path.join(FIXTURES, "test-plugin");
     const resolved = makeResolved("acme", pluginRoot);

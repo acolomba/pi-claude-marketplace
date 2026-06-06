@@ -12,8 +12,8 @@ import type { PluginIndexRow } from "../../../extensions/pi-claude-marketplace/s
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 /**
- * Wave 2 / Plan 06-03 tests for edge/completions/provider.ts (TC-1..TC-9
- * integration + null sentinel + branching dispatch).
+ * Tests for edge/completions/provider.ts (TC-1..TC-9 integration + null
+ * sentinel + branching dispatch).
  *
  * The provider is a pure function of (prefix, resolver); resolver is a
  * test-built mock that captures call counts + throws to exercise TC-8/TC-9.
@@ -101,8 +101,8 @@ test("TC-1 :: first positional surfaces top-level keywords (bootstrap/install/un
     const items = await getArgumentCompletions("", f.resolver);
     assert.ok(items !== null);
     const labels = items.map((i) => i.label);
-    // Phase 44 / INFO-02: `info` added to TOP_LEVEL_SUBCOMMANDS for
-    // the new `info <plugin>@<marketplace>` top-level verb.
+    // INFO-02: `info` added to TOP_LEVEL_SUBCOMMANDS for the
+    // `info <plugin>@<marketplace>` top-level verb.
     assert.deepEqual([...labels].sort(), [
       "bootstrap",
       "import",
@@ -176,7 +176,7 @@ test("TC-2 :: after marketplace surfaces nested keywords and aliases", async () 
   try {
     const items = await getArgumentCompletions("marketplace ", f.resolver);
     assert.ok(items !== null);
-    // Phase 43 / INFO-06: `info` added to MARKETPLACE_SUBCOMMANDS for
+    // INFO-06: `info` added to MARKETPLACE_SUBCOMMANDS for
     // `marketplace info <name>` argument completion (TC-5 via the
     // MARKETPLACE_VERBS_WITH_NAME_ARG set).
     assert.deepEqual([...items.map((i) => i.label)].sort(), [
@@ -589,8 +589,8 @@ test("TC-5 :: marketplace noautoupdate <here> completes with marketplace names",
   }
 });
 
-// Phase 43 / Plan 43-01 / INFO-06: `marketplace info <name>` argument
-// completion. The TC-5 union surface is reused: candidates are the union
+// INFO-06: `marketplace info <name>` argument completion. The TC-5
+// union surface is reused: candidates are the union
 // of marketplace names across BOTH scopes; the `--scope` filter does NOT
 // narrow the completion candidate set (the orchestrator handles scope-
 // mismatch at execution time via the INFO-04 `{not added}` row).
@@ -891,18 +891,17 @@ test("TC-6 :: update <here> -- status filter shows only installed plugins", asyn
 //       paths appear. Either way our slash-command `getArgumentCompletions`
 //       is NEVER reached for the bare-`@<mp>` token.
 //
-// Causes ruled out: (a) provider code-path divergence -- ELIMINATED, the v1.4
-// runtime now source-loads v0.2.0 (the version this test covers) via SNM-37
-// (plan 25-01). (c) `getInstalledPluginToMarketplacesMap` empty via scope-root
-// mismatch -- not the cause: pi-tui intercepts before our resolver map
-// (`data.ts:313`) is ever consulted for a bare `@` token.
+// Causes ruled out: (a) provider code-path divergence -- ELIMINATED, the
+// runtime source-loads the provider this test covers via SNM-37. (c)
+// `getInstalledPluginToMarketplacesMap` empty via scope-root mismatch -- not
+// the cause: pi-tui intercepts before our resolver map (`data.ts:313`) is ever
+// consulted for a bare `@` token.
 //
 // Per D-25-10 this is `@earendil-works/pi-tui`-external -- DEFER, do NOT contort
 // our provider to dodge the host's `@`-precedence (that would degrade the
 // documented bare-`@<mp>` UX without fixing the interception). The
 // `<plugin>@<mp>` and bare-`<TAB>` plugin-half forms are unaffected (their
-// token does not START with `@`). See `.planning/v1.4-MILESTONE-UAT.md` G-MIL-07
-// for the recorded verdict.
+// token does not START with `@`).
 test("TC-6 :: update accepts bare @<marketplace> form", async () => {
   __resetCacheForTests();
   const f = await makeFixture({
@@ -1121,7 +1120,7 @@ test("TC-6 :: multi-marketplace plugin yields name@ without trailing space", asy
 });
 
 // ---------------------------------------------------------------------------
-// Phase 44 / Plan 44-01 / INFO-02 + INFO-06: TC-6 `info` mode --
+// INFO-02 + INFO-06: TC-6 `info` mode --
 // `<plugin>@<marketplace>` token completion across the union of
 // installed + available + unavailable rows from BOTH scopes (no
 // install-state exclusion; scope filter does NOT narrow the candidate

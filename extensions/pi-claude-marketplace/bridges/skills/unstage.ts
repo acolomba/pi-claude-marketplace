@@ -1,10 +1,8 @@
 // bridges/skills/unstage.ts
 //
 // Remove previously-staged skill dirs by name. Idempotent: ENOENT on a name
-// is silently treated as already-removed. Mirrors V1
-// `agent/stage.ts::unstagePluginAgents` shape but simpler -- skills have
-// no on-disk index and no foreign-content marker (D-06: skills dir is owned
-// end-to-end by name).
+// is silently treated as already-removed. Skills have no on-disk index and
+// no foreign-content marker (D-06: skills dir is owned end-to-end by name).
 
 import { rm } from "node:fs/promises";
 import path from "node:path";

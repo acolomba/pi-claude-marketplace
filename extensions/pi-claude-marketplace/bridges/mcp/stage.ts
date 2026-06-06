@@ -1,7 +1,8 @@
 // bridges/mcp/stage.ts
 //
-// MC-6 prepare/commit/abort for the MCP bridge, plus Phase 8 replacement
-// exports: replacePreparedMcp, rollbackMcpReplacement, finalizeMcpReplacement. The prepare phase reads
+// MC-6 prepare/commit/abort for the MCP bridge, plus replacement
+// exports: replacePreparedMcp, rollbackMcpReplacement, finalizeMcpReplacement.
+// The prepare phase reads
 // the scoped `mcp.json`, partitions existing entries into ours-vs-theirs
 // by `_piClaudeMarketplace` marker, runs the four-slot cross-slot collision
 // check (MC-4 / RN-5), short-circuits AS-8 noops, stamps the new entries
@@ -10,16 +11,12 @@
 // EXDEV risk, no partial-state recovery surface. Abort is a synchronous
 // no-op because prepare wrote nothing to disk.
 //
-// V1 carry-forward (`mcp/stage.ts`, lines 81-173) with two deltas:
-//   1. `MCP_COLLISION_SLOTS` is hoisted to a named export in
-//      `collision-slots.ts` -- the V1 inline slot list moved there.
-//   2. The plain-`Error` collision throw is replaced by typed
-//      `McpServerCollisionError` so callers can `instanceof`-discriminate
-//      the refusal category.
+// The collision throw is a typed `McpServerCollisionError` so callers can
+// `instanceof`-discriminate the refusal category.
 //
-// W-05 fix: the commit result now carries `recorded: StagedMcpRecord[]`
-// so Phase 5 can populate state.json from the bridge return value
-// without re-deriving the per-server `targetPath`.
+// W-05: the commit result carries `recorded: StagedMcpRecord[]` so callers
+// can populate state.json from the bridge return value without re-deriving
+// the per-server `targetPath`.
 
 import { mkdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
@@ -169,8 +166,7 @@ function stampServers(
  * AND nothing previously-ours -- in that case `commitPreparedMcp` writes
  * no file (PRD success criterion: AS-8 noop produces no `mcp.json`).
  *
- * Throws `McpServerCollisionError` on cross-slot conflict (NEW typed-error
- * delta vs V1's plain `Error`).
+ * Throws `McpServerCollisionError` on cross-slot conflict.
  */
 export async function prepareStageMcpServers(input: StageMcpInput): Promise<PreparedMcpStaging> {
   const { locations, cwd, marketplaceName, pluginName, servers } = input;
@@ -211,7 +207,7 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   // no new servers but ours.size > 0).
   const next: RawMcpDoc = { ...doc, mcpServers: { ...theirs, ...stamped } };
 
-  // W-05: Phase 5 reads `recorded` to populate state.json. `sourcePath`
+  // W-05: callers read `recorded` to populate state.json. `sourcePath`
   // is the canonical provenance the install path passes in (e.g.
   // "<pluginRoot>/.mcp.json" or "<pluginRoot>/<plugin>.json#mcpServers");
   // when omitted we fall back to a synthetic `<plugin>#mcpServers` tag.
@@ -242,7 +238,7 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
 /**
  * MC-6 commit: a single `atomicWriteJson` for the staged branch; a
  * zero-op for the noop branch. Returns the same `StageMcpCommitResult`
- * the prepare phase computed (W-05) so Phase 5 has a stable hand-off
+ * the prepare phase computed (W-05) so callers have a stable hand-off
  * shape regardless of which branch the prepare took.
  */
 export async function commitPreparedMcp(

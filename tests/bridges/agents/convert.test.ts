@@ -344,13 +344,13 @@ test("AG-7 convertAgent treats inherit as 'no model emit' but records originalMo
 });
 
 // ---------------------------------------------------------------------------
-// AG-7 mapModel opt-in default (260516-08j)
+// AG-7 mapModel opt-in default
 // ---------------------------------------------------------------------------
 
 test("AG-7 convertAgent with mapModel: false omits model field entirely (source 'sonnet')", () => {
-  // Default behavior per 260516-08j: even when the source declares a known
-  // model, the generated frontmatter MUST NOT contain a `model:` line. Pi
-  // picks its own default.
+  // Default behavior: even when the source declares a known model, the
+  // generated frontmatter MUST NOT contain a `model:` line. Pi picks its own
+  // default.
   const out = convertAgent({
     pluginName: "acme",
     pluginRoot: "/root",

@@ -1,13 +1,11 @@
 // domain/components/mcp.ts
 //
 // TypeBox schema for the `mcpServers` map shape (PRD §5.8 MC-1/MC-2).
-// The per-server entry shape is opaque from Phase 2's perspective -- the
-// Phase 3 MCP bridge inspects each entry's `command`/`args`/`env` fields
-// when it stages servers. Phase 2 validates only that mcpServers is a
-// string-keyed object.
+// The per-server entry shape is opaque here -- the MCP bridge inspects
+// each entry's `command`/`args`/`env` fields when it stages servers. This
+// schema validates only that mcpServers is a string-keyed object.
 //
-// CONTEXT.md D-07 + RESEARCH.md Pattern 2: JIT compilation at module load.
-// RESEARCH.md Pitfall 3: import path is `typebox/compile` in 1.x.
+// D-07: JIT compilation at module load. The import path is `typebox/compile`.
 
 import Type from "typebox";
 import { Compile } from "typebox/compile";

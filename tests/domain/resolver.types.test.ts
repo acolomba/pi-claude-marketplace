@@ -1,6 +1,4 @@
-// tests/domain/resolver.types.test.ts
-//
-// Phase 2 Success Criterion 1 / NFR-7 verifier.
+// NFR-7 verifier.
 //
 // The load-bearing assertion in this file is at the // @ts-expect-error
 // line below: TypeScript MUST refuse to typecheck a read of `pluginRoot`

@@ -3,12 +3,12 @@
 // TypeBox schemas for plugin entries (inside `marketplace.json` `plugins[]`)
 // and standalone plugin.json files. Per MM-2, all unsupported-component
 // declarations are accepted as opaque `Type.Unknown()` -- the resolver
-// (Plan 02-05) classifies and disqualifies them. Per MM-3 the resolver
-// also runs the source field through parsePluginSource; the schema layer
-// accepts `source` as Unknown.
+// classifies and disqualifies them. Per MM-3 the resolver also runs the
+// source field through parsePluginSource; the schema layer accepts `source`
+// as Unknown.
 //
-// RESEARCH.md Pitfall 7: TypeBox `Type.Optional` produces `T | undefined`
-// in Static<>, not `T?`. Use `=== undefined` checks downstream, not `in`.
+// TypeBox `Type.Optional` produces `T | undefined` in Static<>, not `T?`.
+// Use `=== undefined` checks downstream, not `in`.
 
 import Type from "typebox";
 import { Compile } from "typebox/compile";

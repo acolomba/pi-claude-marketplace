@@ -40,9 +40,8 @@ interface NotifyRecord {
 
 function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: NotifyRecord[] } {
   const notifications: NotifyRecord[] = [];
-  // Plan 18-00: `pi` promoted from `pi?` to required on
-  // UpdateMarketplaceOptions / UpdateAllMarketplacesOptions; mirror
-  // production wiring shape (D-18-06 preserved).
+  // `pi` is required on UpdateMarketplaceOptions /
+  // UpdateAllMarketplacesOptions; mirror production wiring shape (D-18-06).
   const pi = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
   const ctx = {
     ui: {
@@ -139,8 +138,7 @@ test("CMC-10 + MU-1: bare form against empty scope succeeds with `(no marketplac
     assert.equal(notifications.length, 1);
     const first = notifications[0];
     assert.ok(first !== undefined);
-    // CMC-10: bare `(no marketplaces)` EmptyToken (formerly the
-    // "No marketplaces configured." sentence; retired by Plan 13-02c-01).
+    // CMC-10: bare `(no marketplaces)` EmptyToken.
     assert.equal(first.message, "(no marketplaces)");
     assert.equal(first.message.includes("/reload to pick up changes"), false);
   });
@@ -175,8 +173,7 @@ test("MU-4 + D-14: github source refreshes via fetch+forceUpdateRef+checkout in 
     const first = notifications[0];
     assert.ok(first !== undefined);
     // mp.status === "skipped" with the benign reason `up-to-date` (in
-    // BENIGN_REASONS) routes to info via computeSeverity (UXG-02 / D-28-06/07
-    // -- the Phase 28 info-softening, now realized).
+    // BENIGN_REASONS) routes to info via computeSeverity (UXG-02 / D-28-06/07).
     assert.equal(first.severity, undefined);
     // SNM-33 / D-22-01 (G-MIL-06): no plugin children -> no Pi-visible resource
     // change -> NO `/reload` trailer (UXG-05 is orthogonal to the reload-hint).
@@ -278,9 +275,9 @@ test("CR-01 / D-14 default-branch: forceUpdateRef target is refs/heads/<branch>,
   // Default-branch tracking (storedRef === undefined): the seeded
   // marketplace has no `ref` fragment. The refresh path must read the
   // symbolic branch name via gitOps.currentBranch(), then
-  // forceUpdateRef("refs/heads/<branch>", remoteSha). Previously it
-  // erroneously used resolveRef("HEAD") (which returns a SHA) as the
-  // ref argument, producing a meaningless `refs/<40-hex>` write.
+  // forceUpdateRef("refs/heads/<branch>", remoteSha) -- NOT
+  // resolveRef("HEAD") (which returns a SHA) as the ref argument, which
+  // would produce a meaningless `refs/<40-hex>` write.
   await withHermeticHome(async ({ cwd }) => {
     await seedGithubMarketplace({ cwd, name: "defaultbranch" });
     const { ctx, pi } = makeCtx();
@@ -591,12 +588,11 @@ test("MU-6: cascade skipped when autoupdate=false (default)", async () => {
 });
 
 test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabetically (regardless of status)", async () => {
-  // Phase 13 / Plan 13-02c-01: the legacy MU-7 partition headers
-  // (`Updated:` / `Unchanged:` / `Skipped:` / `Failed:`) are RETIRED;
-  // cascade rows now interleave alphabetically by name per MSG-GR-3
-  // (`compareByNameThenScope`). The status / icon / reason on each row
-  // carries the partition signal -- the partition labels are no longer
-  // emitted as section headers.
+  // The MU-7 partition headers (`Updated:` / `Unchanged:` / `Skipped:` /
+  // `Failed:`) are not emitted; cascade rows interleave alphabetically by
+  // name per MSG-GR-3 (`compareByNameThenScope`). The status / icon /
+  // reason on each row carries the partition signal -- the partition labels
+  // are not emitted as section headers.
   await withHermeticHome(async ({ cwd }) => {
     await seedGithubMarketplace({
       cwd,
@@ -614,9 +610,8 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
     const { gitOps } = makeMockGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000006" },
     });
-    // Task 260525-cjr C2: PluginUpdateOutcome is now a discriminated
-    // union; each partition variant has different required fields.
-    // Construct a fixture per branch.
+    // PluginUpdateOutcome is a discriminated union; each partition variant
+    // has different required fields. Construct a fixture per branch.
     const pluginUpdate: PluginUpdateFn = (plugin) => {
       if (plugin === "a") {
         return Promise.resolve<PluginUpdateOutcome>({
@@ -675,14 +670,14 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
     const first = notifications[0];
     assert.ok(first !== undefined);
     const body = first.message;
-    // Plan 18-05 / D-18-03: Rows interleave in caller order (D-16-06):
-    // a (updated), b (unchanged), c (skipped fallback), d (failed). V2
-    // catalog `mixed-outcomes` shape (docs/output-catalog.md:813-822).
+    // D-18-03: Rows interleave in caller order (D-16-06):
+    // a (updated), b (unchanged), c (skipped fallback), d (failed). Catalog
+    // `mixed-outcomes` shape.
     // Glyph map per D-16-11 severity ladder:
     //   updated -> ● (info)
-    //   skipped -> ⊘ (warning)   <-- RESEARCH Risks #5 flip vs V1's ●
+    //   skipped -> ⊘ (warning)
     //   failed  -> ⊘ (error)
-    // The `[project]` scope bracket is suppressed by Phase 17.2 orphan-fold
+    // The `[project]` scope bracket is suppressed by the orphan-fold
     // (plugin.scope === mp.scope -> renderScopeBracket returns ""). Both
     // narrowSkipReason (WR-06) and narrowFailReason fallbacks now map an
     // empty-notes/no-substring-match outcome to `unreadable manifest`;
@@ -696,7 +691,7 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
       idxA >= 0 && idxB > idxA && idxC > idxB && idxD > idxC,
       `row order broken in body:\n${body}`,
     );
-    // Legacy partition headers MUST NOT appear.
+    // Partition headers MUST NOT appear.
     assert.equal(body.includes("Updated:"), false);
     assert.equal(body.includes("Unchanged:"), false);
     assert.equal(body.includes("Skipped:"), false);
@@ -780,14 +775,11 @@ test("UXG-05 (UAT Test-3 gap) + RH-1 + SNM-33 / D-22-01: autoupdate-ON cascade a
       gitOps,
       pluginUpdate,
     });
-    // UXG-05 (Phase 27 UAT Test-3 gap): the autoupdate-ON branch previously
-    // emitted `(updated)` unconditionally (this test passed against that buggy
-    // output asserting only trailer-absence, which masked the gap). With the
-    // fix, snapshot.changed === false AND every cascade outcome is `unchanged`
-    // -> the marketplace converges to the SAME no-op byte form as the OFF
-    // no-op: `(skipped) {up-to-date}`, all-`unchanged` cascade rows dropped
-    // (plugins:[]). The benign `up-to-date` reason routes severity to info per
-    // UXG-02 / D-28-06/07.
+    // UXG-05: when snapshot.changed === false AND every cascade outcome is
+    // `unchanged`, the marketplace converges to the SAME no-op byte form as
+    // the autoupdate-OFF no-op: `(skipped) {up-to-date}`, all-`unchanged`
+    // cascade rows dropped (plugins:[]). The benign `up-to-date` reason routes
+    // severity to info per UXG-02 / D-28-06/07.
     const first = notifications[0];
     assert.ok(first !== undefined);
     assert.equal(first.message, "● noupd [project] (skipped) {up-to-date}");
@@ -888,7 +880,7 @@ test("NFR-5: path-source update calls zero gitOps methods", async () => {
 });
 
 test("D-03-INV :: update invalidates plugin cache for that marketplace", async () => {
-  // Plan 06-05 wires invalidateMarketplaceCache into updateMarketplace's
+  // updateMarketplace wires invalidateMarketplaceCache into its
   // post-state-commit window (after the inner withStateGuard returns,
   // before any cascade runs). Manifest refresh may have changed the plugin
   // set, so the cached plugin index for this (scope, marketplace) pair
@@ -929,16 +921,16 @@ test("D-03-INV :: update invalidates plugin cache for that marketplace", async (
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// Plan 18-05 / D-18-03: outcomeToCascadePluginMessage maps a
-// PluginUpdateOutcome to a discriminated PluginNotificationMessage. The
-// V2 mapper returns one of `PluginUpdatedMessage{from,to,dependencies}`,
-// `PluginSkippedMessage{reasons}`, or `PluginFailedMessage{reasons,cause?}`
-// (no PluginUnchangedMessage variant -- `unchanged` outcomes map to
-// `skipped` + `["up-to-date"]` per RESEARCH Risks #5 glyph flip).
+// D-18-03: outcomeToCascadePluginMessage maps a PluginUpdateOutcome to a
+// discriminated PluginNotificationMessage. The mapper returns one of
+// `PluginUpdatedMessage{from,to,dependencies}`, `PluginSkippedMessage{reasons}`,
+// or `PluginFailedMessage{reasons,cause?}` (no PluginUnchangedMessage variant
+// -- `unchanged` outcomes map to `skipped` + `["up-to-date"]` with a glyph
+// flip).
 //
-// Carries forward Quick task 260525-aub's typed-reasons preference over
-// the notes-parsing fallback (CR-06 producer-narrowed contract) so a
-// future refactor cannot regress to substring matching.
+// The typed-reasons path is preferred over the notes-parsing fallback (CR-06
+// producer-narrowed contract) so a future refactor cannot regress to substring
+// matching.
 // ───────────────────────────────────────────────────────────────────────────
 
 test("outcomeToCascadePluginMessage: updated outcome -> PluginUpdatedMessage with from/to/dependencies", () => {
@@ -968,9 +960,8 @@ test("outcomeToCascadePluginMessage: updated outcome -> PluginUpdatedMessage wit
 });
 
 test('outcomeToCascadePluginMessage: unchanged outcome -> PluginSkippedMessage with ["up-to-date"] (glyph flips to ⊘ at render time)', () => {
-  // RESEARCH Risks #5: V1 mapped `unchanged` to a trivial-skip ● glyph
-  // via `outcomeToCascadeRow`. V2 maps it to `skipped` + `["up-to-date"]`;
-  // the V2 renderer routes `skipped` to warning severity -> ⊘ glyph.
+  // `unchanged` maps to `skipped` + `["up-to-date"]`; the renderer routes
+  // `skipped` to warning severity -> ⊘ glyph.
   const outcome: PluginUpdateOutcome = {
     partition: "unchanged",
     name: "p",
@@ -1034,11 +1025,10 @@ test("outcomeToCascadePluginMessage: failed outcome with typed reasons + cause -
 });
 
 test("outcomeToCascadePluginMessage: skipped outcome without typed reasons falls back to notes substring parse (back-compat)", () => {
-  // Task 260525-cjr C2: `reasons` is required on PluginUpdateSkippedOutcome
-  // (the producer-narrowed contract). An empty `reasons: []` array
-  // exercises the consumer's notes-fallback substring narrow without
-  // populating a typed reason -- equivalent in behavior to the
-  // pre-C2 `reasons: undefined` fixture.
+  // `reasons` is required on PluginUpdateSkippedOutcome (the
+  // producer-narrowed contract). An empty `reasons: []` array exercises the
+  // consumer's notes-fallback substring narrow without populating a typed
+  // reason.
   const outcome: PluginUpdateOutcome = {
     partition: "skipped",
     name: "p",
@@ -1072,17 +1062,17 @@ test("outcomeToCascadePluginMessage: failed outcome without typed reasons falls 
   }
 
   assert.deepEqual(msg.reasons, ["rollback partial"]);
-  // No cause was stamped on the outcome -> the V2 mapper omits it on
+  // No cause was stamped on the outcome -> the mapper omits it on
   // PluginFailedMessage; the renderer skips the cause-chain trailer.
   assert.equal(msg.cause, undefined);
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// Task 260525-cjr B2: cascadeAutoupdates catch site pre-narrows the closed
-// `Reason` via the typed-dispatch helper. EACCES / EPERM throws surface as
-// `{permission denied}` instead of the consumer's permissive `not in manifest`
-// fallback. Exercised end-to-end through `updateMarketplace` with an injected
-// `pluginUpdate` stub that throws an errno-bearing error.
+// cascadeAutoupdates catch site pre-narrows the closed `Reason` via the
+// typed-dispatch helper. EACCES / EPERM throws surface as `{permission denied}`
+// instead of the consumer's permissive `not in manifest` fallback. Exercised
+// end-to-end through `updateMarketplace` with an injected `pluginUpdate` stub
+// that throws an errno-bearing error.
 // ───────────────────────────────────────────────────────────────────────────
 
 test("260525-cjr B2: cascadeAutoupdates catch -> EACCES surfaces as `{permission denied}` not `{not in manifest}`", async () => {
@@ -1207,7 +1197,7 @@ test("260525-cjr B2: cascadeAutoupdates catch -> generic Error falls through to 
 // ── New tests covering previously uncovered paths ────────────────────
 
 test("SC-6 / MU-1: updateAllMarketplaces (no scope) processes user-scope marketplace", async () => {
-  // Lines 168-170: targets.push() for a marketplace discovered in the
+  // targets.push() for a marketplace discovered in the
   // user scope during the no-scope-filter iteration path.
   await withHermeticHome(async ({ cwd }) => {
     // Seed a marketplace in user scope.  getAgentDir() uses
@@ -1251,7 +1241,7 @@ test("SC-6 / MU-1: updateAllMarketplaces (no scope) processes user-scope marketp
 });
 
 test("SC-6 / MU-1: updateAllMarketplaces (no scope) with both scopes empty notifies once", async () => {
-  // Lines 174-177: the empty-targets guard fires when BOTH scopes are
+  // The empty-targets guard fires when BOTH scopes are
   // enumerated and neither has any marketplaces.  The existing MU-1 test
   // uses scope:'project' (single scope); this test exercises the no-filter
   // path that checks both scopes.
@@ -1270,7 +1260,7 @@ test("SC-6 / MU-1: updateAllMarketplaces (no scope) with both scopes empty notif
 });
 
 test("refreshRecord: unsupported source kind surfaces as notifyError (lines 219-222)", async () => {
-  // Lines 219-222: the else branch in refreshRecord throws
+  // The else branch in refreshRecord throws
   // `Cannot update marketplace "..." unsupported source kind "..."`.
   // An `unknown`-kind source stored in state reaches this branch because
   // normalizeStoredSource passes kind==="unknown" through verbatim, but
@@ -1316,9 +1306,9 @@ test("refreshRecord: unsupported source kind surfaces as notifyError (lines 219-
 });
 
 test("snapshotAfterRefresh: MarketplaceNotFoundError when name absent from state (lines 244-246)", async () => {
-  // Lines 244-246: withStateGuard loads state, record===undefined, throws
+  // withStateGuard loads state, record===undefined, throws
   // MarketplaceNotFoundError.  refreshOneMarketplace catches it and calls
-  // notifyError (the non-MarketplaceUpdateError branch, lines 318-320).
+  // notifyError (the non-MarketplaceUpdateError branch).
   await withHermeticHome(async ({ cwd }) => {
     // Leave state empty -- no marketplace named "ghost".
     const { ctx, pi, notifications } = makeCtx();
@@ -1338,7 +1328,7 @@ test("snapshotAfterRefresh: MarketplaceNotFoundError when name absent from state
 });
 
 test("validateManifestAtRoot: stale manifestPath and marketplaceRoot are corrected (lines 382-388)", async () => {
-  // Lines 382-388: conditional writes in validateManifestAtRoot update
+  // The conditional writes in validateManifestAtRoot update
   // record.manifestPath and record.marketplaceRoot only when they differ
   // from the canonical computed values.  Seed with stale paths, run
   // update, then re-read state and assert both fields were corrected.

@@ -3,9 +3,7 @@
 // Shared helper for plugin orchestrators that need the set of generated
 // names a plugin would produce when staged. `update.ts` uses it to wire
 // the agents-knownSkills validator and to build cross-plugin conflict
-// inputs; `reinstall.ts` uses it for the same purposes. Extracted to
-// remove the duplicated body in both orchestrators (Sonar new-code
-// duplication).
+// inputs; `reinstall.ts` uses it for the same purposes.
 //
 // Lives outside `shared.ts` because it imports from `bridges/`; the
 // shared-helpers module is intentionally domain/persistence-only.

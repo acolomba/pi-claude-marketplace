@@ -9,7 +9,7 @@
 // miss they can address.
 //
 // SP-7: PathSource.raw preserves the verbatim user input unchanged --
-// tilde expansion happens at access time (Phase 4, location/index.ts).
+// tilde expansion happens at access time (location/index.ts).
 //
 // ST-6: pathSource() / githubSource() factories are the SAME funnel used
 // by both parse-time and state-load-time validation. Persistence layer
@@ -17,9 +17,9 @@
 //
 // SECURITY (T-02-03): the path branch deliberately accepts ANY string
 // starting with `./`, `../`, `/`, or `~/` as a path. NFR-10 path-traversal
-// containment is the responsibility of Phase 3 bridges + Phase 1's
-// `assertPathInside`. This parser is the syntactic gate; downstream
-// containment checks are the semantic gate.
+// containment is the responsibility of the bridges + `assertPathInside`.
+// This parser is the syntactic gate; downstream containment checks are the
+// semantic gate.
 
 export interface PathSource {
   readonly kind: "path";

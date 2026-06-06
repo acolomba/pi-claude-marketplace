@@ -1,4 +1,4 @@
-// Plan 06-04 Task 1: install handler shim tests.
+// install handler shim tests.
 //
 // The shim is a thin Pattern 1 wrapper (parseCommandArgs -> early-return ->
 // delegate). We verify:
@@ -138,7 +138,7 @@ test('shim :: --scope project calls installPlugin with scope: "project"', async 
 });
 
 // ---------------------------------------------------------------------------
-// 260516-08j: --map-model flag is accepted; unknown long flags rejected.
+// --map-model flag is accepted; unknown long flags rejected.
 // ---------------------------------------------------------------------------
 
 test("shim :: --map-model flag is accepted and control reaches installPlugin", async () => {

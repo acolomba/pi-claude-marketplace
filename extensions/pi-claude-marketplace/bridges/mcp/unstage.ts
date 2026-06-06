@@ -5,8 +5,7 @@
 // `(plugin, marketplace)` tuple, atomic-writes the reduced doc, and
 // returns the names that were removed.
 //
-// V1 carry-forward (`mcp/stage.ts::unstageMcpServers`, lines 185-206)
-// with explicit MC-7 tolerances:
+// MC-7 tolerances:
 //   - Missing `mcp.json` (ENOENT/ENOTDIR) -> noop. Must NOT materialize
 //     the file just to write an empty one back.
 //   - Missing `mcpServers` field on an otherwise-valid scoped doc ->
