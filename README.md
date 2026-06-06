@@ -43,7 +43,7 @@ Install the Pi extension.
 pi install npm:pi-claude-marketplace
 ```
 
-Bootstrap the offical Claude plugin marketplace (`anthropics/claude-plugins-official`).
+Bootstrap the official Claude plugin marketplace (`anthropics/claude-plugins-official`).
 
 ```text
 /claude:plugin bootstrap
@@ -76,7 +76,7 @@ List its plugins.
 Add another plugin.
 
 ```text
-/claude:plugin context7-plugin@context7-marketplace
+/claude:plugin install context7-plugin@context7-marketplace
 ```
 
 Then reload.
@@ -296,7 +296,7 @@ Bootstrap is a convenience one-shot setup of the official Anthropic marketplace 
 This is equivalent to running.
 
 ```text
-/claude:plugin marketplace add anthropics/claude-plugins-marketplace
+/claude:plugin marketplace add anthropics/claude-plugins-official
 /claude:plugin marketplace autoupdate claude-plugins-official
 ```
 
