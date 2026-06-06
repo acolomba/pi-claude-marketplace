@@ -70,6 +70,26 @@ table stopped at phase 36 (with 35/36 as `TBD`) and the Total/Avg columns +
 - v1.0-v1.2 phase dirs (incl. 03/06/10/11) were archived; their counts are the
   last recorded values and a few have none -- noted inline.
 
+## Follow-up 2: MILESTONES.md backfill
+
+`MILESTONES.md` was missing entire entries and double-counted one. The existing
+"v1.5" entry actually held the merged v1.4 + v1.4.1 + v1.5 work (its "17 phases,
+61 plans" = 9+5+3 phases / 43+8+10 plans). Reconstructed the milestone history:
+
+- **Split** the merged "v1.5" entry into three correct entries -- v1.5
+  Notification Output Polish (3/10/25), v1.4.1 Post-ship UAT Patches (5/8/23),
+  v1.4 Structured Notification Messages (9/43/106).
+- **Inserted** the missing v1.6 GitHub Private Marketplace Authentication entry
+  (7/12/25) in its correct reverse-chronological slot (between v1.7 and v1.5).
+- **Fixed** the v1.8 entry: "3 phases, 5 plans, 0 tasks" -> "3 phases, 5 plans,
+  10 tasks", and replaced "(none recorded)" with real accomplishments.
+- Counts derived from `.planning/milestones/<m>-phases/` (phases = dirs, plans =
+  `*PLAN.md`, tasks = `<task>` tags); accomplishments synthesized from CHANGELOG
+  + STATE decisions. Added the npm release version to each rebuilt heading so the
+  three milestones that shipped together as 0.2.0 are no longer ambiguous.
+- Left v1.7's pre-existing "9 tasks" untouched (the `<task>`-tag method counts
+  17, but that entry was already authored; not churning it).
+
 ## Notes
 
 - Ran on branch `features/reconcile-v1.8-state` (CLAUDE.md forbids committing
