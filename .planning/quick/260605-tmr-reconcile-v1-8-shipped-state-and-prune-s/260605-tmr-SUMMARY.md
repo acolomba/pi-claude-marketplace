@@ -121,6 +121,34 @@ Verified clean (no change needed): package.json / sonar-project.properties / CHA
 all at 0.4.0; `.planning/todos` empty; `.planning/debug` only a resolved entry;
 ROADMAP summary + progress table already correct.
 
+## Follow-up 4: README + repo-doc sweep
+
+Audited the user/contributor-facing docs (README, CONTRIBUTING, docs/) and the
+remaining `.planning/` artifacts.
+
+- **README.md** (committed separately, `c309b1f`): added the missing `install`
+  verb in the "Add another plugin" example; corrected the bootstrap "equivalent
+  to" repo `anthropics/claude-plugins-marketplace` -> `anthropics/claude-plugins-official`
+  (source-confirmed via `bootstrap.ts` BOOTSTRAP_SOURCE; it contradicted the
+  autoupdate line in the same block); fixed "offical" -> "official".
+- **Left as-is by operator decision:** the `upstash/context7` vs
+  `context7-marketplace` references -- a marketplace's name differs from its
+  GitHub shorthand, so the README is correct.
+- **Archived loose UAT files** from `.planning/` root into their milestone dirs
+  (`git mv`, history preserved): `v1.4-MILESTONE-UAT.md` -> `milestones/v1.4-phases/`;
+  `v1.5-MILESTONE-UAT.md` + `v1.5-branch-gate-{session,uat}.md` ->
+  `milestones/v1.5-phases/`.
+
+Noted but not changed (historical / low value): `REQUIREMENTS.md` is referenced
+throughout the planning narrative but never existed (requirements live in
+PROJECT.md `## Requirements`); RETROSPECTIVE.md has entries only for v1.8 / v1.5 /
+v1.3 (no retro written for v1.4 / v1.4.1 / v1.6 / v1.7).
+
+Verified clean: CONTRIBUTING.md, CODE_OF_CONDUCT.md, CHANGELOG (complete
+0.1.0 -> 0.4.0), docs/output-catalog + messaging-style-guide (test-locked),
+docs/prd (frozen successor-spec voice). README feature coverage is current
+(info, Device Flow auth, reinstall, import all documented).
+
 ## Notes
 
 - Ran on branch `features/reconcile-v1.8-state` (CLAUDE.md forbids committing
