@@ -24,7 +24,7 @@
 
 ## v1.6 GitHub Private Marketplace Authentication (0.3.0, Shipped: 2026-06-01)
 
-**Phases completed:** 7 phases, 12 plans, 25 tasks
+**Phases completed:** 7 phases, 11 plans, 25 tasks
 
 **Key accomplishments:**
 

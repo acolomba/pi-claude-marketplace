@@ -90,6 +90,37 @@ table stopped at phase 36 (with 35/36 as `TBD`) and the Total/Avg columns +
 - Left v1.7's pre-existing "9 tasks" untouched (the `<task>`-tag method counts
   17, but that entry was already authored; not churning it).
 
+## Follow-up 3: full consistency sweep
+
+Audited the remaining large docs (ROADMAP ~78K, PROJECT ~71K) with two read-only
+agents plus version/artifact spot-checks. Found and fixed:
+
+- **Off-by-one I introduced** (phase 32): I'd changed STATE phase 32 from 1->2 by
+  counting PLAN.md files, but only `32-02` executed (`32-01` was folded; no
+  SUMMARY). ROADMAP confirms `32 | 1/2`. Reverted STATE 32 -> 1, total 157 -> 156;
+  MILESTONES v1.6 12 -> 11 plans. Phase 32 is the only completed<planned phase.
+- **ROADMAP.md** Phase Details accordion: ticked the v1.8 plan checkboxes
+  (42-01, 43-01/02, 44-01/02) and changed "N plans"/"4/4 plans executed" to
+  "N/N plans complete" -- the accordion contradicted the (correct) summary + progress
+  table.
+- **PROJECT.md** (badly stale, frozen at "v1.8 just started"): rewrote the
+  `## Current Milestone: v1.8` block to "none active"; moved INFO-01..INFO-08 from
+  Active to a new v1.8 Validated entry; fixed the line-7 framing ("last release
+  v0.1.7 / unreleased 0.2.0 / eight milestones" -> latest 0.4.0, ten milestones,
+  adds v1.7/v1.8); prepended a v1.8-shipped footer entry; relabeled the misleading
+  "Current codebase state" snapshot.
+- **CLAUDE.md** versioning instruction: `project.json` -> `package.json`,
+  `sonar.properties` -> `sonar-project.properties` (the originals never existed; the
+  real files are `package.json` and `sonar-project.properties`, both at 0.4.0).
+- **package-lock.json**: root `version` was `0.3.2` while package.json is `0.4.0`
+  (lockfile not regenerated after the v1.8 bump). `npm install` resynced it to
+  0.4.0 -- clean diff, no dependency churn.
+- **STATE.md** cosmetic: decision label `[Phase ?]: [Phase 25]:` -> `[Phase 25]:`.
+
+Verified clean (no change needed): package.json / sonar-project.properties / CHANGELOG
+all at 0.4.0; `.planning/todos` empty; `.planning/debug` only a resolved entry;
+ROADMAP summary + progress table already correct.
+
 ## Notes
 
 - Ran on branch `features/reconcile-v1.8-state` (CLAUDE.md forbids committing
