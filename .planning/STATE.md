@@ -185,7 +185,7 @@ None yet.
 | 260525-cjr | Apply PR #22 review fixes: 5 comment fixes, 2 silent-failure catches, declaresAgents/Mcp required, 4 narrowReason migrations, drift architecture test, plus 10 polish items               | 2026-05-25 | c79b6bc |          | [260525-cjr-apply-pr-22-review-fixes-5-comment-fixes](./quick/260525-cjr-apply-pr-22-review-fixes-5-comment-fixes/) |
 | 260530-7pk | Fix PR #22 review findings: 4 failing CI tests reconciled to V2 output, bootstrap/marketplace error diagnostics surfaced (IL-2/AS-7), comment-rot sweep, reasons-type tightening + resolver dedup, MAX_DEPTH cause-chain tests, NFR-4 Node floor to >=20.19.0, PRD PU-4/AS-6 leak policy | 2026-05-30 | 015e8f6 |          | [260530-7pk-fix-pr-22-review-findings-failing-tests-](./quick/260530-7pk-fix-pr-22-review-findings-failing-tests-/) |
 | 260530-fast | Resolve 4 SonarCloud code smells on PR #22 (S3735 void operator, S1871 duplicate case, S3626 redundant jump, S7755 .at indexing); coverage deferred | 2026-05-30 | a36988d |          | (inline /gsd-fast, no task dir) |
-| 260605-tmr | Reconcile v1.8 shipped state (STATE.md frontmatter/body/session-continuity) and prune resolved v1.4-UAT section from BACKLOG.md | 2026-06-05 | fee2459 | Verified | [260605-tmr-reconcile-v1-8-shipped-state-and-prune-s](./quick/260605-tmr-reconcile-v1-8-shipped-state-and-prune-s/) |
+| 260605-tmr | Reconcile v1.8 shipped state (STATE.md frontmatter/body/session-continuity) and prune resolved v1.4-UAT section from BACKLOG.md | 2026-06-05 | 0a11ba3 | Verified | [260605-tmr-reconcile-v1-8-shipped-state-and-prune-s](./quick/260605-tmr-reconcile-v1-8-shipped-state-and-prune-s/) |
 
 ## Deferred Items
 
