@@ -8,8 +8,8 @@
 //   - <name>  -> updateMarketplace
 //
 // `deps.gitOps` and `deps.pluginUpdate` are injected per D-04 EdgeDeps
-// pattern; the orchestrator side accepts them as optional, but Phase 7's
-// wiring always supplies both.
+// pattern; the orchestrator side accepts them as optional, but the wiring
+// always supplies both.
 
 import {
   updateAllMarketplaces,

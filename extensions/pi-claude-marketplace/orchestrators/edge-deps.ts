@@ -1,6 +1,6 @@
 // orchestrators/edge-deps.ts
 //
-// Plan 06-05 D-04: registration-glue helper that constructs a
+// D-04: registration-glue helper that constructs a
 // `LocationsResolver` (interface defined in edge/completions/data.ts) from
 // the persistence/state-io + persistence/locations + domain/manifest +
 // domain/resolver surfaces. This file lives in `orchestrators/` so that
@@ -8,7 +8,7 @@
 // reach all four underlying modules without violating BLOCK C
 // (edge/ -> persistence/ and edge/ -> domain/ are forbidden).
 //
-// Architectural seam (the "option (c)" resolution chosen by Plan 06-05):
+// Architectural seam:
 //   - shared/completion-cache.ts: pure paths + rebuild callbacks
 //     (shared/ MUST NOT import persistence/).
 //   - edge/completions/data.ts: declares the LocationsResolver interface
@@ -113,8 +113,8 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
         if (mp === undefined) {
           // No state record for the requested marketplace in this scope.
           // The cache layer treats ManifestSoftFailError as the TC-8 poison
-          // signal; subsequent reads return []. Plan 06-05's orchestrator-
-          // side invalidation call-sites clear the poison once the user
+          // signal; subsequent reads return []. The orchestrator-side
+          // invalidation call-sites clear the poison once the user
           // fixes the underlying state.
           throw new ManifestSoftFailError(
             new Error(`Marketplace "${marketplace}" has no state record in scope "${scope}".`),
@@ -127,7 +127,7 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
         const rows: PluginIndexRow[] = [];
 
         // Installed entries first (status derived from state; presence in
-        // mp.plugins === installed per Phase 2 D-09).
+        // mp.plugins === installed per D-09).
         for (const [pluginName, installed] of Object.entries(mp.plugins)) {
           rows.push({
             name: pluginName,

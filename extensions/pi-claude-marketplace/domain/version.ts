@@ -1,11 +1,11 @@
 // domain/version.ts
 //
-// PI-7 hash-version computation per CONTEXT.md D-11 + D-12.
+// PI-7 hash-version computation per D-11 + D-12.
 //
 // Algorithm:
 //   1. Walk pluginRoot recursively, skipping HASH_WALK_SKIP entries.
 //   2. Sort entries at each directory level by name (deterministic order).
-//   3. For each entry, hash the POSIX-style relative path bytes (Pitfall 6).
+//   3. For each entry, hash the POSIX-style relative path bytes.
 //   4. For files, also hash the normalized content bytes (CRLF -> LF + BOM strip).
 //   5. Symlinks are skipped entirely (PI-7: targets MUST NOT be included).
 //   6. Return SHA-256 truncated to 12 hex chars, prefixed `hash-`.
@@ -42,9 +42,9 @@ async function walkAndHash(hash: Hash, root: string, rel: string): Promise<void>
     .sort((a, b) => a.name.localeCompare(b.name));
 
   for (const entry of filtered) {
-    // Pitfall 6: posix joiner for the path-bytes argument so the hash is
-    // identical on Windows and POSIX. Note: path.join (OS-aware) is used
-    // separately for the actual fs read on the next line.
+    // Posix joiner for the path-bytes argument so the hash is identical on
+    // Windows and POSIX. Note: path.join (OS-aware) is used separately for
+    // the actual fs read on the next line.
     const childRel = path.posix.join(rel, entry.name);
     hash.update(childRel);
 

@@ -2,7 +2,7 @@
 //
 // PI-1..15 + AS-6 + AS-7 + COMP-01 + NFR-5.
 //
-// FIRST production consumer of the Phase 2 runPhases<C> ledger primitive
+// Production consumer of the runPhases<C> ledger primitive
 // (transaction/phase-ledger.ts). Composition order is locked by D-01,
 // D-02, D-05, D-08:
 //
@@ -16,13 +16,13 @@
 //     runPhases(phases, ctx)                               // D-01 5-phase ledger
 //     capture rollbackPartials, throw raw error            // D-02 PI-14 bypass
 //   })
-//   POST-state-commit (D-08 / AS-6):  mkdir(pluginDataDir) -> dropped per D-19-01
-//   Success notify via V2 notify() with PluginInstalledMessage carrying
+//   POST-state-commit (D-08 / AS-6):  mkdir(pluginDataDir), dropped per D-19-01
+//   Success notify via notify() with PluginInstalledMessage carrying
 //   dependencies: readonly Dependency[] derived from staged content; the
 //  renderer probes companion-loaded state once per notify call
 //   and emits per-row soft-dep markers + the reload-hint trailer
 //  structurally.
-//   Failure routes through one V2 notify() call with PluginFailedMessage
+//   Failure routes through one notify() call with PluginFailedMessage
 //   carrying optional cause + optional rollbackPartial[]; the renderer
 //  composes the depth-5 cause-chain and per-phase rollback child
 //   rows automatically.
@@ -143,10 +143,10 @@ interface EntityErrorRow {
 
 /**
  * Parsed (plugin, marketplace) options bundle. PI-1 / RH-1 / RH-2 parse is
- * the edge layer's responsibility (Phase 6); this orchestrator entrypoint
+ * the edge layer's responsibility; this orchestrator entrypoint
  * accepts already-parsed strings + the resolved scope.
  *
- * `pi` is REQUIRED -- V2 `notify(ctx, pi, message)` consumes it for the
+ * `pi` is REQUIRED -- `notify(ctx, pi, message)` consumes it for the
  * single `softDepStatus(pi)` probe per call. The renderer
  * injects per-row `{requires pi-subagents}` / `{requires pi-mcp}`
  * markers from the per-row `dependencies: readonly Dependency[]`
@@ -156,7 +156,7 @@ interface EntityErrorRow {
  *
  * SNM-04 / D-15-02: the `"installed"` variant carries REQUIRED
  * `dependencies: readonly Dependency[]` (the closed-set
- * `"agents" | "mcp"` per Phase 15 SNM-04). The orchestrator derives the
+ * `"agents" | "mcp"` per SNM-04). The orchestrator derives the
  * array at the success-return site from
  * `installCtx.stagedAgentNames.length > 0` (-> `"agents"`) and
  * `installCtx.stagedMcpServerNames.length > 0` (-> `"mcp"`); the
@@ -191,16 +191,15 @@ export type InstallPluginOutcome =
 /**
  * Controls how `installPlugin` surfaces notifications.
  *
- * - `"standalone"` (default): fires a SINGLE V2 `notify(ctx, pi, ...)`
+ * - `"standalone"` (default): fires a SINGLE `notify(ctx, pi, ...)`
  *   call per orchestration arm with the per-variant
  *   `PluginInstalledMessage` / `PluginFailedMessage` payload. Severity +
- *   reload-hint + soft-dep markers are computed by `notify()` per
- * . Use for direct `/claude:plugin install`.
- *   Phase 19 / Plan 19-02 dropped the 5 V1 post-state-commit
- *   `notifyWarning` sites per D-19-01: the user-visible warning surface
- *   for mkdir / cache-refresh / agentForeignFailures / bridgeWarnings /
- *   PI-13 deps note is GONE in standalone mode (the underlying side
- *   effects still fire).
+ *   reload-hint + soft-dep markers are computed by `notify()`.
+ *   Use for direct `/claude:plugin install`.
+ *   Per D-19-01 there are no post-state-commit `notifyWarning` sites: the
+ *   user-visible warning surface for mkdir / cache-refresh /
+ *   agentForeignFailures / bridgeWarnings / PI-13 deps note is absent in
+ *   standalone mode (the underlying side effects still fire).
  * - `"orchestrated"`: suppresses all notifications, returns the typed
  *   outcome, and collects post-commit warnings in
  *   `outcome.postCommitWarnings`. The import cascade caller injects each
@@ -267,7 +266,7 @@ interface InstallCtx {
 /**
  * Read and validate the cached marketplace.json (PI-2 NO network).
  *
- * `manifestPath` is the value persisted at marketplace-add time (Phase 4) --
+ * `manifestPath` is the value persisted at marketplace-add time --
  * it points either at the github-cloned marketplace dir's manifest or at
  * the path-source marketplace's manifest. Either way the bytes are on disk
  * before install runs.
@@ -280,16 +279,16 @@ async function loadCachedMarketplaceManifest(
 
 /**
  * PI-1..15 entrypoint. The function never re-throws -- failures surface
- * via a single V2 `notify()` call carrying a `PluginFailedMessage`
+ * via a single `notify()` call carrying a `PluginFailedMessage`
  * (Pattern S-1 single chokepoint, IL-2 lint gate). Standalone-mode emits
  * exactly one notification per orchestration arm; orchestrated-mode emits
  * none and returns the typed outcome.
  *
- * Failure modes funnel through three paths inside the single V2 catch
+ * Failure modes funnel through three paths inside the single catch
  * site:
  *   1. Guard-closure throw (PI-3 / PI-4 / PI-5 / PI-6 / PI-7 errors,
  *      ConcurrentInstallError from PI-15 layer (a), and the rolled-up
- *      ledger error captured as failureRollbackPartials) -> V2 notify()
+ *      ledger error captured as failureRollbackPartials) -> notify()
  *      with `PluginFailedMessage` carrying the typed `cause` and
  *      (when rollback partials are present) the
  *      `rollbackPartial: readonly { phase; cause? }[]` field. The renderer
@@ -356,10 +355,9 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       // re-entry. PI-17: other-scope installs do not block this target.
       if (targetMp.plugins[plugin] !== undefined) {
         // PI-5: already-installed AND PI-15 early-sanity collapse onto the same
-        // path here. Per CONTEXT.md "Open questions" researcher recommendation,
-        // surface PI-5 wording at the early-sanity check (the user-visible
-        // message is "already installed"); PI-15 (race-at-commit) surfaces
-        // via the state-commit phase's defensive throw.
+        // path here. Surface PI-5 wording at the early-sanity check (the
+        // user-visible message is "already installed"); PI-15 (race-at-commit)
+        // surfaces via the state-commit phase's defensive throw.
         throw new PluginShapeError({ kind: "already-installed", plugin, marketplace });
       }
 
@@ -384,7 +382,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
 
       const entry: PluginEntry = entryRaw;
 
-      // PI-4: resolveStrict + requireInstallable. Per Phase 2 D-04, the
+      // PI-4: resolveStrict + requireInstallable. Per D-04, the
       // strict resolver consumes the array-shape componentPaths (D-07 /
       // COMP-01) and either returns an installable variant or surfaces
       // disqualification notes. requireInstallable narrows the discriminated
@@ -538,7 +536,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
             // AG-7 opt-in: `--map-model` on /claude:plugin install threads
             // the flag down to here. When the user did not pass the flag
             // we explicitly default to false so generated agents omit
-            // `model:` (the new default per 260516-08j).
+            // `model:` (the default behavior).
             mapModel: opts.mapModel ?? false,
           });
           c.agentsPrep = prep;
@@ -650,7 +648,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
         },
         // undo intentionally absent: at state-commit phase time the guard
         // has not flushed yet, and on throw the guard does NOT save the
-        // mutated snapshot (Phase 2 ST-7 contract). The mutation is discarded
+        // mutated snapshot (ST-7 contract). The mutation is discarded
         // by the unwinding closure.
       };
 
@@ -687,11 +685,11 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       installCtx = ctxLocal;
     });
   } catch (err) {
-    // Pattern S-1 single chokepoint for user-visible errors (V2: one
+    // Pattern S-1 single chokepoint for user-visible errors (one
     // notify(ctx, pi, ...) call carrying a per-variant
     // PluginFailedMessage / PluginUnavailableMessage).
     //
-    // Failure routing priority (highest first); the V2 renderer composes
+    // Failure routing priority (highest first); the renderer composes
     // the depth-5 cause-chain trailer and per-phase
     // rollback-child rows automatically. Severity is derived to "error"
     // structurally; no reload-hint (failed /
@@ -706,9 +704,8 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     //      PathContainmentError) -- PluginFailedMessage with
     //      reasons: ["rollback partial"] plus rollbackPartial: readonly
     //      { phase; cause? }[] with the typed Error threaded directly
-    //      from the phase-ledger per Plan 19-02 RESEARCH Finding 1
-    //      (RollbackPartial.cause is already typed Error -- NO synthesis
-    //      from the free-form .msg string).
+    //      from the phase-ledger (RollbackPartial.cause is already typed
+    //      Error -- NO synthesis from the free-form .msg string).
     //   3. Entity-shape errors (PI-3 / PI-4 / PI-5 via
     //      `classifyEntityShapeError`) -- the classifier's EntityErrorRow
     //      carries `status: "failed" | "unavailable"` AND `reasons:
@@ -770,7 +767,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       return { status: "failed", error: internalErr, cause };
     }
 
-    // V2 internal-error defensive arm: synthesise a PluginFailedMessage
+    // Internal-error defensive arm: synthesise a PluginFailedMessage
     // carrying the wrapped internalErr. `reasons: []` -- no closed-set
     // Reason classifies an internal invariant violation; the renderer
     // suppresses the empty brace per D-15-01 and surfaces the cause
@@ -807,11 +804,10 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   // The state record is already committed; the side effect runs inside
   // a defensive try/catch so a permission error cannot strand the
   // install. The standalone-mode user-visible warning is DROPPED per
-  // D-19-01 (D-18-01 lineage): the V2
-  // MarketplaceNotificationMessage type has no field to surface
-  // "data-dir creation deferred after successful state mutation". The
-  // orchestrated-mode collection path is preserved for the cascade
-  // caller's pushDiagnostic channel.
+  // D-19-01: the MarketplaceNotificationMessage type has no field to
+  // surface "data-dir creation deferred after successful state
+  // mutation". The orchestrated-mode collection path is preserved for
+  // the cascade caller's pushDiagnostic channel.
   try {
     await mkdir(installCtx.pluginDataDir, { recursive: true });
   } catch (mkdirErr) {
@@ -819,18 +815,18 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     if (orchestrated) {
       postCommitWarnings.push(msg);
     }
-    // else: D-19-01 precedent -- dropped in standalone mode.
+    // else: D-19-01 -- dropped in standalone mode.
   }
 
-  // D-03-INV (Plan 06-05): post-state-commit completion-cache invalidation.
+  // D-03-INV: post-state-commit completion-cache invalidation.
   // Plugin moved from "available" -> "installed"; drop the cached plugin
   // index for this marketplace so the next completion read rebuilds with
   // the new status. Defense-in-depth try/catch.
   //
-  // D-19-01 precedent (D-18-01 lineage): cache-refresh failure is
-  // swallowed silently in V2. The cache-refresh side effect still fires;
-  // only the user-visible warning surface is gone. The orchestrated-mode
-  // collection path is preserved for the cascade caller.
+  // Per D-19-01 the cache-refresh failure is swallowed silently. The
+  // cache-refresh side effect still fires; only the user-visible warning
+  // surface is gone. The orchestrated-mode collection path is preserved
+  // for the cascade caller.
   try {
     await dropMarketplaceCache(await locations.pluginCacheFile(marketplace), scope, marketplace);
   } catch (err) {
@@ -838,18 +834,17 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     if (orchestrated) {
       postCommitWarnings.push(msg);
     }
-    // else: D-19-01 precedent -- dropped in standalone mode.
+    // else: D-19-01 -- dropped in standalone mode.
   }
 
   // AS-7 / W-08 / B-08: agents-bridge preserved foreign-content rows
   // during prepare. The install of NEW agents succeeded; the
   // foreign-preserved rows are a manual-cleanup hint. The standalone-mode
-  // user-visible warning is DROPPED per D-19-01 (D-18-01 lineage):
-  // agent foreign-file preservation rows have no clean V2
-  // MarketplaceNotificationMessage representation. The
-  // orchestrated-mode collection path is preserved for the cascade
-  // caller; the underlying agents-bridge state still records the
-  // foreign-row preservation in agents-index.json.
+  // user-visible warning is DROPPED per D-19-01: agent foreign-file
+  // preservation rows have no clean MarketplaceNotificationMessage
+  // representation. The orchestrated-mode collection path is preserved
+  // for the cascade caller; the underlying agents-bridge state still
+  // records the foreign-row preservation in agents-index.json.
   if (installCtx.agentForeignFailures.length > 0) {
     const detail = installCtx.agentForeignFailures
       .map((f) => `${f.generatedName}: ${f.reason}`)
@@ -858,19 +853,19 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     if (orchestrated) {
       postCommitWarnings.push(msg);
     }
-    // else: D-19-01 precedent -- dropped in standalone mode.
+    // else: D-19-01 -- dropped in standalone mode.
   }
 
   // Bridge-side soft warnings (e.g. agents bridge cleanup-leak return
   // values aggregated during the staged phases). The standalone-mode
-  // user-visible warning is DROPPED per D-19-01 (D-18-01 lineage):
-  // bridge-side soft warnings have no clean V2 representation. The
-  // orchestrated-mode collection path is preserved.
+  // user-visible warning is DROPPED per D-19-01: bridge-side soft
+  // warnings have no clean representation. The orchestrated-mode
+  // collection path is preserved.
   for (const w of installCtx.bridgeWarnings) {
     if (orchestrated) {
       postCommitWarnings.push(w);
     }
-    // else: D-19-01 precedent -- dropped in standalone mode.
+    // else: D-19-01 -- dropped in standalone mode.
   }
 
   // PI-9 corollary: track whether anything was actually staged. Preserved
@@ -883,23 +878,20 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     installCtx.stagedMcpServerNames.length > 0;
 
   if (!orchestrated) {
-    // V2 success: one notify(ctx, pi, ...) call with a
+    // Success: one notify(ctx, pi, ...) call with a
     // PluginInstalledMessage. The renderer probes companion-loaded
     // state via softDepStatus(pi) and emits the
     // per-row soft-dep markers (`{requires pi-subagents, requires
     // pi-mcp}`) automatically from `dependencies: readonly
     // Dependency[]`. The "/reload to pick up changes" trailer fires
-    // structurally on the `installed` status -- the V1 RH-1
-    // noop-gate (suppress when `!stagedAny`) is GONE in V2; the
-    // reload-hint trigger ladder is per-variant, not per-resource-count
-    // (mirrors Plan 19-01 pilot's PU-8 (b) behavior change).
+    // structurally on the `installed` status; the reload-hint trigger
+    // ladder is per-variant, not per-resource-count (RH-1, PU-8 (b)).
     //
-    // PI-13 dependencies-declaration note (V1 line 808 follow-up
-    // notifyWarning) is DROPPED per D-19-01: the PR-5 free-form prose
-    // had no clean V2 MarketplaceNotificationMessage representation;
-    // the resolver still appends the note to `installable.notes` so
-    // downstream surfaces (e.g. `/claude:plugin list` rendering) can
-    // continue to consume it.
+    // The PI-13 dependencies-declaration note is DROPPED per D-19-01:
+    // the PR-5 free-form prose has no clean
+    // MarketplaceNotificationMessage representation; the resolver still
+    // appends the note to `installable.notes` so downstream surfaces
+    // (e.g. `/claude:plugin list` rendering) can continue to consume it.
     const dependencies: Dependency[] = [];
     if (installCtx.stagedAgentNames.length > 0) {
       dependencies.push("agents");
@@ -932,7 +924,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       dependencies,
       version: installCtx.version,
     };
-    // V2 notify() call mirrors the Plan 19-01 pilot recipe at
+    // notify() call mirrors the recipe at
     // orchestrators/plugin/uninstall.ts; install.ts substitutes
     // "installed" + dependencies[] + per-D-19-03 failure branches
     // (D-19-02 + D-19-03).
@@ -956,19 +948,17 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   };
 }
 
-// Plan 19-02 (D-19-03): the V1 CMC-17 / MSG-RP-1 rollback-partial body
-// composer is RETIRED entirely. The V2 PluginFailedMessage.rollbackPartial
-// field (SNM-09 + SNM-10) is the structural replacement; the renderer at
-// shared/notify.ts::composeRollbackPartialLines drives all indentation
-// (4-space rollback-child row + 6-space per-phase cause-chain trailer)
-// . The transaction/phase-ledger.ts RollbackPartial already
-// exposes the typed cause?: Error, threaded directly into the V2 field
-// per Plan 19-02 RESEARCH Finding 1.
+// D-19-03 / CMC-17 / MSG-RP-1: the PluginFailedMessage.rollbackPartial
+// field (SNM-09 + SNM-10) is the structural rollback-partial channel; the
+// renderer at shared/notify.ts::composeRollbackPartialLines drives all
+// indentation (4-space rollback-child row + 6-space per-phase cause-chain
+// trailer). The transaction/phase-ledger.ts RollbackPartial exposes the
+// typed cause?: Error, threaded directly into the field.
 
 /**
- * Plan 19-02 helper: compose the per-variant V2 plugin notification for
- * the install failure surface. Routes to one of four shapes per D-19-03
- * (priority highest first):
+ * Compose the per-variant plugin notification for the install failure
+ * surface. Routes to one of four shapes per D-19-03 (priority highest
+ * first):
  *
  *   1. PI-14 PathContainmentError -- PluginFailedMessage with reasons:
  *      [], cause: err. The renderer surfaces the message via the
@@ -976,8 +966,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
  *      even when partials are present.
  *   2. Rollback-partial -- PluginFailedMessage with reasons:
  *      ["rollback partial"] plus rollbackPartial: readonly { phase;
- *      cause? }[] (typed Error threaded directly from the ledger per
- *      RESEARCH Finding 1).
+ *      cause? }[] (typed Error threaded directly from the ledger).
  *   3. Entity-shape (classifier returns non-undefined) -- preserves the
  *      classifier's status discriminator (failed vs unavailable) so the
  *      catalog `failure-unsupported-features` byte form (uses
@@ -991,15 +980,10 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
  * The narrowed `cause?: Error` field on failure variants is populated
  * only when `err instanceof Error` (defensive against non-Error throws).
  */
-// WR-04: `marketplace` removed from the args type. The pre-fix signature
-// accepted `marketplace: string` but never read it -- the destructuring
-// at the function body omitted it and no usage referenced
-// `args.marketplace`. The caller silently dropped the value, leaving no
-// compile-time gate against a future refactor that would expect the
-// marketplace name to participate in the cause-chain trailer (e.g. to
-// disambiguate a same-named plugin across marketplaces) and would
-// silently use stale data. If the marketplace becomes needed for future
-// cause-chain composition, add it back here with a comment marking the
+// WR-04: `marketplace` is not in the args type -- nothing in this
+// function reads it. If the marketplace name becomes needed for future
+// cause-chain composition (e.g. to disambiguate a same-named plugin
+// across marketplaces), add it back here with a comment marking the
 // dependency.
 function composeInstallFailureMessage(args: {
   err: unknown;
@@ -1029,7 +1013,7 @@ function composeInstallFailureMessage(args: {
   }
 
   // Branch 2: rollback-partial. Thread RollbackPartial.cause directly
-  // per RESEARCH Finding 1 -- no synthesis from the free-form .msg.
+  // -- no synthesis from the free-form .msg.
   if (rolledBackPartial) {
     const failed: PluginFailedMessage = {
       status: "failed",
@@ -1088,13 +1072,13 @@ function composeInstallFailureMessage(args: {
 }
 
 /**
- * Plan 19-02 helper: format the orchestrated-mode `cause` string for the
+ * Format the orchestrated-mode `cause` string for the
  * `InstallPluginOutcome.cause` field. The import cascade caller at
  * `orchestrators/import/execute.ts` reads this string for its
- * `dispatchFailedOutcome` rendering. Mirrors the V1 D-CMC-12 join
+ * `dispatchFailedOutcome` rendering. Follows the D-CMC-12 join
  * discipline: `<errorMessage>` plus the depth-5 cause-chain trailer
  * (shared/errors.ts::causeChainTrailer) joined with a blank line when
- * present. Standalone-mode trailers are emitted by V2 `notify()` from
+ * present. Standalone-mode trailers are emitted by `notify()` from
  * the structural `PluginFailedMessage.cause` field; this helper exists
  * solely to preserve the orchestrated-mode string contract.
  */
@@ -1176,15 +1160,11 @@ function classifyEntityShapeError(
 // set holds the BARE camelCase token (`hooks`, `lspServers`) -- the DETECTION
 // key sliced from the resolver note, derived from the real `.claude-plugin/
 // plugin.json` JSON key. The resolver prefixes the kind with `"contains "`
-// when populating `r.notes` (see `domain/resolver.ts:685` -- the
-// `addUnsupportedKindNotes` helper writes `partial.notes.push(\`contains
-// ${kind}\`)` for every UNSUPPORTED_COMPONENT_KINDS member it detects).
-// The previous predicate `MANIFEST_FIELD_REASONS.has(reason)` compared the
-// WHOLE note string against the bare set -- so the resolver's
-// `"contains hooks"` never matched, the row degraded to
-// `{unsupported source}`, and the carve-out was effectively dead. Task
-// 260525-cjr C5 restores the carve-out: `startsWith("contains ")` strips
-// the resolver's prefix, then checks the remaining token against the set.
+// when populating `r.notes` (the `addUnsupportedKindNotes` helper pushes
+// a `contains ${kind}` note for every UNSUPPORTED_COMPONENT_KINDS member
+// it detects).
+// The carve-out: `startsWith("contains ")` strips the resolver's prefix,
+// then checks the remaining token against the set.
 // New detection tokens added here MUST also have an entry in
 // `MANIFEST_FIELD_TO_REASON` below mapping them to a member of the closed
 // `Reason` set in `shared/notify.ts::REASONS` so the renderer accepts them.

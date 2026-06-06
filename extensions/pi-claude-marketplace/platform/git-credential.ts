@@ -1,12 +1,12 @@
 /**
- * Phase 31: AUTH-06 / AUTH-08 / AUTH-09. The CredentialOps surface wraps
+ * AUTH-06 / AUTH-08 / AUTH-09. The CredentialOps surface wraps
  * `git credential fill/approve/reject` via node:child_process.spawn.
  *
  * REJECTED: `pi.exec` from @earendil-works/pi-coding-agent -- verified at
  * node_modules/@earendil-works/pi-coding-agent/dist/core/exec.js:12 to use
  * `stdio: ["ignore", ...]`. git credential REQUIRES stdin.
  *
- * D-21 supersession is preserved: this is the ONLY file in
+ * D-21: this is the ONLY file in
  * extensions/pi-claude-marketplace/ permitted to import node:child_process
  * (whitelist asserted in tests/architecture/no-shell-out.test.ts).
  *
@@ -14,7 +14,7 @@
  * subprocess spawn emits ENOENT. `credentialFill` catches and returns null;
  * `credentialApprove` / `credentialReject` swallow and silently no-op
  * (best-effort persistence per Pattern 3). The current operation still
- * succeeds via Device Flow in Phase 32+ -- only keychain reuse is lost.
+ * succeeds via Device Flow -- only keychain reuse is lost.
  *
  * Error-message discipline (Pitfall 8 / AUTH-09): no Error constructor in
  * this file interpolates a credential field. The only thrown errors from
@@ -48,11 +48,11 @@ import type { GitCredentials } from "./git.ts";
  * Tests inject makeMockCredentialOps() from tests/helpers/credential-mock.ts
  * so the developer's OS keychain is never touched by the test suite.
  *
- * Phase 32+ buildAuthCallbacks will consume this seam.
+ * buildAuthCallbacks consumes this seam.
  *
  * Caller note for keychain hygiene (Pitfall 5): on macOS, repeated approve
  * without a prior reject can accumulate duplicate keychain entries. The
- * Phase 33 buildAuthCallbacks consumer is responsible for sequencing
+ * buildAuthCallbacks consumer is responsible for sequencing
  * `reject(host, old) → approve(host, new)` when rotating a token. The
  * approve impl here does NOT do this internally; it is a single-shot
  * primitive.
@@ -62,7 +62,7 @@ export interface CredentialOps {
   fill(host: string): Promise<GitCredentials | null>;
   /** AUTH-06: Persist a credential to the OS keychain via the configured helper. */
   approve(host: string, cred: GitCredentials): Promise<void>;
-  /** AUTH-07 (Phase 32 prereq): Evict a credential from the OS keychain. */
+  /** AUTH-07: Evict a credential from the OS keychain. */
   reject(host: string, cred: GitCredentials): Promise<void>;
 }
 
@@ -190,8 +190,8 @@ function parseCredentialOutput(stdout: string): Record<string, string> {
  *   - non-zero exit (no helper, miss)       -> null
  *   - exit 0 but no username= or password=  -> null
  *
- * The `null` return is the affirmative no-result; callers (Phase 33+
- * buildAuthCallbacks) fall through to Device Flow on null.
+ * The `null` return is the affirmative no-result; callers
+ * (buildAuthCallbacks) fall through to Device Flow on null.
  */
 async function credentialFill(host: string): Promise<GitCredentials | null> {
   const input = buildAttributeBlock(host);
@@ -234,7 +234,7 @@ async function credentialApprove(host: string, cred: GitCredentials): Promise<vo
 }
 
 /**
- * AUTH-07 (Phase 32 prereq): reject semantics. Evicts a credential from
+ * AUTH-07: reject semantics. Evicts a credential from
  * the OS keychain. Same best-effort silent-return shape as approve.
  *
  * The cred argument is the credential to evict; the underlying git

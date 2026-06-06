@@ -598,7 +598,7 @@ function renderReinstallPartitionAndNotify(
 }
 
 /**
- *  binding seam: exported under the `__test_*` prefix
+ * Test binding seam: exported under the `__test_*` prefix
  * so the cascade-emission regression test in
  * tests/orchestrators/plugin/reinstall.test.ts can verify the cascade
  * payload structure (including the folded-in manual-recovery row) without
@@ -670,10 +670,10 @@ function outcomeToPluginMessage(
     }
 
     case "failed": {
-      // CMC-16: structural failure-class tag supersedes
-      // the legacy substring match on `notes` for the manual-recovery
-      // class. expands this: manual-recovery is
-      // STRUCTURALLY a `PluginManualRecoveryMessage` variant, NOT a
+      // CMC-16: structural failure-class tag takes priority over
+      // the substring match on `notes` for the manual-recovery
+      // class. Manual-recovery is STRUCTURALLY a
+      // `PluginManualRecoveryMessage` variant, NOT a
       // `PluginFailedMessage` with a `{rollback partial}` reason. The
       // status discriminator is the literal `"manual recovery"` WITH a
       // space per shared/grammar/status-tokens.ts:47.
@@ -1083,7 +1083,7 @@ function successOutcome(
   // `{requires pi-mcp}` iff (declares AND companion unloaded). The
   // predicate is satisfied iff the plugin's reinstall actually staged
   // resources of that kind (i.e. the resolved manifest declared them AND
-  // they materialized). : probing companion-loaded state is the
+  // they materialized). Probing companion-loaded state is the
   // renderer's job via the injected SoftDepProbe.
   return {
     partition: "reinstalled",
@@ -1216,8 +1216,8 @@ async function finalizeReplacement(entry: ReplacementEntry): Promise<readonly st
 /**
  * CMC-16: wrap an error with bridge-rollback leak data.
  *
- * Short-circuits to the original error when no leaks accumulated (preserves
- * the pre-migration zero-leak fast path). Otherwise constructs a
+ * Short-circuits to the original error when no leaks accumulated (the
+ * zero-leak fast path). Otherwise constructs a
  * `ManualRecoveryError` carrying the merged leak set via `Error.cause` so
  * the depth-5 `causeChainTrailer` walker surfaces the original error text
  * at the notify boundary.

@@ -4,18 +4,16 @@
 // union locked by NFR-7: TypeScript refuses to compile any code that reads
 // `pluginRoot` from a non-installable variant.
 //
-// Per CONTEXT.md D-04: TWO distinct functions, no shared branching.
+// Per D-04: TWO distinct functions, no shared branching.
 //   - resolveStrict (MM-5):   union of entry + manifest + implicit + standalone
 //   - resolveLoose  (MM-6/7): entry-only; manifest/standalone declarations conflict
 //
-// Per RESEARCH.md Pitfall 1 (correction of CONTEXT.md D-04 wording):
-//   Type.Union([...]) takes NO `discriminator` option in TypeBox 1.x.
-//   Literal-tagged variants ARE the discriminator -- TypeScript narrowing
-//   works automatically on `if (r.installable)`.
+// Type.Union([...]) takes NO `discriminator` option in TypeBox 1.x.
+// Literal-tagged variants ARE the discriminator -- TypeScript narrowing
+// works automatically on `if (r.installable)`.
 //
-// Per RESEARCH.md correction of D-05 wording:
-//   Use boolean-literal `installable: true | false` (PRD §6.4 verbatim),
-//   NOT the string-tag form (e.g. kind discriminator).
+// Per D-05: use boolean-literal `installable: true | false` (PRD §6.4
+// verbatim), NOT the string-tag form (e.g. kind discriminator).
 
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
@@ -37,8 +35,8 @@ import { parsePluginSource, type ParsedSource } from "./source.ts";
 // D-07 (COMP-01): array-per-kind shape. The resolver UNIONs declared
 // (entry > manifest order) + implicit-by-convention paths with first-wins
 // dedup; the array semantics let `componentPaths.skills` carry both the
-// declared `custom/skills` and the conventional `skills` simultaneously
-// (PR-4 short-circuit semantics SUPERSEDED -- docs deferred to Plan 05-10).
+// declared `custom/skills` and the conventional `skills` simultaneously.
+// This is additive rather than PR-4 short-circuit semantics.
 const ComponentPathsSchema = Type.Object({
   skills: Type.Array(Type.String()),
   commands: Type.Array(Type.String()),
@@ -69,7 +67,7 @@ const ResolvedPluginNotInstallableSchema = Type.Object({
   // pluginRoot intentionally absent -- NFR-7 enforces non-readability
 });
 
-/** Pitfall 1: literal-tagged variants ARE the discriminator. NO options arg. */
+/** Literal-tagged variants ARE the discriminator. NO options arg. */
 export const ResolvedPluginSchema = Type.Union([
   ResolvedPluginInstallableSchema,
   ResolvedPluginNotInstallableSchema,
@@ -133,9 +131,8 @@ type SupportedKind = (typeof SUPPORTED_COMPONENT_KINDS)[number];
  * with note `contains <kind>`.
  *
  * SECURITY (T-02-25): The list is closed. A new kind upstream that's neither
- * in SUPPORTED_COMPONENT_KINDS nor in this list would be silently ignored;
- * matches V1 behavior. Phase 7 review item: re-audit when Claude Code adds
- * new component kinds.
+ * in SUPPORTED_COMPONENT_KINDS nor in this list would be silently ignored.
+ * Re-audit when Claude Code adds new component kinds.
  */
 const UNSUPPORTED_COMPONENT_KINDS = [
   "hooks",
@@ -369,7 +366,7 @@ async function preflightStages(
   // Classify source. PluginEntry.source is Type.Unknown() per MM-3.
   const parsedSource: ParsedSource = parsePluginSource(entry.source);
 
-  // PR-2 case 1: only path sources are installable in V1 (MM-3).
+  // PR-2 case 1: only path sources are installable (MM-3).
   const unsupportedReason = sourceUnsupportedReason(parsedSource);
   if (unsupportedReason !== undefined) {
     return {
@@ -414,7 +411,7 @@ async function preflightStages(
  * field into a flat readonly string-or-other-element array. The element-level
  * `validateComponentPath` call rejects non-string elements (and nested arrays);
  * we deliberately keep `unknown` typing on each element here so the rejection
- * messaging stays consistent with the V1-shape PR-2 case 7 path.
+ * messaging stays consistent with the PR-2 case 7 path.
  *
  * - `undefined` / `null` -> `[]` (not declared)
  * - a single string       -> `[string]`
@@ -439,11 +436,11 @@ function readPathOrArray(value: unknown): readonly unknown[] {
  * on success (caller adds to componentPaths + supported), or
  * `{ ok: false, reason }` on failure (caller adds note + flips notInstallable).
  *
- * D-07 narrowing: the resolver now accepts a top-level array of strings as
+ * D-07 narrowing: the resolver accepts a top-level array of strings as
  * legal input (the schema is `Type.Array(Type.String())`). Callers MUST
  * normalize their raw inputs through `readPathOrArray` BEFORE handing each
  * element to this function. Per-element non-string / nested-array values
- * are still rejected here (the schema-level guard does not survive the
+ * are rejected here (the schema-level guard does not survive the
  * `as unknown` coercion that the resolver uses to read untrusted entry /
  * manifest fields).
  */
@@ -708,11 +705,11 @@ export async function resolveStrict(
   let dirty = false; // any "notInstallable" reason found in steps 7-9
 
   // Step 7 (MM-5 + D-07/COMP-01): component paths are the UNION of declared
-  // (entry > manifest order) + implicit-by-convention. PR-4 is SUPERSEDED:
-  // implicit-by-convention is ADDITIVE rather than fallback-only -- if the
-  // conventional dir exists on disk and is not already declared, it is
-  // appended to the array. First-wins dedup by relative-path string preserves
-  // ordering (declared first, implicit last).
+  // (entry > manifest order) + implicit-by-convention. Implicit-by-convention
+  // is ADDITIVE rather than fallback-only (cf. PR-4) -- if the conventional
+  // dir exists on disk and is not already declared, it is appended to the
+  // array. First-wins dedup by relative-path string preserves ordering
+  // (declared first, implicit last).
   for (const kind of SUPPORTED_COMPONENT_KINDS) {
     dirty =
       (await collectStrictComponentKind(entry, manifest, partial, pluginRoot, ctx, kind)) || dirty;

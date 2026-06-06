@@ -28,11 +28,11 @@
 //      set (the orchestrator handles scope-mismatch).
 //
 // Returns `null` when no completion makes sense at the cursor position --
-// Pi-tui contract; NOT `[]` (06-RESEARCH line 493).
+// Pi-tui contract; NOT `[]`.
 //
 // `resolver` is the LocationsResolver from data.ts; constructed by
-// register.ts (Plan 06-05) from persistence/ + domain/ surfaces and threaded
-// through this dispatcher. Tests inject a hermetic mock resolver.
+// register.ts from persistence/ + domain/ surfaces and threaded through
+// this dispatcher. Tests inject a hermetic mock resolver.
 
 import { SCOPES } from "../../shared/types.ts";
 import { MARKETPLACE_SUBCOMMANDS, TOP_LEVEL_SUBCOMMANDS } from "../router.ts";
@@ -107,9 +107,9 @@ function flagCompletions(
   }
 
   if (positionalHead === "install" || positionalHead === "update") {
-    // AG-7 opt-in (260516-08j): surface `--map-model` as a completion
-    // suggestion under the install and update positional heads, mirroring
-    // the existing list-flag pattern.
+    // AG-7 opt-in: surface `--map-model` as a completion suggestion under
+    // the install and update positional heads, mirroring the existing
+    // list-flag pattern.
     flags.push({
       name: "--map-model",
       description: "Enable model field mapping in generated agents (default: omit)",

@@ -1,13 +1,12 @@
 // bridges/agents/index-mutation.ts
 //
 // Pure in-memory partition + ownership-conflict detection on the
-// agents-index. NO IO. The stage.ts orchestrator wires loadAgentsIndex
-// (Plan 03-02) into these helpers and then routes the partitioned slices
-// into commit / abort.
+// agents-index. NO IO. The stage.ts orchestrator wires loadAgentsIndex into
+// these helpers and then routes the partitioned slices into commit / abort.
 //
-// Hoisted into a dedicated module so the AG-3 (cross-(mp,plugin)
-// preservation) and AG-9/RN-4 (cross-owner conflict) invariants live
-// behind a tested seam, separately from the IO-laden 10-step prepare.
+// A dedicated module so the AG-3 (cross-(mp,plugin) preservation) and
+// AG-9/RN-4 (cross-owner conflict) invariants live behind a tested seam,
+// separately from the IO-laden 10-step prepare.
 
 import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
 

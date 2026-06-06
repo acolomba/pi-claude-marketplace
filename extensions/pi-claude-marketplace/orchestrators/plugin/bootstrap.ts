@@ -1,6 +1,6 @@
 // orchestrators/plugin/bootstrap.ts
 //
-// Quick 260516-02r: one-keystroke onboarding for the Anthropic marketplace.
+// One-keystroke onboarding for the Anthropic marketplace.
 //
 // Composes the two already-idempotent orchestrators
 // (`addMarketplace` + `setMarketplaceAutoupdate`) under hard-coded
@@ -35,7 +35,7 @@ import type { GitOps } from "../marketplace/shared.ts";
 
 /**
  * Hard-coded GitHub shorthand for the canonical Anthropic marketplace.
- * Not user-overridable in V1. If a future iteration introduces
+ * Not user-overridable. If a future iteration introduces
  * configurable bootstrap targets, this constant becomes a defaulted
  * field on `BootstrapOptions`.
  */

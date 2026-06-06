@@ -1,24 +1,22 @@
 // bridges/agents/stage.ts
 //
-// Two-phase staging for the agents bridge: prepare / commit / abort.
-// Phase 8 adds three-phase replacement exports: replacePreparedAgents,
-// rollbackAgentsReplacement, finalizeAgentsReplacement.
-// Carry-forward of V1 agent/stage.ts (lines 280-525) with the Phase 3
-// successor deltas:
+// Two-phase staging for the agents bridge: prepare / commit / abort, plus
+// three-phase replacement exports: replacePreparedAgents,
+// rollbackAgentsReplacement, finalizeAgentsReplacement. Notable invariants:
 //
-//   1. agents-index IO is hoisted to persistence/agents-index-io.ts
-//      (Plan 03-02). saveAgentsIndex remains the LAST step in commit so
-//      the V1 self-heal property survives: if commit fails after writing
-//      files but before persisting the index, the next unstage's ENOENT
-//      tolerance plus the index showing OLD targetPaths self-heals.
-//   2. AG-5 prepare-time foreign content is SOFT-FAILED (W-08 / B-08
-//      fix per D-06 corollary) -- surfaced via result.failed[] rather
-//      than thrown as AgentForeignContentError. Foreign-preserved index
-//      rows survive the commit (kept in agents:[]).
-//   3. AG-9 / RN-4 cross-owner conflict (a generated name is already
-//      owned by a DIFFERENT (mp, plugin)) STILL throws --
-//      AgentOwnershipConflictError carries the full conflict list.
-//   4. AG-12 collision detection within this plugin moves to convert.ts
+//   1. agents-index IO lives in persistence/agents-index-io.ts.
+//      saveAgentsIndex is the LAST step in commit so the self-heal property
+//      holds: if commit fails after writing files but before persisting the
+//      index, the next unstage's ENOENT tolerance plus the index showing OLD
+//      targetPaths self-heals.
+//   2. AG-5 prepare-time foreign content is SOFT-FAILED (W-08 / B-08 per
+//      D-06 corollary) -- surfaced via result.failed[] rather than thrown as
+//      AgentForeignContentError. Foreign-preserved index rows survive the
+//      commit (kept in agents:[]).
+//   3. AG-9 / RN-4 cross-owner conflict (a generated name is already owned
+//      by a DIFFERENT (mp, plugin)) throws -- AgentOwnershipConflictError
+//      carries the full conflict list.
+//   4. AG-12 collision detection within this plugin lives in convert.ts
 //      (assertNoAgentCollisions); we call it before the convert pass.
 //   5. The 10-step prepare is decomposed -- partition + ownership-guard
 //      logic lives in index-mutation.ts so AG-3 / AG-9 are testable
@@ -110,10 +108,10 @@ export async function prepareStagePluginAgents(
     mapModel,
   } = input;
 
-  // Step 1: discover. D-07 signature: discoverPluginAgents now takes
+  // Step 1: discover. D-07 signature: discoverPluginAgents takes
   // `agentsDirs: readonly string[]`. A null agentsSourceDir means the
   // plugin has no agents component; a non-null string maps to a
-  // single-element array. Phase 5 callers building over the new
+  // single-element array. Callers building over the
   // `componentPaths.agents: readonly string[]` shape pass the array
   // directly (translation lives at the StageAgentsInput boundary).
   // D-07 warnings (duplicate generated names across array elements)
@@ -131,7 +129,7 @@ export async function prepareStagePluginAgents(
   );
 
   // Step 3: convert (AG-7 + AG-11). AG-11 throws here if mapped tools is empty.
-  // `mapModel` defaults to false: the omit-by-default behavior is the new
+  // `mapModel` defaults to false: the omit-by-default behavior is the
   // contract; only explicit `--map-model` on install/update flips it on.
   const converted: ConvertedAgent[] = discovered.map((d) =>
     convertAgent({
@@ -252,8 +250,8 @@ export async function prepareStagePluginAgents(
     throw appendLeakToError(err, await cleanupStaging(stagingDir, "agents staging directory"));
   }
 
-  // Step 10: assemble the result. recorded[] is the W-05 fix Phase 5 reads
-  // to populate state.json.installs.
+  // Step 10: assemble the result. recorded[] is the W-05 record the
+  // orchestrator reads to populate state.json.installs.
   const recorded: StagedAgentRecord[] = newEntries.map((e) => ({
     generatedName: e.generatedName,
     sourcePath: e.sourcePath,
@@ -286,8 +284,7 @@ function optionalOriginalModel(originalModel: string | undefined): { originalMod
 
 /**
  * Format a single ConvertedAgent's warnings + dropped-fields/tools summary
- * into the flat array the orchestrator surfaces to the user. Mirrors V1
- * formatAgentWarnings (agent-stage.ts lines 256-271).
+ * into the flat array the orchestrator surfaces to the user.
  */
 function formatAgentWarnings(converted: ConvertedAgent): string[] {
   const out: string[] = [];
@@ -325,7 +322,7 @@ export async function commitPreparedAgents(
     return undefined;
   }
 
-  // TR-07 / Phase 41: Step 1 is retry-safe by construction. The Promise.all
+  // TR-07: Step 1 is retry-safe by construction. The Promise.all
   // rm loop pre-removes OLD plugin-owned targets; ENOENT means "already gone"
   // -- the only way ENOENT can fire is if a prior partial commit already
   // removed the target before crashing, in which case the second pass is a
@@ -395,8 +392,8 @@ export async function commitPreparedAgents(
     ]);
   }
 
-  // Step 3: persist new index (LAST step before cleanup -- RESEARCH
-  // self-heal property). Index = otherEntries (mp/plugin not ours) +
+  // Step 3: persist new index (LAST step before cleanup -- the self-heal
+  // property). Index = otherEntries (mp/plugin not ours) +
   // newEntries (just staged) + foreignPreservedEntries (W-08 fix: keep
   // these so future runs surface them again).
   await saveAgentsIndex(prepared.locations, {

@@ -1,6 +1,6 @@
 // bridges/commands/types.ts
 //
-// Type definitions for the commands bridge (Phase 3 Plan 03-04).
+// Type definitions for the commands bridge.
 //
 // `PreparedCommandsStaging` is a discriminated union over `kind: "noop" |
 // "staged"`. The "noop" branch carries no staging-dir state because the
@@ -12,10 +12,9 @@
 // (`bridges/commands/index.ts`) so external consumers cannot read or
 // mutate them.
 //
-// `StageCommandsCommitResult.recorded` (W-05 fix) gives Phase 5
-// install/update orchestrators the per-command (sourcePath, targetPath)
-// records needed to populate `state.json` without re-discovering after
-// commit.
+// `StageCommandsCommitResult.recorded` (W-05) gives the install/update
+// orchestrators the per-command (sourcePath, targetPath) records needed to
+// populate `state.json` without re-discovering after commit.
 
 import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -42,7 +41,7 @@ export interface StageCommandsInput {
   readonly previousCommandNames?: readonly string[];
 }
 
-/** Per-command record returned to Phase 5 for `state.json` population (W-05). */
+/** Per-command record returned for `state.json` population (W-05). */
 export interface StagedCommandRecord {
   readonly generatedName: string;
   /** Absolute path to the source `.md` file (pre-substitution). */
@@ -54,7 +53,7 @@ export interface StagedCommandRecord {
 /** Result returned to callers after commit (or noop). */
 export interface StageCommandsCommitResult {
   readonly stagedNames: readonly string[];
-  /** W-05 fix: Phase 5 reads `recorded` to populate state.json. */
+  /** W-05: callers read `recorded` to populate state.json. */
   readonly recorded: readonly StagedCommandRecord[];
   readonly warnings: readonly string[];
 }

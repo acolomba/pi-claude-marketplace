@@ -62,8 +62,8 @@ export interface StageMcpInput {
 }
 
 /**
- * One staged-server record for Phase 5 state.json population (W-05 fix).
- * Phase 5 reads `StageMcpCommitResult.recorded` -- not the StageMcpInput --
+ * One staged-server record for state.json population (W-05).
+ * Callers read `StageMcpCommitResult.recorded` -- not the StageMcpInput --
  * because by commit time the per-server `targetPath` is final and the
  * generated server name is already stable.
  */
@@ -79,8 +79,8 @@ export interface StagedMcpRecord {
 /** Discriminated commit-result shape. `stagedNames` aliases `recorded.map(r=>r.generatedName)`. */
 export interface StageMcpCommitResult {
   readonly stagedNames: readonly string[];
-  // W-05 fix: Phase 5 reads `recorded` to populate state.json (CONTEXT.md
-  // "Integration Points" line 192). Order matches stagedNames.
+  // W-05: callers read `recorded` to populate state.json. Order matches
+  // stagedNames.
   readonly recorded: readonly StagedMcpRecord[];
   readonly warnings: readonly string[];
 }

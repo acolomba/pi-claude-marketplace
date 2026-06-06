@@ -27,17 +27,16 @@
 // status (installed/updated/reinstalled/uninstalled), and an autoupdate flip
 // changes a marketplace record, not a Pi-visible resource (SNM-33).
 //
-// UXG-04 / MSG-GR-5 (reverses the Phase 17.1 / D-18-05 status-token design):
-// the marker-as-outcome row form (`● <mp> [<scope>] <autoupdate>` /
-// `<no autoupdate>`) IS NOW the emitted form on the flip surface, for byte-form
-// parity with the marketplace-list surface header. Fresh flips render the bare
-// marker; idempotent flips render the marker + the `{already autoupdate}` /
-// `{already no autoupdate}` brace. The renderer (shared/notify.ts) owns the
-// byte composition; per CLAUDE.md IL-2 all output still flows through notify().
-// Strategy B: the `autoupdate enabled` / `autoupdate disabled` / `skipped`
-// MarketplaceStatus discriminators are UNCHANGED -- only the emitted bytes and
-// the two renamed REASONS members (`already autoupdate` / `already no
-// autoupdate`) differ.
+// UXG-04 / MSG-GR-5 / D-18-05: the marker-as-outcome row form
+// (`● <mp> [<scope>] <autoupdate>` / `<no autoupdate>`) is the emitted form
+// on the flip surface, for byte-form parity with the marketplace-list surface
+// header. Fresh flips render the bare marker; idempotent flips render the
+// marker + the `{already autoupdate}` / `{already no autoupdate}` brace. The
+// renderer (shared/notify.ts) owns the byte composition; per CLAUDE.md IL-2
+// all output still flows through notify(). The `autoupdate enabled` /
+// `autoupdate disabled` / `skipped` MarketplaceStatus discriminators carry the
+// outcome; the REASONS members are `already autoupdate` / `already no
+// autoupdate`.
 //
 // Single orchestrator parameterized by `enable: boolean`. The edge layer maps
 // `marketplace autoupdate` -> enable=true and `marketplace noautoupdate` ->

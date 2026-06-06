@@ -1,18 +1,14 @@
 // bridges/agents/convert.ts
 //
-// AG-7 conversion pipeline. Carry-forward of V1 agent/convert.ts (478 lines)
-// with three successor deltas:
-//   1. substituteClaudeVars from ../../shared/vars.ts (D-08 / PI-10) replaces
-//      V1's substitutePluginVars import. Body substitution preserved
-//      verbatim per PI-10 contract (PROJECT.md PI-10 + V1).
-//   2. generatedAgentName from ../../domain/name.ts replaces V1's local
-//      generateAgentName helper. Single source of truth for agent name
-//      generation + AG-1 elision.
-//   3. discoverPluginAgents moved to ./discover.ts (V1 had it co-located
-//      here; the new layout keeps convert pure).
+// AG-7 conversion pipeline. Notable details:
+//   1. substituteClaudeVars from ../../shared/vars.ts (D-08 / PI-10) handles
+//      body substitution per the PI-10 contract.
+//   2. generatedAgentName from ../../domain/name.ts is the single source of
+//      truth for agent name generation + AG-1 elision.
+//   3. discoverPluginAgents lives in ./discover.ts so convert stays pure.
 //
-// MODEL_MAP, TOOL_MAP, THINKING_VALUES are byte-for-byte from V1 -- user
-// contract; tests assert exact equality.
+// MODEL_MAP, TOOL_MAP, THINKING_VALUES are user contract; tests assert exact
+// equality.
 
 import { generatedSkillName } from "../../domain/name.ts";
 import { substituteClaudeVars } from "../../shared/vars.ts";
@@ -42,7 +38,7 @@ const SUPPORTED_SOURCE_FIELDS = new Set([
 
 /**
  * AG-7 user contract: allowlisted Claude model strings. Anything else is
- * omitted from the generated frontmatter. Byte-for-byte from V1.
+ * omitted from the generated frontmatter.
  */
 export const MODEL_MAP: Readonly<Record<string, string>> = Object.freeze({
   sonnet: "anthropic/claude-sonnet-4-6",
@@ -52,7 +48,7 @@ export const MODEL_MAP: Readonly<Record<string, string>> = Object.freeze({
 
 /**
  * AG-7 user contract: Claude tool name -> Pi tool name. Tokens not present
- * here are dropped. Byte-for-byte from V1.
+ * here are dropped.
  */
 export const TOOL_MAP: Readonly<Record<string, string>> = Object.freeze({
   Read: "read",
@@ -64,7 +60,7 @@ export const TOOL_MAP: Readonly<Record<string, string>> = Object.freeze({
   LS: "ls",
 });
 
-/** Allowlist for thinking/effort values. Byte-for-byte from V1. */
+/** Allowlist for thinking/effort values. */
 export const THINKING_VALUES: ReadonlySet<string> = new Set([
   "off",
   "minimal",
@@ -304,9 +300,8 @@ export function convertAgent(input: {
    * model-mapping table is NOT consulted and the generated frontmatter
    * omits `model:` entirely (Pi picks its own default). When true (only
    * passed when the user supplies `--map-model` on install/update), the
-   * existing mapping applies byte-for-byte. The marketplace autoupdate
-   * cascade never passes this flag, so cascade-driven re-installs always
-   * omit `model:`.
+   * mapping table applies. The marketplace autoupdate cascade never passes
+   * this flag, so cascade-driven re-installs always omit `model:`.
    */
   mapModel: boolean;
 }): ConvertedAgent {
@@ -330,10 +325,10 @@ export function convertAgent(input: {
     warnings.push("source description was missing or empty -- using fallback");
   }
 
-  // 2. Model mapping. AG-7 is now opt-in: when `mapModel` is false the
+  // 2. Model mapping. AG-7 is opt-in: when `mapModel` is false the
   //    generated frontmatter omits `model:` entirely (no mapping, no
   //    originalModel provenance, no unknown-model warning -- absence is
-  //    self-documenting). When true the existing mapping table applies.
+  //    self-documenting). When true the mapping table applies.
   const modelResult = mapModelFlag
     ? mapModel(raw.model)
     : { emit: undefined, originalModel: undefined, warning: undefined };
@@ -373,9 +368,9 @@ export function convertAgent(input: {
     }
   }
 
-  // 7. Substitute plugin variables in the body (PI-10 + V1).
+  // 7. Substitute plugin variables in the body (PI-10).
   // D-08 corollary: the shared primitive sides with PI-10 -- agents DO get
-  // substitution. See PROJECT.md and 03-01-SUMMARY.md for the resolution.
+  // substitution.
   const substitutedBody = substituteClaudeVars(body, {
     pluginRoot,
     pluginData: pluginDataDir,

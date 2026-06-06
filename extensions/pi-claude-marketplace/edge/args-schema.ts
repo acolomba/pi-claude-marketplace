@@ -1,10 +1,6 @@
 // edge/args-schema.ts
 //
-// Schema-driven positional validator. Ported verbatim from V1
-// (`extensions/pi-claude-marketplace/commands/_args.ts`) with import refactor:
-//   - `./args.ts` (sibling) for `parseArgs` (V1 imported from `../args.ts`)
-//   - `../shared/errors.ts` for `errorMessage`
-//   - `../shared/types.ts` for `Scope`
+// Schema-driven positional validator.
 //
 // Note: `notify` is delivered as a callback parameter (`onError`),
 // NOT imported. The caller (handler) passes a closure that wraps the

@@ -1,14 +1,12 @@
 /**
- * Phase 32: GitHub OAuth Device Flow state machine.
+ * GitHub OAuth Device Flow state machine.
  *
- * Ships `initiateDeviceFlow` -- the v1.6 authentication engine. Phase 33+
- * wraps this in isomorphic-git's `onAuth` / `onAuthFailure` closures via
- * `buildAuthCallbacks`; Phase 34 threads `onAuthRequired` through `GitOps`;
- * Phase 35 wires the orchestrator call sites. Phase 32 alone has zero
- * production call sites -- the file is exercised only by its unit tests
- * (tests/domain/github-auth.test.ts) until Phase 33 imports it.
+ * Ships `initiateDeviceFlow` -- the authentication engine. This is wrapped in
+ * isomorphic-git's `onAuth` / `onAuthFailure` closures via `buildAuthCallbacks`;
+ * `onAuthRequired` is threaded through `GitOps` and wired at the orchestrator
+ * call sites.
  *
- * Locked decisions (32-CONTEXT.md):
+ * Locked decisions:
  *   - D-32-01: file lives in domain/ (auth policy is domain-tier).
  *   - D-32-02: injectable DeviceFlowHttp seam (DEFAULT_DEVICE_FLOW_HTTP uses
  *     globalThis.fetch; tests inject makeMockDeviceFlowHttp).
@@ -18,9 +16,9 @@
  *   - D-32-04: notifyFn callback (no `ctx` import; preserves shared/notify.ts
  *     chokepoint at the boundary).
  *   - D-32-05: every DeviceFlowResult -- success OR failure -- carries
- *     `authAttempted: true` so Phase 33's onAuthFailure can detect a second
- *     consecutive auth failure and return { cancel: true } instead of
- *     re-triggering Device Flow infinitely (AUTH-07; CP-9 retry-loop guard).
+ *     `authAttempted: true` so onAuthFailure can detect a second consecutive
+ *     auth failure and return { cancel: true } instead of re-triggering Device
+ *     Flow infinitely (AUTH-07; CP-9 retry-loop guard).
  *   - D-32-06: AUTH-09 discipline -- user_code and verification_uri MAY
  *     appear in notifyFn; access_token / cred.* / r.accessToken MUST NEVER
  *     appear in notifyFn or new Error(...) interpolation. Enforced by
@@ -33,8 +31,8 @@
  * substitute the placeholder with the real client_id. The mock-HTTP unit
  * tests do NOT depend on the real client_id value.
  *
- * Scope: hard-coded to `repo` for v1.6 (P32-8 -- full control of private
- * repositories; covers AUTH-01's "private GitHub marketplace" requirement).
+ * Scope: hard-coded to `repo` (P32-8 -- full control of private repositories;
+ * covers AUTH-01's "private GitHub marketplace" requirement).
  *
  * AUTH-09 discipline (mechanical lock): the
  * tests/architecture/no-credential-leak.test.ts gate scans THIS file for
@@ -107,29 +105,29 @@ export interface DeviceFlowHttp {
 }
 
 /**
- * Pre-bound notify callback (D-32-04). Phase 35 binds at the orchestrator
- * call site (e.g. `ctx.ui.notify.bind(ctx)` or via shared/notify.ts).
- * Returns `void` -- fire-and-forget per P32-5; do NOT await.
+ * Pre-bound notify callback (D-32-04). Bound at the orchestrator call site
+ * (e.g. `ctx.ui.notify.bind(ctx)` or via shared/notify.ts). Returns `void`
+ * -- fire-and-forget per P32-5; do NOT await.
  */
 export type NotifyFn = (message: string, severity?: "info" | "warning" | "error") => void;
 
 export interface InitiateDeviceFlowOpts {
   /** Bare hostname for credentialOps.approve key (e.g. "github.com"). */
   host: string;
-  /** Phase 31 CredentialOps instance (default or mock). */
+  /** CredentialOps instance (default or mock). */
   credentialOps: CredentialOps;
   /** Pre-bound ctx.ui.notify callback per D-32-04. */
   notifyFn: NotifyFn;
   /** Defaults to DEFAULT_DEVICE_FLOW_HTTP; tests inject a mock. */
   http?: DeviceFlowHttp;
-  /** Optional abort signal. Future-proofing; Phase 33 ignores for now. */
+  /** Optional abort signal. Future-proofing; currently ignored. */
   signal?: AbortSignal;
 }
 
 /**
- * Discriminated result. Both branches carry `authAttempted: true` so Phase
- * 33's onAuthFailure closure can guard against the isomorphic-git retry
- * loop (CP-9) by inspecting a single field across success + failure.
+ * Discriminated result. Both branches carry `authAttempted: true` so the
+ * onAuthFailure closure can guard against the isomorphic-git retry loop
+ * (CP-9) by inspecting a single field across success + failure.
  */
 export type DeviceFlowResult =
   | { ok: true; cred: GitCredentials; authAttempted: true }
@@ -139,10 +137,9 @@ const GITHUB_DEVICE_CODE_URL = "https://github.com/login/device/code";
 const GITHUB_ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
 
 /**
- * D-32-03: PUBLIC OAuth App client_id. Currently a placeholder (Plan 32-01
- * operator chose 'placeholder ok'); the operator substitutes the real
- * client_id before the first production smoke test. Unit tests pass the
- * constant through to mocks; they do not validate its value.
+ * D-32-03: PUBLIC OAuth App client_id. Currently a placeholder; the operator
+ * substitutes the real client_id before the first production smoke test. Unit
+ * tests pass the constant through to mocks; they do not validate its value.
  */
 const GITHUB_OAUTH_CLIENT_ID = "Ov23liNcyK08uGdU0mMl";
 
@@ -217,8 +214,8 @@ async function pollTokenImpl(
     return { kind: "unexpected", error: "invalid_json", description: `HTTP ${res.status}` };
   }
 
-  // Destructure named fields (Phase 31 SUMMARY deviation: prefer
-  // destructuring over bracket access on parsed objects).
+  // Destructure named fields (prefer destructuring over bracket access on
+  // parsed objects).
   const {
     access_token: accessTokenRaw,
     token_type: tokenTypeRaw,
@@ -268,14 +265,14 @@ export const DEFAULT_DEVICE_FLOW_HTTP: DeviceFlowHttp = {
  * Returns a discriminated DeviceFlowResult:
  *   - { ok: true, cred, authAttempted: true } -- token successfully obtained
  *     AND credentialOps.approve(host, cred) invoked (its failure -- if any
- *     -- propagates; the Phase 31 default impl swallows internally per its
- *     best-effort contract).
+ *     -- propagates; the default impl swallows internally per its best-effort
+ *     contract).
  *   - { ok: false, reason, authAttempted: true } -- terminal failure
  *     (access_denied / expired_token / deadline exceeded / init failure /
  *     unexpected error / caller aborted).
  *
- * D-32-05: authAttempted is true in BOTH branches so Phase 33's
- * onAuthFailure can guard the retry loop.
+ * D-32-05: authAttempted is true in BOTH branches so onAuthFailure can guard
+ * the retry loop.
  */
 async function safePollToken(
   http: DeviceFlowHttp,

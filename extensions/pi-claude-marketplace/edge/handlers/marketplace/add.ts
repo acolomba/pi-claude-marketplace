@@ -4,8 +4,7 @@
 // `/claude:plugin marketplace add <source> [--scope user|project]`.
 // Delegates to `addMarketplace` orchestrator, threading deps.gitOps through.
 //
-// Argument-parsing failures route through `notifyUsageError` (sentence + Usage block).
-// argument-parsing failures route through `notifyUsageError` so the
+// Argument-parsing failures route through `notifyUsageError` so the
 // rendered surface is `${message}\n\n${USAGE}` (sentence form +
 // blank-line + Usage block). Entity-shape errors
 // (MarketplaceDuplicateNameError / StaleSourceCloneError / unknown

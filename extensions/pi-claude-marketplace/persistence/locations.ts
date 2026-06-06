@@ -5,12 +5,12 @@
 // so hand-crafted shapes that mix scopes do NOT type-check.
 //
 // Per SC-7, every name-derived path inside the bundle goes through
-// assertPathInside (Phase 1 D-15 single chokepoint). The three
+// assertPathInside (D-15 single chokepoint). The three
 // method-helpers (pluginDataDir / marketplaceDataDir / sourceCloneDir)
 // exist precisely to enforce this -- callers MUST NOT compose paths
 // by string concatenation; they call the methods.
 //
-// Per CONTEXT.md D-10, ScopedLocations is per-scope independent.
+// Per D-10, ScopedLocations is per-scope independent.
 // Cross-scope reads are explicitly not modeled here.
 
 import path from "node:path";
@@ -44,7 +44,7 @@ export interface ScopedLocations {
   readonly extensionRoot: string;
   /** `<extensionRoot>/state.json` -- atomic state file. */
   readonly stateJsonPath: string;
-  /** `<extensionRoot>/.state-lock` -- Phase 7 per-scope cross-process lock sentinel. */
+  /** `<extensionRoot>/.state-lock` -- per-scope cross-process lock sentinel. */
   readonly stateLockFile: string;
   /** `<scopeRoot>/agents/` -- where pi-subagents agents are written (SC-2). */
   readonly agentsDir: string;
@@ -54,7 +54,7 @@ export interface ScopedLocations {
   readonly agentsIndexPath: string;
   /** `<scopeRoot>/mcp.json` -- MCP server registry (SC-2). */
   readonly mcpJsonPath: string;
-  /** `<extensionRoot>/skills-staging/` -- per-skill atomic-rename source (Phase 3 D-04). */
+  /** `<extensionRoot>/skills-staging/` -- per-skill atomic-rename source (D-04). */
   readonly skillsStagingDir: string;
   /** `<extensionRoot>/commands-staging/` -- per-command atomic-rename source. */
   readonly commandsStagingDir: string;
@@ -67,18 +67,17 @@ export interface ScopedLocations {
   /** `<extensionRoot>/sources/` -- where GitHub clones land. */
   readonly sourcesDir: string;
   /**
-   * `<extensionRoot>/cache/` -- Phase 6 D-03 completion cache root.
+   * `<extensionRoot>/cache/` -- D-03 completion cache root.
    * Sibling of `dataRoot`, `sourcesDir`. Optimization-only: every file
    * inside this directory is rebuildable from `state.json` +
    * `marketplace.json` and may be deleted at any time.
    */
   readonly cacheDir: string;
   /**
-   * `<extensionRoot>/cache/marketplace-names.json` -- Phase 6 D-03
-   * file-backed marketplace-names cache (per scope). Holds the union
-   * of marketplace names visible in this scope; consumed by
-   * `getMarketplaceNames(scope)` in `shared/completion-cache.ts`
-   * (Plan 06-03).
+   * `<extensionRoot>/cache/marketplace-names.json` -- D-03 file-backed
+   * marketplace-names cache (per scope). Holds the union of marketplace
+   * names visible in this scope; consumed by `getMarketplaceNames(scope)`
+   * in `shared/completion-cache.ts`.
    */
   readonly marketplaceNamesCacheFile: string;
 
@@ -91,12 +90,11 @@ export interface ScopedLocations {
   /** Returns `<extensionRoot>/sources-staging/<uuid>/` after SC-7 / NFR-10 containment check (D-09 same-FS sibling of `sourcesDir`). */
   sourcesStagingDir(uuid: string): Promise<string>;
   /**
-   * Phase 6 D-03: returns `<cacheDir>/plugins/<marketplace>.json` after
+   * D-03: returns `<cacheDir>/plugins/<marketplace>.json` after
    * `assertSafeName` + `assertPathInside` containment checks. Consumed
-   * by `getPluginIndex(scope, marketplace)` in `shared/completion-cache.ts`
-   * (Plan 06-03). The cache file is optimization-only -- it can be
-   * deleted at any time and will be lazily rebuilt from authoritative
-   * sources.
+   * by `getPluginIndex(scope, marketplace)` in `shared/completion-cache.ts`.
+   * The cache file is optimization-only -- it can be deleted at any time
+   * and will be lazily rebuilt from authoritative sources.
    */
   pluginCacheFile(marketplace: string): Promise<string>;
 }
@@ -129,7 +127,7 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
   const promptsTargetDir = path.join(extensionRoot, "resources", "prompts");
   const dataRoot = path.join(extensionRoot, "data");
   const sourcesDir = path.join(extensionRoot, "sources");
-  // Phase 6 D-03: completion cache root. Sibling of dataRoot, sourcesDir.
+  // D-03: completion cache root. Sibling of dataRoot, sourcesDir.
   const cacheDir = path.join(extensionRoot, "cache");
   const marketplaceNamesCacheFile = path.join(cacheDir, "marketplace-names.json");
 
@@ -137,7 +135,7 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
   // `extensionRoot` joined to a HARD-CODED suffix; no untrusted name
   // components participate. Per W-10 / B-04, the bridges that join leaf
   // names onto these dirs MUST call assertPathInside on the resulting
-  // leaf -- enforced in their plans (03-03 / 03-04 / 03-05 / 03-06).
+  // leaf.
   // We do not call assertPathInside here because (a) it is async and
   // locationsFor is sync (callers like loadState/saveState rely on the
   // sync shape), and (b) the suffix-only construction makes a containment
@@ -165,8 +163,8 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
 
     async pluginDataDir(mp: string, plugin: string): Promise<string> {
       // Defense-in-depth: route both name inputs through assertSafeName before
-      // path.join + assertPathInside (T-5-09 mitigation per Plan 05-03 threat
-      // model). assertPathInside alone does NOT catch every embedded separator
+      // path.join + assertPathInside (T-5-09 mitigation). assertPathInside
+      // alone does NOT catch every embedded separator
       // (e.g. `plugin = "p/sub"` joins to `<dataRoot>/mp/p/sub` which STAYS
       // inside dataRoot). assertSafeName upstream rejects "/" and "\" path
       // separators, "." / ".." traversal segments, and ASCII control chars.
@@ -203,7 +201,7 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
     },
 
     async pluginCacheFile(marketplace: string): Promise<string> {
-      // Phase 6 D-03 / T-EDGE-5b: marketplace names originate in user-
+      // D-03 / T-EDGE-5b: marketplace names originate in user-
       // supplied state, so route through assertSafeName before composing
       // a path. assertPathInside enforces NFR-10 containment on the
       // resulting leaf path against cacheDir.

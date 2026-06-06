@@ -565,8 +565,8 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   }
 
   // Destructure to make the branch choice unambiguous and avoid the
-  // silent fall-through hazard the pre-fix `if (found.length === 1) /
-  // if (sole !== undefined)` had under `noUncheckedIndexedAccess`.
+  // silent fall-through hazard `if (found.length === 1) / if (sole !==
+  // undefined)` has under `noUncheckedIndexedAccess`.
   const [sole, ...rest] = found;
   if (sole !== undefined && rest.length === 0) {
     const block = await buildBlock(opts.marketplace, opts.plugin, sole.scope, sole.record);

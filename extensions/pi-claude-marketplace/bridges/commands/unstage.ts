@@ -3,9 +3,8 @@
 // CommandsBridge: remove previously-staged command files by name.
 // ENOENT-tolerant per-name unlink (idempotent on repeated calls).
 //
-// Pattern carry-forward: V1 `agent/stage.ts::unstagePluginAgents` (shape
-// only; commands have no on-disk index, no marker check needed -- the
-// promptsTargetDir is owned end-to-end by name per D-06).
+// Commands have no on-disk index and need no marker check -- the
+// promptsTargetDir is owned end-to-end by name per D-06.
 
 import { unlink } from "node:fs/promises";
 import path from "node:path";

@@ -6,9 +6,8 @@
 // subobject. `unstage` and the `prepare` partition step read the marker
 // to identify which entries belong to a given (marketplace, plugin) tuple.
 //
-// Carried verbatim from V1 `mcp/marker.ts` (41 lines). The marker key
-// string is USER CONTRACT -- byte-for-byte identical with V1 so existing
-// `mcp.json` documents from a V1-installed plugin remain readable.
+// The marker key string is USER CONTRACT -- it must stay byte-stable so
+// existing `mcp.json` documents remain readable.
 
 /** Per MC-5 user contract -- DO NOT EDIT key. */
 export const CLAUDE_MARKETPLACE_MARKER_KEY = "_piClaudeMarketplace";
@@ -46,8 +45,8 @@ export function readMarker(value: unknown): ClaudeMarketplaceMarker | null {
 /**
  * Build a marker subobject. The plan-side discipline of MC-5 is uniform
  * with state-record discipline -- callers are expected to have already
- * validated `plugin` and `marketplace` via `assertSafeName` upstream
- * (Phase 2 discipline). This helper does NOT re-validate; the bridge
+ * validated `plugin` and `marketplace` via `assertSafeName` upstream.
+ * This helper does NOT re-validate; the bridge
  * stage path enters this function with names that have already passed
  * the resolver's name checks.
  */

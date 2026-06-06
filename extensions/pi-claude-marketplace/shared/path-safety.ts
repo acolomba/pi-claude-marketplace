@@ -60,8 +60,7 @@ function isPathInside(parent: string, child: string): boolean {
  * each segment to `parent` in turn. Per-component cost: 1x lstat() per segment,
  * negligible compared to the IO that follows.
  *
- * D-14: refuse all symlinks (PRD doesn't specify symlink behavior -- this is
- * new contract beyond V1).
+ * D-14: refuse all symlinks (PRD doesn't specify symlink behavior).
  * D-15: single chokepoint -- every PS-1 callsite uses this function, no
  * per-bridge wrappers.
  * D-16: walk every parent component, not just the leaf (catches the case
@@ -70,7 +69,7 @@ function isPathInside(parent: string, child: string): boolean {
  * inherits.
  *
  * TOCTOU note: between this check returning and the actual write, an attacker
- * with write access to a parent dir could insert a symlink. V1's threat model
+ * with write access to a parent dir could insert a symlink. The threat model
  * is "careless or malicious *plugin author*", not "concurrent in-process
  * attacker", so this residual risk is acceptable. Documented here so a future
  * hardening pass can find it.

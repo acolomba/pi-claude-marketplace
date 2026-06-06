@@ -5,16 +5,14 @@
 // Returns a sorted, deterministic `DiscoveredCommand[]` plus a `warnings[]`
 // channel for D-07 soft-fails.
 //
-// Pattern carry-forward: V1 `resource/stage.ts` (commands branch of
-// `discoverPluginResources`, lines 73-87). The CM-2 elision is performed
-// by the Phase 2 helper `domain/name.ts::generatedCommandName`.
+// The CM-2 elision is performed by `domain/name.ts::generatedCommandName`.
 //
 // D-07 (COMP-01): iterates over the array shape. First-wins dedup by
 // generated command name (`<plugin>:<command>` per RN-1); the second
 // occurrence across array elements surfaces as a warning. Within-dir
 // RN-6 collisions remain hard errors via `assertNoCommandCollisions`.
 //
-// Symlink discipline (RESEARCH "Easy mistakes" #7 / D-14): refuse symlinked
+// Symlink discipline (D-14): refuse symlinked
 // `.md` entries. We `lstat` each candidate before reading; isSymbolicLink()
 // short-circuits without touching the file body. Containment of the
 // commands directory itself is the resolver's job (it called
@@ -70,7 +68,7 @@ export async function discoverPluginCommands(input: {
   pluginName: string;
   resolved: ResolvedPluginInstallable;
 }): Promise<DiscoverPluginCommandsResult> {
-  // Phase 2 resolver populates componentPaths.commands with one element per
+  // The resolver populates componentPaths.commands with one element per
   // declared (or implicit-by-convention) commands directory. Empty array
   // means the plugin has no commands -- return the empty discovered + no
   // warnings.

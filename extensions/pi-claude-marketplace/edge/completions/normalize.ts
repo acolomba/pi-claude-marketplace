@@ -1,7 +1,6 @@
 // edge/completions/normalize.ts
 //
-// TC-7 carry-forward from V1 (`extensions/pi-claude-marketplace/completions.ts`).
-// Two exports + one internal regex:
+// TC-7. Two exports + one internal regex:
 //
 //   * `normalizeCompletionWhitespace` -- collapse a run of spaces at the
 //     cursor to a single space. Pi-tui's autocomplete inserts an item's
@@ -15,8 +14,8 @@
 //   * `isClaudePluginCommandLine` -- true when `line` is invoking
 //     `/claude:plugin`. Accepts Pi's collision-suffix form `:\d+` that gets
 //     applied when multiple extensions register the same command name.
-//     Used by `register.ts` (Plan 06-05) to scope the post-processor to
-//     our own command.
+//     Used by `register.ts` to scope the post-processor to our own
+//     command.
 //
 //   * `CLAUDE_PLUGIN_LINE` regex (module-private) -- single source of truth
 //     for the match shape.

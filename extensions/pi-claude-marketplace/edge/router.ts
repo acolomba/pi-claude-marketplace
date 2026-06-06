@@ -1,28 +1,23 @@
 // edge/router.ts
 //
-// AP-3 dispatch + Usage emission. Ported from V1
-// (`extensions/pi-claude-marketplace/commands/router.ts`) with two refinements:
+// AP-3 dispatch + Usage emission.
 //
-//   1. Direct Pi notify calls are replaced with notifyUsageError(ctx,
-//      message, usageBlock) from shared/notify.ts. ESLint BLOCK A
-//      (eslint.config.js) forbids direct notify on the Pi context outside
-//      of shared/notify.ts; the notify-discipline grep gate (Plan 06-02
-//      Task 2 verify) further enforces zero direct calls in this file by
-//      asserting the literal Pi-context notify expression does not appear.
+// Direct Pi notify calls are replaced with notifyUsageError(ctx, message,
+// usageBlock) from shared/notify.ts. ESLint BLOCK A (eslint.config.js)
+// forbids direct notify on the Pi context outside of shared/notify.ts; the
+// notify-discipline grep gate further enforces zero direct calls in this
+// file by asserting the literal Pi-context notify expression does not
+// appear.
 //
-//   2. Imports re-anchored to the new structure: `notifyUsageError` from
-//      `../shared/notify.ts`; `ExtensionCommandContext` from the Pi host pkg.
-//
-// `TOP_LEVEL_USAGE` and `MARKETPLACE_USAGE` are PRD-stable strings carried
-// verbatim from V1.
+// `TOP_LEVEL_USAGE` and `MARKETPLACE_USAGE` are PRD-stable strings.
 //
 // `routeClaudePlugin` accepts `ls` as an alias for `list`; `routeMarketplace`
 // accepts `rm` and `ls` as aliases for `remove` and `list`.
 //
 // Router signature is pure-functional (`routeClaudePlugin(args, handlers, ctx)`)
 // so handlers + ctx can be mocked without an `ExtensionAPI` instance.
-// `register.ts` (Plan 06-05) builds the `SubcommandHandlers` record from
-// `EdgeDeps` and passes it in.
+// `register.ts` builds the `SubcommandHandlers` record from `EdgeDeps` and
+// passes it in.
 
 import { notifyUsageError } from "../shared/notify.ts";
 

@@ -1,9 +1,9 @@
 // domain/name.ts
 //
 // Pure name validation (RN-2) and generated-name helpers (RN-1) per PRD
-// §6.5. THREE different rules per resource type -- see RESEARCH.md
-// Pitfall 8. The single helper that handled all three in V1 was a
-// recurring bug surface; Phase 2 splits into three explicit functions.
+// §6.5. THREE different rules per resource type, split into three explicit
+// functions (one shared helper that handled all three was a recurring bug
+// surface).
 
 /**
  * RN-2: validate that a name is safe to use as a path basename / generated
@@ -18,13 +18,11 @@
  * The optional `label` argument is prepended to error messages
  * (e.g. `assertSafeName(skill.generatedName, "generated skill name")` -->
  * `generated skill name "..." must not contain path separators.`). When
- * omitted, messages use the legacy capitalized "Name" form for
- * backward-compatibility with Phase 2 call sites and tests.
+ * omitted, messages use the capitalized "Name" form.
  */
 export function assertSafeName(name: string, label?: string): void {
   // When `label` is provided, prepend it (lowercase form for sentence-flow);
-  // when omitted, fall back to "Name" so legacy single-arg call sites and
-  // their tests keep matching the same regexes.
+  // when omitted, fall back to "Name".
   const prefix = label === undefined ? "Name " : `${label} `;
 
   if (typeof name !== "string") {

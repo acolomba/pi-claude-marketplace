@@ -10,7 +10,7 @@
 // since the extension-wide block scopes the prohibition everywhere else.
 //
 // Per ST-4: missing manifestPath / marketplaceRoot are filled with
-// V1's default-derivation. Per ST-5: missing resources.agents /
+// the default derivation. Per ST-5: missing resources.agents /
 // resources.mcpServers are normalized to [].
 //
 // Per ST-4 "persisted asynchronously (best-effort)": the persist call
@@ -100,7 +100,7 @@ function ensurePluginResources(mp: Record<string, unknown>): boolean {
  * Pure function -- does NOT touch disk. Caller decides whether to persist
  * the result (typically via persistMigratedState).
  *
- * Behavior (V1-equivalent):
+ * Behavior:
  *   - non-object / null parsed input -> { marketplaces: {}, mutated: false }
  *   - parsed object with non-object marketplaces -> reset to {} (Pitfall 9)
  *   - per-marketplace: fill manifestPath and marketplaceRoot with defaults
@@ -137,7 +137,7 @@ export function migrateLegacyMarketplaceRecords(
 
   for (const [mpName, mpRaw] of Object.entries(rawMps as Record<string, unknown>)) {
     if (typeof mpRaw !== "object" || mpRaw === null || Array.isArray(mpRaw)) {
-      // V1 never produced this shape; skip silently and mark mutated.
+      // Skip this shape silently and mark mutated.
       mutated = true;
       continue;
     }
@@ -161,7 +161,7 @@ export function migrateLegacyMarketplaceRecords(
  * it manually if needed, but the in-memory state is still usable for the
  * remainder of this Pi process.
  *
- * Per Plan 21-01 D-21-04: the IL-3 callsite below is allowed by the
+ * Per D-21-04: the IL-3 callsite below is allowed by the
  * block-level files-override at `extensions/pi-claude-marketplace/persistence/migrate.ts`
  * in eslint.config.js (BLOCK B-2). No inline disable directive is
  * required. Any other `console.warn` in the extension trips BLOCK A by

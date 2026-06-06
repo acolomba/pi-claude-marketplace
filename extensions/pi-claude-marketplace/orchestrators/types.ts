@@ -1,10 +1,10 @@
 // orchestrators/types.ts
 //
 // Cross-orchestrator types (D-06). Sits at the ROOT of
-// `orchestrators/` so (marketplace/update.ts) and
-// (plugin/update.ts) both import from here without an
+// `orchestrators/` so marketplace/update.ts and plugin/update.ts both
+// import from here without an
 // orchestrators/marketplace ↔ orchestrators/plugin cycle. Mirrors
-//  D-01's escalation note about a future BridgeOps<Prep, Target>
+// D-01's escalation note about a future BridgeOps<Prep, Target>
 // belonging at this same path.
 
 import type { Reason } from "../shared/notify.ts";
@@ -65,7 +65,7 @@ export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
    * orchestrator catches a `ManualRecoveryError` (thrown by the bridges'
    * leak-on-rollback path), it sets `failureClass: "manual-recovery"` so
    * the cascade row renders `(failed) {rollback partial}` without
-   * substring-matching the legacy ES-5 `notes` text. Omitted on
+   * substring-matching the ES-5 `notes` text. Omitted on
    * non-manual-recovery failures; the cascade renderer falls back to
    * `narrowReason` on `notes` for those.
    */
@@ -76,8 +76,8 @@ export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
    * `composeErrorWithCauseChain(err)` text downstream. Mirrors the
    * `PluginUpdateOutcome.reasons` precedent (CR-06 / NFR-7). When
    * present, `outcomeToCascadePluginMessage` prefers `reasons[0]` over
-   * `narrowReasons(notes)`; when absent, the legacy substring narrow
-   * is used (back-compat for fixtures that build outcomes without
+   * `narrowReasons(notes)`; when absent, the substring narrow
+   * is used (for fixtures that build outcomes without
    * `reasons`). Populated by the catch in `reinstallPlugins` so an
    * EACCES / EPERM / ENOENT failure renders as the matching closed
    * Reason (`permission denied` / `source missing`) rather than the
@@ -91,7 +91,7 @@ export type ReinstallPluginOutcome =
   | ReinstallSkippedOutcome
   | ReinstallFailedOutcome;
 
-/** MU-7 partition tag. 's plugin/update.ts returns one outcome per plugin. */
+/** MU-7 partition tag. plugin/update.ts returns one outcome per plugin. */
 export type PluginUpdatePartition = "updated" | "unchanged" | "skipped" | "failed";
 
 /**
@@ -175,8 +175,8 @@ export interface PluginUpdateSkippedOutcome extends PluginUpdateBase {
  * them undefined. `notes` is REQUIRED (the composed cause-chain text
  * for the notify trailer). `reasons` and `phaseFailures` are optional
  * structured supplements consumed by the cascade renderer; when
- * neither is set the consumer falls back to the legacy notes
- * substring parse for back-compat.
+ * neither is set the consumer falls back to the notes
+ * substring parse.
  *
  * `cause?: Error` carries the raw thrown error
  * (only populated by the cascadeAutoupdates catch where the error is
@@ -197,15 +197,14 @@ export interface PluginUpdateFailedOutcome extends PluginUpdateBase {
 }
 
 /**
- * split into a discriminated union on `partition`
- * (previously a single interface with every field optional). The
+ * Discriminated union on `partition`. The
  * discriminated union makes partition-specific fields (fromVersion /
  * toVersion on updated; phaseFailures on failed) STRUCTURALLY
  * unreachable on the wrong partition, so the renderer cannot read
  * `outcome.fromVersion!` from a skipped outcome without a narrow.
  *
  * Each partition variant carries `declaresAgents` / `declaresMcp` via
- * the shared `PluginUpdateBase` base (Task B1 / CMC-13 required
+ * the shared `PluginUpdateBase` base (CMC-13 required
  * booleans).
  */
 export type PluginUpdateOutcome =
@@ -217,9 +216,9 @@ export type PluginUpdateOutcome =
 /**
  * D-05 function-injection seam. (`marketplace update` with
  * `record.autoupdate === true`) calls this once per installed plugin
- * during the autoupdate cascade. ships the real implementation
- * (`orchestrators/plugin/update.ts`); tests inject a mock. 's
- * `index.ts` performs the registration-time wiring.
+ * during the autoupdate cascade. `orchestrators/plugin/update.ts` ships
+ * the real implementation; tests inject a mock. The
+ * `index.ts` barrel performs the registration-time wiring.
  */
 export type PluginUpdateFn = (
   plugin: string,

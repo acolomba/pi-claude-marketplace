@@ -436,9 +436,10 @@ function buildImportNotificationMarketplaces(
   }
 
   for (const o of result.warnings) {
-    // A1 DROP: marketplace-failed / unmappable-marketplace-source warnings
-    // have no V2 representation (the failing marketplace's own status: "failed"
-    // carries the structural signal; advisory-only warnings are silenced).
+    // marketplace-failed / unmappable-marketplace-source warnings
+    // have no notification representation (the failing marketplace's own
+    // status: "failed" carries the structural signal; advisory-only warnings
+    // are silenced).
     if (o.reason === "marketplace-failed" || o.reason === "unmappable-marketplace-source") {
       continue;
     }
@@ -452,11 +453,11 @@ function buildImportNotificationMarketplaces(
     block.plugins.push(row);
   }
 
-  // A2 DROP: result.diagnostics (orphan + per-marketplace) have no V2
+  // result.diagnostics (orphan + per-marketplace) have no notification
   // representation. The in-memory record stays on the returned result;
   // Pi runtime debug logs preserve diagnostic visibility.
 
-  // : orchestrator owns iteration order; notify does NOT sort.
+  // orchestrator owns iteration order; notify does NOT sort.
   // Project-before-user tie-break per MSG-GR-3 via compareByNameThenScope.
   // defense-in-depth: typed readonly + runtime freeze (codebase convention)
   return Object.freeze(
@@ -608,7 +609,7 @@ async function executeScopedPlan(
       continue;
     }
 
-    // WR-02 (gap closure, Plan 20-05): catch unexpected installPlugin throws
+    // WR-02: catch unexpected installPlugin throws
     // and route them to result.unexpectedPluginFailures matching
     // dispatchFailedOutcome's shape; per-scope loop continues and the final
     // notify() at the end of importClaudeSettings still fires.
@@ -754,10 +755,10 @@ export async function importClaudeSettings(
     await executeScopedPlan(opts, result, scopePlan);
   }
 
-  // Plan 20-02 / D-20-02 (strict D-19-02 mirror): V2 cascade construction
-  // mirrors the Plan 19-04 reinstall.ts recipe at
+  // D-20-02 / D-19-02: cascade construction
+  // mirrors the reinstall.ts recipe at
   // orchestrators/plugin/reinstall.ts; execute.ts substitutes the
-  // import-cascade variant set (added / updated / failed marketplaces
+  // import-cascade variant set (added / updated / failed marketplaces).
   // Truly catastrophic throws bubble to Pi runtime -- better for debugging
   // than a polished error message that masks the bug. The inner
   // executeScopedPlan try/catch covers expected loadState failures.

@@ -2,12 +2,10 @@
 //
 // AG-5 two-part marker check + user-contract constants.
 //
-// Carries the V1 isSafeToTouch algorithm (agent-stage.ts lines 200-230)
-// renamed to isOwnedAgentFile and hoisted into a testable module per the
-// Phase 3 successor-architecture deltas. The marker constant is byte-for-
-// byte user contract -- the markers-snapshot architectural test asserts
-// equality, and any drift would silently break every existing user's
-// previously-staged agent files.
+// The isOwnedAgentFile algorithm lives in a testable module. The marker
+// constant is byte-for-byte user contract -- the markers-snapshot
+// architectural test asserts equality, and any drift would silently break
+// every existing user's previously-staged agent files.
 //
 // T-03-25 mitigation: a foreign file claiming the basename without the
 // marker fails the body check; a foreign file with the marker but wrong

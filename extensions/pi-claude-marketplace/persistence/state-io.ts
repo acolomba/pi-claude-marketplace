@@ -8,18 +8,18 @@
 // pathSource/githubSource at load time -- the SAME factories used at
 // marketplace-add parse time.
 //
-// Per CONTEXT.md D-09, state shape nests plugins under their owning
+// Per D-09, state shape nests plugins under their owning
 // marketplace; the (mp, plugin) tuple is the natural composite key.
 //
 // Per Pitfall 4, this layer is INTRA-PROCESS only; cross-process
-// safety is NOT claimed. withStateGuard (Plan 02-06) enforces the
+// safety is NOT claimed. withStateGuard enforces the
 // single-writer-at-a-time discipline; cross-process races resolve
 // last-writer-wins via write-file-atomic's queue.
 //
 // SECURITY (T-02-16): the schema accepts any string for `manifestPath`
 // and `marketplaceRoot`. Containment of THOSE paths is the responsibility
-// of Phase 4 marketplace orchestrators when they read the manifest file
-// (assertPathInside applied at read site). Phase 2 loads the value
+// of the marketplace orchestrators when they read the manifest file
+// (assertPathInside applied at read site). This layer loads the value
 // verbatim.
 
 import { readFile } from "node:fs/promises";
@@ -176,8 +176,8 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
 
   // ST-6: revalidate stored source records through the SAME factories used at
   // parse time. Three legal storage shapes:
-  //   1. raw string (V1 legacy) -> classify via parsePluginSource
-  //   2. ParsedSource object (current) -> revalidate via pathSource/githubSource
+  //   1. raw string -> classify via parsePluginSource
+  //   2. ParsedSource object -> revalidate via pathSource/githubSource
   //   3. unknown-kind object (forward-compat / NFR-12) -> accept verbatim
   for (const [mpName, mpRaw] of Object.entries(marketplaces)) {
     if (typeof mpRaw !== "object" || mpRaw === null) {

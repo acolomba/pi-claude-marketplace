@@ -1,14 +1,10 @@
 // bridges/skills/stage.ts
 //
 // Skills bridge prepare/commit/abort with per-skill atomic dir rename, plus
-// Phase 8 replacement exports: replacePreparedSkills, rollbackSkillsReplacement,
+// replacement exports: replacePreparedSkills, rollbackSkillsReplacement,
 // finalizeSkillsReplacement.
 //
-// Carry-forward from V1 `resource/stage.ts` (skills branch, lines 178-204) for
-// the per-skill cp+rewrite+substitute pipeline; from V1 `agent/stage.ts`
-// (lines 280-525) for the prepare/commit/abort discriminated-union shape.
-//
-// Phase-3 deltas (vs V1):
+// Behavior:
 //   - D-04: bridge owns its own staging dir at
 //     `<extensionRoot>/skills-staging/<uuid>/` -- staging and target both
 //     live under `<extensionRoot>/`, guaranteeing same-FS atomicity for the
@@ -261,7 +257,7 @@ export async function commitPreparedSkills(
 /**
  * Cleanup-only counterpart to commit. Called when prepare returned the
  * `staged` variant but the orchestrator decided not to commit (e.g. another
- * bridge in the same Phase 5 transaction failed). After commit succeeds,
+ * bridge in the same install transaction failed). After commit succeeds,
  * abort is a no-op because the staging dir is already cleaned.
  */
 export async function abortPreparedSkills(

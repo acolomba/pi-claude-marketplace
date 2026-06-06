@@ -1,10 +1,9 @@
 // bridges/agents/frontmatter.ts
 //
 // Owns the input + output sides of pi-subagents' frontmatter format.
-// Carry-forward of V1 agent/frontmatter.ts (226 lines) verbatim with one
-// successor delta: GENERATED_AGENT_MARKER is re-exported from ./marker.ts
-// rather than redefined here, so the constant has a single source of truth
-// (see marker.ts -- markers-snapshot test asserts byte-for-byte equality).
+// GENERATED_AGENT_MARKER is re-exported from ./marker.ts rather than
+// redefined here, so the constant has a single source of truth (see
+// marker.ts -- markers-snapshot test asserts byte-for-byte equality).
 //
 // On the OUTPUT side, this module is the only place in the extension that
 // decides how generated agent files are assembled: which scalars get

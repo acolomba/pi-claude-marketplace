@@ -2,13 +2,10 @@
 //
 // SK-5 / D-10: enumerate skill subdirs that contain `SKILL.md`.
 //
-// Carry-forward from V1 `resource/stage.ts::discoverPluginResources` (skills
-// branch, lines 46-72) with three deltas:
-//   - Sort entries by `name.localeCompare` for deterministic ordering
-//     (RESEARCH line 422 recommends).
-//   - Refuse symlinked entries inside the skills dir
-//     (RESEARCH "Easy mistakes" #7) -- `lstat` each direct child and skip
-//     symbolic links instead of following them.
+// Behavior:
+//   - Sort entries by `name.localeCompare` for deterministic ordering.
+//   - Refuse symlinked entries inside the skills dir -- `lstat` each direct
+//     child and skip symbolic links instead of following them.
 //   - D-07 (COMP-01): iterate over `componentPaths.skills: readonly string[]`
 //     (array shape). First-wins dedup by generated name; the second
 //     occurrence of a collision surfaces via `warnings[]` rather than
@@ -82,13 +79,12 @@ function duplicateWarning(sourceName: string, skillsDir: string, generatedName: 
  *
  * Path resolution: each element is passed through `resolveSkillsDir` -- a
  * relative element is joined against `resolved.pluginRoot`; an absolute
- * element is used verbatim (legacy test-fixture pattern preserved). Per
- * existing skills/discover.test.ts contract, the resolved path may legally
- * be missing (ENOENT-graceful per SK-5).
+ * element is used verbatim. The resolved path may legally be missing
+ * (ENOENT-graceful per SK-5).
  *
- * Returns an empty array when no entries qualify. The Phase 2 resolver
- * guarantees `componentPaths` is populated for installable plugins (W-03
- * fix: dropped defensive fallback; trust the Phase 2 contract).
+ * Returns an empty array when no entries qualify. The resolver
+ * guarantees `componentPaths` is populated for installable plugins (W-03:
+ * no defensive fallback; trust the resolver contract).
  */
 export async function discoverPluginSkills(input: {
   pluginName: string;
@@ -115,7 +111,7 @@ export async function discoverPluginSkills(input: {
     for (const entry of sorted) {
       const full = path.join(skillsDir, entry.name);
 
-      // Refuse symlinked skill dirs (RESEARCH "Easy mistakes" #7).
+      // Refuse symlinked skill dirs.
       // readdir's `withFileTypes` reports the link's TYPE (so a symlink to a
       // directory shows isDirectory()=true). lstat is the only way to detect
       // the link itself.

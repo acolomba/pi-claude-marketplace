@@ -1,14 +1,12 @@
 // edge/args.ts
 //
-// AP-1 tokenizer + AP-2 / AP-4 --scope validator. Ported verbatim from V1
-// (`extensions/pi-claude-marketplace/args.ts`) with one import refactor:
-// `Scope` now resolves from `shared/types.ts` (Phase 2 carry-forward) so
-// `edge/` can consume it without violating the Phase 1 D-11 import boundary
-// (edge MUST NOT import from `domain/`).
+// AP-1 tokenizer + AP-2 / AP-4 --scope validator. `Scope` resolves from
+// `shared/types.ts` so `edge/` can consume it without violating the D-11
+// import boundary (edge MUST NOT import from `domain/`).
 //
 // PRD §6.6 AP-1: tokenize single (`'...'`) and double (`"..."`) quoted strings;
-// no backslash escapes, no quote nesting, no mixed-quote escape (V1 locked
-// baseline -- intentional minimalism).
+// no backslash escapes, no quote nesting, no mixed-quote escape (intentional
+// minimalism).
 //
 // PRD §6.6 AP-2: `--scope user` and `--scope project` are the only legal
 // values. Missing value throws `--scope requires a value: "user" or "project".`.

@@ -1,18 +1,17 @@
 // bridges/agents/types.ts
 //
-// Type contracts for the agents bridge. Carry-forward of V1 shapes with three
-// successor deltas:
-//   1. Discriminated PreparedAgentsStaging union (noop|staged) preserves V1's
+// Type contracts for the agents bridge. Notable shapes:
+//   1. Discriminated PreparedAgentsStaging union (noop|staged) carries a
 //      kind tag so commit/abort branch on `kind` rather than empty-string
 //      sentinels.
-//   2. StageAgentsCommitResult adds `recorded: StagedAgentRecord[]` (W-05)
-//      so Phase 5 install/update can populate state.json.installs.
-//   3. StageAgentsCommitResult adds `failed: UnstageAgentFailure[]` (W-08)
-//      so prepare-time AG-5 foreign content surfaces softly per D-06
+//   2. StageAgentsCommitResult includes `recorded: StagedAgentRecord[]`
+//      (W-05) so install/update can populate state.json.installs.
+//   3. StageAgentsCommitResult includes `failed: UnstageAgentFailure[]`
+//      (W-08) so prepare-time AG-5 foreign content surfaces softly per D-06
 //      corollary, instead of throwing.
 //
-// W-04 fix: typed fields + open index signature use `unknown` to avoid
-// TS2411 (typed-string fields incompatible with `string | undefined` index).
+// W-04: typed fields + open index signature use `unknown` to avoid TS2411
+// (typed-string fields incompatible with `string | undefined` index).
 // The line-based parser in frontmatter.ts only emits string values for the
 // known fields; consumers narrow as needed.
 
@@ -87,8 +86,7 @@ export interface StageAgentsInput {
 }
 
 /**
- * Per-agent stage record. Phase 5 reads this to populate state.json.installs
- * (CONTEXT.md "Integration Points" line 192).
+ * Per-agent stage record. Read to populate state.json.installs.
  */
 export interface StagedAgentRecord {
   readonly generatedName: string;
@@ -106,7 +104,7 @@ export interface StageAgentsCommitResult {
   /** Generated agent names that will land in <scopeRoot>/agents/. */
   readonly stagedNames: readonly string[];
   /**
-   * W-05 fix: per-record array Phase 5 reads to populate state.json.installs.
+   * W-05: per-record array read to populate state.json.installs.
    * Distinct from stagedNames because state.json wants the full {generatedName,
    * sourcePath, targetPath} tuple, not just names.
    */
@@ -114,9 +112,9 @@ export interface StageAgentsCommitResult {
   /** Aggregated warnings (per-agent + per-row index corruptions). */
   readonly warnings: readonly string[];
   /**
-   * W-08 / B-08 fix: prepare-time AG-5 foreign content surfaces here, NOT via
-   * throw, per D-06 corollary. Empty when no foreign content found. The Phase
-   * 5 orchestrator routes these to notifyWarning.
+   * W-08 / B-08: prepare-time AG-5 foreign content surfaces here, NOT via
+   * throw, per D-06 corollary. Empty when no foreign content found. The
+   * orchestrator routes these to notifyWarning.
    */
   readonly failed: readonly UnstageAgentFailure[];
 }

@@ -1,15 +1,15 @@
 // shared/errors-bridges.ts
 //
-// Typed error subclasses for Phase 3 bridge refusals. Each error type maps
-// to one specific PRD failure mode; bridges throw these so callers can
-// distinguish refusal categories via instanceof and so user-visible error
-// messages are uniform.
+// Typed error subclasses for bridge refusals. Each error type maps to one
+// specific PRD failure mode; bridges throw these so callers can distinguish
+// refusal categories via instanceof and so user-visible error messages are
+// uniform.
 //
-// AgentForeignContentError EXTENDS PathContainmentError (Phase 1 D-17
-// inheritance pattern). PI-14 `instanceof PathContainmentError` catches
-// foreign-content refusals on the same code path as true containment
-// escapes -- a foreign agent file is, in effect, an "ownership escape"
-// from the extension's bookkeeping.
+// AgentForeignContentError EXTENDS PathContainmentError (D-17 inheritance
+// pattern). PI-14 `instanceof PathContainmentError` catches foreign-content
+// refusals on the same code path as true containment escapes -- a foreign
+// agent file is, in effect, an "ownership escape" from the extension's
+// bookkeeping.
 
 import path from "node:path";
 

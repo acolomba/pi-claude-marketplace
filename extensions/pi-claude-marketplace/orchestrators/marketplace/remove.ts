@@ -75,10 +75,10 @@ export interface RemoveMarketplaceOptions {
 }
 
 async function removePath(pathPromise: Promise<string>): Promise<void> {
-  // D-18-01 precedent (Plan 18-04 cleanup-leak DROP): the cleanup `rm()`
-  // call still runs (correctness preserved); failures are swallowed
-  // silently because the V2 `MarketplaceNotificationMessage` type has no
-  // field to surface "cleanup leak after successful state mutation".
+  // D-18-01: the cleanup `rm()` call still runs (correctness preserved);
+  // failures are swallowed silently because the
+  // `MarketplaceNotificationMessage` type has no field to surface
+  // "cleanup leak after successful state mutation".
   // Nothing surfaces these cleanup failures to the user.
   try {
     await rm(await pathPromise, { recursive: true, force: true });
@@ -89,23 +89,19 @@ async function removePath(pathPromise: Promise<string>): Promise<void> {
 }
 
 /**
- * Narrow a per-plugin cascade Error.cause to a closed-set Reason for
- * the failed-plugin children block.
- *
- * Narrow a per-plugin cascade Error.cause to a closed-set Reason by
- * dispatching on the typed cause (`AgentsUnstageFailureError` or
- * `NodeJS.ErrnoException.code`) rather than substring-matching message text.
- * Falls back to `"not in manifest"` as the permissive default when no
- * typed case matches; bare-Error substring branches are a defensive last
- * resort for cases where the error was already serialised into a notes string.
+ * Narrow a per-plugin cascade Error.cause to a closed-set Reason for the
+ * failed-plugin children block by dispatching on the typed cause
+ * (`AgentsUnstageFailureError` or `NodeJS.ErrnoException.code`) rather than
+ * substring-matching message text. Falls back to `"not in manifest"` as the
+ * permissive default when no typed case matches; bare-Error substring branches
+ * are a defensive last resort for cases where the error was already serialised
+ * into a notes string.
  */
 function narrowCascadeFailure(cause: Error): Reason {
   if (cause instanceof AgentsUnstageFailureError) {
-    // No closed-set Reason captures the per-agent foreign-content
-    // failure mode today; map to the documented permissive fallback
-    // until the catalog UAT shows a new REASONS member is justified
-    // No closed-set Reason maps to this failure mode yet; the fallback
-    // requires a catalog UAT precedent + grammar sync before a new member is added.
+    // No closed-set Reason captures the per-agent foreign-content failure
+    // mode today; map to the documented permissive fallback. Adding a new
+    // REASONS member requires a catalog UAT precedent + grammar sync.
     return "not in manifest";
   }
 
@@ -193,12 +189,9 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
     // MR-3 requires continuation across plugin failures.
     //
     // WR-01: state mutation (delete record.plugins[pluginName]) is folded
-    // into THIS loop. Previously a second loop ran the deletes after
-    // cascade aggregation -- correct only because cascade is fail-soft
-    // (always returns ok:false rather than throwing). Inlining removes
-    // that dependency: if cascade ever changes to throw, only the
-    // already-cleaned entries are persisted because withStateGuard saves
-    // on no-throw.
+    // into THIS loop. This removes any dependency on cascade being fail-soft:
+    // if cascade ever changes to throw, only the already-cleaned entries are
+    // persisted because withStateGuard saves on no-throw.
     for (const [pluginName, plugin] of Object.entries(record.plugins)) {
       const outcome = await cascade(pluginName, opts.name, locations, plugin);
       if (outcome.ok) {
@@ -210,7 +203,7 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
         // D-03: outcome.cause is set when ok===false (see UnstageOutcome).
         const cause = outcome.cause ?? new Error(`unknown cascade failure for ${pluginName}`);
 
-        // Phase 39 TR-03: non-AG-5 partial-failure path filters
+        // TR-03: non-AG-5 partial-failure path filters
         // plugin.resources.* by outcome.dropped.* so the persisted row
         // reflects only artifacts still on disk (no ghost record).
         // AG-5 (AgentsUnstageFailureError) preserves the row INTACT --
@@ -220,7 +213,7 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
         // plugin deletes.
         //
         // CRITICAL field-name mapping: dropped.commands populates from
-        // resources.prompts (cascade primitive shared.ts:339), so the
+        // resources.prompts (in the cascade primitive in shared.ts), so the
         // filter MUST wire dropped.commands -> resources.prompts.
         if (!(cause instanceof AgentsUnstageFailureError)) {
           const dropped = outcome.dropped;
@@ -248,7 +241,7 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
     }
   });
 
-  // D-03-INV (Plan 06-05): post-state-commit completion-cache cleanup.
+  // D-03-INV: post-state-commit completion-cache cleanup.
   // The marketplace-names cache and per-marketplace plugin cache file must be
   // unlinked because the marketplace set changed and this marketplace is gone.
   // Cache cleanup is a hygienic concern, not a contract.
@@ -285,16 +278,13 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
   // notify(opts.ctx, opts.pi, ...) call; `plugins[]` carries one
   // PluginUninstalledMessage per successfully unstaged plugin (D-22-02).
   // Per-plugin `PluginFailedMessage.cause` renders at 4-space indent via
-  // renderPluginRow. The
-  //   marketplace-level `causeChainTrailer(err)` body is GONE.
-  // - V1 `RETRY_ANCHOR` ("Fix the underlying issue and retry.") is
-  //   DROPPED per D-17-09 (already excluded by the Phase 17 catalog).
+  // renderPluginRow. There is no marketplace-level cause-chain trailer.
+  // - No retry anchor is emitted per D-17-09.
   // - Severity (error on partial, info on clean) is computed by notify()
   // ; the `/reload to pick up changes` trailer is computed per
   //   D-22-01 (fires iff >=1 plugin row carries a state-change token);
   //   callers MUST NOT compose.
-  // - Reference: catalog UAT `clean` + `partial` fixtures at
-  //   tests/architecture/catalog-uat.test.ts:1154-1183.
+  // - Reference: catalog UAT `clean` + `partial` fixtures.
   if (failedPlugins.length > 0) {
     // CMC-31 PARTIAL: mp.status="failed"; plugins[] mixes uninstalled +
     // failed (with per-plugin cause). Caller-order honored end-to-end:
@@ -351,9 +341,9 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
 }
 
 /**
- * Quick task 260525-aub: test seam for the typed-cause cascade-failure
- * narrowing. Mirrors the `__test_outcomeToCascadeRow` re-export precedent
- * in `orchestrators/plugin/reinstall.ts`: the helper stays private to the
+ * Test seam for the typed-cause cascade-failure narrowing. Mirrors the
+ * `__test_outcomeToCascadeRow` re-export precedent in
+ * `orchestrators/plugin/reinstall.ts`: the helper stays private to the
  * orchestrator while tests can exercise the `instanceof
  * AgentsUnstageFailureError` / `NodeJS.ErrnoException.code` dispatch
  * branches directly.

@@ -53,22 +53,18 @@ import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../platform/
 
 /**
  * CMC-11 closed reasons set. Byte-equal to the `reasons:` block in the
- * binding frontmatter at `docs/messaging-style-guide.md`. The set was
- * extended from the original 23 entries to cover the autoupdate-flip
- * idempotent rows (`"already autoupdate"` / `"already no autoupdate"`) and the
- * failure-class closed Reasons the catalog UAT requires across uninstall /
- * marketplace-remove partial / reinstall / update / marketplace-update rows
- * (`"permission denied"` / `"source missing"` / `"network unreachable"`).
+ * binding frontmatter at `docs/messaging-style-guide.md`. The set covers the
+ * autoupdate-flip idempotent rows (`"already autoupdate"` /
+ * `"already no autoupdate"`) and the failure-class closed Reasons the catalog
+ * UAT requires across uninstall / marketplace-remove partial / reinstall /
+ * update / marketplace-update rows (`"permission denied"` /
+ * `"source missing"` / `"network unreachable"`).
  *
- * Phase 42 / INFO-04 / INFO-08: added `"not added"` as the 29th entry to
- * carry the `--scope` mismatch failure surface on the new info-message
- * variants (`MarketplaceInfoMessage` / `PluginInfoMessage`). A request for a
- * scope where the target marketplace is not present renders
- * `⊘ <name> [<scope>] (failed) {not added}` at column 0 with severity
- * `"error"`. The atomic-supersession commit (v1.3 retrospective lesson per
- * `c4d87d4` / `dbd149a`) lands the tuple extension together with the new
- * variant types, the renderer arms, the first catalog state, and the
- * matching UAT fixture in ONE commit.
+ * INFO-04 / INFO-08: `"not added"` carries the `--scope` mismatch failure
+ * surface on the info-message variants (`MarketplaceInfoMessage` /
+ * `PluginInfoMessage`). A request for a scope where the target marketplace is
+ * not present renders `⊘ <name> [<scope>] (failed) {not added}` at column 0
+ * with severity `"error"`.
  */
 export const REASONS = [
   "up-to-date",
@@ -105,7 +101,7 @@ export const REASONS = [
 export type Reason = (typeof REASONS)[number];
 
 /**
- * Phase 28 / UXG-02 (D-28-02): the closed set of `Reason` members that mark a
+ * UXG-02 (D-28-02): the closed set of `Reason` members that mark a
  * `skipped` row as a BENIGN idempotent no-op -- the resource already matches
  * the exact state the command requested (D-28-01 classification principle).
  * A `skipped` cascade whose reasons are ALL drawn from this set routes the
@@ -113,8 +109,7 @@ export type Reason = (typeof REASONS)[number];
  * any non-benign reason (or a missing/empty reason set on an mp-level skip)
  * routes to `warning`. These four are the idempotent "already in requested
  * state" reasons; `already autoupdate` / `already no autoupdate` are the
- * Phase-27/UXG-04-renamed forms of the requirement text's stale
- * `already enabled` / `already disabled`.
+ * UXG-04 autoupdate-flip forms.
  */
 const BENIGN_REASONS: ReadonlySet<Reason> = new Set([
   "up-to-date",
@@ -124,7 +119,7 @@ const BENIGN_REASONS: ReadonlySet<Reason> = new Set([
 ]);
 
 /**
- * Phase 28 / UXG-02 (D-28-06): a skip's reasons are "all benign" iff the set
+ * UXG-02 (D-28-06): a skip's reasons are "all benign" iff the set
  * is NON-EMPTY and every member is in `BENIGN_REASONS`. An empty array returns
  * `false` -- a no-reason skip cannot be PROVEN benign, so it routes to
  * `warning` (the D-28-08 safe default for an mp-level `skipped` whose optional
@@ -315,7 +310,7 @@ export type Dependency = (typeof DEPENDENCIES)[number];
  * (SNM-07). `autoupdate` is REQUIRED -- the persistence record
  * always knows whether autoupdate is enabled. `lastUpdatedAt?` is an
  * optional ISO timestamp whose shape mirrors
- * persistence/state-io.ts:70 (`lastUpdatedAt: Type.Optional(Type.String)`)
+ * `persistence/state-io.ts` (`lastUpdatedAt: Type.Optional(Type.String)`)
  * so list orchestrators can pass the record's value through unchanged.
  *
  * Intentionally minimal: no `source`, no `version`, no other entries (the
@@ -380,7 +375,7 @@ export interface PluginInstalledMessage {
 
 /**
  * `(updated)` -- update cascade row. Carries REQUIRED `from` / `to`
- *  so the renderer can compose the `v1.0 → v1.2` arrow form;
+ * so the renderer can compose the `v1.0 → v1.2` arrow form;
  * `dependencies` REQUIRED; no `reasons`.
  */
 export interface PluginUpdatedMessage {
@@ -393,8 +388,8 @@ export interface PluginUpdatedMessage {
 }
 
 /**
- * `(reinstalled)` -- reinstall cascade row. Carries `dependencies` per
- * ; no `reasons`.
+ * `(reinstalled)` -- reinstall cascade row. Carries `dependencies` (SNM-06);
+ * no `reasons`.
  */
 export interface PluginReinstalledMessage {
   readonly status: "reinstalled";
@@ -406,8 +401,8 @@ export interface PluginReinstalledMessage {
 
 /**
  * `(uninstalled)` -- single-shot uninstall or cascade uninstall row. NO
- * `dependencies` (-- MSG-SD-3 forbids the soft-dep marker on
- * uninstalled rows); no `reasons`.
+ * `dependencies` (MSG-SD-3 forbids the soft-dep marker on uninstalled
+ * rows); no `reasons`.
  */
 export interface PluginUninstalledMessage {
   readonly status: "uninstalled";
@@ -419,9 +414,9 @@ export interface PluginUninstalledMessage {
 /**
  * `(available)` -- list-surface row for installable, not-yet-installed
  * plugins. NO `scope` (SNM-11 carve-out: MSG-PL-6 omits `[<scope>]`
- * brackets on available rows); no `reasons`; no `dependencies`
- * . PL-4: optional `description` rendered as a second
- * 4-space-indented line, truncated at column 66.
+ * brackets on available rows); no `reasons`; no `dependencies`. PL-4:
+ * optional `description` rendered as a second 4-space-indented line,
+ * truncated at column 66.
  */
 export interface PluginAvailableMessage {
   readonly status: "available";
@@ -516,9 +511,9 @@ export interface PluginFailedMessage {
 
 /**
  * `(skipped)` -- per-plugin skip row inside cascades (e.g. update cascade
- * encountering an already-up-to-date plugin). Carries REQUIRED `reasons`
- * ; no `dependencies`; no `cause` (skipped is not a
- * failure -- SNM-10 confines `cause` to failed / manual recovery).
+ * encountering an already-up-to-date plugin). Carries REQUIRED `reasons`;
+ * no `dependencies`; no `cause` (skipped is not a failure -- SNM-10
+ * confines `cause` to failed / manual recovery).
  */
 export interface PluginSkippedMessage {
   readonly status: "skipped";
@@ -603,15 +598,13 @@ export interface MarketplaceNotificationMessage {
  * state-change paths always populate at least one marketplace. No top-level
  * `noMarketplaces` discriminator field.
  *
- * Phase 42 / RESEARCH Migration Strategy #2: `kind?` is OPTIONAL on the
- * cascade variant so every v1.0-v1.7 call site (90+ orchestrator / test /
- * fixture sites that construct `{ marketplaces: [...] }`) continues to
- * type-check without migration. The `notify()` dispatcher narrows via
- * `message.kind ?? "cascade"` so the absence of `kind` routes through the
- * cascade arm unambiguously. The two new info-surface variants
- * (`MarketplaceInfoMessage`, `PluginInfoMessage`) carry a REQUIRED `kind`
- * literal so they cannot be confused with a cascade payload at construction
- * time.
+ * `kind?` is OPTIONAL on the cascade variant so call sites that construct
+ * `{ marketplaces: [...] }` type-check without supplying `kind`. The
+ * `notify()` dispatcher narrows via `message.kind ?? "cascade"` so the
+ * absence of `kind` routes through the cascade arm unambiguously. The
+ * info-surface variants (`MarketplaceInfoMessage`, `PluginInfoMessage`)
+ * carry a REQUIRED `kind` literal so they cannot be confused with a cascade
+ * payload at construction time.
  */
 export interface CascadeNotificationMessage {
   readonly kind?: "cascade";
@@ -619,23 +612,18 @@ export interface CascadeNotificationMessage {
 }
 
 /**
- * Phase 42 / INFO-01 / INFO-04: top-level info-surface variant emitted by
- * the (Phase 43) `/claude:plugin marketplace info <name>` command. Carries
- * the marketplace identifier (`name`, `scope`), the persisted
- * `MarketplaceDetails` for the `<autoupdate>` / `<no autoupdate>` marker
- * AND for the `last_updated:` ISO8601 line (read from
- * `details.lastUpdatedAt` -- single source of truth; Phase 42 / WR-04
- * removed a parallel top-level `lastUpdated?` field that duplicated the
- * same datum), the source-kind detail (`github: <owner>/<repo>[#<ref>]`
- * vs `path: <abs-path>`), and optional `description` (marketplace.json
- * description, optional) line. The `last_updated:` line renders only on
- * the github-source arm (INFO-01).
+ * INFO-01 / INFO-04: top-level info-surface variant emitted by the
+ * `/claude:plugin marketplace info <name>` command. Carries the marketplace
+ * identifier (`name`, `scope`), the persisted `MarketplaceDetails` for the
+ * `<autoupdate>` / `<no autoupdate>` marker AND for the `last_updated:`
+ * ISO8601 line (read from `details.lastUpdatedAt` -- single source of
+ * truth), the source-kind detail (`github: <owner>/<repo>[#<ref>]` vs
+ * `path: <abs-path>`), and optional `description` (marketplace.json
+ * description, optional) line. The `last_updated:` line renders only on the
+ * github-source arm (INFO-01).
  *
- * Phase 42's only catalog state under this variant is the INFO-04 `{not
- * added}` `--scope` mismatch row (which is emitted via the sibling
- * `PluginInfoMessage` per INFO-04's byte form -- see that interface). The
- * Phase 43 catalog will exercise the github + path +
- * details.lastUpdatedAt + description rendering paths.
+ * The INFO-04 `{not added}` `--scope` mismatch row is emitted via the
+ * sibling `PluginInfoMessage` per INFO-04's byte form -- see that interface.
  */
 export interface MarketplaceInfoMessage {
   readonly kind: "marketplace-info";
@@ -782,10 +770,9 @@ export interface PluginInfoCascadeMessage {
 /**
  * Top-level discriminated-union envelope consumed by `notify(ctx, pi,
  * NotificationMessage)`. The cascade arm omits `kind` (or sets it to
- * `"cascade"`) for back-compat with v1.0-v1.7 call sites; the four
- * info-surface arms set `kind` explicitly. The dispatcher narrows
- * with an `assertNever` default arm so every future variant addition
- * becomes a compile-time error at the switch.
+ * `"cascade"`); the four info-surface arms set `kind` explicitly. The
+ * dispatcher narrows with an `assertNever` default arm so every future
+ * variant addition becomes a compile-time error at the switch.
  */
 export type NotificationMessage =
   | CascadeNotificationMessage
@@ -824,11 +811,11 @@ function truncateDescription(s: string): string {
 }
 
 /**
- * Phase 42 / INFO-02 hard-wrap helper. Splits `text` on whitespace
- * (`/\s+/`), filters empty tokens, greedy-accumulates words into lines
- * whose TEXT length (not counting the indent) does not exceed `wrapCol`,
- * then prepends `indentCol` spaces to each emitted line. Returns an array
- * of indented lines so the caller composes the final body via `.join("\n")`.
+ * INFO-02 hard-wrap helper. Splits `text` on whitespace (`/\s+/`), filters
+ * empty tokens, greedy-accumulates words into lines whose TEXT length (not
+ * counting the indent) does not exceed `wrapCol`, then prepends `indentCol`
+ * spaces to each emitted line. Returns an array of indented lines so the
+ * caller composes the final body via `.join("\n")`.
  *
  * Edge cases:
  *  - Empty / whitespace-only text -> `[]` (caller skips the wrap block).
@@ -840,14 +827,13 @@ function truncateDescription(s: string): string {
  *    separators, which also serves as basic display normalization for
  *    user-supplied descriptions (T-42-01 mitigation).
  *
- * RESEARCH Pitfall 4: `wrapCol` is the TEXT width, NOT the total line
- * width. Mirrors the existing `DESCRIPTION_MAX_COLS = 66` / 4-space-indent
- * convention used by `truncateDescription` (INFO-02 catalog spec: col 4
- * indent / 66-col text width).
+ * `wrapCol` is the TEXT width, NOT the total line width. Mirrors the
+ * `DESCRIPTION_MAX_COLS = 66` / 4-space-indent convention used by
+ * `truncateDescription` (INFO-02 catalog spec: col 4 indent / 66-col text
+ * width).
  *
- * File-private; sole caller is `renderPluginInfo` (Phase 42). Do NOT
- * export -- RESEARCH Anti-Pattern: exporting would let other modules drift
- * from the catalog byte contract.
+ * File-private; sole caller is `renderPluginInfo`. Do NOT export --
+ * exporting would let other modules drift from the catalog byte contract.
  */
 function wrapDescription(text: string, indentCol: number, wrapCol: number): string[] {
   const words = text.split(/\s+/).filter((w) => w !== "");
@@ -939,17 +925,14 @@ function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus
     case "failed":
       return `${ICON_UNINSTALLABLE} ${mp.name} [${mp.scope}] (failed)`;
     case "autoupdate enabled":
-      // UXG-04: fresh autoupdate-on flip renders the `<autoupdate>` marker as
-      // the outcome (byte-form parity with the `marketplace list` surface),
-      // superseding the Phase 17.1 / D-18-05 `(autoupdate enabled)` status
-      // token. The `autoupdate enabled` discriminator STAYS (Strategy B); only
-      // the emitted bytes change. Does NOT carry mp.reasons.
+      // UXG-04 / D-18-05: fresh autoupdate-on flip renders the `<autoupdate>`
+      // marker as the outcome (byte-form parity with the `marketplace list`
+      // surface). Does NOT carry mp.reasons.
       return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] <autoupdate>`;
     case "autoupdate disabled":
       // UXG-04: fresh autoupdate-off flip renders the explicit `<no autoupdate>`
-      // off-marker (`<no autoupdate>` is already a MARKERS member; only its
-      // emission on the flip surface is new), superseding `(autoupdate
-      // disabled)`. Discriminator STAYS (Strategy B). Does NOT carry mp.reasons.
+      // off-marker (`<no autoupdate>` is a MARKERS member). Does NOT carry
+      // mp.reasons.
       return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] <no autoupdate>`;
     case "skipped": {
       // The "skipped" arm is SHARED across mp-level skips (UXG-05's
@@ -981,11 +964,10 @@ function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus
     }
 
     case undefined: {
-      // List-surface case. mp.details is OPTIONAL and INDEPENDENT of mp.status
-      // 's (shared/notify.ts:466). Guard explicitly with
-      // an early return for SUB-BRANCH A (mp.details === undefined) so the
-      // SUB-BRANCH B composition below reads narrowed (non-optional)
-      // mp.details.autoupdate under TS strict.
+      // List-surface case. mp.details is OPTIONAL and INDEPENDENT of mp.status.
+      // Guard explicitly with an early return for SUB-BRANCH A
+      // (mp.details === undefined) so the SUB-BRANCH B composition below reads
+      // narrowed (non-optional) mp.details.autoupdate under TS strict.
       if (mp.details === undefined) {
         // SUB-BRANCH A: empty-list-surface -- bare header, no trailing tokens.
         return `${ICON_INSTALLED} ${mp.name} [${mp.scope}]`;
@@ -1090,7 +1072,7 @@ function renderVersion(version: string | undefined): string {
  * through this helper.
  *
  * The bracket emits ONLY when `pluginScope !== undefined AND
- * pluginScope !== mpScope` -- the orphan-fold case from. When the
+ * pluginScope !== mpScope` -- the orphan-fold case. When the
  * plugin's scope matches the parent marketplace's scope, the bracket is
  * suppressed because the marketplace header already carries the
  * `[mpScope]` token; emitting a redundant per-row bracket would
@@ -1201,7 +1183,7 @@ function composeReasons(
  *  - 5 reasons-bearing variants (unavailable, upgradable, skipped,
  *  failed, manual recovery) pass `p.reasons`.
  *
- * NOT rendered here ('s `notify` composes them as additional
+ * NOT rendered here (`notify` composes them as additional
  * indented lines AFTER the row):
  *  - `failed.cause` / `manual recovery.cause` cause-chain trailers.
  *  - `failed.rollbackPartial[]` child rows.
@@ -1320,8 +1302,7 @@ function renderPluginRow(
         p.name,
         renderScopeBracket(p.scope, mpScope),
         renderVersion(p.version),
-        // `manual recovery` discriminator preserved verbatim WITH A SPACE
-        // (historical convention).
+        // `manual recovery` discriminator preserved verbatim WITH A SPACE.
         "(manual recovery)",
         composeReasons(p.reasons, false, false, probe),
       ]);
@@ -1383,8 +1364,8 @@ function renderPluginRow(
 const RELOAD_HINT_TRAILER = "/reload to pick up changes";
 
 /**
- * Severity ladder per SNM-14, refined by Phase 28 / UXG-02
- * (D-28-06/07/08/09). A first-match ladder with FIVE arms, in this order:
+ * Severity ladder per SNM-14 / UXG-02 (D-28-06/07/08/09). A first-match
+ * ladder with FIVE arms, in this order:
  *
  *   1. any `plugin.status === "failed"` OR `mp.status === "failed"` -> "error"
  *   2. any `plugin.status === "manual recovery"`                    -> "warning"
@@ -1396,22 +1377,20 @@ const RELOAD_HINT_TRAILER = "/reload to pick up changes";
  *      no-reason mp-skip routes to warning -- the safe default)      -> "warning"
  *   5. otherwise                                                    -> undefined (info)
  *
- * This SOFTENS the old "any skipped -> warning" rule (the original SNM-14 /
- * D-16-11 / Phase-17.1 wording): a cascade whose ONLY non-success rows are
- * BENIGN idempotent no-op skips (every reason in `BENIGN_REASONS`) now
- * computes `info` and omits the 2nd `ctx.ui.notify` arg. mp-level skips soften
- * SYMMETRICALLY with plugin-level skips (D-28-07): the UXG-04 idempotent
- * autoupdate flip and the UXG-05 `marketplace update` no-op are benign -> info,
- * closing the Plan 27-04 deferral. First-match poisoning is intentional
- * (D-28-09): a MIXED cascade (one benign skip + one actionable skip, or any
- * manual-recovery row) routes the whole notification to `warning`. This ladder
- * is independent of `shouldEmitReloadHint` (SNM-33) -- severity and reload-hint
- * are separate ladders. NO rendered byte string changes: severity is the
+ * A cascade whose ONLY non-success rows are BENIGN idempotent no-op skips
+ * (every reason in `BENIGN_REASONS`, per SNM-14 / D-16-11) computes `info`
+ * and omits the 2nd `ctx.ui.notify` arg. mp-level skips soften SYMMETRICALLY
+ * with plugin-level skips (D-28-07): the UXG-04 idempotent autoupdate flip
+ * and the UXG-05 `marketplace update` no-op are benign -> info. First-match
+ * poisoning is intentional (D-28-09): a MIXED cascade (one benign skip + one
+ * actionable skip, or any manual-recovery row) routes the whole notification
+ * to `warning`. This ladder is independent of `shouldEmitReloadHint`
+ * (SNM-33) -- severity and reload-hint are separate ladders. Severity is the
  * second arg, never part of the body.
  */
 function computeSeverity(message: NotificationMessage): "warning" | "error" | undefined {
-  // Phase 42 / INFO-04 / SC#2 + Phase 43 / INFO-03 + Phase 44 / INFO-02:
-  // info-surface kinds take precedence over the cascade severity ladder.
+  // INFO-04 / SC#2 / INFO-03 / INFO-02: info-surface kinds take precedence
+  // over the cascade severity ladder.
   // `marketplace-info` payloads carry no failure state and route to info
   // (undefined 2nd arg); `plugin-info` payloads route to `"error"` ONLY when
   // the embedded plugin row is `(failed)` (the `{not added}` --scope mismatch
@@ -1473,7 +1452,7 @@ function computeSeverity(message: NotificationMessage): "warning" | "error" | un
 }
 
 /**
- * The plugin/marketplace operation counts that drive the Phase 29 summary line.
+ * The plugin/marketplace operation counts that drive the summary line.
  */
 interface SummaryCounts {
   readonly plugins: number;
@@ -1483,7 +1462,7 @@ interface SummaryCounts {
 /**
  * `error`-severity counting (D-29-04): failed plugin rows (summed across all
  * marketplaces) and failed marketplace rows. Mirrors `computeSeverity` arm 1.
- * Cascade-only: Phase 42 / SC#1 narrows the parameter to
+ * Cascade-only (SC#1): the parameter is narrowed to
  * `CascadeNotificationMessage` -- info-surface kinds do not invoke
  * `buildSummaryLine` (see `notify()` dispatcher and `buildSummaryLine`'s
  * defensive short-circuit).
@@ -1507,8 +1486,8 @@ function countFailedOperations(message: CascadeNotificationMessage): SummaryCoun
  * `warning`-severity counting (D-29-04): actionable-skip plugin rows
  * (`skipped` with NON-benign reasons) plus `manual recovery` plugin rows, and
  * actionable-skip marketplace rows (`skipped` with non-benign `reasons`).
- * Mirrors `computeSeverity` arms 2-4 / `allBenign`. Cascade-only per Phase
- * 42 / SC#1 (see `countFailedOperations`).
+ * Mirrors `computeSeverity` arms 2-4 / `allBenign`. Cascade-only (SC#1; see
+ * `countFailedOperations`).
  */
 function countSkippedOperations(message: CascadeNotificationMessage): SummaryCounts {
   let plugins = 0;
@@ -1536,7 +1515,7 @@ function operationPhrase(count: number, kind: "plugin" | "marketplace"): string 
 }
 
 /**
- * Phase 29 / UXG-07 (D-29-02/03/04): build the human-readable summary line that
+ * UXG-07 (D-29-02/03/04): build the human-readable summary line that
  * `notify()` prepends before the cascade body for `error` and `warning`
  * severity. It gives the host `Error:` / `Warning:` prefix a meaningful,
  * contextual sentence to introduce ("focus on the operation, not what happened
@@ -1554,9 +1533,8 @@ function operationPhrase(count: number, kind: "plugin" | "marketplace"): string 
  * crashing.
  */
 function buildSummaryLine(message: NotificationMessage, severity: "error" | "warning"): string {
-  // Phase 42 / RESEARCH A6 + Phase 43 / INFO-03 + Phase 44 / INFO-02:
-  // info-surface kinds NEVER carry a Phase-29 summary line (the operation-
-  // count semantics of "N plugin operations failed" do not apply to
+  // INFO-03 / INFO-02: info-surface kinds NEVER carry a summary line (the
+  // operation-count semantics of "N plugin operations failed" do not apply to
   // read-only query results -- the `notify()` dispatcher only invokes
   // `buildSummaryLine` from the cascade arm). This defensive short-circuit
   // returns the empty string so a future mistaken call still produces
@@ -1598,27 +1576,25 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
  *
  * The rule is therefore plugin-row-driven only: emit iff some marketplace
  * carries a plugin row whose status is one of the four state-change tokens
- * `installed | updated | reinstalled | uninstalled`. No marketplace-status arm
- * remains -- every marketplace status (added / removed / updated / autoupdate
- * enabled / autoupdate disabled / skipped / failed) now NEVER triggers on its
- * own. This mirrors the G-21-01 invariant: every status
- * discriminator either always triggers the reload-hint or never does -- no
- * token straddles inventory vs transition, so the predicate is unambiguous.
+ * `installed | updated | reinstalled | uninstalled`. No marketplace status
+ * (added / removed / updated / autoupdate enabled / autoupdate disabled /
+ * skipped / failed) triggers on its own. This mirrors the G-21-01 invariant:
+ * every status discriminator either always triggers the reload-hint or never
+ * does -- no token straddles inventory vs transition, so the predicate is
+ * unambiguous.
  *
- * : this supersedes the reload-trigger half of -- fresh-flip
- * autoupdate enabled/disabled no longer emit the trailer (the flip changes a
- * marketplace record, not a Pi-visible resource). The `skipped -> warning`
- * severity route (computeSeverity) is unaffected: severity and
- * reload-hint are independent ladders.
+ * A fresh autoupdate enabled/disabled flip does NOT emit the trailer (the
+ * flip changes a marketplace record, not a Pi-visible resource). The
+ * `skipped -> warning` severity route (computeSeverity) is unaffected:
+ * severity and reload-hint are independent ladders.
  *
  * Clean `marketplace remove` carries one `PluginUninstalledMessage` row per
  * unstaged plugin, so a non-empty remove still emits the trailer via
  * the `uninstalled` token while an empty remove (header-only) does not.
  */
 function shouldEmitReloadHint(message: NotificationMessage): boolean {
-  // Phase 42 / RESEARCH "Don't Hand-Roll: Reload-hint trailer on info messages"
-  // + Phase 43 / INFO-03 + Phase 44 / INFO-02: info-surface kinds NEVER
-  // trigger the reload-hint trailer. The info commands (`marketplace info`,
+  // INFO-03 / INFO-02: info-surface kinds NEVER trigger the reload-hint
+  // trailer. The info commands (`marketplace info`,
   // `plugin info`) are read-only surfaces that do not change a Pi-visible
   // resource; the trailer would mislead the user into running `/reload`
   // for no reason. Each fan-out wrapper inherits this short-circuit -- a
@@ -1650,7 +1626,7 @@ function shouldEmitReloadHint(message: NotificationMessage): boolean {
 }
 
 /**
- * : render the depth-5 cause-chain trailer at the requested space-indent
+ * Render the depth-5 cause-chain trailer at the requested space-indent
  * prefix when `cause` is defined and the walker returns a non-empty string.
  * Returns `""` otherwise so callers can `if (trailer !== "") lines.push(...)`.
  * Centralizes the "guard + walker + indent" composition reused for both the
@@ -1667,7 +1643,7 @@ function renderIndentedCauseChain(cause: unknown, indent: string): string {
 }
 
 /**
- * : render the rollbackPartial child rows for a failed-variant plugin.
+ * Render the rollbackPartial child rows for a failed-variant plugin.
  * Each phase emits a 4-space-indented row plus an optional 6-space-indented
  * cause-chain trailer when `phase.cause` is set. Returns an empty array when
  * the plugin has no `rollbackPartial`, so callers can spread the result
@@ -1762,15 +1738,15 @@ function composePluginLines(
 }
 
 /**
- * Phase 42 / INFO-01: compose the marketplace-info marketplace header line.
+ * INFO-01: compose the marketplace-info marketplace header line.
  * Mirrors `renderMpHeader`'s SUB-BRANCH B list-surface composition (the
  * details-defined / list-surface form: `● <name> [<scope>] <autoupdate-marker>`).
  * Differs from `renderMpHeader` in one place: on the info surface BOTH the
  * `<autoupdate>` and `<no autoupdate>` markers are emitted (per INFO-01:
  * "with `<autoupdate>` / `<no autoupdate>` marker"), whereas the list
  * surface suppresses `<no autoupdate>` (absence-conveys-off). The carve-out
- * lives here and does NOT touch `renderMpHeader` (RESEARCH Pitfall 1: zero
- * mutation of the cascade renderer arms).
+ * lives here and does NOT touch `renderMpHeader` (zero mutation of the
+ * cascade renderer arms).
  *
  * File-private; sole callers are `renderMarketplaceInfo` and
  * `renderPluginInfo` below.
@@ -1781,7 +1757,7 @@ function composeMpInfoHeader(name: string, scope: Scope, details: MarketplaceDet
 }
 
 /**
- * Phase 42 / INFO-01 / INFO-04: render a `MarketplaceInfoMessage` to its
+ * INFO-01 / INFO-04: render a `MarketplaceInfoMessage` to its
  * single-string body. Composes:
  *   - the marketplace-info header line at column 0 (`composeMpInfoHeader`),
  *   - the source-kind line (`github: <owner>/<repo>[#<ref>]` or
@@ -1791,9 +1767,9 @@ function composeMpInfoHeader(name: string, scope: Scope, details: MarketplaceDet
  *     -- description wrapping is `plugin info`-only per INFO-02).
  *
  * Joins all lines with `\n`. `probe` is unused on info surfaces (info
- * messages do not emit soft-dep markers per RESEARCH Anti-Patterns) but
- * accepted for signature parity with `composeMarketplaceBlock`. File-
- * private; sole caller is `notify()` dispatcher.
+ * messages do not emit soft-dep markers) but accepted for signature parity
+ * with `composeMarketplaceBlock`. File-private; sole caller is `notify()`
+ * dispatcher.
  */
 function renderMarketplaceInfo(message: MarketplaceInfoMessage, _probe: SoftDepStatus): string {
   const lines: string[] = [composeMpInfoHeader(message.name, message.scope, message.details)];
@@ -1803,7 +1779,7 @@ function renderMarketplaceInfo(message: MarketplaceInfoMessage, _probe: SoftDepS
       const refSuffix = message.source.ref === undefined ? "" : `#${message.source.ref}`;
       lines.push(`github: ${message.source.owner}/${message.source.repo}${refSuffix}`);
 
-      // Phase 42 / WR-04: read the timestamp from the persisted
+      // WR-04: read the timestamp from the persisted
       // `MarketplaceDetails.lastUpdatedAt` rather than a duplicate
       // top-level `lastUpdated` field. The `details` record already carries
       // this value through state-io; a parallel top-level field would mean
@@ -1832,7 +1808,7 @@ function renderMarketplaceInfo(message: MarketplaceInfoMessage, _probe: SoftDepS
 }
 
 /**
- * Phase 43 / INFO-03: render a `MarketplaceInfoCascadeMessage` to its
+ * INFO-03: render a `MarketplaceInfoCascadeMessage` to its
  * single-string body by composing `renderMarketplaceInfo` over each block
  * in caller order and joining the per-block bodies with `\n\n` (one blank
  * line between blocks). Mirrors the cascade `composeMarketplaceBlock` join
@@ -1858,7 +1834,7 @@ function renderMarketplaceInfoCascade(
 }
 
 /**
- * Phase 44 / INFO-02 + INFO-03: render a `PluginInfoCascadeMessage` to
+ * INFO-02 / INFO-03: render a `PluginInfoCascadeMessage` to
  * its single-string body by composing `renderPluginInfo` over each block
  * in caller order and joining the per-block bodies with `\n\n` (one
  * blank line between blocks). Mirrors `renderMarketplaceInfoCascade` and
@@ -2048,10 +2024,9 @@ function renderPluginInfo(message: PluginInfoMessage, probe: SoftDepStatus): str
  * `\n\n` between marketplaces.
  */
 function composeMarketplaceBlock(mp: MarketplaceNotificationMessage, probe: SoftDepStatus): string {
-  //  : pass the threaded soft-dep probe into renderMpHeader
-  // so the new "skipped" arm can reuse composeReasons. The mp-skipped arm
-  // passes (false, false) for the two declares-flags; no
-  // soft-dep marker can leak onto an mp-level row.
+  // Pass the threaded soft-dep probe into renderMpHeader so the "skipped" arm
+  // can reuse composeReasons. The mp-skipped arm passes (false, false) for the
+  // two declares-flags; no soft-dep marker can leak onto an mp-level row.
   const lines: string[] = [renderMpHeader(mp, probe)];
   for (const p of mp.plugins) {
     lines.push(...composePluginLines(p, probe, mp.scope));
@@ -2119,7 +2094,7 @@ export function notify(
   // Single soft-dep probe per invocation; threaded into every renderPluginRow
   // call inside composePluginLines below (cascade arm) and into the info-
   // surface renderers (which accept it for signature parity but do not use it
-  // -- info messages never emit soft-dep markers per RESEARCH Anti-Patterns).
+  // -- info messages never emit soft-dep markers).
   const probe = softDepStatus(pi);
 
   // Dispatch info-surface kinds through `dispatchInfoMessage` so the
@@ -2153,10 +2128,8 @@ export function notify(
       return;
   }
 
-  // Cascade body unchanged -- moved verbatim into this arm so v1.0-v1.7
-  // byte forms remain identical across the 60+ catalog UAT fixtures
-  // (RESEARCH Pitfall 1). Caller-supplied order honored end-to-end (no
-  // internal sort). An empty top-level marketplaces array renders the
+  // Cascade body. Caller-supplied order honored end-to-end (no internal
+  // sort). An empty top-level marketplaces array renders the
   // "(no marketplaces)" sentinel rather than the empty string; one blank
   // line between marketplace blocks.
   const blocks = message.marketplaces.map((mp) => composeMarketplaceBlock(mp, probe));
@@ -2171,11 +2144,11 @@ export function notify(
   // omitting the 2nd arg is info severity; "warning" / "error" otherwise.
   const severity = computeSeverity(message);
   if (severity === undefined) {
-    // Phase 29 / UXG-07 (D-29-02): info severity is byte-identical to the
-    // pre-Phase-29 behavior -- cascade body only, NO summary line.
+    // UXG-07 (D-29-02): info severity emits the cascade body only, NO summary
+    // line.
     ctx.ui.notify(withHint);
   } else {
-    // Phase 29 / UXG-07 (D-29-02): for error/warning severity, PREPEND the
+    // UXG-07 (D-29-02): for error/warning severity, PREPEND the
     // summary line so the host `Error:` / `Warning:` prefix introduces a
     // meaningful count of the failed/skipped operations. The reload-hint
     // (if any) stays last: `{summary}\n\n{cascade body}\n\n{reload-hint}`.

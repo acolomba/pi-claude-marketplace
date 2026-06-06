@@ -1,7 +1,7 @@
 // transaction/index.ts -- public API surface for the transaction/ tier.
 //
-// Phase 5 install/update/uninstall orchestrators consume this module.
-// The composition pattern is per CONTEXT.md D-02:
+// The install/update/uninstall orchestrators consume this module.
+// The composition pattern is per D-02:
 //
 //   await withStateGuard(loc, async (state) => {
 //     await runPhases(buildPhases(state), { ...ctx, state });

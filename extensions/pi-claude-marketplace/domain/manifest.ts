@@ -3,10 +3,8 @@
 // Top-level `marketplace.json` schema (PRD §6.3 MM-1). The `plugins` array
 // contains entries shaped per `domain/components/plugin.ts` PLUGIN_ENTRY_SCHEMA.
 //
-// CONTEXT.md D-05 + D-07: TypeBox JIT compilation runs at module load.
-// RESEARCH.md Pitfall 3: import path is `typebox/compile` (the 1.x package
-// is `typebox` with no scope; the 0.34 LTS path used the scoped name plus
-// `/compiler`, which is NOT what we want here).
+// D-05 + D-07: TypeBox JIT compilation runs at module load. The import path
+// is `typebox/compile` (the package is `typebox` with no scope).
 
 import { readFile } from "node:fs/promises";
 
@@ -39,7 +37,7 @@ export type MarketplaceManifest = Type.Static<typeof MARKETPLACE_SCHEMA>;
 export const MARKETPLACE_VALIDATOR = Compile(MARKETPLACE_SCHEMA);
 
 /**
- * NFR-8 / Phase 7 D-14: single domain seam for reading marketplace manifests.
+ * NFR-8 / D-14: single domain seam for reading marketplace manifests.
  *
  * Future mtime-based caching wraps this function. Keep this function focused
  * on path-based marketplace.json reads only: no cache state, invalidation, or

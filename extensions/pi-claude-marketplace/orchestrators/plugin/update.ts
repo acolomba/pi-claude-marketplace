@@ -174,47 +174,35 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
   try {
     targets = await enumerateTargets(opts);
   } catch (err) {
-    // WR-05: the previous code path assumed `target.kind !== "all"` was the
-    // only reachable failure mode (the comment claimed "the bare form never
-    // throws here"), but `enumerateTargets` for the bare form calls
-    // `loadState` for both scopes and propagates any I/O / schema-validation
-    // throw. When the bare form throws, the synthetic identity collapsed
-    // onto the literal string `"(targets)"` returned by
-    // `targetMarketplaceName` -- producing a user-visible row reading
-    // `⊘ (targets) (failed)...` under a marketplace block named
-    // `(targets)`. Hardcoding `scope: "project"` as the default also did
-    // not necessarily match the scope whose state.json actually failed
-    // to load.
+    // WR-05: `enumerateTargets` for the bare form calls `loadState` for
+    // both scopes and propagates any I/O / schema-validation throw.
     //
     // Split the failure path on `target.kind`:
     //  - `marketplace` / `plugin`: the marketplace identity is present
     //  on the target; surface the failure via `notifyDirectFailure`
-    //  under the real marketplace name (behavior preserved).
+    //  under the real marketplace name.
     //  - `all` (bare form): no marketplace identity is available;
     //  surface a marketplace-level failure via the `(no marketplaces)`
     //  sentinel `{ marketplaces: [] }` and a separate explicit-failure
-    //  emission carrying just the cause chain. Avoid the misleading
-    //  `(targets)` stand-in entirely.
+    //  emission carrying just the cause chain.
     if (target.kind === "all") {
       notifyBareFormEnumerateFailure({ ctx, pi, scope: explicitScope, err });
       return;
     }
 
-    //  Option B: synthesize a PluginFailedMessage
+    // Option B: synthesize a PluginFailedMessage
     // carrying the typed `cause` so the renderer's 4-space cause-chain
     // trailer preserves the error-message text. Reaching
     // here implies `target.kind === "marketplace" | "plugin"` so
     // `target.marketplace` is structurally present.
     //
-    // WR-01: when target.kind === "marketplace" (no plugin name) the
-    // previous code put the marketplace name in the plugin-row name slot,
-    // which renders as `⊘ <marketplace> (failed) {<reason>}` directly
-    // underneath a marketplace block ALSO named `<marketplace>` -- a
-    // redundant / confusing row. Wrap the marketplace identity in parens
-    // when used as a synthetic plugin-row name (mirroring the bare-form
+    // WR-01: when target.kind === "marketplace" (no plugin name), wrap
+    // the marketplace identity in parens when used as a synthetic
+    // plugin-row name (mirroring the bare-form
     // SYNTHETIC_UPDATE_PLACEHOLDER_NAME = "(update)" precedent) so the
     // row reads `⊘ (<marketplace>) (failed) {<reason>}` and is visually
-    // distinguishable from the surrounding mp header.
+    // distinguishable from the surrounding mp header (instead of a
+    // redundant `⊘ <marketplace>` row under an mp block of the same name).
     notifyDirectFailure({
       ctx,
       pi,
@@ -231,8 +219,7 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
   }
 
   if (targets.length === 0) {
-    // empty-targets success mirrors 's
-    // empty-targets shape -- `marketplaces: []` round-trips through notify
+    // empty-targets success: `marketplaces: []` round-trips through notify
     // to the (no marketplaces) sentinel. Severity: undefined. No reload-hint.
     notify(ctx, pi, { marketplaces: [] });
     return;
@@ -400,8 +387,8 @@ function renderUpdateCascadeIfAny(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * D-09 corollary: ships the `PluginUpdateFn` impl reserved by D-05.
- *  wires this into the marketplace autoupdate cascade.
+ * D-09 corollary: the `PluginUpdateFn` impl (D-05). The marketplace
+ * autoupdate cascade wires this in.
  *
  * Cascade-safe contract: this function NEVER throws. All errors (including
  * PathContainmentError, ST-9 stale-version, prep failures, phase-3a aggregate
@@ -410,7 +397,7 @@ function renderUpdateCascadeIfAny(
 export const updateSinglePlugin: PluginUpdateFn = async (plugin, marketplace, scope) => {
   // The cascade signature does not carry `cwd`; we default to process.cwd
   // because the cascade is invoked from a marketplace orchestrator that
-  // already operates in the user's session cwd. wiring may add a
+  // already operates in the user's session cwd. Future wiring may add a
   // dependency-injection seam if needed.
   const cwd = process.cwd();
   const locations = locationsFor(scope, cwd);
@@ -569,8 +556,8 @@ async function preflightUpdate(
     // Pre-narrow to a closed-set Reason so the cascade consumer reads it
     // directly instead of regex-parsing `notes`.
     //
-    // required `boolean` predicates -- skipped
-    // outcomes do NOT render the soft-dep marker (MSG-SD-3), so the
+    // declaresAgents / declaresMcp are required `boolean` predicates --
+    // skipped outcomes do NOT render the soft-dep marker (MSG-SD-3), so the
     // value is `false`. Repeated on every static-skipped return below.
     return {
       partition: "skipped",
@@ -779,14 +766,14 @@ async function abortHandles(handles: PrepHandles): Promise<(string | undefined)[
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TR-04 (Phase 40): intent-mark + finalize helpers replacing swapStateRecord.
+// TR-04: intent-mark + finalize helpers.
 //
 // Module-level constants:
 //  - UPDATE_IN_PROGRESS_NOTE: the load-bearing marker text written into
 //    `compatibility.notes` during the intent-mark window. A static string
 //    keeps the cross-process contract simple to grep + assert; a future GC
 //    sweeper can use `sRecord.updatedAt` (already in the schema) for
-//    staleness (RESEARCH Open Q5 RESOLVED).
+//    staleness.
 //  - PHASE3_FAILURE_PHASES + Phase3Phase: closed-set tuple for the per-bridge
 //    finalize gating. `Phase3Failure.phase` is already declared as the closed
 //    union `"skills" | "commands" | "agents" | "mcp"` in shared/errors.ts, so
@@ -794,10 +781,9 @@ async function abortHandles(handles: PrepHandles): Promise<(string | undefined)[
 //    construction inside `finalizeUpdateRecord`. A future fifth bridge surfaces
 //    here as a TS error.
 //
-// A1 spot-check (RESEARCH Assumptions): grep of shared/notify.ts for
-// `compatibility.notes` returns zero hits; the only extension consumer is
-// reinstall.ts:1349 (record copy, not rendering). The intent-mark marker is
-// internal-only -- no notify-rendering test is at risk.
+// The intent-mark marker is internal-only: shared/notify.ts does not read
+// `compatibility.notes`; the only extension consumer is reinstall.ts
+// (record copy, not rendering), so no notify-rendering test is at risk.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const UPDATE_IN_PROGRESS_NOTE = "update-in-progress";
@@ -806,12 +792,12 @@ const PHASE3_FAILURE_PHASES = ["skills", "commands", "agents", "mcp"] as const;
 type Phase3Phase = (typeof PHASE3_FAILURE_PHASES)[number];
 
 /**
- * TR-04 Pattern 1 (Phase 40): pre-commit intent-mark.
+ * TR-04 Pattern 1: pre-commit intent-mark.
  *
  * Runs INSIDE a `withStateGuard` BEFORE phase-3a commits begin. Re-reads
  * the per-marketplace per-plugin state record, performs the ST-9
- * stale-version check (moved here from the retired `swapStateRecord`),
- * and writes the intent-mark `compatibility = { installable: false,
+ * stale-version check, and writes the intent-mark
+ * `compatibility = { installable: false,
  * notes: [UPDATE_IN_PROGRESS_NOTE], supported: <carry-forward>,
  * unsupported: <carry-forward> }`.
  *
@@ -819,9 +805,9 @@ type Phase3Phase = (typeof PHASE3_FAILURE_PHASES)[number];
  * `installable: false` + `notes: [UPDATE_IN_PROGRESS_NOTE]` MUST treat
  * this plugin as in-flight; the next `update` call from any process is
  * the recovery path. ST-9 lives here; `finalizeUpdateRecord` does NOT
- * re-check ST-9 (Open Q1 RESOLVED: a finalize-time ST-9 check would
- * over-fire on the legitimate same-process intent-mark -> commits ->
- * finalize sequence because intent-mark does not bump the version).
+ * re-check ST-9: a finalize-time ST-9 check would over-fire on the
+ * legitimate same-process intent-mark -> commits -> finalize sequence
+ * because intent-mark does not bump the version.
  *
  * Pitfall 7: `compatibility.supported` and `compatibility.unsupported`
  * carry forward UNCHANGED from the pre-update sRecord. They are the
@@ -850,7 +836,7 @@ async function markUpdateInProgress(
       throw new Error(`Plugin "${plugin}" was concurrently uninstalled.`);
     }
 
-    // ST-9: stale-version check (moved from the retired swapStateRecord).
+    // ST-9: stale-version check.
     if (sRecord.version !== fromVersion) {
       throw new Error(
         `Plugin "${plugin}" was concurrently updated; expected version "${fromVersion}", found "${sRecord.version}".`,
@@ -870,7 +856,7 @@ async function markUpdateInProgress(
 }
 
 /**
- * TR-04 Pattern 2 (Phase 40): post-commit finalize.
+ * TR-04 Pattern 2: post-commit finalize.
  *
  * Runs INSIDE a SECOND `withStateGuard` AFTER phase-3a. Mutation policy
  * has TWO distinct failure semantics:
@@ -878,11 +864,11 @@ async function markUpdateInProgress(
  * 1. PER-BRIDGE (independent across bridges): for each of skills /
  *    commands / agents / mcp, if `!failedPhases.has(bridge)` then write
  *    `sRecord.resources.<schemaField> = handles.<bridge>.result.recorded
- *    .map(r => r.generatedName)`. CONTEXT.md SC#2 + Pitfall 1: do NOT
+ *    .map(r => r.generatedName)`. SC#2 + Pitfall 1: do NOT
  *    gate per-bridge writes on `phase3aFailures.length === 0`; the
  *    independent per-bridge gate is the load-bearing structural contract.
  *
- *    Bridge -> schema-field mapping (locked, mirrors Phase 39 / TR-03):
+ *    Bridge -> schema-field mapping (locked, per TR-03):
  *      skills    -> resources.skills
  *      commands  -> resources.prompts   (asymmetric, schema-locked)
  *      agents    -> resources.agents
@@ -929,7 +915,7 @@ async function finalizeUpdateRecord(
 
     // SC#2 per-bridge orthogonality: each successful bridge writes its
     // new generated names INDEPENDENTLY of other bridges' outcomes.
-    // The commands -> prompts asymmetry mirrors Phase 39 (TR-03).
+    // The commands -> prompts asymmetry is per TR-03.
     if (!failedPhases.has("skills")) {
       sRecord.resources.skills = handles.skills.result.recorded.map((r) => r.generatedName);
     }
@@ -995,12 +981,12 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   assertNoCrossPluginConflicts(scope, generatedNames, stateForGuard);
   const handles = await prepareUpdateHandles(args, preflight, generatedNames.agentsSourceDir);
 
-  // ─── Phase 2a: pre-commit intent-mark (TR-04 / Phase 40) ──────────────────
+  // ─── Phase 2a: pre-commit intent-mark (TR-04) ─────────────────────────────
   //
   // The intent-mark window writes `compatibility.installable = false` +
   // `notes: [UPDATE_IN_PROGRESS_NOTE]` BEFORE phase-3a commits. ST-9
-  // stale-version detection lives here (moved from the retired
-  // `swapStateRecord`). The intent-mark survives a process crash mid-commit
+  // stale-version detection lives here. The intent-mark survives a process
+  // crash mid-commit
   // so the next `/reload` + retry sees the truthful prior version and the
   // `RECOVERY_PLUGIN_REINSTALL_PREFIX` recovery hint is structurally mirrored
   // on disk.
@@ -1067,7 +1053,7 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
     phase3aFailures.push({ phase: "mcp", msg: errorMessage(err), cause: err });
   }
 
-  // ─── Phase 2b: finalize state (TR-04 / Phase 40) ──────────────────────────
+  // ─── Phase 2b: finalize state (TR-04) ─────────────────────────────────────
   //
   // The finalize window writes per-bridge resource updates for every
   // bridge whose commit succeeded (independent of other bridges' outcomes),
@@ -1081,13 +1067,12 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   // 'mcp' push inside the finalize catch (below) trips the phase-3b branch
   // so the recovery hint fires.
   //
-  // Pitfall 4 + Assumption A3: a finalize throw routes through
+  // Pitfall 4: a finalize throw routes through
   // `phase3aFailures` as a synthetic `phase: "mcp"` entry so the existing
   // `notifyDirectFailure` recovery-hint pipeline fires unchanged. The
   // `msg` field carries the explicit `state finalize failed:` text so
   // operator diagnostics see the truthful cause. A dedicated
-  // `phase: "finalize"` Phase3Failure member is deferred to v1.8
-  // (RESEARCH Open Q3 RESOLVED).
+  // `phase: "finalize"` Phase3Failure member is deferred.
   try {
     await finalizeUpdateRecord(args, preflight, handles, phase3aFailures);
   } catch (finalizeErr) {
@@ -1157,8 +1142,8 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
       // reads `reasons[0]` directly.
       reasons: ["rollback partial"] as const,
       phaseFailures: phase3aFailures.map((f) => ({ phase: f.phase, msg: f.msg })),
-      // required `boolean`. `(failed)` rows do
-      // not render the soft-dep marker.
+      // declaresAgents / declaresMcp are required `boolean`. `(failed)`
+      // rows do not render the soft-dep marker.
       declaresAgents: false,
       declaresMcp: false,
     };
@@ -1193,11 +1178,11 @@ async function dropPluginCompletionCache(args: ThreePhaseArgs): Promise<void> {
       args.marketplace,
     );
   } catch {
-    //  precedent (lineage): direct-path completion-cache-refresh
-    // warnings are swallowed silently The cache-refresh side effect
-    // still fires above; only the user-visible standalone-mode warning
-    // surface is gone. The orchestrated/cascade path is unaffected by
-    //  (no separate warning emission in cascade mode).
+    // Per D-19-01 direct-path completion-cache-refresh warnings are
+    // swallowed silently. The cache-refresh side effect still fires
+    // above; only the user-visible standalone-mode warning surface is
+    // gone. The cascade path is unaffected (no separate warning emission
+    // in cascade mode).
   }
 }
 
@@ -1279,7 +1264,7 @@ function outcomeToCascadePluginMessage(
       const reasons: readonly Reason[] = hasPhaseFailures
         ? (["rollback partial"] as const)
         : (outcome.reasons ?? narrowFailReasons(outcome.notes));
-      //  carve-out: PluginFailedMessage has NO `from`/`to` fields
+      // carve-out: PluginFailedMessage has NO `from`/`to` fields
       // (only the `updated` variant carries them). The renderer emits at
       // most the bare `version?` token, so we surface only the
       // pre-update version (`fromVersion`) when available -- the catalog
@@ -1396,7 +1381,7 @@ function renderUpdateCascadeAndNotify(
       plugins: g.plugins,
     }));
 
-  // cascade construction recipe (mirrors pilot at
+  // cascade construction recipe (mirrors the recipe at
   // orchestrators/plugin/uninstall.ts; substitutes the
   // version-arrow cascade variant set).
   // - One MarketplaceNotificationMessage per affected (scope, marketplace)
@@ -1521,7 +1506,7 @@ function narrowDirectFailReason(err: Error): Reason {
   if (err instanceof PluginShapeError) {
     // IN-03: add `default: assertNever(err.shape)` for compile-time
     // exhaustiveness against the `PluginShapeError.shape.kind`
-    // discriminator. Mirrors the install.ts:1155 +
+    // discriminator. Mirrors install.ts +
     // outcomeToCascadePluginMessage default-arm precedent. Without this
     // a future 5th shape kind would silently fall through to the errno-
     // substring branch below and surface as `unreadable manifest` --
@@ -1633,8 +1618,7 @@ function notifyBareFormEnumerateFailure(args: {
  */
 const SYNTHETIC_UPDATE_PLACEHOLDER_NAME = "(update)";
 
-// the legacy version-arrow helper is no longer imported -- the
-// renderer (shared/notify.ts) owns version-arrow composition via the
+// The renderer (shared/notify.ts) owns version-arrow composition via the
 // PluginUpdatedMessage's required from/to fields.
 
 function narrowSkipReasons(notes: readonly string[] | undefined): readonly Reason[] {
