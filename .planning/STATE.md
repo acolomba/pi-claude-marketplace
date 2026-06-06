@@ -33,77 +33,58 @@ Last activity: 2026-06-05 -- v1.8 reconciled to shipped (quick 260605-tmr)
 
 **Velocity:**
 
-- Total plans completed: 127
-- Average duration: -
-- Total execution time: -
+- Total plans completed: 157 (sum of recorded phase counts below; some early v1.0-v1.2 phases were archived without a recorded plan count)
 
-**By Phase:**
+**Plans by phase:**
 
-| Phase | Plans | Total | Avg/Plan |
-| ----- | ----- | ----- | -------- |
-| 01    | 7     | -     | -        |
-| 02    | 6     | -     | -        |
-| 04    | 10    | -     | -        |
-| 05    | 10    | -     | -        |
-| 07    | 6     | -     | -        |
-| 08    | 4     | -     | -        |
-| 12    | 4     | -     | -        |
-| 13    | 10    | -     | -        |
-| 14.1  | 2     | -     | -        |
-| 14    | 6     | -     | -        |
-| 14.2  | 5     | -     | -        |
-| 15    | 3     | -     | -        |
-| 16    | 6     | -     | -        |
-| 17.2  | 4     | -     | -        |
-| 18    | 7     | -     | -        |
-| 19    | 6     | -     | -        |
-| 20    | 6     | -     | -        |
-| 21    | 4     | -     | -        |
-| 22    | 1     | -     | -        |
-| 23    | 2     | -     | -        |
-| 24    | 1     | -     | -        |
-| 25 | 3 | - | - |
-| 26 | 1 | - | - |
-| 27 | 5 | - | - |
-| 28 | 2 | - | - |
-| 29 | 3 | - | - |
-| 30 | 1 | - | - |
-| 31 | 2 | - | - |
-| 32 | 1 | - | - |
-| 33 | 1 | - | - |
-| 34 | 1 | - | - |
-| 35 | TBD | - | - |
-| 36 | TBD | - | - |
+| Phase | Plans | Milestone |
+| ----- | ----- | --------- |
+| 01 | 7 | v1.0 |
+| 02 | 6 | v1.0 |
+| 04 | 10 | v1.0 |
+| 05 | 10 | v1.0 |
+| 07 | 6 | v1.0 |
+| 08 | 4 | v1.1 |
+| 09 | 4 | v1.1 |
+| 12 | 4 | v1.3 |
+| 13 | 10 | v1.3 |
+| 14 | 6 | v1.3 |
+| 14.1 | 2 | v1.3 |
+| 14.2 | 5 | v1.3 |
+| 15 | 3 | v1.4 |
+| 16 | 6 | v1.4 |
+| 17 | 3 | v1.4 |
+| 17.1 | 4 | v1.4 |
+| 17.2 | 4 | v1.4 |
+| 18 | 7 | v1.4 |
+| 19 | 6 | v1.4 |
+| 20 | 6 | v1.4 |
+| 21 | 4 | v1.4 |
+| 22 | 1 | v1.4.1 |
+| 23 | 2 | v1.4.1 |
+| 24 | 1 | v1.4.1 |
+| 25 | 3 | v1.4.1 |
+| 26 | 1 | v1.4.1 |
+| 27 | 5 | v1.5 |
+| 28 | 2 | v1.5 |
+| 29 | 3 | v1.5 |
+| 30 | 1 | v1.6 |
+| 31 | 2 | v1.6 |
+| 32 | 2 | v1.6 |
+| 33 | 1 | v1.6 |
+| 34 | 1 | v1.6 |
+| 35 | 4 | v1.6 |
+| 36 | 1 | v1.6 |
+| 37 | 1 | v1.7 |
+| 38 | 1 | v1.7 |
+| 39 | 1 | v1.7 |
+| 40 | 1 | v1.7 |
+| 41 | 1 | v1.7 |
+| 42 | 1 | v1.8 |
+| 43 | 2 | v1.8 |
+| 44 | 2 | v1.8 |
 
-**Recent Trend:**
-
-- Last 5 plans: -
-- Trend: -
-
-<!-- Updated after each plan completion -->
-
-| Phase 07 P01 | 9 min | 3 tasks | 29 files |
-| Phase 07 P02 | 4 min | 3 tasks | 9 files |
-| Phase 07 P03 | 6 min | 2 tasks | 5 files |
-| Phase 07 P04 | 11 min | 3 tasks | 10 files |
-| Phase 07 P05 | 7 min | 3 tasks | 20 files |
-| Phase 07 P06 | 2 min | 2 tasks | 4 files |
-| Phase 08 P01 | 10 min | 2 tasks | 4 files |
-| Phase 08 P02 | 12 min | 2 tasks | 8 files |
-| Phase 08 P03 | 12 min | 2 tasks | 8 files |
-| Phase 08 P04 | 23 min | 3 tasks | 5 files |
-| Phase 09 P01 | 45 min | 3 tasks | 4 files |
-| Phase 09 P02 | 35 min | 3 tasks | 6 files |
-| Phase 09 P03 | 20 min | 3 tasks | 3 files |
-| Phase 09 P04 | - | 4 tasks | 4 files |
-| Phase 25 P01 | 14 min | 3 tasks | 4 files |
-| Phase 25 P2 | 5min | 2 tasks | 2 files |
-| Phase 27 P01 | 6 min | 2 tasks | 2 files |
-| Phase 27 P02 | 9 min | 2 tasks | 5 files |
-| Phase 27 P03 | 14 min | 3 tasks | 8 files |
-| Phase 27 P04 | 18 min | 3 tasks | 6 files |
-| Phase 28 P01 | 23 min | 3 tasks | 11 files |
-| Phase 28 P02 | 12 min | 2 tasks | 5 files |
+<!-- Plan counts for v1.4+ derived from .planning/milestones/<milestone>-phases/. Early-milestone (v1.0-v1.3) phase dirs were archived; their counts are the last recorded values, and some early phases have no recorded count. -->
 
 ## Accumulated Context
 

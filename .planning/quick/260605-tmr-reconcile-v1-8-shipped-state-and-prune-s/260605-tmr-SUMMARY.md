@@ -54,6 +54,22 @@ Install error misattribution when marketplace is missing, and the structural
 - `grep -c "v1.4 UAT findings" .planning/BACKLOG.md` -> 0
 - Three remaining BACKLOG sections intact
 
+## Follow-up: STATE.md Performance Metrics reconcile
+
+Addressed the related staleness flagged at first-pass close-out. The "By Phase"
+table stopped at phase 36 (with 35/36 as `TBD`) and the Total/Avg columns +
+"Recent Trend" per-plan log were never maintained. Rebuilt the section:
+
+- Replaced the dead `Total`/`Avg/Plan` columns and the abandoned per-plan trend
+  log with a clean `Phase | Plans | Milestone` table.
+- Made plan counts accurate through phase 44, derived from
+  `.planning/milestones/<milestone>-phases/` for v1.4+: filled 35 (4) and 36 (1);
+  added the missing 09 (4), 17 (3), 17.1 (4); corrected 32 (1 -> 2); appended
+  v1.7 (37-41) and v1.8 (42-44).
+- Recomputed total plans: 127 -> 157 (sum of the 44 recorded rows).
+- v1.0-v1.2 phase dirs (incl. 03/06/10/11) were archived; their counts are the
+  last recorded values and a few have none -- noted inline.
+
 ## Notes
 
 - Ran on branch `features/reconcile-v1.8-state` (CLAUDE.md forbids committing
