@@ -1,15 +1,12 @@
 /**
- * tests/domain/github-auth.test.ts -- 13 unit tests for Phase 32's
- * initiateDeviceFlow state machine covering AUTH-01/03/04/05/07/09.
+ * Unit tests for the initiateDeviceFlow state machine covering
+ * AUTH-01/03/04/05/07/09.
  *
  * Each test is self-contained: fresh makeMockDeviceFlowHttp +
  * makeMockCredentialOps + notifyFn recorder per test. No shared `let`
  * state; no beforeEach. Tests use `interval: 0` on the mock deviceCode so
  * the poll loop spins synchronously through pre-loaded pollQueue
  * sequences -- no real timers, no real network.
- *
- * Test-title strings include the 32-VALIDATION.md grep-able phrases so the
- * `-t <pattern>` filter from the per-task validation map works.
  *
  * Source map:
  *   - AUTH-01: Test 1 (happy path), Test 2 (approve on success)
@@ -460,7 +457,7 @@ test("Phase 32 initiateDeviceFlow: AbortSignal cancels poll loop mid-sleep (opts
   // opts.signal abort path: runPollLoop wraps sleepMs with the signal. When the
   // signal fires while the loop is sleeping, the sleepMs rejects with an
   // AbortError which the catch block converts to { ok: false, reason: "Device
-  // Flow cancelled." } (github-auth.ts:311-312).
+  // Flow cancelled." }.
   //
   // The controller is aborted immediately after initiateDeviceFlow() starts;
   // with interval: 5 the loop is sleeping when the abort fires.

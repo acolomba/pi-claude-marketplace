@@ -20,33 +20,32 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
  *     MUST NOT import `gitOps` / `platform/git` / `DEFAULT_GIT_OPS` or reference
  *     `refreshGitHubClone` (PRL-07: reinstall uses cached manifests only).
  *   - extensions/pi-claude-marketplace/orchestrators/plugin/info.ts
- *     MUST NOT import `gitOps` / `platform/git` / `DEFAULT_GIT_OPS` (Phase 44 /
- *     INFO-02 + NFR-5: info is a read-only seam over the local state + on-disk
+ *     MUST NOT import `gitOps` / `platform/git` / `DEFAULT_GIT_OPS` (INFO-02 +
+ *     NFR-5: info is a read-only seam over the local state + on-disk
  *     marketplace manifests; no network).
  *   - extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts
- *     MUST NOT import `gitOps` / `platform/git` / `DEFAULT_GIT_OPS` (Phase 43 /
- *     INFO-01 + NFR-5: marketplace info is read-only against local state +
+ *     MUST NOT import `gitOps` / `platform/git` / `DEFAULT_GIT_OPS` (INFO-01 +
+ *     NFR-5: marketplace info is read-only against local state +
  *     marketplace.json; no network).
  *
  * Exempt files (do NOT add):
  *   - orchestrators/plugin/update.ts
  *     PUP-2 syncClone REQUIRES gitOps; the orchestrator legitimately imports
- *     `GitOps` via Phase 4's `orchestrators/marketplace/shared.ts` re-export
- *     (Pattern S-9). Adding it here would break Phase 5 update.
+ *     `GitOps` via the `orchestrators/marketplace/shared.ts` re-export
+ *     (Pattern S-9). Adding it here would break update.
  *   - orchestrators/plugin/uninstall.ts is implicitly clean (no git surface
  *     today) but is not gated here -- gating install + list covers the NFR-5
  *     orchestrator-tier obligation.
  *
- * Skip-path rationale (Wave 0/Plan 01 lands BEFORE some orchestrators exist):
- *   Later waves create these files. Until then, the test skips ENOENT targets
- *   with an informational marker so this gate can land before implementation
- *   without blocking the wave. Once a target file exists, assertions fire.
+ * Skip-path rationale:
+ *   The test skips ENOENT targets
+ *   with an informational marker so this gate can land before implementation.
+ *   Once a target file exists, assertions fire.
  *
- * stripComments rationale (mandatory; mirrors list.test.ts:175-216 pattern):
+ * stripComments rationale (mandatory):
  *   Source files include header docstrings that legally mention the forbidden
  *   symbols (e.g. "MUST NOT import platform/git"). Without `stripComments`,
- *   the assertion would fail on prose. See Pitfall 5 / Pitfall 8 in
- *   .planning/phases/05-plugin-orchestrators/05-PATTERNS.md.
+ *   the assertion would fail on prose. See Pitfall 5 / Pitfall 8.
  */
 const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts",
@@ -80,7 +79,7 @@ test("NFR-5 + PI-2 + PL-3 + PRL-07: network-free orchestrators have zero gitOps 
       const code = (err as NodeJS.ErrnoException).code;
       if (code === "ENOENT") {
         // Pre-implementation skip path: the file does not exist yet. The gate
-        // activates once later waves land the orchestrator target (see header).
+        // activates once the orchestrator target lands (see header).
         continue;
       }
 

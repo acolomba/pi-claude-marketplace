@@ -10,13 +10,8 @@ import { cleanupStaging } from "../../extensions/pi-claude-marketplace/shared/fs
 import type { ExtensionAPI } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 /**
- * Plan 04 regression guard: index.ts loads cleanly, exports a default
+ * Regression guard: index.ts loads cleanly, exports a default
  * function, and registers exactly the expected Pi surface.
- *
- * Phase 1 deliberately registers ZERO LLM tools (per RESEARCH.md Open
- * Question 3). If a future PR re-adds `pi.registerTool(...)` here, this
- * test fails -- preventing accidental regression to the legacy stub
- * behavior.
  */
 
 interface RegistrationLog {

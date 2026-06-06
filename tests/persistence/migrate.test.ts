@@ -188,9 +188,10 @@ test("CMC-36: persistence/migrate.ts warn body matches style guide §14.1 wordin
 
 test("CMC-37 / D-21-04: IL-3 console.warn callsite carries no inline eslint-disable directive (block-level override supersedes)", async () => {
   const src = await readFile(MIGRATE_PATH, "utf8");
-  // Plan 21-01 D-21-04 retired the inline `eslint-disable-next-line` above the
-  // warn in favor of a block-level files-override (BLOCK B-2 in eslint.config.js)
-  // scoped to this single file. Assert the inline directive is GONE.
+  // D-21-04: the warn callsite carries no inline `eslint-disable-next-line`;
+  // a block-level files-override (BLOCK B-2 in eslint.config.js) scoped to
+  // this single file supplies the suppression. Assert the inline directive
+  // is absent.
   assert.ok(
     !/eslint-disable-next-line\s+no-restricted-syntax/.test(src),
     "Inline `eslint-disable-next-line` directive at the IL-3 warn callsite must be removed; the BLOCK B-2 files-override in eslint.config.js supplies the equivalent suppression.",

@@ -11,7 +11,7 @@ import {
  *
  * The validator runs at load + save sites; these tests pin the
  * acceptance/rejection contract independently of the IO layer.
- * Test names prefixed with REQ-IDs (Phase 2 convention -- grep-able).
+ * Test names prefixed with REQ-IDs (grep-able).
  */
 
 const VALID_ROW = {

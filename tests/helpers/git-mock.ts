@@ -1,5 +1,5 @@
 /**
- * tests/helpers/git-mock.ts -- in-memory GitOps stub for Phase 4 tests.
+ * In-memory GitOps stub for tests.
  *
  * The returned mock implements the same 5-method GitOps interface
  * defined in `orchestrators/marketplace/shared.ts` (clone / fetch /
@@ -231,8 +231,8 @@ export function makeMockGitOps(initial?: Partial<MockGitState>): MockGitOpsHandl
 
 /**
  * Convenience: return an absolute path to the fixture root used by
- * Phase 4 orchestrator tests. Centralized so test files don't
- * recompute the path.
+ * the orchestrator tests. Centralized so test files don't recompute
+ * the path.
  */
 export function fixtureMarketplaceDir(
   name: "valid-marketplace" | "invalid-manifest" | "empty-marketplace",

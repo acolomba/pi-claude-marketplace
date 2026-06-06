@@ -1,9 +1,7 @@
-// Quick 260516-02r: bootstrap orchestrator tests.
+// bootstrap orchestrator tests.
 //
-// Phase 13 Plan 13-02c-01 migration: the legacy sentence-form
-// assertions (`Added marketplace ...`, `Enabled autoupdate: ...`,
-// `Already enabled: ...`) have been migrated to the compact-line
-// MarketplaceRow forms per CMC-28 / CMC-30 / CMC-33.
+// Assertions use the compact-line MarketplaceRow forms per CMC-28 /
+// CMC-30 / CMC-33.
 //
 // Covers:
 //   a. First run, clean state: addMarketplace + setMarketplaceAutoupdate
@@ -58,7 +56,7 @@ interface NotifyRecord {
 
 function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: NotifyRecord[] } {
   const notifications: NotifyRecord[] = [];
-  // Plan 18-00: `pi` required on BootstrapOptions (mirroring the composed
+  // `pi` required on BootstrapOptions (mirroring the composed
   // marketplace orchestrators); mirror production wiring shape.
   const pi = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
   const ctx = {

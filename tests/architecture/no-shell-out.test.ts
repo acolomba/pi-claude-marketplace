@@ -8,8 +8,8 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 const EXTENSION_ROOT = path.join(REPO_ROOT, "extensions/pi-claude-marketplace");
 
 /**
- * D-21 supersession defense (W-8). MA-7 (PRD §5.1.1) required the extension
- * to handle "git not found on PATH" gracefully. D-21 supersedes that by
+ * D-21 supersession defense (W-8). MA-7 (PRD §5.1.1) requires the extension
+ * to handle "git not found on PATH" gracefully. D-21 satisfies that by
  * adopting `isomorphic-git` -- a pure-JS implementation that eliminates the
  * shell-out entirely. This test asserts the supersession holds: no file
  * under `extensions/pi-claude-marketplace/` may import `node:child_process`,
@@ -24,15 +24,14 @@ const EXTENSION_ROOT = path.join(REPO_ROOT, "extensions/pi-claude-marketplace");
  *   - `require("child_process")`
  *   - `require("node:child_process")`
  *
- * Phase 31 narrowing (AUTH-06, AUTH-08, AUTH-09):
- * D-21 retired the V1 execFile("git", [...]) clone/fetch shell-out. Phase 31
- * (AUTH-06/08/09) reintroduces child_process ONLY for the `git credential`
+ * AUTH-06 / AUTH-08 / AUTH-09 narrowing:
+ * child_process is permitted ONLY for the `git credential`
  * subprocess in extensions/pi-claude-marketplace/platform/git-credential.ts,
  * which is fundamentally different from a clone shell-out:
  *   - it never executes git clone/fetch/pull/etc.
  *   - it accesses the OS keychain via git's helper chain (osxkeychain,
  *     manager-core, libsecret), which has no pure-JS equivalent (keytar
- *     adds native deps; see Phase 31 RESEARCH.md "Don't Hand-Roll").
+ *     adds native deps).
  *   - the missing-git-binary failure mode is non-fatal (degrades to
  *     "no credential reuse"; the current operation still works via Device
  *     Flow). The MA-7 "git CLI not found" hard-fail concern is therefore
@@ -92,11 +91,11 @@ test("no child_process imports outside the Phase 31 whitelist (D-21 + Phase 31 n
   );
 });
 
-// Phase 31 NEW assertion (AUTH-06/08/09): the whitelist is exactly
+// AUTH-06/08/09 assertion: the whitelist is exactly
 // platform/git-credential.ts -- nobody silently widened it. If a future
-// phase needs another file with node:child_process, it MUST update both
+// change needs another file with node:child_process, it MUST update both
 // ALLOWED_CHILD_PROCESS_FILES above AND this assertion's expected array
-// in the same commit, with a phase-level justification recorded in the
+// in the same commit, with a justification recorded in the
 // docstring header.
 test("Phase 31 whitelist: exactly one file may import node:child_process", () => {
   assert.deepEqual([...ALLOWED_CHILD_PROCESS_FILES].sort(), [

@@ -1,7 +1,7 @@
 /**
- * tests/integration/auth-e2e.test.ts -- Phase 36 integration gate.
+ * tests/integration/auth-e2e.test.ts -- auth integration gate.
  *
- * Wires the full v1.6 auth stack end-to-end without going through the
+ * Wires the full auth stack end-to-end without going through the
  * full add/update orchestrators:
  *
  *   buildAuthCallbacks (platform/git.ts)

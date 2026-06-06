@@ -1,23 +1,22 @@
 // tests/shared/snm37-behavioral-smoke.test.ts
 //
-// Phase 25 Plan 25-01 -- SNM-37 behavioral byte-form smoke (the D-25-04
-// v1.4-identity proof).
+// SNM-37 behavioral byte-form smoke (D-25-04).
 //
 // WHAT THIS PROVES (D-25-04): that a `/claude:plugin list` rendered by the
-// CURRENTLY-LOADED extension source emits the v1.4 catalog-conformant byte
-// forms. This is STRONGER evidence of v1.4 identity than `pi --version` --
+// CURRENTLY-LOADED extension source emits the catalog-conformant byte
+// forms. This is STRONGER evidence of extension identity than `pi --version` --
 // under the `scripts/pi.sh` source-load (`-e extensions/.../index.ts`, D-25-01)
 // the extension is NOT a separately-versioned installed package, so
 // `pi --version` reports Pi's own version and is moot for proving the
 // extension's code revision (D-25-04). The byte forms below only render if the
-// new v1.4 code paths actually execute:
+// code paths actually execute:
 //   - SNM-33: read-only `list` (present/available statuses) emits NO
 //     `/reload to pick up changes` trailer (`shouldEmitReloadHint` excludes
 //     present/list surfaces).
 //   - SNM-35: a persisted PI-7 `hash-<12hex>` version renders as the
 //     git-style short SHA `v#<7hex>` (`formatHashVersionForDisplay`).
 //   - SNM-36: the emitted Reason brace reads `{lsp}`, never `{lspServers}`
-//     (the REASONS member rename; detection substrings may stay camelCase but
+//     (the REASONS member name; detection substrings may stay camelCase but
 //     the emitted brace must read `lsp`).
 //
 // DELIVERY MECHANISM (SNM-37, D-25-01/D-25-02): the runtime delivery path is
@@ -29,22 +28,22 @@
 // call (PRE-tui / pre-markdown). The live tui/markdown layer can mutate
 // leading whitespace, so post-markdown bytes are NEVER asserted here.
 //
-// LOCATION (RESEARCH Pitfall 3): this file lives under `tests/shared/` -- NOT
-// `tests/e2e/` -- because `npm test` (and thus `npm run check` and Phase 26's
+// LOCATION: this file lives under `tests/shared/` -- NOT
+// `tests/e2e/` -- because `npm test` (and thus `npm run check` and the
 // GREEN gate) globs
 // `tests/{architecture,bridges,domain,edge,helpers,orchestrators,persistence,shared,transaction}/**`
-// and EXCLUDES `tests/e2e/**`. Placing it here keeps the v1.4-identity proof
+// and EXCLUDES `tests/e2e/**`. Placing it here keeps the identity proof
 // inside the GREEN bar.
 //
 // DEFERRAL RECORDED (D-25-06, not silently skipped): real `npm publish` /
 // packaged-artifact (release-tarball) validation is explicitly DEFERRED.
 // `scripts/pi.sh` does not exercise the `files:` tarball or a real npm install;
 // SNM-37 is reproduction-enablement, not a release gate. Real publish-validation
-// belongs to an actual release effort, out of v1.4.1 scope.
+// belongs to an actual release effort.
 //
-// FIXTURE (Claude's discretion within the locked minimums): pure
+// FIXTURE: pure
 // `NotificationMessage` data driven straight through `notify(ctx, pi, message)`
-// (RESEARCH Q1 Option 1 -- fastest, no fs install needed for byte-form
+// (fastest, no fs install needed for byte-form
 // assertions). Shapes mirror `tests/architecture/catalog-uat.test.ts`
 // `single-mp-mixed` (installed/available mix + `{hooks, lsp}` reason brace) and
 // `hash-version-list` (`v#2ea95f8`).
@@ -59,7 +58,7 @@ import {
 
 // ---------------------------------------------------------------------------
 // Notify-capture seam (pre-tui). Mirrors the inline `mock.fn()` ctx in
-// `tests/architecture/catalog-uat.test.ts:149-151` -- capture the exact string
+// `tests/architecture/catalog-uat.test.ts` -- capture the exact string
 // passed to `ctx.ui.notify`, before any tui/markdown rendering (D-25-09).
 // ---------------------------------------------------------------------------
 

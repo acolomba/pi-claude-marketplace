@@ -29,7 +29,7 @@ function makeResolved(
   pluginRoot: string,
   skillsDirAbs: string | undefined,
 ): ResolvedPluginInstallable {
-  // D-07: componentPaths.skills is now `readonly string[]`.
+  // D-07: componentPaths.skills is `readonly string[]`.
   return {
     installable: true,
     name,

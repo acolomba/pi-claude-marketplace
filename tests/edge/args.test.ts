@@ -1,7 +1,7 @@
 // tests/edge/args.test.ts
 //
-// AP-1 / AP-2 / AP-4 coverage for the verbatim V1 tokenizer + --scope
-// validator now living in extensions/pi-claude-marketplace/edge/args.ts.
+// AP-1 / AP-2 / AP-4 coverage for the tokenizer + --scope validator in
+// extensions/pi-claude-marketplace/edge/args.ts.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -25,8 +25,8 @@ test("AP-1 :: tokenize double-quoted spaced argument", () => {
 });
 
 test("AP-1 :: tokenize mixed quotes in same input", () => {
-  // Outer single quotes wrap a literal double quote -- V1 has no escape
-  // semantics so the inner `"` is just data.
+  // Outer single quotes wrap a literal double quote -- no escape
+  // semantics, so the inner `"` is just data.
   const result = parseArgs('install \'foo"bar\' "baz qux"');
   assert.deepEqual(result.positional, ["install", 'foo"bar', "baz qux"]);
 });

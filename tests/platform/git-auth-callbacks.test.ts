@@ -1,8 +1,8 @@
 /**
- * Phase 33 -- Unit tests for `buildAuthCallbacks` (platform/git.ts).
+ * Unit tests for `buildAuthCallbacks` (platform/git.ts).
  *
- * Covers the closure contract that the v1.6 GitHub auth wiring lands as
- * the load-bearing seam between isomorphic-git and Phase 32's Device Flow:
+ * Covers the closure contract for the GitHub auth wiring -- the
+ * load-bearing seam between isomorphic-git and the Device Flow:
  *
  *   - SC-1 (AUTH-01 / AUTH-02): fill-first; Device Flow only on miss.
  *     Tests 1 + 2 + 3.
@@ -203,7 +203,7 @@ test("Phase 33 buildAuthCallbacks: onAuthRequired throws -- onAuth returns { can
 });
 
 // ---------------------------------------------------------------------------
-// Phase 33 git.ts wrapper tests -- lines 112-230
+// git.ts wrapper tests -- lines 112-230
 //
 // These tests exercise the exported git wrappers (clone, fetch, checkout,
 // resolveRef, forceUpdateRef, currentBranch, listBranches, listRemotes) against

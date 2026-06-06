@@ -1,4 +1,4 @@
-// Phase 43 / Plan 43-01 / Task 3: marketplace info handler shim tests.
+// marketplace info handler shim tests.
 //
 // Mirrors the structure of `tests/edge/handlers/marketplace/list.test.ts`
 // and `remove.test.ts`. The shim parses one required positional + the

@@ -59,7 +59,7 @@ test("import handler defaults omitted --scope to project and user scopes (projec
 
   await handler("", ctx);
 
-  // Phase 14.2-fix CR-01: the bare-import handler iterates scopes
+  // CR-01: the bare-import handler iterates scopes
   // project-first to match the MSG-GR-3 contract. Orphan diagnostic
   // lines (insertion-ordered) render project-before-user in same-key
   // ties; per-marketplace cascade blocks are sorted independently

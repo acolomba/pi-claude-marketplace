@@ -28,7 +28,7 @@
 //
 // Why not put this in the ESLint plugin? The existing
 // `msg-gr-3-per-scope` rule is scoped to `orchestrators/` and
-// `edge/handlers/` per the v1.3 surface-pattern rules; this guard is
+// `edge/handlers/` per the surface-pattern rules; this guard is
 // repo-wide (every TS file under `extensions/`) and runs at test time
 // so a new offender file outside the eslint glob still fails CI.
 

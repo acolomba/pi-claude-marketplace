@@ -1,4 +1,4 @@
-// Plan 06-05 Task 2: registration glue tests.
+// Registration glue tests.
 //
 // Verifies that `edge/register.ts` wires the slash-command + autocomplete
 // + LLM tools correctly onto a mock `pi: ExtensionAPI`. The mock pi records
@@ -199,9 +199,8 @@ test("D-04 :: registered command routes reinstall through makeReinstallHandler",
 
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]?.severity, undefined);
-    // Plan 19-04 / D-19-02 byte change: V2 empty-targets renders as the
-    // `(no marketplaces)` sentinel via `{ marketplaces: [] }`. V1's
-    // `(no plugins)` empty-row form is RETIRED.
+    // D-19-02: empty-targets renders as the `(no marketplaces)` sentinel
+    // via `{ marketplaces: [] }`.
     assert.equal(notifications[0]?.message ?? "", "(no marketplaces)");
   });
 });

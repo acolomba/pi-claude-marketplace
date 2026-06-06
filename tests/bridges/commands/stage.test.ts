@@ -44,7 +44,7 @@ async function tmpScope(): Promise<TmpScope> {
 }
 
 function makeResolved(pluginRoot: string, commandsRel?: string): ResolvedPluginInstallable {
-  // D-07: componentPaths.commands is now `readonly string[]`.
+  // D-07: componentPaths.commands is `readonly string[]`.
   return {
     installable: true,
     name: "acme",

@@ -162,7 +162,7 @@ test("AG-1 generatedAgentName always starts with pi-claude-marketplace- (AG-5 ma
 
 // ──────────────────────────────────────────────────────────────────────────
 // B-02: assertSafeName accepts an optional `label` argument used in error
-// messages (Phase 3 bridges pass it for human-readable context).
+// messages (bridges pass it for human-readable context).
 // ──────────────────────────────────────────────────────────────────────────
 
 test("B-02 assertSafeName(name) single-arg call still accepts valid names (back-compat)", () => {
@@ -190,9 +190,8 @@ test("B-02 assertSafeName(name, label) labels control-char error", () => {
 });
 
 test("B-02 assertSafeName(name) without label keeps legacy message form", () => {
-  // Regression guard: the older Phase 2 message form used "Name " as the
-  // prefix. Existing tests rely on this exact text; verify it survives the
-  // optional-label extension.
+  // Regression guard: the no-label message form uses "Name " as the prefix.
+  // Existing tests rely on this exact text.
   assert.throws(() => {
     assertSafeName("");
   }, /Name must be a non-empty string/);

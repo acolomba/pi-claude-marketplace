@@ -19,7 +19,7 @@ import type { PluginIndexRow } from "../../../extensions/pi-claude-marketplace/s
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 /**
- * Wave 2 / Plan 06-03 tests for edge/completions/data.ts.
+ * Tests for edge/completions/data.ts.
  *
  * Each test builds a hermetic LocationsResolver mock with in-memory state +
  * manifest fixtures and a fresh tmpdir-rooted cache path. Tests call

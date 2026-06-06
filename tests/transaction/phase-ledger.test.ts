@@ -10,7 +10,7 @@ import {
 /**
  * D-01 / AS-4 / PI-14 -- runPhases ledger semantics.
  *
- * The ledger primitive is the seam every Phase 5 install/update/uninstall
+ * The ledger primitive is the seam every install/update/uninstall
  * orchestrator reuses. Tests focus on the three contracts that orchestrators
  * rely on: reverse-order undo (D-01), aggregated undo failures (AS-4), and
  * the loud PathContainmentError re-throw path (PI-14) that signals state
@@ -99,10 +99,10 @@ test("AS-4 runPhases: undo failure aggregated with phase name", async () => {
   const result = await runPhases(phases, {});
   assert.equal(result.ok, false);
   assert.equal(result.error?.message, "boom");
-  // Task 260525-cjr C1: RollbackPartial now also preserves the
-  // original undo throw via `cause`. Assert field-by-field instead of
-  // a deep-equal on the whole row so the test does not encode the
-  // Error instance identity into the fixture.
+  // Task 260525-cjr C1: RollbackPartial preserves the original undo
+  // throw via `cause`. Assert field-by-field instead of a deep-equal on
+  // the whole row so the test does not encode the Error instance
+  // identity into the fixture.
   assert.equal(result.rollbackPartials.length, 1);
   const first = result.rollbackPartials[0];
   assert.ok(first !== undefined);
@@ -253,8 +253,7 @@ test("D-01 runPhases: ctx threaded to every do AND undo call", async () => {
 // ───────────────────────────────────────────────────────────────────────────
 // Task 260525-cjr C1: RollbackPartial preserves the original undo throw's
 // Error.cause chain so the presentation layer can surface the depth-5 walk
-// to the user. Previously only `errorMessage(undoErr)` was recorded as
-// `msg`, dropping any deeper cause attached via `new Error(..., {cause})`.
+// to the user.
 // ───────────────────────────────────────────────────────────────────────────
 
 test("260525-cjr C1: undo error's Error.cause is preserved on the RollbackPartial.cause field", async () => {
@@ -307,7 +306,7 @@ test("260525-cjr C1: undo throw of a non-Error (defensive) leaves RollbackPartia
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// Phase 37 / TR-02: failing-phase own-undo invocation (separate catch-block
+// TR-02: failing-phase own-undo invocation (separate catch-block
 // call site). The failing phase's undo runs FIRST in the catch block, BEFORE
 // rollbackExecuted walks executed[] in reverse. PathContainmentError still
 // re-throws (PI-14). Failing-phase RollbackPartial sorts to index 0 (AS-4).

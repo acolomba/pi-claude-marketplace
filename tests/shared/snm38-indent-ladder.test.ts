@@ -1,13 +1,13 @@
 // tests/shared/snm38-indent-ladder.test.ts
 //
-// Phase 25 Plan 25-02 -- SNM-38 (G-MIL-03 indent ladder) explicit
+// SNM-38 (G-MIL-03 indent ladder) explicit
 // leading-whitespace readability assertion.
 //
 // VERDICT RECORDED HERE (D-25-09, REFUTE): the renderer emits the
 // catalog-conformant indent ladder at the `ctx.ui.notify` boundary --
 // marketplace header at column 0, plugin rows two spaces beneath, per-plugin
-// cause-chain trailer at four spaces (D-16-04 / D-16-08). The byte capture run
-// during plan 25-02 Task 1 recorded, for a representative `/claude:plugin list`
+// cause-chain trailer at four spaces (D-16-04 / D-16-08). The byte capture
+// recorded, for a representative `/claude:plugin list`
 // exercising an installed/available mix + a `{...}` reason brace + a
 // failed/cause row:
 //
@@ -33,7 +33,7 @@
 // NEVER asserted -- that is exactly the layer that introduces the false 1/3
 // appearance.
 //
-// AUTHORITATIVE BYTE SOURCE (RESEARCH Pitfall 1): the expected indents are
+// AUTHORITATIVE BYTE SOURCE: the expected indents are
 // anchored on the `notify.ts` renderer constants -- header prefix `""`
 // (`composeMarketplaceBlock`), plugin row prefix `"  "` (`composePluginLines`),
 // cause trailer `"    "` (`renderIndentedCauseChain`) -- and the catalog
@@ -47,11 +47,10 @@
 // `tests/architecture/catalog-uat.test.ts` (byte-equality between `notify()`
 // and `docs/output-catalog.md` for `single-mp-mixed`, `project-orphan-folded`,
 // etc.). This file is a cheap, explicit READABILITY assertion on top of that
-// gate -- drift insurance feeding Phase 26's GREEN gate (Claude's discretion:
-// YES per D-25-09 / RESEARCH Open Question 1, RESOLVED).
+// gate -- drift insurance feeding the GREEN gate (D-25-09).
 //
-// LOCATION (RESEARCH Pitfall 3): this file lives under `tests/shared/` -- NOT
-// `tests/e2e/` -- because `npm test` (and thus `npm run check` and Phase 26's
+// LOCATION: this file lives under `tests/shared/` -- NOT
+// `tests/e2e/` -- because `npm test` (and thus `npm run check` and the
 // GREEN gate) globs
 // `tests/{architecture,bridges,domain,edge,helpers,orchestrators,persistence,shared,transaction}/**`
 // and EXCLUDES `tests/e2e/**`.
@@ -66,7 +65,7 @@ import {
 
 // ---------------------------------------------------------------------------
 // Notify-capture seam (pre-tui). Mirrors the inline `mock.fn()` ctx in
-// `tests/architecture/catalog-uat.test.ts:149-151` -- capture the exact string
+// `tests/architecture/catalog-uat.test.ts` -- capture the exact string
 // passed to `ctx.ui.notify`, before any tui/markdown rendering (D-25-09).
 // ---------------------------------------------------------------------------
 
@@ -205,12 +204,12 @@ test("SNM-38 :: per-plugin cause-chain trailer is at 4 leading spaces (D-16-08)"
 
 test("SNM-38 :: full ladder snapshot matches the catalog 0/2(/4) ladder (D-25-09 byte evidence)", () => {
   const { indents } = captureIndents();
-  // Recorded byte evidence from plan 25-02 Task 1 (REFUTE verdict). This is the
+  // Recorded byte evidence (REFUTE verdict). This is the
   // explicit drift lock: any renderer change that perturbs the ladder (e.g. a
   // misguided header->2-space "fix" chasing the UAT 2/4 misquote) trips here AND
   // in catalog-uat.test.ts.
   //
-  // Phase 29 / UXG-07 (D-29-02): the LIST_MESSAGE fixture carries a `failed`
+  // UXG-07 (D-29-02): the LIST_MESSAGE fixture carries a `failed`
   // plugin row (`zeta`), so notify() computes "error" severity and PREPENDS the
   // "1 plugin operation failed." summary line + blank line. Those two leading
   // column-0 lines are the first two `0` entries below; the catalog-conformant

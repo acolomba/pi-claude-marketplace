@@ -1,4 +1,4 @@
-// Plan 06-04 Task 1: marketplace remove handler shim tests.
+// marketplace remove handler shim tests.
 //
 // removeMarketplace's MR-1 path throws MarketplaceNotFoundError when the
 // name is absent in BOTH scopes (or the requested scope). The error is

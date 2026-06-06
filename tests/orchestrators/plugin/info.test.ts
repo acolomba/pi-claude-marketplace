@@ -1,10 +1,10 @@
 // tests/orchestrators/plugin/info.test.ts
 //
-// Phase 44 / Plan 44-01 / Task 2: integration tests for the read-only
+// Integration tests for the read-only
 // `getPluginInfo` orchestrator. Hermetic HOME + tmp cwd + saveState
 // fixtures + on-disk path-source marketplace dirs carrying a real
 // `plugin.json`. The orchestrator is the SOLE site that projects local
-// state + on-disk manifest resolution into the Phase 42 info-message
+// state + on-disk manifest resolution into the info-message
 // variants.
 //
 // Coverage:
@@ -13,7 +13,7 @@
 //   (c) single-scope unavailable with `{hooks}` reason
 //   (d) single-scope external source -> componentsResolved: false marker
 //   (e) both-scopes fan-out (project-first per MSG-GR-3 / INFO-03)
-//   (f) `--scope` mismatch -> Phase 42 INFO-04 `{not added}` row with
+//   (f) `--scope` mismatch -> INFO-04 `{not added}` row with
 //       `[scope]` bracket + severity error
 //   (g) absent-from-both with no --scope -> bare `{not added}` row,
 //       NO `[scope]` bracket (D-03)
@@ -494,19 +494,15 @@ test("UXG-08: missing plugin in known marketplace emits `⊘ <plugin> (failed) {
 });
 
 // ---------------------------------------------------------------------------
-// (h-WR-01) WR-01 (Phase 44 review): the `narrowProbeError` classifier
+// (h-WR-01) WR-01: the `narrowProbeError` classifier
 // in `info.ts` must stay in lockstep with `list.ts::narrowProbeError`.
-// Pre-fix the orchestrator silently dropped the probe error and
-// emitted a bare `componentsResolved: false` row that rendered
-// IDENTICALLY to a deliberate INFO-05 external-source defer. Post-fix
-// it threads the SAME closed-set Reason ladder that list.ts uses, so
-// the user sees `{permission denied}` / `{source missing}` /
+// The orchestrator threads the closed-set Reason ladder that list.ts
+// uses, so the user sees `{permission denied}` / `{source missing}` /
 // `{unparseable}` / `{unreadable}` on the `(installed)` row instead
 // of being silently misled.
 //
-// Unit-tests the ladder via the `__test_narrowProbeError` re-export
-// (mirrors `tests/orchestrators/plugin/list.test.ts:771-799`). An
-// end-to-end integration of the THROW branch through the real
+// Unit-tests the ladder via the `__test_narrowProbeError` re-export.
+// An end-to-end integration of the THROW branch through the real
 // resolver requires an FS-level fault injection that is not portable
 // across CI sandboxes; the orchestrator-level `(c) install bucket
 // throws` arm is exercised via the WR-01 NotInstallable test below
@@ -540,10 +536,7 @@ test("WR-01: narrowProbeError -> SyntaxError classifies as `unparseable`", async
 test("WR-01: narrowProbeError -> generic Error falls through to `unreadable` (NOT `unsupported source`)", async () => {
   const mod =
     await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
-  // Pre-fix: the catch handler hardcoded `unreadable` for the
-  // not-installed path and gave NO reason at all on the installed
-  // path, both of which hid the actual failure class. Post-fix: the
-  // permissive fallback returns `unreadable`, but only AFTER trying
+  // The permissive fallback returns `unreadable`, but only AFTER trying
   // SyntaxError + errno classification first. Hardcoding `unreadable`
   // would pass this test but FAIL the SyntaxError / EACCES tests
   // above.
@@ -599,13 +592,12 @@ test("WR-01: installed plugin whose manifest declares hooks surfaces `{hooks}` o
 });
 
 // ---------------------------------------------------------------------------
-// (h-WR-02) WR-02 (Phase 44 review): the NOT-installed catch path
+// (h-WR-02) WR-02: the NOT-installed catch path
 // must classify the probe throw via the SAME `narrowProbeError` ladder
 // as `list.ts`, not hardcode `"unreadable"`. We exercise the
 // `unparseable` arm by writing a malformed `plugin.json` so the
-// resolver's JSON.parse throws SyntaxError -- which the new ladder
-// must map to the `unparseable` Reason (pre-fix would emit
-// `{unreadable}`).
+// resolver's JSON.parse throws SyntaxError -- which the ladder
+// must map to the `unparseable` Reason.
 // ---------------------------------------------------------------------------
 
 test("WR-02: not-installed plugin with malformed plugin.json surfaces `{unparseable}` (not `{unreadable}`)", async () => {
@@ -636,8 +628,8 @@ test("WR-02: not-installed plugin with malformed plugin.json surfaces `{unparsea
     const { ctx, pi, notifications } = makeCtx();
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "broken", scope: "user", cwd });
     assert.equal(notifications.length, 1);
-    // Pre-fix: `{unreadable}`. Post-fix: `{unparseable}` because the
-    // SyntaxError is now correctly distinguished by the ladder.
+    // Expect `{unparseable}` because the SyntaxError is correctly
+    // distinguished by the ladder.
     // Either outcome of `resolveStrict` (throws SyntaxError, or
     // catches internally and returns NotInstallable with a malformed-
     // JSON note) is acceptable -- the test locks the WR-02 invariant

@@ -1,5 +1,5 @@
 /**
- * Phase 31 -- Unit tests for the CredentialOps surface.
+ * Unit tests for the CredentialOps surface.
  *
  * Mock-based tests (1-5, 8) cover the seam contract: fill hit / miss,
  * approve persistence, reject eviction, and mock throws-overrides for

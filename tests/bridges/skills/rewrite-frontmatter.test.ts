@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { rewriteFrontmatterName } from "../../../extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts";
 
-// SK-3: rewriteFrontmatterName carry-forward (V1 algorithm verbatim).
+// SK-3: rewriteFrontmatterName.
 
 test("SK-3 rewriteFrontmatterName replaces existing name field", () => {
   const input = "---\nname: old-name\ndescription: foo\n---\n\nbody text";

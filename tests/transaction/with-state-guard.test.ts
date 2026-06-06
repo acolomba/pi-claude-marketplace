@@ -245,7 +245,7 @@ test("D-06 save failure releases the lock for the next state guard call", async 
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Phase 8 / PRL-10: manual-save transaction helper for reinstall rollback
+// PRL-10: manual-save transaction helper for reinstall rollback
 // ──────────────────────────────────────────────────────────────────────────
 
 test("Phase 8 / PRL-10 manual transaction saves only when tx.save is called", async () => {

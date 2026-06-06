@@ -1,13 +1,12 @@
 // tests/bridges/integration.test.ts
 //
-// Phase 3 capstone -- multi-bridge happy-path end-to-end test.
+// Multi-bridge happy-path end-to-end test.
 //
 // Exercises all four bridges (skills, commands, agents, MCP) in sequence
-// against the full-plugin fixture from Plan 03-01. Verifies ROADMAP success
-// criterion 1: every supported artefact lands at its PRD-specified path with
-// the correct generated name and ${CLAUDE_PLUGIN_ROOT} / ${CLAUDE_PLUGIN_DATA}
-// substituted in bodies. Also exercises idempotency (re-stage produces the
-// same on-disk state).
+// against the full-plugin fixture: every supported artefact lands at its
+// PRD-specified path with the correct generated name and
+// ${CLAUDE_PLUGIN_ROOT} / ${CLAUDE_PLUGIN_DATA} substituted in bodies. Also
+// exercises idempotency (re-stage produces the same on-disk state).
 //
 // Per D-01 each bridge's PreparedXxx handle is a distinct discriminated union;
 // composition is exercised here only by calling each bridge's prepare/commit
@@ -56,13 +55,12 @@ const PLUGIN_NAME = "acme";
 const MARKETPLACE_NAME = "test-mp";
 
 /**
- * Synthesize a Phase-2 ResolvedPluginInstallable for the integration tests.
+ * Synthesize a ResolvedPluginInstallable for the integration tests.
  *
- * The Phase 2 resolver is not exercised here -- by D-01 each bridge accepts
- * the resolved record directly, and the integration tests construct it from
- * the fixture path so the test surface remains "bridges only". Skills and
- * agents bridges read absolute paths from `componentPaths.*` (skills test
- * pattern -- see tests/bridges/skills/stage.test.ts); the commands bridge
+ * The resolver is not exercised here -- by D-01 each bridge accepts the
+ * resolved record directly, and the integration tests construct it from the
+ * fixture path so the test surface remains "bridges only". Skills and agents
+ * bridges read absolute paths from `componentPaths.*`; the commands bridge
  * resolves `componentPaths.commands` against `pluginRoot`.
  */
 function makeResolved(): ResolvedPluginInstallable {
@@ -73,7 +71,7 @@ function makeResolved(): ResolvedPluginInstallable {
     supported: ["skills", "commands", "agents"],
     unsupported: [],
     notes: [],
-    // D-07: componentPaths.* are now `readonly string[]`.
+    // D-07: componentPaths.* are `readonly string[]`.
     componentPaths: {
       skills: [path.join(FIXTURE_PLUGIN, "skills")],
       commands: ["commands"],

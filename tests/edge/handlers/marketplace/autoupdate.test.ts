@@ -1,4 +1,4 @@
-// Plan 06-04 Task 1: marketplace autoupdate dual-form handler shim tests.
+// marketplace autoupdate dual-form handler shim tests.
 //
 // Dual-form factory: makeAutoupdateHandler(true) maps to enable=true;
 // makeAutoupdateHandler(false) maps to enable=false. The orchestrator
@@ -37,7 +37,7 @@ function makeCtx(cwd: string): { ctx: ExtensionCommandContext; notifications: No
   return { ctx, notifications };
 }
 
-// Plan 18-00 (Wave 0): `makeAutoupdateHandler(pi, enable)` requires `pi`
+// `makeAutoupdateHandler(pi, enable)` requires `pi`
 // as first positional arg. Edge shim tests mirror the production wiring shape.
 function makePi(): ExtensionAPI {
   return {
@@ -71,8 +71,7 @@ test("dual-form :: makeAutoupdateHandler(true) calls setMarketplaceAutoupdate wi
     await handler("", ctx);
     // Bare form, empty state both scopes -> "No marketplaces configured."
     assert.equal(notifications.length, 1);
-    // CMC-10: bare `(no marketplaces)` EmptyToken (formerly the
-    // "No marketplaces configured." sentence; retired by Plan 13-02c-01).
+    // CMC-10: bare `(no marketplaces)` EmptyToken.
     assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });
@@ -83,8 +82,7 @@ test("dual-form :: makeAutoupdateHandler(false) calls setMarketplaceAutoupdate w
     const handler = makeAutoupdateHandler(makePi(), false);
     await handler("", ctx);
     assert.equal(notifications.length, 1);
-    // CMC-10: bare `(no marketplaces)` EmptyToken (formerly the
-    // "No marketplaces configured." sentence; retired by Plan 13-02c-01).
+    // CMC-10: bare `(no marketplaces)` EmptyToken.
     assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });
@@ -95,8 +93,7 @@ test("shim :: bare form (no name) propagates name: undefined", async () => {
     const handler = makeAutoupdateHandler(makePi(), true);
     await handler("", ctx);
     assert.equal(notifications.length, 1);
-    // CMC-10: bare `(no marketplaces)` EmptyToken (formerly the
-    // "No marketplaces configured." sentence; retired by Plan 13-02c-01).
+    // CMC-10: bare `(no marketplaces)` EmptyToken.
     assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });
@@ -119,8 +116,7 @@ test("shim :: --scope user/project propagated", async () => {
     await handler("--scope project", ctx);
     // Project-scope empty -> "No marketplaces configured."
     assert.equal(notifications.length, 1);
-    // CMC-10: bare `(no marketplaces)` EmptyToken (formerly the
-    // "No marketplaces configured." sentence; retired by Plan 13-02c-01).
+    // CMC-10: bare `(no marketplaces)` EmptyToken.
     assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });

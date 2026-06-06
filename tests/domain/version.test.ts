@@ -1,8 +1,6 @@
-// tests/domain/version.test.ts
-//
 // PI-7 hash-version contract tests. The snapshot value pinned in
 // `PI-7 SNAPSHOT` freezes the algorithm + truncation length (12 hex chars)
-// + walk filter list as a stable user contract per CONTEXT.md D-11/D-12.
+// + walk filter list as a stable user contract per D-11/D-12.
 // Any future change to the algorithm, truncation length, normalization
 // rules, or HASH_WALK_SKIP list MUST be accompanied by a CHANGELOG entry.
 //

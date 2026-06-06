@@ -1,8 +1,7 @@
-// Plan 06-04 Task 1: marketplace list handler shim tests.
+// marketplace list handler shim tests.
 //
-// Plan 18-00 (Wave 0): the previous plain `handleMarketplaceList`
-// function is now a `makeMarketplaceListHandler(pi)` factory that
-// returns the same `(args, ctx) => Promise<void>` shape. Tests
+// `makeMarketplaceListHandler(pi)` is a factory that
+// returns the `(args, ctx) => Promise<void>` shape. Tests
 // thread an empty-getAllTools `pi` to mirror production wiring.
 // The orchestrator emits the bare CMC-10 EmptyToken form `(no
 // marketplaces)` when state is empty.
@@ -35,7 +34,7 @@ function makeCtx(cwd: string): { ctx: ExtensionCommandContext; notifications: No
   return { ctx, notifications };
 }
 
-// Plan 18-00 (Wave 0): factory takes `pi: ExtensionAPI`. Mirror the
+// Factory takes `pi: ExtensionAPI`. Mirror the
 // production wiring shape used by sibling marketplace handler tests.
 function makePi(): ExtensionAPI {
   return {
@@ -68,8 +67,7 @@ test("shim :: no positional calls listMarketplaces with scope: undefined", async
     const handler = makeMarketplaceListHandler(makePi());
     await handler("", ctx);
     assert.equal(notifications.length, 1);
-    // CMC-10: bare `(no marketplaces)` EmptyToken (formerly the
-    // "No marketplaces configured." sentence; retired by Plan 13-02c-01).
+    // CMC-10: bare `(no marketplaces)` EmptyToken.
     assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });
@@ -80,8 +78,7 @@ test('shim :: --scope user calls listMarketplaces with scope: "user"', async () 
     const handler = makeMarketplaceListHandler(makePi());
     await handler("--scope user", ctx);
     assert.equal(notifications.length, 1);
-    // CMC-10: bare `(no marketplaces)` EmptyToken (formerly the
-    // "No marketplaces configured." sentence; retired by Plan 13-02c-01).
+    // CMC-10: bare `(no marketplaces)` EmptyToken.
     assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });
@@ -92,8 +89,7 @@ test('shim :: --scope project calls listMarketplaces with scope: "project"', asy
     const handler = makeMarketplaceListHandler(makePi());
     await handler("--scope project", ctx);
     assert.equal(notifications.length, 1);
-    // CMC-10: bare `(no marketplaces)` EmptyToken (formerly the
-    // "No marketplaces configured." sentence; retired by Plan 13-02c-01).
+    // CMC-10: bare `(no marketplaces)` EmptyToken.
     assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });

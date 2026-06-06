@@ -1,4 +1,4 @@
-// Plan 06-04 Task 1: update handler shim tests.
+// update handler shim tests.
 //
 // Update has three positional forms (bare / @marketplace / plugin@marketplace).
 // We verify each form reaches updatePlugins by observing the orchestrator's
@@ -71,10 +71,9 @@ test("shim :: bare /update with no positional calls updatePlugins with target = 
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeUpdateHandler(makePi());
     await handler("", ctx);
-    // Phase 19 / Plan 19-05: V2 empty-targets renders via notify({
+    // empty-targets renders via notify({
     // marketplaces: [] }) -> renderer's `(no marketplaces)` sentinel
-    // per D-16-17. Mirrors the Wave 1 precedent at
-    // orchestrators/marketplace/update.ts:230.
+    // per D-16-17.
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
     assert.equal(notifications[0]!.message, "(no marketplaces)");
@@ -114,7 +113,7 @@ test("shim :: --scope user/project propagated to updatePlugins", async () => {
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeUpdateHandler(makePi());
     await handler("--scope project", ctx);
-    // Phase 19 / Plan 19-05: V2 empty-targets renders `(no marketplaces)`.
+    // empty-targets renders `(no marketplaces)`.
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
@@ -132,7 +131,7 @@ test("shim :: invalid ref (no @, not bare) emits USAGE", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// 260516-08j: --map-model flag is accepted on all three positional forms;
+// --map-model flag is accepted on all three positional forms;
 // unknown long flags rejected.
 // ---------------------------------------------------------------------------
 
@@ -141,7 +140,7 @@ test("shim :: bare form + --map-model is accepted; control reaches updatePlugins
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeUpdateHandler(makePi());
     await handler("--map-model", ctx);
-    // Phase 19 / Plan 19-05: V2 empty-targets renders `(no marketplaces)`;
+    // empty-targets renders `(no marketplaces)`;
     // critically, no USAGE error fires.
     assert.equal(notifications.length, 1);
     assert.doesNotMatch(notifications[0]!.message, /Usage: \/claude:plugin update/);

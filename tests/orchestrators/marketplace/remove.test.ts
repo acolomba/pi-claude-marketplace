@@ -333,7 +333,7 @@ test("NFR-5: remove for a path-source marketplace makes no network calls", async
   assert.equal(src.includes("gitOps"), false);
 });
 
-// MR-4 (single V2 cascade notification, severity=error) ------------
+// MR-4 (single cascade notification, severity=error) ------------
 
 test("MR-4: cascade failure produces ONE V2 notification with severity=error (D-16-11)", async () => {
   await withHermeticHome(async () => {
@@ -388,10 +388,9 @@ test("MR-4: cascade failure produces ONE V2 notification with severity=error (D-
         cascade: stubCascade,
       });
 
-      // Exactly ONE V2 notification, severity=error (any plugin/mp failed
-      // routes to error per D-16-11; the V1 free-text retry-anchor
-      // ("Fix the underlying issue and retry.") is DROPPED per D-17-09 /
-      // D-18-03 -- it has no V2 catalog representation).
+      // Exactly ONE notification, severity=error (any plugin/mp failed
+      // routes to error per D-16-11; there is no free-text retry-anchor per
+      // D-17-09 / D-18-03 -- it has no catalog representation).
       assert.equal(notifications.length, 1, "exactly one V2 notification");
       assert.equal(notifications[0]!.severity, "error", "severity must be error");
 
@@ -520,8 +519,8 @@ test("MR-7 inverse: github-source clone dir REMOVED on full cascade success", as
 });
 
 test("D-03-INV :: remove unlinks the plugin cache file and invalidates marketplace-names", async () => {
-  // Plan 06-05 wires dropMarketplaceCache + invalidateMarketplaceNames into
-  // removeMarketplace's post-state-commit window. The plugin cache file
+  // removeMarketplace wires dropMarketplaceCache + invalidateMarketplaceNames
+  // into its post-state-commit window. The plugin cache file
   // MUST be unlinked because the marketplace is gone (no rebuild path
   // can recover it); the marketplace-names cache file MUST also be unlinked
   // because the marketplace set changed. This test verifies BOTH limbs: the
@@ -607,16 +606,16 @@ test("D-03-INV :: remove unlinks the plugin cache file and invalidates marketpla
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// Quick task 260525-aub: discriminated-dispatch regression guards on the
-// per-plugin cascade-failure narrowing. Locks in the typed dispatch
+// Discriminated-dispatch regression guards on the per-plugin
+// cascade-failure narrowing. Locks in the typed dispatch
 // (`instanceof AgentsUnstageFailureError` + `NodeJS.ErrnoException.code`)
 // so a future refactor cannot regress to message-text substring matching.
 // ───────────────────────────────────────────────────────────────────────────
 
 test("narrowCascadeFailure: NodeJS.ErrnoException code=EACCES -> {permission denied}", () => {
-  // Phase 13 Wave 3 plan 13-03-01 added `permission denied` to the closed
-  // REASONS set; this typed dispatch produces it without substring matching
-  // English error text (which varies across Node versions per NFR-4).
+  // `permission denied` is in the closed REASONS set; this typed dispatch
+  // produces it without substring matching English error text (which varies
+  // across Node versions per NFR-4).
   const errnoLike = Object.assign(new Error("permission denied: /agents/foo.md"), {
     code: "EACCES",
   });
@@ -649,7 +648,7 @@ test("narrowCascadeFailure: arbitrary bare Error with no recognizable text -> {n
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// Phase 39 / TR-03: cascade ghost-record correctness in the multi-plugin
+// TR-03: cascade ghost-record correctness in the multi-plugin
 // per-loop arm of removeMarketplace.
 //
 // Two regression tests cover the per-plugin partial-cascade-failure surface:

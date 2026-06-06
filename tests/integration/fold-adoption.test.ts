@@ -1,7 +1,5 @@
 // tests/integration/fold-adoption.test.ts
 //
-// Phase 13 Wave 2 sub-wave 2d (Plan 13-02d-01) integration:
-//
 // CMC-21 / D-13-17 / D-13-18 / D-13-19 orphan-fold round-trip.
 //
 // The contract under test:

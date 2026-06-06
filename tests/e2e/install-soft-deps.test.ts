@@ -11,9 +11,7 @@ import { installTargetWithMockPi, withE2EEnvironment } from "./_helpers.ts";
 // are NOT closed-set Reasons exported from `shared/grammar/reasons.ts`
 // (they are -- see `requires pi-subagents` / `requires pi-mcp`), but the
 // rendered form inside the `{}` block is what the user observes. The
-// legacy aggregated trailers (PI_SUBAGENTS_NOT_LOADED + PI_MCP_ADAPTER_NOT_LOADED)
-// were retired by Phase 13 sub-wave 2b (D-13-07); the per-row markers
-// inside the PluginInlineRow reasons block replace them.
+// per-row markers live inside the PluginInlineRow reasons block (D-13-07).
 const REQUIRES_PI_SUBAGENTS_MARKER = "{requires pi-subagents";
 const REQUIRES_PI_MCP_MARKER = "{requires pi-mcp";
 
@@ -39,11 +37,10 @@ for (const loaded of MATRIX) {
         .map((notification) => notification.message)
         .join("\n");
 
-      // CMC-13 / MSG-SD-1..2: per-row markers fire when (declares AND
-      // !companion_loaded). With subagents not loaded -> agent-installing
+      // CMC-13 / MSG-SD-1..2 / D-13-07: per-row markers fire when (declares
+      // AND !companion_loaded). With subagents not loaded -> agent-installing
       // plugin emits `{requires pi-subagents}`; with mcp not loaded ->
-      // mcp-installing plugin emits `{requires pi-mcp}`. The aggregated
-      // PI_*_NOT_LOADED trailer is RETIRED per D-13-07.
+      // mcp-installing plugin emits `{requires pi-mcp}`.
       assert.equal(messages.includes(REQUIRES_PI_SUBAGENTS_MARKER), !loaded.subagents);
       assert.equal(messages.includes(REQUIRES_PI_MCP_MARKER), !loaded.mcp);
 

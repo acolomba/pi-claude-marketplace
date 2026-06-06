@@ -199,7 +199,7 @@ test("PI-6 / D-05 case D: MCP server collision NOT detected (PRD §6.5 exclusion
 });
 
 test("PI-6 / D-05 case E: cross-scope independence -- helper trusts caller passes one scope's state", () => {
-  // Phase 2 D-10 cross-scope independence is enforced BY CONSTRUCTION:
+  // D-10 cross-scope independence is enforced BY CONSTRUCTION:
   // the caller passes one scope's state. Demonstrate: a "this-scope"
   // state with no marketplaces (the same-named skill lives in the
   // OTHER scope, which is NOT passed) does not throw.

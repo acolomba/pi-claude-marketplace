@@ -146,7 +146,7 @@ test("discoverPluginAgents falls back to filename stem when frontmatter has no n
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// D-07 (COMP-01): agentsDirs is now `readonly string[]`. Multi-element
+// D-07 (COMP-01): agentsDirs is `readonly string[]`. Multi-element
 // arrays iterate per-dir; first-wins dedup by generated name surfaces a
 // warning rather than throwing.
 // ──────────────────────────────────────────────────────────────────────────

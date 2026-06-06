@@ -1,4 +1,4 @@
-// Quick 260516-02r: bootstrap handler shim tests.
+// bootstrap handler shim tests.
 //
 // Mirrors `tests/edge/handlers/marketplace/autoupdate.test.ts` shape
 // (hermetic HOME + NotifyRecord harness) with two additions:
@@ -40,9 +40,9 @@ function makeCtx(cwd: string): { ctx: ExtensionCommandContext; notifications: No
   return { ctx, notifications };
 }
 
-// Plan 18-00 (Wave 0): `makeBootstrapHandler(pi, deps)` requires `pi`
+// `makeBootstrapHandler(pi, deps)` requires `pi`
 // as first positional arg (the composed `addMarketplace` /
-// `setMarketplaceAutoupdate` orchestrators now require `pi`).
+// `setMarketplaceAutoupdate` orchestrators require `pi`).
 function makePi(): ExtensionAPI {
   return {
     getAllTools: (): unknown[] => [],
@@ -153,7 +153,7 @@ test("bootstrap handler (positional argument): rejected with usage error, orches
     await handler("foo", ctx);
 
     assert.equal(notifications.length, 1);
-    // CMC-34 closure (Phase 14, Plan 14-02): the positional-rejected case now
+    // CMC-34: the positional-rejected case
     // routes via notifyUsageError, which emits `${message}\n\n${USAGE}`. The
     // sentence head ("bootstrap takes no arguments.") + blank-line separator
     // + Usage block is the on-the-wire byte shape (MSG-NC-2 / MSG-SR-7).

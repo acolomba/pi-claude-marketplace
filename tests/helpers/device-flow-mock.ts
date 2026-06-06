@@ -1,18 +1,16 @@
 /**
- * tests/helpers/device-flow-mock.ts -- in-memory DeviceFlowHttp stub for Phase 32+ tests.
+ * In-memory DeviceFlowHttp stub for tests.
  *
  * Sibling of tests/helpers/credential-mock.ts and tests/helpers/git-mock.ts;
  * mirrors the makeMockCredentialOps shape: closure-scoped state, per-method
  * call logs, optional throws overrides, programmable response queue. The mock
  * is pure in-memory: no filesystem ops, no environment mutation, no subprocess
- * spawn, no real HTTP (per RESEARCH.md Pitfall 9 mirror -- the DeviceFlowHttp
- * mock NEVER reaches github.com).
+ * spawn, no real HTTP -- the DeviceFlowHttp mock NEVER reaches github.com.
  *
- * Phase 32+ initiateDeviceFlow tests will inject this mock the same way Phase
- * 31 credential tests inject makeMockCredentialOps. The mock does NOT
- * internally sleep: the caller controls timing via deviceCode.interval, and
- * tests use `interval: 0` to spin the poll loop synchronously without
- * mocking timers.
+ * initiateDeviceFlow tests inject this mock the same way credential tests
+ * inject makeMockCredentialOps. The mock does NOT internally sleep: the
+ * caller controls timing via deviceCode.interval, and tests use
+ * `interval: 0` to spin the poll loop synchronously without mocking timers.
  *
  * Type-only import for DeviceFlowHttp / DeviceCodeResponse / PollResult so
  * the helper file does NOT runtime-couple to the production module. The
@@ -60,8 +58,8 @@ export interface MockDeviceFlowHttpHandle {
  * / access_denied / expired_token / unexpected).
  *
  * The optional throws fields use the conditional-spread pattern to satisfy
- * exactOptionalPropertyTypes (mirrors the Phase 31 credential-mock.ts
- * idiom: `...(initial?.X !== undefined && { X: initial.X })`).
+ * exactOptionalPropertyTypes (mirrors the credential-mock.ts idiom:
+ * `...(initial?.X !== undefined && { X: initial.X })`).
  */
 export function makeMockDeviceFlowHttp(
   initial?: Partial<MockDeviceFlowState>,
