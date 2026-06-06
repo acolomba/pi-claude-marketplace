@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.8
-milestone_name: milestone closes.
-status: "PR #36 open for review"
-stopped_at: v1.8 roadmap created
-last_updated: "2026-06-04T11:26:38.351Z"
-last_activity: "2026-06-04 -- Milestone v1.8 PR #36 opened"
+milestone_name: Plugin and Marketplace Info Commands
+status: "v1.8 shipped (PR #36 merged 2026-06-04)"
+stopped_at: v1.8 milestone shipped
+last_updated: "2026-06-06T01:20:06.108Z"
+last_activity: "2026-06-05 -- v1.8 reconciled to shipped (quick 260605-tmr)"
 progress:
   total_phases: 3
-  completed_phases: 0
+  completed_phases: 3
   total_plans: 5
-  completed_plans: 0
-  percent: 0
+  completed_plans: 5
+  percent: 100
 ---
 
 # Project State
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-05-30)
 
 Phase: Milestone v1.8 complete
 Plan: --
-Status: PR #36 open for review
-Last activity: 2026-06-04 -- Milestone v1.8 PR #36 opened
+Status: v1.8 shipped (PR #36 merged 2026-06-04, commit 47a63f7)
+Last activity: 2026-06-05 -- v1.8 reconciled to shipped (quick 260605-tmr)
 
 ## Performance Metrics
 
@@ -185,6 +185,7 @@ None yet.
 | 260525-cjr | Apply PR #22 review fixes: 5 comment fixes, 2 silent-failure catches, declaresAgents/Mcp required, 4 narrowReason migrations, drift architecture test, plus 10 polish items               | 2026-05-25 | c79b6bc |          | [260525-cjr-apply-pr-22-review-fixes-5-comment-fixes](./quick/260525-cjr-apply-pr-22-review-fixes-5-comment-fixes/) |
 | 260530-7pk | Fix PR #22 review findings: 4 failing CI tests reconciled to V2 output, bootstrap/marketplace error diagnostics surfaced (IL-2/AS-7), comment-rot sweep, reasons-type tightening + resolver dedup, MAX_DEPTH cause-chain tests, NFR-4 Node floor to >=20.19.0, PRD PU-4/AS-6 leak policy | 2026-05-30 | 015e8f6 |          | [260530-7pk-fix-pr-22-review-findings-failing-tests-](./quick/260530-7pk-fix-pr-22-review-findings-failing-tests-/) |
 | 260530-fast | Resolve 4 SonarCloud code smells on PR #22 (S3735 void operator, S1871 duplicate case, S3626 redundant jump, S7755 .at indexing); coverage deferred | 2026-05-30 | a36988d |          | (inline /gsd-fast, no task dir) |
+| 260605-tmr | Reconcile v1.8 shipped state (STATE.md frontmatter/body/session-continuity) and prune resolved v1.4-UAT section from BACKLOG.md | 2026-06-05 | fee2459 | Verified | [260605-tmr-reconcile-v1-8-shipped-state-and-prune-s](./quick/260605-tmr-reconcile-v1-8-shipped-state-and-prune-s/) |
 
 ## Deferred Items
 
@@ -214,9 +215,9 @@ Additional v1.4.1-scope deferrals:
 
 ## Session Continuity
 
-Last session: 2026-06-03T00:00:00.000Z
-Stopped At: v1.8 roadmap created
-Resume File: .planning/ROADMAP.md (Phase 42 next)
+Last session: 2026-06-05T00:00:00.000Z
+Stopped At: v1.8 milestone shipped (PR #36 merged)
+Resume File: none -- start the next milestone with /gsd-new-milestone
 
 ## Operator Next Steps
 
