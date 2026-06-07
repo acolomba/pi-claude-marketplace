@@ -803,7 +803,7 @@ test("PRL-05 bulk reinstall explicit scope filters targets", async () => {
   });
 });
 
-test("PRL-05 explicit plugin reinstall in another scope reports not-installed instead of marketplace-not-found", async () => {
+test("ATTR-03/SCOPE-01: explicit-scope-plugin reinstall of an other-scope-only target emits standalone {not added}", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-cross-scope-source-"));
     try {
@@ -818,6 +818,11 @@ test("PRL-05 explicit plugin reinstall in another scope reports not-installed in
       });
       const { ctx, pi, notifications } = makeCtx();
 
+      // --scope project where the marketplace lives ONLY in user scope.
+      // ATTR-03 / D-47-A: re-attributed from the former synthesized phantom
+      // target -> `(skipped) {not installed}` to the standalone
+      // `MarketplaceNotAddedMessage`. SCOPE-01: the `[project]` bracket carries
+      // the REQUESTED scope (the operator infers the other scope).
       const outcomes = await reinstallPlugins({
         ctx,
         pi,
@@ -826,33 +831,18 @@ test("PRL-05 explicit plugin reinstall in another scope reports not-installed in
         target: { kind: "plugin", plugin: "plug", marketplace: "mp" },
       });
 
-      assert.deepEqual(outcomes, [
-        {
-          partition: "skipped",
-          name: "plug",
-          marketplace: "mp",
-          scope: "project",
-          notes: ["not installed"],
-        },
-      ]);
-      assert.equal(
-        notifications.some((n) => n.severity === "error"),
-        false,
-      );
-      // D-19-02: cascade row carries `(skipped) {not
-      // installed}`; per-row scope is orphan-folded (matches marketplace
-      // scope). Severity computed by notify() per D-16-11: `warning`
-      // (skipped row in plugins[] tips ladder to warning).
+      // No raw throw escapes; the entrypoint returns [] before the cascade.
+      assert.deepEqual([...outcomes], []);
       const body = notifications.at(-1)?.message ?? "";
-      assert.match(body, /● mp \[project\]\n {2}⊘ plug \(skipped\) \{not installed\}/);
-      assert.equal(notifications.at(-1)?.severity, "warning");
+      assert.equal(body, "⊘ mp [project] (failed) {not added}");
+      assert.equal(notifications.at(-1)?.severity, "error");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
   });
 });
 
-test("PRL-04 marketplace reinstall with explicit scope where marketplace not found emits error", async () => {
+test("ATTR-03/SCOPE-01: explicit-scope-marketplace reinstall of a not-added marketplace emits standalone {not added}", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-mp-cross-scope-empty-"));
     try {
@@ -867,6 +857,11 @@ test("PRL-04 marketplace reinstall with explicit scope where marketplace not fou
       });
       const { ctx, pi, notifications } = makeCtx();
 
+      // Marketplace target with explicit --scope project where mp lives only
+      // in user scope. ATTR-03 / D-47-A: re-attributed from the former raw
+      // `MarketplaceNotFoundError` -> synthetic `(reinstall)` `{not found}` row
+      // to the standalone `MarketplaceNotAddedMessage`. SCOPE-01: the
+      // `[project]` bracket carries the REQUESTED scope. No raw throw escapes.
       const outcomes = await reinstallPlugins({
         ctx,
         pi,
@@ -875,16 +870,48 @@ test("PRL-04 marketplace reinstall with explicit scope where marketplace not fou
         target: { kind: "marketplace", marketplace: "mp" },
       });
 
-      // Marketplace target with explicit --scope project where mp lives only
-      // in user scope: enumerateMarketplaceReinstallTargets throws
-      // MarketplaceNotFoundError; reinstallPlugins catches it, notifies error,
-      // and returns [].
       assert.deepEqual([...outcomes], []);
-      assert.equal(
-        notifications.some((n) => n.severity === "error"),
-        true,
-      );
-      assert.match(notifications.find((n) => n.severity === "error")?.message ?? "", /mp/);
+      const body = notifications.at(-1)?.message ?? "";
+      assert.equal(body, "⊘ mp [project] (failed) {not added}");
+      assert.equal(notifications.at(-1)?.severity, "error");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("ATTR-03: bare reinstall of a marketplace absent in BOTH scopes emits standalone {not added} with no bracket", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bare-absent-both-"));
+    try {
+      // Seed an unrelated marketplace so both scope states exist on disk but
+      // neither holds `ghost-mp`.
+      await seedMarketplace({
+        cwd,
+        scope: "user",
+        marketplaceRoot: path.join(cwd, "user-mp-src"),
+        marketplaceName: "other",
+        pluginName: "plug",
+        resources: { skill: "user" },
+        install: true,
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // Bare form (no --scope): ghost-mp is absent in both scopes.
+      // ATTR-03 / D-47-A: re-attributed from the former raw `Error` ->
+      // `{not found}` to the standalone `{not added}` with NO bracket
+      // (absent-from-both form).
+      const outcomes = await reinstallPlugins({
+        ctx,
+        pi,
+        cwd,
+        target: { kind: "marketplace", marketplace: "ghost-mp" },
+      });
+
+      assert.deepEqual([...outcomes], []);
+      const body = notifications.at(-1)?.message ?? "";
+      assert.equal(body, "⊘ ghost-mp (failed) {not added}");
+      assert.equal(notifications.at(-1)?.severity, "error");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1229,10 +1256,11 @@ test("Plan 19-04 / D-19-02: outcomeToPluginMessage maps failureClass=manual-reco
   assert.deepEqual([...row.reasons], ["rollback partial"]);
 });
 
-test("Plan 19-04 / D-19-02: outcomeToPluginMessage without failureClass falls back to narrowReason -> PluginFailedMessage", () => {
-  // Without the structural tag, the closed-set narrowing falls through to
-  // the `"not in manifest"` catch-all (the catalog's most permissive
-  // cascade skip reason for opaque notes text).
+test("ATTR-09 / D-47-B: outcomeToPluginMessage without failureClass falls back to narrowReason -> PluginFailedMessage with the truthful `unreadable`", () => {
+  // Without the structural tag, the closed-set narrowing falls through to the
+  // ATTR-09 / D-47-B last-resort `"unreadable"` (truthful "could not reconcile
+  // this row" member) for opaque notes text, never the former `"not in
+  // manifest"` lie.
   const outcome: ReinstallFailedOutcome = {
     partition: "failed",
     name: "hello",
@@ -1243,7 +1271,7 @@ test("Plan 19-04 / D-19-02: outcomeToPluginMessage without failureClass falls ba
   const row = __test_outcomeToPluginMessage(outcome, "project");
   assert.equal(row.status, "failed");
   assert.ok(row.status === "failed");
-  assert.deepEqual([...row.reasons], ["not in manifest"]);
+  assert.deepEqual([...row.reasons], ["unreadable"]);
 });
 
 test("Plan 19-04 / D-19-02: outcomeToPluginMessage rollback substring still maps to rollback partial", () => {
@@ -1303,9 +1331,11 @@ test("Plan 19-04 / D-19-02: outcomeToPluginMessage `source missing` typed reason
   assert.deepEqual([...row.reasons], ["source missing"]);
 });
 
-test("Plan 19-04 / D-19-02: outcomeToPluginMessage without `reasons` falls back to substring narrow (back-compat preserved)", () => {
-  // No `reasons` field -- the substring narrow on `notes` runs.
-  // The default for opaque text is `not in manifest`.
+test("ATTR-09 / D-47-B: outcomeToPluginMessage without `reasons` falls back to the truthful `unreadable`, never `{not in manifest}`", () => {
+  // No `reasons` field -- the substring narrow on `notes` runs. ATTR-09 /
+  // D-47-B: the last-resort fallback for a genuinely unrecognized cascade/IO
+  // note is `"unreadable"` (truthful "could not reconcile this row"), NOT the
+  // former `"not in manifest"` lie that the plugin is absent from the manifest.
   const outcome: ReinstallFailedOutcome = {
     partition: "failed",
     name: "hello",
@@ -1316,7 +1346,7 @@ test("Plan 19-04 / D-19-02: outcomeToPluginMessage without `reasons` falls back 
   const row = __test_outcomeToPluginMessage(outcome, "project");
   assert.equal(row.status, "failed");
   assert.ok(row.status === "failed");
-  assert.deepEqual([...row.reasons], ["not in manifest"]);
+  assert.deepEqual([...row.reasons], ["unreadable"]);
 });
 
 test("Plan 19-04 / D-19-02: outcomeToPluginMessage `failureClass=manual-recovery` STILL wins over typed `reasons` (precedence locked)", () => {
@@ -1398,8 +1428,9 @@ test("Plan 13-02a-02 / CMC-16: errorWithManualRecovery short-circuits on zero le
  * `new Error(combinedMsg, { cause: base })`. A direct
  * `err instanceof ManualRecoveryError` check would see a plain Error and
  * silently downgrade the cascade row's Reason from `{rollback partial}`
- * to `{not in manifest}`. WR-01 uses a cause-chain walk instead of the
- * direct `instanceof` check so the class identity survives the wrapping.
+ * to the `narrowReason` last-resort fallback. WR-01 uses a cause-chain walk
+ * instead of the direct `instanceof` check so the class identity survives the
+ * wrapping.
  *
  * These tests pin both directions: positive (the walker finds the wrapped
  * MRE) and negative (no MRE in the chain returns undefined; cycles and
@@ -2161,13 +2192,12 @@ test("GAP-17: reinstallPlugin outcome notes include reinstall-specific failure m
   });
 });
 
-test("GAP-18: reinstallPlugins outer target enumeration failure for unknown marketplace emits error", async () => {
-  // enumerateMarketplaceReinstallTargets throws MarketplaceNotFoundError
-  // when the marketplace exists only in user scope and caller specifies
-  // project scope explicitly. reinstallPlugins catches this at the
-  // targets-enumeration boundary (lines 212-217) and notifies error.
-  // Already covered by PRL-04 test; this variant uses kind='marketplace'
-  // to exercise the sortReinstallTargets call for single-result arrays.
+test("GAP-18: reinstallPlugins enumeration miss for an other-scope-only marketplace emits standalone {not added}", async () => {
+  // enumerateMarketplaceReinstallTargets raises the structural
+  // MarketplaceNotAddedSignal when the marketplace exists only in user scope
+  // and the caller specifies project scope explicitly. reinstallPlugins
+  // catches it at the targets-enumeration boundary and emits the standalone
+  // `{not added}` variant (ATTR-03 / D-47-A) -- no raw throw escapes.
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-enum-err-"));
     try {
@@ -2191,7 +2221,9 @@ test("GAP-18: reinstallPlugins outer target enumeration failure for unknown mark
       });
 
       assert.deepEqual([...outcomes], []);
-      assert.ok(notifications.some((n) => n.severity === "error"));
+      const body = notifications.at(-1)?.message ?? "";
+      assert.equal(body, "⊘ onlyuser [project] (failed) {not added}");
+      assert.equal(notifications.at(-1)?.severity, "error");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

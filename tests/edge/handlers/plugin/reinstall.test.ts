@@ -159,9 +159,11 @@ test("shim :: @marketplace form calls reinstallPlugins marketplace target", asyn
     const handler = makeReinstallHandler(makePi());
     await handler("@mymkt", ctx);
     assert.equal(notifications.length, 1);
+    // ATTR-03 / D-47-A: bare `@<marketplace>` form absent in both scopes ->
+    // standalone `{not added}` with NO bracket (re-attributed from the former
+    // `{not found}`). Severity error.
     assert.equal(notifications[0]?.severity, "error");
-    assert.match(notifications[0]?.message ?? "", /mymkt/);
-    assert.match(notifications[0]?.message ?? "", /not found/);
+    assert.equal(notifications[0]?.message ?? "", "⊘ mymkt (failed) {not added}");
   });
 });
 
@@ -171,9 +173,10 @@ test("shim :: plugin@marketplace form calls reinstallPlugins plugin target", asy
     const handler = makeReinstallHandler(makePi());
     await handler("myplug@mymkt", ctx);
     assert.equal(notifications.length, 1);
+    // ATTR-03 / D-47-A: bare `<plugin>@<marketplace>` form absent in both
+    // scopes -> standalone `{not added}` with NO bracket. Severity error.
     assert.equal(notifications[0]?.severity, "error");
-    assert.match(notifications[0]?.message ?? "", /mymkt/);
-    assert.match(notifications[0]?.message ?? "", /not found/);
+    assert.equal(notifications[0]?.message ?? "", "⊘ mymkt (failed) {not added}");
   });
 });
 
@@ -192,15 +195,12 @@ test("shim :: --scope works before and after reinstall ref", async () => {
     const second = makeCtx(cwd);
     await handler("myplug@mymkt --scope project", second.ctx);
     assert.equal(second.notifications.length, 1);
-    // D-19-02: skipped row in plugins[] tips severity to
-    // `warning` per D-16-11 (notify() content-derived ladder).
-    assert.equal(second.notifications[0]?.severity, "warning");
-    // Cascade row carries `(skipped) {not installed}`; per-row scope
-    // orphan-folded (matches marketplace scope).
-    assert.match(
-      second.notifications[0]?.message ?? "",
-      /● mymkt \[project\]\n {2}⊘ myplug \(skipped\) \{not installed\}/,
-    );
+    // ATTR-03 / D-47-A / SCOPE-01: explicit `--scope project` where mymkt is
+    // not added in project -> standalone `{not added}` carrying the requested
+    // `[project]` bracket (re-attributed from the former synthesized phantom
+    // target -> `(skipped) {not installed}`). Severity error.
+    assert.equal(second.notifications[0]?.severity, "error");
+    assert.equal(second.notifications[0]?.message ?? "", "⊘ mymkt [project] (failed) {not added}");
   });
 });
 

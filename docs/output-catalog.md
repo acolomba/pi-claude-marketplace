@@ -552,6 +552,26 @@ Two marketplace blocks joined by one blank line (D-16-07). Severity: `error` (th
 
 The marketplaces never collapse -- each per-scope header is a distinct marketplace block.
 
+### Failure -- marketplace not added, explicit scope (ATTR-03 / SCOPE-01)
+
+Triggered when `reinstall <plugin>@<marketplace>` or `reinstall @<marketplace>` names a marketplace that is NOT added in the requested `--scope` (or is present only in the OTHER scope). ATTR-03 makes the attribution form-INDEPENDENT: the explicit-scope-plugin, explicit-scope-marketplace, and bare forms ALL emit the standalone `MarketplaceNotAddedMessage` variant (`{not added}` on the marketplace subject) BEFORE any cascade row exists -- replacing the former per-form divergence (`(skipped) {not installed}` for the explicit-scope plugin form via a synthesized phantom target; `(failed) {not found}` for the explicit-scope-marketplace and bare forms via a raw throw -> synthetic `(reinstall)` row). The `[scope]` bracket carries the REQUESTED scope: the operator infers the other scope (SCOPE-01; resolved Open Question #1 -- the requested-scope bracket, no other-scope phrase). The legitimate "marketplace present, plugin not installed" case keeps its `(skipped) {not installed}` outcome -- only the marketplace-absent precondition is re-attributed. Bare column-0 row, NO summary line, NO cause-chain trailer. Severity `error`; no reload-hint.
+
+<!-- catalog-state: missing-marketplace-not-added -->
+
+```text
+⊘ ghost-mp [project] (failed) {not added}
+```
+
+### Failure -- marketplace not added, bare form absent from both scopes (ATTR-03)
+
+Triggered when the bare `reinstall @<marketplace>` form (no `--scope`) names a marketplace that is absent in BOTH scopes. The same standalone `{not added}` variant fires, but with NO `[scope]` bracket (the absent-from-both form: there is no requested scope to report). Byte-identical to `info`'s `missing-marketplace-not-added-absent-from-both` state. Severity `error`; no reload-hint.
+
+<!-- catalog-state: missing-marketplace-not-added-absent-from-both -->
+
+```text
+⊘ ghost-mp (failed) {not added}
+```
+
 ______________________________________________________________________
 
 ## `/claude:plugin update`

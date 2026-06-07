@@ -74,7 +74,7 @@ import {
 import { resolveScopeFromState } from "../marketplace/shared.ts";
 
 import { discoverGeneratedNames } from "./discover-names.ts";
-import { assertNoCrossPluginConflicts, resolveInstalledPluginTarget } from "./shared.ts";
+import { assertNoCrossPluginConflicts, resolveCrossScopePluginTarget } from "./shared.ts";
 
 import type { AgentsReplacement, PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { CommandsReplacement, PreparedCommandsStaging } from "../../bridges/commands/index.ts";
@@ -176,6 +176,40 @@ interface ResolvedReinstallTarget {
   readonly plugin: string;
   readonly marketplace: string;
   readonly scope: Scope;
+}
+
+/**
+ * ATTR-03 / D-47-A structural marketplace-absent signal.
+ *
+ * The reinstall target enumerator throws this when the requested marketplace
+ * is not added (in the requested explicit scope, or in BOTH scopes for the
+ * bare form, or present only in the OTHER scope per SCOPE-01). The
+ * `reinstallPlugins` enumeration catch detects it via `instanceof` and emits
+ * ONE standalone Phase 46 `MarketplaceNotAddedMessage` (`{not added}` on the
+ * marketplace subject) BEFORE any cascade row exists -- replacing the former
+ * per-form divergence (synthesized phantom target -> `(skipped) {not
+ * installed}`; raw `MarketplaceNotFoundError`/`Error` -> synthetic
+ * `(reinstall)` `{not found}` row).
+ *
+ * `requestedScope` carries the explicitly-requested scope so the `[scope]`
+ * bracket reads "not added in the scope you asked for" (SCOPE-01); it is
+ * OMITTED for the bare form that missed in both scopes (no bracket).
+ *
+ * Structural (not REASONS): `{not added}` is the hard-coded brace of
+ * `renderMarketplaceNotAdded`, reachable only via the dedicated variant -- no
+ * new `REASONS` member is introduced (D-47-B).
+ */
+class MarketplaceNotAddedSignal extends Error {
+  readonly marketplace: string;
+  readonly requestedScope?: Scope;
+  constructor(marketplace: string, requestedScope?: Scope) {
+    super(`Marketplace "${marketplace}" not added.`);
+    this.name = "MarketplaceNotAddedSignal";
+    this.marketplace = marketplace;
+    if (requestedScope !== undefined) {
+      this.requestedScope = requestedScope;
+    }
+  }
 }
 
 const defaultRemoveDataDir: RemoveDataDirFn = async (dataDir) => {
@@ -316,32 +350,7 @@ export async function reinstallPlugins(
   try {
     targets = await enumerateReinstallTargets(opts);
   } catch (err) {
-    // The enumeration-failure path emits a single notify() call. The failed
-    // entity is the targeting layer (no specific plugin), so the row carries a
-    // placeholder name `"(reinstall)"` and the marketplace block sits under a
-    // synthetic marketplace name derived from the target (or `"(reinstall)"`
-    // for the bare-all form). Severity (`error`) + no reload-hint are computed
-    // by notify().
-    //
-    // A synthetic PluginFailedMessage is used rather than a marketplace-level
-    // failure shape because the renderer's failed-row form carries the
-    // cause-chain trailer needed for the underlying MarketplaceNotFoundError
-    // text (marketplace-level rows carry no cause per SNM-10).
-    const typedReasons = reasonsFromTypedError(err);
-    const reasons: readonly ContentReason[] =
-      typedReasons ?? narrowReasons([composeErrorWithCauseChain(err)]);
-    const causeErr = err instanceof Error ? err : new Error(errorMessage(err));
-    const targetingScope = opts.scope ?? "user";
-    const targetingMp = opts.target.kind === "all" ? "(reinstall)" : opts.target.marketplace;
-    const failedRow: PluginFailedMessage = {
-      status: "failed",
-      name: "(reinstall)",
-      reasons,
-      cause: causeErr,
-    };
-    notify(ctx, pi, {
-      marketplaces: [{ name: targetingMp, scope: targetingScope, plugins: [failedRow] }],
-    });
+    handleEnumerationFailure(opts, err);
     return [];
   }
 
@@ -403,6 +412,56 @@ export async function reinstallPlugins(
   return Object.freeze(outcomes);
 }
 
+/**
+ * Emit the single `notify()` call for a target-enumeration failure. Extracted
+ * from `reinstallPlugins` to keep that function's cognitive complexity inside
+ * the sonarjs ceiling.
+ *
+ * Two arms:
+ *   - ATTR-03 / D-47-A marketplace-not-added: the enumerator raised the
+ *     structural `MarketplaceNotAddedSignal` (instead of synthesizing a phantom
+ *     target or throwing a raw `MarketplaceNotFoundError`/`Error`). Emit ONE
+ *     standalone top-level `MarketplaceNotAddedMessage` -- byte-identical to
+ *     `info` and the install/uninstall plan (47-01) -- BEFORE any cascade row
+ *     exists. The `requestedScope` (when present) renders the `[scope]` bracket
+ *     (SCOPE-01); the bare both-scopes-miss form carries no bracket.
+ *   - Any other enumeration failure: the legacy synthetic `(reinstall)` failed
+ *     row. The failed entity is the targeting layer (no specific plugin), so
+ *     the row carries a placeholder name `"(reinstall)"` under a synthetic
+ *     marketplace name derived from the target (or `"(reinstall)"` for the
+ *     bare-all form). A synthetic `PluginFailedMessage` carries the cause-chain
+ *     trailer (marketplace-level rows carry no cause per SNM-10). Severity
+ *     (`error`) + no reload-hint are computed by notify().
+ */
+function handleEnumerationFailure(opts: ReinstallPluginsOptions, err: unknown): void {
+  const { ctx, pi } = opts;
+
+  if (err instanceof MarketplaceNotAddedSignal) {
+    notify(ctx, pi, {
+      kind: "marketplace-not-added",
+      name: err.marketplace,
+      ...(err.requestedScope !== undefined && { scope: err.requestedScope }),
+    });
+    return;
+  }
+
+  const typedReasons = reasonsFromTypedError(err);
+  const reasons: readonly ContentReason[] =
+    typedReasons ?? narrowReasons([composeErrorWithCauseChain(err)]);
+  const causeErr = err instanceof Error ? err : new Error(errorMessage(err));
+  const targetingScope = opts.scope ?? "user";
+  const targetingMp = opts.target.kind === "all" ? "(reinstall)" : opts.target.marketplace;
+  const failedRow: PluginFailedMessage = {
+    status: "failed",
+    name: "(reinstall)",
+    reasons,
+    cause: causeErr,
+  };
+  notify(ctx, pi, {
+    marketplaces: [{ name: targetingMp, scope: targetingScope, plugins: [failedRow] }],
+  });
+}
+
 async function enumerateReinstallTargets(
   opts: ReinstallPluginsOptions,
 ): Promise<readonly ResolvedReinstallTarget[]> {
@@ -442,57 +501,111 @@ async function installedTargetsForScope(
   );
 }
 
-async function resolveReinstallScope(
-  cwd: string,
-  marketplace: string,
-  target: Extract<ReinstallPluginsTarget, { kind: "marketplace" | "plugin" }>,
-  explicitScope: Scope | undefined,
-): Promise<{ scope: Scope; locations: ReturnType<typeof locationsFor> }> {
-  if (target.kind === "plugin" && explicitScope === undefined) {
-    return (
-      (await resolveInstalledPluginTarget({ cwd, marketplace, plugin: target.plugin })) ?? {
-        scope: "user" as const,
-        locations: locationsFor("user", cwd),
-      }
-    );
-  }
-
-  if (explicitScope !== undefined) {
-    return { scope: explicitScope, locations: locationsFor(explicitScope, cwd) };
-  }
-
-  return resolveScopeFromState(
-    marketplace,
-    locationsFor("user", cwd),
-    locationsFor("project", cwd),
-  );
-}
-
 async function enumerateMarketplaceReinstallTargets(
   cwd: string,
   explicitScope: Scope | undefined,
   target: Extract<ReinstallPluginsTarget, { kind: "marketplace" | "plugin" }>,
 ): Promise<readonly ResolvedReinstallTarget[]> {
   const marketplace = target.marketplace;
-  const resolved = await resolveReinstallScope(cwd, marketplace, target, explicitScope);
+
+  // ATTR-03 / D-47-A: probe marketplace existence STRUCTURALLY across the
+  // three forms (explicit-scope-plugin, explicit-scope-marketplace, bare).
+  // A miss raises `MarketplaceNotAddedSignal` -- caught at the
+  // `reinstallPlugins` entrypoint and re-attributed to the standalone
+  // `{not added}` variant -- instead of the former per-form divergence
+  // (synthesized phantom target / raw `MarketplaceNotFoundError`/`Error`).
+  const resolved = await resolveMarketplaceReinstallScope(cwd, marketplace, target, explicitScope);
   const state = await loadState(resolved.locations.extensionRoot);
   const mp = state.marketplaces[marketplace];
   if (mp === undefined) {
-    if (explicitScope !== undefined) {
-      if (target.kind === "plugin") {
-        return sortReinstallTargets([{ plugin: target.plugin, marketplace, scope: explicitScope }]);
-      }
-
-      throw new MarketplaceNotFoundError(marketplace, [explicitScope]);
-    }
-
-    throw new Error(`Marketplace "${marketplace}" not found in ${resolved.scope} scope.`);
+    // Defensive: `resolveMarketplaceReinstallScope` only returns a scope whose
+    // container it confirmed present. A miss here is a concurrent-removal edge;
+    // signal it as not-added carrying the resolved scope so the standalone
+    // emission still fires (never a raw throw escaping the orchestrator).
+    throw new MarketplaceNotAddedSignal(marketplace, explicitScope);
   }
 
   const plugins = target.kind === "plugin" ? [target.plugin] : Object.keys(mp.plugins);
   return sortReinstallTargets(
     plugins.map((plugin) => ({ plugin, marketplace, scope: resolved.scope })),
   );
+}
+
+/**
+ * ATTR-03 / SCOPE-01: resolve the scope of an existing marketplace container
+ * for the marketplace/plugin reinstall forms, raising
+ * `MarketplaceNotAddedSignal` when the marketplace is not added.
+ *
+ *  - explicit-scope PLUGIN form: reuse the Plan 47-01 discriminated
+ *    cross-scope resolver so an other-scope-only target yields the SCOPE-01
+ *    hint (signal carrying the REQUESTED scope) rather than a synthesized
+ *    `(skipped) {not installed}` phantom target.
+ *  - explicit-scope MARKETPLACE form: confirm the container in the requested
+ *    scope; on a miss, signal `{not added}` carrying the REQUESTED scope.
+ *  - bare (no `--scope`) form: the existing two-scope `resolveScopeFromState`
+ *    read establishes both-scope absence; on a miss, signal `{not added}`
+ *    with NO bracket (absent-from-both form).
+ *
+ * All reads are `loadState` only (NFR-5: no network).
+ */
+async function resolveMarketplaceReinstallScope(
+  cwd: string,
+  marketplace: string,
+  target: Extract<ReinstallPluginsTarget, { kind: "marketplace" | "plugin" }>,
+  explicitScope: Scope | undefined,
+): Promise<{ scope: Scope; locations: ReturnType<typeof locationsFor> }> {
+  if (target.kind === "plugin") {
+    // PLUGIN form (explicit OR bare): reuse the Plan 47-01 discriminated
+    // cross-scope resolver. It resolves against the marketplace CONTAINER's
+    // scope when present (so the downstream `runLockedReinstall` `oldRecord ===
+    // undefined` branch keeps the legitimate `(skipped) {not installed}` for a
+    // present-marketplace/absent-plugin -- Pitfall 4), and surfaces SCOPE-01 /
+    // marketplace-absence otherwise.
+    const resolution = await resolveCrossScopePluginTarget({
+      cwd,
+      marketplace,
+      plugin: target.plugin,
+      ...(explicitScope !== undefined && { explicitScope }),
+    });
+    if (resolution.kind === "resolved") {
+      return { scope: resolution.scope, locations: resolution.locations };
+    }
+
+    // marketplace-absent OR other-scope (present only in the other scope).
+    // SCOPE-01: carry the REQUESTED scope (explicit form) so the `[scope]`
+    // bracket reads "not added in the scope you asked for"; the bare form that
+    // missed everywhere carries no bracket (resolution.requestedScope is
+    // undefined there).
+    throw new MarketplaceNotAddedSignal(marketplace, resolution.requestedScope);
+  }
+
+  // MARKETPLACE form.
+  if (explicitScope !== undefined) {
+    const explicitLocations = locationsFor(explicitScope, cwd);
+    const explicitState = await loadState(explicitLocations.extensionRoot);
+    if (explicitState.marketplaces[marketplace] !== undefined) {
+      return { scope: explicitScope, locations: explicitLocations };
+    }
+
+    throw new MarketplaceNotAddedSignal(marketplace, explicitScope);
+  }
+
+  try {
+    return await resolveScopeFromState(
+      marketplace,
+      locationsFor("user", cwd),
+      locationsFor("project", cwd),
+    );
+  } catch (err) {
+    // resolveScopeFromState throws MarketplaceNotFoundError when absent from
+    // BOTH scopes -- re-attribute to the no-bracket `{not added}` signal
+    // (absent-from-both form). Any other error propagates unchanged.
+    if (err instanceof MarketplaceNotFoundError) {
+      throw new MarketplaceNotAddedSignal(marketplace);
+    }
+
+    throw err;
+  }
 }
 
 function sortReinstallTargets(
@@ -742,9 +855,9 @@ function dependenciesFromOutcome(outcome: ReinstallReinstalledOutcome): readonly
 /**
  * Closed-set narrowing for skipped/failed outcome notes. Maps the legacy
  * free-form notes to the closed `Reason` set (CMC-11). Unrecognized text
- * falls back to `"not in manifest"` (the most permissive cascade reason
- * matching the catalog's `(skipped) {not in manifest}` form when the
- * underlying cause is opaque).
+ * falls back to `"unreadable"` (ATTR-09 / D-47-B: a truthful "could not
+ * read/reconcile this row" member, never a false manifest-absence claim) when
+ * the underlying cause is opaque.
  *
  * The mapping is intentionally narrow -- production code paths that
  * generate notes have known shapes (`"not installed"`, `"not in
@@ -800,10 +913,13 @@ function narrowReason(note: string): ContentReason {
     return "rollback partial";
   }
 
-  // Fallback: surface as "not in manifest" -- this is the catalog's
-  // most-permissive cascade skip reason and matches the operator mental
-  // model "we couldn't reconcile this row".
-  return "not in manifest";
+  // ATTR-09 / D-47-B: last-resort fallback for a genuinely unrecognized note.
+  // The cascade could not read/reconcile the on-disk state for this row;
+  // `"unreadable"` is the truthful existing member. The former
+  // `"not in manifest"` LIED that the plugin was absent from the manifest for
+  // any cascade/IO failure whose typed dispatch (`reasonsFromTypedError`)
+  // missed. No new `REASONS` member is introduced (ContentReason only).
+  return "unreadable";
 }
 
 /**
