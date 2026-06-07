@@ -849,8 +849,9 @@ Plans:
 
 </details>
 
-<details>
-<summary>In progress v1.9 Manifest In-Memory Cache (Phase 45) -- started 2026-06-06</summary>
+### In progress v1.9 Manifest In-Memory Cache (Phase 45)
+
+_Started 2026-06-06._
 
 ### Phase 45: Manifest In-Memory Cache
 
@@ -869,8 +870,6 @@ Plans:
 5. The `catalog-uat` byte-equality runner and the full `npm run check` (typecheck + ESLint + Prettier + tests) pass with the cache in place -- observable output is byte-identical to the uncached path, and NFR-5 / NFR-10 / NFR-12 are unaffected (CACHE-04).
 
 **Plans:** TBD (planned via `/gsd-plan-phase 45`)
-
-</details>
 
 ## Progress
 
