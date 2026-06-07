@@ -12,6 +12,7 @@
 - Done **v1.6 GitHub Private Marketplace Authentication** -- Phases 30-36 (shipped 2026-06-01)
 - Done **v1.7 Transaction Resilience Hardening** -- Phases 37-41 (shipped 2026-06-02)
 - Done **v1.8 Plugin and Marketplace Info Commands** -- Phases 42-44 (shipped 2026-06-04)
+- **v1.9 Manifest In-Memory Cache** -- Phase 45 (in progress, started 2026-06-06)
 
 For full details of each milestone, see `.planning/milestones/v[X.Y]-ROADMAP.md` and `.planning/milestones/v[X.Y]-REQUIREMENTS.md`.
 
@@ -848,6 +849,29 @@ Plans:
 
 </details>
 
+<details>
+<summary>In progress v1.9 Manifest In-Memory Cache (Phase 45) -- started 2026-06-06</summary>
+
+### Phase 45: Manifest In-Memory Cache
+
+**Goal:** A process-lifetime in-memory cache wraps the `loadMarketplaceManifest` seam (`domain/manifest.ts`), memoizing the load _result_ (parsed manifest on success, thrown error on failure) keyed by `(mtimeMs, size)` with passive `stat`-based invalidation and negative caching -- eliminating the per-`list` / per-`info` re-read + re-parse + re-validate cost (NFR-8) with byte-identical output and the architecture single-seam gate preserved. Scope is `marketplace.json` only; write sites stay cache-unaware. The seam was pre-landed for exactly this wrap point in Phase 7 / Plan 07-02.
+
+**Depends on:** v1.8 Phase 44 complete
+
+**Requirements:** CACHE-01, CACHE-02, CACHE-03, CACHE-04, CACHE-05, CACHE-06
+
+**Success Criteria** (what must be TRUE):
+
+1. A second read of an unchanged `marketplace.json` within one process performs only a `stat` -- no second `readFile`, `JSON.parse`, or `MARKETPLACE_VALIDATOR.Check` -- provable by a test that spies the read/validate path and asserts a single parse across N reads; cache entries are keyed and matched by `(mtimeMs, size)` (CACHE-01).
+2. Changing a manifest's `mtimeMs` or `size` between two reads causes the next read to re-read + re-parse + re-validate and return the new manifest; both a prior successful parse and a prior parse failure are invalidated by the change (CACHE-02, CACHE-05 invalidation arm).
+3. A schema-invalid or unparseable manifest is memoized as a negative entry: repeated reads of the unchanged bad file re-throw with no re-read or re-parse, and the re-thrown error stays behaviorally equal to the uncached throw (same message consumed by the soft-load path) (CACHE-05).
+4. The cache holds no disk state -- no cache file or sidecar is written under any scope root, a freshly constructed cache starts empty (cold first read), and `loadMarketplaceManifest` remains the sole manifest-read chokepoint so the architecture single-seam gate stays green (CACHE-03, CACHE-06).
+5. The `catalog-uat` byte-equality runner and the full `npm run check` (typecheck + ESLint + Prettier + tests) pass with the cache in place -- observable output is byte-identical to the uncached path, and NFR-5 / NFR-10 / NFR-12 are unaffected (CACHE-04).
+
+**Plans:** TBD (planned via `/gsd-plan-phase 45`)
+
+</details>
+
 ## Progress
 
 | Phase                                                                | Milestone | Plans Complete | Status      | Completed  |
@@ -894,3 +918,4 @@ Plans:
 | 42. Type Model & Render Seam Foundations                             | v1.8      | 1/1 | Complete    | 2026-06-03 |
 | 43. Marketplace Info Command                                         | v1.8      | 2/2 | Complete    | 2026-06-04 |
 | 44. Plugin Info Command                                              | v1.8      | 2/2 | Complete    | 2026-06-04 |
+| 45. Manifest In-Memory Cache                                        | v1.9      | 0/0 | Planned     | --         |

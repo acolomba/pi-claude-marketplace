@@ -44,18 +44,21 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CACHE-01 | TBD | Pending |
-| CACHE-02 | TBD | Pending |
-| CACHE-03 | TBD | Pending |
-| CACHE-04 | TBD | Pending |
-| CACHE-05 | TBD | Pending |
-| CACHE-06 | TBD | Pending |
+| CACHE-01 | Phase 45 | Pending |
+| CACHE-02 | Phase 45 | Pending |
+| CACHE-03 | Phase 45 | Pending |
+| CACHE-04 | Phase 45 | Pending |
+| CACHE-05 | Phase 45 | Pending |
+| CACHE-06 | Phase 45 | Pending |
 
 **Coverage:**
 - v1.9 requirements: 6 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 6 ⚠️
+- Mapped to phases: 6 (100%)
+- Unmapped: 0
+
+**Phase mapping rationale:**
+- **Phase 45 (Manifest In-Memory Cache):** CACHE-01..06. All six requirements are facets of one cache wrapper at one seam (`loadMarketplaceManifest`) -- hit path, `(mtimeMs, size)` invalidation, negative caching, process-scoped lifetime, single-seam containment, and byte-identical non-regression are not independently shippable, so they land as one phase (implementation + verification plans).
 
 ---
 *Requirements defined: 2026-06-06*
-*Last updated: 2026-06-06 -- defined; traceability pending roadmap creation*
+*Last updated: 2026-06-06 -- traceability filled by roadmap; 6/6 requirements mapped to Phase 45*
