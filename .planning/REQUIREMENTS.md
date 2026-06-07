@@ -65,31 +65,33 @@ Explicitly excluded for v1.10. Documented to prevent scope creep.
 
 ## Traceability
 
-Which phases cover which requirements. Populated during roadmap creation.
+Which phases cover which requirements. Each requirement maps to exactly one phase.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ATTR-01 | TBD | Pending |
-| ATTR-02 | TBD | Pending |
-| ATTR-03 | TBD | Pending |
-| ATTR-04 | TBD | Pending |
-| ATTR-05 | TBD | Pending |
-| ATTR-06 | TBD | Pending |
-| ATTR-07 | TBD | Pending |
-| ATTR-08 | TBD | Pending |
-| ATTR-09 | TBD | Pending |
-| ATTR-10 | TBD | Pending |
-| SCOPE-01 | TBD | Pending |
-| TYPE-01 | TBD | Pending |
-| TYPE-02 | TBD | Pending |
-| TYPE-03 | TBD | Pending |
-| TYPE-04 | TBD | Pending |
+| ATTR-01 | Phase 47 | Pending |
+| ATTR-02 | Phase 47 | Pending |
+| ATTR-03 | Phase 47 | Pending |
+| ATTR-04 | Phase 47 | Pending |
+| ATTR-05 | Phase 48 | Pending |
+| ATTR-06 | Phase 48 | Pending |
+| ATTR-07 | Phase 48 | Pending |
+| ATTR-08 | Phase 47 | Pending |
+| ATTR-09 | Phase 47 | Pending |
+| ATTR-10 | Phase 48 | Pending |
+| SCOPE-01 | Phase 47 | Pending |
+| TYPE-01 | Phase 46 | Pending |
+| TYPE-02 | Phase 46 | Pending |
+| TYPE-03 | Phase 46 | Pending |
+| TYPE-04 | Phase 46 | Pending |
+
+Phase 49 (Cross-Op Convergence & GREEN-Gate Close) is a verification + closure phase with no new requirement closure; it proves the Phase 46-48 fixes converge across the full operation matrix (audit Class C) and gates the milestone GREEN.
 
 **Coverage:**
 - v1 requirements: 15 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 15 ⚠️
+- Mapped to phases: 15 (Phase 46: TYPE-01..04; Phase 47: ATTR-01/02/03/04/08/09 + SCOPE-01; Phase 48: ATTR-05/06/07/10)
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-06-07*
-*Last updated: 2026-06-07 after initial v1.10 definition*
+*Last updated: 2026-06-07 after v1.10 roadmap creation (phases 46-49 mapped)*

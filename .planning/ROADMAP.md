@@ -13,6 +13,7 @@
 - Done **v1.7 Transaction Resilience Hardening** -- Phases 37-41 (shipped 2026-06-02)
 - Done **v1.8 Plugin and Marketplace Info Commands** -- Phases 42-44 (shipped 2026-06-04)
 - Done **v1.9 Manifest In-Memory Cache** -- Phase 45 (shipped 2026-06-07)
+- 🚧 **v1.10 Error Attribution & Message-Type Consistency** -- Phases 46-49 (in progress)
 
 For full details of each milestone, see `.planning/milestones/v[X.Y]-ROADMAP.md` and `.planning/milestones/v[X.Y]-REQUIREMENTS.md`.
 
@@ -906,3 +907,89 @@ Process-lifetime in-memory cache wrapping the single `loadMarketplaceManifest` s
 | 43. Marketplace Info Command                                         | v1.8      | 2/2 | Complete    | 2026-06-04 |
 | 44. Plugin Info Command                                              | v1.8      | 2/2 | Complete    | 2026-06-04 |
 | 45. Manifest In-Memory Cache                                        | v1.9      | 2/2 | Complete    | 2026-06-07 |
+| 46. Type-Model Foundations                                          | v1.10     | 0/?            | Not started | --         |
+| 47. Plugin-Ops Attribution & Cross-Scope                            | v1.10     | 0/?            | Not started | --         |
+| 48. Marketplace-Ops Attribution                                     | v1.10     | 0/?            | Not started | --         |
+| 49. Cross-Op Convergence & GREEN-Gate Close                         | v1.10     | 0/?            | Not started | --         |
+
+### In progress v1.10 Error Attribution & Message-Type Consistency (Phases 46-49)
+
+Every plugin/marketplace operation reports the true blocker on the correct subject with a canonical closed-set reason, and the notification type model makes illegal message shapes unrepresentable. Internal correctness + type-model-hardening milestone driven by `.planning/research/v1.10-attribution-audit.md` (23-finding audit) plus two BACKLOG items. Canonical reason for "marketplace not present in scope" = reuse the existing `not added` REASONS member (no new member). No new user commands or flags; the user-visible output is a byte-locked contract enforced by `tests/architecture/catalog-uat.test.ts` against `docs/output-catalog.md` plus `tests/shared/notify-v2.test.ts`.
+
+- [ ] Phase 46: Type-Model Foundations -- TYPE-01, TYPE-02, TYPE-03, TYPE-04
+- [ ] Phase 47: Plugin-Ops Attribution & Cross-Scope -- ATTR-01, ATTR-02, ATTR-03, ATTR-04, ATTR-08, ATTR-09, SCOPE-01
+- [ ] Phase 48: Marketplace-Ops Attribution -- ATTR-05, ATTR-06, ATTR-07, ATTR-10
+- [ ] Phase 49: Cross-Op Convergence & GREEN-Gate Close -- verification (no new requirement closure)
+
+### Phase 46: Type-Model Foundations
+
+**Goal:** `shared/notify.ts` and `shared/types.ts` are reshaped so the message shapes that allowed the attribution drift become unrepresentable: a dedicated marketplace-not-added variant with no placeholder fields and no runtime renderer carve-out, structural reasons that cannot be type-combined with content reasons, a single-source `isInfoKind` exhaustiveness guard, and a fully co-occurrence-constrained `MarketplaceNotificationMessage`. The new variant/guards land atomically with the catalog + UAT byte fixtures that consume them (the established atomic-supersession lesson) so no intermediate commit is RED, while leaving every v1.0-v1.9 rendered byte string byte-identical except where a corrected output is intentionally amended.
+
+**Depends on:** v1.9 Phase 45 complete
+
+**Requirements:** TYPE-01, TYPE-02, TYPE-03, TYPE-04
+
+**Success Criteria** (what must be TRUE):
+
+1. A dedicated marketplace-not-added `NotificationMessage` variant exists carrying only the fields it renders -- the placeholder `marketplaceScope` / `marketplaceDetails` fields and the runtime-only renderer carve-out (`status === "failed" && reasons.length === 1 && reasons[0] === "not added"`) are gone from all three confirmed construction sites (`orchestrators/plugin/info.ts`, `orchestrators/marketplace/info.ts` `buildNotAddedMessage`, and the standard-path coexistence); `tests/architecture/notify-types.test.ts` proves the placeholder fields are no longer present on the not-added path (TYPE-01, audit B-1 / M-5, backlog #2).
+2. The type system makes `reasons: ["not added", "permission denied"]` (a structural reason combined with a content reason) a compile error rather than a render-time-guarded shape -- a TypeScript-only assert in `tests/architecture/notify-types.test.ts` proves the illegal mix does not type-check, and `not added` no longer shares the open `Reason[]` field with content reasons on the same row (TYPE-02, audit B-2).
+3. The info-`kind` set is enumerated in exactly one place via a single `isInfoKind` guard; `computeSeverity`, `buildSummaryLine`, `shouldEmitReloadHint`, and the `notify()` early-dispatch all route through that guard with an `assertNever` exhaustiveness tail, so adding a hypothetical new `NotificationMessage` kind is a compile error in every one of those four consumers (today 3 of the 4 lack `assertNever`) -- demonstrated by a compile-fail fixture or `@ts-expect-error` assert in `tests/architecture/notify-types.test.ts` (TYPE-03, audit B-7).
+4. `MarketplaceNotificationMessage` co-occurrence is type-constrained via a discriminated union so `reasons` is reachable only on the `skipped` arm and `details` only on the list surface -- a TypeScript assert proves a list-surface row cannot carry `reasons` and a skipped row cannot carry `details` (TYPE-04, audit B-3).
+5. `npm run check` exits 0; the catalog-UAT byte-equality runner stays GREEN with zero output-byte changes for any v1.0-v1.9 command; the type-model reshape, the new variant, the new `isInfoKind` guard, and any catalog/UAT/notify-v2 fixtures that change shape land in one atomic commit per NFR-6 + the atomic-supersession lesson.
+
+**Plans:** TBD
+
+### Phase 47: Plugin-Ops Attribution & Cross-Scope
+
+**Goal:** Every plugin operation (`install`, `uninstall`, `reinstall`, `update`) converges on `info`'s model for the marketplace-existence and scope preconditions: a missing/not-added marketplace renders `(failed) {not added}` on the marketplace subject (never `{not in manifest}` on the plugin row, never silent, never raw-thrown), "plugin absent from a present manifest" stays distinct as `{not in manifest}`, cleanup/cascade failures report a truthful reason instead of degrading to `{not in manifest}`, and a target present only in the other scope says so instead of being reported as not-in-manifest / not-installed. Built on the Phase 46 not-added variant and `isInfoKind` guard; the plugin-op family is migrated as one wave through the shared scope-resolution chokepoint (`orchestrators/plugin/shared.ts`), serialized rather than parallelized because every change converges on `shared/notify.ts` reasons/types.
+
+**Depends on:** Phase 46
+
+**Requirements:** ATTR-01, ATTR-02, ATTR-03, ATTR-04, ATTR-08, ATTR-09, SCOPE-01
+
+**Success Criteria** (what must be TRUE):
+
+1. `install <plugin>@<missing-marketplace>` renders `(failed) {not added}` on the marketplace subject (the Phase 46 variant), not `(failed) {not in manifest}` on the plugin row; when the marketplace is present but the plugin is absent from it, `install` still renders `(failed) {not in manifest}` -- the two conditions emit different reasons (ATTR-01, ATTR-08; the `install.ts` `not-in-manifest` throws at the marketplace-absent branch are replaced with a marketplace-absent subject path).
+2. `update` (both `<plugin>@<mp>` and `@<mp>` forms) and `reinstall` (explicit-scope and bare forms) each render a structured `(failed) {not added}` on the marketplace subject for a missing marketplace -- no `{not found}` / `{not installed}` misattribution, no form-dependent self-inconsistency, and no raw `MarketplaceNotFoundError` thrown past the orchestrator boundary (ATTR-02, ATTR-03).
+3. `uninstall` of a marketplace that was never added renders it explicitly as `(failed) {not added}`, distinct from the silent converge that is correct only when a plugin record is merely already gone (ATTR-04; the current silent-no-output path for a missing marketplace is eliminated).
+4. Cleanup / cascade failures (foreign content, IO, permission) during `uninstall` and `reinstall` surface a truthful reason (the on-disk content / IO / permission blocker) instead of degrading to `{not in manifest}` -- the `narrowCascadeFailure` / `narrowReason` fallbacks no longer assert the plugin is absent from the manifest when the real blocker is on-disk (ATTR-09, audit A-9 / A-10).
+5. When a target plugin/marketplace is absent in the requested explicit `--scope` but present in the other scope, `install` / `uninstall` / `reinstall` / `update` report that it exists in the other scope instead of misattributing as not-in-manifest / not-installed -- explicit-scope resolution in `orchestrators/plugin/shared.ts` consults the other scope before failing (SCOPE-01, audit A-7; the by-design project-to-user install fallback per CMP-3 is preserved).
+6. `npm run check` exits 0; every new/changed `(failed) {not added}` and cross-scope byte form is paired with a catalog state in `docs/output-catalog.md` and a fixture in `tests/architecture/catalog-uat.test.ts`, and all pre-existing catalog states stay byte-identical except those intentionally amended for corrected attribution (NFR-6).
+
+**Plans:** TBD
+
+### Phase 48: Marketplace-Ops Attribution
+
+**Goal:** Every marketplace operation routes its precondition failures through `notify(...)` as structured `(failed)` rows with closed-set reasons instead of throwing raw past the orchestrator: `autoupdate` / `noautoupdate` and `marketplace remove` of a missing marketplace converge on `(failed) {not added}`; `marketplace add` surfaces duplicate-name / stale-clone / unsupported-source / missing-path-source / invalid-manifest as structured rows using the `REASONS` members it currently defines but never routes through `notify`; and a path-source manifest failure during `marketplace update` reports a manifest-specific reason, never `{network unreachable}` (NFR-5). Serialized after Phase 47 because the marketplace-op family also converges on `shared/notify.ts` reasons/renderer.
+
+**Depends on:** Phase 47
+
+**Requirements:** ATTR-05, ATTR-06, ATTR-07, ATTR-10
+
+**Success Criteria** (what must be TRUE):
+
+1. `marketplace autoupdate` / `noautoupdate` of a missing marketplace renders `(failed) {not added}` consistently whether the scope is explicit or the name is missing in every scope -- no reason-less failed row and no `{not found}` (ATTR-05).
+2. `marketplace remove` of a missing marketplace renders a structured `(failed) {not added}` row instead of throwing `MarketplaceNotFoundError` raw past the orchestrator boundary; the edge handler routes the precondition failure through `notify(...)` rather than letting it propagate to the Pi command runner unstyled (ATTR-06, audit M-1 / Theme 2).
+3. `marketplace add` surfaces each of its precondition failures -- duplicate name, stale clone, unsupported source, missing path source, invalid manifest -- as a structured `(failed)` row carrying the matching closed-set `REASONS` member (`duplicate name` / `stale clone` / `unsupported source` / `source missing` / `invalid manifest`), instead of a raw throw; these reasons, defined in `REASONS` but never previously routed through `notify`, are now reachable end-to-end (ATTR-07, audit M-7).
+4. A path-source malformed/unreadable manifest during `marketplace update` reports a manifest-specific reason (e.g. `invalid manifest`), never `{network unreachable}` -- the `refreshOneMarketplace` `?? ["network unreachable"]` default no longer fires for a path source, and a `SyntaxError` / schema `Error` is classified to the manifest reason; the path-source `marketplace update` path performs no network access (ATTR-10, NFR-5, audit M-3 Class A+D).
+5. `npm run check` exits 0; the edge handlers for `remove` / `update` / `add` have try/notify discipline (no bare-registered handler lets a precondition error escape raw); every new structured `(failed)` row is paired with a catalog state in `docs/output-catalog.md` and a `tests/architecture/catalog-uat.test.ts` fixture, byte-equality GREEN (NFR-6).
+
+**Plans:** TBD
+
+### Phase 49: Cross-Op Convergence & GREEN-Gate Close
+
+**Goal:** Prove, across the full plugin + marketplace operation matrix, that the identical precondition (target marketplace absent / wrong-scope; cleanup/cascade failure; path-source manifest failure) now produces the SAME canonical structured outcome the audit's `info` row models -- Class C cross-op inconsistency is closed, not merely fixed per-op -- and close the milestone with `npm run check` GREEN, the catalog UAT byte-locked, and traceability reconciled. This is a verification + closure phase: no new requirement closure, mirroring the v1.4 execution-only / GREEN-gate phases.
+
+**Depends on:** Phase 48
+
+**Requirements:** none (verification + closure; ATTR/SCOPE/TYPE requirements close in Phases 46-48)
+
+**Success Criteria** (what must be TRUE):
+
+1. A cross-op convergence test (or the catalog UAT matrix) demonstrates that the "marketplace absent in target scope" precondition now renders `(failed) {not added}` on the marketplace subject uniformly across `install`, `uninstall`, `reinstall`, `update`, `marketplace remove`, and `autoupdate` -- matching the `info` model -- with no op going silent, misattributing the subject, or throwing raw (closes audit Theme 1 / Class C across the whole matrix).
+2. The closed `Reason` set has one canonical vocabulary for the marketplace-missing condition (the existing `not added` member; no new `marketplace not added` member was introduced), confirmed by the `REASONS` length-lock and closed-set proof in `tests/architecture/notify-types.test.ts`.
+3. `tests/architecture/catalog-uat.test.ts` byte-equality is GREEN for every catalog state, and `docs/output-catalog.md` documents every corrected-attribution byte form added in Phases 46-48; no orphaned or stale catalog state remains.
+4. `npm run check` exits 0 end-to-end on a clean tree (typecheck + ESLint + Prettier + tests) with no regression in test count from the Phase 45 baseline; NFR-5 (no network on path-source / non-network ops), NFR-7 (discriminated `installable`), and NFR-10 (containment) are unaffected.
+5. `.planning/REQUIREMENTS.md` traceability shows all 15 v1.10 requirements mapped to phases with no `TBD`, and the milestone is ready for close.
+
+**Plans:** TBD
