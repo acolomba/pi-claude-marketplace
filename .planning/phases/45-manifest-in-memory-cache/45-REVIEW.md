@@ -22,6 +22,23 @@ status: issues_found
 **Files Reviewed:** 3
 **Status:** issues_found
 
+## Resolution (2026-06-07)
+
+Operator decision: apply both warnings; accept the three info items as-is.
+
+- **WR-01 -- FIXED** (commit `3fe6b46`): the cache now re-stats after the loader
+  returns and keys the entry on the post-load stat. The hit path stays a single
+  `stat` (CACHE-01 criterion #1 holds); output is byte-identical (catalog-uat
+  green).
+- **WR-02 -- FIXED** (commit `3fe6b46`): the negative arm now stores and re-throws
+  the exact thrown value (`thrown: unknown`) instead of coercing non-Error throws,
+  preserving `.code`/structured fields and matching the D-02 stat-fail path.
+- **Info CR-03/04/05 -- ACCEPTED**: the `as Promise<MarketplaceManifest>` cast,
+  the bindingless `catch {}`, and the "no locking" comment are left as intentional
+  (the comment was reworded in `3fe6b46` to not overstate atomicity).
+
+`npm run check` green (1473/1473) after the fixes.
+
 ## Summary
 
 Phase 45 wraps `loadMarketplaceManifest` in a process-lifetime in-memory cache keyed
