@@ -705,8 +705,9 @@ export interface CascadeNotificationMessage {
  * description, optional) line. The `last_updated:` line renders only on the
  * github-source arm (INFO-01).
  *
- * The INFO-04 `{not added}` `--scope` mismatch row is emitted via the
- * sibling `PluginInfoMessage` per INFO-04's byte form -- see that interface.
+ * The marketplace-absent (`{not added}`) condition is NOT emitted by this
+ * variant -- it is the dedicated `MarketplaceNotAddedMessage` variant
+ * (TYPE-01 / D-46-01). This variant can only carry a found marketplace.
  */
 export interface MarketplaceInfoMessage {
   readonly kind: "marketplace-info";
@@ -823,9 +824,9 @@ interface PluginInfoComponentsUnresolved {
  * `renderMarketplaceInfoCascade` joins per-block bodies with `\n\n`.
  * Iteration order is the orchestrator's responsibility (project-first
  * per MSG-GR-3). Reload-hint NEVER fires; severity is always info (no
- * failure can be expressed on a fan-out payload -- the orchestrator
- * routes the `{not added}` failure surface through the sibling
- * `PluginInfoMessage` variant).
+ * failure can be expressed on a fan-out payload -- the marketplace-absent
+ * (`{not added}`) failure surface is carried by the dedicated
+ * `MarketplaceNotAddedMessage` variant, TYPE-01).
  *
  * The `blocks` tuple is non-empty (`readonly [T, ...T[]]`) so an empty
  * fan-out is a compile-time error rather than a documented "renderer
@@ -1540,11 +1541,11 @@ function computeSeverity(message: NotificationMessage): "warning" | "error" | un
   // over the cascade severity ladder.
   // `marketplace-info` payloads carry no failure state and route to info
   // (undefined 2nd arg); `plugin-info` payloads route to `"error"` ONLY when
-  // the embedded plugin row is `(failed)` (the `{not added}` --scope mismatch
-  // row is the canonical example), else info; `marketplace-info-cascade`
-  // AND `plugin-info-cascade` payloads route to info unconditionally -- no
-  // failure can be expressed on a fan-out wrapper (the orchestrator routes
-  // `{not added}` through the sibling `PluginInfoMessage` variant instead).
+  // the embedded plugin row is `(failed)` (e.g. an unreadable manifest), else
+  // info; `marketplace-info-cascade` AND `plugin-info-cascade` payloads route
+  // to info unconditionally -- no failure can be expressed on a fan-out
+  // wrapper. The `{not added}` --scope mismatch condition is carried by the
+  // dedicated `marketplace-not-added` arm, which always routes to `"error"`.
   // The cascade arm executes the existing first-match ladder below.
   if (isInfoKind(message)) {
     // The `marketplace-not-added` variant routes to "error" (the marketplace
