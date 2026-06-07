@@ -19,7 +19,7 @@ import path from "node:path";
 import { computeHashVersion } from "../../domain/version.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { CrossPluginConflictError, MarketplaceNotFoundError } from "../../shared/errors.ts";
+import { CrossPluginConflictError } from "../../shared/errors.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
@@ -236,17 +236,70 @@ export async function resolveInstalledPluginTarget(opts: {
   return undefined;
 }
 
-/** CMP-5: unqualified @marketplace update targets project installs before user installs. */
+/**
+ * SCOPE-01 / ATTR-02 / D-47-C discriminated `@marketplace` lifecycle target
+ * resolution. The NFR-7 discriminated-union precedent applied to the update
+ * direct path: the chokepoint distinguishes the three outcomes the former
+ * `undefined`/raw-`MarketplaceNotFoundError` return collapsed (M11).
+ *
+ *   - `resolved`: the marketplace CONTAINER exists in the chosen scope (CMP-5
+ *     precedence preserved -- see `resolveInstalledMarketplaceTarget`).
+ *   - `other-scope`: the requested explicit scope misses, but the marketplace
+ *     CONTAINER exists in the OTHER scope. The caller surfaces this as a
+ *     `marketplace-not-added` carrying the REQUESTED scope (the `[scope]`
+ *     bracket communicates "not added in the scope you asked for"; the
+ *     operator infers the other scope -- resolved Open Question #1).
+ *   - `marketplace-absent`: the container is absent in the requested scope AND
+ *     the other scope, OR (for the unqualified `@mp` form) in BOTH scopes.
+ *     `requestedScope` is set for the explicit-scope path and OMITTED for the
+ *     unqualified path that missed everywhere (no-bracket form).
+ *
+ * No raw `MarketplaceNotFoundError` escapes -- the absent case is a structural
+ * arm the update entrypoint maps to the standalone `{not added}` emission.
+ */
+export type ScopedMarketplaceResolution =
+  | { readonly kind: "resolved"; readonly scope: Scope; readonly locations: ScopedLocations }
+  | { readonly kind: "other-scope"; readonly presentIn: Scope; readonly requestedScope: Scope }
+  | { readonly kind: "marketplace-absent"; readonly requestedScope?: Scope };
+
+/**
+ * CMP-5: unqualified `@marketplace` update targets project installs before user
+ * installs. Returns a discriminated result instead of throwing
+ * `MarketplaceNotFoundError` (M11) so the update direct path can emit the
+ * standalone `{not added}` variant for the marketplace-existence precondition.
+ *
+ * CMP-5 precedence for the resolved arm is UNCHANGED (project-with-plugins ->
+ * user-with-plugins -> project-empty -> user-empty). All reads are `loadState`
+ * only (NFR-5: no network). The explicit-scope miss performs ONE extra
+ * `loadState` of the other scope to surface the SCOPE-01 hint.
+ */
 export async function resolveInstalledMarketplaceTarget(opts: {
   readonly cwd: string;
   readonly marketplace: string;
   readonly explicitScope?: Scope;
-}): Promise<ResolvedScopedPluginTarget> {
+}): Promise<ScopedMarketplaceResolution> {
   if (opts.explicitScope !== undefined) {
-    return {
-      scope: opts.explicitScope,
-      locations: locationsFor(opts.explicitScope, opts.cwd),
-    };
+    const requestedScope = opts.explicitScope;
+    const requestedLocations = locationsFor(requestedScope, opts.cwd);
+    const requestedState = await loadState(requestedLocations.extensionRoot);
+
+    // Container present in the requested scope: resolve there (the plugin set
+    // may be empty -- the caller still reads it as the update target).
+    if (requestedState.marketplaces[opts.marketplace] !== undefined) {
+      return { kind: "resolved", scope: requestedScope, locations: requestedLocations };
+    }
+
+    // Container absent in the requested scope: consult the OTHER scope so a
+    // marketplace present only there is reported (SCOPE-01) rather than
+    // collapsed into a raw not-found throw.
+    const otherScopeName = otherScope(requestedScope);
+    const otherLocations = locationsFor(otherScopeName, opts.cwd);
+    const otherState = await loadState(otherLocations.extensionRoot);
+    if (otherState.marketplaces[opts.marketplace] !== undefined) {
+      return { kind: "other-scope", presentIn: otherScopeName, requestedScope };
+    }
+
+    return { kind: "marketplace-absent", requestedScope };
   }
 
   const projectLocations = locationsFor("project", opts.cwd);
@@ -259,22 +312,23 @@ export async function resolveInstalledMarketplaceTarget(opts: {
   const userRecord = userState.marketplaces[opts.marketplace];
 
   if (projectRecord !== undefined && Object.keys(projectRecord.plugins).length > 0) {
-    return { scope: "project", locations: projectLocations };
+    return { kind: "resolved", scope: "project", locations: projectLocations };
   }
 
   if (userRecord !== undefined && Object.keys(userRecord.plugins).length > 0) {
-    return { scope: "user", locations: userLocations };
+    return { kind: "resolved", scope: "user", locations: userLocations };
   }
 
   if (projectRecord !== undefined) {
-    return { scope: "project", locations: projectLocations };
+    return { kind: "resolved", scope: "project", locations: projectLocations };
   }
 
   if (userRecord !== undefined) {
-    return { scope: "user", locations: userLocations };
+    return { kind: "resolved", scope: "user", locations: userLocations };
   }
 
-  throw new MarketplaceNotFoundError(opts.marketplace, ["project", "user"]);
+  // Absent from BOTH scopes (bare `@mp` form): no requested scope to report.
+  return { kind: "marketplace-absent" };
 }
 
 /**

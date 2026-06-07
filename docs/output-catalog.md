@@ -674,6 +674,26 @@ Per-scope blocks; identical lock to `reinstall` -- marketplaces never collapse a
 
 Both `from` and `to` are PI-7 hash-versions (`hash-2ea95f85703d` -> `hash-1c3d9a0bbef1`); each is shortened to its git-style 7-hex form with a `v#` prefix (`v#2ea95f8`, `v#1c3d9a0`) per `composeVersionArrow` (SNM-35, D-23-05). Persistence keeps the full `hash-<12hex>` on both sides. Severity: info. Reload-hint fires because `hashed-plugin` was updated.
 
+### Failure -- marketplace not added, explicit scope (ATTR-02 / SCOPE-01)
+
+Triggered when `update <plugin>@<marketplace>` or `update @<marketplace>` names a marketplace that is NOT added in the requested `--scope` (or is present only in the OTHER scope). ATTR-02 makes the attribution form-INDEPENDENT: BOTH the `<plugin>@<mp>` and `@<mp>` forms flow through `enumerateMarketplaceTarget` and emit the standalone `MarketplaceNotAddedMessage` variant (`{not added}` on the marketplace subject) BEFORE any cascade row exists -- replacing the former raw `Error` (M10) / `MarketplaceNotFoundError` (M11) that escaped to a synthetic `(failed) {not found}` row. No raw throw escapes the orchestrator for the marketplace-existence case. The `[scope]` bracket carries the REQUESTED scope: the operator infers the other scope (SCOPE-01; resolved Open Question #1 -- the requested-scope bracket, no other-scope phrase). The cascade path (`updateSinglePlugin` / `preflightUpdate`) keeps its non-throwing concurrent-removal outcome and is unaffected (Pitfall 3 / A3). Bare column-0 row, NO summary line, NO cause-chain trailer. Severity `error`; no reload-hint.
+
+<!-- catalog-state: missing-marketplace-not-added -->
+
+```text
+⊘ ghost-mp [user] (failed) {not added}
+```
+
+### Failure -- marketplace not added, bare form absent from both scopes (ATTR-02)
+
+Triggered when the bare `update @<marketplace>` form (no `--scope`) names a marketplace that is absent in BOTH scopes. The same standalone `{not added}` variant fires, but with NO `[scope]` bracket (the absent-from-both form: there is no requested scope to report). Byte-identical to `info`'s `missing-marketplace-not-added-absent-from-both` state. Severity `error`; no reload-hint.
+
+<!-- catalog-state: missing-marketplace-not-added-absent-from-both -->
+
+```text
+⊘ ghost-mp (failed) {not added}
+```
+
 ______________________________________________________________________
 
 ## `/claude:plugin import`

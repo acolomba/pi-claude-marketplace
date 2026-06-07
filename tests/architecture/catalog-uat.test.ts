@@ -1075,6 +1075,33 @@ const FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // ATTR-02 / SCOPE-01 / M10 / M11: marketplace not added in the requested
+    // explicit scope (or present only in the other scope) -> standalone
+    // `marketplace-not-added` variant carrying the requested-scope bracket,
+    // form-independent across the `<plugin>@<mp>` / `@<mp>` forms. No raw
+    // throw escapes the orchestrator.
+    "missing-marketplace-not-added": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+        scope: "user",
+      } satisfies NotificationMessage,
+    },
+
+    // ATTR-02: bare `update @<marketplace>` form absent in BOTH scopes ->
+    // standalone `marketplace-not-added` variant with NO bracket (the
+    // absent-from-both form; no requested scope to report).
+    "missing-marketplace-not-added-absent-from-both": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+      } satisfies NotificationMessage,
+    },
   },
 
   // -------------------------------------------------------------------------

@@ -85,13 +85,12 @@ test("shim :: <plugin>@<marketplace> form calls updatePlugins with single-plugin
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeUpdateHandler(makePi());
     await handler("myplug@mymkt", ctx);
-    // The orchestrator surfaces "Marketplace \"mymkt\" not found ..." for
-    // single-form when marketplace doesn't exist; we accept either form
-    // ("not found" + the marketplace name).
+    // ATTR-02: a missing marketplace (no `--scope`, absent in both scopes) now
+    // surfaces the standalone `(failed) {not added}` marketplace-subject row --
+    // no raw `{not found}` misattribution. No bracket (absent-from-both form).
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
-    assert.match(notifications[0]!.message, /mymkt/);
-    assert.match(notifications[0]!.message, /not found/);
+    assert.equal(notifications[0]!.message, "⊘ mymkt (failed) {not added}");
   });
 });
 
@@ -100,11 +99,11 @@ test("shim :: bare @<marketplace> form calls updatePlugins with all-plugins-one-
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeUpdateHandler(makePi());
     await handler("@mymkt", ctx);
-    // marketplace-form: orchestrator throws Marketplace not found.
+    // ATTR-02: marketplace-form against a missing marketplace -> standalone
+    // `(failed) {not added}` (no bracket: absent in both scopes, no `--scope`).
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
-    assert.match(notifications[0]!.message, /mymkt/);
-    assert.match(notifications[0]!.message, /not found/);
+    assert.equal(notifications[0]!.message, "⊘ mymkt (failed) {not added}");
   });
 });
 
@@ -156,8 +155,9 @@ test("shim :: @<mp> form + --map-model is accepted; control reaches updatePlugin
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
     assert.doesNotMatch(notifications[0]!.message, /Usage: \/claude:plugin update/);
-    assert.match(notifications[0]!.message, /mymkt/);
-    assert.match(notifications[0]!.message, /not found/);
+    // ATTR-02: control reaches updatePlugins, which emits the standalone
+    // `{not added}` for the missing marketplace (not the raw `{not found}`).
+    assert.equal(notifications[0]!.message, "⊘ mymkt (failed) {not added}");
   });
 });
 
@@ -169,8 +169,9 @@ test("shim :: pl@<mp> form + --map-model is accepted; control reaches updatePlug
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
     assert.doesNotMatch(notifications[0]!.message, /Usage: \/claude:plugin update/);
-    assert.match(notifications[0]!.message, /mymkt/);
-    assert.match(notifications[0]!.message, /not found/);
+    // ATTR-02: control reaches updatePlugins, which emits the standalone
+    // `{not added}` for the missing marketplace (not the raw `{not found}`).
+    assert.equal(notifications[0]!.message, "⊘ mymkt (failed) {not added}");
   });
 });
 

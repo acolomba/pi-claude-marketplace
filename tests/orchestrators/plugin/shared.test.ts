@@ -15,10 +15,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import {
-  CrossPluginConflictError,
-  MarketplaceNotFoundError,
-} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { CrossPluginConflictError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
@@ -368,7 +365,8 @@ test("CMP-5 :: unqualified marketplace target prefers project when both scopes h
 
     const resolved = await resolveInstalledMarketplaceTarget({ cwd, marketplace: "mp" });
 
-    assert.equal(resolved.scope, "project");
+    assert.equal(resolved.kind, "resolved");
+    assert.equal(resolved.kind === "resolved" ? resolved.scope : undefined, "project");
   });
 });
 
@@ -379,7 +377,8 @@ test("CMP-5 :: unqualified marketplace target resolves user when only user has i
 
     const resolved = await resolveInstalledMarketplaceTarget({ cwd, marketplace: "mp" });
 
-    assert.equal(resolved.scope, "user");
+    assert.equal(resolved.kind, "resolved");
+    assert.equal(resolved.kind === "resolved" ? resolved.scope : undefined, "user");
   });
 });
 
@@ -390,7 +389,8 @@ test("CMP-5 :: unqualified marketplace target returns project empty record befor
 
     const resolved = await resolveInstalledMarketplaceTarget({ cwd, marketplace: "mp" });
 
-    assert.equal(resolved.scope, "project");
+    assert.equal(resolved.kind, "resolved");
+    assert.equal(resolved.kind === "resolved" ? resolved.scope : undefined, "project");
   });
 });
 
@@ -400,16 +400,76 @@ test("CMP-5 :: unqualified marketplace target returns user empty record when pro
 
     const resolved = await resolveInstalledMarketplaceTarget({ cwd, marketplace: "mp" });
 
-    assert.equal(resolved.scope, "user");
+    assert.equal(resolved.kind, "resolved");
+    assert.equal(resolved.kind === "resolved" ? resolved.scope : undefined, "user");
   });
 });
 
-test("CMP-5 :: unqualified marketplace target throws when absent from both scopes", async () => {
+// ATTR-02 / M11: the bare `@mp` form absent from BOTH scopes returns the
+// structural `marketplace-absent` arm (no requestedScope bracket) instead of
+// throwing a raw MarketplaceNotFoundError that would escape to the update
+// `{not found}` synthetic row.
+test("ATTR-02 :: unqualified marketplace target returns marketplace-absent when absent from both scopes", async () => {
   await withTmpCwd(async (cwd) => {
-    await assert.rejects(
-      resolveInstalledMarketplaceTarget({ cwd, marketplace: "mp" }),
-      (err: unknown) => err instanceof MarketplaceNotFoundError,
-    );
+    const resolved = await resolveInstalledMarketplaceTarget({ cwd, marketplace: "mp" });
+
+    assert.equal(resolved.kind, "marketplace-absent");
+    assert.equal(resolved.kind === "marketplace-absent" ? resolved.requestedScope : "x", undefined);
+  });
+});
+
+// ATTR-02: explicit-scope `@mp` form present in the requested scope -> resolved
+// there (CMP-5 explicit-scope honored).
+test("ATTR-02 :: explicit-scope marketplace target resolves in the requested scope when present", async () => {
+  await withTmpCwd(async (cwd) => {
+    await saveScopedState(cwd, "user", { mp: { plug: makePluginRecord({}) } });
+
+    const resolved = await resolveInstalledMarketplaceTarget({
+      cwd,
+      marketplace: "mp",
+      explicitScope: "user",
+    });
+
+    assert.equal(resolved.kind, "resolved");
+    assert.equal(resolved.kind === "resolved" ? resolved.scope : undefined, "user");
+  });
+});
+
+// SCOPE-01 / M11: explicit scope misses but the marketplace container exists in
+// the OTHER scope -> other-scope arm carrying the REQUESTED scope (the update
+// entrypoint surfaces the `[requestedScope]` bracket on `{not added}`).
+test("SCOPE-01 :: explicit-scope marketplace target present only in the other scope -> other-scope", async () => {
+  await withTmpCwd(async (cwd) => {
+    // The marketplace lives in user; the operator asks for project explicitly.
+    await saveScopedState(cwd, "user", { mp: { plug: makePluginRecord({}) } });
+
+    const resolved = await resolveInstalledMarketplaceTarget({
+      cwd,
+      marketplace: "mp",
+      explicitScope: "project",
+    });
+
+    assert.equal(resolved.kind, "other-scope");
+    if (resolved.kind === "other-scope") {
+      assert.equal(resolved.presentIn, "user");
+      assert.equal(resolved.requestedScope, "project");
+    }
+  });
+});
+
+// ATTR-02: explicit scope misses AND the marketplace is absent in the other
+// scope -> marketplace-absent carrying the requested scope (bracketed
+// `{not added}`).
+test("ATTR-02 :: explicit-scope marketplace target absent in both scopes -> marketplace-absent with requestedScope", async () => {
+  await withTmpCwd(async (cwd) => {
+    const resolved = await resolveInstalledMarketplaceTarget({
+      cwd,
+      marketplace: "mp",
+      explicitScope: "project",
+    });
+
+    assert.equal(resolved.kind, "marketplace-absent");
+    assert.equal(resolved.kind === "marketplace-absent" ? resolved.requestedScope : "x", "project");
   });
 });
 
