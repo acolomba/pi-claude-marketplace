@@ -14,22 +14,22 @@ Requirements for milestone v1.10. Each maps to exactly one roadmap phase.
 
 Themes 1-3: every operation reports the true blocker on the correct subject with a canonical, truthful, closed-set reason.
 
-- [ ] **ATTR-01**: `install <plugin>@<marketplace>` with a missing marketplace reports `{not added}` on the marketplace subject, not `{not in manifest}` on the plugin row (backlog #1)
-- [ ] **ATTR-02**: `update` (single-plugin `<plugin>@<mp>` and `@<mp>` forms) reports a missing marketplace as a structured `(failed) {not added}` on the marketplace subject -- no `{not found}` misattribution, no raw throw past the orchestrator
-- [ ] **ATTR-03**: `reinstall` reports a missing marketplace as `{not added}` consistently across explicit-scope and bare forms (not `{not installed}` or `{not found}` depending on form)
-- [ ] **ATTR-04**: `uninstall` of a marketplace that was never added reports it explicitly (`{not added}`), distinct from the silent converge used when a plugin record is merely already gone
+- [x] **ATTR-01**: `install <plugin>@<marketplace>` with a missing marketplace reports `{not added}` on the marketplace subject, not `{not in manifest}` on the plugin row (backlog #1)
+- [x] **ATTR-02**: `update` (single-plugin `<plugin>@<mp>` and `@<mp>` forms) reports a missing marketplace as a structured `(failed) {not added}` on the marketplace subject -- no `{not found}` misattribution, no raw throw past the orchestrator
+- [x] **ATTR-03**: `reinstall` reports a missing marketplace as `{not added}` consistently across explicit-scope and bare forms (not `{not installed}` or `{not found}` depending on form)
+- [x] **ATTR-04**: `uninstall` of a marketplace that was never added reports it explicitly (`{not added}`), distinct from the silent converge used when a plugin record is merely already gone
 - [ ] **ATTR-05**: `marketplace autoupdate`/`noautoupdate` of a missing marketplace reports `{not added}` consistently whether the scope is explicit or the name is missing in every scope (no reason-less failed row, no `{not found}`)
 - [ ] **ATTR-06**: `marketplace remove` of a missing marketplace renders a structured `(failed) {not added}` row instead of throwing `MarketplaceNotFoundError` raw past the orchestrator boundary
 - [ ] **ATTR-07**: `marketplace add` surfaces its precondition failures (duplicate name, stale clone, unsupported source, missing path source, invalid manifest) as structured `(failed)` rows with closed-set reasons, instead of raw throws
-- [ ] **ATTR-08**: `install` distinguishes "marketplace absent" (`{not added}`) from "plugin absent from a present manifest" (`{not in manifest}`) -- the two conditions emit different reasons
-- [ ] **ATTR-09**: cleanup/cascade failures (foreign content, IO) during `uninstall`/`reinstall`/`marketplace remove` surface a truthful reason instead of degrading to `{not in manifest}`
+- [x] **ATTR-08**: `install` distinguishes "marketplace absent" (`{not added}`) from "plugin absent from a present manifest" (`{not in manifest}`) -- the two conditions emit different reasons
+- [x] **ATTR-09**: cleanup/cascade failures (foreign content, IO) during `uninstall`/`reinstall`/`marketplace remove` surface a truthful reason instead of degrading to `{not in manifest}`
 - [ ] **ATTR-10**: a path-source manifest failure during `marketplace update` reports a manifest-specific reason, never `{network unreachable}` (honors NFR-5: path-source operations touch no network)
 
 ### Cross-Scope Reporting (SCOPE)
 
 Theme 4: stop treating "wrong scope" as "does not exist."
 
-- [ ] **SCOPE-01**: when a target marketplace/plugin is absent in the requested explicit scope but present in the other scope, the failure reports that it exists in the other scope (install/uninstall/reinstall/update) instead of misattributing as not-in-manifest/not-installed
+- [x] **SCOPE-01**: when a target marketplace/plugin is absent in the requested explicit scope but present in the other scope, the failure reports that it exists in the other scope (install/uninstall/reinstall/update) instead of misattributing as not-in-manifest/not-installed
 
 ### Message-Type Model (TYPE)
 
@@ -69,17 +69,17 @@ Which phases cover which requirements. Each requirement maps to exactly one phas
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ATTR-01 | Phase 47 | Pending |
-| ATTR-02 | Phase 47 | Pending |
-| ATTR-03 | Phase 47 | Pending |
-| ATTR-04 | Phase 47 | Pending |
+| ATTR-01 | Phase 47 | Complete |
+| ATTR-02 | Phase 47 | Complete |
+| ATTR-03 | Phase 47 | Complete |
+| ATTR-04 | Phase 47 | Complete |
 | ATTR-05 | Phase 48 | Pending |
 | ATTR-06 | Phase 48 | Pending |
 | ATTR-07 | Phase 48 | Pending |
-| ATTR-08 | Phase 47 | Pending |
-| ATTR-09 | Phase 47 | Pending |
+| ATTR-08 | Phase 47 | Complete |
+| ATTR-09 | Phase 47 | Complete |
 | ATTR-10 | Phase 48 | Pending |
-| SCOPE-01 | Phase 47 | Pending |
+| SCOPE-01 | Phase 47 | Complete |
 | TYPE-01 | Phase 46 | Complete |
 | TYPE-02 | Phase 46 | Complete |
 | TYPE-03 | Phase 46 | Complete |
