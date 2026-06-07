@@ -907,7 +907,7 @@ Process-lifetime in-memory cache wrapping the single `loadMarketplaceManifest` s
 | 43. Marketplace Info Command                                         | v1.8      | 2/2 | Complete    | 2026-06-04 |
 | 44. Plugin Info Command                                              | v1.8      | 2/2 | Complete    | 2026-06-04 |
 | 45. Manifest In-Memory Cache                                        | v1.9      | 2/2 | Complete    | 2026-06-07 |
-| 46. Type-Model Foundations                                          | v1.10     | 0/?            | Not started | --         |
+| 46. Type-Model Foundations                                          | v1.10     | 0/1            | Planned     | --         |
 | 47. Plugin-Ops Attribution & Cross-Scope                            | v1.10     | 0/?            | Not started | --         |
 | 48. Marketplace-Ops Attribution                                     | v1.10     | 0/?            | Not started | --         |
 | 49. Cross-Op Convergence & GREEN-Gate Close                         | v1.10     | 0/?            | Not started | --         |
@@ -937,7 +937,10 @@ Every plugin/marketplace operation reports the true blocker on the correct subje
 4. `MarketplaceNotificationMessage` co-occurrence is type-constrained via a discriminated union so `reasons` is reachable only on the `skipped` arm and `details` only on the list surface -- a TypeScript assert proves a list-surface row cannot carry `reasons` and a skipped row cannot carry `details` (TYPE-04, audit B-3).
 5. `npm run check` exits 0; the catalog-UAT byte-equality runner stays GREEN with zero output-byte changes for any v1.0-v1.9 command; the type-model reshape, the new variant, the new `isInfoKind` guard, and any catalog/UAT/notify-v2 fixtures that change shape land in one atomic commit per NFR-6 + the atomic-supersession lesson.
 
-**Plans:** TBD
+**Plans:** 1 plan
+**Wave 1**
+
+- [ ] 46-01-PLAN.md -- Atomic type-model reshape: 6th MarketplaceNotAddedMessage arm + ContentReason exclusion + per-status MarketplaceNotificationMessage union + single isInfoKind guard/assertNever across all 4 consumers; switch the 2 info construction sites + import/execute per-status arm constructor; re-key the 4 {not added} fixtures asserting identical bytes; npm run check GREEN in one commit (TYPE-01..04; D-46-01..07)
 
 ### Phase 47: Plugin-Ops Attribution & Cross-Scope
 
