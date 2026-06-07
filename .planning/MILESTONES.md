@@ -1,5 +1,16 @@
 # Milestones: pi-claude-marketplace
 
+## v1.9 Manifest In-Memory Cache (Shipped: 2026-06-07)
+
+**Phases completed:** 1 phases, 2 plans, 3 tasks
+
+**Key accomplishments:**
+
+- 1. [Rule 3 - Blocking] Split CACHE-01 into 2 tests to satisfy the 7-block acceptance criterion
+- `createManifestCache(loader)` stat-keyed memoization wired behind the `loadMarketplaceManifest` seam -- by-reference success hits, same-instance negative re-throw, stat-fail fall-through -- turning Plan 45-01's Wave 0 suite GREEN with byte-identical output and zero call-site churn.
+
+---
+
 ## v1.8 Plugin and Marketplace Info Commands (Shipped: 2026-06-04)
 
 **Phases completed:** 3 phases, 5 plans, 10 tasks
