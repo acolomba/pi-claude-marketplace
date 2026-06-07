@@ -74,7 +74,12 @@ import {
 import { resolveScopeFromState } from "../marketplace/shared.ts";
 
 import { discoverGeneratedNames } from "./discover-names.ts";
-import { assertNoCrossPluginConflicts, resolveCrossScopePluginTarget } from "./shared.ts";
+import {
+  assertNoCrossPluginConflicts,
+  MarketplaceNotAddedSignal,
+  resolveCrossScopePluginTarget,
+  resolveInstalledMarketplaceTarget,
+} from "./shared.ts";
 
 import type { AgentsReplacement, PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { CommandsReplacement, PreparedCommandsStaging } from "../../bridges/commands/index.ts";
@@ -178,39 +183,11 @@ interface ResolvedReinstallTarget {
   readonly scope: Scope;
 }
 
-/**
- * ATTR-03 / D-47-A structural marketplace-absent signal.
- *
- * The reinstall target enumerator throws this when the requested marketplace
- * is not added (in the requested explicit scope, or in BOTH scopes for the
- * bare form, or present only in the OTHER scope per SCOPE-01). The
- * `reinstallPlugins` enumeration catch detects it via `instanceof` and emits
- * ONE standalone Phase 46 `MarketplaceNotAddedMessage` (`{not added}` on the
- * marketplace subject) BEFORE any cascade row exists -- replacing the former
- * per-form divergence (synthesized phantom target -> `(skipped) {not
- * installed}`; raw `MarketplaceNotFoundError`/`Error` -> synthetic
- * `(reinstall)` `{not found}` row).
- *
- * `requestedScope` carries the explicitly-requested scope so the `[scope]`
- * bracket reads "not added in the scope you asked for" (SCOPE-01); it is
- * OMITTED for the bare form that missed in both scopes (no bracket).
- *
- * Structural (not REASONS): `{not added}` is the hard-coded brace of
- * `renderMarketplaceNotAdded`, reachable only via the dedicated variant -- no
- * new `REASONS` member is introduced (D-47-B).
- */
-class MarketplaceNotAddedSignal extends Error {
-  readonly marketplace: string;
-  readonly requestedScope?: Scope;
-  constructor(marketplace: string, requestedScope?: Scope) {
-    super(`Marketplace "${marketplace}" not added.`);
-    this.name = "MarketplaceNotAddedSignal";
-    this.marketplace = marketplace;
-    if (requestedScope !== undefined) {
-      this.requestedScope = requestedScope;
-    }
-  }
-}
+// ATTR-03 / D-47-A: the structural marketplace-not-added signal thrown by the
+// reinstall target enumerator is the shared `MarketplaceNotAddedSignal` from
+// `./shared.ts` (one source of truth so `instanceof` agrees with update.ts).
+// The `reinstallPlugins` enumeration catch detects it via `instanceof` and
+// emits ONE standalone `MarketplaceNotAddedMessage` before any cascade row.
 
 const defaultRemoveDataDir: RemoveDataDirFn = async (dataDir) => {
   await rm(dataDir, { recursive: true, force: true });
@@ -581,10 +558,20 @@ async function resolveMarketplaceReinstallScope(
 
   // MARKETPLACE form.
   if (explicitScope !== undefined) {
-    const explicitLocations = locationsFor(explicitScope, cwd);
-    const explicitState = await loadState(explicitLocations.extensionRoot);
-    if (explicitState.marketplaces[marketplace] !== undefined) {
-      return { scope: explicitScope, locations: explicitLocations };
+    // WR-03: reuse the discriminated `resolveInstalledMarketplaceTarget` (the
+    // resolver update.ts uses) so reinstall's explicit-scope cross-scope read
+    // is consistent with update. Byte-neutral for the operator: a `resolved`
+    // arm yields the same (scope, locations) the former inline guard returned;
+    // both the `marketplace-absent` and `other-scope` arms (which carry the
+    // REQUESTED scope) collapse to the same `{not added} [requestedScope]`
+    // bracket-only emission per resolved Open Question #1.
+    const resolution = await resolveInstalledMarketplaceTarget({
+      cwd,
+      marketplace,
+      explicitScope,
+    });
+    if (resolution.kind === "resolved") {
+      return { scope: resolution.scope, locations: resolution.locations };
     }
 
     throw new MarketplaceNotAddedSignal(marketplace, explicitScope);
@@ -963,6 +950,13 @@ function reasonsFromTypedError(err: unknown): readonly ContentReason[] | undefin
     return ["rollback partial"] as const;
   }
 
+  // IN-03: dead defensive coverage. Post-WR-03 the marketplace-existence case
+  // no longer reaches here -- `resolveScopeFromState`'s `MarketplaceNotFoundError`
+  // is caught inside `resolveMarketplaceReinstallScope` and re-attributed to the
+  // no-bracket `MarketplaceNotAddedSignal`. Kept (NOT removed) so any FUTURE
+  // `MarketplaceNotFoundError` that slips through a different code path still maps
+  // to a typed `{not found}` reason rather than degrading to the `narrowReasons`
+  // substring fallback. No live non-mp-existence caller exists today.
   if (err instanceof MarketplaceNotFoundError) {
     return ["not found"] as const;
   }

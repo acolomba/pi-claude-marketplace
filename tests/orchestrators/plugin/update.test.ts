@@ -1112,6 +1112,43 @@ test("SCOPE-01 @<mp>: marketplace present only in other scope -> standalone {not
   });
 });
 
+// SCOPE-01: explicit-scope `<plugin>@<mp>` against a marketplace present ONLY in
+// the other scope -> standalone `{not added}` carrying the REQUESTED scope
+// bracket. The plugin form reaches this via `resolveInstalledPluginTarget`
+// returning the explicit scope blindly, then `enumerateMarketplaceTarget`
+// finding `mp === undefined` for that scope and raising the signal -- the
+// companion of the `@<mp>` form test above (WR-01 gap closure).
+test("SCOPE-01 <plugin>@<mp>: marketplace present only in other scope -> standalone {not added} [requestedScope]", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-scope01-plugin-other-"));
+    try {
+      // Seed the marketplace in PROJECT; ask for USER explicitly.
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "user", // project has it; user doesn't
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.equal(notifications[0]?.message, "⊘ mp [user] (failed) {not added}");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // Covers the resolveInstalledPluginTarget → undefined → ?? resolveInstalledMarketplaceTarget
 // fallback in enumerateMarketplaceTarget. With no explicit scope, resolveInstalledPluginTarget
 // searches both scopes and finds nothing, so the fallback fires to locate the marketplace scope.

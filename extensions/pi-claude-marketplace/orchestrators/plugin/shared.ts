@@ -86,6 +86,37 @@ export type CrossScopePluginResolution =
   | { readonly kind: "other-scope"; readonly presentIn: Scope; readonly requestedScope: Scope }
   | { readonly kind: "marketplace-absent"; readonly requestedScope?: Scope };
 
+/**
+ * ATTR-02 / ATTR-03 / D-47-A structural signal for the marketplace-existence
+ * precondition, shared by the update and reinstall direct-path enumerators.
+ *
+ * A single exported class is the one source of truth so `instanceof` checks
+ * agree across orchestrators (a per-file copy would defeat `instanceof` by
+ * class identity). The enumeration catch in each entrypoint detects it via
+ * `instanceof` and emits ONE standalone `MarketplaceNotAddedMessage`
+ * (`{not added}` on the marketplace subject) before any cascade row exists.
+ *
+ * `requestedScope` carries the explicitly-requested scope so the `[scope]`
+ * bracket reads "not added in the scope you asked for" (SCOPE-01); it is
+ * OMITTED for the bare form that missed in both scopes (no bracket).
+ *
+ * Structural (not REASONS): `{not added}` is the hard-coded brace of
+ * `renderMarketplaceNotAdded`, reachable only via the dedicated variant -- no
+ * new `REASONS` member is introduced (D-47-B).
+ */
+export class MarketplaceNotAddedSignal extends Error {
+  readonly marketplace: string;
+  readonly requestedScope?: Scope;
+  constructor(marketplace: string, requestedScope?: Scope) {
+    super(`Marketplace "${marketplace}" not added.`);
+    this.name = "MarketplaceNotAddedSignal";
+    this.marketplace = marketplace;
+    if (requestedScope !== undefined) {
+      this.requestedScope = requestedScope;
+    }
+  }
+}
+
 /** The non-requested scope -- used to read the other scope on an explicit-scope miss. */
 function otherScope(scope: Scope): Scope {
   return scope === "project" ? "user" : "project";

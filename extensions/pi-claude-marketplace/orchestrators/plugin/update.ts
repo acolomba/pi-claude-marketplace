@@ -93,6 +93,7 @@ import { DEFAULT_GIT_OPS, refreshGitHubClone, type GitOps } from "../marketplace
 import { discoverGeneratedNames } from "./discover-names.ts";
 import {
   assertNoCrossPluginConflicts,
+  MarketplaceNotAddedSignal,
   resolveInstalledMarketplaceTarget,
   resolveInstalledPluginTarget,
   resolvePluginVersion,
@@ -133,39 +134,12 @@ export type UpdatePluginsTarget =
   | { readonly kind: "marketplace"; readonly marketplace: string }
   | { readonly kind: "plugin"; readonly plugin: string; readonly marketplace: string };
 
-/**
- * ATTR-02 / D-47-A: structural signal raised by the direct-path target
- * enumerator (`enumerateMarketplaceTarget`) when the marketplace is not added
- * (in the requested explicit scope, or in BOTH scopes for the bare `@mp` form,
- * or present only in the OTHER scope per SCOPE-01). The `updatePlugins`
- * enumeration catch detects it via `instanceof` and emits ONE standalone Phase
- * 46 `MarketplaceNotAddedMessage` (`{not added}` on the marketplace subject)
- * BEFORE any cascade row exists -- replacing the former raw `Error` (M10) /
- * `MarketplaceNotFoundError` (M11) that escaped to the `{not found}` synthetic
- * row.
- *
- * `requestedScope` carries the explicitly-requested scope so the `[scope]`
- * bracket reads "not added in the scope you asked for" (SCOPE-01); it is
- * OMITTED for the bare form that missed in both scopes (no bracket).
- *
- * Structural (not REASONS): `{not added}` is the hard-coded brace of
- * `renderMarketplaceNotAdded`, reachable only via the dedicated variant -- no
- * new `REASONS` member is introduced (D-47-B). The cascade path
- * (`updateSinglePlugin` / `preflightUpdate`) NEVER raises this -- it keeps its
- * non-throwing concurrent-removal outcome (Pitfall 3 / A3).
- */
-class MarketplaceNotAddedSignal extends Error {
-  readonly marketplace: string;
-  readonly requestedScope?: Scope;
-  constructor(marketplace: string, requestedScope?: Scope) {
-    super(`Marketplace "${marketplace}" not added.`);
-    this.name = "MarketplaceNotAddedSignal";
-    this.marketplace = marketplace;
-    if (requestedScope !== undefined) {
-      this.requestedScope = requestedScope;
-    }
-  }
-}
+// ATTR-02 / D-47-A: the structural marketplace-not-added signal raised by the
+// direct-path enumerator (`enumerateMarketplaceTarget`) is the shared
+// `MarketplaceNotAddedSignal` from `./shared.ts` (one source of truth so
+// `instanceof` agrees with reinstall.ts). The cascade path
+// (`updateSinglePlugin` / `preflightUpdate`) NEVER raises it -- it keeps its
+// non-throwing concurrent-removal outcome (Pitfall 3 / A3).
 
 export interface UpdatePluginsOptions {
   readonly ctx: ExtensionContext;
