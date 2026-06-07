@@ -68,9 +68,9 @@ import { applyAutoupdateFlipInPlace } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
+  ContentReason,
   MarketplaceNotificationMessage,
   PluginFailedMessage,
-  Reason,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
@@ -127,7 +127,7 @@ function missingEverywhere(
  * the permissive `not found`.
  */
 function autoupdateFailedRow(name: string, err: unknown): PluginFailedMessage {
-  const reasons: readonly Reason[] =
+  const reasons: readonly ContentReason[] =
     err instanceof StateLockHeldError ? (["lock held"] as const) : (["not found"] as const);
   return {
     status: "failed",

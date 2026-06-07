@@ -2661,24 +2661,15 @@ test("Phase 42 / WR-05 / wrapDescription: two words whose `current.length + 1 + 
 });
 
 test("Phase 42 / INFO-04: {not added} row renders as bare column-0 plugin row with error severity", () => {
-  // The INFO-04 carve-out: a plugin-info payload whose plugin row is
-  // status:"failed" + reasons:["not added"] renders ONLY the bare plugin
-  // row at column 0 (no marketplace header). Severity routes to "error"
-  // via computeSeverity's plugin-info arm.
+  // TYPE-01 / TYPE-03: the dedicated `marketplace-not-added` variant renders
+  // the bare column-0 row (no marketplace header). `computeSeverity` routes
+  // the new arm to "error" through the single `isInfoKind` guard.
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
-    kind: "plugin-info",
-    marketplaceName: "my-mp",
-    marketplaceScope: "user",
-    marketplaceDetails: { autoupdate: false },
-    plugin: {
-      status: "failed",
-      name: "my-mp",
-      scope: "user",
-      reasons: ["not added"],
-      componentsResolved: false,
-    },
+    kind: "marketplace-not-added",
+    name: "my-mp",
+    scope: "user",
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2688,29 +2679,21 @@ test("Phase 42 / INFO-04: {not added} row renders as bare column-0 plugin row wi
 });
 
 test("Phase 42 / INFO-04: {not added} row never carries a reload-hint (read-only surface)", () => {
-  // INFO surfaces are read-only -- shouldEmitReloadHint short-circuits
-  // false on info kinds. Lock that the bare plugin row does NOT carry
-  // `\n\n/reload to pick up changes`.
+  // TYPE-03: `shouldEmitReloadHint` routes the new `marketplace-not-added`
+  // arm to `false` through the single `isInfoKind` guard. Lock that the bare
+  // row does NOT carry `\n\n/reload to pick up changes`.
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
-    kind: "plugin-info",
-    marketplaceName: "my-mp",
-    marketplaceScope: "user",
-    marketplaceDetails: { autoupdate: false },
-    plugin: {
-      status: "failed",
-      name: "my-mp",
-      scope: "user",
-      reasons: ["not added"],
-      componentsResolved: false,
-    },
+    kind: "marketplace-not-added",
+    name: "my-mp",
+    scope: "user",
   };
   notify(ctx as never, pi as never, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   assert.ok(
     !body.includes("/reload"),
-    "info-surface plugin-info must NOT carry the reload-hint trailer",
+    "marketplace-not-added must NOT carry the reload-hint trailer",
   );
 });
 

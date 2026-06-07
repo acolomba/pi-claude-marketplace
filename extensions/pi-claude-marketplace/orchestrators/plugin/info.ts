@@ -26,10 +26,10 @@ import { narrowProbeError, narrowResolverNotes } from "../../shared/probe-classi
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
+  ContentReason,
   NotificationMessage,
   PluginInfoMessage,
   PluginInfoRow,
-  Reason,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
@@ -402,7 +402,7 @@ async function buildInstalledRow(
     // confirms the install); the `{reason}` brace makes the
     // persistence-vs-disk disagreement explicit and prevents byte-
     // identical render with a deliberate external-source defer.
-    const reasons: readonly Reason[] = [narrowProbeError(err)];
+    const reasons: readonly ContentReason[] = [narrowProbeError(err)];
     return {
       status: "installed",
       name: pluginName,
@@ -436,7 +436,7 @@ async function buildNotInstalledRow(
     // `narrowProbeError` ladder used by `list.ts`. Hardcoding
     // `"unreadable"` here would diverge from the list surface for the
     // same `EACCES` / `ENOENT` failures.
-    const reasons: readonly Reason[] = [narrowProbeError(err)];
+    const reasons: readonly ContentReason[] = [narrowProbeError(err)];
     return {
       status: "unavailable",
       name: pluginName,
@@ -504,7 +504,7 @@ async function buildAvailableRow(opts: {
       ...(dependencies !== undefined && { dependencies }),
     };
   } catch (err) {
-    const reasons: readonly Reason[] = [narrowProbeError(err)];
+    const reasons: readonly ContentReason[] = [narrowProbeError(err)];
     return {
       status: "available",
       name: pluginName,
@@ -537,28 +537,17 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // Branch on the collected marketplaces (a) / (b) / (c) per the file
   // header.
   if (found.length === 0) {
-    // `{not added}` carve-out reused. The renderer's predicate emits
-    // ONLY the bare plugin row when `status === "failed"` and
-    // `reasons === ["not added"]`; `marketplaceName`,
-    // `marketplaceScope`, `marketplaceDetails` are unused on this
-    // path. `plugin.name` carries the MARKETPLACE name -- the user-
-    // facing failure is "the marketplace is not added", not "the
-    // plugin doesn't exist". `plugin.scope` is set when a `--scope`
-    // was requested (renders `[user]` / `[project]`); OMITTED when
-    // `--scope` was undefined and BOTH scopes missed (the bracket
-    // suppresses).
+    // The marketplace is absent -> the dedicated `MarketplaceNotAddedMessage`
+    // variant (TYPE-01 / D-46-01). `name` carries the MARKETPLACE name -- the
+    // user-facing failure is "the marketplace is not added", not "the plugin
+    // doesn't exist". `scope` is set when a `--scope` was requested (renders
+    // `[user]` / `[project]`); OMITTED when `--scope` was undefined and BOTH
+    // scopes missed (the bracket suppresses). `renderMarketplaceNotAdded`
+    // emits the bare column-0 row `⊘ <name> [scope?] (failed) {not added}`.
     const message: NotificationMessage = {
-      kind: "plugin-info",
-      marketplaceName: opts.marketplace,
-      marketplaceScope: opts.scope ?? "user",
-      marketplaceDetails: { autoupdate: false },
-      plugin: {
-        status: "failed",
-        name: opts.marketplace,
-        ...(opts.scope !== undefined && { scope: opts.scope }),
-        reasons: ["not added"],
-        componentsResolved: false,
-      },
+      kind: "marketplace-not-added",
+      name: opts.marketplace,
+      ...(opts.scope !== undefined && { scope: opts.scope }),
     };
     notify(opts.ctx, opts.pi, message);
     return;

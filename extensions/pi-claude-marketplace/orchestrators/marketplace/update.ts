@@ -127,9 +127,9 @@ import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { AuthAttemptResult, OnAuthRequiredFn } from "../../platform/git.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
+  ContentReason,
   PluginFailedMessage,
   PluginNotificationMessage,
-  Reason,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
@@ -507,7 +507,7 @@ async function cascadeAutoupdates(
  * PluginShapeError variants first, then errno-bearing FS errors, then
  * `undefined` to defer to the consumer's substring fallback.
  */
-function reasonsFromCascadeError(err: unknown): readonly Reason[] | undefined {
+function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undefined {
   if (err instanceof PluginShapeError) {
     // Switch on `err.shape.kind` for compile-time exhaustiveness.
     switch (err.shape.kind) {
@@ -635,7 +635,7 @@ function outcomeToCascadePluginMessage(
  * without `reasons`; once every producer populates `reasons`, the fallback
  * can be deleted.
  */
-function narrowSkipReason(outcome: PluginUpdateSkippedOutcome): Reason {
+function narrowSkipReason(outcome: PluginUpdateSkippedOutcome): ContentReason {
   const firstReason = outcome.reasons[0];
   if (firstReason !== undefined) {
     return firstReason;
@@ -682,7 +682,7 @@ function narrowSkipReason(outcome: PluginUpdateSkippedOutcome): Reason {
  * as `narrowSkipReason` above). The fallback is `"unreadable manifest"`
  * because most update failures bubble up from manifest re-reads.
  */
-function narrowFailReason(outcome: PluginUpdateFailedOutcome): Reason {
+function narrowFailReason(outcome: PluginUpdateFailedOutcome): ContentReason {
   const firstReason = outcome.reasons?.[0];
   if (firstReason !== undefined) {
     return firstReason;

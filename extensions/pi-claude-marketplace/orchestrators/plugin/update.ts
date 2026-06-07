@@ -108,11 +108,11 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
+  ContentReason,
   Dependency,
   MarketplaceNotificationMessage,
   PluginFailedMessage,
   PluginNotificationMessage,
-  Reason,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
@@ -442,7 +442,7 @@ export const updateSinglePlugin: PluginUpdateFn = async (plugin, marketplace, sc
  * then falls back to substring-narrowing on `notes`. Only `PluginShapeError`
  * carries enough structure to map directly.
  */
-function reasonsFromTypedError(err: unknown): readonly Reason[] | undefined {
+function reasonsFromTypedError(err: unknown): readonly ContentReason[] | undefined {
   if (err instanceof PluginShapeError) {
     // switch on `err.shape.kind` for compile-time
     // exhaustiveness against the typed discriminated union.
@@ -1261,7 +1261,7 @@ function outcomeToCascadePluginMessage(
     case "failed": {
       const phaseFailures = outcome.phaseFailures ?? [];
       const hasPhaseFailures = phaseFailures.length > 0;
-      const reasons: readonly Reason[] = hasPhaseFailures
+      const reasons: readonly ContentReason[] = hasPhaseFailures
         ? (["rollback partial"] as const)
         : (outcome.reasons ?? narrowFailReasons(outcome.notes));
       // carve-out: PluginFailedMessage has NO `from`/`to` fields
@@ -1426,7 +1426,7 @@ interface NotifyDirectFailureArgs {
    * route through `narrowDirectFailReason` for a best-fit Reason from
    * the typed error.
    */
-  readonly reasonOverride?: Reason;
+  readonly reasonOverride?: ContentReason;
   /**
    * Optional per-phase rollback children. Threaded only by the phase-3
    * aggregate path. Each entry's `msg` is wrapped in a synthesized Error
@@ -1441,7 +1441,7 @@ interface NotifyDirectFailureArgs {
 function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
   const { ctx, pi, marketplace, scope, pluginName, err } = args;
   const cause = err instanceof Error ? err : new Error(String(err));
-  const reasons: readonly Reason[] = [args.reasonOverride ?? narrowDirectFailReason(cause)];
+  const reasons: readonly ContentReason[] = [args.reasonOverride ?? narrowDirectFailReason(cause)];
   // WR-05: row-level `scope` is OMITTED -- it always matched the
   // marketplace block's `scope` at every callsite below, and
   // `renderScopeBracket` (shared/notify.ts) suppresses the bracket in
@@ -1500,7 +1500,7 @@ function rollbackPartialCauseSlot(p: Phase3Failure): { readonly cause?: Error } 
  * The fallback `"unreadable manifest"` mirrors the marketplace/update.ts
  * narrowFailReason precedent for unknown error shapes.
  */
-function narrowDirectFailReason(err: Error): Reason {
+function narrowDirectFailReason(err: Error): ContentReason {
   // Phase-3 aggregate failures are surfaced via reasonOverride; here we
   // handle the enumerate / syncClone / phase-2 paths only.
   if (err instanceof PluginShapeError) {
@@ -1588,7 +1588,7 @@ function notifyBareFormEnumerateFailure(args: {
 }): void {
   const { ctx, pi, scope, err } = args;
   const cause = err instanceof Error ? err : new Error(String(err));
-  const reasons: readonly Reason[] = [narrowDirectFailReason(cause)];
+  const reasons: readonly ContentReason[] = [narrowDirectFailReason(cause)];
   // WR-05: row-level `scope` is OMITTED -- the marketplace block carries
   // the same scope, and `renderScopeBracket` suppresses the per-row
   // bracket in that case. Matches the omit convention used by
@@ -1621,7 +1621,7 @@ const SYNTHETIC_UPDATE_PLACEHOLDER_NAME = "(update)";
 // The renderer (shared/notify.ts) owns version-arrow composition via the
 // PluginUpdatedMessage's required from/to fields.
 
-function narrowSkipReasons(notes: readonly string[] | undefined): readonly Reason[] {
+function narrowSkipReasons(notes: readonly string[] | undefined): readonly ContentReason[] {
   if (notes === undefined || notes.length === 0) {
     return [];
   }
@@ -1629,7 +1629,7 @@ function narrowSkipReasons(notes: readonly string[] | undefined): readonly Reaso
   return [narrowSkipReason(notes[0] ?? "")];
 }
 
-function narrowSkipReason(note: string): Reason {
+function narrowSkipReason(note: string): ContentReason {
   if (note === "not installed") {
     return "not installed";
   }
@@ -1655,7 +1655,7 @@ function narrowSkipReason(note: string): Reason {
   return "not in manifest";
 }
 
-function narrowFailReasons(notes: readonly string[] | undefined): readonly Reason[] {
+function narrowFailReasons(notes: readonly string[] | undefined): readonly ContentReason[] {
   if (notes === undefined || notes.length === 0) {
     return [];
   }
@@ -1663,7 +1663,7 @@ function narrowFailReasons(notes: readonly string[] | undefined): readonly Reaso
   return [narrowFailReason(notes[0] ?? "")];
 }
 
-function narrowFailReason(note: string): Reason {
+function narrowFailReason(note: string): ContentReason {
   if (note.includes("rollback")) {
     return "rollback partial";
   }

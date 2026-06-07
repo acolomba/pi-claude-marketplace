@@ -59,10 +59,12 @@ import {
 
 import type {
   CascadeNotificationMessage,
+  ContentReason,
   Dependency,
   MarketplaceDetails,
   MarketplaceInfoCascadeMessage,
   MarketplaceInfoMessage,
+  MarketplaceNotAddedMessage,
   MarketplaceNotificationMessage,
   MarketplaceStatus,
   NotificationMessage,
@@ -227,21 +229,35 @@ export type _NoSeverityOnNotificationMessage = CascadeNotificationMessage["sever
 // @ts-expect-error -- SNM-01: CascadeNotificationMessage has NO trailer field
 export type _NoTrailerOnNotificationMessage = CascadeNotificationMessage["trailer"];
 
-// SNM-02 + D-15-06 + D-17.1-01 reasons? amendment:
-// `MarketplaceNotificationMessage` carries name + scope + optional status +
-// optional details + optional reasons + plugins. `status?`, `details?`, and
-// `reasons?` are independent optionals.
-interface _MarketplaceMessageExpected {
+// SNM-02 + TYPE-04 (D-46-03): `MarketplaceNotificationMessage` is a per-status
+// discriminated union. Every arm carries the common `name` / `scope` /
+// `plugins`; `reasons` is reachable ONLY on the `skipped` arm and `details`
+// ONLY on the list (`status?: undefined`) arm. Under a union the old
+// all-optional struct no longer proves the constraint (Pitfall 5) -- instead,
+// prove the common fields exist on every arm and that the discriminated
+// `status` set is exactly the closed `MarketplaceStatus` plus `undefined`
+// (list arm). The per-arm co-occurrence proofs (`reasons` only on skipped,
+// `details` only on list, neither on failed) live in the TYPE-04 block below.
+type _Assert_MarketplaceCommonFields = MarketplaceNotificationMessage extends {
   readonly name: string;
   readonly scope: _Scope;
-  readonly status?: MarketplaceStatus;
-  readonly details?: MarketplaceDetails;
-  readonly reasons?: readonly _Reason[];
   readonly plugins: readonly PluginNotificationMessage[];
 }
-type _Assert_MarketplaceMessageShape =
-  MarketplaceNotificationMessage extends _MarketplaceMessageExpected ? true : never;
-export const _mms: _Assert_MarketplaceMessageShape = true;
+  ? true
+  : never;
+export const _mms: _Assert_MarketplaceCommonFields = true;
+
+// The union's `status` discriminator is EXACTLY the closed `MarketplaceStatus`
+// set plus `undefined` (the list/inventory arm). Bidirectional `extends`
+// proves set-equality: a dropped arm or a stray status both fail.
+type _Assert_MarketplaceStatusDomain = MarketplaceNotificationMessage["status"] extends
+  | MarketplaceStatus
+  | undefined
+  ? MarketplaceStatus | undefined extends MarketplaceNotificationMessage["status"]
+    ? true
+    : never
+  : never;
+export const _mmsd: _Assert_MarketplaceStatusDomain = true;
 
 // SNM-07 + D-15-05: `MarketplaceDetails` has EXACTLY autoupdate (required)
 // and lastUpdatedAt? (optional). No `source`, no `version`, no other entries.
@@ -922,6 +938,116 @@ export const _l10b: _Assert_NotifFiveArms = true;
 type _Assert_ExtractCascadeByOptionalKindIsNever =
   Extract<NotificationMessage, { kind: "cascade" }> extends never ? true : never;
 export const _l11: _Assert_ExtractCascadeByOptionalKindIsNever = true;
+
+// ============================================================================
+// Phase 46 / TYPE-01..04: type-model foundations compile proofs
+//
+// These prove the four type-model deliverables that make the v1.10 attribution
+// foot-guns UNREPRESENTABLE. Negative-presence proofs use `// @ts-expect-error`
+// on a single indexed-access line: an unused directive (i.e. the field came
+// BACK) is itself a typecheck failure, surfacing the regression.
+// ============================================================================
+
+// --- TYPE-02 (D-46-02): ContentReason excludes the structural "not added" ---
+
+// @ts-expect-error -- TYPE-02: "not added" is NOT a ContentReason; the mixed
+// structural+content row is a COMPILE error, not a render-time length guard.
+const _illegal: readonly ContentReason[] = ["not added", "permission denied"];
+// Reference `_illegal` so it is not flagged as an entirely-unused const
+// (the load-bearing proof is the consumed `@ts-expect-error` above).
+void _illegal;
+
+type _Assert_NotAddedExcluded = "not added" extends ContentReason ? never : true;
+export const _car: _Assert_NotAddedExcluded = true;
+
+// Every other Reason member is still a ContentReason (the Exclude removed
+// exactly one literal). Bidirectional inclusion against `Reason` minus the one
+// literal is awkward to spell; instead prove a representative content reason
+// survives and that ContentReason is a strict subtype of Reason.
+type _Assert_ContentReasonIsReasonSubset = ContentReason extends _Reason ? true : never;
+export const _crs: _Assert_ContentReasonIsReasonSubset = true;
+
+// --- TYPE-01 (D-46-01): the marketplace-not-added variant carries no
+//     placeholder fields and only kind / name / scope? ---
+
+type _VNotAdded = Extract<NotificationMessage, { kind: "marketplace-not-added" }>;
+
+// The variant is reachable from the union via its kind discriminator.
+type _Assert_NotAddedReachable = _VNotAdded extends never ? never : true;
+export const _vnr: _Assert_NotAddedReachable = true;
+
+// @ts-expect-error -- TYPE-01: variant has NO marketplaceScope placeholder
+export type _NoMpScopePlaceholder = _VNotAdded["marketplaceScope"];
+// @ts-expect-error -- TYPE-01: variant has NO marketplaceDetails placeholder
+export type _NoMpDetailsPlaceholder = _VNotAdded["marketplaceDetails"];
+// @ts-expect-error -- TYPE-01: variant has NO reasons field (the {not added}
+// brace is hard-coded by renderMarketplaceNotAdded)
+export type _NoReasonsOnNotAdded = _VNotAdded["reasons"];
+
+// Positive field-shape proof: the variant is EXACTLY kind / name / scope?.
+type _Assert_NotAddedFields = _VNotAdded extends {
+  readonly kind: "marketplace-not-added";
+  readonly name: string;
+  readonly scope?: _Scope;
+}
+  ? true
+  : never;
+export const _vna: _Assert_NotAddedFields = true;
+
+// The exported interface alias mirrors the union arm (no drift).
+type _Assert_NotAddedAliasMatches = MarketplaceNotAddedMessage extends _VNotAdded
+  ? _VNotAdded extends MarketplaceNotAddedMessage
+    ? true
+    : never
+  : never;
+export const _vnaa: _Assert_NotAddedAliasMatches = true;
+
+// --- D-46-07: 6-arm union arity. `_l9b` (four) and `_l10b` (five) stay above
+//     as cheap regression coverage; this locks the 6th arm. ---
+
+type _Assert_NotifSixArms =
+  Extract<NotificationMessage, { marketplaces: readonly unknown[] }> extends never
+    ? never
+    : Extract<NotificationMessage, { kind: "marketplace-info" }> extends never
+      ? never
+      : Extract<NotificationMessage, { kind: "plugin-info" }> extends never
+        ? never
+        : Extract<NotificationMessage, { kind: "marketplace-info-cascade" }> extends never
+          ? never
+          : Extract<NotificationMessage, { kind: "plugin-info-cascade" }> extends never
+            ? never
+            : Extract<NotificationMessage, { kind: "marketplace-not-added" }> extends never
+              ? never
+              : true;
+export const _l12: _Assert_NotifSixArms = true;
+
+// --- TYPE-04 (D-46-03): per-status co-occurrence -- reasons only on skipped,
+//     details only on the list arm, neither on failed ---
+
+type _MpSkipped = Extract<MarketplaceNotificationMessage, { status: "skipped" }>;
+type _MpList = Extract<MarketplaceNotificationMessage, { status?: undefined }>;
+type _MpFailed = Extract<MarketplaceNotificationMessage, { status: "failed" }>;
+
+// reasons reachable on the skipped arm (optional ContentReason[]).
+type _Assert_ReasonsOnSkipped = _MpSkipped["reasons"] extends readonly ContentReason[] | undefined
+  ? true
+  : never;
+export const _mrs: _Assert_ReasonsOnSkipped = true;
+
+// details reachable on the list arm (optional MarketplaceDetails).
+type _Assert_DetailsOnList = _MpList["details"] extends MarketplaceDetails | undefined
+  ? true
+  : never;
+export const _mdl: _Assert_DetailsOnList = true;
+
+// @ts-expect-error -- TYPE-04 / D-46-03a: the failed mp arm has NO reasons
+export type _NoReasonsOnMpFailed = _MpFailed["reasons"];
+// @ts-expect-error -- TYPE-04 / D-46-03a: the failed mp arm has NO details
+export type _NoDetailsOnMpFailed = _MpFailed["details"];
+// @ts-expect-error -- TYPE-04: the skipped mp arm has NO details
+export type _NoDetailsOnMpSkipped = _MpSkipped["details"];
+// @ts-expect-error -- TYPE-04: the list mp arm has NO reasons
+export type _NoReasonsOnMpList = _MpList["reasons"];
 
 // ============================================================================
 // Drift guards (the length-locks `_l1` / `_l2` / `_l3` above lock 11 / 7 / 2):

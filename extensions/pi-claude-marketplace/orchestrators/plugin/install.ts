@@ -113,12 +113,12 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
+  ContentReason,
   Dependency,
   PluginFailedMessage,
   PluginInstalledMessage,
   PluginNotificationMessage,
   PluginUnavailableMessage,
-  Reason,
   StatusToken,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -138,7 +138,7 @@ interface EntityErrorRow {
   readonly marketplace?: string;
   readonly scope?: Scope;
   readonly status: Extract<StatusToken, "failed" | "unavailable">;
-  readonly reasons: readonly Reason[];
+  readonly reasons: readonly ContentReason[];
 }
 
 /**
@@ -1176,7 +1176,7 @@ const MANIFEST_FIELD_NOTE_PREFIX = "contains ";
 // the EMITTED closed-set Reason is the user-rendered value. `lspServers`
 // detects but renders as `lsp` (parallel to the single-word `hooks`
 // carve-out); `hooks` detects and renders unchanged.
-const MANIFEST_FIELD_TO_REASON: Readonly<Record<string, Reason>> = {
+const MANIFEST_FIELD_TO_REASON: Readonly<Record<string, ContentReason>> = {
   hooks: "hooks",
   lspServers: "lsp",
 };
@@ -1188,7 +1188,7 @@ const MANIFEST_FIELD_TO_REASON: Readonly<Record<string, Reason>> = {
  * Detection token (camelCase) and emitted Reason can differ -- see the
  * SNM-36 / D-24-04 seam note above.
  */
-function manifestFieldTokenFromNote(note: string): Reason | undefined {
+function manifestFieldTokenFromNote(note: string): ContentReason | undefined {
   if (!note.startsWith(MANIFEST_FIELD_NOTE_PREFIX)) {
     return undefined;
   }
@@ -1216,8 +1216,8 @@ function manifestFieldTokenFromNote(note: string): Reason | undefined {
  * the preferred path is typed errno-bearing Errors dispatched at the
  * orchestrator catch site via `.code`.
  */
-function narrowResolverReasons(reasons: readonly string[]): readonly Reason[] {
-  const out: Reason[] = [];
+function narrowResolverReasons(reasons: readonly string[]): readonly ContentReason[] {
+  const out: ContentReason[] = [];
   for (const reason of reasons) {
     if (reason === "") {
       continue;

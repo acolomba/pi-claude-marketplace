@@ -1351,46 +1351,26 @@ const FIXTURES: FixtureMap = {
     "absent-from-both": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
+      // TYPE-01: the dedicated `marketplace-not-added` variant. `scope` is
+      // OMITTED so the renderer emits no `[scope]` token -- absent-from-both
+      // states have no bracket because the marketplace is in NEITHER scope.
+      // Byte form is unchanged (`⊘ ghost-mp (failed) {not added}`).
       message: {
-        kind: "plugin-info",
-        marketplaceName: "ghost-mp",
-        // Unused placeholder per the INFO-04 carve-out (renderer skips
-        // the header on the bare `{not added}` row); supply a default.
-        marketplaceScope: "user",
-        marketplaceDetails: { autoupdate: false },
-        plugin: {
-          status: "failed",
-          name: "ghost-mp",
-          // D-03: `plugin.scope` OMITTED so the renderer's bracket
-          // short-circuit emits no `[scope]` token. Absent-from-both
-          // states have no [scope] bracket because the marketplace is
-          // in NEITHER scope -- emitting one would be misleading.
-          reasons: ["not added"],
-          componentsResolved: false,
-        },
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
       } satisfies NotificationMessage,
     },
 
-    // Anchor preserved byte-identical. DO NOT modify.
+    // Byte form preserved byte-identical (`⊘ my-mp [user] (failed) {not added}`).
+    // The fixture shape is re-keyed to the TYPE-01 variant; the rendered BYTES
+    // are unchanged.
     "scope-mismatch-not-added": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
-        kind: "plugin-info",
-        marketplaceName: "my-mp",
-        marketplaceScope: "user",
-        // Minimal MarketplaceDetails -- the carve-out renderer does not
-        // emit a marketplace header for this catalog state, so the
-        // autoupdate marker is never composed; supply the required
-        // `autoupdate` field with a default value.
-        marketplaceDetails: { autoupdate: false },
-        plugin: {
-          status: "failed",
-          name: "my-mp",
-          scope: "user",
-          reasons: ["not added"],
-          componentsResolved: false,
-        },
+        kind: "marketplace-not-added",
+        name: "my-mp",
+        scope: "user",
       } satisfies NotificationMessage,
     },
   },
@@ -1580,43 +1560,25 @@ const FIXTURES: FixtureMap = {
     "missing-marketplace-not-added-absent-from-both": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
+      // TYPE-01 variant. `name` carries the MARKETPLACE name (the user-facing
+      // failure is "the marketplace is not added"). `scope` OMITTED -> no
+      // bracket. Byte form unchanged (`⊘ ghost-mp (failed) {not added}`).
       message: {
-        kind: "plugin-info",
-        marketplaceName: "ghost-mp",
-        // Unused placeholder per the INFO-04 carve-out (renderer skips
-        // the header on the bare `{not added}` row); supply a default.
-        marketplaceScope: "user",
-        marketplaceDetails: { autoupdate: false },
-        plugin: {
-          status: "failed",
-          // The MARKETPLACE name (not the plugin name) -- the
-          // user-facing failure is "the marketplace is not added".
-          name: "ghost-mp",
-          // D-03: `plugin.scope` OMITTED so the renderer's bracket
-          // short-circuit emits no `[scope]` token.
-          reasons: ["not added"],
-          componentsResolved: false,
-        },
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
       } satisfies NotificationMessage,
     },
 
     "missing-marketplace-not-added-scope-mismatch": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
+      // TYPE-01 variant. `--scope user` requested explicitly -> renderer emits
+      // the `[user]` bracket. Byte form unchanged
+      // (`⊘ ghost-mp [user] (failed) {not added}`).
       message: {
-        kind: "plugin-info",
-        marketplaceName: "ghost-mp",
-        marketplaceScope: "user",
-        marketplaceDetails: { autoupdate: false },
-        plugin: {
-          status: "failed",
-          name: "ghost-mp",
-          // `--scope user` was requested explicitly -> renderer emits
-          // `[user]` bracket.
-          scope: "user",
-          reasons: ["not added"],
-          componentsResolved: false,
-        },
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+        scope: "user",
       } satisfies NotificationMessage,
     },
   },

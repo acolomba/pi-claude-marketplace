@@ -7,7 +7,7 @@
 // D-01's escalation note about a future BridgeOps<Prep, Target>
 // belonging at this same path.
 
-import type { Reason } from "../shared/notify.ts";
+import type { ContentReason } from "../shared/notify.ts";
 import type { Scope } from "../shared/types.ts";
 
 export type ReinstallPluginPartition = "reinstalled" | "skipped" | "failed";
@@ -81,9 +81,10 @@ export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
    * `reasons`). Populated by the catch in `reinstallPlugins` so an
    * EACCES / EPERM / ENOENT failure renders as the matching closed
    * Reason (`permission denied` / `source missing`) rather than the
-   * permissive `not in manifest` default.
+   * permissive `not in manifest` default. Typed `ContentReason` (TYPE-02):
+   * the structural `not added` marker is never a per-plugin outcome reason.
    */
-  readonly reasons?: readonly Reason[];
+  readonly reasons?: readonly ContentReason[];
 }
 
 export type ReinstallPluginOutcome =
@@ -165,7 +166,7 @@ export interface PluginUpdateSkippedOutcome extends PluginUpdateBase {
   readonly partition: "skipped";
   readonly fromVersion?: string;
   readonly notes: readonly string[];
-  readonly reasons: readonly Reason[];
+  readonly reasons: readonly ContentReason[];
 }
 
 /**
@@ -191,7 +192,7 @@ export interface PluginUpdateFailedOutcome extends PluginUpdateBase {
   readonly fromVersion?: string;
   readonly toVersion?: string;
   readonly notes: readonly string[];
-  readonly reasons?: readonly Reason[];
+  readonly reasons?: readonly ContentReason[];
   readonly phaseFailures?: readonly UpdatePhaseFailure[];
   readonly cause?: Error;
 }

@@ -52,7 +52,11 @@ import {
 } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { PluginFailedMessage, PluginUninstalledMessage, Reason } from "../../shared/notify.ts";
+import type {
+  ContentReason,
+  PluginFailedMessage,
+  PluginUninstalledMessage,
+} from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface RemoveMarketplaceOptions {
@@ -97,7 +101,7 @@ async function removePath(pathPromise: Promise<string>): Promise<void> {
  * are a defensive last resort for cases where the error was already serialised
  * into a notes string.
  */
-function narrowCascadeFailure(cause: Error): Reason {
+function narrowCascadeFailure(cause: Error): ContentReason {
   if (cause instanceof AgentsUnstageFailureError) {
     // No closed-set Reason captures the per-agent foreign-content failure
     // mode today; map to the documented permissive fallback. Adding a new

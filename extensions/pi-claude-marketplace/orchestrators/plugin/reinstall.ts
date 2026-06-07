@@ -85,6 +85,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
+  ContentReason,
   Dependency,
   MarketplaceNotificationMessage,
   PluginFailedMessage,
@@ -92,7 +93,6 @@ import type {
   PluginNotificationMessage,
   PluginReinstalledMessage,
   PluginSkippedMessage,
-  Reason,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
@@ -271,7 +271,7 @@ function handleSinglePluginFailure(
   const causeErr = err instanceof Error ? err : new Error(errorMessage(err));
   const typedReasons = reasonsFromTypedError(err);
   const isManualRecovery = findManualRecoveryError(err) !== undefined;
-  const reasons: readonly Reason[] = isManualRecovery
+  const reasons: readonly ContentReason[] = isManualRecovery
     ? (["rollback partial"] as const)
     : (typedReasons ?? narrowReasons([message]));
 
@@ -328,7 +328,7 @@ export async function reinstallPlugins(
     // cause-chain trailer needed for the underlying MarketplaceNotFoundError
     // text (marketplace-level rows carry no cause per SNM-10).
     const typedReasons = reasonsFromTypedError(err);
-    const reasons: readonly Reason[] =
+    const reasons: readonly ContentReason[] =
       typedReasons ?? narrowReasons([composeErrorWithCauseChain(err)]);
     const causeErr = err instanceof Error ? err : new Error(errorMessage(err));
     const targetingScope = opts.scope ?? "user";
@@ -682,7 +682,7 @@ function outcomeToPluginMessage(
       //  (1) failureClass=manual-recovery -> ["rollback partial"]
       //  (2) typed outcome.reasons -> verbatim
       //  (3) narrowReasons(outcome.notes) -> substring fallback
-      const reasons: readonly Reason[] = isManualRecoveryOutcome(outcome)
+      const reasons: readonly ContentReason[] = isManualRecoveryOutcome(outcome)
         ? (["rollback partial"] as const)
         : (outcome.reasons ?? narrowReasons(outcome.notes));
 
@@ -752,12 +752,12 @@ function dependenciesFromOutcome(outcome: ReinstallReinstalledOutcome): readonly
  * from cached-manifest read). catalog UAT is the binding
  * verification that the mapped reason set is sufficient.
  */
-function narrowReasons(notes: readonly string[] | undefined): readonly Reason[] {
+function narrowReasons(notes: readonly string[] | undefined): readonly ContentReason[] {
   if (notes === undefined || notes.length === 0) {
     return [];
   }
 
-  const reasons: Reason[] = [];
+  const reasons: ContentReason[] = [];
   for (const note of notes) {
     reasons.push(narrowReason(note));
   }
@@ -765,7 +765,7 @@ function narrowReasons(notes: readonly string[] | undefined): readonly Reason[] 
   return Object.freeze(reasons);
 }
 
-function narrowReason(note: string): Reason {
+function narrowReason(note: string): ContentReason {
   // Exact-match first. Order: cheapest predicate to most expensive.
   if (note === "not installed") {
     return "not installed";
@@ -823,7 +823,7 @@ function narrowReason(note: string): Reason {
  * Reason via substring matching. Forcing a default Reason here would
  * shadow that fallback.
  */
-function reasonsFromTypedError(err: unknown): readonly Reason[] | undefined {
+function reasonsFromTypedError(err: unknown): readonly ContentReason[] | undefined {
   if (err instanceof PluginShapeError) {
     // switch on `err.shape.kind` so a future
     // shape variant addition fails at compile time (the discriminator
