@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.9
 milestone_name: Manifest In-Memory Cache
-status: planning
-stopped_at: Phase 45 context gathered
-last_updated: "2026-06-07T08:29:06.077Z"
-last_activity: 2026-06-06 -- Milestone v1.9 roadmap created (Phase 45)
+status: executing
+stopped_at: Completed 45-01-PLAN.md (Wave 0 RED scaffold)
+last_updated: "2026-06-07T09:07:55.303Z"
+last_activity: 2026-06-07
 progress:
   total_phases: 1
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 2
+  completed_plans: 1
   percent: 0
 ---
 
@@ -20,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-06)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Milestone v1.9 -- Manifest In-Memory Cache
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 45 -- manifest-in-memory-cache
 
 ## Current Position
 
-Phase: 45 Manifest In-Memory Cache (not started)
-Plan: --
-Status: Roadmap created -- ready to plan Phase 45
-Last activity: 2026-06-06 -- Milestone v1.9 roadmap created (Phase 45)
+Phase: 45 (manifest-in-memory-cache) -- EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-06-07
 
 ## Performance Metrics
 
@@ -85,6 +85,7 @@ Last activity: 2026-06-06 -- Milestone v1.9 roadmap created (Phase 45)
 | 44 | 2 | v1.8 |
 
 <!-- Plan counts for v1.4+ derived from .planning/milestones/<milestone>-phases/. Early-milestone (v1.0-v1.3) phase dirs were archived; their counts are the last recorded values, and some early phases have no recorded count. Counts are completed plans: Phase 32 shipped 1 of its 2 planned plans (32-01 folded). -->
+| Phase 45 P01 | ~6m | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -145,6 +146,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 27]: UXG-05 closed via manifest CONTENT-compare (not git SHA, not lastUpdatedAt -- Pitfall 4). The autoupdate-OFF (manifest-only refresh) path now distinguishes a no-op from a change: `manifestContentKey` loads the post-validation parsed MarketplaceManifest via `loadMarketplaceManifest` and `JSON.stringify`s the validated parse (stable key order; no crypto, no field-by-field diff); pre/post-refresh keys are compared and threaded through `RefreshSnapshot.changed`. No change -> `(skipped) {up-to-date}` (warning, no `/reload` trailer; mirrors the plugin-level up-to-date no-op); changed -> `(updated)`. Source-kind-uniform (path + github). The renderer needed NO change -- the shared mp-level `skipped` arm + `up-to-date` REASONS member already compose the byte form. Severity stays `warning` (UXG-02 info-softening is Phase 28, NOT pre-empted). Catalog `autoupdate-off-manifest-refresh` state split into `update-no-op-skipped` + `manifest-refresh-changed` (net +1, keeps examples.length >= 30). Orchestrator+catalog+catalog-uat+notify-v2+update orchestrator tests in one atomic commit (52f53b9); the pre-existing github MU-4 test naturally became the github no-op fixture. Phase 27 GREEN gate: npm run check 1146/1146 + integration 4/4 + pinned e2e 14/14; nyquist_compliant flipped true (ded3633). -- Plan 27-04. PHASE 27 COMPLETE.
 - [Phase 28]: UXG-02 closed -- computeSeverity rewritten as the D-28-06 5-arm first-match ladder with a BENIGN_REASONS closed set (up-to-date, already installed, already autoupdate, already no autoupdate) + a shared allBenign() predicate (empty/undefined -> false, so a no-reason mp-skip routes to warning per D-28-08). A cascade whose only non-success rows are benign idempotent no-op skips computes info (omits the 2nd ctx.ui.notify arg); actionable skips, mixed cascades, and manual-recovery compute warning (first-match poisoning, D-28-09); failed computes error. Pure severity-arg change -- every rendered byte string byte-identical (catalog-uat byte gate GREEN). Both named gates (notify-v2 + catalog-uat, warning fixtures 6->1) plus 11 downstream orchestrator severity assertions moved in lockstep (Rule 1). ADR v2-001 / messaging-style-guide / output-catalog severity prose synced; the UXG-05 "info-softening is Phase 28" deferral sentences removed (realized), closing the Plan 27-04 hand-off. npm run check GREEN 1152/1152. -- Plan 28-01.
 - [Phase 28]: UXG-03 resolved DEFER-WITH-FINDING -- feasibility spike RUN against the installed host `@earendil-works/pi-coding-agent@0.75.5` REFUTED the colorless-cascade approach: the host couples the `Error:`/`Warning:` label AND the severity color to the single `notify(message, type?)` arg (`dist/core/extensions/types.d.ts:75` has no color-only param; label+color co-derive from `type` in `dist/main.js:64-69` `reportDiagnostics` and `dist/modes/interactive/interactive-mode.js:1771-1781`/`:2944-2954` `showExtensionNotify`->`showError`/`showWarning`, both binding color+label in one `theme.fg` call; the only label-free path `showStatus:2438` also drops the color). The only in-extension lever (forcing `info`) ALSO drops the color and nullifies UXG-02's routing -- REJECTED (D-28-11). No colorless workaround shipped (D-28-10); notify.ts untouched. Resolved as an upstream-tracked finding mirroring SNM-39 / G-MIL-07 (D-28-12): a read-only evidence-lock test (`tests/shared/snm-uxg03-label-color-spike.test.ts`, 4 tests GREEN, runs inside npm run check) + `UXG-03-FINDING.md` + UAT note + REQUIREMENTS note + STATE.md deferral row. Filing the upstream issue is the operator's call. Contingent D-28-13 entrypoint policy recorded for intent (`notify()` suppresses, `notifyUsageError()` keeps; NOT line-count). npm run check GREEN 1156/1156. -- Plan 28-02. PHASE 28 COMPLETE.
+- [Phase 45]: Wave 0 manifest-cache RED suite (tests/domain/manifest-cache.test.ts, 7 tests) binds createManifestCache through a single injected counting loader (no readFile/JSON.parse/validator mock, no singleton routing); CACHE-02 invalidation driven off size changes; suite is RED at import until Plan 45-02 creates domain/manifest-cache.ts. -- Plan 45-01.
 
 ### Pending Todos
 
@@ -196,9 +198,9 @@ Additional v1.4.1-scope deferrals:
 
 ## Session Continuity
 
-Last session: 2026-06-07T08:29:06.060Z
-Stopped At: Phase 45 context gathered
-Resume File: .planning/phases/45-manifest-in-memory-cache/45-CONTEXT.md
+Last session: 2026-06-07T09:07:55.288Z
+Stopped At: Completed 45-01-PLAN.md (Wave 0 RED scaffold)
+Resume File: None
 
 ## Operator Next Steps
 

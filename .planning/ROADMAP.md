@@ -619,7 +619,6 @@ Plans:
 
 - [x] 29-02-PLAN.md -- UXG-07 lockstep: output-catalog.md byte blocks + catalog-uat.test.ts fixtures + messaging-style-guide.md + ADR amendment (D-29-06/07)
 
-
 ### Phase 30: Duplicate Type Fix
 
 **Goal:** Remove the duplicate `GitCredentials` type declaration from `platform/git.ts` so `npm run check` passes clean -- this is the prerequisite gate that unblocks all auth wiring.
@@ -869,11 +868,11 @@ _Started 2026-06-06._
 4. The cache holds no disk state -- no cache file or sidecar is written under any scope root, a freshly constructed cache starts empty (cold first read), and `loadMarketplaceManifest` remains the sole manifest-read chokepoint so the architecture single-seam gate stays green (CACHE-03, CACHE-06).
 5. The `catalog-uat` byte-equality runner and the full `npm run check` (typecheck + ESLint + Prettier + tests) pass with the cache in place -- observable output is byte-identical to the uncached path, and NFR-5 / NFR-10 / NFR-12 are unaffected (CACHE-04).
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 **Wave 0** *(test scaffold -- the RED Nyquist contract)*
 
-- [ ] 45-01-PLAN.md -- Author `tests/domain/manifest-cache.test.ts`: 7 behavioral tests (CACHE-01 by-reference + single loader call, CACHE-02 both arms, CACHE-05 same-instance re-throw, D-02 stat-fail loader-every-read, CACHE-03 cold start) via an injected counting loader + `mkdtemp`/`writeFile` harness; fresh `createManifestCache(...)` instances, no `readFile` mock, no singleton routing (CACHE-01, CACHE-02, CACHE-03, CACHE-05)
+- [x] 45-01-PLAN.md -- Author `tests/domain/manifest-cache.test.ts`: 7 behavioral tests (CACHE-01 by-reference + single loader call, CACHE-02 both arms, CACHE-05 same-instance re-throw, D-02 stat-fail loader-every-read, CACHE-03 cold start) via an injected counting loader + `mkdtemp`/`writeFile` harness; fresh `createManifestCache(...)` instances, no `readFile` mock, no singleton routing (CACHE-01, CACHE-02, CACHE-03, CACHE-05)
 
 **Wave 1** *(implementation + gates -- depends on Wave 0)*
 
@@ -925,4 +924,4 @@ _Started 2026-06-06._
 | 42. Type Model & Render Seam Foundations                             | v1.8      | 1/1 | Complete    | 2026-06-03 |
 | 43. Marketplace Info Command                                         | v1.8      | 2/2 | Complete    | 2026-06-04 |
 | 44. Plugin Info Command                                              | v1.8      | 2/2 | Complete    | 2026-06-04 |
-| 45. Manifest In-Memory Cache                                        | v1.9      | 0/0 | Planned     | --         |
+| 45. Manifest In-Memory Cache                                        | v1.9      | 1/2 | In Progress|  |
