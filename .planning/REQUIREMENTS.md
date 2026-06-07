@@ -35,10 +35,10 @@ Theme 4: stop treating "wrong scope" as "does not exist."
 
 Theme 5: make the message shapes that allowed the attribution drift unrepresentable.
 
-- [ ] **TYPE-01**: the marketplace-not-added row is a dedicated `NotificationMessage` variant carrying only the fields it renders -- no placeholder `marketplaceScope`/`marketplaceDetails`, no runtime-only renderer carve-out (backlog #2)
-- [ ] **TYPE-02**: structural reasons (`not added`) cannot be type-combined with content reasons -- illegal reason mixes (e.g. `["not added", "permission denied"]`) are unrepresentable, not merely guarded at render time
-- [ ] **TYPE-03**: the info-`kind` set is enumerated in exactly one place; adding a new `NotificationMessage` kind is a compile error in every consumer (`computeSeverity`, `buildSummaryLine`, `shouldEmitReloadHint`, dispatch) via a single `isInfoKind` guard + `assertNever`
-- [ ] **TYPE-04**: `MarketplaceNotificationMessage` co-occurrence is type-constrained (reasons only on the skipped arm, details only on the list surface) via a discriminated union
+- [x] **TYPE-01**: the marketplace-not-added row is a dedicated `NotificationMessage` variant carrying only the fields it renders -- no placeholder `marketplaceScope`/`marketplaceDetails`, no runtime-only renderer carve-out (backlog #2)
+- [x] **TYPE-02**: structural reasons (`not added`) cannot be type-combined with content reasons -- illegal reason mixes (e.g. `["not added", "permission denied"]`) are unrepresentable, not merely guarded at render time
+- [x] **TYPE-03**: the info-`kind` set is enumerated in exactly one place; adding a new `NotificationMessage` kind is a compile error in every consumer (`computeSeverity`, `buildSummaryLine`, `shouldEmitReloadHint`, dispatch) via a single `isInfoKind` guard + `assertNever`
+- [x] **TYPE-04**: `MarketplaceNotificationMessage` co-occurrence is type-constrained (reasons only on the skipped arm, details only on the list surface) via a discriminated union
 
 ## Future Requirements
 
@@ -80,14 +80,15 @@ Which phases cover which requirements. Each requirement maps to exactly one phas
 | ATTR-09 | Phase 47 | Pending |
 | ATTR-10 | Phase 48 | Pending |
 | SCOPE-01 | Phase 47 | Pending |
-| TYPE-01 | Phase 46 | Pending |
-| TYPE-02 | Phase 46 | Pending |
-| TYPE-03 | Phase 46 | Pending |
-| TYPE-04 | Phase 46 | Pending |
+| TYPE-01 | Phase 46 | Complete |
+| TYPE-02 | Phase 46 | Complete |
+| TYPE-03 | Phase 46 | Complete |
+| TYPE-04 | Phase 46 | Complete |
 
 Phase 49 (Cross-Op Convergence & GREEN-Gate Close) is a verification + closure phase with no new requirement closure; it proves the Phase 46-48 fixes converge across the full operation matrix (audit Class C) and gates the milestone GREEN.
 
 **Coverage:**
+
 - v1 requirements: 15 total
 - Mapped to phases: 15 (Phase 46: TYPE-01..04; Phase 47: ATTR-01/02/03/04/08/09 + SCOPE-01; Phase 48: ATTR-05/06/07/10)
 - Unmapped: 0 ✓

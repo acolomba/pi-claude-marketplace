@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.10
 milestone_name: Error Attribution & Message-Type Consistency
 status: executing
-stopped_at: Phase 46 context gathered
-last_updated: "2026-06-07T20:16:54.566Z"
-last_activity: 2026-06-07 -- Phase 46 planning complete
+stopped_at: Phase 46 complete; Phase 47 next
+last_updated: "2026-06-07T21:18:00.045Z"
+last_activity: 2026-06-07 -- Phase 46 complete (type-model reshape TYPE-01..04; npm run check GREEN 1473/1473; verification passed)
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 1
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 25
 ---
 
 # Project State
@@ -20,20 +20,20 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-06)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.10 Phase 46 -- type-model foundations
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 47 -- Plugin-Ops Attribution & Cross-Scope
 
 ## Current Position
 
-Phase: 46 -- Type-Model Foundations (not started)
+Phase: 47 -- Plugin-Ops Attribution & Cross-Scope (not started)
 Plan: --
-Status: Ready to execute
-Last activity: 2026-06-07 -- Phase 46 planning complete
+Status: Phase 46 complete (verification passed); ready to plan Phase 47
+Last activity: 2026-06-07 -- Phase 46 complete: notify type model reshaped (TYPE-01..04), 1473/1473 GREEN
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 158 (sum of recorded phase counts below; some early v1.0-v1.2 phases were archived without a recorded plan count)
+- Total plans completed: 159 (sum of recorded phase counts below; some early v1.0-v1.2 phases were archived without a recorded plan count)
 
 **Plans by phase:**
 
@@ -151,6 +151,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 28]: UXG-03 resolved DEFER-WITH-FINDING -- feasibility spike RUN against the installed host `@earendil-works/pi-coding-agent@0.75.5` REFUTED the colorless-cascade approach: the host couples the `Error:`/`Warning:` label AND the severity color to the single `notify(message, type?)` arg (`dist/core/extensions/types.d.ts:75` has no color-only param; label+color co-derive from `type` in `dist/main.js:64-69` `reportDiagnostics` and `dist/modes/interactive/interactive-mode.js:1771-1781`/`:2944-2954` `showExtensionNotify`->`showError`/`showWarning`, both binding color+label in one `theme.fg` call; the only label-free path `showStatus:2438` also drops the color). The only in-extension lever (forcing `info`) ALSO drops the color and nullifies UXG-02's routing -- REJECTED (D-28-11). No colorless workaround shipped (D-28-10); notify.ts untouched. Resolved as an upstream-tracked finding mirroring SNM-39 / G-MIL-07 (D-28-12): a read-only evidence-lock test (`tests/shared/snm-uxg03-label-color-spike.test.ts`, 4 tests GREEN, runs inside npm run check) + `UXG-03-FINDING.md` + UAT note + REQUIREMENTS note + STATE.md deferral row. Filing the upstream issue is the operator's call. Contingent D-28-13 entrypoint policy recorded for intent (`notify()` suppresses, `notifyUsageError()` keeps; NOT line-count). npm run check GREEN 1156/1156. -- Plan 28-02. PHASE 28 COMPLETE.
 - [Phase 45]: Wave 0 manifest-cache RED suite (tests/domain/manifest-cache.test.ts, 7 tests) binds createManifestCache through a single injected counting loader (no readFile/JSON.parse/validator mock, no singleton routing); CACHE-02 invalidation driven off size changes; suite is RED at import until Plan 45-02 creates domain/manifest-cache.ts. -- Plan 45-01.
 - [Phase 45]: NFR-8 manifest memoization landed. New domain/manifest-cache.ts exposes a createManifestCache(loader) factory owning a per-path Map keyed by (mtimeMs,size): one stat per read (never readFile -> CACHE-06), by-reference success hits + same-instance negative re-throw (D-03), (mtimeMs|size)-change reload invalidating either arm (CACHE-02/05), stat-fail = pure miss fall-through never negative-cached (D-02), unbounded + no reset hook + no in-flight de-dup (D-01/D-04). ManifestCacheEntry modeled as a discriminated union on `ok` so the negative re-throw is a non-null Error and the hit guard is an optional chain (no cast). domain/manifest.ts renames its loader body to private loadMarketplaceManifestUncached (sole marketplace.json read, raw JSON.parse value -- WR-01, no .Parse()/.Clean()/structuredClone), constructs one module-level singleton, and delegates the unchanged exported loadMarketplaceManifest (9 call sites untouched). Wave 0 suite GREEN (7/7); CACHE-06 single-seam gate + CACHE-04 catalog-uat byte-equality stay GREEN; npm run check exit 0 (1473/1473); zero new dependency, zero package.json churn; NFR-5/NFR-10/NFR-12 unaffected. Fixed 8 pre-existing eslint errors in the 45-01 test file (require-await + padding-line) so eslint . stays green. CACHE-01..06 closed. PHASE 45 COMPLETE. -- Plan 45-02.
+- [Phase 46]: Type-model foundation landed (TYPE-01..04) as ONE atomic commit (0877952), byte-neutral for every v1.0-v1.9 command. notify.ts now has a 6th `MarketplaceNotAddedMessage` arm (kind/name/scope? only; renderPluginInfo `{not added}` carve-out deleted, renderer lifted to renderMarketplaceNotAdded); `ContentReason = Exclude<Reason,"not added">` retyped across all row reasons fields AND (deviation, no casts) the orchestrators/types.ts outcome vocabulary + ~11 reason-narrowing helpers across 8 files, making the structural/content reason mix a compile error end-to-end; single `isInfoKind` guard over 5 StandaloneKinds with assertNever in all 4 consumers (computeSeverity/buildSummaryLine/shouldEmitReloadHint/notify() early-dispatch); `MarketplaceNotificationMessage` is a per-status discriminated union (reasons only on skipped, details only on list, neither on failed); import/execute.ts builds concrete per-status arms (dead block.reasons removed). REASONS tuple (29) + _l4/_l4b untouched (D-46-02a). 4 catalog-uat `{not added}` fixtures + 2 notify-v2 tests re-keyed to the variant asserting identical bytes; docs/output-catalog.md unedited. npm run check GREEN 1473/1473; verification passed 6/6; code review 0 blockers (3 stale docstrings fixed fd999cf; WR-03/IN-01 deferred/accepted). Phase 47-48 build attribution corrections on this model. PHASE 46 COMPLETE.
 
 ### Pending Todos
 
