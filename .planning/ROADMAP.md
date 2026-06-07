@@ -869,7 +869,15 @@ _Started 2026-06-06._
 4. The cache holds no disk state -- no cache file or sidecar is written under any scope root, a freshly constructed cache starts empty (cold first read), and `loadMarketplaceManifest` remains the sole manifest-read chokepoint so the architecture single-seam gate stays green (CACHE-03, CACHE-06).
 5. The `catalog-uat` byte-equality runner and the full `npm run check` (typecheck + ESLint + Prettier + tests) pass with the cache in place -- observable output is byte-identical to the uncached path, and NFR-5 / NFR-10 / NFR-12 are unaffected (CACHE-04).
 
-**Plans:** TBD (planned via `/gsd-plan-phase 45`)
+**Plans:** 2 plans
+
+**Wave 0** *(test scaffold -- the RED Nyquist contract)*
+
+- [ ] 45-01-PLAN.md -- Author `tests/domain/manifest-cache.test.ts`: 7 behavioral tests (CACHE-01 by-reference + single loader call, CACHE-02 both arms, CACHE-05 same-instance re-throw, D-02 stat-fail loader-every-read, CACHE-03 cold start) via an injected counting loader + `mkdtemp`/`writeFile` harness; fresh `createManifestCache(...)` instances, no `readFile` mock, no singleton routing (CACHE-01, CACHE-02, CACHE-03, CACHE-05)
+
+**Wave 1** *(implementation + gates -- depends on Wave 0)*
+
+- [ ] 45-02-PLAN.md -- Create `domain/manifest-cache.ts` (`createManifestCache(loader)` factory: per-path Map keyed by `(mtimeMs,size)`, by-reference hits, same-instance negative re-throw, stat-fail fall-through, unbounded, `stat`-only) + wire it behind the `domain/manifest.ts` seam (private raw-`JSON.parse` loader + one singleton + delegating `loadMarketplaceManifest`); turn Wave 0 GREEN, keep the single-seam (CACHE-06) + byte-equality (CACHE-04) gates + `npm run check` green (CACHE-01..06)
 
 ## Progress
 
