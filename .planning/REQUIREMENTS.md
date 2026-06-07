@@ -44,6 +44,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| NFR-8 (PRD parent) | Phase 45 | Complete |
 | CACHE-01 | Phase 45 | Complete |
 | CACHE-02 | Phase 45 | Complete |
 | CACHE-03 | Phase 45 | Complete |
