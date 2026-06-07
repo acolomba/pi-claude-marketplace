@@ -1,33 +1,33 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.8
-milestone_name: Plugin and Marketplace Info Commands
-status: "v1.8 shipped (PR #36 merged 2026-06-04)"
-stopped_at: v1.8 milestone shipped
-last_updated: "2026-06-06T01:20:06.108Z"
-last_activity: "2026-06-05 -- v1.8 reconciled to shipped (quick 260605-tmr)"
+milestone: v1.9
+milestone_name: Manifest In-Memory Cache
+status: "planning"
+stopped_at: ""
+last_updated: "2026-06-07T02:27:51.647Z"
+last_activity: "2026-06-06 -- Milestone v1.9 started"
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 5
-  completed_plans: 5
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-30)
+See: .planning/PROJECT.md (updated 2026-06-06)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Milestone v1.8 -- Plugin and Marketplace Info Commands
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Milestone v1.9 -- Manifest In-Memory Cache
 
 ## Current Position
 
-Phase: Milestone v1.8 complete
+Phase: Not started (defining requirements)
 Plan: --
-Status: v1.8 shipped (PR #36 merged 2026-06-04, commit 47a63f7)
-Last activity: 2026-06-05 -- v1.8 reconciled to shipped (quick 260605-tmr)
+Status: Defining requirements
+Last activity: 2026-06-06 -- Milestone v1.9 started
 
 ## Performance Metrics
 
