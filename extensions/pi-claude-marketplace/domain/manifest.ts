@@ -12,6 +12,7 @@ import Type from "typebox";
 import { Compile } from "typebox/compile";
 
 import { PLUGIN_ENTRY_SCHEMA } from "./components/plugin.ts";
+import { createManifestCache } from "./manifest-cache.ts";
 
 /**
  * MM-1: `marketplace.json` shape. Required: string `name`, array `plugins`.
@@ -33,17 +34,20 @@ export const MARKETPLACE_SCHEMA = Type.Object({
 
 export type MarketplaceManifest = Type.Static<typeof MARKETPLACE_SCHEMA>;
 
-/** JIT-compiled validator (D-07). Use `.Check(value)` or `.Parse(value)`. */
+/** JIT-compiled validator (D-07). Call its `Check` (or coercing `Parse`) method. */
 export const MARKETPLACE_VALIDATOR = Compile(MARKETPLACE_SCHEMA);
 
 /**
- * NFR-8 / D-14: single domain seam for reading marketplace manifests.
- *
- * Future mtime-based caching wraps this function. Keep this function focused
- * on path-based marketplace.json reads only: no cache state, invalidation, or
- * caller-specific error wrapping belongs here.
+ * NFR-8 / D-14: the sole marketplace.json read+parse+validate. This is the ONLY
+ * marketplace.json file read in the repo (CACHE-06) and the injected loader
+ * behind the cache. It returns the RAW JSON.parse value (WR-01) -- it does NOT
+ * route the result back through the validator's coercing parse, a schema clean,
+ * or a deep clone -- so key order and extra fields survive (`update.ts`
+ * JSON.stringifys it; `info.ts` reads `parsed.description`). Keep this focused on
+ * path-based reads only: no cache state, invalidation, or caller-specific error
+ * wrapping belongs here.
  */
-export async function loadMarketplaceManifest(manifestPath: string): Promise<MarketplaceManifest> {
+async function loadMarketplaceManifestUncached(manifestPath: string): Promise<MarketplaceManifest> {
   const raw = await readFile(manifestPath, "utf8");
   const parsed: unknown = JSON.parse(raw);
 
@@ -56,4 +60,24 @@ export async function loadMarketplaceManifest(manifestPath: string): Promise<Mar
   }
 
   return parsed;
+}
+
+/**
+ * Process-lifetime singleton memoizing the seam (D-01: one module-level cache,
+ * no reset hook). Keyed per-path by (mtimeMs, size); cold again after /reload.
+ */
+const manifestCache = createManifestCache(loadMarketplaceManifestUncached);
+
+/**
+ * NFR-8 / D-14: single domain seam for reading marketplace manifests.
+ *
+ * Memoized (D-01..D-04): a second read of an unchanged manifest performs only a
+ * `stat` and serves the prior parse; a (mtimeMs, size) change reloads; parse/
+ * validate failures are negative-cached and re-thrown as the same Error until
+ * the file changes; a stat failure falls through to the loader on every read
+ * (D-02). The result is the raw parse returned BY REFERENCE -- callers MUST
+ * treat it as READ-ONLY (D-03; mutation would corrupt every later cache hit).
+ */
+export async function loadMarketplaceManifest(manifestPath: string): Promise<MarketplaceManifest> {
+  return manifestCache.load(manifestPath) as Promise<MarketplaceManifest>;
 }

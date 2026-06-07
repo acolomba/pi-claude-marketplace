@@ -2,6 +2,42 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v1.9 -- Manifest In-Memory Cache
+
+**Shipped:** 2026-06-07
+**Phases:** 1 (45) | **Plans:** 2
+**Timeline:** 2026-06-06 → 2026-06-07 (autonomous run)
+
+### What Was Built
+
+A process-lifetime in-memory cache (`createManifestCache(loader)` in `domain/manifest-cache.ts`) wrapping the single `loadMarketplaceManifest` seam, realizing PRD NFR-8. `stat`-only invalidation keyed by `(mtimeMs, size)`, by-reference success hits, same-instance negative re-throw (negative caching), `stat()`-failure as a pure miss. Wired behind the existing seam via one module-level singleton with zero call-site churn across the 9 consumers; byte-identical output (catalog-UAT 3/3, `npm run check` 1473/1473).
+
+### What Worked
+
+- **The seam was pre-landed for exactly this.** Phase 7 / Plan 07-02 deliberately built `loadMarketplaceManifest` as the sole manifest-read chokepoint with a "future caching wraps this" comment. v1.9 slotted the cache in behind it with no consumer changes -- the single-seam discipline paid off two milestones later.
+- **TDD scaffold-first (Wave 0 RED → Wave 1 GREEN).** Authoring the 7-test behavioral contract before the implementation made the locked design (D-01..D-04) executable and caught the spy-mechanism question early (injected counting loader, since `readFile` is unmockable on the ESM namespace).
+- **Research POC de-risked the one open question.** The phase researcher built and ran the full `createManifestCache` design end-to-end before planning, proving all four behavioral arms -- so planning had no unknowns.
+
+### What Was Inefficient
+
+- **VALIDATION.md authored pre-execution as a draft stayed `nyquist_compliant: false`** until manually flipped at audit time. The frontmatter didn't auto-update when the Wave 0 suite went green; a post-execution reconcile step would avoid the audit-time PARTIAL flag.
+- **`phase complete` regressed STATE.md Current Position** to "Plan: Not started" on the last phase, needing a manual closure-narrative restore.
+
+### Patterns Established
+
+- **Injected-loader cache** (mirrors `shared/completion-cache.ts`) but with a constructed-instance factory instead of a module-global map + reset hook -- fresh instances give tests a guaranteed cold start without leaking a `__resetCacheForTests()` onto the public surface.
+- **Accepted, documented residual risk over scope creep:** the same-`(mtimeMs, size)` collision on a same-size rewrite is owned in code comments and REQUIREMENTS Non-Goals rather than solved with content hashing.
+
+### Key Lessons
+
+- A single-chokepoint seam built one milestone is the cheapest possible insertion point for a cross-cutting optimization the next -- design seams for the wrap point you anticipate.
+- Code-review warnings that touch a locked design + byte-identical contract are a grey-area acceptance call, not an auto-fix: surface the trade-off, let the operator decide (here: apply both -- post-load re-stat + exact-thrown-value preservation, commit `3fe6b46`).
+
+### Cost Observations
+
+- Model mix: opus (research, planning, execution, integration) + sonnet (plan-check, verify); single autonomous run.
+- Notable: 1-phase milestone end-to-end (discuss pre-done → research → plan → execute → review → verify → audit → complete) with no blockers and zero gap-closure cycles.
+
 ## Milestone: v1.8 -- Plugin and Marketplace Info Commands
 
 **Shipped:** 2026-06-04

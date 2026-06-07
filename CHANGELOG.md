@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.4.1] - 2026-06-07
+
+- Performance: marketplace manifests are now read through a process-lifetime in-memory cache (NFR-8). A repeated `list`/`info` read of an unchanged `marketplace.json` skips the re-read + re-parse + re-validate and serves the memoized result after a single `stat`; the entry is invalidated and reloaded when the file's modification time or size changes, and parse/validation failures are cached too so an invalid manifest is not re-parsed on every read. No user-visible behavior change -- output is byte-identical to before.
+
 ## [0.4.0] - 2026-06-04
 
 - New Plugin and marketplace info commands. `/claude:plugin marketplace info` and `/claude:plugin info` show detailed information about a given marketplace or plugin.
