@@ -868,7 +868,7 @@ _Started 2026-06-06._
 4. The cache holds no disk state -- no cache file or sidecar is written under any scope root, a freshly constructed cache starts empty (cold first read), and `loadMarketplaceManifest` remains the sole manifest-read chokepoint so the architecture single-seam gate stays green (CACHE-03, CACHE-06).
 5. The `catalog-uat` byte-equality runner and the full `npm run check` (typecheck + ESLint + Prettier + tests) pass with the cache in place -- observable output is byte-identical to the uncached path, and NFR-5 / NFR-10 / NFR-12 are unaffected (CACHE-04).
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 **Wave 0** *(test scaffold -- the RED Nyquist contract)*
 
@@ -876,7 +876,7 @@ _Started 2026-06-06._
 
 **Wave 1** *(implementation + gates -- depends on Wave 0)*
 
-- [ ] 45-02-PLAN.md -- Create `domain/manifest-cache.ts` (`createManifestCache(loader)` factory: per-path Map keyed by `(mtimeMs,size)`, by-reference hits, same-instance negative re-throw, stat-fail fall-through, unbounded, `stat`-only) + wire it behind the `domain/manifest.ts` seam (private raw-`JSON.parse` loader + one singleton + delegating `loadMarketplaceManifest`); turn Wave 0 GREEN, keep the single-seam (CACHE-06) + byte-equality (CACHE-04) gates + `npm run check` green (CACHE-01..06)
+- [x] 45-02-PLAN.md -- Create `domain/manifest-cache.ts` (`createManifestCache(loader)` factory: per-path Map keyed by `(mtimeMs,size)`, by-reference hits, same-instance negative re-throw, stat-fail fall-through, unbounded, `stat`-only) + wire it behind the `domain/manifest.ts` seam (private raw-`JSON.parse` loader + one singleton + delegating `loadMarketplaceManifest`); turn Wave 0 GREEN, keep the single-seam (CACHE-06) + byte-equality (CACHE-04) gates + `npm run check` green (CACHE-01..06)
 
 ## Progress
 
@@ -924,4 +924,4 @@ _Started 2026-06-06._
 | 42. Type Model & Render Seam Foundations                             | v1.8      | 1/1 | Complete    | 2026-06-03 |
 | 43. Marketplace Info Command                                         | v1.8      | 2/2 | Complete    | 2026-06-04 |
 | 44. Plugin Info Command                                              | v1.8      | 2/2 | Complete    | 2026-06-04 |
-| 45. Manifest In-Memory Cache                                        | v1.9      | 1/2 | In Progress|  |
+| 45. Manifest In-Memory Cache                                        | v1.9      | 2/2 | Complete   | 2026-06-07 |
