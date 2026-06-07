@@ -603,6 +603,20 @@ const FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // ATTR-01 / ATTR-08 / M1: marketplace absent -> standalone
+    // `marketplace-not-added` variant on the marketplace subject (NOT
+    // `{not in manifest}` on a plugin row). install always carries a
+    // resolved scope, so the `[scope]` bracket is always present.
+    "missing-marketplace-not-added": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+        scope: "project",
+      } satisfies NotificationMessage,
+    },
   },
 
   // -------------------------------------------------------------------------
@@ -655,6 +669,20 @@ const FIXTURES: FixtureMap = {
           },
         ],
       },
+    },
+
+    // ATTR-04 / SCOPE-01 / M3 / M4: marketplace never added (or present only
+    // in the other scope) -> LOUD standalone `marketplace-not-added` variant
+    // carrying the requested-scope bracket (distinct from the silent PU-5
+    // already-gone-plugin converge).
+    "missing-marketplace-not-added": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+        scope: "user",
+      } satisfies NotificationMessage,
     },
   },
 

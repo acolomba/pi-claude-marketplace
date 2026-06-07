@@ -7,6 +7,7 @@ import test from "node:test";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   assertNoCrossPluginConflicts,
+  resolveCrossScopePluginTarget,
   resolveInstallMarketplaceSource,
   resolveInstalledMarketplaceTarget,
   resolveInstalledPluginTarget,
@@ -409,5 +410,109 @@ test("CMP-5 :: unqualified marketplace target throws when absent from both scope
       resolveInstalledMarketplaceTarget({ cwd, marketplace: "mp" }),
       (err: unknown) => err instanceof MarketplaceNotFoundError,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SCOPE-01 / D-47-C -- resolveCrossScopePluginTarget discriminated union.
+// ---------------------------------------------------------------------------
+
+test("SCOPE-01 :: explicit scope with the plugin present resolves in that scope", async () => {
+  await withTmpCwd(async (cwd) => {
+    await saveScopedState(cwd, "project", { mp: { plug: makePluginRecord({}) } });
+
+    const result = await resolveCrossScopePluginTarget({
+      cwd,
+      marketplace: "mp",
+      plugin: "plug",
+      explicitScope: "project",
+    });
+
+    assert.equal(result.kind, "resolved");
+    assert.equal(result.kind === "resolved" ? result.scope : undefined, "project");
+  });
+});
+
+test("SCOPE-01 :: explicit scope miss with the plugin present in the other scope -> other-scope hint", async () => {
+  await withTmpCwd(async (cwd) => {
+    // The plugin lives in user; the operator asks for project explicitly.
+    await saveScopedState(cwd, "user", { mp: { plug: makePluginRecord({}) } });
+
+    const result = await resolveCrossScopePluginTarget({
+      cwd,
+      marketplace: "mp",
+      plugin: "plug",
+      explicitScope: "project",
+    });
+
+    assert.equal(result.kind, "other-scope");
+    if (result.kind === "other-scope") {
+      assert.equal(result.presentIn, "user");
+      assert.equal(result.requestedScope, "project");
+    }
+  });
+});
+
+test("SCOPE-01 :: explicit scope miss with the marketplace absent in both scopes -> marketplace-absent with requestedScope", async () => {
+  await withTmpCwd(async (cwd) => {
+    const result = await resolveCrossScopePluginTarget({
+      cwd,
+      marketplace: "mp",
+      plugin: "plug",
+      explicitScope: "user",
+    });
+
+    assert.equal(result.kind, "marketplace-absent");
+    assert.equal(result.kind === "marketplace-absent" ? result.requestedScope : "x", "user");
+  });
+});
+
+test("SCOPE-01 :: explicit scope, container present but plugin row absent -> resolved (silent-converge path)", async () => {
+  await withTmpCwd(async (cwd) => {
+    // Container present in the requested scope but holds no plugin row.
+    await saveScopedState(cwd, "project", { mp: {} });
+
+    const result = await resolveCrossScopePluginTarget({
+      cwd,
+      marketplace: "mp",
+      plugin: "plug",
+      explicitScope: "project",
+    });
+
+    assert.equal(result.kind, "resolved");
+    assert.equal(result.kind === "resolved" ? result.scope : undefined, "project");
+  });
+});
+
+test("SCOPE-01 :: unqualified, plugin present in project -> resolved project (CMP-5 ordering)", async () => {
+  await withTmpCwd(async (cwd) => {
+    await saveScopedState(cwd, "user", { mp: { plug: makePluginRecord({}) } });
+    await saveScopedState(cwd, "project", { mp: { plug: makePluginRecord({}) } });
+
+    const result = await resolveCrossScopePluginTarget({ cwd, marketplace: "mp", plugin: "plug" });
+
+    assert.equal(result.kind, "resolved");
+    assert.equal(result.kind === "resolved" ? result.scope : undefined, "project");
+  });
+});
+
+test("SCOPE-01 :: unqualified, marketplace absent in both scopes -> marketplace-absent without requestedScope", async () => {
+  await withTmpCwd(async (cwd) => {
+    const result = await resolveCrossScopePluginTarget({ cwd, marketplace: "mp", plugin: "plug" });
+
+    assert.equal(result.kind, "marketplace-absent");
+    assert.equal(result.kind === "marketplace-absent" ? result.requestedScope : "x", undefined);
+  });
+});
+
+test("SCOPE-01 :: unqualified, container present without the plugin row -> resolved (silent-converge path)", async () => {
+  await withTmpCwd(async (cwd) => {
+    // Container present in user only, but holds no plugin row.
+    await saveScopedState(cwd, "user", { mp: {} });
+
+    const result = await resolveCrossScopePluginTarget({ cwd, marketplace: "mp", plugin: "plug" });
+
+    assert.equal(result.kind, "resolved");
+    assert.equal(result.kind === "resolved" ? result.scope : undefined, "user");
   });
 });

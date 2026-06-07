@@ -371,6 +371,16 @@ The manifest declares Claude features Pi doesn't support; the `unavailable` vari
 
 `failed` variant carrying both `cause?` and `rollbackPartial`. The per-plugin `cause:` trailer renders at 4-space indent first; the rollback-partial child rows render at 4-space indent next (one `[<phase>] (rollback failed)` row per phase), each carrying an optional 6-space-indent cause-chain trailer when `phase.cause` is set (D-16-08). Severity: `error`. No reload-hint.
 
+### Failure -- marketplace not added (ATTR-01 / ATTR-08)
+
+Triggered when `install <plugin>@<marketplace>` names a marketplace that is NOT added in the target scope and the CMP-3 project-to-user fallback ALSO misses. The failure subject is the MARKETPLACE, not the plugin: the orchestrator emits the standalone Phase 46 `MarketplaceNotAddedMessage` variant (`kind: "marketplace-not-added"`, `name` set to the marketplace name) -- NOT `{not in manifest}` on a plugin row. This is the ATTR-08 split: "marketplace absent" reads `{not added}` on the marketplace subject, while "plugin absent from a PRESENT manifest" stays `{not in manifest}` on the plugin row (the `failure-runtime-with-cause` / PI-3 path). install always has a resolved scope (the edge defaults it), so the row always carries the `[scope]` bracket communicating "not added in the scope you asked for" (SCOPE-01). Bare column-0 row, NO summary line, NO cause-chain trailer. Severity `error`; no reload-hint.
+
+<!-- catalog-state: missing-marketplace-not-added -->
+
+```text
+⊘ ghost-mp [project] (failed) {not added}
+```
+
 ______________________________________________________________________
 
 ## `/claude:plugin uninstall <plugin>@<marketplace>`
@@ -416,6 +426,16 @@ The `uninstalled` variant has no `dependencies` field by construction (D-15-02 /
 ```
 
 Marketplace header is bare (SUB-BRANCH A); plugin row is `failed` with the typed `permission denied` reason and a 4-space-indent `cause:` trailer (D-16-08). Severity: `error`. No reload-hint -- no state-changing status (a failed uninstall did not remove anything, so there is nothing to reload).
+
+### Failure -- marketplace not added (ATTR-04 / SCOPE-01)
+
+Triggered when `uninstall <plugin>@<marketplace>` names a marketplace that was NEVER added in the requested scope, OR is present only in the OTHER scope. ATTR-04 makes this LOUD: the orchestrator emits the standalone `MarketplaceNotAddedMessage` variant (`{not added}` on the marketplace subject) instead of the former silent no-output. This is DISTINCT from the silent PU-5 converge for an already-gone plugin record (a marketplace that IS present but no longer holds the plugin row stays silent -- nothing to report). The `[scope]` bracket carries the REQUESTED scope: for an explicit `--scope` (or an other-scope-only target) the bracket communicates "not added in the scope you asked for" (SCOPE-01); the operator infers the other scope. A bare lifecycle form that misses in BOTH scopes carries no bracket. Bare column-0 row, NO summary line. Severity `error`; no reload-hint.
+
+<!-- catalog-state: missing-marketplace-not-added -->
+
+```text
+⊘ ghost-mp [user] (failed) {not added}
+```
 
 ______________________________________________________________________
 

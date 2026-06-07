@@ -115,12 +115,13 @@ test('shim :: valid args call installPlugin with { ctx, pi, scope: "user", cwd, 
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeInstallHandler(makePi());
     await handler("myplug@mymkt", ctx);
-    // Empty user state -> orchestrator surfaces "not found" error. This proves
-    // (a) control reached installPlugin, (b) default scope was user (the
-    // notification is from the user-scope state.json read path).
+    // Empty user state -> orchestrator surfaces the ATTR-01 `{not added}`
+    // marketplace-subject error. This proves (a) control reached installPlugin,
+    // (b) default scope was user (the `[user]` bracket on the not-added row
+    // comes from the user-scope state.json read path).
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
-    assert.match(notifications[0]!.message, /not found in marketplace "mymkt"/);
+    assert.match(notifications[0]!.message, /⊘ mymkt \[user\] \(failed\) \{not added\}/);
   });
 });
 
@@ -129,11 +130,12 @@ test('shim :: --scope project calls installPlugin with scope: "project"', async 
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeInstallHandler(makePi());
     await handler("myplug@mymkt --scope project", ctx);
-    // Empty project state -> "not found" surfaces. The shim selected the
-    // project locations (state.json under <cwd>/.pi/pi-claude-marketplace/).
+    // Empty project state -> the ATTR-01 `{not added}` row surfaces. The shim
+    // selected the project locations (state.json under
+    // <cwd>/.pi/pi-claude-marketplace/), proven by the `[project]` bracket.
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
-    assert.match(notifications[0]!.message, /not found in marketplace "mymkt"/);
+    assert.match(notifications[0]!.message, /⊘ mymkt \[project\] \(failed\) \{not added\}/);
   });
 });
 
@@ -147,12 +149,12 @@ test("shim :: --map-model flag is accepted and control reaches installPlugin", a
     const handler = makeInstallHandler(makePi());
     await handler("myplug@mymkt --map-model", ctx);
     // The flag must NOT produce USAGE; control must reach installPlugin
-    // which then surfaces "not found in marketplace" against the empty
+    // which then surfaces the ATTR-01 `{not added}` row against the empty
     // hermetic state.
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
     assert.doesNotMatch(notifications[0]!.message, /Usage: \/claude:plugin install/);
-    assert.match(notifications[0]!.message, /not found in marketplace "mymkt"/);
+    assert.match(notifications[0]!.message, /⊘ mymkt \[user\] \(failed\) \{not added\}/);
   });
 });
 
@@ -163,7 +165,7 @@ test("shim :: --map-model + --scope project both accepted together", async () =>
     await handler("myplug@mymkt --map-model --scope project", ctx);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
-    assert.match(notifications[0]!.message, /not found in marketplace "mymkt"/);
+    assert.match(notifications[0]!.message, /⊘ mymkt \[project\] \(failed\) \{not added\}/);
   });
 });
 

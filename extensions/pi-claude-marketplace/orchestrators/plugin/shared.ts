@@ -51,6 +51,119 @@ export interface ResolvedScopedPluginTarget {
 }
 
 /**
+ * SCOPE-01 / D-47-C discriminated cross-scope plugin-target resolution.
+ *
+ * The NFR-7 discriminated-union precedent (`installable: true | false`)
+ * applied to lifecycle scope resolution: the chokepoint distinguishes
+ * three outcomes a single `undefined`/raw-throw return previously
+ * collapsed.
+ *
+ *   - `resolved`: the marketplace CONTAINER exists in the chosen scope
+ *     (the plugin row may or may not be present -- the caller's
+ *     downstream `installed === undefined` branch handles the
+ *     plugin-row-absent silent converge, distinct from container
+ *     absence per RESEARCH M13 / Pitfall 4).
+ *   - `other-scope`: the requested explicit scope misses, but the SAME
+ *     plugin record exists in the OTHER scope. The caller surfaces this
+ *     as a `marketplace-not-added` carrying the REQUESTED scope (the
+ *     `[scope]` bracket communicates "not added in the scope you asked
+ *     for"; the operator infers the other scope).
+ *   - `marketplace-absent`: the marketplace container is absent in the
+ *     requested scope AND (for explicit scope) the other scope, OR (for
+ *     the unqualified form) in BOTH scopes. `requestedScope` is set for
+ *     the explicit-scope path and OMITTED for the unqualified path that
+ *     missed everywhere.
+ *
+ * All reads are `loadState` only (NFR-5: no network). The explicit-scope
+ * miss performs ONE extra `loadState` of the other scope.
+ *
+ * DOES NOT touch `resolveInstallMarketplaceSource` (the CMP-3 install
+ * fallback) -- this resolver serves the explicit-scope lifecycle path
+ * (uninstall/reinstall/update), which has no by-design fallback.
+ */
+export type CrossScopePluginResolution =
+  | { readonly kind: "resolved"; readonly scope: Scope; readonly locations: ScopedLocations }
+  | { readonly kind: "other-scope"; readonly presentIn: Scope; readonly requestedScope: Scope }
+  | { readonly kind: "marketplace-absent"; readonly requestedScope?: Scope };
+
+/** The non-requested scope -- used to read the other scope on an explicit-scope miss. */
+function otherScope(scope: Scope): Scope {
+  return scope === "project" ? "user" : "project";
+}
+
+/**
+ * SCOPE-01: resolve a (marketplace, plugin) lifecycle target across scopes.
+ * Mirrors the `loadState`/`locationsFor` read pattern from
+ * `resolveScopeFromState` (marketplace/shared.ts) but returns a
+ * discriminated result so the caller can distinguish marketplace-container
+ * absence from plugin-row absence and surface the cross-scope hint.
+ */
+export async function resolveCrossScopePluginTarget(opts: {
+  readonly cwd: string;
+  readonly marketplace: string;
+  readonly plugin: string;
+  readonly explicitScope?: Scope;
+}): Promise<CrossScopePluginResolution> {
+  if (opts.explicitScope !== undefined) {
+    const requestedScope = opts.explicitScope;
+    const requestedLocations = locationsFor(requestedScope, opts.cwd);
+    const requestedState = await loadState(requestedLocations.extensionRoot);
+
+    // Container present in the requested scope: resolve there. The plugin
+    // row may still be absent -- the caller's `installed === undefined`
+    // branch handles that silent converge (Pitfall 4).
+    if (requestedState.marketplaces[opts.marketplace] !== undefined) {
+      return { kind: "resolved", scope: requestedScope, locations: requestedLocations };
+    }
+
+    // Container absent in the requested scope: consult the OTHER scope so a
+    // target present only there is reported (SCOPE-01) rather than collapsed
+    // into a silent/not-in-manifest miss.
+    const otherScopeName = otherScope(requestedScope);
+    const otherLocations = locationsFor(otherScopeName, opts.cwd);
+    const otherState = await loadState(otherLocations.extensionRoot);
+    if (otherState.marketplaces[opts.marketplace]?.plugins[opts.plugin] !== undefined) {
+      return { kind: "other-scope", presentIn: otherScopeName, requestedScope };
+    }
+
+    // Absent in the requested scope, and either absent or merely container-
+    // present-without-the-plugin in the other scope: the marketplace the
+    // operator asked for (in the requested scope) is not added there.
+    return { kind: "marketplace-absent", requestedScope };
+  }
+
+  // Unqualified form: prefer project, then user (CMP-5 ordering preserved).
+  const projectLocations = locationsFor("project", opts.cwd);
+  const userLocations = locationsFor("user", opts.cwd);
+  const [projectState, userState] = await Promise.all([
+    loadState(projectLocations.extensionRoot),
+    loadState(userLocations.extensionRoot),
+  ]);
+
+  if (projectState.marketplaces[opts.marketplace]?.plugins[opts.plugin] !== undefined) {
+    return { kind: "resolved", scope: "project", locations: projectLocations };
+  }
+
+  if (userState.marketplaces[opts.marketplace]?.plugins[opts.plugin] !== undefined) {
+    return { kind: "resolved", scope: "user", locations: userLocations };
+  }
+
+  // Plugin row absent in both scopes. Distinguish "container present
+  // somewhere" (resolved against that container's scope so the caller's
+  // silent-converge path applies) from "container absent in both"
+  // (marketplace-absent, no requestedScope bracket for the bare form).
+  if (projectState.marketplaces[opts.marketplace] !== undefined) {
+    return { kind: "resolved", scope: "project", locations: projectLocations };
+  }
+
+  if (userState.marketplaces[opts.marketplace] !== undefined) {
+    return { kind: "resolved", scope: "user", locations: userLocations };
+  }
+
+  return { kind: "marketplace-absent" };
+}
+
+/**
  * CMP-2..4: plugin install target scope and marketplace source scope are
  * distinct. User-target installs can read only user marketplaces; project-
  * target installs read the project marketplace first, then fall back to the

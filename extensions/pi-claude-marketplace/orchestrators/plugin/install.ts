@@ -323,6 +323,16 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   // pre-dated `resolvePluginVersion`).
   let failureRollbackPartials: readonly RollbackPartial[] = [];
   let failureVersion: string | undefined;
+  // ATTR-01 / ATTR-08 / M1: marketplace-existence is a PRECONDITION, not a
+  // plugin-row property. When the CMP-2..4 source resolution misses (the
+  // marketplace is absent in the target scope AND the CMP-3 user fallback
+  // also misses), the failure subject is the MARKETPLACE, not the plugin.
+  // The guard sets this sentinel and returns WITHOUT mutating state; the
+  // post-guard branch emits the standalone `marketplace-not-added` variant
+  // (standalone mode) or returns the failed outcome (orchestrated mode).
+  // This is distinct from M2 (plugin absent from a PRESENT manifest), which
+  // stays `{not in manifest}` on the plugin row (Pitfall 2).
+  let marketplaceAbsent = false;
 
   try {
     await withStateGuard(locations, async (state) => {
@@ -337,7 +347,13 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
         targetState: state,
       });
       if (source === undefined) {
-        throw new PluginShapeError({ kind: "not-in-manifest", plugin, marketplace });
+        // M1: marketplace absent (after the CMP-3 fallback also missed). Set
+        // the precondition sentinel and return cleanly -- no state mutation,
+        // no plugin-row `{not in manifest}` throw. The post-guard branch
+        // surfaces the marketplace subject. (Returning here lets the guard
+        // re-save the unchanged state; the operation is read-only in effect.)
+        marketplaceAbsent = true;
+        return;
       }
 
       // Target container: same scope record when present, or a cloned
@@ -756,6 +772,35 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // formatted text for callers that render it directly.
     const wrapped = err instanceof Error ? err : new Error(errorMessage(err));
     return { status: "failed", error: wrapped, cause: formatOrchestratedCause(err) };
+  }
+
+  // ATTR-01 / ATTR-08 / M1: marketplace-absent precondition (set inside the
+  // guard, no state mutated). The marketplace subject is reported via the
+  // canonical Phase 46 `MarketplaceNotAddedMessage` variant -- standalone
+  // top-level emission per D-47-A, matching `info` exactly. Orchestrated
+  // mode (import cascade) returns the failed outcome WITHOUT emitting; the
+  // cascade caller renders its own rows (mirrors the entity-error
+  // orchestrated gate at the catch above).
+  //
+  // install always carries a resolved `scope` (the edge defaults it), so the
+  // not-added row always renders the `[scope]` bracket (SCOPE-01 resolved
+  // Open Question #1). DO NOT route through `resolveInstallMarketplaceSource`
+  // -- the CMP-3 project->user fallback already ran inside the guard; only a
+  // double-miss reaches here (Pitfall 1).
+  //
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- `marketplaceAbsent` is mutated inside the withStateGuard closure above; TS flow analysis cannot prove the closure executed, so it sees the variable as still `false`. The check is required at runtime.
+  if (marketplaceAbsent) {
+    const cause = `Marketplace "${marketplace}" is not added in the ${scope} scope.`;
+    if (opts.notifications?.mode === "orchestrated") {
+      return { status: "failed", error: new Error(cause), cause };
+    }
+
+    notify(ctx, pi, {
+      kind: "marketplace-not-added",
+      name: marketplace,
+      scope,
+    });
+    return { status: "failed", error: new Error(cause), cause };
   }
 
   // Defensive: the success path always populates installCtx; if it did not,
