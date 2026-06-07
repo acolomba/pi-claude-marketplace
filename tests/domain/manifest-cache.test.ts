@@ -33,9 +33,9 @@ test("CACHE-01: N sequential reads of an unchanged manifest -> loader runs exact
 
     let calls = 0;
     const value = { name: "a", plugins: [] };
-    const cache = createManifestCache(async () => {
+    const cache = createManifestCache(() => {
       calls++;
-      return value;
+      return Promise.resolve(value);
     });
 
     // Sequential awaits, one read at a time (deliberately not concurrent).
@@ -61,7 +61,7 @@ test("CACHE-01/D-03: hits return the loaded value by reference (r1 === r2 === r3
     await writeFile(p, JSON.stringify({ name: "a", plugins: [] }), "utf8");
 
     const value = { name: "a", plugins: [] };
-    const cache = createManifestCache(async () => value);
+    const cache = createManifestCache(() => Promise.resolve(value));
 
     const r1 = await cache.load(p);
     const r2 = await cache.load(p);
@@ -96,11 +96,11 @@ test("CACHE-02 success->success: a size change triggers a reload and returns the
     await writeFile(p, smallBytes, "utf8");
 
     let calls = 0;
-    const cache = createManifestCache(async () => {
+    const cache = createManifestCache(() => {
       calls++;
       // Return whatever the loader would have parsed off disk -- a fresh object
       // per call so the test can prove the SECOND value is served after reload.
-      return calls === 1 ? small : large;
+      return Promise.resolve(calls === 1 ? small : large);
     });
 
     const r1 = await cache.load(p);
@@ -136,12 +136,15 @@ test("CACHE-02/CACHE-05 failure->success: a negative entry is discarded on a siz
 
     const good = { name: "a", plugins: [{ name: "p", source: "./p" }] };
     let calls = 0;
-    const cache = createManifestCache(async () => {
+    const cache = createManifestCache(() => {
       calls++;
       if (calls === 1) {
-        throw new Error("marketplace.json schema invalid: <root>: Unexpected token");
+        return Promise.reject(
+          new Error("marketplace.json schema invalid: <root>: Unexpected token"),
+        );
       }
-      return good;
+
+      return Promise.resolve(good);
     });
 
     // First read stores a negative entry and re-throws.
@@ -179,9 +182,9 @@ test("CACHE-05: bad manifest negative-cached; same Error re-thrown; no re-parse;
     await writeFile(p, "{ not json", "utf8"); // size won't change between reads
 
     let calls = 0;
-    const cache = createManifestCache(async () => {
+    const cache = createManifestCache(() => {
       calls++;
-      throw new Error("marketplace.json schema invalid: <root>: Unexpected token");
+      return Promise.reject(new Error("marketplace.json schema invalid: <root>: Unexpected token"));
     });
 
     const e1 = await cache.load(p).then(
@@ -217,7 +220,7 @@ test("D-02 stat-fail: a nonexistent path is a pure miss -> loader runs every rea
     const p = path.join(tmp, "does-not-exist", "marketplace.json");
 
     let calls = 0;
-    const cache = createManifestCache(async (manifestPath: string) => {
+    const cache = createManifestCache((manifestPath: string) => {
       calls++;
       // Mirror the natural error the real loader's readFile would throw: an
       // ENOENT-coded error that must propagate unchanged (D-02).
@@ -227,7 +230,8 @@ test("D-02 stat-fail: a nonexistent path is a pure miss -> loader runs every rea
         code?: string;
       };
       err.code = "ENOENT";
-      throw err;
+
+      return Promise.reject(err);
     });
 
     const e1 = await cache.load(p).then(
@@ -273,9 +277,9 @@ test("CACHE-03: a freshly constructed cache starts empty -> first load is a miss
 
     let calls = 0;
     const value = { name: "a", plugins: [] };
-    const cache = createManifestCache(async () => {
+    const cache = createManifestCache(() => {
       calls++;
-      return value;
+      return Promise.resolve(value);
     });
 
     const r = await cache.load(p);
