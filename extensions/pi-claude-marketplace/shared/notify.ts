@@ -1692,11 +1692,16 @@ function operationPhrase(count: number, kind: "plugin" | "marketplace"): string 
 }
 
 /**
- * UXG-07 (D-29-02/03/04): build the human-readable summary line that
- * `notify()` prepends before the cascade body for `error` and `warning`
- * severity. It gives the host `Error:` / `Warning:` prefix a meaningful,
- * contextual sentence to introduce ("focus on the operation, not what happened
- * to each plugin -- the cascade body already shows that").
+ * UXG-07 / GRAM-01 / GRAM-02 (D-29-02/03/04): build the human-readable summary
+ * line that `emitWithSummary` prepends before the body for `error` and
+ * `warning` severity. It gives the host `Error:` / `Warning:` prefix a
+ * meaningful, contextual sentence to introduce ("focus on the operation, not
+ * what happened to each plugin -- the body already shows that").
+ *
+ * Invoked for BOTH the cascade arm and the standalone arm (GRAM-04): the two
+ * error-severity standalone kinds (`marketplace-not-added`, failed
+ * `plugin-info`) take a hard-count-1 summary on the FAILED ROW's subject
+ * (GRAM-02); the cascade arm counts the failed/skipped rows.
  *
  * Verb is `"failed"` for error severity, `"skipped"` for warning severity.
  *
@@ -1710,20 +1715,23 @@ function operationPhrase(count: number, kind: "plugin" | "marketplace"): string 
  * crashing.
  */
 function buildSummaryLine(message: NotificationMessage, severity: "error" | "warning"): string {
-  // INFO-03 / INFO-02: info-surface kinds NEVER carry a summary line (the
-  // operation-count semantics of "N plugin operations failed" do not apply to
-  // read-only query results -- the `notify()` dispatcher only invokes
-  // `buildSummaryLine` from the cascade arm). This defensive short-circuit
-  // returns the empty string so a future mistaken call still produces
-  // benign output instead of accessing `message.marketplaces` on a
-  // narrowed-away variant.
+  // GRAM-02: the standalone-dispatched kinds derive their summary from the
+  // FAILED ROW's subject, not the invoking command. The two error-severity
+  // standalone kinds carry a hard-count-1 summary (one absent marketplace /
+  // one failed plugin row); the read-only info/cascade kinds and a non-failed
+  // `plugin-info` carry NO summary (they route through the info arm of the
+  // emission helper and never reach the summary path). Narrowed through the
+  // single `isInfoKind` guard so a future StandaloneKind without a summary arm
+  // is a compile error.
   if (isInfoKind(message)) {
     switch (message.kind) {
-      case "marketplace-info":
+      case "marketplace-not-added":
+        return `${operationPhrase(1, "marketplace")} failed.`;
       case "plugin-info":
+        return message.plugin.status === "failed" ? `${operationPhrase(1, "plugin")} failed.` : "";
+      case "marketplace-info":
       case "marketplace-info-cascade":
       case "plugin-info-cascade":
-      case "marketplace-not-added":
         return "";
       default:
         assertNever(message);
@@ -2220,11 +2228,34 @@ function composeMarketplaceBlock(mp: MarketplaceNotificationMessage, probe: Soft
 }
 
 /**
- * Dispatcher for the info-surface arms of `notify()`. Centralizes the
- * four-arm body computation + the severity-aware `ctx.ui.notify()`
- * call so the public `notify()` dispatcher stays under the cognitive-
- * complexity budget. IL-2: one `ctx.ui.notify` call per invocation
- * (arms are mutually exclusive).
+ * GRAM-04: the single summary-emission seam shared by the standalone arm
+ * (`dispatchInfoMessage`) and the cascade arm of `notify()`. Computing the
+ * severity and prepending the summary in ONE place is the structural
+ * anti-divergence guarantee -- no caller can re-introduce a summary-less
+ * error/warning emission like the v1.10 standalone-arm defect.
+ *
+ * GRAM-01: at error/warning severity the summary is prepended as its own
+ * block, separated from the body by `\n\n` (never a single `\n`, which would
+ * re-glue the host `Error:` / `Warning:` label onto the detail row). At info
+ * severity the body is emitted unchanged (no summary -- the operation-count
+ * semantics do not apply to read-only results). IL-2: exactly one
+ * `ctx.ui.notify` call per invocation.
+ */
+function emitWithSummary(ctx: ExtensionContext, message: NotificationMessage, body: string): void {
+  const severity = computeSeverity(message);
+  if (severity === undefined) {
+    ctx.ui.notify(body);
+  } else {
+    ctx.ui.notify(`${buildSummaryLine(message, severity)}\n\n${body}`, severity);
+  }
+}
+
+/**
+ * Dispatcher for the standalone-dispatched arms of `notify()`. Centralizes the
+ * per-variant body composition, then routes through the shared
+ * `emitWithSummary` seam (GRAM-04) so error/warning standalone emissions carry
+ * the summary line exactly like the cascade arm does. IL-2: one
+ * `ctx.ui.notify` call per invocation (the seam performs it).
  */
 function dispatchInfoMessage(
   ctx: ExtensionContext,
@@ -2256,12 +2287,7 @@ function dispatchInfoMessage(
       return;
   }
 
-  const severity = computeSeverity(message);
-  if (severity === undefined) {
-    ctx.ui.notify(body);
-  } else {
-    ctx.ui.notify(body, severity);
-  }
+  emitWithSummary(ctx, message, body);
 }
 
 /**
@@ -2284,9 +2310,11 @@ export function notify(
   // cascade arm below stays under the cognitive-complexity budget. The single
   // `isInfoKind` guard (TYPE-03) is the one place that enumerates the
   // standalone set. The helper performs exactly ONE `ctx.ui.notify` call per
-  // invocation (IL-2). No reload-hint, no summary line for any standalone
-  // kind. After this branch, TypeScript narrows `message` to
-  // `CascadeNotificationMessage` via the exhaustiveness switch below.
+  // invocation (IL-2) and routes through the SAME `emitWithSummary` seam as the
+  // cascade arm (GRAM-04): error/warning standalone kinds carry the summary
+  // line, info kinds do not. No reload-hint for any standalone kind. After this
+  // branch, TypeScript narrows `message` to `CascadeNotificationMessage` via
+  // the exhaustiveness switch below.
   if (isInfoKind(message)) {
     dispatchInfoMessage(ctx, message, probe);
     return;
@@ -2319,21 +2347,11 @@ export function notify(
   const hint = shouldEmitReloadHint(message) ? RELOAD_HINT_TRAILER : "";
   const withHint = hint === "" ? body : `${body}\n\n${hint}`;
 
-  // Severity dispatch via the Pi API's magic-string second-arg convention:
-  // omitting the 2nd arg is info severity; "warning" / "error" otherwise.
-  const severity = computeSeverity(message);
-  if (severity === undefined) {
-    // UXG-07 (D-29-02): info severity emits the cascade body only, NO summary
-    // line.
-    ctx.ui.notify(withHint);
-  } else {
-    // UXG-07 (D-29-02): for error/warning severity, PREPEND the
-    // summary line so the host `Error:` / `Warning:` prefix introduces a
-    // meaningful count of the failed/skipped operations. The reload-hint
-    // (if any) stays last: `{summary}\n\n{cascade body}\n\n{reload-hint}`.
-    const summarized = `${buildSummaryLine(message, severity)}\n\n${withHint}`;
-    ctx.ui.notify(summarized, severity);
-  }
+  // Emit through the shared summary seam (GRAM-04). At info severity the body
+  // emits unchanged; at error/warning severity the summary is prepended as its
+  // own block, with the reload-hint (if any) already folded into `withHint`
+  // last: `{summary}\n\n{cascade body}\n\n{reload-hint}` (UXG-07 / GRAM-01).
+  emitWithSummary(ctx, message, withHint);
 }
 
 // ---------------------------------------------------------------------------
