@@ -1,5 +1,34 @@
 # Milestones: pi-claude-marketplace
 
+## v1.11 Notification Summary-Line Grammar (Shipped: 2026-06-08)
+
+**Phases completed:** 1 phases, 1 plans, 3 tasks
+
+**Key accomplishments:**
+
+- Every error/warning notification now carries a non-empty summary first line with the detail rendered as its own block, emitted through ONE shared `emitWithSummary` seam so the standalone-vs-cascade divergence that caused the v1.10 glued-label defect cannot recur.
+
+---
+
+## v1.10 Error Attribution & Message-Type Consistency (Shipped: 2026-06-08)
+
+**Phases completed:** 4 phases, 10 plans, 28 tasks
+
+**Key accomplishments:**
+
+- A dedicated `marketplace-not-added` variant + `ContentReason` exclusion + per-status `MarketplaceNotificationMessage` union + a single `isInfoKind`/`assertNever` guard make the v1.10 attribution foot-guns unrepresentable -- with ZERO rendered-byte changes for any v1.0-v1.9 command.
+- install/uninstall now converge on info's model: a missing or wrong-scope marketplace renders standalone `(failed) {not added}` on the marketplace subject (not `{not in manifest}` on a plugin row, not silent), backed by a new discriminated cross-scope resolver and truthful cascade-failure reasons.
+- Reinstall's marketplace-existence/scope precondition now emits one standalone `(failed) {not added}` consistently across the explicit-scope-plugin, explicit-scope-marketplace, and bare forms (ATTR-03), with a truthful `unreadable` cascade last-resort (ATTR-09) and the `[requestedScope]` cross-scope bracket (SCOPE-01).
+- update's missing-marketplace precondition re-attributed to the canonical standalone `(failed) {not added}` for both the `<plugin>@<mp>` and `@<mp>` forms, eliminating the raw `MarketplaceNotFoundError`/`Error` -> `{not found}` misattribution while preserving the cascade never-throw contract -- closing ATTR-02 and the update half of SCOPE-01.
+- The D-48-A `MpFailed.reasons?` type+renderer foundation, the typed `InvalidMarketplaceManifestError`, and ATTR-07 `marketplace add` precondition attribution land atomically in one GREEN state -- the marketplace subject can now render its own closed-set reason, and all five `add` precondition failures route through `notify` as `(failed) {<reason>}` rows instead of raw throws.
+- autoupdate/noautoupdate (S1+S2) and marketplace remove (S3+S4) of a missing marketplace now converge on the standalone `(failed) {not added}` variant -- no reason-less row, no `{not found}`, no raw `MarketplaceNotFoundError` escaping the orchestrator -- with the StateLockHeldError `{lock held}` path preserved.
+- A path-source malformed/schema-invalid `marketplace.json` during `marketplace update` now renders `(failed) {invalid manifest}` -- never the lying `{network unreachable}` -- via the typed `InvalidMarketplaceManifestError` branch in `reasonsFromCascadeError` (recognized before the `?? ["network unreachable"]` default), with zero network on the path-source failure path (NFR-5); the github no-errno catch-all is preserved and the three bare-`(failed)` byte forms are regression-locked. Final phase gate `npm run check` exits 0 (1502 tests).
+- `marketplace update <missing-mp>` now converges on the canonical standalone `(failed) {not added}` variant (explicit-scope `⊘ <name> [scope] (failed) {not added}` + bracketless bare form) instead of raw-throwing MarketplaceNotFoundError -- closing the last residual Class-C gap so SC#1 is literally true.
+- `narrowProbeError` now maps a schema-invalid `InvalidMarketplaceManifestError` to `{invalid manifest}` on the read-only `marketplace info` / `plugin info` / `list` surfaces -- parity with the `marketplace add` write path -- while preserving `{unparseable}` for malformed JSON, with the new read-surface byte form catalog-documented and fixture-locked.
+- A dedicated cross-op byte-identity matrix test that proves every converged op (info / install / uninstall / reinstall / plugin-update / marketplace-remove / autoupdate / the newly-converged marketplace-update) emits the byte-identical `⊘ <name> [scope?] (failed) {not added}` row, plus a catalog-uat inverse-walk orphan gate and the milestone GREEN-gate evidence (npm run check exit 0, 1510 tests).
+
+---
+
 ## v1.9 Manifest In-Memory Cache (Shipped: 2026-06-07)
 
 **Phases completed:** 1 phases, 2 plans, 3 tasks

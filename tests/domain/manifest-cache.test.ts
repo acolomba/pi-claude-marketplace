@@ -13,7 +13,10 @@ import test from "node:test";
 import { createManifestCache } from "../../extensions/pi-claude-marketplace/domain/manifest-cache.ts";
 // Cross-check the CACHE-05 message-equivalence against the same accessor the
 // soft-load consumer (list.ts) uses.
-import { errorMessage } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  errorMessage,
+  InvalidMarketplaceManifestError,
+} from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // CACHE-01: a repeated read of an unchanged manifest runs the injected loader
@@ -201,6 +204,59 @@ test("CACHE-05: bad manifest negative-cached; same Error re-thrown; no re-parse;
     assert.equal((e1 as Error).message, (e2 as Error).message, ".message stable across reads");
     // Mirror the soft-load consumer (list.ts), which reads only err.message.
     assert.equal(errorMessage(e1), errorMessage(e2), "errorMessage() equivalent across reads");
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// D-48-B A1: the typed InvalidMarketplaceManifestError survives the negative
+// cache -- the SAME typed instance is re-thrown (with its `name` and `cause`
+// intact) on a repeated read of an unchanged bad manifest, with no second
+// loader call. This is the structural-classification guarantee ATTR-07/ATTR-10
+// rely on (classifyAddError / reasonsFromCascadeError narrow on instanceof, so
+// the re-thrown value MUST still be an InvalidMarketplaceManifestError).
+// ──────────────────────────────────────────────────────────────────────────
+
+test("D-48-B A1: negative-cache re-throws the SAME InvalidMarketplaceManifestError instance (typed survival)", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "pi-cm-neg-typed-"));
+  try {
+    const p = path.join(tmp, "marketplace.json");
+    await writeFile(p, "{ not json", "utf8"); // size won't change between reads
+
+    let calls = 0;
+    const cache = createManifestCache(() => {
+      calls++;
+      return Promise.reject(
+        new InvalidMarketplaceManifestError("marketplace.json is not valid JSON: SyntaxError", {
+          cause: new SyntaxError("Unexpected token"),
+        }),
+      );
+    });
+
+    const e1 = await cache.load(p).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    const e2 = await cache.load(p).then(
+      () => null,
+      (e: unknown) => e,
+    );
+
+    assert.equal(calls, 1, "negative entry serves the second read with no re-parse");
+    assert.ok(
+      e1 instanceof InvalidMarketplaceManifestError,
+      "first read re-throws the typed instance",
+    );
+    assert.ok(
+      e2 instanceof InvalidMarketplaceManifestError,
+      "negative-cached re-throw is STILL the typed instance (instanceof holds)",
+    );
+    assert.equal(e1, e2, "D-03 / D-48-B A1: the SAME typed instance is re-thrown");
+    assert.ok(
+      e2.cause instanceof SyntaxError,
+      "the SyntaxError cause survives the negative-cache re-throw",
+    );
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }

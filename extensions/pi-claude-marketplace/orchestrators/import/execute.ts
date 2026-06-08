@@ -22,6 +22,7 @@ import type {
 import type { AddMarketplaceOptions } from "../../orchestrators/marketplace/add.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
+  ContentReason,
   Dependency,
   MarketplaceNotificationMessage,
   MarketplaceStatus,
@@ -30,7 +31,6 @@ import type {
   PluginNotificationMessage,
   PluginSkippedMessage,
   PluginUnavailableMessage,
-  Reason,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
@@ -294,7 +294,6 @@ interface MarketplaceBlock {
   readonly name: string;
   readonly scope: Scope;
   status?: MarketplaceStatus;
-  reasons?: readonly Reason[];
   plugins: PluginNotificationMessage[];
 }
 
@@ -319,7 +318,7 @@ function ensureMarketplaceBlock(
   return block;
 }
 
-function importWarningReason(reason: ImportWarningOutcome["reason"]): Reason {
+function importWarningReason(reason: ImportWarningOutcome["reason"]): ContentReason {
   switch (reason) {
     case "unavailable":
     case "uninstallable":
@@ -385,11 +384,13 @@ function buildImportNotificationMarketplaces(
 
   // Source-mismatch supersedes any prior status (the import for that
   // marketplace effectively failed); dependent plugin rows accumulate as
-  // PluginFailedMessage children under the (failed) header.
+  // PluginFailedMessage children under the (failed) header. The mp-level
+  // `failed` arm carries NO `reasons` (D-46-03a): `renderMpHeader`'s failed
+  // arm renders only `(failed)` and the source-mismatch reason rides the
+  // child `PluginFailedMessage` row below.
   for (const o of result.sourceMismatches) {
     const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
     block.status = "failed";
-    block.reasons = ["source mismatch"] as const;
   }
 
   // Plugin rows -- orphan-fold contract: per-row `scope?` is OMITTED
@@ -461,19 +462,38 @@ function buildImportNotificationMarketplaces(
   // Project-before-user tie-break per MSG-GR-3 via compareByNameThenScope.
   // defense-in-depth: typed readonly + runtime freeze (codebase convention)
   return Object.freeze(
-    [...byMp.values()]
-      .sort((a, b) => compareByNameThenScope(a, b))
-      .map(
-        (block): MarketplaceNotificationMessage => ({
-          name: block.name,
-          scope: block.scope,
-          ...(block.status !== undefined && { status: block.status }),
-          ...(block.reasons !== undefined && { reasons: block.reasons }),
-          // defense-in-depth: typed readonly + runtime freeze (codebase convention)
-          plugins: Object.freeze(block.plugins),
-        }),
-      ),
+    [...byMp.values()].sort((a, b) => compareByNameThenScope(a, b)).map(blockToMarketplaceMessage),
   );
+}
+
+/**
+ * Construct the concrete per-status `MarketplaceNotificationMessage` arm
+ * (TYPE-04 / D-46-03) for an accumulated `MarketplaceBlock`. The import path
+ * only ever sets `status` to `"added"` / `"updated"` / `"failed"` (or leaves
+ * it absent for the list/inventory arm), so the switch needs exactly those
+ * arms; a future status added to the import path becomes a compile error at
+ * `assertNever`. (The full B-6 reducer cleanup, TYPE-F3, is deferred
+ * post-v1.10.)
+ */
+function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceNotificationMessage {
+  const name = block.name;
+  const scope = block.scope;
+  // defense-in-depth: typed readonly + runtime freeze (codebase convention)
+  const plugins = Object.freeze(block.plugins);
+  switch (block.status) {
+    case "added":
+      return { name, scope, status: "added", plugins };
+    case "updated":
+      return { name, scope, status: "updated", plugins };
+    case "failed":
+      return { name, scope, status: "failed", plugins };
+    case undefined:
+      return { name, scope, plugins };
+    default:
+      // The import path never produces "removed" / "skipped" / autoupdate
+      // statuses; an unhandled status is a producer-contract violation.
+      throw new Error(`unexpected import marketplace status: ${block.status}`);
+  }
 }
 
 // The import workflow is intentionally linear: ensure marketplaces, record diagnostics,

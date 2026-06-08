@@ -42,6 +42,7 @@ import {
 import { getPluginInfo } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { InvalidMarketplaceManifestError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -442,7 +443,10 @@ test("INFO-04: --scope user mismatch (mp only in project) emits bare `⊘ <mp> [
       cwd,
     });
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "⊘ p-only [user] (failed) {not added}");
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ p-only [user] (failed) {not added}",
+    );
     assert.equal(notifications[0]!.severity, "error");
   });
 });
@@ -456,7 +460,10 @@ test("D-03: absent from BOTH scopes with no --scope renders `(failed) {not added
     const { ctx, pi, notifications } = makeCtx();
     await getPluginInfo({ ctx, pi, marketplace: "ghost-mp", plugin: "ghost", cwd });
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "⊘ ghost-mp (failed) {not added}");
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ ghost-mp (failed) {not added}",
+    );
     assert.equal(notifications[0]!.severity, "error");
     assert.ok(
       !notifications[0]!.message.includes("[user]") &&
@@ -488,7 +495,72 @@ test("UXG-08: missing plugin in known marketplace emits `⊘ <plugin> (failed) {
     assert.equal(notifications[0]!.severity, "error");
     assert.equal(
       notifications[0]!.message,
-      ["● mp [user] <no autoupdate>", "  ⊘ ghost (failed) {not in manifest}"].join("\n"),
+      [
+        "1 plugin operation failed.",
+        "",
+        "● mp [user] <no autoupdate>",
+        "  ⊘ ghost (failed) {not in manifest}",
+      ].join("\n"),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (h2) GRAM-04: a `(failed)` block on the BOTH-scopes path must NOT hide inside
+// the info-severity `plugin-info-cascade`. It is separated out and surfaced as
+// its own `error` + summary notify -- the same LOUD shape the single-scope arm
+// (test h) produces. Guards against the standalone-vs-cascade divergence
+// resurfacing on the fan-out path (Phase-50 code review WR-01/WR-02).
+// ---------------------------------------------------------------------------
+
+test("GRAM-04: both-scopes missing plugin emits per-scope `error` + summary, NOT a silent info cascade", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const projectRoot = path.join(cwd, ".pi");
+    // `mp` exists in BOTH scopes, but `ghost` is in neither manifest -> each
+    // scope yields a `(failed) {not in manifest}` block.
+    await seedPathMarketplace({
+      scope: "project",
+      scopeRoot: projectRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [{ name: "real", source: "./real", version: "1.0.0" }] },
+      installablePluginDirs: ["real"],
+    });
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [{ name: "real", source: "./real", version: "1.0.0" }] },
+      installablePluginDirs: ["real"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "ghost", cwd });
+
+    // Two failed scopes -> two standalone error notifications (project-first),
+    // NOT one info-severity cascade. The failure can never be summary-less.
+    assert.equal(notifications.length, 2, "each failed scope surfaces its own notify");
+    assert.equal(notifications[0]!.severity, "error");
+    assert.equal(notifications[1]!.severity, "error");
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "1 plugin operation failed.",
+        "",
+        "● mp [project] <no autoupdate>",
+        "  ⊘ ghost (failed) {not in manifest}",
+      ].join("\n"),
+    );
+    assert.equal(
+      notifications[1]!.message,
+      [
+        "1 plugin operation failed.",
+        "",
+        "● mp [user] <no autoupdate>",
+        "  ⊘ ghost (failed) {not in manifest}",
+      ].join("\n"),
     );
   });
 });
@@ -530,6 +602,26 @@ test("WR-01: narrowProbeError -> SyntaxError classifies as `unparseable`", async
   const mod =
     await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
   const err = new SyntaxError("Unexpected token");
+  assert.equal(mod.__test_narrowProbeError(err), "unparseable");
+});
+
+test("D-48-B IN-02: narrowProbeError -> schema-invalid InvalidMarketplaceManifestError classifies as `invalid manifest`", async () => {
+  const mod =
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
+  // Schema-invalid manifest = typed error with NO SyntaxError cause. The read
+  // surface reports the SAME `{invalid manifest}` reason the write path does.
+  const err = new InvalidMarketplaceManifestError("marketplace.json schema invalid: plugins");
+  assert.equal(mod.__test_narrowProbeError(err), "invalid manifest");
+});
+
+test("D-48-B IN-02: narrowProbeError -> malformed-JSON InvalidMarketplaceManifestError stays `unparseable`", async () => {
+  const mod =
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
+  // Malformed JSON = typed error WHOSE cause IS a SyntaxError. The collapse
+  // into one InvalidMarketplaceManifestError branch must preserve this arm.
+  const err = new InvalidMarketplaceManifestError("bad json", {
+    cause: new SyntaxError("Unexpected token"),
+  });
   assert.equal(mod.__test_narrowProbeError(err), "unparseable");
 });
 

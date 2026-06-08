@@ -603,6 +603,20 @@ const FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // ATTR-01 / ATTR-08 / M1: marketplace absent -> standalone
+    // `marketplace-not-added` variant on the marketplace subject (NOT
+    // `{not in manifest}` on a plugin row). install always carries a
+    // resolved scope, so the `[scope]` bracket is always present.
+    "missing-marketplace-not-added": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+        scope: "project",
+      } satisfies NotificationMessage,
+    },
   },
 
   // -------------------------------------------------------------------------
@@ -655,6 +669,20 @@ const FIXTURES: FixtureMap = {
           },
         ],
       },
+    },
+
+    // ATTR-04 / SCOPE-01 / M3 / M4: marketplace never added (or present only
+    // in the other scope) -> LOUD standalone `marketplace-not-added` variant
+    // carrying the requested-scope bracket (distinct from the silent PU-5
+    // already-gone-plugin converge).
+    "missing-marketplace-not-added": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+        scope: "user",
+      } satisfies NotificationMessage,
     },
   },
 
@@ -841,6 +869,33 @@ const FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // ATTR-03 / SCOPE-01 / M6 / M7 / M8: marketplace not added in the requested
+    // explicit scope (or present only in the other scope) -> standalone
+    // `marketplace-not-added` variant carrying the requested-scope bracket,
+    // form-independent across the explicit-scope-plugin / explicit-scope-
+    // marketplace forms.
+    "missing-marketplace-not-added": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+        scope: "project",
+      } satisfies NotificationMessage,
+    },
+
+    // ATTR-03: bare `reinstall @<marketplace>` form absent in BOTH scopes ->
+    // standalone `marketplace-not-added` variant with NO bracket (the
+    // absent-from-both form; no requested scope to report).
+    "missing-marketplace-not-added-absent-from-both": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+      } satisfies NotificationMessage,
+    },
   },
 
   // -------------------------------------------------------------------------
@@ -1019,6 +1074,33 @@ const FIXTURES: FixtureMap = {
           },
         ],
       },
+    },
+
+    // ATTR-02 / SCOPE-01 / M10 / M11: marketplace not added in the requested
+    // explicit scope (or present only in the other scope) -> standalone
+    // `marketplace-not-added` variant carrying the requested-scope bracket,
+    // form-independent across the `<plugin>@<mp>` / `@<mp>` forms. No raw
+    // throw escapes the orchestrator.
+    "missing-marketplace-not-added": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+        scope: "user",
+      } satisfies NotificationMessage,
+    },
+
+    // ATTR-02: bare `update @<marketplace>` form absent in BOTH scopes ->
+    // standalone `marketplace-not-added` variant with NO bracket (the
+    // absent-from-both form; no requested scope to report).
+    "missing-marketplace-not-added-absent-from-both": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+      } satisfies NotificationMessage,
     },
   },
 
@@ -1249,6 +1331,90 @@ const FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // ATTR-07 / D-48-A: the five marketplace-add precondition reasons render on
+    // the marketplace subject via the MpFailed.reasons brace. Post-manifest
+    // failures carry the derived name; pre-manifest failures carry the raw
+    // source string (A2). All route to `error` severity (failed-bearing).
+    "add-duplicate-name": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            status: "failed",
+            reasons: ["duplicate name"],
+            plugins: [],
+          },
+        ],
+      },
+    },
+
+    "add-stale-clone": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            status: "failed",
+            reasons: ["stale clone"],
+            plugins: [],
+          },
+        ],
+      },
+    },
+
+    "add-unsupported-source": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "git@github.com:foo/bar.git",
+            scope: "user",
+            status: "failed",
+            reasons: ["unsupported source"],
+            plugins: [],
+          },
+        ],
+      },
+    },
+
+    "add-source-missing": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "./missing-mp",
+            scope: "user",
+            status: "failed",
+            reasons: ["source missing"],
+            plugins: [],
+          },
+        ],
+      },
+    },
+
+    "add-invalid-manifest": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "anthropics/claude-plugins-official",
+            scope: "user",
+            status: "failed",
+            reasons: ["invalid manifest"],
+            plugins: [],
+          },
+        ],
+      },
+    },
   },
 
   // -------------------------------------------------------------------------
@@ -1351,44 +1517,51 @@ const FIXTURES: FixtureMap = {
     "absent-from-both": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
+      // TYPE-01: the dedicated `marketplace-not-added` variant. `scope` is
+      // OMITTED so the renderer emits no `[scope]` token -- absent-from-both
+      // states have no bracket because the marketplace is in NEITHER scope.
+      // Byte form is unchanged (`⊘ ghost-mp (failed) {not added}`).
       message: {
-        kind: "plugin-info",
-        marketplaceName: "ghost-mp",
-        // Unused placeholder per the INFO-04 carve-out (renderer skips
-        // the header on the bare `{not added}` row); supply a default.
-        marketplaceScope: "user",
-        marketplaceDetails: { autoupdate: false },
-        plugin: {
-          status: "failed",
-          name: "ghost-mp",
-          // D-03: `plugin.scope` OMITTED so the renderer's bracket
-          // short-circuit emits no `[scope]` token. Absent-from-both
-          // states have no [scope] bracket because the marketplace is
-          // in NEITHER scope -- emitting one would be misleading.
-          reasons: ["not added"],
-          componentsResolved: false,
-        },
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
       } satisfies NotificationMessage,
     },
 
-    // Anchor preserved byte-identical. DO NOT modify.
+    // Byte form preserved byte-identical (`⊘ my-mp [user] (failed) {not added}`).
+    // The fixture shape is re-keyed to the TYPE-01 variant; the rendered BYTES
+    // are unchanged.
     "scope-mismatch-not-added": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        kind: "marketplace-not-added",
+        name: "my-mp",
+        scope: "user",
+      } satisfies NotificationMessage,
+    },
+
+    // D-48-B IN-02: a schema-invalid `marketplace.json` (typed
+    // InvalidMarketplaceManifestError, NO SyntaxError cause) reads
+    // `{invalid manifest}` for parity with the `marketplace add` write path,
+    // not the former generic `{unreadable}` fallback. Mirrors
+    // buildManifestFailureMessage: a `plugin-info` payload on the marketplace
+    // subject (marketplaceName === plugin.name, plugin.scope ===
+    // marketplaceScope so the renderer's orphan-fold rule drops the failed-row
+    // bracket), status `failed`, reasons `["invalid manifest"]`,
+    // componentsResolved false. Byte form: header + 2-space-indent failed row.
+    "manifest-invalid": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
         kind: "plugin-info",
-        marketplaceName: "my-mp",
+        marketplaceName: "bad-mp",
         marketplaceScope: "user",
-        // Minimal MarketplaceDetails -- the carve-out renderer does not
-        // emit a marketplace header for this catalog state, so the
-        // autoupdate marker is never composed; supply the required
-        // `autoupdate` field with a default value.
         marketplaceDetails: { autoupdate: false },
         plugin: {
           status: "failed",
-          name: "my-mp",
+          name: "bad-mp",
           scope: "user",
-          reasons: ["not added"],
+          reasons: ["invalid manifest"],
           componentsResolved: false,
         },
       } satisfies NotificationMessage,
@@ -1580,43 +1753,25 @@ const FIXTURES: FixtureMap = {
     "missing-marketplace-not-added-absent-from-both": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
+      // TYPE-01 variant. `name` carries the MARKETPLACE name (the user-facing
+      // failure is "the marketplace is not added"). `scope` OMITTED -> no
+      // bracket. Byte form unchanged (`⊘ ghost-mp (failed) {not added}`).
       message: {
-        kind: "plugin-info",
-        marketplaceName: "ghost-mp",
-        // Unused placeholder per the INFO-04 carve-out (renderer skips
-        // the header on the bare `{not added}` row); supply a default.
-        marketplaceScope: "user",
-        marketplaceDetails: { autoupdate: false },
-        plugin: {
-          status: "failed",
-          // The MARKETPLACE name (not the plugin name) -- the
-          // user-facing failure is "the marketplace is not added".
-          name: "ghost-mp",
-          // D-03: `plugin.scope` OMITTED so the renderer's bracket
-          // short-circuit emits no `[scope]` token.
-          reasons: ["not added"],
-          componentsResolved: false,
-        },
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
       } satisfies NotificationMessage,
     },
 
     "missing-marketplace-not-added-scope-mismatch": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
+      // TYPE-01 variant. `--scope user` requested explicitly -> renderer emits
+      // the `[user]` bracket. Byte form unchanged
+      // (`⊘ ghost-mp [user] (failed) {not added}`).
       message: {
-        kind: "plugin-info",
-        marketplaceName: "ghost-mp",
-        marketplaceScope: "user",
-        marketplaceDetails: { autoupdate: false },
-        plugin: {
-          status: "failed",
-          name: "ghost-mp",
-          // `--scope user` was requested explicitly -> renderer emits
-          // `[user]` bracket.
-          scope: "user",
-          reasons: ["not added"],
-          componentsResolved: false,
-        },
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+        scope: "user",
       } satisfies NotificationMessage,
     },
   },
@@ -1660,6 +1815,32 @@ const FIXTURES: FixtureMap = {
           },
         ],
       },
+    },
+
+    // ATTR-06 / S3 / D-48-C Shape 1: explicit-scope remove of a name not added
+    // in the requested scope -> standalone `marketplace-not-added` `{not added}`
+    // variant carrying the requested scope bracket (pre-guard miss; no raw
+    // MarketplaceNotFoundError escapes the orchestrator).
+    "remove-missing-not-added": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+        scope: "user",
+      } satisfies NotificationMessage,
+    },
+
+    // ATTR-06 / S4: bare-form remove of a name absent from BOTH scopes -> the
+    // SAME standalone variant with NO bracket (resolveScopeFromState's
+    // MarketplaceNotFoundError caught at the entrypoint, absent-from-both form).
+    "remove-missing-not-added-bare": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+      } satisfies NotificationMessage,
     },
   },
 
@@ -1750,6 +1931,53 @@ const FIXTURES: FixtureMap = {
         marketplaces: [{ name: "official", scope: "user", status: "failed", plugins: [] }],
       },
     },
+
+    // ATTR-10 / D-48-B: a path-source marketplace.json that is malformed or
+    // schema-invalid renders `(failed) {invalid manifest}` on the synthetic-child
+    // failed row -- never `{network unreachable}` (NFR-5: path-source touches no
+    // network). The orchestrator's refreshOneMarketplace catch carries the
+    // classified reason on a synthetic child (mirroring the mp-failure recipe);
+    // this fixture pins that byte form. `cause` is omitted so the byte form is
+    // deterministic (the live cause-chain trailer carries data-dependent JSON
+    // parser text). Summary counts the synthetic child as one plugin operation.
+    "update-path-invalid-manifest": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            status: "failed",
+            plugins: [{ status: "failed", name: "official", reasons: ["invalid manifest"] }],
+          },
+        ],
+      },
+    },
+
+    // SC#1 / ATTR-06 / D-48-C: the marketplace-form update now converges on the
+    // standalone `marketplace-not-added` variant for the marketplace-absent
+    // precondition (closing the last residual Class-C raw-throw). Explicit scope
+    // carries the requested `[scope]` bracket (SCOPE-01); the bare absent-from-both
+    // form carries NO bracket. Both severity `error` via computeSeverity.
+    "update-missing-not-added": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+        scope: "project",
+      },
+    },
+
+    "update-missing-not-added-absent-from-both": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+      },
+    },
   },
 
   // -------------------------------------------------------------------------
@@ -1804,12 +2032,32 @@ const FIXTURES: FixtureMap = {
       },
     },
 
-    "failure-not-found": {
+    // ATTR-05 / S1 / D-48-C Shape 1: an explicit-scope flip of a name not
+    // added in the requested scope routes to the standalone
+    // `marketplace-not-added` `{not added}` variant carrying the requested
+    // scope bracket -- superseding the former reason-less / `{not found}` form.
+    "autoupdate-missing-not-added": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
-        marketplaces: [{ name: "missing-mp", scope: "user", status: "failed", plugins: [] }],
-      },
+        kind: "marketplace-not-added",
+        name: "missing-mp",
+        scope: "user",
+      } satisfies NotificationMessage,
+    },
+
+    // ATTR-05 / S2: the bare form absent from EVERY iterated scope routes to
+    // the SAME standalone variant carrying `first.scope` (project-before-user
+    // SC-6 order -> `[project]`). Supersedes the former reason-LESS bare
+    // `(failed)` row.
+    "autoupdate-missing-not-added-bare": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "missing-mp",
+        scope: "project",
+      } satisfies NotificationMessage,
     },
   },
 
@@ -1959,6 +2207,44 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
       })
       .join("\n\n");
     assert.fail(`catalog UAT failures (${failures.length}):\n${formatted}`);
+  }
+});
+
+test("catalog UAT inverse walk: every FIXTURES (section,state) has a matching catalog annotation (no orphan/stale fixture)", async () => {
+  // SC#3 both-directions gate. The forward walk above (catalog -> fixture)
+  // catches an UNDOCUMENTED-fixture gap (a catalog state with no fixture). This
+  // inverse walk (fixture -> catalog) catches an ORPHAN fixture: a FIXTURES
+  // entry with no corresponding `<!-- catalog-state: STATE -->` annotation is
+  // silently never exercised by the forward driver. Asserting both directions
+  // makes "no orphaned/stale catalog state remains" (SC#3) a real gate. When
+  // Plans 49-01 / 49-02 added new states + fixtures, this confirms they stay
+  // paired (every fixture has a catalog annotation).
+  const catalog = await readFile(CATALOG_PATH, "utf8");
+  const examples = loadCatalogExamples(catalog);
+
+  // Set of `${section}::${state}` keys for every parsed catalog annotation.
+  const annotated = new Set<string>(examples.map((e) => `${e.section}::${e.state}`));
+
+  // Iterate every FIXTURES (section,state) key; collect orphans -- fixtures with
+  // no matching catalog annotation.
+  const orphans: string[] = [];
+  for (const section of Object.keys(FIXTURES)) {
+    const states = FIXTURES[section];
+    if (states === undefined) {
+      continue;
+    }
+
+    for (const state of Object.keys(states)) {
+      if (!annotated.has(`${section}::${state}`)) {
+        orphans.push(`[ORPHAN FIXTURE] section=${section} state=${state}`);
+      }
+    }
+  }
+
+  if (orphans.length > 0) {
+    assert.fail(
+      `catalog UAT inverse-walk failures (${orphans.length}) -- FIXTURES entries with no catalog annotation:\n${orphans.join("\n")}`,
+    );
   }
 });
 

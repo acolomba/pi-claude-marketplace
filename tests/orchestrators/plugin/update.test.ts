@@ -995,11 +995,17 @@ test("PUP-1 pl@mp: targeting a plugin not in state AND not in manifest -> partit
   });
 });
 
-// ─── PUP-1 missing marketplace -> direct-path V2 notify (PluginFailedMessage) ─
+// ─── ATTR-02 missing marketplace -> standalone {not added} (both forms) ───────
 
-test("PUP-1: targeting an unknown marketplace -> direct-path V2 notify (PluginFailedMessage with cause)", async () => {
+// ATTR-02 / SCOPE-01: `@<mp>` form against an absent marketplace with an
+// explicit `--scope` emits the standalone Phase 46 `MarketplaceNotAddedMessage`
+// (`{not added}` on the marketplace subject) carrying the requested-scope
+// bracket -- NOT the former `(failed) {not found}` synthetic plugin row (M10/M11
+// misattribution). No raw MarketplaceNotFoundError/Error escapes the
+// orchestrator.
+test("ATTR-02 @<mp>: unknown marketplace with explicit scope -> standalone {not added} [scope] bracket", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-pup1-nomp-"));
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-attr02-nomp-mp-"));
     try {
       const { ctx, pi, notifications } = makeCtx();
       await updatePlugins({
@@ -1010,30 +1016,147 @@ test("PUP-1: targeting an unknown marketplace -> direct-path V2 notify (PluginFa
         target: { kind: "marketplace", marketplace: "ghost-mp" },
       });
 
-      // V2 direct-path failure (Option B) -- the
-      // enumerate-targets throw surfaces via a single notify(ctx, pi,
-      // { marketplaces: [{ name, scope, plugins: [PluginFailedMessage] }] })
-      // call. The synthetic failed-row identity is the marketplace name
-      // wrapped in parens (WR-01: a bare marketplace name in the plugin-row
-      // slot would render as `⊘ <marketplace> (failed) ...` directly under
-      // a marketplace block ALSO named `<marketplace>` -- a redundant /
-      // confusing row; the parens-wrapped form `⊘ (<marketplace>) (failed)
-      // ...` mirrors the SYNTHETIC_UPDATE_PLACEHOLDER_NAME = "(update)"
-      // bare-form precedent and is visually distinguishable from the mp
-      // header). The renderer composes the 4-space cause-chain trailer per
-      // D-16-08 from PluginFailedMessage.cause, preserving the
-      // error-text `Marketplace "ghost-mp" not found in project scope.`.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
-      // Cause-chain trailer text preserves the error message.
-      assert.match(notifications[0]?.message ?? "", /not found in project scope/);
-      // Bare marketplace header + a synthetic failed plugin
-      // row carrying the parens-wrapped marketplace name (WR-01).
+      // Standalone marketplace-subject row; bracket carries the REQUESTED scope
+      // (SCOPE-01); no summary line, no cause-chain trailer.
       assert.equal(
         notifications[0]?.message,
-        "1 plugin operation failed.\n\n● ghost-mp [project]\n" +
-          "  ⊘ (ghost-mp) (failed) {not found}\n" +
-          '    cause: Marketplace "ghost-mp" not found in project scope.',
+        "1 marketplace operation failed.\n\n⊘ ghost-mp [project] (failed) {not added}",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ATTR-02: `<plugin>@<mp>` form against an absent marketplace with an explicit
+// scope converges on the SAME standalone `{not added}` emission as the `@<mp>`
+// form (both flow through enumerateMarketplaceTarget).
+test("ATTR-02 <plugin>@<mp>: unknown marketplace with explicit scope -> standalone {not added} [scope] bracket", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-attr02-nomp-pl-"));
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "user",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "ghost-mp" },
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.equal(
+        notifications[0]?.message,
+        "1 marketplace operation failed.\n\n⊘ ghost-mp [user] (failed) {not added}",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ATTR-02: bare `@<mp>` form (no `--scope`) against a marketplace absent in BOTH
+// scopes -> standalone `{not added}` with NO `[scope]` bracket (absent-from-both
+// form; no requested scope to report).
+test("ATTR-02 @<mp> bare: unknown marketplace absent from both scopes -> standalone {not added}, no bracket", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-attr02-nomp-bare-"));
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        // scope omitted -> bare form searches both scopes, misses both.
+        cwd,
+        target: { kind: "marketplace", marketplace: "ghost-mp" },
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.equal(
+        notifications[0]?.message,
+        "1 marketplace operation failed.\n\n⊘ ghost-mp (failed) {not added}",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// SCOPE-01: explicit-scope `@<mp>` against a marketplace present ONLY in the
+// other scope -> standalone `{not added}` carrying the REQUESTED scope bracket
+// ("not added in the scope you asked for"; the operator infers the other scope).
+test("SCOPE-01 @<mp>: marketplace present only in other scope -> standalone {not added} [requestedScope]", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-scope01-other-"));
+    try {
+      // Seed the marketplace in PROJECT (seedPathMarketplace uses project).
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        // Ask for USER explicitly; the marketplace lives only in project.
+        scope: "user",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.equal(
+        notifications[0]?.message,
+        "1 marketplace operation failed.\n\n⊘ mp [user] (failed) {not added}",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// SCOPE-01: explicit-scope `<plugin>@<mp>` against a marketplace present ONLY in
+// the other scope -> standalone `{not added}` carrying the REQUESTED scope
+// bracket. The plugin form reaches this via `resolveInstalledPluginTarget`
+// returning the explicit scope blindly, then `enumerateMarketplaceTarget`
+// finding `mp === undefined` for that scope and raising the signal -- the
+// companion of the `@<mp>` form test above (WR-01 gap closure).
+test("SCOPE-01 <plugin>@<mp>: marketplace present only in other scope -> standalone {not added} [requestedScope]", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-scope01-plugin-other-"));
+    try {
+      // Seed the marketplace in PROJECT; ask for USER explicitly.
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "user", // project has it; user doesn't
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.equal(
+        notifications[0]?.message,
+        "1 marketplace operation failed.\n\n⊘ mp [user] (failed) {not added}",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });

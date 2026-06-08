@@ -13,6 +13,10 @@ The use of generative AI is welcome, provided these conditions are met:
 
 ## Development setup
 
+Prerequisites:
+
+- [Open GSD](https://www.opengsd.net/)
+
 ```bash
 npm install
 git lfs install

@@ -83,7 +83,10 @@ test("shim :: `info my-mp` delegates with scope: undefined; absent-from-both -> 
     const handler = makeMarketplaceInfoHandler(makePi());
     await handler("my-mp", ctx);
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "⊘ my-mp (failed) {not added}");
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ my-mp (failed) {not added}",
+    );
     assert.equal(notifications[0]!.severity, "error");
   });
 });
@@ -94,7 +97,10 @@ test("shim :: `info my-mp --scope user` delegates with scope: 'user'; absent -> 
     const handler = makeMarketplaceInfoHandler(makePi());
     await handler("my-mp --scope user", ctx);
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "⊘ my-mp [user] (failed) {not added}");
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ my-mp [user] (failed) {not added}",
+    );
     assert.equal(notifications[0]!.severity, "error");
   });
 });
@@ -105,7 +111,10 @@ test("shim :: `info my-mp --scope project` delegates with scope: 'project'; abse
     const handler = makeMarketplaceInfoHandler(makePi());
     await handler("my-mp --scope project", ctx);
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "⊘ my-mp [project] (failed) {not added}");
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ my-mp [project] (failed) {not added}",
+    );
     assert.equal(notifications[0]!.severity, "error");
   });
 });

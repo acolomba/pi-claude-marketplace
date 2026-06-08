@@ -102,15 +102,22 @@ test("shim :: missing source positional emits USAGE; no orchestrator call", asyn
 
 test('shim :: valid source calls addMarketplace with { ctx, scope: "user", cwd, rawSource, gitOps: deps.gitOps }', async () => {
   await withHermeticHome(async ({ cwd }) => {
-    const { ctx } = makeCtx(cwd);
+    const { ctx, notifications } = makeCtx(cwd);
     const { deps, gitMock } = makeDeps();
     const handler = makeAddHandler(makePi(), deps);
-    // A non-existent path source surfaces an ENOENT-class error from
-    // addMarketplace's stat() probe -- the surfacing is via a thrown error
-    // (addMarketplace re-throws via withStateGuard). We expect the
-    // notification machinery to NOT have caught it (the handler-shim does
-    // not wrap orchestrator throws). So we expect this call to reject.
-    await assert.rejects(async () => handler("./nonexistent-marketplace-dir", ctx));
+    // ATTR-07 (Phase 48): a non-existent path source surfaces an ENOENT-class
+    // error from addMarketplace's stat() probe. The orchestrator now routes
+    // that precondition through notify as a structured `(failed) {source
+    // missing}` row instead of throwing past the orchestrator -- so the call
+    // RESOLVES and the handler emits the failed notification (no raw throw).
+    await handler("./nonexistent-marketplace-dir", ctx);
+    const note = notifications[0];
+    assert.ok(note);
+    assert.equal(
+      note.message,
+      "1 marketplace operation failed.\n\n⊘ ./nonexistent-marketplace-dir [user] (failed) {source missing}",
+    );
+    assert.equal(note.severity, "error");
     // No git operations expected (path source -- NFR-5).
     assert.equal(gitMock.state.cloneCalls.length, 0);
   });
@@ -118,27 +125,40 @@ test('shim :: valid source calls addMarketplace with { ctx, scope: "user", cwd, 
 
 test("shim :: --scope project propagated to addMarketplace", async () => {
   await withHermeticHome(async ({ cwd }) => {
-    const { ctx } = makeCtx(cwd);
+    const { ctx, notifications } = makeCtx(cwd);
     const { deps, gitMock } = makeDeps();
     const handler = makeAddHandler(makePi(), deps);
-    // Same path-source path with --scope project. The shim selecting project
-    // scope is observed by addMarketplace looking up project locations; the
-    // resulting ENOENT also rejects. We assert reject + no clone calls.
-    await assert.rejects(async () => handler("./nonexistent-marketplace-dir --scope project", ctx));
+    // ATTR-07: same path-source ENOENT with --scope project. The shim selecting
+    // project scope is observed in the failed row's `[project]` bracket; the
+    // precondition routes through notify (no raw throw).
+    await handler("./nonexistent-marketplace-dir --scope project", ctx);
+    const note = notifications[0];
+    assert.ok(note);
+    assert.equal(
+      note.message,
+      "1 marketplace operation failed.\n\n⊘ ./nonexistent-marketplace-dir [project] (failed) {source missing}",
+    );
+    assert.equal(note.severity, "error");
     assert.equal(gitMock.state.cloneCalls.length, 0);
   });
 });
 
 test("shim :: deps.gitOps is passed through from EdgeDeps", async () => {
   await withHermeticHome(async ({ cwd }) => {
-    const { ctx } = makeCtx(cwd);
+    const { ctx, notifications } = makeCtx(cwd);
     const { deps, gitMock } = makeDeps();
     const handler = makeAddHandler(makePi(), deps);
     // A github source triggers the gitOps.clone path. The mock has no fixture
-    // configured, so the orchestrator will fail at manifest read after clone;
-    // but the clone call will be RECORDED on gitMock.state.cloneCalls -- proof
-    // that deps.gitOps reached addMarketplace.
-    await assert.rejects(async () => handler("owner/repo", ctx));
+    // configured, so the cloned staging dir has no `.claude-plugin/
+    // marketplace.json` -- the post-clone read fails ENOENT, now routed through
+    // notify as `(failed) {source missing}` (ATTR-07) rather than thrown. The
+    // clone call is still RECORDED on gitMock.state.cloneCalls, proving
+    // deps.gitOps reached addMarketplace.
+    await handler("owner/repo", ctx);
+    const note = notifications[0];
+    assert.ok(note);
+    assert.equal(note.severity, "error");
+    assert.match(note.message, /\(failed\) \{source missing\}/);
     assert.equal(gitMock.state.cloneCalls.length, 1);
   });
 });

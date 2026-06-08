@@ -418,11 +418,11 @@ test("PU-3 + PU-7: foreign agent content -> V2 PluginFailedMessage + state recor
       assert.equal(loadedIdx.agents.length, 1, "agents-index row retained");
       assert.equal(loadedIdx.agents[0]?.generatedName, agentName);
 
-      // V2 byte form per docs/output-catalog.md:370-374
-      // (catalog-state `failure-permission-denied` shape -- the closed-set
-      // Reason here is `"not in manifest"` because the cause is an
-      // AgentsUnstageFailureError, which narrowCascadeFailure() maps to
-      // that Reason per the marketplace/remove.ts precedent).
+      // V2 byte form per docs/output-catalog.md `failure-permission-denied`
+      // shape. ATTR-09 / D-47-B: the cause is an AgentsUnstageFailureError
+      // (foreign content owned by another process), which narrowCascadeFailure
+      // now maps to the truthful `"source mismatch"` member -- the former
+      // `"not in manifest"` lied that the plugin was gone from the manifest.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
       // UXG-07 (D-29-02/03): the "1 plugin operation failed."
@@ -430,7 +430,7 @@ test("PU-3 + PU-7: foreign agent content -> V2 PluginFailedMessage + state recor
       // mp glyph `●` so the marketplace did not fail).
       assert.equal(
         (notifications[0]?.message ?? "").startsWith(
-          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {not in manifest}\n",
+          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {source mismatch}\n",
         ),
         true,
         `V2 failure row prefix mismatch: got "${notifications[0]?.message ?? ""}"`,
@@ -492,12 +492,15 @@ test("PU-5: record already absent -> NO notification (literal silence)", async (
   });
 });
 
-test("PU-5: marketplace record itself absent -> NO notification (silent converge)", async () => {
+test("ATTR-04 / M4: marketplace record itself absent -> LOUD {not added} (explicit scope)", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-pu5b-"));
     try {
       const locations = locationsFor("project", cwd);
-      // Do NOT seed state -- entire state.json missing.
+      // Do NOT seed state -- entire state.json missing in BOTH scopes. The
+      // marketplace was never added; ATTR-04 makes this LOUD (distinct from
+      // the silent already-gone-plugin converge above). The standalone
+      // `marketplace-not-added` variant carries the requested-scope bracket.
       const { ctx, pi, notifications } = makeCtx();
       await uninstallPlugin({
         ctx,
@@ -507,11 +510,63 @@ test("PU-5: marketplace record itself absent -> NO notification (silent converge
         marketplace: "missing-mp",
         plugin: "missing-plugin",
       });
-      assert.equal(notifications.length, 0);
-      // No state.json materialized -- the guard saves on close (extensionRoot
-      // is created lazily by saveState), but no orchestrator output occurred.
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.equal(
+        notifications[0]?.message,
+        "1 marketplace operation failed.\n\n⊘ missing-mp [project] (failed) {not added}",
+      );
+      // No state mutation -- the resolver short-circuits before the guard.
       const after = await loadState(locations.extensionRoot);
       assert.deepEqual(after.marketplaces, {});
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("SCOPE-01: explicit-scope uninstall of an other-scope-only target -> LOUD {not added} with requested bracket", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-scope01-"));
+    try {
+      // The plugin is installed in USER scope; the operator asks PROJECT.
+      const userLocations = locationsFor("user", cwd);
+      await seedState(userLocations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "user",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: { hello: makePluginRecord({}) },
+          },
+        },
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // SCOPE-01: not silent, not {not in manifest} -- the requested-scope
+      // bracket communicates "not added in the scope you asked for"; the
+      // operator infers the other scope. The user record is untouched.
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.equal(
+        notifications[0]?.message,
+        "1 marketplace operation failed.\n\n⊘ mp [project] (failed) {not added}",
+      );
+      const userAfter = await loadState(userLocations.extensionRoot);
+      assert.ok("hello" in (userAfter.marketplaces["mp"]?.plugins ?? {}), "user record retained");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -802,10 +857,10 @@ test("D-03-INV :: uninstall invalidates plugin cache for the target marketplace"
   });
 });
 
-// narrowCascadeFailure errno branches (lines 111-121) -----------------
+// narrowCascadeFailure errno branches -------------------------------
 // Exercises the EACCES/EPERM -> "permission denied", ENOENT ->
-// "source missing", unknown-errno default -> "not in manifest", and
-// plain-Error (no .code) -> "not in manifest" paths by injecting
+// "source missing", unknown-errno default -> "unreadable" (ATTR-09), and
+// plain-Error (no .code) -> "unreadable" (ATTR-09) paths by injecting
 // cascade stubs that return ok:false with the target error as cause.
 
 test("narrowCascadeFailure: EACCES maps to 'permission denied' in PluginFailedMessage", async () => {
@@ -982,7 +1037,7 @@ test("narrowCascadeFailure: ENOENT maps to 'source missing' in PluginFailedMessa
   });
 });
 
-test("narrowCascadeFailure: unknown errno (ETIMEDOUT default branch) maps to 'not in manifest'", async () => {
+test("narrowCascadeFailure: unknown errno (ETIMEDOUT default branch) maps to 'unreadable' (ATTR-09)", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-ncf-etimedout-"));
     try {
@@ -1026,13 +1081,13 @@ test("narrowCascadeFailure: unknown errno (ETIMEDOUT default branch) maps to 'no
 
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
-      // The switch default break falls through to the final `return "not in
-      // manifest"` at line 121 of uninstall.ts.
+      // ATTR-09 / D-47-B: the switch default break falls through to the
+      // truthful `return "unreadable"` (was the lying `"not in manifest"`).
       assert.ok(
         (notifications[0]?.message ?? "").startsWith(
-          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {not in manifest}\n",
+          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {unreadable}\n",
         ),
-        `expected 'not in manifest' reason; got: "${notifications[0]?.message ?? ""}"`,
+        `expected 'unreadable' reason; got: "${notifications[0]?.message ?? ""}"`,
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -1040,7 +1095,7 @@ test("narrowCascadeFailure: unknown errno (ETIMEDOUT default branch) maps to 'no
   });
 });
 
-test("narrowCascadeFailure: plain Error (no .code) maps to 'not in manifest' via isErrnoException=false", async () => {
+test("narrowCascadeFailure: plain Error (no .code) maps to 'unreadable' (ATTR-09) via isErrnoException=false", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-ncf-plain-"));
     try {
@@ -1063,7 +1118,7 @@ test("narrowCascadeFailure: plain Error (no .code) maps to 'not in manifest' via
       const stubCascade: typeof cascadeUnstagePlugin = () => {
         // Plain Error -- no .code property. isErrnoException() returns false
         // so the switch is skipped entirely; narrowCascadeFailure returns
-        // "not in manifest" via the final fallthrough at uninstall.ts:121.
+        // the truthful "unreadable" (ATTR-09) via the final fallthrough.
         return Promise.resolve({
           ok: false,
           dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
@@ -1086,9 +1141,9 @@ test("narrowCascadeFailure: plain Error (no .code) maps to 'not in manifest' via
       assert.equal(notifications[0]?.severity, "error");
       assert.ok(
         (notifications[0]?.message ?? "").startsWith(
-          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {not in manifest}\n",
+          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {unreadable}\n",
         ),
-        `expected 'not in manifest' reason; got: "${notifications[0]?.message ?? ""}"`,
+        `expected 'unreadable' reason; got: "${notifications[0]?.message ?? ""}"`,
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -1390,13 +1445,14 @@ test("TR-03 (AG-5 cause): full row preserved intact when cause instanceof Agents
         "AG-5: resources.mcpServers UNCHANGED",
       );
 
-      // (3) AG-5 still emits the existing V2 PluginFailedMessage via the
-      // outer catch block (PU-3 + PU-7 invariant preserved).
+      // (3) AG-5 still emits the V2 PluginFailedMessage via the outer catch
+      // block (PU-3 + PU-7 invariant preserved). ATTR-09 / D-47-B: the
+      // foreign-content cause now narrows to the truthful `{source mismatch}`.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
       assert.ok(
         (notifications[0]?.message ?? "").startsWith(
-          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {not in manifest}\n",
+          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {source mismatch}\n",
         ),
         `TR-03 AG-5: expected failure row; got "${notifications[0]?.message ?? ""}"`,
       );

@@ -11,11 +11,21 @@
 // these directly; local wrappers (e.g. `list.ts::narrowListFailReason`)
 // remain valid when a caller needs a distinct semantic name.
 
+import { InvalidMarketplaceManifestError } from "./errors.ts";
+
 /**
  * Classify a thrown FS/JSON error into a closed-set probe Reason.
  *
- *   - `SyntaxError`           -> `unparseable` (JSON.parse on a
- *     malformed `plugin.json` / `marketplace.json`)
+ *   - `SyntaxError`           -> `unparseable` (raw JSON.parse on a
+ *     `plugin.json` / `marketplace.json` with no typed wrapper)
+ *   - `InvalidMarketplaceManifestError` whose `cause` is a `SyntaxError`
+ *     -> `unparseable` (malformed JSON wrapped in the typed manifest error);
+ *     the SAME typed error with NO `SyntaxError` cause (schema-invalid
+ *     manifest) -> `invalid manifest` (D-48-B IN-02 close, SC#1 manifest
+ *     cross-surface parity): the read-only `info`/`list` surfaces report the
+ *     same truthful `{invalid manifest}` reason the write path
+ *     (`marketplace add::classifyAddError`) already does, instead of the
+ *     generic `unreadable` fallback.
  *   - `EACCES` / `EPERM`      -> `permission denied`
  *   - `ENOENT` / `ENOTDIR`    -> `source missing`
  *   - any other thrown shape  -> `unreadable` (permissive fallback)
@@ -26,9 +36,19 @@
  */
 export function narrowProbeError(
   err: unknown,
-): "permission denied" | "source missing" | "unparseable" | "unreadable" {
+): "invalid manifest" | "permission denied" | "source missing" | "unparseable" | "unreadable" {
   if (err instanceof SyntaxError) {
     return "unparseable";
+  }
+
+  // D-48-B IN-02: a marketplace-manifest failure is surfaced as a typed
+  // InvalidMarketplaceManifestError. A malformed-JSON manifest carries the
+  // original SyntaxError as cause -> `unparseable`; a schema-invalid manifest
+  // (typed error, NO SyntaxError cause) -> `invalid manifest`, matching the
+  // write path so the read-only surfaces classify the SAME on-disk condition
+  // identically rather than falling through to the generic `unreadable`.
+  if (err instanceof InvalidMarketplaceManifestError) {
+    return err.cause instanceof SyntaxError ? "unparseable" : "invalid manifest";
   }
 
   if (err instanceof Error) {

@@ -363,13 +363,16 @@ test("PI-3: plugin name not in marketplace plugins[] -> V2 failed/{not in manife
   });
 });
 
-test("PI-3: marketplace itself absent -> V2 failed/{not in manifest}", async () => {
+test("ATTR-01 / M1: marketplace itself absent -> standalone {not added} on the marketplace subject", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi3b-"));
     try {
-      // No state seeded -- the marketplace record is absent.
+      // No state seeded -- the marketplace record is absent. After the CMP-3
+      // project->user fallback also misses, install re-attributes the failure
+      // to the MARKETPLACE subject via the canonical Phase 46 variant
+      // (ATTR-01 / ATTR-08 split), NOT `{not in manifest}` on a plugin row.
       const { ctx, pi, notifications } = makeCtx();
-      await installPlugin({
+      const outcome = await installPlugin({
         ctx,
         pi,
         scope: "project",
@@ -380,15 +383,47 @@ test("PI-3: marketplace itself absent -> V2 failed/{not in manifest}", async () 
 
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
-      // UXG-07 (D-29-02/03): summary prefix for the single failed
-      // plugin (mp glyph is `●`, not `⊘`, so the marketplace did not fail).
+      // Standalone `marketplace-not-added` emission (D-47-A): a bare
+      // column-0 row carrying the requested-scope bracket, NO summary line,
+      // NO cause-chain trailer. Byte-identical to `info`'s scope-mismatch
+      // not-added state.
       assert.equal(
         notifications[0]?.message,
-        "1 plugin operation failed.\n\n" +
-          "● ghost-mp [project]\n" +
-          "  ⊘ anything (failed) {not in manifest}\n" +
-          '    cause: Plugin "anything" not found in marketplace "ghost-mp".',
+        "1 marketplace operation failed.\n\n⊘ ghost-mp [project] (failed) {not added}",
       );
+      assert.equal(outcome.status, "failed");
+
+      // State unchanged -- no marketplace container was synthesized.
+      const after = await loadState(locationsFor("project", cwd).extensionRoot);
+      assert.equal(after.marketplaces["ghost-mp"], undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("Orchestrated ATTR-01 / M1: marketplace absent in orchestrated mode -> failed outcome, no notification", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-m1-"));
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "ghost-mp",
+        plugin: "anything",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // Orchestrated mode (import cascade) returns the failed outcome WITHOUT
+      // emitting the standalone variant (the cascade caller renders its own
+      // rows). Mirrors the entity-error orchestrated gate.
+      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+      assert.equal(outcome.status, "failed");
+      assert.ok("cause" in outcome && typeof outcome.cause === "string");
+      assert.match((outcome as { cause: string }).cause, /not added in the project scope/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1285,16 +1320,17 @@ test("CMP-4 / PI-16: user-target install cannot source a project-only marketplac
         plugin: "hello",
       });
 
-      // V2 byte form: same shape as PI-3 (failed/{not in manifest}) --
-      // the failed-discriminator entity-shape row plus the cause-chain
-      // trailer that names the marketplace verbatim. UXG-07
-      // (D-29-02/03): the "1 plugin operation failed." summary line precedes
-      // the cascade body.
+      // ATTR-01 / SCOPE-01 / M1: a user-target install cannot source a
+      // project-only marketplace and the CMP-3 fallback is user->? only (it
+      // does NOT fall back project, so the user-target miss is terminal).
+      // The marketplace is "not added in user", surfaced via the standalone
+      // `marketplace-not-added` variant with the `[user]` bracket -- NOT
+      // `{not in manifest}` on a plugin row.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
-      assert.match(
-        notifications[0]?.message ?? "",
-        /^1 plugin operation failed\.\n\n● mp \[user\]\n {2}⊘ hello \(failed\) \{not in manifest\}\n {4}cause: .*not found in marketplace "mp"/,
+      assert.equal(
+        notifications[0]?.message,
+        "1 marketplace operation failed.\n\n⊘ mp [user] (failed) {not added}",
       );
 
       const userAfter = await loadState(userLocations.extensionRoot);

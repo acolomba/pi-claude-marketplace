@@ -1,8 +1,11 @@
 // marketplace remove handler shim tests.
 //
-// removeMarketplace's MR-1 path throws MarketplaceNotFoundError when the
-// name is absent in BOTH scopes (or the requested scope). The error is
-// notifyError-surfaced; we assert on the notification.
+// ATTR-06 / D-48-C Shape 1: removeMarketplace's MR-1 missing-marketplace
+// precondition no longer throws raw past the orchestrator. The orchestrator
+// routes the miss (bare form in BOTH scopes, or explicit-scope absence) to the
+// standalone `(failed) {not added}` notify variant. These shim tests assert the
+// precondition error does NOT escape the handler -- a notification is captured,
+// no rejection propagates to the Pi command runner.
 
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -68,24 +71,38 @@ test("shim :: missing name positional emits USAGE", async () => {
   });
 });
 
-test("shim :: valid name calls removeMarketplace with { ctx, scope?, cwd, name }", async () => {
+test("shim :: valid name reaches the orchestrator; bare-form miss routes to `{not added}` WITHOUT escaping the handler (ATTR-06 S4)", async () => {
   await withHermeticHome(async ({ cwd }) => {
-    const { ctx } = makeCtx(cwd);
+    const { ctx, notifications } = makeCtx(cwd);
     const handler = makeRemoveHandler(makePi());
-    // Without --scope and against empty state in both scopes,
-    // resolveScopeFromState throws MarketplaceNotFoundError. That surfaces
-    // via notifyError -- proving the handler reached the orchestrator.
-    await assert.rejects(async () => handler("ghost", ctx));
+    // Without --scope and against empty state in both scopes, the orchestrator
+    // catches resolveScopeFromState's MarketplaceNotFoundError and routes the
+    // miss to the standalone `(failed) {not added}` variant -- proving the
+    // handler reached the orchestrator AND that no precondition error escapes.
+    await assert.doesNotReject(async () => handler("ghost", ctx));
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ ghost (failed) {not added}",
+    );
+    assert.equal(notifications[0]!.severity, "error");
   });
 });
 
-test("shim :: --scope user/project propagated", async () => {
+test("shim :: --scope propagated; explicit-scope miss routes to `{not added}` WITHOUT escaping the handler (ATTR-06 S3)", async () => {
   await withHermeticHome(async ({ cwd }) => {
-    const { ctx } = makeCtx(cwd);
+    const { ctx, notifications } = makeCtx(cwd);
     const handler = makeRemoveHandler(makePi());
     // With --scope project, the orchestrator uses project locations directly
-    // (bypassing resolveScopeFromState). Empty state -> the MarketplaceNotFoundError
-    // is thrown from withStateGuard's closure and surfaces.
-    await assert.rejects(async () => handler("ghost --scope project", ctx));
+    // (bypassing resolveScopeFromState). Empty state -> the pre-guard existence
+    // check routes the miss to the standalone `(failed) {not added}` variant
+    // carrying the `[project]` bracket; no error escapes the handler.
+    await assert.doesNotReject(async () => handler("ghost --scope project", ctx));
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ ghost [project] (failed) {not added}",
+    );
+    assert.equal(notifications[0]!.severity, "error");
   });
 });

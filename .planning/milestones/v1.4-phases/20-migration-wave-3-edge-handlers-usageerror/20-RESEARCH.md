@@ -511,7 +511,7 @@ The following directives from `CLAUDE.md` are binding on every plan:
 - **Pre-commit hooks:** `pre-commit run --all-files` (or `--files <changed>`) BEFORE `git commit`; fix failures, re-stage, re-run until clean. Never use `--no-verify`.
 - **Worktree commits:** prefix with `SKIP=trufflehog` ONLY (trufflehog hook auto-updater fails under worktree sandbox; standalone `pre-commit run trufflehog --all-files` confirms clean before commit). Do not extend `SKIP=` to other hooks.
 - **PR descriptions:** use the `humanizer` skill if available.
-- **Versioning:** before creating a PR, offer to bump version in `project.json` + `sonar.properties`, and record in `CHANGELOG.md`. Be succinct.
+- **Versioning:** before creating a PR, offer to bump version in `project.json` + `sonar-project.properties`, and record in `CHANGELOG.md`. Be succinct.
 - **Containment (NFR-10):** refuse to write outside `<scopeRoot>/pi-claude-marketplace/`, `<scopeRoot>/agents/`, or `<scopeRoot>/mcp.json`.
 - **Quality bar (NFR-6):** `npm run check` must stay green -- typecheck + ESLint + Prettier + tests.
 - **Output channel (IL-2):** all user-visible messages MUST go through `ctx.ui.notify(message, severity)`; direct `process.stdout`/`process.stderr` writes forbidden in command/bridge code. Single sanctioned `console.warn` is the load-time legacy-migration save failure (IL-3).

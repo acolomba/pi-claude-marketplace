@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.4.2] - 2026-06-08
+
+- Error attribution: every operation now blames the right thing. When a marketplace is not added (or is configured only in the other scope), `install`, `uninstall`, `reinstall`, `update`, `marketplace update`, `marketplace remove`, and `autoupdate`/`noautoupdate` all report `{not added}` on the marketplace, instead of the old misleading `{not in manifest}` on the plugin or a raw error. Cleanup and cascade failures now report the truthful on-disk/permission reason rather than a generic `{not in manifest}`, and a path-source manifest that fails to read reports `{invalid manifest}` instead of a false `{network unreachable}`. A target that exists only in the other scope carries the requested-scope bracket so you can tell which scope was checked.
+- Notification grammar: every error/warning message now leads with a non-empty summary line on the `Error:`/`Warning:` label line, with the detail rendered as its own separate block below. Previously a standalone failure glued the label directly onto the detail row (e.g. `Error: ⊘ my-mp [user] (failed) {not added}`); it now reads `Error: 1 marketplace operation failed.` followed by the `⊘ my-mp [user] (failed) {not added}` row underneath. The summary subject follows the failure itself, so a marketplace failure reads `marketplace operation failed` and a plugin failure reads `plugin operation failed`. No new commands; output is otherwise byte-identical to before for non-error surfaces.
+
 ## [0.4.1] - 2026-06-07
 
 - Performance: marketplace manifests are now read through a process-lifetime in-memory cache (NFR-8). A repeated `list`/`info` read of an unchanged `marketplace.json` skips the re-read + re-parse + re-validate and serves the memoized result after a single `stat`; the entry is invalidated and reloaded when the file's modification time or size changes, and parse/validation failures are cached too so an invalid manifest is not re-parsed on every read. No user-visible behavior change -- output is byte-identical to before.

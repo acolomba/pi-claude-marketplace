@@ -13,6 +13,7 @@ import {
   loadMarketplaceManifest,
   MARKETPLACE_VALIDATOR,
 } from "../../extensions/pi-claude-marketplace/domain/manifest.ts";
+import { InvalidMarketplaceManifestError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // MM-1: MARKETPLACE_SCHEMA accept matrix
@@ -90,7 +91,7 @@ test("NFR-8 loadMarketplaceManifest reads and validates marketplace.json through
   }
 });
 
-test("NFR-8 loadMarketplaceManifest rejects schema-invalid marketplace.json", async () => {
+test("D-48-B loadMarketplaceManifest throws InvalidMarketplaceManifestError on schema-invalid marketplace.json", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "pi-cm-manifest-invalid-"));
   try {
     const manifestPath = path.join(tmp, "marketplace.json");
@@ -98,7 +99,36 @@ test("NFR-8 loadMarketplaceManifest rejects schema-invalid marketplace.json", as
 
     await assert.rejects(
       () => loadMarketplaceManifest(manifestPath),
-      /marketplace\.json schema invalid|schema validation/i,
+      (err: unknown) => {
+        assert.ok(
+          err instanceof InvalidMarketplaceManifestError,
+          "schema-invalid manifest must throw a typed InvalidMarketplaceManifestError",
+        );
+        assert.match(err.message, /marketplace\.json schema invalid/);
+        return true;
+      },
+    );
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("D-48-B loadMarketplaceManifest throws InvalidMarketplaceManifestError on malformed JSON (carries SyntaxError cause)", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "pi-cm-manifest-malformed-"));
+  try {
+    const manifestPath = path.join(tmp, "marketplace.json");
+    await writeFile(manifestPath, "{ this is not json", "utf8");
+
+    await assert.rejects(
+      () => loadMarketplaceManifest(manifestPath),
+      (err: unknown) => {
+        assert.ok(
+          err instanceof InvalidMarketplaceManifestError,
+          "malformed JSON must throw a typed InvalidMarketplaceManifestError",
+        );
+        assert.ok(err.cause instanceof SyntaxError, "the original SyntaxError survives as cause");
+        return true;
+      },
     );
   } finally {
     await rm(tmp, { recursive: true, force: true });

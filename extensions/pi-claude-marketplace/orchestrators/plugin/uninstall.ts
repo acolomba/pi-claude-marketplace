@@ -48,10 +48,14 @@ import { notify } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { AgentsUnstageFailureError, cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
-import { resolveInstalledPluginTarget } from "./shared.ts";
+import { resolveCrossScopePluginTarget } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { PluginFailedMessage, PluginUninstalledMessage, Reason } from "../../shared/notify.ts";
+import type {
+  ContentReason,
+  PluginFailedMessage,
+  PluginUninstalledMessage,
+} from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -89,12 +93,14 @@ export interface UninstallPluginOptions {
  * `NodeJS.ErrnoException.code` second, permissive fallback last. Closed-set
  * Reasons live in `shared/notify.ts::REASONS`.
  */
-function narrowCascadeFailure(cause: Error): Reason {
+function narrowCascadeFailure(cause: Error): ContentReason {
   if (cause instanceof AgentsUnstageFailureError) {
-    // No closed-set Reason captures the per-agent foreign-content failure
-    // mode today; map to the documented permissive fallback (same precedent
-    // as orchestrators/marketplace/remove.ts narrowCascadeFailure).
-    return "not in manifest";
+    // ATTR-09 / D-47-B: foreign content owned by another process is a
+    // content/ownership mismatch, not a manifest absence. The former
+    // `"not in manifest"` lied that the plugin was gone from the manifest;
+    // `"source mismatch"` is the truthful existing member (no new REASONS
+    // member -- the closed set already covers it).
+    return "source mismatch";
   }
 
   if (isErrnoException(cause)) {
@@ -109,7 +115,11 @@ function narrowCascadeFailure(cause: Error): Reason {
     }
   }
 
-  return "not in manifest";
+  // ATTR-09 / D-47-B: the unclassified cascade-failure default is genuinely
+  // "we could not read/remove on-disk state", not a manifest claim. The
+  // former `"not in manifest"` was a false assertion; `"unreadable"` is the
+  // truthful existing member.
+  return "unreadable";
 }
 
 /**
@@ -138,17 +148,35 @@ function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
 export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<void> {
   const { ctx, pi, cwd, marketplace, plugin } = opts;
   const cascade = opts.cascade ?? cascadeUnstagePlugin;
-  const resolved = await resolveInstalledPluginTarget({
+
+  // ATTR-04 / SCOPE-01 / M3 / M4: the discriminated cross-scope resolver
+  // distinguishes "marketplace container absent" (loud `{not added}`) from
+  // "container present, plugin row absent" (silent PU-5 converge, reached via
+  // the `resolved` arm's downstream `installed === undefined` branch).
+  const resolution = await resolveCrossScopePluginTarget({
     cwd,
     marketplace,
     plugin,
     ...(opts.scope !== undefined && { explicitScope: opts.scope }),
   });
-  if (resolved === undefined) {
+
+  if (resolution.kind === "marketplace-absent" || resolution.kind === "other-scope") {
+    // M3 / M4: the marketplace the operator asked for is not added in the
+    // requested scope (or is present only in the OTHER scope). Surface the
+    // marketplace subject via the canonical Phase 46 variant -- standalone
+    // top-level emission per D-47-A. The `requested` scope, when present,
+    // renders the `[scope]` bracket (SCOPE-01 resolved Open Question #1);
+    // the bare lifecycle form that missed everywhere carries no bracket.
+    const requestedScope: Scope | undefined = resolution.requestedScope;
+    notify(ctx, pi, {
+      kind: "marketplace-not-added",
+      name: marketplace,
+      ...(requestedScope !== undefined && { scope: requestedScope }),
+    });
     return;
   }
 
-  const { scope, locations } = resolved;
+  const { scope, locations } = resolution;
 
   let alreadyGone = false;
   // Lifted from inside the guard closure so the post-guard success path can
@@ -165,18 +193,15 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
     await withStateGuard(locations, async (state) => {
       const mp = state.marketplaces[marketplace];
       if (mp === undefined) {
-        // IN-05: reachability note. The prior `resolveInstalledPluginTarget`
-        // call at line 152-160 already verified the marketplace's existence
-        // when no `explicitScope` was supplied (it returns `undefined` on
-        // missing record); when `explicitScope` IS set,
-        // `resolveInstalledPluginTarget` short-circuits to
-        // `{ scope: opts.scope, locations: ... }` WITHOUT reading state. So
-        // this branch is reached only via the explicit-scope path, where
-        // the closure's `loadState` may find an empty state.json. Exercised
-        // by the PU-5 marketplace-absent test at uninstall.test.ts:489.
-        //
-        // Marketplace itself absent -- nothing to uninstall; treat as
-        // silent converge.
+        // ATTR-04 reachability note. The "marketplace never added" case is
+        // now caught BEFORE the guard by `resolveCrossScopePluginTarget`
+        // (the `marketplace-absent` / `other-scope` arms emit `{not added}`
+        // and return). So a `mp === undefined` HERE is exclusively a
+        // CONCURRENT-REMOVAL race: the container existed at the resolver's
+        // unlocked read but was removed by another process before this
+        // locked re-load. That is the legitimate PU-5 idempotent converge
+        // (PRD §5.2.2) -- silence, same as the `installed === undefined`
+        // branch below.
         alreadyGone = true;
         return;
       }

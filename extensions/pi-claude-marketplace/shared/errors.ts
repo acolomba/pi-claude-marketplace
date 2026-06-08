@@ -129,13 +129,24 @@ export function appendLeaks(err: unknown, leaks: readonly (string | undefined)[]
   return wrapped;
 }
 
-/** MA-6: stale source clone refusal. The absolute path is the canonical hint. */
+/**
+ * MA-6: stale source clone refusal. The absolute path is the canonical hint.
+ *
+ * `mpName` (D-48-A / ATTR-07) carries the derived marketplace name so the
+ * `marketplace add` entrypoint can render the `(failed) {stale clone}` row on
+ * the marketplace SUBJECT (the stale clone is detected post-manifest, so the
+ * name is known). Optional to preserve existing two-arg-less call sites.
+ */
 export class StaleSourceCloneError extends Error {
   readonly absPath: string;
-  constructor(absPath: string) {
+  readonly mpName?: string;
+  constructor(absPath: string, mpName?: string) {
     super(`stale source clone at ${absPath}`);
     this.name = "StaleSourceCloneError";
     this.absPath = absPath;
+    if (mpName !== undefined) {
+      this.mpName = mpName;
+    }
   }
 }
 
@@ -172,6 +183,50 @@ export class MarketplaceUpdateError extends Error {
     super(message, opts.cause === undefined ? undefined : { cause: opts.cause });
     this.name = "MarketplaceUpdateError";
     this.retryHint = opts.retryHint ?? "";
+  }
+}
+
+/**
+ * D-48-B: typed marketplace-manifest parse/validation failure.
+ *
+ * Thrown by `domain/manifest.ts::loadMarketplaceManifestUncached` for BOTH
+ * malformed JSON (formerly a bare `SyntaxError` from `JSON.parse`) and a
+ * schema-invalid manifest (formerly a bare `Error("marketplace.json schema
+ * invalid: ...")`). Giving the failure a typed class lets consumers narrow on
+ * `instanceof` instead of substring-matching the message text or sniffing for
+ * `SyntaxError`:
+ *   - `orchestrators/marketplace/add.ts::classifyAddError` -> `invalid manifest`
+ *     (ATTR-07).
+ *   - `orchestrators/marketplace/update.ts::reasonsFromCascadeError` ->
+ *     `invalid manifest` (ATTR-10), so a path-source manifest failure never
+ *     falls back to the lying `network unreachable` default (NFR-5).
+ *
+ * The original `SyntaxError` (when one originated the failure) is preserved via
+ * `Error.cause` so the depth-5 `causeChainTrailer` walker still surfaces the
+ * root parse error. The manifest negative-cache (`domain/manifest-cache.ts`)
+ * re-throws the SAME instance until the file's (mtimeMs, size) changes -- a
+ * typed instance survives that re-throw unchanged (D-48-B A1).
+ */
+export class InvalidMarketplaceManifestError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "InvalidMarketplaceManifestError";
+  }
+}
+
+/**
+ * ATTR-07 (D-48-C A3): typed unsupported-source refusal for `marketplace add`.
+ *
+ * Thrown by `orchestrators/marketplace/add.ts` when the parsed source kind is
+ * `"unknown"` or a valid-but-unimplemented kind (`url` / `git-subdir` / `npm`).
+ * Giving it a class keeps `classifyAddError` fully `instanceof`-driven so the
+ * catch-all default can re-throw genuinely unexpected errors rather than
+ * silently labeling them `unsupported source`.
+ */
+export class UnsupportedSourceError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UnsupportedSourceError";
   }
 }
 

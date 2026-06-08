@@ -544,6 +544,78 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
 });
 
 // ===========================================================================
+// Pitfall 1 (D-48-A byte-regression locks): adding `reasons?` to the MpFailed
+// arm (Plan 48-01) MUST NOT change the byte form of an existing bare-`(failed)`
+// marketplace state that omits `reasons`. `composeReasons(undefined, ...)`
+// returns "", and the renderer's `reasonsBrace === ""` ternary then emits the
+// bare `⊘ <name> [<scope>] (failed)` header with NO reason brace. These tests
+// pin the THREE pre-existing bare-`(failed)` byte forms that this milestone's
+// catalog states reference:
+//   - `failure-unreachable` (marketplace add)  -> `⊘ <mp> [<scope>] (failed)`
+//   - `mp-failure-network`  (marketplace update) -> same header (cause rides a
+//      synthetic child row in the live path; the bare header is the locked form)
+//   - the autoupdate bare-not-found form was SUPERSEDED to `{not added}` in Plan
+//      48-02, so the third bare form is re-asserted here on the same MpFailed
+//      arm (an autoupdate-shaped marketplace `failed` with reasons omitted) to
+//      prove the arm itself stayed byte-stable for any reasons-omitted failed mp.
+// The load-bearing proof is that each renders `(failed)` with NO `{...}` brace.
+// ===========================================================================
+
+test("Pitfall 1 / D-48-A: bare-(failed) add `failure-unreachable` form is byte-unchanged (reasons omitted -> brace collapses)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [{ name: "unreachable-mp", scope: "user", status: "failed", plugins: [] }],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const rendered = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `1 marketplace operation failed.\n\n⊘ unreachable-mp [user] (failed)`,
+    "error",
+  ]);
+  // The header carries NO reason brace -- the D-48-A `reasons?` addition did not
+  // regress the bare form.
+  assert.match(rendered, /⊘ unreachable-mp \[user\] \(failed\)$/m);
+  assert.doesNotMatch(rendered, /\(failed\) \{/);
+});
+
+test("Pitfall 1 / D-48-A: bare-(failed) update `mp-failure-network` header is byte-unchanged (reasons omitted -> brace collapses)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [{ name: "official", scope: "user", status: "failed", plugins: [] }],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const rendered = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `1 marketplace operation failed.\n\n⊘ official [user] (failed)`,
+    "error",
+  ]);
+  assert.match(rendered, /⊘ official \[user\] \(failed\)$/m);
+  assert.doesNotMatch(rendered, /\(failed\) \{/);
+});
+
+test("Pitfall 1 / D-48-A: a reasons-omitted failed marketplace arm renders bare `(failed)` (the third bare form; arm byte-stable)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  // Explicitly omit `reasons` on the MpFailed arm: the brace MUST collapse.
+  const msg: NotificationMessage = {
+    marketplaces: [{ name: "missing-mp", scope: "project", status: "failed", plugins: [] }],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const rendered = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `1 marketplace operation failed.\n\n⊘ missing-mp [project] (failed)`,
+    "error",
+  ]);
+  assert.match(rendered, /⊘ missing-mp \[project\] \(failed\)$/m);
+  assert.doesNotMatch(rendered, /\(failed\) \{/);
+});
+
+// ===========================================================================
 // 15a-15e (D-17.1-05.2): tests covering the autoupdate
 // surface (D-17.1-02 / D-18-05). Three per-arm byte-equality tests
 // (autoupdate enabled, autoupdate disabled, skipped + reasons) lock the
@@ -2660,57 +2732,79 @@ test("Phase 42 / WR-05 / wrapDescription: two words whose `current.length + 1 + 
   assert.deepEqual(tail, [`    ${a} ${b}`, "    components: not resolved"]);
 });
 
-test("Phase 42 / INFO-04: {not added} row renders as bare column-0 plugin row with error severity", () => {
-  // The INFO-04 carve-out: a plugin-info payload whose plugin row is
-  // status:"failed" + reasons:["not added"] renders ONLY the bare plugin
-  // row at column 0 (no marketplace header). Severity routes to "error"
-  // via computeSeverity's plugin-info arm.
+test("GRAM-01 / GRAM-02: standalone {not added} row renders the two-block summary + separate detail block (marketplace subject, error severity)", () => {
+  // GRAM-01: an error-severity standalone emission carries a non-empty summary
+  // first line, with the detail row as its own block below (separated by
+  // `\n\n`) -- never the glued single line. GRAM-02: the summary subject
+  // follows the failed row -- a `marketplace-not-added` failure reads
+  // "1 marketplace operation failed." The variant routes to "error" through
+  // the single `isInfoKind` guard.
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "marketplace-not-added",
+    name: "my-mp",
+    scope: "user",
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "1 marketplace operation failed.\n\n⊘ my-mp [user] (failed) {not added}",
+    "error",
+  ]);
+});
+
+test("GRAM-02: standalone failed plugin-info renders `1 plugin operation failed.` + separate multi-line detail block", () => {
+  // GRAM-02: a failed `plugin-info` emission (e.g. plugin info on a
+  // schema-invalid manifest) takes the PLUGIN subject. The summary is its own
+  // block above the existing multi-line plugin-info body (header + indented
+  // failed row + `components: not resolved`). Modelled on the catalog-uat
+  // `manifest-invalid` fixture. Exactly one `ctx.ui.notify` call (IL-2).
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info",
-    marketplaceName: "my-mp",
+    marketplaceName: "bad-mp",
     marketplaceScope: "user",
     marketplaceDetails: { autoupdate: false },
     plugin: {
       status: "failed",
-      name: "my-mp",
+      name: "bad-mp",
       scope: "user",
-      reasons: ["not added"],
+      reasons: ["invalid manifest"],
       componentsResolved: false,
     },
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  const args = ctx.ui.notify.mock.calls[0]!.arguments;
-  assert.equal(args[0], "⊘ my-mp [user] (failed) {not added}");
-  assert.equal(args[1], "error");
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    [
+      "1 plugin operation failed.",
+      "",
+      "● bad-mp [user] <no autoupdate>",
+      "  ⊘ bad-mp (failed) {invalid manifest}",
+      "    components: not resolved",
+    ].join("\n"),
+    "error",
+  ]);
 });
 
 test("Phase 42 / INFO-04: {not added} row never carries a reload-hint (read-only surface)", () => {
-  // INFO surfaces are read-only -- shouldEmitReloadHint short-circuits
-  // false on info kinds. Lock that the bare plugin row does NOT carry
-  // `\n\n/reload to pick up changes`.
+  // TYPE-03: `shouldEmitReloadHint` routes the new `marketplace-not-added`
+  // arm to `false` through the single `isInfoKind` guard. Lock that the bare
+  // row does NOT carry `\n\n/reload to pick up changes`.
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
-    kind: "plugin-info",
-    marketplaceName: "my-mp",
-    marketplaceScope: "user",
-    marketplaceDetails: { autoupdate: false },
-    plugin: {
-      status: "failed",
-      name: "my-mp",
-      scope: "user",
-      reasons: ["not added"],
-      componentsResolved: false,
-    },
+    kind: "marketplace-not-added",
+    name: "my-mp",
+    scope: "user",
   };
   notify(ctx as never, pi as never, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   assert.ok(
     !body.includes("/reload"),
-    "info-surface plugin-info must NOT carry the reload-hint trailer",
+    "marketplace-not-added must NOT carry the reload-hint trailer",
   );
 });
 

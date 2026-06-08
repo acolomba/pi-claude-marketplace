@@ -19,7 +19,11 @@ import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { MarketplaceInfoMessage, NotificationMessage, Reason } from "../../shared/notify.ts";
+import type {
+  ContentReason,
+  MarketplaceInfoMessage,
+  NotificationMessage,
+} from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface GetMarketplaceInfoOptions {
@@ -80,30 +84,20 @@ async function buildBlock(record: MarketplaceRecord): Promise<MarketplaceInfoMes
 
 /**
  * The `{not added}` bare-row failure (catalog state D-03 / INFO-04 scope
- * mismatch). Carried as a `PluginInfoMessage` because the renderer's
- * carve-out at `renderPluginInfo` emits ONLY the bare plugin row when
- * `status === "failed" && reasons === ["not added"]`, suppressing the
- * marketplace header (there is no marketplace to head).
+ * mismatch). Built as the dedicated `MarketplaceNotAddedMessage` variant
+ * (TYPE-01 / D-46-01), which carries only the marketplace `name` and an
+ * optional `scope`; `renderMarketplaceNotAdded` emits the bare column-0 row
+ * `⊘ <name> [scope?] (failed) {not added}` with no marketplace header (there
+ * is no marketplace to head).
  */
 function buildNotAddedMessage(name: string, scope: Scope | undefined): NotificationMessage {
   return {
-    kind: "plugin-info",
-    marketplaceName: name,
-    // Placeholder per the renderer carve-out -- never rendered on the
-    // `{not added}` bare-row state.
-    marketplaceScope: scope ?? "user",
-    marketplaceDetails: { autoupdate: false },
-    plugin: {
-      status: "failed",
-      name,
-      // `plugin.scope` is set when a single `--scope` was requested
-      // (renders `[scope]` bracket); OMITTED when `--scope` was undefined
-      // and BOTH scopes missed (D-03: "absent from both scopes" body
-      // has no `[scope]` bracket).
-      ...(scope !== undefined && { scope }),
-      reasons: ["not added"],
-      componentsResolved: false,
-    },
+    kind: "marketplace-not-added",
+    name,
+    // `scope` is set when a single `--scope` was requested (renders the
+    // `[scope]` bracket); OMITTED when `--scope` was undefined and BOTH scopes
+    // missed (D-03: "absent from both scopes" body has no `[scope]` bracket).
+    ...(scope !== undefined && { scope }),
   };
 }
 
@@ -116,7 +110,7 @@ function buildNotAddedMessage(name: string, scope: Scope | undefined): Notificat
  */
 function buildManifestFailureMessage(
   record: MarketplaceRecord,
-  reason: Reason,
+  reason: ContentReason,
 ): NotificationMessage {
   return {
     kind: "plugin-info",

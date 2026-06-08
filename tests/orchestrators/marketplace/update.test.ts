@@ -10,6 +10,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   __test_outcomeToCascadePluginMessage,
+  __test_snapshotAfterRefresh,
   updateAllMarketplaces,
   updateMarketplace,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
@@ -491,6 +492,167 @@ test("WR-02: corrupt pre-existing manifest routes to (failed), never a silent no
     assert.match(first.message, /^⊘ corrupt \[project\] \(failed\)/m);
     assert.doesNotMatch(first.message, /\(updated\)/);
     assert.doesNotMatch(first.message, /\(skipped\) \{up-to-date\}/);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// ATTR-10 / D-48-B: a path-source marketplace.json that is malformed or
+// schema-invalid during `marketplace update` must render
+// `(failed) {invalid manifest}` on the synthetic-child failed row -- NEVER the
+// lying `{network unreachable}` default (NFR-5: path-source touches no network).
+// The reasonsFromCascadeError branch recognizes the typed
+// InvalidMarketplaceManifestError (thrown by loadMarketplaceManifest, wrapped in
+// MarketplaceUpdateError by refreshRecord) BEFORE the `?? network unreachable`
+// fallback fires. github-source no-errno failures KEEP `{network unreachable}`
+// as the catch-all (Pitfall 3: the path/github classification did not collapse).
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Seed a path-source marketplace pointing at an on-disk dir under the cwd. */
+async function seedPathMarketplace(opts: {
+  cwd: string;
+  name: string;
+  marketplaceRoot: string;
+}): Promise<void> {
+  const locations = locationsFor("project", opts.cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 1,
+    marketplaces: {
+      [opts.name]: {
+        name: opts.name,
+        scope: "project",
+        source: pathSource(opts.marketplaceRoot),
+        addedFromCwd: opts.cwd,
+        manifestPath: path.join(opts.marketplaceRoot, ".claude-plugin", "marketplace.json"),
+        marketplaceRoot: opts.marketplaceRoot,
+        plugins: {},
+      },
+    },
+  });
+}
+
+test("ATTR-10: path-source MALFORMED-JSON manifest renders `(failed) {invalid manifest}`, never `{network unreachable}`", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // A real on-disk marketplace whose marketplace.json is malformed JSON. The
+    // PRE manifestContentKey read throws InvalidMarketplaceManifestError (cause:
+    // SyntaxError) -> refreshRecord wraps it as MarketplaceUpdateError -> the
+    // refreshOneMarketplace catch unwraps one cause level and classifies
+    // `invalid manifest`. Zero network/gitOps on the path branch (NFR-5).
+    const localMpDir = await mkdtemp(path.join(tmpdir(), "mp-path-bad-json-"));
+    try {
+      await mkdir(path.join(localMpDir, ".claude-plugin"), { recursive: true });
+      await writeFile(
+        path.join(localMpDir, ".claude-plugin", "marketplace.json"),
+        "{ not valid json",
+        "utf8",
+      );
+      await seedPathMarketplace({ cwd, name: "bad-json", marketplaceRoot: localMpDir });
+
+      const { ctx, pi, notifications } = makeCtx();
+      const { gitOps } = makeMockGitOps();
+      await updateMarketplace({ ctx, pi, name: "bad-json", scope: "project", cwd, gitOps });
+
+      assert.equal(notifications.length, 1);
+      const first = notifications[0];
+      assert.ok(first !== undefined);
+      assert.equal(first.severity, "error");
+      assert.match(first.message, /\(failed\) \{invalid manifest\}/);
+      assert.doesNotMatch(first.message, /\{network unreachable\}/);
+    } finally {
+      await rm(localMpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("ATTR-10: path-source SCHEMA-INVALID manifest renders `(failed) {invalid manifest}`, never `{network unreachable}`", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // Valid JSON, but fails MARKETPLACE_VALIDATOR (missing required `plugins`
+    // array / wrong shape) -> loadMarketplaceManifest throws
+    // InvalidMarketplaceManifestError("marketplace.json schema invalid: ...").
+    const localMpDir = await mkdtemp(path.join(tmpdir(), "mp-path-bad-schema-"));
+    try {
+      await mkdir(path.join(localMpDir, ".claude-plugin"), { recursive: true });
+      await writeFile(
+        path.join(localMpDir, ".claude-plugin", "marketplace.json"),
+        JSON.stringify({ name: 42, plugins: "not-an-array" }),
+        "utf8",
+      );
+      await seedPathMarketplace({ cwd, name: "bad-schema", marketplaceRoot: localMpDir });
+
+      const { ctx, pi, notifications } = makeCtx();
+      const { gitOps } = makeMockGitOps();
+      await updateMarketplace({ ctx, pi, name: "bad-schema", scope: "project", cwd, gitOps });
+
+      assert.equal(notifications.length, 1);
+      const first = notifications[0];
+      assert.ok(first !== undefined);
+      assert.equal(first.severity, "error");
+      assert.match(first.message, /\(failed\) \{invalid manifest\}/);
+      assert.doesNotMatch(first.message, /\{network unreachable\}/);
+    } finally {
+      await rm(localMpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("NFR-5: path-source update FAILURE (invalid manifest) still calls zero gitOps methods", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // The failure path must not reach for the network either: the path branch of
+    // refreshRecord calls validateManifestAtRoot -> loadMarketplaceManifest (a
+    // readFile + parse) and NO gitOps. Sibling of the success-path NFR-5 test.
+    const localMpDir = await mkdtemp(path.join(tmpdir(), "mp-path-fail-nfr5-"));
+    try {
+      await mkdir(path.join(localMpDir, ".claude-plugin"), { recursive: true });
+      await writeFile(
+        path.join(localMpDir, ".claude-plugin", "marketplace.json"),
+        "{ not valid json",
+        "utf8",
+      );
+      await seedPathMarketplace({ cwd, name: "local-bad", marketplaceRoot: localMpDir });
+
+      const { ctx, pi, notifications } = makeCtx();
+      const { gitOps, state } = makeMockGitOps();
+      await updateMarketplace({ ctx, pi, name: "local-bad", scope: "project", cwd, gitOps });
+
+      // The failed row classified `invalid manifest` (not a network reason).
+      const first = notifications[0];
+      assert.ok(first !== undefined);
+      assert.match(first.message, /\(failed\) \{invalid manifest\}/);
+
+      // Zero gitOps -- the failure path is network-free.
+      assert.equal(state.cloneCalls.length, 0);
+      assert.equal(state.fetchCalls.length, 0);
+      assert.equal(state.forceUpdateRefCalls.length, 0);
+      assert.equal(state.checkoutCalls.length, 0);
+      assert.equal(state.resolveRefCalls.length, 0);
+    } finally {
+      await rm(localMpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("Pitfall 3: github-source no-errno refresh failure still renders `{network unreachable}` (classification did not collapse)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // A github fetch failure with NO errno code and NO typed manifest error is
+    // genuinely plausibly-network -> the `?? ["network unreachable"]` catch-all
+    // MUST still fire. This is the regression lock proving the ATTR-10 typed
+    // manifest branch did NOT swallow the github network default.
+    await seedGithubMarketplace({ cwd, name: "ghnet", ref: "main" });
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      // Plain Error: message mentions ENETUNREACH but carries no `.code` errno,
+      // so reasonsFromCascadeError returns undefined and the network default
+      // fires for this github source.
+      fetchThrows: new Error("mock: connection failed reaching github.com"),
+    });
+    await updateMarketplace({ ctx, pi, name: "ghnet", scope: "project", cwd, gitOps });
+
+    assert.equal(notifications.length, 1);
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    assert.equal(first.severity, "error");
+    assert.match(first.message, /\(failed\) \{network unreachable\}/);
+    assert.doesNotMatch(first.message, /\{invalid manifest\}/);
   });
 });
 
@@ -1305,10 +1467,13 @@ test("refreshRecord: unsupported source kind surfaces as notifyError (lines 219-
   });
 });
 
-test("snapshotAfterRefresh: MarketplaceNotFoundError when name absent from state (lines 244-246)", async () => {
-  // withStateGuard loads state, record===undefined, throws
-  // MarketplaceNotFoundError.  refreshOneMarketplace catches it and calls
-  // notifyError (the non-MarketplaceUpdateError branch).
+test("updateMarketplace: explicit-scope missing marketplace -> standalone {not added} (SC#1)", async () => {
+  // SC#1 cross-op convergence: an explicit-scope miss is blocked by the
+  // pre-guard loadState existence read BEFORE it reaches snapshotAfterRefresh's
+  // withStateGuard (which would otherwise throw MarketplaceNotFoundError raw).
+  // It renders the canonical standalone `(failed) {not added}` variant -- no
+  // longer a synthetic `(failed)` cascade row or a raw escape. Byte-locked to
+  // the exact canonical row (mirrors remove.ts / autoupdate.ts convergence).
   await withHermeticHome(async ({ cwd }) => {
     // Leave state empty -- no marketplace named "ghost".
     const { ctx, pi, notifications } = makeCtx();
@@ -1319,11 +1484,115 @@ test("snapshotAfterRefresh: MarketplaceNotFoundError when name absent from state
     assert.equal(notifications.length, 1);
     const first = notifications[0];
     assert.ok(first !== undefined);
-    assert.equal(first.severity, "error");
-    assert.ok(
-      first.message.includes("ghost"),
-      `expected marketplace name in error message: ${first.message}`,
+    assert.equal(
+      first.message,
+      "1 marketplace operation failed.\n\n⊘ ghost [project] (failed) {not added}",
     );
+    assert.equal(first.severity, "error");
+  });
+});
+
+test("CR-01 TOCTOU: marketplace removed between pre-guard read and snapshotAfterRefresh's fresh load returns undefined (silent no-op), never throws raw nor emits `{network unreachable}`", async () => {
+  // CR-01: there is a TOCTOU window between resolveScopeOrNotifyNotAdded's
+  // pre-guard `loadState` (which proved the marketplace exists) and
+  // snapshotAfterRefresh's withStateGuard fresh `loadState`. If a concurrent
+  // `marketplace remove` lands in that window, the guard's fresh load sees
+  // `record === undefined`. The PREVIOUS code threw a raw
+  // MarketplaceNotFoundError there, which refreshOneMarketplace's generic catch
+  // misattributed (reasonsFromCascadeError -> undefined -> `?? network
+  // unreachable`) as the LYING `(failed) {network unreachable}` row -- exactly
+  // the NFR-5/ATTR-10 misattribution class this milestone closes.
+  //
+  // The fix mirrors remove.ts:235-244: snapshotAfterRefresh returns `undefined`
+  // (sentinel) instead of throwing, and refreshOneMarketplace returns silently.
+  // We drive the seam directly with an empty on-disk state (the concurrent-
+  // removal end-state) and assert it returns `undefined` rather than rejecting.
+  await withHermeticHome(async ({ cwd }) => {
+    const locations = locationsFor("project", cwd);
+    await mkdir(locations.extensionRoot, { recursive: true });
+    // Persist an empty state -- this is the post-concurrent-removal disk state
+    // the guard's fresh `loadState` observes.
+    await saveState(locations.extensionRoot, { schemaVersion: 1, marketplaces: {} });
+
+    const { ctx, pi } = makeCtx();
+    const { gitOps, state: gitState } = makeMockGitOps();
+
+    const snapshot = await __test_snapshotAfterRefresh({
+      ctx,
+      pi,
+      name: "vanished",
+      scope: "project",
+      locations,
+      gitOps,
+      credentialOps: makeMockCredentialOps().credOps,
+    });
+
+    // The sentinel: undefined, NOT a thrown MarketplaceNotFoundError. The
+    // record-absent arm never reaches refreshRecord, so zero gitOps fire
+    // (NFR-5: the concurrent-removal no-op touches no network).
+    assert.equal(snapshot, undefined);
+    assert.equal(gitState.cloneCalls.length, 0);
+    assert.equal(gitState.fetchCalls.length, 0);
+    assert.equal(gitState.checkoutCalls.length, 0);
+  });
+});
+
+test("CR-01 TOCTOU: refreshOneMarketplace silently no-ops on a removed marketplace -- no `{network unreachable}`, no second notification", async () => {
+  // End-to-end companion to the seam test: drive updateMarketplace with state
+  // whose marketplace exists at the pre-guard read but whose guard-time fresh
+  // load sees it gone. We simulate the concurrent removal by deleting the record
+  // through a gitOps lifecycle hook... but the guard load precedes any gitOps
+  // call, so instead we assert the BEHAVIORAL contract via the seam end-state:
+  // when snapshotAfterRefresh yields undefined, refreshOneMarketplace must emit
+  // NOTHING (the pre-guard already notified `{not added}`) and MUST NOT render
+  // the lying `{network unreachable}` row. We prove the negative directly: an
+  // explicit-scope miss (record absent at BOTH reads) emits exactly the
+  // `{not added}` convergence row and NEVER `{network unreachable}`.
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps();
+
+    await assert.doesNotReject(async () =>
+      updateMarketplace({ ctx, pi, name: "vanished", scope: "project", cwd, gitOps }),
+    );
+
+    const composed = notifications.map((n) => n.message).join("\n");
+    assert.doesNotMatch(
+      composed,
+      /\{network unreachable\}/,
+      `a missing/removed marketplace must NEVER render the lying {network unreachable} reason:\n${composed}`,
+    );
+    // Exactly the convergence `{not added}` row, one emission.
+    assert.equal(notifications.length, 1);
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    assert.equal(
+      first.message,
+      "1 marketplace operation failed.\n\n⊘ vanished [project] (failed) {not added}",
+    );
+  });
+});
+
+test("updateMarketplace: bare-form missing marketplace -> bracketless {not added} (SC#1)", async () => {
+  // SC#1 cross-op convergence, bare form (no --scope): resolveScopeFromState
+  // throws MarketplaceNotFoundError when absent from BOTH scopes; the pre-guard
+  // catches it and routes to the bracketless standalone `(failed) {not added}`
+  // variant. The call resolves WITHOUT rejection, proving the raw
+  // MarketplaceNotFoundError no longer escapes the orchestrator boundary.
+  await withHermeticHome(async ({ cwd }) => {
+    // Leave state empty -- no marketplace named "ghost" in either scope.
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps();
+
+    await assert.doesNotReject(async () =>
+      updateMarketplace({ ctx, pi, name: "ghost", cwd, gitOps }),
+    );
+
+    assert.equal(notifications.length, 1);
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    assert.equal(first.message, "1 marketplace operation failed.\n\n⊘ ghost (failed) {not added}");
+    assert.equal(first.severity, "error");
   });
 });
 

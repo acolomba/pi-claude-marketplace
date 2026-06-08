@@ -11,6 +11,8 @@ import { readFile } from "node:fs/promises";
 import Type from "typebox";
 import { Compile } from "typebox/compile";
 
+import { InvalidMarketplaceManifestError } from "../shared/errors.ts";
+
 import { PLUGIN_ENTRY_SCHEMA } from "./components/plugin.ts";
 import { createManifestCache } from "./manifest-cache.ts";
 
@@ -49,14 +51,28 @@ export const MARKETPLACE_VALIDATOR = Compile(MARKETPLACE_SCHEMA);
  */
 async function loadMarketplaceManifestUncached(manifestPath: string): Promise<MarketplaceManifest> {
   const raw = await readFile(manifestPath, "utf8");
-  const parsed: unknown = JSON.parse(raw);
+
+  // D-48-B: malformed JSON throws SyntaxError from JSON.parse; re-throw it as a
+  // typed InvalidMarketplaceManifestError (carrying the original as cause) so
+  // consumers narrow on instanceof instead of sniffing for SyntaxError.
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    throw new InvalidMarketplaceManifestError(
+      `marketplace.json is not valid JSON: ${String(err)}`,
+      {
+        cause: err,
+      },
+    );
+  }
 
   if (!MARKETPLACE_VALIDATOR.Check(parsed)) {
     const firstErr = MARKETPLACE_VALIDATOR.Errors(parsed)[0];
     const detail = firstErr
       ? `${firstErr.instancePath || "<root>"}: ${firstErr.message}`
       : "(no detail)";
-    throw new Error(`marketplace.json schema invalid: ${detail}`);
+    throw new InvalidMarketplaceManifestError(`marketplace.json schema invalid: ${detail}`);
   }
 
   return parsed;

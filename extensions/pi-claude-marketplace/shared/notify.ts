@@ -60,11 +60,12 @@ import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../platform/
  * update / marketplace-update rows (`"permission denied"` /
  * `"source missing"` / `"network unreachable"`).
  *
- * INFO-04 / INFO-08: `"not added"` carries the `--scope` mismatch failure
- * surface on the info-message variants (`MarketplaceInfoMessage` /
- * `PluginInfoMessage`). A request for a scope where the target marketplace is
- * not present renders `⊘ <name> [<scope>] (failed) {not added}` at column 0
- * with severity `"error"`.
+ * INFO-04 / INFO-08 / TYPE-01: `"not added"` is the STRUCTURAL marketplace-
+ * absent marker -- it is NOT a `ContentReason` and is reachable ONLY via the
+ * dedicated `MarketplaceNotAddedMessage` variant (`renderMarketplaceNotAdded`
+ * hard-codes the `{not added}` brace). A request for a scope where the target
+ * marketplace is not present renders `⊘ <name> [<scope>] (failed) {not added}`
+ * at column 0 with severity `"error"`.
  */
 export const REASONS = [
   "up-to-date",
@@ -99,6 +100,18 @@ export const REASONS = [
 ] as const;
 
 export type Reason = (typeof REASONS)[number];
+
+/**
+ * The closed set of CONTENT reasons -- every `Reason` EXCEPT the structural
+ * `"not added"` marker (TYPE-02 / D-46-02). Content reasons describe WHY a
+ * resource is in a failure / skipped / unavailable state; the structural
+ * `"not added"` describes that the marketplace SUBJECT is absent entirely and
+ * is reachable ONLY via the dedicated `MarketplaceNotAddedMessage` variant
+ * (TYPE-01). Retyping the row `reasons` fields to `readonly ContentReason[]`
+ * makes a mixed `["not added", "permission denied"]` row a COMPILE error
+ * rather than a render-time `length === 1` guard.
+ */
+export type ContentReason = Exclude<Reason, "not added">;
 
 /**
  * UXG-02 (D-28-02): the closed set of `Reason` members that mark a
@@ -435,7 +448,7 @@ export interface PluginAvailableMessage {
 export interface PluginUnavailableMessage {
   readonly status: "unavailable";
   readonly name: string;
-  readonly reasons: readonly Reason[];
+  readonly reasons: readonly ContentReason[];
   readonly version?: string;
   readonly description?: string;
 }
@@ -450,7 +463,7 @@ export interface PluginUnavailableMessage {
 export interface PluginUpgradableMessage {
   readonly status: "upgradable";
   readonly name: string;
-  readonly reasons: readonly Reason[];
+  readonly reasons: readonly ContentReason[];
   readonly version?: string;
   readonly scope?: Scope;
   readonly description?: string;
@@ -495,7 +508,7 @@ export interface PluginPresentMessage {
 export interface PluginFailedMessage {
   readonly status: "failed";
   readonly name: string;
-  readonly reasons: readonly Reason[];
+  readonly reasons: readonly ContentReason[];
   readonly version?: string;
   readonly scope?: Scope;
   readonly cause?: Error;
@@ -518,7 +531,7 @@ export interface PluginFailedMessage {
 export interface PluginSkippedMessage {
   readonly status: "skipped";
   readonly name: string;
-  readonly reasons: readonly Reason[];
+  readonly reasons: readonly ContentReason[];
   readonly version?: string;
   readonly scope?: Scope;
 }
@@ -532,7 +545,7 @@ export interface PluginSkippedMessage {
 export interface PluginManualRecoveryMessage {
   readonly status: "manual recovery";
   readonly name: string;
-  readonly reasons: readonly Reason[];
+  readonly reasons: readonly ContentReason[];
   readonly version?: string;
   readonly scope?: Scope;
   readonly cause?: Error;
@@ -560,31 +573,109 @@ export type PluginNotificationMessage =
   | PluginManualRecoveryMessage;
 
 /**
- * Marketplace-level notification message (SNM-02). `status?`,
- * `details?`, and `reasons?` are independent optionals -- the renderer
- * narrows on `status` and consumes the others only where the relevant arm
- * needs them, but the type does not structurally constrain co-occurrence.
- *
- * `readonly reasons?: readonly Reason[]`: the `"skipped"` mp-status renderer
- * arm consumes this field to compose the `{<reason>, <reason>}` brace (e.g.,
- * `{already autoupdate}` for idempotent autoupdate flips); other mp-status
- * arms ignore the field, per the independent-optionals discipline (the type
- * does not structurally constrain co-occurrence with `status`).
+ * Common fields shared by every arm of the per-status
+ * `MarketplaceNotificationMessage` discriminated union (SNM-02 / TYPE-04 /
+ * D-46-03).
  *
  * `plugins: readonly PluginNotificationMessage[]` is REQUIRED. An empty
  * array IS the structural representation of the `(no plugins)` rendering
- * on the list surface; on state-change paths an empty
- * `plugins` array is the normal case (renderer emits the marketplace
- * header alone). No separate `noPlugins` discriminator field.
+ * on the list surface; on state-change paths an empty `plugins` array is the
+ * normal case (renderer emits the marketplace header alone). No separate
+ * `noPlugins` discriminator field.
  */
-export interface MarketplaceNotificationMessage {
+interface MpCommon {
   readonly name: string;
   readonly scope: Scope;
-  readonly status?: MarketplaceStatus;
-  readonly details?: MarketplaceDetails;
-  readonly reasons?: readonly Reason[];
   readonly plugins: readonly PluginNotificationMessage[];
 }
+
+/** `(added)` marketplace block. */
+interface MpAdded extends MpCommon {
+  readonly status: "added";
+}
+
+/** `(removed)` marketplace block. */
+interface MpRemoved extends MpCommon {
+  readonly status: "removed";
+}
+
+/** `(updated)` marketplace block. */
+interface MpUpdated extends MpCommon {
+  readonly status: "updated";
+}
+
+/**
+ * `(failed)` marketplace block. Carries OPTIONAL mp-level `reasons?`
+ * (D-48-A): a marketplace-op precondition failure with NO plugin child rows
+ * (e.g. `marketplace add` duplicate-name / unsupported-source) renders its
+ * closed-set reason on the marketplace subject. `reasons?` is
+ * `readonly ContentReason[]` so the structural `"not added"` marker stays
+ * unrepresentable here (TYPE-02) -- that condition is the dedicated
+ * `MarketplaceNotAddedMessage` variant. When omitted/empty the brace
+ * collapses (composeReasons returns ""), preserving the bare
+ * `${ICON_UNINSTALLABLE} ${name} [${scope}] (failed)` byte form for the
+ * existing update/autoupdate mp-failure states that ride the cause on a child
+ * row.
+ */
+interface MpFailed extends MpCommon {
+  readonly status: "failed";
+  readonly reasons?: readonly ContentReason[];
+}
+
+/** `<autoupdate>` fresh-flip block (UXG-04). Never carries `reasons`. */
+interface MpAutoupdateEnabled extends MpCommon {
+  readonly status: "autoupdate enabled";
+}
+
+/** `<no autoupdate>` fresh-flip block (UXG-04). Never carries `reasons`. */
+interface MpAutoupdateDisabled extends MpCommon {
+  readonly status: "autoupdate disabled";
+}
+
+/**
+ * `(skipped)` marketplace block. `reasons?` is reachable ONLY on this arm
+ * (TYPE-04): the `"skipped"` mp-status renderer arm composes the
+ * `{<reason>, <reason>}` brace (e.g. `{already autoupdate}` for idempotent
+ * autoupdate flips, `{up-to-date}` for the `marketplace update` no-op). Kept
+ * OPTIONAL -- `allBenign(undefined)` returns false and `computeSeverity`
+ * arm 4 reads `mp.reasons` on the skipped arm, so a missing reason set routes
+ * to `warning` (the D-28-08 safe default).
+ */
+interface MpSkipped extends MpCommon {
+  readonly status: "skipped";
+  readonly reasons?: readonly ContentReason[];
+}
+
+/**
+ * List / inventory marketplace block (status omitted). Modeled as
+ * `status?: undefined` so the many status-omitted construction sites compile
+ * unchanged and the renderer's `case undefined:` narrows to this arm.
+ * `details?` is reachable ONLY on this arm (TYPE-04): the list surface
+ * composes the `<autoupdate>` marker from `details.autoupdate`.
+ */
+interface MpList extends MpCommon {
+  readonly status?: undefined;
+  readonly details?: MarketplaceDetails;
+}
+
+/**
+ * Marketplace-level notification message (SNM-02), a per-status discriminated
+ * union (TYPE-04 / D-46-03). One arm per `MarketplaceStatus` plus a
+ * list/inventory arm (status omitted). The renderer's status switch narrows
+ * to exactly one arm per `case` with an `assertNever` tail -- adding a
+ * marketplace status becomes a compile error at every construction site and
+ * renderer case. `reasons` is reachable only on the `skipped` arm; `details`
+ * only on the list arm; the `failed` arm carries neither (D-46-03a).
+ */
+export type MarketplaceNotificationMessage =
+  | MpAdded
+  | MpRemoved
+  | MpUpdated
+  | MpFailed
+  | MpAutoupdateEnabled
+  | MpAutoupdateDisabled
+  | MpSkipped
+  | MpList;
 
 /**
  * Cascade-arm of the top-level discriminated `NotificationMessage` union
@@ -622,8 +713,9 @@ export interface CascadeNotificationMessage {
  * description, optional) line. The `last_updated:` line renders only on the
  * github-source arm (INFO-01).
  *
- * The INFO-04 `{not added}` `--scope` mismatch row is emitted via the
- * sibling `PluginInfoMessage` per INFO-04's byte form -- see that interface.
+ * The marketplace-absent (`{not added}`) condition is NOT emitted by this
+ * variant -- it is the dedicated `MarketplaceNotAddedMessage` variant
+ * (TYPE-01 / D-46-01). This variant can only carry a found marketplace.
  */
 export interface MarketplaceInfoMessage {
   readonly kind: "marketplace-info";
@@ -651,12 +743,10 @@ export interface MarketplaceInfoMessage {
  * `components: not resolved` marker (external sources cannot be
  * resolved without fetching, which would violate NFR-5).
  *
- * `{not added}` carve-out: a `--scope` mismatch row is constructed
- * with `status: "failed"`, `name: <marketplace-name>`,
- * `reasons: ["not added"]`, `componentsResolved: false`. The renderer
- * emits the bare `⊘ <name> [<scope>] (failed) {not added}` row at
- * column 0 with severity `"error"` and NO marketplace header (the row
- * IS the message). See `renderPluginInfo`.
+ * The marketplace-absent condition is NOT carried by this variant -- it is
+ * the dedicated `MarketplaceNotAddedMessage` variant (TYPE-01). This variant's
+ * `plugin.reasons` is a `readonly ContentReason[]` (TYPE-02): the structural
+ * `"not added"` marker can never appear on it.
  */
 export interface PluginInfoMessage {
   readonly kind: "plugin-info";
@@ -687,9 +777,12 @@ export type PluginInfoRow =
  * messages are a SIBLING concept to cascades and must not contaminate
  * the cascade closed set.
  *
- * `reasons?: readonly Reason[]` is populated when `status` is
- * `"unavailable"` or `"failed"` (e.g., `["not added"]` for the
- * `--scope` mismatch row, `["not in manifest"]` for an unknown plugin).
+ * `reasons?: readonly ContentReason[]` is populated when `status` is
+ * `"unavailable"` or `"failed"` (e.g., `["not in manifest"]` for an unknown
+ * plugin, `["unreadable manifest"]` for a manifest read failure). The
+ * structural `"not added"` marker is NOT a `ContentReason` (TYPE-02): the
+ * marketplace-absent condition is carried by the dedicated
+ * `MarketplaceNotAddedMessage` variant, never by this row field.
  */
 interface PluginInfoRowBase {
   readonly status: "installed" | "available" | "unavailable" | "failed";
@@ -697,7 +790,7 @@ interface PluginInfoRowBase {
   readonly version?: string;
   readonly scope?: Scope;
   readonly description?: string;
-  readonly reasons?: readonly Reason[];
+  readonly reasons?: readonly ContentReason[];
 }
 
 /**
@@ -739,9 +832,9 @@ interface PluginInfoComponentsUnresolved {
  * `renderMarketplaceInfoCascade` joins per-block bodies with `\n\n`.
  * Iteration order is the orchestrator's responsibility (project-first
  * per MSG-GR-3). Reload-hint NEVER fires; severity is always info (no
- * failure can be expressed on a fan-out payload -- the orchestrator
- * routes the `{not added}` failure surface through the sibling
- * `PluginInfoMessage` variant).
+ * failure can be expressed on a fan-out payload -- the marketplace-absent
+ * (`{not added}`) failure surface is carried by the dedicated
+ * `MarketplaceNotAddedMessage` variant, TYPE-01).
  *
  * The `blocks` tuple is non-empty (`readonly [T, ...T[]]`) so an empty
  * fan-out is a compile-time error rather than a documented "renderer
@@ -768,9 +861,29 @@ export interface PluginInfoCascadeMessage {
 }
 
 /**
+ * TYPE-01 / D-46-01: the dedicated marketplace-not-added variant -- the 6th
+ * arm of `NotificationMessage`. Carries ONLY the fields its row renders:
+ * `name` (the MARKETPLACE name) and an optional `scope` (`scope` present =>
+ * `[scope]` bracket; absent => no bracket). It has NO placeholder
+ * `marketplaceScope` / `marketplaceDetails` fields and NO `reasons` field --
+ * the structural `{not added}` brace is hard-coded by `renderMarketplaceNotAdded`.
+ *
+ * Renders byte-identical to the former `renderPluginInfo` `{not added}`
+ * carve-out (D-46-01a): a bare column-0 row
+ * `⊘ <name> [scope?] (failed) {not added}` at severity `"error"`. The info
+ * construction sites build it in this phase; install / uninstall / reinstall /
+ * update reuse the SAME variant in later phases (no re-cut).
+ */
+export interface MarketplaceNotAddedMessage {
+  readonly kind: "marketplace-not-added";
+  readonly name: string;
+  readonly scope?: Scope;
+}
+
+/**
  * Top-level discriminated-union envelope consumed by `notify(ctx, pi,
  * NotificationMessage)`. The cascade arm omits `kind` (or sets it to
- * `"cascade"`); the four info-surface arms set `kind` explicitly. The
+ * `"cascade"`); the five standalone-dispatched arms set `kind` explicitly. The
  * dispatcher narrows with an `assertNever` default arm so every future
  * variant addition becomes a compile-time error at the switch.
  */
@@ -779,7 +892,47 @@ export type NotificationMessage =
   | MarketplaceInfoMessage
   | PluginInfoMessage
   | MarketplaceInfoCascadeMessage
-  | PluginInfoCascadeMessage;
+  | PluginInfoCascadeMessage
+  | MarketplaceNotAddedMessage;
+
+/**
+ * TYPE-03 / D-46-04: the closed set of STANDALONE-DISPATCHED message kinds --
+ * the 4 read-only info surfaces (`marketplace-info`, `plugin-info`,
+ * `marketplace-info-cascade`, `plugin-info-cascade`) PLUS the
+ * `marketplace-not-added` failure variant. Enumerated in EXACTLY ONE place so
+ * that adding a future standalone kind is a single-site edit here that
+ * surfaces as a compile error in every consumer's `assertNever` tail.
+ *
+ * The guard name is kept as `isInfoKind` per the TYPE-03 wording even though
+ * the set now includes a failure kind; "standalone-dispatched" is the precise
+ * meaning -- these kinds are routed through `dispatchInfoMessage` and never
+ * carry a cascade summary line or reload-hint trailer.
+ */
+type StandaloneKind =
+  | "marketplace-info"
+  | "plugin-info"
+  | "marketplace-info-cascade"
+  | "plugin-info-cascade"
+  | "marketplace-not-added";
+
+/**
+ * Single-source type-predicate for the standalone-dispatched kinds
+ * (TYPE-03 / D-46-04). All four consumers (`computeSeverity`,
+ * `buildSummaryLine`, `shouldEmitReloadHint`, the `notify()` early-dispatch)
+ * route through this one guard; each then narrows the residual to
+ * `CascadeNotificationMessage` and closes with `assertNever`.
+ */
+function isInfoKind(
+  m: NotificationMessage,
+): m is Extract<NotificationMessage, { kind: StandaloneKind }> {
+  return (
+    m.kind === "marketplace-info" ||
+    m.kind === "plugin-info" ||
+    m.kind === "marketplace-info-cascade" ||
+    m.kind === "plugin-info-cascade" ||
+    m.kind === "marketplace-not-added"
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Grammar rendering helpers -- file-private.
@@ -922,8 +1075,21 @@ function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus
       return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (removed)`;
     case "updated":
       return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (updated)`;
-    case "failed":
-      return `${ICON_UNINSTALLABLE} ${mp.name} [${mp.scope}] (failed)`;
+    case "failed": {
+      // D-48-A: append the closed-set reason brace iff `mp.reasons` is present
+      // and non-empty (marketplace-op precondition failure with no plugin child
+      // rows, e.g. `marketplace add`). Pass (false, false) for the soft-dep
+      // declares-flags -- mp-level rows never emit soft-dep markers (mirrors the
+      // "skipped" arm). composeReasons returns "" when reasons is
+      // undefined/empty, so the existing bare `(failed)` byte form
+      // (update/autoupdate mp-failure states that ride the cause on a child row)
+      // is preserved unchanged.
+      const reasonsBrace = composeReasons(mp.reasons, false, false, probe);
+      return reasonsBrace === ""
+        ? `${ICON_UNINSTALLABLE} ${mp.name} [${mp.scope}] (failed)`
+        : `${ICON_UNINSTALLABLE} ${mp.name} [${mp.scope}] (failed) ${reasonsBrace}`;
+    }
+
     case "autoupdate enabled":
       // UXG-04 / D-18-05: fresh autoupdate-on flip renders the `<autoupdate>`
       // marker as the outcome (byte-form parity with the `marketplace list`
@@ -986,7 +1152,10 @@ function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus
     }
 
     default: {
-      assertNever(mp.status);
+      // Per-status discriminated union (TYPE-04): every arm is handled above,
+      // so `mp` narrows to `never` here -- pass the value itself rather than
+      // `mp.status` (which would be an access on `never`).
+      assertNever(mp);
       return "";
     }
   }
@@ -1393,22 +1562,30 @@ function computeSeverity(message: NotificationMessage): "warning" | "error" | un
   // over the cascade severity ladder.
   // `marketplace-info` payloads carry no failure state and route to info
   // (undefined 2nd arg); `plugin-info` payloads route to `"error"` ONLY when
-  // the embedded plugin row is `(failed)` (the `{not added}` --scope mismatch
-  // row is the canonical example), else info; `marketplace-info-cascade`
-  // AND `plugin-info-cascade` payloads route to info unconditionally -- no
-  // failure can be expressed on a fan-out wrapper (the orchestrator routes
-  // `{not added}` through the sibling `PluginInfoMessage` variant instead).
+  // the embedded plugin row is `(failed)` (e.g. an unreadable manifest), else
+  // info; `marketplace-info-cascade` AND `plugin-info-cascade` payloads route
+  // to info unconditionally -- no failure can be expressed on a fan-out
+  // wrapper. The `{not added}` --scope mismatch condition is carried by the
+  // dedicated `marketplace-not-added` arm, which always routes to `"error"`.
   // The cascade arm executes the existing first-match ladder below.
-  if (
-    message.kind === "marketplace-info" ||
-    message.kind === "marketplace-info-cascade" ||
-    message.kind === "plugin-info-cascade"
-  ) {
-    return undefined;
-  }
-
-  if (message.kind === "plugin-info") {
-    return message.plugin.status === "failed" ? "error" : undefined;
+  if (isInfoKind(message)) {
+    // The `marketplace-not-added` variant routes to "error" (the marketplace
+    // is absent -- a failure surface); `plugin-info` routes to "error" only
+    // when its embedded row is `(failed)`; the read-only info/cascade kinds
+    // carry no failure state and route to info (undefined).
+    switch (message.kind) {
+      case "marketplace-not-added":
+        return "error";
+      case "plugin-info":
+        return message.plugin.status === "failed" ? "error" : undefined;
+      case "marketplace-info":
+      case "marketplace-info-cascade":
+      case "plugin-info-cascade":
+        return undefined;
+      default:
+        assertNever(message);
+        return undefined;
+    }
   }
 
   // Arm 1: any failed (plugin or marketplace) -> "error".
@@ -1515,11 +1692,16 @@ function operationPhrase(count: number, kind: "plugin" | "marketplace"): string 
 }
 
 /**
- * UXG-07 (D-29-02/03/04): build the human-readable summary line that
- * `notify()` prepends before the cascade body for `error` and `warning`
- * severity. It gives the host `Error:` / `Warning:` prefix a meaningful,
- * contextual sentence to introduce ("focus on the operation, not what happened
- * to each plugin -- the cascade body already shows that").
+ * UXG-07 / GRAM-01 / GRAM-02 (D-29-02/03/04): build the human-readable summary
+ * line that `emitWithSummary` prepends before the body for `error` and
+ * `warning` severity. It gives the host `Error:` / `Warning:` prefix a
+ * meaningful, contextual sentence to introduce ("focus on the operation, not
+ * what happened to each plugin -- the body already shows that").
+ *
+ * Invoked for BOTH the cascade arm and the standalone arm (GRAM-04): the two
+ * error-severity standalone kinds (`marketplace-not-added`, failed
+ * `plugin-info`) take a hard-count-1 summary on the FAILED ROW's subject
+ * (GRAM-02); the cascade arm counts the failed/skipped rows.
  *
  * Verb is `"failed"` for error severity, `"skipped"` for warning severity.
  *
@@ -1533,20 +1715,28 @@ function operationPhrase(count: number, kind: "plugin" | "marketplace"): string 
  * crashing.
  */
 function buildSummaryLine(message: NotificationMessage, severity: "error" | "warning"): string {
-  // INFO-03 / INFO-02: info-surface kinds NEVER carry a summary line (the
-  // operation-count semantics of "N plugin operations failed" do not apply to
-  // read-only query results -- the `notify()` dispatcher only invokes
-  // `buildSummaryLine` from the cascade arm). This defensive short-circuit
-  // returns the empty string so a future mistaken call still produces
-  // benign output instead of accessing `message.marketplaces` on a
-  // narrowed-away variant.
-  if (
-    message.kind === "marketplace-info" ||
-    message.kind === "plugin-info" ||
-    message.kind === "marketplace-info-cascade" ||
-    message.kind === "plugin-info-cascade"
-  ) {
-    return "";
+  // GRAM-02: the standalone-dispatched kinds derive their summary from the
+  // FAILED ROW's subject, not the invoking command. The two error-severity
+  // standalone kinds carry a hard-count-1 summary (one absent marketplace /
+  // one failed plugin row); the read-only info/cascade kinds and a non-failed
+  // `plugin-info` carry NO summary (they route through the info arm of the
+  // emission helper and never reach the summary path). Narrowed through the
+  // single `isInfoKind` guard so a future StandaloneKind without a summary arm
+  // is a compile error.
+  if (isInfoKind(message)) {
+    switch (message.kind) {
+      case "marketplace-not-added":
+        return `${operationPhrase(1, "marketplace")} failed.`;
+      case "plugin-info":
+        return message.plugin.status === "failed" ? `${operationPhrase(1, "plugin")} failed.` : "";
+      case "marketplace-info":
+      case "marketplace-info-cascade":
+      case "plugin-info-cascade":
+        return "";
+      default:
+        assertNever(message);
+        return "";
+    }
   }
 
   const verb = severity === "error" ? "failed" : "skipped";
@@ -1600,13 +1790,18 @@ function shouldEmitReloadHint(message: NotificationMessage): boolean {
   // for no reason. Each fan-out wrapper inherits this short-circuit -- a
   // fan-out of N info blocks is N read-only queries composed; it remains
   // structurally read-only.
-  if (
-    message.kind === "marketplace-info" ||
-    message.kind === "plugin-info" ||
-    message.kind === "marketplace-info-cascade" ||
-    message.kind === "plugin-info-cascade"
-  ) {
-    return false;
+  if (isInfoKind(message)) {
+    switch (message.kind) {
+      case "marketplace-info":
+      case "plugin-info":
+      case "marketplace-info-cascade":
+      case "plugin-info-cascade":
+      case "marketplace-not-added":
+        return false;
+      default:
+        assertNever(message);
+        return false;
+    }
   }
 
   for (const mp of message.marketplaces) {
@@ -1921,19 +2116,38 @@ function appendResolvedComponentLines(
 }
 
 /**
+ * TYPE-01 / D-46-01a: render the dedicated `MarketplaceNotAddedMessage`
+ * variant. Lifted from the former `renderPluginInfo` `{not added}` carve-out;
+ * emits the byte-identical bare column-0 row
+ * `⊘ <name> [scope?] (failed) {not added}` with NO marketplace header (the row
+ * IS the message). `name` carries the MARKETPLACE name. `scope` present =>
+ * `[scope]` bracket; absent => no bracket. The version slot collapses to `""`
+ * (the variant carries no version) and the `{not added}` brace is hard-coded
+ * via the `["not added"]` literal (the variant carries no `reasons` field).
+ *
+ * `probe` is accepted for signature parity with the other info renderers and
+ * threaded into `composeReasons` with BOTH soft-dep declares-flags FALSE --
+ * info-surface rows NEVER emit soft-dep markers.
+ */
+function renderMarketplaceNotAdded(
+  message: MarketplaceNotAddedMessage,
+  probe: SoftDepStatus,
+): string {
+  return joinTokens([
+    ICON_UNINSTALLABLE,
+    message.name,
+    message.scope === undefined ? "" : `[${message.scope}]`,
+    renderVersion(undefined),
+    "(failed)",
+    composeReasons(["not added"], false, false, probe),
+  ]);
+}
+
+/**
  * Render a `PluginInfoMessage` to its single-string body.
  *
- * `{not added}` carve-out: when the embedded plugin row has
- * `status === "failed"` AND `reasons` is EXACTLY `["not added"]` (sole
- * reason), the marketplace being queried is not present in the
- * requested scope -- the renderer emits ONLY the bare plugin row at
- * column 0 (`⊘ <name> [<scope>] (failed) {not added}`). No
- * marketplace header. Any `failed` row whose reasons contain
- * `"not added"` AS WELL AS other reasons routes through the standard
- * header form so the additional failure context surfaces.
- *
- * Standard path: every other plugin-info row renders the
- * always-marketplace-header form: marketplace header at col 0;
+ * Every plugin-info row renders the always-marketplace-header form:
+ * marketplace header at col 0;
  * plugin row at 2-space indent (status glyph + name + optional scope
  * bracket + version + (status) + optional reasons brace); optional
  * description block wrapped via `wrapDescription(text, 4, 66)`; then
@@ -1953,28 +2167,6 @@ function appendResolvedComponentLines(
  */
 function renderPluginInfo(message: PluginInfoMessage, probe: SoftDepStatus): string {
   const plugin = message.plugin;
-
-  // `{not added}` carve-out: bare row at column 0, no marketplace
-  // header. The predicate demands `"not added"` be the SOLE reason:
-  // a future caller bug constructing
-  // `reasons: ["not added", "permission denied"]` must NOT silently
-  // suppress the additional reason and marketplace context. Sole-
-  // reason scoping keeps the carve-out at the catalog state and routes
-  // every other reason mix through the standard header form.
-  if (
-    plugin.status === "failed" &&
-    plugin.reasons?.length === 1 &&
-    plugin.reasons[0] === "not added"
-  ) {
-    return joinTokens([
-      ICON_UNINSTALLABLE,
-      plugin.name,
-      plugin.scope === undefined ? "" : `[${plugin.scope}]`,
-      renderVersion(plugin.version),
-      "(failed)",
-      composeReasons(plugin.reasons, false, false, probe),
-    ]);
-  }
 
   // INFO-02 standard path: marketplace header + 2-space-indent row + optional
   // description + per-kind components.
@@ -2036,22 +2228,41 @@ function composeMarketplaceBlock(mp: MarketplaceNotificationMessage, probe: Soft
 }
 
 /**
- * Dispatcher for the info-surface arms of `notify()`. Centralizes the
- * four-arm body computation + the severity-aware `ctx.ui.notify()`
- * call so the public `notify()` dispatcher stays under the cognitive-
- * complexity budget. IL-2: one `ctx.ui.notify` call per invocation
- * (arms are mutually exclusive).
+ * GRAM-04: the single summary-emission seam shared by the standalone arm
+ * (`dispatchInfoMessage`) and the cascade arm of `notify()`. Computing the
+ * severity and prepending the summary in ONE place is the structural
+ * anti-divergence guarantee -- no caller can re-introduce a summary-less
+ * error/warning emission like the v1.10 standalone-arm defect.
+ *
+ * GRAM-01: at error/warning severity the summary is prepended as its own
+ * block, separated from the body by `\n\n` (never a single `\n`, which would
+ * re-glue the host `Error:` / `Warning:` label onto the detail row). At info
+ * severity the body is emitted unchanged (no summary -- the operation-count
+ * semantics do not apply to read-only results). IL-2: exactly one
+ * `ctx.ui.notify` call per invocation.
+ */
+function emitWithSummary(ctx: ExtensionContext, message: NotificationMessage, body: string): void {
+  const severity = computeSeverity(message);
+  if (severity === undefined) {
+    ctx.ui.notify(body);
+  } else {
+    ctx.ui.notify(`${buildSummaryLine(message, severity)}\n\n${body}`, severity);
+  }
+}
+
+/**
+ * Dispatcher for the standalone-dispatched arms of `notify()`. Centralizes the
+ * per-variant body composition, then routes through the shared
+ * `emitWithSummary` seam (GRAM-04) so error/warning standalone emissions carry
+ * the summary line exactly like the cascade arm does. IL-2: one
+ * `ctx.ui.notify` call per invocation (the seam performs it).
  */
 function dispatchInfoMessage(
   ctx: ExtensionContext,
-  message:
-    | MarketplaceInfoMessage
-    | PluginInfoMessage
-    | MarketplaceInfoCascadeMessage
-    | PluginInfoCascadeMessage,
+  message: Extract<NotificationMessage, { kind: StandaloneKind }>,
   probe: SoftDepStatus,
 ): void {
-  // Body composition per variant. The four info renderers share the
+  // Body composition per variant. The standalone renderers share the
   // same `(message, probe) => string` shape; severity is computed off
   // the discriminator via the shared `computeSeverity` ladder.
   let body: string;
@@ -2068,17 +2279,15 @@ function dispatchInfoMessage(
     case "plugin-info-cascade":
       body = renderPluginInfoCascade(message, probe);
       break;
+    case "marketplace-not-added":
+      body = renderMarketplaceNotAdded(message, probe);
+      break;
     default:
       assertNever(message);
       return;
   }
 
-  const severity = computeSeverity(message);
-  if (severity === undefined) {
-    ctx.ui.notify(body);
-  } else {
-    ctx.ui.notify(body, severity);
-  }
+  emitWithSummary(ctx, message, body);
 }
 
 /**
@@ -2097,26 +2306,24 @@ export function notify(
   // -- info messages never emit soft-dep markers).
   const probe = softDepStatus(pi);
 
-  // Dispatch info-surface kinds through `dispatchInfoMessage` so the
-  // cascade arm below stays under the cognitive-complexity budget.
-  // The helper performs exactly ONE `ctx.ui.notify` call per
-  // invocation (IL-2). No reload-hint, no summary line for any info
-  // kind. After this branch, TypeScript narrows `message` to
-  // `CascadeNotificationMessage` via the exhaustiveness switch below.
-  if (
-    message.kind === "marketplace-info" ||
-    message.kind === "plugin-info" ||
-    message.kind === "marketplace-info-cascade" ||
-    message.kind === "plugin-info-cascade"
-  ) {
+  // Dispatch standalone-dispatched kinds through `dispatchInfoMessage` so the
+  // cascade arm below stays under the cognitive-complexity budget. The single
+  // `isInfoKind` guard (TYPE-03) is the one place that enumerates the
+  // standalone set. The helper performs exactly ONE `ctx.ui.notify` call per
+  // invocation (IL-2) and routes through the SAME `emitWithSummary` seam as the
+  // cascade arm (GRAM-04): error/warning standalone kinds carry the summary
+  // line, info kinds do not. No reload-hint for any standalone kind. After this
+  // branch, TypeScript narrows `message` to `CascadeNotificationMessage` via
+  // the exhaustiveness switch below.
+  if (isInfoKind(message)) {
     dispatchInfoMessage(ctx, message, probe);
     return;
   }
 
-  // Exhaustiveness gate. After the info-arm return above, the only
+  // Exhaustiveness gate. After the standalone-arm return above, the only
   // legal residual `message.kind` values are `undefined` (back-compat)
   // or the explicit `"cascade"`. The switch + `assertNever` ensures a
-  // future 6th `kind` literal added without extending this dispatcher
+  // future standalone `kind` literal added without extending `isInfoKind`
   // becomes a compile error here.
   switch (message.kind) {
     case undefined:
@@ -2140,21 +2347,11 @@ export function notify(
   const hint = shouldEmitReloadHint(message) ? RELOAD_HINT_TRAILER : "";
   const withHint = hint === "" ? body : `${body}\n\n${hint}`;
 
-  // Severity dispatch via the Pi API's magic-string second-arg convention:
-  // omitting the 2nd arg is info severity; "warning" / "error" otherwise.
-  const severity = computeSeverity(message);
-  if (severity === undefined) {
-    // UXG-07 (D-29-02): info severity emits the cascade body only, NO summary
-    // line.
-    ctx.ui.notify(withHint);
-  } else {
-    // UXG-07 (D-29-02): for error/warning severity, PREPEND the
-    // summary line so the host `Error:` / `Warning:` prefix introduces a
-    // meaningful count of the failed/skipped operations. The reload-hint
-    // (if any) stays last: `{summary}\n\n{cascade body}\n\n{reload-hint}`.
-    const summarized = `${buildSummaryLine(message, severity)}\n\n${withHint}`;
-    ctx.ui.notify(summarized, severity);
-  }
+  // Emit through the shared summary seam (GRAM-04). At info severity the body
+  // emits unchanged; at error/warning severity the summary is prepended as its
+  // own block, with the reload-hint (if any) already folded into `withHint`
+  // last: `{summary}\n\n{cascade body}\n\n{reload-hint}` (UXG-07 / GRAM-01).
+  emitWithSummary(ctx, message, withHint);
 }
 
 // ---------------------------------------------------------------------------

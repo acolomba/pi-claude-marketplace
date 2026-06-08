@@ -101,6 +101,7 @@ import { loadState } from "../../persistence/state-io.ts";
 import { DEFAULT_CREDENTIAL_OPS } from "../../platform/git-credential.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
+  InvalidMarketplaceManifestError,
   MarketplaceNotFoundError,
   MarketplaceUpdateError,
   PluginShapeError,
@@ -127,9 +128,9 @@ import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { AuthAttemptResult, OnAuthRequiredFn } from "../../platform/git.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
+  ContentReason,
   PluginFailedMessage,
   PluginNotificationMessage,
-  Reason,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
@@ -196,19 +197,81 @@ export interface UpdateAllMarketplacesOptions {
   readonly deviceFlowHttp?: DeviceFlowHttp;
 }
 
+/**
+ * ATTR-06 / D-48-C Shape 1 (mirrors remove.ts::resolveScopeOrNotifyNotAdded):
+ * resolve the target scope and enforce the missing-marketplace precondition
+ * BEFORE the caller enters refreshOneMarketplace / snapshotAfterRefresh.
+ *
+ * Returns the resolved `{ scope, locations }` when the marketplace record
+ * exists in the target scope. Returns `undefined` when the marketplace is
+ * absent -- in which case it has ALREADY emitted the standalone
+ * MarketplaceNotAddedMessage `(failed) {not added}` variant (SC#1 cross-op
+ * convergence), so the caller must return without entering the guard. This
+ * closes the residual Class-C gap: previously a missing marketplace let a raw
+ * MarketplaceNotFoundError escape past the orchestrator boundary (bare form via
+ * resolveScopeFromState; explicit-scope form via snapshotAfterRefresh's
+ * withStateGuard throw). NFR-5: every read here is a network-free `loadState`.
+ *
+ * Bracket discipline: the bare form absent from BOTH scopes emits NO scope
+ * bracket (resolveScopeFromState's MarketplaceNotFoundError is caught here, NOT
+ * re-thrown; its throw contract -- shared with other callers -- is unmodified).
+ * The explicit-scope miss emits the requested scope bracket (SCOPE-01).
+ *
+ * Genuine refresh failures are untouched: only a MarketplaceNotFoundError from
+ * the resolve seam reroutes here. A non-MarketplaceNotFoundError from
+ * resolveScopeFromState is re-thrown; all clone/manifest/lock failures arise
+ * later inside refreshOneMarketplace and keep their existing `(failed)` cascade.
+ */
+async function resolveScopeOrNotifyNotAdded(
+  opts: UpdateMarketplaceOptions,
+  userLocations: ScopedLocations,
+  projectLocations: ScopedLocations,
+): Promise<{ scope: Scope; locations: ScopedLocations } | undefined> {
+  // Bare form: resolveScopeFromState proves existence across both scopes.
+  if (opts.scope === undefined) {
+    try {
+      return await resolveScopeFromState(opts.name, userLocations, projectLocations);
+    } catch (err) {
+      if (err instanceof MarketplaceNotFoundError) {
+        notify(opts.ctx, opts.pi, { kind: "marketplace-not-added", name: opts.name });
+        return undefined;
+      }
+
+      throw err;
+    }
+  }
+
+  // Explicit scope: a single pre-guard loadState read blocks the miss BEFORE it
+  // reaches snapshotAfterRefresh's withStateGuard (which would otherwise throw
+  // MarketplaceNotFoundError(name, [scope]) raw past the orchestrator).
+  const locations = opts.scope === "user" ? userLocations : projectLocations;
+  const preState = await loadState(locations.extensionRoot);
+  if (preState.marketplaces[opts.name] === undefined) {
+    notify(opts.ctx, opts.pi, {
+      kind: "marketplace-not-added",
+      name: opts.name,
+      scope: opts.scope,
+    });
+    return undefined;
+  }
+
+  return { scope: opts.scope, locations };
+}
+
 /** MU-1 single-name form. */
 export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise<void> {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
   const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
   const userLocations = locationsFor("user", opts.cwd);
   const projectLocations = locationsFor("project", opts.cwd);
-  const resolved =
-    opts.scope === undefined
-      ? await resolveScopeFromState(opts.name, userLocations, projectLocations)
-      : {
-          scope: opts.scope,
-          locations: opts.scope === "user" ? userLocations : projectLocations,
-        };
+
+  // MU-1 + ATTR-06 / SC#1: resolve scope and enforce the missing-marketplace
+  // precondition. On a miss the helper has already emitted the standalone
+  // `(failed) {not added}` variant, so return without entering the refresh path.
+  const resolved = await resolveScopeOrNotifyNotAdded(opts, userLocations, projectLocations);
+  if (resolved === undefined) {
+    return;
+  }
 
   await refreshOneMarketplace({
     ctx: opts.ctx,
@@ -429,12 +492,24 @@ interface RefreshSnapshot {
   readonly changed: boolean;
 }
 
-async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapshot> {
-  const { name, scope, locations } = args;
+async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapshot | undefined> {
+  const { name, locations } = args;
   return withStateGuard(locations, async (state) => {
     const record = state.marketplaces[name];
     if (record === undefined) {
-      throw new MarketplaceNotFoundError(name, [scope]);
+      // TOCTOU race: the marketplace was removed between
+      // `resolveScopeOrNotifyNotAdded`'s pre-guard `loadState` and this guard's
+      // fresh `loadState`. The pre-guard already proved existence and the
+      // missing-marketplace precondition is handled there (routed to the
+      // standalone `{not added}` variant); reaching here means a concurrent
+      // removal in that window. Return undefined so the caller skips the
+      // cascade and emits NOTHING further -- no raw MarketplaceNotFoundError
+      // escapes (which `refreshOneMarketplace`'s catch would misattribute as the
+      // lying `{network unreachable}` default, the exact ATTR-10/NFR-5 class this
+      // milestone closes). Mirrors remove.ts:235-244's silent-return at the same
+      // withStateGuard boundary. withStateGuard still saves the unmodified state
+      // (a harmless re-write of the same content).
+      return undefined;
     }
 
     const changed = await refreshRecord(record, args);
@@ -507,7 +582,7 @@ async function cascadeAutoupdates(
  * PluginShapeError variants first, then errno-bearing FS errors, then
  * `undefined` to defer to the consumer's substring fallback.
  */
-function reasonsFromCascadeError(err: unknown): readonly Reason[] | undefined {
+function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undefined {
   if (err instanceof PluginShapeError) {
     // Switch on `err.shape.kind` for compile-time exhaustiveness.
     switch (err.shape.kind) {
@@ -522,6 +597,27 @@ function reasonsFromCascadeError(err: unknown): readonly Reason[] | undefined {
         // permissive `not in manifest` fallback.
         return ["not in manifest"] as const;
     }
+  }
+
+  // ATTR-10 / D-48-B: a typed marketplace-manifest parse/validation failure
+  // (malformed JSON or schema-invalid marketplace.json) maps to the closed-set
+  // `invalid manifest` reason for BOTH path and github sources. A path-source
+  // manifest failure is network-free (NFR-5), so it MUST NOT fall through to the
+  // `?? ["network unreachable"]` default at the refreshOneMarketplace catch; a
+  // github clone that advanced and then hit a malformed manifest is genuinely
+  // `invalid manifest` too (Pitfall 3 -- only typed manifest errors map here,
+  // not generic github network failures). The refreshOneMarketplace catch sees
+  // the InvalidMarketplaceManifestError WRAPPED inside a MarketplaceUpdateError
+  // (refreshRecord rethrows with `{ cause }`), so unwrap ONE level of cause as
+  // well (mirrors add.ts::unwrapAddError). The cascadeAutoupdates catch passes
+  // the raw error, which the direct `instanceof` covers. Placed before the errno
+  // checks so the typed class takes precedence over any incidental errno on the
+  // cause chain.
+  if (
+    err instanceof InvalidMarketplaceManifestError ||
+    (err instanceof Error && err.cause instanceof InvalidMarketplaceManifestError)
+  ) {
+    return ["invalid manifest"] as const;
   }
 
   if (err instanceof Error) {
@@ -635,7 +731,7 @@ function outcomeToCascadePluginMessage(
  * without `reasons`; once every producer populates `reasons`, the fallback
  * can be deleted.
  */
-function narrowSkipReason(outcome: PluginUpdateSkippedOutcome): Reason {
+function narrowSkipReason(outcome: PluginUpdateSkippedOutcome): ContentReason {
   const firstReason = outcome.reasons[0];
   if (firstReason !== undefined) {
     return firstReason;
@@ -682,7 +778,7 @@ function narrowSkipReason(outcome: PluginUpdateSkippedOutcome): Reason {
  * as `narrowSkipReason` above). The fallback is `"unreadable manifest"`
  * because most update failures bubble up from manifest re-reads.
  */
-function narrowFailReason(outcome: PluginUpdateFailedOutcome): Reason {
+function narrowFailReason(outcome: PluginUpdateFailedOutcome): ContentReason {
   const firstReason = outcome.reasons?.[0];
   if (firstReason !== undefined) {
     return firstReason;
@@ -718,7 +814,7 @@ function narrowFailReason(outcome: PluginUpdateFailedOutcome): Reason {
 async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   const { ctx, name, scope, locations, pluginUpdate, pi } = args;
 
-  let snapshot: RefreshSnapshot;
+  let snapshot: RefreshSnapshot | undefined;
   try {
     snapshot = await snapshotAfterRefresh(args);
   } catch (err) {
@@ -740,6 +836,16 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     notify(ctx, pi, {
       marketplaces: [{ name, scope, status: "failed", plugins: [failedRow] }],
     });
+    return;
+  }
+
+  if (snapshot === undefined) {
+    // TOCTOU concurrent-removal no-op: the marketplace was removed between the
+    // pre-guard existence read and snapshotAfterRefresh's fresh guard load. The
+    // pre-guard already emitted the standalone `{not added}` notification, so
+    // return silently -- NO second contradictory notification, and crucially NO
+    // lying `{network unreachable}` (the raw MarketplaceNotFoundError no longer
+    // escapes; mirrors remove.ts).
     return;
   }
 
@@ -868,3 +974,12 @@ async function validateManifestAtRoot(
  * `unchanged` -> `skipped {up-to-date}`).
  */
 export { outcomeToCascadePluginMessage as __test_outcomeToCascadePluginMessage };
+
+/**
+ * Test seam for the TOCTOU concurrent-removal regression (CR-01). Verifies that
+ * `snapshotAfterRefresh` returns `undefined` (instead of throwing a raw
+ * MarketplaceNotFoundError) when the marketplace record is absent at the guard's
+ * fresh `loadState` -- the silent-return that prevents `refreshOneMarketplace`'s
+ * catch from misattributing the race as the lying `{network unreachable}`.
+ */
+export { snapshotAfterRefresh as __test_snapshotAfterRefresh };
