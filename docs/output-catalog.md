@@ -1289,6 +1289,26 @@ Triggered when `marketplace update <name>` refreshes a PATH-source marketplace w
   ⊘ official (failed) {invalid manifest}
 ```
 
+### Failure -- marketplace not added, explicit scope (SC#1 / ATTR-06 / D-48-C)
+
+Triggered when `marketplace update <name> --scope <scope>` names a marketplace that is NOT added in the requested scope (or is present only in the OTHER scope). SC#1 cross-op convergence: the marketplace-form update now joins `install` / `uninstall` / `reinstall` / `update` (plugin form) / `marketplace remove` / `autoupdate` in routing the marketplace-absent precondition to the SAME standalone `MarketplaceNotAddedMessage` variant -- replacing the former raw `MarketplaceNotFoundError` escape past the orchestrator boundary (the last residual Class-C instance). A single pre-guard `loadState` existence read (NFR-5: network-free) blocks the miss BEFORE it reaches `snapshotAfterRefresh`'s `withStateGuard` throw; the `[scope]` bracket carries the REQUESTED scope (SCOPE-01). Genuine refresh failures (clone/manifest/lock) are untouched -- only `MarketplaceNotFoundError` reroutes here; everything else keeps its `(failed)` cascade (`mp-failure-network` / `update-path-invalid-manifest`). Bare column-0 row, NO summary line, NO cause-chain trailer. Severity `error`; no reload-hint.
+
+<!-- catalog-state: update-missing-not-added -->
+
+```text
+⊘ ghost-mp [project] (failed) {not added}
+```
+
+### Failure -- marketplace not added, bare form absent from both scopes (SC#1 / ATTR-06)
+
+Triggered when the bare `marketplace update <name>` form (no `--scope`) names a marketplace that is absent in BOTH scopes. `resolveScopeFromState` throws `MarketplaceNotFoundError`; the pre-guard catches it and emits the same standalone `{not added}` variant, but with NO `[scope]` bracket (the absent-from-both form: there is no requested scope to report). Byte-identical to `info`'s `missing-marketplace-not-added-absent-from-both` state and to the corresponding `reinstall` / `update` rows -- the cross-op byte convergence SC#1 proves. Severity `error`; no reload-hint.
+
+<!-- catalog-state: update-missing-not-added-absent-from-both -->
+
+```text
+⊘ ghost-mp (failed) {not added}
+```
+
 ______________________________________________________________________
 
 ## `/claude:plugin marketplace autoupdate|noautoupdate <name>`

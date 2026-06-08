@@ -1466,10 +1466,13 @@ test("refreshRecord: unsupported source kind surfaces as notifyError (lines 219-
   });
 });
 
-test("snapshotAfterRefresh: MarketplaceNotFoundError when name absent from state (lines 244-246)", async () => {
-  // withStateGuard loads state, record===undefined, throws
-  // MarketplaceNotFoundError.  refreshOneMarketplace catches it and calls
-  // notifyError (the non-MarketplaceUpdateError branch).
+test("updateMarketplace: explicit-scope missing marketplace -> standalone {not added} (SC#1)", async () => {
+  // SC#1 cross-op convergence: an explicit-scope miss is blocked by the
+  // pre-guard loadState existence read BEFORE it reaches snapshotAfterRefresh's
+  // withStateGuard (which would otherwise throw MarketplaceNotFoundError raw).
+  // It renders the canonical standalone `(failed) {not added}` variant -- no
+  // longer a synthetic `(failed)` cascade row or a raw escape. Byte-locked to
+  // the exact canonical row (mirrors remove.ts / autoupdate.ts convergence).
   await withHermeticHome(async ({ cwd }) => {
     // Leave state empty -- no marketplace named "ghost".
     const { ctx, pi, notifications } = makeCtx();
@@ -1480,11 +1483,31 @@ test("snapshotAfterRefresh: MarketplaceNotFoundError when name absent from state
     assert.equal(notifications.length, 1);
     const first = notifications[0];
     assert.ok(first !== undefined);
+    assert.equal(first.message, "⊘ ghost [project] (failed) {not added}");
     assert.equal(first.severity, "error");
-    assert.ok(
-      first.message.includes("ghost"),
-      `expected marketplace name in error message: ${first.message}`,
+  });
+});
+
+test("updateMarketplace: bare-form missing marketplace -> bracketless {not added} (SC#1)", async () => {
+  // SC#1 cross-op convergence, bare form (no --scope): resolveScopeFromState
+  // throws MarketplaceNotFoundError when absent from BOTH scopes; the pre-guard
+  // catches it and routes to the bracketless standalone `(failed) {not added}`
+  // variant. The call resolves WITHOUT rejection, proving the raw
+  // MarketplaceNotFoundError no longer escapes the orchestrator boundary.
+  await withHermeticHome(async ({ cwd }) => {
+    // Leave state empty -- no marketplace named "ghost" in either scope.
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps();
+
+    await assert.doesNotReject(async () =>
+      updateMarketplace({ ctx, pi, name: "ghost", cwd, gitOps }),
     );
+
+    assert.equal(notifications.length, 1);
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    assert.equal(first.message, "⊘ ghost (failed) {not added}");
+    assert.equal(first.severity, "error");
   });
 });
 

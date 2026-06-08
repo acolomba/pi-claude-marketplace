@@ -4,7 +4,9 @@
 //   - bare    -> updateAllMarketplaces (empty-set silent success on
 //                  fresh state -> `(no marketplaces)` EmptyToken per
 //                  CMC-10)
-//   - <name>  -> updateMarketplace (MarketplaceNotFoundError -> notifyError)
+//   - <name>  -> updateMarketplace (SC#1 convergence: a missing marketplace
+//                  routes to the standalone `(failed) {not added}` variant,
+//                  NOT a raw MarketplaceNotFoundError)
 
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -98,16 +100,19 @@ test("shim :: bare /marketplace update calls updateAllMarketplaces", async () =>
 
 test("shim :: named /marketplace update <name> calls updateMarketplace with name", async () => {
   await withHermeticHome(async ({ cwd }) => {
-    const { ctx } = makeCtx(cwd);
+    const { ctx, notifications } = makeCtx(cwd);
     const { deps } = makeDeps();
     const handler = makeMarketplaceUpdateHandler(makePi(), deps);
-    // updateMarketplace's `resolveScopeFromState` throws
-    // MarketplaceNotFoundError when --scope is omitted and the name is
-    // absent in BOTH scopes. The throw is NOT caught by the orchestrator
-    // (the scope-resolution step runs BEFORE the outer try/catch that
-    // surfaces refresh-time errors via notifyError). This rejection proves
-    // control reached updateMarketplace with the requested name.
-    await assert.rejects(async () => handler("mymkt", ctx), /mymkt/);
+    // SC#1 cross-op convergence: updateMarketplace's pre-guard catches
+    // resolveScopeFromState's MarketplaceNotFoundError (--scope omitted, name
+    // absent in BOTH scopes) and routes to the standalone `(failed) {not added}`
+    // variant -- no raw error escapes past the orchestrator. The handler
+    // resolves (no rejection) and a single bracketless not-added row is emitted,
+    // proving control reached updateMarketplace with the requested name.
+    await handler("mymkt", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.message, "⊘ mymkt (failed) {not added}");
+    assert.equal(notifications[0]!.severity, "error");
   });
 });
 

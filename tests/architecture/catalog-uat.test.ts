@@ -1927,6 +1927,30 @@ const FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // SC#1 / ATTR-06 / D-48-C: the marketplace-form update now converges on the
+    // standalone `marketplace-not-added` variant for the marketplace-absent
+    // precondition (closing the last residual Class-C raw-throw). Explicit scope
+    // carries the requested `[scope]` bracket (SCOPE-01); the bare absent-from-both
+    // form carries NO bracket. Both severity `error` via computeSeverity.
+    "update-missing-not-added": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+        scope: "project",
+      },
+    },
+
+    "update-missing-not-added-absent-from-both": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+      },
+    },
   },
 
   // -------------------------------------------------------------------------
