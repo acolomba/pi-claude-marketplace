@@ -1539,6 +1539,33 @@ const FIXTURES: FixtureMap = {
         scope: "user",
       } satisfies NotificationMessage,
     },
+
+    // D-48-B IN-02: a schema-invalid `marketplace.json` (typed
+    // InvalidMarketplaceManifestError, NO SyntaxError cause) reads
+    // `{invalid manifest}` for parity with the `marketplace add` write path,
+    // not the former generic `{unreadable}` fallback. Mirrors
+    // buildManifestFailureMessage: a `plugin-info` payload on the marketplace
+    // subject (marketplaceName === plugin.name, plugin.scope ===
+    // marketplaceScope so the renderer's orphan-fold rule drops the failed-row
+    // bracket), status `failed`, reasons `["invalid manifest"]`,
+    // componentsResolved false. Byte form: header + 2-space-indent failed row.
+    "manifest-invalid": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "bad-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "failed",
+          name: "bad-mp",
+          scope: "user",
+          reasons: ["invalid manifest"],
+          componentsResolved: false,
+        },
+      } satisfies NotificationMessage,
+    },
   },
 
   // -------------------------------------------------------------------------

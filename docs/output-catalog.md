@@ -944,7 +944,7 @@ ______________________________________________________________________
 
 Read-only detail surface (Phases 42-43). Renders the marketplace header at column 0 carrying the `<autoupdate>` or `<no autoupdate>` marker, followed by per-attribute lines (`github:` or `path:`; optional `last_updated:` for github sources; optional `description:` when `marketplace.json` carries one). Phase 43 / INFO-01 + INFO-03 + INFO-04 + INFO-07 lock the full state set below.
 
-Severity routing: every success state is `info` (no second arg to `ctx.ui.notify`); the two `{not added}` failure states route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
+Severity routing: every success state is `info` (no second arg to `ctx.ui.notify`); the two `{not added}` failure states and the `{invalid manifest}` manifest-failure state route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
 
 ### Success -- github source with all optional fields
 
@@ -1005,6 +1005,18 @@ path: /repo/path/my-mp
 
 ● my-mp [user] <no autoupdate>
 github: someuser/my-mp
+```
+
+### Failure -- schema-invalid `marketplace.json` (`{invalid manifest}`)
+
+Triggered when `marketplace info <name> [--scope ...]` reads a present-but-schema-invalid `marketplace.json` (a typed `InvalidMarketplaceManifestError` with NO `SyntaxError` cause -- the JSON parsed but failed validation). The read surface now classifies this as `{invalid manifest}` for parity with the `marketplace add` write path's `classifyAddError` (D-48-B / IN-02 close), instead of the former generic `{unreadable}` fallback -- the same on-disk condition surfaces the same truthful reason across read and write. The orchestrator emits the `buildManifestFailureMessage` `PluginInfoMessage` with `plugin.status: "failed"` + `reasons: ["invalid manifest"]` + `componentsResolved: false` on the marketplace subject; the renderer composes the marketplace header at column 0 (carrying the `<no autoupdate>` marker for a record with `autoupdate: false`), the failed row at 2-space indent, and the `components: not resolved` marker at 4-space indent (the manifest never parsed, so no component set could be resolved). The failed row carries NO `[scope]` bracket because `plugin.scope` equals the marketplace scope (the renderer's orphan-fold rule suppresses the bracket). A malformed-JSON manifest still reads `{unparseable}` -- that arm is preserved. Severity `error`; no reload-hint (info surfaces are read-only per SNM-33).
+
+<!-- catalog-state: manifest-invalid -->
+
+```text
+● bad-mp [user] <no autoupdate>
+  ⊘ bad-mp (failed) {invalid manifest}
+    components: not resolved
 ```
 
 ### Failure -- absent from both scopes

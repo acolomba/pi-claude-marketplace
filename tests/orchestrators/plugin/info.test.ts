@@ -42,6 +42,7 @@ import {
 import { getPluginInfo } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { InvalidMarketplaceManifestError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -530,6 +531,26 @@ test("WR-01: narrowProbeError -> SyntaxError classifies as `unparseable`", async
   const mod =
     await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
   const err = new SyntaxError("Unexpected token");
+  assert.equal(mod.__test_narrowProbeError(err), "unparseable");
+});
+
+test("D-48-B IN-02: narrowProbeError -> schema-invalid InvalidMarketplaceManifestError classifies as `invalid manifest`", async () => {
+  const mod =
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
+  // Schema-invalid manifest = typed error with NO SyntaxError cause. The read
+  // surface reports the SAME `{invalid manifest}` reason the write path does.
+  const err = new InvalidMarketplaceManifestError("marketplace.json schema invalid: plugins");
+  assert.equal(mod.__test_narrowProbeError(err), "invalid manifest");
+});
+
+test("D-48-B IN-02: narrowProbeError -> malformed-JSON InvalidMarketplaceManifestError stays `unparseable`", async () => {
+  const mod =
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
+  // Malformed JSON = typed error WHOSE cause IS a SyntaxError. The collapse
+  // into one InvalidMarketplaceManifestError branch must preserve this arm.
+  const err = new InvalidMarketplaceManifestError("bad json", {
+    cause: new SyntaxError("Unexpected token"),
+  });
   assert.equal(mod.__test_narrowProbeError(err), "unparseable");
 });
 
