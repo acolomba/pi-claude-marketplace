@@ -4,14 +4,14 @@ milestone: v1.11
 milestone_name: Notification Summary-Line Grammar
 status: verifying
 stopped_at: Completed 50-01-PLAN.md
-last_updated: "2026-06-08T17:30:49.779Z"
+last_updated: "2026-06-08T22:27:02.992Z"
 last_activity: 2026-06-08
 progress:
-  total_phases: 28
+  total_phases: 1
   completed_phases: 1
   total_plans: 1
   completed_plans: 1
-  percent: 4
+  percent: 100
 ---
 
 # Project State
@@ -24,16 +24,16 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 
 ## Current Position
 
-Phase: 50 (notification-summary-line-grammar) -- COMPLETE (ready for verification)
-Plan: 1 of 1
-Status: Phase complete -- ready for verification
-Last activity: 2026-06-08 -- Quick task 260608-npa removed the brittle README-prose reinstall-docs test (PRL coverage already lives on behavior/spec tests + output-catalog catalog-uat); npm run check now fully green (1514/1514). Phase 50 GRAM-01..05 closed.
+Phase: 50 (notification-summary-line-grammar) -- COMPLETE & VERIFIED
+Plan: 1 of 1 complete
+Status: All v1.11 phases complete -- ready for milestone audit/close
+Last activity: 2026-06-08 -- Phase 50 verified PASSED (8/8 must-haves; npm run check GREEN 1515/0). Code-review WR-01/WR-02 fixed (5e671d0: failed plugin-info no longer hides in the both-scopes info cascade). Quick task 260608-npa removed the brittle README-prose reinstall-docs test.
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 168 (sum of recorded phase counts below; some early v1.0-v1.2 phases were archived without a recorded plan count)
+- Total plans completed: 169 (sum of recorded phase counts below; some early v1.0-v1.2 phases were archived without a recorded plan count)
 
 **Plans by phase:**
 

@@ -24,7 +24,7 @@ For full details of each milestone, see `.planning/milestones/v[X.Y]-ROADMAP.md`
 
 Fixes the v1.10 notification-grammar violation: every error/warning-severity notification must carry a non-empty summary message on the host `Error:`/`Warning:` label line, with the cascade/detail rendered as its own separate block below. The standalone `marketplace-not-added` and failed `plugin-info` outputs currently glue the host label directly onto the detail row with no summary (e.g. `Error: ⊘ y [user] (failed) {not added}`) because `dispatchInfoMessage` in `shared/notify.ts` emits these error/warning-severity standalone kinds body-only -- it never calls `buildSummaryLine` (which returns `""` for them), unlike the cascade arm that prepends `{summary}\n\n{body}`. Output correction only; no new commands, flags, REASONS, or row bytes.
 
-- [ ] Phase 50: Notification Summary-Line Grammar -- single shared summary-emission path; standalone `marketplace-not-added` + failed `plugin-info` render the failed-subject summary line + separate detail block; grammar-invariant test + corrected catalog/fixtures; `npm run check` GREEN
+- [x] Phase 50: Notification Summary-Line Grammar -- single shared summary-emission path; standalone `marketplace-not-added` + failed `plugin-info` render the failed-subject summary line + separate detail block; grammar-invariant test + corrected catalog/fixtures; `npm run check` GREEN (completed 2026-06-08)
 
 <details>
 <summary>Done v1.0 successor architecture (Phases 1-7) -- SHIPPED 2026-05-11</summary>
@@ -176,7 +176,7 @@ Two new read-only detail-surface commands (`/claude:plugin marketplace info <nam
   4. Standalone and cascade notifications emit their summary through one shared code path in `shared/notify.ts`: `dispatchInfoMessage` no longer bypasses `buildSummaryLine`, and `buildSummaryLine` returns the failed-subject summary for the standalone error/warning kinds -- no standalone-kind path can drift back to a summary-less emission.
   5. A new cross-cutting grammar-invariant test asserts that every error/warning notification's emitted message has a non-empty summary first line distinct from the cascade block, across all catalog fixtures; `docs/output-catalog.md` (the ~6 sections that encoded "NO summary line. Severity error" -- install/uninstall/reinstall/update/marketplace-update + remove/autoupdate) and the `catalog-uat` fixtures are corrected to the new byte forms in lockstep; `npm run check` exits 0.
 
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 **Wave 1**
 
@@ -952,4 +952,4 @@ Every plugin/marketplace operation reports the true blocker on the correct subje
 | 47. Plugin-Ops Attribution & Cross-Scope                            | v1.10     | 3/3 | Complete    | 2026-06-07 |
 | 48. Marketplace-Ops Attribution                                     | v1.10     | 3/3 | Complete    | 2026-06-08 |
 | 49. Cross-Op Convergence & GREEN-Gate Close                         | v1.10     | 3/3 | Complete    | 2026-06-08 |
-| 50. Notification Summary-Line Grammar                               | v1.11     | 1/1 | Complete   | 2026-06-08 |
+| 50. Notification Summary-Line Grammar                               | v1.11     | 1/1 | Complete    | 2026-06-08 |
