@@ -1789,6 +1789,32 @@ const FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // ATTR-06 / S3 / D-48-C Shape 1: explicit-scope remove of a name not added
+    // in the requested scope -> standalone `marketplace-not-added` `{not added}`
+    // variant carrying the requested scope bracket (pre-guard miss; no raw
+    // MarketplaceNotFoundError escapes the orchestrator).
+    "remove-missing-not-added": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+        scope: "user",
+      } satisfies NotificationMessage,
+    },
+
+    // ATTR-06 / S4: bare-form remove of a name absent from BOTH scopes -> the
+    // SAME standalone variant with NO bracket (resolveScopeFromState's
+    // MarketplaceNotFoundError caught at the entrypoint, absent-from-both form).
+    "remove-missing-not-added-bare": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+      } satisfies NotificationMessage,
+    },
   },
 
   // -------------------------------------------------------------------------
@@ -1932,12 +1958,32 @@ const FIXTURES: FixtureMap = {
       },
     },
 
-    "failure-not-found": {
+    // ATTR-05 / S1 / D-48-C Shape 1: an explicit-scope flip of a name not
+    // added in the requested scope routes to the standalone
+    // `marketplace-not-added` `{not added}` variant carrying the requested
+    // scope bracket -- superseding the former reason-less / `{not found}` form.
+    "autoupdate-missing-not-added": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
-        marketplaces: [{ name: "missing-mp", scope: "user", status: "failed", plugins: [] }],
-      },
+        kind: "marketplace-not-added",
+        name: "missing-mp",
+        scope: "user",
+      } satisfies NotificationMessage,
+    },
+
+    // ATTR-05 / S2: the bare form absent from EVERY iterated scope routes to
+    // the SAME standalone variant carrying `first.scope` (project-before-user
+    // SC-6 order -> `[project]`). Supersedes the former reason-LESS bare
+    // `(failed)` row.
+    "autoupdate-missing-not-added-bare": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "missing-mp",
+        scope: "project",
+      } satisfies NotificationMessage,
     },
   },
 

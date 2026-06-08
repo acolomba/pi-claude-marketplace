@@ -125,6 +125,13 @@ function missingEverywhere(
  * depth-5 cause-chain trailer. A held state lock narrows to the `lock held`
  * reason (its message carries the retry hint); anything else falls back to
  * the permissive `not found`.
+ *
+ * ATTR-05: this row no longer handles the missing-marketplace case -- an
+ * explicit-scope `MarketplaceNotFoundError` is routed to the standalone
+ * `MarketplaceNotAddedMessage` `{not added}` variant by `setMarketplaceAutoupdate`
+ * BEFORE this helper is reached. This helper now only maps `StateLockHeldError`
+ * (-> `lock held`, whose message carries the retry hint) and other non-not-found
+ * flip errors (-> the permissive `not found` fallback).
  */
 function autoupdateFailedRow(name: string, err: unknown): PluginFailedMessage {
   const reasons: readonly ContentReason[] =
@@ -135,6 +142,43 @@ function autoupdateFailedRow(name: string, err: unknown): PluginFailedMessage {
     reasons,
     cause: err instanceof Error ? err : new Error(errorMessage(err)),
   };
+}
+
+/**
+ * Routes a non-collected per-scope autoupdate-flip failure (S1) to notify.
+ *
+ * ATTR-05 / D-48-C Shape 1: an explicit-scope `MarketplaceNotFoundError` is a
+ * missing-marketplace precondition, NOT a flip failure -- it routes to the
+ * standalone MarketplaceNotAddedMessage `⊘ <name> [<scope>] (failed) {not added}`
+ * variant (Pattern 1) carrying the explicit scope bracket (the former
+ * synthetic-child `{not found}` reason lied about the blocker). Every OTHER
+ * error -- notably `StateLockHeldError`, whose message carries an actionable
+ * retry hint -- keeps the synthetic failed-plugin child whose `cause` drives the
+ * renderer's depth-5 cause-chain trailer (the MarketplaceNotificationMessage
+ * header carries no `cause` per SNM-10).
+ */
+function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err: unknown): void {
+  const failureName = opts.name ?? "(unknown)";
+
+  if (err instanceof MarketplaceNotFoundError) {
+    notify(opts.ctx, opts.pi, {
+      kind: "marketplace-not-added",
+      name: failureName,
+      scope,
+    });
+    return;
+  }
+
+  notify(opts.ctx, opts.pi, {
+    marketplaces: [
+      {
+        name: failureName,
+        scope,
+        status: "failed",
+        plugins: [autoupdateFailedRow(failureName, err)],
+      },
+    ],
+  });
 }
 
 export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise<void> {
@@ -165,24 +209,7 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
       // lives in the OTHER scope; we collect and only surface if BOTH
       // scopes failed AND no flips happened anywhere.
       if (!shouldCollectNotFound(opts, err)) {
-        // A non-NotFound autoupdate-flip failure renders as the header
-        // `⊘ <name> [<scope>] (failed)`. The MarketplaceNotificationMessage
-        // shape carries no `cause` (SNM-10 confines `cause` to plugin-level
-        // variants), so surface the underlying error -- notably
-        // StateLockHeldError, whose message carries an actionable retry
-        // hint -- via a synthetic failed-plugin child whose `cause` drives
-        // the depth-5 cause-chain trailer the renderer appends.
-        const failureName = opts.name ?? "(unknown)";
-        notify(opts.ctx, opts.pi, {
-          marketplaces: [
-            {
-              name: failureName,
-              scope,
-              status: "failed",
-              plugins: [autoupdateFailedRow(failureName, err)],
-            },
-          ],
-        });
+        notifyAutoupdateScopeFailure(opts, scope, err);
         return;
       }
 
@@ -196,18 +223,18 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
   if (missingEverywhere(opts, { rows, errors, scopes })) {
     const first = errors[0];
     if (first !== undefined) {
-      // Failure path: emit a single failed marketplace row for the scope
-      // where the first not-found was observed.
+      // ATTR-05 / D-48-C Shape 1: a single-name flip that missed in EVERY
+      // iterated scope is a missing-marketplace precondition. Route it to the
+      // standalone MarketplaceNotAddedMessage `(failed) {not added}` variant
+      // (Pattern 1) instead of the former reason-LESS bare `(failed)` row.
+      // Scope bracket: an explicit `opts.scope` carries it; the bare form
+      // carries `first.scope` (the scope where the first not-found was
+      // observed), per the RESEARCH recommendation.
       const failureName = opts.name ?? "(unknown)";
       notify(opts.ctx, opts.pi, {
-        marketplaces: [
-          {
-            name: failureName,
-            scope: first.scope,
-            status: "failed",
-            plugins: [],
-          },
-        ],
+        kind: "marketplace-not-added",
+        name: failureName,
+        scope: opts.scope ?? first.scope,
       });
     }
 

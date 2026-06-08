@@ -1191,6 +1191,26 @@ Marketplace header is `failed` (the marketplace remove did not fully complete). 
 
 The v1.0 free-text retry-anchor trailer (a sentence above the reload-hint instructing the operator to remediate and re-run) is no longer emitted -- it is not expressible in `NotificationMessage` (per D-17-09).
 
+### Failure -- missing marketplace (explicit `--scope`)
+
+Triggered when `marketplace remove <name> --scope <scope>` targets a name that is NOT present in the requested scope (ATTR-06 / S3). The orchestrator's pre-guard existence check routes the miss to the standalone `MarketplaceNotAddedMessage` `{not added}` variant (`kind: "marketplace-not-added"`, `name`, `scope`) and returns BEFORE entering `withStateGuard` -- no raw `MarketplaceNotFoundError` escapes past the orchestrator (D-48-C Shape 1), and state is left untouched. The variant carries the requested `[scope]` bracket (SCOPE-01). Routed via `isInfoKind` -> `error` severity, no reload-hint, no summary prefix.
+
+<!-- catalog-state: remove-missing-not-added -->
+
+```text
+⊘ ghost-mp [user] (failed) {not added}
+```
+
+### Failure -- missing marketplace (bare form, absent from both scopes)
+
+Triggered when `marketplace remove <name>` (no `--scope`) targets a name absent from BOTH scopes (ATTR-06 / S4). The bare-form `resolveScopeFromState` `MarketplaceNotFoundError` is caught at the orchestrator entrypoint and routed to the SAME standalone `MarketplaceNotAddedMessage` variant -- but with NO `scope`, so the renderer's bracket short-circuit suppresses the `[scope]` token ("absent from both"). `resolveScopeFromState`'s throw contract is unmodified (it is shared with `update.ts`); the catch lives at the remove entrypoint. Severity `error`; no reload-hint; no summary prefix.
+
+<!-- catalog-state: remove-missing-not-added-bare -->
+
+```text
+⊘ ghost-mp (failed) {not added}
+```
+
 ______________________________________________________________________
 
 ## `/claude:plugin marketplace update <name>`
@@ -1260,7 +1280,7 @@ ______________________________________________________________________
 
 ## `/claude:plugin marketplace autoupdate|noautoupdate <name>`
 
-Marketplace-only flag flip. The orchestrator emits a single marketplace block with no plugin children; the block's `mp.status` discriminates between the V2 outcomes. V2 distinguishes five user-visible states for this surface: fresh-flip enable, fresh-flip disable, idempotent enable (no-op), idempotent disable (no-op), and failure when the marketplace persistence record cannot be found. The per-state catalog blocks below give the exact byte form for each outcome. UXG-04: the flip surface now renders the autoupdate state as the `<autoupdate>` / `<no autoupdate>` marker (byte-form parity with the list surface), reversing the Phase 17.1 / D-18-05 status-token design; fresh flips render the bare marker, idempotent no-ops render the marker plus an `{already autoupdate}` / `{already no autoupdate}` idempotence brace. This shares byte form with the list-surface markers documented under [`## /claude:plugin marketplace list`](#claudeplugin-marketplace-list), but the two surfaces differ: the **list** surface conveys autoupdate-off by marker _absence_ (it emits `<autoupdate>` iff `mp.details.autoupdate === true`, with no off-marker), whereas this **flip** surface emits the explicit `<no autoupdate>` off-marker. The `<no autoupdate>` off-marker is therefore emitted only on this flip surface, never on the list surface (UXG-04 does not change the list surface).
+Marketplace-only flag flip. The orchestrator emits a single marketplace block with no plugin children; the block's `mp.status` discriminates between the V2 outcomes. V2 distinguishes six user-visible states for this surface: fresh-flip enable, fresh-flip disable, idempotent enable (no-op), idempotent disable (no-op), and -- when the marketplace persistence record cannot be found -- the standalone `{not added}` failure in two forms (explicit `--scope` carrying the scope bracket, and the bare absent-from-both form; ATTR-05 / D-48-C Shape 1). The per-state catalog blocks below give the exact byte form for each outcome. UXG-04: the flip surface now renders the autoupdate state as the `<autoupdate>` / `<no autoupdate>` marker (byte-form parity with the list surface), reversing the Phase 17.1 / D-18-05 status-token design; fresh flips render the bare marker, idempotent no-ops render the marker plus an `{already autoupdate}` / `{already no autoupdate}` idempotence brace. This shares byte form with the list-surface markers documented under [`## /claude:plugin marketplace list`](#claudeplugin-marketplace-list), but the two surfaces differ: the **list** surface conveys autoupdate-off by marker _absence_ (it emits `<autoupdate>` iff `mp.details.autoupdate === true`, with no off-marker), whereas this **flip** surface emits the explicit `<no autoupdate>` off-marker. The `<no autoupdate>` off-marker is therefore emitted only on this flip surface, never on the list surface (UXG-04 does not change the list surface).
 
 ### Fresh enable
 
@@ -1302,19 +1322,27 @@ Idempotent no-op -- the flag was already in the requested state. `mp.status` = `
 
 Idempotent no-op -- the flag was already in the requested state. `mp.status` = `"skipped"`; `mp.reasons` = `["already no autoupdate"]`; UXG-04 renders the explicit `<no autoupdate>` off-marker plus the `{already no autoupdate}` idempotence brace (no `(skipped)` token); severity = `info` (`already no autoupdate` is in the benign closed set, so this benign no-op computes info -- the second arg is omitted -- per UXG-02 / D-28-06/07); reload-hint suppressed.
 
-### Failure -- marketplace not found
+### Failure -- missing marketplace (explicit `--scope`)
 
-<!-- catalog-state: failure-not-found -->
+Triggered when `marketplace autoupdate <name> --scope <scope>` (or `noautoupdate`) targets a name NOT added in the requested scope (ATTR-05 / S1). The explicit-scope `MarketplaceNotFoundError` raised by `applyAutoupdateFlipInPlace` is a missing-marketplace precondition, NOT a flip failure -- the orchestrator routes it to the standalone `MarketplaceNotAddedMessage` `{not added}` variant (`kind: "marketplace-not-added"`, `name`, `scope`) carrying the requested `[scope]` bracket (D-48-C Shape 1). This supersedes the former reason-less / synthetic-child `{not found}` byte form: the reason is now the truthful `{not added}`. Routed via `isInfoKind` -> `error` severity, no reload-hint, no summary prefix. A `StateLockHeldError` is NOT a missing-marketplace and keeps its separate synthetic-child `(failed) {lock held}` routing (unchanged by ATTR-05).
+
+<!-- catalog-state: autoupdate-missing-not-added -->
 
 ```text
-1 marketplace operation failed.
-
-⊘ missing-mp [user] (failed)
+⊘ missing-mp [user] (failed) {not added}
 ```
 
-Marketplace persistence record lookup failed. `mp.status` = `"failed"`; severity = `"error"`; no reload-hint (failed state-change rolled back; nothing landed).
+### Failure -- missing marketplace (bare form, absent from both scopes)
 
-The five blocks above span two ladders. The severity ladder runs fresh → info, benign skipped → info, failed → error (per D-16-11 + Phase 17.1's mp-level skipped extension, refined by UXG-02 / D-28-06: the two idempotent autoupdate no-ops carry benign reasons -- `already autoupdate` / `already no autoupdate` -- so they compute info, not warning; an mp-level `skipped` with non-benign or missing reasons would still route to warning). The reload-hint ladder is uniform here: every autoupdate flag flip suppresses the trailer (per SNM-33 / D-22-01 / D-22-03). The autoupdate flag lives on a marketplace record, not on any Pi-visible resource, so neither a fresh flip nor an idempotent no-op nor a rolled-back failure contributes to "/reload to pick up changes" -- only a plugin row state change does.
+Triggered when `marketplace autoupdate <name>` (no `--scope`) targets a name absent from EVERY iterated scope (ATTR-05 / S2). The former byte form was a reason-LESS bare `(failed)` row; it is superseded by the SAME standalone `MarketplaceNotAddedMessage` `{not added}` variant. The bare form carries `first.scope` -- the scope where the first not-found was observed; SC-6 iterates project-before-user, so the bracket is `[project]`. Severity `error`; no reload-hint; no summary prefix.
+
+<!-- catalog-state: autoupdate-missing-not-added-bare -->
+
+```text
+⊘ missing-mp [project] (failed) {not added}
+```
+
+The blocks above span two ladders. The severity ladder runs fresh → info, benign skipped → info, failed (and the `{not added}` precondition miss) → error (per D-16-11 + Phase 17.1's mp-level skipped extension, refined by UXG-02 / D-28-06: the two idempotent autoupdate no-ops carry benign reasons -- `already autoupdate` / `already no autoupdate` -- so they compute info, not warning; an mp-level `skipped` with non-benign or missing reasons would still route to warning). The reload-hint ladder is uniform here: every autoupdate flag flip suppresses the trailer (per SNM-33 / D-22-01 / D-22-03). The autoupdate flag lives on a marketplace record, not on any Pi-visible resource, so neither a fresh flip nor an idempotent no-op nor a missing-marketplace `{not added}` failure contributes to "/reload to pick up changes" -- only a plugin row state change does.
 
 ______________________________________________________________________
 

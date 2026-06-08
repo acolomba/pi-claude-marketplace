@@ -23,7 +23,6 @@ import {
   __resetCacheForTests,
   getMarketplaceNames,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -100,16 +99,41 @@ async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
 
 // MR-1 not-found ----------------------------------------------------
 
-test("MR-1: --scope omitted + name not in either scope throws MarketplaceNotFoundError", async () => {
+test("ATTR-06 (S4): --scope omitted + name not in either scope renders standalone `(failed) {not added}` with NO bracket (no raw throw)", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-"));
     try {
       // No state seeded in either scope; the name will be absent.
-      const { ctx, pi } = makeCtx();
-      await assert.rejects(
-        removeMarketplace({ ctx, pi, name: "absent-mp-zzz-9999", cwd }),
-        (err: unknown) => err instanceof MarketplaceNotFoundError,
-      );
+      // ATTR-06 / D-48-C Shape 1: the bare-form resolveScopeFromState
+      // MarketplaceNotFoundError is caught at the entrypoint and routed to the
+      // standalone MarketplaceNotAddedMessage variant -- NOT thrown raw.
+      const { ctx, pi, notifications } = makeCtx();
+      await removeMarketplace({ ctx, pi, name: "absent-mp-zzz-9999", cwd });
+      assert.equal(notifications.length, 1);
+      // Bare form, absent from both scopes -> NO scope bracket. The standalone
+      // not-added variant routes via isInfoKind -> error severity, no summary
+      // prefix.
+      assert.equal(notifications[0]!.message, "⊘ absent-mp-zzz-9999 (failed) {not added}");
+      assert.equal(notifications[0]!.severity, "error");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("ATTR-06 (S3): explicit --scope + name absent in that scope renders standalone `(failed) {not added}` WITH the scope bracket (no raw throw)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-s3-"));
+    try {
+      // No state seeded in the project scope; request an explicit project-scope
+      // remove of a name not present there.
+      const { ctx, pi, notifications } = makeCtx();
+      await removeMarketplace({ ctx, pi, name: "ghost", scope: "project", cwd });
+      assert.equal(notifications.length, 1);
+      // Explicit scope -> the standalone variant carries the `[project]`
+      // bracket. No raw MarketplaceNotFoundError escapes; state untouched.
+      assert.equal(notifications[0]!.message, "⊘ ghost [project] (failed) {not added}");
+      assert.equal(notifications[0]!.severity, "error");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
