@@ -1,33 +1,32 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.10
-milestone_name: Error Attribution & Message-Type Consistency
-status: Awaiting next milestone
-stopped_at: Phase 46 context gathered
-last_updated: "2026-06-08T03:18:34.294Z"
-last_activity: 2026-06-08 -- Milestone v1.10 completed and archived
+milestone: v1.11
+milestone_name: Notification Summary-Line Grammar
+status: planning
+last_updated: "2026-06-08T15:50:35.637Z"
+last_activity: 2026-06-08
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 10
-  completed_plans: 10
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-06)
+See: .planning/PROJECT.md (updated 2026-06-08)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.10 all phases complete (46-49); ready for milestone audit -> complete -> cleanup
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.11 Notification Summary-Line Grammar -- defining requirements; fix the error/warning label-grammar violation (summary message + cascade as its own block) shipped in v1.10.
 
 ## Current Position
 
-Phase: Milestone v1.10 complete
+Phase: Not started (defining requirements)
 Plan: --
-Status: Awaiting next milestone
-Last activity: 2026-06-08 -- Milestone v1.10 completed and archived
+Status: Defining requirements
+Last activity: 2026-06-08 -- Milestone v1.11 started
 
 ## Performance Metrics
 
