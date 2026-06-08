@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v1.11
 milestone_name: Notification Summary-Line Grammar
-status: planning
-last_updated: "2026-06-08T15:50:35.637Z"
+status: roadmapped
+last_updated: "2026-06-08T16:30:00.000Z"
 last_activity: 2026-06-08
 progress:
-  total_phases: 0
+  total_phases: 1
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -19,14 +19,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-08)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.11 Notification Summary-Line Grammar -- defining requirements; fix the error/warning label-grammar violation (summary message + cascade as its own block) shipped in v1.10.
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.11 Notification Summary-Line Grammar -- roadmapped (Phase 50); fix the error/warning label-grammar violation shipped in v1.10 so every error/warning notification carries a non-empty summary line with the cascade as its own separate block.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 50 (Notification Summary-Line Grammar) -- not started
 Plan: --
-Status: Defining requirements
-Last activity: 2026-06-08 -- Milestone v1.11 started
+Status: Roadmapped -- ready to plan Phase 50
+Last activity: 2026-06-08 -- Milestone v1.11 roadmapped (1 phase, Phase 50; GRAM-01..05 all mapped)
 
 ## Performance Metrics
 
@@ -99,6 +99,8 @@ Last activity: 2026-06-08 -- Milestone v1.11 started
 - v1.4.1 roadmap (2026-05-28): 5 phases (22-26) created by `gsd-roadmapper`. All 8 SNM-\* requirements (SNM-33..SNM-40) mapped: SNM-33 -> Phase 22 (Reload-hint Discipline Family -- 3-gap chokepoint fix at shouldEmitReloadHint); SNM-34 + SNM-35 -> Phase 23 (Version Display Bundle -- tier-2 plugin.json fallback + v#<7hex> renderer transform; serialized within phase per shared/notify.ts convergence constraint); SNM-36 -> Phase 24 (Grammar Consistency -- lspServers REASONS rename + 13 call-site propagation); SNM-37 + SNM-38 + SNM-39 -> Phase 25 (Runtime Publish & Verification -- SNM-37 gates SNM-38/SNM-39; G-MIL-03 indent + G-MIL-07 completion reproduction-or-refutation against v1.4 runtime); SNM-40 -> Phase 26 (GREEN Gate Close). v1.4 phase dirs (15-21) intentionally left under .planning/phases/; v1.4.1 continues phase numbering at 22+ rather than archiving.
 
 - v1.10 roadmap (2026-06-07): 4 phases (46-49) created by `gsd-roadmapper`, continuing phase numbering from v1.9 Phase 45. All 15 v1.10 requirements mapped: TYPE-01..04 -> Phase 46 (Type-Model Foundations -- dedicated marketplace-not-added variant retiring the placeholder-field + runtime renderer carve-out, structural-vs-content reason mixes made unrepresentable, single-source `isInfoKind` guard + `assertNever`, co-occurrence-constrained `MarketplaceNotificationMessage`; lands atomically with catalog/UAT fixtures per the atomic-supersession lesson, mirroring how v1.8 Phase 42 foundations preceded the command phases); ATTR-01/02/03/04/08/09 + SCOPE-01 -> Phase 47 (Plugin-Ops Attribution & Cross-Scope -- install/uninstall/reinstall/update converge on `info`'s `(failed) {not added}` marketplace-subject model through the shared `orchestrators/plugin/shared.ts` scope-resolution chokepoint; cross-scope blind-spot fix; truthful cascade reasons replacing the `{not in manifest}` degradations); ATTR-05/06/07/10 -> Phase 48 (Marketplace-Ops Attribution -- autoupdate/remove/add route preconditions through `notify` as structured rows instead of raw throws; path-source manifest failure stops lying `{network unreachable}` per NFR-5). Phase 49 (Cross-Op Convergence & GREEN-Gate Close) is a verification + closure phase with NO requirement closure -- it proves the audit's Class C cross-op inconsistency is closed across the full op matrix and gates `npm run check` GREEN, mirroring the v1.4 GREEN-gate phases. Phase serialization respects the `shared/notify.ts` convergence constraint (v1.4.1 / v1.5 lesson): Phases 46->47->48 are sequential because all three mutate the notify type model / reasons / renderer; they are NOT run as parallel waves. Canonical reason locked = reuse existing `not added` REASONS member (no new `marketplace not added`). Driven by `.planning/research/v1.10-attribution-audit.md` (23-finding audit) + 2 BACKLOG items.
+
+- v1.11 roadmap (2026-06-08): 1 phase (Phase 50) created by `gsd-roadmapper`, continuing phase numbering from v1.10 Phase 49 (NOT reset to 1). All 5 v1.11 requirements mapped to Phase 50 (Notification Summary-Line Grammar): GRAM-01..05. Single-phase by design -- this is a focused, single-category notification-grammar correctness fix where every requirement converges on one `shared/notify.ts` seam plus a lockstep catalog/fixture byte-rewrite; not over-decomposed. NO split into a type/path-unification wave before the byte-rewrite: the catalog-uat byte-equality gate would go RED between a unification commit and the corrected fixtures, so the `dispatchInfoMessage`/`buildSummaryLine` unification, the failed-subject summary, the new grammar-invariant test, and the corrected `docs/output-catalog.md` (~6 sections) + `catalog-uat` fixtures must land atomically (the v1.3 atomic-supersession lesson, re-applied). Output correction only -- no new commands/flags/REASONS/row bytes; severity routing (`computeSeverity`) and info-severity surfaces unchanged (REQUIREMENTS Out of Scope). Root cause: `dispatchInfoMessage` emits error/warning-severity standalone kinds (`marketplace-not-added`, failed `plugin-info`) body-only -- never prepending `buildSummaryLine` (which returns `""` for them) -- while the cascade arm emits `{summary}\n\n{body}`; the v1.10 catalog encoded the violation as GREEN.
 
 ### Decisions
 
@@ -205,10 +207,10 @@ Additional v1.4.1-scope deferrals:
 
 ## Session Continuity
 
-Last session: 2026-06-07T19:42:36.667Z
-Stopped At: Phase 46 context gathered
-Resume File: .planning/phases/46-type-model-foundations/46-CONTEXT.md
+Last session: 2026-06-08
+Stopped At: v1.11 roadmap created (Phase 50; GRAM-01..05 mapped)
+Resume File: .planning/ROADMAP.md (Phase 50 detail) -- next: /gsd-plan-phase 50
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Plan Phase 50 with /gsd-plan-phase 50

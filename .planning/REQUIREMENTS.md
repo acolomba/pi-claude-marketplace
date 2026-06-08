@@ -38,7 +38,7 @@ Explicitly excluded for v1.11. Documented to prevent scope creep.
 
 ## Traceability
 
-Which phases cover which requirements. Finalized during roadmap creation.
+Which phases cover which requirements. Finalized during roadmap creation (2026-06-08): all 5 requirements map to Phase 50.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
@@ -56,4 +56,4 @@ Which phases cover which requirements. Finalized during roadmap creation.
 
 ---
 *Requirements defined: 2026-06-08*
-*Last updated: 2026-06-08 after v1.11 milestone start*
+*Last updated: 2026-06-08 after v1.11 roadmap creation (Phase 50; GRAM-01..05 mapped)*

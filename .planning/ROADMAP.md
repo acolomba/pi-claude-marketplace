@@ -14,10 +14,17 @@
 - Done **v1.8 Plugin and Marketplace Info Commands** -- Phases 42-44 (shipped 2026-06-04)
 - Done **v1.9 Manifest In-Memory Cache** -- Phase 45 (shipped 2026-06-07)
 - Done **v1.10 Error Attribution & Message-Type Consistency** -- Phases 46-49 (shipped 2026-06-08)
+- In progress **v1.11 Notification Summary-Line Grammar** -- Phase 50 (started 2026-06-08)
 
 For full details of each milestone, see `.planning/milestones/v[X.Y]-ROADMAP.md` and `.planning/milestones/v[X.Y]-REQUIREMENTS.md`.
 
 ## Phases
+
+### In progress v1.11 Notification Summary-Line Grammar (Phase 50)
+
+Fixes the v1.10 notification-grammar violation: every error/warning-severity notification must carry a non-empty summary message on the host `Error:`/`Warning:` label line, with the cascade/detail rendered as its own separate block below. The standalone `marketplace-not-added` and failed `plugin-info` outputs currently glue the host label directly onto the detail row with no summary (e.g. `Error: ⊘ y [user] (failed) {not added}`) because `dispatchInfoMessage` in `shared/notify.ts` emits these error/warning-severity standalone kinds body-only -- it never calls `buildSummaryLine` (which returns `""` for them), unlike the cascade arm that prepends `{summary}\n\n{body}`. Output correction only; no new commands, flags, REASONS, or row bytes.
+
+- [ ] Phase 50: Notification Summary-Line Grammar -- single shared summary-emission path; standalone `marketplace-not-added` + failed `plugin-info` render the failed-subject summary line + separate detail block; grammar-invariant test + corrected catalog/fixtures; `npm run check` GREEN
 
 <details>
 <summary>Done v1.0 successor architecture (Phases 1-7) -- SHIPPED 2026-05-11</summary>
@@ -152,6 +159,24 @@ Two new read-only detail-surface commands (`/claude:plugin marketplace info <nam
 </details>
 
 ## Phase Details
+
+### Phase 50: Notification Summary-Line Grammar
+
+**Goal:** Every error/warning-severity notification carries a non-empty summary message on the host `Error:`/`Warning:` label line, with the cascade/detail rendered as its own separate block below -- emitted through a single shared summary-emission path so the standalone-vs-cascade divergence that caused the v1.10 defect cannot recur.
+
+**Depends on:** v1.10 Phase 49 complete
+
+**Requirements:** GRAM-01, GRAM-02, GRAM-03, GRAM-04, GRAM-05
+
+**Success Criteria** (what must be TRUE):
+
+  1. Running `/claude:plugin install x@y` against a missing marketplace renders a summary line on the host label line (`Error: 1 marketplace operation failed.`) followed by the `⊘ y [user] (failed) {not added}` detail row as its own separate block below -- never the glued single-line `Error: ⊘ y [user] (failed) {not added}`.
+  2. The same corrected two-block shape (non-empty summary line + separate detail block) renders across every standalone `marketplace-not-added` emission -- install, uninstall, reinstall, update, marketplace update, marketplace remove, autoupdate/noautoupdate -- and across the failed `plugin-info` surface (e.g. `plugin info` against an unreadable manifest).
+  3. The summary subject follows the failed-row subject, not the invoking command: a marketplace-subject failure reads `N marketplace operation(s) failed.` and a plugin-subject failure reads `N plugin operation(s) failed.` (the v1.10 ATTR-08 subject-attribution principle: `{not added}` on the marketplace vs `{not in manifest}` on the plugin).
+  4. Standalone and cascade notifications emit their summary through one shared code path in `shared/notify.ts`: `dispatchInfoMessage` no longer bypasses `buildSummaryLine`, and `buildSummaryLine` returns the failed-subject summary for the standalone error/warning kinds -- no standalone-kind path can drift back to a summary-less emission.
+  5. A new cross-cutting grammar-invariant test asserts that every error/warning notification's emitted message has a non-empty summary first line distinct from the cascade block, across all catalog fixtures; `docs/output-catalog.md` (the ~6 sections that encoded "NO summary line. Severity error" -- install/uninstall/reinstall/update/marketplace-update + remove/autoupdate) and the `catalog-uat` fixtures are corrected to the new byte forms in lockstep; `npm run check` exits 0.
+
+**Plans:** TBD
 
 <details>
 <summary>Shipped milestones -- Phases 15-44 historical details (v1.4 → v1.8)</summary>
@@ -923,3 +948,4 @@ Every plugin/marketplace operation reports the true blocker on the correct subje
 | 47. Plugin-Ops Attribution & Cross-Scope                            | v1.10     | 3/3 | Complete    | 2026-06-07 |
 | 48. Marketplace-Ops Attribution                                     | v1.10     | 3/3 | Complete    | 2026-06-08 |
 | 49. Cross-Op Convergence & GREEN-Gate Close                         | v1.10     | 3/3 | Complete    | 2026-06-08 |
+| 50. Notification Summary-Line Grammar                               | v1.11     | 0/0 | Not started | -          |
