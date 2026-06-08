@@ -179,8 +179,9 @@ the GREEN-gate close (Phase 26); state migration for hash-versioned plugins
   Reference for the behavioral-smoke automation (D-25-04, D-25-07).
 - `tests/e2e/pi-runtime-smoke.test.ts` -- the existing runtime-smoke test that
   asserts the extension loads via the installed `pi` bin.
-- `package.json` -- already at `version: 0.2.0` (no bump needed for SNM-37). No
-  `project.json` / `sonar.properties` exist in this repo (the CLAUDE.md note is
+- `package.json` -- already at `version: 0.2.0` (no bump needed for SNM-37).
+  There is no `project.json` in this repo; `sonar-project.properties` does exist
+  (`sonar.projectVersion`) but needs no bump for SNM-37 (the CLAUDE.md note is
   a generic global). Peer deps are `@earendil-works/pi-coding-agent` +
   `@earendil-works/pi-tui` (NOT the stale `@mariozechner/*` from CLAUDE.md).
 

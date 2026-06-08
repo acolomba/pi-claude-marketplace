@@ -821,7 +821,7 @@ Phase 15 introduces no new external dependencies. All required tooling is alread
 - **Run `pre-commit run --files <changed files>` BEFORE `git commit`.** Don't iterate with `--amend` after hook failure.
 - **Never use `--no-verify` or `--no-gpg-sign`.**
 - **If committing from inside a worktree:** prefix with `SKIP=trufflehog`; run `pre-commit run trufflehog --all-files` separately to confirm the scan is clean.
-- **Versioning:** Before creating a PR, offer to bump `project.json` and `sonar.properties`, and record in `CHANGELOG.md`. (Phase 15 in isolation may not need a version bump -- types are not user-visible yet; milestone-end is the natural bump point.)
+- **Versioning:** Before creating a PR, offer to bump `project.json` and `sonar-project.properties`, and record in `CHANGELOG.md`. (Phase 15 in isolation may not need a version bump -- types are not user-visible yet; milestone-end is the natural bump point.)
 - **GSD Workflow Enforcement:** Direct `Edit` / `Write` only after entering through a GSD command (`/gsd-execute-phase` for planned phase work). Phase 15 is the planned-phase path.
 
 ## Sources

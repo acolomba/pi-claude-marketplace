@@ -45,8 +45,8 @@ hash-versioned plugins (inherited Out of Scope).
   git tag is `v0.1.7`) and is **not yet bug-free** -- v1.3, v1.4, and v1.4.1 are
   all iterations toward shipping that single unreleased `0.2.0`. v1.4.1 does NOT
   get its own version number. No `chore(release)` bump, no tag. (Overrides the
-  generic CLAUDE.md "offer to bump version" guidance for this close; also moots
-  the nonexistent `project.json` / `sonar.properties`.)
+  generic CLAUDE.md "offer to bump version" guidance for this close; no
+  `package.json` / `sonar-project.properties` bump, and there is no `project.json`.)
 
 ### CHANGELOG reconciliation -- user-locked
 - **D-26-02:** **Reconcile the CHANGELOG *down* to a single unreleased
@@ -158,8 +158,9 @@ hash-versioned plugins (inherited Out of Scope).
   (`:147`); mark milestone-ready per D-26-04.
 - `.planning/PROJECT.md` -- evolve with the v1.4.1 close (per the post-phase
   evolution pattern).
-- `package.json` -- version field stays `0.2.0` (D-26-01); do NOT edit it. (No
-  `project.json` / `sonar.properties` exist in this repo.)
+- `package.json` -- version field stays `0.2.0` (D-26-01); do NOT edit it. (There
+  is no `project.json`; `sonar-project.properties` exists but its version stays
+  frozen this close.)
 
 ### GREEN-gate command + named-test surfaces (SC#1/#2)
 - `package.json` `scripts` -- `npm run check` (typecheck + ESLint + Prettier +
