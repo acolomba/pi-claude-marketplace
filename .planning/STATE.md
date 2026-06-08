@@ -5,7 +5,7 @@ milestone_name: Error Attribution & Message-Type Consistency
 status: Awaiting next milestone
 stopped_at: Phase 46 context gathered
 last_updated: "2026-06-08T03:18:34.294Z"
-last_activity: 2026-06-08 — Milestone v1.10 completed and archived
+last_activity: 2026-06-08 -- Milestone v1.10 completed and archived
 progress:
   total_phases: 4
   completed_phases: 4
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-06-06)
 ## Current Position
 
 Phase: Milestone v1.10 complete
-Plan: —
+Plan: --
 Status: Awaiting next milestone
-Last activity: 2026-06-08 — Milestone v1.10 completed and archived
+Last activity: 2026-06-08 -- Milestone v1.10 completed and archived
 
 ## Performance Metrics
 
