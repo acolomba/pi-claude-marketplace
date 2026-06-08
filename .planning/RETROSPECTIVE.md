@@ -2,6 +2,73 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v1.10 -- Error Attribution & Message-Type Consistency
+
+**Shipped:** 2026-06-08
+**Phases:** 4 (46-49) | **Plans:** 10 | **Tasks:** 28 | **Tests:** 1473 -> 1513
+
+### What Was Built
+
+A type-model-first attribution overhaul. Phase 46 made the attribution-drift message shapes
+unrepresentable (dedicated `marketplace-not-added` variant, `ContentReason` exclusion, per-status
+`MarketplaceNotificationMessage` discriminated union, single-source `isInfoKind`/`assertNever`
+guard) -- byte-neutral. Phases 47-48 then converged every plugin and marketplace operation on
+`info`'s `(failed) {not added}` marketplace-subject model, replaced lying `{not in manifest}` /
+`{network unreachable}` fallbacks with truthful reasons, and added cross-scope reporting. Phase 49
+proved Class C cross-op convergence with a dedicated 8-orchestrator byte-identity test and closed
+the last residual gap (marketplace update raw-throw).
+
+### What Worked
+
+- **Type-model-first sequencing.** Landing the unrepresentable-shapes foundation (Phase 46) before
+  the behavior changes meant the compiler enforced the convergence: a wrong attribution shape simply
+  did not type-check. The `ContentReason` retype rippling into the orchestrator outcome vocabulary
+  strengthened the invariant end-to-end (a sanctioned executor deviation).
+- **Serialization through `shared/notify.ts`.** Per the v1.4.1/v1.5 convergence lesson, phases (and
+  plans within a phase) were strictly serialized via `depends_on` rather than parallelized, because
+  every change converged on the notify type model / reasons / renderer. Zero merge conflicts.
+- **Atomic byte-pairing.** Every rendered-byte change landed with its `docs/output-catalog.md`
+  catalog state + `catalog-uat` fixture in the same GREEN commit -- no intermediate RED.
+- **Adversarial code review caught a real blocker.** The Phase 49 review found CR-01 (a concurrent-
+  removal race emitting a false `{network unreachable}` -- the exact lie the milestone exists to
+  eliminate) that the per-op tests missed; fixed before close.
+
+### What Was Inefficient
+
+- Two executor deviations per phase were consistently needed for SonarJS cognitive-complexity
+  ceilings (helper extraction) -- predictable, could be pre-empted in planning for chokepoint files.
+- `mdformat` reformats `docs/output-catalog.md` at commit time (not in `npm run check`), forcing a
+  restage-and-recheck loop to confirm byte-equality survived the reformat. Worth a pre-commit-aware
+  catalog format step.
+- The `D-46-03a` decision (whether the `failed` marketplace arm carries reasons) was deferred from
+  Phase 46 to Phase 48, where it became the linchpin `MpFailed.reasons?` touch -- correct call, but
+  it meant Phase 48 re-opened the Phase 46 type model (one inverted proof).
+
+### Patterns Established
+
+- **Standalone top-level emission for marketplace-absent** (D-47-A): the precondition fails before
+  any cascade, so it emits a standalone variant matching `info`, not an embedded cascade row.
+- **`remove.ts` catch-and-reroute** as the reusable shape for routing a raw `MarketplaceNotFoundError`
+  precondition through `notify` (reused by reinstall, update, autoupdate, and the Phase 49 fix).
+- **Cross-op byte-identity matrix test** as the first-class Class-C regression lock (invoke every
+  real orchestrator against the precondition; assert all bytes identical).
+
+### Key Lessons
+
+- A convergence milestone needs a convergence PROOF, not just per-op fixes -- the dedicated matrix
+  test is what makes "Class C closed" verifiable and regression-locked.
+- "Lying reasons" hide on rare edges (concurrent-removal TOCTOU) that per-op happy-path tests miss;
+  adversarial review + a cross-op no-`{network unreachable}` cross-check are the safety net.
+
+### Cost Observations
+
+- Model mix: opus for research / planning / execution; sonnet for plan-checking / code review /
+  verification / integration. Run end-to-end via `/gsd:autonomous` (discuss skipped per
+  `workflow.skip_discuss`).
+- Sessions: 1 (single autonomous run).
+- Notable: orchestrator-owned commits via the pre-commit hook path (never `--no-verify`) handled the
+  `fix-unicode-dashes` / `mdformat` fixer-modifies-then-aborts loop the GSD commit verb does not.
+
 ## Milestone: v1.9 -- Manifest In-Memory Cache
 
 **Shipped:** 2026-06-07
