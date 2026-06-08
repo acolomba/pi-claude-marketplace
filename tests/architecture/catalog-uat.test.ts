@@ -2210,6 +2210,44 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
   }
 });
 
+test("catalog UAT inverse walk: every FIXTURES (section,state) has a matching catalog annotation (no orphan/stale fixture)", async () => {
+  // SC#3 both-directions gate. The forward walk above (catalog -> fixture)
+  // catches an UNDOCUMENTED-fixture gap (a catalog state with no fixture). This
+  // inverse walk (fixture -> catalog) catches an ORPHAN fixture: a FIXTURES
+  // entry with no corresponding `<!-- catalog-state: STATE -->` annotation is
+  // silently never exercised by the forward driver. Asserting both directions
+  // makes "no orphaned/stale catalog state remains" (SC#3) a real gate. When
+  // Plans 49-01 / 49-02 added new states + fixtures, this confirms they stay
+  // paired (every fixture has a catalog annotation).
+  const catalog = await readFile(CATALOG_PATH, "utf8");
+  const examples = loadCatalogExamples(catalog);
+
+  // Set of `${section}::${state}` keys for every parsed catalog annotation.
+  const annotated = new Set<string>(examples.map((e) => `${e.section}::${e.state}`));
+
+  // Iterate every FIXTURES (section,state) key; collect orphans -- fixtures with
+  // no matching catalog annotation.
+  const orphans: string[] = [];
+  for (const section of Object.keys(FIXTURES)) {
+    const states = FIXTURES[section];
+    if (states === undefined) {
+      continue;
+    }
+
+    for (const state of Object.keys(states)) {
+      if (!annotated.has(`${section}::${state}`)) {
+        orphans.push(`[ORPHAN FIXTURE] section=${section} state=${state}`);
+      }
+    }
+  }
+
+  if (orphans.length > 0) {
+    assert.fail(
+      `catalog UAT inverse-walk failures (${orphans.length}) -- FIXTURES entries with no catalog annotation:\n${orphans.join("\n")}`,
+    );
+  }
+});
+
 test("loadCatalogExamples: returns no examples when the catalog has no annotations", () => {
   const noAnnotations =
     "# Bare catalog\n\n## `/claude:plugin list`\n\n```text\n(no plugins)\n```\n";
