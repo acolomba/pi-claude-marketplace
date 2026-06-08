@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.11
 milestone_name: Notification Summary-Line Grammar
-status: verifying
+status: Awaiting next milestone
 stopped_at: Completed 50-01-PLAN.md
-last_updated: "2026-06-08T22:27:02.992Z"
-last_activity: 2026-06-08
+last_updated: "2026-06-08T22:38:15.896Z"
+last_activity: 2026-06-08 — Milestone v1.11 completed and archived
 progress:
-  total_phases: 1
+  total_phases: 28
   completed_phases: 1
   total_plans: 1
   completed_plans: 1
-  percent: 100
+  percent: 4
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-08)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 50 -- notification-summary-line-grammar
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.11 shipped (Notification Summary-Line Grammar); planning next milestone (`/gsd-new-milestone`).
 
 ## Current Position
 
-Phase: 50 (notification-summary-line-grammar) -- COMPLETE & VERIFIED
-Plan: 1 of 1 complete
-Status: All v1.11 phases complete -- ready for milestone audit/close
-Last activity: 2026-06-08 -- Phase 50 verified PASSED (8/8 must-haves; npm run check GREEN 1515/0). Code-review WR-01/WR-02 fixed (5e671d0: failed plugin-info no longer hides in the both-scopes info cascade). Quick task 260608-npa removed the brittle README-prose reinstall-docs test.
+Phase: Milestone v1.11 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-06-08 — Milestone v1.11 completed and archived
 
 ## Performance Metrics
 
@@ -217,4 +217,4 @@ Resume File: None
 
 ## Operator Next Steps
 
-- Plan Phase 50 with /gsd-plan-phase 50
+- Start the next milestone with /gsd-new-milestone

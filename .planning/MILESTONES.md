@@ -1,5 +1,15 @@
 # Milestones: pi-claude-marketplace
 
+## v1.11 Notification Summary-Line Grammar (Shipped: 2026-06-08)
+
+**Phases completed:** 1 phases, 1 plans, 3 tasks
+
+**Key accomplishments:**
+
+- Every error/warning notification now carries a non-empty summary first line with the detail rendered as its own block, emitted through ONE shared `emitWithSummary` seam so the standalone-vs-cascade divergence that caused the v1.10 glued-label defect cannot recur.
+
+---
+
 ## v1.10 Error Attribution & Message-Type Consistency (Shipped: 2026-06-08)
 
 **Phases completed:** 4 phases, 10 plans, 28 tasks
