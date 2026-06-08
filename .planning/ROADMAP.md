@@ -985,7 +985,21 @@ Plans:
 4. A path-source malformed/unreadable manifest during `marketplace update` reports a manifest-specific reason (e.g. `invalid manifest`), never `{network unreachable}` -- the `refreshOneMarketplace` `?? ["network unreachable"]` default no longer fires for a path source, and a `SyntaxError` / schema `Error` is classified to the manifest reason; the path-source `marketplace update` path performs no network access (ATTR-10, NFR-5, audit M-3 Class A+D).
 5. `npm run check` exits 0; the edge handlers for `remove` / `update` / `add` have try/notify discipline (no bare-registered handler lets a precondition error escape raw); every new structured `(failed)` row is paired with a catalog state in `docs/output-catalog.md` and a `tests/architecture/catalog-uat.test.ts` fixture, byte-equality GREEN (NFR-6).
 
-**Plans:** TBD
+**Plans:** 3 plans
+
+Plans:
+
+**Wave 1** *(serialized: each plan depends on the prior; never run concurrently -- shared `shared/notify.ts` / catalog convergence, like Phase 47)*
+
+- [ ] 48-01-PLAN.md -- D-48-A foundation (MpFailed.reasons? + renderer + inverted proof) + typed InvalidMarketplaceManifestError + `marketplace add` precondition routing (ATTR-07; D-48-A/D-48-B-typed-error)
+
+**Wave 2** *(blocked on 48-01 completion)*
+
+- [ ] 48-02-PLAN.md -- `autoupdate`/`noautoupdate` + `marketplace remove` missing-marketplace converge on standalone `(failed) {not added}` (ATTR-05, ATTR-06; D-48-C Shape 1, reuse Phase 46 MarketplaceNotAddedMessage)
+
+**Wave 3** *(blocked on 48-02 completion)*
+
+- [ ] 48-03-PLAN.md -- `marketplace update` path-source manifest reason classification `{invalid manifest}` (never `{network unreachable}`) + bare-(failed) byte-regression locks + phase GREEN gate (ATTR-10, NFR-5; D-48-B Option B2)
 
 ### Phase 49: Cross-Op Convergence & GREEN-Gate Close
 
