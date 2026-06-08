@@ -564,25 +564,43 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   }
 
   // (c) Two marketplaces found (BOTH scopes hold the marketplace).
-  // Emit the fan-out variant `PluginInfoCascadeMessage`. `blocks`
-  // order follows the iteration order of the outer scopes loop above
-  // (project-first per MSG-GR-3). The destructure-and-rebuild proves
-  // the non-empty tuple shape that the cascade type requires.
+  // Build a block per scope, then SEPARATE `(failed)` blocks (e.g.
+  // `{not in manifest}` / `{unreadable}`) from the read-only info blocks
+  // before composing the fan-out. The `plugin-info-cascade` wrapper routes to
+  // info severity with NO summary line, so a `(failed)` block buried inside it
+  // would render summary-less -- exactly the standalone-vs-cascade divergence
+  // this surface closes (GRAM-04): the same not-in-manifest failure is LOUD on
+  // the single-scope `plugin-info` arm but would be SILENT here. Mirror
+  // `getMarketplaceInfo`'s failure separation -- each failed scope is surfaced
+  // as its own standalone `plugin-info` notify (which routes to `error` + the
+  // `1 plugin operation failed.` summary via the single arm), and only the info
+  // blocks form the cascade. This intentionally breaks IL-2's single-notify
+  // rule on the partial-failure path so a failure in one scope cannot hide
+  // behind a healthy other-scope render; callers wanting strict IL-2 must pass
+  // `--scope`. Block order follows the project-first scope iteration (MSG-GR-3).
   const blocks = await Promise.all(
     found.map((f) => buildBlock(opts.marketplace, opts.plugin, f.scope, f.record)),
   );
-  const [head, ...tail] = blocks;
-  if (head === undefined) {
-    // Unreachable: the (a) / (b) branches above already returned for
-    // empty / single-element `found`; here `blocks.length >= 2`.
-    return;
+  const infoBlocks = blocks.filter((b) => b.plugin.status !== "failed");
+  const failedBlocks = blocks.filter((b) => b.plugin.status === "failed");
+
+  // Info blocks: a single survivor renders as the bare single-scope shape
+  // (no cascade wrapping); two render as the fan-out cascade. The destructure
+  // proves the non-empty tuple shape the cascade type requires.
+  const [firstInfo, ...remainingInfo] = infoBlocks;
+  if (firstInfo !== undefined && remainingInfo.length === 0) {
+    notify(opts.ctx, opts.pi, firstInfo);
+  } else if (firstInfo !== undefined) {
+    notify(opts.ctx, opts.pi, {
+      kind: "plugin-info-cascade",
+      blocks: [firstInfo, ...remainingInfo],
+    });
   }
 
-  const message: NotificationMessage = {
-    kind: "plugin-info-cascade",
-    blocks: [head, ...tail],
-  };
-  notify(opts.ctx, opts.pi, message);
+  // Surface each failed scope as its own `error`-severity notify (GRAM-04).
+  for (const failure of failedBlocks) {
+    notify(opts.ctx, opts.pi, failure);
+  }
 }
 
 // Test-only re-export of the shared classifier so callers exercising

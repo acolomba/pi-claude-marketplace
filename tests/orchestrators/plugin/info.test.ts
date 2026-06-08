@@ -506,6 +506,66 @@ test("UXG-08: missing plugin in known marketplace emits `⊘ <plugin> (failed) {
 });
 
 // ---------------------------------------------------------------------------
+// (h2) GRAM-04: a `(failed)` block on the BOTH-scopes path must NOT hide inside
+// the info-severity `plugin-info-cascade`. It is separated out and surfaced as
+// its own `error` + summary notify -- the same LOUD shape the single-scope arm
+// (test h) produces. Guards against the standalone-vs-cascade divergence
+// resurfacing on the fan-out path (Phase-50 code review WR-01/WR-02).
+// ---------------------------------------------------------------------------
+
+test("GRAM-04: both-scopes missing plugin emits per-scope `error` + summary, NOT a silent info cascade", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const projectRoot = path.join(cwd, ".pi");
+    // `mp` exists in BOTH scopes, but `ghost` is in neither manifest -> each
+    // scope yields a `(failed) {not in manifest}` block.
+    await seedPathMarketplace({
+      scope: "project",
+      scopeRoot: projectRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [{ name: "real", source: "./real", version: "1.0.0" }] },
+      installablePluginDirs: ["real"],
+    });
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [{ name: "real", source: "./real", version: "1.0.0" }] },
+      installablePluginDirs: ["real"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "ghost", cwd });
+
+    // Two failed scopes -> two standalone error notifications (project-first),
+    // NOT one info-severity cascade. The failure can never be summary-less.
+    assert.equal(notifications.length, 2, "each failed scope surfaces its own notify");
+    assert.equal(notifications[0]!.severity, "error");
+    assert.equal(notifications[1]!.severity, "error");
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "1 plugin operation failed.",
+        "",
+        "● mp [project] <no autoupdate>",
+        "  ⊘ ghost (failed) {not in manifest}",
+      ].join("\n"),
+    );
+    assert.equal(
+      notifications[1]!.message,
+      [
+        "1 plugin operation failed.",
+        "",
+        "● mp [user] <no autoupdate>",
+        "  ⊘ ghost (failed) {not in manifest}",
+      ].join("\n"),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // (h-WR-01) WR-01: the `narrowProbeError` classifier
 // in `info.ts` must stay in lockstep with `list.ts::narrowProbeError`.
 // The orchestrator threads the closed-set Reason ladder that list.ts
