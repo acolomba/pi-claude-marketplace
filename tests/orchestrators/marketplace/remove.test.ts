@@ -113,7 +113,10 @@ test("ATTR-06 (S4): --scope omitted + name not in either scope renders standalon
       // Bare form, absent from both scopes -> NO scope bracket. The standalone
       // not-added variant routes via isInfoKind -> error severity, no summary
       // prefix.
-      assert.equal(notifications[0]!.message, "⊘ absent-mp-zzz-9999 (failed) {not added}");
+      assert.equal(
+        notifications[0]!.message,
+        "1 marketplace operation failed.\n\n⊘ absent-mp-zzz-9999 (failed) {not added}",
+      );
       assert.equal(notifications[0]!.severity, "error");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -132,7 +135,10 @@ test("ATTR-06 (S3): explicit --scope + name absent in that scope renders standal
       assert.equal(notifications.length, 1);
       // Explicit scope -> the standalone variant carries the `[project]`
       // bracket. No raw MarketplaceNotFoundError escapes; state untouched.
-      assert.equal(notifications[0]!.message, "⊘ ghost [project] (failed) {not added}");
+      assert.equal(
+        notifications[0]!.message,
+        "1 marketplace operation failed.\n\n⊘ ghost [project] (failed) {not added}",
+      );
       assert.equal(notifications[0]!.severity, "error");
     } finally {
       await rm(cwd, { recursive: true, force: true });

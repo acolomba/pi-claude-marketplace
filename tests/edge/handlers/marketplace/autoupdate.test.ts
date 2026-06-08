@@ -109,7 +109,10 @@ test("shim :: named form propagates name", async () => {
     // ATTR-05: name-absent routes to the standalone {not added} variant
     // (byte-regression sentinel at the edge-handler boundary). Bare form
     // carries first.scope == "project" (SC-6 project-first iteration).
-    assert.equal(notifications[0]!.message, "⊘ mymkt [project] (failed) {not added}");
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ mymkt [project] (failed) {not added}",
+    );
   });
 });
 

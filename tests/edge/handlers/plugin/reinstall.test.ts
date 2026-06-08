@@ -163,7 +163,10 @@ test("shim :: @marketplace form calls reinstallPlugins marketplace target", asyn
     // standalone `{not added}` with NO bracket (re-attributed from the former
     // `{not found}`). Severity error.
     assert.equal(notifications[0]?.severity, "error");
-    assert.equal(notifications[0]?.message ?? "", "⊘ mymkt (failed) {not added}");
+    assert.equal(
+      notifications[0]?.message ?? "",
+      "1 marketplace operation failed.\n\n⊘ mymkt (failed) {not added}",
+    );
   });
 });
 
@@ -176,7 +179,10 @@ test("shim :: plugin@marketplace form calls reinstallPlugins plugin target", asy
     // ATTR-03 / D-47-A: bare `<plugin>@<marketplace>` form absent in both
     // scopes -> standalone `{not added}` with NO bracket. Severity error.
     assert.equal(notifications[0]?.severity, "error");
-    assert.equal(notifications[0]?.message ?? "", "⊘ mymkt (failed) {not added}");
+    assert.equal(
+      notifications[0]?.message ?? "",
+      "1 marketplace operation failed.\n\n⊘ mymkt (failed) {not added}",
+    );
   });
 });
 
@@ -200,7 +206,10 @@ test("shim :: --scope works before and after reinstall ref", async () => {
     // `[project]` bracket (re-attributed from the former synthesized phantom
     // target -> `(skipped) {not installed}`). Severity error.
     assert.equal(second.notifications[0]?.severity, "error");
-    assert.equal(second.notifications[0]?.message ?? "", "⊘ mymkt [project] (failed) {not added}");
+    assert.equal(
+      second.notifications[0]?.message ?? "",
+      "1 marketplace operation failed.\n\n⊘ mymkt [project] (failed) {not added}",
+    );
   });
 });
 

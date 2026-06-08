@@ -834,7 +834,7 @@ test("ATTR-03/SCOPE-01: explicit-scope-plugin reinstall of an other-scope-only t
       // No raw throw escapes; the entrypoint returns [] before the cascade.
       assert.deepEqual([...outcomes], []);
       const body = notifications.at(-1)?.message ?? "";
-      assert.equal(body, "⊘ mp [project] (failed) {not added}");
+      assert.equal(body, "1 marketplace operation failed.\n\n⊘ mp [project] (failed) {not added}");
       assert.equal(notifications.at(-1)?.severity, "error");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -872,7 +872,7 @@ test("ATTR-03/SCOPE-01: explicit-scope-marketplace reinstall of a not-added mark
 
       assert.deepEqual([...outcomes], []);
       const body = notifications.at(-1)?.message ?? "";
-      assert.equal(body, "⊘ mp [project] (failed) {not added}");
+      assert.equal(body, "1 marketplace operation failed.\n\n⊘ mp [project] (failed) {not added}");
       assert.equal(notifications.at(-1)?.severity, "error");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -910,7 +910,7 @@ test("ATTR-03: bare reinstall of a marketplace absent in BOTH scopes emits stand
 
       assert.deepEqual([...outcomes], []);
       const body = notifications.at(-1)?.message ?? "";
-      assert.equal(body, "⊘ ghost-mp (failed) {not added}");
+      assert.equal(body, "1 marketplace operation failed.\n\n⊘ ghost-mp (failed) {not added}");
       assert.equal(notifications.at(-1)?.severity, "error");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -2222,7 +2222,10 @@ test("GAP-18: reinstallPlugins enumeration miss for an other-scope-only marketpl
 
       assert.deepEqual([...outcomes], []);
       const body = notifications.at(-1)?.message ?? "";
-      assert.equal(body, "⊘ onlyuser [project] (failed) {not added}");
+      assert.equal(
+        body,
+        "1 marketplace operation failed.\n\n⊘ onlyuser [project] (failed) {not added}",
+      );
       assert.equal(notifications.at(-1)?.severity, "error");
     } finally {
       await rm(cwd, { recursive: true, force: true });

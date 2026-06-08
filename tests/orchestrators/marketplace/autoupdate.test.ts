@@ -337,7 +337,10 @@ test("ATTR-05: single-name flip with name absent from BOTH scopes surfaces stand
     // project-before-user, so the bracket is `[project]`. The standalone
     // not-added variant routes via isInfoKind -> error severity with NO
     // summary prefix.
-    assert.equal(notifications[0]!.message, "⊘ absent-zzz-9999 [project] (failed) {not added}");
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ absent-zzz-9999 [project] (failed) {not added}",
+    );
     // D-18-05 severity ladder: not-added -> error.
     assert.equal(notifications[0]!.severity, "error");
   });
@@ -361,7 +364,10 @@ test("ATTR-05: explicit-scope flip of a missing marketplace surfaces standalone 
     // ATTR-05: the explicit-scope MarketplaceNotFoundError converts to the
     // standalone `{not added}` variant carrying the requested `[project]`
     // bracket -- the former synthetic-child `{not found}` reason is gone.
-    assert.equal(notifications[0]!.message, "⊘ absent-explicit [project] (failed) {not added}");
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ absent-explicit [project] (failed) {not added}",
+    );
     assert.doesNotMatch(notifications[0]!.message, /\{not found\}/);
     assert.equal(notifications[0]!.severity, "error");
   });

@@ -81,7 +81,10 @@ test("shim :: valid name reaches the orchestrator; bare-form miss routes to `{no
     // handler reached the orchestrator AND that no precondition error escapes.
     await assert.doesNotReject(async () => handler("ghost", ctx));
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "⊘ ghost (failed) {not added}");
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ ghost (failed) {not added}",
+    );
     assert.equal(notifications[0]!.severity, "error");
   });
 });
@@ -96,7 +99,10 @@ test("shim :: --scope propagated; explicit-scope miss routes to `{not added}` WI
     // carrying the `[project]` bracket; no error escapes the handler.
     await assert.doesNotReject(async () => handler("ghost --scope project", ctx));
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "⊘ ghost [project] (failed) {not added}");
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ ghost [project] (failed) {not added}",
+    );
     assert.equal(notifications[0]!.severity, "error");
   });
 });

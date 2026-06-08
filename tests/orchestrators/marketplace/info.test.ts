@@ -327,7 +327,10 @@ test("INFO-04: --scope user mismatch (mp only in project) emits bare `{not added
     const { ctx, pi, notifications } = makeCtx();
     await getMarketplaceInfo({ ctx, pi, name: "p-only", scope: "user", cwd });
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "⊘ p-only [user] (failed) {not added}");
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ p-only [user] (failed) {not added}",
+    );
     assert.equal(notifications[0]!.severity, "error");
   });
 });
@@ -357,7 +360,10 @@ test("INFO-04: --scope project mismatch (mp only in user) emits bare `{not added
     const { ctx, pi, notifications } = makeCtx();
     await getMarketplaceInfo({ ctx, pi, name: "u-only", scope: "project", cwd });
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "⊘ u-only [project] (failed) {not added}");
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ u-only [project] (failed) {not added}",
+    );
     assert.equal(notifications[0]!.severity, "error");
   });
 });
@@ -367,7 +373,10 @@ test("D-03: absent from BOTH scopes with no --scope renders `(failed) {not added
     const { ctx, pi, notifications } = makeCtx();
     await getMarketplaceInfo({ ctx, pi, name: "ghost-mp", cwd });
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "⊘ ghost-mp (failed) {not added}");
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ ghost-mp (failed) {not added}",
+    );
     assert.equal(notifications[0]!.severity, "error");
     assert.ok(
       !notifications[0]!.message.includes("[user]") &&

@@ -1020,7 +1020,10 @@ test("ATTR-02 @<mp>: unknown marketplace with explicit scope -> standalone {not 
       assert.equal(notifications[0]?.severity, "error");
       // Standalone marketplace-subject row; bracket carries the REQUESTED scope
       // (SCOPE-01); no summary line, no cause-chain trailer.
-      assert.equal(notifications[0]?.message, "⊘ ghost-mp [project] (failed) {not added}");
+      assert.equal(
+        notifications[0]?.message,
+        "1 marketplace operation failed.\n\n⊘ ghost-mp [project] (failed) {not added}",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1045,7 +1048,10 @@ test("ATTR-02 <plugin>@<mp>: unknown marketplace with explicit scope -> standalo
 
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
-      assert.equal(notifications[0]?.message, "⊘ ghost-mp [user] (failed) {not added}");
+      assert.equal(
+        notifications[0]?.message,
+        "1 marketplace operation failed.\n\n⊘ ghost-mp [user] (failed) {not added}",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1070,7 +1076,10 @@ test("ATTR-02 @<mp> bare: unknown marketplace absent from both scopes -> standal
 
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
-      assert.equal(notifications[0]?.message, "⊘ ghost-mp (failed) {not added}");
+      assert.equal(
+        notifications[0]?.message,
+        "1 marketplace operation failed.\n\n⊘ ghost-mp (failed) {not added}",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1105,7 +1114,10 @@ test("SCOPE-01 @<mp>: marketplace present only in other scope -> standalone {not
 
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
-      assert.equal(notifications[0]?.message, "⊘ mp [user] (failed) {not added}");
+      assert.equal(
+        notifications[0]?.message,
+        "1 marketplace operation failed.\n\n⊘ mp [user] (failed) {not added}",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1142,7 +1154,10 @@ test("SCOPE-01 <plugin>@<mp>: marketplace present only in other scope -> standal
 
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
-      assert.equal(notifications[0]?.message, "⊘ mp [user] (failed) {not added}");
+      assert.equal(
+        notifications[0]?.message,
+        "1 marketplace operation failed.\n\n⊘ mp [user] (failed) {not added}",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

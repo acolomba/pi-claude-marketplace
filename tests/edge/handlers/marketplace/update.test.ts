@@ -111,7 +111,10 @@ test("shim :: named /marketplace update <name> calls updateMarketplace with name
     // proving control reached updateMarketplace with the requested name.
     await handler("mymkt", ctx);
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "⊘ mymkt (failed) {not added}");
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ mymkt (failed) {not added}",
+    );
     assert.equal(notifications[0]!.severity, "error");
   });
 });

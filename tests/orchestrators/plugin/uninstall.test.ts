@@ -512,7 +512,10 @@ test("ATTR-04 / M4: marketplace record itself absent -> LOUD {not added} (explic
       });
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
-      assert.equal(notifications[0]?.message, "⊘ missing-mp [project] (failed) {not added}");
+      assert.equal(
+        notifications[0]?.message,
+        "1 marketplace operation failed.\n\n⊘ missing-mp [project] (failed) {not added}",
+      );
       // No state mutation -- the resolver short-circuits before the guard.
       const after = await loadState(locations.extensionRoot);
       assert.deepEqual(after.marketplaces, {});
@@ -558,7 +561,10 @@ test("SCOPE-01: explicit-scope uninstall of an other-scope-only target -> LOUD {
       // operator infers the other scope. The user record is untouched.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
-      assert.equal(notifications[0]?.message, "⊘ mp [project] (failed) {not added}");
+      assert.equal(
+        notifications[0]?.message,
+        "1 marketplace operation failed.\n\n⊘ mp [project] (failed) {not added}",
+      );
       const userAfter = await loadState(userLocations.extensionRoot);
       assert.ok("hello" in (userAfter.marketplaces["mp"]?.plugins ?? {}), "user record retained");
     } finally {

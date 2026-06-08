@@ -90,7 +90,10 @@ test("shim :: <plugin>@<marketplace> form calls updatePlugins with single-plugin
     // no raw `{not found}` misattribution. No bracket (absent-from-both form).
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
-    assert.equal(notifications[0]!.message, "⊘ mymkt (failed) {not added}");
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ mymkt (failed) {not added}",
+    );
   });
 });
 
@@ -103,7 +106,10 @@ test("shim :: bare @<marketplace> form calls updatePlugins with all-plugins-one-
     // `(failed) {not added}` (no bracket: absent in both scopes, no `--scope`).
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
-    assert.equal(notifications[0]!.message, "⊘ mymkt (failed) {not added}");
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ mymkt (failed) {not added}",
+    );
   });
 });
 
@@ -157,7 +163,10 @@ test("shim :: @<mp> form + --map-model is accepted; control reaches updatePlugin
     assert.doesNotMatch(notifications[0]!.message, /Usage: \/claude:plugin update/);
     // ATTR-02: control reaches updatePlugins, which emits the standalone
     // `{not added}` for the missing marketplace (not the raw `{not found}`).
-    assert.equal(notifications[0]!.message, "⊘ mymkt (failed) {not added}");
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ mymkt (failed) {not added}",
+    );
   });
 });
 
@@ -171,7 +180,10 @@ test("shim :: pl@<mp> form + --map-model is accepted; control reaches updatePlug
     assert.doesNotMatch(notifications[0]!.message, /Usage: \/claude:plugin update/);
     // ATTR-02: control reaches updatePlugins, which emits the standalone
     // `{not added}` for the missing marketplace (not the raw `{not found}`).
-    assert.equal(notifications[0]!.message, "⊘ mymkt (failed) {not added}");
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ mymkt (failed) {not added}",
+    );
   });
 });
 

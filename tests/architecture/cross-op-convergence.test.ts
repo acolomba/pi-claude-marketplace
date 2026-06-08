@@ -102,8 +102,9 @@ async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Pr
 }
 
 const NAME = "ghost-mp";
-const CANONICAL_EXPLICIT = "⊘ ghost-mp [project] (failed) {not added}";
-const CANONICAL_BARE = "⊘ ghost-mp (failed) {not added}";
+const CANONICAL_EXPLICIT =
+  "1 marketplace operation failed.\n\n⊘ ghost-mp [project] (failed) {not added}";
+const CANONICAL_BARE = "1 marketplace operation failed.\n\n⊘ ghost-mp (failed) {not added}";
 
 interface Emission {
   body: string;

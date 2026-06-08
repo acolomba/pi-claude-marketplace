@@ -387,7 +387,10 @@ test("ATTR-01 / M1: marketplace itself absent -> standalone {not added} on the m
       // column-0 row carrying the requested-scope bracket, NO summary line,
       // NO cause-chain trailer. Byte-identical to `info`'s scope-mismatch
       // not-added state.
-      assert.equal(notifications[0]?.message, "⊘ ghost-mp [project] (failed) {not added}");
+      assert.equal(
+        notifications[0]?.message,
+        "1 marketplace operation failed.\n\n⊘ ghost-mp [project] (failed) {not added}",
+      );
       assert.equal(outcome.status, "failed");
 
       // State unchanged -- no marketplace container was synthesized.
@@ -1325,7 +1328,10 @@ test("CMP-4 / PI-16: user-target install cannot source a project-only marketplac
       // `{not in manifest}` on a plugin row.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
-      assert.equal(notifications[0]?.message, "⊘ mp [user] (failed) {not added}");
+      assert.equal(
+        notifications[0]?.message,
+        "1 marketplace operation failed.\n\n⊘ mp [user] (failed) {not added}",
+      );
 
       const userAfter = await loadState(userLocations.extensionRoot);
       const projectAfter = await loadState(projectLocations.extensionRoot);

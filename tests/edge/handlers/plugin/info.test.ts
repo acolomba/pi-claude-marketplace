@@ -113,7 +113,10 @@ test("shim :: `info foo@mp` delegates with scope: undefined; absent-from-both ->
     const handler = makePluginInfoHandler(makePi());
     await handler("foo@mp", ctx);
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "⊘ mp (failed) {not added}");
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ mp (failed) {not added}",
+    );
     assert.equal(notifications[0]!.severity, "error");
   });
 });
@@ -124,7 +127,10 @@ test("shim :: `info foo@mp --scope user` delegates with scope: 'user'; absent ->
     const handler = makePluginInfoHandler(makePi());
     await handler("foo@mp --scope user", ctx);
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "⊘ mp [user] (failed) {not added}");
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ mp [user] (failed) {not added}",
+    );
     assert.equal(notifications[0]!.severity, "error");
   });
 });
@@ -135,7 +141,10 @@ test("shim :: `info foo@mp --scope project` delegates with scope: 'project'", as
     const handler = makePluginInfoHandler(makePi());
     await handler("foo@mp --scope project", ctx);
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "⊘ mp [project] (failed) {not added}");
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ mp [project] (failed) {not added}",
+    );
     assert.equal(notifications[0]!.severity, "error");
   });
 });

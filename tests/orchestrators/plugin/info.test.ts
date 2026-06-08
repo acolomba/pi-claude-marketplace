@@ -443,7 +443,10 @@ test("INFO-04: --scope user mismatch (mp only in project) emits bare `⊘ <mp> [
       cwd,
     });
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "⊘ p-only [user] (failed) {not added}");
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ p-only [user] (failed) {not added}",
+    );
     assert.equal(notifications[0]!.severity, "error");
   });
 });
@@ -457,7 +460,10 @@ test("D-03: absent from BOTH scopes with no --scope renders `(failed) {not added
     const { ctx, pi, notifications } = makeCtx();
     await getPluginInfo({ ctx, pi, marketplace: "ghost-mp", plugin: "ghost", cwd });
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "⊘ ghost-mp (failed) {not added}");
+    assert.equal(
+      notifications[0]!.message,
+      "1 marketplace operation failed.\n\n⊘ ghost-mp (failed) {not added}",
+    );
     assert.equal(notifications[0]!.severity, "error");
     assert.ok(
       !notifications[0]!.message.includes("[user]") &&
@@ -489,7 +495,12 @@ test("UXG-08: missing plugin in known marketplace emits `⊘ <plugin> (failed) {
     assert.equal(notifications[0]!.severity, "error");
     assert.equal(
       notifications[0]!.message,
-      ["● mp [user] <no autoupdate>", "  ⊘ ghost (failed) {not in manifest}"].join("\n"),
+      [
+        "1 plugin operation failed.",
+        "",
+        "● mp [user] <no autoupdate>",
+        "  ⊘ ghost (failed) {not in manifest}",
+      ].join("\n"),
     );
   });
 });
