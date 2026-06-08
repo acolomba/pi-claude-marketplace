@@ -176,7 +176,11 @@ Two new read-only detail-surface commands (`/claude:plugin marketplace info <nam
   4. Standalone and cascade notifications emit their summary through one shared code path in `shared/notify.ts`: `dispatchInfoMessage` no longer bypasses `buildSummaryLine`, and `buildSummaryLine` returns the failed-subject summary for the standalone error/warning kinds -- no standalone-kind path can drift back to a summary-less emission.
   5. A new cross-cutting grammar-invariant test asserts that every error/warning notification's emitted message has a non-empty summary first line distinct from the cascade block, across all catalog fixtures; `docs/output-catalog.md` (the ~6 sections that encoded "NO summary line. Severity error" -- install/uninstall/reinstall/update/marketplace-update + remove/autoupdate) and the `catalog-uat` fixtures are corrected to the new byte forms in lockstep; `npm run check` exits 0.
 
-**Plans:** TBD
+**Plans:** 1 plan
+
+**Wave 1**
+
+- [ ] 50-01-PLAN.md -- Unify standalone + cascade emission on one shared summary helper, extend `buildSummaryLine` for the two standalone error kinds, rewrite the ~9 catalog fence bodies + 8 prose sentences, update/extend `notify-v2` byte tests, add the cross-cutting grammar-invariant test; atomic landing, `npm run check` GREEN (GRAM-01..05)
 
 <details>
 <summary>Shipped milestones -- Phases 15-44 historical details (v1.4 → v1.8)</summary>
