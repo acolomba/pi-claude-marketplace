@@ -1,11 +1,19 @@
 ---
 phase: 50
 slug: notification-summary-line-grammar
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: approved
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-06-08
+approved: 2026-06-08
 ---
+
+<!-- Post-execution: all phase requirements (GRAM-01..05) have automated
+     coverage with no MISSING references; the Wave 0 deliverables (the
+     grammar-invariant test + the notify-v2 byte cases) were created and are
+     GREEN; npm run check exits 0 (1515 tests). No watch-mode flags; feedback
+     latency < 30s. Nyquist sign-off satisfied. -->
+
 
 # Phase 50 — Validation Strategy
 
