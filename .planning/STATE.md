@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.10
 milestone_name: Error Attribution & Message-Type Consistency
 status: executing
-stopped_at: Phase 46 context gathered
-last_updated: "2026-06-08T01:55:08.820Z"
-last_activity: 2026-06-08 -- Phase 49 planning complete
+stopped_at: All v1.10 phases (46-49) complete; ready for milestone audit -> complete -> cleanup
+last_updated: "2026-06-08T03:06:06.658Z"
+last_activity: 2026-06-08 -- Phase 49 complete; milestone v1.10 GREEN (npm run check 1513/1513); cross-op convergence proven; ready for /gsd-audit-milestone
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 10
-  completed_plans: 7
-  percent: 70
+  completed_plans: 10
+  percent: 100
 ---
 
 # Project State
@@ -20,20 +20,20 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-06)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 49 -- Cross-Op Convergence & GREEN-Gate Close (final)
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** v1.10 all phases complete (46-49); ready for milestone audit -> complete -> cleanup
 
 ## Current Position
 
-Phase: 49 -- Cross-Op Convergence & GREEN-Gate Close (not started)
+Phase: all v1.10 phases complete (46, 47, 48, 49)
 Plan: --
-Status: Ready to execute
-Last activity: 2026-06-08 -- Phase 49 planning complete
+Status: Milestone v1.10 GREEN -- all 15 requirements closed (TYPE-01..04, ATTR-01..10, SCOPE-01); cross-op convergence proven; npm run check 1513/1513. Ready for /gsd-audit-milestone -> /gsd-complete-milestone -> /gsd-cleanup.
+Last activity: 2026-06-08 -- Phase 49 complete: cross-op convergence proof + GREEN-gate close
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 165 (sum of recorded phase counts below; some early v1.0-v1.2 phases were archived without a recorded plan count)
+- Total plans completed: 168 (sum of recorded phase counts below; some early v1.0-v1.2 phases were archived without a recorded plan count)
 
 **Plans by phase:**
 
@@ -154,6 +154,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 46]: Type-model foundation landed (TYPE-01..04) as ONE atomic commit (0877952), byte-neutral for every v1.0-v1.9 command. notify.ts now has a 6th `MarketplaceNotAddedMessage` arm (kind/name/scope? only; renderPluginInfo `{not added}` carve-out deleted, renderer lifted to renderMarketplaceNotAdded); `ContentReason = Exclude<Reason,"not added">` retyped across all row reasons fields AND (deviation, no casts) the orchestrators/types.ts outcome vocabulary + ~11 reason-narrowing helpers across 8 files, making the structural/content reason mix a compile error end-to-end; single `isInfoKind` guard over 5 StandaloneKinds with assertNever in all 4 consumers (computeSeverity/buildSummaryLine/shouldEmitReloadHint/notify() early-dispatch); `MarketplaceNotificationMessage` is a per-status discriminated union (reasons only on skipped, details only on list, neither on failed); import/execute.ts builds concrete per-status arms (dead block.reasons removed). REASONS tuple (29) + _l4/_l4b untouched (D-46-02a). 4 catalog-uat `{not added}` fixtures + 2 notify-v2 tests re-keyed to the variant asserting identical bytes; docs/output-catalog.md unedited. npm run check GREEN 1473/1473; verification passed 6/6; code review 0 blockers (3 stale docstrings fixed fd999cf; WR-03/IN-01 deferred/accepted). Phase 47-48 build attribution corrections on this model. PHASE 46 COMPLETE.
 - [Phase 47]: Plugin-ops attribution + cross-scope landed (ATTR-01/02/03/04/08/09 + SCOPE-01) across 3 serialized plans (47-01->02->03), each independently GREEN. install/uninstall/reinstall/update now converge on info's canonical `(failed) {not added}` standalone marketplace-subject emission (D-47-A) for a missing/not-added marketplace -- never `{not in manifest}` on the plugin row, never silent (uninstall ATTR-04 loud), never raw-thrown (update dropped the raw MarketplaceNotFoundError from resolveInstalledMarketplaceTarget). The marketplace-absent vs plugin-absent-from-present-manifest split is preserved (install M1 vs M2; ATTR-08). Cascade/cleanup truthful reasons via narrowCascadeFailure/narrowReason -> `source mismatch`/`unreadable`, never lying `{not in manifest}` (ATTR-09). Cross-scope (SCOPE-01) via new exported discriminated resolvers in orchestrators/plugin/shared.ts (`resolveCrossScopePluginTarget`, `resolveInstalledMarketplaceTarget` -> resolved|other-scope|marketplace-absent), state-only reads (NFR-5); other-scope-only target carries the `[requestedScope]` bracket (OQ#1 resolved: bracket-only, byte-identical to info's scope-mismatch form, no new mechanism). CMP-3 (`resolveInstallMarketplaceSource`) byte-unchanged. No new REASONS member. 6 new `missing-marketplace-not-added` catalog states (install/uninstall/reinstall x2/update x2) each paired with a catalog-uat fixture; this phase CHANGES bytes (unlike 46). MarketplaceNotAddedSignal consolidated into shared.ts (WR-02). Deferred: IN-01 (install M1 zero-delta save, TOCTOU trade-off) + IN-02 (preflightUpdate concurrent-removal `{not in manifest}` reason) -> Phase 49 holistic reason review. npm run check GREEN 1490/1490; verification passed 7/7; code review 0 blockers (WR-01/02/03 + IN-03 fixed a493ef6). PHASE 47 COMPLETE.
 - [Phase 48]: Marketplace-ops attribution landed (ATTR-05/06/07/10) across 3 serialized plans (48-01->02->03), each independently GREEN. Every marketplace-op precondition failure now routes through notify() as a structured (failed) row instead of a raw throw. autoupdate/noautoupdate (ATTR-05) + remove (ATTR-06) of a missing marketplace -> standalone (failed) {not added} (Phase 46 variant), explicit-scope + missing-everywhere consistent; remove's raw MarketplaceNotFoundError eliminated, edge handler no longer leaks raw. marketplace add (ATTR-07) -> structured (failed) {duplicate name|stale clone|unsupported source|source missing|invalid manifest} via classifyAddError using EXISTING REASONS members (no new member; REASONS still 29). marketplace update path-source manifest failure (ATTR-10) -> {invalid manifest} via the new typed InvalidMarketplaceManifestError recognized in reasonsFromCascadeError (direct + one Error.cause level, since refreshRecord wraps in MarketplaceUpdateError), NEVER {network unreachable}; path-source path makes zero gitOps (NFR-5); github catch-all preserved. D-48-A: surgical MpFailed.reasons?: readonly ContentReason[] union touch (sanctioned by D-46-03a; TYPE-02 preserved -- ContentReason excludes {not added}; renderer mirrors the skipped arm so the 3 bare-(failed) byte forms stay byte-identical; notify-types _NoReasonsOnMpFailed proof inverted to positive, _NoDetailsOnMpFailed kept). D-48-B: typed InvalidMarketplaceManifestError (shared/errors.ts) thrown by domain/manifest.ts; Phase 45 manifest cache re-throws the same instance (tested); narrowProbeError maps the SyntaxError-cause variant to {unparseable} for marketplace info; bootstrap one-signal contract preserved via a rethrowPreconditionErrors seam. New marketplace-op (failed) catalog states each paired with a catalog-uat fixture; mdformat reformats docs/output-catalog.md but byte-equality holds. Deferred to Phase 49 holistic cross-op review: IN-02 (marketplace info renders {unreadable} vs add {invalid manifest} for a schema-invalid manifest -- cross-surface asymmetry). npm run check GREEN 1502/1502; verification passed 16/16; code review 0 blockers (WR-01 + IN-01 fixed b0312a5). PHASE 48 COMPLETE.
+- [Phase 49]: Cross-op convergence + GREEN-gate close (verification + closure; NO requirement closure) across 3 serialized plans. Class C closed: 49-01 fixed the last residual gap -- marketplace update <missing-mp> now converges on the standalone (failed) {not added} variant (remove.ts-mirrored catch-and-reroute; no raw MarketplaceNotFoundError escapes; NFR-5 network-free pre-guard). 49-02 closed Phase 48 IN-02 -- narrowProbeError gains an InvalidMarketplaceManifestError arm so schema-invalid manifests read {invalid manifest} on read surfaces (info/list), {unparseable} preserved for malformed JSON; no cast, no new REASONS member. 49-03 added the SC#1 cross-op convergence proof (tests/architecture/cross-op-convergence.test.ts INVOKES all 8 orchestrators against a missing marketplace and asserts byte-identical {not added}) + a catalog-uat inverse-walk (FIXTURES->catalog orphan detection, 0 orphans). Code review found + I fixed a real BLOCKER (CR-01): marketplace update concurrent-removal race emitted a false {network unreachable} (ATTR-10-class lie) -- snapshotAfterRefresh now returns an undefined sentinel (mirrors remove.ts) so refreshOneMarketplace no-ops; +2 regression tests; convergence test strengthened (WR-01). Accepted + documented: Phase 47 IN-01 (install M1 zero-delta save, perf) + IN-02 (preflightUpdate concurrent-removal {not in manifest}, rare TOCTOU not in the matrix). SC#2 REASONS=29; SC#5 traceability 15/15 mapped, 0 TBD. npm run check GREEN 1513/1513 (vs 1473 Phase-45 baseline); verification passed 5/5; code review resolved (CR-01 fixed 9935a61). PHASE 49 COMPLETE -- MILESTONE v1.10 GREEN.
 
 ### Pending Todos
 

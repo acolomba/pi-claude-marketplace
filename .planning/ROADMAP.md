@@ -910,7 +910,7 @@ Process-lifetime in-memory cache wrapping the single `loadMarketplaceManifest` s
 | 46. Type-Model Foundations                                          | v1.10     | 1/1 | Complete    | 2026-06-07 |
 | 47. Plugin-Ops Attribution & Cross-Scope                            | v1.10     | 3/3 | Complete    | 2026-06-07 |
 | 48. Marketplace-Ops Attribution                                     | v1.10     | 3/3 | Complete    | 2026-06-08 |
-| 49. Cross-Op Convergence & GREEN-Gate Close                         | v1.10     | 0/3            | Planned     | --         |
+| 49. Cross-Op Convergence & GREEN-Gate Close                         | v1.10     | 3/3 | Complete    | 2026-06-08 |
 
 ### In progress v1.10 Error Attribution & Message-Type Consistency (Phases 46-49)
 
@@ -919,7 +919,7 @@ Every plugin/marketplace operation reports the true blocker on the correct subje
 - [x] Phase 46: Type-Model Foundations -- TYPE-01, TYPE-02, TYPE-03, TYPE-04 (completed 2026-06-07)
 - [x] Phase 47: Plugin-Ops Attribution & Cross-Scope (3 plans) -- ATTR-01, ATTR-02, ATTR-03, ATTR-04, ATTR-08, ATTR-09, SCOPE-01 (completed 2026-06-07)
 - [x] Phase 48: Marketplace-Ops Attribution -- ATTR-05, ATTR-06, ATTR-07, ATTR-10 (completed 2026-06-08)
-- [ ] Phase 49: Cross-Op Convergence & GREEN-Gate Close (3 plans) -- verification + closure (no new requirement closure)
+- [x] Phase 49: Cross-Op Convergence & GREEN-Gate Close (3 plans) -- verification + closure (no new requirement closure) (completed 2026-06-08)
 
 ### Phase 46: Type-Model Foundations
 
@@ -1017,16 +1017,16 @@ Plans:
 4. `npm run check` exits 0 end-to-end on a clean tree (typecheck + ESLint + Prettier + tests) with no regression in test count from the Phase 45 baseline; NFR-5 (no network on path-source / non-network ops), NFR-7 (discriminated `installable`), and NFR-10 (containment) are unaffected.
 5. `.planning/REQUIREMENTS.md` traceability shows all 15 v1.10 requirements mapped to phases with no `TBD`, and the milestone is ready for close.
 
-**Plans:** 3 plans (serialized; each independently GREEN, no intermediate RED)
+**Plans:** 3/3 plans complete
 
 **Wave 1**
 
-- [ ] 49-01-PLAN.md -- Close the residual `marketplace update <missing-mp>` Class-C gap: mirror remove.ts's catch-and-reroute so the marketplace-form update miss converges on the standalone `(failed) {not added}` variant (explicit-scope + bare); 2 catalog states + fixtures + regression (reuse existing variant, REASONS stays 29) (SC#1; RESEARCH item 1)
+- [x] 49-01-PLAN.md -- Close the residual `marketplace update <missing-mp>` Class-C gap: mirror remove.ts's catch-and-reroute so the marketplace-form update miss converges on the standalone `(failed) {not added}` variant (explicit-scope + bare); 2 catalog states + fixtures + regression (reuse existing variant, REASONS stays 29) (SC#1; RESEARCH item 1)
 
 **Wave 2** *(serialized after Wave 1 -- shared catalog/notify convergence)*
 
-- [ ] 49-02-PLAN.md -- Close Phase 48 IN-02 read-vs-write manifest asymmetry: widen `narrowProbeError` so a schema-invalid manifest reads `{invalid manifest}` on info/list (parity with add), preserving `{unparseable}` for malformed JSON; new marketplace-info catalog state + fixture + read-surface unit cases (SC#1 manifest parity; RESEARCH item 2)
+- [x] 49-02-PLAN.md -- Close Phase 48 IN-02 read-vs-write manifest asymmetry: widen `narrowProbeError` so a schema-invalid manifest reads `{invalid manifest}` on info/list (parity with add), preserving `{unparseable}` for malformed JSON; new marketplace-info catalog state + fixture + read-surface unit cases (SC#1 manifest parity; RESEARCH item 2)
 
 **Wave 3** *(serialized after Waves 1-2 -- proves the matrix + gates GREEN)*
 
-- [ ] 49-03-PLAN.md -- Add the SC#1 cross-op convergence byte-identity matrix test + the SC#3 catalog-uat inverse-walk (fixture->catalog orphan detection); verify SC#5 traceability + prove the SC#4 GREEN gate (`npm run check` exit 0, count >= 1473, NFR-5/7/10 unaffected); record ACCEPT of Phase 47 IN-01/IN-02 (SC#1/3/4/5; RESEARCH items 3+4 accept)
+- [x] 49-03-PLAN.md -- Add the SC#1 cross-op convergence byte-identity matrix test + the SC#3 catalog-uat inverse-walk (fixture->catalog orphan detection); verify SC#5 traceability + prove the SC#4 GREEN gate (`npm run check` exit 0, count >= 1473, NFR-5/7/10 unaffected); record ACCEPT of Phase 47 IN-01/IN-02 (SC#1/3/4/5; RESEARCH items 3+4 accept)
