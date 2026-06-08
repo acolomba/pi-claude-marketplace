@@ -268,7 +268,7 @@ test("shim :: --force works before and after reinstall ref", async () => {
   });
 });
 
-test("shim :: invalid ref unknown flag and extra positionals emit reinstall usage", async () => {
+test("PRL-01: shim :: invalid ref unknown flag and extra positionals emit reinstall usage (top-level command exposes a clear Usage: block)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const handler = makeReinstallHandler(makePi());
     for (const args of ["no-at-sign", "--bogus", "a@mp b@mp", "--force=true"]) {
