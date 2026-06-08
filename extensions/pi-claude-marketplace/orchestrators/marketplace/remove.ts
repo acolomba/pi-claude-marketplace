@@ -238,8 +238,9 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
       // pre-guard existence check above (routed to the standalone `{not added}`
       // variant). Reaching here means the record was deleted between the
       // pre-guard read and this guard's fresh load (a concurrent removal) --
-      // treat it as a no-op: return without mutating, so the guard's trailing
-      // saveState commits nothing. No raw MarketplaceNotFoundError escapes.
+      // treat it as a no-op: return without mutating. withStateGuard still
+      // calls saveState with the unmodified state (a harmless re-write of the
+      // same content), and no raw MarketplaceNotFoundError escapes.
       return;
     }
 
