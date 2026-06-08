@@ -16,7 +16,7 @@
 
 ### Versioning
 
-- Before creating a PR, offer to bump the project version in `package.json` and `sonar-project.properties`, and to record the change in CHANGELOG.md. Be succint.
+Before creating a PR, offer to bump the version in `package.json` and `sonar-project.properties`, update `package-lock.json`, and succintly record changes in `CHANGELOG.md`.
 
 <!-- GSD:project-start source:PROJECT.md -->
 

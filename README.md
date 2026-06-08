@@ -222,7 +222,7 @@ Filter the list by plugin status, installed, available for installation, or unav
 Show details for one plugin.
 
 ```text
-/claude:plugin info pr-review-toolkit@claude-plugins-official
+/claude:plugin info context7-plugin@context7-marketplace
 ```
 
 Install a plugin, using the `<plugin>@<marketplace>` format.
@@ -245,11 +245,14 @@ Update one installed plugin, every installed plugin from one marketplace, or all
 /claude:plugin update
 ```
 
-Reinstall one installed plugin, every installed plugin from one marketplace, or all installed plugins. Reinstall uses the cached marketplace manifest and the installed record's existing version; it does not fetch, pull, or otherwise sync the marketplace from the network:
+> [!NOTE]
+> Agent definitions in plugins may include a preferred model for running the agent, e.g. "sonnet", "opus", etc. These are discarded by default, but the `--map-model` option for `install` and `update`can be used to make a best-effort attempt at mapping these models to Pi models.
+
+Reinstall one installed plugin, every installed plugin from one marketplace, or all installed plugins.
 
 ```text
-/claude:plugin reinstall pr-review-toolkit@claude-plugins-official
-/claude:plugin reinstall @claude-plugins-official
+/claude:plugin reinstall context7-plugin@context7-marketplace
+/claude:plugin reinstall @context7-marketplace
 /claude:plugin reinstall
 ```
 
@@ -257,21 +260,14 @@ Limit reinstall to one scope with `--scope user` or `--scope project`. The flag 
 
 ```text
 /claude:plugin reinstall --scope project
-/claude:plugin reinstall @claude-plugins-official --scope user
+/claude:plugin reinstall @context7-marketplace --scope user
 ```
 
-The `--scope` flag selects which installed plugin records and generated resources are reinstalled; the marketplace reference identifies the source marketplace. For an explicit plugin target, reinstall reports `not installed` in the selected scope instead of failing just because that marketplace is configured in another scope.
-
-Use `--force` only when reinstalling a plugin whose own previous agent files were manually edited or otherwise look foreign. `--force` can overwrite that plugin's previous agent content, but it does not override other-plugin ownership conflicts, unsafe names, path-containment failures, or MCP server name collisions:
+Force a reinstall should any foreign content have altered the plugin.
 
 ```text
-/claude:plugin reinstall pr-review-toolkit@claude-plugins-official --force
+/claude:plugin reinstall context7-plugin@context7-marketplace --force
 ```
-
-Reinstall targets installed plugins only. If no installed plugins match the selected target set, the command reports `No plugins installed.` and does not emit a reload hint. Plugin data directories are deleted only after replacement resources and `state.json` commit successfully; if reinstall fails, the previous plugin state, resources, and data remain available.
-
-> [!NOTE]
-> Agent definitions in plugins may include a preferred model for running the agent, e.g. "sonnet", "opus", etc. These are discarded by default, but the `--map-model` option for `install` can be used to make a best-effort attempt at mapping these models to Pi models.
 
 Uninstall a plugin.
 
@@ -317,31 +313,13 @@ By default, marketplaces and plugins are added in accordance to the scope that t
 
 Plugins that are not available for installation in Pi because of unsupported components are skipped with a warning.
 
-## Development
+## Contributing
 
-Install pre-commit hooks.
-
-```bash
-pre-commit install
-pre-commit install --hook-type commit-msg
-```
-
-Enable Git LFS for large binary assets such as images and videos.
-
-```bash
-git lfs install
-```
-
-Build.
-
-```bash
-npm install
-npm run check
-```
+Refer to [CONTRIBUTING](CONTRIBUTING.md) and [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md).
 
 ## AI disclaimer
 
-This project is developed with AI agent engineering practices using the [GSD redux](https://github.com/open-gsd/get-shit-done-redux) spec-driven development system.
+This project is developed with AI agent engineering practices using the [Open GSD](https://www.opengsd.net/) spec-driven development system.
 
 The author vibe-coded a prototype until it was feature-complete for a first release, then extracted and reviewed a PRD from the implementation.
 
