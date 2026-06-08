@@ -11,7 +11,11 @@ findings:
   warning: 2
   info: 2
   total: 4
-status: issues_found
+status: resolved
+resolution:
+  warnings_fixed: 2
+  info_accepted: 2
+  fix_commit: 5e671d0
 ---
 
 # Phase 50: Code Review Report
@@ -19,7 +23,26 @@ status: issues_found
 **Reviewed:** 2026-06-08
 **Depth:** standard
 **Files Reviewed:** 2
-**Status:** issues_found
+**Status:** resolved (both warnings fixed in `5e671d0`; both info findings accepted)
+
+## Resolution (2026-06-08)
+
+- **WR-01 (fixed, `5e671d0`):** `getPluginInfo` now separates `(failed)` blocks
+  out of the both-scopes `plugin-info-cascade` and surfaces each as its own
+  standalone `plugin-info` (`error` + `1 plugin operation failed.` summary),
+  mirroring `getMarketplaceInfo`. The info-severity cascade no longer carries
+  failures, so `notify.ts`'s "fan-out carries no failure" invariant is upheld
+  by the orchestrator — closing the surviving GRAM-04 divergence.
+- **WR-02 (fixed, `5e671d0`):** Added a both-scopes-missing-plugin regression
+  test in `tests/orchestrators/plugin/info.test.ts` asserting two per-scope
+  `error` + summary notifications (project-first), not a silent info cascade.
+- **INFO-1 (accepted):** `SUMMARY_GRAMMAR` permits subject orders the code never
+  emits — harmless over-permissiveness in a test regex; left as-is.
+- **INFO-2 (accepted):** pre-existing empty-description rendering nit between the
+  two info renderers — outside the summary-line charter; not introduced by this
+  phase. Left for a future docs/render pass if it ever surfaces.
+
+`npm run check` green (1515) after the fix.
 
 ## Summary
 
