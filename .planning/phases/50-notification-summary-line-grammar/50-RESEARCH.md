@@ -306,7 +306,7 @@ For the multi-line `manifest-invalid` case:
 
 **Note on test discoverability:** `npm test` globs `tests/{architecture,bridges,domain,edge,helpers,orchestrators,persistence,platform,shared,transaction}/**/*.test.ts` — both `tests/shared/` and `tests/architecture/` are covered. [VERIFIED: package.json:76]
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should the new invariant test live in `tests/shared/` or `tests/architecture/`?**
    - What we know: both are in the `npm test` glob; catalog-uat (the closest analog) lives in `tests/architecture/`; per-variant byte tests live in `tests/shared/notify-v2.test.ts`.
