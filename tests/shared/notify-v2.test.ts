@@ -2732,10 +2732,13 @@ test("Phase 42 / WR-05 / wrapDescription: two words whose `current.length + 1 + 
   assert.deepEqual(tail, [`    ${a} ${b}`, "    components: not resolved"]);
 });
 
-test("Phase 42 / INFO-04: {not added} row renders as bare column-0 plugin row with error severity", () => {
-  // TYPE-01 / TYPE-03: the dedicated `marketplace-not-added` variant renders
-  // the bare column-0 row (no marketplace header). `computeSeverity` routes
-  // the new arm to "error" through the single `isInfoKind` guard.
+test("GRAM-01 / GRAM-02: standalone {not added} row renders the two-block summary + separate detail block (marketplace subject, error severity)", () => {
+  // GRAM-01: an error-severity standalone emission carries a non-empty summary
+  // first line, with the detail row as its own block below (separated by
+  // `\n\n`) -- never the glued single line. GRAM-02: the summary subject
+  // follows the failed row -- a `marketplace-not-added` failure reads
+  // "1 marketplace operation failed." The variant routes to "error" through
+  // the single `isInfoKind` guard.
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
@@ -2745,9 +2748,45 @@ test("Phase 42 / INFO-04: {not added} row renders as bare column-0 plugin row wi
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  const args = ctx.ui.notify.mock.calls[0]!.arguments;
-  assert.equal(args[0], "⊘ my-mp [user] (failed) {not added}");
-  assert.equal(args[1], "error");
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "1 marketplace operation failed.\n\n⊘ my-mp [user] (failed) {not added}",
+    "error",
+  ]);
+});
+
+test("GRAM-02: standalone failed plugin-info renders `1 plugin operation failed.` + separate multi-line detail block", () => {
+  // GRAM-02: a failed `plugin-info` emission (e.g. plugin info on a
+  // schema-invalid manifest) takes the PLUGIN subject. The summary is its own
+  // block above the existing multi-line plugin-info body (header + indented
+  // failed row + `components: not resolved`). Modelled on the catalog-uat
+  // `manifest-invalid` fixture. Exactly one `ctx.ui.notify` call (IL-2).
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "plugin-info",
+    marketplaceName: "bad-mp",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: {
+      status: "failed",
+      name: "bad-mp",
+      scope: "user",
+      reasons: ["invalid manifest"],
+      componentsResolved: false,
+    },
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    [
+      "1 plugin operation failed.",
+      "",
+      "● bad-mp [user] <no autoupdate>",
+      "  ⊘ bad-mp (failed) {invalid manifest}",
+      "    components: not resolved",
+    ].join("\n"),
+    "error",
+  ]);
 });
 
 test("Phase 42 / INFO-04: {not added} row never carries a reload-hint (read-only surface)", () => {
