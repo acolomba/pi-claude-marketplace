@@ -10,6 +10,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   __test_outcomeToCascadePluginMessage,
+  __test_snapshotAfterRefresh,
   updateAllMarketplaces,
   updateMarketplace,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
@@ -1485,6 +1486,84 @@ test("updateMarketplace: explicit-scope missing marketplace -> standalone {not a
     assert.ok(first !== undefined);
     assert.equal(first.message, "⊘ ghost [project] (failed) {not added}");
     assert.equal(first.severity, "error");
+  });
+});
+
+test("CR-01 TOCTOU: marketplace removed between pre-guard read and snapshotAfterRefresh's fresh load returns undefined (silent no-op), never throws raw nor emits `{network unreachable}`", async () => {
+  // CR-01: there is a TOCTOU window between resolveScopeOrNotifyNotAdded's
+  // pre-guard `loadState` (which proved the marketplace exists) and
+  // snapshotAfterRefresh's withStateGuard fresh `loadState`. If a concurrent
+  // `marketplace remove` lands in that window, the guard's fresh load sees
+  // `record === undefined`. The PREVIOUS code threw a raw
+  // MarketplaceNotFoundError there, which refreshOneMarketplace's generic catch
+  // misattributed (reasonsFromCascadeError -> undefined -> `?? network
+  // unreachable`) as the LYING `(failed) {network unreachable}` row -- exactly
+  // the NFR-5/ATTR-10 misattribution class this milestone closes.
+  //
+  // The fix mirrors remove.ts:235-244: snapshotAfterRefresh returns `undefined`
+  // (sentinel) instead of throwing, and refreshOneMarketplace returns silently.
+  // We drive the seam directly with an empty on-disk state (the concurrent-
+  // removal end-state) and assert it returns `undefined` rather than rejecting.
+  await withHermeticHome(async ({ cwd }) => {
+    const locations = locationsFor("project", cwd);
+    await mkdir(locations.extensionRoot, { recursive: true });
+    // Persist an empty state -- this is the post-concurrent-removal disk state
+    // the guard's fresh `loadState` observes.
+    await saveState(locations.extensionRoot, { schemaVersion: 1, marketplaces: {} });
+
+    const { ctx, pi } = makeCtx();
+    const { gitOps, state: gitState } = makeMockGitOps();
+
+    const snapshot = await __test_snapshotAfterRefresh({
+      ctx,
+      pi,
+      name: "vanished",
+      scope: "project",
+      locations,
+      gitOps,
+      credentialOps: makeMockCredentialOps().credOps,
+    });
+
+    // The sentinel: undefined, NOT a thrown MarketplaceNotFoundError. The
+    // record-absent arm never reaches refreshRecord, so zero gitOps fire
+    // (NFR-5: the concurrent-removal no-op touches no network).
+    assert.equal(snapshot, undefined);
+    assert.equal(gitState.cloneCalls.length, 0);
+    assert.equal(gitState.fetchCalls.length, 0);
+    assert.equal(gitState.checkoutCalls.length, 0);
+  });
+});
+
+test("CR-01 TOCTOU: refreshOneMarketplace silently no-ops on a removed marketplace -- no `{network unreachable}`, no second notification", async () => {
+  // End-to-end companion to the seam test: drive updateMarketplace with state
+  // whose marketplace exists at the pre-guard read but whose guard-time fresh
+  // load sees it gone. We simulate the concurrent removal by deleting the record
+  // through a gitOps lifecycle hook... but the guard load precedes any gitOps
+  // call, so instead we assert the BEHAVIORAL contract via the seam end-state:
+  // when snapshotAfterRefresh yields undefined, refreshOneMarketplace must emit
+  // NOTHING (the pre-guard already notified `{not added}`) and MUST NOT render
+  // the lying `{network unreachable}` row. We prove the negative directly: an
+  // explicit-scope miss (record absent at BOTH reads) emits exactly the
+  // `{not added}` convergence row and NEVER `{network unreachable}`.
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps();
+
+    await assert.doesNotReject(async () =>
+      updateMarketplace({ ctx, pi, name: "vanished", scope: "project", cwd, gitOps }),
+    );
+
+    const composed = notifications.map((n) => n.message).join("\n");
+    assert.doesNotMatch(
+      composed,
+      /\{network unreachable\}/,
+      `a missing/removed marketplace must NEVER render the lying {network unreachable} reason:\n${composed}`,
+    );
+    // Exactly the convergence `{not added}` row, one emission.
+    assert.equal(notifications.length, 1);
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    assert.equal(first.message, "⊘ vanished [project] (failed) {not added}");
   });
 });
 

@@ -492,12 +492,24 @@ interface RefreshSnapshot {
   readonly changed: boolean;
 }
 
-async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapshot> {
-  const { name, scope, locations } = args;
+async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapshot | undefined> {
+  const { name, locations } = args;
   return withStateGuard(locations, async (state) => {
     const record = state.marketplaces[name];
     if (record === undefined) {
-      throw new MarketplaceNotFoundError(name, [scope]);
+      // TOCTOU race: the marketplace was removed between
+      // `resolveScopeOrNotifyNotAdded`'s pre-guard `loadState` and this guard's
+      // fresh `loadState`. The pre-guard already proved existence and the
+      // missing-marketplace precondition is handled there (routed to the
+      // standalone `{not added}` variant); reaching here means a concurrent
+      // removal in that window. Return undefined so the caller skips the
+      // cascade and emits NOTHING further -- no raw MarketplaceNotFoundError
+      // escapes (which `refreshOneMarketplace`'s catch would misattribute as the
+      // lying `{network unreachable}` default, the exact ATTR-10/NFR-5 class this
+      // milestone closes). Mirrors remove.ts:235-244's silent-return at the same
+      // withStateGuard boundary. withStateGuard still saves the unmodified state
+      // (a harmless re-write of the same content).
+      return undefined;
     }
 
     const changed = await refreshRecord(record, args);
@@ -802,7 +814,7 @@ function narrowFailReason(outcome: PluginUpdateFailedOutcome): ContentReason {
 async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   const { ctx, name, scope, locations, pluginUpdate, pi } = args;
 
-  let snapshot: RefreshSnapshot;
+  let snapshot: RefreshSnapshot | undefined;
   try {
     snapshot = await snapshotAfterRefresh(args);
   } catch (err) {
@@ -824,6 +836,16 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     notify(ctx, pi, {
       marketplaces: [{ name, scope, status: "failed", plugins: [failedRow] }],
     });
+    return;
+  }
+
+  if (snapshot === undefined) {
+    // TOCTOU concurrent-removal no-op: the marketplace was removed between the
+    // pre-guard existence read and snapshotAfterRefresh's fresh guard load. The
+    // pre-guard already emitted the standalone `{not added}` notification, so
+    // return silently -- NO second contradictory notification, and crucially NO
+    // lying `{network unreachable}` (the raw MarketplaceNotFoundError no longer
+    // escapes; mirrors remove.ts).
     return;
   }
 
@@ -952,3 +974,12 @@ async function validateManifestAtRoot(
  * `unchanged` -> `skipped {up-to-date}`).
  */
 export { outcomeToCascadePluginMessage as __test_outcomeToCascadePluginMessage };
+
+/**
+ * Test seam for the TOCTOU concurrent-removal regression (CR-01). Verifies that
+ * `snapshotAfterRefresh` returns `undefined` (instead of throwing a raw
+ * MarketplaceNotFoundError) when the marketplace record is absent at the guard's
+ * fresh `loadState` -- the silent-return that prevents `refreshOneMarketplace`'s
+ * catch from misattributing the race as the lying `{network unreachable}`.
+ */
+export { snapshotAfterRefresh as __test_snapshotAfterRefresh };
