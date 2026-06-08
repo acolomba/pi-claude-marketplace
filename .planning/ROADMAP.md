@@ -180,7 +180,7 @@ Two new read-only detail-surface commands (`/claude:plugin marketplace info <nam
 
 **Wave 1**
 
-- [ ] 50-01-PLAN.md -- Unify standalone + cascade emission on one shared summary helper, extend `buildSummaryLine` for the two standalone error kinds, rewrite the ~9 catalog fence bodies + 8 prose sentences, update/extend `notify-v2` byte tests, add the cross-cutting grammar-invariant test; atomic landing, `npm run check` GREEN (GRAM-01..05)
+- [x] 50-01-PLAN.md -- Unify standalone + cascade emission on one shared summary helper, extend `buildSummaryLine` for the two standalone error kinds, rewrite the ~9 catalog fence bodies + 8 prose sentences, update/extend `notify-v2` byte tests, add the cross-cutting grammar-invariant test; atomic landing, `npm run check` GREEN (GRAM-01..05)
 
 <details>
 <summary>Shipped milestones -- Phases 15-44 historical details (v1.4 → v1.8)</summary>
@@ -952,4 +952,4 @@ Every plugin/marketplace operation reports the true blocker on the correct subje
 | 47. Plugin-Ops Attribution & Cross-Scope                            | v1.10     | 3/3 | Complete    | 2026-06-07 |
 | 48. Marketplace-Ops Attribution                                     | v1.10     | 3/3 | Complete    | 2026-06-08 |
 | 49. Cross-Op Convergence & GREEN-Gate Close                         | v1.10     | 3/3 | Complete    | 2026-06-08 |
-| 50. Notification Summary-Line Grammar                               | v1.11     | 0/0 | Not started | -          |
+| 50. Notification Summary-Line Grammar                               | v1.11     | 1/1 | Complete   | 2026-06-08 |

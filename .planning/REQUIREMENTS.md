@@ -14,11 +14,11 @@ Requirements for milestone v1.11. Each maps to exactly one roadmap phase.
 
 Every error/warning-severity notification carries a summary message on the host label line, with the cascade always rendered as its own separate block.
 
-- [ ] **GRAM-01**: Every error/warning-severity notification renders a non-empty summary message on the host `Error:`/`Warning:` label line, with the cascade/detail rendered as its own separate block below -- no notification emits the label glued directly onto a detail row (fixes the reported `Error: ⊘ y [user] (failed) {not added}`).
-- [ ] **GRAM-02**: The summary subject follows the nature of the failure (the failed-row subject), not the invoking command: a marketplace-subject failure reads `N marketplace operation(s) failed`, a plugin-subject failure reads `N plugin operation(s) failed` -- the same subject-attribution principle as the v1.10 ATTR-08 split (`{not added}` on the marketplace vs `{not in manifest}` on the plugin).
-- [ ] **GRAM-03**: Every `marketplace-not-added` emission (install, uninstall, reinstall, update, marketplace update, marketplace remove, autoupdate/noautoupdate) and every failed `plugin-info` surface (e.g. `plugin info` on an unreadable manifest) renders the corrected summary line followed by its detail block.
-- [ ] **GRAM-04**: Standalone and cascade notifications emit their summary through a single shared code path; no standalone-kind path bypasses `buildSummaryLine`, so the summary/no-summary divergence that caused the v1.10 defect cannot recur.
-- [ ] **GRAM-05**: A cross-cutting grammar-invariant test asserts that every error/warning notification's emitted message has a non-empty summary first line distinct from the cascade block, across all catalog fixtures; `docs/output-catalog.md` and the `catalog-uat` fixtures are corrected to the new byte forms in lockstep.
+- [x] **GRAM-01**: Every error/warning-severity notification renders a non-empty summary message on the host `Error:`/`Warning:` label line, with the cascade/detail rendered as its own separate block below -- no notification emits the label glued directly onto a detail row (fixes the reported `Error: ⊘ y [user] (failed) {not added}`).
+- [x] **GRAM-02**: The summary subject follows the nature of the failure (the failed-row subject), not the invoking command: a marketplace-subject failure reads `N marketplace operation(s) failed`, a plugin-subject failure reads `N plugin operation(s) failed` -- the same subject-attribution principle as the v1.10 ATTR-08 split (`{not added}` on the marketplace vs `{not in manifest}` on the plugin).
+- [x] **GRAM-03**: Every `marketplace-not-added` emission (install, uninstall, reinstall, update, marketplace update, marketplace remove, autoupdate/noautoupdate) and every failed `plugin-info` surface (e.g. `plugin info` on an unreadable manifest) renders the corrected summary line followed by its detail block.
+- [x] **GRAM-04**: Standalone and cascade notifications emit their summary through a single shared code path; no standalone-kind path bypasses `buildSummaryLine`, so the summary/no-summary divergence that caused the v1.10 defect cannot recur.
+- [x] **GRAM-05**: A cross-cutting grammar-invariant test asserts that every error/warning notification's emitted message has a non-empty summary first line distinct from the cascade block, across all catalog fixtures; `docs/output-catalog.md` and the `catalog-uat` fixtures are corrected to the new byte forms in lockstep.
 
 ## Future Requirements
 
@@ -42,11 +42,11 @@ Which phases cover which requirements. Finalized during roadmap creation (2026-0
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GRAM-01 | Phase 50 | Pending |
-| GRAM-02 | Phase 50 | Pending |
-| GRAM-03 | Phase 50 | Pending |
-| GRAM-04 | Phase 50 | Pending |
-| GRAM-05 | Phase 50 | Pending |
+| GRAM-01 | Phase 50 | Complete |
+| GRAM-02 | Phase 50 | Complete |
+| GRAM-03 | Phase 50 | Complete |
+| GRAM-04 | Phase 50 | Complete |
+| GRAM-05 | Phase 50 | Complete |
 
 **Coverage:**
 
