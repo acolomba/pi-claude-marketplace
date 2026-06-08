@@ -2,6 +2,43 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v1.11 -- Notification Summary-Line Grammar
+
+**Shipped:** 2026-06-08
+**Phases:** 1 (Phase 50) | **Plans:** 1 | **Tasks:** 3 | **Tests:** 1514 -> 1515
+
+### What Was Built
+
+A single file-private `emitWithSummary(ctx, message, body)` seam in `shared/notify.ts` that BOTH the standalone arm (`dispatchInfoMessage`) and the cascade arm of `notify()` route through. `buildSummaryLine` extended to return the failed-subject summary (`N marketplace operation(s) failed.` / `N plugin operation(s) failed.`) for the standalone `marketplace-not-added` and failed `plugin-info` kinds. The v1.10 glued-label defect (`Error: ⊘ y [user] (failed) {not added}`) is gone; every error/warning emission is now a non-empty summary line + a separate detail block. Closed GRAM-01..05.
+
+### What Worked
+
+- **Single-phase, single-seam scoping was right.** Every requirement converged on one notify seam plus a lockstep catalog/fixture byte-rewrite; no over-decomposition. The atomic-landing constraint (code + `buildSummaryLine` + ~9 catalog fences + tests in one plan) kept the `catalog-uat` byte gate from ever going RED across a commit boundary -- the v1.3 atomic-supersession lesson, re-applied.
+- **Sequential (non-worktree) execution was the correct call.** A worktree checkout lacks `node_modules`, so `npm run check` (a phase acceptance criterion) would have failed inside one; running the single plan on the main tree avoided that entirely.
+- **Code review earned its keep.** It found WR-01: a *surviving* instance of the exact standalone-vs-cascade divergence the phase targeted, on the both-scopes `plugin-info-cascade` fan-out path that the planned scope didn't touch. Fixing it in the orchestrator (mirroring `getMarketplaceInfo`'s failure separation) closed the goal completely rather than leaving a quiet hole.
+
+### What Was Inefficient
+
+- The v1.10 catalog had encoded the broken glued-label form as GREEN across ~6 sections, so byte-equality verification had been passing on broken output. Catalog-as-contract is powerful but only as correct as the bytes a human signed off on.
+- A pre-existing, unrelated red test (`reinstall-docs.test.ts` asserting verbatim README prose) surfaced during the green-gate check and had to be triaged mid-milestone; it was resolved by a separate quick task (260608-npa) that removed the brittle README-prose contract in favor of the already-existing spec/behavior coverage.
+
+### Patterns Established
+
+- **One severity-gated emission seam** (`emitWithSummary`): severity computed once via `computeSeverity`; info emits body-only, error/warning prepend `buildSummaryLine(...) + "\n\n" + body`. No standalone kind can drift back to a summary-less emission.
+- **Failure separation before fan-out**: info-cascade wrappers (`plugin-info-cascade`) must never carry a `(failed)` block; the orchestrator separates failures out and emits each as its own LOUD standalone notify (the `getPluginInfo`/`getMarketplaceInfo` shape).
+- **Docs-as-contract belongs on the spec doc + implementation, not README prose**: brittle verbatim-string README assertions were retired in favor of `docs/output-catalog.md` byte-binding (catalog-uat) + behavior tests.
+
+### Key Lessons
+
+- When a fix targets a *class* of divergence, audit every code path that can produce the class -- not just the one in the bug report. The fan-out path (WR-01) was the same bug wearing a different hat.
+- A "pre-existing failure" excuse must be verified, not accepted: confirm the failing files are untouched by the phase and the test is deterministic before treating a red gate as out-of-scope.
+
+### Cost Observations
+
+- Model mix: opus for research/pattern-map/plan/execute/review, sonnet for plan-check/verify/integration.
+- Sessions: 1 (autonomous run, discuss skipped via `workflow.skip_discuss`).
+- Notable: a single-phase milestone still benefits from the full research -> pattern-map -> plan -> check -> execute -> review -> verify chain when the change touches a core emission seam; the review pass alone caught a real goal gap.
+
 ## Milestone: v1.10 -- Error Attribution & Message-Type Consistency
 
 **Shipped:** 2026-06-08
