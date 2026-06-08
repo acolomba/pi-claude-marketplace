@@ -101,6 +101,7 @@ import { loadState } from "../../persistence/state-io.ts";
 import { DEFAULT_CREDENTIAL_OPS } from "../../platform/git-credential.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
+  InvalidMarketplaceManifestError,
   MarketplaceNotFoundError,
   MarketplaceUpdateError,
   PluginShapeError,
@@ -522,6 +523,27 @@ function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undef
         // permissive `not in manifest` fallback.
         return ["not in manifest"] as const;
     }
+  }
+
+  // ATTR-10 / D-48-B: a typed marketplace-manifest parse/validation failure
+  // (malformed JSON or schema-invalid marketplace.json) maps to the closed-set
+  // `invalid manifest` reason for BOTH path and github sources. A path-source
+  // manifest failure is network-free (NFR-5), so it MUST NOT fall through to the
+  // `?? ["network unreachable"]` default at the refreshOneMarketplace catch; a
+  // github clone that advanced and then hit a malformed manifest is genuinely
+  // `invalid manifest` too (Pitfall 3 -- only typed manifest errors map here,
+  // not generic github network failures). The refreshOneMarketplace catch sees
+  // the InvalidMarketplaceManifestError WRAPPED inside a MarketplaceUpdateError
+  // (refreshRecord rethrows with `{ cause }`), so unwrap ONE level of cause as
+  // well (mirrors add.ts::unwrapAddError). The cascadeAutoupdates catch passes
+  // the raw error, which the direct `instanceof` covers. Placed before the errno
+  // checks so the typed class takes precedence over any incidental errno on the
+  // cause chain.
+  if (
+    err instanceof InvalidMarketplaceManifestError ||
+    (err instanceof Error && err.cause instanceof InvalidMarketplaceManifestError)
+  ) {
+    return ["invalid manifest"] as const;
   }
 
   if (err instanceof Error) {

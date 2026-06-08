@@ -1904,6 +1904,29 @@ const FIXTURES: FixtureMap = {
         marketplaces: [{ name: "official", scope: "user", status: "failed", plugins: [] }],
       },
     },
+
+    // ATTR-10 / D-48-B: a path-source marketplace.json that is malformed or
+    // schema-invalid renders `(failed) {invalid manifest}` on the synthetic-child
+    // failed row -- never `{network unreachable}` (NFR-5: path-source touches no
+    // network). The orchestrator's refreshOneMarketplace catch carries the
+    // classified reason on a synthetic child (mirroring the mp-failure recipe);
+    // this fixture pins that byte form. `cause` is omitted so the byte form is
+    // deterministic (the live cause-chain trailer carries data-dependent JSON
+    // parser text). Summary counts the synthetic child as one plugin operation.
+    "update-path-invalid-manifest": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            status: "failed",
+            plugins: [{ status: "failed", name: "official", reasons: ["invalid manifest"] }],
+          },
+        ],
+      },
+    },
   },
 
   // -------------------------------------------------------------------------

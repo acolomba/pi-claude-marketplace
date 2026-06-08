@@ -494,6 +494,167 @@ test("WR-02: corrupt pre-existing manifest routes to (failed), never a silent no
   });
 });
 
+// ───────────────────────────────────────────────────────────────────────────
+// ATTR-10 / D-48-B: a path-source marketplace.json that is malformed or
+// schema-invalid during `marketplace update` must render
+// `(failed) {invalid manifest}` on the synthetic-child failed row -- NEVER the
+// lying `{network unreachable}` default (NFR-5: path-source touches no network).
+// The reasonsFromCascadeError branch recognizes the typed
+// InvalidMarketplaceManifestError (thrown by loadMarketplaceManifest, wrapped in
+// MarketplaceUpdateError by refreshRecord) BEFORE the `?? network unreachable`
+// fallback fires. github-source no-errno failures KEEP `{network unreachable}`
+// as the catch-all (Pitfall 3: the path/github classification did not collapse).
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Seed a path-source marketplace pointing at an on-disk dir under the cwd. */
+async function seedPathMarketplace(opts: {
+  cwd: string;
+  name: string;
+  marketplaceRoot: string;
+}): Promise<void> {
+  const locations = locationsFor("project", opts.cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 1,
+    marketplaces: {
+      [opts.name]: {
+        name: opts.name,
+        scope: "project",
+        source: pathSource(opts.marketplaceRoot),
+        addedFromCwd: opts.cwd,
+        manifestPath: path.join(opts.marketplaceRoot, ".claude-plugin", "marketplace.json"),
+        marketplaceRoot: opts.marketplaceRoot,
+        plugins: {},
+      },
+    },
+  });
+}
+
+test("ATTR-10: path-source MALFORMED-JSON manifest renders `(failed) {invalid manifest}`, never `{network unreachable}`", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // A real on-disk marketplace whose marketplace.json is malformed JSON. The
+    // PRE manifestContentKey read throws InvalidMarketplaceManifestError (cause:
+    // SyntaxError) -> refreshRecord wraps it as MarketplaceUpdateError -> the
+    // refreshOneMarketplace catch unwraps one cause level and classifies
+    // `invalid manifest`. Zero network/gitOps on the path branch (NFR-5).
+    const localMpDir = await mkdtemp(path.join(tmpdir(), "mp-path-bad-json-"));
+    try {
+      await mkdir(path.join(localMpDir, ".claude-plugin"), { recursive: true });
+      await writeFile(
+        path.join(localMpDir, ".claude-plugin", "marketplace.json"),
+        "{ not valid json",
+        "utf8",
+      );
+      await seedPathMarketplace({ cwd, name: "bad-json", marketplaceRoot: localMpDir });
+
+      const { ctx, pi, notifications } = makeCtx();
+      const { gitOps } = makeMockGitOps();
+      await updateMarketplace({ ctx, pi, name: "bad-json", scope: "project", cwd, gitOps });
+
+      assert.equal(notifications.length, 1);
+      const first = notifications[0];
+      assert.ok(first !== undefined);
+      assert.equal(first.severity, "error");
+      assert.match(first.message, /\(failed\) \{invalid manifest\}/);
+      assert.doesNotMatch(first.message, /\{network unreachable\}/);
+    } finally {
+      await rm(localMpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("ATTR-10: path-source SCHEMA-INVALID manifest renders `(failed) {invalid manifest}`, never `{network unreachable}`", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // Valid JSON, but fails MARKETPLACE_VALIDATOR (missing required `plugins`
+    // array / wrong shape) -> loadMarketplaceManifest throws
+    // InvalidMarketplaceManifestError("marketplace.json schema invalid: ...").
+    const localMpDir = await mkdtemp(path.join(tmpdir(), "mp-path-bad-schema-"));
+    try {
+      await mkdir(path.join(localMpDir, ".claude-plugin"), { recursive: true });
+      await writeFile(
+        path.join(localMpDir, ".claude-plugin", "marketplace.json"),
+        JSON.stringify({ name: 42, plugins: "not-an-array" }),
+        "utf8",
+      );
+      await seedPathMarketplace({ cwd, name: "bad-schema", marketplaceRoot: localMpDir });
+
+      const { ctx, pi, notifications } = makeCtx();
+      const { gitOps } = makeMockGitOps();
+      await updateMarketplace({ ctx, pi, name: "bad-schema", scope: "project", cwd, gitOps });
+
+      assert.equal(notifications.length, 1);
+      const first = notifications[0];
+      assert.ok(first !== undefined);
+      assert.equal(first.severity, "error");
+      assert.match(first.message, /\(failed\) \{invalid manifest\}/);
+      assert.doesNotMatch(first.message, /\{network unreachable\}/);
+    } finally {
+      await rm(localMpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("NFR-5: path-source update FAILURE (invalid manifest) still calls zero gitOps methods", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // The failure path must not reach for the network either: the path branch of
+    // refreshRecord calls validateManifestAtRoot -> loadMarketplaceManifest (a
+    // readFile + parse) and NO gitOps. Sibling of the success-path NFR-5 test.
+    const localMpDir = await mkdtemp(path.join(tmpdir(), "mp-path-fail-nfr5-"));
+    try {
+      await mkdir(path.join(localMpDir, ".claude-plugin"), { recursive: true });
+      await writeFile(
+        path.join(localMpDir, ".claude-plugin", "marketplace.json"),
+        "{ not valid json",
+        "utf8",
+      );
+      await seedPathMarketplace({ cwd, name: "local-bad", marketplaceRoot: localMpDir });
+
+      const { ctx, pi, notifications } = makeCtx();
+      const { gitOps, state } = makeMockGitOps();
+      await updateMarketplace({ ctx, pi, name: "local-bad", scope: "project", cwd, gitOps });
+
+      // The failed row classified `invalid manifest` (not a network reason).
+      const first = notifications[0];
+      assert.ok(first !== undefined);
+      assert.match(first.message, /\(failed\) \{invalid manifest\}/);
+
+      // Zero gitOps -- the failure path is network-free.
+      assert.equal(state.cloneCalls.length, 0);
+      assert.equal(state.fetchCalls.length, 0);
+      assert.equal(state.forceUpdateRefCalls.length, 0);
+      assert.equal(state.checkoutCalls.length, 0);
+      assert.equal(state.resolveRefCalls.length, 0);
+    } finally {
+      await rm(localMpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("Pitfall 3: github-source no-errno refresh failure still renders `{network unreachable}` (classification did not collapse)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // A github fetch failure with NO errno code and NO typed manifest error is
+    // genuinely plausibly-network -> the `?? ["network unreachable"]` catch-all
+    // MUST still fire. This is the regression lock proving the ATTR-10 typed
+    // manifest branch did NOT swallow the github network default.
+    await seedGithubMarketplace({ cwd, name: "ghnet", ref: "main" });
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      // Plain Error: message mentions ENETUNREACH but carries no `.code` errno,
+      // so reasonsFromCascadeError returns undefined and the network default
+      // fires for this github source.
+      fetchThrows: new Error("mock: connection failed reaching github.com"),
+    });
+    await updateMarketplace({ ctx, pi, name: "ghnet", scope: "project", cwd, gitOps });
+
+    assert.equal(notifications.length, 1);
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    assert.equal(first.severity, "error");
+    assert.match(first.message, /\(failed\) \{network unreachable\}/);
+    assert.doesNotMatch(first.message, /\{invalid manifest\}/);
+  });
+});
+
 test("MU-6 + MU-8: cascade runs ONLY when autoupdate=true; pluginUpdate called once per state plugin (never for new-manifest entries)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // Seed with autoupdate=true and one installed plugin.

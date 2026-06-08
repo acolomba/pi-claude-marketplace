@@ -544,6 +544,78 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
 });
 
 // ===========================================================================
+// Pitfall 1 (D-48-A byte-regression locks): adding `reasons?` to the MpFailed
+// arm (Plan 48-01) MUST NOT change the byte form of an existing bare-`(failed)`
+// marketplace state that omits `reasons`. `composeReasons(undefined, ...)`
+// returns "", and the renderer's `reasonsBrace === ""` ternary then emits the
+// bare `⊘ <name> [<scope>] (failed)` header with NO reason brace. These tests
+// pin the THREE pre-existing bare-`(failed)` byte forms that this milestone's
+// catalog states reference:
+//   - `failure-unreachable` (marketplace add)  -> `⊘ <mp> [<scope>] (failed)`
+//   - `mp-failure-network`  (marketplace update) -> same header (cause rides a
+//      synthetic child row in the live path; the bare header is the locked form)
+//   - the autoupdate bare-not-found form was SUPERSEDED to `{not added}` in Plan
+//      48-02, so the third bare form is re-asserted here on the same MpFailed
+//      arm (an autoupdate-shaped marketplace `failed` with reasons omitted) to
+//      prove the arm itself stayed byte-stable for any reasons-omitted failed mp.
+// The load-bearing proof is that each renders `(failed)` with NO `{...}` brace.
+// ===========================================================================
+
+test("Pitfall 1 / D-48-A: bare-(failed) add `failure-unreachable` form is byte-unchanged (reasons omitted -> brace collapses)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [{ name: "unreachable-mp", scope: "user", status: "failed", plugins: [] }],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const rendered = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `1 marketplace operation failed.\n\n⊘ unreachable-mp [user] (failed)`,
+    "error",
+  ]);
+  // The header carries NO reason brace -- the D-48-A `reasons?` addition did not
+  // regress the bare form.
+  assert.match(rendered, /⊘ unreachable-mp \[user\] \(failed\)$/m);
+  assert.doesNotMatch(rendered, /\(failed\) \{/);
+});
+
+test("Pitfall 1 / D-48-A: bare-(failed) update `mp-failure-network` header is byte-unchanged (reasons omitted -> brace collapses)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [{ name: "official", scope: "user", status: "failed", plugins: [] }],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const rendered = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `1 marketplace operation failed.\n\n⊘ official [user] (failed)`,
+    "error",
+  ]);
+  assert.match(rendered, /⊘ official \[user\] \(failed\)$/m);
+  assert.doesNotMatch(rendered, /\(failed\) \{/);
+});
+
+test("Pitfall 1 / D-48-A: a reasons-omitted failed marketplace arm renders bare `(failed)` (the third bare form; arm byte-stable)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  // Explicitly omit `reasons` on the MpFailed arm: the brace MUST collapse.
+  const msg: NotificationMessage = {
+    marketplaces: [{ name: "missing-mp", scope: "project", status: "failed", plugins: [] }],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const rendered = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `1 marketplace operation failed.\n\n⊘ missing-mp [project] (failed)`,
+    "error",
+  ]);
+  assert.match(rendered, /⊘ missing-mp \[project\] \(failed\)$/m);
+  assert.doesNotMatch(rendered, /\(failed\) \{/);
+});
+
+// ===========================================================================
 // 15a-15e (D-17.1-05.2): tests covering the autoupdate
 // surface (D-17.1-02 / D-18-05). Three per-arm byte-equality tests
 // (autoupdate enabled, autoupdate disabled, skipped + reasons) lock the

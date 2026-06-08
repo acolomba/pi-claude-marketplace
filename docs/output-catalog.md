@@ -1276,6 +1276,19 @@ Marketplace header carries `(updated)`; plugin rows mix outcomes. Reload-hint fi
 
 Marketplace-level failure with no plugin children evaluated. No reload-hint (failed marketplace does not trigger per D-16-12). Severity: `error`. The cause-chain trailer for failed marketplaces is not emitted by the current `notify()` renderer (the v2 type model places `cause?: Error` on plugin variants only); orchestrators surfacing the cause must do so via a per-plugin manual-recovery or failed row inside the block.
 
+### Marketplace update failed (path-source invalid manifest)
+
+Triggered when `marketplace update <name>` refreshes a PATH-source marketplace whose `marketplace.json` is malformed JSON or schema-invalid (ATTR-10 / D-48-B). `loadMarketplaceManifest` throws the typed `InvalidMarketplaceManifestError`; `refreshRecord` wraps it as `MarketplaceUpdateError`, and the `refreshOneMarketplace` catch classifies it via `reasonsFromCascadeError` (which now recognizes the typed manifest error before the `?? ["network unreachable"]` default) to `{invalid manifest}` -- carried on the synthetic-child failed row (the marketplace header has no `reasons` field for this recipe; the reason rides the child, mirroring `mp-failure-network`). A path-source refresh touches ZERO network (NFR-5), so the former lying `{network unreachable}` default MUST NOT fire here. github-source no-errno failures KEEP `{network unreachable}` as the catch-all (the classification did not collapse). No reload-hint (failed marketplace does not trigger per D-16-12). Severity: `error`. The summary prefix counts the synthetic child as one plugin operation.
+
+<!-- catalog-state: update-path-invalid-manifest -->
+
+```text
+1 plugin operation and 1 marketplace operation failed.
+
+⊘ official [user] (failed)
+  ⊘ official (failed) {invalid manifest}
+```
+
 ______________________________________________________________________
 
 ## `/claude:plugin marketplace autoupdate|noautoupdate <name>`
