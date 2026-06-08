@@ -909,7 +909,7 @@ Process-lifetime in-memory cache wrapping the single `loadMarketplaceManifest` s
 | 45. Manifest In-Memory Cache                                        | v1.9      | 2/2 | Complete    | 2026-06-07 |
 | 46. Type-Model Foundations                                          | v1.10     | 1/1 | Complete    | 2026-06-07 |
 | 47. Plugin-Ops Attribution & Cross-Scope                            | v1.10     | 3/3 | Complete    | 2026-06-07 |
-| 48. Marketplace-Ops Attribution                                     | v1.10     | 0/?            | Not started | --         |
+| 48. Marketplace-Ops Attribution                                     | v1.10     | 3/3 | Complete    | 2026-06-08 |
 | 49. Cross-Op Convergence & GREEN-Gate Close                         | v1.10     | 0/?            | Not started | --         |
 
 ### In progress v1.10 Error Attribution & Message-Type Consistency (Phases 46-49)
@@ -918,7 +918,7 @@ Every plugin/marketplace operation reports the true blocker on the correct subje
 
 - [x] Phase 46: Type-Model Foundations -- TYPE-01, TYPE-02, TYPE-03, TYPE-04 (completed 2026-06-07)
 - [x] Phase 47: Plugin-Ops Attribution & Cross-Scope (3 plans) -- ATTR-01, ATTR-02, ATTR-03, ATTR-04, ATTR-08, ATTR-09, SCOPE-01 (completed 2026-06-07)
-- [ ] Phase 48: Marketplace-Ops Attribution -- ATTR-05, ATTR-06, ATTR-07, ATTR-10
+- [x] Phase 48: Marketplace-Ops Attribution -- ATTR-05, ATTR-06, ATTR-07, ATTR-10 (completed 2026-06-08)
 - [ ] Phase 49: Cross-Op Convergence & GREEN-Gate Close -- verification (no new requirement closure)
 
 ### Phase 46: Type-Model Foundations
@@ -985,21 +985,21 @@ Plans:
 4. A path-source malformed/unreadable manifest during `marketplace update` reports a manifest-specific reason (e.g. `invalid manifest`), never `{network unreachable}` -- the `refreshOneMarketplace` `?? ["network unreachable"]` default no longer fires for a path source, and a `SyntaxError` / schema `Error` is classified to the manifest reason; the path-source `marketplace update` path performs no network access (ATTR-10, NFR-5, audit M-3 Class A+D).
 5. `npm run check` exits 0; the edge handlers for `remove` / `update` / `add` have try/notify discipline (no bare-registered handler lets a precondition error escape raw); every new structured `(failed)` row is paired with a catalog state in `docs/output-catalog.md` and a `tests/architecture/catalog-uat.test.ts` fixture, byte-equality GREEN (NFR-6).
 
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 
 Plans:
 
 **Wave 1** *(serialized: each plan depends on the prior; never run concurrently -- shared `shared/notify.ts` / catalog convergence, like Phase 47)*
 
-- [ ] 48-01-PLAN.md -- D-48-A foundation (MpFailed.reasons? + renderer + inverted proof) + typed InvalidMarketplaceManifestError + `marketplace add` precondition routing (ATTR-07; D-48-A/D-48-B-typed-error)
+- [x] 48-01-PLAN.md -- D-48-A foundation (MpFailed.reasons? + renderer + inverted proof) + typed InvalidMarketplaceManifestError + `marketplace add` precondition routing (ATTR-07; D-48-A/D-48-B-typed-error)
 
 **Wave 2** *(blocked on 48-01 completion)*
 
-- [ ] 48-02-PLAN.md -- `autoupdate`/`noautoupdate` + `marketplace remove` missing-marketplace converge on standalone `(failed) {not added}` (ATTR-05, ATTR-06; D-48-C Shape 1, reuse Phase 46 MarketplaceNotAddedMessage)
+- [x] 48-02-PLAN.md -- `autoupdate`/`noautoupdate` + `marketplace remove` missing-marketplace converge on standalone `(failed) {not added}` (ATTR-05, ATTR-06; D-48-C Shape 1, reuse Phase 46 MarketplaceNotAddedMessage)
 
 **Wave 3** *(blocked on 48-02 completion)*
 
-- [ ] 48-03-PLAN.md -- `marketplace update` path-source manifest reason classification `{invalid manifest}` (never `{network unreachable}`) + bare-(failed) byte-regression locks + phase GREEN gate (ATTR-10, NFR-5; D-48-B Option B2)
+- [x] 48-03-PLAN.md -- `marketplace update` path-source manifest reason classification `{invalid manifest}` (never `{network unreachable}`) + bare-(failed) byte-regression locks + phase GREEN gate (ATTR-10, NFR-5; D-48-B Option B2)
 
 ### Phase 49: Cross-Op Convergence & GREEN-Gate Close
 

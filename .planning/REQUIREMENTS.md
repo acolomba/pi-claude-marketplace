@@ -18,12 +18,12 @@ Themes 1-3: every operation reports the true blocker on the correct subject with
 - [x] **ATTR-02**: `update` (single-plugin `<plugin>@<mp>` and `@<mp>` forms) reports a missing marketplace as a structured `(failed) {not added}` on the marketplace subject -- no `{not found}` misattribution, no raw throw past the orchestrator
 - [x] **ATTR-03**: `reinstall` reports a missing marketplace as `{not added}` consistently across explicit-scope and bare forms (not `{not installed}` or `{not found}` depending on form)
 - [x] **ATTR-04**: `uninstall` of a marketplace that was never added reports it explicitly (`{not added}`), distinct from the silent converge used when a plugin record is merely already gone
-- [ ] **ATTR-05**: `marketplace autoupdate`/`noautoupdate` of a missing marketplace reports `{not added}` consistently whether the scope is explicit or the name is missing in every scope (no reason-less failed row, no `{not found}`)
-- [ ] **ATTR-06**: `marketplace remove` of a missing marketplace renders a structured `(failed) {not added}` row instead of throwing `MarketplaceNotFoundError` raw past the orchestrator boundary
-- [ ] **ATTR-07**: `marketplace add` surfaces its precondition failures (duplicate name, stale clone, unsupported source, missing path source, invalid manifest) as structured `(failed)` rows with closed-set reasons, instead of raw throws
+- [x] **ATTR-05**: `marketplace autoupdate`/`noautoupdate` of a missing marketplace reports `{not added}` consistently whether the scope is explicit or the name is missing in every scope (no reason-less failed row, no `{not found}`)
+- [x] **ATTR-06**: `marketplace remove` of a missing marketplace renders a structured `(failed) {not added}` row instead of throwing `MarketplaceNotFoundError` raw past the orchestrator boundary
+- [x] **ATTR-07**: `marketplace add` surfaces its precondition failures (duplicate name, stale clone, unsupported source, missing path source, invalid manifest) as structured `(failed)` rows with closed-set reasons, instead of raw throws
 - [x] **ATTR-08**: `install` distinguishes "marketplace absent" (`{not added}`) from "plugin absent from a present manifest" (`{not in manifest}`) -- the two conditions emit different reasons
 - [x] **ATTR-09**: cleanup/cascade failures (foreign content, IO) during `uninstall`/`reinstall`/`marketplace remove` surface a truthful reason instead of degrading to `{not in manifest}`
-- [ ] **ATTR-10**: a path-source manifest failure during `marketplace update` reports a manifest-specific reason, never `{network unreachable}` (honors NFR-5: path-source operations touch no network)
+- [x] **ATTR-10**: a path-source manifest failure during `marketplace update` reports a manifest-specific reason, never `{network unreachable}` (honors NFR-5: path-source operations touch no network)
 
 ### Cross-Scope Reporting (SCOPE)
 
@@ -73,12 +73,12 @@ Which phases cover which requirements. Each requirement maps to exactly one phas
 | ATTR-02 | Phase 47 | Complete |
 | ATTR-03 | Phase 47 | Complete |
 | ATTR-04 | Phase 47 | Complete |
-| ATTR-05 | Phase 48 | Pending |
-| ATTR-06 | Phase 48 | Pending |
-| ATTR-07 | Phase 48 | Pending |
+| ATTR-05 | Phase 48 | Complete |
+| ATTR-06 | Phase 48 | Complete |
+| ATTR-07 | Phase 48 | Complete |
 | ATTR-08 | Phase 47 | Complete |
 | ATTR-09 | Phase 47 | Complete |
-| ATTR-10 | Phase 48 | Pending |
+| ATTR-10 | Phase 48 | Complete |
 | SCOPE-01 | Phase 47 | Complete |
 | TYPE-01 | Phase 46 | Complete |
 | TYPE-02 | Phase 46 | Complete |
