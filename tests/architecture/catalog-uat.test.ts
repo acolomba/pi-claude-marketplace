@@ -1331,6 +1331,90 @@ const FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // ATTR-07 / D-48-A: the five marketplace-add precondition reasons render on
+    // the marketplace subject via the MpFailed.reasons brace. Post-manifest
+    // failures carry the derived name; pre-manifest failures carry the raw
+    // source string (A2). All route to `error` severity (failed-bearing).
+    "add-duplicate-name": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            status: "failed",
+            reasons: ["duplicate name"],
+            plugins: [],
+          },
+        ],
+      },
+    },
+
+    "add-stale-clone": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            status: "failed",
+            reasons: ["stale clone"],
+            plugins: [],
+          },
+        ],
+      },
+    },
+
+    "add-unsupported-source": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "git@github.com:foo/bar.git",
+            scope: "user",
+            status: "failed",
+            reasons: ["unsupported source"],
+            plugins: [],
+          },
+        ],
+      },
+    },
+
+    "add-source-missing": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "./missing-mp",
+            scope: "user",
+            status: "failed",
+            reasons: ["source missing"],
+            plugins: [],
+          },
+        ],
+      },
+    },
+
+    "add-invalid-manifest": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "anthropics/claude-plugins-official",
+            scope: "user",
+            status: "failed",
+            reasons: ["invalid manifest"],
+            plugins: [],
+          },
+        ],
+      },
+    },
   },
 
   // -------------------------------------------------------------------------

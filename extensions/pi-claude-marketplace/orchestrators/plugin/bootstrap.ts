@@ -25,6 +25,13 @@
 //   - Only `MarketplaceDuplicateNameError` is swallowed from
 //     `addMarketplace`. All other errors propagate so the surface
 //     matches existing orchestrator behavior.
+//   - ATTR-07 (Phase 48): `addMarketplace` now routes precondition failures
+//     (incl. duplicate name) through `notify` as a `(failed) {<reason>}` row
+//     for the public `marketplace add` command. Bootstrap MUST keep the
+//     one-signal-per-state-change contract, so it passes
+//     `rethrowPreconditionErrors: true` to restore the throw-based contract
+//     it depends on -- catching + swallowing the typed duplicate-name error so
+//     no failed row leaks on an idempotent re-run.
 
 import { MarketplaceDuplicateNameError } from "../../shared/errors.ts";
 import { addMarketplace } from "../marketplace/add.ts";
@@ -96,6 +103,10 @@ export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<voi
       cwd: opts.cwd,
       rawSource: BOOTSTRAP_SOURCE,
       gitOps: opts.gitOps,
+      // ATTR-07: re-throw the typed precondition (incl. MarketplaceDuplicateName
+      // Error) instead of emitting a `(failed)` row, so the catch below can
+      // swallow the idempotent re-run and keep one-signal-per-state-change.
+      rethrowPreconditionErrors: true,
     });
   } catch (err) {
     // The marketplace already exists in user scope -- idempotent path.

@@ -1021,8 +1021,8 @@ type _Assert_NotifSixArms =
               : true;
 export const _l12: _Assert_NotifSixArms = true;
 
-// --- TYPE-04 (D-46-03): per-status co-occurrence -- reasons only on skipped,
-//     details only on the list arm, neither on failed ---
+// --- TYPE-04 (D-46-03 / D-48-A): per-status co-occurrence -- reasons on
+//     skipped AND failed, details only on the list arm ---
 
 type _MpSkipped = Extract<MarketplaceNotificationMessage, { status: "skipped" }>;
 type _MpList = Extract<MarketplaceNotificationMessage, { status?: undefined }>;
@@ -1040,10 +1040,20 @@ type _Assert_DetailsOnList = _MpList["details"] extends MarketplaceDetails | und
   : never;
 export const _mdl: _Assert_DetailsOnList = true;
 
-// @ts-expect-error -- TYPE-04 / D-46-03a: the failed mp arm has NO reasons
-export type _NoReasonsOnMpFailed = _MpFailed["reasons"];
+// D-48-A: the failed mp arm now carries OPTIONAL reasons (ContentReason[])
+// so a marketplace-op precondition failure with no plugin child rows can
+// render its closed-set reason on the marketplace subject. TYPE-02 preserved:
+// the field is ContentReason[], so the structural "not added" stays out.
+type _Assert_ReasonsOnMpFailed = _MpFailed["reasons"] extends readonly ContentReason[] | undefined
+  ? true
+  : never;
+export const _mrf: _Assert_ReasonsOnMpFailed = true;
 // @ts-expect-error -- TYPE-04 / D-46-03a: the failed mp arm has NO details
 export type _NoDetailsOnMpFailed = _MpFailed["details"];
+// @ts-expect-error -- TYPE-02 / D-48-A: the structural "not added" marker is
+//   NOT assignable to MpFailed.reasons (the field is ContentReason[], which
+//   excludes "not added"; that condition is MarketplaceNotAddedMessage).
+export const _mrfNotAdded: _MpFailed["reasons"] = ["not added"];
 // @ts-expect-error -- TYPE-04: the skipped mp arm has NO details
 export type _NoDetailsOnMpSkipped = _MpSkipped["details"];
 // @ts-expect-error -- TYPE-04: the list mp arm has NO reasons

@@ -11,11 +11,19 @@
 // these directly; local wrappers (e.g. `list.ts::narrowListFailReason`)
 // remain valid when a caller needs a distinct semantic name.
 
+import { InvalidMarketplaceManifestError } from "./errors.ts";
+
 /**
  * Classify a thrown FS/JSON error into a closed-set probe Reason.
  *
  *   - `SyntaxError`           -> `unparseable` (JSON.parse on a
  *     malformed `plugin.json` / `marketplace.json`)
+ *   - `InvalidMarketplaceManifestError` whose `cause` is a `SyntaxError`
+ *     -> `unparseable` (D-48-B: `loadMarketplaceManifest` now wraps a
+ *     malformed-JSON `SyntaxError` in the typed manifest error, so the read-
+ *     only `info`/`list` surfaces must unwrap the cause to preserve the
+ *     `{unparseable}` reason). A schema-invalid manifest (typed error with NO
+ *     `SyntaxError` cause) keeps the permissive `unreadable` fallback.
  *   - `EACCES` / `EPERM`      -> `permission denied`
  *   - `ENOENT` / `ENOTDIR`    -> `source missing`
  *   - any other thrown shape  -> `unreadable` (permissive fallback)
@@ -28,6 +36,14 @@ export function narrowProbeError(
   err: unknown,
 ): "permission denied" | "source missing" | "unparseable" | "unreadable" {
   if (err instanceof SyntaxError) {
+    return "unparseable";
+  }
+
+  // D-48-B: a malformed-JSON manifest is now surfaced as a typed
+  // InvalidMarketplaceManifestError carrying the original SyntaxError as cause.
+  // Unwrap one level so the read-only surfaces keep classifying it as
+  // `unparseable` rather than the generic `unreadable` fallback.
+  if (err instanceof InvalidMarketplaceManifestError && err.cause instanceof SyntaxError) {
     return "unparseable";
   }
 

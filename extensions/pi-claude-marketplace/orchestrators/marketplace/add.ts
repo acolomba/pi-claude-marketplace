@@ -57,8 +57,10 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { DEFAULT_CREDENTIAL_OPS } from "../../platform/git-credential.ts";
 import { dropMarketplaceCache, invalidateMarketplaceNames } from "../../shared/completion-cache.ts";
 import {
+  InvalidMarketplaceManifestError,
   MarketplaceDuplicateNameError,
   StaleSourceCloneError,
+  UnsupportedSourceError,
   appendLeakToError,
   errorMessage,
 } from "../../shared/errors.ts";
@@ -75,6 +77,7 @@ import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { AuthAttemptResult } from "../../platform/git.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { ContentReason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface AddMarketplaceOptions {
@@ -104,21 +107,125 @@ export interface AddMarketplaceOptions {
    * can drive Device Flow end-to-end without network.
    */
   readonly deviceFlowHttp?: DeviceFlowHttp;
+  /**
+   * Composition seam for `bootstrapClaudePlugin` (ATTR-07). When `true`, the
+   * enumerated precondition errors are re-thrown (typed) instead of being
+   * routed through `notify` as a `(failed) {<reason>}` row. Bootstrap relies on
+   * catching `MarketplaceDuplicateNameError` to detect the idempotent re-run
+   * and SUPPRESS a duplicate add notification (one-signal-per-state-change). The
+   * public `marketplace add` command path omits this flag and gets the ATTR-07
+   * structured failed row. Omitted (undefined) => route through notify.
+   */
+  readonly rethrowPreconditionErrors?: boolean;
 }
 
-export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void> {
-  const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
-  const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
-  const locations = locationsFor(opts.scope, opts.cwd);
-  const source = parsePluginSource(opts.rawSource);
-
-  // MA-10: parser produced an unknown kind with a reason -- surface verbatim.
-  if (source.kind === "unknown") {
-    throw new Error(`Cannot add marketplace from "${opts.rawSource}": ${source.reason}`);
+/**
+ * Resolve the typed add-precondition error from a thrown value, unwrapping ONE
+ * level of `Error.cause`. The github guard's MA-9 catch wraps a precondition
+ * error via `appendLeakToError` when `cleanupStaging` itself leaks -- that
+ * produces a generic `Error` whose `.cause` is the original typed error. Both
+ * the unwrapped (no-leak) and wrapped (leak) shapes must classify identically,
+ * so ATTR-07 routing survives a cleanup leak (Pitfall 4). Single level only --
+ * a deeper chain is not an add-precondition shape this orchestrator produces.
+ */
+function unwrapAddError(err: unknown): unknown {
+  if (
+    err instanceof MarketplaceDuplicateNameError ||
+    err instanceof StaleSourceCloneError ||
+    err instanceof InvalidMarketplaceManifestError ||
+    err instanceof UnsupportedSourceError
+  ) {
+    return err;
   }
 
+  if (err instanceof Error && err.cause !== undefined) {
+    return err.cause;
+  }
+
+  return err;
+}
+
+/**
+ * ATTR-07 (Pattern 3): map an `addMarketplace` precondition error to its
+ * closed-set `ContentReason`. Fully `instanceof`-driven (D-48-C A3) so the
+ * catch-all returns `undefined` -- a non-enumerated error (e.g.
+ * `StateLockHeldError`, an unforeseen catastrophic failure) re-throws at the
+ * entrypoint rather than being silently mislabeled. No substring matching.
+ */
+function classifyAddError(rawErr: unknown): ContentReason | undefined {
+  const err = unwrapAddError(rawErr);
+  if (err instanceof MarketplaceDuplicateNameError) {
+    return "duplicate name";
+  }
+
+  if (err instanceof StaleSourceCloneError) {
+    return "stale clone";
+  }
+
+  if (err instanceof InvalidMarketplaceManifestError) {
+    return "invalid manifest";
+  }
+
+  if (err instanceof UnsupportedSourceError) {
+    return "unsupported source";
+  }
+
+  if (err instanceof Error) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return "source missing";
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * ATTR-07 (A2): the marketplace subject name for a failed-add row. Post-manifest
+ * failures know the derived marketplace name (`MarketplaceDuplicateNameError`
+ * carries `mpName`; `StaleSourceCloneError` carries the derived `mpName`), so
+ * the row renders on the real subject. Pre-clone/pre-manifest failures
+ * (unsupported source, source missing, invalid manifest) have no derived name,
+ * so the user-typed `rawSource` is the subject.
+ */
+function addSubjectName(rawErr: unknown, rawSource: string): string {
+  const err = unwrapAddError(rawErr);
+  if (err instanceof MarketplaceDuplicateNameError) {
+    return err.mpName;
+  }
+
+  if (err instanceof StaleSourceCloneError && err.mpName !== undefined) {
+    return err.mpName;
+  }
+
+  return rawSource;
+}
+
+/**
+ * Dispatch the source-kind precondition + the in-guard add. Extracted so the
+ * entrypoint try/catch (ATTR-07) wraps BOTH the synchronous source-kind refusal
+ * (S5a/S5b -> UnsupportedSourceError) and the guard body uniformly.
+ */
+async function runAddInGuard(args: {
+  opts: AddMarketplaceOptions;
+  locations: ScopedLocations;
+  source: ReturnType<typeof parsePluginSource>;
+  gitOps: GitOps;
+  credentialOps: CredentialOps;
+}): Promise<string> {
+  const { opts, locations, source, gitOps, credentialOps } = args;
+
+  // S5a (MA-10): parser produced an unknown kind with a reason -- surface
+  // verbatim on the cause, classified as `unsupported source` (D-48-C A3).
+  if (source.kind === "unknown") {
+    throw new UnsupportedSourceError(
+      `Cannot add marketplace from "${opts.rawSource}": ${source.reason}`,
+    );
+  }
+
+  // S5b: valid-but-unsupported kinds (url / git-subdir / npm).
   if (source.kind !== "github" && source.kind !== "path") {
-    throw new Error(
+    throw new UnsupportedSourceError(
       `Cannot add marketplace from "${opts.rawSource}": unsupported source kind ${source.kind}`,
     );
   }
@@ -149,6 +256,60 @@ export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void>
   if (recordedName === undefined) {
     // Defensive: the guard always sets it on success.
     throw new Error("addMarketplace: internal error -- guard returned without recording a name");
+  }
+
+  return recordedName;
+}
+
+export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void> {
+  const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
+  const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
+  const locations = locationsFor(opts.scope, opts.cwd);
+  const source = parsePluginSource(opts.rawSource);
+
+  // ATTR-07: route every enumerated precondition failure through notify as a
+  // structured `⊘ <subject> [<scope>] (failed) {<reason>}` row on the
+  // marketplace subject (D-48-A reasons brace) instead of throwing raw past the
+  // orchestrator. Genuinely unexpected/catastrophic errors re-throw -- only the
+  // closed-set add preconditions are caught here. The github guard's own catch
+  // (cleanupStaging + appendLeakToError) runs FIRST and re-throws; this catch
+  // sees the already-cleaned error, so no staging dir leaks (Pitfall 4).
+  let recordedName: string;
+  try {
+    recordedName = await runAddInGuard({
+      opts,
+      locations,
+      source,
+      gitOps,
+      credentialOps,
+    });
+  } catch (err) {
+    const reason = classifyAddError(err);
+    if (reason === undefined) {
+      // Not an enumerated add precondition (e.g. a StateLockHeldError or an
+      // unforeseen catastrophic error) -- never swallow it.
+      throw err;
+    }
+
+    if (opts.rethrowPreconditionErrors === true) {
+      // Composition seam (bootstrap): re-throw the typed precondition so the
+      // caller can make a control-flow decision (e.g. swallow the idempotent
+      // duplicate-name re-run) instead of emitting a structured failed row.
+      throw err;
+    }
+
+    notify(opts.ctx, opts.pi, {
+      marketplaces: [
+        {
+          name: addSubjectName(err, opts.rawSource),
+          scope: opts.scope,
+          status: "failed",
+          reasons: [reason],
+          plugins: [],
+        },
+      ],
+    });
+    return;
   }
 
   // D-03-INV: post-state-commit completion-cache invalidation.
@@ -254,7 +415,9 @@ async function addGithubInGuard(args: {
     // 4. MA-6: stale-clone refusal on the final destination.
     finalDir = await locations.sourceCloneDir(derivedName);
     if (await pathExists(finalDir)) {
-      throw new StaleSourceCloneError(finalDir);
+      // Carry the derived name so the ATTR-07 entrypoint catch renders the
+      // `(failed) {stale clone}` row on the marketplace SUBJECT (A2).
+      throw new StaleSourceCloneError(finalDir, derivedName);
     }
 
     // 5. Atomic rename -- same FS by D-09 (sources-staging/ and sources/
@@ -323,7 +486,15 @@ async function addPathInGuard(args: {
     // Walk up two levels: <root>/.claude-plugin/marketplace.json -> <root>
     marketplaceRoot = path.dirname(path.dirname(manifestPath));
   } else {
-    throw new Error(`Local marketplace path is neither a file nor a directory: ${onDiskPath}`);
+    // ATTR-07 (S5e): a path that exists but is neither a regular file nor a
+    // directory (e.g. a socket / fifo) is an unusable source. Tag it ENOTDIR so
+    // classifyAddError routes it structurally to `source missing` alongside the
+    // ENOENT (path absent) case -- no substring matching.
+    const notUsable = new Error(
+      `Local marketplace path is neither a file nor a directory: ${onDiskPath}`,
+    ) as NodeJS.ErrnoException;
+    notUsable.code = "ENOTDIR";
+    throw notUsable;
   }
 
   // Read + validate manifest.

@@ -13,10 +13,6 @@ import {
   __resetCacheForTests,
   getMarketplaceNames,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import {
-  MarketplaceDuplicateNameError,
-  StaleSourceCloneError,
-} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { makeMockCredentialOps } from "../../helpers/credential-mock.ts";
 import { makeMockDeviceFlowHttp } from "../../helpers/device-flow-mock.ts";
@@ -138,9 +134,9 @@ test("MA-5: github HTTPS source with #ref clones the canonical repo URL at that 
   });
 });
 
-test("MA-6: pre-existing non-empty sources/<name>/ throws StaleSourceCloneError", async () => {
+test("MA-6 / ATTR-07: pre-existing non-empty sources/<name>/ renders (failed) {stale clone} on the marketplace subject", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
-    const { ctx, pi } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     // Pre-create the final dir with a marker file so pathExists returns true.
     const finalDir = await locations.sourceCloneDir("valid-marketplace");
     await mkdir(finalDir, { recursive: true });
@@ -150,21 +146,29 @@ test("MA-6: pre-existing non-empty sources/<name>/ throws StaleSourceCloneError"
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
-    await assert.rejects(
-      addMarketplace({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        rawSource: "anthropics/claude-plugins-official",
-        gitOps,
-      }),
-      (err: unknown): err is StaleSourceCloneError => err instanceof StaleSourceCloneError,
+    // ATTR-07: no raw throw -- the precondition routes through notify.
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+
+    const note = notifications[0];
+    assert.ok(note);
+    // Post-manifest failure: subject is the derived marketplace name (A2).
+    // notify() prepends the UXG-07 summary line for error severity.
+    assert.equal(
+      note.message,
+      "1 marketplace operation failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}",
     );
+    assert.equal(note.severity, "error");
   });
 });
 
-test("MA-8: duplicate name in same scope throws MarketplaceDuplicateNameError", async () => {
+test("MA-8 / ATTR-07: duplicate name in same scope renders (failed) {duplicate name}", async () => {
   await withTmpScope(async ({ cwd }) => {
     const { ctx, pi } = makeCtx();
     const { gitOps: gitOps1 } = makeMockGitOps({
@@ -180,48 +184,59 @@ test("MA-8: duplicate name in same scope throws MarketplaceDuplicateNameError", 
       gitOps: gitOps1,
     });
 
+    const { ctx: ctx2, pi: pi2, notifications: n2 } = makeCtx();
     const { gitOps: gitOps2 } = makeMockGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
-    // Second add for same name throws.
-    await assert.rejects(
-      addMarketplace({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        rawSource: "anthropics/claude-plugins-official",
-        gitOps: gitOps2,
-      }),
-      (err: unknown): err is MarketplaceDuplicateNameError =>
-        err instanceof MarketplaceDuplicateNameError,
+    // ATTR-07: second add for same name routes through notify, no raw throw.
+    await addMarketplace({
+      ctx: ctx2,
+      pi: pi2,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps: gitOps2,
+    });
+
+    const note = n2[0];
+    assert.ok(note);
+    // Post-manifest failure: subject is the derived marketplace name (A2).
+    assert.equal(
+      note.message,
+      "1 marketplace operation failed.\n\n⊘ valid-marketplace [project] (failed) {duplicate name}",
     );
+    assert.equal(note.severity, "error");
   });
 });
 
-test("MA-9: invalid manifest after clone triggers cleanupStaging + appendLeakToError", async () => {
+test("MA-9 / ATTR-07: invalid manifest after clone renders (failed) {invalid manifest}; cleanupStaging still runs", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
-    const { ctx, pi } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps, state } = makeMockGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("invalid-manifest"),
     });
 
-    let caught: unknown;
-    try {
-      await addMarketplace({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        rawSource: "anthropics/claude-plugins-official",
-        gitOps,
-      });
-    } catch (e) {
-      caught = e;
-    }
+    // ATTR-07: no raw throw escapes -- the precondition routes through notify.
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
 
-    // (1) Threw a manifest-related error.
-    assert.ok(caught instanceof Error, "addMarketplace should throw on invalid manifest");
+    // (1) Routed through notify as a structured (failed) {invalid manifest} row.
+    //     Pre-name failure (manifest unreadable, so no derived name) -> subject
+    //     is the raw source string (A2).
+    const note = notifications[0];
+    assert.ok(note, "addMarketplace should notify on invalid manifest");
+    assert.equal(
+      note.message,
+      "1 marketplace operation failed.\n\n" +
+        "⊘ anthropics/claude-plugins-official [project] (failed) {invalid manifest}",
+    );
+    assert.equal(note.severity, "error");
 
     // (2) The clone DID happen (NFR-5 not violated for github source).
     assert.equal(state.cloneCalls.length, 1);
@@ -234,48 +249,51 @@ test("MA-9: invalid manifest after clone triggers cleanupStaging + appendLeakToE
       "state must NOT contain the partial marketplace",
     );
 
-    // (4) appendLeakToError ran: staging dir cleanup attempted, leak chain present.
-    //     If cleanupStaging succeeded, the parent sources-staging/ dir is gone
-    //     or contains no leftover uuid subdirs (this run's staging dir was removed).
-    //     If cleanupStaging itself failed, err.message contains the canonical
-    //     leak phrase from appendLeakToError.
-    // MA-9 contract: either staging dir empty (cleanup succeeded) OR err.message reports leak.
+    // (4) Pitfall 4: cleanupStaging from addGithubInGuard's catch STILL ran
+    //     before the failed row was emitted -- no staging-dir leak. If
+    //     cleanupStaging succeeded, the parent sources-staging/ dir is gone or
+    //     contains no leftover uuid subdirs.
     const sourcesStagingRoot = path.join(locations.extensionRoot, "sources-staging");
     const stagingExists = await pathExists(sourcesStagingRoot);
     if (stagingExists) {
       const remaining = await readdir(sourcesStagingRoot);
-      const cleanupSucceeded = remaining.length === 0;
-      const errMsg = caught instanceof Error ? caught.message : "";
-      const leakReported = /staging.*leak|leak.*staging|orphan|leaked|additionally/i.test(errMsg);
-      assert.ok(
-        cleanupSucceeded || leakReported,
-        `MA-9 contract: either staging dir empty (cleanup succeeded) or err.message reports leak. ` +
-          `Got: stagingExists=${String(stagingExists)}, remaining=${JSON.stringify(remaining)}, msg=${errMsg}`,
+      assert.equal(
+        remaining.length,
+        0,
+        `MA-9 / Pitfall 4: cleanupStaging must run before the failed row -- no staging leak. ` +
+          `Got remaining=${JSON.stringify(remaining)}`,
       );
     }
     // If sources-staging dir doesn't exist at all, cleanup succeeded fully (acceptable).
   });
 });
 
-test("MA-10: unknown source kind throws with parser's reason", async () => {
+test("MA-10 / ATTR-07: unknown source kind renders (failed) {unsupported source}", async () => {
   await withTmpScope(async ({ cwd }) => {
-    const { ctx, pi } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps, state } = makeMockGitOps();
 
-    await assert.rejects(
-      addMarketplace({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        rawSource: "git@github.com:foo/bar.git",
-        gitOps,
-      }),
-      (err: unknown): err is Error =>
-        err instanceof Error && err.message.includes("Cannot add marketplace from"),
-    );
+    // ATTR-07: no raw throw -- the unsupported-source precondition routes
+    // through notify on the raw source subject (pre-clone, pre-name -> A2).
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "git@github.com:foo/bar.git",
+      gitOps,
+    });
 
-    // NFR-5: unknown source NEVER reached gitOps.clone.
+    const note = notifications[0];
+    assert.ok(note);
+    assert.equal(
+      note.message,
+      "1 marketplace operation failed.\n\n" +
+        "⊘ git@github.com:foo/bar.git [project] (failed) {unsupported source}",
+    );
+    assert.equal(note.severity, "error");
+
+    // NFR-5: unsupported source NEVER reached gitOps.clone.
     assert.equal(state.cloneCalls.length, 0);
   });
 });
@@ -488,10 +506,11 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
   });
 });
 
-// addPathInGuard throws when stat() reports neither file nor directory.
-test("addPathInGuard: Unix domain socket path throws 'neither a file nor a directory'", async () => {
+// ATTR-07 (S5e): a path that exists but is neither a file nor a directory
+// (a Unix domain socket) is an unusable source -> (failed) {source missing}.
+test("ATTR-07: a Unix domain socket path renders (failed) {source missing}", async () => {
   await withTmpScope(async ({ cwd }) => {
-    const { ctx, pi } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const socketPath = path.join(tmpdir(), `mp-add-sock-${process.pid}.sock`);
     const server = net.createServer();
     await new Promise<void>((resolve, reject) => {
@@ -500,11 +519,16 @@ test("addPathInGuard: Unix domain socket path throws 'neither a file nor a direc
     });
     try {
       const { gitOps } = makeMockGitOps();
-      await assert.rejects(
-        addMarketplace({ ctx, pi, scope: "project", cwd, rawSource: socketPath, gitOps }),
-        (err: unknown): err is Error =>
-          err instanceof Error && err.message.includes("neither a file nor a directory"),
+      await addMarketplace({ ctx, pi, scope: "project", cwd, rawSource: socketPath, gitOps });
+
+      const note = notifications[0];
+      assert.ok(note);
+      // Pre-name failure (no readable manifest) -> subject is the raw source.
+      assert.equal(
+        note.message,
+        `1 marketplace operation failed.\n\n⊘ ${socketPath} [project] (failed) {source missing}`,
       );
+      assert.equal(note.severity, "error");
     } finally {
       await new Promise<void>((resolve) => {
         server.close(() => {
@@ -518,10 +542,33 @@ test("addPathInGuard: Unix domain socket path throws 'neither a file nor a direc
   });
 });
 
-// addPathInGuard throws MarketplaceDuplicateNameError on second path-source add.
-test("MA-8 (path source): duplicate name in same scope throws MarketplaceDuplicateNameError", async () => {
+// ATTR-07 (S5e): a path source that does not exist (ENOENT) renders
+// (failed) {source missing} on the raw source subject (pre-name).
+test("ATTR-07: a missing path source (ENOENT) renders (failed) {source missing}", async () => {
   await withTmpScope(async ({ cwd }) => {
-    const { ctx: ctx1 } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
+    const missingDir = path.join(tmpdir(), `mp-add-absent-${process.pid}-${Date.now()}`, "nope");
+    const { gitOps, state } = makeMockGitOps();
+
+    await addMarketplace({ ctx, pi, scope: "project", cwd, rawSource: missingDir, gitOps });
+
+    const note = notifications[0];
+    assert.ok(note);
+    assert.equal(
+      note.message,
+      `1 marketplace operation failed.\n\n⊘ ${missingDir} [project] (failed) {source missing}`,
+    );
+    assert.equal(note.severity, "error");
+    // NFR-5: a path source never touches gitOps.
+    assert.equal(state.cloneCalls.length, 0);
+  });
+});
+
+// ATTR-07 (path source): second path-source add of the same name renders the
+// structured (failed) {duplicate name} row, not a raw throw.
+test("MA-8 (path source) / ATTR-07: duplicate name in same scope renders (failed) {duplicate name}", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx: ctx1, pi: pi1 } = makeCtx();
     const localMpDir = await mkdtemp(path.join(tmpdir(), "mp-dup-path-"));
     try {
       await cp(fixtureMarketplaceDir("valid-marketplace"), localMpDir, { recursive: true });
@@ -529,27 +576,32 @@ test("MA-8 (path source): duplicate name in same scope throws MarketplaceDuplica
       const { gitOps: gitOps1 } = makeMockGitOps();
       await addMarketplace({
         ctx: ctx1,
-        pi: makeCtx().pi,
+        pi: pi1,
         scope: "project",
         cwd,
         rawSource: localMpDir,
         gitOps: gitOps1,
       });
 
-      const { ctx: ctx2 } = makeCtx();
+      const { ctx: ctx2, pi: pi2, notifications: n2 } = makeCtx();
       const { gitOps: gitOps2 } = makeMockGitOps();
-      await assert.rejects(
-        addMarketplace({
-          ctx: ctx2,
-          pi: makeCtx().pi,
-          scope: "project",
-          cwd,
-          rawSource: localMpDir,
-          gitOps: gitOps2,
-        }),
-        (err: unknown): err is MarketplaceDuplicateNameError =>
-          err instanceof MarketplaceDuplicateNameError,
+      await addMarketplace({
+        ctx: ctx2,
+        pi: pi2,
+        scope: "project",
+        cwd,
+        rawSource: localMpDir,
+        gitOps: gitOps2,
+      });
+
+      const note = n2[0];
+      assert.ok(note);
+      // Post-manifest failure -> subject is the derived marketplace name (A2).
+      assert.equal(
+        note.message,
+        "1 marketplace operation failed.\n\n⊘ valid-marketplace [project] (failed) {duplicate name}",
       );
+      assert.equal(note.severity, "error");
     } finally {
       await rm(localMpDir, { recursive: true, force: true });
     }

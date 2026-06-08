@@ -605,13 +605,21 @@ interface MpUpdated extends MpCommon {
 }
 
 /**
- * `(failed)` marketplace block. Carries NO mp-level `reasons` (D-46-03a):
- * the failure reason rides a child `PluginFailedMessage` row (e.g.
- * `orchestrators/marketplace/update.ts`), and `renderMpHeader`'s `failed` arm
- * renders only `${ICON_UNINSTALLABLE} ${name} [${scope}] (failed)`.
+ * `(failed)` marketplace block. Carries OPTIONAL mp-level `reasons?`
+ * (D-48-A): a marketplace-op precondition failure with NO plugin child rows
+ * (e.g. `marketplace add` duplicate-name / unsupported-source) renders its
+ * closed-set reason on the marketplace subject. `reasons?` is
+ * `readonly ContentReason[]` so the structural `"not added"` marker stays
+ * unrepresentable here (TYPE-02) -- that condition is the dedicated
+ * `MarketplaceNotAddedMessage` variant. When omitted/empty the brace
+ * collapses (composeReasons returns ""), preserving the bare
+ * `${ICON_UNINSTALLABLE} ${name} [${scope}] (failed)` byte form for the
+ * existing update/autoupdate mp-failure states that ride the cause on a child
+ * row.
  */
 interface MpFailed extends MpCommon {
   readonly status: "failed";
+  readonly reasons?: readonly ContentReason[];
 }
 
 /** `<autoupdate>` fresh-flip block (UXG-04). Never carries `reasons`. */
@@ -1067,8 +1075,21 @@ function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus
       return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (removed)`;
     case "updated":
       return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (updated)`;
-    case "failed":
-      return `${ICON_UNINSTALLABLE} ${mp.name} [${mp.scope}] (failed)`;
+    case "failed": {
+      // D-48-A: append the closed-set reason brace iff `mp.reasons` is present
+      // and non-empty (marketplace-op precondition failure with no plugin child
+      // rows, e.g. `marketplace add`). Pass (false, false) for the soft-dep
+      // declares-flags -- mp-level rows never emit soft-dep markers (mirrors the
+      // "skipped" arm). composeReasons returns "" when reasons is
+      // undefined/empty, so the existing bare `(failed)` byte form
+      // (update/autoupdate mp-failure states that ride the cause on a child row)
+      // is preserved unchanged.
+      const reasonsBrace = composeReasons(mp.reasons, false, false, probe);
+      return reasonsBrace === ""
+        ? `${ICON_UNINSTALLABLE} ${mp.name} [${mp.scope}] (failed)`
+        : `${ICON_UNINSTALLABLE} ${mp.name} [${mp.scope}] (failed) ${reasonsBrace}`;
+    }
+
     case "autoupdate enabled":
       // UXG-04 / D-18-05: fresh autoupdate-on flip renders the `<autoupdate>`
       // marker as the outcome (byte-form parity with the `marketplace list`

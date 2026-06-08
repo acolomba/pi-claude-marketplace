@@ -842,6 +842,8 @@ ______________________________________________________________________
 
 Single-marketplace command. The marketplace header alone is the body -- no plugin children.
 
+D-48-A / ATTR-07: the `failed` marketplace header MAY now carry a closed-set reason brace (`(failed) {<reason>}`) when a precondition fails and there is no plugin child row to carry the cause. The five `marketplace add` preconditions -- duplicate name, stale clone, unsupported source, missing path source, invalid manifest -- each render their matching closed-set `REASONS` member on the marketplace subject instead of throwing raw past the orchestrator. The `failure-unreachable` state below carries NO reason brace (`reasons` omitted -> `composeReasons` returns `""` -> the brace collapses to a bare `(failed)`), so its byte form is unchanged. Post-manifest failures (duplicate name, stale clone) render the derived marketplace name as the subject; pre-clone/pre-manifest failures (unsupported source, source missing, invalid manifest) render the user-typed source string as the subject (A2).
+
 ### Success -- path source
 
 <!-- catalog-state: path-source -->
@@ -874,7 +876,67 @@ Path-source marketplaces default to autoupdate OFF; the `added` arm does not car
 
 Bare `failed` marketplace header at column 0; no plugin children. Severity: `error`. No reload-hint per D-16-12 (failed marketplace status does not trigger).
 
-> Note: the v2 `notify()` renderer's `composeMarketplaceBlock` does not emit a marketplace-level cause-chain trailer below the failed header. The v2 type model places `cause?: Error` on plugin variants only; orchestrators wanting to surface the diagnostic must construct the payload as a per-plugin failed/manual-recovery row with `cause?: Error`. This catalog state is the bare failed-marketplace header byte form.
+> Note: the v2 `notify()` renderer's `composeMarketplaceBlock` does not emit a marketplace-level cause-chain trailer below the failed header. The v2 type model places `cause?: Error` on plugin variants only; orchestrators wanting to surface the diagnostic must construct the payload as a per-plugin failed/manual-recovery row with `cause?: Error`. This catalog state is the bare failed-marketplace header byte form. D-48-A: this bare-`(failed)` form (reasons omitted) is byte-unchanged by the ATTR-07 reason-brace addition.
+
+### Failure -- duplicate name (ATTR-07)
+
+Triggered when `marketplace add <source>` resolves a manifest whose derived `name` already exists in the target scope (`MarketplaceDuplicateNameError`). Post-manifest failure: the subject is the derived marketplace name. Severity `error`; no reload-hint.
+
+<!-- catalog-state: add-duplicate-name -->
+
+```text
+1 marketplace operation failed.
+
+⊘ claude-plugins-official [user] (failed) {duplicate name}
+```
+
+### Failure -- stale clone (ATTR-07)
+
+Triggered when a github `marketplace add` finds a pre-existing non-empty `sources/<derivedName>/` clone directory on the final destination (`StaleSourceCloneError`). Post-manifest failure: the subject is the derived marketplace name. The github guard's `cleanupStaging` runs before this row is emitted (no staging-dir leak). Severity `error`; no reload-hint.
+
+<!-- catalog-state: add-stale-clone -->
+
+```text
+1 marketplace operation failed.
+
+⊘ claude-plugins-official [user] (failed) {stale clone}
+```
+
+### Failure -- unsupported source (ATTR-07)
+
+Triggered when the parsed source kind is `unknown` (e.g. an SSH `git@...` URL) or a valid-but-unimplemented kind (`url` / `git-subdir` / `npm`) -- `UnsupportedSourceError`. Pre-clone, pre-name failure: the subject is the user-typed source string. Severity `error`; no reload-hint.
+
+<!-- catalog-state: add-unsupported-source -->
+
+```text
+1 marketplace operation failed.
+
+⊘ git@github.com:foo/bar.git [user] (failed) {unsupported source}
+```
+
+### Failure -- source missing (ATTR-07)
+
+Triggered when a path `marketplace add` points at a path that does not exist (ENOENT) or exists but is neither a file nor a directory (e.g. a socket; tagged ENOTDIR). Pre-name failure (no readable manifest): the subject is the user-typed source string. NFR-5: a path source never touches the network. Severity `error`; no reload-hint.
+
+<!-- catalog-state: add-source-missing -->
+
+```text
+1 marketplace operation failed.
+
+⊘ ./missing-mp [user] (failed) {source missing}
+```
+
+### Failure -- invalid manifest (ATTR-07)
+
+Triggered when `marketplace add` reads a `marketplace.json` that is malformed JSON or schema-invalid (`InvalidMarketplaceManifestError`, D-48-B). Pre-name failure (the manifest is unreadable, so no derived name): the subject is the user-typed source string. For a github source, the clone has already happened and `cleanupStaging` runs before this row is emitted. Severity `error`; no reload-hint.
+
+<!-- catalog-state: add-invalid-manifest -->
+
+```text
+1 marketplace operation failed.
+
+⊘ anthropics/claude-plugins-official [user] (failed) {invalid manifest}
+```
 
 ______________________________________________________________________
 
