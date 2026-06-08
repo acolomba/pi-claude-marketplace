@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 Phase: 50 (notification-summary-line-grammar) -- COMPLETE (ready for verification)
 Plan: 1 of 1
 Status: Phase complete -- ready for verification
-Last activity: 2026-06-08 -- Plan 50-01 executed; GRAM-01..05 closed; npm run check 1514/1515 (sole failure: pre-existing unrelated reinstall-docs README gap, deferred)
+Last activity: 2026-06-08 -- Quick task 260608-npa removed the brittle README-prose reinstall-docs test (PRL coverage already lives on behavior/spec tests + output-catalog catalog-uat); npm run check now fully green (1514/1514). Phase 50 GRAM-01..05 closed.
 
 ## Performance Metrics
 
@@ -181,6 +181,7 @@ None yet.
 | 260530-7pk | Fix PR #22 review findings: 4 failing CI tests reconciled to V2 output, bootstrap/marketplace error diagnostics surfaced (IL-2/AS-7), comment-rot sweep, reasons-type tightening + resolver dedup, MAX_DEPTH cause-chain tests, NFR-4 Node floor to >=20.19.0, PRD PU-4/AS-6 leak policy | 2026-05-30 | 015e8f6 |          | [260530-7pk-fix-pr-22-review-findings-failing-tests-](./quick/260530-7pk-fix-pr-22-review-findings-failing-tests-/) |
 | 260530-fast | Resolve 4 SonarCloud code smells on PR #22 (S3735 void operator, S1871 duplicate case, S3626 redundant jump, S7755 .at indexing); coverage deferred | 2026-05-30 | a36988d |          | (inline /gsd-fast, no task dir) |
 | 260605-tmr | Reconcile v1.8 shipped state (STATE.md frontmatter/body/session-continuity) and prune resolved v1.4-UAT section from BACKLOG.md | 2026-06-05 | 0a11ba3 | Verified | [260605-tmr-reconcile-v1-8-shipped-state-and-prune-s](./quick/260605-tmr-reconcile-v1-8-shipped-state-and-prune-s/) |
+| 260608-npa | Remove brittle README-prose reinstall-docs test; PRL coverage already on behavior/spec tests (output-catalog catalog-uat); re-tag PRL-01; npm run check green | 2026-06-08 | 0d7c797 | Verified | [260608-npa-remove-readme-prose-reinstall-docs-test-](./quick/260608-npa-remove-readme-prose-reinstall-docs-test-/) |
 
 ## Deferred Items
 

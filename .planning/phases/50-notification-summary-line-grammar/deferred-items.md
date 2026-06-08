@@ -4,6 +4,21 @@ Out-of-scope discoveries logged during execution of plan 50-01. Per the
 executor SCOPE BOUNDARY rule these are pre-existing failures in files NOT
 touched by this plan; they are documented, not fixed.
 
+## ✅ RESOLVED (2026-06-08, quick task 260608-npa)
+
+The pre-existing failure below was resolved by quick task `260608-npa`: the
+brittle README-prose contract test `tests/architecture/reinstall-docs.test.ts`
+was removed. Its 8 PRL requirements are already covered by behavior tests
+(`tests/orchestrators/plugin/reinstall.test.ts`,
+`tests/edge/completions/provider.test.ts`,
+`tests/edge/handlers/plugin/reinstall.test.ts`) and the reinstall output bytes
+are spec-bound in `docs/output-catalog.md` via
+`tests/architecture/catalog-uat.test.ts`. `PRL-01` was re-tagged onto the
+handler Usage-block test. `npm run check` is now fully green (1514/1514). The
+original deferral record is retained below for the audit trail.
+
+---
+
 ## Pre-existing test failure: reinstall README documentation gap
 
 - **Test:** `tests/architecture/reinstall-docs.test.ts` -- "PRL-01/03/04/05/13/14/15/16: README documents reinstall command forms and semantics"
