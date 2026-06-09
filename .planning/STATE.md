@@ -5,7 +5,7 @@ milestone_name: Notification Summary-Line Grammar
 status: Awaiting next milestone
 stopped_at: Completed 50-01-PLAN.md
 last_updated: "2026-06-08T22:38:15.896Z"
-last_activity: 2026-06-08 — Milestone v1.11 completed and archived
+last_activity: 2026-06-08 -- Milestone v1.11 completed and archived
 progress:
   total_phases: 28
   completed_phases: 1
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 ## Current Position
 
 Phase: Milestone v1.11 complete
-Plan: —
+Plan: --
 Status: Awaiting next milestone
-Last activity: 2026-06-08 — Milestone v1.11 completed and archived
+Last activity: 2026-06-08 -- Milestone v1.11 completed and archived
 
 ## Performance Metrics
 
@@ -206,8 +206,10 @@ Additional v1.4.1-scope deferrals:
 | integration_test   | tests/integration/fold-adoption.test.ts phase 1 failure                                                                                                                                                                                                                                                                                                                                 | pre-existing on v1.4 baseline; tracked for separate /gsd-debug                                                                                                                                                 | 2026-05-28  |
 | state_migration    | Migration tooling for already-installed `hash-<12hex>` plugins whose plugin.json declares a SemVer                                                                                                                                                                                                                                                                                      | out of scope v1.4.1; marketplace update will naturally surface as upgradable post-SNM-34                                                                                                                       | 2026-05-28  |
 | milestone_archival | v1.4 phase dirs (15-21) archival                                                                                                                                                                                                                                                                                                                                                        | deferred; phase dirs remain under .planning/phases/ during v1.4.1; operator-initiated via /gsd-complete-milestone                                                                                              | 2026-05-28  |
-| upstream_finding   | pi-tui `@`-precedence intercepts `/claude:plugin update @<TAB>` (G-MIL-07 / SNM-39): `@earendil-works/pi-tui` 0.76.0 `CombinedAutocompleteProvider.getSuggestions:188` checks `extractAtPrefix:191`/`:331` (`PATH_DELIMITERS:6`, no `@`) BEFORE the slash branch `:205`, so a bare `@<mp>` token is routed to file-mention completion and our `getArgumentCompletions` is never reached | defer-with-finding; recorded in-repo with exact line refs (UAT G-MIL-07 + provider.test.ts:793). Opening an upstream pi-tui issue is the user's call (RESEARCH Open Q2). Do NOT contort our provider (D-25-10) | 2026-05-29  |
-| upstream_finding   | host couples notify label + color to the single `type` arg (UXG-03): `@earendil-works/pi-coding-agent@0.75.5` `dist/core/extensions/types.d.ts:75` `notify(message, type?)` has no color-only param; label + color co-derive from `type` in `dist/main.js:64-69` (`reportDiagnostics`) and `dist/modes/interactive/interactive-mode.js:1771-1781`/`:2944-2954` (`showExtensionNotify` -> `showError`/`showWarning` bind color + `Error:`/`Warning:` label in one `theme.fg` call; the only label-free path `showStatus:2438` also drops the color). Rendering a multi-line cascade's severity color WITHOUT the label is not host-supported | defer-with-finding; feasibility REFUTED by the Phase 28 / Plan 28-02 read-only spike. Recorded in-repo (UXG-03-FINDING.md + spike test `tests/shared/snm-uxg03-label-color-spike.test.ts` + UAT). No colorless in-extension workaround shipped (D-28-10); forcing `info` rejected (D-28-11). Opening an upstream `@earendil-works/pi-coding-agent` issue is the operator's call (D-28-12) | 2026-05-31  |
+_The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / G-MIL-07 / SNM-39, and pi-coding-agent label+color coupling / UXG-03) were **RESOLVED 2026-06-08** and removed:_
+
+- _Tab-completion: **accepted as-is.** `/claude:plugin update @<TAB>` works as is; our `tests/edge/completions/provider.test.ts` provider is correct and passes. No code change and no upstream issue needed._
+- _Label/color: **resolved by design.** The severity color comes from the severity argument of `ctx.ui.notify`, not from the label. v1.10/v1.11 use the correct severity and keep the `Error:`/`Warning:` label, always followed by a non-empty summary message with the cascade as its own separate block (D-29-01/02, GRAM-01..05). "Color requires dropping the label" is moot -- we never want color without the label. The supersession is recorded in `docs/adr/v2-001-structured-notify.md`; the obsolete UXG-03 spike test was deleted._
 
 ## Session Continuity
 
