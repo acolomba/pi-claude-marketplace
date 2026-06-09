@@ -24,7 +24,7 @@ Installs plugins from the Claude plugin marketplace that contain these component
 
 - Commands.
 - Skills.
-- Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents).
+- Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents) or `@tintinweb/pi-subagents`.
 - MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter).
 
 Plugins that contain unsupported components are marked as "unavailable".
@@ -32,7 +32,7 @@ Plugins that contain unsupported components are marked as "unavailable".
 ## Prerequisites
 
 - [Pi Coding Agent](https://pi.dev)
-- [pi-subagents](https://pi.dev/packages/pi-subagents) (optional but recommended, `pi install npm:pi-subagents`)
+- [pi-subagents](https://pi.dev/packages/pi-subagents) or `@tintinweb/pi-subagents` (optional but recommended, `pi install npm:pi-subagents` or `pi install npm:@tintinweb/pi-subagents`)
 - [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) (optional but recommended, `pi install npm:pi-mcp-adapter`)
 
 ## Usage
