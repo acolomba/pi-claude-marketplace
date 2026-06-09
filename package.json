@@ -68,7 +68,7 @@
     "url": "git+https://github.com/acolomba/pi-claude-marketplace.git"
   },
   "scripts": {
-    "check": "npm run typecheck && npm run lint && npm run format:check && npm test",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run test:integration",
     "format": "prettier --write \"**/*.{js,json,ts}\"",
     "format:check": "prettier --check \"**/*.{js,json,ts}\"",
     "lint": "eslint .",

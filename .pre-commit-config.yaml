@@ -40,10 +40,13 @@ repos:
     rev: 0.7.1
     hooks:
       - id: fix-smartquotes
+        exclude: ^\.planning/
       - id: alphabetize-codeowners
       - id: fix-spaces
       - id: fix-unicode-dashes
+        exclude: ^\.planning/
       - id: fix-ligatures
+        exclude: ^\.planning/
       - id: forbid-bidi-controls
 
   - repo: https://github.com/trufflesecurity/trufflehog
