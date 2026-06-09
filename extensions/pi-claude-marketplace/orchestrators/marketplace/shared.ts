@@ -35,12 +35,14 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import * as defaultGit from "../../platform/git.ts";
 import { MarketplaceNotFoundError } from "../../shared/errors.ts";
+import { notify } from "../../shared/notify.ts";
 
 import type { UnstageAgentFailure } from "../../bridges/agents/types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { OnAuthRequiredFn } from "../../platform/git.ts";
+import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateOutcome } from "../types.ts";
 
@@ -483,6 +485,67 @@ export async function resolveScopeFromState(
   }
 
   throw new MarketplaceNotFoundError(mpName, ["project", "user"]);
+}
+
+/**
+ * ATTR-06 / D-48-C Shape 1: resolve the target scope and enforce the
+ * missing-marketplace precondition BEFORE the caller enters its state guard
+ * (`removeMarketplace`'s withStateGuard / `updateMarketplace`'s
+ * snapshotAfterRefresh). Shared by remove.ts and update.ts.
+ *
+ * Returns the resolved `{ scope, locations }` when the marketplace record
+ * exists in the target scope. Returns `undefined` when the marketplace is
+ * absent -- in which case it has ALREADY emitted the standalone
+ * MarketplaceNotAddedMessage `(failed) {not added}` variant (SC#1 cross-op
+ * convergence), so the caller must return without entering the guard (no raw
+ * MarketplaceNotFoundError escapes past the orchestrator boundary, state
+ * untouched). NFR-5: every read here is a network-free `loadState`.
+ *
+ * Bracket discipline: the bare form absent from BOTH scopes emits NO scope
+ * bracket (resolveScopeFromState's MarketplaceNotFoundError is caught here, NOT
+ * re-thrown; its throw contract is unmodified). The explicit-scope miss emits
+ * the requested scope bracket (SCOPE-01). A non-MarketplaceNotFoundError from
+ * resolveScopeFromState is re-thrown -- genuine clone/manifest/lock failures
+ * arise later inside the caller's refresh path and keep their `(failed)`
+ * cascade.
+ *
+ * Takes the structural subset of the caller opts ({ ctx, pi, name, scope? })
+ * so both UpdateMarketplaceOptions and RemoveMarketplaceOptions satisfy it.
+ */
+export async function resolveScopeOrNotifyNotAdded(
+  opts: { ctx: ExtensionContext; pi: ExtensionAPI; name: string; scope?: Scope },
+  userLocations: ScopedLocations,
+  projectLocations: ScopedLocations,
+): Promise<{ scope: Scope; locations: ScopedLocations } | undefined> {
+  // Bare form: resolveScopeFromState proves existence across both scopes.
+  if (opts.scope === undefined) {
+    try {
+      return await resolveScopeFromState(opts.name, userLocations, projectLocations);
+    } catch (err) {
+      if (err instanceof MarketplaceNotFoundError) {
+        notify(opts.ctx, opts.pi, { kind: "marketplace-not-added", name: opts.name });
+        return undefined;
+      }
+
+      throw err;
+    }
+  }
+
+  // Explicit scope: a single pre-guard loadState read blocks the miss BEFORE it
+  // reaches the caller's state guard (which would otherwise throw
+  // MarketplaceNotFoundError(name, [scope]) raw past the orchestrator).
+  const locations = opts.scope === "user" ? userLocations : projectLocations;
+  const preState = await loadState(locations.extensionRoot);
+  if (preState.marketplaces[opts.name] === undefined) {
+    notify(opts.ctx, opts.pi, {
+      kind: "marketplace-not-added",
+      name: opts.name,
+      scope: opts.scope,
+    });
+    return undefined;
+  }
+
+  return { scope: opts.scope, locations };
 }
 
 /**
