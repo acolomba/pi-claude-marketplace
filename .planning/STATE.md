@@ -185,27 +185,18 @@ None yet.
 
 ## Deferred Items
 
-Items acknowledged and deferred at v1.3 milestone close on 2026-05-25:
-
-| Category   | Item                                                | Status                       | Deferred At |
-| ---------- | --------------------------------------------------- | ---------------------------- | ----------- |
-| quick_task | 260515-bkt-pi-coding-agent-dir                      | complete (frontmatter stale) | 2026-05-25  |
-| quick_task | 260515-cmp-scope-rules-implementation               | complete (frontmatter stale) | 2026-05-25  |
-| quick_task | 260515-tqx-fix-these-gaps                           | complete (frontmatter stale) | 2026-05-25  |
-| quick_task | 260515-wpe-scope-rules                              | complete (frontmatter stale) | 2026-05-25  |
-| quick_task | 260516-02r-implement-claude-plugin-bootstrap-comman | complete (frontmatter stale) | 2026-05-25  |
-| quick_task | 260516-08j-modify-agent-mapping-logic-to-omit-model | complete (frontmatter stale) | 2026-05-25  |
-| quick_task | 260522-c80-patch-project-md-to-close-requirements-s | complete (frontmatter stale) | 2026-05-25  |
-
-All seven quick tasks have a SUMMARY.md and are completed; the `audit-open` query flags them as `missing` because their SUMMARY.md frontmatter lacks a `status:` field (pre-canonical-frontmatter format). No follow-up work; acknowledged as deferred at v1.3 close.
-
-Additional v1.4.1-scope deferrals:
+Genuinely-open deferral (v1.4.1 scope):
 
 | Category           | Item                                                                                                                                                                                                                                                                                                                                                                                    | Status                                                                                                                                                                                                         | Deferred At |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| integration_test   | tests/integration/fold-adoption.test.ts phase 1 failure                                                                                                                                                                                                                                                                                                                                 | pre-existing on v1.4 baseline; tracked for separate /gsd-debug                                                                                                                                                 | 2026-05-28  |
 | state_migration    | Migration tooling for already-installed `hash-<12hex>` plugins whose plugin.json declares a SemVer                                                                                                                                                                                                                                                                                      | out of scope v1.4.1; marketplace update will naturally surface as upgradable post-SNM-34                                                                                                                       | 2026-05-28  |
-| milestone_archival | v1.4 phase dirs (15-21) archival                                                                                                                                                                                                                                                                                                                                                        | deferred; phase dirs remain under .planning/phases/ during v1.4.1; operator-initiated via /gsd-complete-milestone                                                                                              | 2026-05-28  |
+
+Resolved / no longer open:
+
+- _v1.3 quick-task frontmatter (7 tasks: 260515-bkt/cmp/tqx/wpe, 260516-02r/08j, 260522-c80): **RESOLVED 2026-06-08.** All seven were archived to `.planning/milestones/v1.4-quick-tasks/` at v1.4 close; `audit-open` no longer scans them and reports clear. The pre-canonical SUMMARY frontmatter is a historical-record detail with no live flag -- no follow-up work._
+- _v1.4 phase-dir archival (15-21): **RESOLVED 2026-06-08.** Archived to `.planning/milestones/v1.4-phases/`; `.planning/phases/` is empty -- the /gsd-complete-milestone archival ran._
+- _`tests/integration/fold-adoption.test.ts` phase 1 (2026-05-28 deferral): **RESOLVED 2026-06-08.** The v1.4-baseline failure was fixed by PR #22 (`0a8155d`) structured-notification/list-render rework -- the test itself is unchanged. Now green 2/2 in isolation and 7/7 in the integration dir, and run in CI via `npm run test:integration` (ci.yml). No /gsd-debug needed._
+
 _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / G-MIL-07 / SNM-39, and pi-coding-agent label+color coupling / UXG-03) were **RESOLVED 2026-06-08** and removed:_
 
 - _Tab-completion: **accepted as-is.** `/claude:plugin update @<TAB>` works as is; our `tests/edge/completions/provider.test.ts` provider is correct and passes. No code change and no upstream issue needed._
