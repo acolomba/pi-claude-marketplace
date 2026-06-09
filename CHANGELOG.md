@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.4.4] - 2026-06-09
+
+- README: mention `@tintinweb/pi-subagents` as an alternative to `pi-subagents` for agent support. Detection already works for both (probes by tool name, not package name).
+
 ## [0.4.3] - 2026-06-09
 
 - Internal refactor to cut SonarCloud copy-paste duplication: extracted shared helpers across the plugin and marketplace edge handlers (`--map-model` arg-parse boilerplate; the single-`<name>` marketplace handler factory), the marketplace orchestrators (the `resolveScopeOrNotifyNotAdded` scope-resolution helper, now lifted to `shared.ts`), and the notify plugin-row renderer (the four identical switch arms folded into one helper). No behavior or output change -- output is byte-identical to before.
