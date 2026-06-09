@@ -40,19 +40,16 @@
 import { rm } from "node:fs/promises";
 
 import { locationsFor } from "../../persistence/locations.ts";
-import { loadState } from "../../persistence/state-io.ts";
 import { dropMarketplaceCache, invalidateMarketplaceNames } from "../../shared/completion-cache.ts";
-import { MarketplaceNotFoundError } from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
 import {
   AgentsUnstageFailureError,
   cascadeUnstagePlugin,
-  resolveScopeFromState,
+  resolveScopeOrNotifyNotAdded,
 } from "./shared.ts";
 
-import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
   ContentReason,
@@ -158,57 +155,6 @@ function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
   return (
     err instanceof Error && "code" in err && typeof (err as { code?: unknown }).code === "string"
   );
-}
-
-/**
- * ATTR-06 / D-48-C Shape 1: resolve the target scope and enforce the
- * missing-marketplace precondition BEFORE the caller enters withStateGuard.
- *
- * Returns the resolved `{ scope, locations }` when the marketplace record
- * exists in the target scope. Returns `undefined` when the marketplace is
- * absent -- in which case it has ALREADY emitted the standalone
- * MarketplaceNotAddedMessage `(failed) {not added}` variant, so the caller must
- * return without entering the guard (no raw MarketplaceNotFoundError escapes,
- * state untouched). NFR-5: every read here is a network-free `loadState`.
- *
- * Bracket discipline: the bare form absent from BOTH scopes emits NO scope
- * bracket (resolveScopeFromState's MarketplaceNotFoundError is caught here, NOT
- * re-thrown; its throw contract -- shared with update.ts -- is unmodified). The
- * explicit-scope miss emits the requested scope bracket (SCOPE-01). A
- * non-MarketplaceNotFoundError from resolveScopeFromState is re-thrown.
- */
-async function resolveScopeOrNotifyNotAdded(
-  opts: RemoveMarketplaceOptions,
-  userLocations: ScopedLocations,
-  projectLocations: ScopedLocations,
-): Promise<{ scope: Scope; locations: ScopedLocations } | undefined> {
-  // S4 (bare form): resolveScopeFromState proves existence across both scopes.
-  if (opts.scope === undefined) {
-    try {
-      return await resolveScopeFromState(opts.name, userLocations, projectLocations);
-    } catch (err) {
-      if (err instanceof MarketplaceNotFoundError) {
-        notify(opts.ctx, opts.pi, { kind: "marketplace-not-added", name: opts.name });
-        return undefined;
-      }
-
-      throw err;
-    }
-  }
-
-  // S3 (explicit scope): a single pre-guard loadState read blocks the miss.
-  const locations = opts.scope === "user" ? userLocations : projectLocations;
-  const preState = await loadState(locations.extensionRoot);
-  if (preState.marketplaces[opts.name] === undefined) {
-    notify(opts.ctx, opts.pi, {
-      kind: "marketplace-not-added",
-      name: opts.name,
-      scope: opts.scope,
-    });
-    return undefined;
-  }
-
-  return { scope: opts.scope, locations };
 }
 
 export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise<void> {

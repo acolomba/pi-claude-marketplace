@@ -1357,6 +1357,40 @@ function composeReasons(
  *  - `failed.cause` / `manual recovery.cause` cause-chain trailers.
  *  - `failed.rollbackPartial[]` child rows.
  */
+/**
+ * Compose a scope-bearing, reasons-bearing plugin row that carries NO
+ * soft-dep marker. Folds the four structurally-identical `renderPluginRow`
+ * arms (`upgradable` / `skipped` / `failed` / `manual recovery`) that differ
+ * only in their icon and their parenthesized status `label`. `label` is the
+ * FULL parenthesized token (the caller passes `"(upgradable)"` etc., INCLUDING
+ * the parens, so the `"(manual recovery)"` literal keeps its space verbatim).
+ * The `p` param is the structural subset those four variants share: a required
+ * `name`, an optional `scope` / `version`, and a required
+ * `readonly ContentReason[]` reasons. Both declares-flags are `false` (these
+ * arms never carry `dependencies`).
+ */
+function pluginRow(
+  icon: string,
+  p: {
+    readonly name: string;
+    readonly scope?: Scope;
+    readonly version?: string;
+    readonly reasons: readonly ContentReason[];
+  },
+  mpScope: Scope,
+  label: string,
+  probe: SoftDepStatus,
+): string {
+  return joinTokens([
+    icon,
+    p.name,
+    renderScopeBracket(p.scope, mpScope),
+    renderVersion(p.version),
+    label,
+    composeReasons(p.reasons, false, false, probe),
+  ]);
+}
+
 function renderPluginRow(
   p: PluginNotificationMessage,
   probe: SoftDepStatus,
@@ -1439,42 +1473,14 @@ function renderPluginRow(
         composeReasons(p.reasons, false, false, probe),
       ]);
     case "upgradable":
-      return joinTokens([
-        ICON_INSTALLED,
-        p.name,
-        renderScopeBracket(p.scope, mpScope),
-        renderVersion(p.version),
-        "(upgradable)",
-        composeReasons(p.reasons, false, false, probe),
-      ]);
+      return pluginRow(ICON_INSTALLED, p, mpScope, "(upgradable)", probe);
     case "skipped":
-      return joinTokens([
-        ICON_UNINSTALLABLE,
-        p.name,
-        renderScopeBracket(p.scope, mpScope),
-        renderVersion(p.version),
-        "(skipped)",
-        composeReasons(p.reasons, false, false, probe),
-      ]);
+      return pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe);
     case "failed":
-      return joinTokens([
-        ICON_UNINSTALLABLE,
-        p.name,
-        renderScopeBracket(p.scope, mpScope),
-        renderVersion(p.version),
-        "(failed)",
-        composeReasons(p.reasons, false, false, probe),
-      ]);
+      return pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe);
     case "manual recovery":
-      return joinTokens([
-        ICON_UNINSTALLABLE,
-        p.name,
-        renderScopeBracket(p.scope, mpScope),
-        renderVersion(p.version),
-        // `manual recovery` discriminator preserved verbatim WITH A SPACE.
-        "(manual recovery)",
-        composeReasons(p.reasons, false, false, probe),
-      ]);
+      // `(manual recovery)` discriminator preserved verbatim WITH A SPACE.
+      return pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(manual recovery)", probe);
     default: {
       assertNever(p);
       return "";

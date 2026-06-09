@@ -6,8 +6,10 @@
 // live in the orchestrator layer and surface as `EntityErrorRow` compact
 // lines per CMC-34 / MSG-NC-1.
 
+import { errorMessage } from "../../../shared/errors.ts";
 import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
+import { parseArgs } from "../../args.ts";
 
 import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { Scope } from "../../../shared/types.ts";
@@ -63,6 +65,50 @@ export function parsePositionalsWithFlags(
   }
 
   return { nonFlagPositionals, mapModel };
+}
+
+export interface ParsedMapModelArgs {
+  readonly scope?: Scope;
+  readonly nonFlagPositionals: readonly string[];
+  readonly mapModel: boolean;
+}
+
+/**
+ * Shared opening parse sequence for the `--map-model`-bearing plugin handlers
+ * (`install` / `update`). Runs `parseArgs` (notifying via `notifyUsageError`
+ * with `errorMessage(err)` on an MSG-NC-2 argument-parsing failure), then
+ * `parsePositionalsWithFlags` with its undefined-guard. Returns `undefined`
+ * whenever an error has ALREADY been notified (parse failure OR an unknown
+ * long flag); on success returns the destructured `{ nonFlagPositionals,
+ * mapModel }` plus `parsed.scope` (carried via spread so the optional-property
+ * contract matches `parsed.scope`'s `Scope | undefined` shape under TS strict).
+ * Each handler keeps its own distinct post-parse positional logic.
+ */
+export function parseMapModelArgs(
+  args: string,
+  ctx: ExtensionCommandContext,
+  usage: string,
+): ParsedMapModelArgs | undefined {
+  let parsed;
+  try {
+    parsed = parseArgs(args);
+  } catch (err) {
+    // MSG-NC-2: argument-parsing failure (invalid --scope value) -- sentence
+    // form with Usage block appended after a blank line.
+    notifyUsageError(ctx, { message: errorMessage(err), usage });
+    return undefined;
+  }
+
+  const flagged = parsePositionalsWithFlags(parsed.positional, ctx, usage);
+  if (flagged === undefined) {
+    return undefined;
+  }
+
+  return {
+    nonFlagPositionals: flagged.nonFlagPositionals,
+    mapModel: flagged.mapModel,
+    ...(parsed.scope !== undefined && { scope: parsed.scope }),
+  };
 }
 
 export function parseRequiredPluginMarketplaceRef(

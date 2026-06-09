@@ -102,7 +102,6 @@ import { DEFAULT_CREDENTIAL_OPS } from "../../platform/git-credential.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   InvalidMarketplaceManifestError,
-  MarketplaceNotFoundError,
   MarketplaceUpdateError,
   PluginShapeError,
   assertNever,
@@ -115,7 +114,7 @@ import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import {
   DEFAULT_GIT_OPS,
   refreshGitHubClone,
-  resolveScopeFromState,
+  resolveScopeOrNotifyNotAdded,
   type GitAuthBundle,
   type GitOps,
 } from "./shared.ts";
@@ -195,67 +194,6 @@ export interface UpdateAllMarketplacesOptions {
    * inside the orchestrator's onAuthRequired closure.
    */
   readonly deviceFlowHttp?: DeviceFlowHttp;
-}
-
-/**
- * ATTR-06 / D-48-C Shape 1 (mirrors remove.ts::resolveScopeOrNotifyNotAdded):
- * resolve the target scope and enforce the missing-marketplace precondition
- * BEFORE the caller enters refreshOneMarketplace / snapshotAfterRefresh.
- *
- * Returns the resolved `{ scope, locations }` when the marketplace record
- * exists in the target scope. Returns `undefined` when the marketplace is
- * absent -- in which case it has ALREADY emitted the standalone
- * MarketplaceNotAddedMessage `(failed) {not added}` variant (SC#1 cross-op
- * convergence), so the caller must return without entering the guard. This
- * closes the residual Class-C gap: previously a missing marketplace let a raw
- * MarketplaceNotFoundError escape past the orchestrator boundary (bare form via
- * resolveScopeFromState; explicit-scope form via snapshotAfterRefresh's
- * withStateGuard throw). NFR-5: every read here is a network-free `loadState`.
- *
- * Bracket discipline: the bare form absent from BOTH scopes emits NO scope
- * bracket (resolveScopeFromState's MarketplaceNotFoundError is caught here, NOT
- * re-thrown; its throw contract -- shared with other callers -- is unmodified).
- * The explicit-scope miss emits the requested scope bracket (SCOPE-01).
- *
- * Genuine refresh failures are untouched: only a MarketplaceNotFoundError from
- * the resolve seam reroutes here. A non-MarketplaceNotFoundError from
- * resolveScopeFromState is re-thrown; all clone/manifest/lock failures arise
- * later inside refreshOneMarketplace and keep their existing `(failed)` cascade.
- */
-async function resolveScopeOrNotifyNotAdded(
-  opts: UpdateMarketplaceOptions,
-  userLocations: ScopedLocations,
-  projectLocations: ScopedLocations,
-): Promise<{ scope: Scope; locations: ScopedLocations } | undefined> {
-  // Bare form: resolveScopeFromState proves existence across both scopes.
-  if (opts.scope === undefined) {
-    try {
-      return await resolveScopeFromState(opts.name, userLocations, projectLocations);
-    } catch (err) {
-      if (err instanceof MarketplaceNotFoundError) {
-        notify(opts.ctx, opts.pi, { kind: "marketplace-not-added", name: opts.name });
-        return undefined;
-      }
-
-      throw err;
-    }
-  }
-
-  // Explicit scope: a single pre-guard loadState read blocks the miss BEFORE it
-  // reaches snapshotAfterRefresh's withStateGuard (which would otherwise throw
-  // MarketplaceNotFoundError(name, [scope]) raw past the orchestrator).
-  const locations = opts.scope === "user" ? userLocations : projectLocations;
-  const preState = await loadState(locations.extensionRoot);
-  if (preState.marketplaces[opts.name] === undefined) {
-    notify(opts.ctx, opts.pi, {
-      kind: "marketplace-not-added",
-      name: opts.name,
-      scope: opts.scope,
-    });
-    return undefined;
-  }
-
-  return { scope: opts.scope, locations };
 }
 
 /** MU-1 single-name form. */
