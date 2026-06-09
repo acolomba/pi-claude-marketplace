@@ -12,11 +12,9 @@
 // manual positional scan pattern from `list.ts`.
 
 import { updatePlugins } from "../../../orchestrators/plugin/update.ts";
-import { errorMessage } from "../../../shared/errors.ts";
 import { notifyUsageError } from "../../../shared/notify.ts";
-import { parseArgs } from "../../args.ts";
 
-import { parsePositionalsWithFlags, splitPluginMarketplaceRef } from "./shared.ts";
+import { parseMapModelArgs, splitPluginMarketplaceRef } from "./shared.ts";
 
 import type { UpdatePluginsTarget } from "../../../orchestrators/plugin/update.ts";
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
@@ -28,15 +26,7 @@ export function makeUpdateHandler(
   pi: ExtensionAPI,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
-    let parsed;
-    try {
-      parsed = parseArgs(args);
-    } catch (err) {
-      notifyUsageError(ctx, { message: errorMessage(err), usage: USAGE });
-      return;
-    }
-
-    const flagged = parsePositionalsWithFlags(parsed.positional, ctx, USAGE);
+    const flagged = parseMapModelArgs(args, ctx, USAGE);
     if (flagged === undefined) {
       return;
     }
@@ -75,7 +65,7 @@ export function makeUpdateHandler(
       pi,
       cwd: ctx.cwd,
       target,
-      ...(parsed.scope !== undefined && { scope: parsed.scope }),
+      ...(flagged.scope !== undefined && { scope: flagged.scope }),
       ...(mapModel && { mapModel: true }),
     });
   };

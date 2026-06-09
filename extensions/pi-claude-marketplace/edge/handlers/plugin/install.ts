@@ -21,11 +21,9 @@
 // platform/. Only orchestrators/, shared/, edge/ (sibling) imports.
 
 import { installPlugin } from "../../../orchestrators/plugin/install.ts";
-import { errorMessage } from "../../../shared/errors.ts";
 import { notifyUsageError } from "../../../shared/notify.ts";
-import { parseArgs } from "../../args.ts";
 
-import { parsePositionalsWithFlags, splitPluginMarketplaceRef } from "./shared.ts";
+import { parseMapModelArgs, splitPluginMarketplaceRef } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
@@ -41,17 +39,7 @@ export function makeInstallHandler(
   pi: ExtensionAPI,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
-    let parsed;
-    try {
-      parsed = parseArgs(args);
-    } catch (err) {
-      // MSG-NC-2: argument-parsing failure (invalid --scope value) -- sentence
-      // form with Usage block appended after a blank line.
-      notifyUsageError(ctx, { message: errorMessage(err), usage: USAGE });
-      return;
-    }
-
-    const flagged = parsePositionalsWithFlags(parsed.positional, ctx, USAGE);
+    const flagged = parseMapModelArgs(args, ctx, USAGE);
     if (flagged === undefined) {
       return;
     }
@@ -82,7 +70,7 @@ export function makeInstallHandler(
     await installPlugin({
       ctx,
       pi,
-      scope: parsed.scope ?? "user",
+      scope: flagged.scope ?? "user",
       cwd: ctx.cwd,
       marketplace: ref.marketplace,
       plugin: ref.plugin,
