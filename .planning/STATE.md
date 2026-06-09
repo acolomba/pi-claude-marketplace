@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.11
-milestone_name: Notification Summary-Line Grammar
-status: Awaiting next milestone
-stopped_at: Completed 50-01-PLAN.md
-last_updated: "2026-06-08T22:38:15.896Z"
-last_activity: 2026-06-08 -- Milestone v1.11 completed and archived
+milestone: v1.12
+milestone_name: Marketplace and Plugin Config Files
+status: planning
+last_updated: "2026-06-09T22:59:45.892Z"
+last_activity: 2026-06-09
 progress:
-  total_phases: 28
-  completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
-  percent: 4
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -24,10 +23,10 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 
 ## Current Position
 
-Phase: Milestone v1.11 complete
-Plan: --
-Status: Awaiting next milestone
-Last activity: 2026-06-08 -- Milestone v1.11 completed and archived
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-06-09 — Milestone v1.12 started
 
 ## Performance Metrics
 
