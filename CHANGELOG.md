@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.4.3] - 2026-06-09
+
+- Internal refactor to cut SonarCloud copy-paste duplication: extracted shared helpers across the plugin and marketplace edge handlers (`--map-model` arg-parse boilerplate; the single-`<name>` marketplace handler factory), the marketplace orchestrators (the `resolveScopeOrNotifyNotAdded` scope-resolution helper, now lifted to `shared.ts`), and the notify plugin-row renderer (the four identical switch arms folded into one helper). No behavior or output change -- output is byte-identical to before.
+
 ## [0.4.2] - 2026-06-08
 
 - Error attribution: every operation now blames the right thing. When a marketplace is not added (or is configured only in the other scope), `install`, `uninstall`, `reinstall`, `update`, `marketplace update`, `marketplace remove`, and `autoupdate`/`noautoupdate` all report `{not added}` on the marketplace, instead of the old misleading `{not in manifest}` on the plugin or a raw error. Cleanup and cascade failures now report the truthful on-disk/permission reason rather than a generic `{not in manifest}`, and a path-source manifest that fails to read reports `{invalid manifest}` instead of a false `{network unreachable}`. A target that exists only in the other scope carries the requested-scope bracket so you can tell which scope was checked.
