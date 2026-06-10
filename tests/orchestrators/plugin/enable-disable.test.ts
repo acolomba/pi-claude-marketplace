@@ -420,10 +420,16 @@ test("ENBL-03: missing cached clone aborts with (failed) {source missing}", asyn
     });
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
+    // WR-06: pin the FULL brace byte form. A bare /\(failed\)/ assertion
+    // also passed for the CR-01 nested-lock StateLockHeldError (which
+    // narrowEnableFailure maps to reasons: [], no brace) -- the weak match
+    // is exactly how a never-working fresh enable shipped green. The
+    // ENBL-03 classification requires the ENOENT-class failure to surface
+    // as `{source missing}`.
     assert.match(
       notifications[0]!.message,
-      /\(failed\)/,
-      "should emit a failed row when the cached clone is missing",
+      /\(failed\) \{source missing\}/,
+      `cached-clone-missing must classify as {source missing}: ${notifications[0]!.message}`,
     );
   });
 });
