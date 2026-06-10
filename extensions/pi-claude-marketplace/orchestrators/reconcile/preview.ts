@@ -36,7 +36,7 @@ import path from "node:path";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { notify } from "../../shared/notify.ts";
+import { compareByNameThenScope, notify } from "../../shared/notify.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 
 import { buildReconcilePreviewNotification, isReconcilePlanListEmpty } from "./notify.ts";
@@ -156,13 +156,19 @@ export async function previewReconcile(opts: PreviewReconcileOptions): Promise<v
   }
 
   // Compose the cascade message: the projection emits the per-scope plan
-  // blocks; the invalid-config blocks are appended (project-first per scope
-  // fan-out order). The two block sources never collide because the
-  // invalid-config path skips planReconcile for that scope -- a scope can be
-  // EITHER in `plans` OR in `invalidBlocks`, never both.
+  // blocks; the invalid-config / invalid-state blocks are merged in and the
+  // whole list re-sorted via compareByNameThenScope so mixed output honours
+  // the single per-scope row-order policy (MSG-GR-3: name primary
+  // case-insensitive, project-before-user secondary) every other
+  // list-rendering surface routes through. The two block sources never
+  // collide on a key because the invalid path skips planReconcile for that
+  // scope -- a scope can be EITHER in `plans` OR in `invalidBlocks`, never
+  // both.
   const projection = buildReconcilePreviewNotification(plans);
   const message: CascadeNotificationMessage = {
-    marketplaces: [...projection.marketplaces, ...invalidBlocks],
+    marketplaces: [...projection.marketplaces, ...invalidBlocks].sort((a, b) =>
+      compareByNameThenScope(a, b),
+    ),
   };
 
   notify(opts.ctx, opts.pi, message);

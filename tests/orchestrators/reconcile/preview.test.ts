@@ -248,6 +248,45 @@ test("failure containment (WR-04): corrupt state.json -> (failed) {unparseable} 
   });
 });
 
+test("mixed output ordering (WR-05): invalid-config block sorts with plan blocks via compareByNameThenScope (MSG-GR-3)", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // Project scope: invalid config -> (failed) {invalid manifest} block
+    // named "claude-plugins.json". User scope: a pending `will add` block
+    // named "zzz-mp". MSG-GR-3 (name primary, case-insensitive) requires
+    // "claude-plugins.json" BEFORE "zzz-mp" -- appending invalid blocks
+    // after the sorted projection would mis-order them.
+    const projectScopeRoot = path.join(cwd, ".pi");
+    await mkdir(projectScopeRoot, { recursive: true });
+    await writeFile(path.join(projectScopeRoot, "claude-plugins.json"), "{", "utf8");
+
+    const userScopeRoot = path.join(home, ".pi", "agent");
+    await mkdir(userScopeRoot, { recursive: true });
+    await writeFile(
+      path.join(userScopeRoot, "claude-plugins.json"),
+      JSON.stringify(
+        { schemaVersion: 1, marketplaces: { "zzz-mp": { source: "acme/z" } }, plugins: {} },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const ctx = makeCtx(cwd);
+    await previewReconcile({ ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd });
+
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+    const failedIdx = emitted.indexOf("claude-plugins.json");
+    const willAddIdx = emitted.indexOf("zzz-mp");
+    assert.ok(failedIdx >= 0, `expected the invalid-config row; got:\n${emitted}`);
+    assert.ok(willAddIdx >= 0, `expected the will-add row; got:\n${emitted}`);
+    assert.ok(
+      failedIdx < willAddIdx,
+      `MSG-GR-3: "claude-plugins.json" must sort before "zzz-mp"; got:\n${emitted}`,
+    );
+  });
+});
+
 test("scope fan-out: omitted --scope walks both scopes project-first (advisory in project + advisory in user converges to one advisory)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const ctx = makeCtx(cwd);
