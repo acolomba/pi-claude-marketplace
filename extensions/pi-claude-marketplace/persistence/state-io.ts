@@ -22,6 +22,7 @@
 // (assertPathInside applied at read site). This layer loads the value
 // verbatim.
 
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -179,21 +180,28 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
   }
 
   // ST-4 / ST-5 / D-13: normalize legacy records. The third argument is the
-  // scope's `claude-plugins.json` path, used as the D-13 ORDERING RAIL: the
-  // `autoupdate` scrub fires only when that config file already exists,
-  // preserving the legacy field on the first load before Phase 52's
-  // first-run migration has captured it. `extensionRoot` is
-  // `<scopeRoot>/pi-claude-marketplace`, so `path.dirname(extensionRoot)`
-  // is `<scopeRoot>` and the config sits as a sibling at
-  // `<scopeRoot>/claude-plugins.json` -- this matches the `locationsFor`
-  // construction in `persistence/locations.ts` byte-for-byte. We do NOT
-  // import `locationsFor` here because the external `loadState(extensionRoot)`
-  // signature MUST stay unchanged for orchestrator callers.
+  // D-13 ORDERING RAIL gate: the `autoupdate` scrub fires only when the
+  // scope's `claude-plugins.json` already exists, preserving the legacy
+  // field on the first load before Phase 52's first-run migration has
+  // captured it. The gate predicate lives HERE (not inside the migrator) so
+  // `migrateLegacyMarketplaceRecords` stays a pure function with no hidden
+  // I/O, and the D-13 gate decision is visible at the load seam where the
+  // path is derived. The SYNC `existsSync` probe is taken once, before the
+  // fully-synchronous migrate call, so the gate cannot race the in-memory
+  // transform. `extensionRoot` is `<scopeRoot>/pi-claude-marketplace`, so
+  // `path.dirname(extensionRoot)` is `<scopeRoot>` and the config sits as a
+  // sibling at `<scopeRoot>/claude-plugins.json` -- this matches the
+  // `locationsFor` construction in `persistence/locations.ts` byte-for-byte
+  // (pinned by a drift-guard test in tests/persistence/state-io.test.ts).
+  // We do NOT import `locationsFor` here because the external
+  // `loadState(extensionRoot)` signature MUST stay unchanged for
+  // orchestrator callers.
   const configJsonPath = path.join(path.dirname(extensionRoot), "claude-plugins.json");
+  const scrubAutoupdate = existsSync(configJsonPath);
   const { marketplaces, mutated } = migrateLegacyMarketplaceRecords(
     parsed,
     extensionRoot,
-    configJsonPath,
+    scrubAutoupdate,
   );
 
   // ST-6: revalidate stored source records through the SAME factories used at
