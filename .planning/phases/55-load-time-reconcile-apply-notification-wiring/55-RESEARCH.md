@@ -618,27 +618,31 @@ test("RECON-06: two simultaneous load-time reconciles converge without double-ap
 - A3 (variant shape): grammar/catalog decision
 - A4 (silent vs banner on empty): UX preference
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Apply-pass orchestrator mode (Strategy A vs Strategy B from Pattern 4)?**
    - What we know: `installPlugin` already supports orchestrated mode; pattern can be replicated cleanly across `addMarketplace`/`removeMarketplace`/`uninstallPlugin`/`setPluginEnabled`.
    - What's unclear: whether this is acceptable scope expansion for one phase (it's 4 orchestrator touches + their tests, on top of the apply.ts + index.ts + new notify variant).
    - Recommendation: plan Strategy B; if granularity gate fails at plan-check, split into two phases (apply skeleton + orchestrator mode extensions). Both phases compose without lock-step risk because each orchestrator's mode is purely additive.
+   - RESOLVED: Strategy B adopted — Plan 55-01 extends orchestrated mode across all four orchestrators; plan-check granularity passed.
 
 2. **Empty-load notification policy — silent or banner?**
    - What we know: NFR-2 says reconcile must never block load; the silent path is friendliest.
    - What's unclear: whether operators want a "reconciliation: no changes" confirmation on every reload.
    - Recommendation: silent on zero-action zero-failure. Operators run `/claude:plugin preview` if they want explicit confirmation.
+   - RESOLVED: silent on zero-action zero-failure loads (Plan 55-02 must_haves truth #5).
 
 3. **New variant `reconcile-applied-cascade` vs. reusing existing cascade with a header line prepended?**
    - What we know: Phase 53 uses a dedicated variant for `reconcile-preview-empty` and that's the locked precedent.
    - What's unclear: whether a separate variant is needed for the NON-empty applied cascade if it reuses existing transition tokens.
    - Recommendation: yes — the variant is justified by the `shouldEmitReloadHint` discipline (Pitfall 4). One new arm + one new renderer dispatch.
+   - RESOLVED: new `reconcile-applied-cascade` StandaloneKind variant (Plan 55-02 Task 1), structurally excluded from the reload-hint ladder.
 
 4. **What if `softDepStatus(pi)` is unreliable at `resources_discover` time?**
    - What we know: notify currently calls `softDepStatus(pi)` once per render, reading `pi.getAllTools()`.
    - What's unclear: load-order guarantees (Assumption A1).
    - Recommendation: plan-time spike — examine pi-coding-agent loader to confirm. If unreliable, defer Phase 55's apply to `session_start` (which also fires on reload per `SessionStartEvent.reason: "startup" | "reload" | ...`) and emit the cascade then. BUT: `session_start` does NOT carry `event.cwd` — would need to capture cwd from `resources_discover` first. Adds complexity; prefer to confirm A1 first.
+   - RESOLVED: A1 sanity check is the first execution step of Plan 55-02 Task 2 — executor STOPS and surfaces the finding if A1 is refuted.
 
 ## Environment Availability
 
