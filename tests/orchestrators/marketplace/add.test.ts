@@ -13,6 +13,7 @@ import {
   __resetCacheForTests,
   getMarketplaceNames,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { MarketplaceDuplicateNameError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { makeMockCredentialOps } from "../../helpers/credential-mock.ts";
 import { makeMockDeviceFlowHttp } from "../../helpers/device-flow-mock.ts";
@@ -872,5 +873,170 @@ test("AUTH-01 add: the GitAuthBundle is forwarded by reference into gitOps.clone
       "function",
       "onAuthRequired must be a function",
     );
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// RECON-03 (Phase 55 Plan 01): orchestrated-mode coverage
+// ───────────────────────────────────────────────────────────────────────────
+
+test("RECON-03 orchestrated mode -- github source success returns { status: 'added' } with ZERO notify calls", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    const outcome = await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      notifications: { mode: "orchestrated" },
+    });
+
+    assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+    assert.ok(outcome, "orchestrated mode must return an outcome");
+    assert.equal(outcome.status, "added");
+    if (outcome.status === "added") {
+      assert.equal(outcome.name, "valid-marketplace");
+    }
+  });
+});
+
+test("RECON-03 orchestrated mode -- unsupported source returns { status: 'failed', reason: 'unsupported source' } with ZERO notify calls", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps, state } = makeMockGitOps();
+
+    const outcome = await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "git@github.com:foo/bar.git",
+      gitOps,
+      notifications: { mode: "orchestrated" },
+    });
+
+    assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+    assert.equal(state.cloneCalls.length, 0, "NFR-5: unsupported source never touches gitOps");
+    assert.ok(outcome);
+    assert.equal(outcome.status, "failed");
+    if (outcome.status === "failed") {
+      assert.equal(outcome.reason, "unsupported source");
+      assert.ok(outcome.error instanceof Error);
+      assert.ok(typeof outcome.cause === "string" && outcome.cause.length > 0);
+    }
+  });
+});
+
+test("RECON-03 orchestrated mode -- duplicate-name (path source) returns typed MarketplaceDuplicateNameError, no notifications", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx: ctx1, pi: pi1 } = makeCtx();
+    const localMpDir = await mkdtemp(path.join(tmpdir(), "mp-orch-dup-"));
+    try {
+      await cp(fixtureMarketplaceDir("valid-marketplace"), localMpDir, { recursive: true });
+
+      const { gitOps: gitOps1 } = makeMockGitOps();
+      // Seed the duplicate via a standalone add.
+      await addMarketplace({
+        ctx: ctx1,
+        pi: pi1,
+        scope: "project",
+        cwd,
+        rawSource: localMpDir,
+        gitOps: gitOps1,
+      });
+
+      const { ctx: ctx2, pi: pi2, notifications: n2 } = makeCtx();
+      const { gitOps: gitOps2 } = makeMockGitOps();
+      const outcome = await addMarketplace({
+        ctx: ctx2,
+        pi: pi2,
+        scope: "project",
+        cwd,
+        rawSource: localMpDir,
+        gitOps: gitOps2,
+        notifications: { mode: "orchestrated" },
+      });
+
+      assert.equal(n2.length, 0, "orchestrated mode must not fire notifications");
+      assert.ok(outcome);
+      assert.equal(outcome.status, "failed");
+      if (outcome.status === "failed") {
+        assert.equal(outcome.reason, "duplicate name");
+        assert.ok(outcome.error instanceof MarketplaceDuplicateNameError);
+      }
+    } finally {
+      await rm(localMpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RECON-03 orchestrated mode -- rethrowPreconditionErrors still rethrows typed precondition (bootstrap contract preserved)", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx: ctx1, pi: pi1 } = makeCtx();
+    const localMpDir = await mkdtemp(path.join(tmpdir(), "mp-orch-rethrow-"));
+    try {
+      await cp(fixtureMarketplaceDir("valid-marketplace"), localMpDir, { recursive: true });
+
+      const { gitOps: gitOps1 } = makeMockGitOps();
+      await addMarketplace({
+        ctx: ctx1,
+        pi: pi1,
+        scope: "project",
+        cwd,
+        rawSource: localMpDir,
+        gitOps: gitOps1,
+      });
+
+      const { ctx: ctx2, pi: pi2, notifications: n2 } = makeCtx();
+      const { gitOps: gitOps2 } = makeMockGitOps();
+
+      await assert.rejects(
+        addMarketplace({
+          ctx: ctx2,
+          pi: pi2,
+          scope: "project",
+          cwd,
+          rawSource: localMpDir,
+          gitOps: gitOps2,
+          rethrowPreconditionErrors: true,
+          notifications: { mode: "orchestrated" },
+        }),
+        (err: unknown) => err instanceof MarketplaceDuplicateNameError,
+      );
+
+      assert.equal(n2.length, 0, "orchestrated mode must not fire notifications");
+    } finally {
+      await rm(localMpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RECON-03 standalone-default mode -- omitted notifications option remains byte-identical to today (regression guard)", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    // The same call without `notifications` -- must return void and fire one
+    // byte-identical notify, matching the standalone test at line 60.
+    const outcome = await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+
+    assert.equal(outcome, undefined, "standalone (omitted) returns void");
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]?.message, "● valid-marketplace [project] (added)");
   });
 });

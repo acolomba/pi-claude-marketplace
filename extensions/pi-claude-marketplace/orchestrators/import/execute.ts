@@ -19,7 +19,10 @@ import type {
   MergedClaudeSettingsResult,
   PlannedPluginImport,
 } from "./types.ts";
-import type { AddMarketplaceOptions } from "../../orchestrators/marketplace/add.ts";
+import type {
+  AddMarketplaceOptions,
+  AddMarketplaceOutcome,
+} from "../../orchestrators/marketplace/add.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
   ContentReason,
@@ -151,7 +154,9 @@ interface ImportDeps {
     opts: { cwd: string },
   ) => Promise<MergedClaudeSettingsResult>;
   readonly loadState?: (scope: Scope, cwd: string) => Promise<ExtensionState>;
-  readonly addMarketplace?: (opts: AddMarketplaceOptions) => Promise<void>;
+  readonly addMarketplace?: (
+    opts: AddMarketplaceOptions,
+  ) => Promise<AddMarketplaceOutcome | undefined>;
   readonly installPlugin?: (opts: InstallPluginOptions) => Promise<InstallPluginOutcome>;
 }
 
@@ -206,7 +211,7 @@ function settingsLoader(
 
 function addMarketplaceFn(
   deps: ImportDeps | undefined,
-): (opts: AddMarketplaceOptions) => Promise<void> {
+): (opts: AddMarketplaceOptions) => Promise<AddMarketplaceOutcome | undefined> {
   return deps?.addMarketplace ?? defaultAddMarketplace;
 }
 

@@ -28,7 +28,11 @@ type SingleNameMarketplaceRun = (opts: {
   name: string;
   cwd: string;
   scope?: Scope;
-}) => Promise<void>;
+  // RECON-03 (Phase 55 Plan 01): orchestrators may now return a typed outcome
+  // in orchestrated mode. The edge handler omits `notifications`, so the
+  // standalone-mode void return is exercised; `void | unknown` keeps the type
+  // unconstrained for any future orchestrators added to this shim.
+}) => Promise<unknown>;
 
 /**
  * Build a thin-shim handler for a `<name>`-only marketplace subcommand. The

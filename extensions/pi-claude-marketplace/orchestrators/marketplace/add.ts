@@ -77,8 +77,62 @@ import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { AuthAttemptResult } from "../../platform/git.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { ContentReason } from "../../shared/notify.ts";
+import type { ContentReason, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
+
+/**
+ * RECON-03 (Phase 55 Plan 01): controls how `addMarketplace` surfaces
+ * notifications. Mirrors the `InstallPluginNotifications` precedent.
+ *
+ * - `"standalone"` (default when option is omitted): the orchestrator fires
+ *   one `notify(ctx, pi, ...)` per outcome arm with the per-variant
+ *   `MarketplaceNotificationMessage` / `MarketplaceNotAddedMessage` payload.
+ *   Byte-identical to today; every existing caller (edge handler, bootstrap
+ *   composer, catalog UAT) observes zero output drift.
+ * - `"orchestrated"`: suppresses every `ctx.ui.notify` call and returns the
+ *   typed `AddMarketplaceOutcome` instead. Consumed by `applyReconcile`
+ *   (Plan 02) which aggregates per-entry outcomes into ONE notify() per load
+ *   (IL-2). The orchestrated caller is contractually required to render the
+ *   outcome itself.
+ */
+export type AddMarketplaceNotifications =
+  | { readonly mode: "standalone" }
+  | { readonly mode: "orchestrated" };
+
+/**
+ * RECON-03: discriminated outcome returned by `addMarketplace` in
+ * orchestrated mode. Standalone mode returns `void` for back-compat.
+ *
+ * `success` (status: "added") carries the `name` of the newly recorded
+ * marketplace so the apply cascade can render the row.
+ *
+ * `failed` collapses every classified precondition failure
+ * (`classifyAddError` recognized: duplicate name / stale clone / invalid
+ * manifest / unsupported source / source missing) plus the catastrophic
+ * fallback ("unparseable" -- chosen because every recognised add precondition
+ * yields a typed error, so a non-enumerated throw is by construction an
+ * unparseable / corrupted source-tree shape). Consumers narrow on
+ * `instanceof MarketplaceDuplicateNameError` etc. via `outcome.error` to
+ * recover the specific failure class.
+ *
+ * `cause` carries the formatted user-visible text for orchestrated callers
+ * that surface it directly.
+ */
+/**
+ * `reason` is typed as `Reason` (not `ContentReason`) so the `applyReconcile`
+ * caller (Plan 02) can dispatch on the broader closed set, including the
+ * structural `"not added"` sentinel surfaced by the `remove` sibling. This
+ * adopts a broader-than-the-plan type to keep the orchestrated outcome
+ * dispatchable end-to-end without a separate marker field.
+ */
+export type AddMarketplaceOutcome =
+  | { readonly status: "added"; readonly name: string }
+  | {
+      readonly status: "failed";
+      readonly reason: Reason;
+      readonly error: Error;
+      readonly cause: string;
+    };
 
 export interface AddMarketplaceOptions {
   readonly ctx: ExtensionContext;
@@ -117,6 +171,12 @@ export interface AddMarketplaceOptions {
    * structured failed row. Omitted (undefined) => route through notify.
    */
   readonly rethrowPreconditionErrors?: boolean;
+  /**
+   * RECON-03 (Phase 55 Plan 01): notification mode selector. Omitted
+   * (undefined) === `{ mode: "standalone" }` -- byte-identical to today.
+   * Orchestrated mode suppresses notify() and returns a typed outcome.
+   */
+  readonly notifications?: AddMarketplaceNotifications;
 }
 
 /**
@@ -261,11 +321,75 @@ async function runAddInGuard(args: {
   return recordedName;
 }
 
-export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void> {
+/**
+ * RECON-03: route the catch arm of `addMarketplace` to either a typed
+ * orchestrated outcome OR a standalone notify() row. Returns an
+ * `AddMarketplaceOutcome` when orchestrated, otherwise `undefined` after
+ * having fired the standalone notify().
+ *
+ * The non-enumerated catastrophic branch in orchestrated mode collapses to
+ * the closed-set `"unparseable"` reason because every recognised add
+ * precondition already yields a typed error; an unrecognised throw is by
+ * construction an opaque source-tree shape, NOT a network reachability
+ * problem (the github guard's clone-catch already classifies those).
+ */
+function handleAddFailure(
+  opts: AddMarketplaceOptions,
+  err: unknown,
+  orchestrated: boolean,
+): AddMarketplaceOutcome | undefined {
+  const reason = classifyAddError(err);
+  if (reason === undefined) {
+    if (orchestrated) {
+      const wrapped = err instanceof Error ? err : new Error(errorMessage(err));
+      return {
+        status: "failed",
+        reason: "unparseable",
+        error: wrapped,
+        cause: errorMessage(err),
+      };
+    }
+
+    // Not an enumerated add precondition (e.g. a StateLockHeldError or an
+    // unforeseen catastrophic error) -- never swallow it in standalone mode.
+    throw err;
+  }
+
+  if (orchestrated) {
+    const wrapped = err instanceof Error ? err : new Error(errorMessage(err));
+    return { status: "failed", reason, error: wrapped, cause: errorMessage(err) };
+  }
+
+  notify(opts.ctx, opts.pi, {
+    marketplaces: [
+      {
+        name: addSubjectName(err, opts.rawSource),
+        scope: opts.scope,
+        status: "failed",
+        reasons: [reason],
+        plugins: [],
+      },
+    ],
+  });
+  return undefined;
+}
+
+/**
+ * RECON-03: returns `AddMarketplaceOutcome` in orchestrated mode and
+ * `undefined` in standalone mode (after firing the standalone notify()).
+ * Callers in orchestrated mode know the outcome is defined; standalone
+ * callers ignore the return.
+ */
+export async function addMarketplace(
+  opts: AddMarketplaceOptions,
+): Promise<AddMarketplaceOutcome | undefined> {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
   const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
   const locations = locationsFor(opts.scope, opts.cwd);
   const source = parsePluginSource(opts.rawSource);
+  // RECON-03: orchestrated mode suppresses every notify() call and returns the
+  // typed outcome instead. Standalone (default/omitted) preserves byte-identity.
+  const orchestrated = opts.notifications?.mode === "orchestrated";
 
   // ATTR-07: route every enumerated precondition failure through notify as a
   // structured `⊘ <subject> [<scope>] (failed) {<reason>}` row on the
@@ -284,13 +408,9 @@ export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void>
       credentialOps,
     });
   } catch (err) {
-    const reason = classifyAddError(err);
-    if (reason === undefined) {
-      // Not an enumerated add precondition (e.g. a StateLockHeldError or an
-      // unforeseen catastrophic error) -- never swallow it.
-      throw err;
-    }
-
+    // rethrowPreconditionErrors short-circuits BEFORE the mode branch so the
+    // bootstrap composer contract is preserved in BOTH standalone and
+    // orchestrated modes (the typed precondition flows past the orchestrator).
     if (opts.rethrowPreconditionErrors === true) {
       // Composition seam (bootstrap): re-throw the typed precondition so the
       // caller can make a control-flow decision (e.g. swallow the idempotent
@@ -298,18 +418,7 @@ export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void>
       throw err;
     }
 
-    notify(opts.ctx, opts.pi, {
-      marketplaces: [
-        {
-          name: addSubjectName(err, opts.rawSource),
-          scope: opts.scope,
-          status: "failed",
-          reasons: [reason],
-          plugins: [],
-        },
-      ],
-    });
-    return;
+    return handleAddFailure(opts, err, orchestrated);
   }
 
   // D-03-INV: post-state-commit completion-cache invalidation.
@@ -331,6 +440,10 @@ export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void>
     // mutation already succeeded; only the completion-cache is stale.
   }
 
+  if (orchestrated) {
+    return { status: "added", name: recordedName };
+  }
+
   // Emit one MarketplaceNotificationMessage per outcome. Severity and
   // reload-hint are computed by notify(); callers MUST NOT compose them.
   // Catalog: `path-source` + `github-source` fixtures in catalog-uat.test.ts.
@@ -344,6 +457,7 @@ export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void>
       },
     ],
   });
+  return undefined;
 }
 
 async function addGithubInGuard(args: {

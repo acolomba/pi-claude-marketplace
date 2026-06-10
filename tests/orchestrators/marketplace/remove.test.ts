@@ -23,6 +23,7 @@ import {
   __resetCacheForTests,
   getMarketplaceNames,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -888,6 +889,135 @@ test("TR-03 (AG-5 cause): failed plugin row preserved INTACT in remove.ts per-pl
         ["mcp1", "mcp2"],
         "AG-5: resources.mcpServers UNCHANGED",
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// RECON-03 (Phase 55 Plan 01): orchestrated-mode coverage
+// ───────────────────────────────────────────────────────────────────────────
+
+test("RECON-03 remove orchestrated mode -- clean success returns { status: 'removed', name, unstaged: [] } with ZERO notify calls", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-orch-ok-"));
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      const projLoc = locationsFor("project", cwd);
+      const seed = {
+        source: pathSource("./src"),
+        addedFromCwd: cwd,
+        manifestPath: path.join(cwd, "marketplace.json"),
+        marketplaceRoot: cwd,
+        plugins: {},
+      };
+      await seedState(projLoc.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: { "orch-mp": { name: "orch-mp", scope: "project", ...seed } },
+      });
+
+      const outcome = await removeMarketplace({
+        ctx,
+        pi,
+        name: "orch-mp",
+        scope: "project",
+        cwd,
+        notifications: { mode: "orchestrated" },
+      });
+
+      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+      assert.ok(outcome);
+      assert.equal(outcome.status, "removed");
+      if (outcome.status === "removed") {
+        assert.equal(outcome.name, "orch-mp");
+        assert.deepEqual(outcome.unstaged, []);
+      }
+
+      const after = await loadState(projLoc.extensionRoot);
+      assert.ok(!("orch-mp" in after.marketplaces), "state record removed");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RECON-03 remove orchestrated mode -- missing marketplace returns { status: 'failed', reason: 'not added', error: MarketplaceNotFoundError } no notifications", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-orch-na-"));
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await removeMarketplace({
+        ctx,
+        pi,
+        name: "absent-xx",
+        cwd,
+        notifications: { mode: "orchestrated" },
+      });
+
+      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+      assert.ok(outcome);
+      assert.equal(outcome.status, "failed");
+      if (outcome.status === "failed") {
+        assert.equal(outcome.reason, "not added");
+        assert.ok(outcome.error instanceof MarketplaceNotFoundError);
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RECON-03 remove orchestrated mode -- explicit --scope miss returns failed with MarketplaceNotFoundError (no notify)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-orch-na-scope-"));
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await removeMarketplace({
+        ctx,
+        pi,
+        name: "ghost",
+        scope: "project",
+        cwd,
+        notifications: { mode: "orchestrated" },
+      });
+
+      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+      assert.ok(outcome);
+      assert.equal(outcome.status, "failed");
+      if (outcome.status === "failed") {
+        assert.equal(outcome.reason, "not added");
+        assert.ok(outcome.error instanceof MarketplaceNotFoundError);
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RECON-03 remove standalone-default mode -- omitted notifications option remains byte-identical to today (regression guard)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-orch-default-"));
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      const projLoc = locationsFor("project", cwd);
+      const seed = {
+        source: pathSource("./src"),
+        addedFromCwd: cwd,
+        manifestPath: path.join(cwd, "marketplace.json"),
+        marketplaceRoot: cwd,
+        plugins: {},
+      };
+      await seedState(projLoc.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: { "byte-mp": { name: "byte-mp", scope: "project", ...seed } },
+      });
+
+      // No `notifications` option -- must behave EXACTLY as today.
+      const outcome = await removeMarketplace({ ctx, pi, name: "byte-mp", scope: "project", cwd });
+      assert.equal(outcome, undefined, "standalone (omitted) returns void");
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.message, "● byte-mp [project] (removed)");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

@@ -40,7 +40,9 @@
 import { rm } from "node:fs/promises";
 
 import { locationsFor } from "../../persistence/locations.ts";
+import { loadState } from "../../persistence/state-io.ts";
 import { dropMarketplaceCache, invalidateMarketplaceNames } from "../../shared/completion-cache.ts";
+import { errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
@@ -50,13 +52,50 @@ import {
   resolveScopeOrNotifyNotAdded,
 } from "./shared.ts";
 
+import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
   ContentReason,
   PluginFailedMessage,
   PluginUninstalledMessage,
+  Reason,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
+
+/**
+ * RECON-03 (Phase 55 Plan 01): controls how `removeMarketplace` surfaces
+ * notifications. Mirrors `AddMarketplaceNotifications`.
+ *
+ * - `"standalone"` (default when option is omitted): byte-identical to today.
+ * - `"orchestrated"`: suppresses every `ctx.ui.notify` call and returns the
+ *   typed `RemoveMarketplaceOutcome` for `applyReconcile` to aggregate (IL-2).
+ */
+export type RemoveMarketplaceNotifications =
+  | { readonly mode: "standalone" }
+  | { readonly mode: "orchestrated" };
+
+/**
+ * RECON-03: discriminated outcome returned by `removeMarketplace` in
+ * orchestrated mode. The success arm carries the names of the plugin rows
+ * the cascade successfully unstaged so the apply renderer can compose the
+ * per-row `(uninstalled)` plugin lines. Cleanup-leak warnings are dropped
+ * per D-18-01 -- the orchestrated outcome surface mirrors standalone's
+ * silence on post-state cleanup hiccups.
+ */
+/**
+ * `reason` is typed as `Reason` (not `ContentReason`) so the orchestrated
+ * `"not added"` arm (missing marketplace, MarketplaceNotFoundError) can
+ * surface its structural sentinel through the same field. Mirrors the
+ * `AddMarketplaceOutcome` shape note.
+ */
+export type RemoveMarketplaceOutcome =
+  | { readonly status: "removed"; readonly name: string; readonly unstaged: readonly string[] }
+  | {
+      readonly status: "failed";
+      readonly reason: Reason;
+      readonly error: Error;
+      readonly cause: string;
+    };
 
 export interface RemoveMarketplaceOptions {
   readonly ctx: ExtensionContext;
@@ -75,6 +114,11 @@ export interface RemoveMarketplaceOptions {
    * fallback.
    */
   readonly cascade?: typeof cascadeUnstagePlugin;
+  /**
+   * RECON-03 (Phase 55 Plan 01): notification mode selector. Omitted
+   * (undefined) === `{ mode: "standalone" }` -- byte-identical to today.
+   */
+  readonly notifications?: RemoveMarketplaceNotifications;
 }
 
 async function removePath(pathPromise: Promise<string>): Promise<void> {
@@ -157,17 +201,134 @@ function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
   );
 }
 
-export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise<void> {
+/**
+ * RECON-03: orchestrated-mode mirror of `resolveScopeOrNotifyNotAdded` that
+ * returns a typed `RemoveMarketplaceOutcome` for the not-added case instead
+ * of firing the standalone notify() side effect. Same project-then-user
+ * precedence as the helper (CMP-5).
+ */
+async function resolveScopeOrFailedOutcome(
+  opts: RemoveMarketplaceOptions,
+  userLocations: ScopedLocations,
+  projectLocations: ScopedLocations,
+): Promise<{ scope: Scope; locations: ScopedLocations } | RemoveMarketplaceOutcome> {
+  if (opts.scope === undefined) {
+    const [userState, projectState] = await Promise.all([
+      loadState(userLocations.extensionRoot),
+      loadState(projectLocations.extensionRoot),
+    ]);
+    if (opts.name in projectState.marketplaces) {
+      return { scope: "project", locations: projectLocations };
+    }
+
+    if (opts.name in userState.marketplaces) {
+      return { scope: "user", locations: userLocations };
+    }
+
+    const err = new MarketplaceNotFoundError(opts.name, ["project", "user"]);
+    return { status: "failed", reason: "not added", error: err, cause: errorMessage(err) };
+  }
+
+  const candLocations = opts.scope === "user" ? userLocations : projectLocations;
+  const preState = await loadState(candLocations.extensionRoot);
+  if (preState.marketplaces[opts.name] === undefined) {
+    const err = new MarketplaceNotFoundError(opts.name, [opts.scope]);
+    return { status: "failed", reason: "not added", error: err, cause: errorMessage(err) };
+  }
+
+  return { scope: opts.scope, locations: candLocations };
+}
+
+/**
+ * RECON-03: route the partial-failure (≥1 plugin cascade failure) arm to
+ * either a typed orchestrated outcome OR the standalone notify() row.
+ * Extracted from `removeMarketplace` to keep its cognitive complexity
+ * inside the project's lint budget.
+ */
+function emitPartialFailure(args: {
+  opts: RemoveMarketplaceOptions;
+  orchestrated: boolean;
+  resolvedScope: Scope;
+  successfullyUnstaged: readonly string[];
+  failedPlugins: readonly { name: string; cause: Error }[];
+}): RemoveMarketplaceOutcome | undefined {
+  const { opts, orchestrated, resolvedScope, successfullyUnstaged, failedPlugins } = args;
+  if (orchestrated) {
+    // Collapse the per-plugin partial-failure surface to ONE typed outcome.
+    // The apply cascade caller (Plan 02) composes per-plugin rows from its
+    // own bucket walk; here we surface the first failed plugin's classified
+    // reason as the marketplace-level failure reason.
+    const first = failedPlugins[0];
+    const err = first?.cause ?? new Error(`removeMarketplace: partial failure for "${opts.name}"`);
+    const firstReason: Reason =
+      first === undefined ? "unreadable" : narrowCascadeFailure(first.cause);
+    return { status: "failed", reason: firstReason, error: err, cause: errorMessage(err) };
+  }
+
+  // CMC-31 PARTIAL: mp.status="failed"; plugins[] mixes uninstalled +
+  // failed (with per-plugin cause). Caller-order honored end-to-end:
+  // successfullyUnstaged first, failed second.
+  notify(opts.ctx, opts.pi, {
+    marketplaces: [
+      {
+        name: opts.name,
+        scope: resolvedScope,
+        status: "failed",
+        plugins: [
+          ...successfullyUnstaged.map(
+            (name): PluginUninstalledMessage => ({
+              status: "uninstalled",
+              name,
+            }),
+          ),
+          ...failedPlugins.map(
+            ({ name, cause }): PluginFailedMessage => ({
+              status: "failed",
+              name,
+              reasons: [narrowCascadeFailure(cause)],
+              cause,
+            }),
+          ),
+        ],
+      },
+    ],
+  });
+  return undefined;
+}
+
+/**
+ * RECON-03: returns `RemoveMarketplaceOutcome` in orchestrated mode and
+ * `undefined` in standalone mode.
+ */
+export async function removeMarketplace(
+  opts: RemoveMarketplaceOptions,
+): Promise<RemoveMarketplaceOutcome | undefined> {
   const cascade = opts.cascade ?? cascadeUnstagePlugin;
+  // RECON-03: orchestrated mode suppresses every notify() call and returns the
+  // typed outcome instead. Standalone (default/omitted) preserves byte-identity.
+  const orchestrated = opts.notifications?.mode === "orchestrated";
 
   // MR-1 + ATTR-06: resolve scope and enforce the missing-marketplace
   // precondition. On a miss the helper has already emitted the standalone
   // `(failed) {not added}` variant, so return without entering the guard.
   const userLocations = locationsFor("user", opts.cwd);
   const projectLocations = locationsFor("project", opts.cwd);
-  const resolved = await resolveScopeOrNotifyNotAdded(opts, userLocations, projectLocations);
-  if (resolved === undefined) {
-    return;
+
+  let resolved: { scope: Scope; locations: ScopedLocations };
+  if (orchestrated) {
+    const r = await resolveScopeOrFailedOutcome(opts, userLocations, projectLocations);
+    if ("status" in r) {
+      return r;
+    }
+
+    resolved = r;
+  } else {
+    const r = await resolveScopeOrNotifyNotAdded(opts, userLocations, projectLocations);
+    if (r === undefined) {
+      return undefined;
+    }
+
+    resolved = r;
   }
 
   const { locations } = resolved;
@@ -296,35 +457,17 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
   //   callers MUST NOT compose.
   // - Reference: catalog UAT `clean` + `partial` fixtures.
   if (failedPlugins.length > 0) {
-    // CMC-31 PARTIAL: mp.status="failed"; plugins[] mixes uninstalled +
-    // failed (with per-plugin cause). Caller-order honored end-to-end:
-    // successfullyUnstaged first, failed second.
-    notify(opts.ctx, opts.pi, {
-      marketplaces: [
-        {
-          name: opts.name,
-          scope: resolved.scope,
-          status: "failed",
-          plugins: [
-            ...successfullyUnstaged.map(
-              (name): PluginUninstalledMessage => ({
-                status: "uninstalled",
-                name,
-              }),
-            ),
-            ...failedPlugins.map(
-              ({ name, cause }): PluginFailedMessage => ({
-                status: "failed",
-                name,
-                reasons: [narrowCascadeFailure(cause)],
-                cause,
-              }),
-            ),
-          ],
-        },
-      ],
+    return emitPartialFailure({
+      opts,
+      orchestrated,
+      resolvedScope: resolved.scope,
+      successfullyUnstaged,
+      failedPlugins,
     });
-    return;
+  }
+
+  if (orchestrated) {
+    return { status: "removed", name: opts.name, unstaged: successfullyUnstaged };
   }
 
   // CMC-31 CLEAN (D-22-02): mp.status="removed"; plugins[] carries one
@@ -348,6 +491,7 @@ export async function removeMarketplace(opts: RemoveMarketplaceOptions): Promise
       },
     ],
   });
+  return undefined;
 }
 
 /**
