@@ -345,6 +345,43 @@ test("Edge: dangling plugin reference (mp not in declared nor recorded) -> Plann
   assert.equal(plan.pluginsToInstall.length, 0);
 });
 
+test("Edge: declared plugin under a recorded-but-undeclared marketplace -> dangling diagnostic, NOT install (WR-01)", () => {
+  // The realistic "user deleted the marketplace entry but forgot the plugin
+  // entry" config: mp exists only in state (-> marketplacesToRemove) while
+  // cr@mp is still declared. Classifying cr as an install would produce a
+  // self-contradictory plan ("will remove" mp AND "will install" cr into
+  // it) that Phase 55's apply path would consume verbatim. The entry must
+  // surface as a dangling diagnostic instead.
+  const state = stateWithOneGithubMarketplace("mp", "acme/tools");
+  const merged = mergeScopeConfigs(configWith({}, { "cr@mp": { enabled: true } }), {});
+  const plan = planReconcile(merged, state, "project");
+  assert.equal(plan.marketplacesToRemove.length, 1);
+  assert.equal(plan.pluginsToInstall.length, 0);
+  assert.equal(plan.sourceMismatches.length, 1);
+  const dangling = plan.sourceMismatches[0];
+  assert.ok(dangling);
+  assert.equal(dangling.marketplace, "mp");
+  assert.equal(dangling.plugin, "cr");
+  assert.equal(dangling.cause, "source-mismatch");
+  assert.equal(dangling.recordedSource, "<marketplace not declared>");
+});
+
+test("Edge: declared-disabled plugin under a recorded-but-undeclared marketplace -> dangling diagnostic, NOT disable (WR-01)", () => {
+  // Symmetric to the install case: a disable under a marketplace being torn
+  // down is equally contradictory (the teardown subsumes the artefact
+  // removal); the entry surfaces as a dangling diagnostic.
+  const state = stateWithOneGithubMarketplace("mp", "acme/tools", ["cr"]);
+  const merged = mergeScopeConfigs(configWith({}, { "cr@mp": { enabled: false } }), {});
+  const plan = planReconcile(merged, state, "project");
+  assert.equal(plan.marketplacesToRemove.length, 1);
+  assert.equal(plan.pluginsToDisable.length, 0);
+  assert.equal(plan.pluginsToInstall.length, 0);
+  assert.equal(plan.sourceMismatches.length, 1);
+  const dangling = plan.sourceMismatches[0];
+  assert.ok(dangling);
+  assert.equal(dangling.plugin, "cr");
+});
+
 test("Plugin key parser: lastIndexOf('@') admits plugin names containing '@'", () => {
   // `evil@evil@marketplace` -> plugin "evil@evil", marketplace "marketplace".
   const state = stateWithOnePathMarketplace("marketplace", "./mp");

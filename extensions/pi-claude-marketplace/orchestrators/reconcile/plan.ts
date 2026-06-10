@@ -28,10 +28,17 @@
 // `"evil@evil"` and marketplace `"marketplace"`) does not collide.
 //
 // Dangling-reference contract: a plugin entry whose
-// `${plugin}@${marketplace}` marketplace name appears in neither map is
-// recorded as a `PlannedSourceMismatch` with cause `"source-mismatch"`,
+// `${plugin}@${marketplace}` marketplace name is NOT declared in the merged
+// config is recorded as a `PlannedSourceMismatch` with cause
+// `"source-mismatch"`, `plugin` set to the offending plugin name,
 // `declaredSource: ""`, and `recordedSource: "<marketplace not declared>"`.
 // The sentinel is stable so Phase 55 can render it without ambiguity.
+// The check is against the DECLARED map (not the declared+recorded union):
+// a plugin declared under a marketplace that exists only in state (i.e. the
+// marketplace is in `marketplacesToRemove`) is dangling too -- classifying
+// it as an install/disable would emit a self-contradictory plan ("will
+// remove" the marketplace AND "will install" into it) that Phase 55's apply
+// path would consume verbatim.
 
 import { parsePluginSource, samePlannedSource, sourceLogical } from "../../domain/source.ts";
 
@@ -163,10 +170,6 @@ function buildRecordedKeys(state: ExtensionState): Set<string> {
   return recordedKeys;
 }
 
-function buildMarketplaceUniverse(merged: MergedConfig, state: ExtensionState): Set<string> {
-  return new Set<string>([...Object.keys(merged.marketplaces), ...Object.keys(state.marketplaces)]);
-}
-
 interface DeclaredPluginAccumulator {
   readonly install: PlannedPluginInstall[];
   readonly disable: PlannedPluginDisable[];
@@ -184,7 +187,7 @@ function classifyDeclaredPlugin(
   key: string,
   declared: MergedConfig["plugins"][string],
   recordedKeys: ReadonlySet<string>,
-  marketplaceUniverse: ReadonlySet<string>,
+  declaredMarketplaces: MergedConfig["marketplaces"],
 ): void {
   const parsed = parsePluginKey(key);
   if (parsed === undefined) {
@@ -193,7 +196,12 @@ function classifyDeclaredPlugin(
 
   const { plugin, marketplace } = parsed;
 
-  if (!marketplaceUniverse.has(marketplace)) {
+  // Dangling reference: the plugin's marketplace is not DECLARED. This
+  // deliberately includes the recorded-but-undeclared case (the marketplace
+  // is in `marketplacesToRemove`): installing into / disabling under a
+  // marketplace being torn down is contradictory, so the entry surfaces as
+  // a diagnostic instead of an install/disable action.
+  if (declaredMarketplaces[marketplace] === undefined) {
     acc.dangling.push({
       scope,
       marketplace,
@@ -268,10 +276,9 @@ function diffPlugins(
 ): PluginDiff {
   const acc: DeclaredPluginAccumulator = { install: [], disable: [], dangling: [] };
   const recordedKeys = buildRecordedKeys(state);
-  const marketplaceUniverse = buildMarketplaceUniverse(merged, state);
 
   for (const [key, declared] of Object.entries(merged.plugins)) {
-    classifyDeclaredPlugin(acc, scope, key, declared, recordedKeys, marketplaceUniverse);
+    classifyDeclaredPlugin(acc, scope, key, declared, recordedKeys, merged.marketplaces);
   }
 
   const uninstall = buildUninstallBucket(merged, state, scope, marketplaceDiff);
