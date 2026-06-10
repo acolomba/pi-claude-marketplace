@@ -390,6 +390,7 @@ test("MIG-02 data-level convergence: every merged entry has provenance source='b
   for (const entry of Object.values(merged.marketplaces)) {
     assert.equal(entry.source, "base");
   }
+
   for (const entry of Object.values(merged.plugins)) {
     assert.equal(entry.source, "base");
   }
