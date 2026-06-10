@@ -6,9 +6,9 @@ Per-command rendered output for each user-visible state. Catalog v2.0 supersedes
 
 ### Glyphs
 
-- `●` -- filled circle. On plugin rows: plugin is installed (covers `(installed)`, `(updated)`, `(reinstalled)`, `(upgradable)`). On marketplace headers: success / OK / state-changing outcome (`(added)`, `(removed)`, `(updated)`, and the list-surface label form).
-- `○` -- empty circle. On plugin rows: plugin is not installed and there is no error -- either `(available)` (declared but never installed) or `(uninstalled)` (explicitly removed). Never used on marketplace headers.
-- `⊘` -- prohibited symbol. On plugin rows: error / blocked state -- `(unavailable)`, `(skipped)`, `(failed)`, or `(manual recovery)`. On marketplace headers: `(failed)` only.
+- `●` -- filled circle. On plugin rows: plugin is installed or pending a positive transition (covers `(installed)`, `(updated)`, `(reinstalled)`, `(upgradable)`, and the preview pending-tense `(will install)` / `(will enable)`). On marketplace headers: success / OK / state-changing outcome (`(added)`, `(removed)`, `(updated)`, the preview `(will add)`, and the list-surface label form).
+- `○` -- empty circle. On plugin rows: plugin is not installed and there is no error -- `(available)` (declared but never installed), `(uninstalled)` (explicitly removed), or the preview pending-tense `(will uninstall)`. Never used on marketplace headers EXCEPT the preview `(will remove)` arm (the marketplace-level analog of an uninstall).
+- `⊘` -- prohibited symbol. On plugin rows: error / blocked state -- `(unavailable)`, `(skipped)`, `(failed)`, `(manual recovery)`, or the preview pending-tense `(will disable)`. On marketplace headers: `(failed)` only.
 
 ### Always-marketplace-header form
 
@@ -137,15 +137,22 @@ ______________________________________________________________________
 | `(failed)`                                  | ⊘    | Plugin row -- any failure variant; carries `reasons`, optional `cause:` trailer, optional `rollbackPartial` children.                                                       |
 | `(skipped)`                                 | ⊘    | Plugin row -- per-plugin skip inside cascades; carries `reasons` (e.g. `{up-to-date}`, `{already installed}`).                                                              |
 | `(manual recovery)`                         | ⊘    | Plugin row -- per-plugin manual-recovery anchor inside a marketplace block; status discriminator includes the space literally.                                              |
+| `(will install)`                            | ●    | Plugin row -- `/claude:plugin preview` pending-tense install (DIFF-02).                                                                                                     |
+| `(will uninstall)`                          | ○    | Plugin row -- `/claude:plugin preview` pending-tense uninstall; the pre-transition analog of the realized `(uninstalled)` row.                                              |
+| `(will enable)`                             | ●    | Plugin row -- `/claude:plugin preview` pending-tense enable (structurally empty in Phase 53 per Pitfall 53-4; Phase 54 wires the bucket).                                   |
+| `(will disable)`                            | ⊘    | Plugin row -- `/claude:plugin preview` pending-tense disable.                                                                                                               |
 
-Marketplace status tokens (4 entries):
+Marketplace status tokens (drawn from the 9-member `MARKETPLACE_STATUSES` tuple; the `autoupdate enabled` / `autoupdate disabled` statuses render the marker-as-outcome forms `<autoupdate>` / `<no autoupdate>` per UXG-04 rather than parenthesised tokens):
 
-| Token       | Icon | Where it appears                                                                                                                               |
-| ----------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `(added)`   | ●    | Marketplace header -- `marketplace add`, `bootstrap`, import cascade.                                                                          |
-| `(removed)` | ●    | Marketplace header -- `marketplace remove` clean.                                                                                              |
-| `(updated)` | ●    | Marketplace header -- `marketplace update`.                                                                                                    |
-| `(failed)`  | ⊘    | Marketplace header -- `marketplace add` failure, `marketplace remove` partial, `marketplace update` failure, `marketplace autoupdate` failure. |
+| Token           | Icon | Where it appears                                                                                                                               |
+| --------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `(added)`       | ●    | Marketplace header -- `marketplace add`, `bootstrap`, import cascade.                                                                          |
+| `(removed)`     | ●    | Marketplace header -- `marketplace remove` clean.                                                                                              |
+| `(updated)`     | ●    | Marketplace header -- `marketplace update`.                                                                                                    |
+| `(failed)`      | ⊘    | Marketplace header -- `marketplace add` failure, `marketplace remove` partial, `marketplace update` failure, `marketplace autoupdate` failure. |
+| `(skipped)`     | ●    | Marketplace header -- mp-level skip (e.g. `{up-to-date}`); the autoupdate-idempotent reasons render the marker-as-outcome form instead.        |
+| `(will add)`    | ●    | Marketplace header -- `/claude:plugin preview` pending-tense marketplace add (DIFF-02).                                                        |
+| `(will remove)` | ○    | Marketplace header -- `/claude:plugin preview` pending-tense marketplace remove; the only `○` marketplace header.                              |
 
 ______________________________________________________________________
 
