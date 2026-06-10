@@ -469,11 +469,11 @@ test("Pitfall 52-5: pre-existing INVALID (schema-failing) claude-plugins.json is
 //
 // The planner-level no-op convergence test --
 //   planReconcile(mergeScopeConfigs(buildConfigFromState(state), {}), state)
-//     deepEqual { adds:[], installs:[], removes:[], uninstalls:[],
-//                 transitions:[] }
-// -- is DEFERRED to Phase 53 where `planReconcile` lands. This data-level
+//     deepEqual emptyReconcilePlan(scope)
+// -- is DISCHARGED in tests/orchestrators/reconcile/plan-convergence.test.ts
+// (Phase 53 Plan 01) where `planReconcile` lands. This data-level
 // convergence (key-set + provenance equality on the merged view) is the
-// Phase 52 surrogate.
+// Phase 52 surrogate kept here for archaeological continuity.
 // ──────────────────────────────────────────────────────────────────────────
 
 test("MIG-02 data-level convergence: merged marketplaces key set === state key set", async () => {

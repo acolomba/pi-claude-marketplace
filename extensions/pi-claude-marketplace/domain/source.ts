@@ -376,6 +376,58 @@ export function githubSource(raw: string): GitHubSource {
 }
 
 /**
+ * Compare a stored source record against a planned raw source string for
+ * semantic equality.
+ *
+ * Both inputs are funnelled through `parsePluginSource` so the comparison
+ * happens on the discriminated `ParsedSource` shape, not on raw strings.
+ * Callers receive one of three results:
+ *
+ *   - `true`  -- planned and stored describe the same source.
+ *   - `false` -- recognised stored source, but different from the plan.
+ *   - `"unknown-stored"` -- stored record is in an unrecognised format
+ *     (e.g. manually edited `state.json`). The sentinel lets callers emit
+ *     a meaningful diagnostic ("verify state.json or remove and re-add")
+ *     rather than misclassifying the situation as a source-mismatch.
+ *
+ * Used by `orchestrators/import/execute.ts` (existing import path) and
+ * `orchestrators/reconcile/plan.ts` (Phase 53 pure planner foundation).
+ * Lives in `domain/source.ts` so both callers import a leaf-pure helper
+ * without pulling in either orchestrator's effectful transitive closure.
+ */
+export function samePlannedSource(stored: unknown, plannedRaw: string): boolean | "unknown-stored" {
+  const planned = parsePluginSource(plannedRaw);
+  const current = parsePluginSource(stored);
+
+  // Treat unrecognized stored source as a special sentinel so callers can
+  // emit a meaningful diagnostic rather than a generic source-mismatch.
+  if (current.kind === "unknown") {
+    return "unknown-stored";
+  }
+
+  if (planned.kind !== current.kind) {
+    return false;
+  }
+
+  switch (planned.kind) {
+    case "github":
+      return (
+        current.kind === "github" &&
+        planned.owner === current.owner &&
+        planned.repo === current.repo &&
+        planned.ref === current.ref
+      );
+    case "path":
+      return current.kind === "path" && planned.logical === current.logical;
+    /* c8 ignore next 3 -- callers only generate path/github sources today */
+    case "url":
+    case "git-subdir":
+    case "npm":
+      return sourceLogical(planned) === sourceLogical(current);
+  }
+}
+
+/**
  * ML-2 / list-format helper. Returns the user-visible logical source label
  * for the `marketplace list` renderer.
  *

@@ -1,4 +1,4 @@
-import { parsePluginSource, sourceLogical } from "../../domain/source.ts";
+import { parsePluginSource, samePlannedSource, sourceLogical } from "../../domain/source.ts";
 import { addMarketplace as defaultAddMarketplace } from "../../orchestrators/marketplace/add.ts";
 import {
   installPlugin as defaultInstallPlugin,
@@ -183,37 +183,9 @@ function refLabel(plugin: PlannedPluginImport): string {
   return plugin.ref.raw;
 }
 
-function samePlannedSource(stored: unknown, plannedRaw: string): boolean | "unknown-stored" {
-  const planned = parsePluginSource(plannedRaw);
-  const current = parsePluginSource(stored);
-
-  // Treat unrecognized stored source as a special sentinel so callers can
-  // emit a meaningful diagnostic rather than a generic source-mismatch.
-  if (current.kind === "unknown") {
-    return "unknown-stored";
-  }
-
-  if (planned.kind !== current.kind) {
-    return false;
-  }
-
-  switch (planned.kind) {
-    case "github":
-      return (
-        current.kind === "github" &&
-        planned.owner === current.owner &&
-        planned.repo === current.repo &&
-        planned.ref === current.ref
-      );
-    case "path":
-      return current.kind === "path" && planned.logical === current.logical;
-    /* c8 ignore next 3 -- import planner only generates path/github sources */
-    case "url":
-    case "git-subdir":
-    case "npm":
-      return sourceLogical(planned) === sourceLogical(current);
-  }
-}
+// `samePlannedSource` moved to `domain/source.ts` in Phase 53 Plan 01 so
+// the new pure `orchestrators/reconcile/plan.ts` can import it without
+// dragging this module's effectful transitive closure.
 
 function stateLoader(
   deps: ImportDeps | undefined,
