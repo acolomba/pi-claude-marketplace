@@ -279,7 +279,7 @@ Declarative, version-controllable config files (`claude-plugins.json` + entry-le
 
 **Wave 1**
 
-- [ ] 55-01-PLAN.md -- Add notifications: { mode: "orchestrated" } option + outcome union types to addMarketplace / removeMarketplace / uninstallPlugin / setPluginEnabled (mirrors installPlugin Phase 19 precedent); standalone mode byte-identical (RECON-03 foundation)
+- [x] 55-01-PLAN.md -- Add notifications: { mode: "orchestrated" } option + outcome union types to addMarketplace / removeMarketplace / uninstallPlugin / setPluginEnabled (mirrors installPlugin Phase 19 precedent); standalone mode byte-identical (RECON-03 foundation)
 
 **Wave 2** *(blocked on Wave 1 completion; atomic catalog-amendment lockstep)*
 
