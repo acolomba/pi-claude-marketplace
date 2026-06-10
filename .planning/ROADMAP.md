@@ -15,6 +15,7 @@
 - Done **v1.9 Manifest In-Memory Cache** -- Phase 45 (shipped 2026-06-07)
 - Done **v1.10 Error Attribution & Message-Type Consistency** -- Phases 46-49 (shipped 2026-06-08)
 - Done **v1.11 Notification Summary-Line Grammar** -- Phase 50 (shipped 2026-06-08)
+- In progress **v1.12 Marketplace and Plugin Config Files** -- Phases 51-56
 
 For full details of each milestone, see `.planning/milestones/v[X.Y]-ROADMAP.md` and `.planning/milestones/v[X.Y]-REQUIREMENTS.md`.
 
@@ -154,27 +155,113 @@ Two new read-only detail-surface commands (`/claude:plugin marketplace info <nam
 
 ## Phase Details
 
-### Phase 50: Notification Summary-Line Grammar
+### In progress v1.12 Marketplace and Plugin Config Files
 
-**Goal:** Every error/warning-severity notification carries a non-empty summary message on the host `Error:`/`Warning:` label line, with the cascade/detail rendered as its own separate block below -- emitted through a single shared summary-emission path so the standalone-vs-cascade divergence that caused the v1.10 defect cannot recur.
+Declarative, version-controllable config files (`claude-plugins.json` + entry-level-override `claude-plugins.local.json` per scope) become the authoritative desired-state record of added marketplaces and installed plugins -- applied automatically at extension load, kept current by every mutating command, and safe by construction around the destructive half of reconciliation. Phases 51-56 continue numbering from v1.11 Phase 50 (not reset). Build order follows the dependency graph: frozen config/state shapes first, then the one-way-door migration, then the pure reconcile planner (with its dry-run consumer) and the offline enable/disable model, then the highest-integration load-wiring, with the broad write-back surface landing last on a frozen foundation. The `shared/notify.ts` / catalog / byte-UAT surface is touched by the reconcile-notification phase only and must land catalog + fixture changes atomically with the renderer/token changes they describe (v1.3 atomic-supersession lesson).
 
-**Depends on:** v1.10 Phase 49 complete
+### Phase 51: Config Schema, Persistence & State Split
 
-**Requirements:** GRAM-01, GRAM-02, GRAM-03, GRAM-04, GRAM-05
+**Goal:** A Pi user can declare marketplaces and plugins in a per-scope `claude-plugins.json` (with a `.local.json` override) validated by a Pi-native schema, while machine bookkeeping cleanly separates into the internal state file -- the frozen data foundation every later phase reads.
+
+**Depends on:** v1.11 Phase 50 complete
+
+**Requirements:** CFG-01, CFG-02, CFG-03, SPLIT-01, SPLIT-02
 
 **Success Criteria** (what must be TRUE):
 
-  1. Running `/claude:plugin install x@y` against a missing marketplace renders a summary line on the host label line (`Error: 1 marketplace operation failed.`) followed by the `⊘ y [user] (failed) {not added}` detail row as its own separate block below -- never the glued single-line `Error: ⊘ y [user] (failed) {not added}`.
-  2. The same corrected two-block shape (non-empty summary line + separate detail block) renders across every standalone `marketplace-not-added` emission -- install, uninstall, reinstall, update, marketplace update, marketplace remove, autoupdate/noautoupdate -- and across the failed `plugin-info` surface (e.g. `plugin info` against an unreadable manifest).
-  3. The summary subject follows the failed-row subject, not the invoking command: a marketplace-subject failure reads `N marketplace operation(s) failed.` and a plugin-subject failure reads `N plugin operation(s) failed.` (the v1.10 ATTR-08 subject-attribution principle: `{not added}` on the marketplace vs `{not in manifest}` on the plugin).
-  4. Standalone and cascade notifications emit their summary through one shared code path in `shared/notify.ts`: `dispatchInfoMessage` no longer bypasses `buildSummaryLine`, and `buildSummaryLine` returns the failed-subject summary for the standalone error/warning kinds -- no standalone-kind path can drift back to a summary-less emission.
-  5. A new cross-cutting grammar-invariant test asserts that every error/warning notification's emitted message has a non-empty summary first line distinct from the cascade block, across all catalog fixtures; `docs/output-catalog.md` (the ~6 sections that encoded "NO summary line. Severity error" -- install/uninstall/reinstall/update/marketplace-update + remove/autoupdate) and the `catalog-uat` fixtures are corrected to the new byte forms in lockstep; `npm run check` exits 0.
+  1. A user can write a `claude-plugins.json` at a scope root (`<cwd>/.pi/` project or `~/.pi/agent/` user, honoring `PI_CODING_AGENT_DIR`) declaring marketplaces (name, source, autoupdate) and plugins (`plugin@marketplace`, enabled); the file loads and validates against a typebox-compiled `CONFIG_SCHEMA` through a `loadConfig` seam mirroring `loadState`, and any save round-trips byte-stably through the existing `atomicWriteJson` / `write-file-atomic` seam (CFG-01, NFR-1).
+  2. A `claude-plugins.local.json` at the same scope root overrides the base file at the entry level -- a local marketplace or plugin entry replaces the base entry of the same key wholesale (never field-merged) -- producing a single `MergedConfig` view that downstream consumers read; the merge matrix (base-only, local-only, both, conflicting-key) is unit-tested in isolation (CFG-02).
+  3. An unparseable or schema-invalid config file is surfaced as an error and treated as an abort signal -- never silently coerced to "empty desired state" -- so a 0-byte, truncated, or malformed file cannot later be interpreted as "uninstall everything" (CFG-03; the load seam distinguishes absent vs. unparseable vs. valid-but-empty).
+  4. Desired-state and user-settings fields (marketplace source/autoupdate, plugin enabled/version-pin intent) live only in the config schema, and `state.json` retains only machine bookkeeping (materialized artefact records, resolved versions, timestamps) under `pi-claude-marketplace/`; a `STATE_SCHEMA` field-relocation (and any `schemaVersion` decision) is documented and an old `state.json` still loads (SPLIT-01).
+  5. The write seams are split by ownership: machine records are written only to the internal state file and the user config is written only via command write-back or one-time migration -- enforced by an architecture test so no reconcile-path code can write the user config (SPLIT-02); config + internal-file paths are added to the NFR-10 containment allow-list.
 
-**Plans:** 1/1 plans complete
+**Plans:** TBD
 
-**Wave 1**
+### Phase 52: First-Run Migration
 
-- [x] 50-01-PLAN.md -- Unify standalone + cascade emission on one shared summary helper, extend `buildSummaryLine` for the two standalone error kinds, rewrite the ~9 catalog fence bodies + 8 prose sentences, update/extend `notify-v2` byte tests, add the cross-cutting grammar-invariant test; atomic landing, `npm run check` GREEN (GRAM-01..05)
+**Goal:** A Pi user upgrading into v1.12 with an existing install gets a `claude-plugins.json` generated losslessly from their current `state.json` on first load, with nothing uninstalled -- the safety rail that guarantees an existing install is never reconciled against absence.
+
+**Depends on:** Phase 51
+
+**Requirements:** MIG-01, MIG-02
+
+**Success Criteria** (what must be TRUE):
+
+  1. On the first load where no `claude-plugins.json` exists, the extension generates one from the existing `state.json` containing every installed entry -- including soft-degraded `unavailable` ones -- so no declared reality is dropped; `state.json` is left intact and nothing is uninstalled (MIG-01).
+  2. Migration runs before any reconcile pass in execution order, so a populated install is never seen as "empty desired state" and pruned (MIG-01 ordering rail; the load wiring in Phase 55 places migrate-then-reconcile in that order).
+  3. Migration is atomic (the config file is written via tmp+rename before any bookkeeping is touched) and idempotent (driven by ENOENT detection, not a half-set flag), so an interrupted or repeated first-load cannot half-generate or double-generate the config (MIG-02, NFR-1, NFR-3).
+  4. Running a reconcile immediately after a fresh migration is a strict no-op -- zero installs, zero uninstalls, no file rewrites -- proven by a migrate-then-reconcile exit-gate test on a populated `state.json` fixture (MIG-02 convergence gate).
+
+**Plans:** TBD
+
+### Phase 53: Pure Reconcile Planner & Dry-Run Preview
+
+**Goal:** A Pi user can run a read-only command that shows exactly what the next load's reconcile would do, backed by a pure, exhaustively-testable diff between the merged config and the recorded reality -- no writes, no network.
+
+**Depends on:** Phase 52
+
+**Requirements:** DIFF-01, DIFF-02
+
+**Success Criteria** (what must be TRUE):
+
+  1. A pure `planReconcile(MergedConfig, state) -> ReconcilePlan` function computes the bidirectional diff -- declared-but-missing marketplaces/plugins to add/install, recorded-but-undeclared (extension-managed) ones to remove/uninstall, and enable/disable transitions -- with the full desired-x-actual matrix covered by a planner architecture test and no disk or network access in the planner (DIFF-01 foundation; reuses the `samePlannedSource` import-planner template).
+  2. A user can run a read-only diff/preview command that prints exactly the actions the next load's reconcile would take (adds, installs, removals, uninstalls, enable/disable transitions) and performs no writes and no network calls -- verifiable by running it twice and observing identical output with no file or state mutation (DIFF-01).
+  3. The diff output follows the locked subject-first row grammar (`<glyph> <name> [scope] (status) {reason}`); any pending-tense status tokens it introduces are closed-set extensions landing in lockstep with the `docs/output-catalog.md` catalog and the `catalog-uat` byte fixtures in the same atomic commit (DIFF-02; the planner's disabled-entry handling excludes disabled plugins from the desired-materialized set so the preview never shows them as pending installs).
+
+**Plans:** TBD
+
+### Phase 54: Enable/Disable Commands
+
+**Goal:** A Pi user can disable a plugin to keep its config entry and version pin while removing its Pi artefacts, and re-enable it from cache with no network -- with disabled status rendered as a distinct, deliberate fact separate from soft-degraded unavailability.
+
+**Depends on:** Phase 51
+
+**Requirements:** ENBL-01, ENBL-02, ENBL-03, ENBL-04
+
+**Success Criteria** (what must be TRUE):
+
+  1. A user can run `enable <plugin>@<marketplace>` and `disable <plugin>@<marketplace>` in the autoupdate/noautoupdate command shape, with `--scope user|project` and `--local` handling consistent with the other mutating commands (ENBL-01); the change is written back to the config (`enabled: true/false`).
+  2. After `disable` and a `/reload`, the plugin keeps its config entry and version pin but its Pi artefacts are not materialized -- reconcile's desired-materialized set is `declared AND enabled`, so a disabled entry is never re-materialized (ENBL-02).
+  3. Running `enable` re-materializes the plugin's artefacts from the cached marketplace clone and persisted internal records with no network access -- verifiable by enabling with the network unplugged while the version pin is preserved (ENBL-03, NFR-5).
+  4. On `list` and `info` surfaces, a `disabled` plugin renders distinctly from a soft-degraded `unavailable` one, keeping the three orthogonal facts (declared / enabled / available) from collapsing into one another (ENBL-04); the `disabled` vs. reused-token decision lands with its catalog + byte-UAT forms in lockstep.
+
+**Plans:** TBD
+
+### Phase 55: Load-Time Reconcile Apply, Notification & Wiring
+
+**Goal:** On every Pi startup and `/reload`, the extension automatically reconciles installed reality to the merged config -- adding declared-but-missing entries, removing undeclared managed ones -- reporting through the structured notification cascade, soft-failing network per entry, and never blocking Pi load.
+
+**Depends on:** Phase 53, Phase 54
+
+**Requirements:** RECON-01, RECON-02, RECON-03, RECON-04, RECON-05, RECON-06
+
+**Success Criteria** (what must be TRUE):
+
+  1. At extension load (both startup and restart/reload), declared-but-missing marketplaces and plugins are added/installed automatically, and installed-but-undeclared marketplaces and plugins -- scoped to entries the extension manages (provenance/ownership guard) -- are removed/uninstalled automatically (RECON-01, RECON-02).
+  2. A network failure during reconcile soft-fails for that one entry: it is reported and skipped, the rest of the pass continues, and the failure never propagates past the `resources_discover` boundary or blocks Pi load (RECON-03, NFR-5; the apply step drives the existing per-scope-locked orchestrators serially with no outer lock, continue-on-failure per item).
+  3. Reconcile results surface through the existing structured `notify` / `emitWithSummary` cascade in catalog-conformant grammar (IL-2), and reconcile never emits a `/reload to pick up changes` hint -- the notify-sink wiring resolves the feasibility question that `resources_discover` carries no `ctx`/`pi` in its current signature (RECON-04; new emission context lands its catalog + byte-UAT forms in the same atomic commit).
+  4. Reconciliation converges to a fixed point: an immediately repeated reconcile applies zero changes and rewrites neither the config nor the internal state file (byte-unchanged), proven by a back-to-back reconcile test (RECON-05).
+  5. Concurrent Pi processes cannot double-apply or interleave reconciliation: the existing cross-process scope lock covers the new internal bookkeeping file, orchestrators run serially with no nested locks, and a two-process simultaneous-start test shows no double-apply or interleaved write (RECON-06, NFR-3).
+
+**Plans:** TBD
+
+### Phase 56: Write-Back Integration & Documentation
+
+**Goal:** Every mutating command records its change into the config file as a targeted entry-level patch (with a `--local` flag to target the local file instead), so the committed config stays the authoritative record -- and the `.local` gitignore convention and config workflow are documented.
+
+**Depends on:** Phase 51, Phase 55
+
+**Requirements:** WB-01, WB-02, WB-03, WB-04, CFG-04
+
+**Success Criteria** (what must be TRUE):
+
+  1. Each mutating command -- marketplace add/remove/autoupdate/noautoupdate and plugin install/uninstall/reinstall/update -- records its change as a targeted entry-level patch of the base config file, re-read under the scope lock immediately before write (never serializing the merged view back), composed inside the command's existing `withLockedStateTransaction` closure (WB-01, NFR-1).
+  2. A `--local` flag on those commands targets `claude-plugins.local.json` instead of the base file, and a `--local` write never touches the base file (WB-02; the write-target selection is explicit, not inferred).
+  3. The `import` command records all imported marketplaces and plugins, and `bootstrap` records its marketplace and autoupdate setting, into the config file -- each as a single batched multi-entry patch under one lock, not N full-file rewrites (WB-03, WB-04).
+  4. After any single mutating command, an immediately following load-time reconcile is a no-op (the config write-back already reflects reality), proven by a config-state-consistency architecture test that also confirms unknown keys are preserved on write-back (WB-01 round-trip integrity).
+  5. The README documents the `claude-plugins.json` / `claude-plugins.local.json` workflow and the `.local` gitignore convention so a user knows which file to commit and which to keep local (CFG-04).
+
+**Plans:** TBD
 
 <details>
 <summary>Shipped milestones -- Phases 15-44 historical details (v1.4 → v1.8)</summary>
@@ -902,6 +989,29 @@ Every error/warning-severity notification now carries a non-empty summary messag
 
 - [x] Phase 50: Notification Summary-Line Grammar (1/1 plans) -- GRAM-01..05 -- completed 2026-06-08
 
+### Phase 50: Notification Summary-Line Grammar
+
+**Goal:** Every error/warning-severity notification carries a non-empty summary message on the host `Error:`/`Warning:` label line, with the cascade/detail rendered as its own separate block below -- emitted through a single shared summary-emission path so the standalone-vs-cascade divergence that caused the v1.10 defect cannot recur.
+
+**Depends on:** v1.10 Phase 49 complete
+
+**Requirements:** GRAM-01, GRAM-02, GRAM-03, GRAM-04, GRAM-05
+
+**Success Criteria** (what must be TRUE):
+
+  1. Running `/claude:plugin install x@y` against a missing marketplace renders a summary line on the host label line (`Error: 1 marketplace operation failed.`) followed by the `⊘ y [user] (failed) {not added}` detail row as its own separate block below -- never the glued single-line `Error: ⊘ y [user] (failed) {not added}`.
+  2. The same corrected two-block shape (non-empty summary line + separate detail block) renders across every standalone `marketplace-not-added` emission -- install, uninstall, reinstall, update, marketplace update, marketplace remove, autoupdate/noautoupdate -- and across the failed `plugin-info` surface (e.g. `plugin info` against an unreadable manifest).
+  3. The summary subject follows the failed-row subject, not the invoking command: a marketplace-subject failure reads `N marketplace operation(s) failed.` and a plugin-subject failure reads `N plugin operation(s) failed.` (the v1.10 ATTR-08 subject-attribution principle: `{not added}` on the marketplace vs `{not in manifest}` on the plugin).
+  4. Standalone and cascade notifications emit their summary through one shared code path in `shared/notify.ts`: `dispatchInfoMessage` no longer bypasses `buildSummaryLine`, and `buildSummaryLine` returns the failed-subject summary for the standalone error/warning kinds -- no standalone-kind path can drift back to a summary-less emission.
+  5. A new cross-cutting grammar-invariant test asserts that every error/warning notification's emitted message has a non-empty summary first line distinct from the cascade block, across all catalog fixtures; `docs/output-catalog.md` (the ~6 sections that encoded "NO summary line. Severity error" -- install/uninstall/reinstall/update/marketplace-update + remove/autoupdate) and the `catalog-uat` fixtures are corrected to the new byte forms in lockstep; `npm run check` exits 0.
+
+**Plans:** 1/1 plans complete
+
+**Wave 1**
+
+- [x] 50-01-PLAN.md -- Unify standalone + cascade emission on one shared summary helper, extend `buildSummaryLine` for the two standalone error kinds, rewrite the ~9 catalog fence bodies + 8 prose sentences, update/extend `notify-v2` byte tests, add the cross-cutting grammar-invariant test; atomic landing, `npm run check` GREEN (GRAM-01..05)
+
+
 </details>
 
 ## Progress
@@ -956,3 +1066,9 @@ Every error/warning-severity notification now carries a non-empty summary messag
 | 48. Marketplace-Ops Attribution                                     | v1.10     | 3/3 | Complete    | 2026-06-08 |
 | 49. Cross-Op Convergence & GREEN-Gate Close                         | v1.10     | 3/3 | Complete    | 2026-06-08 |
 | 50. Notification Summary-Line Grammar                               | v1.11     | 1/1 | Complete    | 2026-06-08 |
+| 51. Config Schema, Persistence & State Split                        | v1.12     | 0/? | Not started | --         |
+| 52. First-Run Migration                                             | v1.12     | 0/? | Not started | --         |
+| 53. Pure Reconcile Planner & Dry-Run Preview                        | v1.12     | 0/? | Not started | --         |
+| 54. Enable/Disable Commands                                         | v1.12     | 0/? | Not started | --         |
+| 55. Load-Time Reconcile Apply, Notification & Wiring                | v1.12     | 0/? | Not started | --         |
+| 56. Write-Back Integration & Documentation                          | v1.12     | 0/? | Not started | --         |

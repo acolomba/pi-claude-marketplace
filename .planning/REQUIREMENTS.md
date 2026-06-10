@@ -83,38 +83,38 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CFG-01 | TBD | Pending |
-| CFG-02 | TBD | Pending |
-| CFG-03 | TBD | Pending |
-| CFG-04 | TBD | Pending |
-| SPLIT-01 | TBD | Pending |
-| SPLIT-02 | TBD | Pending |
-| MIG-01 | TBD | Pending |
-| MIG-02 | TBD | Pending |
-| RECON-01 | TBD | Pending |
-| RECON-02 | TBD | Pending |
-| RECON-03 | TBD | Pending |
-| RECON-04 | TBD | Pending |
-| RECON-05 | TBD | Pending |
-| RECON-06 | TBD | Pending |
-| WB-01 | TBD | Pending |
-| WB-02 | TBD | Pending |
-| WB-03 | TBD | Pending |
-| WB-04 | TBD | Pending |
-| ENBL-01 | TBD | Pending |
-| ENBL-02 | TBD | Pending |
-| ENBL-03 | TBD | Pending |
-| ENBL-04 | TBD | Pending |
-| DIFF-01 | TBD | Pending |
-| DIFF-02 | TBD | Pending |
+| CFG-01 | Phase 51 | Pending |
+| CFG-02 | Phase 51 | Pending |
+| CFG-03 | Phase 51 | Pending |
+| CFG-04 | Phase 56 | Pending |
+| SPLIT-01 | Phase 51 | Pending |
+| SPLIT-02 | Phase 51 | Pending |
+| MIG-01 | Phase 52 | Pending |
+| MIG-02 | Phase 52 | Pending |
+| RECON-01 | Phase 55 | Pending |
+| RECON-02 | Phase 55 | Pending |
+| RECON-03 | Phase 55 | Pending |
+| RECON-04 | Phase 55 | Pending |
+| RECON-05 | Phase 55 | Pending |
+| RECON-06 | Phase 55 | Pending |
+| WB-01 | Phase 56 | Pending |
+| WB-02 | Phase 56 | Pending |
+| WB-03 | Phase 56 | Pending |
+| WB-04 | Phase 56 | Pending |
+| ENBL-01 | Phase 54 | Pending |
+| ENBL-02 | Phase 54 | Pending |
+| ENBL-03 | Phase 54 | Pending |
+| ENBL-04 | Phase 54 | Pending |
+| DIFF-01 | Phase 53 | Pending |
+| DIFF-02 | Phase 53 | Pending |
 
 **Coverage:**
 
 - v1.12 requirements: 24 total
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 24 ⚠️
+- Mapped to phases: 24 ✓
+- Unmapped: 0
 
 ---
 
 *Requirements defined: 2026-06-09*
-*Last updated: 2026-06-09 after initial definition*
+*Last updated: 2026-06-09 after roadmap creation (Phases 51-56)*
