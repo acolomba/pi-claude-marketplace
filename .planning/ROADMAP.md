@@ -249,7 +249,15 @@ Declarative, version-controllable config files (`claude-plugins.json` + entry-le
   3. Running `enable` re-materializes the plugin's artefacts from the cached marketplace clone and persisted internal records with no network access -- verifiable by enabling with the network unplugged while the version pin is preserved (ENBL-03, NFR-5).
   4. On `list` and `info` surfaces, a `disabled` plugin renders distinctly from a soft-degraded `unavailable` one, keeping the three orthogonal facts (declared / enabled / available) from collapsing into one another (ENBL-04); the `disabled` vs. reused-token decision lands with its catalog + byte-UAT forms in lockstep.
 
-**Plans:** TBD
+**Plans:** 2 plans
+
+**Wave 1** *(byte-neutral foundation: planner Phase 53→54 hand-off + network gate + RED scaffolds)*
+
+- [ ] 54-01-PLAN.md -- Wire reconcile planner pluginsToEnable bucket via isRecordedButDisabled predicate + arm NFR-5 FORBIDDEN_TARGETS gate for enable-disable.ts + Wave 0 RED scaffolds for orchestrator + edge handler tests (ENBL-02 partial; D-54-01 token NOT touched in this plan)
+
+**Wave 2** *(blocked on Wave 1 completion; atomic catalog-amendment lockstep)*
+
+- [ ] 54-02-PLAN.md -- ATOMIC: setPluginEnabled orchestrator + makeEnableDisableHandler edge factory + router/register/completion wiring + (disabled) closed-set token (PLUGIN_STATUSES 15→16, STATUS_TOKENS 21→22) + PluginDisabledMessage variant + renderer arm + (already enabled)/(already disabled) REASONS (29→31) + BENIGN_REASONS additions + docs/output-catalog.md H2 sections + catalog-uat FIXTURES + length-locks + Wave 0 scaffold flips (ENBL-01, ENBL-02, ENBL-03, ENBL-04; D-54-01)
 
 ### Phase 55: Load-Time Reconcile Apply, Notification & Wiring
 
