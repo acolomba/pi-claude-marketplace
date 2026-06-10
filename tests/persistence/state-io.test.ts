@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   DEFAULT_STATE,
   STATE_VALIDATOR,
@@ -242,6 +243,67 @@ test("SPLIT-01: legacy state.json with autoupdate still loads (typebox lenient)"
   } finally {
     await cleanup();
   }
+});
+
+test("D-13 GATE OPEN through loadState: sibling claude-plugins.json triggers the autoupdate scrub (in-memory + persisted)", async (t) => {
+  const { root, cleanup } = await tmpExtensionRoot();
+  // Suppress the IL-3 sanctioned warn: ST-4 fire-and-forget persist may race
+  // the cleanup `rm`, surfacing as a harmless persist failure.
+  t.mock.method(console, "warn", () => {
+    // suppress noise
+  });
+  try {
+    // `root` is <scopeRoot>/pi-claude-marketplace; the D-13 gate path is the
+    // SIBLING <scopeRoot>/claude-plugins.json. Materializing it here proves
+    // loadState's internal derivation (path.dirname(extensionRoot) join)
+    // actually points at the file the gate is specified against -- the scrub
+    // must fire end-to-end through loadState, not just at the migrator unit.
+    const scopeRoot = path.dirname(root);
+    await writeFile(path.join(scopeRoot, "claude-plugins.json"), "{}", "utf8");
+    const fixtureRaw = await readFile(path.join(FIXTURES, "state-with-autoupdate.json"), "utf8");
+    const stateJsonPath = path.join(root, "state.json");
+    await writeFile(stateJsonPath, fixtureRaw);
+
+    const got = await loadState(root);
+    const mp = (got.marketplaces as Record<string, Record<string, unknown>>)["mp-with-autoupdate"];
+    assert.ok(mp);
+    // Gate OPEN -> the legacy autoupdate flag is scrubbed from the in-memory record.
+    assert.equal(mp["autoupdate"], undefined);
+
+    // Flush the ST-4 fire-and-forget persist, then assert the scrub was
+    // persisted: the on-disk state.json no longer carries the flag either.
+    // write-file-atomic performs real fs work (write + fsync + rename), so
+    // poll with a short backoff instead of relying on a fixed tick count.
+    let persisted: { marketplaces: Record<string, Record<string, unknown>> } | undefined;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      persisted = JSON.parse(await readFile(stateJsonPath, "utf8")) as {
+        marketplaces: Record<string, Record<string, unknown>>;
+      };
+      if (persisted.marketplaces["mp-with-autoupdate"]?.["autoupdate"] === undefined) {
+        break;
+      }
+
+      await new Promise<void>((resolve) => setTimeout(resolve, 25));
+    }
+
+    assert.ok(persisted);
+    assert.equal(persisted.marketplaces["mp-with-autoupdate"]?.["autoupdate"], undefined);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("D-13 drift guard: loadState's configJsonPath derivation matches locationsFor byte-for-byte", () => {
+  // loadState derives the gate path as
+  // path.join(path.dirname(extensionRoot), "claude-plugins.json") without
+  // importing locationsFor (its external signature must stay
+  // loadState(extensionRoot)). Pin the equivalence so a future edit to
+  // either construction cannot silently divert the D-13 gate.
+  const loc = locationsFor("project", path.join(tmpdir(), "drift-guard-cwd"));
+  assert.equal(
+    path.join(path.dirname(loc.extensionRoot), "claude-plugins.json"),
+    loc.configJsonPath,
+  );
 });
 
 test("SPLIT-01 / D-12: STATE_SCHEMA.schemaVersion stays Type.Literal(1) (saveState refuses schemaVersion: 2)", async () => {
