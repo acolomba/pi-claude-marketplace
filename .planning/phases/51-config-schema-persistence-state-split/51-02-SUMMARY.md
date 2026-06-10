@@ -303,11 +303,29 @@ NOT stubs — they preserve V1 runtime behavior and are tagged
 
 ## Threat Flags
 
-None new. The plan's STRIDE register at `<threat_model>` covers the merge
+The plan's STRIDE register at `<threat_model>` covers the merge
 seam (T-51-02-01 / T-51-02-02), the D-13 ordering rail
 (T-51-02-03), the accepted Pitfall 51-2 risk that downstream readers carry
 the cast (T-51-02-04), and the TOCTOU class on the gate predicate
 (T-51-02-05 — accepted; converges on next load).
+
+**Code-review follow-up (WR-02, accepted interim hazard):** the D-13 scrub
+gates on bare `claude-plugins.json` existence, not on a positive Phase-52
+capture marker. Because `claude-plugins.json` is a USER-AUTHORED file
+(CFG-01), a user who hand-creates it before Phases 54-56 rewire the
+autoupdate read/write paths puts the install in a state where every
+`loadState` scrubs `autoupdate` from in-memory records AND persists the
+scrubbed state, while all SPLIT-01 cast sites still read/write
+`autoupdate` on the state record — so `marketplace autoupdate on` becomes
+silently non-durable (each flip survives only until the next load). This
+is the locked D-13 Mechanism A and is acceptable ONLY because the window
+closes when the milestone ships as a whole.
+
+**Phase 54-56 verification item (MUST):** before the config write-path
+lands, assert that no production site reads or writes `record.autoupdate`
+on state — i.e. `grep -nE "// SPLIT-01:" extensions/` returns zero
+production markers and the autoupdate read/write path is fully rewired to
+MergedConfig (CFG-02). This hazard must not survive past Phases 54-56.
 
 ## Verification Run
 
