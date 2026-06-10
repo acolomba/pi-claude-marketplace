@@ -33,6 +33,16 @@ function usageFor(enable: boolean): string {
  * `parseRequiredPluginMarketplaceRef`; we walk the same token list here to
  * surface `--local` without re-implementing the full args parser.
  *
+ * WR-02 (Phase 54 review): the `--local` token is REMOVED from the returned
+ * `residualArgs` so flag position cannot change the outcome --
+ * `parseRequiredPluginMarketplaceRef`'s tokenizer treats every non-`--scope`
+ * token as a positional, so leaving `--local` in place made
+ * `enable --local foo@mp` fail with a misleading
+ * `Invalid <plugin>@<marketplace> ref: "--local".` while
+ * `enable foo@mp --local` worked (the trailing extra positional was
+ * silently dropped). This mirrors how `--scope` is consumed by the parser
+ * itself.
+ *
  * Returns `undefined` when an unknown flag was found (the caller-supplied
  * `notifyUsage` has already fired and the handler should early-return).
  */
@@ -40,7 +50,7 @@ function extractLocalFlag(
   args: string,
   ctx: ExtensionCommandContext,
   usage: string,
-): { local: boolean } | undefined {
+): { local: boolean; residualArgs: string } | undefined {
   let local = false;
   const tokens = args.split(/\s+/).filter((t) => t.length > 0);
   let i = 0;
@@ -70,7 +80,7 @@ function extractLocalFlag(
     i += 1;
   }
 
-  return { local };
+  return { local, residualArgs: tokens.filter((t) => t !== "--local").join(" ") };
 }
 
 export function makeEnableDisableHandler(
@@ -84,7 +94,9 @@ export function makeEnableDisableHandler(
       return;
     }
 
-    const parsed = parseRequiredPluginMarketplaceRef(args, ctx, usage);
+    // WR-02: parse the RESIDUE (with `--local` removed) so the flag is
+    // position-independent like `--scope`.
+    const parsed = parseRequiredPluginMarketplaceRef(localFlag.residualArgs, ctx, usage);
     if (parsed === undefined) {
       return;
     }

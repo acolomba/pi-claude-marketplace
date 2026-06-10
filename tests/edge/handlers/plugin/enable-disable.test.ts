@@ -112,6 +112,35 @@ test("Flag: --local is parsed and forwarded to the orchestrator (enable)", async
   });
 });
 
+test("WR-02: --local BEFORE the ref parses identically to --local after (flag position must not change the outcome)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeEnableDisableHandler(makePi(), true);
+    // Pre-fix this failed with `Invalid <plugin>@<marketplace> ref:
+    // "--local".` because the un-stripped `--local` token became the first
+    // positional. Both orderings must reach the orchestrator.
+    await handler("--local foo@mp --scope user", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.match(notifications[0]!.message, /⊘ mp \[user\] \(failed\) \{not added\}/);
+    assert.ok(
+      !notifications[0]!.message.includes("Invalid <plugin>@<marketplace> ref"),
+      `--local must not be mistaken for the ref positional: ${notifications[0]!.message}`,
+    );
+  });
+});
+
+test("WR-02: --local between ref and --scope also parses (disable)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeEnableDisableHandler(makePi(), false);
+    await handler("foo@mp --local --scope project", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.match(notifications[0]!.message, /⊘ mp \[project\] \(failed\) \{not added\}/);
+  });
+});
+
 test("Flag: --scope user|project is parsed and forwarded to the orchestrator (disable)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
