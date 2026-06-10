@@ -1091,7 +1091,7 @@ Every error/warning-severity notification now carries a non-empty summary messag
 | 50. Notification Summary-Line Grammar                               | v1.11     | 1/1 | Complete    | 2026-06-08 |
 | 51. Config Schema, Persistence & State Split                        | v1.12     | 3/3 | Complete    | 2026-06-10 |
 | 52. First-Run Migration                                             | v1.12     | 1/1 | Complete    | 2026-06-10 |
-| 53. Pure Reconcile Planner & Dry-Run Preview                        | v1.12     | 0/? | Not started | --         |
+| 53. Pure Reconcile Planner & Dry-Run Preview                        | v1.12     | 2/2 | Complete    | 2026-06-10 |
 | 54. Enable/Disable Commands                                         | v1.12     | 0/? | Not started | --         |
 | 55. Load-Time Reconcile Apply, Notification & Wiring                | v1.12     | 0/? | Not started | --         |
 | 56. Write-Back Integration & Documentation                          | v1.12     | 0/? | Not started | --         |
