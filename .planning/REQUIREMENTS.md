@@ -33,7 +33,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 - [x] **RECON-03**: Network failures during reconcile soft-fail per entry -- reported and skipped, never blocking Pi load
 - [x] **RECON-04**: Reconcile results surface through the structured notification cascade in catalog-conformant grammar; reconcile never emits a `/reload` hint
 - [x] **RECON-05**: Reconciliation converges to a fixed point -- an immediately repeated reconcile applies zero changes and rewrites no files
-- [ ] **RECON-06**: Concurrent Pi processes cannot double-apply or interleave reconciliation (existing cross-process lock discipline preserved; orchestrators driven serially, no nested locks)
+- [x] **RECON-06**: Concurrent Pi processes cannot double-apply or interleave reconciliation (existing cross-process lock discipline preserved; orchestrators driven serially, no nested locks)
 
 ### Write-back
 
@@ -96,7 +96,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RECON-03 | Phase 55 | Complete |
 | RECON-04 | Phase 55 | Complete |
 | RECON-05 | Phase 55 | Complete |
-| RECON-06 | Phase 55 | Pending |
+| RECON-06 | Phase 55 | Complete |
 | WB-01 | Phase 56 | Pending |
 | WB-02 | Phase 56 | Pending |
 | WB-03 | Phase 56 | Pending |
