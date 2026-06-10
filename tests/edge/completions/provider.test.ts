@@ -94,7 +94,7 @@ async function emptyFixture(): Promise<Fixture> {
 // TC-1 -- top-level subcommand keywords.
 // ---------------------------------------------------------------------------
 
-test("TC-1 :: first positional surfaces top-level keywords (bootstrap/install/uninstall/update/reinstall/list/ls/info/import/marketplace)", async () => {
+test("TC-1 :: first positional surfaces top-level keywords (bootstrap/install/uninstall/update/reinstall/list/ls/info/preview/import/marketplace)", async () => {
   __resetCacheForTests();
   const f = await emptyFixture();
   try {
@@ -102,7 +102,9 @@ test("TC-1 :: first positional surfaces top-level keywords (bootstrap/install/un
     assert.ok(items !== null);
     const labels = items.map((i) => i.label);
     // INFO-02: `info` added to TOP_LEVEL_SUBCOMMANDS for the
-    // `info <plugin>@<marketplace>` top-level verb.
+    // `info <plugin>@<marketplace>` top-level verb. DIFF-01 SC #2 (Phase 53
+    // Plan 02): `preview` added for the `/claude:plugin preview` read-only
+    // diff command.
     assert.deepEqual([...labels].sort(), [
       "bootstrap",
       "import",
@@ -111,6 +113,7 @@ test("TC-1 :: first positional surfaces top-level keywords (bootstrap/install/un
       "list",
       "ls",
       "marketplace",
+      "preview",
       "reinstall",
       "uninstall",
       "update",

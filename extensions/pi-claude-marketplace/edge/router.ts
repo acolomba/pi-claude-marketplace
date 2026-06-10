@@ -33,6 +33,8 @@ export interface SubcommandHandlers {
   // Named `pluginInfo` (NOT `info`) to disambiguate from
   // `marketplaceInfo`. The router dispatches `"info"` here.
   pluginInfo: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
+  // DIFF-01 SC #2 / D-53-01: `/claude:plugin preview` read-only diff command.
+  preview: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   import: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   marketplaceAdd: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   marketplaceRemove: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
@@ -56,6 +58,7 @@ export const TOP_LEVEL_SUBCOMMANDS = [
   "list",
   "ls",
   "info",
+  "preview",
   "import",
   "marketplace",
 ] as const;
@@ -77,7 +80,7 @@ export const MARKETPLACE_SUBCOMMANDS = [
 ] as const;
 
 export const TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <bootstrap|install|uninstall|update|reinstall|list|ls|info|import|marketplace> ...\n" +
+  "Usage: /claude:plugin <bootstrap|install|uninstall|update|reinstall|list|ls|info|preview|import|marketplace> ...\n" +
   "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project]\n" +
@@ -85,6 +88,7 @@ export const TOP_LEVEL_USAGE =
   "  reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--force]\n" +
   "  list [<marketplace>] [--scope user|project]   (alias: ls)\n" +
   "  info <plugin>@<marketplace> [--scope user|project]\n" +
+  "  preview [--scope user|project]\n" +
   "  import [--scope user|project]\n" +
   "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...";
 
@@ -145,6 +149,8 @@ export async function routeClaudePlugin(
       return handlers.list(rest, ctx);
     case "info":
       return handlers.pluginInfo(rest, ctx);
+    case "preview":
+      return handlers.preview(rest, ctx);
     case "import":
       return handlers.import(rest, ctx);
     case "marketplace":

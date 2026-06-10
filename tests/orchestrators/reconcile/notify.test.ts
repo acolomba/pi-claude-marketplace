@@ -1,18 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildReconcilePreviewNotification } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts";
+import {
+  buildReconcilePreviewNotification,
+  isReconcilePlanListEmpty,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts";
 
 import type { ReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 /**
- * DIFF-01 plan-to-message projection tests. Plan 01 asserts STRUCTURAL
- * shape only; the byte-exact rendered output (token strings, catalog
- * states, FIXTURES) lands in Plan 02 alongside the renderer arms it
- * exercises. The placeholder status strings used here ("added",
- * "removed", "failed") are Plan 01 stubs that Plan 02 replaces with the
- * pending-tense token set.
+ * DIFF-01 + DIFF-02 plan-to-message projection tests. Plan 02 replaces the
+ * Plan 01 placeholder status strings ("added" / "removed" / "uninstalled") on
+ * the projection's output with the pending-tense `will *` token set; the
+ * structural shape tests are unchanged.
  */
 
 function emptyPlan(scope: Scope): ReconcilePlan {
@@ -51,7 +52,7 @@ test("one plan with one MarketplaceAdd -> one MarketplaceNotificationMessage", (
   assert.ok(block);
   assert.equal(block.name, "mp");
   assert.equal(block.scope, "project");
-  assert.equal(block.status, "added");
+  assert.equal(block.status, "will add");
   assert.deepEqual([...block.plugins], []);
 });
 
@@ -114,14 +115,15 @@ test("one plan with one PluginInstall under one MarketplaceAdd -> plugin nested 
   const block = msg.marketplaces[0];
   assert.ok(block);
   assert.equal(block.name, "mp");
-  assert.equal(block.status, "added");
+  assert.equal(block.status, "will add");
   assert.equal(block.plugins.length, 1);
   const pluginRow = block.plugins[0];
   assert.ok(pluginRow);
   assert.equal(pluginRow.name, "cr");
+  assert.equal(pluginRow.status, "will install");
 });
 
-test("MarketplaceRemove projection -> block.status='removed'", () => {
+test("MarketplaceRemove projection -> block.status='will remove'", () => {
   const plan: ReconcilePlan = {
     ...emptyPlan("project"),
     marketplacesToRemove: [{ scope: "project", marketplace: "old-mp" }],
@@ -131,10 +133,10 @@ test("MarketplaceRemove projection -> block.status='removed'", () => {
   const block = msg.marketplaces[0];
   assert.ok(block);
   assert.equal(block.name, "old-mp");
-  assert.equal(block.status, "removed");
+  assert.equal(block.status, "will remove");
 });
 
-test("sourceMismatch projection -> block.status='failed'", () => {
+test("sourceMismatch projection -> block.status='failed' + reasons=['source mismatch'] (Pitfall 53-7)", () => {
   const plan: ReconcilePlan = {
     ...emptyPlan("project"),
     sourceMismatches: [
@@ -152,9 +154,13 @@ test("sourceMismatch projection -> block.status='failed'", () => {
   const block = msg.marketplaces[0];
   assert.ok(block);
   assert.equal(block.status, "failed");
+  // Pitfall 53-7: the source-mismatch row reuses the existing
+  // "source mismatch" REASONS member; no new REASONS literal.
+  assert.ok("reasons" in block);
+  assert.deepEqual("reasons" in block ? [...(block.reasons ?? [])] : [], ["source mismatch"]);
 });
 
-test("PluginUninstall projection -> plugin row under marketplace block", () => {
+test("PluginUninstall projection -> plugin row under marketplace block with (will uninstall) status", () => {
   const plan: ReconcilePlan = {
     ...emptyPlan("project"),
     pluginsToUninstall: [{ scope: "project", plugin: "cr", marketplace: "mp" }],
@@ -171,4 +177,36 @@ test("PluginUninstall projection -> plugin row under marketplace block", () => {
   const pluginRow = block.plugins[0];
   assert.ok(pluginRow);
   assert.equal(pluginRow.name, "cr");
+  assert.equal(pluginRow.status, "will uninstall");
+});
+
+test("PluginDisable projection -> plugin row with (will disable) status", () => {
+  const plan: ReconcilePlan = {
+    ...emptyPlan("project"),
+    pluginsToDisable: [{ scope: "project", plugin: "cr", marketplace: "mp" }],
+  };
+  const msg = buildReconcilePreviewNotification([plan]);
+  assert.equal(msg.marketplaces.length, 1);
+  const block = msg.marketplaces[0];
+  assert.ok(block);
+  assert.equal(block.plugins.length, 1);
+  const row = block.plugins[0];
+  assert.ok(row);
+  assert.equal(row.status, "will disable");
+});
+
+test("isReconcilePlanListEmpty: empty list -> true", () => {
+  assert.equal(isReconcilePlanListEmpty([]), true);
+});
+
+test("isReconcilePlanListEmpty: every-bucket-empty plan -> true", () => {
+  assert.equal(isReconcilePlanListEmpty([emptyPlan("project"), emptyPlan("user")]), true);
+});
+
+test("isReconcilePlanListEmpty: any non-empty bucket -> false", () => {
+  const plan: ReconcilePlan = {
+    ...emptyPlan("project"),
+    pluginsToInstall: [{ scope: "project", plugin: "cr", marketplace: "mp", configSource: "base" }],
+  };
+  assert.equal(isReconcilePlanListEmpty([plan]), false);
 });

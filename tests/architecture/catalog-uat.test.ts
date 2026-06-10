@@ -2087,6 +2087,94 @@ const FIXTURES: FixtureMap = {
       },
     },
   },
+
+  // -------------------------------------------------------------------------
+  // /claude:plugin preview -- DIFF-01 SC #2 / D-53-01 read-only diff command.
+  // -------------------------------------------------------------------------
+  "/claude:plugin preview": {
+    "empty-steady-state": {
+      pi: piWithBothLoaded(),
+      // Dedicated standalone variant; the renderer hard-codes the advisory
+      // body line so the byte form cannot drift from the catalog state.
+      message: { kind: "reconcile-preview-empty" },
+    },
+    "mp-add-plugin-install": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "new-mp",
+            scope: "user",
+            status: "will add",
+            plugins: [{ status: "will install", name: "new-plugin" }],
+          },
+        ],
+      },
+    },
+    "plugin-pending-uninstall": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [{ status: "will uninstall", name: "old-plugin" }],
+          },
+        ],
+      },
+    },
+    "enable-disable-transitions": {
+      // Pitfall 53-4: Phase 53 produces ZERO will-enable rows in practice; the
+      // catalog fixture is hand-constructed (not routed through planReconcile)
+      // so Phase 54's enable-bucket wiring can land against an exercised path.
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              { status: "will enable", name: "to-enable" },
+              { status: "will disable", name: "to-disable" },
+            ],
+          },
+        ],
+      },
+    },
+    "source-mismatch": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            status: "failed",
+            reasons: ["source mismatch"],
+            plugins: [],
+          },
+        ],
+      },
+    },
+    "invalid-config-abort": {
+      // CFG-03 / Pitfall 53-1: the marketplace `name` is the file BASENAME
+      // (never the absolute path -- T-53-02-02 information-disclosure
+      // mitigation). The orchestrator passes path.basename(filePath).
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins.json",
+            scope: "project",
+            status: "failed",
+            reasons: ["invalid manifest"],
+            plugins: [],
+          },
+        ],
+      },
+    },
+  },
 };
 
 // ---------------------------------------------------------------------------

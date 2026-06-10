@@ -3417,3 +3417,156 @@ test('Phase 42 / Migration Strategy #2: cascade payload WITHOUT `kind` field byt
     'Optional kind?:"cascade" must produce byte-identical notify() output to omitted kind',
   );
 });
+
+// ===========================================================================
+// Phase 53 Plan 02 / DIFF-02 -- pending-tense `(will *)` preview rows.
+//
+// Six new tokens (4 plugin + 2 marketplace) emitted by `/claude:plugin preview`.
+// All are info-severity (no failure / skipped / manual-recovery semantics) so
+// the 2nd `ctx.ui.notify` arg is omitted. None are in shouldEmitReloadHint's
+// trigger set, so no `/reload to pick up changes` trailer is appended.
+// ===========================================================================
+
+test("DIFF-02: will-add marketplace header + will-install plugin child (orphan-fold suppresses [scope])", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "new-mp",
+        scope: "user",
+        status: "will add",
+        plugins: [{ status: "will install", name: "alpha" }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  // info severity -> single-arg notify
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(args[0], `● new-mp [user] (will add)\n  ● alpha (will install)`);
+});
+
+test("DIFF-02: will-remove marketplace header (open circle, no plugin children)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "old-mp",
+        scope: "project",
+        status: "will remove",
+        plugins: [],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(args[0], `○ old-mp [project] (will remove)`);
+});
+
+test("DIFF-02: will-uninstall plugin under existing (no-status) marketplace block", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "mp",
+        scope: "user",
+        plugins: [{ status: "will uninstall", name: "old-plugin" }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(args[0], `● mp [user]\n  ○ old-plugin (will uninstall)`);
+});
+
+test("DIFF-02: will-enable + will-disable rows under same marketplace (Phase 54 hand-off shape)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "mp",
+        scope: "user",
+        plugins: [
+          { status: "will enable", name: "to-enable" },
+          { status: "will disable", name: "to-disable" },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(args[0], `● mp [user]\n  ● to-enable (will enable)\n  ⊘ to-disable (will disable)`);
+});
+
+test("DIFF-02: cross-scope orphan-fold -- plugin scope differs from marketplace scope -> [scope] bracket renders", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "shared",
+        scope: "project",
+        status: "will add",
+        plugins: [
+          // Plugin's scope explicitly differs from marketplace -> bracket emits.
+          { status: "will install", name: "alpha", scope: "user" },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(args[0], `● shared [project] (will add)\n  ● alpha [user] (will install)`);
+});
+
+test("DIFF-02: will-* cascade emits NO /reload to pick up changes trailer (preview rows are pre-transition)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "mp",
+        scope: "user",
+        status: "will add",
+        plugins: [
+          { status: "will install", name: "a" },
+          { status: "will uninstall", name: "b" },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.ok(
+    !emitted.includes("/reload to pick up changes"),
+    "preview rows MUST NOT emit the reload-hint trailer",
+  );
+});
+
+test("DIFF-02: will-* cascade computes info severity (no second arg to ctx.ui.notify)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "mp",
+        scope: "user",
+        status: "will remove",
+        plugins: [{ status: "will uninstall", name: "p" }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  // info severity routing: emitWithSummary omits the 2nd arg entirely.
+  assert.equal(args.length, 1);
+});

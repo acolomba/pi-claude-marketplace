@@ -152,6 +152,118 @@ const FIXTURES: readonly GrammarFixture[] = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// DIFF-02 (Phase 53 Plan 02): subject-first row grammar for the 6 new
+// pending-tense `(will *)` tokens. Each rendered row matches
+// `<glyph> <name> [<scope>] (<token>)` with the status token AFTER the
+// subject, never before. The status token is the load-bearing assertion --
+// the row icon + name + optional bracket are exercised by the catalog-uat
+// byte-equality runner.
+// ---------------------------------------------------------------------------
+
+const WILL_VARIANT_FIXTURES: readonly GrammarFixture[] = [
+  {
+    label: "DIFF-02 / will add marketplace header",
+    pi: piWithBothLoaded(),
+    message: {
+      marketplaces: [{ name: "mp", scope: "user", status: "will add", plugins: [] }],
+    },
+  },
+  {
+    label: "DIFF-02 / will remove marketplace header",
+    pi: piWithBothLoaded(),
+    message: {
+      marketplaces: [{ name: "mp", scope: "user", status: "will remove", plugins: [] }],
+    },
+  },
+  {
+    label: "DIFF-02 / will install plugin row under list-arm marketplace",
+    pi: piWithBothLoaded(),
+    message: {
+      marketplaces: [
+        { name: "mp", scope: "user", plugins: [{ status: "will install", name: "p" }] },
+      ],
+    },
+  },
+  {
+    label: "DIFF-02 / will uninstall plugin row",
+    pi: piWithBothLoaded(),
+    message: {
+      marketplaces: [
+        { name: "mp", scope: "user", plugins: [{ status: "will uninstall", name: "p" }] },
+      ],
+    },
+  },
+  {
+    label: "DIFF-02 / will enable plugin row (Phase 54 hand-off shape)",
+    pi: piWithBothLoaded(),
+    message: {
+      marketplaces: [
+        { name: "mp", scope: "user", plugins: [{ status: "will enable", name: "p" }] },
+      ],
+    },
+  },
+  {
+    label: "DIFF-02 / will disable plugin row",
+    pi: piWithBothLoaded(),
+    message: {
+      marketplaces: [
+        { name: "mp", scope: "user", plugins: [{ status: "will disable", name: "p" }] },
+      ],
+    },
+  },
+];
+
+// Subject-first row grammar for DIFF-02 will-* rows: glyph + name + optional
+// [scope] bracket + optional `(will ...)` status token. The status token is
+// optional because a list-arm (no-status) marketplace header renders the
+// bare `● mp [scope]` form when its plugin children carry the will-* tokens
+// -- this is the catalog's `plugin-pending-uninstall` / `enable-disable-
+// transitions` shape. The load-bearing invariant is that the status token,
+// when present, ALWAYS follows the subject -- never precedes it.
+const WILL_TOKEN_RE =
+  /^(?:[●○⊘]) [A-Za-z0-9_-]+(?: \[(?:user|project)\])?(?: \(will (?:add|remove|install|uninstall|enable|disable)\))?$/;
+
+test("DIFF-02: every will-* row renders subject-first `<glyph> <name> [<scope>] (will ...)` with the status token AFTER the subject", () => {
+  for (const fixture of WILL_VARIANT_FIXTURES) {
+    const ctx = makeCtx();
+    notify(ctx as never, fixture.pi as never, fixture.message);
+    assert.equal(
+      ctx.ui.notify.mock.calls.length,
+      1,
+      `notify() must call ctx.ui.notify exactly once for: ${fixture.label}`,
+    );
+    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    // will-* tokens are info severity -> no 2nd arg.
+    assert.equal(
+      args.length,
+      1,
+      `${fixture.label}: will-* rows route to info severity (no 2nd notify arg)`,
+    );
+    const emitted = args[0];
+    // Every line in the rendered output must match the subject-first grammar
+    // (mp header, plugin row -- both shapes match the regex since the regex
+    // strips the leading 2-space plugin indent before checking).
+    const lines = emitted
+      .split("\n")
+      .map((l) => l.replace(/^ {2}/, ""))
+      .filter((l) => l.length > 0);
+    for (const line of lines) {
+      assert.match(
+        line,
+        WILL_TOKEN_RE,
+        `${fixture.label}: subject-first row grammar must hold for line '${line}'`,
+      );
+    }
+
+    // Reload-hint trailer MUST NOT fire on a preview cascade.
+    assert.ok(
+      !emitted.includes("/reload to pick up changes"),
+      `${fixture.label}: will-* preview rows must NOT emit the reload-hint trailer`,
+    );
+  }
+});
+
 test("GRAM-01/04/05: every error/warning emission has a non-empty summary first line distinct from the detail block", () => {
   for (const fixture of FIXTURES) {
     const ctx = makeCtx();

@@ -1,6 +1,6 @@
 // orchestrators/reconcile/notify.ts
 //
-// DIFF-01 pure plan-to-notification projection. Mirrors
+// DIFF-01 + DIFF-02 pure plan-to-notification projection. Mirrors
 // `buildImportNotificationMarketplaces` (in `orchestrators/import/execute.ts`)
 // in shape and ordering discipline: groups every Plan action by
 // `(scope, marketplace)` into a `MarketplaceBlock`, sorts the resulting
@@ -9,27 +9,35 @@
 // per-status `MarketplaceNotificationMessage` arm for each block.
 //
 // Pure: no I/O. The function NEVER calls `ctx.ui.notify` or any seam in
-// `shared/notify.ts` beyond importing the types and the comparator. Phase
-// 53 Plan 02 owns the user-visible token bytes (`will add` / `will remove`
-// / `will install` / `will uninstall` / `will enable` / `will disable`)
-// and the catalog/UAT fixture changes that go with them; Plan 01's
-// projection uses placeholder status strings ("added" for to-add,
-// "removed" for to-remove, "failed" for sourceMismatches) so the
-// structural shape is exercised under unit tests without depending on a
-// token set that does not yet exist.
+// `shared/notify.ts` beyond importing the types and the comparator.
 //
-// Why placeholders are safe in Plan 01: Plan 01 does NOT add catalog
-// states, does NOT add catalog-uat FIXTURES entries, and does NOT touch
-// `shared/notify.ts`. Plan 02 takes the projection's `block.status`
-// assignment as the seam where the new pending-tense tokens land, and
-// updates the catalog + catalog-uat fixtures + the renderer arms in one
-// atomic commit (Pitfall 53-3 atomic-supersession discipline).
+// DIFF-02 (Phase 53 Plan 02) replaces the Plan 01 placeholder strings
+// ("added" / "removed" / "uninstalled" / "skipped+already installed") with
+// the real pending-tense token set:
+//
+//   marketplacesToAdd     -> block.status = "will add"
+//   marketplacesToRemove  -> block.status = "will remove"
+//   sourceMismatches      -> block.status = "failed", reasons: ["source mismatch"]
+//   pluginsToInstall      -> child row { status: "will install" }
+//   pluginsToUninstall    -> child row { status: "will uninstall" }
+//   pluginsToDisable      -> child row { status: "will disable" }
+//   pluginsToEnable       -> child row { status: "will enable" }
+//                            (structurally empty in Phase 53 per Pitfall 53-4)
+//
+// The empty-plan case is handled by the orchestrator (`preview.ts`) which
+// switches on `plans.every(isPlanEmpty)` and emits a free-form advisory line
+// for the catalog's `empty-steady-state` byte form. The projection itself
+// returns a `CascadeNotificationMessage` with the marketplaces array empty
+// (which would otherwise render as the `(no marketplaces)` sentinel) -- the
+// orchestrator detects emptiness BEFORE calling this projection so the
+// advisory takes precedence.
 
 import { compareByNameThenScope } from "../../shared/notify.ts";
 
 import type { ReconcilePlan } from "./types.ts";
 import type {
   CascadeNotificationMessage,
+  ContentReason,
   MarketplaceNotificationMessage,
   MarketplaceStatus,
   PluginNotificationMessage,
@@ -41,6 +49,7 @@ interface MarketplaceBlock {
   readonly name: string;
   readonly scope: Scope;
   status?: MarketplaceStatus;
+  reasons?: readonly ContentReason[];
   plugins: PluginNotificationMessage[];
 }
 
@@ -67,22 +76,33 @@ function ensureMarketplaceBlock(
 
 /**
  * Construct the concrete per-status `MarketplaceNotificationMessage` arm for
- * an accumulated block. Plan 01 only assigns `"added"` / `"removed"` /
- * `"failed"` (or leaves status absent), so those are the only handled cases.
- * Plan 02 replaces these with the pending-tense token set in lockstep with
- * the catalog + UAT fixture changes.
+ * an accumulated block. DIFF-02 token set:
+ *  - `"will add"` / `"will remove"` are the new pending-tense marketplace
+ *    statuses.
+ *  - `"failed"` is reused for source-mismatch blocks; its `reasons` is the
+ *    existing `"source mismatch"` REASONS member (Pitfall 53-7 -- REASONS
+ *    stays at 29 entries).
+ *  - `undefined` is the list/inventory arm; used when a block carries only
+ *    plugin child rows (e.g. a pending-uninstall under an existing
+ *    marketplace whose source matches).
  */
 function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceNotificationMessage {
   const name = block.name;
   const scope = block.scope;
   const plugins = Object.freeze(block.plugins);
   switch (block.status) {
-    case "added":
-      return { name, scope, status: "added", plugins };
-    case "removed":
-      return { name, scope, status: "removed", plugins };
+    case "will add":
+      return { name, scope, status: "will add", plugins };
+    case "will remove":
+      return { name, scope, status: "will remove", plugins };
     case "failed":
-      return { name, scope, status: "failed", plugins };
+      return {
+        name,
+        scope,
+        status: "failed",
+        plugins,
+        ...(block.reasons !== undefined && { reasons: block.reasons }),
+      };
     case undefined:
       return { name, scope, plugins };
     default:
@@ -96,25 +116,23 @@ function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceNotifica
  * Every plan action is folded into its `(scope, marketplace)` block. The
  * mapping is:
  *
- *   - marketplacesToAdd     -> block.status = "added"
- *   - marketplacesToRemove  -> block.status = "removed"
- *   - sourceMismatches      -> block.status = "failed" (the marketplace's
- *                              declaration cannot be honoured byte-for-byte)
- *   - pluginsToInstall      -> child plugin row with placeholder status
- *                              "skipped" + reason "already installed"
- *                              (structural; Plan 02 swaps the bytes)
- *   - pluginsToUninstall    -> child plugin row "uninstalled"
- *   - pluginsToDisable      -> child plugin row placeholder "skipped"
- *                              + reason "already installed"
- *                              (structural; Plan 02 swaps the bytes)
- *
- * The empty `pluginsToEnable` bucket emits no child rows by definition
- * (Phase 54 hand-off).
+ *   - marketplacesToAdd     -> block.status = "will add"
+ *   - marketplacesToRemove  -> block.status = "will remove"
+ *   - sourceMismatches      -> block.status = "failed", reasons:
+ *                              ["source mismatch"] (Pitfall 53-7 -- reuses the
+ *                              existing REASONS member; no new literal)
+ *   - pluginsToInstall      -> child row { status: "will install" }
+ *   - pluginsToUninstall    -> child row { status: "will uninstall" }
+ *   - pluginsToDisable      -> child row { status: "will disable" }
+ *   - pluginsToEnable       -> child row { status: "will enable" }
+ *                              (structurally empty in Phase 53 per
+ *                              Pitfall 53-4 -- the loop runs but the bucket is
+ *                              always empty)
  *
  * Ordering: blocks are sorted by `compareByNameThenScope` (name primary
  * case-insensitive, project-before-user secondary). Plugin rows within a
- * block preserve insertion order per their owning bucket -- the apply
- * path will re-order at execution time if needed.
+ * block preserve insertion order per their owning bucket -- the apply path
+ * will re-order at execution time if needed.
  */
 export function buildReconcilePreviewNotification(
   plans: readonly ReconcilePlan[],
@@ -124,38 +142,35 @@ export function buildReconcilePreviewNotification(
   for (const plan of plans) {
     for (const o of plan.marketplacesToAdd) {
       const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
-      block.status = "added";
+      block.status = "will add";
     }
 
     for (const o of plan.marketplacesToRemove) {
       const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
-      block.status = "removed";
+      block.status = "will remove";
     }
 
     for (const o of plan.sourceMismatches) {
       const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
-      // Source-mismatch supersedes any prior status (the declaration
-      // cannot be honoured byte-for-byte). Plan 02 may re-route this to a
-      // dedicated `(failed) {source mismatch}` row.
+      // Source-mismatch supersedes any prior status (the declaration cannot
+      // be honoured byte-for-byte). Pitfall 53-7: reuse the existing
+      // "source mismatch" REASONS member; do NOT add a new REASONS literal.
       block.status = "failed";
+      block.reasons = ["source mismatch"];
     }
 
     for (const o of plan.pluginsToInstall) {
       const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
-      // Plan 01 placeholder: the structural shape is a per-plugin row
-      // under the marketplace block. Plan 02 replaces the `status` and
-      // `reasons` here with the new pending-tense token set.
       block.plugins.push({
-        status: "skipped",
+        status: "will install",
         name: o.plugin,
-        reasons: ["already installed"] as const,
       });
     }
 
     for (const o of plan.pluginsToUninstall) {
       const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
       block.plugins.push({
-        status: "uninstalled",
+        status: "will uninstall",
         name: o.plugin,
       });
     }
@@ -163,14 +178,20 @@ export function buildReconcilePreviewNotification(
     for (const o of plan.pluginsToDisable) {
       const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
       block.plugins.push({
-        status: "skipped",
+        status: "will disable",
         name: o.plugin,
-        reasons: ["already installed"] as const,
       });
     }
 
-    // pluginsToEnable is structurally empty in Phase 53 (Pitfall 53-4);
-    // no rows are emitted from it.
+    for (const o of plan.pluginsToEnable) {
+      // Pitfall 53-4: Phase 53 produces zero of these. The loop runs so
+      // Phase 54 wiring lands against a path the projection already exercises.
+      const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
+      block.plugins.push({
+        status: "will enable",
+        name: o.plugin,
+      });
+    }
   }
 
   return {
@@ -180,4 +201,24 @@ export function buildReconcilePreviewNotification(
         .map(blockToMarketplaceMessage),
     ),
   };
+}
+
+/**
+ * DIFF-01 SC #2 empty-plan helper. Returns `true` iff every action bucket on
+ * every plan is empty. Consumed by `orchestrators/reconcile/preview.ts` so
+ * the orchestrator can route the empty case to the catalog's
+ * `empty-steady-state` advisory body line BEFORE invoking the projection
+ * (which would otherwise emit the `(no marketplaces)` sentinel).
+ */
+export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boolean {
+  return plans.every(
+    (p) =>
+      p.marketplacesToAdd.length === 0 &&
+      p.marketplacesToRemove.length === 0 &&
+      p.pluginsToInstall.length === 0 &&
+      p.pluginsToUninstall.length === 0 &&
+      p.pluginsToEnable.length === 0 &&
+      p.pluginsToDisable.length === 0 &&
+      p.sourceMismatches.length === 0,
+  );
 }

@@ -58,6 +58,7 @@ function makeHandlers(): { handlers: SubcommandHandlers; calls: HandlerCall[] } 
     reinstall: mk("reinstall"),
     list: mk("list"),
     pluginInfo: mk("pluginInfo"),
+    preview: mk("preview"),
     import: mk("import"),
     marketplaceAdd: mk("marketplaceAdd"),
     marketplaceRemove: mk("marketplaceRemove"),

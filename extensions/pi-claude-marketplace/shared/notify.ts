@@ -148,6 +148,13 @@ function allBenign(reasons: readonly Reason[] | undefined): boolean {
  * `(no marketplaces)` and `(no plugins)` are FLAT members of this single
  * tuple; the bare-token render shape (no icon, no scope brackets) is a
  * renderer concern that branches at emission time.
+ *
+ * DIFF-02 (D-53-02): the 6 trailing `"will *"` entries are the pending-tense
+ * tokens emitted by `/claude:plugin preview` rows. They are STRUCTURALLY
+ * EXCLUDED from `shouldEmitReloadHint`'s trigger set (preview rows are
+ * pre-transition; `/reload to pick up changes` is grammatically false for
+ * them) and are appended at the END of the tuple so the four head-of-tuple
+ * state-change tokens that drive the reload-hint stay positionally unchanged.
  */
 export const STATUS_TOKENS = [
   "installed",
@@ -165,6 +172,12 @@ export const STATUS_TOKENS = [
   "manual recovery",
   "no marketplaces",
   "no plugins",
+  "will add",
+  "will remove",
+  "will install",
+  "will uninstall",
+  "will enable",
+  "will disable",
 ] as const;
 
 export type StatusToken = (typeof STATUS_TOKENS)[number];
@@ -269,6 +282,10 @@ export const PLUGIN_STATUSES = [
   "skipped",
   "manual recovery",
   "present",
+  "will install",
+  "will uninstall",
+  "will enable",
+  "will disable",
 ] as const;
 
 /**
@@ -288,6 +305,8 @@ export const MARKETPLACE_STATUSES = [
   "autoupdate enabled",
   "autoupdate disabled",
   "skipped",
+  "will add",
+  "will remove",
 ] as const;
 
 /**
@@ -552,6 +571,53 @@ export interface PluginManualRecoveryMessage {
 }
 
 /**
+ * `(will install)` -- DIFF-02 preview row for a plugin declared in config but
+ * not yet recorded. Carries NO `dependencies` (the soft-dep probe is
+ * meaningless before installation); NO `reasons`; NO `version` (the recorded
+ * version does not exist yet for an install).
+ */
+export interface PluginWillInstallMessage {
+  readonly status: "will install";
+  readonly name: string;
+  readonly scope?: Scope;
+}
+
+/**
+ * `(will uninstall)` -- DIFF-02 preview row for a plugin recorded in state
+ * but no longer declared. Carries NO `reasons`; NO `version`; NO
+ * `dependencies`.
+ */
+export interface PluginWillUninstallMessage {
+  readonly status: "will uninstall";
+  readonly name: string;
+  readonly scope?: Scope;
+}
+
+/**
+ * `(will enable)` -- DIFF-02 preview row for a recorded plugin currently
+ * marked disabled but newly declared `enabled: true`. Phase 53 produces ZERO
+ * of these (Pitfall 53-4: the Phase 53 state model has no disabled marker);
+ * the variant ships so Phase 54's enable-bucket wiring lands against an
+ * already-defined type model.
+ */
+export interface PluginWillEnableMessage {
+  readonly status: "will enable";
+  readonly name: string;
+  readonly scope?: Scope;
+}
+
+/**
+ * `(will disable)` -- DIFF-02 preview row for a recorded plugin newly
+ * declared `enabled: false`. Carries NO `reasons`; NO `version`; NO
+ * `dependencies`.
+ */
+export interface PluginWillDisableMessage {
+  readonly status: "will disable";
+  readonly name: string;
+  readonly scope?: Scope;
+}
+
+/**
  * Discriminated union of every per-plugin notification variant (SNM-03).
  * The renderer narrows via `switch (msg.status)` + `assertNever` for
  * exhaustiveness; downstream tests iterate `PLUGIN_STATUSES` to enumerate
@@ -570,7 +636,11 @@ export type PluginNotificationMessage =
   | PluginPresentMessage
   | PluginFailedMessage
   | PluginSkippedMessage
-  | PluginManualRecoveryMessage;
+  | PluginManualRecoveryMessage
+  | PluginWillInstallMessage
+  | PluginWillUninstallMessage
+  | PluginWillEnableMessage
+  | PluginWillDisableMessage;
 
 /**
  * Common fields shared by every arm of the per-status
@@ -647,6 +717,24 @@ interface MpSkipped extends MpCommon {
 }
 
 /**
+ * `(will add)` marketplace block (DIFF-02). Preview row for a marketplace
+ * declared in config but not yet recorded. Never carries `reasons` /
+ * `details` -- preview rows are pre-transition.
+ */
+interface MpWillAdd extends MpCommon {
+  readonly status: "will add";
+}
+
+/**
+ * `(will remove)` marketplace block (DIFF-02). Preview row for a marketplace
+ * recorded in state but no longer declared. Never carries `reasons` /
+ * `details`.
+ */
+interface MpWillRemove extends MpCommon {
+  readonly status: "will remove";
+}
+
+/**
  * List / inventory marketplace block (status omitted). Modeled as
  * `status?: undefined` so the many status-omitted construction sites compile
  * unchanged and the renderer's `case undefined:` narrows to this arm.
@@ -675,6 +763,8 @@ export type MarketplaceNotificationMessage =
   | MpAutoupdateEnabled
   | MpAutoupdateDisabled
   | MpSkipped
+  | MpWillAdd
+  | MpWillRemove
   | MpList;
 
 /**
@@ -861,6 +951,27 @@ export interface PluginInfoCascadeMessage {
 }
 
 /**
+ * DIFF-01 SC #2 / D-53-01 (Phase 53 Plan 02): the dedicated empty-steady-state
+ * variant emitted by `/claude:plugin preview` when the next reload's
+ * reconcile would apply zero actions in every scope (no marketplaces /
+ * plugins / source-mismatches / invalid-config rows). Routes through the
+ * standalone-dispatched arm of `notify()` with severity `info` (no second
+ * arg) and emits the catalog-locked free-form advisory body line:
+ *
+ *   Preview: next reload will apply 0 actions.
+ *
+ * Carries NO fields -- the body is a hard-coded literal in
+ * `renderReconcilePreviewEmpty` so the byte form cannot drift from the
+ * catalog state. `shouldEmitReloadHint` is structurally false on this arm
+ * (preview rows are pre-transition; `/reload to pick up changes` is
+ * grammatically false). `buildSummaryLine` returns the empty string
+ * (info-severity -- no summary semantics apply).
+ */
+export interface ReconcilePreviewEmptyMessage {
+  readonly kind: "reconcile-preview-empty";
+}
+
+/**
  * TYPE-01 / D-46-01: the dedicated marketplace-not-added variant -- the 6th
  * arm of `NotificationMessage`. Carries ONLY the fields its row renders:
  * `name` (the MARKETPLACE name) and an optional `scope` (`scope` present =>
@@ -893,7 +1004,8 @@ export type NotificationMessage =
   | PluginInfoMessage
   | MarketplaceInfoCascadeMessage
   | PluginInfoCascadeMessage
-  | MarketplaceNotAddedMessage;
+  | MarketplaceNotAddedMessage
+  | ReconcilePreviewEmptyMessage;
 
 /**
  * TYPE-03 / D-46-04: the closed set of STANDALONE-DISPATCHED message kinds --
@@ -913,7 +1025,8 @@ type StandaloneKind =
   | "plugin-info"
   | "marketplace-info-cascade"
   | "plugin-info-cascade"
-  | "marketplace-not-added";
+  | "marketplace-not-added"
+  | "reconcile-preview-empty";
 
 /**
  * Single-source type-predicate for the standalone-dispatched kinds
@@ -930,7 +1043,8 @@ function isInfoKind(
     m.kind === "plugin-info" ||
     m.kind === "marketplace-info-cascade" ||
     m.kind === "plugin-info-cascade" ||
-    m.kind === "marketplace-not-added"
+    m.kind === "marketplace-not-added" ||
+    m.kind === "reconcile-preview-empty"
   );
 }
 
@@ -1128,6 +1242,19 @@ function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus
         ? `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (skipped)`
         : `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (skipped) ${reasonsBrace}`;
     }
+
+    case "will add":
+      // DIFF-02 / D-53-02: pending-tense preview row for a marketplace
+      // declared in config but not yet recorded. Reuses ICON_INSTALLED per
+      // RESEARCH Pattern 5 (no new icon constant).
+      return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (will add)`;
+    case "will remove":
+      // DIFF-02: pending-tense preview row for a marketplace recorded in
+      // state but no longer declared. Reuses ICON_UNINSTALLED (`○`) per
+      // RESEARCH Pattern 5 -- the same glyph the (uninstalled) plugin row
+      // carries, because a `will remove` is the marketplace-level analog of
+      // an uninstall.
+      return `${ICON_AVAILABLE} ${mp.name} [${mp.scope}] (will remove)`;
 
     case undefined: {
       // List-surface case. mp.details is OPTIONAL and INDEPENDENT of mp.status.
@@ -1481,6 +1608,52 @@ function renderPluginRow(
     case "manual recovery":
       // `(manual recovery)` discriminator preserved verbatim WITH A SPACE.
       return pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(manual recovery)", probe);
+    case "will install":
+      // DIFF-02 / D-53-02: pending-tense preview row for a plugin declared in
+      // config but not yet recorded. Reuses ICON_INSTALLED per RESEARCH
+      // Pattern 5. No `version` slot (the install hasn't happened yet); no
+      // reasons (preview rows are pre-transition).
+      return joinTokens([
+        ICON_INSTALLED,
+        p.name,
+        renderScopeBracket(p.scope, mpScope),
+        "(will install)",
+      ]);
+    case "will uninstall":
+      // DIFF-02: pending-tense preview row for a plugin recorded in state but
+      // no longer declared. Reuses ICON_AVAILABLE (open circle `○`) -- same
+      // glyph as the realized (uninstalled) row, because a `will uninstall`
+      // is its pre-transition analog.
+      return joinTokens([
+        ICON_AVAILABLE,
+        p.name,
+        renderScopeBracket(p.scope, mpScope),
+        "(will uninstall)",
+      ]);
+    case "will enable":
+      // DIFF-02: pending-tense preview row for a recorded plugin newly
+      // declared `enabled: true` after being locally disabled. Reuses
+      // ICON_INSTALLED per RESEARCH Pattern 5. Phase 53 produces ZERO of
+      // these (Pitfall 53-4); the arm ships so Phase 54 wiring is
+      // type-complete.
+      return joinTokens([
+        ICON_INSTALLED,
+        p.name,
+        renderScopeBracket(p.scope, mpScope),
+        "(will enable)",
+      ]);
+    case "will disable":
+      // DIFF-02: pending-tense preview row for a recorded plugin newly
+      // declared `enabled: false`. Reuses ICON_UNINSTALLABLE (`⊘`) per
+      // RESEARCH Pattern 5 -- the same glyph the (skipped) / (failed) rows
+      // carry, mirroring the prohibited-symbol semantics of a deliberate
+      // disable.
+      return joinTokens([
+        ICON_UNINSTALLABLE,
+        p.name,
+        renderScopeBracket(p.scope, mpScope),
+        "(will disable)",
+      ]);
     default: {
       assertNever(p);
       return "";
@@ -1587,6 +1760,8 @@ function computeSeverity(message: NotificationMessage): "warning" | "error" | un
       case "marketplace-info":
       case "marketplace-info-cascade":
       case "plugin-info-cascade":
+      case "reconcile-preview-empty":
+        // DIFF-01 SC #2: the empty-steady-state advisory is read-only / info.
         return undefined;
       default:
         assertNever(message);
@@ -1738,6 +1913,8 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
       case "marketplace-info":
       case "marketplace-info-cascade":
       case "plugin-info-cascade":
+      case "reconcile-preview-empty":
+        // DIFF-01 SC #2: info-severity / read-only -- no summary semantics.
         return "";
       default:
         assertNever(message);
@@ -1803,6 +1980,9 @@ function shouldEmitReloadHint(message: NotificationMessage): boolean {
       case "marketplace-info-cascade":
       case "plugin-info-cascade":
       case "marketplace-not-added":
+      case "reconcile-preview-empty":
+        // DIFF-01 SC #2: preview rows are pre-transition; the trailer would
+        // be grammatically false (`/reload` cannot pick up zero changes).
         return false;
       default:
         assertNever(message);
@@ -2287,6 +2467,12 @@ function dispatchInfoMessage(
       break;
     case "marketplace-not-added":
       body = renderMarketplaceNotAdded(message, probe);
+      break;
+    case "reconcile-preview-empty":
+      // DIFF-01 SC #2: catalog-locked free-form advisory body line. Hard-coded
+      // here so the byte form cannot drift from `docs/output-catalog.md`'s
+      // `empty-steady-state` state.
+      body = "Preview: next reload will apply 0 actions.";
       break;
     default:
       assertNever(message);

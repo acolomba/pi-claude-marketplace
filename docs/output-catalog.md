@@ -1191,6 +1191,80 @@ Triggered when `plugin info <plugin>@<marketplace> --scope <wrong-scope>` is inv
 
 ______________________________________________________________________
 
+## `/claude:plugin preview`
+
+DIFF-01 SC #2 / D-53-01 read-only diff/preview surface. Renders the bidirectional difference between the merged config (`claude-plugins.json` + `claude-plugins.local.json`) and the recorded state (`state.json`) for the next reload's reconcile. Runs against both scopes when `--scope` is omitted. NEVER writes any file, NEVER touches the network (NFR-5). Running it twice produces byte-identical output (DIFF-01 SC #2). DIFF-02: rows render subject-first `<glyph> <name> [<scope>] (will ...)` with the closed-set pending-tense token set (`will add` / `will remove` / `will install` / `will uninstall` / `will enable` / `will disable`). The `/reload to pick up changes` trailer is STRUCTURALLY EXCLUDED -- preview rows are pre-transition and the trailer would mislead the user.
+
+### Empty steady-state (no actions pending)
+
+The merged config matches the recorded state byte-for-byte in every scope -- the next reload's reconcile would apply zero actions. The orchestrator emits a free-form advisory body line (no cascade, no marketplaces array projection). Severity `info`; no reload-hint; no summary line.
+
+<!-- catalog-state: empty-steady-state -->
+
+```text
+Preview: next reload will apply 0 actions.
+```
+
+### Marketplace add with child plugin install
+
+A new marketplace declared in `claude-plugins.json` (`will add`) carries one child plugin row declared with the same key (`will install`). Subject-first row grammar per DIFF-02: `● new-mp [user] (will add)` / `● new-plugin (will install)`. Orphan-fold (D-13-18 / MSG-PL-6): the plugin row omits its `[scope]` bracket because its scope matches the parent marketplace's scope. Severity `info`; no reload-hint.
+
+<!-- catalog-state: mp-add-plugin-install -->
+
+```text
+● new-mp [user] (will add)
+  ● new-plugin (will install)
+```
+
+### Plugin pending uninstall under existing marketplace
+
+A plugin recorded in `state.json` but no longer declared in `claude-plugins.json`. The marketplace itself is still declared (source matches the recording) so its header renders status-less (list-arm: SUB-BRANCH A bare header) and only the plugin row carries the `(will uninstall)` token (`○` glyph -- the pre-transition analog of the realized `(uninstalled)` open-circle row). Severity `info`; no reload-hint.
+
+<!-- catalog-state: plugin-pending-uninstall -->
+
+```text
+● mp [user]
+  ○ old-plugin (will uninstall)
+```
+
+### Enable / disable transitions (Phase 54 hand-off shape)
+
+A marketplace with two plugin children: one newly enabled in config (`will enable`, `●` glyph) and one newly disabled (`will disable`, `⊘` glyph). Phase 53 produces ZERO `will enable` rows in practice (Pitfall 53-4: the Phase 53 state model has no disabled marker on a recorded plugin); the variant and renderer arm ship so Phase 54's enable-bucket wiring lands against a type-complete model. Severity `info`; no reload-hint.
+
+<!-- catalog-state: enable-disable-transitions -->
+
+```text
+● mp [user]
+  ● to-enable (will enable)
+  ⊘ to-disable (will disable)
+```
+
+### Source mismatch (declared source diverges from recorded source)
+
+A declared marketplace whose recorded source string does not match the declaration byte-for-byte (the apply path cannot honour the declaration without first removing the recording). The row reuses the existing `"source mismatch"` REASONS member (Pitfall 53-7 -- REASONS stays at 29 entries). Severity `error` (a `(failed)` mp row); summary line prepended (GRAM-01 / GRAM-02): `1 marketplace operation failed.`.
+
+<!-- catalog-state: source-mismatch -->
+
+```text
+1 marketplace operation failed.
+
+⊘ mp [project] (failed) {source mismatch}
+```
+
+### Invalid config abort (CFG-03 -- Pitfall 53-1)
+
+A `claude-plugins.json` (or `claude-plugins.local.json`) that is malformed, unparseable, or schema-invalid. The orchestrator routes the scope through a structured `(failed) {invalid manifest}` row and does NOT call `planReconcile` for it -- invalid input is NEVER silently coerced to an empty desired state (which would otherwise render as a mass-uninstall preview). The row body carries the file BASENAME (never the absolute path -- RESEARCH Security Threat Pattern "Information disclosure" T-53-02-02). Severity `error`; summary line prepended.
+
+<!-- catalog-state: invalid-config-abort -->
+
+```text
+1 marketplace operation failed.
+
+⊘ claude-plugins.json [project] (failed) {invalid manifest}
+```
+
+______________________________________________________________________
+
 ## `/claude:plugin marketplace remove <name>`
 
 Single-marketplace command that cascades plugin unstaging.
