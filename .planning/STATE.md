@@ -2,11 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.12
 milestone_name: Marketplace and Plugin Config Files
-status: planned
-last_updated: "2026-06-09T23:30:00.000Z"
-last_activity: 2026-06-09
+status: planning
+stopped_at: Phase 51 context gathered
+last_updated: "2026-06-10T01:29:55.967Z"
+last_activity: 2026-06-09 — v1.12 roadmap created (Phases 51-56)
 progress:
-  total_phases: 6
+  total_phases: 34
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -206,9 +207,9 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-09
-Stopped At: Completed quick task 260609-bfq (CPD-duplication shared-helper extraction + v0.4.3 bump) on branch features/reduce-cpd-duplication
-Resume File: None
+Last session: 2026-06-10T01:29:55.948Z
+Stopped At: Phase 51 context gathered
+Resume File: .planning/phases/51-config-schema-persistence-state-split/51-CONTEXT.md
 
 ## Operator Next Steps
 
