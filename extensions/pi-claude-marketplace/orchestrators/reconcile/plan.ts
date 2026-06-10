@@ -197,6 +197,7 @@ function classifyDeclaredPlugin(
     acc.dangling.push({
       scope,
       marketplace,
+      plugin,
       declaredSource: "",
       recordedSource: MARKETPLACE_NOT_DECLARED,
       cause: "source-mismatch",

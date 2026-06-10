@@ -111,6 +111,32 @@ function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceNotifica
 }
 
 /**
+ * Fold one `PlannedSourceMismatch` into its `(scope, marketplace)` block.
+ * Source-mismatch supersedes any prior status (the declaration cannot be
+ * honoured byte-for-byte). Pitfall 53-7: reuse the existing
+ * "source mismatch" REASONS member; do NOT add a new REASONS literal.
+ *
+ * Plugin-level diagnostics (dangling reference -- `plugin` set) surface the
+ * offending plugin as a child (failed) row so N dangling plugins under one
+ * undeclared marketplace stay individually attributable instead of
+ * collapsing into one anonymous marketplace row.
+ */
+function applySourceMismatch(
+  block: MarketplaceBlock,
+  mismatch: ReconcilePlan["sourceMismatches"][number],
+): void {
+  block.status = "failed";
+  block.reasons = ["source mismatch"];
+  if (mismatch.plugin !== undefined) {
+    block.plugins.push({
+      status: "failed",
+      name: mismatch.plugin,
+      reasons: ["source mismatch"],
+    });
+  }
+}
+
+/**
  * Pure projection: ReconcilePlan[] -> CascadeNotificationMessage.
  *
  * Every plan action is folded into its `(scope, marketplace)` block. The
@@ -151,12 +177,7 @@ export function buildReconcilePreviewNotification(
     }
 
     for (const o of plan.sourceMismatches) {
-      const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
-      // Source-mismatch supersedes any prior status (the declaration cannot
-      // be honoured byte-for-byte). Pitfall 53-7: reuse the existing
-      // "source mismatch" REASONS member; do NOT add a new REASONS literal.
-      block.status = "failed";
-      block.reasons = ["source mismatch"];
+      applySourceMismatch(ensureMarketplaceBlock(byMp, o.scope, o.marketplace), o);
     }
 
     for (const o of plan.pluginsToInstall) {

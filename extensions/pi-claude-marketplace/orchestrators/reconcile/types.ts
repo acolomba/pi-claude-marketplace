@@ -117,15 +117,24 @@ export interface PlannedPluginDisable {
  *      operator can see what the unrecognised value actually is.
  *
  * A third use of the variant captures the DANGLING-REFERENCE diagnostic
- * (a plugin entry whose `${plugin}@${marketplace}` marketplace name does
- * NOT appear in either map): cause `"source-mismatch"`, `declaredSource`
- * is the empty string, `recordedSource` is the literal sentinel
- * `"<marketplace not declared>"`. Phase 55 surfaces this as a
- * planning-time advisory.
+ * (a plugin entry whose `${plugin}@${marketplace}` marketplace name is NOT
+ * declared in the merged config): cause `"source-mismatch"`,
+ * `declaredSource` is the empty string, `recordedSource` is the literal
+ * sentinel `"<marketplace not declared>"`, and `plugin` carries the plugin
+ * component of the offending config key so N dangling plugins under one
+ * undeclared marketplace stay individually attributable. Phase 55 surfaces
+ * this as a planning-time advisory.
  */
 export interface PlannedSourceMismatch {
   readonly scope: Scope;
   readonly marketplace: string;
+  /**
+   * Present ONLY on plugin-level diagnostics (dangling reference): the
+   * plugin component of the offending `${plugin}@${marketplace}` config
+   * key. Marketplace-level mismatches (`source-mismatch` /
+   * `unknown-stored` on a declared+recorded marketplace) carry no plugin.
+   */
+  readonly plugin?: string;
   readonly declaredSource: string;
   readonly recordedSource: string;
   readonly cause: "source-mismatch" | "unknown-stored";

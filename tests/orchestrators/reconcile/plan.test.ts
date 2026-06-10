@@ -335,6 +335,10 @@ test("Edge: dangling plugin reference (mp not in declared nor recorded) -> Plann
   assert.ok(dangling);
   assert.equal(dangling.cause, "source-mismatch");
   assert.equal(dangling.marketplace, "phantom-mp");
+  // WR-03: the diagnostic carries the plugin component of the offending
+  // config key so N dangling plugins under one undeclared marketplace stay
+  // individually attributable.
+  assert.equal(dangling.plugin, "cr");
   assert.equal(dangling.declaredSource, "");
   assert.equal(dangling.recordedSource, "<marketplace not declared>");
   // Crucially, the dangling reference does NOT land in pluginsToInstall.

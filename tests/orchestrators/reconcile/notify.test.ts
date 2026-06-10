@@ -160,6 +160,46 @@ test("sourceMismatch projection -> block.status='failed' + reasons=['source mism
   assert.deepEqual("reasons" in block ? [...(block.reasons ?? [])] : [], ["source mismatch"]);
 });
 
+test("dangling-reference mismatch (plugin attributed) -> child (failed) {source mismatch} plugin row (WR-03)", () => {
+  const plan: ReconcilePlan = {
+    ...emptyPlan("project"),
+    sourceMismatches: [
+      {
+        scope: "project",
+        marketplace: "phantom-mp",
+        plugin: "cr",
+        declaredSource: "",
+        recordedSource: "<marketplace not declared>",
+        cause: "source-mismatch",
+      },
+      {
+        scope: "project",
+        marketplace: "phantom-mp",
+        plugin: "cr2",
+        declaredSource: "",
+        recordedSource: "<marketplace not declared>",
+        cause: "source-mismatch",
+      },
+    ],
+  };
+  const msg = buildReconcilePreviewNotification([plan]);
+  assert.equal(msg.marketplaces.length, 1);
+  const block = msg.marketplaces[0];
+  assert.ok(block);
+  assert.equal(block.status, "failed");
+  // Each dangling plugin stays individually attributable as a child
+  // (failed) row -- N dangling plugins do NOT collapse into one anonymous
+  // marketplace row.
+  assert.equal(block.plugins.length, 2);
+  assert.deepEqual(
+    [...block.plugins].map((p) => [p.name, p.status]),
+    [
+      ["cr", "failed"],
+      ["cr2", "failed"],
+    ],
+  );
+});
+
 test("PluginUninstall projection -> plugin row under marketplace block with (will uninstall) status", () => {
   const plan: ReconcilePlan = {
     ...emptyPlan("project"),
