@@ -347,7 +347,11 @@ test("MIG-02 idempotency: second call short-circuits and does not rewrite the fi
     await new Promise<void>((resolve) => setTimeout(resolve, 25));
     const second = await migrateFirstRunConfig(loc, state);
     assert.equal(second.migrated, false);
-    assert.equal(second.entryCount, 0);
+    if (!second.migrated) {
+      assert.equal(second.reason, "existing-valid");
+      assert.equal(second.error, undefined);
+    }
+
     assert.equal(second.filePath, loc.configJsonPath);
     const mtimeAfter = (await stat(loc.configJsonPath)).mtimeMs;
     assert.equal(mtimeAfter, mtimeBefore);
@@ -365,6 +369,13 @@ test("Pitfall 52-5: pre-existing 0-byte claude-plugins.json is NOT overwritten",
     const state = await loadPopulatedState();
     const result = await migrateFirstRunConfig(loc, state);
     assert.equal(result.migrated, false);
+    if (!result.migrated) {
+      // CFG-03: 0-byte file is the `invalid` arm; the loadConfig detail rides
+      // along so the Phase 55 caller can surface it without a second probe.
+      assert.equal(result.reason, "existing-invalid");
+      assert.match(result.error ?? "", /JSON parse failed/);
+    }
+
     assert.equal(await readFile(loc.configJsonPath, "utf8"), "");
   } finally {
     await cleanup();
@@ -384,6 +395,11 @@ test("Pitfall 52-5: pre-existing VALID claude-plugins.json is NOT overwritten", 
     const state = await loadPopulatedState();
     const result = await migrateFirstRunConfig(loc, state);
     assert.equal(result.migrated, false);
+    if (!result.migrated) {
+      assert.equal(result.reason, "existing-valid");
+      assert.equal(result.error, undefined);
+    }
+
     assert.equal(await readFile(loc.configJsonPath, "utf8"), preExisting);
   } finally {
     await cleanup();
@@ -401,6 +417,11 @@ test("Pitfall 52-5: pre-existing INVALID (schema-failing) claude-plugins.json is
     const state = await loadPopulatedState();
     const result = await migrateFirstRunConfig(loc, state);
     assert.equal(result.migrated, false);
+    if (!result.migrated) {
+      assert.equal(result.reason, "existing-invalid");
+      assert.match(result.error ?? "", /schema validation failed/);
+    }
+
     assert.equal(await readFile(loc.configJsonPath, "utf8"), preExisting);
   } finally {
     await cleanup();

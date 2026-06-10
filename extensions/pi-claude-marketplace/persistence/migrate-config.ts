@@ -30,12 +30,27 @@ import type { ParsedSource } from "../domain/source.ts";
  * MIG-02: result of a first-run migration attempt. The Phase 55 load-wiring
  * caller narrows on `migrated` to decide whether/how to surface the
  * migration via `shared/notify.ts`.
+ *
+ * The `migrated: false` arm preserves the loadConfig trichotomy (CFG-03 /
+ * D-15) instead of collapsing it: `"existing-valid"` means "nothing to do,
+ * config already declared"; `"existing-invalid"` means "migration was
+ * suppressed because the config file is corrupt" and carries loadConfig's
+ * `error` detail so the Phase 55 caller can surface the CFG-03 abort signal
+ * without a second (divergence-prone) loadConfig probe.
  */
-export interface MigrateFirstRunResult {
-  readonly migrated: boolean;
-  readonly entryCount: number;
-  readonly filePath: string;
-}
+export type MigrateFirstRunResult =
+  | {
+      readonly migrated: true;
+      readonly entryCount: number;
+      readonly filePath: string;
+    }
+  | {
+      readonly migrated: false;
+      readonly reason: "existing-valid" | "existing-invalid";
+      /** loadConfig's invalid-arm detail; present iff reason is "existing-invalid". */
+      readonly error?: string;
+      readonly filePath: string;
+    };
 
 /**
  * MIG-01: pure lossless projection from in-memory ExtensionState to the
@@ -112,9 +127,11 @@ export function buildConfigFromState(state: ExtensionState): ScopeConfig {
  * MIG-01 + MIG-02 + Pitfall 52-5: thin ENOENT-gated orchestrator.
  *
  * NEVER overwrites a pre-existing `claude-plugins.json` -- neither a valid
- * one nor an invalid (e.g. 0-byte) one. Both arms fall into the same
- * early-return path on `result.status !== "absent"`. Idempotency comes from
- * the loadConfig trichotomy itself (no half-set flag).
+ * one nor an invalid (e.g. 0-byte) one. Both arms short-circuit before any
+ * write, but each carries its own `reason` (and the `invalid` arm forwards
+ * loadConfig's `error` detail) so the caller keeps the CFG-03 trichotomy.
+ * Idempotency comes from the loadConfig trichotomy itself (no half-set
+ * flag).
  *
  * On the `absent` arm: builds the projection and writes via saveConfig.
  * Atomicity, NFR-10 containment, and CONFIG_VALIDATOR revalidation are all
@@ -127,8 +144,17 @@ export async function migrateFirstRunConfig(
   state: ExtensionState,
 ): Promise<MigrateFirstRunResult> {
   const result = await loadConfig(loc.configJsonPath);
-  if (result.status !== "absent") {
-    return { migrated: false, entryCount: 0, filePath: loc.configJsonPath };
+  if (result.status === "valid") {
+    return { migrated: false, reason: "existing-valid", filePath: loc.configJsonPath };
+  }
+
+  if (result.status === "invalid") {
+    return {
+      migrated: false,
+      reason: "existing-invalid",
+      error: result.error,
+      filePath: loc.configJsonPath,
+    };
   }
 
   const config = buildConfigFromState(state);
