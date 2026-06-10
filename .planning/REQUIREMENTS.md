@@ -51,8 +51,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Dry-run
 
-- [ ] **DIFF-01**: User can run a read-only diff/preview command showing exactly what the next load's reconcile would do (adds, installs, removals, uninstalls, enable/disable transitions) -- no writes, no network
-- [ ] **DIFF-02**: Diff output follows the locked row grammar -- subject-first rows (`<glyph> <name> [scope] (status) {reason}`); any new pending-tense status tokens are closed-set extensions landing in lockstep with catalog + byte-UAT fixtures
+- [x] **DIFF-01**: User can run a read-only diff/preview command showing exactly what the next load's reconcile would do (adds, installs, removals, uninstalls, enable/disable transitions) -- no writes, no network -- CLOSED 2026-06-10 (Phase 53)
+- [x] **DIFF-02**: Diff output follows the locked row grammar -- subject-first rows (`<glyph> <name> [scope] (status) {reason}`); any new pending-tense status tokens are closed-set extensions landing in lockstep with catalog + byte-UAT fixtures -- CLOSED 2026-06-10 (Phase 53)
 
 ## v2 Requirements
 
@@ -105,8 +105,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ENBL-02 | Phase 54 | Pending |
 | ENBL-03 | Phase 54 | Pending |
 | ENBL-04 | Phase 54 | Pending |
-| DIFF-01 | Phase 53 | Pending |
-| DIFF-02 | Phase 53 | Pending |
+| DIFF-01 | Phase 53 | Closed |
+| DIFF-02 | Phase 53 | Closed |
 
 **Coverage:**
 

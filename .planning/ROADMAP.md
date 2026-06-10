@@ -224,15 +224,15 @@ Declarative, version-controllable config files (`claude-plugins.json` + entry-le
   2. A user can run a read-only diff/preview command that prints exactly the actions the next load's reconcile would take (adds, installs, removals, uninstalls, enable/disable transitions) and performs no writes and no network calls -- verifiable by running it twice and observing identical output with no file or state mutation (DIFF-01).
   3. The diff output follows the locked subject-first row grammar (`<glyph> <name> [scope] (status) {reason}`); any pending-tense status tokens it introduces are closed-set extensions landing in lockstep with the `docs/output-catalog.md` catalog and the `catalog-uat` byte fixtures in the same atomic commit (DIFF-02; the planner's disabled-entry handling excludes disabled plugins from the desired-materialized set so the preview never shows them as pending installs).
 
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 **Wave 1**
 
 - [x] 53-01-PLAN.md -- Pure planReconcile + types + projection skeleton + architecture purity gate + Phase 52 convergence proof discharged (DIFF-01 foundation; byte-neutral to shared/notify.ts) -- shipped 2026-06-10 (commit c690a60)
 
-**Wave 2** *(blocked on Wave 1 completion)*
+**Wave 2**
 
-- [ ] 53-02-PLAN.md -- Atomic 6-fold catalog amendment: 6 new `will *` tokens (D-53-02) + variants + renderer arms + preview orchestrator + edge shim + router + register + 6 catalog states + 6 FIXTURES entries + length-locks + FORBIDDEN_TARGETS extension + idempotency/CFG-03/shim tests (DIFF-01 SC #2/SC #3 + DIFF-02 SC #3; D-53-01 `preview` subcommand)
+- [x] 53-02-PLAN.md -- Atomic 6-fold catalog amendment: 6 new `will *` tokens (D-53-02) + variants + renderer arms + preview orchestrator + edge shim + router + register + 6 catalog states + 6 FIXTURES entries + length-locks + FORBIDDEN_TARGETS extension + idempotency/CFG-03/shim tests (DIFF-01 SC #2/SC #3 + DIFF-02 SC #3; D-53-01 `preview` subcommand) -- shipped 2026-06-10 (commit 5402f56)
 
 ### Phase 54: Enable/Disable Commands
 
