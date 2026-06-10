@@ -17,8 +17,10 @@ import {
   migrateFirstRunConfig,
   type MigrateFirstRunResult,
 } from "../../extensions/pi-claude-marketplace/persistence/migrate-config.ts";
-
-import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import {
+  DEFAULT_STATE,
+  type ExtensionState,
+} from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 /**
  * MIG-01 (lossless first-run generation from state.json -> claude-plugins.json)
@@ -276,9 +278,43 @@ test("MIG-01 D-11: schemaVersion is emitted as the literal 1", async () => {
   assert.equal(cfg.schemaVersion, 1);
 });
 
+test("MIG-01 fresh install: empty state projects to the empty (but schema-valid) config", () => {
+  // The single most common production path: loadState returns DEFAULT_STATE
+  // on ENOENT (a box that never had V1 state).
+  const cfg = buildConfigFromState({ schemaVersion: 1, marketplaces: {} });
+  assert.deepEqual(cfg, { schemaVersion: 1, marketplaces: {}, plugins: {} });
+  assert.equal(CONFIG_VALIDATOR.Check(cfg), true);
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // Section B -- migrateFirstRunConfig ENOENT-arm integration (MIG-02 happy path)
 // ──────────────────────────────────────────────────────────────────────────
+
+test("MIG-02 fresh install: empty state migrates with entryCount 0 and a loadable file (D-13 gate opens)", async () => {
+  const { tmpDir, cleanup } = await tmpScopeRoot();
+  try {
+    const loc = locationsFor("project", tmpDir);
+    await mkdir(loc.scopeRoot, { recursive: true });
+    // DEFAULT_STATE is exactly what loadState hands the Phase 55 caller on
+    // ENOENT; `migrated: true` with `entryCount: 0` is the intended signal
+    // shape for fresh-install messaging, and the file's existence is what
+    // opens the D-13 autoupdate-scrub gate on a box without V1 state.
+    const result = await migrateFirstRunConfig(loc, DEFAULT_STATE);
+    assert.equal(result.migrated, true);
+    if (result.migrated) {
+      assert.equal(result.entryCount, 0);
+    }
+
+    assert.equal(result.filePath, loc.configJsonPath);
+    const reloaded = await loadConfig(loc.configJsonPath);
+    assert.equal(reloaded.status, "valid");
+    if (reloaded.status === "valid") {
+      assert.deepEqual(reloaded.config, { schemaVersion: 1, marketplaces: {}, plugins: {} });
+    }
+  } finally {
+    await cleanup();
+  }
+});
 
 test("MIG-02 happy path: ENOENT triggers migration; result.migrated true with correct count", async () => {
   const { tmpDir, cleanup } = await tmpScopeRoot();
