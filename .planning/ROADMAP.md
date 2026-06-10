@@ -253,7 +253,7 @@ Declarative, version-controllable config files (`claude-plugins.json` + entry-le
 
 **Wave 1** *(byte-neutral foundation: planner Phase 53→54 hand-off + network gate + RED scaffolds)*
 
-- [ ] 54-01-PLAN.md -- Wire reconcile planner pluginsToEnable bucket via isRecordedButDisabled predicate + arm NFR-5 FORBIDDEN_TARGETS gate for enable-disable.ts + Wave 0 RED scaffolds for orchestrator + edge handler tests (ENBL-02 partial; D-54-01 token NOT touched in this plan)
+- [x] 54-01-PLAN.md -- Wire reconcile planner pluginsToEnable bucket via isRecordedButDisabled predicate + arm NFR-5 FORBIDDEN_TARGETS gate for enable-disable.ts + Wave 0 RED scaffolds for orchestrator + edge handler tests (ENBL-02 partial; D-54-01 token NOT touched in this plan)
 
 **Wave 2** *(blocked on Wave 1 completion; atomic catalog-amendment lockstep)*
 
