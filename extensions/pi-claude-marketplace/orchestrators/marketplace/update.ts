@@ -560,8 +560,23 @@ function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undef
     return ["invalid manifest"] as const;
   }
 
+  // Mirror the one-level cause unwrap above for errno-bearing FS errors: the
+  // refreshOneMarketplace catch receives the errno error WRAPPED inside a
+  // MarketplaceUpdateError (refreshRecord rethrows with `{ cause }`), so the
+  // wrapper itself carries no `code`. Without the unwrap, a path-source
+  // refresh that hits ENOENT/ENOTDIR/EACCES/EPERM -- a network-free failure
+  // (NFR-5) -- would fall through to the lying `?? ["network unreachable"]`
+  // default instead of the correct closed-set `source missing` /
+  // `permission denied` reasons.
   if (err instanceof Error) {
-    const code = (err as NodeJS.ErrnoException).code;
+    let errnoBearer: NodeJS.ErrnoException | undefined;
+    if ((err as NodeJS.ErrnoException).code !== undefined) {
+      errnoBearer = err;
+    } else if (err.cause instanceof Error) {
+      errnoBearer = err.cause;
+    }
+
+    const code = errnoBearer?.code;
     if (code === "EACCES" || code === "EPERM") {
       return ["permission denied"] as const;
     }
