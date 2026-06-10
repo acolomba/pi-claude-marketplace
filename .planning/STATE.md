@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.12
 milestone_name: Marketplace and Plugin Config Files
-status: planning
-stopped_at: Phase 51 Plan 01 complete
-last_updated: "2026-06-10T11:53:12.962Z"
-last_activity: 2026-06-10 -- Phase 52 planning complete
+status: executing
+stopped_at: Phase 52 Plan 01 complete
+last_updated: "2026-06-10T12:05:48Z"
+last_activity: 2026-06-10 -- Phase 52 Plan 01 complete
 progress:
   total_phases: 34
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
-  percent: 3
+  completed_phases: 2
+  total_plans: 5
+  completed_plans: 4
+  percent: 6
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-08)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 51 — config-schema-persistence-state-split
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 52 — first-run-migration
 
 ## Current Position
 
-Phase: 52
-Plan: Not started
-Status: Plan 01 complete; ready to plan Plan 02 (MergedConfig + STATE_SCHEMA carve-out)
-Last activity: 2026-06-10 -- Phase 52 planning complete
+Phase: 53 (pure-reconcile-planner-and-dry-run-preview) — PENDING
+Plan: 1 of TBD
+Status: Phase 52 complete; ready to plan Phase 53
+Last activity: 2026-06-10 -- Phase 52 Plan 01 complete (MIG-01 + MIG-02 closed)
 
 ## Performance Metrics
 
@@ -91,6 +91,7 @@ Last activity: 2026-06-10 -- Phase 52 planning complete
 | Phase 51 P01 | ~25m | 2 tasks | 4 files |
 | Phase 51 P02 | 95 | 2 tasks | 17 files |
 | Phase 51 P03 | 25 | 1 tasks | 1 files |
+| Phase 52 P01 | ~14m | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -168,6 +169,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: D-13 ORDERING RAIL: autoupdate scrub gated on existsSync(configJsonPath) preserves legacy field for Phase 52 first-run migration
 - [Phase ?]: SPLIT-01 cast migration (user-approved 2026-06-10, Rule 4 Option A): cast-and-tag readers/writers across 11 files outside persistence/ with // SPLIT-01: markers; rewire deferred to Phases 54-56
 - [Phase ?]: [Phase 51]: SPLIT-02 closed structurally — tests/architecture/config-state-write-seams.test.ts refuses any atomicWriteJson(...) callsite targeting state.json / claude-plugins.json / claude-plugins.local.json outside the named allow-lists (config-io.ts for config; state-io.ts + migrate.ts for state); 'exactly N' sibling assertions force silent widening to fail CI. Path-name-specific regex chosen over the plan's locked COARSE-WALK formulation (Rule 1 deviation): coarse walk would have wrongly flagged 7 legitimate atomicWriteJson callsites that write other JSON files (mcp.json, agents-index.json, completion caches). -- Plan 51-03.
+- [Phase 52]: MIG-01 + MIG-02 closed. New persistence/migrate-config.ts (118 lines) exports three symbols: MigrateFirstRunResult interface, pure buildConfigFromState projection (every marketplace + every plugin -- including soft-degraded/installable=false per Pitfall 52-1 -- flat-keyed `${plugin}@${mp}` per D-01 with empty body per D-04; source byte-stable via (mp.source as ParsedSource).raw per SP-7; legacy autoupdate captured only on strict === true / === false arms per D-04+defense-in-depth; schemaVersion: 1 literal per D-11), and migrateFirstRunConfig thin ENOENT-gated orchestrator (loadConfig trichotomy: any status !== 'absent' short-circuits with { migrated:false, entryCount:0 } -- Pitfall 52-5 NEVER overwrites valid OR invalid pre-existing config; on absent arm builds projection + writes through saveConfig inheriting NFR-1 atomicity + NFR-10 containment + CONFIG_VALIDATOR revalidation). Assumption A1 [VERIFIED]: SPLIT-02 architecture test stayed at 1 entry in ALLOWED_CONFIG_JSON_WRITERS (config-io.ts) -- migrate-config.ts routes through saveConfig not atomicWriteJson, so the path-name regex does not match; no allow-list edit needed. Phase 53 owns the planner-level planReconcile no-op convergence proof; Phase 55 owns the load-wiring call site + Pitfall 52-2 (concurrent first-load lock coverage) + Pitfall 52-4 (D-13 gate race). 20/20 new tests GREEN; npm run check GREEN 1571/1571 unit + 7/7 integration. -- Plan 52-01.
 
 ### Pending Todos
 
@@ -214,10 +216,10 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-10T10:44:45.502Z
-Stopped At: Phase 51 Plan 01 complete
-Resume File: .planning/phases/51-config-schema-persistence-state-split/51-02-PLAN.md
+Last session: 2026-06-10T12:05:48Z
+Stopped At: Phase 52 Plan 01 complete
+Resume File: .planning/phases/53-pure-reconcile-planner-and-dry-run-preview/ (to be planned)
 
 ## Operator Next Steps
 
-- Execute Plan 51-02 (MergedConfig entry-level base+local merge + STATE_SCHEMA autoupdate carve-out + D-13-gated legacy scrub in migrate.ts) -- depends on Plan 51-01's CONFIG_SCHEMA + ConfigLoadResult shapes (now shipped).
+- Plan Phase 53 (Pure Reconcile Planner & Dry-Run Preview, DIFF-01 + DIFF-02) -- consumes the Phase 52 buildConfigFromState seam in the data-level convergence proof and lands planReconcile + the read-only diff/preview command.

@@ -23,8 +23,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Migration
 
-- [ ] **MIG-01**: First load without a config file generates `claude-plugins.json` losslessly from existing state.json (all installed entries, including soft-degraded ones); nothing is uninstalled
-- [ ] **MIG-02**: Migration is atomic and idempotent; reconcile immediately after migration is a strict no-op
+- [x] **MIG-01**: First load without a config file generates `claude-plugins.json` losslessly from existing state.json (all installed entries, including soft-degraded ones); nothing is uninstalled
+- [x] **MIG-02**: Migration is atomic and idempotent; reconcile immediately after migration is a strict no-op
 
 ### Reconciliation
 
@@ -89,8 +89,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CFG-04 | Phase 56 | Pending |
 | SPLIT-01 | Phase 51 | Complete |
 | SPLIT-02 | Phase 51 | Complete |
-| MIG-01 | Phase 52 | Pending |
-| MIG-02 | Phase 52 | Pending |
+| MIG-01 | Phase 52 | Done (Plan 52-01, 2026-06-10) |
+| MIG-02 | Phase 52 | Done (Plan 52-01, 2026-06-10) |
 | RECON-01 | Phase 55 | Pending |
 | RECON-02 | Phase 55 | Pending |
 | RECON-03 | Phase 55 | Pending |

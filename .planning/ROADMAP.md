@@ -208,7 +208,7 @@ Declarative, version-controllable config files (`claude-plugins.json` + entry-le
 
 **Wave 1**
 
-- [ ] 52-01-PLAN.md -- buildConfigFromState + migrateFirstRunConfig ENOENT-gated seam + populated fixture + RED-first test suite + npm run check gate (MIG-01, MIG-02; SPLIT-02 architecture test stays at 1 entry per Assumption A1)
+- [x] 52-01-PLAN.md -- buildConfigFromState + migrateFirstRunConfig ENOENT-gated seam + populated fixture + RED-first test suite + npm run check gate (MIG-01, MIG-02; SPLIT-02 architecture test stays at 1 entry per Assumption A1)
 
 ### Phase 53: Pure Reconcile Planner & Dry-Run Preview
 
@@ -1082,7 +1082,7 @@ Every error/warning-severity notification now carries a non-empty summary messag
 | 49. Cross-Op Convergence & GREEN-Gate Close                         | v1.10     | 3/3 | Complete    | 2026-06-08 |
 | 50. Notification Summary-Line Grammar                               | v1.11     | 1/1 | Complete    | 2026-06-08 |
 | 51. Config Schema, Persistence & State Split                        | v1.12     | 3/3 | Complete    | 2026-06-10 |
-| 52. First-Run Migration                                             | v1.12     | 0/? | Not started | --         |
+| 52. First-Run Migration                                             | v1.12     | 1/1 | Complete    | 2026-06-10 |
 | 53. Pure Reconcile Planner & Dry-Run Preview                        | v1.12     | 0/? | Not started | --         |
 | 54. Enable/Disable Commands                                         | v1.12     | 0/? | Not started | --         |
 | 55. Load-Time Reconcile Apply, Notification & Wiring                | v1.12     | 0/? | Not started | --         |
