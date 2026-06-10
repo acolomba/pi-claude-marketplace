@@ -175,7 +175,19 @@ Declarative, version-controllable config files (`claude-plugins.json` + entry-le
   4. Desired-state and user-settings fields (marketplace source/autoupdate, plugin enabled/version-pin intent) live only in the config schema, and `state.json` retains only machine bookkeeping (materialized artefact records, resolved versions, timestamps) under `pi-claude-marketplace/`; a `STATE_SCHEMA` field-relocation (and any `schemaVersion` decision) is documented and an old `state.json` still loads (SPLIT-01).
   5. The write seams are split by ownership: machine records are written only to the internal state file and the user config is written only via command write-back or one-time migration -- enforced by an architecture test so no reconcile-path code can write the user config (SPLIT-02); config + internal-file paths are added to the NFR-10 containment allow-list.
 
-**Plans:** TBD
+**Plans:** 3 plans
+
+**Wave 1**
+
+- [ ] 51-01-PLAN.md -- Lock the schema + I/O seam (CONFIG_SCHEMA, loadConfig trichotomy, saveConfig with assertPathInside) + ScopedLocations additions (CFG-01, CFG-03; D-01, D-02, D-04, D-05, D-06, D-09, D-11, D-15)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 51-02-PLAN.md -- Entry-level base+local merge (MergedConfig) + STATE_SCHEMA carve-out (autoupdate removed) + D-13-gated legacy scrub in migrate.ts (CFG-02, SPLIT-01; D-01, D-10, D-12, D-13, D-14, D-16, D-18)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 51-03-PLAN.md -- SPLIT-02 architecture test: write-seam ownership enforced by config-state-write-seams.test.ts (allow-list + exactly-N sibling assertion) (SPLIT-02)
 
 ### Phase 52: First-Run Migration
 
