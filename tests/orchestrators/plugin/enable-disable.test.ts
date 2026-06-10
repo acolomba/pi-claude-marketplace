@@ -458,11 +458,12 @@ test("Idempotency: enable on already-enabled plugin renders (skipped) {already e
 
 test("Idempotency: disable on already-disabled plugin renders (skipped) {already disabled} at info severity", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
-    await writeUserState(home, {
+    const { statePath } = await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
       disabled: true,
     });
+    const statePre = await readFile(statePath, "utf8");
     const { ctx, notifications } = makeCtx(cwd);
     await setPluginEnabled({
       ctx,
@@ -476,6 +477,10 @@ test("Idempotency: disable on already-disabled plugin renders (skipped) {already
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined, "benign idempotent skip routes to info");
     assert.match(notifications[0]!.message, /\(skipped\) \{already disabled\}/);
+    // WR-01: the idempotent arm returns without tx.save() -- state.json is
+    // not rewritten on a no-op.
+    const statePost = await readFile(statePath, "utf8");
+    assert.equal(statePost, statePre, "state.json bytes unchanged after idempotent no-op");
   });
 });
 
@@ -483,7 +488,7 @@ test("Idempotency: disable on already-disabled plugin renders (skipped) {already
 // CFG-03: invalid-config abort
 // ──────────────────────────────────────────────────────────────────────────
 
-test("CFG-03: invalid config aborts and state.json is unchanged (path.basename containment, T-54-02-02)", async () => {
+test("CFG-03 / WR-01: invalid config aborts and state.json is byte- and mtime-unchanged (path.basename containment, T-54-02-02)", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     const { statePath, configPath } = await writeUserState(home, {
       marketplaceName: "mp",
@@ -493,6 +498,7 @@ test("CFG-03: invalid config aborts and state.json is unchanged (path.basename c
     // 0-byte file -> CFG-03 invalid (JSON parse failure).
     await writeFile(configPath, "", "utf8");
     const statePre = await readFile(statePath, "utf8");
+    const mtimePre = (await stat(statePath)).mtimeMs;
     const { ctx, notifications } = makeCtx(cwd);
     await setPluginEnabled({
       ctx,
@@ -517,35 +523,14 @@ test("CFG-03: invalid config aborts and state.json is unchanged (path.basename c
       /claude-plugins\.json/,
       "basename should be cited in the cause",
     );
-    // T-54-02-02 invariant: the plugin record's `resources.*` arrays and
-    // `version` must be unchanged after a CFG-03 abort (state-io's load-time
-    // source normalization is allowed to rewrite the source field, so we
-    // can't byte-compare; we instead check the load-bearing fields).
+    // WR-01: the abort arms return WITHOUT tx.save(), so state.json is not
+    // rewritten at all -- the catalog's "state.json mtime is UNCHANGED"
+    // claim for `enable-invalid-config` / `disable-invalid-config` is a real
+    // byte-level invariant (not just load-bearing-field preservation).
     const statePost = await readFile(statePath, "utf8");
-    const parsedPost = JSON.parse(statePost) as {
-      marketplaces: Record<
-        string,
-        {
-          plugins: Record<
-            string,
-            {
-              version: string;
-              resources: {
-                skills: string[];
-                prompts: string[];
-                agents: string[];
-                mcpServers: string[];
-              };
-            }
-          >;
-        }
-      >;
-    };
-    const parsedPre = JSON.parse(statePre) as typeof parsedPost;
-    const recPost = parsedPost.marketplaces.mp!.plugins.foo!;
-    const recPre = parsedPre.marketplaces.mp!.plugins.foo!;
-    assert.equal(recPost.version, recPre.version, "version pin unchanged after CFG-03 abort");
-    assert.deepEqual(recPost.resources, recPre.resources, "resources unchanged after CFG-03 abort");
+    assert.equal(statePost, statePre, "state.json bytes unchanged after CFG-03 abort");
+    const mtimePost = (await stat(statePath)).mtimeMs;
+    assert.equal(mtimePost, mtimePre, "state.json mtime unchanged after CFG-03 abort");
   });
 });
 
