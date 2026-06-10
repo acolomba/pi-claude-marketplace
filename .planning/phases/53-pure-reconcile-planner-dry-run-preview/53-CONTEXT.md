@@ -20,7 +20,15 @@ Success criteria (from ROADMAP):
 <decisions>
 ## Implementation Decisions
 
-### Claude's Discretion
+### Locked (user-decided 2026-06-10)
+- D-53-01: The read-only command is `/claude:plugin preview` (subcommand name: `preview`).
+- D-53-02: Pending-tense status tokens use the future-tense `(will ...)` form: `will add`, `will remove`, `will install`, `will uninstall`, `will enable`, `will disable`. New closed-set tokens (not reuse of past-tense tokens) so the `shouldEmitReloadHint` ladder is never mis-triggered. Renderer + `docs/output-catalog.md` + catalog-uat byte fixtures land in the SAME atomic commit.
+
+### Claude's Discretion (research recommendations adopted)
+- Rendering: one global cascade ordered by name-then-scope (not per-scope fan-out).
+- Empty plan renders as a free-form advisory line (no new token).
+- Autoupdate-flip bucket deferred (a setting, not a materialization transition) — Phase 55/56 territory.
+- `samePlannedSource` extracted from `orchestrators/import/execute.ts` into `domain/source.ts` (pure module) so the planner imports no effectful code; both existing call sites updated, behavior-neutral.
 All implementation choices are at Claude's discretion — discuss phase was skipped per user setting. Use ROADMAP phase goal, success criteria, and codebase conventions to guide decisions.
 
 Inherited constraints from Phases 51-52 (the frozen foundation):
