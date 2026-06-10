@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.12
 milestone_name: Marketplace and Plugin Config Files
-status: executing
-stopped_at: Phase 54 Plan 01 complete
-last_updated: "2026-06-10T18:42:13Z"
-last_activity: 2026-06-10 -- Phase 54 Plan 01 complete
+status: verifying
+stopped_at: Phase 53 complete (both plans)
+last_updated: "2026-06-10T19:40:45.092Z"
+last_activity: 2026-06-10 -- Phase 54 Plan 01 complete (commit ed09e8b)
 progress:
   total_phases: 34
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 8
-  completed_plans: 7
-  percent: 9
+  completed_plans: 8
+  percent: 12
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 
 Phase: 54 (enable-disable-commands) — EXECUTING
 Plan: 2 of 2 (Plan 01 complete)
-Status: Executing Phase 54 — Plan 01 complete, Plan 02 next
+Status: Phase complete — ready for verification
 Last activity: 2026-06-10 -- Phase 54 Plan 01 complete (commit ed09e8b)
 
 ## Performance Metrics
@@ -95,6 +95,7 @@ Last activity: 2026-06-10 -- Phase 54 Plan 01 complete (commit ed09e8b)
 | Phase 53 P01 | ~18m | 1 tasks | 11 files |
 | Phase 53 P02 | ~32m | 2 tasks | 19 files |
 | Phase 54 P01 | ~21m | 2 tasks | 6 files |
+| Phase 54 PP02 | ~47m | 2 tasks | 20 files |
 
 ## Accumulated Context
 
@@ -177,6 +178,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 54]: ENBL-02 planner side closed -- isRecordedButDisabled predicate wires pluginsToEnable from Phase 53's structurally-empty placeholder into a real bucket. Predicate gates on the four-empty-resources arrays AND compatibility.installable === true (D-54-01-A load-bearing guard: without it the Phase 52 SC#4 convergence proof breaks on the populated fixture's soft-degraded entry where installable: false legally co-exists with all-empty resources arrays). DeclaredPluginAccumulator.enable + PluginDiff.enable threaded through; classifyDeclaredPlugin's recorded + declared-enabled branch splits on the predicate (Pitfall 54-6 mutual exclusion: !recorded branch returns BEFORE the enable check, structurally guaranteeing install + enable cannot fire for the same plugin in the same pass). tests/architecture/no-orchestrator-network.test.ts FORBIDDEN_TARGETS armed for orchestrators/plugin/enable-disable.ts (ENOENT-skip keeps gate GREEN until Plan 02 lands the file). Wave 0 RED scaffolds (tests/orchestrators/plugin/enable-disable.test.ts 11 test.skip + tests/edge/handlers/plugin/enable-disable.test.ts 5 test.skip) use dynamic await import(...) inside skipped bodies (D-54-01-B: static @ts-expect-error imports would crash file load under node --test BEFORE test.skip suppression). Existing plan.test.ts helpers updated to populate resources.skills = ["s1"] for steady-state fixtures (D-54-01-C). Phase 53 hand-off TODO comments deleted per source-comment-cleanup-policy. npm run check GREEN 1640 unit + 7 integration. ENBL-01/03/04 closure deferred to Plan 02 (orchestrator + edge handler + catalog amendment atomic commit). -- Plan 54-01.
 - [Phase 53]: DIFF-01 foundation landed (pure planner + types + projection + purity gate) as one atomic byte-neutral commit. New orchestrators/reconcile/{types,plan,notify}.ts with the 7-bucket bidirectional diff (marketplacesToAdd / marketplacesToRemove / pluginsToInstall / pluginsToUninstall / pluginsToEnable / pluginsToDisable / sourceMismatches) plus emptyReconcilePlan factory; planReconcile imports zero effectful surface (architecture grep-gate at tests/architecture/reconcile-planner-purity.test.ts over comment-stripped source enforces this structurally); buildReconcilePreviewNotification mirrors buildImportNotificationMarketplaces using the same MarketplaceBlock / ensureMarketplaceBlock / compareByNameThenScope pattern; placeholder status strings ("added" / "removed" / "failed") so Plan 02 takes the projection's status assignment as the seam where the pending-tense token set lands. samePlannedSource extracted from orchestrators/import/execute.ts:186-216 into domain/source.ts as a sibling export to sourceLogical/parsePluginSource; both call sites import from there; orchestrators/import/execute.ts behavior-preserving (18/18 import tests stayed GREEN byte-identically). Phase 52 SC#4 deferred convergence proof DISCHARGED: tests/orchestrators/reconcile/plan-convergence.test.ts asserts planReconcile(mergeScopeConfigs(buildConfigFromState(state), {}), state, scope) deepEqual emptyReconcilePlan(scope) for both project and user scopes against the populated fixture. pluginsToEnable bucket structurally empty in Phase 53 (Pitfall 53-4; Phase 54 wires the disabled-state check); D-04 consume-time default applied (enabled === undefined includes; only === false excludes). Pitfall 53-3 atomic-supersession discipline preserved -- zero touches to shared/notify.ts / docs/output-catalog.md / catalog-uat FIXTURES / notify-types.test.ts / notify-grammar-invariant.test.ts; Plan 02 owns those bytes. npm run check GREEN 1604/1604 unit + 7/7 integration (Phase 52 baseline 1571 + 33 new tests across 4 new test files). -- Plan 53-01.
 - [Phase 52]: MIG-01 + MIG-02 closed. New persistence/migrate-config.ts (118 lines) exports three symbols: MigrateFirstRunResult interface, pure buildConfigFromState projection (every marketplace + every plugin -- including soft-degraded/installable=false per Pitfall 52-1 -- flat-keyed `${plugin}@${mp}` per D-01 with empty body per D-04; source byte-stable via (mp.source as ParsedSource).raw per SP-7; legacy autoupdate captured only on strict === true / === false arms per D-04+defense-in-depth; schemaVersion: 1 literal per D-11), and migrateFirstRunConfig thin ENOENT-gated orchestrator (loadConfig trichotomy: any status !== 'absent' short-circuits with { migrated:false, entryCount:0 } -- Pitfall 52-5 NEVER overwrites valid OR invalid pre-existing config; on absent arm builds projection + writes through saveConfig inheriting NFR-1 atomicity + NFR-10 containment + CONFIG_VALIDATOR revalidation). Assumption A1 [VERIFIED]: SPLIT-02 architecture test stayed at 1 entry in ALLOWED_CONFIG_JSON_WRITERS (config-io.ts) -- migrate-config.ts routes through saveConfig not atomicWriteJson, so the path-name regex does not match; no allow-list edit needed. Phase 53 owns the planner-level planReconcile no-op convergence proof; Phase 55 owns the load-wiring call site + Pitfall 52-2 (concurrent first-load lock coverage) + Pitfall 52-4 (D-13 gate race). 20/20 new tests GREEN; npm run check GREEN 1571/1571 unit + 7/7 integration. -- Plan 52-01.
+- [Phase ?]: [Phase 54]: ENBL-01..04 closed atomically (Plan 02 commit 37d01ed). New (disabled) closed-set PluginStatus token + PluginDisabledMessage variant + renderer arm; (already enabled) / (already disabled) BENIGN_REASONS additions; PLUGIN_STATUSES 16, STATUS_TOKENS 22, REASONS 31. setPluginEnabled orchestrator delegates re-materialization to installPlugin in orchestrated mode with new pinVersionOverride opt-in (Pitfall 54-4 ENBL-02 version pin); disable branch composes cascadeUnstagePlugin + in-place reset of resources.* arrays. Edge handler parses --local via local scan + rejects unknown long flags. isRecordedButDisabled exported from planner as single source of truth. atomic-supersession discipline preserved -- 20 files in ONE commit. npm run check GREEN 1662 unit + 7 integration. -- Plan 54-02. PHASE 54 COMPLETE.
 
 ### Pending Todos
 
@@ -223,7 +225,7 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-10T17:00:00Z
+Last session: 2026-06-10T19:40:45.071Z
 Stopped At: Phase 53 complete (both plans)
 Resume File: .planning/phases/54-enable-disable-commands/ (Phase 54 plan dir not yet authored)
 

@@ -257,7 +257,7 @@ Declarative, version-controllable config files (`claude-plugins.json` + entry-le
 
 **Wave 2** *(blocked on Wave 1 completion; atomic catalog-amendment lockstep)*
 
-- [ ] 54-02-PLAN.md -- ATOMIC: setPluginEnabled orchestrator + makeEnableDisableHandler edge factory + router/register/completion wiring + (disabled) closed-set token (PLUGIN_STATUSES 15→16, STATUS_TOKENS 21→22) + PluginDisabledMessage variant + renderer arm + (already enabled)/(already disabled) REASONS (29→31) + BENIGN_REASONS additions + docs/output-catalog.md H2 sections + catalog-uat FIXTURES + length-locks + Wave 0 scaffold flips (ENBL-01, ENBL-02, ENBL-03, ENBL-04; D-54-01)
+- [x] 54-02-PLAN.md -- ATOMIC: setPluginEnabled orchestrator + makeEnableDisableHandler edge factory + router/register/completion wiring + (disabled) closed-set token (PLUGIN_STATUSES 15→16, STATUS_TOKENS 21→22) + PluginDisabledMessage variant + renderer arm + (already enabled)/(already disabled) REASONS (29→31) + BENIGN_REASONS additions + docs/output-catalog.md H2 sections + catalog-uat FIXTURES + length-locks + Wave 0 scaffold flips (ENBL-01, ENBL-02, ENBL-03, ENBL-04; D-54-01)
 
 ### Phase 55: Load-Time Reconcile Apply, Notification & Wiring
 
@@ -1100,6 +1100,6 @@ Every error/warning-severity notification now carries a non-empty summary messag
 | 51. Config Schema, Persistence & State Split                        | v1.12     | 3/3 | Complete    | 2026-06-10 |
 | 52. First-Run Migration                                             | v1.12     | 1/1 | Complete    | 2026-06-10 |
 | 53. Pure Reconcile Planner & Dry-Run Preview                        | v1.12     | 2/2 | Complete    | 2026-06-10 |
-| 54. Enable/Disable Commands                                         | v1.12     | 0/? | Not started | --         |
+| 54. Enable/Disable Commands                                         | v1.12     | 2/2 | Complete   | 2026-06-10 |
 | 55. Load-Time Reconcile Apply, Notification & Wiring                | v1.12     | 0/? | Not started | --         |
 | 56. Write-Back Integration & Documentation                          | v1.12     | 0/? | Not started | --         |

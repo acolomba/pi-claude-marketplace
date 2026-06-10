@@ -44,10 +44,10 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Enable/Disable
 
-- [ ] **ENBL-01**: User can run `enable <plugin>@<marketplace>` / `disable <plugin>@<marketplace>` (autoupdate/noautoupdate command shape; scope and `--local` handling consistent with other mutating commands)
-- [ ] **ENBL-02**: A disabled plugin keeps its config entry and version pin, but its Pi artefacts are not materialized after reload
-- [ ] **ENBL-03**: `enable` re-materializes from the cached marketplace clone with no network
-- [ ] **ENBL-04**: Disabled status renders distinct from soft-degraded `unavailable` on list/info surfaces (declared / enabled / available are orthogonal facts)
+- [x] **ENBL-01**: User can run `enable <plugin>@<marketplace>` / `disable <plugin>@<marketplace>` (autoupdate/noautoupdate command shape; scope and `--local` handling consistent with other mutating commands)
+- [x] **ENBL-02**: A disabled plugin keeps its config entry and version pin, but its Pi artefacts are not materialized after reload
+- [x] **ENBL-03**: `enable` re-materializes from the cached marketplace clone with no network
+- [x] **ENBL-04**: Disabled status renders distinct from soft-degraded `unavailable` on list/info surfaces (declared / enabled / available are orthogonal facts)
 
 ### Dry-run
 
@@ -101,10 +101,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WB-02 | Phase 56 | Pending |
 | WB-03 | Phase 56 | Pending |
 | WB-04 | Phase 56 | Pending |
-| ENBL-01 | Phase 54 | Pending |
-| ENBL-02 | Phase 54 | Pending |
-| ENBL-03 | Phase 54 | Pending |
-| ENBL-04 | Phase 54 | Pending |
+| ENBL-01 | Phase 54 | Complete |
+| ENBL-02 | Phase 54 | Complete |
+| ENBL-03 | Phase 54 | Complete |
+| ENBL-04 | Phase 54 | Complete |
 | DIFF-01 | Phase 53 | Closed |
 | DIFF-02 | Phase 53 | Closed |
 
