@@ -6,7 +6,10 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { githubSource, pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
-import { loadConfig } from "../../extensions/pi-claude-marketplace/persistence/config-io.ts";
+import {
+  CONFIG_VALIDATOR,
+  loadConfig,
+} from "../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { mergeScopeConfigs } from "../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -201,6 +204,57 @@ test("MIG-01 forward-tampered autoupdate (string 'yes') is silently dropped", ()
   const entry = cfg.marketplaces?.["mp-tamper"];
   assert.ok(entry);
   assert.equal("autoupdate" in entry, false);
+});
+
+test("MIG-01 NFR-12 regression: raw-less unknown-kind source coerces to its JSON string (never wedges)", () => {
+  // ST-6 shape 3: loadState admits an unknown-kind source object verbatim
+  // WITHOUT checking that `raw` exists (state-io.ts normalizeStoredSource).
+  // Before the guard, the projection emitted { source: undefined }, which
+  // failed CONFIG_VALIDATOR inside saveConfig and wedged first-run migration
+  // permanently (the ENOENT arm re-fired identically on every load).
+  const forwardCompatSource = { kind: "unknown", reason: "future kind" };
+  const state: ExtensionState = {
+    schemaVersion: 1,
+    marketplaces: {
+      "mp-forward": {
+        name: "mp-forward",
+        scope: "user",
+        source: forwardCompatSource,
+        addedFromCwd: "/cwd",
+        manifestPath: "/abs/manifest.json",
+        marketplaceRoot: "/abs/root",
+        plugins: {},
+      } as unknown as ExtensionState["marketplaces"][string],
+    },
+  };
+  const cfg = buildConfigFromState(state);
+  // Policy: coerce the record to its JSON string (objectRaw precedent in
+  // domain/source.ts) -- the marketplace is preserved, not dropped, and the
+  // emitted source is always a string. NOTE: sourceLogical() is NOT a safe
+  // fallback here -- its `unknown` arm returns `.raw`, i.e. undefined.
+  assert.equal(cfg.marketplaces?.["mp-forward"]?.source, JSON.stringify(forwardCompatSource));
+  // The wedge fired as a CONFIG_VALIDATOR failure inside saveConfig; pin
+  // validity of the projection itself.
+  assert.equal(CONFIG_VALIDATOR.Check(cfg), true);
+});
+
+test("MIG-01 NFR-12 regression: unknown-kind source WITH string raw recovers raw byte-stably", () => {
+  const state: ExtensionState = {
+    schemaVersion: 1,
+    marketplaces: {
+      "mp-forward-raw": {
+        name: "mp-forward-raw",
+        scope: "user",
+        source: { kind: "unknown", raw: "future://thing", reason: "future kind" },
+        addedFromCwd: "/cwd",
+        manifestPath: "/abs/manifest.json",
+        marketplaceRoot: "/abs/root",
+        plugins: {},
+      } as unknown as ExtensionState["marketplaces"][string],
+    },
+  };
+  const cfg = buildConfigFromState(state);
+  assert.equal(cfg.marketplaces?.["mp-forward-raw"]?.source, "future://thing");
 });
 
 test("MIG-01 Pitfall 52-6: same-named plugin across two marketplaces does not collide", async () => {

@@ -49,10 +49,17 @@ export interface MigrateFirstRunResult {
  * at consume time).
  *
  * `source` is recovered byte-stably via `(mp.source as ParsedSource).raw`
- * (SP-7 verbatim user input). `autoupdate` is captured per D-13 via the
- * SPLIT-01 cast pattern; only an exact `=== true` or `=== false` reaches
- * the projection (defense-in-depth: any forward-tampered non-boolean is
- * silently dropped).
+ * (SP-7 verbatim user input). Defense-in-depth: `loadState`'s ST-6 funnel
+ * admits forward-compat `unknown`-kind source objects verbatim (NFR-12),
+ * which may lack a string `raw`; for those the projection coerces the
+ * record to its JSON string (the same `objectRaw` policy the
+ * `domain/source.ts` parse funnel applies to raw-less objects) so the
+ * emitted `source` is ALWAYS a string -- a single forward-compat record
+ * must never wedge first-run migration for the whole scope, and no
+ * marketplace is ever silently dropped from the projection. `autoupdate`
+ * is captured per D-13 via the SPLIT-01 cast pattern; only an exact
+ * `=== true` or `=== false` reaches the projection (defense-in-depth: any
+ * forward-tampered non-boolean is silently dropped).
  *
  * Return shape includes `schemaVersion: 1` per D-11 (self-documenting).
  */
@@ -62,7 +69,21 @@ export function buildConfigFromState(state: ExtensionState): ScopeConfig {
 
   for (const [mpName, mp] of Object.entries(state.marketplaces)) {
     // SP-7 / Pitfall 52-3: the raw verbatim user input is the contract.
-    const sourceRaw = (mp.source as ParsedSource).raw;
+    // Defense-in-depth: ST-6 admits unknown-kind source objects without a
+    // string `raw` (NFR-12 forward-compat); coerce those to their JSON
+    // string so the projection NEVER emits a non-string source (a schema
+    // failure here would wedge migration permanently -- the file is never
+    // created, so the ENOENT arm re-fires and fails identically forever).
+    // Note: sourceLogical() is NOT a safe fallback -- its `unknown` arm
+    // returns `.raw`, i.e. undefined for exactly this shape.
+    // The Partial cast (vs a bare ParsedSource cast) keeps the guard
+    // type-honest: STATE_SCHEMA declares `source: Type.Unknown()`, so `raw`
+    // genuinely may be absent here.
+    const storedSource = mp.source as Partial<ParsedSource> | null | undefined;
+    const sourceRaw =
+      typeof storedSource?.raw === "string"
+        ? storedSource.raw
+        : JSON.stringify(storedSource ?? null);
     // SPLIT-01 / D-13: legacy field, not on STATE_SCHEMA but preserved
     // in-memory on the first load by the gate-closed migrate.ts scrub.
     const legacyAutoupdate = (mp as unknown as Record<string, unknown>).autoupdate;
