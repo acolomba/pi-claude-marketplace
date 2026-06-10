@@ -4,8 +4,8 @@ milestone: v1.12
 milestone_name: Marketplace and Plugin Config Files
 status: planning
 stopped_at: Phase 51 Plan 01 complete
-last_updated: "2026-06-10T10:45:19.313Z"
-last_activity: 2026-06-10 -- Phase 51 Plan 01 (config-io seam + ScopedLocations paths) shipped
+last_updated: "2026-06-10T11:30:38.281Z"
+last_activity: 2026-06-10
 progress:
   total_phases: 34
   completed_phases: 1
@@ -24,16 +24,16 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 
 ## Current Position
 
-Phase: 51 (config-schema-persistence-state-split) — EXECUTING
-Plan: 3 of 3
+Phase: 52
+Plan: Not started
 Status: Plan 01 complete; ready to plan Plan 02 (MergedConfig + STATE_SCHEMA carve-out)
-Last activity: 2026-06-10 -- Phase 51 Plan 01 (config-io seam + ScopedLocations paths) shipped
+Last activity: 2026-06-10
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 169 (sum of recorded phase counts below; some early v1.0-v1.2 phases were archived without a recorded plan count)
+- Total plans completed: 172 (sum of recorded phase counts below; some early v1.0-v1.2 phases were archived without a recorded plan count)
 
 **Plans by phase:**
 

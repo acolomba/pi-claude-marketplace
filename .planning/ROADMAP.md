@@ -175,7 +175,7 @@ Declarative, version-controllable config files (`claude-plugins.json` + entry-le
   4. Desired-state and user-settings fields (marketplace source/autoupdate, plugin enabled/version-pin intent) live only in the config schema, and `state.json` retains only machine bookkeeping (materialized artefact records, resolved versions, timestamps) under `pi-claude-marketplace/`; a `STATE_SCHEMA` field-relocation (and any `schemaVersion` decision) is documented and an old `state.json` still loads (SPLIT-01).
   5. The write seams are split by ownership: machine records are written only to the internal state file and the user config is written only via command write-back or one-time migration -- enforced by an architecture test so no reconcile-path code can write the user config (SPLIT-02); config + internal-file paths are added to the NFR-10 containment allow-list.
 
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 
 **Wave 1**
 
@@ -1077,7 +1077,7 @@ Every error/warning-severity notification now carries a non-empty summary messag
 | 48. Marketplace-Ops Attribution                                     | v1.10     | 3/3 | Complete    | 2026-06-08 |
 | 49. Cross-Op Convergence & GREEN-Gate Close                         | v1.10     | 3/3 | Complete    | 2026-06-08 |
 | 50. Notification Summary-Line Grammar                               | v1.11     | 1/1 | Complete    | 2026-06-08 |
-| 51. Config Schema, Persistence & State Split                        | v1.12     | 3/3 | Complete   | 2026-06-10 |
+| 51. Config Schema, Persistence & State Split                        | v1.12     | 3/3 | Complete    | 2026-06-10 |
 | 52. First-Run Migration                                             | v1.12     | 0/? | Not started | --         |
 | 53. Pure Reconcile Planner & Dry-Run Preview                        | v1.12     | 0/? | Not started | --         |
 | 54. Enable/Disable Commands                                         | v1.12     | 0/? | Not started | --         |
