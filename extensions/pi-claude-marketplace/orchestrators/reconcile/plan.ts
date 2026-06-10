@@ -15,12 +15,12 @@
 // is declared-and-enabled (D-04 consume-time default -- the absent field
 // includes, only an explicit `false` excludes).
 //
-// Phase 53 hand-off (Pitfall 53-4): `pluginsToEnable` is structurally
-// empty for any Phase 53 input. The state model has no "currently
-// disabled" marker on a recorded plugin, so the planner cannot
-// distinguish recorded-and-enabled from recorded-and-locally-disabled.
-// Phase 54 will wire this bucket to a real `state.disabled === true`
-// check.
+// ENBL-02 (Phase 54 Plan 01): the Phase 53→54 hand-off closes here.
+// `isRecordedButDisabled(record)` reads the empty-resources marker (all
+// four `resources.*` arrays empty -- A1; SPLIT-01 preserved) so a
+// recorded-but-disabled plugin paired with config `enabled !== false`
+// lands in `pluginsToEnable` while the install branch stays mutually
+// exclusive (Pitfall 54-6).
 //
 // Plugin-key parser (D-01 / Pitfall 52-6 / Pitfall 53-?): flat-keyed
 // plugin entries are parsed by `lastIndexOf("@")` so a plugin name
@@ -54,6 +54,7 @@ import type {
   PlannedMarketplaceAdd,
   PlannedMarketplaceRemove,
   PlannedPluginDisable,
+  PlannedPluginEnable,
   PlannedPluginInstall,
   PlannedPluginUninstall,
   PlannedSourceMismatch,
@@ -172,6 +173,7 @@ function diffMarketplaces(
 interface PluginDiff {
   readonly install: readonly PlannedPluginInstall[];
   readonly uninstall: readonly PlannedPluginUninstall[];
+  readonly enable: readonly PlannedPluginEnable[];
   readonly disable: readonly PlannedPluginDisable[];
   readonly dangling: readonly PlannedSourceMismatch[];
 }
@@ -189,14 +191,54 @@ function buildRecordedKeys(state: ExtensionState): Set<string> {
 
 interface DeclaredPluginAccumulator {
   readonly install: PlannedPluginInstall[];
+  readonly enable: PlannedPluginEnable[];
   readonly disable: PlannedPluginDisable[];
   readonly dangling: PlannedSourceMismatch[];
 }
 
 /**
- * Classify a single declared plugin entry into install / disable / dangling
- * buckets (or a steady-state no-op). Extracted out of `diffPlugins` to keep
- * the cognitive complexity of the iteration body low.
+ * ENBL-02 / Pattern 4 / A1 -- the empty-resources marker.
+ *
+ * A recorded plugin whose four `resources.{skills,prompts,agents,mcpServers}`
+ * arrays are ALL empty AND whose `compatibility.installable === true` is
+ * treated as currently disabled. The
+ * `orchestrators/plugin/install.ts::statePhase` (lines 617-664) is the only
+ * code path that writes `resources.*`; it copies from `c.stagedXxxNames`
+ * which the resolver populates from the plugin's components. The
+ * `requireInstallable` gate rules out the zero-component installable
+ * degenerate, so an INSTALLABLE plugin always has at least one populated
+ * array.
+ *
+ * The `installable === true` guard is load-bearing (Rule 2 deviation from
+ * the original plan's `behavior` block): a soft-degraded
+ * (`installable: false`) plugin -- e.g. one whose companion extension is
+ * missing -- legally records all four resource arrays empty. Without the
+ * guard, the convergence proof
+ * (`tests/orchestrators/reconcile/plan-convergence.test.ts`) would
+ * misclassify the `soft-degraded` fixture entry in
+ * `state-populated-mixed.json` as `pluginsToEnable`, breaking the Phase 52
+ * SC#4 no-op proof. Phase 54 Plan 02's disable orchestrator empties all
+ * four arrays (while keeping the version pin -- D-04 / ENBL-02 -- AND
+ * preserving the previously-known `installable: true` flag), so the
+ * empty-resources + installable-true intersection is the unambiguous
+ * "currently disabled" marker. SPLIT-01 preserved -- no new schema field.
+ */
+function isRecordedButDisabled(
+  record: ExtensionState["marketplaces"][string]["plugins"][string],
+): boolean {
+  return (
+    record.compatibility.installable &&
+    record.resources.skills.length === 0 &&
+    record.resources.prompts.length === 0 &&
+    record.resources.agents.length === 0 &&
+    record.resources.mcpServers.length === 0
+  );
+}
+
+/**
+ * Classify a single declared plugin entry into install / enable / disable /
+ * dangling buckets (or a steady-state no-op). Extracted out of `diffPlugins`
+ * to keep the cognitive complexity of the iteration body low.
  */
 function classifyDeclaredPlugin(
   acc: DeclaredPluginAccumulator,
@@ -205,6 +247,7 @@ function classifyDeclaredPlugin(
   declared: MergedConfig["plugins"][string],
   recordedKeys: ReadonlySet<string>,
   declaredMarketplaces: MergedConfig["marketplaces"],
+  state: ExtensionState,
 ): void {
   const parsed = parsePluginKey(key);
   if (parsed === undefined) {
@@ -257,12 +300,19 @@ function classifyDeclaredPlugin(
 
   if (!recorded) {
     acc.install.push({ scope, plugin, marketplace, configSource: declared.source });
+    return;
   }
-  // Declared-enabled and recorded: steady state, no action.
-  //
-  // Phase 54 hand-off (Pitfall 53-4): this branch will later split on a
-  // `state.disabled === true` marker to populate `pluginsToEnable`. In
-  // Phase 53 the marker does not exist, so the bucket stays empty.
+
+  // Recorded + declared-enabled: split on the empty-resources marker
+  // (ENBL-02 / isRecordedButDisabled). Pitfall 54-6 mutual exclusion: the
+  // install branch above already returned for `!recorded`, so a plugin
+  // CAN'T land in both `install` and `enable` in the same pass.
+  const record = state.marketplaces[marketplace]?.plugins[plugin];
+  if (record !== undefined && isRecordedButDisabled(record)) {
+    acc.enable.push({ scope, plugin, marketplace });
+    return;
+  }
+  // Declared-enabled, recorded, populated: steady state, no action.
 }
 
 /**
@@ -301,11 +351,11 @@ function diffPlugins(
   scope: Scope,
   marketplaceDiff: MarketplaceDiff,
 ): PluginDiff {
-  const acc: DeclaredPluginAccumulator = { install: [], disable: [], dangling: [] };
+  const acc: DeclaredPluginAccumulator = { install: [], enable: [], disable: [], dangling: [] };
   const recordedKeys = buildRecordedKeys(state);
 
   for (const [key, declared] of Object.entries(merged.plugins)) {
-    classifyDeclaredPlugin(acc, scope, key, declared, recordedKeys, merged.marketplaces);
+    classifyDeclaredPlugin(acc, scope, key, declared, recordedKeys, merged.marketplaces, state);
   }
 
   const uninstall = buildUninstallBucket(merged, state, scope, marketplaceDiff);
@@ -313,6 +363,7 @@ function diffPlugins(
   return {
     install: acc.install,
     uninstall,
+    enable: acc.enable,
     disable: acc.disable,
     dangling: acc.dangling,
   };
@@ -341,6 +392,7 @@ export function planReconcile(
   const totalRemoves = marketplaceDiff.remove.length;
   const totalInstalls = pluginDiff.install.length;
   const totalUninstalls = pluginDiff.uninstall.length;
+  const totalEnables = pluginDiff.enable.length;
   const totalDisables = pluginDiff.disable.length;
   const totalMismatches = marketplaceDiff.mismatches.length + pluginDiff.dangling.length;
 
@@ -349,6 +401,7 @@ export function planReconcile(
     totalRemoves === 0 &&
     totalInstalls === 0 &&
     totalUninstalls === 0 &&
+    totalEnables === 0 &&
     totalDisables === 0 &&
     totalMismatches === 0
   ) {
@@ -361,7 +414,7 @@ export function planReconcile(
     marketplacesToRemove: marketplaceDiff.remove,
     pluginsToInstall: pluginDiff.install,
     pluginsToUninstall: pluginDiff.uninstall,
-    pluginsToEnable: [],
+    pluginsToEnable: pluginDiff.enable,
     pluginsToDisable: pluginDiff.disable,
     sourceMismatches: [...marketplaceDiff.mismatches, ...pluginDiff.dangling],
   };

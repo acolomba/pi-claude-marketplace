@@ -33,7 +33,12 @@ function stateWithOneGithubMarketplace(
       version: "1.0.0",
       resolvedSource: "/abs/whatever",
       compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-      resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+      // ENBL-02: a non-empty resources array signals "currently installed
+      // and enabled" (the install path's statePhase populates at least one
+      // array for any installable plugin per `requireInstallable`). Tests
+      // that need a "currently disabled" record use `stateWithDisabledRecord`
+      // (all four arrays empty -- A1).
+      resources: { skills: ["s1"], prompts: [], agents: [], mcpServers: [] },
       installedAt: "2025-01-01T00:00:00.000Z",
       updatedAt: "2025-01-01T00:00:00.000Z",
     };
@@ -66,7 +71,12 @@ function stateWithOnePathMarketplace(
       version: "1.0.0",
       resolvedSource: "/abs/whatever",
       compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-      resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+      // ENBL-02: a non-empty resources array signals "currently installed
+      // and enabled" (the install path's statePhase populates at least one
+      // array for any installable plugin per `requireInstallable`). Tests
+      // that need a "currently disabled" record use `stateWithDisabledRecord`
+      // (all four arrays empty -- A1).
+      resources: { skills: ["s1"], prompts: [], agents: [], mcpServers: [] },
       installedAt: "2025-01-01T00:00:00.000Z",
       updatedAt: "2025-01-01T00:00:00.000Z",
     };
@@ -266,10 +276,11 @@ test("Plugin cell (not declared, recorded): 1 PlannedPluginUninstall", () => {
   });
 });
 
-test("Plugin cell (declared+enabled-true, recorded, future-Phase-54-disabled): pluginsToEnable structurally empty (Pitfall 53-4)", () => {
-  // Phase 53 cannot distinguish recorded-and-enabled from
-  // recorded-and-locally-disabled (no `state.disabled` marker exists yet).
-  // The bucket is empty for every legal Phase 53 input -- Phase 54 wires it.
+test("Plugin cell (declared+enabled-true, recorded, non-empty resources): pluginsToEnable empty (steady-state preserved)", () => {
+  // Phase 54 ENBL-02: the empty-resources arrays serve as the implicit
+  // "currently disabled" marker (A1; SPLIT-01 preserved -- no schema bump).
+  // A recorded plugin with non-empty resources is steady-state, NOT a
+  // candidate for the enable bucket.
   const state = stateWithOneGithubMarketplace("mp", "acme/tools", ["cr"]);
   const merged = mergeScopeConfigs(
     configWith({ mp: { source: "acme/tools" } }, { "cr@mp": { enabled: true } }),
@@ -277,6 +288,132 @@ test("Plugin cell (declared+enabled-true, recorded, future-Phase-54-disabled): p
   );
   const plan = planReconcile(merged, state, "project");
   assert.equal(plan.pluginsToEnable.length, 0);
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// Phase 54 Plan 01: ENBL-02 recorded-but-disabled (empty-resources marker)
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Build a state with a recorded plugin whose four resources arrays are all
+ * empty -- the implicit "currently disabled" marker (Pattern 4 / A1). The
+ * statePhase in `orchestrators/plugin/install.ts:617-664` only writes empty
+ * arrays through the disable path; an installable plugin always populates
+ * at least one component (the resolver's `requireInstallable` gate rules
+ * out the zero-component degenerate).
+ */
+function stateWithDisabledRecord(
+  mpName: string,
+  rawSource: string,
+  plugin: string,
+): ExtensionState {
+  return {
+    schemaVersion: 1,
+    marketplaces: {
+      [mpName]: {
+        name: mpName,
+        scope: "project",
+        source: githubSource(rawSource),
+        addedFromCwd: "/some/cwd",
+        manifestPath: "/abs/manifest",
+        marketplaceRoot: "/abs/root",
+        plugins: {
+          [plugin]: {
+            version: "1.0.0",
+            resolvedSource: "/abs/whatever",
+            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            // All four arrays empty -- the disabled marker per A1.
+            resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+            installedAt: "2025-01-01T00:00:00.000Z",
+            updatedAt: "2025-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  };
+}
+
+test("ENBL-02 (a): recorded + empty resources + enabled!==false -> pluginsToEnable non-empty (isRecordedButDisabled fires)", () => {
+  const state = stateWithDisabledRecord("mp", "acme/tools", "cr");
+  const merged = mergeScopeConfigs(
+    configWith({ mp: { source: "acme/tools" } }, { "cr@mp": { enabled: true } }),
+    {},
+  );
+  const plan = planReconcile(merged, state, "project");
+  assert.equal(plan.pluginsToEnable.length, 1);
+  assert.deepEqual(plan.pluginsToEnable[0], {
+    scope: "project",
+    plugin: "cr",
+    marketplace: "mp",
+  });
+  // Steady-state buckets stay empty.
+  assert.equal(plan.pluginsToInstall.length, 0);
+  assert.equal(plan.pluginsToUninstall.length, 0);
+  assert.equal(plan.pluginsToDisable.length, 0);
+});
+
+test("ENBL-02 (b): recorded + NON-empty resources + enabled!==false -> pluginsToEnable empty (steady state preserved)", () => {
+  const state = stateWithOneGithubMarketplace("mp", "acme/tools", ["cr"]);
+  const merged = mergeScopeConfigs(
+    configWith({ mp: { source: "acme/tools" } }, { "cr@mp": { enabled: true } }),
+    {},
+  );
+  const plan = planReconcile(merged, state, "project");
+  assert.equal(plan.pluginsToEnable.length, 0);
+  assert.deepEqual(plan, emptyReconcilePlan("project"));
+});
+
+test("ENBL-02 (c): recorded + empty resources + enabled===false -> pluginsToDisable (NOT pluginsToEnable, disable branch still owns)", () => {
+  // The disable branch (Phase 53) still applies when enabled===false even
+  // for an already-empty-resources record. Phase 55's apply path makes this
+  // a no-op at the artefact level, but the planner classifies the entry as
+  // a disable so the config<->state divergence is surfaced.
+  const state = stateWithDisabledRecord("mp", "acme/tools", "cr");
+  const merged = mergeScopeConfigs(
+    configWith({ mp: { source: "acme/tools" } }, { "cr@mp": { enabled: false } }),
+    {},
+  );
+  const plan = planReconcile(merged, state, "project");
+  assert.equal(plan.pluginsToEnable.length, 0);
+  assert.equal(plan.pluginsToDisable.length, 1);
+  assert.deepEqual(plan.pluginsToDisable[0], {
+    scope: "project",
+    plugin: "cr",
+    marketplace: "mp",
+  });
+});
+
+test("ENBL-02 (d): NOT recorded + enabled!==false -> pluginsToInstall ONLY, NEVER both (Pitfall 54-6 mutual exclusion)", () => {
+  // A NOT-recorded plugin lands in pluginsToInstall (not pluginsToEnable).
+  // The recorded-but-disabled check is gated on `recorded === true` so the
+  // install branch and the enable branch are structurally mutually
+  // exclusive for the same plugin in the same planner pass.
+  const state = stateWithOneGithubMarketplace("mp", "acme/tools");
+  const merged = mergeScopeConfigs(
+    configWith({ mp: { source: "acme/tools" } }, { "cr@mp": { enabled: true } }),
+    {},
+  );
+  const plan = planReconcile(merged, state, "project");
+  assert.equal(plan.pluginsToInstall.length, 1);
+  assert.equal(plan.pluginsToEnable.length, 0);
+  const ins = plan.pluginsToInstall[0];
+  assert.ok(ins);
+  assert.equal(ins.plugin, "cr");
+});
+
+test("ENBL-02 (e): back-to-back planReconcile against same inputs returns deepEqual plans (purity preserved across enable branch)", () => {
+  const state = stateWithDisabledRecord("mp", "acme/tools", "cr");
+  const merged = mergeScopeConfigs(
+    configWith({ mp: { source: "acme/tools" } }, { "cr@mp": { enabled: true } }),
+    {},
+  );
+  const plan1 = planReconcile(merged, state, "project");
+  const plan2 = planReconcile(merged, state, "project");
+  assert.deepEqual(plan1, plan2);
+  // Ensure both runs produced the non-empty bucket (guards against an
+  // accidental same-empty-shape false positive).
+  assert.equal(plan1.pluginsToEnable.length, 1);
+  assert.equal(plan2.pluginsToEnable.length, 1);
 });
 
 // ──────────────────────────────────────────────────────────────────────────

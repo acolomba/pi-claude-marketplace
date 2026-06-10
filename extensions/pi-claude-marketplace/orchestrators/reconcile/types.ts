@@ -80,11 +80,13 @@ export interface PlannedPluginUninstall {
 /**
  * Planned enable of a plugin declared+enabled but locally disabled in state.
  *
- * Phase 53 produces this bucket as STRUCTURALLY EMPTY (Pitfall 53-4): the
- * Phase 53 state model has no "currently disabled" marker on a recorded
- * plugin, so the planner cannot distinguish recorded-and-enabled from
- * recorded-and-locally-disabled. Phase 54 introduces the marker and wires
- * this bucket to a real `state.disabled === true` check.
+ * ENBL-02 (Phase 54 Plan 01): the planner detects a "currently disabled"
+ * recorded plugin via the empty-resources marker -- all four
+ * `resources.{skills,prompts,agents,mcpServers}` arrays empty (A1; SPLIT-01
+ * preserved, no schema bump). When such a record is paired with a config
+ * entry that has `enabled !== false`, the entry lands in this bucket so
+ * Phase 55's apply path can re-materialize the artefacts from cache (no
+ * network, NFR-5).
  */
 export interface PlannedPluginEnable {
   readonly scope: Scope;

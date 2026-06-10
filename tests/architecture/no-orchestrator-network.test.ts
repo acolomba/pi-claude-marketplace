@@ -60,6 +60,11 @@ const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
   "extensions/pi-claude-marketplace/orchestrators/reconcile/preview.ts",
   "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts",
   "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts",
+  // ENBL-03 / Phase 54 Plan 02: the enable/disable orchestrator
+  // re-materializes from cache (Pitfall 54-3) -- NO network. Armed in
+  // Plan 01 so the gate activates the moment Plan 02 creates the file
+  // (the ENOENT-skip path keeps this GREEN until then).
+  "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
 ];
 
 const FORBIDDEN_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
