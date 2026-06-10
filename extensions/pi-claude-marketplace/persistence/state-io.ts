@@ -63,12 +63,19 @@ const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
 const MARKETPLACE_RECORD_SCHEMA = Type.Object({
   name: Type.String(),
   scope: Type.Union([Type.Literal("user"), Type.Literal("project")]),
+  // D-14: `source` KEEPS on the state record (materialized machine fact). The
+  // user-authored desired-state `source` lives on `CONFIG_SCHEMA` in
+  // `persistence/config-io.ts`; the two are deliberately separate per the
+  // ownership split.
   source: Type.Unknown(),
   addedFromCwd: Type.String(),
   manifestPath: Type.String(),
   marketplaceRoot: Type.String(),
   lastUpdatedAt: Type.Optional(Type.String()),
-  autoupdate: Type.Optional(Type.Boolean()),
+  // SPLIT-01 / D-12: `autoupdate` field REMOVED from MARKETPLACE_RECORD_SCHEMA.
+  // It lives in CONFIG_SCHEMA (per-marketplace config entry) now. Legacy
+  // state.json that still has the field loads cleanly via typebox's lenient
+  // default; the D-13-gated scrub in migrate.ts removes it post-migration.
   plugins: Type.Record(Type.String(), PLUGIN_INSTALL_RECORD_SCHEMA),
 });
 
@@ -171,8 +178,23 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
     });
   }
 
-  // ST-4 / ST-5: normalize legacy records.
-  const { marketplaces, mutated } = migrateLegacyMarketplaceRecords(parsed, extensionRoot);
+  // ST-4 / ST-5 / D-13: normalize legacy records. The third argument is the
+  // scope's `claude-plugins.json` path, used as the D-13 ORDERING RAIL: the
+  // `autoupdate` scrub fires only when that config file already exists,
+  // preserving the legacy field on the first load before Phase 52's
+  // first-run migration has captured it. `extensionRoot` is
+  // `<scopeRoot>/pi-claude-marketplace`, so `path.dirname(extensionRoot)`
+  // is `<scopeRoot>` and the config sits as a sibling at
+  // `<scopeRoot>/claude-plugins.json` -- this matches the `locationsFor`
+  // construction in `persistence/locations.ts` byte-for-byte. We do NOT
+  // import `locationsFor` here because the external `loadState(extensionRoot)`
+  // signature MUST stay unchanged for orchestrator callers.
+  const configJsonPath = path.join(path.dirname(extensionRoot), "claude-plugins.json");
+  const { marketplaces, mutated } = migrateLegacyMarketplaceRecords(
+    parsed,
+    extensionRoot,
+    configJsonPath,
+  );
 
   // ST-6: revalidate stored source records through the SAME factories used at
   // parse time. Three legal storage shapes:

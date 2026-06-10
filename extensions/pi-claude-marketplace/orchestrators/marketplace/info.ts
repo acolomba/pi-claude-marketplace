@@ -65,7 +65,10 @@ async function buildBlock(record: MarketplaceRecord): Promise<MarketplaceInfoMes
   // The renderer gates `last_updated:` line emission on
   // `sourceKind === "github"` AND `lastUpdatedAt !== undefined`.
   const details: MarketplaceInfoMessage["details"] = {
-    autoupdate: record.autoupdate ?? false,
+    // SPLIT-01: autoupdate carved out of MARKETPLACE_RECORD_SCHEMA in Phase 51-02;
+    // reads autoupdate from the state record via cast until Phase 54-56 rewires
+    // this site to read from the merged config (CFG-02). D-04: undefined === false.
+    autoupdate: (record as unknown as Record<string, unknown>).autoupdate === true,
     ...(record.lastUpdatedAt !== undefined && { lastUpdatedAt: record.lastUpdatedAt }),
   };
 
@@ -116,7 +119,10 @@ function buildManifestFailureMessage(
     kind: "plugin-info",
     marketplaceName: record.name,
     marketplaceScope: record.scope,
-    marketplaceDetails: { autoupdate: record.autoupdate ?? false },
+    // SPLIT-01: see comment above; cast read until Phase 54-56 rewires to MergedConfig.
+    marketplaceDetails: {
+      autoupdate: (record as unknown as Record<string, unknown>).autoupdate === true,
+    },
     plugin: {
       status: "failed",
       name: record.name,

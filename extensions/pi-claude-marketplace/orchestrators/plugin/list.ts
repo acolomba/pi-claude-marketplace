@@ -533,8 +533,12 @@ async function buildMarketplaceMessage(args: {
   // reference: every `/claude:plugin list` fixture at
   // docs/output-catalog.md:139-263 has `details: { autoupdate: true }` --
   // no `lastUpdatedAt` field.
+  // SPLIT-01: autoupdate carved out of MARKETPLACE_RECORD_SCHEMA in Phase 51-02;
+  // cast read until Phase 54-56 rewires to MergedConfig (CFG-02). D-04: undefined === false.
   const detailsField: { readonly details?: { autoupdate: boolean } } =
-    mpRecord.autoupdate === true ? { details: { autoupdate: true } } : {};
+    (mpRecord as unknown as Record<string, unknown>).autoupdate === true
+      ? { details: { autoupdate: true } }
+      : {};
 
   return {
     mp: {

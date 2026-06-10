@@ -65,13 +65,17 @@ export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<v
       //  notify (list surface emits neither).
       // - Reference: catalog UAT `mixed-scopes` fixture (binding
       //   `<autoupdate>` + `<last-updated <iso>>` tokens).
+      // SPLIT-01: autoupdate carved out of MARKETPLACE_RECORD_SCHEMA in Phase 51-02;
+      // cast reads until Phase 54-56 rewires this site to the merged config (CFG-02).
+      // D-04: undefined === false.
+      const recordAutoupdate = (record as unknown as Record<string, unknown>).autoupdate;
       marketplaces.push({
         name: record.name,
         scope: record.scope,
-        ...(record.autoupdate !== undefined || record.lastUpdatedAt !== undefined
+        ...(recordAutoupdate !== undefined || record.lastUpdatedAt !== undefined
           ? {
               details: {
-                autoupdate: record.autoupdate ?? false,
+                autoupdate: recordAutoupdate === true,
                 ...(record.lastUpdatedAt !== undefined && {
                   lastUpdatedAt: record.lastUpdatedAt,
                 }),

@@ -98,6 +98,8 @@ function makeBootstrapMarketplaceRecord(
   // The bootstrap target name; matches the manifest name field served
   // by the test fixture at
   // tests/orchestrators/plugin/_fixtures/claude-plugins-official.
+  // SPLIT-01: autoupdate carved out of MARKETPLACE_RECORD_SCHEMA in Phase 51-02.
+  // Test fixture seeds autoupdate via cast until Phase 54-56 rewires to MergedConfig (CFG-02).
   return {
     name: "claude-plugins-official",
     scope: "user",
@@ -111,7 +113,7 @@ function makeBootstrapMarketplaceRecord(
     marketplaceRoot: cwd,
     plugins: {},
     autoupdate,
-  };
+  } as unknown as ExtensionState["marketplaces"][string];
 }
 
 function fixtureClaudePluginsOfficial(): string {
@@ -138,7 +140,8 @@ test("bootstrap (clean state): adds marketplace + enables autoupdate; two notifi
     const recorded = userState.marketplaces["claude-plugins-official"];
     assert.ok(recorded);
     assert.equal(recorded.scope, "user");
-    assert.equal(recorded.autoupdate, true);
+    // SPLIT-01: read autoupdate via cast (carved out in Phase 51-02).
+    assert.equal((recorded as unknown as Record<string, unknown>).autoupdate, true);
 
     // Exactly two notifications in order. SNM-33 / D-22-01 / D-22-03:
     // both are marketplace-status-only blocks (no plugin rows), so NEITHER
@@ -221,7 +224,12 @@ test("bootstrap (half-configured: autoupdate off): swallows duplicate-name, flip
     await bootstrapClaudePlugin({ ctx, pi, cwd, gitOps });
 
     const after = await loadState(userLocations.extensionRoot);
-    assert.equal(after.marketplaces["claude-plugins-official"]?.autoupdate, true);
+    // SPLIT-01: read autoupdate via cast (carved out in Phase 51-02).
+    assert.equal(
+      (after.marketplaces["claude-plugins-official"] as unknown as Record<string, unknown>)
+        ?.autoupdate,
+      true,
+    );
     assert.equal(notifications.length, 1);
     // SNM-33 / D-22-03: UXG-04 `<autoupdate>` marker-as-outcome header-only
     // block, NO `/reload` trailer (the autoupdate flag is not a Pi-visible

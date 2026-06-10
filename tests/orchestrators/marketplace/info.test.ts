@@ -33,7 +33,18 @@ import { getMarketplaceInfo } from "../../../extensions/pi-claude-marketplace/or
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
+import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+
+// SPLIT-01: autoupdate carved out of MARKETPLACE_RECORD_SCHEMA in Phase 51-02.
+// Test fixtures still seed autoupdate via this cast helper until Phase 54-56
+// rewires the autoupdate write-path to claude-plugins.json (CFG-02).
+function withAutoupdate(
+  rec: ExtensionState["marketplaces"][string],
+  autoupdate: boolean,
+): ExtensionState["marketplaces"][string] {
+  return { ...rec, autoupdate } as unknown as ExtensionState["marketplaces"][string];
+}
 
 interface NotifyRecord {
   message: string;
@@ -112,17 +123,19 @@ test("INFO-01: single-scope github source with autoupdate + lastUpdatedAt + desc
     await saveState(userLocations.extensionRoot, {
       schemaVersion: 1,
       marketplaces: {
-        "claude-plugins-official": {
-          name: "claude-plugins-official",
-          scope: "user",
-          source: githubSource("https://github.com/anthropics/claude-plugins-official#main"),
-          addedFromCwd: cwd,
-          manifestPath,
-          marketplaceRoot: cwd,
-          plugins: {},
-          autoupdate: true,
-          lastUpdatedAt: "2026-06-03T00:00:00Z",
-        },
+        "claude-plugins-official": withAutoupdate(
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            source: githubSource("https://github.com/anthropics/claude-plugins-official#main"),
+            addedFromCwd: cwd,
+            manifestPath,
+            marketplaceRoot: cwd,
+            plugins: {},
+            lastUpdatedAt: "2026-06-03T00:00:00Z",
+          },
+          true,
+        ),
       },
     });
 
@@ -185,18 +198,20 @@ test("INFO-01: single-scope path source renders `path: <abs>`; NO `last_updated:
     await saveState(projectLocations.extensionRoot, {
       schemaVersion: 1,
       marketplaces: {
-        "local-mp": {
-          name: "local-mp",
-          scope: "project",
-          source: pathSource("/abs/path/to/mp"),
-          addedFromCwd: cwd,
-          manifestPath,
-          // NOTE: `marketplaceRoot` is what the renderer emits on the
-          // `path:` line per the orchestrator's path-source projection.
-          marketplaceRoot: "/abs/path/to/mp",
-          plugins: {},
-          autoupdate: false,
-        },
+        "local-mp": withAutoupdate(
+          {
+            name: "local-mp",
+            scope: "project",
+            source: pathSource("/abs/path/to/mp"),
+            addedFromCwd: cwd,
+            manifestPath,
+            // NOTE: `marketplaceRoot` is what the renderer emits on the
+            // `path:` line per the orchestrator's path-source projection.
+            marketplaceRoot: "/abs/path/to/mp",
+            plugins: {},
+          },
+          false,
+        ),
       },
     });
 
@@ -257,31 +272,35 @@ test("INFO-03: both-scopes fan-out emits ONE notify call; project block FIRST, u
     await saveState(projectLocations.extensionRoot, {
       schemaVersion: 1,
       marketplaces: {
-        "my-mp": {
-          name: "my-mp",
-          scope: "project",
-          source: pathSource("/repo/path/my-mp"),
-          addedFromCwd: cwd,
-          manifestPath: projectManifest,
-          marketplaceRoot: "/repo/path/my-mp",
-          plugins: {},
-          autoupdate: true,
-        },
+        "my-mp": withAutoupdate(
+          {
+            name: "my-mp",
+            scope: "project",
+            source: pathSource("/repo/path/my-mp"),
+            addedFromCwd: cwd,
+            manifestPath: projectManifest,
+            marketplaceRoot: "/repo/path/my-mp",
+            plugins: {},
+          },
+          true,
+        ),
       },
     });
     await saveState(userLocations.extensionRoot, {
       schemaVersion: 1,
       marketplaces: {
-        "my-mp": {
-          name: "my-mp",
-          scope: "user",
-          source: githubSource("https://github.com/someuser/my-mp"),
-          addedFromCwd: cwd,
-          manifestPath: userManifest,
-          marketplaceRoot: cwd,
-          plugins: {},
-          autoupdate: false,
-        },
+        "my-mp": withAutoupdate(
+          {
+            name: "my-mp",
+            scope: "user",
+            source: githubSource("https://github.com/someuser/my-mp"),
+            addedFromCwd: cwd,
+            manifestPath: userManifest,
+            marketplaceRoot: cwd,
+            plugins: {},
+          },
+          false,
+        ),
       },
     });
 

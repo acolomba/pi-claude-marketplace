@@ -61,13 +61,22 @@ async function withHermeticHome<T>(
   }
 }
 
+// SPLIT-01: autoupdate carved out of MARKETPLACE_RECORD_SCHEMA in Phase 51-02.
+// Test scaffolding still seeds/reads autoupdate via cast until Phase 54-56 rewires
+// to MergedConfig (CFG-02). D-04: undefined === false.
+function recordAutoupdate(
+  rec: ExtensionState["marketplaces"][string] | undefined,
+): boolean | undefined {
+  return (rec as unknown as Record<string, unknown> | undefined)?.autoupdate as boolean | undefined;
+}
+
 function makeMarketplaceRecord(
   name: string,
   scope: "user" | "project",
   cwd: string,
   autoupdate?: boolean,
 ): ExtensionState["marketplaces"][string] {
-  return {
+  const base: ExtensionState["marketplaces"][string] = {
     name,
     scope,
     source: pathSource("./src"),
@@ -75,8 +84,14 @@ function makeMarketplaceRecord(
     manifestPath: path.join(cwd, "marketplace.json"),
     marketplaceRoot: cwd,
     plugins: {},
-    ...(autoupdate !== undefined && { autoupdate }),
   };
+
+  // SPLIT-01: write autoupdate via cast (carved out of MARKETPLACE_RECORD_SCHEMA).
+  if (autoupdate !== undefined) {
+    (base as Record<string, unknown>).autoupdate = autoupdate;
+  }
+
+  return base;
 }
 
 test("MAU-1 / UXG-04: enable=true on a single marketplace flips false->true and emits V2 `<autoupdate>` marker with NO reload-hint trailer (SNM-33 / D-22-03)", async () => {
@@ -92,7 +107,7 @@ test("MAU-1 / UXG-04: enable=true on a single marketplace flips false->true and 
     await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: true, scope: "project", cwd });
 
     const after = await loadState(locations.extensionRoot);
-    assert.equal(after.marketplaces["mp"]!.autoupdate, true);
+    assert.equal(recordAutoupdate(after.marketplaces["mp"]), true);
     assert.equal(notifications.length, 1);
     // SNM-33 / D-22-03: a fresh autoupdate flip mutates a marketplace record,
     // not a Pi-visible resource, so NO `/reload` trailer.
@@ -113,7 +128,7 @@ test("MAU-1 / UXG-04: enable=false flips true->false and emits V2 `<no autoupdat
     const { ctx, pi, notifications } = makeCtx();
     await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: false, scope: "project", cwd });
     const after = await loadState(locations.extensionRoot);
-    assert.equal(after.marketplaces["mp"]!.autoupdate, false);
+    assert.equal(recordAutoupdate(after.marketplaces["mp"]), false);
     // SNM-33 / D-22-03: fresh autoupdate flip -> NO `/reload` trailer.
     assert.equal(notifications[0]!.message, "● mp [project] <no autoupdate>");
     // D-18-05 severity ladder: fresh autoupdate disable -> info (no 2nd arg).
@@ -132,7 +147,7 @@ test("MAU-3 / UXG-04: idempotent -- already-true + enable=true emits V2 `<autoup
     const { ctx, pi, notifications } = makeCtx();
     await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: true, scope: "project", cwd });
     const after = await loadState(locations.extensionRoot);
-    assert.equal(after.marketplaces["mp"]!.autoupdate, true);
+    assert.equal(recordAutoupdate(after.marketplaces["mp"]), true);
     assert.equal(notifications[0]!.message, "● mp [project] <autoupdate> {already autoupdate}");
     // UXG-02 / D-28-06/07 severity ladder: the benign idempotent flip reason
     // `already autoupdate` is in BENIGN_REASONS -> info (no severity arg).
@@ -172,7 +187,7 @@ test("MAU-4: missing autoupdate field treated as false; enable=true flips it to 
     const { ctx, pi, notifications } = makeCtx();
     await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: true, scope: "project", cwd });
     const after = await loadState(locations.extensionRoot);
-    assert.equal(after.marketplaces["mp"]!.autoupdate, true);
+    assert.equal(recordAutoupdate(after.marketplaces["mp"]), true);
     // SNM-33 / D-22-03: fresh autoupdate flip -> NO `/reload` trailer.
     assert.equal(notifications[0]!.message, "● mp [project] <autoupdate>");
     // D-18-05 severity ladder: fresh enable -> info.
@@ -216,8 +231,8 @@ test("MAU-2 / CMC-33 (V2): bare form flips every marketplace in scope; one notif
     await setMarketplaceAutoupdate({ ctx, pi, enable: true, scope: "project", cwd });
 
     const after = await loadState(locations.extensionRoot);
-    assert.equal(after.marketplaces["already"]!.autoupdate, true);
-    assert.equal(after.marketplaces["to-flip"]!.autoupdate, true);
+    assert.equal(recordAutoupdate(after.marketplaces["already"]), true);
+    assert.equal(recordAutoupdate(after.marketplaces["to-flip"]), true);
 
     // Catalog forms: one notification carries both rows.
     // D-16-06: caller-order honored (no alphabetic sort at the

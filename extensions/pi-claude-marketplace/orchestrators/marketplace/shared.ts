@@ -427,16 +427,21 @@ export function applyAutoupdateFlipInPlace(
   const changed: string[] = [];
   const unchanged: string[] = [];
 
+  // SPLIT-01: autoupdate carved out of MARKETPLACE_RECORD_SCHEMA in Phase 51-02;
+  // this flip logic still mutates the state record via cast until Phase 54-56
+  // rewires the autoupdate write-path to claude-plugins.json (CFG-02).
+  // D-04: undefined === false. Read/write through `Record<string, unknown>` cast.
   if (name !== undefined) {
     const record = state.marketplaces[name];
     if (record === undefined) {
       throw new MarketplaceNotFoundError(name, []);
     }
 
-    if ((record.autoupdate ?? false) === enable) {
+    const mut = record as unknown as Record<string, unknown>;
+    if ((mut.autoupdate === true) === enable) {
       unchanged.push(name);
     } else {
-      record.autoupdate = enable;
+      mut.autoupdate = enable;
       changed.push(name);
     }
 
@@ -444,10 +449,12 @@ export function applyAutoupdateFlipInPlace(
   }
 
   for (const [mp, record] of Object.entries(state.marketplaces)) {
-    if ((record.autoupdate ?? false) === enable) {
+    // SPLIT-01: see comment above; cast read/write until Phase 54-56 rewires.
+    const mut = record as unknown as Record<string, unknown>;
+    if ((mut.autoupdate === true) === enable) {
       unchanged.push(mp);
     } else {
-      record.autoupdate = enable;
+      mut.autoupdate = enable;
       changed.push(mp);
     }
   }

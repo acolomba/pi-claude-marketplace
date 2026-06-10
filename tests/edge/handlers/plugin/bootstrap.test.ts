@@ -124,7 +124,13 @@ test("bootstrap handler (no args, clean state): dispatches to orchestrator and e
     const userLocations = locationsFor("user", cwd);
     const userState = await loadState(userLocations.extensionRoot);
     assert.ok("claude-plugins-official" in userState.marketplaces);
-    assert.equal(userState.marketplaces["claude-plugins-official"]?.autoupdate, true);
+    // SPLIT-01: autoupdate carved out of MARKETPLACE_RECORD_SCHEMA in Phase 51-02;
+    // cast read until Phase 54-56 rewires to MergedConfig (CFG-02).
+    assert.equal(
+      (userState.marketplaces["claude-plugins-official"] as unknown as Record<string, unknown>)
+        .autoupdate,
+      true,
+    );
   });
 });
 

@@ -18,6 +18,7 @@
 // the in-memory normalized state remains usable for the rest of the
 // process. The next load re-runs the migration.
 
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { atomicWriteJson } from "../shared/atomic-json.ts";
@@ -56,6 +57,32 @@ function ensureMarketplacePaths(
   }
 
   return mutated;
+}
+
+/**
+ * SPLIT-01 / D-12 / D-13: scrub the legacy `autoupdate` field from a
+ * marketplace record. Mirrors the shape of `ensureMarketplacePaths` and
+ * `ensurePluginResources`: returns `true` iff a field was removed.
+ *
+ * Gating policy (D-13 ORDERING RAIL): this helper is invoked from
+ * `migrateLegacyMarketplaceRecords` ONLY when the scope's `configJsonPath`
+ * already exists on disk -- preserving the legacy `autoupdate` intent on
+ * the FIRST load (pre-Phase-52-migration) so Phase 52 can capture it before
+ * the field is destroyed. Subsequent loads (after Phase 52 has materialized
+ * `claude-plugins.json`) see the config file and scrub.
+ *
+ * Phase 51 implements D-13 via Mechanism A (existsSync-gated). The
+ * alternative (Mechanism B: Phase 52 pre-reads legacy autoupdate via a
+ * separate entry point) is documented in `51-RESEARCH.md` as equally
+ * valid; Mechanism A is the simpler diff and the locked choice.
+ */
+function ensureNoLegacyAutoupdate(mp: Record<string, unknown>): boolean {
+  if (mp.autoupdate === undefined) {
+    return false;
+  }
+
+  delete mp.autoupdate;
+  return true;
 }
 
 function ensurePluginResources(mp: Record<string, unknown>): boolean {
@@ -111,6 +138,7 @@ function ensurePluginResources(mp: Record<string, unknown>): boolean {
 export function migrateLegacyMarketplaceRecords(
   parsed: unknown,
   extensionRoot: string,
+  configJsonPath: string,
 ): MigrationResult {
   // Reject anything that isn't an object (Pitfall 9: null/array -> reset).
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
@@ -132,6 +160,13 @@ export function migrateLegacyMarketplaceRecords(
     return { marketplaces: {}, mutated: rawMps !== undefined };
   }
 
+  // D-13 ORDERING RAIL: the autoupdate scrub is gated on the existence of a
+  // config file at `configJsonPath`. We use the SYNC `existsSync` here by
+  // design -- the gate predicate must NOT race the in-memory transform
+  // below. Async `fs.stat` would interleave with the per-marketplace loop
+  // and break the gate's atomicity guarantee.
+  const scrubAutoupdate = existsSync(configJsonPath);
+
   let mutated = false;
   const marketplaces: Record<string, unknown> = {};
 
@@ -146,6 +181,9 @@ export function migrateLegacyMarketplaceRecords(
 
     mutated = ensureMarketplacePaths(mpName, mp, extensionRoot) || mutated;
     mutated = ensurePluginResources(mp) || mutated;
+    if (scrubAutoupdate) {
+      mutated = ensureNoLegacyAutoupdate(mp) || mutated;
+    }
 
     marketplaces[mpName] = mp;
   }

@@ -214,3 +214,48 @@ test("STATE_VALIDATOR exports a JIT-compiled validator (D-07)", () => {
   assert.equal(STATE_VALIDATOR.Check(DEFAULT_STATE), true);
   assert.equal(STATE_VALIDATOR.Check({ schemaVersion: 2, marketplaces: {} }), false);
 });
+
+test("SPLIT-01: legacy state.json with autoupdate still loads (typebox lenient)", async (t) => {
+  const { root, cleanup } = await tmpExtensionRoot();
+  // Suppress the IL-3 sanctioned warn: ST-4 fire-and-forget persist may race
+  // the cleanup `rm`, surfacing as a harmless persist failure.
+  t.mock.method(console, "warn", () => {
+    // suppress noise
+  });
+  try {
+    const fixtureRaw = await readFile(path.join(FIXTURES, "state-with-autoupdate.json"), "utf8");
+    await writeFile(path.join(root, "state.json"), fixtureRaw);
+    // D-13 gate is CLOSED here because no <scopeRoot>/claude-plugins.json
+    // exists alongside the tmp extensionRoot -- the migrator preserves the
+    // legacy `autoupdate` in-memory for Phase 52 to capture, while the
+    // STATE_SCHEMA carve-out (autoupdate removed from MARKETPLACE_RECORD_SCHEMA)
+    // means the lenient typebox default ACCEPTS the extra property at the
+    // schema gate. Both halves must hold for the load to succeed.
+    const got = await loadState(root);
+    assert.equal(got.schemaVersion, 1);
+    const mp = (got.marketplaces as Record<string, { name: string }>)["mp-with-autoupdate"];
+    assert.ok(mp);
+    assert.equal(mp.name, "mp-with-autoupdate");
+    // Flush fire-and-forget persist.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  } finally {
+    await cleanup();
+  }
+});
+
+test("SPLIT-01 / D-12: STATE_SCHEMA.schemaVersion stays Type.Literal(1) (saveState refuses schemaVersion: 2)", async () => {
+  const { root, cleanup } = await tmpExtensionRoot();
+  try {
+    // The compile-time `Type.Literal(1)` forces the cast below; the runtime
+    // STATE_VALIDATOR.Check inside saveState must REFUSE because the on-disk
+    // contract is locked at schemaVersion 1 (D-12: no STATE_SCHEMA bump).
+    const bumped = {
+      schemaVersion: 2 as 1,
+      marketplaces: {},
+    } as ExtensionState;
+    await assert.rejects(() => saveState(root, bumped), /failed schema validation/);
+  } finally {
+    await cleanup();
+  }
+});

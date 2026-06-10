@@ -235,7 +235,11 @@ async function buildBlock(
   scope: Scope,
   mpRecord: MarketplaceRecord,
 ): Promise<PluginInfoMessage> {
-  const marketplaceDetails = { autoupdate: mpRecord.autoupdate ?? false };
+  // SPLIT-01: autoupdate carved out of MARKETPLACE_RECORD_SCHEMA in Phase 51-02;
+  // cast read until Phase 54-56 rewires to MergedConfig (CFG-02). D-04: undefined === false.
+  const marketplaceDetails = {
+    autoupdate: (mpRecord as unknown as Record<string, unknown>).autoupdate === true,
+  };
 
   // (a) Manifest read failure -> bare `(failed) {<reason>}` row under
   // the marketplace header. The reason is CLASSIFIED via the same

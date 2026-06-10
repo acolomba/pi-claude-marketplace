@@ -452,7 +452,9 @@ async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapsh
 
     const changed = await refreshRecord(record, args);
     return {
-      autoupdate: record.autoupdate ?? false,
+      // SPLIT-01: autoupdate carved out of MARKETPLACE_RECORD_SCHEMA in Phase 51-02;
+      // cast read until Phase 54-56 rewires to MergedConfig (CFG-02). D-04: undefined === false.
+      autoupdate: (record as unknown as Record<string, unknown>).autoupdate === true,
       plugins: Object.keys(record.plugins),
       changed,
     };
