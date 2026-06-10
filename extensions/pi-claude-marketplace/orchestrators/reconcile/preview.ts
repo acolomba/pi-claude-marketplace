@@ -37,6 +37,7 @@ import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { notify } from "../../shared/notify.ts";
+import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 
 import { buildReconcilePreviewNotification, isReconcilePlanListEmpty } from "./notify.ts";
 import { planReconcile } from "./plan.ts";
@@ -45,6 +46,7 @@ import type { ReconcilePlan } from "./types.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
   CascadeNotificationMessage,
+  ContentReason,
   MarketplaceNotificationMessage,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -72,6 +74,22 @@ function buildInvalidConfigBlock(scope: Scope, filePath: string): MarketplaceNot
     reasons: ["invalid manifest"],
     plugins: [],
   };
+}
+
+/**
+ * Classify a `loadState` throw (unparseable JSON, schema-invalid record,
+ * unreadable file) into a closed-set reason. `loadState` wraps the raw
+ * `JSON.parse` `SyntaxError` in an `Error` whose `cause` is the
+ * `SyntaxError`, so unwrap the cause before delegating to the shared
+ * `narrowProbeError` ladder (which the sibling read-only `listPlugins`
+ * catch path also routes through).
+ */
+function narrowStateLoadFailReason(err: unknown): ContentReason {
+  if (err instanceof Error && err.cause instanceof SyntaxError) {
+    return "unparseable";
+  }
+
+  return narrowProbeError(err);
 }
 
 export async function previewReconcile(opts: PreviewReconcileOptions): Promise<void> {
@@ -103,7 +121,27 @@ export async function previewReconcile(opts: PreviewReconcileOptions): Promise<v
       continue;
     }
 
-    const state = await loadState(loc.extensionRoot);
+    // Failure containment (IL-2): a hand-edited / corrupt `state.json`
+    // throws from `loadState` (unparseable JSON or schema-invalid record).
+    // Mirror the CFG-03 arm above -- surface a structured `(failed)` row
+    // carrying the BASENAME (T-53-02-02: never the absolute path) instead
+    // of letting the throw escape the command handler with no
+    // `ctx.ui.notify` output at all (the sibling read-only `listPlugins`
+    // catches exactly this class).
+    let state;
+    try {
+      state = await loadState(loc.extensionRoot);
+    } catch (err) {
+      invalidBlocks.push({
+        name: "state.json",
+        scope,
+        status: "failed",
+        reasons: [narrowStateLoadFailReason(err)],
+        plugins: [],
+      });
+      continue;
+    }
+
     plans.push(planReconcile(outcome.merged, state, scope));
   }
 

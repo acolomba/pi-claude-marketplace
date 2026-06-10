@@ -200,6 +200,54 @@ test("CFG-03 abort / Pitfall 53-1: malformed claude-plugins.json -> (failed) {in
   });
 });
 
+test("failure containment (WR-04): corrupt state.json -> (failed) {unparseable} row with BASENAME, no raw throw", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const projectScopeRoot = path.join(cwd, ".pi");
+    const extensionRoot = path.join(projectScopeRoot, "pi-claude-marketplace");
+    await mkdir(extensionRoot, { recursive: true });
+    // Valid (empty) config; corrupt state -- the asymmetric twin of the
+    // CFG-03 case above. loadState throws on unparseable JSON; the
+    // orchestrator must contain it as a structured row (IL-2), mirroring
+    // listPlugins, instead of escaping as an unhandled rejection.
+    await writeFile(
+      path.join(projectScopeRoot, "claude-plugins.json"),
+      JSON.stringify({ schemaVersion: 1 }, null, 2),
+      "utf8",
+    );
+    const statePath = path.join(extensionRoot, "state.json");
+    await writeFile(statePath, "{", "utf8");
+
+    const ctx = makeCtx(cwd);
+    // Must NOT throw.
+    await previewReconcile({
+      ctx: ctx as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    // IL-2: exactly one notify call.
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    const emitted = args[0];
+    // Severity: error (failed marketplace row).
+    assert.equal(args[1], "error");
+    // BASENAME only (T-53-02-02) -- the absolute path is NEVER emitted.
+    assert.ok(
+      emitted.includes("state.json"),
+      `expected emitted output to include the BASENAME 'state.json'; got:\n${emitted}`,
+    );
+    assert.ok(
+      !emitted.includes(extensionRoot),
+      `emitted output must NOT include the absolute path '${extensionRoot}'; got:\n${emitted}`,
+    );
+    assert.ok(
+      emitted.includes("(failed)") && emitted.includes("{unparseable}"),
+      `expected (failed) {unparseable} row; got:\n${emitted}`,
+    );
+  });
+});
+
 test("scope fan-out: omitted --scope walks both scopes project-first (advisory in project + advisory in user converges to one advisory)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const ctx = makeCtx(cwd);
