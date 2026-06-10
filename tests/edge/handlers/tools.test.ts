@@ -140,7 +140,10 @@ async function seedMarketplace(opts: {
       version: p.version,
       resolvedSource: path.join(mpRoot, "plugins", p.name),
       compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-      resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+      // ENBL-04: empty resources + installable:true IS the disabled marker;
+      // seed a populated skills array so the record reads as ENABLED (a
+      // production installed record always has >= 1 populated array).
+      resources: { skills: [`${p.name}-skill`], prompts: [], agents: [], mcpServers: [] },
       installedAt: nowIso,
       updatedAt: nowIso,
     };
@@ -626,7 +629,9 @@ test("pi_claude_marketplace_plugin_list :: installed:true filter skips unavailab
               version: "1.0.0",
               resolvedSource: path.join(mpRoot, "plugins", "pinstalled"),
               compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-              resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+              // Populated resources: an ENABLED installed record (empty
+              // resources + installable:true reads as disabled per ENBL-04).
+              resources: { skills: ["pinstalled-skill"], prompts: [], agents: [], mcpServers: [] },
               installedAt: nowIso,
               updatedAt: nowIso,
             },

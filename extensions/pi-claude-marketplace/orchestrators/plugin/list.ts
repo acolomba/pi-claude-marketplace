@@ -63,12 +63,14 @@ import {
   narrowProbeError as sharedNarrowProbeError,
   narrowResolverNotes as sharedNarrowResolverNotes,
 } from "../../shared/probe-classifiers.ts";
+import { isRecordedButDisabled } from "../reconcile/plan.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
   Dependency,
   MarketplaceNotificationMessage,
   PluginAvailableMessage,
+  PluginDisabledMessage,
   PluginFailedMessage,
   PluginNotificationMessage,
   PluginPresentMessage,
@@ -84,10 +86,12 @@ import type { Scope } from "../../shared/types.ts";
  * subset per shared/notify.ts. UAT G-21-01: the installed bucket emits the
  * list-only `present` token instead of the cascade-context `installed`
  * token so `shouldEmitReloadHint` does not misfire on steady-state list
- * invocations; the PL-1 `--installed` filter treats `present` and
- * `upgradable` as the installed bucket.
+ * invocations; the PL-1 `--installed` filter treats `present`, `upgradable`,
+ * and `disabled` as the installed bucket (a disabled plugin IS recorded --
+ * the catalog's `disabled-inventory` state sits under the installed
+ * inventory; D-54-01 / ENBL-04).
  */
-type PluginRenderStatus = "present" | "upgradable" | "available" | "unavailable";
+type PluginRenderStatus = "present" | "upgradable" | "available" | "unavailable" | "disabled";
 
 /**
  * Options bag for {@link listPlugins}. The edge layer constructs this
@@ -130,7 +134,10 @@ function shouldShow(opts: ListPluginsOptions, status: PluginRenderStatus): boole
     return true;
   }
 
-  if (opts.installed === true && (status === "present" || status === "upgradable")) {
+  if (
+    opts.installed === true &&
+    (status === "present" || status === "upgradable" || status === "disabled")
+  ) {
     return true;
   }
 
@@ -222,7 +229,7 @@ function installedRowMessage(
   marketplaceScope: Scope,
   record: ExtensionState["marketplaces"][string]["plugins"][string],
   manifestEntry: MarketplaceManifest["plugins"][number] | undefined,
-): PluginPresentMessage | PluginUpgradableMessage {
+): PluginPresentMessage | PluginUpgradableMessage | PluginDisabledMessage {
   const declaresAgents = record.resources.agents.length > 0;
   const declaresMcp = record.resources.mcpServers.length > 0;
   const upgradable =
@@ -237,6 +244,21 @@ function installedRowMessage(
 
   const descriptionField: { readonly description?: string } =
     manifestEntry?.description === undefined ? {} : { description: manifestEntry.description };
+
+  // D-54-01 / ENBL-04: a recorded-but-disabled record (empty-resources +
+  // `installable: true` -- the canonical `isRecordedButDisabled` marker the
+  // disable orchestrator writes) renders the `(disabled)` inventory token,
+  // NOT `(installed)`. Checked BEFORE the upgradable branch: the version pin
+  // is frozen while disabled (ENBL-02), so a manifest-version drift must not
+  // surface a misleading `(upgradable)` on a plugin with no artefacts.
+  if (isRecordedButDisabled(record)) {
+    return {
+      status: "disabled",
+      name: pluginName,
+      version: record.version,
+      ...scopeField,
+    };
+  }
 
   if (upgradable) {
     // The PluginUpgradableMessage type structurally requires `reasons`
@@ -631,12 +653,17 @@ export async function loadPluginListPayload(
       // UAT G-21-01: `installedRowMessage` emits `status: "present"`
       // (list-only) for the steady-state inventory row, not the
       // cascade-context `"installed"` token. The carry-over filter MUST
-      // discriminate on `"present"` (plus the `"upgradable"` arm) so
-      // orphan-folded rows survive (CR-01). The integration regression for
+      // discriminate on `"present"` (plus the `"upgradable"` and ENBL-04
+      // `"disabled"` arms) so orphan-folded rows survive (CR-01). A disabled
+      // record IS an installed record -- dropping it here would both hide
+      // the row and let the user-side enumeration re-emit the plugin as a
+      // duplicate `(available)`. The integration regression for
       // this fold lives at tests/integration/fold-adoption.test.ts; the
       // orchestrator-level reproduction is in
       // tests/orchestrators/plugin/list.test.ts ("CR-01 / G-21-01 fold-carryover...").
-      folded = projectSideRows.filter((r) => r.status === "present" || r.status === "upgradable");
+      folded = projectSideRows.filter(
+        (r) => r.status === "present" || r.status === "upgradable" || r.status === "disabled",
+      );
       // Record the folded plugin names so the user-scope manifest's
       // available-bucket enumeration skips them (catalog
       // `project-orphan-folded` state shows a single
