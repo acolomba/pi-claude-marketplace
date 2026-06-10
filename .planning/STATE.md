@@ -4,14 +4,14 @@ milestone: v1.12
 milestone_name: Marketplace and Plugin Config Files
 status: planning
 stopped_at: Phase 51 Plan 01 complete
-last_updated: "2026-06-10T10:31:23.601Z"
+last_updated: "2026-06-10T10:45:19.313Z"
 last_activity: 2026-06-10 -- Phase 51 Plan 01 (config-io seam + ScopedLocations paths) shipped
 progress:
   total_phases: 34
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
-  percent: 0
+  completed_plans: 3
+  percent: 3
 ---
 
 # Project State
@@ -90,6 +90,7 @@ Last activity: 2026-06-10 -- Phase 51 Plan 01 (config-io seam + ScopedLocations 
 | Phase 50 P01 | 20m | 3 tasks | 21 files |
 | Phase 51 P01 | ~25m | 2 tasks | 4 files |
 | Phase 51 P02 | 95 | 2 tasks | 17 files |
+| Phase 51 P03 | 25 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -166,6 +167,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 51]: CFG-01 + CFG-03 closed at the persistence layer. New persistence/config-io.ts mirrors state-io.ts: typebox CONFIG_SCHEMA (Type.Object with Optional schemaVersion: Literal(1), Optional marketplaces + plugins Records; lenient default per D-09, no extra-property gate); CONFIG_VALIDATOR JIT-compiled (D-07 mirror); discriminated ConfigLoadResult { absent | invalid | valid } (D-15) where loadConfig NEVER throws -- ENOENT -> absent, non-ENOENT read fail / JSON parse fail / schema-check fail -> invalid. Pitfall 51-1 anchor locked: 0-byte file's JSON.parse("") -> SyntaxError -> invalid (NOT valid-with-empty-defaults). saveConfig(filePath, config, scopeRoot) runs CONFIG_VALIDATOR.Check (caller-bug guard) -> assertPathInside(scopeRoot, filePath, "saveConfig") (Pitfall 51-5 / SPLIT-02 write-site NFR-10) -> atomicWriteJson (NFR-1 single sanctioned seam); PathContainmentError propagates loudly per PI-14. D-02 keeps source as raw Type.String() (no parsePluginSource import in this layer); D-04 keeps defaults at consume time; D-05 makes both records optional; D-06 omits version from plugin entries; D-11 locks schemaVersion to literal 1. ScopedLocations extended with configJsonPath / configLocalJsonPath under scopeRoot (sibling tier of agentsDir + mcpJsonPath; NFR-10 enforcement happens at saveConfig write-site, not at construction). 15 new + 4 extended tests; npm run check GREEN end-to-end (1527 unit tests + 7 integration tests). -- Plan 51-01.
 - [Phase ?]: D-13 ORDERING RAIL: autoupdate scrub gated on existsSync(configJsonPath) preserves legacy field for Phase 52 first-run migration
 - [Phase ?]: SPLIT-01 cast migration (user-approved 2026-06-10, Rule 4 Option A): cast-and-tag readers/writers across 11 files outside persistence/ with // SPLIT-01: markers; rewire deferred to Phases 54-56
+- [Phase ?]: [Phase 51]: SPLIT-02 closed structurally — tests/architecture/config-state-write-seams.test.ts refuses any atomicWriteJson(...) callsite targeting state.json / claude-plugins.json / claude-plugins.local.json outside the named allow-lists (config-io.ts for config; state-io.ts + migrate.ts for state); 'exactly N' sibling assertions force silent widening to fail CI. Path-name-specific regex chosen over the plan's locked COARSE-WALK formulation (Rule 1 deviation): coarse walk would have wrongly flagged 7 legitimate atomicWriteJson callsites that write other JSON files (mcp.json, agents-index.json, completion caches). -- Plan 51-03.
 
 ### Pending Todos
 
@@ -212,7 +214,7 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-10T10:30:58.368Z
+Last session: 2026-06-10T10:44:45.502Z
 Stopped At: Phase 51 Plan 01 complete
 Resume File: .planning/phases/51-config-schema-persistence-state-split/51-02-PLAN.md
 

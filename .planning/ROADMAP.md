@@ -187,7 +187,7 @@ Declarative, version-controllable config files (`claude-plugins.json` + entry-le
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 51-03-PLAN.md -- SPLIT-02 architecture test: write-seam ownership enforced by config-state-write-seams.test.ts (allow-list + exactly-N sibling assertion) (SPLIT-02)
+- [x] 51-03-PLAN.md -- SPLIT-02 architecture test: write-seam ownership enforced by config-state-write-seams.test.ts (allow-list + exactly-N sibling assertion) (SPLIT-02)
 
 ### Phase 52: First-Run Migration
 
@@ -1077,7 +1077,7 @@ Every error/warning-severity notification now carries a non-empty summary messag
 | 48. Marketplace-Ops Attribution                                     | v1.10     | 3/3 | Complete    | 2026-06-08 |
 | 49. Cross-Op Convergence & GREEN-Gate Close                         | v1.10     | 3/3 | Complete    | 2026-06-08 |
 | 50. Notification Summary-Line Grammar                               | v1.11     | 1/1 | Complete    | 2026-06-08 |
-| 51. Config Schema, Persistence & State Split                        | v1.12     | 2/3 | In Progress|  |
+| 51. Config Schema, Persistence & State Split                        | v1.12     | 3/3 | Complete   | 2026-06-10 |
 | 52. First-Run Migration                                             | v1.12     | 0/? | Not started | --         |
 | 53. Pure Reconcile Planner & Dry-Run Preview                        | v1.12     | 0/? | Not started | --         |
 | 54. Enable/Disable Commands                                         | v1.12     | 0/? | Not started | --         |

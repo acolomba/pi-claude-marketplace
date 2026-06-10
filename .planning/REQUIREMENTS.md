@@ -19,7 +19,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### State Split
 
 - [x] **SPLIT-01**: Config file owns desired state + user settings (marketplace source/autoupdate, plugin enabled/version pin); machine bookkeeping (materialized artefact records, resolved versions) lives in an internal file under `pi-claude-marketplace/`
-- [ ] **SPLIT-02**: Reconciliation writes machine records only to the internal file; the user config is written only by command write-back and one-time migration
+- [x] **SPLIT-02**: Reconciliation writes machine records only to the internal file; the user config is written only by command write-back and one-time migration
 
 ### Migration
 
@@ -88,7 +88,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CFG-03 | Phase 51 | Done (Plan 51-01, 2026-06-10) |
 | CFG-04 | Phase 56 | Pending |
 | SPLIT-01 | Phase 51 | Complete |
-| SPLIT-02 | Phase 51 | Pending |
+| SPLIT-02 | Phase 51 | Complete |
 | MIG-01 | Phase 52 | Pending |
 | MIG-02 | Phase 52 | Pending |
 | RECON-01 | Phase 55 | Pending |
