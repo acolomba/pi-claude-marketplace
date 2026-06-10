@@ -204,7 +204,7 @@ Declarative, version-controllable config files (`claude-plugins.json` + entry-le
   3. Migration is atomic (the config file is written via tmp+rename before any bookkeeping is touched) and idempotent (driven by ENOENT detection, not a half-set flag), so an interrupted or repeated first-load cannot half-generate or double-generate the config (MIG-02, NFR-1, NFR-3).
   4. Running a reconcile immediately after a fresh migration is a strict no-op -- zero installs, zero uninstalls, no file rewrites -- proven by a migrate-then-reconcile exit-gate test on a populated `state.json` fixture (MIG-02 convergence gate).
 
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 **Wave 1**
 
