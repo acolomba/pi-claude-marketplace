@@ -12,13 +12,13 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### Config File & Schema
 
 - [x] **CFG-01**: User can declare marketplaces (name, source, autoupdate) and plugins (`plugin@marketplace`, enabled) in a per-scope `claude-plugins.json` with a Pi-native, typebox-validated schema
-- [ ] **CFG-02**: User can override base entries in a gitignore-able `claude-plugins.local.json`; a local entry replaces the base entry wholesale (entry-level override)
+- [x] **CFG-02**: User can override base entries in a gitignore-able `claude-plugins.local.json`; a local entry replaces the base entry wholesale (entry-level override)
 - [x] **CFG-03**: An unparseable or schema-invalid config file aborts reconciliation without changing anything and surfaces an error -- never treated as "empty desired state"
 - [ ] **CFG-04**: The `.local` gitignore convention and config-file workflow are documented (README)
 
 ### State Split
 
-- [ ] **SPLIT-01**: Config file owns desired state + user settings (marketplace source/autoupdate, plugin enabled/version pin); machine bookkeeping (materialized artefact records, resolved versions) lives in an internal file under `pi-claude-marketplace/`
+- [x] **SPLIT-01**: Config file owns desired state + user settings (marketplace source/autoupdate, plugin enabled/version pin); machine bookkeeping (materialized artefact records, resolved versions) lives in an internal file under `pi-claude-marketplace/`
 - [ ] **SPLIT-02**: Reconciliation writes machine records only to the internal file; the user config is written only by command write-back and one-time migration
 
 ### Migration
@@ -84,10 +84,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | CFG-01 | Phase 51 | Done (Plan 51-01, 2026-06-10) |
-| CFG-02 | Phase 51 | Pending |
+| CFG-02 | Phase 51 | Complete |
 | CFG-03 | Phase 51 | Done (Plan 51-01, 2026-06-10) |
 | CFG-04 | Phase 56 | Pending |
-| SPLIT-01 | Phase 51 | Pending |
+| SPLIT-01 | Phase 51 | Complete |
 | SPLIT-02 | Phase 51 | Pending |
 | MIG-01 | Phase 52 | Pending |
 | MIG-02 | Phase 52 | Pending |

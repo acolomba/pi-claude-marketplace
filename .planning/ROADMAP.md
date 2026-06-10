@@ -183,7 +183,7 @@ Declarative, version-controllable config files (`claude-plugins.json` + entry-le
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 51-02-PLAN.md -- Entry-level base+local merge (MergedConfig) + STATE_SCHEMA carve-out (autoupdate removed) + D-13-gated legacy scrub in migrate.ts (CFG-02, SPLIT-01; D-01, D-10, D-12, D-13, D-14, D-16, D-18)
+- [x] 51-02-PLAN.md -- Entry-level base+local merge (MergedConfig) + STATE_SCHEMA carve-out (autoupdate removed) + D-13-gated legacy scrub in migrate.ts (CFG-02, SPLIT-01; D-01, D-10, D-12, D-13, D-14, D-16, D-18)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -1023,7 +1023,6 @@ Every error/warning-severity notification now carries a non-empty summary messag
 
 - [x] 50-01-PLAN.md -- Unify standalone + cascade emission on one shared summary helper, extend `buildSummaryLine` for the two standalone error kinds, rewrite the ~9 catalog fence bodies + 8 prose sentences, update/extend `notify-v2` byte tests, add the cross-cutting grammar-invariant test; atomic landing, `npm run check` GREEN (GRAM-01..05)
 
-
 </details>
 
 ## Progress
@@ -1078,7 +1077,7 @@ Every error/warning-severity notification now carries a non-empty summary messag
 | 48. Marketplace-Ops Attribution                                     | v1.10     | 3/3 | Complete    | 2026-06-08 |
 | 49. Cross-Op Convergence & GREEN-Gate Close                         | v1.10     | 3/3 | Complete    | 2026-06-08 |
 | 50. Notification Summary-Line Grammar                               | v1.11     | 1/1 | Complete    | 2026-06-08 |
-| 51. Config Schema, Persistence & State Split                        | v1.12     | 1/3 | In progress | 2026-06-10 |
+| 51. Config Schema, Persistence & State Split                        | v1.12     | 2/3 | In Progress|  |
 | 52. First-Run Migration                                             | v1.12     | 0/? | Not started | --         |
 | 53. Pure Reconcile Planner & Dry-Run Preview                        | v1.12     | 0/? | Not started | --         |
 | 54. Enable/Disable Commands                                         | v1.12     | 0/? | Not started | --         |

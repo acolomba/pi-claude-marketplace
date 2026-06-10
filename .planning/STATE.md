@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.12
 milestone_name: Marketplace and Plugin Config Files
-status: executing
+status: planning
 stopped_at: Phase 51 Plan 01 complete
-last_updated: "2026-06-10T03:00:00.000Z"
+last_updated: "2026-06-10T10:31:23.601Z"
 last_activity: 2026-06-10 -- Phase 51 Plan 01 (config-io seam + ScopedLocations paths) shipped
 progress:
   total_phases: 34
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
-  percent: 33
+  completed_plans: 2
+  percent: 0
 ---
 
 # Project State
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 ## Current Position
 
 Phase: 51 (config-schema-persistence-state-split) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Plan 01 complete; ready to plan Plan 02 (MergedConfig + STATE_SCHEMA carve-out)
 Last activity: 2026-06-10 -- Phase 51 Plan 01 (config-io seam + ScopedLocations paths) shipped
 
@@ -89,6 +89,7 @@ Last activity: 2026-06-10 -- Phase 51 Plan 01 (config-io seam + ScopedLocations 
 | Phase 45 P02 | ~22m | 3 tasks | 3 files |
 | Phase 50 P01 | 20m | 3 tasks | 21 files |
 | Phase 51 P01 | ~25m | 2 tasks | 4 files |
+| Phase 51 P02 | 95 | 2 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -163,6 +164,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 49]: Cross-op convergence + GREEN-gate close (verification + closure; NO requirement closure) across 3 serialized plans. Class C closed: 49-01 fixed the last residual gap -- marketplace update <missing-mp> now converges on the standalone (failed) {not added} variant (remove.ts-mirrored catch-and-reroute; no raw MarketplaceNotFoundError escapes; NFR-5 network-free pre-guard). 49-02 closed Phase 48 IN-02 -- narrowProbeError gains an InvalidMarketplaceManifestError arm so schema-invalid manifests read {invalid manifest} on read surfaces (info/list), {unparseable} preserved for malformed JSON; no cast, no new REASONS member. 49-03 added the SC#1 cross-op convergence proof (tests/architecture/cross-op-convergence.test.ts INVOKES all 8 orchestrators against a missing marketplace and asserts byte-identical {not added}) + a catalog-uat inverse-walk (FIXTURES->catalog orphan detection, 0 orphans). Code review found + I fixed a real BLOCKER (CR-01): marketplace update concurrent-removal race emitted a false {network unreachable} (ATTR-10-class lie) -- snapshotAfterRefresh now returns an undefined sentinel (mirrors remove.ts) so refreshOneMarketplace no-ops; +2 regression tests; convergence test strengthened (WR-01). Accepted + documented: Phase 47 IN-01 (install M1 zero-delta save, perf) + IN-02 (preflightUpdate concurrent-removal {not in manifest}, rare TOCTOU not in the matrix). SC#2 REASONS=29; SC#5 traceability 15/15 mapped, 0 TBD. npm run check GREEN 1513/1513 (vs 1473 Phase-45 baseline); verification passed 5/5; code review resolved (CR-01 fixed 9935a61). PHASE 49 COMPLETE -- MILESTONE v1.10 GREEN.
 - [Phase 50]: GRAM-01..05 closed -- standalone + cascade error/warning emissions both prepend the summary through ONE shared emitWithSummary seam (anti-divergence guarantee, GRAM-04); buildSummaryLine returns the failed-row subject (1 marketplace/plugin operation failed.) for marketplace-not-added + failed plugin-info; info-severity surfaces byte-unchanged. 11 catalog fence bodies + 8 prose lines rewritten to the two-block form; 45 cascading orchestrator/edge byte assertions updated (Rule 1). npm run check 1514/1515 (sole failure: pre-existing unrelated reinstall-docs README gap, deferred). -- Plan 50-01.
 - [Phase 51]: CFG-01 + CFG-03 closed at the persistence layer. New persistence/config-io.ts mirrors state-io.ts: typebox CONFIG_SCHEMA (Type.Object with Optional schemaVersion: Literal(1), Optional marketplaces + plugins Records; lenient default per D-09, no extra-property gate); CONFIG_VALIDATOR JIT-compiled (D-07 mirror); discriminated ConfigLoadResult { absent | invalid | valid } (D-15) where loadConfig NEVER throws -- ENOENT -> absent, non-ENOENT read fail / JSON parse fail / schema-check fail -> invalid. Pitfall 51-1 anchor locked: 0-byte file's JSON.parse("") -> SyntaxError -> invalid (NOT valid-with-empty-defaults). saveConfig(filePath, config, scopeRoot) runs CONFIG_VALIDATOR.Check (caller-bug guard) -> assertPathInside(scopeRoot, filePath, "saveConfig") (Pitfall 51-5 / SPLIT-02 write-site NFR-10) -> atomicWriteJson (NFR-1 single sanctioned seam); PathContainmentError propagates loudly per PI-14. D-02 keeps source as raw Type.String() (no parsePluginSource import in this layer); D-04 keeps defaults at consume time; D-05 makes both records optional; D-06 omits version from plugin entries; D-11 locks schemaVersion to literal 1. ScopedLocations extended with configJsonPath / configLocalJsonPath under scopeRoot (sibling tier of agentsDir + mcpJsonPath; NFR-10 enforcement happens at saveConfig write-site, not at construction). 15 new + 4 extended tests; npm run check GREEN end-to-end (1527 unit tests + 7 integration tests). -- Plan 51-01.
+- [Phase ?]: D-13 ORDERING RAIL: autoupdate scrub gated on existsSync(configJsonPath) preserves legacy field for Phase 52 first-run migration
+- [Phase ?]: SPLIT-01 cast migration (user-approved 2026-06-10, Rule 4 Option A): cast-and-tag readers/writers across 11 files outside persistence/ with // SPLIT-01: markers; rewire deferred to Phases 54-56
 
 ### Pending Todos
 
@@ -209,7 +212,7 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-10T03:00:00.000Z
+Last session: 2026-06-10T10:30:58.368Z
 Stopped At: Phase 51 Plan 01 complete
 Resume File: .planning/phases/51-config-schema-persistence-state-split/51-02-PLAN.md
 
