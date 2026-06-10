@@ -535,6 +535,41 @@ test("CFG-03 / WR-01: invalid config aborts and state.json is byte- and mtime-un
 });
 
 // ──────────────────────────────────────────────────────────────────────────
+// WR-03: marketplace present, plugin row absent -> (skipped) {not installed}
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WR-03: enable on a present marketplace whose plugin row is absent renders (skipped) {not installed} at warning severity", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // Seed state with the marketplace container but a DIFFERENT plugin row.
+    await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "other-plugin",
+      disabled: false,
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+    assert.equal(notifications.length, 1);
+    // `not installed` is NOT benign -> warning severity (D-28-03), and the
+    // taxonomy must NOT misuse `{not in manifest}` (reserved for "plugin
+    // absent from a PRESENT manifest").
+    assert.equal(notifications[0]!.severity, "warning");
+    assert.match(notifications[0]!.message, /⊘ foo \(skipped\) \{not installed\}/);
+    assert.ok(
+      !notifications[0]!.message.includes("{not in manifest}"),
+      `must not misuse the not-in-manifest reason: ${notifications[0]!.message}`,
+    );
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
 // Marketplace-not-added (M3 / M4)
 // ──────────────────────────────────────────────────────────────────────────
 

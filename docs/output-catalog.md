@@ -1492,6 +1492,19 @@ Idempotent no-op -- the plugin is already enabled. Plugin row = `PluginSkippedMe
 
 Triggered when the cached marketplace clone has been deleted between the recorded state and the enable invocation. The orchestrator aborts pre-ledger -- no artefacts are partially materialized, no state mutation occurs, and the config file is unchanged. Severity `error` (the cascade carries a failed row); the summary line names the failed plugin operation per GRAM-02.
 
+### Not installed -- marketplace present, plugin row absent
+
+<!-- catalog-state: enable-not-installed -->
+
+```text
+1 plugin operation skipped.
+
+● claude-plugins-official [user]
+  ⊘ foo-plugin (skipped) {not installed}
+```
+
+Triggered when the marketplace container is recorded in the target scope but the plugin row is absent from state.json (never installed, or concurrently uninstalled). Mirrors the reinstall/update precedent: `{not in manifest}` is reserved for "plugin absent from a PRESENT manifest"; "marketplace present, plugin not installed" is the actionable `(skipped) {not installed}` skip (ATTR-08 taxonomy). `not installed` is NOT in the benign closed set, so the skip routes to `warning` severity with the `1 plugin operation skipped.` summary (D-28-03). No reload-hint. The same arm fires for `disable` (the orchestrator's not-recorded outcome is shared by both verbs).
+
 ### Marketplace not added (ENBL / SCOPE-01)
 
 <!-- catalog-state: enable-marketplace-not-added -->

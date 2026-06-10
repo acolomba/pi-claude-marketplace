@@ -2126,6 +2126,29 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    "enable-not-installed": {
+      pi: piWithBothLoaded(),
+      // WR-03: marketplace present, plugin row absent -> actionable skip
+      // (`not installed` is NOT benign, so the cascade routes to warning
+      // per D-28-03 and carries the skipped-summary line).
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                name: "foo-plugin",
+                reasons: ["not installed"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "enable-source-missing": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",

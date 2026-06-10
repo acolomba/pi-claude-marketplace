@@ -443,11 +443,18 @@ function composeOutcomeRow(args: {
         },
       };
     case "not-recorded":
+      // WR-03: the marketplace container is PRESENT but the plugin row is
+      // absent from state.json (never installed, or concurrently
+      // uninstalled). The established taxonomy (ATTR-08, reinstall/update
+      // precedent) reserves `{not in manifest}` for "plugin absent from a
+      // PRESENT manifest" and uses `(skipped) {not installed}` for
+      // "marketplace present, plugin not installed". Non-benign reason ->
+      // warning severity (catalog `enable-not-installed` state).
       return {
         plugin: {
-          status: "failed",
+          status: "skipped",
           name: plugin,
-          reasons: ["not in manifest"] as const,
+          reasons: ["not installed"] as const,
         },
       };
     case "idempotent": {
