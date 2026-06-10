@@ -16,6 +16,7 @@ import path from "node:path";
 import { test } from "node:test";
 
 import { setPluginEnabled } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
+import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -594,5 +595,139 @@ test("Marketplace not added: explicit --scope emits standalone marketplace-not-a
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
     assert.match(notifications[0]!.message, /⊘ ghost-mp \[user\] \(failed\) \{not added\}/);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// RECON-03 (Phase 55 Plan 01): orchestrated-mode coverage
+// ──────────────────────────────────────────────────────────────────────────
+
+test("RECON-03 enable-disable orchestrated mode -- disable returns { status: 'disabled', name, version } with ZERO notify calls", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      disabled: false,
+      version: "1.2.3",
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+    const outcome = await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: false,
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    });
+
+    assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+    assert.ok(outcome);
+    assert.equal(outcome.status, "disabled");
+    if (outcome.status === "disabled") {
+      assert.equal(outcome.name, "foo");
+      assert.equal(outcome.version, "1.2.3");
+    }
+  });
+});
+
+test("RECON-03 enable-disable orchestrated mode -- idempotent disable-already-disabled returns { status: 'skipped', reason: 'already disabled' } no notify", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      disabled: true,
+      version: "1.2.3",
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+    const outcome = await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: false,
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    });
+
+    assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+    assert.ok(outcome);
+    assert.equal(outcome.status, "skipped");
+    if (outcome.status === "skipped") {
+      assert.equal(outcome.reason, "already disabled");
+    }
+  });
+});
+
+test("RECON-03 enable-disable orchestrated mode -- idempotent enable-already-enabled returns { status: 'skipped', reason: 'already enabled' }", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      disabled: false, // populated resources = enabled
+      version: "1.2.3",
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+    const outcome = await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    });
+
+    assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+    assert.ok(outcome);
+    assert.equal(outcome.status, "skipped");
+    if (outcome.status === "skipped") {
+      assert.equal(outcome.reason, "already enabled");
+    }
+  });
+});
+
+test("RECON-03 enable-disable orchestrated mode -- missing marketplace returns { status: 'failed', reason: 'not added' } no notifications", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const outcome = await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "ghost-mp",
+      plugin: "foo",
+      enable: false,
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    });
+
+    assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+    assert.ok(outcome);
+    assert.equal(outcome.status, "failed");
+    if (outcome.status === "failed") {
+      assert.equal(outcome.reason, "not added");
+      assert.ok(outcome.error instanceof MarketplaceNotFoundError);
+    }
+  });
+});
+
+test("RECON-03 enable-disable standalone-default mode -- omitted notifications option remains byte-identical to today (regression guard)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const outcome = await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "ghost-mp-byte",
+      plugin: "foo",
+      enable: false,
+      scope: "user",
+    });
+    assert.equal(outcome, undefined, "standalone (omitted) returns undefined");
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /⊘ ghost-mp-byte \[user\] \(failed\) \{not added\}/);
   });
 });

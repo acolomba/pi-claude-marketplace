@@ -58,7 +58,7 @@
 import path from "node:path";
 
 import { loadConfig, saveConfig } from "../../persistence/config-io.ts";
-import { errorMessage } from "../../shared/errors.ts";
+import { errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
@@ -70,8 +70,49 @@ import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { ContentReason, PluginNotificationMessage } from "../../shared/notify.ts";
+import type { ContentReason, PluginNotificationMessage, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
+
+/**
+ * RECON-03 (Phase 55 Plan 01): controls how `setPluginEnabled` surfaces
+ * notifications. Mirrors `AddMarketplaceNotifications`.
+ *
+ * - `"standalone"` (default when option is omitted): byte-identical to today.
+ * - `"orchestrated"`: suppresses every `ctx.ui.notify` call and returns the
+ *   typed `EnableDisablePluginOutcome` for `applyReconcile` (Plan 02).
+ */
+export type EnableDisablePluginNotifications =
+  | { readonly mode: "standalone" }
+  | { readonly mode: "orchestrated" };
+
+/**
+ * RECON-03: discriminated outcome returned by `setPluginEnabled` in
+ * orchestrated mode.
+ *
+ * - `"enabled"` -- the enable branch re-materialized the plugin.
+ * - `"disabled"` -- the disable branch cascaded-unstaged the artefacts and
+ *   reset `resources.*` while preserving the state record.
+ * - `"skipped"` -- the idempotent already-enabled / already-disabled arm.
+ *   The `reason` carries the standalone benign Reason for parity with the
+ *   standalone rendering token set.
+ * - `"failed"` -- enable / disable / not-recorded / invalid-config /
+ *   marketplace-not-added paths. `reason` typed `Reason` so the
+ *   structural `"not added"` sentinel can flow through the same field.
+ */
+export type EnableDisablePluginOutcome =
+  | { readonly status: "enabled"; readonly name: string; readonly version?: string }
+  | { readonly status: "disabled"; readonly name: string; readonly version?: string }
+  | {
+      readonly status: "skipped";
+      readonly name: string;
+      readonly reason: "already enabled" | "already disabled" | "not installed";
+    }
+  | {
+      readonly status: "failed";
+      readonly reason: Reason;
+      readonly error: Error;
+      readonly cause: string;
+    };
 
 /**
  * D-54-01 options bundle for `setPluginEnabled`. Mirrors
@@ -95,6 +136,11 @@ export interface EnableDisablePluginOptions {
    * `claude-plugins.json`. The base file is NEVER touched on the --local path.
    */
   readonly local?: boolean;
+  /**
+   * RECON-03 (Phase 55 Plan 01): notification mode selector. Omitted
+   * (undefined) === `{ mode: "standalone" }` -- byte-identical to today.
+   */
+  readonly notifications?: EnableDisablePluginNotifications;
 }
 
 /** Outcome sentinel populated by the withStateGuard closure. */
@@ -253,15 +299,16 @@ type InstalledPluginRecord = ExtensionState["marketplaces"][string]["plugins"][s
 
 /**
  * D-54-01 entrypoint. Never re-throws -- every failure surfaces through a
- * single `notify()` call per IL-2.
+ * single `notify()` call per IL-2 (standalone) OR a typed outcome per
+ * RECON-03 (orchestrated).
  */
-export async function setPluginEnabled(opts: EnableDisablePluginOptions): Promise<void> {
+export async function setPluginEnabled(
+  opts: EnableDisablePluginOptions,
+): Promise<EnableDisablePluginOutcome | undefined> {
   const { ctx, pi, cwd, marketplace, plugin, enable } = opts;
+  const orchestrated = opts.notifications?.mode === "orchestrated";
 
-  // SCOPE-01 / ATTR-04: resolve the cross-scope target. The discriminated
-  // resolver distinguishes "marketplace container absent" (loud `{not added}`)
-  // from "container present, plugin row absent" (downstream handled inside
-  // the guard closure).
+  // SCOPE-01 / ATTR-04: resolve the cross-scope target.
   const resolution = await resolveCrossScopePluginTarget({
     cwd,
     marketplace,
@@ -270,15 +317,26 @@ export async function setPluginEnabled(opts: EnableDisablePluginOptions): Promis
   });
 
   if (resolution.kind === "marketplace-absent" || resolution.kind === "other-scope") {
-    // M3 / M4: the marketplace the operator asked for is not added in the
-    // requested scope. Standalone `MarketplaceNotAddedMessage` per D-47-A.
     const requestedScope: Scope | undefined = resolution.requestedScope;
+    if (orchestrated) {
+      const scopeList: readonly Scope[] =
+        requestedScope === undefined ? ["project", "user"] : [requestedScope];
+      const err = new MarketplaceNotFoundError(marketplace, scopeList);
+      return {
+        status: "failed",
+        reason: "not added",
+        error: err,
+        cause: errorMessage(err),
+      };
+    }
+
+    // M3 / M4: standalone `MarketplaceNotAddedMessage` per D-47-A.
     notify(ctx, pi, {
       kind: "marketplace-not-added",
       name: marketplace,
       ...(requestedScope !== undefined && { scope: requestedScope }),
     });
-    return;
+    return undefined;
   }
 
   const { scope, locations } = resolution;
@@ -289,13 +347,9 @@ export async function setPluginEnabled(opts: EnableDisablePluginOptions): Promis
   let outcome: SetEnabledOutcome | undefined;
 
   try {
-    // CR-01 / WR-01: a single per-scope lock owns the whole critical
-    // section; `tx.save()` fires ONLY on the fresh arms so abort/no-op arms
-    // leave state.json untouched (mtime unchanged, per the catalog CFG-03
-    // states).
+    // CR-01 / WR-01: a single per-scope lock owns the whole critical section.
     await withLockedStateTransaction(locations, async (tx) => {
       const state = tx.state;
-      // Pitfall 54-1 / A6: CFG-03 load inside the lock.
       const cfg = await loadConfig(targetConfigPath);
       if (cfg.status === "invalid") {
         outcome = { kind: "invalid-config" };
@@ -305,9 +359,6 @@ export async function setPluginEnabled(opts: EnableDisablePluginOptions): Promis
       const mp = state.marketplaces[marketplace];
       const installed = mp?.plugins[plugin];
       if (mp === undefined || installed === undefined) {
-        // Either the container disappeared (concurrent removal race) or the
-        // plugin row was never written. Surface as not-recorded; the
-        // post-guard branch renders an actionable row.
         outcome = { kind: "not-recorded" };
         return;
       }
@@ -337,15 +388,19 @@ export async function setPluginEnabled(opts: EnableDisablePluginOptions): Promis
         enable,
       );
 
-      // Persist the mutated snapshot (enable: the ledger's re-populated
-      // record; disable: the emptied resources arrays). Fail arms above
-      // returned WITHOUT saving -- their snapshots are unmutated.
       await tx.save();
     });
   } catch (err) {
-    // withLockedStateTransaction rethrew (lock-held, save failure, etc.).
-    // Surface as a failed plugin row carrying the cause.
     const cause = err instanceof Error ? err : new Error(errorMessage(err));
+    if (orchestrated) {
+      return {
+        status: "failed",
+        reason: "lock held",
+        error: cause,
+        cause: errorMessage(cause),
+      };
+    }
+
     notify(ctx, pi, {
       marketplaces: [
         {
@@ -362,10 +417,86 @@ export async function setPluginEnabled(opts: EnableDisablePluginOptions): Promis
         },
       ],
     });
-    return;
+    return undefined;
+  }
+
+  if (orchestrated) {
+    return outcomeToTypedResult({ plugin, enable, outcome, configBasename });
   }
 
   dispatchOutcome({ ctx, pi, marketplace, scope, plugin, enable, configBasename, outcome });
+  return undefined;
+}
+
+/**
+ * RECON-03: map the internal `SetEnabledOutcome` sentinel to the typed
+ * `EnableDisablePluginOutcome` for orchestrated callers. Mirrors the
+ * standalone `composeOutcomeRow` taxonomy.
+ */
+function outcomeToTypedResult(args: {
+  plugin: string;
+  enable: boolean;
+  configBasename: string;
+  outcome: SetEnabledOutcome | undefined;
+}): EnableDisablePluginOutcome {
+  const { plugin, enable, configBasename, outcome } = args;
+  if (outcome === undefined) {
+    const err = new Error(
+      `setPluginEnabled: internal error -- guard returned cleanly without populating outcome for plugin "${plugin}".`,
+    );
+    return { status: "failed", reason: "unreadable", error: err, cause: errorMessage(err) };
+  }
+
+  switch (outcome.kind) {
+    case "invalid-config": {
+      const err = new Error(`Config file "${configBasename}" failed schema validation.`);
+      return { status: "failed", reason: "invalid manifest", error: err, cause: errorMessage(err) };
+    }
+
+    case "not-recorded": {
+      return { status: "skipped", name: plugin, reason: "not installed" };
+    }
+
+    case "idempotent": {
+      return {
+        status: "skipped",
+        name: plugin,
+        reason: enable ? "already enabled" : "already disabled",
+      };
+    }
+
+    case "enable-failed": {
+      return {
+        status: "failed",
+        reason: narrowEnableFailure(outcome.cause)[0] ?? "unreadable",
+        error: outcome.cause,
+        cause: errorMessage(outcome.cause),
+      };
+    }
+
+    case "disable-failed": {
+      return {
+        status: "failed",
+        reason: narrowDisableFailure(outcome.cause)[0] ?? "unreadable",
+        error: outcome.cause,
+        cause: errorMessage(outcome.cause),
+      };
+    }
+
+    case "fresh": {
+      return enable
+        ? {
+            status: "enabled",
+            name: plugin,
+            ...(outcome.version !== undefined && { version: outcome.version }),
+          }
+        : {
+            status: "disabled",
+            name: plugin,
+            ...(outcome.version !== undefined && { version: outcome.version }),
+          };
+    }
+  }
 }
 
 /**

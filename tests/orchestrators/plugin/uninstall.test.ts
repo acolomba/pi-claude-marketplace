@@ -25,6 +25,7 @@ import {
   __resetCacheForTests,
   getPluginIndex,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
@@ -1455,6 +1456,101 @@ test("TR-03 (AG-5 cause): full row preserved intact when cause instanceof Agents
           "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {source mismatch}\n",
         ),
         `TR-03 AG-5: expected failure row; got "${notifications[0]?.message ?? ""}"`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// RECON-03 (Phase 55 Plan 01): orchestrated-mode coverage
+// ───────────────────────────────────────────────────────────────────────────
+
+test("RECON-03 uninstall orchestrated mode -- success returns { status: 'uninstalled', name, version } with ZERO notify calls", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-orch-ok-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      const { ctx, pi, notifications } = makeCtx();
+
+      const outcome = await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+      assert.ok(outcome);
+      assert.equal(outcome.status, "uninstalled");
+      if (outcome.status === "uninstalled") {
+        assert.equal(outcome.name, "hello");
+        assert.equal(outcome.version, "0.0.1");
+      }
+
+      // State record removed via orchestrated path -- same cascade ran.
+      const after = await loadState(locations.extensionRoot);
+      assert.equal("hello" in (after.marketplaces["mp"]?.plugins ?? {}), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RECON-03 uninstall orchestrated mode -- missing marketplace returns { status: 'failed', reason: 'not added' } no notifications", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-orch-na-"));
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "absent-mp",
+        plugin: "anything",
+        notifications: { mode: "orchestrated" },
+      });
+
+      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+      assert.ok(outcome);
+      assert.equal(outcome.status, "failed");
+      if (outcome.status === "failed") {
+        assert.equal(outcome.reason, "not added");
+        assert.ok(outcome.error instanceof MarketplaceNotFoundError);
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RECON-03 uninstall standalone-default mode -- omitted notifications option remains byte-identical to today", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-orch-default-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "byte-hello", cwd);
+      const { ctx, pi, notifications } = makeCtx();
+
+      const outcome = await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "byte-hello",
+      });
+      assert.equal(outcome, undefined, "standalone (omitted) returns undefined");
+      assert.equal(notifications.length, 1);
+      assert.equal(
+        notifications[0]?.message,
+        "● mp [project]\n  ○ byte-hello v0.0.1 (uninstalled)\n\n/reload to pick up changes",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });

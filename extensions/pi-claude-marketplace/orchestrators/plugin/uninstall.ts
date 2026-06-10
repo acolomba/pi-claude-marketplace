@@ -44,6 +44,7 @@
 import { rm } from "node:fs/promises";
 
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
+import { errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { AgentsUnstageFailureError, cascadeUnstagePlugin } from "../marketplace/shared.ts";
@@ -55,8 +56,40 @@ import type {
   ContentReason,
   PluginFailedMessage,
   PluginUninstalledMessage,
+  Reason,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
+
+/**
+ * RECON-03 (Phase 55 Plan 01): controls how `uninstallPlugin` surfaces
+ * notifications. Mirrors the `AddMarketplaceNotifications` precedent.
+ *
+ * - `"standalone"` (default when option is omitted): byte-identical to today.
+ * - `"orchestrated"`: suppresses every `ctx.ui.notify` call and returns the
+ *   typed `UninstallPluginOutcome` for `applyReconcile` (Plan 02) to
+ *   aggregate (IL-2).
+ */
+export type UninstallPluginNotifications =
+  | { readonly mode: "standalone" }
+  | { readonly mode: "orchestrated" };
+
+/**
+ * RECON-03: discriminated outcome returned by `uninstallPlugin` in
+ * orchestrated mode. The success arm carries the optional `version` of the
+ * removed record (when available) so apply can compose the per-plugin row.
+ *
+ * `reason` is typed as `Reason` (broader than `ContentReason`) so the
+ * structural `"not added"` sentinel returned by the missing-marketplace arm
+ * flows through the same field; mirrors `RemoveMarketplaceOutcome`.
+ */
+export type UninstallPluginOutcome =
+  | { readonly status: "uninstalled"; readonly name: string; readonly version?: string }
+  | {
+      readonly status: "failed";
+      readonly reason: Reason;
+      readonly error: Error;
+      readonly cause: string;
+    };
 
 /**
  * PU-1..8 options bundle. `scope` + `cwd` together resolve a `ScopedLocations`
@@ -83,6 +116,11 @@ export interface UninstallPluginOptions {
    * a single `??` fallback.
    */
   readonly cascade?: typeof cascadeUnstagePlugin;
+  /**
+   * RECON-03 (Phase 55 Plan 01): notification mode selector. Omitted
+   * (undefined) === `{ mode: "standalone" }` -- byte-identical to today.
+   */
+  readonly notifications?: UninstallPluginNotifications;
 }
 
 /**
@@ -145,9 +183,87 @@ function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
  * Returns void; the function never re-throws -- failures surface via a
  * single `notify()` call per IL-2 (single ctx.ui.notify chokepoint).
  */
-export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<void> {
+/**
+ * RECON-03: route a cascade-failure cause to either the typed orchestrated
+ * outcome or the standalone notify() row. Extracted from `uninstallPlugin`
+ * to keep cognitive complexity inside the SonarJS lint budget.
+ */
+function emitCascadeFailure(args: {
+  ctx: ExtensionContext;
+  pi: ExtensionAPI;
+  marketplace: string;
+  scope: Scope;
+  plugin: string;
+  cause: Error;
+  removedVersion: string | undefined;
+  orchestrated: boolean;
+}): UninstallPluginOutcome | undefined {
+  const { ctx, pi, marketplace, scope, plugin, cause, removedVersion, orchestrated } = args;
+  if (orchestrated) {
+    return {
+      status: "failed",
+      reason: narrowCascadeFailure(cause),
+      error: cause,
+      cause: errorMessage(cause),
+    };
+  }
+
+  const failedRow: PluginFailedMessage = {
+    status: "failed",
+    name: plugin,
+    reasons: [narrowCascadeFailure(cause)],
+    ...(removedVersion !== undefined && { version: removedVersion }),
+    cause,
+  };
+  notify(ctx, pi, {
+    marketplaces: [
+      {
+        name: marketplace,
+        scope,
+        plugins: [failedRow],
+      },
+    ],
+  });
+  return undefined;
+}
+
+/**
+ * RECON-03: route the not-added cross-scope resolution path to either the
+ * typed orchestrated outcome or the standalone notify() row.
+ */
+function emitMarketplaceNotAdded(args: {
+  ctx: ExtensionContext;
+  pi: ExtensionAPI;
+  marketplace: string;
+  requestedScope: Scope | undefined;
+  orchestrated: boolean;
+}): UninstallPluginOutcome | undefined {
+  const { ctx, pi, marketplace, requestedScope, orchestrated } = args;
+  if (orchestrated) {
+    const scopeList: readonly Scope[] =
+      requestedScope === undefined ? ["project", "user"] : [requestedScope];
+    const err = new MarketplaceNotFoundError(marketplace, scopeList);
+    return { status: "failed", reason: "not added", error: err, cause: errorMessage(err) };
+  }
+
+  notify(ctx, pi, {
+    kind: "marketplace-not-added",
+    name: marketplace,
+    ...(requestedScope !== undefined && { scope: requestedScope }),
+  });
+  return undefined;
+}
+
+/**
+ * RECON-03: returns `UninstallPluginOutcome` in orchestrated mode and
+ * `undefined` in standalone mode (after firing the standalone notify()).
+ */
+export async function uninstallPlugin(
+  opts: UninstallPluginOptions,
+): Promise<UninstallPluginOutcome | undefined> {
   const { ctx, pi, cwd, marketplace, plugin } = opts;
   const cascade = opts.cascade ?? cascadeUnstagePlugin;
+  const orchestrated = opts.notifications?.mode === "orchestrated";
 
   // ATTR-04 / SCOPE-01 / M3 / M4: the discriminated cross-scope resolver
   // distinguishes "marketplace container absent" (loud `{not added}`) from
@@ -161,19 +277,13 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
   });
 
   if (resolution.kind === "marketplace-absent" || resolution.kind === "other-scope") {
-    // M3 / M4: the marketplace the operator asked for is not added in the
-    // requested scope (or is present only in the OTHER scope). Surface the
-    // marketplace subject via the canonical Phase 46 variant -- standalone
-    // top-level emission per D-47-A. The `requested` scope, when present,
-    // renders the `[scope]` bracket (SCOPE-01 resolved Open Question #1);
-    // the bare lifecycle form that missed everywhere carries no bracket.
-    const requestedScope: Scope | undefined = resolution.requestedScope;
-    notify(ctx, pi, {
-      kind: "marketplace-not-added",
-      name: marketplace,
-      ...(requestedScope !== undefined && { scope: requestedScope }),
+    return emitMarketplaceNotAdded({
+      ctx,
+      pi,
+      marketplace,
+      requestedScope: resolution.requestedScope,
+      orchestrated,
     });
-    return;
   }
 
   const { scope, locations } = resolution;
@@ -272,67 +382,48 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
       delete mp.plugins[plugin];
     });
   } catch (err) {
-    // PU-7 propagation: surface chained AgentsUnstageFailureError (or any
-    // other cascade failure) via a single notify() call constructing a
-    // `PluginFailedMessage` with the typed cause threaded through. State was
-    // NOT saved (guard contract); the plugin record stays intact for retry.
-    // Severity (`error`) and reload-hint suppression are computed by notify()
-    //  (any failed -> error) and (no state-changing
-    // variant -> no reload-hint).
+    // PU-7 propagation: AG-5 (or any other cascade failure). State was NOT
+    // saved (guard contract); the plugin record stays intact for retry.
     const cause = err instanceof Error ? err : new Error(String(err));
-    const failedRow: PluginFailedMessage = {
-      status: "failed",
-      name: plugin,
-      reasons: [narrowCascadeFailure(cause)],
-      // IN-02: see the success-path commit message; the `!== ""` half of
-      // the guard is dead by construction.
-      ...(removedVersion !== undefined && { version: removedVersion }),
+    return emitCascadeFailure({
+      ctx,
+      pi,
+      marketplace,
+      scope,
+      plugin,
       cause,
-    };
-    notify(ctx, pi, {
-      marketplaces: [
-        {
-          name: marketplace,
-          scope,
-          plugins: [failedRow],
-        },
-      ],
+      removedVersion,
+      orchestrated,
     });
-    return;
   }
 
   // PU-5 silent converge: literal silence, no notification (PRD §5.2.2
-  // verbatim).
+  // verbatim). In orchestrated mode the silent converge surfaces as an
+  // `uninstalled` outcome with no version -- apply (Plan 02) treats both
+  // the standalone-silence path and the converge path identically (no row
+  // to emit).
   //
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- `alreadyGone` is mutated inside the withStateGuard closure above; TS flow analysis cannot prove the closure executed, so it sees the variable as still `false`. The check is required at runtime.
   if (alreadyGone) {
-    return;
+    if (orchestrated) {
+      return { status: "uninstalled", name: plugin };
+    }
+
+    return undefined;
   }
 
-  // TR-03: non-AG-5 cascade partial-failure surface. The guard
-  // already saved the SHRUNKEN sRecord.resources.* (filtered by
-  // outcome.dropped.* in place). Now emit the PluginFailedMessage so the
-  // user sees the failure. Pitfall 4: this branch MUST return BEFORE the
-  // post-state cleanup (cache-drop, data-dir rm, PluginUninstalledMessage)
-  // -- those run only on full success.
+  // TR-03: non-AG-5 cascade partial-failure surface.
   if (cascadeFailure !== undefined) {
-    const failedRow: PluginFailedMessage = {
-      status: "failed",
-      name: plugin,
-      reasons: [narrowCascadeFailure(cascadeFailure)],
-      ...(removedVersion !== undefined && { version: removedVersion }),
+    return emitCascadeFailure({
+      ctx,
+      pi,
+      marketplace,
+      scope,
+      plugin,
       cause: cascadeFailure,
-    };
-    notify(ctx, pi, {
-      marketplaces: [
-        {
-          name: marketplace,
-          scope,
-          plugins: [failedRow],
-        },
-      ],
+      removedVersion,
+      orchestrated,
     });
-    return;
   }
 
   // D-03-INV: post-state-commit completion-cache invalidation.
@@ -393,21 +484,19 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
   // non-empty version by construction (see install.ts IN-02).
   // The renderer suppresses the `v<version>` token on undefined / empty
   // anyway, so the empty-version edge case is handled structurally.
+  if (orchestrated) {
+    return {
+      status: "uninstalled",
+      name: plugin,
+      ...(removedVersion !== undefined && { version: removedVersion }),
+    };
+  }
+
   const uninstalledRow: PluginUninstalledMessage = {
     status: "uninstalled",
     name: plugin,
     ...(removedVersion !== undefined && { version: removedVersion }),
   };
-  // One MarketplaceNotificationMessage per affected marketplace, emitted
-  // via a single notify(opts.ctx, opts.pi, ...) call per orchestration.
-  // - plugins: readonly PluginNotificationMessage[] in display order
-  //  (orchestrator-controlled iteration; notify does not sort).
-  // - Discriminators by status: "uninstalled" here. Sibling orchestrators
-  //   use their own status sets: installed/updated/reinstalled/failed/
-  //   skipped/manual recovery/available/unavailable/upgradable.
-  // - Severity + "/reload to pick up changes" trailer are computed by notify()
-  // ; callers MUST NOT compose them.
-  // - Reference: catalog UAT plugin-uninstall fixtures at docs/output-catalog.md:340-378.
   notify(ctx, pi, {
     marketplaces: [
       {
@@ -417,4 +506,5 @@ export async function uninstallPlugin(opts: UninstallPluginOptions): Promise<voi
       },
     ],
   });
+  return undefined;
 }
