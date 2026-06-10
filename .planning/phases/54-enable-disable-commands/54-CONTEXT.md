@@ -21,7 +21,15 @@ Success criteria (from ROADMAP):
 <decisions>
 ## Implementation Decisions
 
-### Claude's Discretion
+### Locked (user-decided 2026-06-10)
+- D-54-01: Disabled plugins render with a NEW closed-set `(disabled)` status token (`⊘ <name> [scope] (disabled)`), not a reused `(unavailable)` + reason. PLUGIN_STATUSES 15→16, STATUS_TOKENS 21→22. Renderer + `docs/output-catalog.md` + catalog-uat byte fixtures land in the SAME atomic commit.
+
+### Claude's Discretion (research recommendations adopted)
+- Idempotency split: `(disabled)` is the inventory token; `{already disabled}`/`{already enabled}` are cascade REASONS (added to BENIGN_REASONS — benign no-ops never warn, per v1.6 severity discipline).
+- Shared `⊘` glyph across disabled/unavailable/will-disable — distinctness lives in the status token, not the glyph.
+- "Currently disabled" reconcile-reality marker is implicit: empty `resources.*` arrays on a recorded plugin record (no STATE_SCHEMA bump; SPLIT-01 preserved; record `version` field is the pin).
+- Enable with corrupted/removed clone: pre-ledger abort `(failed) {source missing}`; state and config untouched.
+- `--local` parsed locally in the enable/disable edge handler; broader write-back surface stays Phase 56.
 All implementation choices are at Claude's discretion — discuss phase was skipped per user setting. Use ROADMAP phase goal, success criteria, and codebase conventions to guide decisions.
 
 Inherited constraints from Phases 51-53 (the frozen foundation):
