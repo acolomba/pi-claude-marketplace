@@ -493,6 +493,23 @@ const FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // D-54-01 / ENBL-04 (Phase 54 Plan 02): list-surface inventory row for a
+    // recorded-but-disabled plugin. The new `(disabled)` closed-set token
+    // mirrors the catalog list section's `disabled-inventory` state.
+    "disabled-inventory": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            details: { autoupdate: true },
+            plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3" }],
+          },
+        ],
+      },
+    },
   },
 
   // -------------------------------------------------------------------------
@@ -2058,6 +2075,186 @@ const FIXTURES: FixtureMap = {
         name: "missing-mp",
         scope: "project",
       } satisfies NotificationMessage,
+    },
+  },
+
+  // -------------------------------------------------------------------------
+  // /claude:plugin enable -- D-54-01 / ENBL-01 / ENBL-03 enable-from-cache.
+  // -------------------------------------------------------------------------
+  "/claude:plugin enable <plugin>@<marketplace>": {
+    "enable-fresh": {
+      pi: piWithBothLoaded(),
+      // Re-materialization through the install ledger -- the cascade carries
+      // an `(added)` marketplace header + `(installed)` plugin row (existing
+      // state-change tokens); reload-hint fires per SNM-33.
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            status: "added",
+            plugins: [
+              {
+                status: "installed",
+                name: "foo-plugin",
+                version: "1.2.3",
+                dependencies: [],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    "enable-idempotent": {
+      pi: piWithBothLoaded(),
+      // Idempotent no-op -- benign reason routes to info per UXG-02 / D-28-06.
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                name: "foo-plugin",
+                reasons: ["already enabled"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    "enable-source-missing": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "foo-plugin",
+                reasons: ["source missing"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    "enable-marketplace-not-added": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+        scope: "user",
+      } satisfies NotificationMessage,
+    },
+
+    "enable-invalid-config": {
+      // CFG-03 abort. Pitfall 54-1 / T-53-02-02: the marketplace name carries
+      // the file BASENAME via the renderer; here the plugin row carries the
+      // `{invalid manifest}` reason -- the orchestrator aborts BEFORE entering
+      // the cascade, so the body is the bare cascade with the failed plugin
+      // row.
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "foo-plugin",
+                reasons: ["invalid manifest"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+  },
+
+  // -------------------------------------------------------------------------
+  // /claude:plugin disable -- D-54-01 / ENBL-02 cascade unstage + config flip.
+  // -------------------------------------------------------------------------
+  "/claude:plugin disable <plugin>@<marketplace>": {
+    "disable-fresh": {
+      pi: piWithBothLoaded(),
+      // Cascade carries the existing `(uninstalled)` token (state-changer);
+      // reload-hint fires per SNM-33.
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "foo-plugin",
+                version: "1.2.3",
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    "disable-idempotent": {
+      pi: piWithBothLoaded(),
+      // Benign reason -> info severity.
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                name: "foo-plugin",
+                reasons: ["already disabled"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    "disable-marketplace-not-added": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+        scope: "user",
+      } satisfies NotificationMessage,
+    },
+
+    "disable-invalid-config": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "foo-plugin",
+                reasons: ["invalid manifest"],
+              },
+            ],
+          },
+        ],
+      },
     },
   },
 

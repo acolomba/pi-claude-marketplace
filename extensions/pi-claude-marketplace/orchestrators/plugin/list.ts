@@ -733,6 +733,10 @@ function sortPluginsInBlock(
       case "present":
       case "upgradable":
       case "installed":
+      case "disabled":
+        // D-54-01 / ENBL-04: disabled rows carry an explicit `scope?` and
+        // join the scope-bearing list-surface variants. The SNM-11 carve-out
+        // applies only to `available` / `unavailable`.
         return p.scope ?? marketplaceScope;
       case "available":
       case "unavailable":

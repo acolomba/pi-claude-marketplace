@@ -169,6 +169,11 @@ function projectRowStatus(status: PluginNotificationMessage["status"]): ToolPlug
       return "available";
     case "unavailable":
       return "unavailable";
+    case "disabled":
+      // D-54-01 / ENBL-04: a disabled plugin is recorded but its artefacts
+      // are not materialized -- the LLM-tool projection treats it as not
+      // currently usable, mirroring `unavailable`.
+      return "unavailable";
     case "updated":
     case "reinstalled":
     case "uninstalled":
@@ -309,6 +314,9 @@ function pluginScopeOrFallback(
     case "present":
     case "installed":
     case "upgradable":
+    case "disabled":
+      // D-54-01 / ENBL-04: disabled rows carry an explicit `scope?` (the
+      // SNM-11 carve-out applies only to `available` / `unavailable`).
       return p.scope ?? marketplaceScope;
     case "available":
     case "unavailable":
@@ -363,6 +371,9 @@ function pluginVersion(p: PluginNotificationMessage): string | undefined {
     case "failed":
     case "skipped":
     case "manual recovery":
+    case "disabled":
+      // D-54-01 / ENBL-04: disabled row carries optional `version?` -- the
+      // recorded state record preserves the pinned version (ENBL-02).
       return p.version;
     case "updated":
       // The updated variant has `from`/`to` instead of a single `version`;

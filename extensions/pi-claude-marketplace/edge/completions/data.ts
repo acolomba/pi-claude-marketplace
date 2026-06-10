@@ -35,7 +35,14 @@ import type { PluginIndexRow } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 
-type PluginRefCompletionMode = "install" | "uninstall" | "update" | "reinstall" | "info";
+type PluginRefCompletionMode =
+  | "install"
+  | "uninstall"
+  | "update"
+  | "reinstall"
+  | "info"
+  | "enable"
+  | "disable";
 
 // ---------------------------------------------------------------------------
 // LocationsResolver -- the edge/ -> persistence/ injection seam.

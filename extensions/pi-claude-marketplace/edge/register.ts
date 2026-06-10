@@ -45,6 +45,7 @@ import { makeMarketplaceListHandler } from "./handlers/marketplace/list.ts";
 import { makeRemoveHandler } from "./handlers/marketplace/remove.ts";
 import { makeMarketplaceUpdateHandler } from "./handlers/marketplace/update.ts";
 import { makeBootstrapHandler } from "./handlers/plugin/bootstrap.ts";
+import { makeEnableDisableHandler } from "./handlers/plugin/enable-disable.ts";
 import { makeImportHandler } from "./handlers/plugin/import.ts";
 import { makePluginInfoHandler } from "./handlers/plugin/info.ts";
 import { makeInstallHandler } from "./handlers/plugin/install.ts";
@@ -83,6 +84,8 @@ export function registerClaudePluginCommand(pi: ExtensionAPI, deps: EdgeDeps): v
     list: makeListHandler(pi),
     pluginInfo: makePluginInfoHandler(pi),
     preview: makePreviewHandler(pi),
+    enable: makeEnableDisableHandler(pi, true),
+    disable: makeEnableDisableHandler(pi, false),
     import: makeImportHandler(pi, deps),
     marketplaceAdd: makeAddHandler(pi, deps),
     marketplaceRemove: makeRemoveHandler(pi),

@@ -227,6 +227,20 @@ export interface InstallPluginOptions {
    * when the user supplies `--map-model` on `/claude:plugin install`.
    */
   readonly mapModel?: boolean;
+  /**
+   * D-54-01 / ENBL-02 / Pitfall 54-4 (Phase 54 Plan 02): when set, bypasses
+   * `resolvePluginVersion` and pins the install ledger to this exact version
+   * string. Used ONLY by `setPluginEnabled` (the enable branch) to preserve
+   * the recorded state record's `version` field across a re-materialization.
+   * The version pin is the load-bearing invariant for ENBL-02 -- a
+   * `resolvePluginVersion` re-read would silently bump the version if
+   * plugin.json or the marketplace entry changed between disable and enable.
+   *
+   * When undefined, the PI-7 / PUP-3 / SNM-34 3-tier precedence applies
+   * (plugin.json > entry.version > hash). All other callers leave this
+   * undefined.
+   */
+  readonly pinVersionOverride?: string;
 }
 
 /**
@@ -441,8 +455,12 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       // is already owned by a different plugin IN THE SAME SCOPE.
       assertNoCrossPluginConflicts(scope, generatedNames, state);
 
-      // PI-7 version precedence (entry > hash).
-      const version = await resolvePluginVersion(entry, installable);
+      // PI-7 version precedence (entry > hash). D-54-01 / ENBL-02: when
+      // `pinVersionOverride` is set (Phase 54 enable branch), skip the
+      // resolver and reuse the caller-supplied pin verbatim. This preserves
+      // the recorded state record's `version` field across a
+      // re-materialization (Pitfall 54-4).
+      const version = opts.pinVersionOverride ?? (await resolvePluginVersion(entry, installable));
 
       // Resolve the per-plugin data dir up front; the bridges receive it
       // for ${CLAUDE_PLUGIN_DATA} substitution. The directory itself is

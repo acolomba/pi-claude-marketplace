@@ -59,6 +59,8 @@ function makeHandlers(): { handlers: SubcommandHandlers; calls: HandlerCall[] } 
     list: mk("list"),
     pluginInfo: mk("pluginInfo"),
     preview: mk("preview"),
+    enable: mk("enable"),
+    disable: mk("disable"),
     import: mk("import"),
     marketplaceAdd: mk("marketplaceAdd"),
     marketplaceRemove: mk("marketplaceRemove"),

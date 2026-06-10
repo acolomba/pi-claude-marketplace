@@ -3570,3 +3570,194 @@ test("DIFF-02: will-* cascade computes info severity (no second arg to ctx.ui.no
   // info severity routing: emitWithSummary omits the 2nd arg entirely.
   assert.equal(args.length, 1);
 });
+
+// ===========================================================================
+// D-54-01 / ENBL-04 (Phase 54 Plan 02): (disabled) inventory row + (already
+// enabled) / (already disabled) skip rows. The new closed-set token + REASONS
+// members land in lockstep with the catalog/UAT byte-equality runner.
+// ===========================================================================
+
+test("D-54-01: (disabled) inventory row renders subject-first with version under list-arm marketplace (info severity, no /reload)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        details: { autoupdate: true },
+        plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3" }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  // info severity -> no 2nd arg.
+  assert.equal(args.length, 1);
+  assert.equal(args[0], `● official [user] <autoupdate>\n  ⊘ foo-plugin v1.2.3 (disabled)`);
+});
+
+test("D-54-01: (disabled) inventory row without version omits the v<version> slot cleanly", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [{ status: "disabled", name: "foo-plugin" }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(args[0], `● official [user]\n  ⊘ foo-plugin (disabled)`);
+});
+
+test("D-54-01: (disabled) inventory row with orphan-fold scope bracket -- explicit p.scope differs from mp.scope", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "shared",
+        scope: "user",
+        plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3", scope: "project" }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(args[0], `● shared [user]\n  ⊘ foo-plugin [project] v1.2.3 (disabled)`);
+});
+
+test("D-54-01: (disabled) inventory row WITHOUT orphan-fold -- p.scope matches mp.scope -> no row bracket", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3", scope: "user" }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(args[0], `● official [user]\n  ⊘ foo-plugin v1.2.3 (disabled)`);
+});
+
+test("D-54-01 / ENBL idempotency: (skipped) {already enabled} row routes to info severity (benign reason)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "claude-plugins-official",
+        scope: "user",
+        plugins: [
+          {
+            status: "skipped",
+            name: "foo-plugin",
+            reasons: ["already enabled"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  // benign reason -> info severity (no 2nd arg).
+  assert.equal(args.length, 1);
+  assert.equal(
+    args[0],
+    `● claude-plugins-official [user]\n  ⊘ foo-plugin (skipped) {already enabled}`,
+  );
+});
+
+test("D-54-01 / ENBL idempotency: (skipped) {already disabled} row routes to info severity (benign reason)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "claude-plugins-official",
+        scope: "user",
+        plugins: [
+          {
+            status: "skipped",
+            name: "foo-plugin",
+            reasons: ["already disabled"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(
+    args[0],
+    `● claude-plugins-official [user]\n  ⊘ foo-plugin (skipped) {already disabled}`,
+  );
+});
+
+test("D-54-01: enable cascade (installed plugin row under added mp header) emits /reload trailer", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "claude-plugins-official",
+        scope: "user",
+        status: "added",
+        plugins: [
+          {
+            status: "installed",
+            name: "foo-plugin",
+            version: "1.2.3",
+            dependencies: [],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(
+    args[0],
+    `● claude-plugins-official [user] (added)\n  ● foo-plugin v1.2.3 (installed)\n\n/reload to pick up changes`,
+  );
+});
+
+test("D-54-01: disable cascade (uninstalled plugin row under list-arm mp) emits /reload trailer", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "claude-plugins-official",
+        scope: "user",
+        plugins: [
+          {
+            status: "uninstalled",
+            name: "foo-plugin",
+            version: "1.2.3",
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(
+    args[0],
+    `● claude-plugins-official [user]\n  ○ foo-plugin v1.2.3 (uninstalled)\n\n/reload to pick up changes`,
+  );
+});

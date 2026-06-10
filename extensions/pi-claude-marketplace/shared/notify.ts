@@ -95,6 +95,8 @@ export const REASONS = [
   "lock held",
   "already autoupdate",
   "already no autoupdate",
+  "already enabled",
+  "already disabled",
   "permission denied",
   "source missing",
   "network unreachable",
@@ -131,6 +133,8 @@ const BENIGN_REASONS: ReadonlySet<Reason> = new Set([
   "already installed",
   "already autoupdate",
   "already no autoupdate",
+  "already enabled",
+  "already disabled",
 ]);
 
 /**
@@ -181,6 +185,7 @@ export const STATUS_TOKENS = [
   "will uninstall",
   "will enable",
   "will disable",
+  "disabled",
 ] as const;
 
 export type StatusToken = (typeof STATUS_TOKENS)[number];
@@ -294,6 +299,7 @@ export const PLUGIN_STATUSES = [
   "will uninstall",
   "will enable",
   "will disable",
+  "disabled",
 ] as const;
 
 /**
@@ -447,6 +453,26 @@ export interface PluginReinstalledMessage {
  */
 export interface PluginUninstalledMessage {
   readonly status: "uninstalled";
+  readonly name: string;
+  readonly version?: string;
+  readonly scope?: Scope;
+}
+
+/**
+ * `(disabled)` -- D-54-01 / ENBL-04 closed-set inventory token. Emitted on
+ * `list` / `info` surfaces for plugins whose state record carries the
+ * empty-resources + `installable: true` marker (the load-bearing predicate is
+ * `orchestrators/reconcile/plan.ts::isRecordedButDisabled`). Structurally
+ * distinct from `(unavailable)`: the variant carries no `reasons` (a disabled
+ * plugin is in the user-requested state, not a failure state), and the byte
+ * form differs (`(disabled)` vs `(unavailable)`).
+ *
+ * NO `dependencies` / `reasons` / `cause` / `rollbackPartial` by construction
+ * -- the inventory row is bare. The renderer arm reuses `ICON_UNINSTALLABLE`
+ * (`⊘`) per RESEARCH Pattern 5 (mirrors the `will disable` glyph).
+ */
+export interface PluginDisabledMessage {
+  readonly status: "disabled";
   readonly name: string;
   readonly version?: string;
   readonly scope?: Scope;
@@ -649,7 +675,8 @@ export type PluginNotificationMessage =
   | PluginWillInstallMessage
   | PluginWillUninstallMessage
   | PluginWillEnableMessage
-  | PluginWillDisableMessage;
+  | PluginWillDisableMessage
+  | PluginDisabledMessage;
 
 /**
  * Common fields shared by every arm of the per-status
@@ -1667,6 +1694,20 @@ function renderPluginRow(
         p.name,
         renderScopeBracket(p.scope, mpScope),
         "(will disable)",
+      ]);
+    case "disabled":
+      // D-54-01 / ENBL-04: list/info inventory row for a recorded-but-disabled
+      // plugin. Subject-first grammar; reuses ICON_UNINSTALLABLE (`⊘`) per
+      // RESEARCH Pattern 5 (shared glyph with `will disable`). NO reasons --
+      // the variant carries none; composeReasons receives undefined + both
+      // soft-dep flags false (the inventory row never emits soft-dep markers).
+      return joinTokens([
+        ICON_UNINSTALLABLE,
+        p.name,
+        renderScopeBracket(p.scope, mpScope),
+        renderVersion(p.version),
+        "(disabled)",
+        composeReasons(undefined, false, false, probe),
       ]);
     default: {
       assertNever(p);

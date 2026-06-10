@@ -224,6 +224,57 @@ const WILL_VARIANT_FIXTURES: readonly GrammarFixture[] = [
 const WILL_TOKEN_RE =
   /^(?:[●○⊘]) [A-Za-z0-9_-]+(?: \[(?:user|project)\])?(?: \(will (?:add|remove|install|uninstall|enable|disable)\))?$/;
 
+// D-54-01 / ENBL-04 (Phase 54 Plan 02): subject-first row grammar for the new
+// `(disabled)` inventory token. Each row matches
+// `⊘ <name> [<scope>] v<version> (disabled)` with the status token AFTER the
+// subject, never before. The status token is the load-bearing assertion --
+// the row icon + name + optional bracket + optional version are exercised by
+// the catalog-uat byte-equality runner.
+const DISABLED_TOKEN_RE =
+  /^⊘ [A-Za-z0-9_-]+(?: \[(?:user|project)\])?(?: v[A-Za-z0-9.#_-]+)? \(disabled\)$/;
+
+const DISABLED_VARIANT_FIXTURES: readonly GrammarFixture[] = [
+  {
+    label: "D-54-01 / disabled plugin row with version under list-arm marketplace",
+    pi: piWithBothLoaded(),
+    message: {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "user",
+          plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3" }],
+        },
+      ],
+    },
+  },
+  {
+    label: "D-54-01 / disabled plugin row without version",
+    pi: piWithBothLoaded(),
+    message: {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "user",
+          plugins: [{ status: "disabled", name: "foo-plugin" }],
+        },
+      ],
+    },
+  },
+  {
+    label: "D-54-01 / disabled plugin row with orphan-fold scope bracket",
+    pi: piWithBothLoaded(),
+    message: {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "user",
+          plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3", scope: "project" }],
+        },
+      ],
+    },
+  },
+];
+
 test("DIFF-02: every will-* row renders subject-first `<glyph> <name> [<scope>] (will ...)` with the status token AFTER the subject", () => {
   for (const fixture of WILL_VARIANT_FIXTURES) {
     const ctx = makeCtx();
@@ -260,6 +311,54 @@ test("DIFF-02: every will-* row renders subject-first `<glyph> <name> [<scope>] 
     assert.ok(
       !emitted.includes("/reload to pick up changes"),
       `${fixture.label}: will-* preview rows must NOT emit the reload-hint trailer`,
+    );
+  }
+});
+
+test("D-54-01 / ENBL-04: every (disabled) row renders subject-first `⊘ <name> [<scope>] v<version> (disabled)` with the status token AFTER the subject", () => {
+  for (const fixture of DISABLED_VARIANT_FIXTURES) {
+    const ctx = makeCtx();
+    notify(ctx as never, fixture.pi as never, fixture.message);
+    assert.equal(
+      ctx.ui.notify.mock.calls.length,
+      1,
+      `notify() must call ctx.ui.notify exactly once for: ${fixture.label}`,
+    );
+    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    // (disabled) is an inventory token; routes to info severity (no 2nd arg).
+    assert.equal(
+      args.length,
+      1,
+      `${fixture.label}: (disabled) rows route to info severity (no 2nd notify arg)`,
+    );
+    const emitted = args[0];
+    // Every plugin row line (stripped 2-space indent) must match the
+    // subject-first grammar; the name appears BEFORE `(disabled)`.
+    const lines = emitted
+      .split("\n")
+      .map((l) => l.replace(/^ {2}/, ""))
+      .filter((l) => l.length > 0 && l.includes("(disabled)"));
+    assert.ok(lines.length > 0, `${fixture.label}: expected at least one (disabled) row`);
+    for (const line of lines) {
+      assert.match(
+        line,
+        DISABLED_TOKEN_RE,
+        `${fixture.label}: subject-first row grammar must hold for line '${line}'`,
+      );
+      // Belt-and-braces: assert the name token appears at byte index before
+      // `(disabled)` so the subject-first invariant is independent of the regex.
+      const nameIdx = line.indexOf("foo-plugin");
+      const tokenIdx = line.indexOf("(disabled)");
+      assert.ok(
+        nameIdx !== -1 && tokenIdx !== -1 && nameIdx < tokenIdx,
+        `${fixture.label}: subject 'foo-plugin' must appear before '(disabled)' in '${line}'`,
+      );
+    }
+
+    // Reload-hint trailer MUST NOT fire on an inventory cascade.
+    assert.ok(
+      !emitted.includes("/reload to pick up changes"),
+      `${fixture.label}: (disabled) inventory rows must NOT emit the reload-hint trailer`,
     );
   }
 });

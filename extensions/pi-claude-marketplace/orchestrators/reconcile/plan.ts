@@ -223,7 +223,7 @@ interface DeclaredPluginAccumulator {
  * empty-resources + installable-true intersection is the unambiguous
  * "currently disabled" marker. SPLIT-01 preserved -- no new schema field.
  */
-function isRecordedButDisabled(
+export function isRecordedButDisabled(
   record: ExtensionState["marketplaces"][string]["plugins"][string],
 ): boolean {
   return (

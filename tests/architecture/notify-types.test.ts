@@ -106,6 +106,12 @@ type _VWillInstall = Extract<PluginNotificationMessage, { status: "will install"
 type _VWillUninstall = Extract<PluginNotificationMessage, { status: "will uninstall" }>;
 type _VWillEnable = Extract<PluginNotificationMessage, { status: "will enable" }>;
 type _VWillDisable = Extract<PluginNotificationMessage, { status: "will disable" }>;
+// D-54-01 (Phase 54 Plan 02): `PluginDisabledMessage` is the new closed-set
+// inventory variant emitted on list/info for a recorded-but-disabled plugin.
+// Per-variant shape mirrors `PluginUninstalledMessage`: REQUIRED `name`,
+// OPTIONAL `version?` / `scope?`; NO `dependencies` / `reasons` / `cause` /
+// `rollbackPartial` / `from` / `to` / `description`.
+type _VDisabled = Extract<PluginNotificationMessage, { status: "disabled" }>;
 
 // Cross-module type aliases used in positional `extends` checks below.
 type _Scope = import("../../extensions/pi-claude-marketplace/shared/types.ts").Scope;
@@ -129,14 +135,15 @@ type _Assert_PluginStatusBackward = PluginNotificationMessage["status"] extends 
   : never;
 export const _pb: _Assert_PluginStatusBackward = true;
 
-// D-15-11 + DIFF-02 (Phase 53 Plan 02): PLUGIN_STATUSES tuple length is
-// exactly 15. UAT G-21-01: the tuple includes the list-only `"present"`
-// inventory token (SNM-15 surface tightening). DIFF-02 appends the 4
-// pending-tense `"will install"` / `"will uninstall"` / `"will enable"` /
-// `"will disable"` literals at the END of the tuple so the four head-of-tuple
-// state-change tokens that drive `shouldEmitReloadHint` stay positionally
-// unchanged.
-type _Assert_PluginStatusesLen = (typeof PLUGIN_STATUSES)["length"] extends 15 ? true : never;
+// D-15-11 + DIFF-02 (Phase 53 Plan 02) + D-54-01 (Phase 54 Plan 02):
+// PLUGIN_STATUSES tuple length is exactly 16 (15 existing + the new closed-set
+// `"disabled"` inventory token). UAT G-21-01: the tuple includes the list-only
+// `"present"` inventory token (SNM-15 surface tightening). DIFF-02 appends the
+// 4 pending-tense `"will install"` / `"will uninstall"` / `"will enable"` /
+// `"will disable"` literals; ENBL-04 appends `"disabled"` LAST so the
+// head-of-tuple state-change tokens that drive `shouldEmitReloadHint` stay
+// positionally unchanged.
+type _Assert_PluginStatusesLen = (typeof PLUGIN_STATUSES)["length"] extends 16 ? true : never;
 export const _l1: _Assert_PluginStatusesLen = true;
 
 // D-17.1-01 + D-15-11 + DIFF-02 (Phase 53 Plan 02): MARKETPLACE_STATUSES
@@ -147,21 +154,24 @@ type _Assert_MarketplaceStatusesLen = (typeof MARKETPLACE_STATUSES)["length"] ex
   : never;
 export const _l2: _Assert_MarketplaceStatusesLen = true;
 
-// DIFF-02 (Phase 53 Plan 02): STATUS_TOKENS tuple length is exactly 21
-// (15 existing + 6 new will-* literals).
-type _Assert_StatusTokensLen = (typeof STATUS_TOKENS)["length"] extends 21 ? true : never;
+// DIFF-02 (Phase 53 Plan 02) + D-54-01 (Phase 54 Plan 02): STATUS_TOKENS
+// tuple length is exactly 22 (21 existing + the new `"disabled"` inventory
+// token appended at the end).
+type _Assert_StatusTokensLen = (typeof STATUS_TOKENS)["length"] extends 22 ? true : never;
 export const _l1s: _Assert_StatusTokensLen = true;
 
 // SNM-06 + D-15-11: DEPENDENCIES tuple length is exactly 2.
 type _Assert_DependenciesLen = (typeof DEPENDENCIES)["length"] extends 2 ? true : never;
 export const _l3: _Assert_DependenciesLen = true;
 
-// SNM-03 + D-15-11 + DIFF-02 (Phase 53 Plan 02): `PluginStatus` is EXACTLY
-// the 15 expected literals (no more, no fewer). Bidirectional `extends`
-// proves set-equality. UAT G-21-01: the `"present"` literal is the list-only
-// inventory token introduced to close the reload-hint misfire on
-// `/claude:plugin list`. DIFF-02: the 4 trailing `"will *"` literals are the
-// pending-tense preview tokens.
+// SNM-03 + D-15-11 + DIFF-02 (Phase 53 Plan 02) + D-54-01 (Phase 54 Plan 02):
+// `PluginStatus` is EXACTLY the 16 expected literals (no more, no fewer).
+// Bidirectional `extends` proves set-equality. UAT G-21-01: the `"present"`
+// literal is the list-only inventory token introduced to close the
+// reload-hint misfire on `/claude:plugin list`. DIFF-02: the 4 trailing
+// `"will *"` literals are the pending-tense preview tokens. ENBL-04:
+// `"disabled"` is the list/info inventory token for a recorded-but-disabled
+// plugin (structurally distinct from `(unavailable)`).
 type _PluginStatusExpected =
   | "installed"
   | "updated"
@@ -177,7 +187,8 @@ type _PluginStatusExpected =
   | "will install"
   | "will uninstall"
   | "will enable"
-  | "will disable";
+  | "will disable"
+  | "disabled";
 type _Assert_PluginStatusValues = _PluginStatusExpected extends PluginStatus
   ? PluginStatus extends _PluginStatusExpected
     ? true
@@ -365,6 +376,8 @@ export type _NoCauseOnWillUninstall = _VWillUninstall["cause"];
 export type _NoCauseOnWillEnable = _VWillEnable["cause"];
 // @ts-expect-error -- DIFF-02: will disable has NO cause field
 export type _NoCauseOnWillDisable = _VWillDisable["cause"];
+// @ts-expect-error -- D-54-01 / ENBL-04: disabled has NO cause field (inventory row)
+export type _NoCauseOnDisabled = _VDisabled["cause"];
 
 // ============================================================================
 // Per-variant: rollbackPartial? (SNM-09 + D-15-12)
@@ -407,6 +420,8 @@ export type _NoRollbackOnWillUninstall = _VWillUninstall["rollbackPartial"];
 export type _NoRollbackOnWillEnable = _VWillEnable["rollbackPartial"];
 // @ts-expect-error -- DIFF-02: will disable has NO rollbackPartial field
 export type _NoRollbackOnWillDisable = _VWillDisable["rollbackPartial"];
+// @ts-expect-error -- D-54-01 / ENBL-04: disabled has NO rollbackPartial field
+export type _NoRollbackPartialOnDisabled = _VDisabled["rollbackPartial"];
 
 // ============================================================================
 // Per-variant: dependencies (SNM-06 + D-15-02 + D-15-12)
@@ -481,6 +496,8 @@ export type _NoDepsOnWillUninstall = _VWillUninstall["dependencies"];
 export type _NoDepsOnWillEnable = _VWillEnable["dependencies"];
 // @ts-expect-error -- DIFF-02: will disable has NO dependencies field
 export type _NoDepsOnWillDisable = _VWillDisable["dependencies"];
+// @ts-expect-error -- D-54-01 / ENBL-04: disabled has NO dependencies field (inventory row never emits soft-dep markers)
+export type _NoDependenciesOnDisabled = _VDisabled["dependencies"];
 
 // ============================================================================
 // Per-variant: reasons (D-15-01 + D-15-12)
@@ -555,6 +572,8 @@ export type _NoReasonsOnWillUninstall = _VWillUninstall["reasons"];
 export type _NoReasonsOnWillEnable = _VWillEnable["reasons"];
 // @ts-expect-error -- DIFF-02: will disable has NO reasons field
 export type _NoReasonsOnWillDisable = _VWillDisable["reasons"];
+// @ts-expect-error -- D-54-01 / ENBL-04: disabled has NO reasons field (the user-requested disabled state is not a failure mode)
+export type _NoReasonsOnDisabled = _VDisabled["reasons"];
 
 // DIFF-02: scope is OPTIONAL (`Scope | undefined`) on every will-* variant.
 type _Assert_ScopeOnWillInstall = _VWillInstall["scope"] extends _Scope | undefined ? true : never;
@@ -618,6 +637,22 @@ type _Assert_WillDisableShape = _VWillDisable extends _PluginWillDisableExpected
     : never
   : never;
 export const _vshpWD: _Assert_WillDisableShape = true;
+
+// D-54-01 / ENBL-04 (Phase 54 Plan 02): PluginDisabledMessage shape proof.
+// Mirrors PluginUninstalledMessage exactly except for the status literal --
+// REQUIRED `name`, OPTIONAL `version?` / `scope?`; NO other fields.
+interface _PluginDisabledExpected {
+  readonly status: "disabled";
+  readonly name: string;
+  readonly version?: string;
+  readonly scope?: _Scope;
+}
+type _Assert_DisabledShape = _VDisabled extends _PluginDisabledExpected
+  ? _PluginDisabledExpected extends _VDisabled
+    ? true
+    : never
+  : never;
+export const _vshpD: _Assert_DisabledShape = true;
 
 // DIFF-02: marketplace will-* variant SHAPE proofs. Each variant carries
 // REQUIRED `name` / `scope` / `plugins` and the literal `status`; no
@@ -692,6 +727,12 @@ export const _scMR: _Assert_ScopeOnManualRecovery = true;
 type _Assert_ScopeOnPresent = _VPresent["scope"] extends _Scope | undefined ? true : never;
 export const _scP: _Assert_ScopeOnPresent = true;
 
+// D-54-01 / ENBL-04: PluginDisabledMessage carries OPTIONAL `scope?: Scope`
+// joining the scope-bearing list-surface variants. The SNM-11 carve-out
+// applies only to `available` / `unavailable`.
+type _Assert_ScopeOnDisabled = _VDisabled["scope"] extends _Scope | undefined ? true : never;
+export const _scD: _Assert_ScopeOnDisabled = true;
+
 // @ts-expect-error -- SNM-11: available has NO scope field (MSG-PL-6 carve-out)
 export type _NoScopeOnAvailable = _VAvailable["scope"];
 // @ts-expect-error -- SNM-11: unavailable has NO scope field (MSG-PL-6 carve-out)
@@ -737,6 +778,8 @@ export type _NoFromOnSkipped = _VSkipped["from"];
 export type _NoFromOnManualRecovery = _VManualRecovery["from"];
 // @ts-expect-error -- D-15-04: present has NO from field (UAT G-21-01)
 export type _NoFromOnPresent = _VPresent["from"];
+// @ts-expect-error -- D-54-01 / ENBL-04: disabled has NO from field
+export type _NoFromOnDisabled = _VDisabled["from"];
 // @ts-expect-error -- DIFF-02: will install has NO from field
 export type _NoFromOnWillInstall = _VWillInstall["from"];
 // @ts-expect-error -- DIFF-02: will uninstall has NO from field
@@ -766,6 +809,8 @@ export type _NoToOnSkipped = _VSkipped["to"];
 export type _NoToOnManualRecovery = _VManualRecovery["to"];
 // @ts-expect-error -- D-15-04: present has NO to field (UAT G-21-01)
 export type _NoToOnPresent = _VPresent["to"];
+// @ts-expect-error -- D-54-01 / ENBL-04: disabled has NO to field
+export type _NoToOnDisabled = _VDisabled["to"];
 // @ts-expect-error -- DIFF-02: will install has NO to field
 export type _NoToOnWillInstall = _VWillInstall["to"];
 // @ts-expect-error -- DIFF-02: will uninstall has NO to field
@@ -836,6 +881,12 @@ export const _vMR: _Assert_VersionOnManualRecovery = true;
 type _Assert_VersionOnPresent = _VPresent["version"] extends string | undefined ? true : never;
 export const _vP: _Assert_VersionOnPresent = true;
 
+// D-54-01 / ENBL-04: PluginDisabledMessage carries OPTIONAL `version?: string`
+// mirroring PluginUninstalledMessage; the recorded state record's version pin
+// (preserved per ENBL-02) carries through to the inventory row.
+type _Assert_VersionOnDisabled = _VDisabled["version"] extends string | undefined ? true : never;
+export const _vD: _Assert_VersionOnDisabled = true;
+
 // ============================================================================
 // INFO-04 / INFO-08: REASONS closed-set + length lock
 //
@@ -851,7 +902,12 @@ export const _vP: _Assert_VersionOnPresent = true;
 // 2); `_l4` / `_l4b` here and `_l5..._l9` cover the info variants below.
 // ============================================================================
 
-type _Assert_ReasonsLen = (typeof REASONS)["length"] extends 29 ? true : never;
+// D-54-01 / ENBL-04 (Phase 54 Plan 02): REASONS tuple length is now 31
+// (29 existing + `"already enabled"` + `"already disabled"`). Both new
+// members are in BENIGN_REASONS so idempotent enable/disable cascades route
+// to info severity via the UXG-02 / D-28-06 first-match ladder (mirrors the
+// `already autoupdate` / `already no autoupdate` precedent).
+type _Assert_ReasonsLen = (typeof REASONS)["length"] extends 31 ? true : never;
 export const _l4: _Assert_ReasonsLen = true;
 
 type _Assert_NotAddedMember = "not added" extends (typeof REASONS)[number] ? true : never;

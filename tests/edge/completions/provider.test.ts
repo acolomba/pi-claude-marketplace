@@ -94,7 +94,7 @@ async function emptyFixture(): Promise<Fixture> {
 // TC-1 -- top-level subcommand keywords.
 // ---------------------------------------------------------------------------
 
-test("TC-1 :: first positional surfaces top-level keywords (bootstrap/install/uninstall/update/reinstall/list/ls/info/preview/import/marketplace)", async () => {
+test("TC-1 :: first positional surfaces top-level keywords (bootstrap/install/uninstall/update/reinstall/list/ls/info/preview/enable/disable/import/marketplace)", async () => {
   __resetCacheForTests();
   const f = await emptyFixture();
   try {
@@ -104,9 +104,12 @@ test("TC-1 :: first positional surfaces top-level keywords (bootstrap/install/un
     // INFO-02: `info` added to TOP_LEVEL_SUBCOMMANDS for the
     // `info <plugin>@<marketplace>` top-level verb. DIFF-01 SC #2 (Phase 53
     // Plan 02): `preview` added for the `/claude:plugin preview` read-only
-    // diff command.
+    // diff command. D-54-01 (Phase 54 Plan 02): `enable` / `disable` added
+    // for the new enable/disable surface (ENBL-01..04).
     assert.deepEqual([...labels].sort(), [
       "bootstrap",
+      "disable",
+      "enable",
       "import",
       "info",
       "install",
