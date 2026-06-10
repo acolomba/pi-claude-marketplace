@@ -99,6 +99,12 @@ function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceNotifica
       return { name, scope, status: "will add", plugins };
     case "will remove":
       return { name, scope, status: "will remove", plugins };
+    case "added":
+      // RECON-04 (Phase 55 Plan 02): realized apply-time transition token.
+      return { name, scope, status: "added", plugins };
+    case "removed":
+      // RECON-04: realized apply-time transition token.
+      return { name, scope, status: "removed", plugins };
     case "failed":
       return {
         name,
@@ -109,8 +115,17 @@ function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceNotifica
       };
     case undefined:
       return { name, scope, plugins };
-    default:
+    case "updated":
+    case "autoupdate enabled":
+    case "autoupdate disabled":
+    case "skipped":
+      // The reconcile projections (preview + applied) never assign these
+      // statuses; surface a defensive error so any future
+      // applyOutcomeToBlock change that would assign one of these here
+      // becomes a runtime signal during tests.
       throw new Error(`unexpected reconcile marketplace status: ${block.status}`);
+    default:
+      assertNever(block.status);
   }
 }
 
