@@ -124,6 +124,12 @@ export interface PlannedPluginDisable {
  * component of the offending config key so N dangling plugins under one
  * undeclared marketplace stay individually attributable. Phase 55 surfaces
  * this as a planning-time advisory.
+ *
+ * A fourth use captures the MALFORMED-PLUGIN-KEY diagnostic (a declared
+ * plugin key with no `@`, a leading `@`, or a trailing `@`): cause
+ * `"source-mismatch"`, `marketplace` carries the RAW config key as the
+ * renderable subject, `declaredSource` is the empty string, and
+ * `recordedSource` is the literal sentinel `"<malformed plugin key>"`.
  */
 export interface PlannedSourceMismatch {
   readonly scope: Scope;

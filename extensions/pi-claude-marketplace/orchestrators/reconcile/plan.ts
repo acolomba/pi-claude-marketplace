@@ -39,6 +39,12 @@
 // it as an install/disable would emit a self-contradictory plan ("will
 // remove" the marketplace AND "will install" into it) that Phase 55's apply
 // path would consume verbatim.
+//
+// Malformed-key contract: a declared plugin key `parsePluginKey` rejects
+// (no `@`, leading `@`, trailing `@`) is recorded as a
+// `PlannedSourceMismatch` with the RAW key in the `marketplace` field,
+// `declaredSource: ""`, and `recordedSource: "<malformed plugin key>"` --
+// the entry surfaces as a `(failed)` row instead of being silently omitted.
 
 import { parsePluginSource, samePlannedSource, sourceLogical } from "../../domain/source.ts";
 
@@ -61,14 +67,25 @@ import type { Scope } from "../../shared/types.ts";
 const MARKETPLACE_NOT_DECLARED = "<marketplace not declared>";
 
 /**
+ * Sentinel for the malformed-plugin-key diagnostic (a declared plugin key
+ * with no `@`, a leading `@`, or a trailing `@`). The raw key is carried in
+ * the diagnostic's `marketplace` field as the renderable subject.
+ */
+const MALFORMED_PLUGIN_KEY = "<malformed plugin key>";
+
+/**
  * Parse a flat-keyed plugin entry `"${plugin}@${marketplace}"` into its
  * components by `lastIndexOf("@")`. This admits plugin names containing
  * `@` (e.g. `"evil@evil@marketplace"` -> plugin `"evil@evil"`, marketplace
  * `"marketplace"`).
  *
  * Returns `undefined` for malformed keys (no `@`, empty plugin, empty
- * marketplace); the planner silently skips them. The CONFIG_SCHEMA upstream
- * permits any string key so a typo cannot wedge the planner.
+ * marketplace). The caller surfaces such keys as a `PlannedSourceMismatch`
+ * diagnostic carrying the raw key -- not-wedging (the CONFIG_SCHEMA upstream
+ * permits any string key so a typo cannot wedge the planner) and
+ * not-reporting are different requirements: a declared entry the preview
+ * silently omits would hide exactly the config↔state divergence the command
+ * exists to surface.
  */
 function parsePluginKey(key: string): { plugin: string; marketplace: string } | undefined {
   const at = key.lastIndexOf("@");
@@ -191,6 +208,16 @@ function classifyDeclaredPlugin(
 ): void {
   const parsed = parsePluginKey(key);
   if (parsed === undefined) {
+    // Malformed key (no `@`, leading `@`, or trailing `@`, e.g. the user
+    // forgot the `@marketplace` suffix). Surface a diagnostic carrying the
+    // raw key as the subject instead of silently omitting the entry.
+    acc.dangling.push({
+      scope,
+      marketplace: key,
+      declaredSource: "",
+      recordedSource: MALFORMED_PLUGIN_KEY,
+      cause: "source-mismatch",
+    });
     return;
   }
 

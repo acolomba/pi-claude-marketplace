@@ -382,6 +382,41 @@ test("Edge: declared-disabled plugin under a recorded-but-undeclared marketplace
   assert.equal(dangling.plugin, "cr");
 });
 
+test("Edge: malformed plugin keys -> diagnostic with raw key as subject, NEVER silently dropped (WR-02)", () => {
+  // A user who declares "my-plugin": {} (forgot the @marketplace suffix)
+  // must get a (failed) diagnostic, not a preview that simply omits the
+  // entry -- the command's whole purpose is surfacing config<->state
+  // divergence. Three malformed shapes: no `@`, leading `@`, trailing `@`.
+  const state: ExtensionState = { schemaVersion: 1, marketplaces: {} };
+  const merged = mergeScopeConfigs(
+    configWith(
+      {},
+      {
+        "my-plugin": {},
+        "@leading": {},
+        "trailing@": {},
+      },
+    ),
+    {},
+  );
+  const plan = planReconcile(merged, state, "project");
+  assert.equal(plan.pluginsToInstall.length, 0);
+  assert.equal(plan.sourceMismatches.length, 3);
+  for (const mm of plan.sourceMismatches) {
+    assert.equal(mm.cause, "source-mismatch");
+    assert.equal(mm.declaredSource, "");
+    assert.equal(mm.recordedSource, "<malformed plugin key>");
+    assert.equal(mm.plugin, undefined);
+  }
+
+  // The raw keys are carried verbatim as the renderable subjects.
+  assert.deepEqual(plan.sourceMismatches.map((mm) => mm.marketplace).sort(), [
+    "@leading",
+    "my-plugin",
+    "trailing@",
+  ]);
+});
+
 test("Plugin key parser: lastIndexOf('@') admits plugin names containing '@'", () => {
   // `evil@evil@marketplace` -> plugin "evil@evil", marketplace "marketplace".
   const state = stateWithOnePathMarketplace("marketplace", "./mp");
