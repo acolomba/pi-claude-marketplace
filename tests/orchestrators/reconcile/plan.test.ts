@@ -363,11 +363,14 @@ test("ENBL-02 (b): recorded + NON-empty resources + enabled!==false -> pluginsTo
   assert.deepEqual(plan, emptyReconcilePlan("project"));
 });
 
-test("ENBL-02 (c): recorded + empty resources + enabled===false -> pluginsToDisable (NOT pluginsToEnable, disable branch still owns)", () => {
-  // The disable branch (Phase 53) still applies when enabled===false even
-  // for an already-empty-resources record. Phase 55's apply path makes this
-  // a no-op at the artefact level, but the planner classifies the entry as
-  // a disable so the config<->state divergence is surfaced.
+test("ENBL-02 (c) / WR-05: recorded + empty resources + enabled===false -> STEADY STATE (converged disabled is no divergence)", () => {
+  // WR-05: the terminal state of a successful disable is exactly "recorded
+  // with empty resources + config enabled:false" (ENBL-02 keeps the
+  // record). The planner must treat it as steady state -- NOT a perpetual
+  // pluginsToDisable entry that would render `(will disable)` forever and
+  // make Phase 55's apply path re-run a no-op disable on every reload.
+  // Symmetric with the enable case: "recorded + populated + enabled" is
+  // steady state too.
   const state = stateWithDisabledRecord("mp", "acme/tools", "cr");
   const merged = mergeScopeConfigs(
     configWith({ mp: { source: "acme/tools" } }, { "cr@mp": { enabled: false } }),
@@ -375,12 +378,31 @@ test("ENBL-02 (c): recorded + empty resources + enabled===false -> pluginsToDisa
   );
   const plan = planReconcile(merged, state, "project");
   assert.equal(plan.pluginsToEnable.length, 0);
-  assert.equal(plan.pluginsToDisable.length, 1);
-  assert.deepEqual(plan.pluginsToDisable[0], {
+  assert.equal(plan.pluginsToDisable.length, 0);
+  assert.deepEqual(plan, emptyReconcilePlan("project"));
+});
+
+test("WR-05 convergence: populated record + enabled===false -> disable; disabled record + enabled===false -> empty plan (disable -> re-plan converges)", () => {
+  const merged = mergeScopeConfigs(
+    configWith({ mp: { source: "acme/tools" } }, { "cr@mp": { enabled: false } }),
+    {},
+  );
+
+  // Step 1: artefacts still materialised -> the planner emits the disable.
+  const populated = stateWithOneGithubMarketplace("mp", "acme/tools", ["cr"]);
+  const planBefore = planReconcile(merged, populated, "project");
+  assert.equal(planBefore.pluginsToDisable.length, 1);
+  assert.deepEqual(planBefore.pluginsToDisable[0], {
     scope: "project",
     plugin: "cr",
     marketplace: "mp",
   });
+
+  // Step 2: after the disable ran (record kept, resources emptied per
+  // ENBL-02), the re-plan must converge to the empty plan.
+  const disabled = stateWithDisabledRecord("mp", "acme/tools", "cr");
+  const planAfter = planReconcile(merged, disabled, "project");
+  assert.deepEqual(planAfter, emptyReconcilePlan("project"));
 });
 
 test("ENBL-02 (d): NOT recorded + enabled!==false -> pluginsToInstall ONLY, NEVER both (Pitfall 54-6 mutual exclusion)", () => {

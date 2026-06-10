@@ -289,9 +289,19 @@ function classifyDeclaredPlugin(
   const recorded = recordedKeys.has(key);
 
   if (enabledExplicitFalse) {
-    if (recorded) {
-      // Declared-disabled but still recorded: drop materialised artefacts
-      // without removing the version pin (D-04 / ENBL-02).
+    // WR-05 convergence: the terminal state of a successful disable is
+    // exactly "recorded with empty resources + config `enabled: false`"
+    // (ENBL-02 keeps the record). That steady state is NOT a config<->state
+    // divergence -- pushing a disable for it would render
+    // `(will disable)` forever and make Phase 55's apply path re-run a
+    // no-op disable on every reload. Only a recorded record that is NOT
+    // already disabled (artefacts still materialised) needs the action --
+    // symmetric with the enable branch's "recorded + populated + enabled"
+    // steady state below.
+    const record = state.marketplaces[marketplace]?.plugins[plugin];
+    if (recorded && record !== undefined && !isRecordedButDisabled(record)) {
+      // Declared-disabled but still materialised: drop artefacts without
+      // removing the version pin (D-04 / ENBL-02).
       acc.disable.push({ scope, plugin, marketplace });
     }
 
