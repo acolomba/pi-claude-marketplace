@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.12
 milestone_name: Marketplace and Plugin Config Files
 status: executing
-stopped_at: Phase 52 Plan 01 complete
-last_updated: "2026-06-10T14:28:23.177Z"
-last_activity: 2026-06-10 -- Phase 53 planning complete
+stopped_at: Phase 53 Plan 01 complete
+last_updated: "2026-06-10T15:30:00.000Z"
+last_activity: 2026-06-10 -- Phase 53 Plan 01 complete (DIFF-01 foundation)
 progress:
   total_phases: 34
   completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
-  percent: 6
+  total_plans: 6
+  completed_plans: 5
+  percent: 7
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-08)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 52 — first-run-migration
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 53 — pure-reconcile-planner-dry-run-preview
 
 ## Current Position
 
-Phase: 53
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-06-10 -- Phase 53 planning complete
+Phase: 53 (pure-reconcile-planner-dry-run-preview) — EXECUTING
+Plan: 2 of 2 (Plan 01 complete; Plan 02 next)
+Status: Executing Phase 53
+Last activity: 2026-06-10 -- Phase 53 Plan 01 complete (DIFF-01 foundation)
 
 ## Performance Metrics
 
@@ -92,6 +92,7 @@ Last activity: 2026-06-10 -- Phase 53 planning complete
 | Phase 51 P02 | 95 | 2 tasks | 17 files |
 | Phase 51 P03 | 25 | 1 tasks | 1 files |
 | Phase 52 P01 | ~14m | 2 tasks | 3 files |
+| Phase 53 P01 | ~18m | 1 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -169,6 +170,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: D-13 ORDERING RAIL: autoupdate scrub gated on existsSync(configJsonPath) preserves legacy field for Phase 52 first-run migration
 - [Phase ?]: SPLIT-01 cast migration (user-approved 2026-06-10, Rule 4 Option A): cast-and-tag readers/writers across 11 files outside persistence/ with // SPLIT-01: markers; rewire deferred to Phases 54-56
 - [Phase ?]: [Phase 51]: SPLIT-02 closed structurally — tests/architecture/config-state-write-seams.test.ts refuses any atomicWriteJson(...) callsite targeting state.json / claude-plugins.json / claude-plugins.local.json outside the named allow-lists (config-io.ts for config; state-io.ts + migrate.ts for state); 'exactly N' sibling assertions force silent widening to fail CI. Path-name-specific regex chosen over the plan's locked COARSE-WALK formulation (Rule 1 deviation): coarse walk would have wrongly flagged 7 legitimate atomicWriteJson callsites that write other JSON files (mcp.json, agents-index.json, completion caches). -- Plan 51-03.
+- [Phase 53]: DIFF-01 foundation landed (pure planner + types + projection + purity gate) as one atomic byte-neutral commit. New orchestrators/reconcile/{types,plan,notify}.ts with the 7-bucket bidirectional diff (marketplacesToAdd / marketplacesToRemove / pluginsToInstall / pluginsToUninstall / pluginsToEnable / pluginsToDisable / sourceMismatches) plus emptyReconcilePlan factory; planReconcile imports zero effectful surface (architecture grep-gate at tests/architecture/reconcile-planner-purity.test.ts over comment-stripped source enforces this structurally); buildReconcilePreviewNotification mirrors buildImportNotificationMarketplaces using the same MarketplaceBlock / ensureMarketplaceBlock / compareByNameThenScope pattern; placeholder status strings ("added" / "removed" / "failed") so Plan 02 takes the projection's status assignment as the seam where the pending-tense token set lands. samePlannedSource extracted from orchestrators/import/execute.ts:186-216 into domain/source.ts as a sibling export to sourceLogical/parsePluginSource; both call sites import from there; orchestrators/import/execute.ts behavior-preserving (18/18 import tests stayed GREEN byte-identically). Phase 52 SC#4 deferred convergence proof DISCHARGED: tests/orchestrators/reconcile/plan-convergence.test.ts asserts planReconcile(mergeScopeConfigs(buildConfigFromState(state), {}), state, scope) deepEqual emptyReconcilePlan(scope) for both project and user scopes against the populated fixture. pluginsToEnable bucket structurally empty in Phase 53 (Pitfall 53-4; Phase 54 wires the disabled-state check); D-04 consume-time default applied (enabled === undefined includes; only === false excludes). Pitfall 53-3 atomic-supersession discipline preserved -- zero touches to shared/notify.ts / docs/output-catalog.md / catalog-uat FIXTURES / notify-types.test.ts / notify-grammar-invariant.test.ts; Plan 02 owns those bytes. npm run check GREEN 1604/1604 unit + 7/7 integration (Phase 52 baseline 1571 + 33 new tests across 4 new test files). -- Plan 53-01.
 - [Phase 52]: MIG-01 + MIG-02 closed. New persistence/migrate-config.ts (118 lines) exports three symbols: MigrateFirstRunResult interface, pure buildConfigFromState projection (every marketplace + every plugin -- including soft-degraded/installable=false per Pitfall 52-1 -- flat-keyed `${plugin}@${mp}` per D-01 with empty body per D-04; source byte-stable via (mp.source as ParsedSource).raw per SP-7; legacy autoupdate captured only on strict === true / === false arms per D-04+defense-in-depth; schemaVersion: 1 literal per D-11), and migrateFirstRunConfig thin ENOENT-gated orchestrator (loadConfig trichotomy: any status !== 'absent' short-circuits with { migrated:false, entryCount:0 } -- Pitfall 52-5 NEVER overwrites valid OR invalid pre-existing config; on absent arm builds projection + writes through saveConfig inheriting NFR-1 atomicity + NFR-10 containment + CONFIG_VALIDATOR revalidation). Assumption A1 [VERIFIED]: SPLIT-02 architecture test stayed at 1 entry in ALLOWED_CONFIG_JSON_WRITERS (config-io.ts) -- migrate-config.ts routes through saveConfig not atomicWriteJson, so the path-name regex does not match; no allow-list edit needed. Phase 53 owns the planner-level planReconcile no-op convergence proof; Phase 55 owns the load-wiring call site + Pitfall 52-2 (concurrent first-load lock coverage) + Pitfall 52-4 (D-13 gate race). 20/20 new tests GREEN; npm run check GREEN 1571/1571 unit + 7/7 integration. -- Plan 52-01.
 
 ### Pending Todos
@@ -216,10 +218,10 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-10T12:05:48Z
-Stopped At: Phase 52 Plan 01 complete
-Resume File: .planning/phases/53-pure-reconcile-planner-and-dry-run-preview/ (to be planned)
+Last session: 2026-06-10T15:30:00Z
+Stopped At: Phase 53 Plan 01 complete
+Resume File: .planning/phases/53-pure-reconcile-planner-dry-run-preview/53-02-PLAN.md
 
 ## Operator Next Steps
 
-- Plan Phase 53 (Pure Reconcile Planner & Dry-Run Preview, DIFF-01 + DIFF-02) -- consumes the Phase 52 buildConfigFromState seam in the data-level convergence proof and lands planReconcile + the read-only diff/preview command.
+- Execute Phase 53 Plan 02 -- atomic 6-fold catalog amendment: the 6 new `will *` STATUS_TOKENS (`will add` / `will remove` / `will install` / `will uninstall` / `will enable` / `will disable`) + per-variant notify interfaces + renderer arms + the `previewReconcile` orchestrator + the edge handler shim + router + completion provider + 6 docs/output-catalog.md catalog states + 6 catalog-uat FIXTURES entries + notify-types length-locks + FORBIDDEN_TARGETS extension on `tests/architecture/no-orchestrator-network.test.ts`. Plan 02 lands the user-visible bytes that Plan 01 deliberately deferred. Phase 53 closes when Plan 02 ships.

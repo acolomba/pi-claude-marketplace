@@ -228,7 +228,7 @@ Declarative, version-controllable config files (`claude-plugins.json` + entry-le
 
 **Wave 1**
 
-- [ ] 53-01-PLAN.md -- Pure planReconcile + types + projection skeleton + architecture purity gate + Phase 52 convergence proof discharged (DIFF-01 foundation; byte-neutral to shared/notify.ts)
+- [x] 53-01-PLAN.md -- Pure planReconcile + types + projection skeleton + architecture purity gate + Phase 52 convergence proof discharged (DIFF-01 foundation; byte-neutral to shared/notify.ts) -- shipped 2026-06-10 (commit c690a60)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
