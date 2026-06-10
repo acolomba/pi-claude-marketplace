@@ -1295,6 +1295,44 @@ type _Assert_ReconcilePreviewEmptyShape = _VReconcilePreviewEmpty extends {
   : never;
 export const _rpe: _Assert_ReconcilePreviewEmptyShape = true;
 
+// --- RECON-04 (Phase 55 Plan 02): 8-arm union arity locking the new
+//     `reconcile-applied-cascade` standalone variant. ---
+
+type _Assert_NotifEightArms =
+  Extract<NotificationMessage, { marketplaces: readonly unknown[]; kind?: "cascade" }> extends never
+    ? never
+    : Extract<NotificationMessage, { kind: "marketplace-info" }> extends never
+      ? never
+      : Extract<NotificationMessage, { kind: "plugin-info" }> extends never
+        ? never
+        : Extract<NotificationMessage, { kind: "marketplace-info-cascade" }> extends never
+          ? never
+          : Extract<NotificationMessage, { kind: "plugin-info-cascade" }> extends never
+            ? never
+            : Extract<NotificationMessage, { kind: "marketplace-not-added" }> extends never
+              ? never
+              : Extract<NotificationMessage, { kind: "reconcile-preview-empty" }> extends never
+                ? never
+                : Extract<NotificationMessage, { kind: "reconcile-applied-cascade" }> extends never
+                  ? never
+                  : true;
+export const _l14: _Assert_NotifEightArms = true;
+
+// RECON-04: the reconcile-applied-cascade variant carries `kind` +
+// `marketplaces` only (no reasons / details / scope at the top level -- the
+// per-mp / per-plugin rows carry their own discriminated fields).
+type _VReconcileAppliedCascade = Extract<
+  NotificationMessage,
+  { kind: "reconcile-applied-cascade" }
+>;
+type _Assert_ReconcileAppliedCascadeShape = _VReconcileAppliedCascade extends {
+  readonly kind: "reconcile-applied-cascade";
+  readonly marketplaces: readonly MarketplaceNotificationMessage[];
+}
+  ? true
+  : never;
+export const _rac: _Assert_ReconcileAppliedCascadeShape = true;
+
 // --- TYPE-04 (D-46-03 / D-48-A): per-status co-occurrence -- reasons on
 //     skipped AND failed, details only on the list arm ---
 

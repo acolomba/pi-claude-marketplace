@@ -79,7 +79,13 @@ function loadCatalogExamples(catalog: string): readonly CatalogExample[] {
   let inFence = false;
   let fenceBody: string[] = [];
 
-  const sectionRe = /^## (`(\/claude:plugin [^`]+)`|Manual recovery anchors)\s*$/;
+  // RECON-04 (Phase 55 Plan 02): the `reconcile-applied-cascade` H2 is a
+  // command-less section -- the cascade is emitted programmatically by the
+  // load-time apply orchestrator, not via a `/claude:plugin` verb. The
+  // parser accepts a plain non-backtick heading whose text matches the
+  // discriminator-style identifier.
+  const sectionRe =
+    /^## (`(\/claude:plugin [^`]+)`|Manual recovery anchors|reconcile-applied-cascade)\s*$/;
   const stateRe = /^<!-- catalog-state: ([a-z0-9-]+) -->\s*$/;
 
   for (const line of lines) {
@@ -105,7 +111,20 @@ function loadCatalogExamples(catalog: string): readonly CatalogExample[] {
 
     const sectionMatch = sectionRe.exec(line);
     if (sectionMatch !== null) {
-      currentSection = sectionMatch[2] ?? "manual-recovery-anchors";
+      // sectionMatch[2] is the backtick-wrapped `/claude:plugin ...` capture
+      // (present only on the command-section arm). When absent, fall back to
+      // the literal section name from group 1 (transformed to kebab-case for
+      // the `Manual recovery anchors` arm; left as-is for the plain
+      // `reconcile-applied-cascade` arm -- RECON-04).
+      const groupOne = sectionMatch[1] ?? "";
+      if (sectionMatch[2] !== undefined) {
+        currentSection = sectionMatch[2];
+      } else if (groupOne === "Manual recovery anchors") {
+        currentSection = "manual-recovery-anchors";
+      } else {
+        currentSection = groupOne;
+      }
+
       pendingState = null;
       continue;
     }
@@ -2383,6 +2402,74 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        marketplaces: [
+          {
+            name: "claude-plugins.json",
+            scope: "project",
+            status: "failed",
+            reasons: ["invalid manifest"],
+            plugins: [],
+          },
+        ],
+      },
+    },
+  },
+
+  // -------------------------------------------------------------------------
+  // reconcile-applied-cascade -- RECON-04 (Phase 55 Plan 02) load-time apply
+  // cascade. Standalone-dispatched variant; severity is content-derived
+  // (mirrors the cascade-arm ladder); shouldEmitReloadHint structurally
+  // false (the reconcile already ran on /reload).
+  // -------------------------------------------------------------------------
+  "reconcile-applied-cascade": {
+    "success-cascade-mixed": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        marketplaces: [
+          {
+            name: "new-mp",
+            scope: "project",
+            status: "added",
+            plugins: [{ status: "installed", name: "new-plugin", dependencies: [] }],
+          },
+          {
+            name: "other-mp",
+            scope: "user",
+            status: "added",
+            plugins: [{ status: "installed", name: "other-plugin", dependencies: [] }],
+          },
+        ],
+      },
+    },
+    "soft-fail-mixed": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        marketplaces: [
+          {
+            name: "flaky-mp",
+            scope: "user",
+            status: "failed",
+            reasons: ["network unreachable"],
+            plugins: [],
+          },
+          {
+            name: "ok-mp",
+            scope: "user",
+            status: "added",
+            plugins: [{ status: "installed", name: "ok-plugin", dependencies: [] }],
+          },
+        ],
+      },
+    },
+    "invalid-config-row": {
+      // T-55-02-01 / T-53-02-02: BASENAME only -- never the absolute path.
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
         marketplaces: [
           {
             name: "claude-plugins.json",

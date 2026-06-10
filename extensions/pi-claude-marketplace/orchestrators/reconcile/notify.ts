@@ -32,8 +32,10 @@
 // orchestrator detects emptiness BEFORE calling this projection so the
 // advisory takes precedence.
 
+import { assertNever } from "../../shared/errors.ts";
 import { compareByNameThenScope } from "../../shared/notify.ts";
 
+import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ReconcilePlan } from "./types.ts";
 import type {
   CascadeNotificationMessage,
@@ -41,6 +43,8 @@ import type {
   MarketplaceNotificationMessage,
   MarketplaceStatus,
   PluginNotificationMessage,
+  Reason,
+  ReconcileAppliedCascadeMessage,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
@@ -242,4 +246,166 @@ export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boole
       p.pluginsToDisable.length === 0 &&
       p.sourceMismatches.length === 0,
   );
+}
+
+// ---------------------------------------------------------------------------
+// RECON-04 (Phase 55 Plan 02): apply-cascade projection.
+//
+// `buildReconcileAppliedCascade(outcomes)` folds the per-entry orchestrator
+// outcomes (success + failure) plus the planner-only source-mismatches and
+// the read-pass invalid-config rows into a single
+// `ReconcileAppliedCascadeMessage`. Token mapping reuses the existing
+// closed-set transition tokens (`added` / `removed` / `installed` /
+// `uninstalled` / `disabled` / `failed`) per RESEARCH Pattern 5 Option A --
+// no new STATUS_TOKENS / PLUGIN_STATUSES / MARKETPLACE_STATUSES / REASONS /
+// MARKERS literals.
+//
+// T-55-02-02 mitigation: this projection consumes `outcome.reason` only.
+// Raw `error.message` is NEVER read into a row's reasons field or anywhere
+// else in the rendered output. The catch ladders in `apply.ts` translate
+// orchestrator throws into typed outcomes BEFORE they reach this projection.
+// ---------------------------------------------------------------------------
+
+/**
+ * `enabled` is NOT a member of PLUGIN_STATUSES (only `disabled` is). A
+ * successful enable re-materializes the plugin via installPlugin, so the
+ * projection emits the `installed` row (with empty dependencies -- the
+ * orchestrated EnableDisablePluginOutcome does not carry declaresAgents /
+ * declaresMcp). The reverse asymmetry (a successful disable maps to
+ * `disabled`) is structural: `disabled` IS a member of PLUGIN_STATUSES.
+ */
+function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome): void {
+  switch (outcome.kind) {
+    case "mp-added":
+      block.status = "added";
+      return;
+    case "mp-removed":
+      block.status = "removed";
+      return;
+    case "mp-add-failed":
+    case "mp-remove-failed":
+      block.status = "failed";
+      block.reasons = reasonAsContent(outcome.reason);
+      return;
+    case "plugin-installed":
+      block.plugins.push({
+        status: "installed",
+        name: outcome.plugin,
+        ...(outcome.version !== undefined && { version: outcome.version }),
+        dependencies: outcome.dependencies,
+      });
+      return;
+    case "plugin-uninstalled":
+      block.plugins.push({
+        status: "uninstalled",
+        name: outcome.plugin,
+        ...(outcome.version !== undefined && { version: outcome.version }),
+      });
+      return;
+    case "plugin-enabled":
+      // RESEARCH Pattern 5 Option A: reuse existing transition tokens. The
+      // enable branch re-materializes via runInstallLedger so the realized
+      // outcome IS an install -- `(installed)` is the truthful surface row.
+      // No dependencies plumbed from EnableDisablePluginOutcome (Plan 01
+      // didn't expose declaresAgents / declaresMcp on the enabled arm); the
+      // empty dependencies array suppresses soft-dep markers, which is the
+      // safe default for a re-materialization that wouldn't change the
+      // companion-extension surface.
+      block.plugins.push({
+        status: "installed",
+        name: outcome.plugin,
+        ...(outcome.version !== undefined && { version: outcome.version }),
+        dependencies: [],
+      });
+      return;
+    case "plugin-disabled":
+      block.plugins.push({
+        status: "disabled",
+        name: outcome.plugin,
+        ...(outcome.version !== undefined && { version: outcome.version }),
+      });
+      return;
+    case "plugin-install-failed":
+    case "plugin-uninstall-failed":
+    case "plugin-enable-failed":
+    case "plugin-disable-failed":
+      block.plugins.push({
+        status: "failed",
+        name: outcome.plugin,
+        reasons: reasonAsContent(outcome.reason),
+      });
+      return;
+    case "source-mismatch":
+      block.status = "failed";
+      block.reasons = ["source mismatch"];
+      if (outcome.plugin !== undefined) {
+        block.plugins.push({
+          status: "failed",
+          name: outcome.plugin,
+          reasons: ["source mismatch"],
+        });
+      }
+
+      return;
+    case "invalid-block":
+      // CFG-03 row: the marketplace name IS the file basename (T-55-02-01).
+      // The block is keyed by (scope, basename) so multiple invalid files in
+      // the same scope render as distinct rows.
+      block.status = "failed";
+      block.reasons = [outcome.reason];
+      return;
+    default:
+      assertNever(outcome);
+  }
+}
+
+/**
+ * Narrow a broader `Reason` to `ContentReason` for `block.reasons` /
+ * plugin-row `reasons`. The structural `"not added"` sentinel is unreachable
+ * here: it would only arise from a missing-marketplace outcome, but the
+ * planner-driven apply pass only drives an orchestrator when the
+ * marketplace IS recorded (or being added). A defensive fallback maps the
+ * sentinel to `"not found"` so the projection never crashes; this branch is
+ * unreachable in normal operation.
+ */
+function reasonAsContent(reason: Reason): readonly ContentReason[] {
+  if (reason === "not added") {
+    return ["not found"];
+  }
+
+  return [reason];
+}
+
+/**
+ * RECON-04: pure projection. Folds the per-entry orchestrator outcomes into
+ * a single `ReconcileAppliedCascadeMessage`. Block ordering:
+ * `compareByNameThenScope` (project-before-user per MSG-GR-3); plugin rows
+ * within a block preserve insertion order from the apply loop. Empty-and-
+ * clean inputs return a message whose `marketplaces` array is empty -- the
+ * caller (apply.ts) MUST short-circuit and skip the notify() call on that
+ * shape per the load-time silence contract (NFR-2 / A4).
+ */
+export function buildReconcileAppliedCascade(
+  outcomes: readonly PerEntryOutcome[],
+): ReconcileAppliedCascadeMessage {
+  const byMp = new Map<string, MarketplaceBlock>();
+
+  for (const outcome of outcomes) {
+    // For invalid-block outcomes, `marketplace` is the file basename so
+    // distinct files render as distinct rows; for source-mismatch the
+    // outcome already carries the offending marketplace name from the
+    // planner. Every variant routes through ensureMarketplaceBlock so the
+    // (scope, name) key is the single accumulation seam.
+    const block = ensureMarketplaceBlock(byMp, outcome.scope, outcome.marketplace);
+    applyOutcomeToBlock(block, outcome);
+  }
+
+  return {
+    kind: "reconcile-applied-cascade",
+    marketplaces: Object.freeze(
+      [...byMp.values()]
+        .sort((a, b) => compareByNameThenScope(a, b))
+        .map(blockToMarketplaceMessage),
+    ),
+  };
 }

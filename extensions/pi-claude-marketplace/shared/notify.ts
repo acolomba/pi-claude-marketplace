@@ -1028,9 +1028,39 @@ export interface MarketplaceNotAddedMessage {
 }
 
 /**
+ * RECON-04 (Phase 55 Plan 02): the load-time reconcile apply cascade variant
+ * emitted by `applyReconcile` after every resources_discover invocation that
+ * resulted in at least one apply action OR carried at least one
+ * invalid-config / source-mismatch row. Wraps the same per-status
+ * `MarketplaceNotificationMessage[]` shape the cascade arm carries so the
+ * existing `renderMpHeader` + `renderPluginRow` helpers compose the body --
+ * no new icon, no new closed-set status / reason / marker literals (RESEARCH
+ * Pattern 5 Option A).
+ *
+ * Dispatched as a StandaloneKind so `shouldEmitReloadHint` returns `false`
+ * structurally: the cascade rows carry realized transition tokens
+ * (`installed` / `uninstalled` / etc.) which would otherwise trigger the
+ * `Run /reload to pick up changes` trailer -- but the reconcile already ran
+ * ON /reload, so the trailer would be a lie (Pitfall 4 / RECON-04).
+ *
+ * `computeSeverity` derives severity from contents (mirrors the cascade
+ * arm's first-match ladder); `buildSummaryLine` runs only at error/warning
+ * severity and reuses `countFailedOperations` / `countSkippedOperations`
+ * over `marketplaces`.
+ *
+ * Empty-and-clean callers MUST short-circuit BEFORE invoking notify() per
+ * the load-time silence contract (NFR-2 / A4) -- this variant is never
+ * dispatched with an empty `marketplaces` array.
+ */
+export interface ReconcileAppliedCascadeMessage {
+  readonly kind: "reconcile-applied-cascade";
+  readonly marketplaces: readonly MarketplaceNotificationMessage[];
+}
+
+/**
  * Top-level discriminated-union envelope consumed by `notify(ctx, pi,
  * NotificationMessage)`. The cascade arm omits `kind` (or sets it to
- * `"cascade"`); the five standalone-dispatched arms set `kind` explicitly. The
+ * `"cascade"`); the six standalone-dispatched arms set `kind` explicitly. The
  * dispatcher narrows with an `assertNever` default arm so every future
  * variant addition becomes a compile-time error at the switch.
  */
@@ -1041,7 +1071,8 @@ export type NotificationMessage =
   | MarketplaceInfoCascadeMessage
   | PluginInfoCascadeMessage
   | MarketplaceNotAddedMessage
-  | ReconcilePreviewEmptyMessage;
+  | ReconcilePreviewEmptyMessage
+  | ReconcileAppliedCascadeMessage;
 
 /**
  * TYPE-03 / D-46-04: the closed set of STANDALONE-DISPATCHED message kinds --
@@ -1062,7 +1093,8 @@ type StandaloneKind =
   | "marketplace-info-cascade"
   | "plugin-info-cascade"
   | "marketplace-not-added"
-  | "reconcile-preview-empty";
+  | "reconcile-preview-empty"
+  | "reconcile-applied-cascade";
 
 /**
  * Single-source type-predicate for the standalone-dispatched kinds
@@ -1080,7 +1112,8 @@ function isInfoKind(
     m.kind === "marketplace-info-cascade" ||
     m.kind === "plugin-info-cascade" ||
     m.kind === "marketplace-not-added" ||
-    m.kind === "reconcile-preview-empty"
+    m.kind === "reconcile-preview-empty" ||
+    m.kind === "reconcile-applied-cascade"
   );
 }
 
@@ -1791,6 +1824,48 @@ const RELOAD_HINT_TRAILER = "/reload to pick up changes";
  * (SNM-33) -- severity and reload-hint are separate ladders. Severity is the
  * second arg, never part of the body.
  */
+/**
+ * RECON-04 severity for the `reconcile-applied-cascade` standalone variant.
+ * Mirrors the cascade-arm first-match ladder over the same per-status
+ * `MarketplaceNotificationMessage[]` shape: any failed row -> "error", any
+ * manual-recovery or actionable plugin / mp skip -> "warning", otherwise
+ * info. Empty-and-clean cascades MUST be short-circuited by the caller
+ * (NFR-2 / A4) and never reach this arm.
+ */
+function reconcileAppliedSeverity(
+  message: ReconcileAppliedCascadeMessage,
+): "warning" | "error" | undefined {
+  const hasError = message.marketplaces.some(
+    (mp) => mp.status === "failed" || mp.plugins.some((p) => p.status === "failed"),
+  );
+  if (hasError) {
+    return "error";
+  }
+
+  const hasManualRecovery = message.marketplaces.some((mp) =>
+    mp.plugins.some((p) => p.status === "manual recovery"),
+  );
+  if (hasManualRecovery) {
+    return "warning";
+  }
+
+  const hasActionablePluginSkip = message.marketplaces.some((mp) =>
+    mp.plugins.some((p) => p.status === "skipped" && !allBenign(p.reasons)),
+  );
+  if (hasActionablePluginSkip) {
+    return "warning";
+  }
+
+  const hasActionableMpSkip = message.marketplaces.some(
+    (mp) => mp.status === "skipped" && !allBenign(mp.reasons),
+  );
+  if (hasActionableMpSkip) {
+    return "warning";
+  }
+
+  return undefined;
+}
+
 function computeSeverity(message: NotificationMessage): "warning" | "error" | undefined {
   // INFO-04 / SC#2 / INFO-03 / INFO-02: info-surface kinds take precedence
   // over the cascade severity ladder.
@@ -1807,11 +1882,16 @@ function computeSeverity(message: NotificationMessage): "warning" | "error" | un
     // is absent -- a failure surface); `plugin-info` routes to "error" only
     // when its embedded row is `(failed)`; the read-only info/cascade kinds
     // carry no failure state and route to info (undefined).
+    // `reconcile-applied-cascade` (RECON-04) is content-derived: any failed
+    // row -> error, any actionable skip -> warning, otherwise info (mirrors
+    // the cascade-arm ladder below).
     switch (message.kind) {
       case "marketplace-not-added":
         return "error";
       case "plugin-info":
         return message.plugin.status === "failed" ? "error" : undefined;
+      case "reconcile-applied-cascade":
+        return reconcileAppliedSeverity(message);
       case "marketplace-info":
       case "marketplace-info-cascade":
       case "plugin-info-cascade":
@@ -1881,18 +1961,28 @@ interface SummaryCounts {
  * defensive short-circuit).
  */
 function countFailedOperations(message: CascadeNotificationMessage): SummaryCounts {
-  let plugins = 0;
-  let marketplaces = 0;
+  return countFailedRows(message.marketplaces);
+}
 
-  for (const mp of message.marketplaces) {
+/**
+ * Shared per-marketplaces-array failure counter consumed by both the cascade
+ * arm and the RECON-04 `reconcile-applied-cascade` standalone arm. Both
+ * carry a structurally identical `readonly MarketplaceNotificationMessage[]`
+ * shape so the counting logic is single-sourced.
+ */
+function countFailedRows(marketplaces: readonly MarketplaceNotificationMessage[]): SummaryCounts {
+  let plugins = 0;
+  let mpCount = 0;
+
+  for (const mp of marketplaces) {
     if (mp.status === "failed") {
-      marketplaces++;
+      mpCount++;
     }
 
     plugins += mp.plugins.filter((p) => p.status === "failed").length;
   }
 
-  return { plugins, marketplaces };
+  return { plugins, marketplaces: mpCount };
 }
 
 /**
@@ -1903,12 +1993,17 @@ function countFailedOperations(message: CascadeNotificationMessage): SummaryCoun
  * `countFailedOperations`).
  */
 function countSkippedOperations(message: CascadeNotificationMessage): SummaryCounts {
-  let plugins = 0;
-  let marketplaces = 0;
+  return countSkippedRows(message.marketplaces);
+}
 
-  for (const mp of message.marketplaces) {
+/** Shared per-marketplaces-array skip counter (mirrors countFailedRows). */
+function countSkippedRows(marketplaces: readonly MarketplaceNotificationMessage[]): SummaryCounts {
+  let plugins = 0;
+  let mpCount = 0;
+
+  for (const mp of marketplaces) {
     if (mp.status === "skipped" && !allBenign(mp.reasons)) {
-      marketplaces++;
+      mpCount++;
     }
 
     plugins += mp.plugins.filter(
@@ -1916,7 +2011,34 @@ function countSkippedOperations(message: CascadeNotificationMessage): SummaryCou
     ).length;
   }
 
-  return { plugins, marketplaces };
+  return { plugins, marketplaces: mpCount };
+}
+
+/**
+ * RECON-04: shared summary-line wording over a marketplaces array. Mirrors
+ * the cascade-arm tail of `buildSummaryLine` so the reconcile-applied
+ * variant emits identical phrasing.
+ */
+function buildSummaryLineForCascade(
+  marketplaces: readonly MarketplaceNotificationMessage[],
+  severity: "error" | "warning",
+): string {
+  const verb = severity === "error" ? "failed" : "skipped";
+  const counts =
+    severity === "error" ? countFailedRows(marketplaces) : countSkippedRows(marketplaces);
+
+  const pluginPhrase = operationPhrase(counts.plugins, "plugin");
+  const marketplacePhrase = operationPhrase(counts.marketplaces, "marketplace");
+
+  if (counts.plugins > 0 && counts.marketplaces > 0) {
+    return `${pluginPhrase} and ${marketplacePhrase} ${verb}.`;
+  }
+
+  if (counts.marketplaces > 0) {
+    return `${marketplacePhrase} ${verb}.`;
+  }
+
+  return `${pluginPhrase} ${verb}.`;
 }
 
 /**
@@ -1965,6 +2087,12 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
         return `${operationPhrase(1, "marketplace")} failed.`;
       case "plugin-info":
         return message.plugin.status === "failed" ? `${operationPhrase(1, "plugin")} failed.` : "";
+      case "reconcile-applied-cascade":
+        // RECON-04: at error/warning severity reuse the cascade-arm counting
+        // helpers over the same per-status `marketplaces` shape; at info
+        // severity buildSummaryLine isn't called (emitWithSummary short-
+        // circuits) so the empty arm below is unreachable in practice.
+        return buildSummaryLineForCascade(message.marketplaces, severity);
       case "marketplace-info":
       case "marketplace-info-cascade":
       case "plugin-info-cascade":
@@ -2038,6 +2166,12 @@ function shouldEmitReloadHint(message: NotificationMessage): boolean {
       case "reconcile-preview-empty":
         // DIFF-01 SC #2: preview rows are pre-transition; the trailer would
         // be grammatically false (`/reload` cannot pick up zero changes).
+        return false;
+      case "reconcile-applied-cascade":
+        // RECON-04 / Pitfall 4: the reconcile already ran ON /reload (the
+        // resources_discover handler IS the trailer's nominal trigger), so
+        // emitting `Run /reload to pick up changes` after applying changes
+        // would be a lie. Structurally false closes the trailer-leak gap.
         return false;
       default:
         assertNever(message);
@@ -2469,6 +2603,23 @@ function composeMarketplaceBlock(mp: MarketplaceNotificationMessage, probe: Soft
 }
 
 /**
+ * RECON-04: compose the `reconcile-applied-cascade` body using the SAME
+ * per-mp / per-plugin helpers the cascade arm uses, so realized transition
+ * tokens (`added` / `installed` / `uninstalled` / `disabled` / `failed`)
+ * render byte-identical to their standalone-command counterparts. The empty-
+ * marketplaces case is unreachable (callers MUST short-circuit BEFORE
+ * invoking notify() per NFR-2 / A4); we defensively fall back to the
+ * `(no marketplaces)` sentinel for parity with the cascade arm.
+ */
+function composeReconcileAppliedBody(
+  message: ReconcileAppliedCascadeMessage,
+  probe: SoftDepStatus,
+): string {
+  const blocks = message.marketplaces.map((mp) => composeMarketplaceBlock(mp, probe));
+  return blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
+}
+
+/**
  * GRAM-04: the single summary-emission seam shared by the standalone arm
  * (`dispatchInfoMessage`) and the cascade arm of `notify()`. Computing the
  * severity and prepending the summary in ONE place is the structural
@@ -2528,6 +2679,14 @@ function dispatchInfoMessage(
       // here so the byte form cannot drift from `docs/output-catalog.md`'s
       // `empty-steady-state` state.
       body = "Preview: next reload will apply 0 actions.";
+      break;
+    case "reconcile-applied-cascade":
+      // RECON-04: compose the same cascade body the cascade arm renders
+      // (per-mp header + per-plugin row via the existing helpers). The
+      // reload-hint trailer is structurally suppressed by
+      // shouldEmitReloadHint's arm above; emitWithSummary handles the
+      // summary prepend at error/warning severity.
+      body = composeReconcileAppliedBody(message, probe);
       break;
     default:
       assertNever(message);

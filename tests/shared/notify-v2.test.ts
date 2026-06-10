@@ -3761,3 +3761,132 @@ test("D-54-01: disable cascade (uninstalled plugin row under list-arm mp) emits 
     `● claude-plugins-official [user]\n  ○ foo-plugin v1.2.3 (uninstalled)\n\n/reload to pick up changes`,
   );
 });
+
+// ===========================================================================
+// RECON-04 (Phase 55 Plan 02) -- reconcile-applied-cascade standalone
+// variant.
+//
+// Three catalog states:
+//   (a) success cascade with mixed mp add + plugin install across both scopes
+//   (b) soft-fail per-entry: one failed mp row + one successful install row
+//   (c) CFG-03 invalid-config row carrying ONLY the basename
+//
+// Load-bearing invariants:
+//   - Realized transition tokens (`added` / `installed` / `uninstalled` /
+//     `disabled` / `failed`) reused from PLUGIN_STATUSES / MARKETPLACE_STATUSES;
+//     no new closed-set members.
+//   - `/reload to pick up changes` trailer is NEVER emitted (Pitfall 4) even
+//     though the rows would otherwise trigger it on the cascade arm.
+// ===========================================================================
+
+test("RECON-04: success cascade -- mixed marketplace add + plugin install across both scopes, project-first ordering", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "reconcile-applied-cascade",
+    marketplaces: [
+      {
+        name: "new-mp",
+        scope: "project",
+        status: "added",
+        plugins: [{ status: "installed", name: "new-plugin", dependencies: [] }],
+      },
+      {
+        name: "other-mp",
+        scope: "user",
+        status: "added",
+        plugins: [{ status: "installed", name: "other-plugin", dependencies: [] }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  // info severity -> single-arg notify (no second arg).
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(
+    args[0],
+    `● new-mp [project] (added)\n  ● new-plugin (installed)\n\n● other-mp [user] (added)\n  ● other-plugin (installed)`,
+  );
+});
+
+test("RECON-04: success cascade NEVER emits `/reload to pick up changes` trailer (Pitfall 4)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "reconcile-applied-cascade",
+    marketplaces: [
+      {
+        name: "new-mp",
+        scope: "user",
+        status: "added",
+        plugins: [
+          { status: "installed", name: "a", dependencies: [] },
+          { status: "uninstalled", name: "b" },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.ok(
+    !emitted.includes("/reload to pick up changes"),
+    "RECON-04: reconcile-applied-cascade MUST NOT emit the reload-hint trailer (the reconcile already ran ON /reload)",
+  );
+});
+
+test("RECON-04: soft-fail per-entry -- failed mp row mixed with successful install row routes to error + summary prepended", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "reconcile-applied-cascade",
+    marketplaces: [
+      {
+        name: "flaky-mp",
+        scope: "user",
+        status: "failed",
+        reasons: ["network unreachable"],
+        plugins: [],
+      },
+      {
+        name: "ok-mp",
+        scope: "user",
+        status: "added",
+        plugins: [{ status: "installed", name: "ok-plugin", dependencies: [] }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 2);
+  assert.equal(args[1], "error");
+  assert.equal(
+    args[0],
+    `1 marketplace operation failed.\n\n⊘ flaky-mp [user] (failed) {network unreachable}\n\n● ok-mp [user] (added)\n  ● ok-plugin (installed)`,
+  );
+});
+
+test("RECON-04: CFG-03 invalid-config row carries BASENAME only (T-55-02-01 information-disclosure mitigation)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "reconcile-applied-cascade",
+    marketplaces: [
+      {
+        name: "claude-plugins.json",
+        scope: "project",
+        status: "failed",
+        reasons: ["invalid manifest"],
+        plugins: [],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 2);
+  assert.equal(args[1], "error");
+  assert.equal(
+    args[0],
+    `1 marketplace operation failed.\n\n⊘ claude-plugins.json [project] (failed) {invalid manifest}`,
+  );
+});

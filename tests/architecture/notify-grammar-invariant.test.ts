@@ -363,6 +363,117 @@ test("D-54-01 / ENBL-04: every (disabled) row renders subject-first `⊘ <name> 
   }
 });
 
+// ---------------------------------------------------------------------------
+// RECON-04 (Phase 55 Plan 02): subject-first row grammar for the
+// `reconcile-applied-cascade` standalone variant. Carries realized
+// transition tokens (`added` / `installed` / `uninstalled` / `disabled` /
+// `failed`) which would otherwise trigger the `/reload to pick up changes`
+// trailer on the cascade arm; the StandaloneKind dispatch path returns
+// `shouldEmitReloadHint = false` so the trailer NEVER appears.
+// ---------------------------------------------------------------------------
+
+const RECONCILE_APPLIED_FIXTURES: readonly GrammarFixture[] = [
+  {
+    label: "RECON-04 / success cascade with realized installed plugin row (transition token)",
+    pi: piWithBothLoaded(),
+    message: {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "new-mp",
+          scope: "user",
+          status: "added",
+          plugins: [{ status: "installed", name: "new-plugin", dependencies: [] }],
+        },
+      ],
+    },
+  },
+  {
+    label: "RECON-04 / soft-fail cascade mixing failed mp row + installed plugin row",
+    pi: piWithBothLoaded(),
+    message: {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "flaky-mp",
+          scope: "user",
+          status: "failed",
+          reasons: ["network unreachable"],
+          plugins: [],
+        },
+        {
+          name: "ok-mp",
+          scope: "user",
+          status: "added",
+          plugins: [{ status: "installed", name: "ok-plugin", dependencies: [] }],
+        },
+      ],
+    },
+  },
+];
+
+test("RECON-04: reconcile-applied-cascade NEVER emits `/reload to pick up changes` even on cascades with realized transition tokens", () => {
+  for (const fixture of RECONCILE_APPLIED_FIXTURES) {
+    const ctx = makeCtx();
+    notify(ctx as never, fixture.pi as never, fixture.message);
+    assert.equal(
+      ctx.ui.notify.mock.calls.length,
+      1,
+      `notify() must call ctx.ui.notify exactly once (IL-2) for: ${fixture.label}`,
+    );
+    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    const emitted = args[0];
+
+    // Pitfall 4 / RECON-04: the trailer is structurally excluded -- the
+    // reconcile already ran ON /reload, so the trailer would be a lie.
+    assert.ok(
+      !emitted.includes("/reload to pick up changes"),
+      `${fixture.label}: reconcile-applied-cascade MUST NOT emit the reload-hint trailer`,
+    );
+  }
+});
+
+test("RECON-04: every reconcile-applied-cascade row renders subject-first `<glyph> <name> [<scope>] (<token>)` with the status token AFTER the subject", () => {
+  // Mirrors the WILL_TOKEN_RE / DISABLED_TOKEN_RE invariant but for the
+  // realized-token row grammar (added / removed / installed / uninstalled /
+  // disabled / failed; optional reasons brace; optional 4-space cause-chain
+  // indent on failed rows). The load-bearing assertion is that no line
+  // starts with a `(<token>)` discriminator -- the subject (glyph + name)
+  // always precedes the token.
+  const ROW_ICONS_AT_START = ["●", "○", "⊘"];
+  for (const fixture of RECONCILE_APPLIED_FIXTURES) {
+    const ctx = makeCtx();
+    notify(ctx as never, fixture.pi as never, fixture.message);
+    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    const emitted = args[0];
+
+    // Drop the summary line (if present) -- the cascade body starts AFTER the
+    // first `\n\n` separator at error/warning severity.
+    const body = emitted.includes("\n\n") ? emitted.slice(emitted.indexOf("\n\n") + 2) : emitted;
+    const lines = body
+      .split("\n")
+      .map((l) => l.replace(/^ {2}/, ""))
+      .filter((l) => l.length > 0);
+
+    for (const line of lines) {
+      // Subject-first invariant: every non-empty row line starts with one of
+      // the closed-set row icons (or is a deeper-indent cause-chain trailer).
+      assert.ok(
+        ROW_ICONS_AT_START.some((icon) => line.startsWith(icon)) || line.startsWith("    "),
+        `${fixture.label}: row line MUST start with a row icon (subject-first); got '${line}'`,
+      );
+      // The status token must never APPEAR before the row icon.
+      const tokenMatch = /\((added|removed|installed|uninstalled|disabled|failed)\)/.exec(line);
+      if (tokenMatch?.index !== undefined) {
+        assert.ok(
+          tokenMatch.index > 0,
+          `${fixture.label}: status token '(${tokenMatch[1] ?? ""})' must follow the subject; got '${line}'`,
+        );
+      }
+    }
+  }
+});
+
 test("GRAM-01/04/05: every error/warning emission has a non-empty summary first line distinct from the detail block", () => {
   for (const fixture of FIXTURES) {
     const ctx = makeCtx();

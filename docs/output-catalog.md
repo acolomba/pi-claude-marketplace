@@ -1287,6 +1287,53 @@ A `claude-plugins.json` (or `claude-plugins.local.json`) that is malformed, unpa
 
 ______________________________________________________________________
 
+## reconcile-applied-cascade
+
+RECON-04 (Phase 55 Plan 02) load-time reconcile apply cascade emitted by `applyReconcile` after every `resources_discover` invocation that performed at least one apply action OR carried at least one invalid-config / source-mismatch row. Wraps the same per-status `MarketplaceNotificationMessage[]` shape the cascade arm carries -- realized transition tokens (`added` / `removed` / `installed` / `uninstalled` / `disabled` / `failed`) reused per RESEARCH Pattern 5 Option A -- so the rendered bytes match each token's standalone-command counterpart. The `Run /reload to pick up changes` trailer is STRUCTURALLY EXCLUDED (Pitfall 4 / RECON-04 -- the reconcile already ran ON /reload). Empty-and-clean reconciles are silent (no notify) per the load-time silence contract (NFR-2 / A4).
+
+### Success cascade -- mixed marketplace add + plugin install across both scopes
+
+A reconcile that materialized one new marketplace + one plugin install per scope. Subject-first row grammar; the `(added)` mp row carries the `●` glyph and the `(installed)` plugin row reuses the standalone-install byte form. Severity `info`; no reload-hint; no summary line.
+
+<!-- catalog-state: success-cascade-mixed -->
+
+```text
+● new-mp [project] (added)
+  ● new-plugin (installed)
+
+● other-mp [user] (added)
+  ● other-plugin (installed)
+```
+
+### Soft-fail per-entry -- one (failed) {network unreachable} row, other entries continue
+
+A reconcile where one declared github-source marketplace failed during `addMarketplace` clone (NFR-5 per-entry soft-fail) but a sibling declared marketplace + plugin install succeeded. Severity `error` (the cascade has a failed mp row); summary line prepended.
+
+<!-- catalog-state: soft-fail-mixed -->
+
+```text
+1 marketplace operation failed.
+
+⊘ flaky-mp [user] (failed) {network unreachable}
+
+● ok-mp [user] (added)
+  ● ok-plugin (installed)
+```
+
+### CFG-03 invalid-config row -- BASENAME only (T-55-02-01)
+
+A reconcile where `claude-plugins.json` is unparseable. The read pass surfaces the scope as `(failed) {invalid manifest}` carrying the file BASENAME (never the absolute path -- T-55-02-01 / T-53-02-02 information-disclosure mitigation); that scope's apply pass is skipped (CFG-03 abort -- never a mass-uninstall). Severity `error`; summary line prepended.
+
+<!-- catalog-state: invalid-config-row -->
+
+```text
+1 marketplace operation failed.
+
+⊘ claude-plugins.json [project] (failed) {invalid manifest}
+```
+
+______________________________________________________________________
+
 ## `/claude:plugin marketplace remove <name>`
 
 Single-marketplace command that cascades plugin unstaging.
