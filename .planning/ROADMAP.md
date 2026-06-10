@@ -275,7 +275,19 @@ Declarative, version-controllable config files (`claude-plugins.json` + entry-le
   4. Reconciliation converges to a fixed point: an immediately repeated reconcile applies zero changes and rewrites neither the config nor the internal state file (byte-unchanged), proven by a back-to-back reconcile test (RECON-05).
   5. Concurrent Pi processes cannot double-apply or interleave reconciliation: the existing cross-process scope lock covers the new internal bookkeeping file, orchestrators run serially with no nested locks, and a two-process simultaneous-start test shows no double-apply or interleaved write (RECON-06, NFR-3).
 
-**Plans:** TBD
+**Plans:** 3 plans
+
+**Wave 1**
+
+- [ ] 55-01-PLAN.md -- Add notifications: { mode: "orchestrated" } option + outcome union types to addMarketplace / removeMarketplace / uninstallPlugin / setPluginEnabled (mirrors installPlugin Phase 19 precedent); standalone mode byte-identical (RECON-03 foundation)
+
+**Wave 2** *(blocked on Wave 1 completion; atomic catalog-amendment lockstep)*
+
+- [ ] 55-02-PLAN.md -- ATOMIC: applyReconcile orchestrator + index.ts resources_discover handler (ctx bound, unknown cast dropped) + ReconcileAppliedCascadeMessage variant + renderer dispatch arm + buildReconcileAppliedCascade projection + PerEntryOutcome type + docs/output-catalog.md H2 section + catalog-uat FIXTURES + notify-types length-locks + notify-grammar-invariant no-/reload-trailer proof + apply.test.ts + index-handler.test.ts (RECON-01, RECON-02, RECON-03, RECON-04, RECON-05)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 55-03-PLAN.md -- tests/integration/load-reconcile-race.test.ts + load-reconcile-race-child.ts (RECON-06 two-process race + Phase 52 deferred Pitfall 52-2 / 52-4 lock-coverage proof; assertions per Pitfall 10 are state-consistency oriented, not exactly-one-winner)
 
 ### Phase 56: Write-Back Integration & Documentation
 
