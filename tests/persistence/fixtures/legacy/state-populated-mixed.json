@@ -1,0 +1,75 @@
+{
+  "marketplaces": {
+    "mp-path": {
+      "name": "mp-path",
+      "scope": "user",
+      "source": "./mp-path-local",
+      "addedFromCwd": "/some/cwd",
+      "autoupdate": true,
+      "plugins": {
+        "code-reviewer": {
+          "version": "1.0.0",
+          "resolvedSource": "/abs/mp-path/code-reviewer",
+          "compatibility": {
+            "installable": true,
+            "notes": [],
+            "supported": ["skills"],
+            "unsupported": []
+          },
+          "resources": {
+            "skills": ["mp-path-cr-skill"],
+            "prompts": [],
+            "agents": [],
+            "mcpServers": []
+          },
+          "installedAt": "2025-01-01T00:00:00.000Z",
+          "updatedAt": "2025-01-01T00:00:00.000Z"
+        },
+        "soft-degraded": {
+          "version": "0.1.0",
+          "resolvedSource": "/abs/mp-path/soft-degraded",
+          "compatibility": {
+            "installable": false,
+            "notes": ["missing companion extension"],
+            "supported": [],
+            "unsupported": ["agents"]
+          },
+          "resources": {
+            "skills": [],
+            "prompts": [],
+            "agents": [],
+            "mcpServers": []
+          },
+          "installedAt": "2025-01-01T00:00:00.000Z",
+          "updatedAt": "2025-01-01T00:00:00.000Z"
+        }
+      }
+    },
+    "mp-github": {
+      "name": "mp-github",
+      "scope": "user",
+      "source": "acme/tools",
+      "addedFromCwd": "/some/cwd",
+      "plugins": {
+        "code-reviewer": {
+          "version": "2.0.0",
+          "resolvedSource": "/abs/mp-github/code-reviewer",
+          "compatibility": {
+            "installable": true,
+            "notes": [],
+            "supported": ["skills", "prompts"],
+            "unsupported": []
+          },
+          "resources": {
+            "skills": ["mp-github-cr-skill"],
+            "prompts": ["mp-github-cr-prompt"],
+            "agents": [],
+            "mcpServers": []
+          },
+          "installedAt": "2025-01-02T00:00:00.000Z",
+          "updatedAt": "2025-01-02T00:00:00.000Z"
+        }
+      }
+    }
+  }
+}
