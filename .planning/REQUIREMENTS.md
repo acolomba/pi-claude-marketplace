@@ -28,11 +28,11 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Reconciliation
 
-- [ ] **RECON-01**: At extension load (startup and restart/reload), declared-but-missing marketplaces/plugins are added/installed automatically
-- [ ] **RECON-02**: Installed-but-undeclared marketplaces/plugins are removed/uninstalled automatically, scoped to entries the extension manages
-- [ ] **RECON-03**: Network failures during reconcile soft-fail per entry -- reported and skipped, never blocking Pi load
-- [ ] **RECON-04**: Reconcile results surface through the structured notification cascade in catalog-conformant grammar; reconcile never emits a `/reload` hint
-- [ ] **RECON-05**: Reconciliation converges to a fixed point -- an immediately repeated reconcile applies zero changes and rewrites no files
+- [x] **RECON-01**: At extension load (startup and restart/reload), declared-but-missing marketplaces/plugins are added/installed automatically
+- [x] **RECON-02**: Installed-but-undeclared marketplaces/plugins are removed/uninstalled automatically, scoped to entries the extension manages
+- [x] **RECON-03**: Network failures during reconcile soft-fail per entry -- reported and skipped, never blocking Pi load
+- [x] **RECON-04**: Reconcile results surface through the structured notification cascade in catalog-conformant grammar; reconcile never emits a `/reload` hint
+- [x] **RECON-05**: Reconciliation converges to a fixed point -- an immediately repeated reconcile applies zero changes and rewrites no files
 - [ ] **RECON-06**: Concurrent Pi processes cannot double-apply or interleave reconciliation (existing cross-process lock discipline preserved; orchestrators driven serially, no nested locks)
 
 ### Write-back
@@ -91,11 +91,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SPLIT-02 | Phase 51 | Complete |
 | MIG-01 | Phase 52 | Done (Plan 52-01, 2026-06-10) |
 | MIG-02 | Phase 52 | Done (Plan 52-01, 2026-06-10) |
-| RECON-01 | Phase 55 | Pending |
-| RECON-02 | Phase 55 | Pending |
-| RECON-03 | Phase 55 | Pending |
-| RECON-04 | Phase 55 | Pending |
-| RECON-05 | Phase 55 | Pending |
+| RECON-01 | Phase 55 | Complete |
+| RECON-02 | Phase 55 | Complete |
+| RECON-03 | Phase 55 | Complete |
+| RECON-04 | Phase 55 | Complete |
+| RECON-05 | Phase 55 | Complete |
 | RECON-06 | Phase 55 | Pending |
 | WB-01 | Phase 56 | Pending |
 | WB-02 | Phase 56 | Pending |

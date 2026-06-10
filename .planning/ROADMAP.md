@@ -283,7 +283,7 @@ Declarative, version-controllable config files (`claude-plugins.json` + entry-le
 
 **Wave 2** *(blocked on Wave 1 completion; atomic catalog-amendment lockstep)*
 
-- [ ] 55-02-PLAN.md -- ATOMIC: applyReconcile orchestrator + index.ts resources_discover handler (ctx bound, unknown cast dropped) + ReconcileAppliedCascadeMessage variant + renderer dispatch arm + buildReconcileAppliedCascade projection + PerEntryOutcome type + docs/output-catalog.md H2 section + catalog-uat FIXTURES + notify-types length-locks + notify-grammar-invariant no-/reload-trailer proof + apply.test.ts + index-handler.test.ts (RECON-01, RECON-02, RECON-03, RECON-04, RECON-05)
+- [x] 55-02-PLAN.md -- ATOMIC: applyReconcile orchestrator + index.ts resources_discover handler (ctx bound, unknown cast dropped) + ReconcileAppliedCascadeMessage variant + renderer dispatch arm + buildReconcileAppliedCascade projection + PerEntryOutcome type + docs/output-catalog.md H2 section + catalog-uat FIXTURES + notify-types length-locks + notify-grammar-invariant no-/reload-trailer proof + apply.test.ts + index-handler.test.ts (RECON-01, RECON-02, RECON-03, RECON-04, RECON-05)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -1113,5 +1113,5 @@ Every error/warning-severity notification now carries a non-empty summary messag
 | 52. First-Run Migration                                             | v1.12     | 1/1 | Complete    | 2026-06-10 |
 | 53. Pure Reconcile Planner & Dry-Run Preview                        | v1.12     | 2/2 | Complete    | 2026-06-10 |
 | 54. Enable/Disable Commands                                         | v1.12     | 2/2 | Complete    | 2026-06-10 |
-| 55. Load-Time Reconcile Apply, Notification & Wiring                | v1.12     | 0/? | Not started | --         |
+| 55. Load-Time Reconcile Apply, Notification & Wiring                | v1.12     | 2/3 | In Progress|  |
 | 56. Write-Back Integration & Documentation                          | v1.12     | 0/? | Not started | --         |

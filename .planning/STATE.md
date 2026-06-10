@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.12
 milestone_name: Marketplace and Plugin Config Files
 status: executing
-stopped_at: Plan 55-01 complete (orchestrated-mode foundation)
-last_updated: "2026-06-10T22:50:00.000Z"
-last_activity: 2026-06-10 -- Plan 55-01 complete; orchestrated-mode foundation landed
+stopped_at: Plan 55-01 complete (orchestrated-mode foundation for the four driven orchestrators)
+last_updated: "2026-06-10T23:19:07.918Z"
+last_activity: 2026-06-10
 progress:
   total_phases: 34
   completed_phases: 4
   total_plans: 11
-  completed_plans: 9
-  percent: 13
+  completed_plans: 10
+  percent: 12
 ---
 
 # Project State
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 ## Current Position
 
 Phase: 55 (load-time-reconcile-apply-notification-wiring) — EXECUTING
-Plan: 2 of 3
-Status: Executing Phase 55 — Plan 01 complete (orchestrated-mode foundation)
-Last activity: 2026-06-10 -- Plan 55-01 complete; orchestrated-mode foundation landed
+Plan: 3 of 3
+Status: Ready to execute
+Last activity: 2026-06-10
 
 ## Performance Metrics
 
@@ -97,6 +97,7 @@ Last activity: 2026-06-10 -- Plan 55-01 complete; orchestrated-mode foundation l
 | Phase 54 P01 | ~21m | 2 tasks | 6 files |
 | Phase 54 PP02 | ~47m | 2 tasks | 20 files |
 | Phase 55 P01 | ~80m | 2 tasks | 10 files |
+| Phase 55 P02 | ~120m | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -181,6 +182,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 52]: MIG-01 + MIG-02 closed. New persistence/migrate-config.ts (118 lines) exports three symbols: MigrateFirstRunResult interface, pure buildConfigFromState projection (every marketplace + every plugin -- including soft-degraded/installable=false per Pitfall 52-1 -- flat-keyed `${plugin}@${mp}` per D-01 with empty body per D-04; source byte-stable via (mp.source as ParsedSource).raw per SP-7; legacy autoupdate captured only on strict === true / === false arms per D-04+defense-in-depth; schemaVersion: 1 literal per D-11), and migrateFirstRunConfig thin ENOENT-gated orchestrator (loadConfig trichotomy: any status !== 'absent' short-circuits with { migrated:false, entryCount:0 } -- Pitfall 52-5 NEVER overwrites valid OR invalid pre-existing config; on absent arm builds projection + writes through saveConfig inheriting NFR-1 atomicity + NFR-10 containment + CONFIG_VALIDATOR revalidation). Assumption A1 [VERIFIED]: SPLIT-02 architecture test stayed at 1 entry in ALLOWED_CONFIG_JSON_WRITERS (config-io.ts) -- migrate-config.ts routes through saveConfig not atomicWriteJson, so the path-name regex does not match; no allow-list edit needed. Phase 53 owns the planner-level planReconcile no-op convergence proof; Phase 55 owns the load-wiring call site + Pitfall 52-2 (concurrent first-load lock coverage) + Pitfall 52-4 (D-13 gate race). 20/20 new tests GREEN; npm run check GREEN 1571/1571 unit + 7/7 integration. -- Plan 52-01.
 - [Phase ?]: [Phase 54]: ENBL-01..04 closed atomically (Plan 02 commit 37d01ed). New (disabled) closed-set PluginStatus token + PluginDisabledMessage variant + renderer arm; (already enabled) / (already disabled) BENIGN_REASONS additions; PLUGIN_STATUSES 16, STATUS_TOKENS 22, REASONS 31. setPluginEnabled orchestrator delegates re-materialization to installPlugin in orchestrated mode with new pinVersionOverride opt-in (Pitfall 54-4 ENBL-02 version pin); disable branch composes cascadeUnstagePlugin + in-place reset of resources.* arrays. Edge handler parses --local via local scan + rejects unknown long flags. isRecordedButDisabled exported from planner as single source of truth. atomic-supersession discipline preserved -- 20 files in ONE commit. npm run check GREEN 1662 unit + 7 integration. -- Plan 54-02. PHASE 54 COMPLETE.
 - [Phase 55]: RECON-03 orchestrated-mode foundation landed across the four driven orchestrators (addMarketplace / removeMarketplace / uninstallPlugin / setPluginEnabled) mirroring the Phase 19 InstallPluginNotifications precedent. Each accepts `notifications?: { mode: "standalone" | "orchestrated" }` and returns a typed discriminated `*Outcome` union in orchestrated mode (success arm + collapsed `failed` arm carrying `reason: Reason`, `error: Error`, `cause: string`); setPluginEnabled additionally carries `enabled` / `disabled` / `skipped` arms. Outcome `reason` typed `Reason` (broader than the plan's stated `ContentReason`) so the structural `not added` sentinel flows through the same field (apply.ts Plan 02 will dispatch on the broader closed set). Standalone mode (omitted) byte-identical: catalog-uat + notify-v2 + every existing add/remove/uninstall/enable-disable fixture stays GREEN. Failure-emit helpers (`handleAddFailure`, `emitPartialFailure`, `resolveScopeOrFailedOutcome`, `emitCascadeFailure`, `emitMarketplaceNotAdded`, `outcomeToTypedResult`) extract orchestrated-vs-standalone dispatch into named helpers; cognitive complexity stays inside the SonarJS budget. CR-01 nested-lock contract preserved (setPluginEnabled enable branch still calls runInstallLedger inside withLockedStateTransaction). rethrowPreconditionErrors short-circuits BEFORE the mode branch so the bootstrap composer contract (ATTR-07 Phase 48) is preserved across both modes. T-55-01-01 mitigation contract documented in each Outcome JSDoc -- the Plan 02 apply consumer is contractually required to project `outcome.reason` only and NEVER render raw `error.message`. Zero new REASONS / PLUGIN_STATUSES / MARKETPLACE_STATUSES / STATUS_TOKENS / MARKERS literals (deferred to Plan 02). npm run check GREEN 1689 unit + 7 integration. -- Plan 55-01.
+- [Phase ?]: [Phase 55]: RECON-01..05 closed. ReconcileAppliedCascadeMessage variant + applyReconcile orchestrator + bound-ctx index.ts. Per-scope read pass under withStateGuard (migrate-then-load-then-plan); per-entry apply pass with NO outer lock (CR-01); per-entry try/catch coerces throws into typed failed outcomes (NFR-5 / RECON-03 soft-fail); single notify() per invocation (IL-2 / RECON-04); SILENT on empty-and-clean (NFR-2 / A4 / RECON-05). shouldEmitReloadHint returns false structurally (Pitfall 4 closed). A1 VERIFIED inline by reading agent-session.js (bindExtensions emits session_start BEFORE extendResourcesFromExtensions). enable success maps to (installed) since enabled is not in PLUGIN_STATUSES; zero new closed-set members per RESEARCH Pattern 5 Option A. T-55-02-01/02 mitigations contractual. atomic-supersession preserved across 2 commits. npm run check GREEN 1703 unit + 7 integration. -- Plan 55-02.
 
 ### Pending Todos
 
@@ -227,9 +229,9 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-10T22:50:00.000Z
+Last session: 2026-06-10T23:18:39.950Z
 Stopped At: Plan 55-01 complete (orchestrated-mode foundation for the four driven orchestrators)
-Resume File: .planning/phases/55-load-time-reconcile-apply-notification-wiring/55-02-PLAN.md (Plan 02 not yet authored)
+Resume File: None
 
 ## Operator Next Steps
 
