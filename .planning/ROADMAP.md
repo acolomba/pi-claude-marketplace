@@ -249,7 +249,7 @@ Declarative, version-controllable config files (`claude-plugins.json` + entry-le
   3. Running `enable` re-materializes the plugin's artefacts from the cached marketplace clone and persisted internal records with no network access -- verifiable by enabling with the network unplugged while the version pin is preserved (ENBL-03, NFR-5).
   4. On `list` and `info` surfaces, a `disabled` plugin renders distinctly from a soft-degraded `unavailable` one, keeping the three orthogonal facts (declared / enabled / available) from collapsing into one another (ENBL-04); the `disabled` vs. reused-token decision lands with its catalog + byte-UAT forms in lockstep.
 
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 **Wave 1** *(byte-neutral foundation: planner Phase 53→54 hand-off + network gate + RED scaffolds)*
 
@@ -1100,6 +1100,6 @@ Every error/warning-severity notification now carries a non-empty summary messag
 | 51. Config Schema, Persistence & State Split                        | v1.12     | 3/3 | Complete    | 2026-06-10 |
 | 52. First-Run Migration                                             | v1.12     | 1/1 | Complete    | 2026-06-10 |
 | 53. Pure Reconcile Planner & Dry-Run Preview                        | v1.12     | 2/2 | Complete    | 2026-06-10 |
-| 54. Enable/Disable Commands                                         | v1.12     | 2/2 | Complete   | 2026-06-10 |
+| 54. Enable/Disable Commands                                         | v1.12     | 2/2 | Complete    | 2026-06-10 |
 | 55. Load-Time Reconcile Apply, Notification & Wiring                | v1.12     | 0/? | Not started | --         |
 | 56. Write-Back Integration & Documentation                          | v1.12     | 0/? | Not started | --         |
