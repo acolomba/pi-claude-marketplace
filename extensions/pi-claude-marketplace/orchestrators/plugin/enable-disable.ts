@@ -4,18 +4,33 @@
 //
 // Single orchestrator parameterized by `enable: boolean`. Mirrors the
 // `setMarketplaceAutoupdate` shape: composes `resolveCrossScopePluginTarget`
-// + `withStateGuard` (CFG-03 abort + cascadeUnstagePlugin OR install-ledger)
-// + `saveConfig` + a single terminal `notify()` per IL-2.
+// + `withLockedStateTransaction` (CFG-03 abort + cascadeUnstagePlugin OR the
+// guard-free install ledger) + `saveConfig` + a single terminal `notify()`
+// per IL-2.
+//
+// CR-01 (Phase 54 review) locking model: exactly ONE per-scope lock owns the
+// whole critical section. The enable branch calls `runInstallLedger` (the
+// guard-FREE ledger body exported by install.ts) against THIS transaction's
+// state snapshot -- calling `installPlugin` here would nest a second
+// `withStateGuard` on the same `stateLockFile`, and `proper-lockfile`
+// (`retries: 0`) is not re-entrant, so every fresh enable would self-deadlock
+// (ELOCKED -> StateLockHeldError). The single snapshot also guarantees the
+// ledger's state mutation is what gets saved (no outer stale-snapshot
+// clobber; ST-7 / D-06 single-writer preserved).
+//
+// WR-01 (Phase 54 review) save discipline: `tx.save()` fires ONLY on the
+// `fresh` arms. The `invalid-config` / `idempotent` / `not-recorded` /
+// `*-failed` arms return without saving, so state.json's mtime is UNCHANGED
+// on every abort/no-op -- exactly what the catalog's CFG-03 states claim.
 //
 // NFR-5 (no network): this file MUST NOT import platform/git or DEFAULT_GIT_OPS.
 // The Phase 54 Plan 01 architecture gate at
 // `tests/architecture/no-orchestrator-network.test.ts` (FORBIDDEN_TARGETS) is
 // armed for this file -- adding any forbidden surface fails the gate.
 //
-// Pitfall 54-1 / A6: `loadConfig(targetConfigPath)` runs INSIDE the
-// `withStateGuard` closure so a concurrent flip from another process either
-// fails fast at lock acquisition or retries against the fresh post-flip
-// state.
+// Pitfall 54-1 / A6: `loadConfig(targetConfigPath)` runs INSIDE the locked
+// transaction so a concurrent flip from another process either fails fast at
+// lock acquisition or retries against the fresh post-flip state.
 //
 // Pitfall 54-2: this file lands in the SAME atomic commit as the
 // `(disabled)` token + variant + renderer arm + catalog amendment. Any
@@ -23,11 +38,12 @@
 // catalog-uat byte equality, etc.).
 //
 // Pitfall 54-4 / ENBL-02 version pin: the enable branch passes
-// `pinVersionOverride: installed.version` to `installPlugin` so the install
-// ledger does NOT call `resolvePluginVersion` (which could bump the version
-// if `plugin.json` or the marketplace entry drifted between disable and
-// enable). The cached marketplace manifest read happens inside `installPlugin`
-// via `loadMarketplaceManifest(` -- the cached PI-2 read, never the network.
+// `pinVersionOverride: installed.version` to `runInstallLedger` so the
+// install ledger does NOT call `resolvePluginVersion` (which could bump the
+// version if `plugin.json` or the marketplace entry drifted between disable
+// and enable). The cached marketplace manifest read happens inside the
+// ledger via `loadMarketplaceManifest(` -- the cached PI-2 read, never the
+// network.
 //
 // Pitfall 54-5 / --local file isolation: when `opts.local === true`,
 // `targetConfigPath = locations.configLocalJsonPath` UNCONDITIONALLY -- the
@@ -44,13 +60,15 @@ import path from "node:path";
 import { loadConfig, saveConfig } from "../../persistence/config-io.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
-import { withStateGuard } from "../../transaction/with-state-guard.ts";
+import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
-import { installPlugin } from "./install.ts";
+import { runInstallLedger } from "./install.ts";
 import { resolveCrossScopePluginTarget } from "./shared.ts";
 
 import type { ScopeConfig } from "../../persistence/config-io.ts";
+import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { ContentReason, PluginNotificationMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -114,27 +132,43 @@ function isCurrentlyDisabled(installed: {
 }
 
 /**
- * Run the enable branch: invoke `installPlugin` in orchestrated mode with the
- * pinned version override (Pitfall 54-4). Returns the outcome sentinel.
+ * Run the enable branch: invoke the guard-FREE `runInstallLedger` against the
+ * OUTER transaction's state snapshot with the pinned version override
+ * (Pitfall 54-4) and `allowExistingRecord: true` (the disabled record is
+ * deliberately KEPT per ENBL-02, so the PI-15 "already installed" sanity
+ * throw must not fire for the re-materialization). Returns the outcome
+ * sentinel.
+ *
+ * CR-01: `installPlugin` MUST NOT be called here -- it opens its own
+ * `withStateGuard` on the same `stateLockFile`, and `proper-lockfile`
+ * (`retries: 0`) is not re-entrant, so the nested acquisition would throw
+ * `StateLockHeldError` and every fresh enable would fail.
  */
 async function runEnableBranch(
   opts: EnableDisablePluginOptions,
   scope: Scope,
+  locations: ScopedLocations,
+  state: ExtensionState,
   recordedVersion: string,
 ): Promise<SetEnabledOutcome> {
   try {
-    const installOutcome = await installPlugin({
-      ctx: opts.ctx,
-      pi: opts.pi,
+    const result = await runInstallLedger(state, locations, {
       scope,
       cwd: opts.cwd,
       marketplace: opts.marketplace,
       plugin: opts.plugin,
-      notifications: { mode: "orchestrated" },
       pinVersionOverride: recordedVersion,
+      allowExistingRecord: true,
     });
-    if (installOutcome.status === "failed") {
-      return { kind: "enable-failed", cause: installOutcome.error, recordedVersion };
+    if (result.kind === "marketplace-absent") {
+      // Defensive: the caller already verified the marketplace container is
+      // recorded in this scope's state, so the CMP-2..4 source resolution
+      // should never miss. Surface a failed row rather than wedging.
+      return {
+        kind: "enable-failed",
+        cause: new Error(`Marketplace "${opts.marketplace}" is not added in the ${scope} scope.`),
+        recordedVersion,
+      };
     }
 
     return { kind: "fresh", version: recordedVersion };
@@ -269,7 +303,12 @@ export async function setPluginEnabled(opts: EnableDisablePluginOptions): Promis
   let outcome: SetEnabledOutcome | undefined;
 
   try {
-    await withStateGuard(locations, async (state) => {
+    // CR-01 / WR-01: a single per-scope lock owns the whole critical
+    // section; `tx.save()` fires ONLY on the fresh arms so abort/no-op arms
+    // leave state.json untouched (mtime unchanged, per the catalog CFG-03
+    // states).
+    await withLockedStateTransaction(locations, async (tx) => {
+      const state = tx.state;
       // Pitfall 54-1 / A6: CFG-03 load inside the lock.
       const cfg = await loadConfig(targetConfigPath);
       if (cfg.status === "invalid") {
@@ -282,7 +321,7 @@ export async function setPluginEnabled(opts: EnableDisablePluginOptions): Promis
       if (mp === undefined || installed === undefined) {
         // Either the container disappeared (concurrent removal race) or the
         // plugin row was never written. Surface as not-recorded; the
-        // post-guard branch renders an actionable failed row.
+        // post-guard branch renders an actionable row.
         outcome = { kind: "not-recorded" };
         return;
       }
@@ -294,7 +333,7 @@ export async function setPluginEnabled(opts: EnableDisablePluginOptions): Promis
       }
 
       outcome = enable
-        ? await runEnableBranch(opts, scope, installed.version)
+        ? await runEnableBranch(opts, scope, locations, state, installed.version)
         : await runDisableBranch(opts, locations, installed);
 
       if (outcome.kind !== "fresh") {
@@ -311,10 +350,15 @@ export async function setPluginEnabled(opts: EnableDisablePluginOptions): Promis
         marketplace,
         enable,
       );
+
+      // Persist the mutated snapshot (enable: the ledger's re-populated
+      // record; disable: the emptied resources arrays). Fail arms above
+      // returned WITHOUT saving -- their snapshots are unmutated.
+      await tx.save();
     });
   } catch (err) {
-    // withStateGuard rethrew (lock-held, save failure, etc.). Surface as a
-    // failed plugin row carrying the cause.
+    // withLockedStateTransaction rethrew (lock-held, save failure, etc.).
+    // Surface as a failed plugin row carrying the cause.
     const cause = err instanceof Error ? err : new Error(errorMessage(err));
     notify(ctx, pi, {
       marketplaces: [

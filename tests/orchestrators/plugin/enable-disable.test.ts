@@ -120,6 +120,79 @@ async function readConfig(configPath: string): Promise<unknown> {
   return JSON.parse(raw);
 }
 
+/**
+ * Build a REAL on-disk path-source marketplace (manifest + skill-bearing
+ * plugin tree) AND a user-scope state.json carrying the KEPT disabled record
+ * (ENBL-02 empty-resources marker) pointing at it. This is the fixture the
+ * fresh-enable success path needs: the enable branch re-materializes from
+ * the cached clone via the install ledger (PI-2 cached read, NFR-5
+ * network-free).
+ */
+async function seedRealDisabledMarketplace(
+  home: string,
+  opts: { marketplaceName: string; pluginName: string; version: string },
+): Promise<{ statePath: string; configPath: string }> {
+  const scopeRoot = path.join(home, ".pi", "agent");
+  const extRoot = path.join(scopeRoot, "pi-claude-marketplace");
+  await mkdir(extRoot, { recursive: true });
+
+  // Marketplace clone on disk.
+  const mpRoot = path.join(home, "mp-src");
+  await mkdir(path.join(mpRoot, ".claude-plugin"), { recursive: true });
+  const pluginRoot = path.join(mpRoot, "plugins", opts.pluginName);
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: opts.pluginName, version: opts.version }),
+  );
+  const skillDir = path.join(pluginRoot, "skills", "s1");
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(path.join(skillDir, "SKILL.md"), "---\nname: s1\n---\n\nBody.\n");
+  const manifestPath = path.join(mpRoot, ".claude-plugin", "marketplace.json");
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      name: opts.marketplaceName,
+      plugins: [
+        {
+          name: opts.pluginName,
+          source: `./plugins/${opts.pluginName}`,
+          version: opts.version,
+        },
+      ],
+    }),
+  );
+
+  // State: the KEPT disabled record (ENBL-02) -- empty resources +
+  // installable: true + the pinned version.
+  const statePath = path.join(extRoot, "state.json");
+  const state = {
+    schemaVersion: 1,
+    marketplaces: {
+      [opts.marketplaceName]: {
+        name: opts.marketplaceName,
+        scope: "user",
+        source: { kind: "path" as const, raw: mpRoot, absPath: mpRoot },
+        addedFromCwd: home,
+        marketplaceRoot: mpRoot,
+        manifestPath,
+        plugins: {
+          [opts.pluginName]: {
+            version: opts.version,
+            resolvedSource: pluginRoot,
+            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  };
+  await writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
+  return { statePath, configPath: path.join(scopeRoot, "claude-plugins.json") };
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // ENBL-01: config write-back (base + --local)
 // ──────────────────────────────────────────────────────────────────────────
@@ -242,6 +315,85 @@ test("ENBL-02: disable preserves version pin and empties resources arrays", asyn
     assert.deepEqual(rec.resources.prompts, [], "resources.prompts emptied");
     assert.deepEqual(rec.resources.agents, [], "resources.agents emptied");
     assert.deepEqual(rec.resources.mcpServers, [], "resources.mcpServers emptied");
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// CR-01 / ENBL-01 / ENBL-03: fresh enable success (end-to-end, real clone)
+// ──────────────────────────────────────────────────────────────────────────
+
+test("CR-01: fresh enable succeeds end-to-end against a real on-disk marketplace (single lock, catalog enable-fresh byte form, state re-populated)", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const { statePath, configPath } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "claude-plugins-official",
+      pluginName: "foo-plugin",
+      version: "1.2.3",
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "claude-plugins-official",
+      plugin: "foo-plugin",
+      enable: true,
+      scope: "user",
+    });
+
+    // Exactly one notify, info severity, catalog `enable-fresh` byte form:
+    // `(added)` header + `(installed)` row + `/reload` trailer. A nested
+    // withStateGuard would instead produce a `(failed)` row with a
+    // StateLockHeldError cause (the CR-01 regression this test pins).
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined, "fresh enable routes to info severity");
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● claude-plugins-official [user] (added)",
+        "  ● foo-plugin v1.2.3 (installed)",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
+    );
+
+    // State: the ledger's mutation must be what got SAVED (no outer
+    // stale-snapshot clobber) -- resources.skills re-populated, version pin
+    // + installedAt preserved (ENBL-02), record no longer disabled.
+    const state = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: Record<
+        string,
+        {
+          plugins: Record<
+            string,
+            {
+              version: string;
+              installedAt: string;
+              resources: { skills: string[] };
+            }
+          >;
+        }
+      >;
+    };
+    const rec = state.marketplaces["claude-plugins-official"]!.plugins["foo-plugin"]!;
+    assert.ok(
+      rec.resources.skills.length > 0,
+      "resources.skills must be non-empty after a fresh enable (state/disk drift otherwise)",
+    );
+    assert.equal(rec.version, "1.2.3", "ENBL-02 version pin preserved across re-materialization");
+    assert.equal(
+      rec.installedAt,
+      "2026-01-01T00:00:00.000Z",
+      "installedAt preserved on re-materialization (record was disabled, never uninstalled)",
+    );
+
+    // Config write-back: enabled:true recorded (ENBL-01).
+    const cfg = await readConfig(configPath);
+    const plugins = (cfg as { plugins?: Record<string, { enabled?: boolean }> }).plugins ?? {};
+    assert.equal(
+      plugins["foo-plugin@claude-plugins-official"]?.enabled,
+      true,
+      "config entry should carry enabled:true",
+    );
   });
 });
 
