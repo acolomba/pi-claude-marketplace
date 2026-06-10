@@ -51,9 +51,15 @@ function makePi(): ExtensionAPI {
 
 async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Promise<T> {
   const originalHome = process.env.HOME;
+  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
   const home = await mkdtemp(path.join(tmpdir(), "bootstrap-shim-home-"));
   const cwd = await mkdtemp(path.join(tmpdir(), "bootstrap-shim-cwd-"));
   process.env.HOME = home;
+  // SC-1: getAgentDir() honors PI_CODING_AGENT_DIR FIRST and only falls back
+  // to homedir(). Clear it so the hermetic HOME above actually governs the
+  // user scope -- otherwise a developer/CI env that sets the variable would
+  // make these tests install bootstrap records into the real Pi agent dir.
+  delete process.env.PI_CODING_AGENT_DIR;
   try {
     return await fn({ cwd });
   } finally {
@@ -61,6 +67,12 @@ async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Pr
       delete process.env.HOME;
     } else {
       process.env.HOME = originalHome;
+    }
+
+    if (originalAgentDir === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = originalAgentDir;
     }
 
     await rm(home, { recursive: true, force: true });

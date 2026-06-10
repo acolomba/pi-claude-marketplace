@@ -44,9 +44,15 @@ async function withHermeticHome<T>(
   fn: (env: { home: string; cwd: string }) => Promise<T>,
 ): Promise<T> {
   const originalHome = process.env.HOME;
+  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
   const home = await mkdtemp(path.join(tmpdir(), "mp-au-home-"));
   const cwd = await mkdtemp(path.join(tmpdir(), "mp-au-cwd-"));
   process.env.HOME = home;
+  // SC-1: getAgentDir() honors PI_CODING_AGENT_DIR FIRST and only falls back
+  // to homedir(). Clear it so the hermetic HOME above actually governs the
+  // user scope -- otherwise a developer/CI env that sets the variable would
+  // make these tests read AND write the real Pi agent dir.
+  delete process.env.PI_CODING_AGENT_DIR;
   try {
     return await fn({ home, cwd });
   } finally {
@@ -54,6 +60,12 @@ async function withHermeticHome<T>(
       delete process.env.HOME;
     } else {
       process.env.HOME = originalHome;
+    }
+
+    if (originalAgentDir === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = originalAgentDir;
     }
 
     await rm(home, { recursive: true, force: true });
