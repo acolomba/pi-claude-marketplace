@@ -52,8 +52,10 @@ import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../platform/
 // ---------------------------------------------------------------------------
 
 /**
- * CMC-11 closed reasons set. Byte-equal to the `reasons:` block in the
- * binding frontmatter at `docs/messaging-style-guide.md`. The set covers the
+ * CMC-11 closed reasons set. This tuple is the SOLE closed-set authority
+ * (style guide v2.0 retired the binding YAML frontmatter at
+ * `docs/messaging-style-guide.md`; the guide's prose references these
+ * tuples). The set covers the
  * autoupdate-flip idempotent rows (`"already autoupdate"` /
  * `"already no autoupdate"`) and the failure-class closed Reasons the catalog
  * UAT requires across uninstall / marketplace-remove partial / reinstall /
@@ -143,8 +145,9 @@ function allBenign(reasons: readonly Reason[] | undefined): boolean {
 }
 
 /**
- * CMC-08 closed status-token set. Byte-equal to the `status_tokens:` block
- * in the binding frontmatter at `docs/messaging-style-guide.md`.
+ * CMC-08 closed status-token set. This tuple is the SOLE closed-set
+ * authority (style guide v2.0 retired the binding YAML frontmatter at
+ * `docs/messaging-style-guide.md`).
  * `(no marketplaces)` and `(no plugins)` are FLAT members of this single
  * tuple; the bare-token render shape (no icon, no scope brackets) is a
  * renderer concern that branches at emission time.
@@ -183,8 +186,9 @@ export const STATUS_TOKENS = [
 export type StatusToken = (typeof STATUS_TOKENS)[number];
 
 /**
- * CMC-38 closed marker set. Byte-equal to the `markers:` block in the
- * binding frontmatter at `docs/messaging-style-guide.md`. Entries are
+ * CMC-38 closed marker set. This tuple is the SOLE closed-set authority
+ * (style guide v2.0 retired the binding YAML frontmatter at
+ * `docs/messaging-style-guide.md`). Entries are
  * stored WITHOUT surrounding `<>` chevrons; the `<marker>` chevron form
  * is composed by the renderer at emission time (MSG-GR-5).
  */
@@ -193,8 +197,9 @@ export const MARKERS = ["autoupdate", "no autoupdate"] as const;
 export type Marker = (typeof MARKERS)[number];
 
 /**
- * CMC-38 closed pattern-class set. Byte-equal to the `pattern_classes:`
- * block in the binding frontmatter at `docs/messaging-style-guide.md`.
+ * CMC-38 closed pattern-class set. This tuple is the SOLE closed-set
+ * authority (style guide v2.0 retired the binding YAML frontmatter at
+ * `docs/messaging-style-guide.md`).
  * Pattern classes label the SHAPES of compact-line emissions (success /
  * failure / cascade-row / etc.) for documentation and rule-attribution
  * purposes. They are NOT emitted in the rendered output -- the renderer
@@ -236,7 +241,8 @@ export function notifyUsageError(ctx: ExtensionContext, message: UsageErrorMessa
 //
 // Satisfies SNM-01 (NotificationMessage), SNM-02
 // (MarketplaceNotificationMessage), SNM-03 (PluginNotificationMessage
-// discriminated union, 11 variants), SNM-04 (PluginStatus derived via indexed
+// discriminated union; variant count is type-length-locked in
+// tests/architecture/notify-types.test.ts), SNM-04 (PluginStatus derived via indexed
 // access), SNM-05 (MarketplaceStatus closed set), SNM-06 (Dependency +
 // required `dependencies` on installed/updated/reinstalled), SNM-07
 // (MarketplaceDetails shape), SNM-08 (UsageErrorMessage shape), SNM-09
@@ -254,13 +260,15 @@ export function notifyUsageError(ctx: ExtensionContext, message: UsageErrorMessa
 // ---------------------------------------------------------------------------
 
 /**
- * Runtime tuple of every plugin status literal. 11 entries.
+ * Runtime tuple of every plugin status literal (entry count is
+ * type-length-locked in tests/architecture/notify-types.test.ts).
  * `"manual recovery"` is a literal string WITH A SPACE; do not transform to
  * kebab-case ("manual-recovery") or camelCase ("manualRecovery") -- the
  * renderer emits the discriminator literal directly into the `(<status>)`
  * brace slot.
  *
- * The trailing `"present"` entry is the list-only inventory token (SNM-15).
+ * The `"present"` entry is the list-only inventory token (SNM-15); the four
+ * trailing `"will *"` entries are the DIFF-02 preview pending-tense tokens.
  * The four state-change tokens at the head of the tuple (`installed`,
  * `updated`, `reinstalled`, `uninstalled`) are the structurally-
  * distinguished transition tokens that drive `shouldEmitReloadHint`;
@@ -289,11 +297,12 @@ export const PLUGIN_STATUSES = [
 ] as const;
 
 /**
- * Runtime tuple of every marketplace status literal. 7 entries. The 3 final
- * entries (`"autoupdate enabled"`, `"autoupdate disabled"`, `"skipped"`)
- * support the autoupdate-flip surface; order is normative -- the 4 leading
- * entries retain their position to match the `renderMpHeader` switch-arm
- * ordering.
+ * Runtime tuple of every marketplace status literal (entry count is
+ * type-length-locked in tests/architecture/notify-types.test.ts).
+ * `"autoupdate enabled"` / `"autoupdate disabled"` / `"skipped"` support the
+ * autoupdate-flip surface; the 2 trailing `"will *"` entries are the DIFF-02
+ * preview pending-tense tokens. Order is normative -- the 4 leading entries
+ * retain their position to match the `renderMpHeader` switch-arm ordering.
  *
  * Pattern: closed-set `as const` tuple + `(typeof X)[number]` literal-union.
  */
@@ -1162,6 +1171,9 @@ function wrapDescription(text: string, indentCol: number, wrapCol: number): stri
  *                           `... <no autoupdate> {already no autoupdate}`
  *                           (marker-as-outcome + idempotence brace, no
  *                           `(skipped)` token).
+ *   "will add"           -> `${ICON_INSTALLED} ${name} [${scope}] (will add)`
+ *   "will remove"        -> `${ICON_AVAILABLE} ${name} [${scope}] (will remove)`
+ *                           (DIFF-02 preview pending-tense arms.)
  *   undefined (list-surface):
  *     SUB-BRANCH A (mp.details === undefined): `${ICON_INSTALLED} ${name} [${scope}]`
  *     SUB-BRANCH B (mp.details !== undefined): `${ICON_INSTALLED} ${name} [${scope}]`
@@ -1171,9 +1183,11 @@ function wrapDescription(text: string, indentCol: number, wrapCol: number): stri
  *       NOT rendered on the list surface (UXG-01 -- the raw ISO timestamp is
  *       noise and meaningless for path-source marketplaces).
  *
- * The icon arms use ICON_AVAILABLE nowhere -- marketplaces are either ok
- * (●) or failure-class (⊘); the open-circle ○ is reserved for available /
- * uninstalled PLUGIN rows that `renderPluginRow` owns.
+ * The only ICON_AVAILABLE (○) marketplace arm is the preview
+ * `"will remove"` (the marketplace-level analog of an uninstall); every
+ * other arm is either ok (●) or failure-class (⊘). The other open-circle
+ * uses are the available / uninstalled / will-uninstall PLUGIN rows that
+ * `renderPluginRow` owns.
  *
  * The `"skipped"` arm reuses the file-private `composeReasons` helper to
  * render the reasons brace, which requires the threaded `SoftDepStatus` probe
