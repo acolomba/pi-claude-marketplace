@@ -186,19 +186,19 @@ async function runEnableBranch(
  * `cascadeUnstagePlugin` primitive, then reset `resources.*` to [] in place
  * (PRESERVING `version` / `resolvedSource` / `compatibility` / `installedAt`
  * per ENBL-02). Returns the outcome sentinel.
+ *
+ * WR-04: parameters carry the REAL types (`ScopedLocations` and the state
+ * record shape) so the `cascadeUnstagePlugin` call type-checks without
+ * casts -- an argument-order swap or a schema field rename is a COMPILE
+ * error here, not a runtime corruption.
  */
 async function runDisableBranch(
   opts: EnableDisablePluginOptions,
-  locations: ScopedLocationsLike,
+  locations: ScopedLocations,
   installed: InstalledPluginRecord,
 ): Promise<SetEnabledOutcome> {
   const recordedVersion = installed.version;
-  const cascade = await cascadeUnstagePlugin(
-    opts.plugin,
-    opts.marketplace,
-    locations as never,
-    installed as never,
-  );
+  const cascade = await cascadeUnstagePlugin(opts.plugin, opts.marketplace, locations, installed);
   if (!cascade.ok) {
     return {
       kind: "disable-failed",
@@ -244,26 +244,12 @@ async function writeConfigEntry(
 }
 
 /**
- * Internal narrow types for the helpers above -- pulled out so the runDisable
- * helper does not need to import the full ScopedLocations branded type.
+ * WR-04: the REAL state-record shape (the exact type
+ * `cascadeUnstagePlugin` requires), aliased for readability. No local
+ * structural mirror -- a schema field rename surfaces as a compile error in
+ * this module instead of being silenced by an `as never` cast.
  */
-interface InstalledPluginRecord {
-  readonly version: string;
-  readonly compatibility: { readonly installable: boolean };
-  resources: {
-    skills: string[];
-    prompts: string[];
-    agents: string[];
-    mcpServers: string[];
-  };
-  updatedAt: string;
-}
-
-interface ScopedLocationsLike {
-  readonly scopeRoot: string;
-  readonly configJsonPath: string;
-  readonly configLocalJsonPath: string;
-}
+type InstalledPluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
 
 /**
  * D-54-01 entrypoint. Never re-throws -- every failure surfaces through a
