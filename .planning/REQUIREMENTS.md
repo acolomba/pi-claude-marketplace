@@ -11,9 +11,9 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Config File & Schema
 
-- [ ] **CFG-01**: User can declare marketplaces (name, source, autoupdate) and plugins (`plugin@marketplace`, enabled) in a per-scope `claude-plugins.json` with a Pi-native, typebox-validated schema
+- [x] **CFG-01**: User can declare marketplaces (name, source, autoupdate) and plugins (`plugin@marketplace`, enabled) in a per-scope `claude-plugins.json` with a Pi-native, typebox-validated schema
 - [ ] **CFG-02**: User can override base entries in a gitignore-able `claude-plugins.local.json`; a local entry replaces the base entry wholesale (entry-level override)
-- [ ] **CFG-03**: An unparseable or schema-invalid config file aborts reconciliation without changing anything and surfaces an error -- never treated as "empty desired state"
+- [x] **CFG-03**: An unparseable or schema-invalid config file aborts reconciliation without changing anything and surfaces an error -- never treated as "empty desired state"
 - [ ] **CFG-04**: The `.local` gitignore convention and config-file workflow are documented (README)
 
 ### State Split
@@ -83,9 +83,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CFG-01 | Phase 51 | Pending |
+| CFG-01 | Phase 51 | Done (Plan 51-01, 2026-06-10) |
 | CFG-02 | Phase 51 | Pending |
-| CFG-03 | Phase 51 | Pending |
+| CFG-03 | Phase 51 | Done (Plan 51-01, 2026-06-10) |
 | CFG-04 | Phase 56 | Pending |
 | SPLIT-01 | Phase 51 | Pending |
 | SPLIT-02 | Phase 51 | Pending |

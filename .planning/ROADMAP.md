@@ -179,7 +179,7 @@ Declarative, version-controllable config files (`claude-plugins.json` + entry-le
 
 **Wave 1**
 
-- [ ] 51-01-PLAN.md -- Lock the schema + I/O seam (CONFIG_SCHEMA, loadConfig trichotomy, saveConfig with assertPathInside) + ScopedLocations additions (CFG-01, CFG-03; D-01, D-02, D-04, D-05, D-06, D-09, D-11, D-15)
+- [x] 51-01-PLAN.md -- Lock the schema + I/O seam (CONFIG_SCHEMA, loadConfig trichotomy, saveConfig with assertPathInside) + ScopedLocations additions (CFG-01, CFG-03; D-01, D-02, D-04, D-05, D-06, D-09, D-11, D-15) -- completed 2026-06-10
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -1078,7 +1078,7 @@ Every error/warning-severity notification now carries a non-empty summary messag
 | 48. Marketplace-Ops Attribution                                     | v1.10     | 3/3 | Complete    | 2026-06-08 |
 | 49. Cross-Op Convergence & GREEN-Gate Close                         | v1.10     | 3/3 | Complete    | 2026-06-08 |
 | 50. Notification Summary-Line Grammar                               | v1.11     | 1/1 | Complete    | 2026-06-08 |
-| 51. Config Schema, Persistence & State Split                        | v1.12     | 0/? | Not started | --         |
+| 51. Config Schema, Persistence & State Split                        | v1.12     | 1/3 | In progress | 2026-06-10 |
 | 52. First-Run Migration                                             | v1.12     | 0/? | Not started | --         |
 | 53. Pure Reconcile Planner & Dry-Run Preview                        | v1.12     | 0/? | Not started | --         |
 | 54. Enable/Disable Commands                                         | v1.12     | 0/? | Not started | --         |
