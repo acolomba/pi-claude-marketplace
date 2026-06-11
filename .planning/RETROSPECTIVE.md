@@ -2,6 +2,40 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v1.12 -- Marketplace and Plugin Config Files
+
+**Shipped:** 2026-06-11
+**Phases:** 6 (Phases 51-56) | **Plans:** 15 | **Tasks:** 24 | **Tests:** 1515 -> 1804 unit + 10 integration
+
+### What Was Built
+Declarative per-scope config files (`claude-plugins.json` + `.local.json` entry-level override) as the authoritative desired-state record: typebox schema with discriminated absent/invalid/valid loading, lossless first-run migration, pure 7-bucket reconcile planner + read-only `preview` command (six `will *` tokens), offline enable/disable with the `(disabled)` token, automatic load-time reconciliation (per-entry soft-fail, one cascade, fixed-point, two-process safe), and config write-back on every mutating command with `--local`.
+
+### What Worked
+- Foundation-first sequencing (51 schema -> 52 migration -> 53 planner -> 54/55 consumers -> 56 write-back) meant every later phase composed frozen seams; zero replanning across 6 phases.
+- The atomic catalog-lockstep commit pattern (renderer + catalog + byte fixtures in ONE commit) held across three closed-set amendments (will-*, disabled, reconcile-applied-cascade) -- no drift gate ever went red between commits.
+- Per-phase code review caught 5 criticals (nested-lock deadlock, token-with-no-producer, autoupdate config clobber, dangling cross-scope declaration, key/name convergence churn) that all passed the per-plan test suites -- adversarial review after execution is load-bearing.
+- Architecture tests as ratchets: SPLIT-02 write-seams allow-list (size 1), SPLIT-01 cast allow-list (6 -> 0), planner purity, FORBIDDEN_TARGETS network gates.
+
+### What Was Inefficient
+- Plan 51-02 hit a self-contradictory plan (persistence-only boundary vs GREEN gate) requiring a mid-execution user decision; planner should sanity-check cross-cutting type changes against consumer compile surface.
+- Worktree-mode fixers had to SKIP=trufflehog and rescan separately every time (known repo limitation).
+- The stale ROADMAP historical sections (Phases 15-50 in details blocks) confused both phase discovery and milestone close until removed.
+
+### Patterns Established
+- Discriminated `ConfigLoadResult` trichotomy as the safety gate for user-editable files (absent != invalid != valid-empty).
+- Orchestrated-vs-standalone notification modes: load-time aggregation reuses command orchestrators without double-notify or config write-back.
+- "Implicit marker" persistence (empty resources arrays = disabled) avoids schema bumps but needs a >=1-component invariant -- watch the zero-component edge.
+
+### Key Lessons
+1. Reconcile-path code must never write the user config -- the WR-09 fix restored SPLIT-02 after orchestrated-mode briefly leaked write-back; the architecture test now pins it.
+2. Write config entries with the user's verbatim source string -- planner convergence breaks on any re-rendering (Phase 55 CR-01).
+3. Tests that drive real orchestrators against real temp dirs catch what mock-driven suites cannot (the fresh-enable deadlock and import config pollution were both invisible to mocks).
+
+### Cost Observations
+- Model mix: opus executors/planners/researchers, sonnet checkers/verifiers.
+- Sessions: 1 autonomous run (discuss-skip mode), 2026-06-09 -> 2026-06-11; 146 commits.
+- Notable: review->fix->verify loop per phase added ~30% wall time but removed 5 ship-blocking defects.
+
 ## Milestone: v1.11 -- Notification Summary-Line Grammar
 
 **Shipped:** 2026-06-08
@@ -286,6 +320,7 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | v1.1 | 2 | Atomic transaction primitive (`withLockedStateTransaction`); cross-process state locking |
 | v1.2 | 2 | Pure desired-state planning boundary (D-28); both-scope default with explicit-scope override |
 | v1.3 | 5 | Drift contract via YAML frontmatter; byte-equality catalog UAT; atomic user-contract supersession commits |
+| v1.12 | 6 | Declarative desired-state config + load-time reconciliation; architecture-test ratchets (write-seams, cast allow-list, planner purity) |
 
 ### Cumulative Quality
 
@@ -295,6 +330,7 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | v1.1 | ~900 | Cross-process IPC fork tests for concurrent-install race |
 | v1.2 | ~1000 | Catalog-UAT fixture pattern seeded |
 | v1.3 | 1249/1249 | Byte-equality catalog UAT + 34-rule MSG-* drift-guard plugin; v1.3 user-contract structurally enforced |
+| v1.12 | 1804 + 10 int | Config/state split architecture-tested; two-process reconcile race coverage; 5 review criticals fixed pre-ship |
 
 ### Top Lessons (Verified Across Milestones)
 
