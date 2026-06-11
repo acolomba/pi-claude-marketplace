@@ -321,3 +321,42 @@ test("bootstrap (non-duplicate clone error): propagates and autoupdate step is N
     assert.deepEqual(userState.marketplaces, {});
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// Phase 56 Plan 02 (Task 3): WB-04 composed-write smoke test
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WB-04: bootstrap records marketplace + autoupdate=true into the config via composed addMarketplace + setMarketplaceAutoupdate writes", async () => {
+  // RESEARCH A2 + PATTERNS §"bootstrap.ts (composed 2-write)": bootstrap
+  // composition is the locked decision. WB-04 is satisfied transitively once
+  // addMarketplace and setMarketplaceAutoupdate write back -- which Task 1
+  // landed in this plan. This smoke test proves the end-state config matches:
+  //   marketplaces[<name>] === { source, autoupdate: true }
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, pi } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureClaudePluginsOfficial(),
+    });
+
+    await bootstrapClaudePlugin({ ctx, pi, cwd, gitOps });
+
+    const userLocations = locationsFor("user", cwd);
+    const { loadConfig } =
+      await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+    const cfg = await loadConfig(userLocations.configJsonPath);
+    assert.equal(cfg.status, "valid");
+    if (cfg.status !== "valid") {
+      return;
+    }
+
+    // End-state config shape (2 composed writes converged):
+    //   marketplaces["claude-plugins-official"] = {
+    //     source: "anthropics/claude-plugins-official",   // addMarketplace verbatim rawSource
+    //     autoupdate: true,                               // setMarketplaceAutoupdate
+    //   }
+    const entry = cfg.config.marketplaces?.["claude-plugins-official"];
+    assert.ok(entry, "marketplace entry must exist in claude-plugins.json");
+    assert.equal(entry.source, "anthropics/claude-plugins-official");
+    assert.equal(entry.autoupdate, true);
+  });
+});
