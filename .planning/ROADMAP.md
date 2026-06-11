@@ -309,7 +309,7 @@ Declarative, version-controllable config files (`claude-plugins.json` + entry-le
 
 **Wave 1**
 
-- [ ] 56-01-PLAN.md -- Shared persistence/config-write-back.ts helpers + lift extractLocalFlag to edge/handlers/shared.ts + Wave 0 architecture tests (config-state-consistency + no-split-01-cast-reads baseline) (WB-01, WB-02, WB-03, WB-04 foundation)
+- [x] 56-01-PLAN.md -- Shared persistence/config-write-back.ts helpers + lift extractLocalFlag to edge/handlers/shared.ts + Wave 0 architecture tests (config-state-consistency + no-split-01-cast-reads baseline) (WB-01, WB-02, WB-03, WB-04 foundation)
 
 **Wave 2** *(blocked on Wave 1 completion; 56-02 and 56-03 parallel-safe -- disjoint marketplace/* vs plugin/* file sets)*
 
@@ -1127,4 +1127,4 @@ Every error/warning-severity notification now carries a non-empty summary messag
 | 53. Pure Reconcile Planner & Dry-Run Preview                        | v1.12     | 2/2 | Complete    | 2026-06-10 |
 | 54. Enable/Disable Commands                                         | v1.12     | 2/2 | Complete    | 2026-06-10 |
 | 55. Load-Time Reconcile Apply, Notification & Wiring                | v1.12     | 3/3 | Complete    | 2026-06-11 |
-| 56. Write-Back Integration & Documentation                          | v1.12     | 0/? | Not started | --         |
+| 56. Write-Back Integration & Documentation                          | v1.12     | 1/4 | In Progress|  |

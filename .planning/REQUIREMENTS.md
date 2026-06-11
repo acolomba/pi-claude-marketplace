@@ -97,10 +97,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RECON-04 | Phase 55 | Complete |
 | RECON-05 | Phase 55 | Complete |
 | RECON-06 | Phase 55 | Complete |
-| WB-01 | Phase 56 | Pending |
-| WB-02 | Phase 56 | Pending |
-| WB-03 | Phase 56 | Pending |
-| WB-04 | Phase 56 | Pending |
+| WB-01 | Phase 56 | In Progress |
+| WB-02 | Phase 56 | In Progress |
+| WB-03 | Phase 56 | In Progress |
+| WB-04 | Phase 56 | In Progress |
 | ENBL-01 | Phase 54 | Complete |
 | ENBL-02 | Phase 54 | Complete |
 | ENBL-03 | Phase 54 | Complete |
