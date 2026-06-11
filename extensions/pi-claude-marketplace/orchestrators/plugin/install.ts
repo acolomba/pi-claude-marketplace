@@ -61,6 +61,7 @@
 // shared/notify.ts; this file holds no rendering imports.
 
 import { mkdir } from "node:fs/promises";
+import path from "node:path";
 
 import {
   commitPreparedAgents,
@@ -88,6 +89,8 @@ import {
 import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
+import { loadConfig } from "../../persistence/config-io.ts";
+import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
@@ -116,6 +119,7 @@ import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
+import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
@@ -248,6 +252,14 @@ export interface InstallPluginOptions {
    * undefined.
    */
   readonly pinVersionOverride?: string;
+  /**
+   * WB-01 / WB-02 / Pitfall 2 (Phase 56 Plan 03): when true, target
+   * `claude-plugins.local.json` instead of `claude-plugins.json`. The base
+   * file is NEVER touched on the --local path; loadConfig's `absent` arm
+   * yields an empty starting shape that saveConfig writes back to the local
+   * path.
+   */
+  readonly local?: boolean;
 }
 
 /**
@@ -804,6 +816,19 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   // This is distinct from M2 (plugin absent from a PRESENT manifest), which
   // stays `{not in manifest}` on the plugin row (Pitfall 2).
   let marketplaceAbsent = false;
+  // WB-01 / CFG-03: invalid-config sentinel; populated inside the guard so
+  // the post-guard branch emits the failed row with a basename-only cause.
+  let configInvalid = false;
+
+  // WB-01 / Pitfall 2: target-path selection happens ONCE before the lock so
+  // the orchestrator NEVER falls back to the base file on ENOENT. The base
+  // file is NEVER touched on the --local path; loadConfig's `absent` arm
+  // yields an empty starting shape that saveConfig writes back to the local
+  // path.
+  const targetConfigPath =
+    opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath;
+  const configBasename = path.basename(targetConfigPath);
+  const orchestrated = opts.notifications?.mode === "orchestrated";
 
   try {
     // D-02 outer guard around the guard-FREE ledger body (CR-01): the lock
@@ -811,6 +836,14 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // snapshot only. (Returning on marketplace-absent lets the guard re-save
     // the unchanged state; the operation is read-only in effect.)
     await withStateGuard(locations, async (state) => {
+      // CFG-03 / T-56-03-04: abort BEFORE any state mutation. The
+      // basename-only message prevents an absolute-path information leak.
+      const cfg = await loadConfig(targetConfigPath);
+      if (cfg.status === "invalid") {
+        configInvalid = true;
+        return;
+      }
+
       const result = await runInstallLedger(
         state,
         locations,
@@ -834,6 +867,24 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       // Success: lift the install context up so the post-guard path can
       // compose the user-visible notification without re-entering the closure.
       installCtx = result.installCtx;
+
+      // WB-01 / WR-09: write-back the plugin entry to the user-authored
+      // config. SKIPPED in orchestrated mode (reconcile derives desired
+      // state FROM the merged config; writing back would clobber a
+      // per-machine override). The patch is `{}` because the plugin entry
+      // shape today carries no install-time field beyond the implicit
+      // declaration -- D-04 keeps the "enabled" default at consume time.
+      if (opts.notifications?.mode !== "orchestrated") {
+        const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
+        await writePluginConfigEntry(
+          current,
+          targetConfigPath,
+          locations.scopeRoot,
+          plugin,
+          marketplace,
+          {},
+        );
+      }
     });
   } catch (err) {
     // Pattern S-1 single chokepoint for user-visible errors (one
@@ -923,6 +974,36 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   // -- the CMP-3 project->user fallback already ran inside the guard; only a
   // double-miss reaches here (Pitfall 1).
   //
+  // WB-01 / CFG-03 / T-56-03-04: invalid-config abort. The basename-only
+  // message prevents an absolute-path information leak. No state mutation,
+  // no write-back -- the closure returned before runInstallLedger ran.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated inside the withStateGuard closure above.
+  if (configInvalid) {
+    const cause = `Config file "${configBasename}" failed schema validation.`;
+    const invalidErr = new Error(cause);
+    if (orchestrated) {
+      return { status: "failed", error: invalidErr, cause };
+    }
+
+    notify(ctx, pi, {
+      marketplaces: [
+        {
+          name: marketplace,
+          scope,
+          plugins: [
+            {
+              status: "failed",
+              name: plugin,
+              reasons: ["invalid manifest"] as const,
+              cause: invalidErr,
+            },
+          ],
+        },
+      ],
+    });
+    return { status: "failed", error: invalidErr, cause };
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- `marketplaceAbsent` is mutated inside the withStateGuard closure above; TS flow analysis cannot prove the closure executed, so it sees the variable as still `false`. The check is required at runtime.
   if (marketplaceAbsent) {
     const cause = `Marketplace "${marketplace}" is not added in the ${scope} scope.`;
@@ -977,7 +1058,6 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     return { status: "failed", error: internalErr, cause };
   }
 
-  const orchestrated = opts.notifications?.mode === "orchestrated";
   const postCommitWarnings: string[] = [];
 
   // POST-state-commit (AS-6 / D-08): eager per-plugin data dir mkdir.

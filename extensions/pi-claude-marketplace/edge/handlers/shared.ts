@@ -28,16 +28,21 @@ import type { ExtensionCommandContext } from "../../platform/pi-api.ts";
  * Position-independent `--local` flag scanner. Walks the tokenised args,
  * recognises `--scope <value>` as a downstream-consumed pair, recognises
  * `--local` as the flag this helper extracts, and rejects any other long
- * flag via `notifyUsageError`.
+ * flag via `notifyUsageError` UNLESS listed in `passThroughLongFlags` (a
+ * caller-supplied allow-list of additional boolean long flags handled by
+ * the downstream domain parser, e.g. install/update's `--map-model`).
  *
  * Returns `{ local, residualArgs }` where `residualArgs` has every `--local`
- * token REMOVED. Returns `undefined` when an unknown long flag was found
- * (the usage error has already been notified; caller should early-return).
+ * token REMOVED (other passthrough flags are preserved verbatim for the
+ * downstream parser). Returns `undefined` when an unknown long flag was
+ * found (the usage error has already been notified; caller should early-
+ * return).
  */
 export function extractLocalFlag(
   args: string,
   ctx: ExtensionCommandContext,
   usage: string,
+  passThroughLongFlags: readonly string[] = [],
 ): { local: boolean; residualArgs: string } | undefined {
   let local = false;
   const tokens = args.split(/\s+/).filter((t) => t.length > 0);
@@ -61,6 +66,13 @@ export function extractLocalFlag(
     }
 
     if (tok.startsWith("--")) {
+      if (passThroughLongFlags.includes(tok)) {
+        // Known downstream-consumed long flag (e.g. --map-model). Preserve
+        // verbatim in residualArgs for the domain parser.
+        i += 1;
+        continue;
+      }
+
       notifyUsageError(ctx, { message: `Unknown flag: "${tok}".`, usage });
       return undefined;
     }

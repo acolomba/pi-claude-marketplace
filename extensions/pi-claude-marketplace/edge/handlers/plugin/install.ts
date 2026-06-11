@@ -22,13 +22,14 @@
 
 import { installPlugin } from "../../../orchestrators/plugin/install.ts";
 import { notifyUsageError } from "../../../shared/notify.ts";
+import { extractLocalFlag } from "../shared.ts";
 
 import { parseMapModelArgs, splitPluginMarketplaceRef } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
 const USAGE =
-  "Usage: /claude:plugin install <plugin>@<marketplace> [--scope user|project] [--map-model]";
+  "Usage: /claude:plugin install <plugin>@<marketplace> [--scope user|project] [--map-model] [--local]";
 
 /**
  * Factory: returns the async handler closed over `pi` (required by
@@ -39,7 +40,14 @@ export function makeInstallHandler(
   pi: ExtensionAPI,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
-    const flagged = parseMapModelArgs(args, ctx, USAGE);
+    // Shared scanner; see edge/handlers/shared.ts. `--map-model` is
+    // downstream-consumed; pass through verbatim.
+    const localFlag = extractLocalFlag(args, ctx, USAGE, ["--map-model"]);
+    if (localFlag === undefined) {
+      return;
+    }
+
+    const flagged = parseMapModelArgs(localFlag.residualArgs, ctx, USAGE);
     if (flagged === undefined) {
       return;
     }
@@ -75,6 +83,7 @@ export function makeInstallHandler(
       marketplace: ref.marketplace,
       plugin: ref.plugin,
       ...(mapModel && { mapModel: true }),
+      ...(localFlag.local && { local: true }),
     });
   };
 }

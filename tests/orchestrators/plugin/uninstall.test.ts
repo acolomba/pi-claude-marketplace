@@ -1609,3 +1609,230 @@ test("RECON-03 uninstall standalone-default mode -- omitted notifications option
     }
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// Phase 56 Plan 03 (Task 1): WB-01/WB-02 write-back, --local, WR-09, CFG-03
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WB-01: standalone uninstall deletes the plugin entry from claude-plugins.json", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wb01-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+
+      // Pre-seed claude-plugins.json with the plugin entry so we can verify
+      // the delete actually removes it.
+      const { saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      await saveConfig(
+        locations.configJsonPath,
+        {
+          schemaVersion: 1,
+          plugins: { "hello@mp": {}, "keep@mp": {} },
+        },
+        locations.scopeRoot,
+      );
+
+      const { ctx, pi } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const cfg = await loadConfig(locations.configJsonPath);
+      assert.equal(cfg.status, "valid");
+      if (cfg.status === "valid") {
+        assert.equal(cfg.config.plugins?.["hello@mp"], undefined);
+        // Other plugin entry preserved.
+        assert.deepEqual(cfg.config.plugins?.["keep@mp"], {});
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WB-01 / Pitfall 2: --local uninstall deletes from claude-plugins.local.json; base file untouched", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wb01-local-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+
+      const { saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      // Pre-seed both files; only the local-file entry should be removed.
+      await saveConfig(
+        locations.configJsonPath,
+        { schemaVersion: 1, plugins: { "hello@mp": {} } },
+        locations.scopeRoot,
+      );
+      await saveConfig(
+        locations.configLocalJsonPath,
+        { schemaVersion: 1, plugins: { "hello@mp": {} } },
+        locations.scopeRoot,
+      );
+
+      // Snapshot base bytes BEFORE the operation.
+      const baseBytesBefore = await readFile(locations.configJsonPath);
+
+      const { ctx, pi } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        local: true,
+      });
+
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const localCfg = await loadConfig(locations.configLocalJsonPath);
+      assert.equal(localCfg.status, "valid");
+      if (localCfg.status === "valid") {
+        assert.equal(localCfg.config.plugins?.["hello@mp"], undefined);
+      }
+
+      // Base file is byte-identical.
+      const baseBytesAfter = await readFile(locations.configJsonPath);
+      assert.deepEqual(baseBytesAfter, baseBytesBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-09 / T-56-03-01: orchestrated-mode uninstall SKIPS write-back; config untouched", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wb01-orch-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+
+      const { saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      await saveConfig(
+        locations.configJsonPath,
+        { schemaVersion: 1, plugins: { "hello@mp": {} } },
+        locations.scopeRoot,
+      );
+      const bytesBefore = await readFile(locations.configJsonPath);
+
+      const { ctx, pi } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // Config file byte-identical -- orchestrated mode skipped the write-back.
+      const bytesAfter = await readFile(locations.configJsonPath);
+      assert.deepEqual(bytesAfter, bytesBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WB-01 / Pitfall 5: ALREADY-GONE uninstall leaves config byte-unchanged", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wb01-gone-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      // Seed marketplace but NOT the plugin record -- triggers PU-5 silent converge.
+      await mkdir(locations.extensionRoot, { recursive: true });
+      const { saveState } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/state-io.ts");
+      await saveState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: {},
+          },
+        },
+      });
+
+      const { saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      await saveConfig(
+        locations.configJsonPath,
+        { schemaVersion: 1, plugins: { "hello@mp": {} } },
+        locations.scopeRoot,
+      );
+      const bytesBefore = await readFile(locations.configJsonPath);
+
+      const { ctx, pi } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // Config bytes UNCHANGED -- alreadyGone arm short-circuits before write-back.
+      const bytesAfter = await readFile(locations.configJsonPath);
+      assert.deepEqual(bytesAfter, bytesBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("CFG-03 / T-56-03-04: invalid config aborts uninstall; basename-only cause; state untouched", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wb01-cfg03-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+
+      // Seed invalid base config.
+      await mkdir(path.dirname(locations.configJsonPath), { recursive: true });
+      await writeFile(locations.configJsonPath, "{ not valid json", "utf8");
+
+      const { ctx, pi, notifications } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      assert.equal(notifications.length, 1);
+      const note = notifications[0]!;
+      assert.match(note.message, /\{invalid manifest\}/);
+      assert.ok(
+        !note.message.includes(locations.configJsonPath),
+        `MUST NOT leak absolute configJsonPath, got: ${note.message}`,
+      );
+
+      // State record was NOT removed.
+      const after = await loadState(locations.extensionRoot);
+      assert.ok("hello" in (after.marketplaces["mp"]?.plugins ?? {}));
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});

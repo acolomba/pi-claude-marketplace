@@ -2300,3 +2300,188 @@ test("260525-cjr B2: narrowResolverReasons -> wholly unclassifiable note -> `uns
     ["unsupported source"],
   );
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// Phase 56 Plan 03 (Task 1): WB-01/WB-02 write-back, --local, WR-09, CFG-03
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WB-01: standalone install writes the plugin entry to claude-plugins.json", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+      });
+
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const cfg = await loadConfig(locations.configJsonPath);
+      assert.equal(cfg.status, "valid");
+      if (cfg.status === "valid") {
+        // Patch is `{}` per D-04 (consume-time default for `enabled`).
+        assert.deepEqual(cfg.config.plugins?.["hello@mp"], {});
+      }
+
+      // Local file MUST NOT be touched on the base-target path.
+      assert.equal((await loadConfig(locations.configLocalJsonPath)).status, "absent");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WB-01 / Pitfall 2: --local routes the write to claude-plugins.local.json; base file untouched", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-local-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+      });
+
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        local: true,
+      });
+
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const localCfg = await loadConfig(locations.configLocalJsonPath);
+      assert.equal(localCfg.status, "valid");
+      if (localCfg.status === "valid") {
+        assert.deepEqual(localCfg.config.plugins?.["hello@mp"], {});
+      }
+
+      // Base MUST be untouched.
+      assert.equal((await loadConfig(locations.configJsonPath)).status, "absent");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-09 / T-56-03-01: orchestrated-mode install SKIPS write-back (neither file created)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-orch-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+      });
+
+      const { ctx, pi } = makeCtx();
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+      assert.equal(outcome.status, "installed");
+
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      assert.equal((await loadConfig(locations.configJsonPath)).status, "absent");
+      assert.equal((await loadConfig(locations.configLocalJsonPath)).status, "absent");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WB-01: marketplace-not-added FAILED arm does NOT write back; config untouched", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-fail-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "ghost-mp",
+        plugin: "any",
+      });
+
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      assert.equal((await loadConfig(locations.configJsonPath)).status, "absent");
+      assert.equal((await loadConfig(locations.configLocalJsonPath)).status, "absent");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("CFG-03 / T-56-03-04: invalid config aborts install; basename-only cause; state untouched", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-cfg03-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+      });
+
+      // Seed an invalid base config so CFG-03 fires.
+      await mkdir(path.dirname(locations.configJsonPath), { recursive: true });
+      await writeFile(locations.configJsonPath, "{ not valid json", "utf8");
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      assert.equal(notifications.length, 1);
+      const note = notifications[0]!;
+      assert.match(note.message, /\{invalid manifest\}/);
+      // Basename only -- no absolute path leak.
+      assert.ok(
+        !note.message.includes(locations.configJsonPath),
+        `MUST NOT leak absolute configJsonPath, got: ${note.message}`,
+      );
+
+      // State was NOT mutated.
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["hello"], undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});

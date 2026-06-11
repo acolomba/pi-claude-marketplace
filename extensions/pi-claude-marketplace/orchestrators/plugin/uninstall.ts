@@ -42,7 +42,10 @@
 // rows even though the probe is uniformly threaded.
 
 import { rm } from "node:fs/promises";
+import path from "node:path";
 
+import { loadConfig } from "../../persistence/config-io.ts";
+import { deletePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import { errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
@@ -51,6 +54,7 @@ import { AgentsUnstageFailureError, cascadeUnstagePlugin } from "../marketplace/
 
 import { resolveCrossScopePluginTarget } from "./shared.ts";
 
+import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
   ContentReason,
@@ -129,6 +133,14 @@ export interface UninstallPluginOptions {
    * (undefined) === `{ mode: "standalone" }` -- byte-identical to today.
    */
   readonly notifications?: UninstallPluginNotifications;
+  /**
+   * WB-01 / WB-02 / Pitfall 2 (Phase 56 Plan 03): when true, target
+   * `claude-plugins.local.json` instead of `claude-plugins.json`. The base
+   * file is NEVER touched on the --local path; loadConfig's `absent` arm
+   * yields an empty starting shape that saveConfig writes back to the local
+   * path.
+   */
+  readonly local?: boolean;
 }
 
 /**
@@ -236,6 +248,78 @@ function emitCascadeFailure(args: {
 }
 
 /**
+ * TR-03: fold a non-AG-5 partial cascade failure into the state record. The
+ * dropped artifacts are subtracted from resources.* IN PLACE so the persisted
+ * row reflects only artifacts still on disk (no ghost record). The asymmetric
+ * dropped.commands -> resources.prompts mapping is per TR-03 (cascade primitive
+ * naming).
+ */
+function applyPartialCascadeFold(
+  installed: {
+    resources: { skills: string[]; prompts: string[]; agents: string[]; mcpServers: string[] };
+  },
+  dropped: {
+    skills: readonly string[];
+    commands: readonly string[];
+    agents: readonly string[];
+    mcpServers: readonly string[];
+  },
+): void {
+  installed.resources.skills = installed.resources.skills.filter(
+    (n) => !dropped.skills.includes(n),
+  );
+  installed.resources.prompts = installed.resources.prompts.filter(
+    (n) => !dropped.commands.includes(n),
+  );
+  installed.resources.agents = installed.resources.agents.filter(
+    (n) => !dropped.agents.includes(n),
+  );
+  installed.resources.mcpServers = installed.resources.mcpServers.filter(
+    (n) => !dropped.mcpServers.includes(n),
+  );
+}
+
+/**
+ * WB-01 / CFG-03 / T-56-03-04: route the invalid-config abort to either the
+ * typed orchestrated outcome or the standalone notify() row. The
+ * basename-only cause prevents an absolute-path information leak.
+ */
+function emitConfigInvalid(args: {
+  ctx: ExtensionContext;
+  pi: ExtensionAPI;
+  marketplace: string;
+  scope: Scope;
+  plugin: string;
+  configBasename: string;
+  orchestrated: boolean;
+}): UninstallPluginOutcome | undefined {
+  const { ctx, pi, marketplace, scope, plugin, configBasename, orchestrated } = args;
+  const cause = `Config file "${configBasename}" failed schema validation.`;
+  const invalidErr = new Error(cause);
+  if (orchestrated) {
+    return { status: "failed", reason: "invalid manifest", error: invalidErr, cause };
+  }
+
+  notify(ctx, pi, {
+    marketplaces: [
+      {
+        name: marketplace,
+        scope,
+        plugins: [
+          {
+            status: "failed",
+            name: plugin,
+            reasons: ["invalid manifest"] as const,
+            cause: invalidErr,
+          },
+        ],
+      },
+    ],
+  });
+  return undefined;
+}
+
+/**
  * RECON-03: route the not-added cross-scope resolution path to either the
  * typed orchestrated outcome or the standalone notify() row.
  */
@@ -266,6 +350,10 @@ function emitMarketplaceNotAdded(args: {
  * RECON-03: returns `UninstallPluginOutcome` in orchestrated mode and
  * `undefined` in standalone mode (after firing the standalone notify()).
  */
+// Uninstall sequencing intentionally keeps the cross-scope resolution, the
+// guarded cascade + CFG-03 + WB-01 write-back, and the post-guard outcome
+// dispatch in one audited flow matching PU-1..8.
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export async function uninstallPlugin(
   opts: UninstallPluginOptions,
 ): Promise<UninstallPluginOutcome | undefined> {
@@ -296,7 +384,16 @@ export async function uninstallPlugin(
 
   const { scope, locations } = resolution;
 
+  // WB-01 / Pitfall 2: target-path selection happens ONCE before the lock so
+  // the orchestrator NEVER falls back to the base file on ENOENT.
+  const targetConfigPath =
+    opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath;
+  const configBasename = path.basename(targetConfigPath);
+
   let alreadyGone = false;
+  // WB-01 / CFG-03: invalid-config sentinel; surfaced post-guard with a
+  // basename-only cause (T-56-03-04 information-disclosure mitigation).
+  let configInvalid = false;
   // Lifted from inside the guard closure so the post-guard success path can
   // populate the PluginUninstalledMessage.version slot without re-reading
   // state. Undefined when alreadyGone (no row to render in that case).
@@ -309,6 +406,14 @@ export async function uninstallPlugin(
 
   try {
     await withStateGuard(locations, async (state) => {
+      // CFG-03 / T-56-03-04: abort BEFORE any state mutation. The
+      // basename-only message prevents an absolute-path information leak.
+      const cfg = await loadConfig(targetConfigPath);
+      if (cfg.status === "invalid") {
+        configInvalid = true;
+        return;
+      }
+
       const mp = state.marketplaces[marketplace];
       if (mp === undefined) {
         // ATTR-04 reachability note. The "marketplace never added" case is
@@ -366,20 +471,7 @@ export async function uninstallPlugin(
         // Non-AG-5: filter resources.* by dropped.* in place. The mutation
         // persists via the guard's trailing saveState because we return
         // normally (no throw) from the closure.
-        const sRecord = installed; // alias for clarity; same object as mp.plugins[plugin]
-        const dropped = localOutcome.dropped;
-        sRecord.resources.skills = sRecord.resources.skills.filter(
-          (n) => !dropped.skills.includes(n),
-        );
-        sRecord.resources.prompts = sRecord.resources.prompts.filter(
-          (n) => !dropped.commands.includes(n),
-        );
-        sRecord.resources.agents = sRecord.resources.agents.filter(
-          (n) => !dropped.agents.includes(n),
-        );
-        sRecord.resources.mcpServers = sRecord.resources.mcpServers.filter(
-          (n) => !dropped.mcpServers.includes(n),
-        );
+        applyPartialCascadeFold(installed, localOutcome.dropped);
         cascadeFailure = cause;
         return;
       }
@@ -388,6 +480,23 @@ export async function uninstallPlugin(
       // on closure return.
       // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- mp.plugins is a dynamic-key Record<string, ...>.
       delete mp.plugins[plugin];
+
+      // WB-01 / WR-09: delete the plugin entry from the user-authored config.
+      // SKIPPED in orchestrated mode (reconcile derives desired state FROM
+      // the merged config; writing back would clobber a per-machine override).
+      // The ALREADY-GONE arm above never reaches here -- it returns early
+      // (WB-01 / Pitfall 5: uninstall alreadyGone leaves config untouched;
+      // planReconcile surfaces the declared-but-missing on next load).
+      if (opts.notifications?.mode !== "orchestrated") {
+        const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
+        await deletePluginConfigEntry(
+          current,
+          targetConfigPath,
+          locations.scopeRoot,
+          plugin,
+          marketplace,
+        );
+      }
     });
   } catch (err) {
     // PU-7 propagation: AG-5 (or any other cascade failure). State was NOT
@@ -401,6 +510,21 @@ export async function uninstallPlugin(
       plugin,
       cause,
       removedVersion,
+      orchestrated,
+    });
+  }
+
+  // WB-01 / CFG-03 / T-56-03-04: invalid-config abort. No state mutation
+  // (the closure returned before reading state); no write-back.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated inside the withStateGuard closure above.
+  if (configInvalid) {
+    return emitConfigInvalid({
+      ctx,
+      pi,
+      marketplace,
+      scope,
+      plugin,
+      configBasename,
       orchestrated,
     });
   }
