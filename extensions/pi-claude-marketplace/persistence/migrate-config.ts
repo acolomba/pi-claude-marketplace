@@ -46,7 +46,7 @@ export type MigrateFirstRunResult =
     }
   | {
       readonly migrated: false;
-      readonly reason: "existing-valid" | "existing-invalid";
+      readonly reason: "existing-valid" | "existing-invalid" | "empty-state";
       /** loadConfig's invalid-arm detail; present iff reason is "existing-invalid". */
       readonly error?: string;
       readonly filePath: string;
@@ -158,8 +158,16 @@ export async function migrateFirstRunConfig(
   }
 
   const config = buildConfigFromState(state);
-  await saveConfig(loc.configJsonPath, config, loc.scopeRoot);
   const entryCount =
     Object.keys(config.marketplaces ?? {}).length + Object.keys(config.plugins ?? {}).length;
+  if (entryCount === 0) {
+    // UAT-01 (v1.12 milestone UAT): nothing to capture -- an empty-but-present
+    // state.json must NOT spawn an empty claude-plugins.json in every scope
+    // root. The config file first appears when there is real desired state to
+    // record (migration of a populated state, or command write-back).
+    return { migrated: false, reason: "empty-state", filePath: loc.configJsonPath };
+  }
+
+  await saveConfig(loc.configJsonPath, config, loc.scopeRoot);
   return { migrated: true, entryCount, filePath: loc.configJsonPath };
 }

@@ -290,27 +290,30 @@ test("MIG-01 fresh install: empty state projects to the empty (but schema-valid)
 // Section B -- migrateFirstRunConfig ENOENT-arm integration (MIG-02 happy path)
 // ──────────────────────────────────────────────────────────────────────────
 
-test("MIG-02 fresh install: empty state migrates with entryCount 0 and a loadable file (D-13 gate opens)", async () => {
+test("MIG-02 UAT-01 fresh install: empty state SKIPS migration -- no empty config file is created", async () => {
   const { tmpDir, cleanup } = await tmpScopeRoot();
   try {
     const loc = locationsFor("project", tmpDir);
     await mkdir(loc.scopeRoot, { recursive: true });
-    // DEFAULT_STATE is exactly what loadState hands the Phase 55 caller on
-    // ENOENT; `migrated: true` with `entryCount: 0` is the intended signal
-    // shape for fresh-install messaging, and the file's existence is what
-    // opens the D-13 autoupdate-scrub gate on a box without V1 state.
+    // UAT-01 (v1.12 milestone UAT): an empty-but-present state (DEFAULT_STATE
+    // on ENOENT, or a scope whose state.json has zero marketplaces) must NOT
+    // spawn an empty claude-plugins.json in the scope root. The config file
+    // first appears when there is real desired state to record (populated
+    // migration or command write-back).
     const result = await migrateFirstRunConfig(loc, DEFAULT_STATE);
-    assert.equal(result.migrated, true);
-    if (result.migrated) {
-      assert.equal(result.entryCount, 0);
+    assert.equal(result.migrated, false);
+    if (!result.migrated) {
+      assert.equal(result.reason, "empty-state");
     }
 
     assert.equal(result.filePath, loc.configJsonPath);
     const reloaded = await loadConfig(loc.configJsonPath);
-    assert.equal(reloaded.status, "valid");
-    if (reloaded.status === "valid") {
-      assert.deepEqual(reloaded.config, { schemaVersion: 1, marketplaces: {}, plugins: {} });
-    }
+    assert.equal(reloaded.status, "absent");
+
+    // Idempotent: a second call still skips and still creates nothing.
+    const second = await migrateFirstRunConfig(loc, DEFAULT_STATE);
+    assert.equal(second.migrated, false);
+    assert.equal((await loadConfig(loc.configJsonPath)).status, "absent");
   } finally {
     await cleanup();
   }
