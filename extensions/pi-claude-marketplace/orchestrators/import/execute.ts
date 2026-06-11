@@ -713,12 +713,22 @@ async function executeScopedPlan(
     }
   }
 
-  // WB-03 / Pitfall 8: bounded race window self-heals on next reconcile.
-  // After all per-entry orchestrated-mode addMarketplace + installPlugin
-  // calls complete for THIS scope, run a per-scope batched post-pass under
-  // ONE withLockedStateTransaction. Per-entry orchestrators SKIPPED their
-  // own write-back (WR-09 orchestrated-mode discipline) so the post-pass
-  // owns the ONLY write to claude-plugins.json for the import command.
+  // WB-03 / Pitfall 8: after all per-entry orchestrated-mode addMarketplace
+  // + installPlugin calls complete for THIS scope, run a per-scope batched
+  // post-pass under ONE withLockedStateTransaction. Per-entry orchestrators
+  // SKIPPED their own write-back (WR-09 orchestrated-mode discipline) so the
+  // post-pass owns the ONLY write to claude-plugins.json for the import
+  // command.
+  //
+  // WR-01 (Phase 56 review): the post-pass also REPAIRS missing config
+  // declarations for already-present (skipped) entries. If a previous
+  // import's post-pass failed (the defensive catch below records a
+  // diagnostic and moves on), state carries entries the config never
+  // declared -- and without the repair, a re-run would skip them as
+  // "already-present" while the next reconcile plans the undeclared
+  // marketplace for REMOVAL and its plugins for UNINSTALL. The repair makes
+  // a re-run converge CONSTRUCTIVELY (re-declare what import installed)
+  // instead of destructively.
   await writeBatchedConfigForScope(opts, result, scopePlan);
 }
 
@@ -729,6 +739,14 @@ async function executeScopedPlan(
  * `BatchedConfigPatch` (one entry per successful addedMarketplaces + one per
  * successful installedPlugins), and writes the patch under ONE
  * withLockedStateTransaction with exactly ONE saveConfig call.
+ *
+ * WR-01 (Phase 56 review): skip outcomes (`skippedExistingMarketplaces` /
+ * `skippedExistingPlugins`) are included as REPAIR candidates -- written
+ * ONLY when the loaded config does not already declare the key (the
+ * key-absence gate preserves RECON-05 byte stability for the all-declared
+ * steady state). This makes a previously failed post-pass converge
+ * constructively on the next import run instead of leaving
+ * recorded-but-undeclared entries the reconcile planner would tear down.
  *
  * Target: import does NOT support `--local` (per RESEARCH project structure;
  * the flag is per-command and not on the import surface), so the post-pass
@@ -741,7 +759,8 @@ async function executeScopedPlan(
  * NOT throw -- other scopes' post-passes still run. State was already saved
  * by per-entry orchestrators; this post-pass writes only the config.
  *
- * Empty batch (no successful additions): SKIP entirely (RECON-05 byte-stable).
+ * Empty batch (no successful additions AND no missing-declaration repairs):
+ * SKIP entirely (RECON-05 byte-stable).
  */
 async function writeBatchedConfigForScope(
   opts: ImportClaudeSettingsOptions,
@@ -749,8 +768,8 @@ async function writeBatchedConfigForScope(
   scopePlan: ScopedImportPlan,
 ): Promise<void> {
   const scope = scopePlan.scope;
-  const batch = buildBatchedPatchForScope(result, scopePlan);
-  if (isEmptyPatch(batch)) {
+  const { ensure, repair } = buildBatchedPatchForScope(result, scopePlan);
+  if (isEmptyPatch(ensure) && isEmptyPatch(repair)) {
     return;
   }
 
@@ -772,12 +791,21 @@ async function writeBatchedConfigForScope(
       }
 
       const current = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 as const };
+      // WR-01: repairs apply ONLY when the key is absent from the loaded
+      // config (already-declared entries are untouched -- byte stability).
+      const batch = mergeEnsureAndRepairs(ensure, repair, current);
+      if (isEmptyPatch(batch)) {
+        // Everything already declared -- no write, mtime stable (RECON-05).
+        return;
+      }
+
       await writeBatchedConfigEntries(current, targetConfigPath, locations.scopeRoot, batch);
       // NO tx.save() -- state was already committed by per-entry
       // orchestrators inside their own withStateGuard / withLockedStateTransaction
       // closures. The bounded race between the last per-entry lock release and
-      // this batched-save lock acquire is self-healing: a concurrent reconcile
-      // can observe partial state, and the next reconcile pass converges.
+      // this batched-save lock acquire converges via the WR-01 repair pass:
+      // a re-run of import re-declares any entry the failed write left
+      // undeclared (constructive convergence, not a reconcile teardown).
     });
   } catch (err) {
     // Defensive: a write-back failure (disk full, EACCES, lock contention)
@@ -795,7 +823,7 @@ async function writeBatchedConfigForScope(
 function buildBatchedPatchForScope(
   result: MutableImportResult,
   scopePlan: ScopedImportPlan,
-): BatchedConfigPatch {
+): { ensure: BatchedConfigPatch; repair: BatchedConfigPatch } {
   // Map marketplace name -> verbatim rawSource so the batched patch records
   // `source: rawSource` exactly as the user/Claude settings declared it
   // (Phase 53 `samePlannedSource` contract).
@@ -829,6 +857,75 @@ function buildBatchedPatchForScope(
 
     const key = `${installed.plugin}@${installed.marketplace}`;
     plugins[key] = {};
+  }
+
+  return {
+    ensure: { marketplaces, plugins },
+    repair: buildRepairPatchForScope(result, scopePlan, rawSourceByName),
+  };
+}
+
+/**
+ * WR-01 (Phase 56 review): already-present (skipped) entries are REPAIR
+ * candidates -- state carries them, so a missing config declaration is a
+ * divergence the reconcile planner would resolve DESTRUCTIVELY (teardown).
+ * The caller applies these only when the loaded config lacks the key.
+ */
+function buildRepairPatchForScope(
+  result: MutableImportResult,
+  scopePlan: ScopedImportPlan,
+  rawSourceByName: ReadonlyMap<string, string>,
+): BatchedConfigPatch {
+  const marketplaces: Record<string, { source: string }> = {};
+  for (const skipped of result.skippedExistingMarketplaces) {
+    if (skipped.scope !== scopePlan.scope) {
+      continue;
+    }
+
+    const rawSource = rawSourceByName.get(skipped.marketplace);
+    if (rawSource === undefined) {
+      continue;
+    }
+
+    marketplaces[skipped.marketplace] = { source: rawSource };
+  }
+
+  const plugins: Record<string, Record<string, never>> = {};
+  for (const skipped of result.skippedExistingPlugins) {
+    if (skipped.scope !== scopePlan.scope) {
+      continue;
+    }
+
+    plugins[`${skipped.plugin}@${skipped.marketplace}`] = {};
+  }
+
+  return { marketplaces, plugins };
+}
+
+/**
+ * WR-01: merge the always-written `ensure` patch with the subset of `repair`
+ * entries whose keys are ABSENT from the loaded config. Already-declared
+ * keys are dropped so the all-declared steady state stays byte-stable
+ * (RECON-05) -- the post-pass then skips the save entirely when nothing
+ * remains.
+ */
+function mergeEnsureAndRepairs(
+  ensure: BatchedConfigPatch,
+  repair: BatchedConfigPatch,
+  current: { marketplaces?: Record<string, unknown>; plugins?: Record<string, unknown> },
+): BatchedConfigPatch {
+  const marketplaces = { ...(ensure.marketplaces ?? {}) };
+  for (const [name, patch] of Object.entries(repair.marketplaces ?? {})) {
+    if (current.marketplaces?.[name] === undefined && marketplaces[name] === undefined) {
+      marketplaces[name] = patch;
+    }
+  }
+
+  const plugins = { ...(ensure.plugins ?? {}) };
+  for (const [key, patch] of Object.entries(repair.plugins ?? {})) {
+    if (current.plugins?.[key] === undefined && plugins[key] === undefined) {
+      plugins[key] = patch;
+    }
   }
 
   return { marketplaces, plugins };
