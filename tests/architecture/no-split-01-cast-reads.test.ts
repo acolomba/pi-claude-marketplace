@@ -43,14 +43,10 @@ import { fileURLToPath } from "node:url";
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const ORCHESTRATORS_ROOT = path.join(REPO_ROOT, "extensions/pi-claude-marketplace/orchestrators");
 
-const ALLOWED_SPLIT_01_AUTOUPDATE_CAST_FILES: ReadonlySet<string> = new Set([
-  "extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts",
-  "extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts",
-  "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts",
-  "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
-]);
+// Phase 56 Plan 04 Task 2: all 7 cast-read sites rewired to MergedConfig.
+// The allow-list is now empty -- Pitfall 6 closed. The sibling 'exactly 0'
+// assertion below catches any future regression that adds a new cast read.
+const ALLOWED_SPLIT_01_AUTOUPDATE_CAST_FILES: ReadonlySet<string> = new Set<string>();
 
 // Regex: matches the trailing `).autoupdate` form produced by the SPLIT-01
 // cast read pattern:
@@ -96,15 +92,8 @@ test("SPLIT-01 baseline: every cast-read of autoupdate is in the allow-list", as
   );
 });
 
-test("SPLIT-01 whitelist: exactly 6 files may read autoupdate via Record<string,unknown> cast", () => {
-  assert.deepEqual([...ALLOWED_SPLIT_01_AUTOUPDATE_CAST_FILES].sort(), [
-    "extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts",
-    "extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts",
-    "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts",
-    "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts",
-    "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
-    "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
-  ]);
+test("SPLIT-01 whitelist: exactly 0 files may read autoupdate via Record<string,unknown> cast (Pitfall 6 closed)", () => {
+  assert.deepEqual([...ALLOWED_SPLIT_01_AUTOUPDATE_CAST_FILES].sort(), []);
 });
 
 // Negative-test the walker itself: prove the regex catches a synthetic

@@ -30,20 +30,31 @@ import {
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { getMarketplaceInfo } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts";
+import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
-import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-// SPLIT-01: autoupdate carved out of MARKETPLACE_RECORD_SCHEMA in Phase 51-02.
-// Test fixtures still seed autoupdate via this cast helper until Phase 54-56
-// rewires the autoupdate write-path to claude-plugins.json (CFG-02).
-function withAutoupdate(
-  rec: ExtensionState["marketplaces"][string],
+// Phase 56-04 / SPLIT-01: autoupdate read-path rewired to MergedConfig
+// (claude-plugins.json). Seed the autoupdate truth on the config side; the
+// state-side autoupdate field is no longer the source of truth (D-13 scrubs
+// it on next loadState once the config exists).
+async function seedConfigAutoupdate(
+  locations: ScopedLocations,
+  name: string,
+  source: string,
   autoupdate: boolean,
-): ExtensionState["marketplaces"][string] {
-  return { ...rec, autoupdate } as unknown as ExtensionState["marketplaces"][string];
+): Promise<void> {
+  await saveConfig(
+    locations.configJsonPath,
+    {
+      schemaVersion: 1,
+      marketplaces: { [name]: { source, autoupdate } },
+    },
+    locations.scopeRoot,
+  );
 }
 
 interface NotifyRecord {
@@ -135,21 +146,24 @@ test("INFO-01: single-scope github source with autoupdate + lastUpdatedAt + desc
     await saveState(userLocations.extensionRoot, {
       schemaVersion: 1,
       marketplaces: {
-        "claude-plugins-official": withAutoupdate(
-          {
-            name: "claude-plugins-official",
-            scope: "user",
-            source: githubSource("https://github.com/anthropics/claude-plugins-official#main"),
-            addedFromCwd: cwd,
-            manifestPath,
-            marketplaceRoot: cwd,
-            plugins: {},
-            lastUpdatedAt: "2026-06-03T00:00:00Z",
-          },
-          true,
-        ),
+        "claude-plugins-official": {
+          name: "claude-plugins-official",
+          scope: "user",
+          source: githubSource("https://github.com/anthropics/claude-plugins-official#main"),
+          addedFromCwd: cwd,
+          manifestPath,
+          marketplaceRoot: cwd,
+          plugins: {},
+          lastUpdatedAt: "2026-06-03T00:00:00Z",
+        },
       },
     });
+    await seedConfigAutoupdate(
+      userLocations,
+      "claude-plugins-official",
+      "anthropics/claude-plugins-official",
+      true,
+    );
 
     const { ctx, pi, notifications } = makeCtx();
     await getMarketplaceInfo({ ctx, pi, name: "claude-plugins-official", scope: "user", cwd });
@@ -210,20 +224,17 @@ test("INFO-01: single-scope path source renders `path: <abs>`; NO `last_updated:
     await saveState(projectLocations.extensionRoot, {
       schemaVersion: 1,
       marketplaces: {
-        "local-mp": withAutoupdate(
-          {
-            name: "local-mp",
-            scope: "project",
-            source: pathSource("/abs/path/to/mp"),
-            addedFromCwd: cwd,
-            manifestPath,
-            // NOTE: `marketplaceRoot` is what the renderer emits on the
-            // `path:` line per the orchestrator's path-source projection.
-            marketplaceRoot: "/abs/path/to/mp",
-            plugins: {},
-          },
-          false,
-        ),
+        "local-mp": {
+          name: "local-mp",
+          scope: "project",
+          source: pathSource("/abs/path/to/mp"),
+          addedFromCwd: cwd,
+          manifestPath,
+          // NOTE: `marketplaceRoot` is what the renderer emits on the
+          // `path:` line per the orchestrator's path-source projection.
+          marketplaceRoot: "/abs/path/to/mp",
+          plugins: {},
+        },
       },
     });
 
@@ -284,35 +295,30 @@ test("INFO-03: both-scopes fan-out emits ONE notify call; project block FIRST, u
     await saveState(projectLocations.extensionRoot, {
       schemaVersion: 1,
       marketplaces: {
-        "my-mp": withAutoupdate(
-          {
-            name: "my-mp",
-            scope: "project",
-            source: pathSource("/repo/path/my-mp"),
-            addedFromCwd: cwd,
-            manifestPath: projectManifest,
-            marketplaceRoot: "/repo/path/my-mp",
-            plugins: {},
-          },
-          true,
-        ),
+        "my-mp": {
+          name: "my-mp",
+          scope: "project",
+          source: pathSource("/repo/path/my-mp"),
+          addedFromCwd: cwd,
+          manifestPath: projectManifest,
+          marketplaceRoot: "/repo/path/my-mp",
+          plugins: {},
+        },
       },
     });
+    await seedConfigAutoupdate(projectLocations, "my-mp", "/repo/path/my-mp", true);
     await saveState(userLocations.extensionRoot, {
       schemaVersion: 1,
       marketplaces: {
-        "my-mp": withAutoupdate(
-          {
-            name: "my-mp",
-            scope: "user",
-            source: githubSource("https://github.com/someuser/my-mp"),
-            addedFromCwd: cwd,
-            manifestPath: userManifest,
-            marketplaceRoot: cwd,
-            plugins: {},
-          },
-          false,
-        ),
+        "my-mp": {
+          name: "my-mp",
+          scope: "user",
+          source: githubSource("https://github.com/someuser/my-mp"),
+          addedFromCwd: cwd,
+          manifestPath: userManifest,
+          marketplaceRoot: cwd,
+          plugins: {},
+        },
       },
     });
 

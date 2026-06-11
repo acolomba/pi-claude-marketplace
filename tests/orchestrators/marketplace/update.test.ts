@@ -14,6 +14,7 @@ import {
   updateAllMarketplaces,
   updateMarketplace,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
+import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -117,6 +118,27 @@ async function seedGithubMarketplace(opts: {
       },
     },
   });
+  // Phase 56-04 / SPLIT-01: autoupdate now lives in claude-plugins.json.
+  // The state-side autoupdate above is harmless legacy seeding (D-13 scrubs
+  // on next loadState once the config exists); seed the config too so the
+  // SPLIT-01-rewired orchestrators (update.ts reads via loadMergedScopeConfig)
+  // observe the autoupdate truth.
+  if (opts.autoupdate !== undefined) {
+    await saveConfig(
+      locations.configJsonPath,
+      {
+        schemaVersion: 1,
+        marketplaces: {
+          [opts.name]: {
+            source: "anthropics/claude-plugins-official",
+            autoupdate: opts.autoupdate,
+          },
+        },
+      },
+      locations.scopeRoot,
+    );
+  }
+
   return { cloneDir };
 }
 

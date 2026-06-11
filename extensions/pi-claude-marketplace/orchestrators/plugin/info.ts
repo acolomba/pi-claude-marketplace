@@ -18,6 +18,7 @@ import path from "node:path";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
 import { resolveStrict } from "../../domain/resolver.ts";
 import { parsePluginSource, type ParsedSource } from "../../domain/source.ts";
+import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { assertNever } from "../../shared/errors.ts";
@@ -236,12 +237,9 @@ async function buildBlock(
   pluginName: string,
   scope: Scope,
   mpRecord: MarketplaceRecord,
+  autoupdate: boolean,
 ): Promise<PluginInfoMessage> {
-  // SPLIT-01: autoupdate carved out of MARKETPLACE_RECORD_SCHEMA in Phase 51-02;
-  // cast read until Phase 54-56 rewires to MergedConfig (CFG-02). D-04: undefined === false.
-  const marketplaceDetails = {
-    autoupdate: (mpRecord as unknown as Record<string, unknown>).autoupdate === true,
-  };
+  const marketplaceDetails = { autoupdate };
 
   // (a) Manifest read failure -> bare `(failed) {<reason>}` row under
   // the marketplace header. The reason is CLASSIFIED via the same
@@ -536,16 +534,15 @@ function buildDisabledInventoryBlock(
   marketplace: string,
   pluginName: string,
   scope: Scope,
-  mpRecord: MarketplaceRecord,
   installed: MarketplaceRecord["plugins"][string],
+  autoupdate: boolean,
 ): MarketplaceNotificationMessage {
   // Mirror the list surface's `<autoupdate>` marker composition (details is
   // emitted ONLY when the flag is true; `lastUpdatedAt` never on this
-  // surface). SPLIT-01 cast read until CFG-02 rewires to MergedConfig.
-  const detailsField: { readonly details?: { autoupdate: boolean } } =
-    (mpRecord as unknown as Record<string, unknown>).autoupdate === true
-      ? { details: { autoupdate: true } }
-      : {};
+  // surface).
+  const detailsField: { readonly details?: { autoupdate: boolean } } = autoupdate
+    ? { details: { autoupdate: true } }
+    : {};
   return {
     name: marketplace,
     scope,
@@ -562,18 +559,24 @@ function buildDisabledInventoryBlock(
  */
 function partitionDisabledScopes(
   opts: GetPluginInfoOptions,
-  found: readonly { scope: Scope; record: MarketplaceRecord }[],
+  found: readonly { scope: Scope; record: MarketplaceRecord; autoupdate: boolean }[],
 ): {
   disabledBlocks: MarketplaceNotificationMessage[];
-  infoFound: { scope: Scope; record: MarketplaceRecord }[];
+  infoFound: { scope: Scope; record: MarketplaceRecord; autoupdate: boolean }[];
 } {
   const disabledBlocks: MarketplaceNotificationMessage[] = [];
-  const infoFound: { scope: Scope; record: MarketplaceRecord }[] = [];
+  const infoFound: { scope: Scope; record: MarketplaceRecord; autoupdate: boolean }[] = [];
   for (const f of found) {
     const installed = f.record.plugins[opts.plugin];
     if (installed !== undefined && isRecordedButDisabled(installed)) {
       disabledBlocks.push(
-        buildDisabledInventoryBlock(opts.marketplace, opts.plugin, f.scope, f.record, installed),
+        buildDisabledInventoryBlock(
+          opts.marketplace,
+          opts.plugin,
+          f.scope,
+          installed,
+          f.autoupdate,
+        ),
       );
     } else {
       infoFound.push(f);
@@ -591,13 +594,19 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // Collect (scope, record) tuples so the fan-out renderer preserves
   // the outer-loop iteration order. Each scope's state is loaded
   // read-only via `loadState` (NFR-5 preserved -- NO network).
-  const found: { scope: Scope; record: MarketplaceRecord }[] = [];
+  //
+  // SPLIT-01 rewire: autoupdate lives in claude-plugins.json (config),
+  // not state. Load the merged config alongside state per scope so each
+  // (scope, record) tuple carries the per-scope autoupdate truth.
+  const found: { scope: Scope; record: MarketplaceRecord; autoupdate: boolean }[] = [];
   for (const scope of scopes) {
     const locations = locationsFor(scope, opts.cwd);
     const state = await loadState(locations.extensionRoot);
     const record = state.marketplaces[opts.marketplace];
     if (record !== undefined) {
-      found.push({ scope, record });
+      const { merged } = await loadMergedScopeConfig(locations);
+      const autoupdate = merged.marketplaces[opts.marketplace]?.entry.autoupdate ?? false;
+      found.push({ scope, record, autoupdate });
     }
   }
 
@@ -638,7 +647,13 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // undefined)` has under `noUncheckedIndexedAccess`.
   const [sole, ...rest] = infoFound;
   if (sole !== undefined && rest.length === 0 && disabledBlocks.length === 0) {
-    const block = await buildBlock(opts.marketplace, opts.plugin, sole.scope, sole.record);
+    const block = await buildBlock(
+      opts.marketplace,
+      opts.plugin,
+      sole.scope,
+      sole.record,
+      sole.autoupdate,
+    );
     notify(opts.ctx, opts.pi, block);
     return;
   }
@@ -659,7 +674,9 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // behind a healthy other-scope render; callers wanting strict IL-2 must pass
   // `--scope`. Block order follows the project-first scope iteration (MSG-GR-3).
   const blocks = await Promise.all(
-    infoFound.map((f) => buildBlock(opts.marketplace, opts.plugin, f.scope, f.record)),
+    infoFound.map((f) =>
+      buildBlock(opts.marketplace, opts.plugin, f.scope, f.record, f.autoupdate),
+    ),
   );
   const infoBlocks = blocks.filter((b) => b.plugin.status !== "failed");
   const failedBlocks = blocks.filter((b) => b.plugin.status === "failed");

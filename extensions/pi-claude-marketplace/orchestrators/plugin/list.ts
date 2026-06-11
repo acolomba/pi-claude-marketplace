@@ -55,6 +55,7 @@
 
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
 import { resolveStrict } from "../../domain/resolver.ts";
+import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { errorMessage } from "../../shared/errors.ts";
@@ -509,10 +510,12 @@ async function buildMarketplaceMessage(args: {
   mpName: string;
   mpScope: Scope;
   mpRecord: ExtensionState["marketplaces"][string];
+  /** SPLIT-01 rewire: autoupdate read from MergedConfig at the caller. */
+  autoupdate: boolean;
   extraPlugins: readonly PluginNotificationMessage[];
   excludeFromAvailable?: ReadonlySet<string>;
 }): Promise<BuiltMarketplace> {
-  const { opts, mpName, mpScope, mpRecord, extraPlugins, excludeFromAvailable } = args;
+  const { opts, mpName, mpScope, mpRecord, autoupdate, extraPlugins, excludeFromAvailable } = args;
   const { manifest, loadError } = await loadMarketplaceManifestSoftly(mpRecord);
 
   // Unparseable manifest: catalog `unparseable-mp` form (lines 215-226)
@@ -555,12 +558,9 @@ async function buildMarketplaceMessage(args: {
   // reference: every `/claude:plugin list` fixture at
   // docs/output-catalog.md:139-263 has `details: { autoupdate: true }` --
   // no `lastUpdatedAt` field.
-  // SPLIT-01: autoupdate carved out of MARKETPLACE_RECORD_SCHEMA in Phase 51-02;
-  // cast read until Phase 54-56 rewires to MergedConfig (CFG-02). D-04: undefined === false.
-  const detailsField: { readonly details?: { autoupdate: boolean } } =
-    (mpRecord as unknown as Record<string, unknown>).autoupdate === true
-      ? { details: { autoupdate: true } }
-      : {};
+  const detailsField: { readonly details?: { autoupdate: boolean } } = autoupdate
+    ? { details: { autoupdate: true } }
+    : {};
 
   return {
     mp: {
@@ -585,9 +585,13 @@ export async function loadPluginListPayload(
   // D-13-19: read both scopes' state.
   const userLocations = locationsFor("user", opts.cwd);
   const projectLocations = locationsFor("project", opts.cwd);
-  const [userState, projectState] = await Promise.all([
+  const [userState, projectState, userMerged, projectMerged] = await Promise.all([
     loadState(userLocations.extensionRoot),
     loadState(projectLocations.extensionRoot),
+    // SPLIT-01 rewire: autoupdate lives in claude-plugins.json (config).
+    // Pre-compute the merged view per scope ONCE before the fold loops below.
+    loadMergedScopeConfig(userLocations).then((r) => r.merged),
+    loadMergedScopeConfig(projectLocations).then((r) => r.merged),
   ]);
 
   const blocks: BuiltMarketplace[] = [];
@@ -612,6 +616,7 @@ export async function loadPluginListPayload(
       mpName,
       mpScope: "project",
       mpRecord,
+      autoupdate: projectMerged.marketplaces[mpName]?.entry.autoupdate ?? false,
       extraPlugins: [],
     });
     blocks.push(built);
@@ -677,6 +682,7 @@ export async function loadPluginListPayload(
       mpName,
       mpScope: "user",
       mpRecord,
+      autoupdate: userMerged.marketplaces[mpName]?.entry.autoupdate ?? false,
       extraPlugins: folded,
       excludeFromAvailable: foldedNames,
     });

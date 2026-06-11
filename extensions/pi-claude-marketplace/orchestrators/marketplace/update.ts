@@ -96,6 +96,7 @@ import path from "node:path";
 
 import { initiateDeviceFlow } from "../../domain/github-auth.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { DEFAULT_CREDENTIAL_OPS } from "../../platform/git-credential.ts";
@@ -432,6 +433,11 @@ interface RefreshSnapshot {
 
 async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapshot | undefined> {
   const { name, locations } = args;
+  // SPLIT-01 rewire: autoupdate lives in claude-plugins.json (config), not
+  // state. Read it OUTSIDE the lock (read-only seam; mergeScopeConfigs is a
+  // pure reducer over loadConfig, which never throws).
+  const { merged } = await loadMergedScopeConfig(locations);
+  const autoupdate = merged.marketplaces[name]?.entry.autoupdate ?? false;
   return withStateGuard(locations, async (state) => {
     const record = state.marketplaces[name];
     if (record === undefined) {
@@ -452,9 +458,7 @@ async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapsh
 
     const changed = await refreshRecord(record, args);
     return {
-      // SPLIT-01: autoupdate carved out of MARKETPLACE_RECORD_SCHEMA in Phase 51-02;
-      // cast read until Phase 54-56 rewires to MergedConfig (CFG-02). D-04: undefined === false.
-      autoupdate: (record as unknown as Record<string, unknown>).autoupdate === true,
+      autoupdate,
       plugins: Object.keys(record.plugins),
       changed,
     };

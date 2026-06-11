@@ -9,20 +9,31 @@ import {
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { listMarketplaces } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts";
+import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
-import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-// SPLIT-01: autoupdate carved out of MARKETPLACE_RECORD_SCHEMA in Phase 51-02.
-// Test fixtures still seed autoupdate via this cast helper until Phase 54-56
-// rewires the autoupdate write-path to claude-plugins.json (CFG-02).
-function withAutoupdate(
-  rec: ExtensionState["marketplaces"][string],
+// Phase 56-04 / SPLIT-01: autoupdate read-path rewired to MergedConfig
+// (claude-plugins.json). Seed the autoupdate truth on the config side; the
+// state-side autoupdate field is no longer the source of truth (D-13 scrubs
+// it on next loadState once the config exists).
+async function seedConfigAutoupdate(
+  locations: ScopedLocations,
+  name: string,
+  source: string,
   autoupdate: boolean,
-): ExtensionState["marketplaces"][string] {
-  return { ...rec, autoupdate } as unknown as ExtensionState["marketplaces"][string];
+): Promise<void> {
+  await saveConfig(
+    locations.configJsonPath,
+    {
+      schemaVersion: 1,
+      marketplaces: { [name]: { source, autoupdate } },
+    },
+    locations.scopeRoot,
+  );
 }
 
 interface NotifyRecord {
@@ -155,20 +166,18 @@ test("CMC-05 / MSG-GR-5: autoupdate=true emits `<autoupdate>` marker", async () 
     await saveState(projectLocations.extensionRoot, {
       schemaVersion: 1,
       marketplaces: {
-        auto: withAutoupdate(
-          {
-            name: "auto",
-            scope: "project",
-            source: pathSource("./auto-src"),
-            addedFromCwd: cwd,
-            manifestPath: path.join(cwd, "marketplace.json"),
-            marketplaceRoot: cwd,
-            plugins: {},
-          },
-          true,
-        ),
+        auto: {
+          name: "auto",
+          scope: "project",
+          source: pathSource("./auto-src"),
+          addedFromCwd: cwd,
+          manifestPath: path.join(cwd, "marketplace.json"),
+          marketplaceRoot: cwd,
+          plugins: {},
+        },
       },
     });
+    await seedConfigAutoupdate(projectLocations, "auto", "./auto-src", true);
 
     const { ctx, pi, notifications } = makeCtx();
     await listMarketplaces({ ctx, pi, scope: "project", cwd });
@@ -192,21 +201,19 @@ test("ML-V2 / UXG-01: list surface does NOT render `<last-updated <iso>>`; lastU
     await saveState(projectLocations.extensionRoot, {
       schemaVersion: 1,
       marketplaces: {
-        "test-mp": withAutoupdate(
-          {
-            name: "test-mp",
-            scope: "project",
-            source: pathSource("./tm-src"),
-            addedFromCwd: cwd,
-            manifestPath: path.join(cwd, "marketplace.json"),
-            marketplaceRoot: cwd,
-            plugins: {},
-            lastUpdatedAt: "2026-05-25T00:00:00Z",
-          },
-          true,
-        ),
+        "test-mp": {
+          name: "test-mp",
+          scope: "project",
+          source: pathSource("./tm-src"),
+          addedFromCwd: cwd,
+          manifestPath: path.join(cwd, "marketplace.json"),
+          marketplaceRoot: cwd,
+          plugins: {},
+          lastUpdatedAt: "2026-05-25T00:00:00Z",
+        },
       },
     });
+    await seedConfigAutoupdate(projectLocations, "test-mp", "./tm-src", true);
 
     const { ctx, pi, notifications } = makeCtx();
     await listMarketplaces({ ctx, pi, scope: "project", cwd });

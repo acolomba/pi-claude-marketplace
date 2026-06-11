@@ -36,6 +36,7 @@ import {
   __test_narrowProbeError,
   listPlugins,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
+import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { InvalidMarketplaceManifestError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -194,6 +195,33 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
     marketplaces: { ...existing.marketplaces, [mpName]: record },
     // saveState validates -- the merged shape must satisfy STATE_SCHEMA.
   } as unknown as Parameters<typeof saveState>[1]);
+
+  // Phase 56-04 / SPLIT-01: autoupdate read-path lives in claude-plugins.json.
+  // Seed the config when autoupdate is set so the SPLIT-01-rewired list/info
+  // orchestrators read the autoupdate truth from the new source of truth.
+  if (opts.autoupdate !== undefined) {
+    const cfgPath = locations.configJsonPath;
+    let existingCfg: { marketplaces?: Record<string, { source: string; autoupdate?: boolean }> } =
+      {};
+    try {
+      const raw = await readFile(cfgPath, "utf8");
+      existingCfg = JSON.parse(raw) as typeof existingCfg;
+    } catch {
+      /* no existing config -- first marketplace in scope */
+    }
+
+    await saveConfig(
+      cfgPath,
+      {
+        schemaVersion: 1,
+        marketplaces: {
+          ...(existingCfg.marketplaces ?? {}),
+          [mpName]: { source: `./${mpName}-src`, autoupdate: opts.autoupdate },
+        },
+      },
+      locations.scopeRoot,
+    );
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────────
