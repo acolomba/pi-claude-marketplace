@@ -341,6 +341,31 @@ export async function setPluginEnabled(
 
       // ENBL-02 idempotency: empty-resources + installable:true marker.
       if (isCurrentlyDisabled(installed) === !enable) {
+        // WR-03 (Phase 56 review): state-side truth alone is not enough.
+        // When the targeted config carries the OPPOSITE EXPLICIT `enabled`
+        // value (hand-edited config, or base/local divergence pending
+        // reconcile), skipping here would leave the config diverged -- and
+        // the next reconcile would apply the config side and INVERT the
+        // user's explicit command. Mirror autoupdate's
+        // `reclassifyByConfigTruth` promotion: the flip is fresh for the
+        // CONFIG write even though the state side already matches (state
+        // untouched -- no tx.save(), mtime stable). A MISSING entry /
+        // missing `enabled` field keeps the state-side classification
+        // as-is, exactly like the autoupdate analog.
+        const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
+        const configEnabled = current.plugins?.[`${plugin}@${marketplace}`]?.enabled;
+        if (!orchestrated && configEnabled !== undefined && configEnabled !== enable) {
+          const adoptedSource = synthesizeUndeclaredMarketplaceSource(current, state, marketplace);
+          await writeBatchedConfigEntries(current, targetConfigPath, locations.scopeRoot, {
+            ...(adoptedSource !== undefined && {
+              marketplaces: { [marketplace]: { source: adoptedSource } },
+            }),
+            plugins: { [`${plugin}@${marketplace}`]: { enabled: enable } },
+          });
+          outcome = { kind: "fresh", version: installed.version };
+          return;
+        }
+
         outcome = { kind: "idempotent" };
         return;
       }

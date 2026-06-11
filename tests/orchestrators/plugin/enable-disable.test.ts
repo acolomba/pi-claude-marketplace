@@ -491,6 +491,51 @@ test("Idempotency: disable on already-disabled plugin renders (skipped) {already
   });
 });
 
+test("WR-03: enable on state-enabled plugin with config enabled:false lands the config-side truth (promotion, state untouched)", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const { statePath, configPath } = await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      disabled: false,
+    });
+    // Config drift: the targeted config carries the OPPOSITE explicit value
+    // (hand-edited config or base/local divergence pending reconcile). A
+    // state-side-only idempotency gate would skip here and the next
+    // reconcile would DISABLE the plugin the user just explicitly enabled.
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        schemaVersion: 1,
+        marketplaces: { mp: { source: "/tmp/dummy-mp" } },
+        plugins: { "foo@mp": { enabled: false } },
+      }),
+      "utf8",
+    );
+    const statePre = await readFile(statePath, "utf8");
+    const { ctx, notifications } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+    // The config-side truth landed: enabled flipped to true.
+    const cfg = (await readConfig(configPath)) as {
+      plugins?: Record<string, { enabled?: boolean }>;
+    };
+    assert.equal(cfg.plugins?.["foo@mp"]?.enabled, true);
+    // State untouched -- the promotion arm writes config ONLY (no tx.save()).
+    const statePost = await readFile(statePath, "utf8");
+    assert.equal(statePost, statePre, "state.json bytes unchanged on config-only promotion");
+    // Rendered as a FRESH enable (the user's command landed), not a skip.
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\(installed\)/);
+  });
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // CFG-03: invalid-config abort
 // ──────────────────────────────────────────────────────────────────────────
