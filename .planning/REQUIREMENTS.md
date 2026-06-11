@@ -37,8 +37,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Write-back
 
-- [ ] **WB-01**: Every mutating command (marketplace add/remove/autoupdate/noautoupdate, plugin install/uninstall/reinstall/update) records its change as a targeted entry-level patch of the base config file, re-read under the scope lock
-- [ ] **WB-02**: A `--local` flag targets `claude-plugins.local.json` instead; `--local` writes never touch the base file
+- [x] **WB-01**: Every mutating command (marketplace add/remove/autoupdate/noautoupdate, plugin install/uninstall/reinstall/update) records its change as a targeted entry-level patch of the base config file, re-read under the scope lock
+- [x] **WB-02**: A `--local` flag targets `claude-plugins.local.json` instead; `--local` writes never touch the base file
 - [ ] **WB-03**: `import` records imported marketplaces and plugins in the config file
 - [x] **WB-04**: `bootstrap` records its marketplace and autoupdate setting in the config file
 

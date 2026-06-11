@@ -314,7 +314,7 @@ Declarative, version-controllable config files (`claude-plugins.json` + entry-le
 **Wave 2** *(blocked on Wave 1 completion; 56-02 and 56-03 parallel-safe -- disjoint marketplace/* vs plugin/* file sets)*
 
 - [x] 56-02-PLAN.md -- Marketplace orchestrators add/remove/autoupdate + edge handlers wire write-back + --local + WR-09 + CFG-03 disciplines; deleteMarketplaceConfigEntryWithCascade closes Pitfall 4; bootstrap WB-04 satisfied by composition (WB-01, WB-02, WB-04)
-- [ ] 56-03-PLAN.md -- Plugin orchestrators install/uninstall/reinstall/update + edge handlers wire write-back + --local + deep-equal short-circuit (reinstall/update) + WR-09 + CFG-03; Phase 54 enable-disable.ts migrated to shared helpers (WB-01, WB-02)
+- [x] 56-03-PLAN.md -- Plugin orchestrators install/uninstall/reinstall/update + edge handlers wire write-back + --local + deep-equal short-circuit (reinstall/update) + WR-09 + CFG-03; Phase 54 enable-disable.ts migrated to shared helpers (WB-01, WB-02)
 
 **Wave 3** *(blocked on Wave 2 completion; milestone GREEN gate)*
 
@@ -1127,4 +1127,4 @@ Every error/warning-severity notification now carries a non-empty summary messag
 | 53. Pure Reconcile Planner & Dry-Run Preview                        | v1.12     | 2/2 | Complete    | 2026-06-10 |
 | 54. Enable/Disable Commands                                         | v1.12     | 2/2 | Complete    | 2026-06-10 |
 | 55. Load-Time Reconcile Apply, Notification & Wiring                | v1.12     | 3/3 | Complete    | 2026-06-11 |
-| 56. Write-Back Integration & Documentation                          | v1.12     | 1/4 | In Progress|  |
+| 56. Write-Back Integration & Documentation                          | v1.12     | 3/4 | In Progress|  |
