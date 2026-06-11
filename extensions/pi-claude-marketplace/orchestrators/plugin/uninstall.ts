@@ -54,7 +54,6 @@ import { AgentsUnstageFailureError, cascadeUnstagePlugin } from "../marketplace/
 
 import { resolveCrossScopePluginTarget } from "./shared.ts";
 
-import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
   ContentReason,
@@ -487,10 +486,20 @@ export async function uninstallPlugin(
       // The ALREADY-GONE arm above never reaches here -- it returns early
       // (WB-01 / Pitfall 5: uninstall alreadyGone leaves config untouched;
       // planReconcile surfaces the declared-but-missing on next load).
-      if (opts.notifications?.mode !== "orchestrated") {
-        const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
+      //
+      // WR-02 (Phase 56 review): ALSO skipped when the targeted physical
+      // file does not declare the key (e.g. declared only in
+      // claude-plugins.local.json while targeting base, or not declared at
+      // all). Writing anyway would rewrite the file -- or CREATE it with
+      // empty maps when absent -- for a semantic no-op, contradicting the
+      // RECON-05 byte/mtime-stability discipline.
+      if (
+        opts.notifications?.mode !== "orchestrated" &&
+        cfg.status === "valid" &&
+        cfg.config.plugins?.[`${plugin}@${marketplace}`] !== undefined
+      ) {
         await deletePluginConfigEntry(
-          current,
+          cfg.config,
           targetConfigPath,
           locations.scopeRoot,
           plugin,

@@ -55,7 +55,7 @@ import {
   resolveScopeOrNotifyNotAdded,
 } from "./shared.ts";
 
-import type { ScopeConfig } from "../../persistence/config-io.ts";
+import type { ConfigLoadResult } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
@@ -365,10 +365,7 @@ async function commitFullRemove(args: {
   readonly marketplace: string;
   readonly targetConfigPath: string;
   readonly scopeRoot: string;
-  readonly cfg: { status: string } & (
-    | { status: "valid"; config: ScopeConfig }
-    | { status: string }
-  );
+  readonly cfg: ConfigLoadResult;
   readonly orchestrated: boolean;
 }): Promise<void> {
   const { tx, marketplace, targetConfigPath, scopeRoot, cfg, orchestrated } = args;
@@ -387,9 +384,30 @@ async function commitFullRemove(args: {
     return;
   }
 
-  const current: ScopeConfig =
-    cfg.status === "valid" ? (cfg as { config: ScopeConfig }).config : { schemaVersion: 1 };
-  await deleteMarketplaceConfigEntryWithCascade(current, targetConfigPath, scopeRoot, marketplace);
+  // WR-02 (Phase 56 review): short-circuit when the TARGETED physical file
+  // declares neither the marketplace nor any plugin key under it. Writing
+  // anyway would rewrite the file (mtime bump) for a semantic no-op -- or
+  // CREATE claude-plugins.json containing only empty maps when the file is
+  // absent. Both contradict the RECON-05 byte/mtime-stability discipline.
+  if (cfg.status !== "valid") {
+    return;
+  }
+
+  const suffix = `@${marketplace}`;
+  const declaresMarketplace = cfg.config.marketplaces?.[marketplace] !== undefined;
+  const declaresPluginUnderIt = Object.keys(cfg.config.plugins ?? {}).some((key) =>
+    key.endsWith(suffix),
+  );
+  if (!declaresMarketplace && !declaresPluginUnderIt) {
+    return;
+  }
+
+  await deleteMarketplaceConfigEntryWithCascade(
+    cfg.config,
+    targetConfigPath,
+    scopeRoot,
+    marketplace,
+  );
 }
 
 /**
