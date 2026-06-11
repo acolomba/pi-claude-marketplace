@@ -108,7 +108,8 @@ export type AddMarketplaceNotifications =
  *
  * `failed` collapses every classified precondition failure
  * (`classifyAddError` recognized: duplicate name / stale clone / invalid
- * manifest / unsupported source / source missing) plus the catastrophic
+ * manifest / unsupported source / source missing / network unreachable)
+ * plus the catastrophic
  * fallback ("unparseable" -- chosen because every recognised add precondition
  * yields a typed error, so a non-enumerated throw is by construction an
  * unparseable / corrupted source-tree shape). Consumers narrow on
@@ -235,6 +236,24 @@ function classifyAddError(rawErr: unknown): ContentReason | undefined {
     if (code === "ENOENT" || code === "ENOTDIR") {
       return "source missing";
     }
+
+    // WR-03 (Phase 55 review): a clone network failure (errno-carrying
+    // throw from the github guard's gitOps.clone) is the NFR-5 per-entry
+    // soft-fail the catalog's `soft-fail-mixed` state documents as
+    // `{network unreachable}`. The clone-catch only cleans staging and
+    // rethrows unclassified, so the errno must be recognised HERE --
+    // otherwise the reason falls through to `unparseable`, falsely implying
+    // a corrupted manifest when the user's network is down.
+    if (
+      code === "ENETUNREACH" ||
+      code === "ECONNREFUSED" ||
+      code === "ENOTFOUND" ||
+      code === "ETIMEDOUT" ||
+      code === "ECONNRESET" ||
+      code === "EAI_AGAIN"
+    ) {
+      return "network unreachable";
+    }
   }
 
   return undefined;
@@ -329,9 +348,10 @@ async function runAddInGuard(args: {
  *
  * The non-enumerated catastrophic branch in orchestrated mode collapses to
  * the closed-set `"unparseable"` reason because every recognised add
- * precondition already yields a typed error; an unrecognised throw is by
- * construction an opaque source-tree shape, NOT a network reachability
- * problem (the github guard's clone-catch already classifies those).
+ * precondition yields a typed error and network reachability failures are
+ * classified by `classifyAddError`'s errno ladder (WR-03 -- the github
+ * guard's clone-catch only cleans staging and rethrows unclassified), so an
+ * unrecognised throw is by construction an opaque source-tree shape.
  */
 function handleAddFailure(
   opts: AddMarketplaceOptions,

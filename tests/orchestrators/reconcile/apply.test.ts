@@ -267,15 +267,19 @@ test("RECON-03 (per-entry network soft-fail): one failing github mp + one succee
     const emitted = args[0];
     assert.ok(emitted.includes("(failed)"), `expected (failed) row; got:\n${emitted}`);
     assert.ok(emitted.includes("flaky-mp"), `expected flaky-mp row; got:\n${emitted}`);
-    // Sibling continued -> the cascade also rendered an (added) row for ok-mp.
-    // (The mock gitOps fixture is "valid-marketplace" so the second clone
-    // resolves a valid manifest; the planner-driven entry's marketplace name
-    // is "ok-mp" -- but addMarketplace records it under the MANIFEST's name
-    // ("valid-marketplace"). Both names are checked permissively below.)
+    // WR-03: the injected ENETUNREACH clone failure must surface as the
+    // catalog-documented `{network unreachable}` reason -- never the
+    // `{unparseable}` fallback (which would falsely imply a corrupted
+    // manifest when the network is down).
     assert.ok(
-      emitted.includes("(added)") ||
-        emitted.includes("ok-mp") ||
-        emitted.includes("valid-marketplace"),
+      emitted.includes("{network unreachable}"),
+      `WR-03: expected {network unreachable} reason on the failed row; got:\n${emitted}`,
+    );
+    // Sibling continued -> the cascade also rendered an (added) row. The
+    // mock gitOps fixture is "valid-marketplace", and addMarketplace records
+    // (and the cascade renders -- CR-01) the MANIFEST-derived name.
+    assert.ok(
+      emitted.includes("(added)") && emitted.includes("valid-marketplace"),
       `expected sibling success row to continue past the failure; got:\n${emitted}`,
     );
     // No /reload trailer (Pitfall 4).
