@@ -386,6 +386,67 @@ test("WB-01 SC#4 (add + remove cascade): post-remove reconcile is a no-op and co
   }
 });
 
+test("WB-01 SC#4 (bare-form autoupdate flip, 2 marketplaces): BOTH config entries survive the batched write-back", async () => {
+  // CR-01 regression (Phase 56 review): the per-name sequential
+  // writeMarketplaceConfigEntry loop rebuilt the file from the SAME stale
+  // snapshot on each iteration, so a bare-form flip over N marketplaces
+  // persisted only the LAST marketplace's entry. The batched write-back must
+  // land every fresh-flipped entry in one atomic save.
+  const { pathSource } = await import("../../extensions/pi-claude-marketplace/domain/source.ts");
+  const { locationsFor } =
+    await import("../../extensions/pi-claude-marketplace/persistence/locations.ts");
+  const { saveState } =
+    await import("../../extensions/pi-claude-marketplace/persistence/state-io.ts");
+
+  const { scopeRoot, cleanup } = await tmpScopeRoot();
+  try {
+    const cwd = scopeRoot.replace(/\/\.pi$/, "");
+    const locations = locationsFor("project", cwd);
+    await mkdir(locations.extensionRoot, { recursive: true });
+
+    const ctx = { ui: { notify: (): void => undefined } } as never;
+    const pi = { getAllTools: (): unknown[] => [] } as never;
+
+    const mpRecord = (name: string): Record<string, unknown> => ({
+      name,
+      scope: "project",
+      source: pathSource(`./${name}-src`),
+      addedFromCwd: cwd,
+      manifestPath: path.join(cwd, `${name}-src`, ".claude-plugin", "marketplace.json"),
+      marketplaceRoot: path.join(cwd, `${name}-src`),
+      plugins: {},
+    });
+    await saveState(locations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: { mp1: mpRecord("mp1"), mp2: mpRecord("mp2") },
+    } as never);
+
+    // Bare form: NO name -- every marketplace in the scope flips.
+    await setMarketplaceAutoupdate({
+      ctx,
+      pi,
+      enable: true,
+      scope: "project",
+      cwd,
+    });
+
+    const cfg = await loadConfig(locations.configJsonPath);
+    assert.equal(cfg.status, "valid");
+    if (cfg.status !== "valid") {
+      return;
+    }
+
+    // BOTH entries carry the flip + the synthesized verbatim source -- the
+    // last-write-wins clobber would have dropped mp1.
+    assert.equal(cfg.config.marketplaces?.mp1?.autoupdate, true);
+    assert.equal(cfg.config.marketplaces?.mp1?.source, "./mp1-src");
+    assert.equal(cfg.config.marketplaces?.mp2?.autoupdate, true);
+    assert.equal(cfg.config.marketplaces?.mp2?.source, "./mp2-src");
+  } finally {
+    await cleanup();
+  }
+});
+
 test("WR-09 orchestrated-mode SKIP: addMarketplace with notifications.mode 'orchestrated' does NOT touch the config file", async () => {
   const { fixtureMarketplaceDir, makeMockGitOps } = await import("../helpers/git-mock.ts");
   const { locationsFor } =

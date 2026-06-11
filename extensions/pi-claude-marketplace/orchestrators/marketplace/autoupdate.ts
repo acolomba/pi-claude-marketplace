@@ -62,7 +62,7 @@
 import path from "node:path";
 
 import { loadConfig } from "../../persistence/config-io.ts";
-import { writeMarketplaceConfigEntry } from "../../persistence/config-write-back.ts";
+import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
@@ -70,7 +70,7 @@ import { withLockedStateTransaction } from "../../transaction/with-state-guard.t
 
 import { applyAutoupdateFlipInPlace } from "./shared.ts";
 
-import type { ScopeConfig } from "../../persistence/config-io.ts";
+import type { MarketplaceConfigEntry, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
   ContentReason,
@@ -304,6 +304,18 @@ function buildAutoupdatePatch(
   return patch;
 }
 
+/**
+ * Accumulate ONE batched patch across every fresh-flipped marketplace and
+ * issue a SINGLE `writeBatchedConfigEntries` call (one `saveConfig`,
+ * all-or-nothing).
+ *
+ * Per-name sequential `writeMarketplaceConfigEntry` calls against the same
+ * stale `current` snapshot were a last-write-wins clobber: each save rebuilt
+ * the whole file from `current` (which never gained the previous iteration's
+ * patch), so a bare-form flip over N marketplaces persisted only the LAST
+ * one. The batched form applies all N patches in memory before the single
+ * atomic save, which also makes a mid-write failure all-or-nothing (NFR-3).
+ */
 async function writeAutoupdateBack(
   current: ScopeConfig,
   state: { marketplaces: Record<string, unknown> },
@@ -312,10 +324,12 @@ async function writeAutoupdateBack(
   changed: readonly string[],
   enable: boolean,
 ): Promise<void> {
+  const marketplaces: Record<string, Partial<MarketplaceConfigEntry>> = {};
   for (const name of changed) {
-    const patch = buildAutoupdatePatch(current, state, name, enable);
-    await writeMarketplaceConfigEntry(current, targetConfigPath, scopeRoot, name, patch);
+    marketplaces[name] = buildAutoupdatePatch(current, state, name, enable);
   }
+
+  await writeBatchedConfigEntries(current, targetConfigPath, scopeRoot, { marketplaces });
 }
 
 async function flipOneScope(
