@@ -58,7 +58,7 @@
 import path from "node:path";
 
 import { loadConfig, saveConfig } from "../../persistence/config-io.ts";
-import { errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
+import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
@@ -393,9 +393,19 @@ export async function setPluginEnabled(
   } catch (err) {
     const cause = err instanceof Error ? err : new Error(errorMessage(err));
     if (orchestrated) {
+      // WR-04 (Phase 55 review): the transaction body also runs loadConfig,
+      // writeConfigEntry/saveConfig, and tx.save() -- an EACCES on the
+      // config write or a disk-full on state save is NOT a lock conflict.
+      // Only a genuine StateLockHeldError may render `{lock held}`; other
+      // throws narrow through the same errno ladder the standalone disable
+      // arm uses (permission denied / source missing / unreadable).
+      const reason: Reason =
+        cause instanceof StateLockHeldError
+          ? "lock held"
+          : (narrowDisableFailure(cause)[0] ?? "unreadable");
       return {
         status: "failed",
-        reason: "lock held",
+        reason,
         error: cause,
         cause: errorMessage(cause),
       };
