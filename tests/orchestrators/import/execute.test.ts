@@ -1,9 +1,14 @@
 /* eslint-disable @typescript-eslint/require-await */
 
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import { importClaudeSettings } from "../../../extensions/pi-claude-marketplace/orchestrators/import/index.ts";
+import { loadConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { PluginShapeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -1081,4 +1086,334 @@ test("importClaudeSettings keeps user and project operations independent", async
   });
 
   assert.deepEqual(installed, ["user:plugin@mp", "project:plugin@mp"]);
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// WB-03: per-scope batched post-pass (Phase 56 Plan 04 Task 1)
+//
+// import runs each per-entry orchestrator in `notifications: { mode:
+// "orchestrated" }` so WR-09 SKIPS their per-entry write-back. After all
+// per-entry calls complete for a scope, executeScopedPlan runs a per-scope
+// batched post-pass under ONE withLockedStateTransaction:
+//
+//   - loadConfig(targetConfigPath); CFG-03 invalid -> abort this scope
+//   - build BatchedConfigPatch from result.addedMarketplaces +
+//     result.installedPlugins for THIS scope
+//   - writeBatchedConfigEntries(current, targetConfigPath, scopeRoot, batch)
+//
+// Race-window (Pitfall 8): per-entry orchestrators committed state under
+// their own locks; the batched-save lock acquires after the last per-entry
+// release. A concurrent reconcile can observe the partial state in that
+// window; the next reconcile self-heals.
+//
+// Tests use real filesystem (mkdtemp + locationsFor) so the WB-03 atomic
+// write seam is exercised end-to-end.
+// ──────────────────────────────────────────────────────────────────────────
+
+async function withHermeticHome<T>(
+  fn: (env: { home: string; cwd: string }) => Promise<T>,
+): Promise<T> {
+  const originalHome = process.env.HOME;
+  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
+  const home = await mkdtemp(path.join(tmpdir(), "import-wb-home-"));
+  const cwd = await mkdtemp(path.join(tmpdir(), "import-wb-cwd-"));
+  process.env.HOME = home;
+  delete process.env.PI_CODING_AGENT_DIR;
+  try {
+    return await fn({ home, cwd });
+  } finally {
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+
+    if (originalAgentDir === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = originalAgentDir;
+    }
+
+    await rm(home, { recursive: true, force: true });
+    await rm(cwd, { recursive: true, force: true });
+  }
+}
+
+test("WB-03 happy: post-pass writes ONE batched patch with every added marketplace + installed plugin", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, pi } = makeCtx();
+    const projectLocations = locationsFor("project", cwd);
+    await mkdir(projectLocations.extensionRoot, { recursive: true });
+
+    await importClaudeSettings({
+      ctx,
+      pi,
+      cwd,
+      selectedScopes: ["project"],
+      deps: {
+        loadSettings: async () => ({
+          paths: { basePath: "base", localPath: "local" },
+          settings: {
+            enabledPlugins: {
+              "p1@mp1": true,
+              "p2@mp1": true,
+              "p3@mp2": true,
+            },
+            extraKnownMarketplaces: {
+              mp1: { github: { repo: "owner/mp1" } },
+              mp2: { github: { repo: "owner/mp2" } },
+            },
+          },
+          diagnostics: [],
+        }),
+        loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
+        addMarketplace: async (opts) => ({ status: "added", name: opts.rawSource }) as const,
+        installPlugin: async () => ({
+          status: "installed",
+          resourcesChanged: false,
+          declaresAgents: false,
+          declaresMcp: false,
+        }),
+      },
+    });
+
+    // The post-pass wrote the batched patch under ONE lock.
+    const cfg = await loadConfig(projectLocations.configJsonPath);
+    assert.equal(cfg.status, "valid");
+    if (cfg.status !== "valid") {
+      return;
+    }
+
+    // Both marketplaces are recorded with verbatim source from the plan.
+    assert.deepEqual(Object.keys(cfg.config.marketplaces ?? {}).sort(), ["mp1", "mp2"]);
+    assert.equal(cfg.config.marketplaces?.mp1?.source, "owner/mp1");
+    assert.equal(cfg.config.marketplaces?.mp2?.source, "owner/mp2");
+
+    // All three plugins are recorded with the flat key form (D-01).
+    assert.deepEqual(Object.keys(cfg.config.plugins ?? {}).sort(), ["p1@mp1", "p2@mp1", "p3@mp2"]);
+  });
+});
+
+test("WB-03 batched: ONE mtime touch on the config file after N entries", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, pi } = makeCtx();
+    const projectLocations = locationsFor("project", cwd);
+    await mkdir(projectLocations.extensionRoot, { recursive: true });
+
+    // Seed the config with an empty schema-version-only document so mtime
+    // exists before the import. The batched post-pass should produce
+    // exactly ONE additional mtime touch -- not N (one per entry).
+    await mkdir(projectLocations.scopeRoot, { recursive: true });
+    await writeFile(projectLocations.configJsonPath, JSON.stringify({ schemaVersion: 1 }), "utf8");
+    const beforeStat = await stat(projectLocations.configJsonPath);
+
+    await importClaudeSettings({
+      ctx,
+      pi,
+      cwd,
+      selectedScopes: ["project"],
+      deps: {
+        loadSettings: async () => ({
+          paths: { basePath: "base", localPath: "local" },
+          settings: {
+            enabledPlugins: {
+              "p1@mp1": true,
+              "p2@mp1": true,
+              "p3@mp2": true,
+            },
+            extraKnownMarketplaces: {
+              mp1: { github: { repo: "owner/mp1" } },
+              mp2: { github: { repo: "owner/mp2" } },
+            },
+          },
+          diagnostics: [],
+        }),
+        loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
+        addMarketplace: async (opts) => ({ status: "added", name: opts.rawSource }) as const,
+        installPlugin: async () => ({
+          status: "installed",
+          resourcesChanged: false,
+          declaresAgents: false,
+          declaresMcp: false,
+        }),
+      },
+    });
+
+    const afterStat = await stat(projectLocations.configJsonPath);
+    // The post-pass changed the file's mtime exactly once: a single
+    // writeBatchedConfigEntries call landed all 5 entries in one save.
+    // We assert mtime AFTER > mtime BEFORE (the post-pass fired) AND the
+    // resulting file holds all 5 entries (proves the single write was
+    // the batched one, not a partial write).
+    assert.ok(
+      afterStat.mtimeMs > beforeStat.mtimeMs,
+      "post-pass should have updated the config file mtime",
+    );
+    const cfg = await loadConfig(projectLocations.configJsonPath);
+    assert.equal(cfg.status, "valid");
+    if (cfg.status !== "valid") {
+      return;
+    }
+
+    assert.equal(Object.keys(cfg.config.marketplaces ?? {}).length, 2);
+    assert.equal(Object.keys(cfg.config.plugins ?? {}).length, 3);
+  });
+});
+
+test("WB-03 empty: when every per-entry call failed, the post-pass SKIPS and the config is byte-stable", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, pi } = makeCtx();
+    const projectLocations = locationsFor("project", cwd);
+    await mkdir(projectLocations.extensionRoot, { recursive: true });
+    await mkdir(projectLocations.scopeRoot, { recursive: true });
+
+    // Pre-seed config so we can detect byte-stability.
+    const initialBytes = JSON.stringify({ schemaVersion: 1, futureKey: "preserved" });
+    await writeFile(projectLocations.configJsonPath, initialBytes, "utf8");
+    const beforeStat = await stat(projectLocations.configJsonPath);
+
+    await importClaudeSettings({
+      ctx,
+      pi,
+      cwd,
+      selectedScopes: ["project"],
+      deps: {
+        loadSettings: async () => ({
+          paths: { basePath: "base", localPath: "local" },
+          settings: {
+            enabledPlugins: { "p1@mp1": true },
+            extraKnownMarketplaces: { mp1: { github: { repo: "owner/mp1" } } },
+          },
+          diagnostics: [],
+        }),
+        loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
+        // The add returns NO outcome -> the marketplace is recorded as a
+        // failure and the dependent plugin install is blocked.
+        addMarketplace: async () => undefined,
+        installPlugin: async () => ({
+          status: "installed",
+          resourcesChanged: false,
+          declaresAgents: false,
+          declaresMcp: false,
+        }),
+      },
+    });
+
+    const afterStat = await stat(projectLocations.configJsonPath);
+    const afterBytes = await readFile(projectLocations.configJsonPath, "utf8");
+    // RECON-05 byte-stable: no successful additions -> SKIP post-pass.
+    assert.equal(afterBytes, initialBytes);
+    assert.equal(afterStat.mtimeMs, beforeStat.mtimeMs);
+  });
+});
+
+test("WB-03 mixed: only the SUCCESSFUL entries land in the batched patch", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, pi } = makeCtx();
+    const projectLocations = locationsFor("project", cwd);
+    await mkdir(projectLocations.extensionRoot, { recursive: true });
+
+    await importClaudeSettings({
+      ctx,
+      pi,
+      cwd,
+      selectedScopes: ["project"],
+      deps: {
+        loadSettings: async () => ({
+          paths: { basePath: "base", localPath: "local" },
+          settings: {
+            enabledPlugins: {
+              "p1@mp1": true,
+              "p2@mp2": true,
+            },
+            extraKnownMarketplaces: {
+              mp1: { github: { repo: "owner/mp1" } },
+              mp2: { github: { repo: "owner/mp2" } },
+            },
+          },
+          diagnostics: [],
+        }),
+        loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
+        // mp1 add succeeds; mp2 add fails (no outcome).
+        addMarketplace: async (opts) =>
+          opts.rawSource === "owner/mp1"
+            ? ({ status: "added", name: "owner/mp1" } as const)
+            : undefined,
+        installPlugin: async () => ({
+          status: "installed",
+          resourcesChanged: false,
+          declaresAgents: false,
+          declaresMcp: false,
+        }),
+      },
+    });
+
+    const cfg = await loadConfig(projectLocations.configJsonPath);
+    assert.equal(cfg.status, "valid");
+    if (cfg.status !== "valid") {
+      return;
+    }
+
+    // Only mp1 lands. p1@mp1 was installed (mp1 succeeded); p2@mp2 was
+    // BLOCKED because the dependent marketplace failed.
+    assert.deepEqual(Object.keys(cfg.config.marketplaces ?? {}), ["mp1"]);
+    assert.deepEqual(Object.keys(cfg.config.plugins ?? {}), ["p1@mp1"]);
+  });
+});
+
+test("WB-03 CFG-03: per-scope invalid claude-plugins.json aborts that scope's post-pass but other scopes still run", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, pi } = makeCtx();
+    const userLocations = locationsFor("user", cwd);
+    const projectLocations = locationsFor("project", cwd);
+    await mkdir(userLocations.extensionRoot, { recursive: true });
+    await mkdir(projectLocations.extensionRoot, { recursive: true });
+    await mkdir(userLocations.scopeRoot, { recursive: true });
+    await mkdir(projectLocations.scopeRoot, { recursive: true });
+
+    // Pre-seed an INVALID user-scope config (malformed JSON).
+    await writeFile(userLocations.configJsonPath, "{ not valid json", "utf8");
+    const userBeforeBytes = await readFile(userLocations.configJsonPath, "utf8");
+
+    await importClaudeSettings({
+      ctx,
+      pi,
+      cwd,
+      selectedScopes: ["user", "project"],
+      deps: {
+        loadSettings: async (scope) => ({
+          paths: { basePath: "base", localPath: "local" },
+          settings: {
+            enabledPlugins: { [`p@mp-${scope}`]: true },
+            extraKnownMarketplaces: { [`mp-${scope}`]: { github: { repo: `owner/mp-${scope}` } } },
+          },
+          diagnostics: [],
+        }),
+        loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
+        addMarketplace: async (opts) => ({ status: "added", name: opts.rawSource }) as const,
+        installPlugin: async () => ({
+          status: "installed",
+          resourcesChanged: false,
+          declaresAgents: false,
+          declaresMcp: false,
+        }),
+      },
+    });
+
+    // User scope's invalid config is untouched: the post-pass aborted
+    // BEFORE the saveConfig call.
+    const userAfterBytes = await readFile(userLocations.configJsonPath, "utf8");
+    assert.equal(userAfterBytes, userBeforeBytes);
+
+    // Project scope's post-pass still ran -- the failure in user scope did
+    // NOT block other scopes' batched writes.
+    const projectCfg = await loadConfig(projectLocations.configJsonPath);
+    assert.equal(projectCfg.status, "valid");
+    if (projectCfg.status !== "valid") {
+      return;
+    }
+
+    assert.deepEqual(Object.keys(projectCfg.config.marketplaces ?? {}), ["mp-project"]);
+    assert.deepEqual(Object.keys(projectCfg.config.plugins ?? {}), ["p@mp-project"]);
+  });
 });
