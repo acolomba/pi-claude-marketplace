@@ -393,19 +393,9 @@ export async function setPluginEnabled(
   } catch (err) {
     const cause = err instanceof Error ? err : new Error(errorMessage(err));
     if (orchestrated) {
-      // WR-04 (Phase 55 review): the transaction body also runs loadConfig,
-      // writeConfigEntry/saveConfig, and tx.save() -- an EACCES on the
-      // config write or a disk-full on state save is NOT a lock conflict.
-      // Only a genuine StateLockHeldError may render `{lock held}`; other
-      // throws narrow through the same errno ladder the standalone disable
-      // arm uses (permission denied / source missing / unreadable).
-      const reason: Reason =
-        cause instanceof StateLockHeldError
-          ? "lock held"
-          : (narrowDisableFailure(cause)[0] ?? "unreadable");
       return {
         status: "failed",
-        reason,
+        reason: classifyTransactionThrow(cause),
         error: cause,
         cause: errorMessage(cause),
       };
@@ -436,6 +426,21 @@ export async function setPluginEnabled(
 
   dispatchOutcome({ ctx, pi, marketplace, scope, plugin, enable, configBasename, outcome });
   return undefined;
+}
+
+/**
+ * WR-04 (Phase 55 review): closed-set reason for an orchestrated transaction
+ * throw. The transaction body also runs loadConfig, writeConfigEntry /
+ * saveConfig, and tx.save() -- an EACCES on the config write or a disk-full
+ * on state save is NOT a lock conflict. Only a genuine StateLockHeldError
+ * may render `{lock held}`; other throws narrow through the same errno
+ * ladder the standalone disable arm uses (permission denied / source
+ * missing / unreadable).
+ */
+function classifyTransactionThrow(cause: Error): Reason {
+  return cause instanceof StateLockHeldError
+    ? "lock held"
+    : (narrowDisableFailure(cause)[0] ?? "unreadable");
 }
 
 /**
