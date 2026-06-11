@@ -18,7 +18,7 @@
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { mock } from "node:test";
@@ -150,23 +150,72 @@ test("RECON-04 wiring: a clean reconcile against an empty scope returns a Resour
   });
 });
 
-test("NFR-2 boundary preservation: catastrophic applyReconcile throw is caught and the handler still returns a ResourcesDiscoverResult", async () => {
-  // The most precise way to drive a catastrophic throw is to break the
-  // notify ctx so applyReconcile's internal `ctx.ui.notify(...)` (when it
-  // does eventually try to emit something) crashes -- but for the catch arm
-  // in index.ts to fire, we need applyReconcile itself to throw.
-  // Constructing a precise crash without restructuring the codebase is
-  // brittle; instead, drive an indirect path: a ctx whose ui.notify throws
-  // is caught by the inner try/catch around the last-ditch notify in
-  // index.ts itself. The reading of the test below is: even when notify
-  // throws inside the last-ditch error path, the handler still completes
-  // and returns the ResourcesDiscoverResult unchanged.
+/**
+ * WR-08 (Phase 55 review): seed a project scope whose config is invalid so
+ * applyReconcile accumulates an invalid-block outcome and CALLS
+ * `ctx.ui.notify` with the cascade. A throwing notify stub then makes
+ * applyReconcile itself throw -- the only injection-free way to drive the
+ * index.ts catch arm with a REAL propagated error.
+ */
+async function seedInvalidProjectConfig(cwd: string): Promise<void> {
+  await mkdir(path.join(cwd, ".pi"), { recursive: true });
+  await writeFile(path.join(cwd, ".pi", "claude-plugins.json"), "{", "utf8");
+}
+
+test("NFR-2 boundary preservation: a real applyReconcile throw is caught, the handler still returns a ResourcesDiscoverResult, and the last-ditch notify reports `reconcile aborted:` at error severity", async () => {
   await withHermeticEnv(async (cwd) => {
+    await seedInvalidProjectConfig(cwd);
+
     const pi = makeMockPi();
     claudeMarketplaceExtension(pi as unknown as ExtensionAPI);
     const handler = pi.handlers.get("resources_discover") as ResourcesDiscoverHandler;
 
-    // Build a ctx whose ui.notify always throws.
+    // The FIRST ctx.ui.notify call (applyReconcile's cascade for the
+    // invalid-config row) throws -- the error propagates out of
+    // applyReconcile into index.ts's catch arm. The SECOND call (the
+    // last-ditch `reconcile aborted:` line) succeeds and is recorded.
+    const recorded: [string, string | undefined][] = [];
+    let calls = 0;
+    const throwOnceCtx: MockCtx = {
+      ui: {
+        notify: mock.fn((message: string, severity?: string): void => {
+          calls += 1;
+          if (calls === 1) {
+            throw new Error("simulated host notify failure");
+          }
+
+          recorded.push([message, severity]);
+        }),
+      },
+    };
+
+    const event: ResourcesDiscoverEvent = { type: "resources_discover", cwd, reason: "startup" };
+    // Must NOT throw past the handler (NFR-2: Pi load is never blocked).
+    const result = await handler(event, throwOnceCtx as unknown as ExtensionContext);
+    assert.ok(Array.isArray(result.skillPaths));
+    assert.ok(Array.isArray(result.promptPaths));
+
+    // The catch arm fired exactly once with the documented last-ditch shape.
+    assert.equal(recorded.length, 1, "the last-ditch notify must fire exactly once");
+    assert.ok(
+      recorded[0]![0].startsWith("reconcile aborted:"),
+      `last-ditch message must start with 'reconcile aborted:'; got: ${recorded[0]![0]}`,
+    );
+    assert.equal(recorded[0]![1], "error", "last-ditch notify must carry error severity");
+  });
+});
+
+test("NFR-2 boundary preservation: even when the last-ditch notify ALSO throws, the handler still returns a ResourcesDiscoverResult (inner catch)", async () => {
+  await withHermeticEnv(async (cwd) => {
+    await seedInvalidProjectConfig(cwd);
+
+    const pi = makeMockPi();
+    claudeMarketplaceExtension(pi as unknown as ExtensionAPI);
+    const handler = pi.handlers.get("resources_discover") as ResourcesDiscoverHandler;
+
+    // EVERY notify throws: applyReconcile's cascade notify throws (driving
+    // the outer catch), then the last-ditch notify throws too (driving the
+    // inner catch). Neither may escape the handler.
     const throwingCtx: MockCtx = {
       ui: {
         notify: mock.fn((): void => {
@@ -176,9 +225,11 @@ test("NFR-2 boundary preservation: catastrophic applyReconcile throw is caught a
     };
 
     const event: ResourcesDiscoverEvent = { type: "resources_discover", cwd, reason: "startup" };
-    // Must NOT throw past the handler.
     const result = await handler(event, throwingCtx as unknown as ExtensionContext);
     assert.ok(Array.isArray(result.skillPaths));
     assert.ok(Array.isArray(result.promptPaths));
+    // Both notify attempts happened (cascade + last-ditch), proving the
+    // outer catch arm executed rather than the reconcile being silent.
+    assert.equal(throwingCtx.ui.notify.mock.calls.length, 2);
   });
 });
