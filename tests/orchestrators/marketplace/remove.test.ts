@@ -1023,3 +1023,235 @@ test("RECON-03 remove standalone-default mode -- omitted notifications option re
     }
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// Phase 56 Plan 02 (Task 2): cascade write-back, --local, WR-09, CFG-03
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WB-01 / Pitfall 4: cascade removes the marketplace entry AND every plugin entry ending in @<mp>", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-cascade-"));
+    try {
+      const projLoc = locationsFor("project", cwd);
+      await seedState(projLoc.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp1: {
+            name: "mp1",
+            scope: "project",
+            source: pathSource("./src1"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "m1.json"),
+            marketplaceRoot: cwd,
+            plugins: {},
+          },
+        },
+      });
+
+      // Seed the config with: mp1 marketplace, mp2 marketplace (intact),
+      // foo@mp1 plugin (must cascade away), bar@mp2 plugin (must SURVIVE).
+      const { saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      await saveConfig(
+        projLoc.configJsonPath,
+        {
+          schemaVersion: 1,
+          marketplaces: { mp1: { source: "./src1" }, mp2: { source: "./src2" } },
+          plugins: { "foo@mp1": { enabled: true }, "bar@mp2": { enabled: true } },
+        },
+        projLoc.scopeRoot,
+      );
+
+      const { ctx, pi } = makeCtx();
+      await removeMarketplace({ ctx, pi, name: "mp1", scope: "project", cwd });
+
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const cfg = await loadConfig(projLoc.configJsonPath);
+      assert.equal(cfg.status, "valid");
+      if (cfg.status !== "valid") {
+        return;
+      }
+
+      // mp1 removed; mp2 retained.
+      assert.equal(cfg.config.marketplaces?.["mp1"], undefined);
+      assert.deepEqual(cfg.config.marketplaces?.["mp2"], { source: "./src2" });
+
+      // Plugin cascade: foo@mp1 removed; bar@mp2 retained.
+      assert.equal(cfg.config.plugins?.["foo@mp1"], undefined);
+      assert.deepEqual(cfg.config.plugins?.["bar@mp2"], { enabled: true });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WB-01 / Pitfall 2: --local routes the cascade to claude-plugins.local.json; base file untouched", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-local-"));
+    try {
+      const projLoc = locationsFor("project", cwd);
+      await seedState(projLoc.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp1: {
+            name: "mp1",
+            scope: "project",
+            source: pathSource("./src1"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "m1.json"),
+            marketplaceRoot: cwd,
+            plugins: {},
+          },
+        },
+      });
+
+      const { saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      // Base file retains mp1; the local file is the override carrying mp1.
+      await saveConfig(
+        projLoc.configJsonPath,
+        { schemaVersion: 1, marketplaces: { mp1: { source: "./src1" } } },
+        projLoc.scopeRoot,
+      );
+      await saveConfig(
+        projLoc.configLocalJsonPath,
+        { schemaVersion: 1, marketplaces: { mp1: { source: "./src1", autoupdate: true } } },
+        projLoc.scopeRoot,
+      );
+
+      const { readFile, stat } = await import("node:fs/promises");
+      const baseBytesBefore = await readFile(projLoc.configJsonPath, "utf8");
+      const baseStatBefore = await stat(projLoc.configJsonPath);
+
+      const { ctx, pi } = makeCtx();
+      await removeMarketplace({ ctx, pi, name: "mp1", scope: "project", cwd, local: true });
+
+      // Base file MUST be byte-identical (Pitfall 2).
+      const baseBytesAfter = await readFile(projLoc.configJsonPath, "utf8");
+      const baseStatAfter = await stat(projLoc.configJsonPath);
+      assert.equal(baseBytesAfter, baseBytesBefore);
+      assert.equal(baseStatAfter.mtimeMs, baseStatBefore.mtimeMs);
+
+      // Local file has mp1 removed.
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const localCfg = await loadConfig(projLoc.configLocalJsonPath);
+      assert.equal(localCfg.status, "valid");
+      if (localCfg.status === "valid") {
+        assert.equal(localCfg.config.marketplaces?.["mp1"], undefined);
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-09 / T-56-02-01: orchestrated remove SKIPS the cascade write-back; config untouched", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-orch-"));
+    try {
+      const projLoc = locationsFor("project", cwd);
+      await seedState(projLoc.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp1: {
+            name: "mp1",
+            scope: "project",
+            source: pathSource("./src1"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "m1.json"),
+            marketplaceRoot: cwd,
+            plugins: {},
+          },
+        },
+      });
+
+      const { saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      await saveConfig(
+        projLoc.configJsonPath,
+        {
+          schemaVersion: 1,
+          marketplaces: { mp1: { source: "./src1" } },
+          plugins: { "foo@mp1": { enabled: true } },
+        },
+        projLoc.scopeRoot,
+      );
+
+      const { readFile, stat } = await import("node:fs/promises");
+      const bytesBefore = await readFile(projLoc.configJsonPath, "utf8");
+      const statBefore = await stat(projLoc.configJsonPath);
+
+      const { ctx, pi } = makeCtx();
+      const outcome = await removeMarketplace({
+        ctx,
+        pi,
+        name: "mp1",
+        scope: "project",
+        cwd,
+        notifications: { mode: "orchestrated" },
+      });
+      assert.equal((outcome as { status: string }).status, "removed");
+
+      // Config file byte-identical (no cascade fired).
+      const bytesAfter = await readFile(projLoc.configJsonPath, "utf8");
+      const statAfter = await stat(projLoc.configJsonPath);
+      assert.equal(bytesAfter, bytesBefore);
+      assert.equal(statAfter.mtimeMs, statBefore.mtimeMs);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("CFG-03 / T-56-02-05: invalid local config aborts the remove; basename-only cause; state untouched", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-cfg03-"));
+    try {
+      const projLoc = locationsFor("project", cwd);
+      await seedState(projLoc.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp1: {
+            name: "mp1",
+            scope: "project",
+            source: pathSource("./src1"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "m1.json"),
+            marketplaceRoot: cwd,
+            plugins: {},
+          },
+        },
+      });
+
+      await writeFile(projLoc.configLocalJsonPath, "{ malformed json", "utf8");
+
+      const { ctx, pi, notifications } = makeCtx();
+      await removeMarketplace({
+        ctx,
+        pi,
+        name: "mp1",
+        scope: "project",
+        cwd,
+        local: true,
+      });
+
+      // CFG-03: failed row with `{invalid manifest}` reason; basename only.
+      assert.ok(notifications.length >= 1);
+      const note = notifications[0]!;
+      assert.match(note.message, /\(failed\) \{invalid manifest\}/);
+      // T-56-02-05: must NOT leak the absolute local config path.
+      assert.ok(
+        !note.message.includes(projLoc.configLocalJsonPath),
+        `must NOT leak absolute path, got: ${note.message}`,
+      );
+
+      // State was NOT mutated: mp1 still recorded.
+      const after = await loadState(projLoc.extensionRoot);
+      assert.ok("mp1" in after.marketplaces);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});

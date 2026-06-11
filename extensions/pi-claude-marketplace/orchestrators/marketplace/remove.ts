@@ -38,13 +38,16 @@
 // D-03 corollary: per-plugin order mirrors PU-1 (skills → commands → agents → MCP).
 
 import { rm } from "node:fs/promises";
+import path from "node:path";
 
+import { loadConfig } from "../../persistence/config-io.ts";
+import { deleteMarketplaceConfigEntryWithCascade } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { dropMarketplaceCache, invalidateMarketplaceNames } from "../../shared/completion-cache.ts";
 import { errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
-import { withStateGuard } from "../../transaction/with-state-guard.ts";
+import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import {
   AgentsUnstageFailureError,
@@ -52,6 +55,7 @@ import {
   resolveScopeOrNotifyNotAdded,
 } from "./shared.ts";
 
+import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
@@ -119,6 +123,12 @@ export interface RemoveMarketplaceOptions {
    * (undefined) === `{ mode: "standalone" }` -- byte-identical to today.
    */
   readonly notifications?: RemoveMarketplaceNotifications;
+  /**
+   * WB-01 / Pitfall 2 (Phase 56 Plan 02): when true, target
+   * `claude-plugins.local.json` instead of `claude-plugins.json`. The base
+   * file is NEVER touched on the --local path.
+   */
+  readonly local?: boolean;
 }
 
 async function removePath(pathPromise: Promise<string>): Promise<void> {
@@ -297,6 +307,243 @@ function emitPartialFailure(args: {
 }
 
 /**
+ * D-02: hand-rolled per-plugin cascade loop. Mutates `record.plugins`,
+ * `successfullyUnstaged`, and `failedPlugins` in place. Extracted from
+ * `removeMarketplace` to keep its cognitive complexity inside the project's
+ * lint budget.
+ */
+async function cascadePluginsInPlace(args: {
+  readonly record: { plugins: Record<string, ExtensionPluginRow> };
+  readonly marketplace: string;
+  readonly locations: ScopedLocations;
+  readonly cascade: typeof cascadeUnstagePlugin;
+  readonly successfullyUnstaged: string[];
+  readonly failedPlugins: { name: string; cause: Error }[];
+}): Promise<void> {
+  const { record, marketplace, locations, cascade, successfullyUnstaged, failedPlugins } = args;
+  for (const [pluginName, plugin] of Object.entries(record.plugins)) {
+    const outcome = await cascade(pluginName, marketplace, locations, plugin);
+    if (outcome.ok) {
+      successfullyUnstaged.push(pluginName);
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- record.plugins is a dynamic-key Record<string, ...>.
+      delete record.plugins[pluginName];
+      continue;
+    }
+
+    // D-03: outcome.cause is set when ok===false (see UnstageOutcome).
+    const cause = outcome.cause ?? new Error(`unknown cascade failure for ${pluginName}`);
+
+    // TR-03: non-AG-5 partial-failure filters resources.* by outcome.dropped.*
+    // so the persisted row reflects only artefacts still on disk.
+    // AG-5 (AgentsUnstageFailureError) preserves the row INTACT.
+    if (!(cause instanceof AgentsUnstageFailureError)) {
+      const dropped = outcome.dropped;
+      plugin.resources.skills = plugin.resources.skills.filter((n) => !dropped.skills.includes(n));
+      plugin.resources.prompts = plugin.resources.prompts.filter(
+        (n) => !dropped.commands.includes(n),
+      );
+      plugin.resources.agents = plugin.resources.agents.filter((n) => !dropped.agents.includes(n));
+      plugin.resources.mcpServers = plugin.resources.mcpServers.filter(
+        (n) => !dropped.mcpServers.includes(n),
+      );
+    }
+
+    failedPlugins.push({ name: pluginName, cause });
+  }
+}
+
+/** Local alias for the per-plugin record shape mutated by the cascade loop. */
+type ExtensionPluginRow =
+  NonNullable<Parameters<typeof cascadeUnstagePlugin>[3]> extends infer T ? T : never;
+
+/**
+ * Commit the full-remove success branch: delete the marketplace from state and
+ * fire the cascade config write-back (skipped in orchestrated mode).
+ */
+async function commitFullRemove(args: {
+  readonly tx: { readonly state: { marketplaces: Record<string, unknown> } };
+  readonly marketplace: string;
+  readonly targetConfigPath: string;
+  readonly scopeRoot: string;
+  readonly cfg: { status: string } & (
+    | { status: "valid"; config: ScopeConfig }
+    | { status: string }
+  );
+  readonly orchestrated: boolean;
+}): Promise<void> {
+  const { tx, marketplace, targetConfigPath, scopeRoot, cfg, orchestrated } = args;
+  // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- state.marketplaces is a dynamic-key Record<string, ...>.
+  delete tx.state.marketplaces[marketplace];
+
+  // WB-01 / Pitfall 4: cascade write-back lives in ONE place. The helper
+  // removes the marketplace entry AND every plugin entry whose key ends in
+  // `@<marketplace>` so the next reconcile is a no-op.
+  //
+  // WR-09 / T-56-02-01: SKIPPED in orchestrated mode. A reconcile-driven
+  // call derives the desired state FROM the merged config; the declaration
+  // may live only in claude-plugins.local.json, and a write-back would
+  // clobber a per-machine override.
+  if (orchestrated) {
+    return;
+  }
+
+  const current: ScopeConfig =
+    cfg.status === "valid" ? (cfg as { config: ScopeConfig }).config : { schemaVersion: 1 };
+  await deleteMarketplaceConfigEntryWithCascade(current, targetConfigPath, scopeRoot, marketplace);
+}
+
+/**
+ * Body of the per-scope state lock. Returns the detected `source.kind` for
+ * the post-guard cleanup branching (github clone retention). A CFG-03 throw
+ * propagates to the caller's catch arm; a missing record is a no-op (saves
+ * state as-is). Extracted to keep `removeMarketplace`'s cognitive complexity
+ * within the project's lint budget.
+ */
+async function runRemoveLockBody(args: {
+  readonly tx: {
+    readonly state: { marketplaces: Record<string, unknown> };
+    save(): Promise<void>;
+  };
+  readonly opts: RemoveMarketplaceOptions;
+  readonly locations: ScopedLocations;
+  readonly targetConfigPath: string;
+  readonly orchestrated: boolean;
+  readonly cascade: typeof cascadeUnstagePlugin;
+  readonly successfullyUnstaged: string[];
+  readonly failedPlugins: { name: string; cause: Error }[];
+  readonly cfgInvalidSentinel: Error;
+}): Promise<"github" | "path" | "unknown" | undefined> {
+  const {
+    tx,
+    opts,
+    locations,
+    targetConfigPath,
+    orchestrated,
+    cascade,
+    successfullyUnstaged,
+    failedPlugins,
+    cfgInvalidSentinel,
+  } = args;
+
+  // CFG-03 (T-56-02-05): abort BEFORE any state mutation; basename-only.
+  const cfg = await loadConfig(targetConfigPath);
+  if (cfg.status === "invalid") {
+    throw cfgInvalidSentinel;
+  }
+
+  const state = tx.state as { marketplaces: Record<string, ExtensionMarketplaceRow> };
+  const record = state.marketplaces[opts.name];
+  if (record === undefined) {
+    // Concurrent removal between pre-guard probe and the lock body:
+    // save the (unchanged) state and let the post-guard arm emit the
+    // header-only `(removed)` row.
+    await tx.save();
+    return undefined;
+  }
+
+  const src = record.source as { kind?: unknown };
+  const sourceKind: "github" | "path" | "unknown" | undefined =
+    src.kind === "github" || src.kind === "path" || src.kind === "unknown" ? src.kind : undefined;
+
+  // D-02: per-plugin cascade loop (MR-3 continuation across failures).
+  await cascadePluginsInPlace({
+    record,
+    marketplace: opts.name,
+    locations,
+    cascade,
+    successfullyUnstaged,
+    failedPlugins,
+  });
+
+  if (failedPlugins.length === 0) {
+    await commitFullRemove({
+      tx,
+      marketplace: opts.name,
+      targetConfigPath,
+      scopeRoot: locations.scopeRoot,
+      cfg,
+      orchestrated,
+    });
+  }
+
+  await tx.save();
+  return sourceKind;
+}
+
+/**
+ * Local alias for the in-state marketplace row -- the `record` shape passed
+ * through the cascade and write-back helpers.
+ */
+interface ExtensionMarketplaceRow {
+  source: unknown;
+  plugins: Record<string, ExtensionPluginRow>;
+}
+
+/**
+ * Resolve the target scope/locations or surface the missing-marketplace
+ * precondition through the correct standalone/orchestrated arm. Returns:
+ *   - `{ scope, locations }` on success
+ *   - `RemoveMarketplaceOutcome` (status: "failed", reason: "not added") in
+ *     orchestrated mode when the marketplace is missing
+ *   - `undefined` in standalone mode when the helper already emitted the
+ *     standalone `(failed) {not added}` variant
+ */
+async function resolveRemoveTargetOrSurface(
+  opts: RemoveMarketplaceOptions,
+  userLocations: ScopedLocations,
+  projectLocations: ScopedLocations,
+  orchestrated: boolean,
+): Promise<{ scope: Scope; locations: ScopedLocations } | RemoveMarketplaceOutcome | undefined> {
+  if (orchestrated) {
+    const r = await resolveScopeOrFailedOutcome(opts, userLocations, projectLocations);
+    if ("status" in r) {
+      return r;
+    }
+
+    return r;
+  }
+
+  const r = await resolveScopeOrNotifyNotAdded(opts, userLocations, projectLocations);
+  return r;
+}
+
+/**
+ * CFG-03 (T-56-02-05) terminal arm: surface a structured `(failed) {invalid
+ * manifest}` row through the correct standalone/orchestrated channel. The
+ * error message carries the basename only -- never the absolute config path.
+ */
+function surfaceCfgInvalid(args: {
+  readonly opts: RemoveMarketplaceOptions;
+  readonly orchestrated: boolean;
+  readonly configBasename: string;
+  readonly scope: Scope;
+}): RemoveMarketplaceOutcome | undefined {
+  const { opts, orchestrated, configBasename, scope } = args;
+  if (orchestrated) {
+    const synthetic = new Error(`Config file "${configBasename}" failed schema validation.`);
+    return {
+      status: "failed",
+      reason: "invalid manifest",
+      error: synthetic,
+      cause: errorMessage(synthetic),
+    };
+  }
+
+  notify(opts.ctx, opts.pi, {
+    marketplaces: [
+      {
+        name: opts.name,
+        scope,
+        status: "failed",
+        reasons: ["invalid manifest"],
+        plugins: [],
+      },
+    ],
+  });
+  return undefined;
+}
+
+/**
  * RECON-03: returns `RemoveMarketplaceOutcome` in orchestrated mode and
  * `undefined` in standalone mode.
  */
@@ -314,103 +561,64 @@ export async function removeMarketplace(
   const userLocations = locationsFor("user", opts.cwd);
   const projectLocations = locationsFor("project", opts.cwd);
 
-  let resolved: { scope: Scope; locations: ScopedLocations };
-  if (orchestrated) {
-    const r = await resolveScopeOrFailedOutcome(opts, userLocations, projectLocations);
-    if ("status" in r) {
-      return r;
-    }
-
-    resolved = r;
-  } else {
-    const r = await resolveScopeOrNotifyNotAdded(opts, userLocations, projectLocations);
-    if (r === undefined) {
-      return undefined;
-    }
-
-    resolved = r;
+  const resolved = await resolveRemoveTargetOrSurface(
+    opts,
+    userLocations,
+    projectLocations,
+    orchestrated,
+  );
+  if (resolved === undefined || "status" in resolved) {
+    return resolved;
   }
 
   const { locations } = resolved;
+
+  // WB-01 / Pitfall 2: target-path selection happens ONCE before the lock so
+  // the orchestrator NEVER falls back to the base file on ENOENT.
+  const targetConfigPath =
+    opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath;
+  const configBasename = path.basename(targetConfigPath);
 
   // Per-plugin tracking accumulators captured by the guard closure.
   const failedPlugins: { name: string; cause: Error }[] = [];
   const successfullyUnstaged: string[] = []; // plugins whose cascade returned ok:true
   let sourceKindAtRecord: "github" | "path" | "unknown" | undefined;
 
-  await withStateGuard(locations, async (state) => {
-    const record = state.marketplaces[opts.name];
-    if (record === undefined) {
-      // ATTR-06: the missing-marketplace precondition is handled by the
-      // pre-guard existence check above (routed to the standalone `{not added}`
-      // variant). Reaching here means the record was deleted between the
-      // pre-guard read and this guard's fresh load (a concurrent removal) --
-      // treat it as a no-op: return without mutating. withStateGuard still
-      // calls saveState with the unmodified state (a harmless re-write of the
-      // same content), and no raw MarketplaceNotFoundError escapes.
-      return;
-    }
+  // CFG-03 sentinel: a synthetic throw signaling the lock body aborted on an
+  // invalid config. The catch arm BELOW maps it to the structured failed row.
+  // Using a throw (rather than a captured boolean) keeps no-unnecessary-
+  // condition lint clean and structurally guarantees tx.save() is NOT called.
+  const CFG_INVALID = new Error("cfg-invalid-sentinel");
 
-    const src = record.source as { kind?: unknown };
-    if (src.kind === "github" || src.kind === "path" || src.kind === "unknown") {
-      sourceKindAtRecord = src.kind;
-    }
-
-    // D-02: hand-rolled try/catch per plugin. NOT the phase-ledger runner --
-    // MR-3 requires continuation across plugin failures.
-    //
-    // WR-01: state mutation (delete record.plugins[pluginName]) is folded
-    // into THIS loop. This removes any dependency on cascade being fail-soft:
-    // if cascade ever changes to throw, only the already-cleaned entries are
-    // persisted because withStateGuard saves on no-throw.
-    for (const [pluginName, plugin] of Object.entries(record.plugins)) {
-      const outcome = await cascade(pluginName, opts.name, locations, plugin);
-      if (outcome.ok) {
-        successfullyUnstaged.push(pluginName);
-
-        // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- record.plugins is a dynamic-key Record<string, ...>.
-        delete record.plugins[pluginName];
-      } else {
-        // D-03: outcome.cause is set when ok===false (see UnstageOutcome).
-        const cause = outcome.cause ?? new Error(`unknown cascade failure for ${pluginName}`);
-
-        // TR-03: non-AG-5 partial-failure path filters
-        // plugin.resources.* by outcome.dropped.* so the persisted row
-        // reflects only artifacts still on disk (no ghost record).
-        // AG-5 (AgentsUnstageFailureError) preserves the row INTACT --
-        // foreign content owned by another process must not cause data
-        // loss. The loop never throws; the guard's trailing saveState
-        // commits the shrunken record alongside successfully-removed
-        // plugin deletes.
-        //
-        // CRITICAL field-name mapping: dropped.commands populates from
-        // resources.prompts (in the cascade primitive in shared.ts), so the
-        // filter MUST wire dropped.commands -> resources.prompts.
-        if (!(cause instanceof AgentsUnstageFailureError)) {
-          const dropped = outcome.dropped;
-          plugin.resources.skills = plugin.resources.skills.filter(
-            (n) => !dropped.skills.includes(n),
-          );
-          plugin.resources.prompts = plugin.resources.prompts.filter(
-            (n) => !dropped.commands.includes(n),
-          );
-          plugin.resources.agents = plugin.resources.agents.filter(
-            (n) => !dropped.agents.includes(n),
-          );
-          plugin.resources.mcpServers = plugin.resources.mcpServers.filter(
-            (n) => !dropped.mcpServers.includes(n),
-          );
-        }
-
-        failedPlugins.push({ name: pluginName, cause });
+  try {
+    await withLockedStateTransaction(locations, async (tx) => {
+      const sk = await runRemoveLockBody({
+        tx,
+        opts,
+        locations,
+        targetConfigPath,
+        orchestrated,
+        cascade,
+        successfullyUnstaged,
+        failedPlugins,
+        cfgInvalidSentinel: CFG_INVALID,
+      });
+      if (sk !== undefined) {
+        sourceKindAtRecord = sk;
       }
+    });
+  } catch (err) {
+    if (err !== CFG_INVALID) {
+      throw err;
     }
 
-    if (failedPlugins.length === 0) {
-      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- state.marketplaces is a dynamic-key Record<string, ...>.
-      delete state.marketplaces[opts.name];
-    }
-  });
+    return surfaceCfgInvalid({
+      opts,
+      orchestrated,
+      configBasename,
+      scope: resolved.scope,
+    });
+  }
 
   // D-03-INV: post-state-commit completion-cache cleanup.
   // The marketplace-names cache and per-marketplace plugin cache file must be
