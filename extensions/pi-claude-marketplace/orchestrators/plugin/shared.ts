@@ -23,6 +23,7 @@ import { CrossPluginConflictError } from "../../shared/errors.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
+import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -236,6 +237,41 @@ export function cloneMarketplaceRecordForTargetScope(
     scope: targetScope,
     plugins: {},
   };
+}
+
+/**
+ * CR-02 (Phase 56 review): synthesize the marketplace `source` for a plugin
+ * write-back into a config that does NOT yet declare the marketplace.
+ *
+ * When a project-scope install resolves the marketplace via the CMP-3
+ * user-scope fallback, the clone-adoption path records the marketplace in
+ * PROJECT state -- but only `marketplace add` writes marketplace config
+ * entries, and it ran at USER scope. Writing the plugin key alone would
+ * leave a dangling declaration: the Phase 53 planner turns it into a
+ * perpetual `<marketplace not declared>` failed row AND plans the
+ * recorded-but-undeclared clone for removal (a destructive, non-converging
+ * plan -- invariant 5 violation). The caller must therefore declare the
+ * marketplace in the SAME batched patch, synthesizing `source` from the
+ * adopted record's verbatim `source.raw` (the Phase 53 `samePlannedSource`
+ * contract).
+ *
+ * Returns `undefined` when the targeted config already declares the
+ * marketplace (nothing to synthesize -- byte-stable) OR when no string
+ * `source.raw` exists on the state record (hand-edited/legacy state;
+ * writing a source-less entry would trip `saveConfig`'s required-`source`
+ * invariant throw).
+ */
+export function synthesizeUndeclaredMarketplaceSource(
+  current: ScopeConfig,
+  state: ExtensionState,
+  marketplace: string,
+): string | undefined {
+  if (current.marketplaces?.[marketplace] !== undefined) {
+    return undefined;
+  }
+
+  const raw = (state.marketplaces[marketplace]?.source as { raw?: unknown } | undefined)?.raw;
+  return typeof raw === "string" ? raw : undefined;
 }
 
 /** CMP-5: unqualified single-plugin lifecycle operations prefer project only when both scopes match. */

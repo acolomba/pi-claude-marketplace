@@ -58,14 +58,14 @@
 import path from "node:path";
 
 import { loadConfig } from "../../persistence/config-io.ts";
-import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
+import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
 import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
 import { runInstallLedger } from "./install.ts";
-import { resolveCrossScopePluginTarget } from "./shared.ts";
+import { resolveCrossScopePluginTarget, synthesizeUndeclaredMarketplaceSource } from "./shared.ts";
 
 import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -363,16 +363,20 @@ export async function setPluginEnabled(
       // copy the local override's `enabled` flag into the shared BASE file
       // and clobber a user-authored base declaration. The config is the
       // reconcile's INPUT; only standalone commands author declarations.
+      // CR-02 (Phase 56 review): when the targeted config does not declare
+      // the marketplace (CMP-3 clone-adoption legacy, or a hand-pruned
+      // config), declare it in the SAME batched patch -- a bare plugin key
+      // would otherwise be a dangling declaration the planner converts into
+      // a marketplace removal + perpetual failed row.
       if (!orchestrated) {
         const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
-        await writePluginConfigEntry(
-          current,
-          targetConfigPath,
-          locations.scopeRoot,
-          plugin,
-          marketplace,
-          { enabled: enable },
-        );
+        const adoptedSource = synthesizeUndeclaredMarketplaceSource(current, state, marketplace);
+        await writeBatchedConfigEntries(current, targetConfigPath, locations.scopeRoot, {
+          ...(adoptedSource !== undefined && {
+            marketplaces: { [marketplace]: { source: adoptedSource } },
+          }),
+          plugins: { [`${plugin}@${marketplace}`]: { enabled: enable } },
+        });
       }
 
       await tx.save();

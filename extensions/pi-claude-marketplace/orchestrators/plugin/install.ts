@@ -90,7 +90,7 @@ import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
-import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
+import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
@@ -111,6 +111,7 @@ import {
   pickAgentsSourceDir,
   resolveInstallMarketplaceSource,
   resolvePluginVersion,
+  synthesizeUndeclaredMarketplaceSource,
 } from "./shared.ts";
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
@@ -871,19 +872,27 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       // WB-01 / WR-09: write-back the plugin entry to the user-authored
       // config. SKIPPED in orchestrated mode (reconcile derives desired
       // state FROM the merged config; writing back would clobber a
-      // per-machine override). The patch is `{}` because the plugin entry
-      // shape today carries no install-time field beyond the implicit
+      // per-machine override). The plugin patch is `{}` because the plugin
+      // entry shape today carries no install-time field beyond the implicit
       // declaration -- D-04 keeps the "enabled" default at consume time.
+      //
+      // CR-02 (Phase 56 review): when the targeted config does not declare
+      // the marketplace -- the CMP-3 user-scope fallback adopted a cloned
+      // record into THIS scope's state, but `marketplace add` only ever ran
+      // at user scope -- declare the marketplace entry in the SAME batched
+      // patch (same lock, one atomic save). Without it the plugin key is a
+      // dangling declaration: the next reconcile plans the adopted clone's
+      // REMOVAL and renders a perpetual `<marketplace not declared>` failed
+      // row (invariant 5 violation).
       if (opts.notifications?.mode !== "orchestrated") {
         const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
-        await writePluginConfigEntry(
-          current,
-          targetConfigPath,
-          locations.scopeRoot,
-          plugin,
-          marketplace,
-          {},
-        );
+        const adoptedSource = synthesizeUndeclaredMarketplaceSource(current, state, marketplace);
+        await writeBatchedConfigEntries(current, targetConfigPath, locations.scopeRoot, {
+          ...(adoptedSource !== undefined && {
+            marketplaces: { [marketplace]: { source: adoptedSource } },
+          }),
+          plugins: { [`${plugin}@${marketplace}`]: {} },
+        });
       }
     });
   } catch (err) {

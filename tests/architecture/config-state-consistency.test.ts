@@ -447,6 +447,112 @@ test("WB-01 SC#4 (bare-form autoupdate flip, 2 marketplaces): BOTH config entrie
   }
 });
 
+test("WB-01 SC#4 (cross-scope CMP-3 install): project-scope install via user-scope marketplace fallback declares the adopted marketplace -- reconcile is a no-op", async () => {
+  // CR-02 regression (Phase 56 review): a project-scope install resolving
+  // the marketplace via the CMP-3 user-scope fallback clones the record into
+  // PROJECT state. The write-back must declare BOTH the plugin key AND the
+  // adopted marketplace entry in the project config -- a bare plugin key is
+  // a dangling declaration the planner converts into a marketplace removal
+  // plus a perpetual `<marketplace not declared>` failed row.
+  const { pathSource } = await import("../../extensions/pi-claude-marketplace/domain/source.ts");
+  const { installPlugin } =
+    await import("../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts");
+  const { locationsFor } =
+    await import("../../extensions/pi-claude-marketplace/persistence/locations.ts");
+  const { loadState, saveState } =
+    await import("../../extensions/pi-claude-marketplace/persistence/state-io.ts");
+  const { mkdtemp, rm, writeFile } = await import("node:fs/promises");
+  const { tmpdir: osTmpdir } = await import("node:os");
+
+  // Hermetic HOME so the user-scope marketplace lives under a tmp root.
+  const hermeticHome = await mkdtemp(path.join(osTmpdir(), "pi-cm-cr02-home-"));
+  const prevHome = process.env.HOME;
+  process.env.HOME = hermeticHome;
+
+  const { scopeRoot, cleanup } = await tmpScopeRoot();
+  try {
+    const cwd = scopeRoot.replace(/\/\.pi$/, "");
+    const projectLocations = locationsFor("project", cwd);
+    const userLocations = locationsFor("user", cwd);
+    await mkdir(projectLocations.extensionRoot, { recursive: true });
+    await mkdir(userLocations.extensionRoot, { recursive: true });
+
+    // Seed a USER-scope path marketplace with one single-skill plugin.
+    const marketplaceRoot = path.join(hermeticHome, "mp-src");
+    const pluginRoot = path.join(marketplaceRoot, "plugins", "tool");
+    await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+    await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+    const skillDir = path.join(pluginRoot, "skills", "helper");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(path.join(skillDir, "SKILL.md"), "---\nname: helper\n---\n\nBody.\n");
+    await writeFile(
+      path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "tool", version: "0.0.1" }),
+    );
+    const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+    await writeFile(
+      manifestPath,
+      JSON.stringify({ name: "mp", plugins: [{ name: "tool", source: "./plugins/tool" }] }),
+    );
+    await saveState(userLocations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: {
+        mp: {
+          name: "mp",
+          scope: "user",
+          source: pathSource(marketplaceRoot),
+          addedFromCwd: cwd,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {},
+        },
+      },
+    } as never);
+
+    const ctx = { ui: { notify: (): void => undefined } } as never;
+    const pi = { getAllTools: (): unknown[] => [] } as never;
+
+    // Project-scope install: marketplace "mp" is NOT in project state, so
+    // resolveInstallMarketplaceSource falls back to the user-scope record
+    // (CMP-3) and clones it into project state.
+    await installPlugin({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      marketplace: "mp",
+      plugin: "tool",
+    });
+
+    const cfg = await loadConfig(projectLocations.configJsonPath);
+    assert.equal(cfg.status, "valid");
+    if (cfg.status !== "valid") {
+      return;
+    }
+
+    // The adopted marketplace is DECLARED alongside the plugin key, with the
+    // cloned record's verbatim source.raw.
+    assert.equal(cfg.config.marketplaces?.mp?.source, marketplaceRoot);
+    assert.ok(cfg.config.plugins?.["tool@mp"] !== undefined);
+
+    // Post-command reconcile against (merged project config, project state)
+    // is the EMPTY plan: no marketplacesToRemove, no dangling failed row.
+    const stateAfter = await loadState(projectLocations.extensionRoot);
+    const merged = mergeScopeConfigs(cfg.config, {});
+    const plan = planReconcile(merged, stateAfter, "project");
+    assert.deepEqual(plan, emptyReconcilePlan("project"));
+  } finally {
+    if (prevHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = prevHome;
+    }
+
+    await rm(hermeticHome, { recursive: true, force: true });
+    await cleanup();
+  }
+});
+
 test("WR-09 orchestrated-mode SKIP: addMarketplace with notifications.mode 'orchestrated' does NOT touch the config file", async () => {
   const { fixtureMarketplaceDir, makeMockGitOps } = await import("../helpers/git-mock.ts");
   const { locationsFor } =
