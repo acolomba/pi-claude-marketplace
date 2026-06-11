@@ -73,6 +73,8 @@ import {
 import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
+import { loadConfig } from "../../persistence/config-io.ts";
+import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
@@ -105,6 +107,7 @@ import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
 import type { ParsedSource } from "../../domain/source.ts";
+import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
@@ -158,6 +161,12 @@ export interface UpdatePluginsOptions {
    * accept this flag; cascade-driven re-installs always omit `model:`.
    */
   readonly mapModel?: boolean;
+  /**
+   * WB-01 / WB-02 / Pitfall 2 (Phase 56 Plan 03): when true, target
+   * `claude-plugins.local.json` instead of `claude-plugins.json` for
+   * write-back on the direct path.
+   */
+  readonly local?: boolean;
 }
 
 /**
@@ -275,6 +284,9 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
         // resolves to false at the bridge call site so cascade re-installs
         // always omit `model:`.
         mapModel: opts.mapModel ?? false,
+        // WB-01 / Pitfall 2: thread `--local` for the direct-path
+        // write-back target selection.
+        ...(opts.local === true && { local: true }),
       });
     } catch (err) {
       // PUP-9 direct path: phase-2-or-earlier throws (including PI-14
@@ -558,6 +570,14 @@ interface ThreePhaseArgs {
    * via `args.mapModel ?? false` in `prepareUpdateHandles`.
    */
   readonly mapModel?: boolean;
+  /**
+   * WB-01 / WB-02 / Pitfall 2 (Phase 56 Plan 03): when true, target
+   * `claude-plugins.local.json` instead of `claude-plugins.json` for the
+   * direct-path write-back. The cascade path (`cascade: true`) SKIPS
+   * write-back regardless -- the marketplace autoupdate cascade owns its
+   * own config writes (mirrors WR-09 orchestrated-mode semantics).
+   */
+  readonly local?: boolean;
 }
 
 interface PrepHandles {
@@ -922,7 +942,7 @@ async function finalizeUpdateRecord(
 ): Promise<void> {
   const { plugin, marketplace, locations } = args;
   const { installable, toVersion } = preflight;
-  await withStateGuard(locations, (s) => {
+  await withStateGuard(locations, async (s) => {
     const sMp = s.marketplaces[marketplace];
     if (sMp === undefined) {
       throw new Error(
@@ -978,7 +998,64 @@ async function finalizeUpdateRecord(
     }
 
     sRecord.updatedAt = new Date().toISOString();
+
+    // WB-01 / A7 / Pitfall 5: deep-equal short-circuited config write-back
+    // on the all-success arm. SKIPPED in cascade mode (the marketplace
+    // autoupdate cascade owns its own writes; mirrors WR-09 orchestrated-
+    // mode semantics). The deep-equal gate compares the prospective
+    // `{...existing, ...patch}` shape against the existing entry; the
+    // current plugin entry shape carries no version field, so the patch
+    // is `{}` and a CHANGED update with a byte-stable existing entry
+    // produces a no-op (preserving RECON-05 mtime stability).
+    if (!args.cascade && phase3aFailures.length === 0) {
+      await maybeWritePluginConfigBackUpdate(locations, marketplace, plugin, args.local === true);
+    }
   });
+}
+
+/**
+ * WB-01 / A7: deep-equal short-circuited plugin write-back for `update`.
+ * Mirrors `reinstall.ts::maybeWritePluginConfigBack`. Loads the target
+ * config (base or local per --local), compares the prospective patched
+ * entry against the existing entry, and writes back ONLY when they differ.
+ * RECON-05 fixed-point: a byte-stable update leaves the config file's
+ * mtime + bytes untouched.
+ */
+async function maybeWritePluginConfigBackUpdate(
+  locations: ScopedLocations,
+  marketplace: string,
+  plugin: string,
+  local: boolean,
+): Promise<void> {
+  const targetConfigPath = local ? locations.configLocalJsonPath : locations.configJsonPath;
+  const cfg = await loadConfig(targetConfigPath);
+  if (cfg.status === "invalid") {
+    return;
+  }
+
+  const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
+  const key = `${plugin}@${marketplace}`;
+  const existingEntry = current.plugins?.[key];
+  // The patched shape is `{...existing, ...{}}` -- always equal to the
+  // existing entry (D-04: update preserves the consume-time `enabled`
+  // default and any forward-compat keys; the patch carries no per-update
+  // mutation). So the gate is simply: if the key is ALREADY PRESENT,
+  // writing back would produce a byte-identical file -- SKIP to preserve
+  // RECON-05 mtime stability. If the key is ABSENT, writing back ADDS
+  // the key -- WRITE so the user-authored config gains the implicit
+  // declaration.
+  if (existingEntry !== undefined) {
+    return;
+  }
+
+  await writePluginConfigEntry(
+    current,
+    targetConfigPath,
+    locations.scopeRoot,
+    plugin,
+    marketplace,
+    {},
+  );
 }
 
 async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOutcome> {

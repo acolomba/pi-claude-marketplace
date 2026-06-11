@@ -54,6 +54,8 @@ import {
 import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
+import { loadConfig } from "../../persistence/config-io.ts";
+import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
@@ -86,6 +88,7 @@ import type { CommandsReplacement, PreparedCommandsStaging } from "../../bridges
 import type { McpReplacement, PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging, SkillsReplacement } from "../../bridges/skills/index.ts";
 import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
+import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
@@ -128,6 +131,14 @@ export interface ReinstallPluginOptions {
   readonly plugin: string;
   readonly force?: boolean;
   readonly render?: "default" | "none";
+  /**
+   * WB-01 / WB-02 / Pitfall 2 (Phase 56 Plan 03): when true, target
+   * `claude-plugins.local.json` instead of `claude-plugins.json`. The base
+   * file is NEVER touched on the --local path; loadConfig's `absent` arm
+   * yields an empty starting shape that saveConfig writes back to the local
+   * path.
+   */
+  readonly local?: boolean;
   /** @internal Test-only seams; production callers omit this. */
   readonly __deps?: ReinstallPluginDeps;
 }
@@ -150,6 +161,12 @@ export interface ReinstallPluginsOptions {
   readonly cwd: string;
   readonly target: ReinstallPluginsTarget;
   readonly force?: boolean;
+  /**
+   * WB-01 / WB-02 / Pitfall 2 (Phase 56 Plan 03): when true, target
+   * `claude-plugins.local.json` instead of `claude-plugins.json` for
+   * write-back. The base file is NEVER touched on the --local path.
+   */
+  readonly local?: boolean;
 }
 
 interface PreparedHandles {
@@ -354,6 +371,7 @@ export async function reinstallPlugins(
           plugin: target.plugin,
           render: "none",
           ...(opts.force === undefined ? {} : { force: opts.force }),
+          ...(opts.local === true && { local: true }),
         }),
       );
     } catch (err) {
@@ -1015,6 +1033,16 @@ async function runLockedReinstall(
 
   try {
     updateStateRecord(tx.state, marketplace, plugin, oldSnapshot, installable, handles);
+
+    // WB-01 / A7 / Pitfall 5: deep-equal short-circuit preserves RECON-05
+    // mtime invariant. Reinstall is invoked by the user (both standalone and
+    // bulk-cascade paths are user-initiated); there is no orchestrated /
+    // reconcile-driven caller today. The deep-equal gate compares the
+    // prospective `{...existing, ...patch}` shape against the existing
+    // entry; a byte-stable patch (the common reinstall case -- entry shape
+    // unchanged) leaves the config file untouched.
+    await maybeWritePluginConfigBack(tx.state, locations, marketplace, plugin, opts);
+
     await tx.save();
   } catch (err) {
     throw errorWithManualRecovery(err, await rollbackReplacements(replacements));
@@ -1028,6 +1056,64 @@ async function runLockedReinstall(
     outcome: successOutcome(scope, marketplace, plugin, oldSnapshot, handles),
     bridgeWarnings,
   };
+}
+
+/**
+ * WB-01 / A7: deep-equal short-circuited plugin write-back. Loads the
+ * target config (base or local per --local), compares the prospective
+ * patched entry against the existing entry, and writes back ONLY when
+ * they differ. RECON-05 fixed-point: a byte-stable no-op reinstall leaves
+ * the config file's mtime + bytes untouched.
+ *
+ * Tx is the OUTER state transaction; we DO NOT throw on CFG-03 here --
+ * the post-success path would have written state already by the time
+ * this runs in update.ts; for reinstall the throw is caught and the
+ * outer catch wraps it as a manual-recovery error. To keep semantics
+ * simple and avoid partial-rollback complexity, an invalid config skips
+ * the write-back silently (loadConfig returns `invalid`; we treat it as
+ * "no prior shape -> bail without write" so the existing record on disk
+ * survives the reinstall unchanged). The CFG-03 abort is an install/
+ * uninstall concern; reinstall/update operate on already-installed
+ * plugins where a transient config corruption should NOT block the
+ * artefact swap.
+ */
+async function maybeWritePluginConfigBack(
+  _state: ExtensionState,
+  locations: ScopedLocations,
+  marketplace: string,
+  plugin: string,
+  opts: { readonly local?: boolean },
+): Promise<void> {
+  const targetConfigPath =
+    opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath;
+  const cfg = await loadConfig(targetConfigPath);
+  if (cfg.status === "invalid") {
+    return;
+  }
+
+  const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
+  const key = `${plugin}@${marketplace}`;
+  const existingEntry = current.plugins?.[key];
+  // The patched shape is `{...existing, ...{}}` -- always equal to the
+  // existing entry (D-04: reinstall preserves the consume-time `enabled`
+  // default and any forward-compat keys; the patch carries no per-reinstall
+  // mutation). So the gate is simply: if the key is ALREADY PRESENT,
+  // writing back would produce a byte-identical file -- SKIP to preserve
+  // RECON-05 mtime stability. If the key is ABSENT, writing back ADDS
+  // the key -- WRITE so the user-authored config gains the implicit
+  // declaration.
+  if (existingEntry !== undefined) {
+    return;
+  }
+
+  await writePluginConfigEntry(
+    current,
+    targetConfigPath,
+    locations.scopeRoot,
+    plugin,
+    marketplace,
+    {},
+  );
 }
 
 async function loadCachedEntry(

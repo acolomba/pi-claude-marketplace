@@ -2201,3 +2201,183 @@ test("TR-04 retry: partial-success-state-converges-to-new-version", async () => 
     }
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// Phase 56 Plan 03 (Task 2): WB-01/WB-02 deep-equal short-circuit + --local
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WB-01 / A7: CHANGED update with ABSENT entry writes the implicit declaration", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-wb01-write-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      // Pre-existing config has NO entry for hello@mp -> write-back fires
+      // to add the implicit declaration.
+      const { ctx, pi } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const cfg = await loadConfig(locations.configJsonPath);
+      assert.equal(cfg.status, "valid");
+      if (cfg.status === "valid") {
+        assert.deepEqual(cfg.config.plugins?.["hello@mp"], {});
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WB-01 / A7: changed update with a DIFFERENT existing entry writes back (preserves D-09 unknown keys)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-wb01-diff-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      // Seed the config with an existing entry that carries a forward-compat
+      // key. The patched shape `{...existing, ...{}} === existing`, so the
+      // deep-equal short-circuit fires and the file stays byte-stable.
+      const { saveConfig, loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      await saveConfig(
+        locations.configJsonPath,
+        {
+          schemaVersion: 1,
+          plugins: { "hello@mp": { enabled: false, futureKey: "x" } as never },
+        },
+        locations.scopeRoot,
+      );
+      const bytesBefore = await readFile(locations.configJsonPath);
+
+      const { ctx, pi } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      const bytesAfter = await readFile(locations.configJsonPath);
+      assert.deepEqual(bytesAfter, bytesBefore, "RECON-05: no-op patch -> byte-stable config");
+
+      // Unknown forward-compat key preserved.
+      const after = await loadConfig(locations.configJsonPath);
+      assert.equal(after.status, "valid");
+      if (after.status === "valid") {
+        const entry = after.config.plugins?.["hello@mp"] as Record<string, unknown> | undefined;
+        assert.equal(entry?.enabled, false);
+        assert.equal(entry?.futureKey, "x");
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WB-01 / Pitfall 5: up-to-date update does NOT write the config (RECON-05 fixed-point preserved)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-wb01-uptodate-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      // Seed config with the entry so we can assert it's untouched.
+      const { saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      await saveConfig(
+        locations.configJsonPath,
+        { schemaVersion: 1, plugins: { "hello@mp": {} } },
+        locations.scopeRoot,
+      );
+      const bytesBefore = await readFile(locations.configJsonPath);
+
+      const { ctx, pi } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // Up-to-date short-circuits BEFORE the 3-phase swap; finalizeUpdateRecord
+      // never runs, so no write-back fires.
+      const bytesAfter = await readFile(locations.configJsonPath);
+      assert.deepEqual(bytesAfter, bytesBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WB-01 / Pitfall 2: --local update targets the local file; base file untouched", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-wb01-local-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      // Seed BASE config with a forward-compat key; --local update MUST NOT
+      // touch it. Local file starts absent; the no-op patch keeps it absent.
+      const { saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      await saveConfig(
+        locations.configJsonPath,
+        { schemaVersion: 1, plugins: { "hello@mp": { futureKey: "x" } as never } },
+        locations.scopeRoot,
+      );
+      const baseBytesBefore = await readFile(locations.configJsonPath);
+
+      const { ctx, pi } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        local: true,
+      });
+
+      // Base bytes UNCHANGED (Pitfall 2: --local NEVER touches the base file).
+      const baseBytesAfter = await readFile(locations.configJsonPath);
+      assert.deepEqual(baseBytesAfter, baseBytesBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});

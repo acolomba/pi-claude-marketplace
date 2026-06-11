@@ -2302,3 +2302,156 @@ test("GAP-19: reinstallPlugin updateStateRecord concurrent-removal detection", a
     }
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// Phase 56 Plan 03 (Task 2): WB-01/WB-02 deep-equal short-circuit + --local
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WB-01 / A7: reinstall with EQUAL existing entry leaves config byte- and mtime-unchanged (RECON-05)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wb01-noop-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "s", command: "c" },
+        install: true,
+      });
+
+      // seedMarketplace -> installPlugin already wrote claude-plugins.json
+      // with the entry `{}`. Snapshot bytes + mtime BEFORE reinstall.
+      const bytesBefore = await readFile(locations.configJsonPath);
+      const statBefore = await (await import("node:fs/promises")).stat(locations.configJsonPath);
+
+      // Pause to ensure any write would produce a different mtime.
+      await new Promise((r) => setTimeout(r, 50));
+
+      const { ctx, pi } = makeCtx();
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      assert.equal(outcome.partition, "reinstalled");
+
+      const bytesAfter = await readFile(locations.configJsonPath);
+      const statAfter = await (await import("node:fs/promises")).stat(locations.configJsonPath);
+      assert.deepEqual(bytesAfter, bytesBefore);
+      assert.equal(statAfter.mtimeMs, statBefore.mtimeMs, "config mtime MUST be unchanged");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WB-01 / A7: reinstall with DIFFERENT existing entry writes back the patched shape (forward-compat key preserved)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wb01-diff-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "s", command: "c" },
+        install: true,
+      });
+
+      // Overwrite the entry with a known-different shape carrying an unknown
+      // forward-compat key. The reinstall MUST preserve the unknown key
+      // (D-09) -- the deep-equal short-circuit fires when the prospective
+      // patched shape ({} spread over existing) == existing.
+      const { saveConfig, loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const cur = await loadConfig(locations.configJsonPath);
+      assert.equal(cur.status, "valid");
+      if (cur.status !== "valid") {
+        return;
+      }
+
+      await saveConfig(
+        locations.configJsonPath,
+        {
+          schemaVersion: 1,
+          plugins: { "hello@mp": { enabled: false, futureKey: "x" } as never },
+        },
+        locations.scopeRoot,
+      );
+
+      const { ctx, pi } = makeCtx();
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      assert.equal(outcome.partition, "reinstalled");
+
+      // Existing shape `{ enabled: false, futureKey: "x" }` deep-equals
+      // the spread-over-existing patched shape -- byte-stable, write
+      // SKIPPED. The unknown key MUST still be present (no clobber).
+      const after = await loadConfig(locations.configJsonPath);
+      assert.equal(after.status, "valid");
+      if (after.status === "valid") {
+        const entry = after.config.plugins?.["hello@mp"] as Record<string, unknown> | undefined;
+        assert.equal(entry?.enabled, false);
+        assert.equal(entry?.futureKey, "x");
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WB-01 / Pitfall 2: --local reinstall targets the local file; base file untouched", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wb01-local-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "s", command: "c" },
+        install: true,
+      });
+
+      // Snapshot base bytes BEFORE the --local reinstall.
+      const baseBytesBefore = await readFile(locations.configJsonPath);
+
+      const { ctx, pi } = makeCtx();
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        local: true,
+      });
+      assert.equal(outcome.partition, "reinstalled");
+
+      // Base bytes UNCHANGED on the --local path (Pitfall 2: --local NEVER
+      // touches the base file).
+      const baseBytesAfter = await readFile(locations.configJsonPath);
+      assert.deepEqual(baseBytesAfter, baseBytesBefore);
+
+      // Local file received the write -- the local file was ABSENT before
+      // the reinstall, so the key is missing -> WRITE fires to add the
+      // implicit declaration.
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const localCfg = await loadConfig(locations.configLocalJsonPath);
+      assert.equal(localCfg.status, "valid");
+      if (localCfg.status === "valid") {
+        assert.deepEqual(localCfg.config.plugins?.["hello@mp"], {});
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});

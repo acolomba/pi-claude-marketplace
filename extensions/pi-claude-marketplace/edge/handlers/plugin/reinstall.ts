@@ -14,6 +14,7 @@ import { reinstallPlugins } from "../../../orchestrators/plugin/reinstall.ts";
 import { errorMessage } from "../../../shared/errors.ts";
 import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseArgs } from "../../args.ts";
+import { extractLocalFlag } from "../shared.ts";
 
 import { splitPluginMarketplaceRef } from "./shared.ts";
 
@@ -21,15 +22,22 @@ import type { ReinstallPluginsTarget } from "../../../orchestrators/plugin/reins
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
 const USAGE =
-  "Usage: /claude:plugin reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--force]";
+  "Usage: /claude:plugin reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--force] [--local]";
 
 export function makeReinstallHandler(
   pi: ExtensionAPI,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
+    // Shared scanner; see edge/handlers/shared.ts. `--force` is
+    // downstream-consumed; pass through verbatim.
+    const localFlag = extractLocalFlag(args, ctx, USAGE, ["--force"]);
+    if (localFlag === undefined) {
+      return;
+    }
+
     let parsed: ReturnType<typeof parseArgs>;
     try {
-      parsed = parseArgs(args);
+      parsed = parseArgs(localFlag.residualArgs);
     } catch (err) {
       notifyUsageError(ctx, { message: errorMessage(err), usage: USAGE });
       return;
@@ -65,6 +73,7 @@ export function makeReinstallHandler(
       target,
       ...(parsed.scope !== undefined && { scope: parsed.scope }),
       ...(force && { force: true }),
+      ...(localFlag.local && { local: true }),
     });
   };
 }
