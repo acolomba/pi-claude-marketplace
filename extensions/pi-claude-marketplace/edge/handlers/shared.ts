@@ -1,0 +1,72 @@
+// edge/handlers/shared.ts
+//
+// Phase 56 Plan 01 Task 2 -- cross-cutting edge-handler helpers shared by
+// both the marketplace/ and plugin/ subtrees. This file sits at the
+// edge/handlers/ directory root, alongside `edge/handlers/marketplace/`
+// and `edge/handlers/plugin/` -- each subtree retains its own domain-
+// specific `shared.ts` (e.g. `parseRequiredPluginMarketplaceRef`); this
+// file hosts ONLY helpers that are genuinely cross-cutting.
+//
+// extractLocalFlag was originally a private function in
+// `edge/handlers/plugin/enable-disable.ts` (Phase 54 frozen). Plans 02 and
+// 03 of this phase migrate the existing handler to import from here so
+// every mutating-command handler consumes one canonical scanner.
+//
+// WR-02 (Phase 54 review) corrected a regression where `--local` left in
+// the residual args caused `parseRequiredPluginMarketplaceRef` to treat it
+// as a positional and reject the entire command with a misleading
+// "Invalid <plugin>@<marketplace> ref: '--local'." error. The scanner
+// REMOVES `--local` from the residual so flag position cannot change the
+// outcome -- matching how `--scope` is consumed by the downstream parser
+// itself.
+
+import { notifyUsageError } from "../../shared/notify.ts";
+
+import type { ExtensionCommandContext } from "../../platform/pi-api.ts";
+
+/**
+ * Position-independent `--local` flag scanner. Walks the tokenised args,
+ * recognises `--scope <value>` as a downstream-consumed pair, recognises
+ * `--local` as the flag this helper extracts, and rejects any other long
+ * flag via `notifyUsageError`.
+ *
+ * Returns `{ local, residualArgs }` where `residualArgs` has every `--local`
+ * token REMOVED. Returns `undefined` when an unknown long flag was found
+ * (the usage error has already been notified; caller should early-return).
+ */
+export function extractLocalFlag(
+  args: string,
+  ctx: ExtensionCommandContext,
+  usage: string,
+): { local: boolean; residualArgs: string } | undefined {
+  let local = false;
+  const tokens = args.split(/\s+/).filter((t) => t.length > 0);
+  let i = 0;
+  while (i < tokens.length) {
+    const tok = tokens[i];
+    if (tok === undefined) {
+      break;
+    }
+
+    if (tok === "--scope") {
+      // Consume the value (handled by the downstream domain parser).
+      i += 2;
+      continue;
+    }
+
+    if (tok === "--local") {
+      local = true;
+      i += 1;
+      continue;
+    }
+
+    if (tok.startsWith("--")) {
+      notifyUsageError(ctx, { message: `Unknown flag: "${tok}".`, usage });
+      return undefined;
+    }
+
+    i += 1;
+  }
+
+  return { local, residualArgs: tokens.filter((t) => t !== "--local").join(" ") };
+}
