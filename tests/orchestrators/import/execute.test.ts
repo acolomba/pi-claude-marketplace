@@ -2,9 +2,17 @@
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+
+// Hermetic guard: Phase 56 wired config write-back into importClaudeSettings, so
+// user-scope tests that are not wrapped in withHermeticHome would otherwise write
+// fixture entries into the developer's real ~/.pi/agent/claude-plugins.json.
+// Redirect the agent dir for the whole file; withHermeticHome-wrapped tests
+// delete this variable themselves, so the two mechanisms compose.
+process.env.PI_CODING_AGENT_DIR = mkdtempSync(path.join(tmpdir(), "import-test-agent-"));
 
 import { importClaudeSettings } from "../../../extensions/pi-claude-marketplace/orchestrators/import/index.ts";
 import { loadConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
