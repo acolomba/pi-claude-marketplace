@@ -39,6 +39,7 @@ import path from "node:path";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
+import { StateLockHeldError } from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
@@ -147,6 +148,25 @@ async function readPassForScope(scope: Scope, cwd: string): Promise<ScopeReadRes
 
 /** Closed-set reason for an unexpected orchestrator throw (post-classifier fallback). */
 function classifyOrchestratorThrow(err: unknown): import("../../shared/notify.ts").ContentReason {
+  return narrowProbeError(err);
+}
+
+/**
+ * WR-01: closed-set reason for a per-scope read-pass throw. A concurrent
+ * process holding the scope lock surfaces as `lock held`; a corrupt
+ * state.json surfaces as `unparseable` (loadState wraps the JSON.parse
+ * SyntaxError one level deep in `Error.cause`, so unwrap before falling back
+ * to the generic probe classifier).
+ */
+function classifyReadPassThrow(err: unknown): import("../../shared/notify.ts").ContentReason {
+  if (err instanceof StateLockHeldError) {
+    return "lock held";
+  }
+
+  if (err instanceof Error && err.cause instanceof SyntaxError) {
+    return "unparseable";
+  }
+
   return narrowProbeError(err);
 }
 
@@ -526,7 +546,26 @@ export async function applyReconcile(opts: ApplyReconcileOptions): Promise<void>
   const outcomes: PerEntryOutcome[] = [];
 
   for (const scope of scopes) {
-    const readResult = await readPassForScope(scope, opts.cwd);
+    // WR-01 (Phase 55 review): per-scope failure isolation. A read-pass
+    // throw (corrupt/unparseable state.json, StateLockHeldError from a
+    // concurrent process, an EACCES on the lock file) must NOT discard the
+    // sibling scope's already-accumulated outcomes or skip its reconcile --
+    // the scopes lock independently. The throw is coerced into the
+    // documented `invalid-block` state-load failure arm (basename subject,
+    // closed-set reason) so it surfaces as a structured `(failed)` row in
+    // the single cascade instead of aborting applyReconcile wholesale.
+    let readResult: ScopeReadResult;
+    try {
+      readResult = await readPassForScope(scope, opts.cwd);
+    } catch (err) {
+      outcomes.push({
+        kind: "invalid-block",
+        scope,
+        marketplace: "state.json",
+        reason: classifyReadPassThrow(err),
+      });
+      continue;
+    }
 
     // CFG-03 / state-load invalid rows surfaced first; the plan is undefined
     // for that scope so we skip the apply pass.

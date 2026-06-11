@@ -397,6 +397,82 @@ test("RECON-05 (back-to-back no-op): two consecutive applyReconcile calls agains
   });
 });
 
+test("WR-01 (per-scope isolation): corrupt project-scope state.json -> structured (failed) {unparseable} row on the state.json subject; the user scope still reconciles and the single notify survives", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // Project scope: a config that would otherwise plan work + a CORRUPT
+    // state.json so the read pass throws inside withStateGuard.
+    const projectScopeRoot = path.join(cwd, ".pi");
+    const extensionRoot = path.join(projectScopeRoot, "pi-claude-marketplace");
+    await mkdir(extensionRoot, { recursive: true });
+    await writeFile(
+      path.join(projectScopeRoot, "claude-plugins.json"),
+      JSON.stringify({ schemaVersion: 1, marketplaces: {} }, null, 2),
+      "utf8",
+    );
+    await writeFile(path.join(extensionRoot, "state.json"), "{ not json", "utf8");
+
+    // User scope: a recorded-but-undeclared marketplace so the sibling
+    // scope's apply pass performs a (removed) action.
+    const userScopeRoot = path.join(home, ".pi", "agent");
+    const userExtensionRoot = path.join(userScopeRoot, "pi-claude-marketplace");
+    await mkdir(userExtensionRoot, { recursive: true });
+    await writeFile(
+      path.join(userScopeRoot, "claude-plugins.json"),
+      JSON.stringify({ schemaVersion: 1, marketplaces: {} }, null, 2),
+      "utf8",
+    );
+    await writeFile(
+      path.join(userExtensionRoot, "state.json"),
+      JSON.stringify(
+        {
+          schemaVersion: 1,
+          marketplaces: {
+            "user-manual-mp": {
+              name: "user-manual-mp",
+              scope: "user",
+              source: { kind: "path", raw: "/tmp/nowhere" },
+              plugins: {},
+              autoupdate: false,
+              addedFromCwd: cwd,
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const ctx = makeCtx();
+    // Both scopes (no explicit scope) -- project first, then user.
+    await applyReconcile({
+      ctx: ctx as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+    });
+
+    // ONE notify carrying BOTH the project-scope state-load failure row AND
+    // the user-scope (removed) row -- the throw neither aborted the sibling
+    // scope nor swallowed the accumulated outcomes.
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.equal(args[1], "error");
+    const emitted = args[0];
+    assert.ok(
+      emitted.includes("state.json") && emitted.includes("{unparseable}"),
+      `expected (failed) {unparseable} row on the state.json subject; got:\n${emitted}`,
+    );
+    assert.ok(
+      emitted.includes("user-manual-mp") && emitted.includes("(removed)"),
+      `WR-01: the user scope must still reconcile past the project-scope throw; got:\n${emitted}`,
+    );
+
+    // The corrupt project state.json is untouched (no clobber, no coercion).
+    const rawAfter = await readFile(path.join(extensionRoot, "state.json"), "utf8");
+    assert.equal(rawAfter, "{ not json", "the corrupt state.json must not be rewritten");
+  });
+});
+
 test("CFG-03 / T-55-02-01: invalid claude-plugins.json -> (failed) {invalid manifest} row with BASENAME, that scope's apply skipped (no mass-uninstall)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const projectScopeRoot = path.join(cwd, ".pi");
