@@ -40,7 +40,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 - [ ] **WB-01**: Every mutating command (marketplace add/remove/autoupdate/noautoupdate, plugin install/uninstall/reinstall/update) records its change as a targeted entry-level patch of the base config file, re-read under the scope lock
 - [ ] **WB-02**: A `--local` flag targets `claude-plugins.local.json` instead; `--local` writes never touch the base file
 - [ ] **WB-03**: `import` records imported marketplaces and plugins in the config file
-- [ ] **WB-04**: `bootstrap` records its marketplace and autoupdate setting in the config file
+- [x] **WB-04**: `bootstrap` records its marketplace and autoupdate setting in the config file
 
 ### Enable/Disable
 
@@ -100,7 +100,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WB-01 | Phase 56 | In Progress |
 | WB-02 | Phase 56 | In Progress |
 | WB-03 | Phase 56 | In Progress |
-| WB-04 | Phase 56 | In Progress |
+| WB-04 | Phase 56 | Complete |
 | ENBL-01 | Phase 54 | Complete |
 | ENBL-02 | Phase 54 | Complete |
 | ENBL-03 | Phase 54 | Complete |

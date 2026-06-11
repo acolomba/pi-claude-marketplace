@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.12
 milestone_name: Marketplace and Plugin Config Files
 status: executing
-stopped_at: Plan 56-01 complete (config-write-back helper + edge/handlers/shared.ts + Wave 0 RED architecture tests)
-last_updated: "2026-06-11T02:16:16.436Z"
-last_activity: 2026-06-11 -- Phase 56 execution started
+stopped_at: Plan 56-02 complete (marketplace add/remove/autoupdate write-back + --local; WB-04 bootstrap composed-write smoke)
+last_updated: "2026-06-11T03:30:00.000Z"
+last_activity: 2026-06-10 -- Plan 56-02 complete
 progress:
   total_phases: 34
   completed_phases: 5
   total_plans: 15
-  completed_plans: 12
-  percent: 15
+  completed_plans: 13
+  percent: 16
 ---
 
 # Project State
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 ## Current Position
 
 Phase: 56 (write-back-integration-documentation) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
-Last activity: 2026-06-11 -- Phase 56 execution started
+Last activity: 2026-06-10 -- Plan 56-02 complete
 
 ## Performance Metrics
 
@@ -100,6 +100,7 @@ Last activity: 2026-06-11 -- Phase 56 execution started
 | Phase 55 P02 | ~120m | 2 tasks | 12 files |
 | Phase 55 P03 | ~45m | 1 tasks | 2 files |
 | Phase 56 P01 | ~95m | 3 tasks | 6 files |
+| Phase 56 P02 | ~175m | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -186,6 +187,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 55]: RECON-03 orchestrated-mode foundation landed across the four driven orchestrators (addMarketplace / removeMarketplace / uninstallPlugin / setPluginEnabled) mirroring the Phase 19 InstallPluginNotifications precedent. Each accepts `notifications?: { mode: "standalone" | "orchestrated" }` and returns a typed discriminated `*Outcome` union in orchestrated mode (success arm + collapsed `failed` arm carrying `reason: Reason`, `error: Error`, `cause: string`); setPluginEnabled additionally carries `enabled` / `disabled` / `skipped` arms. Outcome `reason` typed `Reason` (broader than the plan's stated `ContentReason`) so the structural `not added` sentinel flows through the same field (apply.ts Plan 02 will dispatch on the broader closed set). Standalone mode (omitted) byte-identical: catalog-uat + notify-v2 + every existing add/remove/uninstall/enable-disable fixture stays GREEN. Failure-emit helpers (`handleAddFailure`, `emitPartialFailure`, `resolveScopeOrFailedOutcome`, `emitCascadeFailure`, `emitMarketplaceNotAdded`, `outcomeToTypedResult`) extract orchestrated-vs-standalone dispatch into named helpers; cognitive complexity stays inside the SonarJS budget. CR-01 nested-lock contract preserved (setPluginEnabled enable branch still calls runInstallLedger inside withLockedStateTransaction). rethrowPreconditionErrors short-circuits BEFORE the mode branch so the bootstrap composer contract (ATTR-07 Phase 48) is preserved across both modes. T-55-01-01 mitigation contract documented in each Outcome JSDoc -- the Plan 02 apply consumer is contractually required to project `outcome.reason` only and NEVER render raw `error.message`. Zero new REASONS / PLUGIN_STATUSES / MARKETPLACE_STATUSES / STATUS_TOKENS / MARKERS literals (deferred to Plan 02). npm run check GREEN 1689 unit + 7 integration. -- Plan 55-01.
 - [Phase ?]: [Phase 55]: RECON-01..05 closed. ReconcileAppliedCascadeMessage variant + applyReconcile orchestrator + bound-ctx index.ts. Per-scope read pass under withStateGuard (migrate-then-load-then-plan); per-entry apply pass with NO outer lock (CR-01); per-entry try/catch coerces throws into typed failed outcomes (NFR-5 / RECON-03 soft-fail); single notify() per invocation (IL-2 / RECON-04); SILENT on empty-and-clean (NFR-2 / A4 / RECON-05). shouldEmitReloadHint returns false structurally (Pitfall 4 closed). A1 VERIFIED inline by reading agent-session.js (bindExtensions emits session_start BEFORE extendResourcesFromExtensions). enable success maps to (installed) since enabled is not in PLUGIN_STATUSES; zero new closed-set members per RESEARCH Pattern 5 Option A. T-55-02-01/02 mitigations contractual. atomic-supersession preserved across 2 commits. npm run check GREEN 1703 unit + 7 integration. -- Plan 55-02.
 - [Phase 55]: RECON-06 closed + Phase 52 deferred Pitfall 52-2 / 52-4 lock-coverage discharged. Two new integration test files (tests/integration/load-reconcile-race.test.ts + load-reconcile-race-child.ts) covering 3 scenarios: (A) RECON-06 two-process simultaneous-start race against a path-source mp + plugin, asserts exactly-one mp + exactly-one plugin + no orphan staging dirs + both children exit 0 (NFR-2). Per RESEARCH Pitfall 10 the test does NOT assert "exactly one winner" -- the read pass is microsecond-scale and racing is benign; lock-held outcome accepted as soft-fail (non-ok child must carry STATE_LOCK_HELD_PREFIX). (B) Pitfall 52-2 concurrent first-load race: state seeded with legacy autoupdate + ENOENT config; two children race; after both exit config exists with exactly one mp entry + autoupdate captured byte-stably. (C) Pitfall 52-4 D-13 gate single-process integration cover. Zero new source surface in the extension; pure test coverage. 5/5 GREEN back-to-back local runs (no-flake). Architecture gates no-orchestrator-network + config-state-write-seams unchanged. npm run check GREEN 1703 unit + 10 integration. PHASE 55 COMPLETE -- requirements RECON-01..06 all CLOSED; Phase 52 deferred hand-off discharged. -- Plan 55-03.
+- [Phase 56]: Plan 02 marketplace write-back + --local landed. orchestrators/marketplace/{add,remove,autoupdate}.ts converted from withStateGuard to withLockedStateTransaction; CFG-03 abort discipline (basename-only error via synthetic Error sentinel rethrown into a catch arm in remove.ts; ConfigInvalidError + ATTR-07 routing in add.ts; direct Error throw + scope-scoped failure surface in autoupdate.ts); WR-09 orchestrated-mode skip preserved across all 3 entrypoints (Phase 55 frozen contract). add.ts writes opts.rawSource VERBATIM to the config (Phase 53 samePlannedSource contract). remove.ts cascade via deleteMarketplaceConfigEntryWithCascade (Pitfall 4 closed structurally). autoupdate.ts SPLIT-01 + Pitfall 5 idempotency moved to the CONFIG-side (the D-13 scrub strips legacy state.autoupdate once the config exists, so a state-side check would re-classify every same-value flip as fresh and drift mtime breaking RECON-05); MARKETPLACE_CONFIG_ENTRY_SCHEMA requires `source` so the first-time autoupdate write synthesizes source from state's source.raw. edge/handlers/marketplace/{add,remove,autoupdate}.ts gain [--local] in USAGE + extractLocalFlag scanner integration (lifted Phase 56-01 cross-cutting helper); remove handler no longer routes through makeSingleNameMarketplaceHandler (info doesn't take --local). WB-04 covered by a composed-write smoke test (bootstrap.ts source byte-unchanged, RESEARCH A2 + PATTERNS §"bootstrap.ts (composed 2-write)" preserved). 5 cognitive-complexity helpers extracted (reclassifyByConfigTruth / buildAutoupdatePatch / writeAutoupdateBack in autoupdate; runRemoveLockBody / cascadePluginsInPlace / commitFullRemove / surfaceCfgInvalid / resolveRemoveTargetOrSurface in remove). 5 existing state-side autoupdate assertions migrated to read from claude-plugins.json (the new source of truth post D-13 scrub). config-state-consistency.test.ts WB-01 SC#4 add-path skip placeholder flipped LIVE. npm run check GREEN 1752 unit + 10 integration (Phase 56-01 baseline 1728 + 24 new tests). -- Plan 56-02.
 - [Phase 56]: Plan 01 byte-neutral foundation landed. New persistence/config-write-back.ts (5 helpers + BatchedConfigPatch interface, 192 lines) wraps saveConfig with entry-level patch semantics preserving D-09 unknown forward-compat keys; Pitfall 1 structurally enforced (no config-merge.ts / mergeScopeConfigs / loadMergedScopeConfig import) -- the helper signature requires ScopeConfig, never a MergedConfig, so the merged-view-write-back anti-pattern is unrepresentable. deleteMarketplaceConfigEntryWithCascade owns the `*@<marketplace>` plugin-key cascade in ONE place (Pitfall 4). writeBatchedConfigEntries is structurally single-write (exactly one await saveConfig) -- the WB-03 import batched contract. New edge/handlers/shared.ts lifts Phase 54's extractLocalFlag byte-matched modulo identifier renames + import paths; the original at edge/handlers/plugin/enable-disable.ts:49-84 is UNCHANGED (Plan 03 owns the 8-handler atomic migration). Two Wave 0 architecture tests GREEN: tests/architecture/config-state-consistency.test.ts (LIVE smoke proves writeMarketplaceConfigEntry integrates with planReconcile reading side -- 1 declared mp lands in marketplacesToAdd -- + 1 test.skip placeholder for the WB-01 SC#4 full no-op proof, Plan 02/04 flips to live) and tests/architecture/no-split-01-cast-reads.test.ts (baseline-then-shrink walker over the orchestrators tree, ALLOWED_SPLIT_01_AUTOUPDATE_CAST_FILES.size === 6 with 'exactly N' sibling guard; Plan 04 SHRINKS to 0 as each cast site rewires to loadMergedScopeConfig). SPLIT-02 architecture test stays GREEN with allow-list size = 1. Auto-fixed during Task 3: PlannedMarketplaceAdd field is `marketplace` not `name` (typo in initial test draft); unused `readFile` import removed to clear typecheck. npm run check GREEN 1728 unit + 10 integration (Phase 55 baseline 1703 + 25 new tests). -- Plan 56-01.
 
 ### Pending Todos
@@ -233,10 +235,10 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-10T23:22:00.000Z
-Stopped At: Plan 56-01 complete (config-write-back helper + edge/handlers/shared.ts + Wave 0 RED architecture tests)
+Last session: 2026-06-11T03:30:00.000Z
+Stopped At: Plan 56-02 complete (marketplace add/remove/autoupdate write-back + --local; WB-04 bootstrap composed-write smoke)
 Resume File: None
 
 ## Operator Next Steps
 
-- Phase 56 Plan 01 byte-neutral foundation landed (helpers + Wave 0 architecture tests). Next: execute Plan 02 (marketplace add/remove/autoupdate orchestrators wire writeMarketplaceConfigEntry / deleteMarketplaceConfigEntryWithCascade via withLockedStateTransaction; --local discipline + WR-09 orchestrated-mode skip + idempotent-arm skip + verbatim rawSource source field; CFG-03 abort path with path.basename containment for T-53-02-02 / T-54-02-02).
+- Phase 56 Plan 02 marketplace write-back + --local wiring landed (WB-01 / WB-02 / WB-04 closed at marketplace + bootstrap surface). Next: execute Plan 03 (plugin install/uninstall/reinstall/update orchestrators wire writePluginConfigEntry / deletePluginConfigEntry via withLockedStateTransaction; --local discipline + WR-09 orchestrated-mode skip + CFG-03 abort; atomic 8-handler migration of extractLocalFlag to edge/handlers/shared.ts). Plan 02 added a `[Phase 56]` decision row: SPLIT-01 + Pitfall 5 autoupdate idempotency now measured against the CONFIG-side `autoupdate` value (the D-13 scrub strips legacy state autoupdate once the config exists, so a state-side check would re-classify every same-value flip as fresh and drift mtime).
