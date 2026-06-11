@@ -305,7 +305,20 @@ Declarative, version-controllable config files (`claude-plugins.json` + entry-le
   4. After any single mutating command, an immediately following load-time reconcile is a no-op (the config write-back already reflects reality), proven by a config-state-consistency architecture test that also confirms unknown keys are preserved on write-back (WB-01 round-trip integrity).
   5. The README documents the `claude-plugins.json` / `claude-plugins.local.json` workflow and the `.local` gitignore convention so a user knows which file to commit and which to keep local (CFG-04).
 
-**Plans:** TBD
+**Plans:** 4 plans
+
+**Wave 1**
+
+- [ ] 56-01-PLAN.md -- Shared persistence/config-write-back.ts helpers + lift extractLocalFlag to edge/handlers/shared.ts + Wave 0 architecture tests (config-state-consistency + no-split-01-cast-reads baseline) (WB-01, WB-02, WB-03, WB-04 foundation)
+
+**Wave 2** *(blocked on Wave 1 completion; 56-02 and 56-03 parallel-safe -- disjoint marketplace/* vs plugin/* file sets)*
+
+- [ ] 56-02-PLAN.md -- Marketplace orchestrators add/remove/autoupdate + edge handlers wire write-back + --local + WR-09 + CFG-03 disciplines; deleteMarketplaceConfigEntryWithCascade closes Pitfall 4; bootstrap WB-04 satisfied by composition (WB-01, WB-02, WB-04)
+- [ ] 56-03-PLAN.md -- Plugin orchestrators install/uninstall/reinstall/update + edge handlers wire write-back + --local + deep-equal short-circuit (reinstall/update) + WR-09 + CFG-03; Phase 54 enable-disable.ts migrated to shared helpers (WB-01, WB-02)
+
+**Wave 3** *(blocked on Wave 2 completion; milestone GREEN gate)*
+
+- [ ] 56-04-PLAN.md -- import batched per-scope post-pass (WB-03) + SPLIT-01 read-path rewire (7 cast sites; allow-list shrinks to 0) + WB-01 SC#4 LIVE round-trip + reconcile no-op proof + SPLIT-02 architecture-test verification (Phase 52 A1 protocol) + CFG-04 README + milestone v1.12 GREEN gate
 
 <details>
 <summary>Shipped milestones -- Phases 15-44 historical details (v1.4 → v1.8)</summary>
