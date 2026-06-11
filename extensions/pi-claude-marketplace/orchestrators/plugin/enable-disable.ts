@@ -57,7 +57,8 @@
 
 import path from "node:path";
 
-import { loadConfig, saveConfig } from "../../persistence/config-io.ts";
+import { loadConfig } from "../../persistence/config-io.ts";
+import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
@@ -264,31 +265,6 @@ async function runDisableBranch(
   return { kind: "fresh", version: recordedVersion };
 }
 
-/** Write the patched config entry via the SOLE sanctioned saveConfig seam. */
-async function writeConfigEntry(
-  current: ScopeConfig,
-  targetConfigPath: string,
-  scopeRoot: string,
-  plugin: string,
-  marketplace: string,
-  enable: boolean,
-): Promise<void> {
-  const key = `${plugin}@${marketplace}`;
-  const existingPluginEntry = current.plugins?.[key] ?? {};
-  const patched: ScopeConfig = {
-    ...current,
-    schemaVersion: 1,
-    plugins: {
-      ...(current.plugins ?? {}),
-      [key]: {
-        ...existingPluginEntry,
-        enabled: enable,
-      },
-    },
-  };
-  await saveConfig(targetConfigPath, patched, scopeRoot);
-}
-
 /**
  * WR-04: the REAL state-record shape (the exact type
  * `cascadeUnstagePlugin` requires), aliased for readability. No local
@@ -389,13 +365,13 @@ export async function setPluginEnabled(
       // reconcile's INPUT; only standalone commands author declarations.
       if (!orchestrated) {
         const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
-        await writeConfigEntry(
+        await writePluginConfigEntry(
           current,
           targetConfigPath,
           locations.scopeRoot,
           plugin,
           marketplace,
-          enable,
+          { enabled: enable },
         );
       }
 
