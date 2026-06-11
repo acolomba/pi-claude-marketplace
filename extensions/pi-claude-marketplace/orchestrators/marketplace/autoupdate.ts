@@ -321,6 +321,13 @@ function buildAutoupdatePatch(
  * patch), so a bare-form flip over N marketplaces persisted only the LAST
  * one. The batched form applies all N patches in memory before the single
  * atomic save, which also makes a mid-write failure all-or-nothing (NFR-3).
+ *
+ * WR-06(b) (Phase 56 review): an entry is SKIPPED from the batch when no
+ * string `source` can be synthesized for a first-time write (config entry
+ * absent AND the state record's `source.raw` is not a string -- hand-edited
+ * or legacy state). Including it would trip `saveConfig`'s required-`source`
+ * invariant throw, which the failure router narrows to a lying `{not found}`
+ * row -- a misclassification of a config write refusal.
  */
 async function writeAutoupdateBack(
   current: ScopeConfig,
@@ -332,7 +339,19 @@ async function writeAutoupdateBack(
 ): Promise<void> {
   const marketplaces: Record<string, Partial<MarketplaceConfigEntry>> = {};
   for (const name of changed) {
-    marketplaces[name] = buildAutoupdatePatch(current, state, name, enable);
+    const patch = buildAutoupdatePatch(current, state, name, enable);
+    const hasConfigSource = current.marketplaces?.[name]?.source !== undefined;
+    if (!hasConfigSource && patch.source === undefined) {
+      // WR-06(b): unsynthesizable source -- skip rather than let the
+      // saveConfig invariant throw masquerade as `{not found}`.
+      continue;
+    }
+
+    marketplaces[name] = patch;
+  }
+
+  if (Object.keys(marketplaces).length === 0) {
+    return;
   }
 
   await writeBatchedConfigEntries(current, targetConfigPath, scopeRoot, { marketplaces });
