@@ -156,7 +156,7 @@ test("importClaudeSettings source mismatch skips dependent plugins without calli
           },
         },
       }),
-      addMarketplace: async () => undefined,
+      addMarketplace: async () => ({ status: "added", name: "mp" }) as const,
       installPlugin: async (opts) => {
         installed.push(`${opts.plugin}@${opts.marketplace}`);
         return {
@@ -206,7 +206,7 @@ test("importClaudeSettings treats cross-kind source as mismatch (github planned,
           },
         },
       }),
-      addMarketplace: async () => undefined,
+      addMarketplace: async () => ({ status: "added", name: "mp" }) as const,
       installPlugin: async (opts) => {
         installed.push(opts.plugin);
         return {
@@ -272,7 +272,7 @@ test("importClaudeSettings skips when github source matches owner and repo", asy
           },
         },
       }),
-      addMarketplace: async () => undefined,
+      addMarketplace: async () => ({ status: "added", name: "mp" }) as const,
       installPlugin: async (opts) => {
         installed.push(opts.plugin);
         return {
@@ -288,6 +288,74 @@ test("importClaudeSettings skips when github source matches owner and repo", asy
   assert.deepEqual(installed, []);
   assert.equal(result.skippedExistingMarketplaces[0]?.marketplace, "mp");
   assert.equal(result.skippedExistingPlugins[0]?.plugin, "plugin");
+});
+
+test("WR-07: a typed orchestrated add failure is NOT recorded as (added) -- dependent plugins are blocked, the cause is attributed, and exactly ONE cascade notify fires", async () => {
+  const { ctx, pi, notifications } = makeCtx();
+  const installed: string[] = [];
+
+  const result = await importClaudeSettings({
+    ctx,
+    pi,
+    cwd: "/tmp/project",
+    selectedScopes: ["user"],
+    deps: {
+      loadSettings: async () => ({
+        paths: { basePath: "base", localPath: "local" },
+        settings: {
+          enabledPlugins: { "a@mp-a": true, "b@mp-b": true },
+          extraKnownMarketplaces: { "mp-a": { directory: "./a" }, "mp-b": { directory: "./b" } },
+        },
+        diagnostics: [],
+      }),
+      loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
+      // Pre-Phase-55-review defect: a classified precondition failure
+      // (duplicate name / stale clone / invalid manifest / ...) did NOT
+      // throw in standalone mode, so the import recorded the marketplace as
+      // (added) and never blocked its plugins. The orchestrated typed
+      // outcome must dispatch to the failure path instead.
+      addMarketplace: async (opts) => {
+        if (opts.rawSource === "./a") {
+          return {
+            status: "failed",
+            reason: "duplicate name",
+            error: new Error('Marketplace "mp-a" already added.'),
+            cause: 'Marketplace "mp-a" already added.',
+          } as const;
+        }
+
+        return { status: "added", name: "mp-b" } as const;
+      },
+      installPlugin: async (opts) => {
+        installed.push(`${opts.plugin}@${opts.marketplace}`);
+        return {
+          status: "installed",
+          resourcesChanged: false,
+          declaresAgents: false,
+          declaresMcp: false,
+        };
+      },
+    },
+  });
+
+  // mp-a never recorded as added; its dependent plugin was blocked.
+  assert.deepEqual(installed, ["b@mp-b"]);
+  assert.equal(
+    result.addedMarketplaces.some((m) => m.marketplace === "mp-a"),
+    false,
+    "a failed add must NOT appear in addedMarketplaces",
+  );
+  assert.equal(result.marketplaceFailures[0]?.marketplace, "mp-a");
+  assert.equal(result.marketplaceFailures[0]?.cause, 'Marketplace "mp-a" already added.');
+  assert.equal(result.warnings.find((w) => w.ref === "a@mp-a")?.reason, "marketplace-failed");
+
+  // One-cascade-per-command discipline: orchestrated mode suppressed the
+  // standalone failure notify, so exactly ONE notification fires.
+  assert.equal(notifications.length, 1);
+  assert.equal(notifications[0]?.severity, "error");
+  const message = notifications[0]?.message ?? "";
+  assert.match(message, /⊘ mp-a \[user\] \(failed\)/);
+  assert.match(message, /● mp-b \[user\] \(added\)\n {2}● b \(installed\)/);
 });
 
 test("importClaudeSettings marketplace add failure skips only dependent plugins", async () => {
@@ -313,6 +381,8 @@ test("importClaudeSettings marketplace add failure skips only dependent plugins"
         if (opts.rawSource === "./a") {
           throw new Error("clone failed");
         }
+
+        return { status: "added", name: "mp-b" } as const;
       },
       installPlugin: async (opts) => {
         installed.push(`${opts.plugin}@${opts.marketplace}`);
@@ -373,7 +443,7 @@ test("importClaudeSettings classifies unavailable and unexpected plugin failures
           },
         },
       }),
-      addMarketplace: async () => undefined,
+      addMarketplace: async () => ({ status: "added", name: "mp" }) as const,
       installPlugin: async (opts) => {
         attempted.push(opts.plugin);
         if (opts.plugin === "missing") {
@@ -463,7 +533,7 @@ test("importClaudeSettings catches unexpected installPlugin throws and surfaces 
           },
         },
       }),
-      addMarketplace: async () => undefined,
+      addMarketplace: async () => ({ status: "added", name: "mp" }) as const,
       installPlugin: async (opts) => {
         attempted.push(opts.plugin);
         if (opts.plugin === "boom") {
@@ -542,7 +612,7 @@ test("importClaudeSettings continues to next scope after unexpected installPlugi
           },
         },
       }),
-      addMarketplace: async () => undefined,
+      addMarketplace: async () => ({ status: "added", name: "mp" }) as const,
       installPlugin: async (opts) => {
         attempted.push(`${opts.scope}:${opts.plugin}`);
         if (opts.scope === "project") {
@@ -611,7 +681,7 @@ test("importClaudeSettings classifies uninstallable plugins as warnings without 
           },
         },
       }),
-      addMarketplace: async () => undefined,
+      addMarketplace: async () => ({ status: "added", name: "mp" }) as const,
       installPlugin: async (opts) => {
         attempted.push(opts.plugin);
         if (opts.plugin === "blocked") {
@@ -676,7 +746,7 @@ test("importClaudeSettings propagates declaresAgents=true (agents-only) onto out
         diagnostics: [],
       }),
       loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
-      addMarketplace: async () => undefined,
+      addMarketplace: async () => ({ status: "added", name: "mp" }) as const,
       installPlugin: async () => ({
         status: "installed",
         resourcesChanged: true,
@@ -714,7 +784,7 @@ test("importClaudeSettings propagates declaresMcp=true (mcp-only) onto outcome a
         diagnostics: [],
       }),
       loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
-      addMarketplace: async () => undefined,
+      addMarketplace: async () => ({ status: "added", name: "mp" }) as const,
       installPlugin: async () => ({
         status: "installed",
         resourcesChanged: true,
@@ -752,7 +822,7 @@ test("importClaudeSettings propagates declaresAgents+declaresMcp (both) onto out
         diagnostics: [],
       }),
       loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
-      addMarketplace: async () => undefined,
+      addMarketplace: async () => ({ status: "added", name: "mp" }) as const,
       installPlugin: async () => ({
         status: "installed",
         resourcesChanged: true,
@@ -789,7 +859,7 @@ test("importClaudeSettings propagates declaresAgents=false+declaresMcp=false (ne
         diagnostics: [],
       }),
       loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
-      addMarketplace: async () => undefined,
+      addMarketplace: async () => ({ status: "added", name: "mp" }) as const,
       installPlugin: async () => ({
         status: "installed",
         resourcesChanged: true,
@@ -825,7 +895,7 @@ test("importClaudeSettings emits the canonical reload-hint trailer on fresh inst
         diagnostics: [],
       }),
       loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
-      addMarketplace: async () => undefined,
+      addMarketplace: async () => ({ status: "added", name: "mp" }) as const,
       installPlugin: async () => ({
         status: "installed",
         resourcesChanged: true,
@@ -876,7 +946,7 @@ test("importClaudeSettings handles already-installed outcome from installPlugin 
           },
         },
       }),
-      addMarketplace: async () => undefined,
+      addMarketplace: async () => ({ status: "added", name: "mp" }) as const,
       installPlugin: async () => ({
         // collapsed failure shape -- already-installed
         // surfaces as `PluginShapeError({kind: "already-installed", ...})`
@@ -927,7 +997,7 @@ test("importClaudeSettings surfaces skippedPlugins from plan as unmappable-marke
         diagnostics: [],
       }),
       loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
-      addMarketplace: async () => undefined,
+      addMarketplace: async () => ({ status: "added", name: "mp" }) as const,
       installPlugin: async () => ({
         status: "installed",
         resourcesChanged: false,
@@ -960,7 +1030,7 @@ test("importClaudeSettings includes postCommitWarnings from installed outcome in
         diagnostics: [],
       }),
       loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
-      addMarketplace: async () => undefined,
+      addMarketplace: async () => ({ status: "added", name: "mp" }) as const,
       installPlugin: async () => ({
         status: "installed",
         resourcesChanged: true,
@@ -997,7 +1067,7 @@ test("importClaudeSettings keeps user and project operations independent", async
         diagnostics: [],
       }),
       loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
-      addMarketplace: async () => undefined,
+      addMarketplace: async () => ({ status: "added", name: "mp" }) as const,
       installPlugin: async (opts) => {
         installed.push(`${opts.scope}:${opts.plugin}@${opts.marketplace}`);
         return {

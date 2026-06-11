@@ -473,6 +473,34 @@ function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceNotifica
   }
 }
 
+type ScopedImportPlan = ReturnType<typeof buildClaudeImportPlan>["scopes"][number];
+
+/**
+ * WR-07 (Phase 55 review): shared failure bookkeeping for a marketplace add
+ * that did not record (typed failed outcome OR unexpected throw): block
+ * dependent plugin installs and attribute the cause on both the marketplace
+ * row and each dependent plugin's warning row.
+ */
+function recordMarketplaceAddFailure(
+  result: MutableImportResult,
+  blockedMarketplaces: Set<string>,
+  scopePlan: ScopedImportPlan,
+  marketplace: ScopedImportPlan["marketplacesToEnsure"][number],
+  cause: string,
+): void {
+  blockedMarketplaces.add(marketplace.marketplace);
+  result.marketplaceFailures.push({
+    kind: "marketplace-failure",
+    scope: marketplace.scope,
+    marketplace: marketplace.marketplace,
+    reason: "add-failed",
+    cause,
+  });
+  for (const plugin of pluginsForMarketplace(scopePlan.pluginsToInstall, marketplace.marketplace)) {
+    pushPluginWarning(result, plugin, "marketplace-failed", cause);
+  }
+}
+
 // The import workflow is intentionally linear: ensure marketplaces, record diagnostics,
 // then install plugins while preserving per-item continuation semantics.
 // eslint-disable-next-line sonarjs/cognitive-complexity
@@ -545,37 +573,50 @@ async function executeScopedPlan(
       continue;
     }
 
+    // WR-07 (Phase 55 review): drive the add in ORCHESTRATED mode and
+    // dispatch on the typed outcome. In standalone mode a classified
+    // precondition failure (duplicate name, stale clone, invalid manifest,
+    // unsupported source, source missing) does NOT throw -- it fires its own
+    // standalone notify (breaking import's one-cascade-per-command
+    // discipline) and returns undefined, so the import recorded the
+    // marketplace as (added), never blocked its dependent plugins, and each
+    // install then failed with a misleading reason.
     try {
-      await addMarketplace({
+      const outcome = await addMarketplace({
         ctx: opts.ctx,
         pi: opts.pi,
         scope: marketplace.scope,
         cwd: opts.cwd,
         rawSource: marketplace.source,
+        notifications: { mode: "orchestrated" },
         ...(opts.gitOps !== undefined && { gitOps: opts.gitOps }),
       });
-      result.addedMarketplaces.push({
-        kind: "marketplace-added",
-        scope: marketplace.scope,
-        marketplace: marketplace.marketplace,
-        reason: "added",
-      });
-    } catch (err) {
-      blockedMarketplaces.add(marketplace.marketplace);
-      const cause = errorMessage(err);
-      result.marketplaceFailures.push({
-        kind: "marketplace-failure",
-        scope: marketplace.scope,
-        marketplace: marketplace.marketplace,
-        reason: "add-failed",
-        cause,
-      });
-      for (const plugin of pluginsForMarketplace(
-        scopePlan.pluginsToInstall,
-        marketplace.marketplace,
-      )) {
-        pushPluginWarning(result, plugin, "marketplace-failed", cause);
+      if (outcome?.status === "added") {
+        result.addedMarketplaces.push({
+          kind: "marketplace-added",
+          scope: marketplace.scope,
+          marketplace: marketplace.marketplace,
+          reason: "added",
+        });
+      } else {
+        recordMarketplaceAddFailure(
+          result,
+          blockedMarketplaces,
+          scopePlan,
+          marketplace,
+          outcome?.cause ?? "addMarketplace returned no outcome in orchestrated mode",
+        );
       }
+    } catch (err) {
+      // Defensive: orchestrated mode coerces classified failures into typed
+      // outcomes, so only a genuinely unexpected throw lands here.
+      recordMarketplaceAddFailure(
+        result,
+        blockedMarketplaces,
+        scopePlan,
+        marketplace,
+        errorMessage(err),
+      );
     }
   }
 
