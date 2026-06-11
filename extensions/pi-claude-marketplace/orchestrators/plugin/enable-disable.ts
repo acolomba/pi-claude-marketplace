@@ -378,15 +378,26 @@ export async function setPluginEnabled(
       }
 
       // Config write-back via the SOLE sanctioned saveConfig seam (SPLIT-02).
-      const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
-      await writeConfigEntry(
-        current,
-        targetConfigPath,
-        locations.scopeRoot,
-        plugin,
-        marketplace,
-        enable,
-      );
+      //
+      // WR-09 (Phase 55 review): SKIPPED in orchestrated mode. A
+      // reconcile-driven call derives the desired state FROM the merged
+      // config (base + local), so the declaration already exists by
+      // construction -- possibly ONLY in `claude-plugins.local.json` (the
+      // per-machine override, Pitfall 54-5). Writing it back here would
+      // copy the local override's `enabled` flag into the shared BASE file
+      // and clobber a user-authored base declaration. The config is the
+      // reconcile's INPUT; only standalone commands author declarations.
+      if (!orchestrated) {
+        const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
+        await writeConfigEntry(
+          current,
+          targetConfigPath,
+          locations.scopeRoot,
+          plugin,
+          marketplace,
+          enable,
+        );
+      }
 
       await tx.save();
     });

@@ -437,6 +437,120 @@ test("RECON-05 (back-to-back no-op): two consecutive applyReconcile calls agains
   });
 });
 
+test("WR-09 (local-file isolation): a disable declared ONLY in claude-plugins.local.json is applied WITHOUT writing enabled:false into the base config; second reconcile converges silently", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const projectScopeRoot = path.join(cwd, ".pi");
+    const extensionRoot = path.join(projectScopeRoot, "pi-claude-marketplace");
+    await mkdir(extensionRoot, { recursive: true });
+
+    // Base config: the user-authored declaration says enabled: true.
+    const basePath = path.join(projectScopeRoot, "claude-plugins.json");
+    await writeFile(
+      basePath,
+      JSON.stringify(
+        {
+          schemaVersion: 1,
+          marketplaces: { mp: { source: "/tmp/nowhere" } },
+          plugins: { "foo@mp": { enabled: true } },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    // Local override (the per-machine file, Pitfall 54-5): enabled: false.
+    const localPath = path.join(projectScopeRoot, "claude-plugins.local.json");
+    await writeFile(
+      localPath,
+      JSON.stringify({ schemaVersion: 1, plugins: { "foo@mp": { enabled: false } } }, null, 2),
+      "utf8",
+    );
+
+    // State: the plugin is recorded AND materialised (non-empty resources),
+    // so the planner derives a disable from the merged enabled:false.
+    await writeFile(
+      path.join(extensionRoot, "state.json"),
+      JSON.stringify(
+        {
+          schemaVersion: 1,
+          marketplaces: {
+            mp: {
+              name: "mp",
+              scope: "project",
+              source: { kind: "path", raw: "/tmp/nowhere" },
+              addedFromCwd: cwd,
+              manifestPath: "/tmp/nowhere/.claude-plugin/marketplace.json",
+              marketplaceRoot: "/tmp/nowhere",
+              plugins: {
+                foo: {
+                  version: "1.2.3",
+                  resolvedSource: "/tmp/nowhere/plugins/foo",
+                  compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+                  resources: { skills: ["s1"], prompts: [], agents: [], mcpServers: [] },
+                  installedAt: "2026-01-01T00:00:00.000Z",
+                  updatedAt: "2026-01-01T00:00:00.000Z",
+                },
+              },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const baseBefore = await readFile(basePath, "utf8");
+    const localBefore = await readFile(localPath, "utf8");
+
+    const ctx = makeCtx();
+    await applyReconcile({
+      ctx: ctx as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    // The disable was applied (one notify with a (disabled) row).
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.ok(
+      args[0].includes("foo") && args[0].includes("(disabled)"),
+      `expected (disabled) row for foo; got:\n${args[0]}`,
+    );
+
+    // WR-09: NEITHER config file was rewritten -- the base keeps the
+    // user-authored enabled: true; the local override is untouched. The
+    // config is the reconcile's INPUT, never its write target.
+    assert.equal(
+      await readFile(basePath, "utf8"),
+      baseBefore,
+      "WR-09: the base config must NOT be rewritten by a reconcile-driven disable",
+    );
+    assert.equal(
+      await readFile(localPath, "utf8"),
+      localBefore,
+      "WR-09: the local config must NOT be rewritten by a reconcile-driven disable",
+    );
+
+    // Convergence: the disabled record + merged enabled:false is steady
+    // state -- the second reconcile is silent.
+    const ctxB = makeCtx();
+    await applyReconcile({
+      ctx: ctxB as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+    assert.equal(
+      ctxB.ui.notify.mock.calls.length,
+      0,
+      "second reconcile after the local-only disable must be a silent no-op",
+    );
+  });
+});
+
 test("WR-01 (per-scope isolation): corrupt project-scope state.json -> structured (failed) {unparseable} row on the state.json subject; the user scope still reconciles and the single notify survives", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // Project scope: a config that would otherwise plan work + a CORRUPT
