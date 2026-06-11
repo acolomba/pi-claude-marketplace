@@ -216,6 +216,22 @@ async function applyMarketplaceRemoves(
       }
 
       if (result.status === "removed") {
+        // WR-02 (Phase 55 review): the planner deliberately excludes plugins
+        // under a to-be-removed marketplace from `pluginsToUninstall` (the
+        // remove cascade unstages them -- no double-billing), so the cascade
+        // outcome is the ONLY carrier of those rows. Fold `result.unstaged`
+        // into the outcome stream so the D-22-02 contract (one indented
+        // `(uninstalled)` row per unstaged plugin) holds on the reconcile
+        // surface too -- plugins must never disappear silently.
+        for (const plugin of result.unstaged) {
+          outcomes.push({
+            kind: "plugin-uninstalled",
+            scope: op.scope,
+            marketplace: op.marketplace,
+            plugin,
+          });
+        }
+
         outcomes.push({ kind: "mp-removed", scope: op.scope, marketplace: op.marketplace });
       } else {
         outcomes.push({

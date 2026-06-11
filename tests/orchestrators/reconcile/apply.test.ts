@@ -156,7 +156,11 @@ test("RECON-02 (installed-but-undeclared -> remove at load): state records mp-a,
   await withHermeticHome(async ({ cwd }) => {
     // State pre-records `manual-mp`; config is empty -> the planner surfaces
     // `manual-mp` in marketplacesToRemove (ownership gate: anything in state
-    // but not in config is fair game for removal).
+    // but not in config is fair game for removal). The marketplace carries
+    // one recorded plugin: the planner deliberately EXCLUDES it from
+    // `pluginsToUninstall` (the remove cascade unstages it), so the
+    // `(uninstalled)` child row must come from the cascade outcome's
+    // `unstaged` list (WR-02 -- plugins must never disappear silently).
     const { extensionRoot } = await setupProjectScope(
       cwd,
       { schemaVersion: 1, marketplaces: {} },
@@ -167,7 +171,16 @@ test("RECON-02 (installed-but-undeclared -> remove at load): state records mp-a,
             name: "manual-mp",
             scope: "project",
             source: { kind: "path", raw: "/tmp/nowhere" },
-            plugins: {},
+            plugins: {
+              "leftover-plugin": {
+                version: "1.0.0",
+                resolvedSource: "/tmp/nowhere/plugins/leftover-plugin",
+                compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+                resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+                installedAt: "2026-01-01T00:00:00.000Z",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+              },
+            },
             autoupdate: false,
             addedFromCwd: cwd,
           },
@@ -195,6 +208,12 @@ test("RECON-02 (installed-but-undeclared -> remove at load): state records mp-a,
     assert.ok(
       args[0].includes("manual-mp"),
       `expected manual-mp in cascade body; got:\n${args[0]}`,
+    );
+    // WR-02 / D-22-02: the plugin the remove cascade unstaged renders as an
+    // indented (uninstalled) child row -- never dropped from the cascade.
+    assert.ok(
+      args[0].includes("leftover-plugin") && args[0].includes("(uninstalled)"),
+      `WR-02: expected (uninstalled) child row for the cascade-unstaged plugin; got:\n${args[0]}`,
     );
   });
 });
