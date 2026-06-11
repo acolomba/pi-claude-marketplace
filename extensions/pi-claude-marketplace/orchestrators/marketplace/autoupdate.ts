@@ -226,13 +226,25 @@ function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err
  * message via the synthetic `Error` -- no absolute path leak.
  */
 /**
- * Reclassify state-side `changed` names against the CONFIG-side
- * `autoupdate` truth (SPLIT-01 + Pitfall 5). Names whose config entry
- * already carries an explicit matching `autoupdate` value are moved into
- * `unchanged` so the write-back does NOT fire for them (RECON-05 mtime
- * stability). A MISSING config entry / missing `autoupdate` field counts
- * as a fresh flip -- the user's command MUST land as an explicit
- * declaration so reconcile sees the truth.
+ * Reclassify both state-side `changed` AND state-side `unchanged` names
+ * against the CONFIG-side `autoupdate` truth (SPLIT-01 + Pitfall 5). The
+ * config (claude-plugins.json) is the new source of truth after Phase 51's
+ * D-13 scrub strips legacy `autoupdate` from state once the config file
+ * exists.
+ *
+ * Two reclassification directions:
+ *  - `changed` -> `unchanged`: when the config already carries the
+ *    requested `enable` value, the write-back is a no-op (RECON-05 mtime
+ *    stability).
+ *  - `unchanged` -> `changed`: when the state-side classifier saw "nothing
+ *    to do" (because the D-13 scrub stripped state.autoupdate so it reads
+ *    as undefined === false), BUT the config-side truth is the OPPOSITE
+ *    of `enable`, the user's flip is a real change that MUST land in the
+ *    config. Without this promotion, a `disable` issued after a previous
+ *    `enable` (config=true; state.autoupdate scrubbed to undefined) would
+ *    silently no-op even though the user's intent is the opposite of the
+ *    config truth. A MISSING config entry / missing `autoupdate` field
+ *    keeps the state-side classification as-is.
  */
 function reclassifyByConfigTruth(
   current: ScopeConfig,
@@ -240,16 +252,29 @@ function reclassifyByConfigTruth(
   enable: boolean,
 ): { changed: readonly string[]; unchanged: readonly string[] } {
   const reallyChanged: string[] = [];
-  const moreUnchanged: string[] = [];
+  const reallyUnchanged: string[] = [];
+
   for (const name of result.changed) {
     if (current.marketplaces?.[name]?.autoupdate === enable) {
-      moreUnchanged.push(name);
+      reallyUnchanged.push(name);
     } else {
       reallyChanged.push(name);
     }
   }
 
-  return { changed: reallyChanged, unchanged: [...result.unchanged, ...moreUnchanged] };
+  for (const name of result.unchanged) {
+    const configValue = current.marketplaces?.[name]?.autoupdate;
+    // Promote: config carries the OPPOSITE explicit value. The user's flip
+    // would diverge from config truth without a write-back, so it's a
+    // fresh change.
+    if (configValue !== undefined && configValue !== enable) {
+      reallyChanged.push(name);
+    } else {
+      reallyUnchanged.push(name);
+    }
+  }
+
+  return { changed: reallyChanged, unchanged: reallyUnchanged };
 }
 
 /**
