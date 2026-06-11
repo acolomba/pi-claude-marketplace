@@ -39,6 +39,7 @@ import test from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { bootstrapClaudePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts";
+import { loadConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -46,6 +47,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { makeMockGitOps } from "../../helpers/git-mock.ts";
 
+import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -103,6 +105,19 @@ async function withHermeticHome<T>(
   }
 }
 
+/** Phase 56-02: post-flip `autoupdate` lives in `claude-plugins.json`. */
+async function configAutoupdate(
+  locations: ScopedLocations,
+  name: string,
+): Promise<boolean | undefined> {
+  const cfg = await loadConfig(locations.configJsonPath);
+  if (cfg.status !== "valid") {
+    return undefined;
+  }
+
+  return cfg.config.marketplaces?.[name]?.autoupdate;
+}
+
 function makeBootstrapMarketplaceRecord(
   cwd: string,
   autoupdate: boolean,
@@ -145,15 +160,15 @@ test("bootstrap (clean state): adds marketplace + enables autoupdate; two notifi
 
     await bootstrapClaudePlugin({ ctx, pi, cwd, gitOps });
 
-    // State has the marketplace recorded under user scope with autoupdate=true.
+    // State has the marketplace recorded under user scope.
     const userLocations = locationsFor("user", cwd);
     const userState = await loadState(userLocations.extensionRoot);
     assert.ok("claude-plugins-official" in userState.marketplaces);
     const recorded = userState.marketplaces["claude-plugins-official"];
     assert.ok(recorded);
     assert.equal(recorded.scope, "user");
-    // SPLIT-01: read autoupdate via cast (carved out in Phase 51-02).
-    assert.equal((recorded as unknown as Record<string, unknown>).autoupdate, true);
+    // Phase 56-02: post-flip `autoupdate` lives in `claude-plugins.json`.
+    assert.equal(await configAutoupdate(userLocations, "claude-plugins-official"), true);
 
     // Exactly two notifications in order. SNM-33 / D-22-01 / D-22-03:
     // both are marketplace-status-only blocks (no plugin rows), so NEITHER
@@ -235,13 +250,8 @@ test("bootstrap (half-configured: autoupdate off): swallows duplicate-name, flip
 
     await bootstrapClaudePlugin({ ctx, pi, cwd, gitOps });
 
-    const after = await loadState(userLocations.extensionRoot);
-    // SPLIT-01: read autoupdate via cast (carved out in Phase 51-02).
-    assert.equal(
-      (after.marketplaces["claude-plugins-official"] as unknown as Record<string, unknown>)
-        ?.autoupdate,
-      true,
-    );
+    // Phase 56-02: post-flip `autoupdate` lives in `claude-plugins.json`.
+    assert.equal(await configAutoupdate(userLocations, "claude-plugins-official"), true);
     assert.equal(notifications.length, 1);
     // SNM-33 / D-22-03: UXG-04 `<autoupdate>` marker-as-outcome header-only
     // block, NO `/reload` trailer (the autoupdate flag is not a Pi-visible

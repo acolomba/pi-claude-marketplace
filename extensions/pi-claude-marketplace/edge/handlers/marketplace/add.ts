@@ -16,19 +16,28 @@
 import { addMarketplace } from "../../../orchestrators/marketplace/add.ts";
 import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
+import { extractLocalFlag } from "../shared.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { EdgeDeps } from "../../types.ts";
 
-const USAGE = "Usage: /claude:plugin marketplace add <source> [--scope user|project]";
+const USAGE = "Usage: /claude:plugin marketplace add <source> [--scope user|project] [--local]";
 
 export function makeAddHandler(
   pi: ExtensionAPI,
   deps: EdgeDeps,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
+    // WB-01 / Phase 56 Plan 02: extract `--local` BEFORE positional parsing
+    // so flag position cannot change the outcome (matches the Phase 54
+    // enable-disable handler shape).
+    const localFlag = extractLocalFlag(args, ctx, USAGE);
+    if (localFlag === undefined) {
+      return;
+    }
+
     const parsed = parseCommandArgs(
-      args,
+      localFlag.residualArgs,
       {
         positional: [{ name: "source" }] as const,
         usage: USAGE,
@@ -56,6 +65,7 @@ export function makeAddHandler(
       cwd: ctx.cwd,
       rawSource: parsed.source,
       gitOps: deps.gitOps,
+      ...(localFlag.local && { local: true }),
     });
   };
 }

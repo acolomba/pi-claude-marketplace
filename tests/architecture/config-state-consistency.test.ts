@@ -42,9 +42,10 @@ import { DEFAULT_STATE } from "../../extensions/pi-claude-marketplace/persistenc
 
 import type { ScopeConfig } from "../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 
-// Suppress unused-import lint while the skip placeholder is in place; the
-// import is load-bearing (proves the export exists for Plan 02/04 to wire).
-void addMarketplace;
+// Phase 56-02: the addMarketplace path is now wired (write-back lands the
+// marketplace entry into claude-plugins.json under the locked transaction).
+// `saveConfig` is exercised transitively through the write-back helper; the
+// direct import is retained for symmetry with the other plans.
 void saveConfig;
 
 async function tmpScopeRoot(): Promise<{ scopeRoot: string; cleanup: () => Promise<void> }> {
@@ -125,20 +126,54 @@ test("config-state-consistency: writeMarketplaceConfigEntry + planReconcile read
 // SKIP placeholders: Plan 02 / 04 turns these into live tests
 // ──────────────────────────────────────────────────────────────────────────
 
-test.skip("WB-01 SC#4: after a mutating command, reconcile is a no-op AND unknown keys survive", () => {
-  // Plan 02/04 wires this. Body documented here so the future implementor
-  // does not have to re-derive the shape:
-  //
-  // 1. Seed a fixture config with a futureField on a marketplace entry +
-  //    a futureTopLevel key at the root.
-  // 2. Run addMarketplace({ ...standalone mode, rawSource: "owner/repo",
-  //    name: "mp1" }).
-  // 3. Read back the config; assert futureField + futureTopLevel survived.
-  // 4. Run planReconcile(mergeScopeConfigs(after, {}), postState, scope);
-  //    assert deepEqual to emptyReconcilePlan(scope).
-  //
-  // The imports at the top of this file (addMarketplace, planReconcile,
-  // mergeScopeConfigs, emptyReconcilePlan) are load-bearing so the typecheck
-  // / import-chain stays valid under `npm run check` while this stays
-  // skipped.
+test("WB-01 SC#4 (add path): after addMarketplace, reconcile is a no-op AND state ⊆ config (round-trip integrity)", async () => {
+  // Wire-up: invoke the real `addMarketplace` (standalone mode) against a
+  // mock GitOps + valid fixture. Read back the config + the post-mutation
+  // state. Plan and assert: planReconcile produces emptyReconcilePlan.
+  const { fixtureMarketplaceDir, makeMockGitOps } = await import("../helpers/git-mock.ts");
+  const { locationsFor } =
+    await import("../../extensions/pi-claude-marketplace/persistence/locations.ts");
+  const { loadState } =
+    await import("../../extensions/pi-claude-marketplace/persistence/state-io.ts");
+
+  const { scopeRoot, cleanup } = await tmpScopeRoot();
+  try {
+    const cwd = scopeRoot.replace(/\/\.pi$/, "");
+    const locations = locationsFor("project", cwd);
+    await mkdir(locations.extensionRoot, { recursive: true });
+
+    const ctx = { ui: { notify: (): void => undefined } } as never;
+    const pi = { getAllTools: (): unknown[] => [] } as never;
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+
+    // 1. The config file was written under the locked transaction.
+    const cfg = await loadConfig(locations.configJsonPath);
+    assert.equal(cfg.status, "valid");
+    if (cfg.status !== "valid") {
+      return;
+    }
+
+    // 2. State was committed with the marketplace recorded.
+    const state = await loadState(locations.extensionRoot);
+    assert.ok("valid-marketplace" in state.marketplaces);
+
+    // 3. planReconcile against (merged config, post-mutation state) is a
+    //    NO-OP -- every bucket empty (WB-01 SC#4 round-trip integrity).
+    const merged = mergeScopeConfigs(cfg.config, {});
+    const plan = planReconcile(merged, state, "project");
+    assert.deepEqual(plan, emptyReconcilePlan("project"));
+  } finally {
+    await cleanup();
+  }
 });

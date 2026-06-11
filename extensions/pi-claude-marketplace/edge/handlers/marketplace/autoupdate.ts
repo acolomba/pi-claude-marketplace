@@ -13,13 +13,14 @@
 import { setMarketplaceAutoupdate } from "../../../orchestrators/marketplace/autoupdate.ts";
 import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
+import { extractLocalFlag } from "../shared.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
 function usageFor(enable: boolean): string {
   return enable
-    ? "Usage: /claude:plugin marketplace autoupdate [<name>] [--scope user|project]"
-    : "Usage: /claude:plugin marketplace noautoupdate [<name>] [--scope user|project]";
+    ? "Usage: /claude:plugin marketplace autoupdate [<name>] [--scope user|project] [--local]"
+    : "Usage: /claude:plugin marketplace noautoupdate [<name>] [--scope user|project] [--local]";
 }
 
 export function makeAutoupdateHandler(
@@ -28,8 +29,13 @@ export function makeAutoupdateHandler(
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   const usage = usageFor(enable);
   return async (args, ctx): Promise<void> => {
+    const localFlag = extractLocalFlag(args, ctx, usage);
+    if (localFlag === undefined) {
+      return;
+    }
+
     const parsed = parseCommandArgs(
-      args,
+      localFlag.residualArgs,
       {
         positional: [{ name: "name", required: false }] as const,
         usage,
@@ -49,6 +55,7 @@ export function makeAutoupdateHandler(
       enable,
       ...(parsed.name !== undefined && { name: parsed.name }),
       ...(parsed.scope !== undefined && { scope: parsed.scope }),
+      ...(localFlag.local && { local: true }),
     });
   };
 }

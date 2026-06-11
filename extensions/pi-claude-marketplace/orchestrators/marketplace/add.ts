@@ -53,6 +53,8 @@ import path from "node:path";
 import { initiateDeviceFlow } from "../../domain/github-auth.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
+import { loadConfig } from "../../persistence/config-io.ts";
+import { writeMarketplaceConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { DEFAULT_CREDENTIAL_OPS } from "../../platform/git-credential.ts";
 import { dropMarketplaceCache, invalidateMarketplaceNames } from "../../shared/completion-cache.ts";
@@ -66,12 +68,13 @@ import {
 } from "../../shared/errors.ts";
 import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
 import { makeRawNotifyFn, notify } from "../../shared/notify.ts";
-import { withStateGuard } from "../../transaction/with-state-guard.ts";
+import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import { DEFAULT_GIT_OPS, type GitAuthBundle, type GitOps } from "./shared.ts";
 
 import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
 import type { GitHubSource, PathSource } from "../../domain/source.ts";
+import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
@@ -178,6 +181,14 @@ export interface AddMarketplaceOptions {
    * Orchestrated mode suppresses notify() and returns a typed outcome.
    */
   readonly notifications?: AddMarketplaceNotifications;
+  /**
+   * WB-01 / Pitfall 2 (Phase 56 Plan 02): when true, target
+   * `claude-plugins.local.json` instead of `claude-plugins.json`. The base
+   * file is NEVER touched on the --local path; loadConfig's `absent` arm
+   * yields an empty starting shape that saveConfig writes back to the local
+   * path.
+   */
+  readonly local?: boolean;
 }
 
 /**
@@ -281,9 +292,28 @@ function addSubjectName(rawErr: unknown, rawSource: string): string {
 }
 
 /**
+ * WB-01 / Pitfall 51-1 mitigation: a CFG-03 invalid-config arm aborts the
+ * command BEFORE any state mutation or network call. Thrown so the
+ * entrypoint catch routes through `classifyAddError` -> `invalid manifest`
+ * with a basename-only cause (T-56-02-05 information disclosure mitigation).
+ */
+class ConfigInvalidError extends InvalidMarketplaceManifestError {
+  constructor(configBasename: string) {
+    super(`Config file "${configBasename}" failed schema validation.`);
+    this.name = "ConfigInvalidError";
+  }
+}
+
+/**
  * Dispatch the source-kind precondition + the in-guard add. Extracted so the
  * entrypoint try/catch (ATTR-07) wraps BOTH the synchronous source-kind refusal
  * (S5a/S5b -> UnsupportedSourceError) and the guard body uniformly.
+ *
+ * WB-01 / WR-09 (Phase 56 Plan 02): converted from `withStateGuard` to
+ * `withLockedStateTransaction` so config write-back happens inside the SAME
+ * per-scope lock as the state mutation. The config write-back fires only in
+ * standalone mode (orchestrated/reconcile-driven calls derive desired state
+ * FROM the merged config; writing back would clobber a per-machine override).
  */
 async function runAddInGuard(args: {
   opts: AddMarketplaceOptions;
@@ -291,8 +321,9 @@ async function runAddInGuard(args: {
   source: ReturnType<typeof parsePluginSource>;
   gitOps: GitOps;
   credentialOps: CredentialOps;
+  orchestrated: boolean;
 }): Promise<string> {
-  const { opts, locations, source, gitOps, credentialOps } = args;
+  const { opts, locations, source, gitOps, credentialOps, orchestrated } = args;
 
   // S5a (MA-10): parser produced an unknown kind with a reason -- surface
   // verbatim on the cause, classified as `unsupported source` (D-48-C A3).
@@ -309,8 +340,23 @@ async function runAddInGuard(args: {
     );
   }
 
+  // WB-01 / Pitfall 2: target-path selection happens ONCE before the lock so
+  // the orchestrator NEVER falls back to the base file on ENOENT.
+  const targetConfigPath =
+    opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath;
+  const configBasename = path.basename(targetConfigPath);
+
   let recordedName: string | undefined;
-  await withStateGuard(locations, async (state) => {
+  await withLockedStateTransaction(locations, async (tx) => {
+    const state = tx.state;
+
+    // CFG-03 (Phase 56 / T-56-02-05): abort BEFORE any state mutation. The
+    // basename-only error message prevents an absolute-path information leak.
+    const cfg = await loadConfig(targetConfigPath);
+    if (cfg.status === "invalid") {
+      throw new ConfigInvalidError(configBasename);
+    }
+
     if (source.kind === "github") {
       recordedName = await addGithubInGuard({
         ctx: opts.ctx,
@@ -330,6 +376,25 @@ async function runAddInGuard(args: {
         cwd: opts.cwd,
       });
     }
+
+    // WB-01 / WR-09: write-back the marketplace entry to the user-authored
+    // config. SKIPPED in orchestrated mode (reconcile derives desired state
+    // FROM the config; writing back would clobber a per-machine override).
+    // The `source` field is `opts.rawSource` VERBATIM so the Phase 53
+    // reconcile planner's `samePlannedSource` comparison stays a no-op on
+    // the next load.
+    if (!orchestrated) {
+      const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
+      await writeMarketplaceConfigEntry(
+        current,
+        targetConfigPath,
+        locations.scopeRoot,
+        recordedName,
+        { source: opts.rawSource },
+      );
+    }
+
+    await tx.save();
   });
 
   if (recordedName === undefined) {
@@ -426,6 +491,7 @@ export async function addMarketplace(
       source,
       gitOps,
       credentialOps,
+      orchestrated,
     });
   } catch (err) {
     // rethrowPreconditionErrors short-circuits BEFORE the mode branch so the

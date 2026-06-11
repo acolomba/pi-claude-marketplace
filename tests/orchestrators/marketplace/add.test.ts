@@ -1040,3 +1040,144 @@ test("RECON-03 standalone-default mode -- omitted notifications option remains b
     assert.equal(notifications[0]?.message, "● valid-marketplace [project] (added)");
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// Phase 56 Plan 02 (Task 1): WB-01 write-back, --local, WR-09, CFG-03
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WB-01: standalone add writes the marketplace entry to claude-plugins.json (source verbatim)", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    const { ctx, pi } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+
+    const { loadConfig } =
+      await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+    const cfg = await loadConfig(locations.configJsonPath);
+    assert.equal(cfg.status, "valid");
+    if (cfg.status !== "valid") {
+      return;
+    }
+
+    // PATTERNS §"Verbatim rawSource": source field MUST equal opts.rawSource
+    // verbatim so the Phase 53 reconcile planner's `samePlannedSource` stays
+    // a no-op on the next load.
+    assert.equal(
+      cfg.config.marketplaces?.["valid-marketplace"]?.source,
+      "anthropics/claude-plugins-official",
+    );
+
+    // The local file MUST NOT have been touched on the base-target path.
+    const localCfg = await loadConfig(locations.configLocalJsonPath);
+    assert.equal(localCfg.status, "absent");
+  });
+});
+
+test("WB-01 / Pitfall 2: --local routes the write to claude-plugins.local.json and never touches the base file", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    const { ctx, pi } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      local: true,
+    });
+
+    const { loadConfig } =
+      await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+    const localCfg = await loadConfig(locations.configLocalJsonPath);
+    assert.equal(localCfg.status, "valid");
+    if (localCfg.status === "valid") {
+      assert.equal(
+        localCfg.config.marketplaces?.["valid-marketplace"]?.source,
+        "anthropics/claude-plugins-official",
+      );
+    }
+
+    // The base file MUST be untouched.
+    const baseCfg = await loadConfig(locations.configJsonPath);
+    assert.equal(baseCfg.status, "absent");
+  });
+});
+
+test("WR-09 / T-56-02-01: orchestrated-mode add SKIPS config write-back (neither base nor local file is created)", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    const { ctx, pi } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    const outcome = await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      notifications: { mode: "orchestrated" },
+    });
+
+    assert.deepEqual(outcome, { status: "added", name: "valid-marketplace" });
+    const { loadConfig } =
+      await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+    assert.equal((await loadConfig(locations.configJsonPath)).status, "absent");
+    assert.equal((await loadConfig(locations.configLocalJsonPath)).status, "absent");
+  });
+});
+
+test("CFG-03 / T-56-02-05: --local path with an invalid config aborts the add; basename-only cause; state untouched", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // Seed an invalid claude-plugins.local.json (malformed JSON).
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(locations.configLocalJsonPath, "{ not valid json", "utf8");
+
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      local: true,
+    });
+
+    // ATTR-07: classifyAddError routes ConfigInvalidError -> {invalid manifest}.
+    assert.equal(notifications.length, 1);
+    const note = notifications[0]!;
+    assert.ok(
+      note.message.includes("(failed) {invalid manifest}"),
+      `expected (failed) {invalid manifest} row, got: ${note.message}`,
+    );
+    // T-56-02-05: the absolute path MUST NOT be leaked in the rendered cause.
+    assert.ok(
+      !note.message.includes(locations.configLocalJsonPath),
+      `must NOT leak absolute configLocalJsonPath, got: ${note.message}`,
+    );
+
+    // State was NOT mutated (the marketplace record was never recorded).
+    const persisted = await loadState(locations.extensionRoot);
+    assert.equal(Object.keys(persisted.marketplaces).length, 0);
+  });
+});

@@ -143,6 +143,66 @@ test("shim :: --scope project propagated to addMarketplace", async () => {
   });
 });
 
+// ──────────────────────────────────────────────────────────────────────────
+// Phase 56 Plan 02 (Task 1): --local flag scanning at the edge boundary
+// ──────────────────────────────────────────────────────────────────────────
+
+test("USAGE string contains [--local]", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const { deps } = makeDeps();
+    const handler = makeAddHandler(makePi(), deps);
+    // Missing source -> the parser fires notifyUsageError carrying USAGE.
+    await handler("", ctx);
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\[--local\]/);
+  });
+});
+
+test("Flag: --local at the trailing position is parsed and routed to the orchestrator", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const { deps } = makeDeps();
+    const handler = makeAddHandler(makePi(), deps);
+    // A github source with --local trailing -- exercises the scanner +
+    // residualArgs threading. The mock has no fixture so the orchestrator
+    // surfaces `(failed) {source missing}`; the test just proves the flag
+    // didn't break parsing.
+    await handler("owner/repo --local", ctx);
+    const note = notifications[0];
+    assert.ok(note);
+    assert.match(note.message, /\(failed\) \{source missing\}/);
+  });
+});
+
+test("Flag: --local at the leading position parses identically", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const { deps } = makeDeps();
+    const handler = makeAddHandler(makePi(), deps);
+    // Leading --local + source: the scanner removes the flag from residual
+    // BEFORE the positional parser runs, so the positional parser sees the
+    // source as the first positional.
+    await handler("--local owner/repo", ctx);
+    const note = notifications[0];
+    assert.ok(note);
+    assert.match(note.message, /\(failed\) \{source missing\}/);
+  });
+});
+
+test("Unknown long flag -> USAGE error (no orchestrator call)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const { deps, gitMock } = makeDeps();
+    const handler = makeAddHandler(makePi(), deps);
+    await handler("owner/repo --frobnicate", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.match(notifications[0]!.message, /Unknown flag: "--frobnicate"\./);
+    assert.equal(gitMock.state.cloneCalls.length, 0);
+  });
+});
+
 test("shim :: deps.gitOps is passed through from EdgeDeps", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);

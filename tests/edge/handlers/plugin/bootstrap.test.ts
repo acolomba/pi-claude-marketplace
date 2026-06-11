@@ -14,6 +14,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { makeBootstrapHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/bootstrap.ts";
+import { loadConfig } from "../../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { fixtureMarketplaceDir, makeMockGitOps } from "../../../helpers/git-mock.ts";
@@ -132,17 +133,16 @@ test("bootstrap handler (no args, clean state): dispatches to orchestrator and e
       "https://github.com/anthropics/claude-plugins-official.git",
     );
 
-    // State reflects the marketplace at user scope with autoupdate=true.
+    // State reflects the marketplace at user scope.
     const userLocations = locationsFor("user", cwd);
     const userState = await loadState(userLocations.extensionRoot);
     assert.ok("claude-plugins-official" in userState.marketplaces);
-    // SPLIT-01: autoupdate carved out of MARKETPLACE_RECORD_SCHEMA in Phase 51-02;
-    // cast read until Phase 54-56 rewires to MergedConfig (CFG-02).
-    assert.equal(
-      (userState.marketplaces["claude-plugins-official"] as unknown as Record<string, unknown>)
-        .autoupdate,
-      true,
-    );
+    // Phase 56-02: post-flip `autoupdate` lives in `claude-plugins.json`.
+    const cfg = await loadConfig(userLocations.configJsonPath);
+    assert.equal(cfg.status, "valid");
+    if (cfg.status === "valid") {
+      assert.equal(cfg.config.marketplaces?.["claude-plugins-official"]?.autoupdate, true);
+    }
   });
 });
 
