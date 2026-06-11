@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.12
 milestone_name: Marketplace and Plugin Config Files
-status: executing
-stopped_at: Plan 56-02 complete (marketplace add/remove/autoupdate write-back + --local; WB-04 bootstrap composed-write smoke)
-last_updated: "2026-06-11T04:24:55.561Z"
-last_activity: 2026-06-10 -- Plan 56-02 complete
+status: complete
+stopped_at: Plan 56-04 complete -- MILESTONE v1.12 GREEN (1795 unit + 10 integration; all 24 v1.12 requirements CLOSED)
+last_updated: "2026-06-11T12:00:00.000Z"
+last_activity: 2026-06-11 -- Plan 56-04 complete; milestone v1.12 GREEN
 progress:
   total_phases: 34
-  completed_phases: 5
-  total_plans: 15
-  completed_plans: 14
-  percent: 15
+  completed_phases: 6
+  total_plans: 16
+  completed_plans: 16
+  percent: 18
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 
 ## Current Position
 
-Phase: 56 (write-back-integration-documentation) — EXECUTING
-Plan: 4 of 4
-Status: Ready to execute
-Last activity: 2026-06-10 -- Plan 56-02 complete
+Phase: 56 (write-back-integration-documentation) — COMPLETE
+Plan: 4 of 4 (all complete)
+Status: Milestone v1.12 GREEN -- ready for milestone-close workflow
+Last activity: 2026-06-11 -- Plan 56-04 complete; milestone v1.12 closed
 
 ## Performance Metrics
 
@@ -102,6 +102,7 @@ Last activity: 2026-06-10 -- Plan 56-02 complete
 | Phase 56 P01 | ~95m | 3 tasks | 6 files |
 | Phase 56 P02 | ~175m | 3 tasks | 15 files |
 | Phase 56 P03 | 54min | 3 tasks | 19 files |
+| Phase 56 P04 | ~165m | 4 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -194,6 +195,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: Plan 56-03: extractLocalFlag scanner extended with optional passThroughLongFlags allow-list ([--map-model], [--force]) so handlers with additional known flags can reuse the Plan 01 lifted scanner
 - [Phase ?]: Plan 56-03: update.ts cascade-mode (args.cascade===true) is the WR-09 orchestrated-equivalent skip; reinstall.ts has no orchestrated mode (no reconcile-driven caller), so write-back fires on both standalone and bulk paths
 - [Phase ?]: Plan 56-03: Phase 54 enable-disable.ts migration is byte-neutral -- private writeConfigEntry + private extractLocalFlag deleted, call sites route through shared helpers, no behavior change, no test edits required
+- [Phase 56]: Plan 56-04 -- MILESTONE v1.12 GREEN. WB-03 import batched per-scope post-pass landed (writeBatchedConfigForScope at end of executeScopedPlan; loadConfig + CFG-03 abort + writeBatchedConfigEntries under ONE withLockedStateTransaction; no tx.save inside -- per-entry orchestrators already committed state; Pitfall 8 race-window self-heals on next reconcile; empty batch SKIPS post-pass for RECON-05 byte-stable). SPLIT-01 read-path rewire of 7 cast sites across 6 files: marketplace/list.ts + marketplace/info.ts (2) + marketplace/update.ts (snapshotAfterRefresh reads OUTSIDE withStateGuard) + plugin/list.ts (parallel userMerged + projectMerged via Promise.all) + plugin/info.ts (2; per-found-scope merged load). ALLOWED_SPLIT_01_AUTOUPDATE_CAST_FILES shrunk from 6 -> 0 via single ReadonlySet replacement + 'exactly N' sibling assertion to 0; Pitfall 6 closed structurally. WB-01 SC#4 LIVE round-trip + reconcile no-op proofs landed (add / add+autoupdate-enable with futureField/futureTopLevel preservation / add+autoupdate-disable / add+remove cascade / WR-09 orchestrated SKIP). Auto-fixed bug (Rule 1): reclassifyByConfigTruth bidirectional promotion -- when state classifier puts name in unchanged (D-13 scrub strips state.autoupdate so it reads undefined === false) BUT config carries the OPPOSITE explicit value of enable, PROMOTE unchanged -> changed so disable after enable lands the write-back. README ## Configuration files section between Scoping and /claude:plugin reference per CFG-04. SPLIT-02 architecture test verified via Phase 52 A1 protocol -- byte-unchanged, allow-list size 1 preserved. Test fixture migration in lockstep: seedConfigAutoupdate helper added to marketplace/list+info tests; seedMarketplace / seedPathMarketplace / seedGithubMarketplace extended in plugin/list+info + marketplace/update tests to write the autoupdate truth on the config side. All 24 v1.12 requirements CLOSED. npm run check GREEN 1795 unit (+92 from Phase 55 baseline 1703) + 10 integration. -- Plan 56-04. PHASE 56 COMPLETE -- MILESTONE v1.12 GREEN.
 
 ### Pending Todos
 
@@ -240,10 +242,10 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-11T04:24:55.538Z
-Stopped At: Plan 56-02 complete (marketplace add/remove/autoupdate write-back + --local; WB-04 bootstrap composed-write smoke)
+Last session: 2026-06-11T12:00:00.000Z
+Stopped At: Plan 56-04 complete -- MILESTONE v1.12 GREEN (1795 unit + 10 integration; all 24 v1.12 requirements CLOSED)
 Resume File: None
 
 ## Operator Next Steps
 
-- Phase 56 Plan 02 marketplace write-back + --local wiring landed (WB-01 / WB-02 / WB-04 closed at marketplace + bootstrap surface). Next: execute Plan 03 (plugin install/uninstall/reinstall/update orchestrators wire writePluginConfigEntry / deletePluginConfigEntry via withLockedStateTransaction; --local discipline + WR-09 orchestrated-mode skip + CFG-03 abort; atomic 8-handler migration of extractLocalFlag to edge/handlers/shared.ts). Plan 02 added a `[Phase 56]` decision row: SPLIT-01 + Pitfall 5 autoupdate idempotency now measured against the CONFIG-side `autoupdate` value (the D-13 scrub strips legacy state autoupdate once the config exists, so a state-side check would re-classify every same-value flip as fresh and drift mtime).
+- Milestone v1.12 (Marketplace and Plugin Config Files) closed GREEN. All 24 requirements CLOSED in REQUIREMENTS.md Traceability: CFG-01..04, SPLIT-01..02, MIG-01..02, RECON-01..06, WB-01..04, ENBL-01..04, DIFF-01..02. Phase 56 SUMMARY at `.planning/phases/56-write-back-integration-documentation/56-04-SUMMARY.md` records the milestone closure narrative + test-count history (Phase 55 close 1703 -> Plan 56-04 close 1795 unit; +92 unit tests v1.12-wide). Next: run the milestone-close workflow (archive phase dirs to `.planning/milestones/v1.12-phases/`, plan the v1.13 roadmap, or address any operator-flagged tech-debt items). Per project memory, milestone close should SKIP the git tag (tags track npm releases v0.x.y, not GSD milestones v1.x).
