@@ -1502,6 +1502,58 @@ test("RECON-03 uninstall orchestrated mode -- success returns { status: 'uninsta
   });
 });
 
+test("WR-06 uninstall orchestrated mode -- PU-5 silent converge (record already absent) returns { status: 'converged' }, never 'uninstalled', with ZERO notify calls", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-orch-converge-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      // Marketplace container present, plugin record ABSENT -- the PU-5
+      // converge arm (another process completed first, or there was never
+      // an install). The orchestrated outcome must be the explicit
+      // `converged` variant so applyReconcile can drop the row instead of
+      // reporting an uninstall this process did not perform.
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: {},
+          },
+        },
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "absent-plugin",
+        notifications: { mode: "orchestrated" },
+      });
+
+      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+      assert.ok(outcome);
+      assert.equal(
+        outcome.status,
+        "converged",
+        "PU-5 converge must surface as the explicit converged arm (WR-06)",
+      );
+      if (outcome.status === "converged") {
+        assert.equal(outcome.name, "absent-plugin");
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("RECON-03 uninstall orchestrated mode -- missing marketplace returns { status: 'failed', reason: 'not added' } no notifications", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-orch-na-"));

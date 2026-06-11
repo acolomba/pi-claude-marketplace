@@ -78,12 +78,20 @@ export type UninstallPluginNotifications =
  * orchestrated mode. The success arm carries the optional `version` of the
  * removed record (when available) so apply can compose the per-plugin row.
  *
+ * WR-06 (Phase 55 review): the PU-5 silent converge (record already absent
+ * -- another process completed first, or there was never an install) is its
+ * own `"converged"` arm so orchestrated consumers can DROP it (PU-5 "literal
+ * silence", PRD §5.2.2) instead of rendering an `(uninstalled)` row for work
+ * this process did not perform. An absent `version` on the `uninstalled` arm
+ * is NOT a reliable converge discriminator, hence the explicit variant.
+ *
  * `reason` is typed as `Reason` (broader than `ContentReason`) so the
  * structural `"not added"` sentinel returned by the missing-marketplace arm
  * flows through the same field; mirrors `RemoveMarketplaceOutcome`.
  */
 export type UninstallPluginOutcome =
   | { readonly status: "uninstalled"; readonly name: string; readonly version?: string }
+  | { readonly status: "converged"; readonly name: string }
   | {
       readonly status: "failed";
       readonly reason: Reason;
@@ -398,15 +406,16 @@ export async function uninstallPlugin(
   }
 
   // PU-5 silent converge: literal silence, no notification (PRD §5.2.2
-  // verbatim). In orchestrated mode the silent converge surfaces as an
-  // `uninstalled` outcome with no version -- apply (Plan 02) treats both
-  // the standalone-silence path and the converge path identically (no row
-  // to emit).
+  // verbatim). WR-06: in orchestrated mode the converge surfaces as the
+  // explicit `converged` outcome so apply (Plan 02) can DROP it -- both the
+  // standalone-silence path and the orchestrated converge render no row,
+  // and a reconcile racing another process never reports an uninstall it
+  // did not perform.
   //
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- `alreadyGone` is mutated inside the withStateGuard closure above; TS flow analysis cannot prove the closure executed, so it sees the variable as still `false`. The check is required at runtime.
   if (alreadyGone) {
     if (orchestrated) {
-      return { status: "uninstalled", name: plugin };
+      return { status: "converged", name: plugin };
     }
 
     return undefined;

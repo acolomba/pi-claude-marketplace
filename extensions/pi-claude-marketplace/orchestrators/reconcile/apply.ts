@@ -350,6 +350,13 @@ async function applyPluginUninstalls(
         continue;
       }
 
+      // WR-06: the PU-5 silent converge (record already gone -- another
+      // process won the race or there was never an install) renders NO row;
+      // reporting it would claim work this reconcile did not perform.
+      if (result.status === "converged") {
+        continue;
+      }
+
       if (result.status === "uninstalled") {
         outcomes.push({
           kind: "plugin-uninstalled",
