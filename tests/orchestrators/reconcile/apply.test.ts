@@ -362,7 +362,7 @@ test("CR-01 (config key != manifest name): first apply records the MANIFEST name
 
 test("RECON-05 (back-to-back no-op): two consecutive applyReconcile calls against unchanged config + state -> config bytes unchanged, ZERO notify on the second call (silent empty-steady-state)", async () => {
   await withHermeticHome(async ({ cwd }) => {
-    const { configPath } = await setupProjectScope(cwd, {
+    const { configPath, statePath } = await setupProjectScope(cwd, {
       schemaVersion: 1,
       marketplaces: {},
       plugins: {},
@@ -371,6 +371,8 @@ test("RECON-05 (back-to-back no-op): two consecutive applyReconcile calls agains
     // Capture the baseline.
     const beforeConfig = await readFile(configPath, "utf8");
     const beforeConfigMtime = (await stat(configPath)).mtimeMs;
+    const beforeState = await readFile(statePath, "utf8");
+    const beforeStateMtime = (await stat(statePath)).mtimeMs;
 
     const ctxA = makeCtx();
     await applyReconcile({
@@ -416,6 +418,21 @@ test("RECON-05 (back-to-back no-op): two consecutive applyReconcile calls agains
       beforeConfigMtime,
       afterConfigMtime,
       "claude-plugins.json mtime must be unchanged across applyReconcile runs",
+    );
+
+    // WR-05: a no-op reconcile must not rewrite state.json either -- the
+    // read pass is write-free (no unconditional save on closure return).
+    const afterState = await readFile(statePath, "utf8");
+    const afterStateMtime = (await stat(statePath)).mtimeMs;
+    assert.equal(
+      beforeState,
+      afterState,
+      "state.json bytes must be unchanged across no-op applyReconcile runs (WR-05)",
+    );
+    assert.equal(
+      beforeStateMtime,
+      afterStateMtime,
+      "state.json mtime must be unchanged across no-op applyReconcile runs (WR-05)",
     );
   });
 });

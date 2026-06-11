@@ -3,13 +3,16 @@
 // RECON-01..05 (Phase 55 Plan 02): the load-time apply orchestrator.
 //
 // CONTRACT:
-//   - Per-scope READ PASS (locked) under `withStateGuard(loc, ...)`: run
-//     `migrateFirstRunConfig(loc, state)` FIRST (Pitfall 52-2 lock-covered
-//     first-load race; Pitfall 52-4 D-13 existsSync gate is observed at
-//     withStateGuard's internal loadState BEFORE the closure runs), then
-//     `loadMergedScopeConfig(loc)`, then the CFG-03 invalid-arm check, then
-//     `planReconcile(merged, state, scope)`. Closure returns the plan +
-//     invalid blocks; lock releases on closure return.
+//   - Per-scope READ PASS (locked, WRITE-FREE -- WR-05) under
+//     `withLockedStateTransaction(loc, ...)` with NO `tx.save()`: a
+//     pristine scope (no state.json, no config) is skipped before the lock;
+//     otherwise run `migrateFirstRunConfig(loc, state)` FIRST (Pitfall 52-2
+//     lock-covered first-load race; Pitfall 52-4 D-13 existsSync gate is
+//     observed at the transaction's internal loadState BEFORE the closure
+//     runs), then `loadMergedScopeConfig(loc)`, then the CFG-03 invalid-arm
+//     check, then `planReconcile(merged, state, scope)`. Closure returns
+//     the plan + invalid blocks; lock releases on closure return;
+//     state.json bytes + mtime stay untouched.
 //   - Per-scope APPLY PASS with NO outer lock (CR-01 lesson preserved): for
 //     each scope's plan (skip when invalid-config aborted the read pass),
 //     drive the four orchestrators in fixed order (Pitfall 8 data dependency):
@@ -40,9 +43,10 @@ import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
 import { StateLockHeldError } from "../../shared/errors.ts";
+import { pathExists } from "../../shared/fs-utils.ts";
 import { notify } from "../../shared/notify.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
-import { withStateGuard } from "../../transaction/with-state-guard.ts";
+import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { addMarketplace } from "../marketplace/add.ts";
 import { removeMarketplace } from "../marketplace/remove.ts";
 import { setPluginEnabled } from "../plugin/enable-disable.ts";
@@ -94,20 +98,48 @@ interface ScopeReadResult {
 }
 
 /**
- * Per-scope read pass under `withStateGuard`. Migrate-then-load-then-plan
+ * Per-scope read pass under the scope lock. Migrate-then-load-then-plan
  * inside ONE lock so the Phase 52 deferred ordering rail is wired.
+ *
+ * WR-05 (Phase 55 review): the read pass is WRITE-FREE.
+ *
+ *   - Pristine-scope gate: a scope with NO state.json and NO config file
+ *     has never been used by the extension -- the read pass returns before
+ *     taking the lock (no mkdir, no lock file, no generated config). The
+ *     pre-Phase-55 handler was read-only; starting Pi in an arbitrary
+ *     repository must not create `.pi/claude-plugins.json` +
+ *     `.pi/pi-claude-marketplace/state.json` there. The Phase 52 MIG-01
+ *     contract is "generate the config from EXISTING state.json on first
+ *     load" -- an absent state.json means nothing to migrate.
+ *   - No state save: the closure mutates nothing on state (migrate writes
+ *     the CONFIG via saveConfig; load + plan are pure), so the guard is
+ *     `withLockedStateTransaction` WITHOUT `tx.save()` -- a no-op reconcile
+ *     leaves state.json bytes AND mtime untouched (mirrors the RECON-05
+ *     invariant the tests assert for the config file).
  */
 async function readPassForScope(scope: Scope, cwd: string): Promise<ScopeReadResult> {
   const loc = locationsFor(scope, cwd);
 
-  return withStateGuard(loc, async (state) => {
+  const stateExists = await pathExists(loc.stateJsonPath);
+  const configExists =
+    (await pathExists(loc.configJsonPath)) || (await pathExists(loc.configLocalJsonPath));
+  if (!stateExists && !configExists) {
+    // Pristine scope: nothing recorded, nothing declared -- no-op without
+    // touching the disk.
+    return { scope, plan: undefined, invalidOutcomes: [] };
+  }
+
+  return withLockedStateTransaction(loc, async (tx) => {
+    const state = tx.state;
     // (1) Migrate FIRST -- generates a fresh `claude-plugins.json` from the
     // current `state.json` on first run (MIG-01). Idempotent: short-circuits
     // when config already exists (valid OR invalid). Pitfall 52-2: the
     // surrounding lock covers the cross-process concurrent-first-load race;
-    // Pitfall 52-4: the D-13 existsSync gate is observed at withStateGuard's
-    // internal loadState BEFORE this closure runs, preserving legacy-
-    // autoupdate capture (the field still lives on state at this point).
+    // Pitfall 52-4: the D-13 existsSync gate is observed at the
+    // transaction's internal loadState BEFORE this closure runs, preserving
+    // legacy-autoupdate capture (the field still lives on state at this
+    // point). WR-05: `tx.save()` is deliberately NEVER called -- the read
+    // pass mutates nothing on state, so state.json stays byte-untouched.
     await migrateFirstRunConfig(loc, state);
 
     // (2) Load the merged scope config (base + local).

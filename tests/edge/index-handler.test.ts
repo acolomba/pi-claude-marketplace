@@ -17,6 +17,7 @@
 // state is touched).
 
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -66,7 +67,7 @@ function makeCtx(): MockCtx {
   return { ui: { notify: mock.fn() } };
 }
 
-async function withHermeticEnv<T>(fn: (cwd: string) => Promise<T>): Promise<T> {
+async function withHermeticEnv<T>(fn: (cwd: string, home: string) => Promise<T>): Promise<T> {
   const originalHome = process.env.HOME;
   const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
   const home = await mkdtemp(path.join(tmpdir(), "ix-home-"));
@@ -74,7 +75,7 @@ async function withHermeticEnv<T>(fn: (cwd: string) => Promise<T>): Promise<T> {
   process.env.HOME = home;
   delete process.env.PI_CODING_AGENT_DIR;
   try {
-    return await fn(cwd);
+    return await fn(cwd, home);
   } finally {
     if (originalHome === undefined) {
       delete process.env.HOME;
@@ -112,7 +113,7 @@ test("RECON-04 wiring: extension registers a resources_discover handler with bou
 });
 
 test("RECON-04 wiring: a clean reconcile against an empty scope returns a ResourcesDiscoverResult (handler completes the round trip)", async () => {
-  await withHermeticEnv(async (cwd) => {
+  await withHermeticEnv(async (cwd, home) => {
     const pi = makeMockPi();
     claudeMarketplaceExtension(pi as unknown as ExtensionAPI);
     const handler = pi.handlers.get("resources_discover") as ResourcesDiscoverHandler;
@@ -131,6 +132,20 @@ test("RECON-04 wiring: a clean reconcile against an empty scope returns a Resour
       ctx.ui.notify.mock.calls.length,
       0,
       "empty/clean reconcile must NOT emit a notify() (NFR-2 silent contract)",
+    );
+
+    // WR-05: a pristine scope must stay pristine -- starting Pi in an
+    // arbitrary directory must NOT create `.pi/claude-plugins.json` or
+    // `.pi/pi-claude-marketplace/state.json` there (or in the user scope).
+    assert.equal(
+      existsSync(path.join(cwd, ".pi")),
+      false,
+      "WR-05: a clean reconcile must not create <cwd>/.pi (no unsolicited files)",
+    );
+    assert.equal(
+      existsSync(path.join(home, ".pi")),
+      false,
+      "WR-05: a clean reconcile must not create user-scope files either",
     );
   });
 });
