@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, readdir, rm, unlink, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, mkdtemp, readdir, rm, unlink, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -1177,6 +1177,55 @@ test("CFG-03 / T-56-02-05: --local path with an invalid config aborts the add; b
     );
 
     // State was NOT mutated (the marketplace record was never recorded).
+    const persisted = await loadState(locations.extensionRoot);
+    assert.equal(Object.keys(persisted.marketplaces).length, 0);
+  });
+});
+
+test("WR-07: config write failure after the clone rename cleans up the final clone (retry never hits {stale clone})", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    // Valid pre-existing config so the CFG-03 pre-check passes -- the
+    // failure must land AFTER addGithubInGuard renamed the clone into its
+    // final sources/<name>/ path.
+    await writeFile(locations.configJsonPath, JSON.stringify({ schemaVersion: 1 }), "utf8");
+    // Read-only scope root: saveConfig's tmp+rename write into scopeRoot
+    // fails with EACCES, while everything under extensionRoot (state lock,
+    // sources/, sources-staging/) stays writable.
+    await chmod(locations.scopeRoot, 0o555);
+
+    let threw = false;
+    try {
+      await addMarketplace({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        rawSource: "anthropics/claude-plugins-official",
+        gitOps,
+      });
+    } catch {
+      threw = true;
+    } finally {
+      await chmod(locations.scopeRoot, 0o755);
+    }
+
+    // The command failed (either a classified failure row or a rethrow).
+    assert.ok(
+      threw || notifications.some((n) => n.severity === "error"),
+      "config write failure must surface as a failure",
+    );
+
+    // WR-07: the committed final clone was cleaned up -- a retry must NOT
+    // fail MA-6 {stale clone}.
+    const finalDir = await locations.sourceCloneDir("valid-marketplace");
+    assert.equal(await pathExists(finalDir), false, "final clone must be removed on write failure");
+
+    // State was NOT persisted (no tx.save() ran).
     const persisted = await loadState(locations.extensionRoot);
     assert.equal(Object.keys(persisted.marketplaces).length, 0);
   });

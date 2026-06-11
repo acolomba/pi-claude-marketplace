@@ -383,18 +383,39 @@ async function runAddInGuard(args: {
     // The `source` field is `opts.rawSource` VERBATIM so the Phase 53
     // reconcile planner's `samePlannedSource` comparison stays a no-op on
     // the next load.
-    if (!orchestrated) {
-      const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
-      await writeMarketplaceConfigEntry(
-        current,
-        targetConfigPath,
-        locations.scopeRoot,
-        recordedName,
-        { source: opts.rawSource },
-      );
-    }
+    //
+    // WR-07 (Phase 56 review): by this point `addGithubInGuard` has ALREADY
+    // renamed the clone into its final `sources/<name>/` path, and its own
+    // MA-9 cleanup catch is out of scope. If the config write-back or
+    // tx.save() throws (disk full, EACCES on claude-plugins.json), the state
+    // snapshot is discarded (no save) but the clone would be orphaned --
+    // making every retry fail MA-6 `{stale clone}` until the user manually
+    // deletes the directory (NFR-3 violation). Mirror the MA-9 discipline:
+    // remove the committed final clone and append any cleanup leak to the
+    // rethrown error.
+    try {
+      if (!orchestrated) {
+        const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
+        await writeMarketplaceConfigEntry(
+          current,
+          targetConfigPath,
+          locations.scopeRoot,
+          recordedName,
+          { source: opts.rawSource },
+        );
+      }
 
-    await tx.save();
+      await tx.save();
+    } catch (err) {
+      let wrapped: unknown = err;
+      if (source.kind === "github") {
+        const finalDir = await locations.sourceCloneDir(recordedName);
+        const leak = await cleanupStaging(finalDir, `marketplace final clone ${finalDir}`);
+        wrapped = appendLeakToError(wrapped, leak);
+      }
+
+      throw wrapped instanceof Error ? wrapped : new Error(errorMessage(wrapped));
+    }
   });
 
   if (recordedName === undefined) {
