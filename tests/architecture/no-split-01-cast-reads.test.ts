@@ -12,12 +12,12 @@
 //   - extensions/pi-claude-marketplace/orchestrators/plugin/list.ts
 //   - extensions/pi-claude-marketplace/orchestrators/plugin/info.ts
 //
-// Note on marketplace/shared.ts: that file holds the autoupdate FLIP logic
-// which reads + writes via `mut.autoupdate` (assignment form), NOT the
-// trailing `).autoupdate` cast-read form this test scans for. It is
-// included in the allow-list for symmetry with the SPLIT-01 audit but is
-// not matched by the regex below; its rewire is tracked under the Phase 56
-// write-back wiring, not under this baseline.
+// Note on marketplace/shared.ts: that file holds the autoupdate FLIP logic.
+// WR-05 (Phase 56 review) made `classifyAutoupdateFlip` classify-only --
+// the legacy state field is read (two-step cast, not the trailing-cast form
+// below) but never assigned. The ASSIGNMENT-form sibling pattern further
+// down locks that in: no orchestrator may write `.autoupdate =` into a
+// state record (the config write-back is the sole flip surface).
 //
 // Rewire target (Plan 04 closes the loop):
 //
@@ -59,6 +59,16 @@ const ALLOWED_SPLIT_01_AUTOUPDATE_CAST_FILES: ReadonlySet<string> = new Set<stri
 // avoid false-positives on unrelated `Record<string, unknown>` casts.
 const SPLIT_01_AUTOUPDATE_CAST_PATTERN = /as unknown as Record<string,\s*unknown>\)\.autoupdate/;
 
+// WR-05 (Phase 56 review): sibling ASSIGNMENT-form pattern. SPLIT-01 carved
+// `autoupdate` out of the state schema; writing `<expr>.autoupdate = ...`
+// re-introduces a schema-stripped legacy field into state.json that the
+// D-13 scrub removes again on the next load (pointless churn + a window
+// where on-disk state carries a field the schema no longer owns). The
+// negative lookahead excludes comparisons (`==` / `===`); object-literal
+// property form (`autoupdate: value`) is intentionally NOT matched -- that
+// is the sanctioned CONFIG-entry patch shape.
+const SPLIT_01_AUTOUPDATE_ASSIGNMENT_PATTERN = /\.autoupdate\s*=(?!=)/;
+
 async function* walkTsFiles(dir: string): AsyncGenerator<string> {
   const entries = await readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
@@ -96,6 +106,23 @@ test("SPLIT-01 whitelist: exactly 0 files may read autoupdate via Record<string,
   assert.deepEqual([...ALLOWED_SPLIT_01_AUTOUPDATE_CAST_FILES].sort(), []);
 });
 
+test("SPLIT-01 / WR-05: no orchestrator assigns `.autoupdate =` on a state record (assignment-form gate, allow-list empty)", async () => {
+  const offenders: string[] = [];
+  for await (const file of walkTsFiles(ORCHESTRATORS_ROOT)) {
+    const rel = path.relative(REPO_ROOT, file);
+    const source = await readFile(file, "utf8");
+    if (SPLIT_01_AUTOUPDATE_ASSIGNMENT_PATTERN.test(source)) {
+      offenders.push(`${rel} matches ${String(SPLIT_01_AUTOUPDATE_ASSIGNMENT_PATTERN)}`);
+    }
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `SPLIT-01 / WR-05 violation: an assignment-form write of \`autoupdate\` appeared in an orchestrator:\n  ${offenders.join("\n  ")}\n  (autoupdate truth lives in claude-plugins.json; flips go through the config write-back helpers, never the state record. The D-13 scrub would strip the field again on the next load.)`,
+  );
+});
+
 // Negative-test the walker itself: prove the regex catches a synthetic
 // offender source string AND does NOT match benign patterns. Without this,
 // a regex bug could make the walker silently GREEN against ANY codebase.
@@ -122,6 +149,35 @@ test("SPLIT-01 walker: pattern catches a synthetic offender and ignores benign c
     assert.ok(
       !SPLIT_01_AUTOUPDATE_CAST_PATTERN.test(s),
       `walker false-positive: ${String(SPLIT_01_AUTOUPDATE_CAST_PATTERN)} matched a benign expression ${s}`,
+    );
+  }
+});
+
+test("SPLIT-01 / WR-05 walker: assignment pattern catches synthetic offenders and ignores comparisons + config patches", () => {
+  const offenders = [
+    "mut.autoupdate = enable;",
+    "record.autoupdate = true;",
+    "(record as unknown as Record<string, unknown>).autoupdate = enable;",
+    "legacy.autoupdate=false;",
+  ];
+  for (const s of offenders) {
+    assert.ok(
+      SPLIT_01_AUTOUPDATE_ASSIGNMENT_PATTERN.test(s),
+      `walker regression: ${String(SPLIT_01_AUTOUPDATE_ASSIGNMENT_PATTERN)} failed to match ${s}`,
+    );
+  }
+
+  const benign = [
+    "if ((legacy.autoupdate === true) === enable) {",
+    "if (mut.autoupdate == enable) {",
+    "const patch = { autoupdate: enable };",
+    "entry.autoupdate ?? false;",
+    "current.marketplaces?.[name]?.autoupdate !== enable",
+  ];
+  for (const s of benign) {
+    assert.ok(
+      !SPLIT_01_AUTOUPDATE_ASSIGNMENT_PATTERN.test(s),
+      `walker false-positive: ${String(SPLIT_01_AUTOUPDATE_ASSIGNMENT_PATTERN)} matched a benign expression ${s}`,
     );
   }
 });

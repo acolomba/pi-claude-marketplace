@@ -45,9 +45,10 @@
 // Flow:
 //  scopes = opts.scope !== undefined ? [opts.scope] : ["project", "user"] // SC-6
 //  for each scope:
-//  withStateGuard(locations, async (state) => {
-//  result = applyAutoupdateFlipInPlace(state, opts.name, opts.enable) // MAU-1, MAU-3, MAU-4
-//  }) // saves state.json on no-throw
+//  withLockedStateTransaction(locations, async (tx) => {
+//  result = classifyAutoupdateFlip(tx.state, opts.name, opts.enable) // MAU-1, MAU-3, MAU-4
+//  }) // WR-05: classify-only -- state.json is NEVER written by a flip;
+//     // the config write-back is the real flip (SPLIT-01)
 //  accumulate result.changed[] and result.unchanged[] across scopes
 //
 //  compose one MarketplaceNotificationMessage per outcome; emit ONE
@@ -68,7 +69,7 @@ import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../.
 import { notify } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
-import { applyAutoupdateFlipInPlace } from "./shared.ts";
+import { classifyAutoupdateFlip } from "./shared.ts";
 
 import type { MarketplaceConfigEntry, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
@@ -211,8 +212,13 @@ function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err
 
 /**
  * WB-01 / Pitfall 5 (Phase 56 Plan 02): execute a single-scope autoupdate
- * flip inside `withLockedStateTransaction` so config write-back happens under
- * the SAME per-scope lock as the state mutation.
+ * flip inside `withLockedStateTransaction` so the config write-back happens
+ * under the per-scope lock (serialized against concurrent state mutators).
+ *
+ * WR-05 (Phase 56 review): the flip never writes state.json --
+ * `classifyAutoupdateFlip` is classify-only and the closure has no
+ * tx.save(). SPLIT-01 moved autoupdate truth into the config; the config
+ * write-back IS the flip.
  *
  * Write-back fires ONLY on FRESH flips (result.changed). Idempotent flips
  * (already-matching) return BEFORE the write-back call so the targeted config
@@ -354,12 +360,12 @@ async function flipOneScope(
     // once the config file exists, so a state-side idempotency check would
     // re-classify every same-value flip as a "fresh flip" (mtime drift).
     const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
-    const stateResult = applyAutoupdateFlipInPlace(tx.state, opts.name, opts.enable);
+    const stateResult = classifyAutoupdateFlip(tx.state, opts.name, opts.enable);
     const finalResult = reclassifyByConfigTruth(current, stateResult, opts.enable);
 
     if (finalResult.changed.length === 0) {
-      // Pitfall 5 mtime-drift guard: no fresh flip -> SKIP tx.save() AND
-      // config write-back. The targeted config file's mtime is byte-stable.
+      // Pitfall 5 mtime-drift guard: no fresh flip -> SKIP the config
+      // write-back. The targeted config file's mtime is byte-stable.
       return finalResult;
     }
 
@@ -375,7 +381,10 @@ async function flipOneScope(
       );
     }
 
-    await tx.save();
+    // WR-05 (Phase 56 review): NO tx.save() -- classifyAutoupdateFlip no
+    // longer mutates state, so a flip never rewrites state.json. The config
+    // write-back above IS the flip (SPLIT-01: config owns autoupdate truth;
+    // the D-13 scrub strips the legacy state field on the next load).
     return finalResult;
   });
 }
@@ -397,7 +406,7 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
         rows.push({ name, scope, alreadyMatching: true });
       }
     } catch (err) {
-      // For single-name flips: applyAutoupdateFlipInPlace throws
+      // For single-name flips: classifyAutoupdateFlip throws
       // MarketplaceNotFoundError when the name is absent from THIS
       // scope. With SC-6 bare-form, that is expected if the name only
       // lives in the OTHER scope; we collect and only surface if BOTH

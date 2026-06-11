@@ -399,7 +399,7 @@ test("ATTR-05: single-name flip with name absent from BOTH scopes surfaces stand
 test("ATTR-05: explicit-scope flip of a missing marketplace surfaces standalone `(failed) {not added}` with the scope bracket (not `{not found}`)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // Empty project scope; request an explicit project-scope flip of a name
-    // that is not added there. applyAutoupdateFlipInPlace throws
+    // that is not added there. classifyAutoupdateFlip throws
     // MarketplaceNotFoundError for the explicit scope (S1).
     const { ctx, pi, notifications } = makeCtx();
     await setMarketplaceAutoupdate({
