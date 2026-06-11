@@ -1,5 +1,22 @@
 # Milestones: pi-claude-marketplace
 
+## v1.12 Marketplace and Plugin Config Files (Shipped: 2026-06-11)
+
+**Phases completed:** 6 phases, 15 plans, 24 tasks
+
+**Key accomplishments:**
+
+- Declarative per-scope config files: `claude-plugins.json` + entry-level-override `claude-plugins.local.json`, typebox-validated with a discriminated absent/invalid/valid load seam — a 0-byte or corrupt file can never read as "uninstall everything" (CFG-01..03).
+- Lossless first-run migration: upgrading installs generate the config from existing state.json with nothing uninstalled; atomic, idempotent, and convergence-proven (MIG-01..02).
+- Pure 7-bucket reconcile planner + read-only `/claude:plugin preview` showing exactly what the next load will do, with six new closed-set `will *` tokens landed in atomic catalog lockstep (DIFF-01..02).
+- Offline enable/disable: `disable` keeps the config entry + version pin while removing artefacts; `enable` re-materializes from the cached clone with zero network; a new `(disabled)` token renders distinctly from soft-degraded `unavailable` (ENBL-01..04).
+- Automatic load-time reconciliation on every Pi startup/`/reload`: per-entry network soft-fail, one structured cascade (never a `/reload` hint), byte-stable fixed point, two-process race safe (RECON-01..06).
+- Config write-back on every mutating command with `--local` targeting, batched import/bootstrap patches, SPLIT-01 cast sites fully rewired to merged-config truth, and the CFG-04 README workflow docs (WB-01..04).
+
+**Quality:** 146 commits, 187 files, +40,241/−964 lines; `npm run check` GREEN at close (1804 unit + 10 integration, +289 vs v1.11). 5 review criticals and 30+ warnings found and fixed across phases. Known deferred items at close: 1 (see STATE.md Deferred Items) plus register items in `milestones/v1.12-MILESTONE-AUDIT.md` (zero-component/disabled-marker ambiguity, Nyquist back-fill, CFGV2 backlog).
+
+---
+
 ## v1.11 Notification Summary-Line Grammar (Shipped: 2026-06-08)
 
 **Phases completed:** 1 phases, 1 plans, 3 tasks

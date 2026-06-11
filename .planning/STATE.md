@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.12
 milestone_name: Marketplace and Plugin Config Files
-status: Milestone v1.12 GREEN -- ready for milestone-close workflow
+status: Awaiting next milestone
 stopped_at: Plan 56-04 complete -- MILESTONE v1.12 GREEN (1795 unit + 10 integration; all 24 v1.12 requirements CLOSED)
-last_updated: "2026-06-11T07:04:11.285Z"
-last_activity: 2026-06-11
+last_updated: "2026-06-11T12:15:50.529Z"
+last_activity: 2026-06-11 — Milestone v1.12 completed and archived
 progress:
-  total_phases: 34
+  total_phases: 6
   completed_phases: 6
   total_plans: 15
   completed_plans: 15
-  percent: 18
+  percent: 100
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 
 ## Current Position
 
-Phase: 56 of 56 (complete)
-Plan: 4/4 complete
-Status: Milestone v1.12 GREEN -- all 6 phases (51-56) verified; ready for milestone-close workflow (audit -> complete -> cleanup)
-Last activity: 2026-06-11
+Phase: Milestone v1.12 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-06-11 — Milestone v1.12 completed and archived
 
 ## Performance Metrics
 
@@ -248,4 +248,4 @@ Resume File: None
 
 ## Operator Next Steps
 
-- Milestone v1.12 (Marketplace and Plugin Config Files) closed GREEN. All 24 requirements CLOSED in REQUIREMENTS.md Traceability: CFG-01..04, SPLIT-01..02, MIG-01..02, RECON-01..06, WB-01..04, ENBL-01..04, DIFF-01..02. Phase 56 SUMMARY at `.planning/phases/56-write-back-integration-documentation/56-04-SUMMARY.md` records the milestone closure narrative + test-count history (Phase 55 close 1703 -> Plan 56-04 close 1795 unit; +92 unit tests v1.12-wide). Next: run the milestone-close workflow (archive phase dirs to `.planning/milestones/v1.12-phases/`, plan the v1.13 roadmap, or address any operator-flagged tech-debt items). Per project memory, milestone close should SKIP the git tag (tags track npm releases v0.x.y, not GSD milestones v1.x).
+- Start the next milestone with /gsd-new-milestone
