@@ -267,6 +267,76 @@ test("RECON-03 (per-entry network soft-fail): one failing github mp + one succee
   });
 });
 
+test("CR-01 (config key != manifest name): first apply records the MANIFEST name; second apply is a stable no-op -- no remove/re-add churn, no network clone, ZERO notify", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // The config key ("my-mp") deliberately differs from the fixture
+    // manifest's `name` ("valid-marketplace"). addMarketplace records under
+    // the MANIFEST-derived name, so without source-based matching in the
+    // planner the second reconcile would plan add("my-mp") (another network
+    // clone) AND remove("valid-marketplace") (uninstall-all + teardown) --
+    // the perpetual destructive churn CR-01 closes.
+    const { extensionRoot } = await setupProjectScope(cwd, {
+      schemaVersion: 1,
+      marketplaces: {
+        "my-mp": { source: "acme/valid" },
+      },
+    });
+
+    const ctxA = makeCtx();
+    const { gitOps, state: gitState } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    await applyReconcile({
+      ctx: ctxA as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+      gitOps,
+    });
+
+    // Recorded under the MANIFEST name, exactly one clone.
+    assert.equal(gitState.cloneCalls.length, 1);
+    const persisted = await loadState(extensionRoot);
+    assert.ok("valid-marketplace" in persisted.marketplaces);
+
+    // The (added) row carries the name the record was actually created under.
+    assert.equal(ctxA.ui.notify.mock.calls.length, 1);
+    const firstArgs = ctxA.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.ok(
+      firstArgs[0].includes("valid-marketplace") && firstArgs[0].includes("(added)"),
+      `expected (added) row on the recorded name; got:\n${firstArgs[0]}`,
+    );
+
+    // Second apply: converged steady state -- no clone, no remove/re-add,
+    // ZERO notify, record intact.
+    const ctxB = makeCtx();
+    await applyReconcile({
+      ctx: ctxB as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+      gitOps,
+    });
+
+    assert.equal(
+      gitState.cloneCalls.length,
+      1,
+      "second applyReconcile must NOT clone again (NFR-5: no network on a converged load)",
+    );
+    assert.equal(
+      ctxB.ui.notify.mock.calls.length,
+      0,
+      "second applyReconcile must be silent (back-to-back convergence, never remove/re-add churn)",
+    );
+    const persisted2 = await loadState(extensionRoot);
+    assert.ok(
+      "valid-marketplace" in persisted2.marketplaces,
+      "the recorded marketplace must survive the second reconcile untouched",
+    );
+  });
+});
+
 test("RECON-05 (back-to-back no-op): two consecutive applyReconcile calls against unchanged config + state -> config bytes unchanged, ZERO notify on the second call (silent empty-steady-state)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { configPath } = await setupProjectScope(cwd, {

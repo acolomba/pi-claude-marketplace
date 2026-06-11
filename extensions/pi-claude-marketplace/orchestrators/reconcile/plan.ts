@@ -107,6 +107,42 @@ interface MarketplaceDiff {
   readonly declaredAndRecorded: ReadonlySet<string>;
 }
 
+/**
+ * CR-01 (Phase 55 review): find a recorded marketplace that carries the SAME
+ * source as a declared entry whose config key matched no recorded name.
+ * `addMarketplace` records under the MANIFEST-derived name -- which the user
+ * cannot know in advance and which the config key does not have to match.
+ * Without source-based matching, a declared key that differs from the
+ * manifest name would oscillate forever: every reload would plan an add
+ * (a network clone for github sources -- NFR-5 violation) AND a remove of
+ * the previously recorded name (tearing down the marketplace and
+ * uninstalling its plugins). Matching by source instead of name alone makes
+ * back-to-back reconciles converge: the declaration is already honoured by
+ * the existing record, so no action is planned in either direction.
+ *
+ * Records whose name IS declared are excluded (the name diff owns them);
+ * records already claimed by another declared key are excluded so two
+ * declared keys cannot both converge onto one record.
+ */
+function findRecordedBySource(
+  recorded: ExtensionState["marketplaces"],
+  declared: MergedConfig["marketplaces"],
+  alreadyClaimed: ReadonlySet<string>,
+  declaredSource: string,
+): string | undefined {
+  for (const [name, record] of Object.entries(recorded)) {
+    if (declared[name] !== undefined || alreadyClaimed.has(name)) {
+      continue;
+    }
+
+    if (samePlannedSource(record.source, declaredSource) === true) {
+      return name;
+    }
+  }
+
+  return undefined;
+}
+
 function diffMarketplaces(
   merged: MergedConfig,
   state: ExtensionState,
@@ -116,6 +152,10 @@ function diffMarketplaces(
   const remove: PlannedMarketplaceRemove[] = [];
   const mismatches: PlannedSourceMismatch[] = [];
   const declaredAndRecorded = new Set<string>();
+  // CR-01: recorded names claimed by a declared key whose name differs but
+  // whose source matches. Claimed records are steady state (no add planned
+  // for the declared key, no remove planned for the recorded name).
+  const sourceClaimed = new Set<string>();
 
   const declared = merged.marketplaces;
   const recorded = state.marketplaces;
@@ -123,6 +163,22 @@ function diffMarketplaces(
   for (const [mpName, declaredEntry] of Object.entries(declared)) {
     const recordedRecord = recorded[mpName];
     if (recordedRecord === undefined) {
+      // CR-01: before planning an add, check whether the declared SOURCE is
+      // already recorded under a different (manifest-derived) name. If so,
+      // the declaration is honoured -- planning an add here would clone on
+      // every load and the removal loop below would tear the record down,
+      // producing the perpetual remove/re-add churn this guard prevents.
+      const claimedName = findRecordedBySource(
+        recorded,
+        declared,
+        sourceClaimed,
+        declaredEntry.entry.source,
+      );
+      if (claimedName !== undefined) {
+        sourceClaimed.add(claimedName);
+        continue;
+      }
+
       add.push({
         scope,
         marketplace: mpName,
@@ -162,7 +218,10 @@ function diffMarketplaces(
   }
 
   for (const mpName of Object.keys(recorded)) {
-    if (declared[mpName] === undefined) {
+    // CR-01: a recorded name claimed by a declared key via source matching
+    // is NOT removed -- removing it would uninstall its plugins as
+    // collateral and the next reload would re-add (re-clone) it.
+    if (declared[mpName] === undefined && !sourceClaimed.has(mpName)) {
       remove.push({ scope, marketplace: mpName });
     }
   }

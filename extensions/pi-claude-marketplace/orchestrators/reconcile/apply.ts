@@ -237,7 +237,12 @@ async function applyMarketplaceAdds(
       }
 
       if (result.status === "added") {
-        outcomes.push({ kind: "mp-added", scope: op.scope, marketplace: op.marketplace });
+        // CR-01: render the row on the name the record was actually created
+        // under (`result.name` is the MANIFEST-derived name, which the
+        // declared config key does not have to match). The planner's
+        // source-based matching (plan.ts::findRecordedBySource) makes the
+        // next reconcile converge on that recorded name.
+        outcomes.push({ kind: "mp-added", scope: op.scope, marketplace: result.name });
       } else {
         outcomes.push({
           kind: "mp-add-failed",
