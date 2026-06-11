@@ -14,7 +14,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 - [x] **CFG-01**: User can declare marketplaces (name, source, autoupdate) and plugins (`plugin@marketplace`, enabled) in a per-scope `claude-plugins.json` with a Pi-native, typebox-validated schema
 - [x] **CFG-02**: User can override base entries in a gitignore-able `claude-plugins.local.json`; a local entry replaces the base entry wholesale (entry-level override)
 - [x] **CFG-03**: An unparseable or schema-invalid config file aborts reconciliation without changing anything and surfaces an error -- never treated as "empty desired state"
-- [ ] **CFG-04**: The `.local` gitignore convention and config-file workflow are documented (README)
+- [x] **CFG-04**: The `.local` gitignore convention and config-file workflow are documented (README)
 
 ### State Split
 
@@ -39,7 +39,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 - [x] **WB-01**: Every mutating command (marketplace add/remove/autoupdate/noautoupdate, plugin install/uninstall/reinstall/update) records its change as a targeted entry-level patch of the base config file, re-read under the scope lock
 - [x] **WB-02**: A `--local` flag targets `claude-plugins.local.json` instead; `--local` writes never touch the base file
-- [ ] **WB-03**: `import` records imported marketplaces and plugins in the config file
+- [x] **WB-03**: `import` records imported marketplaces and plugins in the config file
 - [x] **WB-04**: `bootstrap` records its marketplace and autoupdate setting in the config file
 
 ### Enable/Disable
@@ -86,7 +86,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CFG-01 | Phase 51 | Done (Plan 51-01, 2026-06-10) |
 | CFG-02 | Phase 51 | Complete |
 | CFG-03 | Phase 51 | Done (Plan 51-01, 2026-06-10) |
-| CFG-04 | Phase 56 | Pending |
+| CFG-04 | Phase 56 | Done (Plan 56-04, 2026-06-11) |
 | SPLIT-01 | Phase 51 | Complete |
 | SPLIT-02 | Phase 51 | Complete |
 | MIG-01 | Phase 52 | Done (Plan 52-01, 2026-06-10) |
@@ -97,10 +97,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RECON-04 | Phase 55 | Complete |
 | RECON-05 | Phase 55 | Complete |
 | RECON-06 | Phase 55 | Complete |
-| WB-01 | Phase 56 | In Progress |
-| WB-02 | Phase 56 | In Progress |
-| WB-03 | Phase 56 | In Progress |
-| WB-04 | Phase 56 | Complete |
+| WB-01 | Phase 56 | Done (Plans 56-02 + 56-03, 2026-06-10/11) |
+| WB-02 | Phase 56 | Done (Plans 56-02 + 56-03, 2026-06-10/11) |
+| WB-03 | Phase 56 | Done (Plan 56-04, 2026-06-11) |
+| WB-04 | Phase 56 | Done (Plan 56-02, 2026-06-10) |
 | ENBL-01 | Phase 54 | Complete |
 | ENBL-02 | Phase 54 | Complete |
 | ENBL-03 | Phase 54 | Complete |

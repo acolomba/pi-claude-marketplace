@@ -305,7 +305,7 @@ Declarative, version-controllable config files (`claude-plugins.json` + entry-le
   4. After any single mutating command, an immediately following load-time reconcile is a no-op (the config write-back already reflects reality), proven by a config-state-consistency architecture test that also confirms unknown keys are preserved on write-back (WB-01 round-trip integrity).
   5. The README documents the `claude-plugins.json` / `claude-plugins.local.json` workflow and the `.local` gitignore convention so a user knows which file to commit and which to keep local (CFG-04).
 
-**Plans:** 4 plans
+**Plans:** 4/4 plans complete
 
 **Wave 1**
 
@@ -318,7 +318,7 @@ Declarative, version-controllable config files (`claude-plugins.json` + entry-le
 
 **Wave 3** *(blocked on Wave 2 completion; milestone GREEN gate)*
 
-- [ ] 56-04-PLAN.md -- import batched per-scope post-pass (WB-03) + SPLIT-01 read-path rewire (7 cast sites; allow-list shrinks to 0) + WB-01 SC#4 LIVE round-trip + reconcile no-op proof + SPLIT-02 architecture-test verification (Phase 52 A1 protocol) + CFG-04 README + milestone v1.12 GREEN gate
+- [x] 56-04-PLAN.md -- import batched per-scope post-pass (WB-03) + SPLIT-01 read-path rewire (7 cast sites; allow-list shrinks to 0) + WB-01 SC#4 LIVE round-trip + reconcile no-op proof + SPLIT-02 architecture-test verification (Phase 52 A1 protocol) + CFG-04 README + milestone v1.12 GREEN gate
 
 <details>
 <summary>Shipped milestones -- Phases 15-44 historical details (v1.4 → v1.8)</summary>
