@@ -3,12 +3,12 @@
 // PU-1..8 + PU-7 propagation + AS-6 (post-commit cleanup leaks warning-severity).
 //
 // Composition (D-09):
-//   withStateGuard(locations, async (state) => {
-//     PU-5 silent converge: if record absent, set alreadyGone=true and return
+//   withLockedStateTransaction(locations, async (tx) => {
+//     PU-5 silent converge: if record absent, set alreadyGone=true and return (NO save)
 //     outcome = await cascadeUnstagePlugin(plugin, marketplace, locations, installed)
 //     if (!outcome.ok) throw outcome.cause  // PU-7 propagation; state record retained
 //     delete state.marketplaces[mp].plugins[plugin]
-//     // guard saves on closure return
+//     await tx.save()  // WR-04: explicit save on mutating arms ONLY
 //   })
 //   if (alreadyGone) return  -- PU-5 silent success
 //   POST-state-commit: rm -rf pluginDataDir; leaks SWALLOWED per
@@ -49,7 +49,7 @@ import { deletePluginConfigEntry } from "../../persistence/config-write-back.ts"
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import { errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
-import { withStateGuard } from "../../transaction/with-state-guard.ts";
+import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { AgentsUnstageFailureError, cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
 import { resolveCrossScopePluginTarget } from "./shared.ts";
@@ -404,9 +404,16 @@ export async function uninstallPlugin(
   let cascadeFailure: Error | undefined;
 
   try {
-    await withStateGuard(locations, async (state) => {
+    // WR-04 (Phase 56 review): explicit-save transaction so the abort arms
+    // (CFG-03 invalid config, PU-5 already-gone) return WITHOUT rewriting
+    // state.json -- `withStateGuard` saved unconditionally on closure
+    // return, bumping state.json's mtime on every abort, diverging from the
+    // documented no-save abort discipline the sibling commands follow.
+    await withLockedStateTransaction(locations, async (tx) => {
+      const state = tx.state;
       // CFG-03 / T-56-03-04: abort BEFORE any state mutation. The
       // basename-only message prevents an absolute-path information leak.
+      // NO tx.save() -- state.json bytes and mtime are untouched.
       const cfg = await loadConfig(targetConfigPath);
       if (cfg.status === "invalid") {
         configInvalid = true;
@@ -467,11 +474,12 @@ export async function uninstallPlugin(
           throw cause;
         }
 
-        // Non-AG-5: filter resources.* by dropped.* in place. The mutation
-        // persists via the guard's trailing saveState because we return
-        // normally (no throw) from the closure.
+        // Non-AG-5: filter resources.* by dropped.* in place. The shrunken
+        // row persists via the explicit tx.save() (WR-04) -- this arm DID
+        // mutate state, unlike the abort arms above.
         applyPartialCascadeFold(installed, localOutcome.dropped);
         cascadeFailure = cause;
+        await tx.save();
         return;
       }
 
@@ -506,6 +514,12 @@ export async function uninstallPlugin(
           marketplace,
         );
       }
+
+      // WR-04: explicit save on the mutating success arm. Ordering
+      // preserved from the previous withStateGuard shape: state persists
+      // AFTER the config write-back (a write-back throw aborts the save,
+      // keeping the record intact for retry exactly as before).
+      await tx.save();
     });
   } catch (err) {
     // PU-7 propagation: AG-5 (or any other cascade failure). State was NOT
@@ -525,7 +539,7 @@ export async function uninstallPlugin(
 
   // WB-01 / CFG-03 / T-56-03-04: invalid-config abort. No state mutation
   // (the closure returned before reading state); no write-back.
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated inside the withStateGuard closure above.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated inside the withLockedStateTransaction closure above.
   if (configInvalid) {
     return emitConfigInvalid({
       ctx,
@@ -545,7 +559,7 @@ export async function uninstallPlugin(
   // and a reconcile racing another process never reports an uninstall it
   // did not perform.
   //
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- `alreadyGone` is mutated inside the withStateGuard closure above; TS flow analysis cannot prove the closure executed, so it sees the variable as still `false`. The check is required at runtime.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- `alreadyGone` is mutated inside the withLockedStateTransaction closure above; TS flow analysis cannot prove the closure executed, so it sees the variable as still `false`. The check is required at runtime.
   if (alreadyGone) {
     if (orchestrated) {
       return { status: "converged", name: plugin };

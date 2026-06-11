@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -1810,6 +1810,12 @@ test("CFG-03 / T-56-03-04: invalid config aborts uninstall; basename-only cause;
       await mkdir(path.dirname(locations.configJsonPath), { recursive: true });
       await writeFile(locations.configJsonPath, "{ not valid json", "utf8");
 
+      // WR-04 (Phase 56 review): the abort must not rewrite state.json at
+      // all -- bytes AND mtime stable (no-save abort discipline).
+      const statePath = path.join(locations.extensionRoot, "state.json");
+      const stateBytesPre = await readFile(statePath, "utf8");
+      const stateMtimePre = (await stat(statePath)).mtimeMs;
+
       const { ctx, pi, notifications } = makeCtx();
       await uninstallPlugin({
         ctx,
@@ -1831,6 +1837,10 @@ test("CFG-03 / T-56-03-04: invalid config aborts uninstall; basename-only cause;
       // State record was NOT removed.
       const after = await loadState(locations.extensionRoot);
       assert.ok("hello" in (after.marketplaces["mp"]?.plugins ?? {}));
+
+      // WR-04: state.json bytes + mtime unchanged on the CFG-03 abort.
+      assert.equal(await readFile(statePath, "utf8"), stateBytesPre);
+      assert.equal((await stat(statePath)).mtimeMs, stateMtimePre);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

@@ -6,7 +6,7 @@
 // (transaction/phase-ledger.ts). Composition order is locked by D-01,
 // D-02, D-05, D-08:
 //
-//   withStateGuard(locations, async (state) => {           // D-02 outer guard
+//   withLockedStateTransaction(locations, async (tx) => {   // D-02 outer guard
 //     runInstallLedger(state, locations, opts, capture)    // guard-FREE body:
 //       PI-15 early sanity:  throw if state.marketplaces[mp].plugins[plugin] != null
 //       PI-3:                throw if marketplace / entry absent
@@ -103,7 +103,7 @@ import {
 import { notify } from "../../shared/notify.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
 import { runPhases, type Phase, type RollbackPartial } from "../../transaction/phase-ledger.ts";
-import { withStateGuard } from "../../transaction/with-state-guard.ts";
+import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import {
   assertNoCrossPluginConflicts,
@@ -293,7 +293,7 @@ interface InstallCtx {
   bridgeWarnings: string[];
   // Bridge-side per-record AG-5 foreign-content rows -- routed to notifyWarning post-success.
   agentForeignFailures: { generatedName: string; reason: string }[];
-  // Mutable handle to the state snapshot loaded by withStateGuard.
+  // Mutable handle to the state snapshot loaded by the caller's locked transaction.
   readonly stateSnapshot: ExtensionState;
 }
 
@@ -366,11 +366,11 @@ type InstallLedgerResult =
  * `withLockedStateTransaction` / `saveState` of its own -- `proper-lockfile`
  * (`retries: 0`) is NOT re-entrant, so nesting a second guard on the same
  * `stateLockFile` self-deadlocks (ELOCKED -> StateLockHeldError; the defect
- * that made the fresh-enable path unreachable). `installPlugin` calls this
- * inside its own `withStateGuard`; `setPluginEnabled`
- * (orchestrators/plugin/enable-disable.ts) calls it inside its
- * `withLockedStateTransaction` so the OUTER snapshot receives the state
- * mutation and exactly one save persists it (single-writer, ST-7 / D-06).
+ * that made the fresh-enable path unreachable). `installPlugin` and
+ * `setPluginEnabled` (orchestrators/plugin/enable-disable.ts) each call
+ * this inside their own `withLockedStateTransaction` so the OUTER snapshot
+ * receives the state mutation and exactly one explicit save persists it
+ * (single-writer, ST-7 / D-06).
  *
  * Failure contract: throws the raw orchestration error (PI-14 bypass
  * preserved). When `capture` is provided, `capture.rollbackPartials` /
@@ -834,11 +834,18 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   try {
     // D-02 outer guard around the guard-FREE ledger body (CR-01): the lock
     // and the load/save lifecycle live HERE; `runInstallLedger` mutates the
-    // snapshot only. (Returning on marketplace-absent lets the guard re-save
-    // the unchanged state; the operation is read-only in effect.)
-    await withStateGuard(locations, async (state) => {
+    // snapshot only.
+    //
+    // WR-04 (Phase 56 review): explicit-save transaction so the abort arms
+    // (CFG-03 invalid config, marketplace-absent) return WITHOUT rewriting
+    // state.json -- `withStateGuard` saved unconditionally on closure
+    // return, bumping state.json's mtime on every abort, diverging from the
+    // documented no-save abort discipline the sibling commands follow.
+    await withLockedStateTransaction(locations, async (tx) => {
+      const state = tx.state;
       // CFG-03 / T-56-03-04: abort BEFORE any state mutation. The
       // basename-only message prevents an absolute-path information leak.
+      // NO tx.save() -- state.json bytes and mtime are untouched.
       const cfg = await loadConfig(targetConfigPath);
       if (cfg.status === "invalid") {
         configInvalid = true;
@@ -861,6 +868,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
         capture,
       );
       if (result.kind === "marketplace-absent") {
+        // WR-04: precondition miss -- read-only in effect, NO tx.save().
         marketplaceAbsent = true;
         return;
       }
@@ -894,6 +902,12 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
           plugins: { [`${plugin}@${marketplace}`]: {} },
         });
       }
+
+      // WR-04: the SOLE mutating arm saves explicitly. Ordering preserved
+      // from the previous withStateGuard shape: state persists AFTER the
+      // config write-back (a write-back throw aborts the save, leaving the
+      // state snapshot discarded exactly as before).
+      await tx.save();
     });
   } catch (err) {
     // Pattern S-1 single chokepoint for user-visible errors (one
@@ -986,7 +1000,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   // WB-01 / CFG-03 / T-56-03-04: invalid-config abort. The basename-only
   // message prevents an absolute-path information leak. No state mutation,
   // no write-back -- the closure returned before runInstallLedger ran.
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated inside the withStateGuard closure above.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated inside the withLockedStateTransaction closure above.
   if (configInvalid) {
     const cause = `Config file "${configBasename}" failed schema validation.`;
     const invalidErr = new Error(cause);
@@ -1013,7 +1027,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     return { status: "failed", error: invalidErr, cause };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- `marketplaceAbsent` is mutated inside the withStateGuard closure above; TS flow analysis cannot prove the closure executed, so it sees the variable as still `false`. The check is required at runtime.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- `marketplaceAbsent` is mutated inside the withLockedStateTransaction closure above; TS flow analysis cannot prove the closure executed, so it sees the variable as still `false`. The check is required at runtime.
   if (marketplaceAbsent) {
     const cause = `Marketplace "${marketplace}" is not added in the ${scope} scope.`;
     if (opts.notifications?.mode === "orchestrated") {
