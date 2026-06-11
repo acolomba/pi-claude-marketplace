@@ -33,8 +33,9 @@
 
 import path from "node:path";
 
-import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
+import { loadMergedScopeConfig, mergeScopeConfigs } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
+import { buildConfigFromState } from "../../persistence/migrate-config.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { compareByNameThenScope, notify } from "../../shared/notify.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
@@ -43,6 +44,8 @@ import { buildReconcilePreviewNotification, isReconcilePlanListEmpty } from "./n
 import { planReconcile } from "./plan.ts";
 
 import type { ReconcilePlan } from "./types.ts";
+import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
+import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
   CascadeNotificationMessage,
@@ -90,6 +93,30 @@ function narrowStateLoadFailReason(err: unknown): ContentReason {
   }
 
   return narrowProbeError(err);
+}
+
+/**
+ * MIG-01 pre-migration window (DIFF-01): pick the merged desired-state view
+ * the planner runs against. When the BASE config file is ABSENT, the apply
+ * path migrates FIRST inside its lock (apply.ts::readPassForScope step 1
+ * writes `buildConfigFromState(state)` to `claude-plugins.json`, then plans
+ * against the merged view). A preview that planned against the raw merged
+ * view (absent base == empty desired state) would render a misleading
+ * mass-uninstall plan for a populated state. Mirror the post-migration
+ * merged view READ-ONLY instead: plan against the PURE
+ * `buildConfigFromState` projection merged with the local arm -- no write,
+ * no migration side effect (NFR-5 read-surface discipline). A pristine
+ * scope (empty state) projects an empty config, so the empty-advisory
+ * behavior is unchanged; an invalid base/local arm never reaches this
+ * helper (CFG-03 abort happens first).
+ */
+function mergedViewForPlanning(outcome: ScopeLoadOutcome, state: ExtensionState): MergedConfig {
+  if (outcome.base.status !== "absent") {
+    return outcome.merged;
+  }
+
+  const local = outcome.local.status === "valid" ? outcome.local.config : {};
+  return mergeScopeConfigs(buildConfigFromState(state), local);
 }
 
 export async function previewReconcile(opts: PreviewReconcileOptions): Promise<void> {
@@ -142,7 +169,10 @@ export async function previewReconcile(opts: PreviewReconcileOptions): Promise<v
       continue;
     }
 
-    plans.push(planReconcile(outcome.merged, state, scope));
+    // MIG-01 pre-migration window (DIFF-01): plan against what the next
+    // load's reconcile would actually see (the apply path migrates first),
+    // not against an absent-as-empty merged view -- see mergedViewForPlanning.
+    plans.push(planReconcile(mergedViewForPlanning(outcome, state), state, scope));
   }
 
   // DIFF-01 SC #2 empty-steady-state: no invalid-config rows AND every plan

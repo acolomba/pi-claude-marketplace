@@ -301,6 +301,165 @@ test("scope fan-out: omitted --scope walks both scopes project-first (advisory i
   });
 });
 
+/**
+ * Lay down a FULLY-MODERN populated project-scope state.json (all
+ * MARKETPLACE_RECORD_SCHEMA fields present, plugin resources arrays
+ * complete) so `loadState` performs NO legacy migration and fires NO
+ * background persist -- the no-write assertions below must not race an
+ * ST-4 best-effort save.
+ */
+async function writePopulatedProjectState(cwd: string): Promise<{ statePath: string }> {
+  const projectScopeRoot = path.join(cwd, ".pi");
+  const extensionRoot = path.join(projectScopeRoot, "pi-claude-marketplace");
+  await mkdir(extensionRoot, { recursive: true });
+  const statePath = path.join(extensionRoot, "state.json");
+  await writeFile(
+    statePath,
+    JSON.stringify(
+      {
+        schemaVersion: 1,
+        marketplaces: {
+          "mp-github": {
+            name: "mp-github",
+            scope: "project",
+            source: "acme/tools",
+            addedFromCwd: "/some/cwd",
+            manifestPath: "/abs/mp-github/.claude-plugin/marketplace.json",
+            marketplaceRoot: "/abs/mp-github",
+            plugins: {
+              "code-reviewer": {
+                version: "1.0.0",
+                resolvedSource: "/abs/mp-github/code-reviewer",
+                compatibility: {
+                  installable: true,
+                  notes: [],
+                  supported: ["skills"],
+                  unsupported: [],
+                },
+                resources: {
+                  skills: ["cr-skill"],
+                  prompts: [],
+                  agents: [],
+                  mcpServers: [],
+                },
+                installedAt: "2025-01-01T00:00:00.000Z",
+                updatedAt: "2025-01-01T00:00:00.000Z",
+              },
+            },
+          },
+        },
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+  return { statePath };
+}
+
+test("MIG-01 pre-migration window: absent config + populated state -> EMPTY advisory, NOT a mass-uninstall plan", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // Populated state.json, NO claude-plugins.json: the post-upgrade,
+    // pre-first-/reload window. The apply path migrates FIRST (the next
+    // load's reconcile is a no-op), so the preview must converge on the
+    // same answer -- planning against the absent-as-empty merged view would
+    // render `(will uninstall)` / `(will remove)` rows for everything in
+    // state (the DIFF-01 'exactly what the next load would do' violation).
+    await writePopulatedProjectState(cwd);
+
+    const ctx = makeCtx(cwd);
+    await previewReconcile({
+      ctx: ctx as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const args = ctx.ui.notify.mock.calls[0]!.arguments;
+    assert.equal(args.length, 1, "empty advisory is info severity (no 2nd arg)");
+    assert.equal(args[0], "Preview: next reload will apply 0 actions.");
+  });
+});
+
+test("MIG-01 pre-migration window: idempotent + READ-ONLY -- run twice, byte-identical output, NO config file created", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { statePath } = await writePopulatedProjectState(cwd);
+    const beforeState = await readFile(statePath, "utf8");
+    const beforeStateMtime = (await stat(statePath)).mtimeMs;
+
+    const ctxA = makeCtx(cwd);
+    const ctxB = makeCtx(cwd);
+    await previewReconcile({
+      ctx: ctxA as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+    await previewReconcile({
+      ctx: ctxB as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    // DIFF-01 SC #2: byte-identical across consecutive runs.
+    assert.deepEqual(
+      ctxA.ui.notify.mock.calls[0]!.arguments,
+      ctxB.ui.notify.mock.calls[0]!.arguments,
+    );
+    // NFR-5 read-surface discipline: the preview projection must NOT have
+    // performed the migration -- no claude-plugins.json appears.
+    const configPath = path.join(cwd, ".pi", "claude-plugins.json");
+    await assert.rejects(
+      stat(configPath),
+      (err: NodeJS.ErrnoException) => err.code === "ENOENT",
+      "preview must NEVER create claude-plugins.json (migration is the apply path's job)",
+    );
+    // state.json bytes + mtime untouched.
+    assert.equal(await readFile(statePath, "utf8"), beforeState);
+    assert.equal((await stat(statePath)).mtimeMs, beforeStateMtime);
+  });
+});
+
+test("MIG-01 pre-migration window: local arm still merges over the projection (will-add for local-only entry, no uninstalls)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // Populated state + absent BASE config + a local config declaring one
+    // EXTRA marketplace: the post-migration merged view is
+    // projection + local, so the preview must show exactly the local-only
+    // addition -- and must NOT plan uninstalls for the recorded entries.
+    await writePopulatedProjectState(cwd);
+    await writeFile(
+      path.join(cwd, ".pi", "claude-plugins.local.json"),
+      JSON.stringify(
+        { schemaVersion: 1, marketplaces: { "zzz-extra": { source: "acme/extra" } }, plugins: {} },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const ctx = makeCtx(cwd);
+    await previewReconcile({
+      ctx: ctx as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+    assert.ok(
+      emitted.includes("zzz-extra") && emitted.includes("(will add)"),
+      `expected a (will add) row for the local-only marketplace; got:\n${emitted}`,
+    );
+    assert.ok(
+      !emitted.includes("will uninstall") && !emitted.includes("will remove"),
+      `recorded entries must NOT plan as uninstalls in the pre-migration window; got:\n${emitted}`,
+    );
+  });
+});
+
 test("scope routing: explicit --scope user routes to user-scope load only (still emits the empty advisory in a clean env)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const ctx = makeCtx(cwd);
