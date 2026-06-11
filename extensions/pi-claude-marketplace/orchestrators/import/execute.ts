@@ -5,10 +5,16 @@ import {
   type InstallPluginOptions,
   type InstallPluginOutcome,
 } from "../../orchestrators/plugin/install.ts";
+import { loadConfig } from "../../persistence/config-io.ts";
+import {
+  writeBatchedConfigEntries,
+  type BatchedConfigPatch,
+} from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState as defaultLoadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
 import { compareByNameThenScope, notify } from "../../shared/notify.ts";
+import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import { buildClaudeImportPlan } from "./marketplaces.ts";
 import { loadMergedClaudeSettingsForScope as defaultLoadSettings } from "./settings.ts";
@@ -706,6 +712,133 @@ async function executeScopedPlan(
         break;
     }
   }
+
+  // WB-03 / Pitfall 8: bounded race window self-heals on next reconcile.
+  // After all per-entry orchestrated-mode addMarketplace + installPlugin
+  // calls complete for THIS scope, run a per-scope batched post-pass under
+  // ONE withLockedStateTransaction. Per-entry orchestrators SKIPPED their
+  // own write-back (WR-09 orchestrated-mode discipline) so the post-pass
+  // owns the ONLY write to claude-plugins.json for the import command.
+  await writeBatchedConfigForScope(opts, result, scopePlan);
+}
+
+/**
+ * WB-03: per-scope batched post-pass.
+ *
+ * Reads back `result` for entries WHOSE scope matches this scope, builds a
+ * `BatchedConfigPatch` (one entry per successful addedMarketplaces + one per
+ * successful installedPlugins), and writes the patch under ONE
+ * withLockedStateTransaction with exactly ONE saveConfig call.
+ *
+ * Target: import does NOT support `--local` (per RESEARCH project structure;
+ * the flag is per-command and not on the import surface), so the post-pass
+ * targets `locations.configJsonPath` unconditionally.
+ *
+ * Source: verbatim `rawSource` from `scopePlan.marketplacesToEnsure` keyed by
+ * marketplace name, preserving the Phase 53 `samePlannedSource` contract.
+ *
+ * CFG-03: invalid claude-plugins.json aborts THIS scope's post-pass but does
+ * NOT throw -- other scopes' post-passes still run. State was already saved
+ * by per-entry orchestrators; this post-pass writes only the config.
+ *
+ * Empty batch (no successful additions): SKIP entirely (RECON-05 byte-stable).
+ */
+async function writeBatchedConfigForScope(
+  opts: ImportClaudeSettingsOptions,
+  result: MutableImportResult,
+  scopePlan: ScopedImportPlan,
+): Promise<void> {
+  const scope = scopePlan.scope;
+  const batch = buildBatchedPatchForScope(result, scopePlan);
+  if (isEmptyPatch(batch)) {
+    return;
+  }
+
+  const locations = locationsFor(scope, opts.cwd);
+  const targetConfigPath = locations.configJsonPath;
+
+  try {
+    await withLockedStateTransaction(locations, async () => {
+      const cfg = await loadConfig(targetConfigPath);
+      if (cfg.status === "invalid") {
+        // CFG-03: per-scope abort. Surface as a diagnostic; do not save.
+        pushDiagnostic(
+          result,
+          scope,
+          "settings-read-error",
+          `Cannot write ${scope} scope claude-plugins.json: existing file is invalid.`,
+        );
+        return;
+      }
+
+      const current = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 as const };
+      await writeBatchedConfigEntries(current, targetConfigPath, locations.scopeRoot, batch);
+      // NO tx.save() -- state was already committed by per-entry
+      // orchestrators inside their own withStateGuard / withLockedStateTransaction
+      // closures. The bounded race between the last per-entry lock release and
+      // this batched-save lock acquire is self-healing: a concurrent reconcile
+      // can observe partial state, and the next reconcile pass converges.
+    });
+  } catch (err) {
+    // Defensive: a write-back failure (disk full, EACCES, lock contention)
+    // does not abort the import command result -- per-entry orchestrators
+    // already committed state. Surface as a per-scope diagnostic.
+    pushDiagnostic(
+      result,
+      scope,
+      "settings-read-error",
+      `Failed to write ${scope} scope claude-plugins.json batched post-pass: ${errorMessage(err)}`,
+    );
+  }
+}
+
+function buildBatchedPatchForScope(
+  result: MutableImportResult,
+  scopePlan: ScopedImportPlan,
+): BatchedConfigPatch {
+  // Map marketplace name -> verbatim rawSource so the batched patch records
+  // `source: rawSource` exactly as the user/Claude settings declared it
+  // (Phase 53 `samePlannedSource` contract).
+  const rawSourceByName = new Map<string, string>();
+  for (const mp of scopePlan.marketplacesToEnsure) {
+    rawSourceByName.set(mp.marketplace, mp.source);
+  }
+
+  const marketplaces: Record<string, { source: string }> = {};
+  for (const added of result.addedMarketplaces) {
+    if (added.scope !== scopePlan.scope) {
+      continue;
+    }
+
+    const rawSource = rawSourceByName.get(added.marketplace);
+    if (rawSource === undefined) {
+      // Defensive: should not happen -- every addedMarketplaces entry
+      // originated from a marketplacesToEnsure entry. Skip rather than
+      // synthesize a wrong source.
+      continue;
+    }
+
+    marketplaces[added.marketplace] = { source: rawSource };
+  }
+
+  const plugins: Record<string, Record<string, never>> = {};
+  for (const installed of result.installedPlugins) {
+    if (installed.scope !== scopePlan.scope) {
+      continue;
+    }
+
+    const key = `${installed.plugin}@${installed.marketplace}`;
+    plugins[key] = {};
+  }
+
+  return { marketplaces, plugins };
+}
+
+function isEmptyPatch(batch: BatchedConfigPatch): boolean {
+  return (
+    Object.keys(batch.marketplaces ?? {}).length === 0 &&
+    Object.keys(batch.plugins ?? {}).length === 0
+  );
 }
 
 /**
