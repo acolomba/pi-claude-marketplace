@@ -14,9 +14,8 @@
 // `EntityErrorRow` compact lines per CMC-34.
 
 import { addMarketplace } from "../../../orchestrators/marketplace/add.ts";
-import { notifyUsageError } from "../../../shared/notify.ts";
-import { parseCommandArgs } from "../../args-schema.ts";
-import { extractLocalFlag } from "../shared.ts";
+
+import { openMarketplaceCommand } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { EdgeDeps } from "../../types.ts";
@@ -28,43 +27,22 @@ export function makeAddHandler(
   deps: EdgeDeps,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
-    // WB-01: extract `--local` BEFORE positional parsing so flag position
-    // cannot change the outcome (matches the enable-disable handler shape).
-    const localFlag = extractLocalFlag(args, ctx, USAGE);
-    if (localFlag === undefined) {
-      return;
-    }
-
-    const parsed = parseCommandArgs(
-      localFlag.residualArgs,
-      {
-        positional: [{ name: "source" }] as const,
-        usage: USAGE,
-      },
-      (message) => {
-        // MSG-NC-2: argument-parsing failure -> sentence form + Usage
-        // block (notifyUsageError contract: ${message}\n\n${usageBlock}).
-        // Substitute "Missing required argument." when the parser hands
-        // back the usage string verbatim (the duplicate-usage case --
-        // notifyUsageError would re-emit the Usage block otherwise).
-        notifyUsageError(ctx, {
-          message: message === USAGE ? "Missing required argument." : message,
-          usage: USAGE,
-        });
-      },
-    );
-    if (parsed === undefined) {
+    const opened = openMarketplaceCommand(args, ctx, {
+      usage: USAGE,
+      positionalName: "source",
+    });
+    if (opened === undefined) {
       return;
     }
 
     await addMarketplace({
       ctx,
       pi,
-      scope: parsed.scope ?? "user",
+      scope: opened.scope ?? "user",
       cwd: ctx.cwd,
-      rawSource: parsed.source,
+      rawSource: opened.source,
       gitOps: deps.gitOps,
-      ...(localFlag.local && { local: true }),
+      ...(opened.local && { local: true }),
     });
   };
 }

@@ -14,9 +14,8 @@
 // positional/scope shape.
 
 import { removeMarketplace } from "../../../orchestrators/marketplace/remove.ts";
-import { notifyUsageError } from "../../../shared/notify.ts";
-import { parseCommandArgs } from "../../args-schema.ts";
-import { extractLocalFlag } from "../shared.ts";
+
+import { openMarketplaceCommand } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
@@ -27,36 +26,21 @@ export function makeRemoveHandler(
   pi: ExtensionAPI,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
-    // WB-01: extract `--local` BEFORE positional parsing.
-    const localFlag = extractLocalFlag(args, ctx, USAGE);
-    if (localFlag === undefined) {
-      return;
-    }
-
-    const parsed = parseCommandArgs(
-      localFlag.residualArgs,
-      {
-        positional: [{ name: "name" }] as const,
-        usage: USAGE,
-      },
-      (message) => {
-        notifyUsageError(ctx, {
-          message: message === USAGE ? "Missing required argument." : message,
-          usage: USAGE,
-        });
-      },
-    );
-    if (parsed === undefined) {
+    const opened = openMarketplaceCommand(args, ctx, {
+      usage: USAGE,
+      positionalName: "name",
+    });
+    if (opened === undefined) {
       return;
     }
 
     await removeMarketplace({
       ctx,
       pi,
-      name: parsed.name,
+      name: opened.name,
       cwd: ctx.cwd,
-      ...(parsed.scope !== undefined && { scope: parsed.scope }),
-      ...(localFlag.local && { local: true }),
+      ...(opened.scope !== undefined && { scope: opened.scope }),
+      ...(opened.local && { local: true }),
     });
   };
 }
