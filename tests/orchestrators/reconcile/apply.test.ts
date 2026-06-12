@@ -72,8 +72,11 @@ async function withHermeticHome<T>(
       process.env.PI_CODING_AGENT_DIR = originalAgentDir;
     }
 
-    await rm(home, { recursive: true, force: true });
-    await rm(cwd, { recursive: true, force: true });
+    // maxRetries: proper-lockfile's async release can still touch the lock
+    // dir while this teardown walks it, racing rmdir into ENOTEMPTY on slow
+    // CI filesystems (PR #51 flake). Node's rm retries cover exactly this.
+    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    await rm(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 }
 

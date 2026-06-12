@@ -69,7 +69,7 @@ async function setupRaceEnv(prefix: string): Promise<RaceEnv> {
     cwd,
     home,
     cleanup: async (): Promise<void> => {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     },
   };
 }

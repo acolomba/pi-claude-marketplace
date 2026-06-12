@@ -68,8 +68,8 @@ async function withHermeticHome<T>(
       process.env.PI_CODING_AGENT_DIR = originalAgentDir;
     }
 
-    await rm(home, { recursive: true, force: true });
-    await rm(cwd, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    await rm(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 }
 
