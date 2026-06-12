@@ -276,7 +276,7 @@ test("ENBL-02: disable preserves version pin and empties resources arrays", asyn
       disabled: false,
       version: "9.9.9",
     });
-    const { ctx } = makeCtx(cwd);
+    const { ctx, notifications } = makeCtx(cwd);
     await setPluginEnabled({
       ctx,
       pi: makePi(),
@@ -286,6 +286,20 @@ test("ENBL-02: disable preserves version pin and empties resources arrays", asyn
       enable: false,
       scope: "user",
     });
+
+    // UAT-03 (v1.12 milestone UAT decision 2026-06-11): catalog
+    // `disable-fresh` byte form -- bare marketplace header + the closed-set
+    // `(disabled)` row (same glyph + token as the disabled-inventory row,
+    // version slot kept) + the `/reload` trailer (the orchestrator
+    // dispatches with the `disable-cascade` kind, so the `(disabled)` row
+    // counts as a realized transition per SNM-33).
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined, "fresh disable routes to info severity");
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp [user]", "  ⊘ foo v9.9.9 (disabled)", "", "/reload to pick up changes"].join("\n"),
+    );
+
     const raw = await readFile(statePath, "utf8");
     const state = JSON.parse(raw) as {
       marketplaces: Record<
@@ -342,15 +356,16 @@ test("CR-01: fresh enable succeeds end-to-end against a real on-disk marketplace
     });
 
     // Exactly one notify, info severity, catalog `enable-fresh` byte form:
-    // `(added)` header + `(installed)` row + `/reload` trailer. A nested
-    // withStateGuard would instead produce a `(failed)` row with a
+    // BARE marketplace header (UAT-04: no `(added)` token -- that header
+    // belongs to `marketplace add`) + `(installed)` row + `/reload` trailer.
+    // A nested withStateGuard would instead produce a `(failed)` row with a
     // StateLockHeldError cause (the CR-01 regression this test pins).
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined, "fresh enable routes to info severity");
     assert.equal(
       notifications[0]!.message,
       [
-        "● claude-plugins-official [user] (added)",
+        "● claude-plugins-official [user]",
         "  ● foo-plugin v1.2.3 (installed)",
         "",
         "/reload to pick up changes",

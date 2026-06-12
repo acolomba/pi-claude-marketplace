@@ -3651,6 +3651,66 @@ test("D-54-01: (disabled) inventory row WITHOUT orphan-fold -- p.scope matches m
   assert.equal(args[0], `● official [user]\n  ⊘ foo-plugin v1.2.3 (disabled)`);
 });
 
+test("UAT-03: (disabled) row on a `disable-cascade`-kind cascade DOES emit the /reload trailer (realized transition; byte-identical row form)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  // The /claude:plugin disable command's fresh cascade: the orchestrator
+  // dispatches with the `disable-cascade` kind so the `(disabled)` row
+  // counts as a state-change transition in shouldEmitReloadHint (artefacts
+  // were unstaged -- SNM-33). The row itself renders byte-identically to
+  // the kind-less inventory form asserted above; ONLY the trailer differs.
+  const msg: NotificationMessage = {
+    kind: "disable-cascade",
+    marketplaces: [
+      {
+        name: "claude-plugins-official",
+        scope: "user",
+        plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3" }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  // info severity -> no 2nd arg (a fresh disable is the user-requested
+  // state, not a failure).
+  assert.equal(args.length, 1);
+  assert.equal(
+    args[0],
+    [
+      "● claude-plugins-official [user]",
+      "  ⊘ foo-plugin v1.2.3 (disabled)",
+      "",
+      "/reload to pick up changes",
+    ].join("\n"),
+  );
+});
+
+test("UAT-03: `disable-cascade` kind WITHOUT a (disabled) row stays trailer-free for non-trigger rows (kind alone is not a trigger)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  // The disable verb's idempotent arm also carries the kind (a no-op for
+  // the hint ladder): a (skipped) {already disabled} row must NOT emit the
+  // trailer -- the kind only promotes `(disabled)` rows, it is not a
+  // blanket trigger.
+  const msg: NotificationMessage = {
+    kind: "disable-cascade",
+    marketplaces: [
+      {
+        name: "claude-plugins-official",
+        scope: "user",
+        plugins: [{ status: "skipped", name: "foo-plugin", reasons: ["already disabled"] }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(
+    args[0],
+    `● claude-plugins-official [user]\n  ⊘ foo-plugin (skipped) {already disabled}`,
+  );
+});
+
 test("D-54-01 / ENBL idempotency: (skipped) {already enabled} row routes to info severity (benign reason)", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();

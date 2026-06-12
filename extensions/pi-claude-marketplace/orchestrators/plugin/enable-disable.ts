@@ -547,48 +547,51 @@ function dispatchOutcome(args: {
 }): void {
   const { ctx, pi, marketplace, scope, plugin, enable, configBasename, outcome } = args;
   const row = composeOutcomeRow({ plugin, enable, configBasename, outcome });
+  // UAT-03 (v1.12 milestone UAT decision 2026-06-11): the disable verb
+  // dispatches with the `"disable-cascade"` kind so the fresh `(disabled)`
+  // row counts as a realized transition in `shouldEmitReloadHint` (artefacts
+  // were unstaged -- SNM-33). Rendering is byte-identical to the plain
+  // cascade arm, so carrying the kind on the disable verb's non-fresh arms
+  // (idempotent / failed / not-recorded) is a no-op. The enable verb stays
+  // kind-less (its `(installed)` row is already a trigger token).
   notify(ctx, pi, {
+    ...(!enable && { kind: "disable-cascade" as const }),
     marketplaces: [
       {
         name: marketplace,
         scope,
-        ...(row.mpStatus !== undefined && { status: row.mpStatus }),
-        plugins: [row.plugin],
+        plugins: [row],
       },
     ],
   });
 }
 
-/** Internal: build the (plugin row, optional mp status) pair for the outcome. */
+/** Internal: build the plugin row for the outcome (bare mp header -- UAT-04). */
 function composeOutcomeRow(args: {
   readonly plugin: string;
   readonly enable: boolean;
   readonly configBasename: string;
   readonly outcome: SetEnabledOutcome | undefined;
-}): { plugin: PluginNotificationMessage; mpStatus?: "added" } {
+}): PluginNotificationMessage {
   const { plugin, enable, configBasename, outcome } = args;
   if (outcome === undefined) {
     return {
-      plugin: {
-        status: "failed",
-        name: plugin,
-        reasons: [] as const,
-        cause: new Error(
-          `setPluginEnabled: internal error -- guard returned cleanly without populating outcome for plugin "${plugin}".`,
-        ),
-      },
+      status: "failed",
+      name: plugin,
+      reasons: [] as const,
+      cause: new Error(
+        `setPluginEnabled: internal error -- guard returned cleanly without populating outcome for plugin "${plugin}".`,
+      ),
     };
   }
 
   switch (outcome.kind) {
     case "invalid-config":
       return {
-        plugin: {
-          status: "failed",
-          name: plugin,
-          reasons: ["invalid manifest"] as const,
-          cause: new Error(`Config file "${configBasename}" failed schema validation.`),
-        },
+        status: "failed",
+        name: plugin,
+        reasons: ["invalid manifest"] as const,
+        cause: new Error(`Config file "${configBasename}" failed schema validation.`),
       };
     case "not-recorded":
       // WR-03: the marketplace container is PRESENT but the plugin row is
@@ -599,60 +602,55 @@ function composeOutcomeRow(args: {
       // "marketplace present, plugin not installed". Non-benign reason ->
       // warning severity (catalog `enable-not-installed` state).
       return {
-        plugin: {
-          status: "skipped",
-          name: plugin,
-          reasons: ["not installed"] as const,
-        },
+        status: "skipped",
+        name: plugin,
+        reasons: ["not installed"] as const,
       };
     case "idempotent": {
       const reason: ContentReason = enable ? "already enabled" : "already disabled";
       return {
-        plugin: {
-          status: "skipped",
-          name: plugin,
-          reasons: [reason],
-        },
+        status: "skipped",
+        name: plugin,
+        reasons: [reason],
       };
     }
 
     case "enable-failed":
       return {
-        plugin: {
-          status: "failed",
-          name: plugin,
-          reasons: narrowEnableFailure(outcome.cause),
-          ...(outcome.recordedVersion !== undefined && { version: outcome.recordedVersion }),
-          cause: outcome.cause,
-        },
+        status: "failed",
+        name: plugin,
+        reasons: narrowEnableFailure(outcome.cause),
+        ...(outcome.recordedVersion !== undefined && { version: outcome.recordedVersion }),
+        cause: outcome.cause,
       };
     case "disable-failed":
       return {
-        plugin: {
-          status: "failed",
-          name: plugin,
-          reasons: narrowDisableFailure(outcome.cause),
-          ...(outcome.recordedVersion !== undefined && { version: outcome.recordedVersion }),
-          cause: outcome.cause,
-        },
+        status: "failed",
+        name: plugin,
+        reasons: narrowDisableFailure(outcome.cause),
+        ...(outcome.recordedVersion !== undefined && { version: outcome.recordedVersion }),
+        cause: outcome.cause,
       };
     case "fresh":
+      // UAT-04: the fresh-enable header is the BARE always-marketplace-header
+      // form (no `(added)` token -- that header belongs to `marketplace add`;
+      // the former `(added)` leaked from reusing the install-cascade header
+      // shape with mp.status "added"). UAT-03: the fresh-disable row carries
+      // the closed-set `(disabled)` token -- same glyph + token as the
+      // disabled-inventory row, version slot kept -- instead of
+      // `(uninstalled)`; the reload-hint fires via the `"disable-cascade"`
+      // kind set in `dispatchOutcome`.
       return enable
         ? {
-            mpStatus: "added",
-            plugin: {
-              status: "installed",
-              name: plugin,
-              dependencies: [],
-              ...(outcome.version !== undefined && { version: outcome.version }),
-            },
+            status: "installed",
+            name: plugin,
+            dependencies: [],
+            ...(outcome.version !== undefined && { version: outcome.version }),
           }
         : {
-            plugin: {
-              status: "uninstalled",
-              name: plugin,
-              ...(outcome.version !== undefined && { version: outcome.version }),
-            },
+            status: "disabled",
+            name: plugin,
+            ...(outcome.version !== undefined && { version: outcome.version }),
           };
   }
 }

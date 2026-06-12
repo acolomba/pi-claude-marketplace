@@ -232,11 +232,14 @@ export const _dv: _Assert_DependencyValues = true;
 // union `CascadeNotificationMessage | MarketplaceInfoMessage |
 // PluginInfoMessage`. The cascade arm preserves the SNM-01 single-shape
 // envelope contract (`marketplaces: readonly MarketplaceNotificationMessage[]`
-// and an optional `kind?: "cascade"` discriminator per
-// Migration Strategy #2). Lock the cascade arm's shape exactly here; the
+// and an optional `kind?: "cascade" | "disable-cascade"` discriminator per
+// Migration Strategy #2 -- the `"disable-cascade"` literal is the UAT-03
+// realized-transition marker for the /claude:plugin disable command's
+// cascade; it renders byte-identically and only flips `shouldEmitReloadHint`
+// for `(disabled)` rows). Lock the cascade arm's shape exactly here; the
 // info-surface arms are locked further down.
 interface _CascadeMessageExpected {
-  readonly kind?: "cascade";
+  readonly kind?: "cascade" | "disable-cascade";
   readonly marketplaces: readonly MarketplaceNotificationMessage[];
 }
 type _Assert_CascadeMessageShape = CascadeNotificationMessage extends _CascadeMessageExpected
@@ -1299,7 +1302,12 @@ export const _rpe: _Assert_ReconcilePreviewEmptyShape = true;
 //     `reconcile-applied-cascade` standalone variant. ---
 
 type _Assert_NotifEightArms =
-  Extract<NotificationMessage, { marketplaces: readonly unknown[]; kind?: "cascade" }> extends never
+  Extract<
+    NotificationMessage,
+    // UAT-03: the cascade arm's kind union includes the `disable-cascade`
+    // realized-transition marker, so the structural Extract names both.
+    { marketplaces: readonly unknown[]; kind?: "cascade" | "disable-cascade" }
+  > extends never
     ? never
     : Extract<NotificationMessage, { kind: "marketplace-info" }> extends never
       ? never

@@ -2103,15 +2103,16 @@ const FIXTURES: FixtureMap = {
   "/claude:plugin enable <plugin>@<marketplace>": {
     "enable-fresh": {
       pi: piWithBothLoaded(),
-      // Re-materialization through the install ledger -- the cascade carries
-      // an `(added)` marketplace header + `(installed)` plugin row (existing
-      // state-change tokens); reload-hint fires per SNM-33.
+      // Re-materialization through the install ledger -- UAT-04 (v1.12
+      // milestone UAT decision 2026-06-11): BARE always-marketplace-header
+      // form (no `(added)` token; that header belongs to `marketplace add`)
+      // + `(installed)` plugin row (existing state-change token);
+      // reload-hint fires per SNM-33.
       message: {
         marketplaces: [
           {
             name: "claude-plugins-official",
             scope: "user",
-            status: "added",
             plugins: [
               {
                 status: "installed",
@@ -2230,16 +2231,20 @@ const FIXTURES: FixtureMap = {
   "/claude:plugin disable <plugin>@<marketplace>": {
     "disable-fresh": {
       pi: piWithBothLoaded(),
-      // Cascade carries the existing `(uninstalled)` token (state-changer);
-      // reload-hint fires per SNM-33.
+      // UAT-03 (v1.12 milestone UAT decision 2026-06-11): the fresh-disable
+      // row carries the closed-set `(disabled)` token -- same glyph + token
+      // as the disabled-inventory row, version slot kept. The reload-hint
+      // fires via the `disable-cascade` kind (SNM-33 carve-out); kind-less
+      // list/info inventory `disabled` rows stay hint-free.
       message: {
+        kind: "disable-cascade",
         marketplaces: [
           {
             name: "claude-plugins-official",
             scope: "user",
             plugins: [
               {
-                status: "uninstalled",
+                status: "disabled",
                 name: "foo-plugin",
                 version: "1.2.3",
               },

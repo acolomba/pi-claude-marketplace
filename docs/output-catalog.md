@@ -64,11 +64,12 @@ The soft-dep markers `requires pi-subagents` and `requires pi-mcp` live INSIDE t
 
 `notify()` appends `/reload to pick up changes` (with one blank line above the trailer) iff (SNM-33 / D-22-01):
 
-- A plugin status is in `{installed, updated, reinstalled, uninstalled}`.
+- A plugin status is in `{installed, updated, reinstalled, uninstalled}`, or
+- a plugin status is `disabled` AND the cascade is dispatched with the `disable-cascade` kind -- the `/claude:plugin disable` command's realized-transition cascade (v1.12 milestone UAT-03 decision, 2026-06-11).
 
-The principle: marketplace records are bookkeeping, not Pi-visible resources; only plugin rows (skill / agent / command / MCP entry) are. A marketplace status alone (`added`, `removed`, `updated`, `autoupdate enabled`, `autoupdate disabled`) never warrants a `/reload` -- the trailer fires only when a plugin row carries one of the four state-change tokens. A `failed` marketplace does NOT trigger the trailer (rolled-back state has nothing to reload). A failed-only cascade (no successful or state-changing rows) also suppresses the trailer.
+The principle: marketplace records are bookkeeping, not Pi-visible resources; only plugin rows (skill / agent / command / MCP entry) are. A marketplace status alone (`added`, `removed`, `updated`, `autoupdate enabled`, `autoupdate disabled`) never warrants a `/reload` -- the trailer fires only when a plugin row carries a state-change token. A `failed` marketplace does NOT trigger the trailer (rolled-back state has nothing to reload). A failed-only cascade (no successful or state-changing rows) also suppresses the trailer.
 
-The list-only inventory token `present` (emitted by `/claude:plugin list` for already-installed plugins as a steady-state row -- distinct from the cascade-context `installed` transition token) is deliberately ABSENT from the plugin-status trigger set. This keeps `shouldEmitReloadHint`'s contents-derived decision unambiguous per SNM-15: every status discriminator either always triggers or never triggers; no token straddles both inventory and transition surfaces. See UAT gap G-21-01 in `.planning/phases/21-final-teardown-green-gate/21-HUMAN-UAT.md` for the failure mode the split closes.
+The list-only inventory token `present` (emitted by `/claude:plugin list` for already-installed plugins as a steady-state row -- distinct from the cascade-context `installed` transition token) is deliberately ABSENT from the plugin-status trigger set. This keeps `shouldEmitReloadHint`'s contents-derived decision unambiguous per SNM-15: within a given cascade kind, every status discriminator either always triggers or never triggers. The `disabled` token resolves its inventory-vs-transition straddle structurally at the KIND level (UAT-03): hint-free on kind-less / `cascade` payloads (the list / info inventory surfaces), trigger on `disable-cascade` payloads (the disable command's fresh cascade) -- mirroring the `reconcile-applied-cascade` kind's structural trailer exclusion. See UAT gap G-21-01 in `.planning/phases/21-final-teardown-green-gate/21-HUMAN-UAT.md` for the failure mode the original split closes.
 
 ### Severity routing
 
@@ -310,7 +311,7 @@ The plugin's persisted version is the PI-7 content hash `hash-2ea95f85703d`; the
   ⊘ foo-plugin v1.2.3 (disabled)
 ```
 
-Triggered when the state record carries the empty-resources + `installable: true` marker (the load-bearing predicate is `orchestrators/reconcile/plan.ts::isRecordedButDisabled`). The `(disabled)` token is the new closed-set `PluginStatus` token (D-54-01); the row uses the `⊘` glyph (shared with `will disable` per RESEARCH Pattern 5). Structurally distinct from `(unavailable)`: the variant carries no `reasons` (a disabled plugin is in the user-requested state, not a failure state), and the byte form differs (`(disabled)` vs `(unavailable)`). The recorded version pin (ENBL-02) is preserved and rendered in the `v<version>` slot. Severity `info`; no reload-hint (inventory row, not a state-changer).
+Triggered when the state record carries the empty-resources + `installable: true` marker (the load-bearing predicate is `orchestrators/reconcile/plan.ts::isRecordedButDisabled`). The `(disabled)` token is the new closed-set `PluginStatus` token (D-54-01); the row uses the `⊘` glyph (shared with `will disable` per RESEARCH Pattern 5). Structurally distinct from `(unavailable)`: the variant carries no `reasons` (a disabled plugin is in the user-requested state, not a failure state), and the byte form differs (`(disabled)` vs `(unavailable)`). The recorded version pin (ENBL-02) is preserved and rendered in the `v<version>` slot. Severity `info`; no reload-hint (inventory row, not a state-changer). The `/claude:plugin disable` command's fresh cascade reuses this exact row byte form WITH the reload-hint trailer via the `disable-cascade` kind (UAT-03; see [`## /claude:plugin disable`](#claudeplugin-disable-pluginmarketplace)).
 
 PL-4: when the manifest entry carries a non-empty `description` field, the renderer emits it on a second line indented four spaces beneath the plugin row. Descriptions longer than 66 characters are truncated to 63 characters and suffixed with `"..."` (landing exactly at column 66). The four list-surface variants (`present`, `upgradable`, `available`, `unavailable`) all support the description field; cascade-only variants (`installed`, `updated`, `reinstalled`, `uninstalled`) do not. The renderer emits the description line only when the field is defined and non-empty.
 
@@ -1500,20 +1501,20 @@ ______________________________________________________________________
 
 ## `/claude:plugin enable <plugin>@<marketplace>`
 
-D-54-01 / ENBL-01 / ENBL-03. Re-materializes a previously-disabled plugin from the cached marketplace clone -- the orchestrator reads `marketplace.json` from disk (PI-2 cached read; NFR-5: no network), reuses the install ledger's 5-phase sequence with `version: installed.version` (the pinned version from the state record), and writes `enabled: true` back to the config file at the resolved scope. A `--local` flag targets `claude-plugins.local.json` (Pitfall 54-5: the base `claude-plugins.json` mtime is unchanged). The cascade-row form uses the existing `(installed)` PluginStatus token (state-changer; reload-hint fires); the new closed-set `(disabled)` token is for the list/info inventory surface only.
+D-54-01 / ENBL-01 / ENBL-03. Re-materializes a previously-disabled plugin from the cached marketplace clone -- the orchestrator reads `marketplace.json` from disk (PI-2 cached read; NFR-5: no network), reuses the install ledger's 5-phase sequence with `version: installed.version` (the pinned version from the state record), and writes `enabled: true` back to the config file at the resolved scope. A `--local` flag targets `claude-plugins.local.json` (Pitfall 54-5: the base `claude-plugins.json` mtime is unchanged). The cascade renders the BARE always-marketplace-header form (`mp.status === undefined`, no `(added)` token -- that header belongs to `marketplace add`; v1.12 milestone UAT-04 decision, 2026-06-11) with the existing `(installed)` PluginStatus row token (state-changer; reload-hint fires).
 
 ### Fresh enable
 
 <!-- catalog-state: enable-fresh -->
 
 ```text
-● claude-plugins-official [user] (added)
+● claude-plugins-official [user]
   ● foo-plugin v1.2.3 (installed)
 
 /reload to pick up changes
 ```
 
-Fresh enable -- a previously-disabled plugin is re-materialized. `mp.status` = `"added"` (the cascade carries the marketplace as a header; the install ledger fires under it); plugin row = `PluginInstalledMessage` (status: `"installed"`, the existing state-change token). Severity `info`; reload-hint fires per SNM-33 (the plugin row is a state-change transition).
+Fresh enable -- a previously-disabled plugin is re-materialized. The marketplace header is the bare always-marketplace-header form (`mp.status === undefined`, no details -- byte-identical to the install command's header; the former `(added)` token leaked from reusing the install-cascade header shape and was dropped per UAT-04); plugin row = `PluginInstalledMessage` (status: `"installed"`, the existing state-change token). Severity `info`; reload-hint fires per SNM-33 (the plugin row is a state-change transition).
 
 ### Idempotent enable
 
@@ -1581,7 +1582,7 @@ ______________________________________________________________________
 
 ## `/claude:plugin disable <plugin>@<marketplace>`
 
-D-54-01 / ENBL-02. Removes a plugin's materialized artefacts (skills/commands/agents/MCP entries) via the existing uninstall cascade while PRESERVING the state record's `version` / `resolvedSource` / `compatibility` / `installedAt` fields. The four `resources.*` arrays reset to `[]`; the `installable: true` flag is retained. The combination is the load-bearing "currently disabled" marker (`orchestrators/reconcile/plan.ts::isRecordedButDisabled`). The config file gains `enabled: false` for the entry; `--local` targets the local file. The cascade-row form uses the existing `(uninstalled)` PluginStatus token (state-changer; reload-hint fires); the new closed-set `(disabled)` token is for the list/info inventory surface only (Open Question #2 resolution: inventory token vs cascade-row token are different surfaces).
+D-54-01 / ENBL-02. Removes a plugin's materialized artefacts (skills/commands/agents/MCP entries) via the existing uninstall cascade while PRESERVING the state record's `version` / `resolvedSource` / `compatibility` / `installedAt` fields. The four `resources.*` arrays reset to `[]`; the `installable: true` flag is retained. The combination is the load-bearing "currently disabled" marker (`orchestrators/reconcile/plan.ts::isRecordedButDisabled`). The config file gains `enabled: false` for the entry; `--local` targets the local file. The cascade-row form uses the closed-set `(disabled)` PluginStatus token -- the SAME glyph + token as the list/info `disabled-inventory` row, version slot kept (v1.12 milestone UAT-03 decision, 2026-06-11, superseding the original `(uninstalled)`-token choice: a disable is not an uninstall, and the row should name the state the plugin entered). The reload-hint still fires: the orchestrator dispatches the cascade with the `disable-cascade` kind, the SNM-33 carve-out under which a `(disabled)` row counts as a realized transition; kind-less list/info inventory surfaces stay hint-free.
 
 ### Fresh disable
 
@@ -1589,12 +1590,12 @@ D-54-01 / ENBL-02. Removes a plugin's materialized artefacts (skills/commands/ag
 
 ```text
 ● claude-plugins-official [user]
-  ○ foo-plugin v1.2.3 (uninstalled)
+  ⊘ foo-plugin v1.2.3 (disabled)
 
 /reload to pick up changes
 ```
 
-Fresh disable -- a previously-enabled plugin's artefacts are unstaged via `cascadeUnstagePlugin`. Plugin row = `PluginUninstalledMessage` (status: `"uninstalled"`, the existing state-change token); reload-hint fires per SNM-33. Severity `info`.
+Fresh disable -- a previously-enabled plugin's artefacts are unstaged via `cascadeUnstagePlugin`. Plugin row = `PluginDisabledMessage` (status: `"disabled"`, byte-identical to the `disabled-inventory` row); the cascade is dispatched with the `disable-cascade` kind, so the reload-hint fires (artefacts were removed -- SNM-33 / UAT-03). Severity `info`.
 
 ### Idempotent disable
 

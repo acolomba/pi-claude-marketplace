@@ -459,10 +459,14 @@ export interface PluginUninstalledMessage {
 }
 
 /**
- * `(disabled)` -- D-54-01 / ENBL-04 closed-set inventory token. Emitted on
- * `list` / `info` surfaces for plugins whose state record carries the
+ * `(disabled)` -- D-54-01 / ENBL-04 closed-set token. Emitted on `list` /
+ * `info` surfaces for plugins whose state record carries the
  * empty-resources + `installable: true` marker (the load-bearing predicate is
- * `orchestrators/reconcile/plan.ts::isRecordedButDisabled`). Structurally
+ * `orchestrators/reconcile/plan.ts::isRecordedButDisabled`), AND -- per the
+ * UAT-03 v1.12 milestone decision (2026-06-11) -- as the `/claude:plugin
+ * disable` command's fresh cascade row (byte-identical to the inventory row;
+ * the reload-hint fires there via the cascade's `"disable-cascade"` kind,
+ * never via this variant alone). Structurally
  * distinct from `(unavailable)`: the variant carries no `reasons` (a disabled
  * plugin is in the user-requested state, not a failure state), and the byte
  * form differs (`(disabled)` vs `(unavailable)`).
@@ -822,9 +826,20 @@ export type MarketplaceNotificationMessage =
  * info-surface variants (`MarketplaceInfoMessage`, `PluginInfoMessage`)
  * carry a REQUIRED `kind` literal so they cannot be confused with a cascade
  * payload at construction time.
+ *
+ * UAT-03 (v1.12 milestone UAT decision 2026-06-11): the `"disable-cascade"`
+ * kind marks the `/claude:plugin disable` command's realized-transition
+ * cascade. Rendering is byte-identical to the plain cascade arm; the ONLY
+ * behavioral difference is in `shouldEmitReloadHint`, where a `(disabled)`
+ * plugin row counts as a state-change transition (artefacts were unstaged
+ * -- SNM-33) and fires the `/reload to pick up changes` trailer. Kind-less
+ * / `"cascade"` payloads (the list / info inventory surfaces, which emit
+ * structurally identical `disabled` rows) stay hint-free. The split is
+ * structural at the KIND level, mirroring `reconcile-applied-cascade`'s
+ * structural trailer exclusion.
  */
 export interface CascadeNotificationMessage {
-  readonly kind?: "cascade";
+  readonly kind?: "cascade" | "disable-cascade";
   readonly marketplaces: readonly MarketplaceNotificationMessage[];
 }
 
@@ -1783,6 +1798,9 @@ function renderPluginRow(
 //
 // Reload-hint trigger (SNM-33):
 //   - Any plugin.status in {"installed", "updated", "reinstalled", "uninstalled"}.
+//   - Any plugin.status === "disabled" iff message.kind === "disable-cascade"
+//     (UAT-03: the disable command's realized-transition cascade; kind-less
+//     list/info inventory `disabled` rows stay hint-free).
 //   - No marketplace-status arm: marketplace records are bookkeeping, not Pi-visible.
 //
 // Empty-marketplaces sentinel: "(no marketplaces)".
@@ -2132,12 +2150,18 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
  *
  * The rule is therefore plugin-row-driven only: emit iff some marketplace
  * carries a plugin row whose status is one of the four state-change tokens
- * `installed | updated | reinstalled | uninstalled`. No marketplace status
+ * `installed | updated | reinstalled | uninstalled` -- or, ONLY on a cascade
+ * dispatched with the `"disable-cascade"` kind (the `/claude:plugin disable`
+ * command's realized-transition cascade, UAT-03), a `disabled` row. No
+ * marketplace status
  * (added / removed / updated / autoupdate enabled / autoupdate disabled /
- * skipped / failed) triggers on its own. This mirrors the G-21-01 invariant:
- * every status discriminator either always triggers the reload-hint or never
- * does -- no token straddles inventory vs transition, so the predicate is
- * unambiguous.
+ * skipped / failed) triggers on its own. This refines the G-21-01 invariant:
+ * within a given cascade KIND every status discriminator either always
+ * triggers the reload-hint or never does; `disabled` is inventory (hint-free)
+ * on kind-less / `"cascade"` payloads (list / info surfaces) and a realized
+ * transition (hint fires) on `"disable-cascade"` payloads -- the straddle is
+ * resolved structurally at the kind level, mirroring
+ * `reconcile-applied-cascade`'s structural exclusion below.
  *
  * A fresh autoupdate enabled/disabled flip does NOT emit the trailer (the
  * flip changes a marketplace record, not a Pi-visible resource). The
@@ -2179,13 +2203,19 @@ function shouldEmitReloadHint(message: NotificationMessage): boolean {
     }
   }
 
+  // UAT-03: the `"disable-cascade"` kind is the structural marker under
+  // which a `(disabled)` row counts as a realized transition (the disable
+  // command unstaged Pi-visible artefacts -- SNM-33). Kind-less / "cascade"
+  // payloads keep `disabled` hint-free (list / info inventory surfaces).
+  const disabledIsTransition = message.kind === "disable-cascade";
   for (const mp of message.marketplaces) {
     for (const p of mp.plugins) {
       if (
         p.status === "installed" ||
         p.status === "updated" ||
         p.status === "reinstalled" ||
-        p.status === "uninstalled"
+        p.status === "uninstalled" ||
+        (disabledIsTransition && p.status === "disabled")
       ) {
         return true;
       }
@@ -2734,7 +2764,11 @@ export function notify(
   switch (message.kind) {
     case undefined:
     case "cascade":
-      // Cascade body falls through below.
+    case "disable-cascade":
+      // Cascade body falls through below. The `disable-cascade` kind
+      // (UAT-03) renders byte-identically; it differs only inside
+      // `shouldEmitReloadHint`, where `(disabled)` rows count as realized
+      // transitions.
       break;
     default:
       assertNever(message);
