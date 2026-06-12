@@ -307,6 +307,68 @@ test("MAU-2 / CMC-33 (V2): bare form flips every marketplace in scope; one notif
   });
 });
 
+test("I2 / PR #51: write-back skipped (unsynthesizable source) renders a failed row, never silent success", async () => {
+  // Pre-fix: writeAutoupdateBack silently dropped entries with no
+  // synthesizable source from the batch but the name stayed in
+  // `finalResult.changed`, so the final notify rendered success for a flip
+  // that was never persisted. After the fix the skipped name is demoted to
+  // an honest failed row (closed-set `not found` reason; no new tokens).
+  await withHermeticHome(async ({ cwd }) => {
+    const locations = locationsFor("project", cwd);
+    await mkdir(locations.extensionRoot, { recursive: true });
+
+    // Seed a record whose source.raw is NOT a string (forward-compat unknown
+    // shape) so buildAutoupdatePatch cannot synthesize a `source` for the
+    // first-time config write. State carries no autoupdate field so the flip
+    // is fresh; the config file does not exist yet so no config-side `source`
+    // is available either.
+    const record: ExtensionState["marketplaces"][string] = {
+      name: "mp-unsynth",
+      scope: "project",
+      // source.raw deliberately a non-string; SP-7 path is taken via
+      // the unknown-kind admission.
+      source: { kind: "unknown" },
+      addedFromCwd: cwd,
+      manifestPath: path.join(cwd, "marketplace.json"),
+      marketplaceRoot: cwd,
+      plugins: {},
+    };
+    await saveState(locations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: { "mp-unsynth": record },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await setMarketplaceAutoupdate({
+      ctx,
+      pi,
+      name: "mp-unsynth",
+      enable: true,
+      scope: "project",
+      cwd,
+    });
+
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    // The row MUST NOT claim success -- the `<autoupdate>` fresh-flip marker
+    // is forbidden because the write-back never landed.
+    assert.ok(
+      !msg.includes("● mp-unsynth [project] <autoupdate>") || msg.includes("(failed)"),
+      `unsynthesizable source must NOT render as silent fresh-flip success; got: ${msg}`,
+    );
+    // The row MUST surface a failure -- closed-set `not found` reason is the
+    // permissive fallback used elsewhere in this orchestrator (matches the
+    // synthetic-child cascade form).
+    assert.match(
+      msg,
+      /\(failed\)/,
+      `unsynthesizable source must render a (failed) row; got: ${msg}`,
+    );
+    // Severity must be error per D-16-11 (any failed row -> error).
+    assert.equal(notifications[0]!.severity, "error");
+  });
+});
+
 test("CMC-10 + SC-6: bare form across both empty scopes succeeds with `(no marketplaces)` sentinel", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, pi, notifications } = makeCtx();

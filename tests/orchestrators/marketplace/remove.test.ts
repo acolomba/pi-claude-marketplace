@@ -995,6 +995,86 @@ test("RECON-03 remove orchestrated mode -- explicit --scope miss returns failed 
   });
 });
 
+test("I1 / PR #51: orchestrated partial remove returns { status: 'partial' } carrying unstaged + per-plugin failures (one row per plugin, never a 1-of-N collapse)", async () => {
+  // Pre-fix the orchestrated arm collapsed any per-plugin cascade failure to a
+  // single { status: 'failed', reason } outcome -- losing both the
+  // successfully-unstaged plugins (rendered nowhere) AND failures 2..N. After
+  // the fix the orchestrated outcome carries `unstaged: readonly string[]`
+  // AND `failed: readonly { name, reason }[]` so the reconcile cascade can
+  // render N rows for N plugins.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-orch-partial-"));
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      const locations = locationsFor("user", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          "acme-mp": {
+            name: "acme-mp",
+            scope: "user",
+            source: { kind: "github", raw: "owner/repo", owner: "owner", repo: "repo" },
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: {
+              "plugin-ok": makePluginRecord(),
+              "plugin-fail-a": makePluginRecord(),
+              "plugin-fail-b": makePluginRecord(),
+            },
+          },
+        },
+      });
+
+      // Stub: plugin-ok succeeds, plugin-fail-a fails (EACCES), plugin-fail-b
+      // fails (ENOENT). Caller-iteration order maps to plugins object order.
+      const stubCascade: typeof cascadeUnstagePlugin = (pluginName) => {
+        if (pluginName === "plugin-ok") {
+          return Promise.resolve({
+            ok: true,
+            dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          });
+        }
+
+        const code = pluginName === "plugin-fail-a" ? "EACCES" : "ENOENT";
+        return Promise.resolve({
+          ok: false,
+          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          cause: Object.assign(new Error(`forced ${code}`), { code }),
+        });
+      };
+
+      const outcome = await removeMarketplace({
+        ctx,
+        pi,
+        name: "acme-mp",
+        scope: "user",
+        cwd,
+        cascade: stubCascade,
+        notifications: { mode: "orchestrated" },
+      });
+
+      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+      assert.ok(outcome);
+      assert.equal(outcome.status, "partial", "orchestrated partial-cascade arm");
+      if (outcome.status === "partial") {
+        // Every successfully-unstaged plugin is carried.
+        assert.deepEqual([...outcome.unstaged], ["plugin-ok"]);
+        // Every failed plugin is carried with its closed-set reason.
+        assert.equal(outcome.failed.length, 2);
+        const failedByName: Record<string, string> = Object.fromEntries(
+          outcome.failed.map((f) => [f.name, f.reason]),
+        );
+        assert.equal(failedByName["plugin-fail-a"], "permission denied");
+        assert.equal(failedByName["plugin-fail-b"], "source missing");
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("RECON-03 remove standalone-default mode -- omitted notifications option remains byte-identical to today (regression guard)", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-orch-default-"));

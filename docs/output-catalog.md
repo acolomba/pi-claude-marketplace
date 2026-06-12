@@ -1333,6 +1333,35 @@ A reconcile where `claude-plugins.json` is unparseable. The read pass surfaces t
 ⊘ claude-plugins.json [project] (failed) {invalid manifest}
 ```
 
+### CFG-03 invalid-config row -- with cause-chain trailer (I5 / PR #51)
+
+Same CFG-03 surface as above, but the read pass threaded `loadConfig`'s diagnostic detail (EACCES / JSON-parse / schema key) into the rendered cause-chain trailer via a synthetic plugin child. Absolute paths are stripped at the boundary via `redactAbsolutePaths` (T-53-02-02 / T-55-02-01 information-disclosure mitigation) -- the parse / permission detail itself is preserved so the operator can debug without re-loading the file. The synthetic child reuses the SNM-10 pattern (marketplace headers cannot carry a cause; plugin rows can), so adding the trailer required no new MarketplaceNotificationMessage shape.
+
+<!-- catalog-state: invalid-config-row-with-cause -->
+
+```text
+1 plugin operation and 1 marketplace operation failed.
+
+⊘ claude-plugins.json [project] (failed) {invalid manifest}
+  ⊘ claude-plugins.json (failed) {invalid manifest}
+    cause: schema validation failed: /marketplaces: Expected object
+```
+
+### Partial marketplace remove -- per-plugin children (I1 / PR #51)
+
+A reconcile-driven `marketplace remove` whose cascade unstaged a subset of the marketplace's plugins and failed others. The orchestrated `RemoveMarketplaceOutcome.partial` arm carries BOTH the unstaged plugin names AND the per-plugin failures; the apply pass renders one row per plugin (○ `(uninstalled)` for unstaged, ⊘ `(failed) {reason}` for failed) under a bare `(failed)` mp header -- mirrors the standalone `marketplace remove` `partial` byte form. Pre-fix the orchestrated arm collapsed the cascade to a single mp-failed row with the first failure's reason, silently dropping the N-1 other rows (D-22-02 violation).
+
+<!-- catalog-state: partial-marketplace-remove -->
+
+```text
+2 plugin operations and 1 marketplace operation failed.
+
+⊘ acme-mp [user] (failed)
+  ○ plugin-ok (uninstalled)
+  ⊘ plugin-fail-a (failed) {permission denied}
+  ⊘ plugin-fail-b (failed) {source missing}
+```
+
 ______________________________________________________________________
 
 ## `/claude:plugin marketplace remove <name>`

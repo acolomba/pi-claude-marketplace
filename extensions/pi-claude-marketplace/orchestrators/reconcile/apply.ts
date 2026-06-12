@@ -44,7 +44,7 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
 import { StateLockHeldError } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
-import { notify } from "../../shared/notify.ts";
+import { notify, notifyDiagnostic, redactAbsolutePaths } from "../../shared/notify.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { addMarketplace } from "../marketplace/add.ts";
@@ -140,7 +140,17 @@ async function readPassForScope(scope: Scope, cwd: string): Promise<ScopeReadRes
     // legacy-autoupdate capture (the field still lives on state at this
     // point). WR-05: `tx.save()` is deliberately NEVER called -- the read
     // pass mutates nothing on state, so state.json stays byte-untouched.
-    await migrateFirstRunConfig(loc, state);
+    //
+    // S3 / PR #51: when saveConfig inside migrateFirstRunConfig throws
+    // (e.g. EACCES on the scope dir), the failing file is
+    // `claude-plugins.json`, NOT state.json. Wrap the call so the throw
+    // carries an attribution sentinel; the per-scope catch in
+    // applyReconcile reads it to name the row's subject correctly.
+    try {
+      await migrateFirstRunConfig(loc, state);
+    } catch (err) {
+      throw new MigrateConfigSaveError(loc.configJsonPath, err);
+    }
 
     // (2) Load the merged scope config (base + local).
     const outcome = await loadMergedScopeConfig(loc);
@@ -151,11 +161,17 @@ async function readPassForScope(scope: Scope, cwd: string): Promise<ScopeReadRes
     // to an empty desired state would emit a mass-uninstall plan.
     const invalidOutcomes: PerEntryOutcome[] = [];
     if (outcome.base.status === "invalid") {
+      // I5 / PR #51: thread loadConfig's diagnostic detail (EACCES vs
+      // JSON-parse vs schema key) into the rendered cause-chain trailer.
+      // Absolute paths are stripped at the boundary -- the projection
+      // walks Error.cause via causeChainTrailer, which does NOT strip
+      // paths on its own (NFR-9 surfaces message text verbatim).
       invalidOutcomes.push({
         kind: "invalid-block",
         scope,
         marketplace: path.basename(outcome.base.filePath),
         reason: "invalid manifest",
+        cause: new Error(redactAbsolutePaths(outcome.base.error)),
       });
     }
 
@@ -165,6 +181,7 @@ async function readPassForScope(scope: Scope, cwd: string): Promise<ScopeReadRes
         scope,
         marketplace: path.basename(outcome.local.filePath),
         reason: "invalid manifest",
+        cause: new Error(redactAbsolutePaths(outcome.local.error)),
       });
     }
 
@@ -181,6 +198,30 @@ async function readPassForScope(scope: Scope, cwd: string): Promise<ScopeReadRes
 /** Closed-set reason for an unexpected orchestrator throw (post-classifier fallback). */
 function classifyOrchestratorThrow(err: unknown): import("../../shared/notify.ts").ContentReason {
   return narrowProbeError(err);
+}
+
+/**
+ * S3 / PR #51: sentinel wrapping a throw originating in
+ * `migrateFirstRunConfig`'s inner `saveConfig` call. The per-scope read-pass
+ * catch unwraps `.configFilePath` to attribute the failure row to
+ * `claude-plugins.json` (the actual failing file) rather than `state.json`.
+ * Pre-fix every read-pass throw misattributed to state.json regardless of
+ * origin.
+ */
+class MigrateConfigSaveError extends Error {
+  readonly configFilePath: string;
+  override readonly cause: unknown;
+  constructor(configFilePath: string, cause: unknown) {
+    super(`migrateFirstRunConfig saveConfig failed for "${path.basename(configFilePath)}"`);
+    this.name = "MigrateConfigSaveError";
+    this.configFilePath = configFilePath;
+    this.cause = cause;
+  }
+}
+
+/** errorMessage equivalent that survives a non-Error throw value. */
+function errorMessageOf(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 /**
@@ -247,32 +288,7 @@ async function applyMarketplaceRemoves(
         continue;
       }
 
-      if (result.status === "removed") {
-        // WR-02: the planner deliberately excludes plugins
-        // under a to-be-removed marketplace from `pluginsToUninstall` (the
-        // remove cascade unstages them -- no double-billing), so the cascade
-        // outcome is the ONLY carrier of those rows. Fold `result.unstaged`
-        // into the outcome stream so the D-22-02 contract (one indented
-        // `(uninstalled)` row per unstaged plugin) holds on the reconcile
-        // surface too -- plugins must never disappear silently.
-        for (const plugin of result.unstaged) {
-          outcomes.push({
-            kind: "plugin-uninstalled",
-            scope: op.scope,
-            marketplace: op.marketplace,
-            plugin,
-          });
-        }
-
-        outcomes.push({ kind: "mp-removed", scope: op.scope, marketplace: op.marketplace });
-      } else {
-        outcomes.push({
-          kind: "mp-remove-failed",
-          scope: op.scope,
-          marketplace: op.marketplace,
-          reason: result.reason,
-        });
-      }
+      foldRemoveOutcome(result, op.scope, op.marketplace, outcomes);
     } catch (err) {
       outcomes.push({
         kind: "mp-remove-failed",
@@ -282,6 +298,67 @@ async function applyMarketplaceRemoves(
       });
     }
   }
+}
+
+/**
+ * I1 / PR #51: fold a `RemoveMarketplaceOutcome` (orchestrated mode) into
+ * the per-entry outcome stream. Extracted from `applyMarketplaceRemoves` to
+ * keep its cognitive complexity inside the project's lint budget. Handles
+ * three arms:
+ *   - `removed`: one `plugin-uninstalled` per unstaged plugin + one
+ *     `mp-removed` (WR-02 / D-22-02).
+ *   - `partial`: one `plugin-uninstalled` per unstaged plugin + one
+ *     `plugin-uninstall-failed` per failed plugin + a bare `mp-remove-partial`
+ *     mp header.
+ *   - `failed`: a single `mp-remove-failed` carrying the reason.
+ */
+function foldRemoveOutcome(
+  result: import("../marketplace/remove.ts").RemoveMarketplaceOutcome,
+  scope: Scope,
+  marketplace: string,
+  outcomes: PerEntryOutcome[],
+): void {
+  if (result.status === "removed") {
+    // WR-02: the planner deliberately excludes plugins under a to-be-removed
+    // marketplace from `pluginsToUninstall` (the remove cascade unstages
+    // them -- no double-billing). Fold `result.unstaged` into the outcome
+    // stream so D-22-02 (one indented `(uninstalled)` row per unstaged
+    // plugin) holds on the reconcile surface too.
+    for (const plugin of result.unstaged) {
+      outcomes.push({ kind: "plugin-uninstalled", scope, marketplace, plugin });
+    }
+
+    outcomes.push({ kind: "mp-removed", scope, marketplace });
+    return;
+  }
+
+  if (result.status === "partial") {
+    // I1 / PR #51: the cascade unstaged some plugins AND failed others.
+    // Render one row per unstaged plugin (○ uninstalled), one row per
+    // failed plugin (⊘ {reason}), plus a bare `(failed)` mp header.
+    for (const plugin of result.unstaged) {
+      outcomes.push({ kind: "plugin-uninstalled", scope, marketplace, plugin });
+    }
+
+    for (const f of result.failed) {
+      outcomes.push({
+        kind: "plugin-uninstall-failed",
+        scope,
+        marketplace,
+        plugin: f.name,
+        reason: f.reason,
+      });
+    }
+
+    // Marketplace header carries bare `(failed)` (no top-level reasons
+    // brace) because the per-plugin children carry the granular reasons.
+    // Mirrors the standalone CMC-31 PARTIAL byte form
+    // (docs/output-catalog.md `marketplace remove` `partial` fixture).
+    outcomes.push({ kind: "mp-remove-partial", scope, marketplace });
+    return;
+  }
+
+  outcomes.push({ kind: "mp-remove-failed", scope, marketplace, reason: result.reason });
 }
 
 async function applyMarketplaceAdds(
@@ -410,6 +487,13 @@ async function applyPluginInstalls(
           marketplace: op.marketplace,
           plugin: op.plugin,
           dependencies: dependenciesFromInstall(result),
+          // S2 / PR #51: propagate post-commit warnings so the cascade
+          // caller can surface them to the operator (mirrors
+          // import/execute.ts:699-703 pushDiagnostic channel).
+          ...(result.postCommitWarnings !== undefined &&
+            result.postCommitWarnings.length > 0 && {
+              postCommitWarnings: result.postCommitWarnings,
+            }),
         });
       } else {
         outcomes.push({
@@ -594,11 +678,24 @@ export async function applyReconcile(opts: ApplyReconcileOptions): Promise<void>
     try {
       readResult = await readPassForScope(scope, opts.cwd);
     } catch (err) {
+      // S3 / PR #51: when the throw came from migrateFirstRunConfig's
+      // inner saveConfig (EACCES on the scope dir blocking the atomic
+      // tmp+rename), attribute to claude-plugins.json -- the file the
+      // load pass was trying to WRITE, not state.json. Pre-fix every
+      // read-pass throw lied about the failing file.
+      const isMigrateSave = err instanceof MigrateConfigSaveError;
+      const marketplace = isMigrateSave ? path.basename(err.configFilePath) : "state.json";
+      // Unwrap the cause for classification so the closed-set reason
+      // (`permission denied`, `unparseable`, etc.) reflects the underlying
+      // error, not the sentinel.
+      const classifiable = isMigrateSave ? err.cause : err;
+      const causeText = errorMessageOf(classifiable);
       outcomes.push({
         kind: "invalid-block",
         scope,
-        marketplace: "state.json",
-        reason: classifyReadPassThrow(err),
+        marketplace,
+        reason: classifyReadPassThrow(classifiable),
+        cause: new Error(redactAbsolutePaths(causeText)),
       });
       continue;
     }
@@ -622,9 +719,54 @@ export async function applyReconcile(opts: ApplyReconcileOptions): Promise<void>
     return;
   }
 
-  // Single notify() per applyReconcile (IL-2 / RECON-04). The projection
-  // T-55-02-02 contract: consumes only outcome.reason; raw error.message
-  // never reaches the notify body.
+  // Single CASCADE notify() per applyReconcile (IL-2 / RECON-04). The
+  // projection T-55-02-02 contract: consumes only outcome.reason; raw
+  // error.message never reaches the notify body.
   const message = buildReconcileAppliedCascade(outcomes);
   notify(opts.ctx, opts.pi, message);
+
+  // S2 / PR #51: post-cascade hygiene warnings. The cascade carries plugin
+  // transition rows (installed/uninstalled/failed) under IL-2's single-
+  // emission discipline; the post-commit warnings (data dir mkdir
+  // deferred, completion-cache refresh deferred, agent foreign-content
+  // preserved, bridge-side soft warnings) describe deferred side effects
+  // AFTER the state mutation committed -- they have no clean
+  // representation in MarketplaceNotificationMessage and mirror import's
+  // pushDiagnostic channel. Surfacing them through a SECOND notify()
+  // (warning severity) preserves the operator's ability to remediate
+  // without contaminating the cascade body. This is the only sanctioned
+  // exception to RECON-04's "single notify per applyReconcile" rule and
+  // is anchored at the install.ts:1098-1166 orchestrated collection
+  // path.
+  surfacePostCommitWarnings(opts, outcomes);
+}
+
+function surfacePostCommitWarnings(
+  opts: ApplyReconcileOptions,
+  outcomes: readonly PerEntryOutcome[],
+): void {
+  const lines: string[] = [];
+  for (const o of outcomes) {
+    if (o.kind !== "plugin-installed" || o.postCommitWarnings === undefined) {
+      continue;
+    }
+
+    for (const w of o.postCommitWarnings) {
+      lines.push(w);
+    }
+  }
+
+  if (lines.length === 0) {
+    return;
+  }
+
+  // Route through the sanctioned `notifyDiagnostic` seam (S2 / PR #51) --
+  // the only post-cascade notify exception to RECON-04's single-emit
+  // discipline. Each warning prints on its own line under a one-line
+  // header so the operator sees the total and the per-warning detail.
+  const header =
+    lines.length === 1
+      ? "1 post-install warning surfaced from reconcile installs."
+      : `${lines.length.toString()} post-install warnings surfaced from reconcile installs.`;
+  notifyDiagnostic(opts.ctx, header, lines);
 }

@@ -58,6 +58,18 @@ export interface MpRemoveFailedOutcome extends OutcomeBase {
 }
 
 /**
+ * I1 / PR #51: orchestrated partial-cascade marketplace-remove outcome. The
+ * cascade unstaged some plugins AND failed others; per-plugin children carry
+ * the granular reasons (rendered as indented `⊘ <plugin> (failed) {<reason>}`
+ * rows), so the marketplace header stays bare `(failed)` (mirrors the
+ * standalone CMC-31 PARTIAL byte form). Distinct from `mp-remove-failed`
+ * which carries an mp-level reasons brace because no plugin children attach.
+ */
+export interface MpRemovePartialOutcome extends OutcomeBase {
+  readonly kind: "mp-remove-partial";
+}
+
+/**
  * Plugin install success outcome. `version` mirrors the resolved install
  * version (when known); `dependencies` is the closed-set
  * `("agents" | "mcp")[]` derived from `InstallPluginOutcome.declaresAgents`
@@ -68,6 +80,17 @@ export interface PluginInstalledOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-installed";
   readonly version?: string;
   readonly dependencies: readonly Dependency[];
+  /**
+   * S2 / PR #51: orchestrated-mode `InstallPluginOutcome.postCommitWarnings`
+   * propagated through to the reconcile cascade caller. Mirrors the
+   * `import/execute.ts:699-703` pattern -- post-commit hygiene warnings
+   * (data-dir mkdir deferred, agent-foreign-content preserved,
+   * completion-cache refresh deferred, bridge-side soft warnings) are
+   * surfaced to the operator instead of silently dropped. Standalone-mode
+   * installs swallow these per D-19-01; orchestrated mode is the supported
+   * surfacing channel.
+   */
+  readonly postCommitWarnings?: readonly string[];
 }
 
 /** Plugin install failure outcome. */
@@ -144,6 +167,16 @@ export interface InvalidBlockOutcome extends OutcomeBase {
   readonly kind: "invalid-block";
   /** Closed-set reason from `narrowProbeError` -- `invalid manifest` for CFG-03, `unparseable` for state-json. */
   readonly reason: ContentReason;
+  /**
+   * I5 / PR #51: optional path-redacted diagnostic. When set, the projection
+   * surfaces it as a synthetic plugin-row cause-chain trailer (depth-5 walker)
+   * so the operator sees WHY the file is invalid (EACCES vs JSON-parse vs
+   * specific schema key) instead of bare `{invalid manifest}`. Absolute
+   * paths MUST already be stripped via `redactAbsolutePaths` BEFORE wrapping
+   * into this Error -- T-53-02-02 / T-55-02-01 information-disclosure
+   * mitigation. Pre-fix this detail was dropped at every consumer surface.
+   */
+  readonly cause?: Error;
 }
 
 /**
@@ -156,6 +189,7 @@ export type PerEntryOutcome =
   | MpAddFailedOutcome
   | MpRemovedOutcome
   | MpRemoveFailedOutcome
+  | MpRemovePartialOutcome
   | PluginInstalledOutcome
   | PluginInstallFailedOutcome
   | PluginUninstalledOutcome

@@ -149,6 +149,40 @@ function allBenign(reasons: readonly Reason[] | undefined): boolean {
 }
 
 /**
+ * I5 / PR #51 / T-53-02-02 / T-55-02-01: collapse any absolute-path token
+ * (POSIX `/...` or Windows `<drive>:\...` / `\\?\...`) in a free-text
+ * diagnostic to its basename. Preserves the surrounding parse / permission
+ * detail (NFR-9: surface only message text, never `.stack`) so callers can
+ * thread `loadConfig`'s `result.error` -- which embeds the absolute
+ * `filePath` -- through the rendered cause-chain trailer WITHOUT leaking
+ * the path. Single canonical implementation here; consumers route their
+ * diagnostic strings through this seam before constructing a synthetic
+ * Error for `notify()`'s cause-chain walker.
+ *
+ * Conservative match:
+ *   - POSIX absolute: `/` followed by a non-whitespace, non-quote run
+ *     (`[\w./_~-]` chars), with at least one path separator inside the run.
+ *   - Windows drive: `<letter>:[\\/]` followed by the same run.
+ *   - UNC extended: `\\?\` followed by the same run.
+ * Each match is replaced with `path.basename(match)`. Non-path tokens
+ * (e.g. JSON pointers like `/schemaVersion`) are short -- single-segment
+ * after the leading `/` -- and intentionally excluded so JSON-validator
+ * diagnostics survive intact for the operator.
+ */
+export function redactAbsolutePaths(text: string): string {
+  // Match absolute paths with at least one internal separator so single-
+  // segment leading-slash JSON pointers (`/schemaVersion`) are not eaten.
+  const re = /(?:[A-Za-z]:[\\/]|\\\\\?\\|\/)[\w./\\_~-]+[\\/][\w./\\_~-]+/g;
+  return text.replace(re, (match) => {
+    // path.basename handles both POSIX and Windows separators when invoked
+    // through the platform-agnostic node:path module, but the renderer ships
+    // on POSIX and a hand-rolled split is byte-stable across runtimes here.
+    const lastSep = Math.max(match.lastIndexOf("/"), match.lastIndexOf("\\"));
+    return lastSep < 0 ? match : match.slice(lastSep + 1);
+  });
+}
+
+/**
  * CMC-08 closed status-token set. This tuple is the SOLE closed-set
  * authority (style guide v2.0 retired the binding YAML frontmatter at
  * `docs/messaging-style-guide.md`).
@@ -239,6 +273,37 @@ export type PatternClass = (typeof PATTERN_CLASSES)[number];
  */
 export function notifyUsageError(ctx: ExtensionContext, message: UsageErrorMessage): void {
   ctx.ui.notify(`${message.message}\n\n${message.usage}`, "error");
+}
+
+/**
+ * S2 / PR #51: post-cascade hygiene warnings out-of-band notification seam.
+ *
+ * Surfaces post-state-commit warnings (data-dir mkdir deferred,
+ * completion-cache refresh deferred, agent foreign-content preserved,
+ * bridge-side soft warnings) that have no representation in the
+ * `MarketplaceNotificationMessage` cascade body. The reconcile apply
+ * pass collects these from `InstallPluginOutcome.postCommitWarnings`
+ * across the install bucket and fires this helper exactly once -- a
+ * sanctioned exception to the per-cascade single-notify discipline
+ * (RECON-04 / IL-2) that mirrors `import/execute.ts`'s `pushDiagnostic`
+ * channel.
+ *
+ * The on-the-wire form is `${header}\n\n${lines.join("\n")}` at
+ * `"warning"` severity. The header counts the per-warning lines so the
+ * operator sees both the total and the per-warning detail without
+ * re-flowing the cascade body. Standalone-mode commands swallow these
+ * per D-19-01; orchestrated-mode (cascade) callers use this seam.
+ */
+export function notifyDiagnostic(
+  ctx: ExtensionContext,
+  header: string,
+  lines: readonly string[],
+): void {
+  if (lines.length === 0) {
+    return;
+  }
+
+  ctx.ui.notify(`${header}\n\n${lines.join("\n")}`, "warning");
 }
 
 // ---------------------------------------------------------------------------

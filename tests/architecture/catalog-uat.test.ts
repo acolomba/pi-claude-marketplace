@@ -2487,6 +2487,61 @@ const FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // I5 / PR #51: invalid-config row that carries the loadConfig diagnostic
+    // detail (EACCES / JSON-parse / schema key) via a synthetic plugin child
+    // (SNM-10 pattern -- mp headers cannot carry a cause). Absolute paths
+    // are stripped at the apply boundary via `redactAbsolutePaths`; the
+    // parse / permission detail survives so the operator can debug.
+    "invalid-config-row-with-cause": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        marketplaces: [
+          {
+            name: "claude-plugins.json",
+            scope: "project",
+            status: "failed",
+            reasons: ["invalid manifest"],
+            plugins: [
+              {
+                status: "failed",
+                name: "claude-plugins.json",
+                reasons: ["invalid manifest"],
+                cause: new Error("schema validation failed: /marketplaces: Expected object"),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // I1 / PR #51: reconcile-driven `marketplace remove` whose cascade
+    // unstaged some plugins and failed others. Bare `(failed)` mp header +
+    // one row per unstaged plugin (○ uninstalled) + one row per failed
+    // plugin (⊘ {reason}). Mirrors the standalone `marketplace remove`
+    // `partial` byte form. Pre-fix the orchestrated arm collapsed this to
+    // ONE mp-failed row, silently dropping the N-1 other rows.
+    "partial-marketplace-remove": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        marketplaces: [
+          {
+            name: "acme-mp",
+            scope: "user",
+            status: "failed",
+            plugins: [
+              { status: "uninstalled", name: "plugin-ok" },
+              { status: "failed", name: "plugin-fail-a", reasons: ["permission denied"] },
+              { status: "failed", name: "plugin-fail-b", reasons: ["source missing"] },
+            ],
+          },
+        ],
+      },
+    },
   },
 };
 

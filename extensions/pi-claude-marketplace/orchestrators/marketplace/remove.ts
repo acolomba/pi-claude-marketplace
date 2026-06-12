@@ -101,6 +101,19 @@ export type RemoveMarketplaceOutcome =
       readonly reason: Reason;
       readonly error: Error;
       readonly cause: string;
+    }
+  // I1 / PR #51: orchestrated partial-cascade arm. A subset of the
+  // marketplace's plugins successfully unstaged AND a subset failed. Pre-fix
+  // the orchestrated path collapsed this to `{ status: "failed", reason }`,
+  // dropping both the unstaged plugin rows AND failures 2..N from the
+  // reconcile cascade. The reconcile caller now renders one row per
+  // `unstaged` plugin (○ uninstalled) AND one row per `failed` plugin (⊘
+  // {reason}), plus a `(failed)` mp header (D-22-02 / CMC-31 PARTIAL).
+  | {
+      readonly status: "partial";
+      readonly name: string;
+      readonly unstaged: readonly string[];
+      readonly failed: readonly { readonly name: string; readonly reason: ContentReason }[];
     };
 
 export interface RemoveMarketplaceOptions {
@@ -266,15 +279,21 @@ function emitPartialFailure(args: {
 }): RemoveMarketplaceOutcome | undefined {
   const { opts, orchestrated, resolvedScope, successfullyUnstaged, failedPlugins } = args;
   if (orchestrated) {
-    // Collapse the per-plugin partial-failure surface to ONE typed outcome.
-    // The apply cascade caller composes per-plugin rows from its
-    // own bucket walk; here we surface the first failed plugin's classified
-    // reason as the marketplace-level failure reason.
-    const first = failedPlugins[0];
-    const err = first?.cause ?? new Error(`removeMarketplace: partial failure for "${opts.name}"`);
-    const firstReason: Reason =
-      first === undefined ? "unreadable" : narrowCascadeFailure(first.cause);
-    return { status: "failed", reason: firstReason, error: err, cause: errorMessage(err) };
+    // I1 / PR #51: surface BOTH unstaged successes AND per-plugin failures
+    // through the typed outcome. The apply cascade caller composes one row
+    // per plugin (○ uninstalled for unstaged, ⊘ {reason} for failed) so the
+    // reconcile surface honours D-22-02 (no plugin ever disappears
+    // silently). Pre-fix this arm returned `{status:"failed",reason}` --
+    // collapsing N rows to 1.
+    return {
+      status: "partial",
+      name: opts.name,
+      unstaged: successfullyUnstaged,
+      failed: failedPlugins.map((f) => ({
+        name: f.name,
+        reason: narrowCascadeFailure(f.cause),
+      })),
+    };
   }
 
   // CMC-31 PARTIAL: mp.status="failed"; plugins[] mixes uninstalled +

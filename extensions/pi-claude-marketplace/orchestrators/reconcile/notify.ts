@@ -302,6 +302,13 @@ function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome):
       block.status = "failed";
       block.reasons = reasonAsContent(outcome.reason);
       return;
+    case "mp-remove-partial":
+      // I1 / PR #51: bare `(failed)` mp header -- the per-plugin children
+      // carry the granular reasons (mirrors the standalone CMC-31 PARTIAL
+      // byte form). Do NOT set block.reasons; the renderer's MpFailed arm
+      // collapses to `⊘ <name> [<scope>] (failed)` when reasons is absent.
+      block.status = "failed";
+      return;
     case "plugin-installed":
       block.plugins.push({
         status: "installed",
@@ -368,6 +375,24 @@ function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome):
       // the same scope render as distinct rows.
       block.status = "failed";
       block.reasons = [outcome.reason];
+      // I5 / PR #51: when loadConfig's diagnostic detail was threaded in
+      // (EACCES vs JSON parse vs schema key), surface it via a synthetic
+      // PluginFailedMessage child carrying the cause -- mirrors the SNM-10
+      // pattern used by autoupdateFailedRow. The MarketplaceNotificationMessage
+      // header itself cannot carry a cause (SNM-10 confines causes to
+      // plugin-row + manual-recovery surfaces), so the synthetic child is the
+      // only IL-2-compatible channel that drives the depth-5 cause-chain
+      // trailer below the row. Path tokens were already stripped at the apply
+      // boundary via redactAbsolutePaths (T-53-02-02 / T-55-02-01).
+      if (outcome.cause !== undefined) {
+        block.plugins.push({
+          status: "failed",
+          name: outcome.marketplace,
+          reasons: [outcome.reason],
+          cause: outcome.cause,
+        });
+      }
+
       return;
     default:
       assertNever(outcome);
