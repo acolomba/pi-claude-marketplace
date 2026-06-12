@@ -42,7 +42,7 @@ import path from "node:path";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
-import { StateLockHeldError } from "../../shared/errors.ts";
+import { PluginShapeError, StateLockHeldError } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
 import { notify, notifyDiagnostic, redactAbsolutePaths } from "../../shared/notify.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
@@ -195,8 +195,42 @@ async function readPassForScope(scope: Scope, cwd: string): Promise<ScopeReadRes
   });
 }
 
-/** Closed-set reason for an unexpected orchestrator throw (post-classifier fallback). */
-function classifyOrchestratorThrow(err: unknown): import("../../shared/notify.ts").ContentReason {
+/**
+ * I6 / PR #51: closed-set reason for an unexpected orchestrator throw.
+ *
+ * Narrows on the typed marketplace/plugin errors BEFORE falling through to
+ * the generic FS/JSON probe classifier so a `StateLockHeldError` surfaces as
+ * `{lock held}` and a `PluginShapeError` surfaces as its kind-mapped catalog
+ * token (`not in manifest` / `already installed` / `no longer installable`)
+ * instead of flattening to the misleading `{unreadable}` fallback. Mirrors
+ * the instanceof ladder in `import/execute.ts::dispatchFailedOutcome`; the
+ * `not-installable` and `no-longer-installable` shape kinds collapse to the
+ * single `no longer installable` token used by import's
+ * `importWarningReason("uninstallable")` so the cross-surface reason stays
+ * identical for the same underlying failure.
+ *
+ * Exported for direct unit-test exercise of the closed-set mapping
+ * (the function is otherwise module-private).
+ */
+export function classifyOrchestratorThrow(
+  err: unknown,
+): import("../../shared/notify.ts").ContentReason {
+  if (err instanceof StateLockHeldError) {
+    return "lock held";
+  }
+
+  if (err instanceof PluginShapeError) {
+    switch (err.shape.kind) {
+      case "not-in-manifest":
+        return "not in manifest";
+      case "already-installed":
+        return "already installed";
+      case "not-installable":
+      case "no-longer-installable":
+        return "no longer installable";
+    }
+  }
+
   return narrowProbeError(err);
 }
 
@@ -284,7 +318,21 @@ async function applyMarketplaceRemoves(
         notifications: { mode: "orchestrated" },
       });
       if (result === undefined) {
-        // Defensive: orchestrated mode always returns an outcome.
+        // S6 / PR #51: a silent continue would drop the row from the
+        // cascade and hide a producer-contract violation
+        // (orchestrated mode is supposed to ALWAYS return an outcome).
+        // Mirror import/execute.ts:613's "returned no outcome in
+        // orchestrated mode" wording so the three apply.ts loops
+        // converge with the import path -- and with the fourth
+        // (toggle) loop once Y3 lands.
+        outcomes.push({
+          kind: "mp-remove-failed",
+          scope: op.scope,
+          marketplace: op.marketplace,
+          reason: classifyOrchestratorThrow(
+            new Error("removeMarketplace returned no outcome in orchestrated mode"),
+          ),
+        });
         continue;
       }
 
@@ -378,6 +426,17 @@ async function applyMarketplaceAdds(
         ...(opts.gitOps !== undefined && { gitOps: opts.gitOps }),
       });
       if (result === undefined) {
+        // S6 / PR #51: fail-loud row instead of silent continue
+        // -- mirrors import/execute.ts:613's
+        // "returned no outcome in orchestrated mode" wording.
+        outcomes.push({
+          kind: "mp-add-failed",
+          scope: op.scope,
+          marketplace: op.marketplace,
+          reason: classifyOrchestratorThrow(
+            new Error("addMarketplace returned no outcome in orchestrated mode"),
+          ),
+        });
         continue;
       }
 
@@ -424,6 +483,18 @@ async function applyPluginUninstalls(
         notifications: { mode: "orchestrated" },
       });
       if (result === undefined) {
+        // S6 / PR #51: fail-loud row instead of silent continue
+        // -- mirrors import/execute.ts:613's
+        // "returned no outcome in orchestrated mode" wording.
+        outcomes.push({
+          kind: "plugin-uninstall-failed",
+          scope: op.scope,
+          marketplace: op.marketplace,
+          plugin: op.plugin,
+          reason: classifyOrchestratorThrow(
+            new Error("uninstallPlugin returned no outcome in orchestrated mode"),
+          ),
+        });
         continue;
       }
 

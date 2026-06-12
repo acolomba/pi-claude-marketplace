@@ -6,6 +6,7 @@ import { DEFAULT_GIT_OPS } from "./orchestrators/marketplace/shared.ts";
 import { updateSinglePlugin } from "./orchestrators/plugin/update.ts";
 import { applyReconcile } from "./orchestrators/reconcile/apply.ts";
 import { locationsFor } from "./persistence/locations.ts";
+import { errorMessage } from "./shared/errors.ts";
 import { makeRawNotifyFn } from "./shared/notify.ts";
 
 import type {
@@ -39,7 +40,10 @@ export default function claudeMarketplaceExtension(pi: ExtensionAPI): void {
         // NotificationMessage construction and routes through this seam to
         // surface a single error string. The inner try/catch ensures a notify
         // failure NEVER propagates past resources_discover (NFR-2).
-        makeRawNotifyFn(ctx)(`reconcile aborted: ${(err as Error).message}`, "error");
+        // Y7 (PR #51): route through shared errorMessage so a non-Error
+        // throw (e.g. a literal string) renders its stringified form
+        // instead of `reconcile aborted: undefined`.
+        makeRawNotifyFn(ctx)(`reconcile aborted: ${errorMessage(err)}`, "error");
       } catch {
         // Last-ditch: never let a notify failure propagate past
         // resources_discover (NFR-2 boundary preservation).

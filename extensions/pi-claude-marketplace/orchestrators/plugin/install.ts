@@ -909,6 +909,15 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
           state,
           marketplace,
         });
+        // S4 (PR #51, CONTEXT.md S4): `adoptedSource === undefined`
+        // collapses two arms -- benign (already-declared, no synthesis
+        // needed) and dangerous (no string `source.raw` on the state
+        // record, so we cannot synthesize at all). The current write-back
+        // proceeds with the plugin key alone in BOTH arms; the dangerous
+        // arm therefore writes a dangling declaration the next reconcile
+        // converts into a destructive plan. Acknowledged trade-off for
+        // this PR; a future PR should widen the helper's return to
+        // disambiguate and route the dangerous arm to a (failed) row.
         await writeBatchedConfigEntries(current, targetConfigPath, locations.scopeRoot, {
           ...(adoptedSource !== undefined && {
             marketplaces: { [marketplace]: { source: adoptedSource } },

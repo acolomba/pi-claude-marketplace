@@ -887,3 +887,144 @@ test("S3 / PR #51: read-pass throw on saveConfig (claude-plugins.json EACCES) at
     }
   });
 });
+
+test("I6 / PR #51: classifyOrchestratorThrow maps PluginShapeError.kind and StateLockHeldError to closed-set tokens (not unreadable)", async () => {
+  // Pre-fix `classifyOrchestratorThrow` was a bare alias for
+  // `narrowProbeError`, so every PluginShapeError and StateLockHeldError
+  // flattened to {unreadable}. After the fix the function narrows on the
+  // typed errors first (mirroring import/execute.ts::dispatchFailedOutcome's
+  // instanceof ladder) and returns the catalog-correct token.
+  const { classifyOrchestratorThrow } =
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
+  const { PluginShapeError, StateLockHeldError } =
+    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
+
+  // (1) PluginShapeError "not-in-manifest" -> "not in manifest" -- the
+  // catalog token for a plugin declared in the config but missing from the
+  // marketplace manifest. Pre-fix: "unreadable".
+  assert.equal(
+    classifyOrchestratorThrow(
+      new PluginShapeError({ kind: "not-in-manifest", plugin: "p", marketplace: "m" }),
+    ),
+    "not in manifest",
+  );
+
+  // (2) PluginShapeError "already-installed" -> "already installed".
+  assert.equal(
+    classifyOrchestratorThrow(
+      new PluginShapeError({ kind: "already-installed", plugin: "p", marketplace: "m" }),
+    ),
+    "already installed",
+  );
+
+  // (3) PluginShapeError "not-installable" / "no-longer-installable" -> the
+  // closed-set "no longer installable" token (mirrors
+  // import/execute.ts::importWarningReason for the "uninstallable" warning).
+  assert.equal(
+    classifyOrchestratorThrow(
+      new PluginShapeError({ kind: "not-installable", plugin: "p", reasons: ["hooks"] }),
+    ),
+    "no longer installable",
+  );
+  assert.equal(
+    classifyOrchestratorThrow(
+      new PluginShapeError({ kind: "no-longer-installable", plugin: "p", reasons: ["lsp"] }),
+    ),
+    "no longer installable",
+  );
+
+  // (4) StateLockHeldError -> "lock held" -- a concurrent process holding
+  // the scope lock surfaces as the catalog `{lock held}` row, never as a
+  // misleading `{unreadable}` flatten.
+  assert.equal(
+    classifyOrchestratorThrow(new StateLockHeldError("project", "/tmp/.state-lock")),
+    "lock held",
+  );
+
+  // Sanity floor: a generic Error still falls through to the probe
+  // classifier's permissive fallback (the existing contract).
+  assert.equal(classifyOrchestratorThrow(new Error("boom")), "unreadable");
+});
+
+test("S6 / PR #51: the three non-toggle orchestrated loops in apply.ts adopt the fail-loud 'returned no outcome in orchestrated mode' pattern", async () => {
+  // Pre-fix three loops in apply.ts (applyMarketplaceRemoves,
+  // applyMarketplaceAdds, applyPluginUninstalls) silently `continue`d when
+  // an orchestrated call returned undefined -- the row vanished from the
+  // cascade with no operator-visible signal. After the fix all three loops
+  // mirror import/execute.ts:613's wording so a future Y3-tracked toggle
+  // loop fix converges on identical text. The fourth toggle loop
+  // (applyPluginToggles) is Y3's scope -- once that lands the count moves
+  // from 3 to 4.
+  const { readFile } = await import("node:fs/promises");
+  const applySource = await readFile(
+    "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts",
+    "utf8",
+  );
+  const matches = applySource.match(/returned no outcome in orchestrated mode/g) ?? [];
+  assert.ok(
+    matches.length >= 3,
+    `S6: expected the fail-loud wording at >= 3 loops in apply.ts; got ${matches.length.toString()} occurrences`,
+  );
+});
+
+test("S4 / PR #51: synthesizeUndeclaredMarketplaceSource undefined-return is decision-anchored at every call site", async () => {
+  // Pre-fix the two call sites of synthesizeAdoptedMarketplaceSource
+  // (install.ts and enable-disable.ts) silently elided the marketplace
+  // write when synthesis returned undefined -- the "no string raw" arm
+  // (the dangerous case the shared.ts:250-257 doc warns about) sealed the
+  // dangling declaration. After the fix every call site carries a
+  // decision-anchored comment referencing CONTEXT.md S4 so the deliberate
+  // fall-through is auditable and the alternative (surface a row) is
+  // recorded for a future PR.
+  const { readFile } = await import("node:fs/promises");
+  const installSrc = await readFile(
+    "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts",
+    "utf8",
+  );
+  const enableSrc = await readFile(
+    "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
+    "utf8",
+  );
+  const sharedSrc = await readFile(
+    "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts",
+    "utf8",
+  );
+
+  // Anchor mention in shared.ts (the function definition site).
+  assert.match(
+    sharedSrc,
+    /CONTEXT\.md S4|PR #51 S4|S4 \(PR #51\)/,
+    "S4: shared.ts must carry a decision-anchored comment at synthesizeUndeclaredMarketplaceSource",
+  );
+
+  // Anchor mention at each call site.
+  assert.match(
+    installSrc,
+    /CONTEXT\.md S4|PR #51 S4|S4 \(PR #51\)/,
+    "S4: install.ts call site must carry a decision-anchored comment",
+  );
+  assert.match(
+    enableSrc,
+    /CONTEXT\.md S4|PR #51 S4|S4 \(PR #51\)/,
+    "S4: enable-disable.ts call site must carry a decision-anchored comment",
+  );
+});
+
+test("Y7 / PR #51: index.ts last-ditch error notify uses errorMessage(err) so non-Error throws render their stringified form", async () => {
+  // Pre-fix index.ts:31 used `(err as Error).message` -- throwing a literal
+  // string ("boom") through resources_discover rendered
+  // `reconcile aborted: undefined` because a string has no .message. After
+  // the fix the call routes through the shared errorMessage(err) helper so
+  // non-Error throws stringify correctly.
+  const { readFile } = await import("node:fs/promises");
+  const indexSrc = await readFile("extensions/pi-claude-marketplace/index.ts", "utf8");
+  assert.match(
+    indexSrc,
+    /reconcile aborted: \$\{errorMessage\(err\)\}/,
+    "Y7: index.ts must compose `reconcile aborted: ${errorMessage(err)}`",
+  );
+  assert.ok(
+    !indexSrc.includes("(err as Error).message"),
+    "Y7: index.ts must NOT retain the pre-fix `(err as Error).message` cast",
+  );
+});

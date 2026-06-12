@@ -271,6 +271,19 @@ export function cloneMarketplaceRecordForTargetScope(
  * no string `source.raw` exists on the state record (hand-edited/legacy
  * state; writing a source-less entry would trip `saveConfig`'s
  * required-`source` invariant throw).
+ *
+ * S4 (PR #51, CONTEXT.md S4): the `undefined` return is OVERLOADED across
+ * two semantically distinct arms -- the BENIGN already-declared arm AND the
+ * DANGEROUS no-string-raw arm. Callers compose
+ * `...(adoptedSource !== undefined && { marketplaces: { ... } })` and write
+ * the plugin key REGARDLESS, so the dangerous arm silently writes a
+ * dangling plugin declaration the reconcile planner converts into a
+ * destructive `<marketplace not declared>` + recorded-clone removal plan
+ * (the exact invariant-5 violation the function doc warns about). The
+ * dangerous arm is rare in practice (hand-edited legacy state) and the
+ * write-back fall-through is deliberate for now -- a future PR should
+ * widen the return to a discriminated result so callers can route the
+ * `unsynthesizable` arm to a (failed) row instead of sealing the fate.
  */
 export function synthesizeUndeclaredMarketplaceSource(
   scopeConfigs: readonly ScopeConfig[],

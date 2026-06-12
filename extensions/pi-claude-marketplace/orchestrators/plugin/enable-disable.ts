@@ -456,6 +456,12 @@ export async function setPluginEnabled(
           // local) so a --local flip never re-declares a base-declared
           // marketplace (CFG-02 wholesale shadowing). Sibling read is fresh
           // inside the lock; membership test only.
+          //
+          // S4 (PR #51, CONTEXT.md S4): `adoptedSource === undefined`
+          // collapses the benign (already-declared) and dangerous
+          // (no string `source.raw`) arms. The dangerous arm writes a
+          // dangling plugin declaration -- acknowledged trade-off pending
+          // a return-type widen in a follow-up PR.
           const adoptedSource = await synthesizeAdoptedMarketplaceSource({
             current,
             siblingConfigPath,
@@ -523,6 +529,11 @@ export async function setPluginEnabled(
           state,
           marketplace,
         });
+        // S4 (PR #51, CONTEXT.md S4): see the synthesizeAdoptedMarketplaceSource
+        // call above -- the `adoptedSource === undefined` benign /
+        // dangerous arms collapse, and the dangerous arm sealing the
+        // dangling declaration is an acknowledged trade-off pending a
+        // helper-return widen.
         await writeBatchedConfigEntries(current, targetConfigPath, locations.scopeRoot, {
           ...(adoptedSource !== undefined && {
             marketplaces: { [marketplace]: { source: adoptedSource } },
