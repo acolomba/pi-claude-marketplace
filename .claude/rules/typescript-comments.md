@@ -17,6 +17,15 @@ wave, or task produced the code. Git history owns process history.
   `(v1.12 milestone UAT decision 2026-06-11)`.
 - Parentheticals like `(Phase 56 review)`, `(Phase 54 frozen)`,
   `(Phase 55 Plan 01)`.
+- Bare `Pitfall N` and `Pattern N` references (where N is a single digit)
+  that cite per-phase RESEARCH.md numbered hazard lists. Per-phase numbering
+  restarts per RESEARCH document, so the same `Pitfall N` token means
+  different things in different files, the earliest source docs no longer
+  exist, and the underlying hazards are gate-enforced by tests. Drop the
+  token and let the surrounding comment's rationale (or surviving
+  requirement/decision IDs) carry the anchor. Phase-qualified forms
+  (`Pitfall NN-N`, `RESEARCH Pitfall N`) are already covered by the
+  planning-artifact clause above.
 - Any other phrasing whose only purpose is to record which planning artefact
   authored the line.
 
@@ -75,4 +84,26 @@ becomes
 
 ```text
 test("PRL-10 replacePreparedSkills can rollback ...", ...)
+```
+
+Forbidden -> Allowed:
+
+```text
+// WB-01 / Pitfall 2: target-path selection happens ONCE
+```
+
+becomes
+
+```text
+// WB-01: target-path selection happens ONCE
+```
+
+```text
+test("Pitfall 9 loadState on missing state.json returns DEFAULT_STATE", ...)
+```
+
+becomes
+
+```text
+test("loadState on missing state.json returns DEFAULT_STATE", ...)
 ```
