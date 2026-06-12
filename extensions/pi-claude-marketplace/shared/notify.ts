@@ -1860,6 +1860,8 @@ const RELOAD_HINT_TRAILER = "/reload to pick up changes";
  *      since allBenign(undefined|[]) === false)             -> "warning"
  *   5. otherwise                                            -> undefined (info)
  */
+type ComputedSeverity = "warning" | "error" | undefined;
+
 function cascadeSeverity(message: {
   readonly marketplaces: readonly {
     readonly status?: string | undefined;
@@ -1869,7 +1871,7 @@ function cascadeSeverity(message: {
       readonly reasons?: readonly Reason[] | undefined;
     }[];
   }[];
-}): "warning" | "error" | undefined {
+}): ComputedSeverity {
   const hasError = message.marketplaces.some(
     (mp) => mp.status === "failed" || mp.plugins.some((p) => p.status === "failed"),
   );
@@ -1906,13 +1908,11 @@ function cascadeSeverity(message: {
  * Empty-and-clean cascades MUST be short-circuited by the caller (NFR-2 / A4)
  * and never reach this arm.
  */
-function reconcileAppliedSeverity(
-  message: ReconcileAppliedCascadeMessage,
-): "warning" | "error" | undefined {
+function reconcileAppliedSeverity(message: ReconcileAppliedCascadeMessage): ComputedSeverity {
   return cascadeSeverity(message);
 }
 
-function computeSeverity(message: NotificationMessage): "warning" | "error" | undefined {
+function computeSeverity(message: NotificationMessage): ComputedSeverity {
   // INFO-04 / SC#2 / INFO-03 / INFO-02: info-surface kinds take precedence
   // over the cascade severity ladder.
   // `marketplace-info` payloads carry no failure state and route to info
