@@ -1844,16 +1844,32 @@ const RELOAD_HINT_TRAILER = "/reload to pick up changes";
  * second arg, never part of the body.
  */
 /**
- * RECON-04 severity for the `reconcile-applied-cascade` standalone variant.
- * Mirrors the cascade-arm first-match ladder over the same per-status
- * `MarketplaceNotificationMessage[]` shape: any failed row -> "error", any
- * manual-recovery or actionable plugin / mp skip -> "warning", otherwise
- * info. Empty-and-clean cascades MUST be short-circuited by the caller
- * (NFR-2 / A4) and never reach this arm.
+ * Cascade severity ladder body shared by the cascade arm of `computeSeverity`
+ * and the RECON-04 `reconcile-applied-cascade` standalone arm
+ * (`reconcileAppliedSeverity`). Structural-subset typed so any message whose
+ * marketplaces[] carries the (status, reasons?, plugins[].status,
+ * plugins[].reasons) shape can be evaluated.
+ *
+ * 4-arm first-match (D-28-08 / D-28-09):
+ *   1. any failed plugin / mp row                           -> "error"
+ *   2. any manual-recovery plugin row                       -> "warning"
+ *   3. any plugin-level "skipped" with not-all-benign reasons
+ *      (first-match poisoning per D-28-09)                  -> "warning"
+ *   4. any mp-level "skipped" with not-all-benign reasons?
+ *      (missing/empty reasons? -> warning, the D-28-08 safe default
+ *      since allBenign(undefined|[]) === false)             -> "warning"
+ *   5. otherwise                                            -> undefined (info)
  */
-function reconcileAppliedSeverity(
-  message: ReconcileAppliedCascadeMessage,
-): "warning" | "error" | undefined {
+function cascadeSeverity(message: {
+  readonly marketplaces: readonly {
+    readonly status?: string | undefined;
+    readonly reasons?: readonly Reason[] | undefined;
+    readonly plugins: readonly {
+      readonly status: string;
+      readonly reasons?: readonly Reason[] | undefined;
+    }[];
+  }[];
+}): "warning" | "error" | undefined {
   const hasError = message.marketplaces.some(
     (mp) => mp.status === "failed" || mp.plugins.some((p) => p.status === "failed"),
   );
@@ -1883,6 +1899,17 @@ function reconcileAppliedSeverity(
   }
 
   return undefined;
+}
+
+/**
+ * RECON-04 severity for the `reconcile-applied-cascade` standalone variant.
+ * Empty-and-clean cascades MUST be short-circuited by the caller (NFR-2 / A4)
+ * and never reach this arm.
+ */
+function reconcileAppliedSeverity(
+  message: ReconcileAppliedCascadeMessage,
+): "warning" | "error" | undefined {
+  return cascadeSeverity(message);
 }
 
 function computeSeverity(message: NotificationMessage): "warning" | "error" | undefined {
@@ -1923,44 +1950,8 @@ function computeSeverity(message: NotificationMessage): "warning" | "error" | un
     }
   }
 
-  // Arm 1: any failed (plugin or marketplace) -> "error".
-  const hasError = message.marketplaces.some(
-    (mp) => mp.status === "failed" || mp.plugins.some((p) => p.status === "failed"),
-  );
-  if (hasError) {
-    return "error";
-  }
-
-  // Arm 2: any manual-recovery plugin row -> "warning" (always actionable).
-  const hasManualRecovery = message.marketplaces.some((mp) =>
-    mp.plugins.some((p) => p.status === "manual recovery"),
-  );
-  if (hasManualRecovery) {
-    return "warning";
-  }
-
-  // Arm 3: any plugin-level "skipped" whose REQUIRED reasons are not all
-  // benign -> "warning" (first-match poisoning per D-28-09 -- one actionable
-  // skip warning-routes the whole cascade).
-  const hasActionablePluginSkip = message.marketplaces.some((mp) =>
-    mp.plugins.some((p) => p.status === "skipped" && !allBenign(p.reasons)),
-  );
-  if (hasActionablePluginSkip) {
-    return "warning";
-  }
-
-  // Arm 4: any mp-level "skipped" whose OPTIONAL reasons? are not all benign
-  // -> "warning". Missing/empty reasons? cannot be proven benign (allBenign
-  // returns false on undefined/empty) -> warning, the D-28-08 safe default.
-  const hasActionableMpSkip = message.marketplaces.some(
-    (mp) => mp.status === "skipped" && !allBenign(mp.reasons),
-  );
-  if (hasActionableMpSkip) {
-    return "warning";
-  }
-
-  // Arm 5: otherwise success / benign-only skip (omit 2nd arg = info).
-  return undefined;
+  // Cascade arm: delegate to the shared 4-arm ladder (D-28-08 / D-28-09).
+  return cascadeSeverity(message);
 }
 
 /**

@@ -59,7 +59,7 @@ import { planReconcile } from "./plan.ts";
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ReconcilePlan } from "./types.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { Dependency } from "../../shared/notify.ts";
+import type { Dependency, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { GitOps } from "../marketplace/shared.ts";
 
@@ -432,12 +432,30 @@ async function applyPluginInstalls(
   }
 }
 
-async function applyPluginEnables(
+interface PluginToggleAxes {
+  readonly enable: boolean;
+  readonly successStatus: "enabled" | "disabled";
+  readonly buildSuccess: (info: {
+    scope: Scope;
+    marketplace: string;
+    plugin: string;
+    version?: string;
+  }) => PerEntryOutcome;
+  readonly buildFailed: (info: {
+    scope: Scope;
+    marketplace: string;
+    plugin: string;
+    reason: Reason;
+  }) => PerEntryOutcome;
+}
+
+async function applyPluginToggles(
   opts: ApplyReconcileOptions,
-  plan: ReconcilePlan,
+  ops: ReconcilePlan["pluginsToEnable"] | ReconcilePlan["pluginsToDisable"],
   outcomes: PerEntryOutcome[],
+  axes: PluginToggleAxes,
 ): Promise<void> {
-  for (const op of plan.pluginsToEnable) {
+  for (const op of ops) {
     try {
       const result = await setPluginEnabled({
         ctx: opts.ctx,
@@ -445,7 +463,7 @@ async function applyPluginEnables(
         cwd: opts.cwd,
         marketplace: op.marketplace,
         plugin: op.plugin,
-        enable: true,
+        enable: axes.enable,
         scope: op.scope,
         notifications: { mode: "orchestrated" },
       });
@@ -453,83 +471,36 @@ async function applyPluginEnables(
         continue;
       }
 
-      if (result.status === "enabled") {
-        outcomes.push({
-          kind: "plugin-enabled",
-          scope: op.scope,
-          marketplace: op.marketplace,
-          plugin: op.plugin,
-          ...(result.version !== undefined && { version: result.version }),
-        });
+      if (result.status === axes.successStatus) {
+        outcomes.push(
+          axes.buildSuccess({
+            scope: op.scope,
+            marketplace: op.marketplace,
+            plugin: op.plugin,
+            ...(result.version !== undefined && { version: result.version }),
+          }),
+        );
       } else if (result.status === "failed") {
-        outcomes.push({
-          kind: "plugin-enable-failed",
-          scope: op.scope,
-          marketplace: op.marketplace,
-          plugin: op.plugin,
-          reason: result.reason,
-        });
+        outcomes.push(
+          axes.buildFailed({
+            scope: op.scope,
+            marketplace: op.marketplace,
+            plugin: op.plugin,
+            reason: result.reason,
+          }),
+        );
       }
       // skipped (idempotent) -> intentionally drop; the steady state isn't a
       // user-visible action.
     } catch (err) {
-      outcomes.push({
-        kind: "plugin-enable-failed",
-        scope: op.scope,
-        marketplace: op.marketplace,
-        plugin: op.plugin,
-        reason: classifyOrchestratorThrow(err),
-      });
-    }
-  }
-}
-
-async function applyPluginDisables(
-  opts: ApplyReconcileOptions,
-  plan: ReconcilePlan,
-  outcomes: PerEntryOutcome[],
-): Promise<void> {
-  for (const op of plan.pluginsToDisable) {
-    try {
-      const result = await setPluginEnabled({
-        ctx: opts.ctx,
-        pi: opts.pi,
-        cwd: opts.cwd,
-        marketplace: op.marketplace,
-        plugin: op.plugin,
-        enable: false,
-        scope: op.scope,
-        notifications: { mode: "orchestrated" },
-      });
-      if (result === undefined) {
-        continue;
-      }
-
-      if (result.status === "disabled") {
-        outcomes.push({
-          kind: "plugin-disabled",
+      outcomes.push(
+        axes.buildFailed({
           scope: op.scope,
           marketplace: op.marketplace,
           plugin: op.plugin,
-          ...(result.version !== undefined && { version: result.version }),
-        });
-      } else if (result.status === "failed") {
-        outcomes.push({
-          kind: "plugin-disable-failed",
-          scope: op.scope,
-          marketplace: op.marketplace,
-          plugin: op.plugin,
-          reason: result.reason,
-        });
-      }
-    } catch (err) {
-      outcomes.push({
-        kind: "plugin-disable-failed",
-        scope: op.scope,
-        marketplace: op.marketplace,
-        plugin: op.plugin,
-        reason: classifyOrchestratorThrow(err),
-      });
+          reason: classifyOrchestratorThrow(err),
+        }),
+      );
     }
   }
 }
@@ -577,8 +548,18 @@ async function applyPlan(
   await applyMarketplaceRemoves(opts, plan, outcomes);
   await applyMarketplaceAdds(opts, plan, outcomes);
   await applyPluginInstalls(opts, plan, outcomes);
-  await applyPluginEnables(opts, plan, outcomes);
-  await applyPluginDisables(opts, plan, outcomes);
+  await applyPluginToggles(opts, plan.pluginsToEnable, outcomes, {
+    enable: true,
+    successStatus: "enabled",
+    buildSuccess: (info) => ({ kind: "plugin-enabled", ...info }),
+    buildFailed: (info) => ({ kind: "plugin-enable-failed", ...info }),
+  });
+  await applyPluginToggles(opts, plan.pluginsToDisable, outcomes, {
+    enable: false,
+    successStatus: "disabled",
+    buildSuccess: (info) => ({ kind: "plugin-disabled", ...info }),
+    buildFailed: (info) => ({ kind: "plugin-disable-failed", ...info }),
+  });
   applySourceMismatches(plan, outcomes);
 }
 
