@@ -50,6 +50,8 @@
 // resolveScopeFromState). MUST NOT import from
 // orchestrators/marketplace/{add,remove,list,update,autoupdate}.ts.
 
+import path from "node:path";
+
 import {
   abortPreparedAgents,
   commitPreparedAgents,
@@ -934,14 +936,73 @@ async function markUpdateInProgress(
  * `sRecord.updatedAt` is set on BOTH branches: even a failed finalize
  * is a truthful "we touched this record" stamp.
  */
+/**
+ * D-UPD: same intersection as `reconcile/plan.ts::isRecordedButDisabled`.
+ * Duplicated here to avoid pulling the reconcile module into the orchestrator's
+ * import graph; the planner is the canonical owner and this predicate is the
+ * deliberate same-rule mirror (`enable-disable.ts::isCurrentlyDisabled` does
+ * the same for its own reasons).
+ */
+function isRecordedButDisabled(
+  record: ExtensionState["marketplaces"][string]["plugins"][string],
+): boolean {
+  return (
+    record.compatibility.installable &&
+    record.resources.skills.length === 0 &&
+    record.resources.prompts.length === 0 &&
+    record.resources.agents.length === 0 &&
+    record.resources.mcpServers.length === 0
+  );
+}
+
+/**
+ * D-UPD: refresh a disabled-but-recorded plugin's version pin + resolvedSource
+ * inside a withStateGuard so a future `enable` re-materializes from the
+ * current manifest. Resources.* stay empty (the plugin is still disabled).
+ * The standalone-direct write-back (maybeWritePluginConfigBackUpdate) is
+ * SKIPPED -- the config entry already exists by construction (the disabled
+ * record only persists when the user explicitly disabled it), and writing
+ * the byte-stable `{}` patch would touch state.json mtime via the SOLE
+ * sanctioned save seam without changing user-visible bytes.
+ */
+async function refreshDisabledRecord(
+  args: ThreePhaseArgs,
+  preflight: PluginPreflight,
+): Promise<void> {
+  const { plugin, marketplace, locations } = args;
+  const { installable, toVersion } = preflight;
+  await withStateGuard(locations, (s) => {
+    const sMp = s.marketplaces[marketplace];
+    if (sMp === undefined) {
+      return;
+    }
+
+    const sRecord = sMp.plugins[plugin];
+    if (sRecord === undefined) {
+      return;
+    }
+
+    sRecord.version = toVersion;
+    sRecord.resolvedSource = installable.pluginRoot;
+    sRecord.compatibility = {
+      installable: true,
+      notes: [...installable.notes],
+      supported: [...installable.supported],
+      unsupported: [...installable.unsupported],
+    };
+    sRecord.updatedAt = new Date().toISOString();
+  });
+}
+
 async function finalizeUpdateRecord(
   args: ThreePhaseArgs,
   preflight: PluginPreflight,
   handles: PrepHandles,
   phase3aFailures: readonly Phase3Failure[],
-): Promise<void> {
+): Promise<{ readonly invalidConfigWriteBack: boolean }> {
   const { plugin, marketplace, locations } = args;
   const { installable, toVersion } = preflight;
+  let invalidConfigWriteBack = false;
   await withStateGuard(locations, async (s) => {
     const sMp = s.marketplaces[marketplace];
     if (sMp === undefined) {
@@ -1008,9 +1069,18 @@ async function finalizeUpdateRecord(
     // is `{}` and a CHANGED update with a byte-stable existing entry
     // produces a no-op (preserving RECON-05 mtime stability).
     if (!args.cascade && phase3aFailures.length === 0) {
-      await maybeWritePluginConfigBackUpdate(locations, marketplace, plugin, args.local === true);
+      const writeResult = await maybeWritePluginConfigBackUpdate(
+        locations,
+        marketplace,
+        plugin,
+        args.local === true,
+      );
+      if (writeResult.invalidConfig) {
+        invalidConfigWriteBack = true;
+      }
     }
   });
+  return { invalidConfigWriteBack };
 }
 
 /**
@@ -1026,11 +1096,19 @@ async function maybeWritePluginConfigBackUpdate(
   marketplace: string,
   plugin: string,
   local: boolean,
-): Promise<void> {
+): Promise<{ readonly invalidConfig: boolean }> {
   const targetConfigPath = local ? locations.configLocalJsonPath : locations.configJsonPath;
   const cfg = await loadConfig(targetConfigPath);
   if (cfg.status === "invalid") {
-    return;
+    // S5: previously a silent skip while the success notify proceeded -- the
+    // caller now surfaces the abort via a warning row. The state mutation
+    // already committed (finalize ran), so the byte form is the success
+    // payload (the plugin DID update on disk) plus the invalid-manifest
+    // warning. Sibling CFG-03 aborts (at preflight) render
+    // `(skipped) {invalid manifest}`; here the mutation already landed so a
+    // skip would lie -- the warning row says "wrote state, could not write
+    // config".
+    return { invalidConfig: true };
   }
 
   const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
@@ -1045,7 +1123,7 @@ async function maybeWritePluginConfigBackUpdate(
   // the key -- WRITE so the user-authored config gains the implicit
   // declaration.
   if (existingEntry !== undefined) {
-    return;
+    return { invalidConfig: false };
   }
 
   await writePluginConfigEntry(
@@ -1056,8 +1134,15 @@ async function maybeWritePluginConfigBackUpdate(
     marketplace,
     {},
   );
+  return { invalidConfig: false };
 }
 
+// The three-phase update body sequences preflight, the D-UPD disabled-record
+// fast path, prepare-handles, the intent-mark window, phase-3a per-bridge
+// commits, finalize, the phase-3b aggregate error path, and the S5
+// invalid-config write-back warning -- splitting it would require additional
+// state-snapshot threading and obscure the per-phase save-vs-throw discipline.
+// eslint-disable-next-line sonarjs/cognitive-complexity
 async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOutcome> {
   const { plugin, marketplace, scope } = args;
 
@@ -1069,6 +1154,24 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   }
 
   const { installable, fromVersion, toVersion } = preflight;
+
+  // D-UPD: a disabled-but-recorded plugin (empty resources.* + installable=true,
+  // the same marker the planner reads via isRecordedButDisabled) must NOT
+  // re-materialize artefacts; an `enable` after the update is the rematerialization
+  // surface. Refresh the record's version + resolvedSource so a future enable
+  // reads the current pin, but keep `resources.*` empty. Renders the existing
+  // `unchanged` byte form -- the artefact state really is unchanged.
+  if (isRecordedButDisabled(preflight.record)) {
+    await refreshDisabledRecord(args, preflight);
+    return {
+      partition: "unchanged",
+      name: plugin,
+      fromVersion,
+      toVersion: fromVersion,
+      declaresAgents: false,
+      declaresMcp: false,
+    };
+  }
 
   // ─── : prepare into tmp ────────────────────────────────────────────
   //
@@ -1180,8 +1283,10 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   // `msg` field carries the explicit `state finalize failed:` text so
   // operator diagnostics see the truthful cause. A dedicated
   // `phase: "finalize"` Phase3Failure member is deferred.
+  let invalidConfigWriteBack = false;
   try {
-    await finalizeUpdateRecord(args, preflight, handles, phase3aFailures);
+    const finalizeResult = await finalizeUpdateRecord(args, preflight, handles, phase3aFailures);
+    invalidConfigWriteBack = finalizeResult.invalidConfigWriteBack;
   } catch (finalizeErr) {
     phase3aFailures.push({
       phase: "mcp",
@@ -1265,6 +1370,39 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   const stagedAgents = handles.agents.result.recorded.map((r) => r.generatedName);
   const stagedMcpServers = handles.mcp.result.recorded.map((r) => r.generatedName);
   await dropPluginCompletionCache(args);
+  // S5: an invalid config file silently skipped the write-back while the
+  // success notify proceeded. Direct-path callers now surface the abort as a
+  // separate warning notification AFTER the success row so the user knows
+  // the on-disk artefacts were updated but the config entry was not written.
+  // The cascade path never calls the write-back (gated by `!args.cascade`),
+  // so it is structurally unaffected.
+  if (
+    invalidConfigWriteBack &&
+    isDirectUpdate(args) &&
+    args.ctx !== undefined &&
+    args.pi !== undefined
+  ) {
+    const targetBasename = path.basename(
+      args.local === true ? args.locations.configLocalJsonPath : args.locations.configJsonPath,
+    );
+    notify(args.ctx, args.pi, {
+      marketplaces: [
+        {
+          name: marketplace,
+          scope,
+          plugins: [
+            {
+              status: "failed",
+              name: plugin,
+              reasons: ["invalid manifest"] as const,
+              cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
+            },
+          ],
+        },
+      ],
+    });
+  }
+
   return {
     partition: "updated",
     name: plugin,

@@ -171,10 +171,11 @@ async function removePath(pathPromise: Promise<string>): Promise<void> {
  */
 function narrowCascadeFailure(cause: Error): ContentReason {
   if (cause instanceof AgentsUnstageFailureError) {
-    // No closed-set Reason captures the per-agent foreign-content failure
-    // mode today; map to the documented permissive fallback. Adding a new
-    // REASONS member requires a catalog UAT precedent + grammar sync.
-    return "not in manifest";
+    // ATTR-09 / D-NCF: foreign content owned by another process is a
+    // content/ownership mismatch, not a manifest absence. Aligned with
+    // uninstall.ts's mapping (`AgentsUnstageFailureError` -> "source mismatch")
+    // so the two cascade-failure narrowers do not drift.
+    return "source mismatch";
   }
 
   if (isErrnoException(cause)) {

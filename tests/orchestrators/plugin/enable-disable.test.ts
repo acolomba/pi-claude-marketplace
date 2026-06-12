@@ -866,3 +866,222 @@ test("UAT-05: --local enable flip with marketplace declared in BASE writes ONLY 
     assert.equal(merged.marketplaces["mp"]?.entry.autoupdate, true);
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// C1: corrupt state.json -> setPluginEnabled NEVER re-throws (PR #51 / C1)
+// ──────────────────────────────────────────────────────────────────────────
+
+test("C1: corrupt state.json in the requested scope renders a (failed) row (no throw escapes; basename-only path; IL-2)", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // Seed a CORRUPT state.json in the user scope so resolveCrossScopePluginTarget's
+    // loadState call throws on parse. The doc on setPluginEnabled at the entry
+    // promises "never re-throws" -- the throw must surface through notify().
+    const scopeRoot = path.join(home, ".pi", "agent");
+    const extRoot = path.join(scopeRoot, "pi-claude-marketplace");
+    await mkdir(extRoot, { recursive: true });
+    const statePath = path.join(extRoot, "state.json");
+    await writeFile(statePath, "{ not json ", "utf8");
+
+    const { ctx, notifications } = makeCtx(cwd);
+    // No throw -- the never-re-throws contract holds.
+    const outcome = await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+    assert.equal(outcome, undefined, "standalone mode returns undefined");
+
+    // Exactly one notify call (IL-2 single chokepoint) at error severity.
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.match(notifications[0]!.message, /\(failed\)/);
+
+    // T-53-02-02: the absolute path must NOT appear; only the basename.
+    assert.ok(
+      !notifications[0]!.message.includes(statePath),
+      `absolute state.json path must not leak: ${notifications[0]!.message}`,
+    );
+    assert.match(
+      notifications[0]!.message,
+      /state\.json/,
+      "basename should appear in the cause trailer",
+    );
+  });
+});
+
+test("C1: orchestrated mode -- corrupt state.json returns { status: 'failed' } typed outcome; ZERO notify calls", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const scopeRoot = path.join(home, ".pi", "agent");
+    const extRoot = path.join(scopeRoot, "pi-claude-marketplace");
+    await mkdir(extRoot, { recursive: true });
+    await writeFile(path.join(extRoot, "state.json"), "{ not json ", "utf8");
+
+    const { ctx, notifications } = makeCtx(cwd);
+    const outcome = await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    });
+    assert.equal(notifications.length, 0, "orchestrated mode never fires notify()");
+    assert.ok(outcome);
+    assert.equal(outcome.status, "failed");
+    if (outcome.status === "failed") {
+      // T-53-02-02: the cause string must not embed the absolute state.json
+      // path; the basename-only sanitizer collapsed any "/.../state.json"
+      // match to "state.json".
+      assert.ok(
+        !outcome.cause.includes("/.pi/agent/pi-claude-marketplace/state.json"),
+        `absolute state.json path must not leak: ${outcome.cause}`,
+      );
+    }
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// I3: disable cascade partial failure folds dropped + saves shrunken record
+// ──────────────────────────────────────────────────────────────────────────
+
+test("I3: disable cascade partial failure mutates state.resources to drop the cascaded artefacts (TR-03 fold) and surfaces (failed)", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // Seed a populated user-scope record. The cascade primitive walks bridges
+    // in skills -> commands -> agents -> mcp order; we make the AGENTS bridge
+    // throw (agents-index.json seeded as a directory -> EISDIR on read) so
+    // the cascade returns ok:false with non-empty dropped.skills /
+    // dropped.commands. The (now-folded) state record must drop only the
+    // axes whose bridge actually removed something on disk.
+    const { statePath } = await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      disabled: false,
+    });
+    const extRoot = path.join(home, ".pi", "agent", "pi-claude-marketplace");
+    // Pre-seed populated resources across all 4 axes so the fold has something
+    // to drop in skills + prompts, and something to retain in agents + mcp.
+    const stateRaw = await readFile(statePath, "utf8");
+    const stateJson = JSON.parse(stateRaw) as {
+      marketplaces: Record<
+        string,
+        {
+          plugins: Record<
+            string,
+            {
+              resources: {
+                skills: string[];
+                prompts: string[];
+                agents: string[];
+                mcpServers: string[];
+              };
+            }
+          >;
+        }
+      >;
+    };
+    stateJson.marketplaces.mp!.plugins.foo!.resources.skills = ["s1"];
+    stateJson.marketplaces.mp!.plugins.foo!.resources.prompts = ["c1"];
+    stateJson.marketplaces.mp!.plugins.foo!.resources.agents = ["a1"];
+    stateJson.marketplaces.mp!.plugins.foo!.resources.mcpServers = ["m1"];
+    await writeFile(statePath, JSON.stringify(stateJson, null, 2), "utf8");
+
+    // Actually create the on-disk skill + command targets so the bridges
+    // report removedNames non-empty when they run. The cascade walks
+    // skills -> commands -> agents -> mcp; both skills and commands must
+    // see a real target dir to push the name into `removed`.
+    const skillsTargetDir = path.join(extRoot, "resources", "skills");
+    await mkdir(path.join(skillsTargetDir, "s1"), { recursive: true });
+    const promptsTargetDir = path.join(extRoot, "resources", "prompts");
+    await mkdir(promptsTargetDir, { recursive: true });
+    await writeFile(path.join(promptsTargetDir, "c1.md"), "# c1\n", "utf8");
+
+    // Force the agents bridge to throw by seeding agents-index.json as a
+    // directory (EISDIR on read). The cascade's skills + commands bridges
+    // run cleanly first, populating dropped.skills + dropped.commands.
+    const agentsIndexPath = path.join(extRoot, "agents-index.json");
+    await mkdir(agentsIndexPath, { recursive: true });
+
+    const { ctx, notifications } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: false,
+      scope: "user",
+    });
+
+    // Exactly one notify; failed row.
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.match(notifications[0]!.message, /\(failed\)/);
+
+    // I3: state.json drops the SKILLS + PROMPTS the cascade actually unstaged
+    // (their bridge ran ok), but RETAINS the agents + mcp axes (their
+    // bridges never ran). The TR-03 fold makes the persisted row reflect
+    // only artefacts still on disk.
+    const stateAfter = JSON.parse(await readFile(statePath, "utf8")) as typeof stateJson;
+    const rec = stateAfter.marketplaces.mp!.plugins.foo!;
+    assert.deepEqual(rec.resources.skills, [], "skills folded (bridge ran ok before agents threw)");
+    assert.deepEqual(rec.resources.prompts, [], "commands folded");
+    assert.deepEqual(
+      rec.resources.agents,
+      ["a1"],
+      "agents retained (bridge threw before completing)",
+    );
+    assert.deepEqual(rec.resources.mcpServers, ["m1"], "mcp retained (bridge never ran)");
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// I4: enable failure threads InstallFailureCapture -> rollback-partial trailer
+// ──────────────────────────────────────────────────────────────────────────
+// I4 produces rollback-partials only when runInstallLedger's commit phase
+// fails midway. Constructing that mid-commit-failure end-to-end requires the
+// full install harness; the smaller pin here is that the capture-threading
+// type contract holds: the existing fresh-enable test (CR-01) drives the
+// happy path (capture stays empty, the row renders as `(installed)`), AND
+// the ENBL-03 missing-clone test pins the non-rollback failure path.
+// The non-empty-rollbackPartials shape is pinned by install.test.ts's
+// `composeInstallFailureMessage` coverage; this test only exercises the
+// I4 thread (capture argument provided) without asserting a rollback row.
+
+test("I4: enable branch threads InstallFailureCapture into runInstallLedger (regression: empty capture leaves narrowEnableFailure path intact)", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // Drive the ENBL-03 missing-clone failure -- the capture is constructed
+    // but stays empty (no commit phase ran), so the rendered row keeps the
+    // catalog `(failed) {source missing}` byte form (regression-pin for the
+    // I4 thread: providing the capture argument must not alter the
+    // pre-commit failure shape).
+    await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      disabled: true,
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    // Empty rollbackPartials must NOT promote the reason to `rollback partial`.
+    assert.match(notifications[0]!.message, /\(failed\) \{source missing\}/);
+    assert.ok(
+      !notifications[0]!.message.includes("rollback partial"),
+      `empty capture must not render rollback-partial: ${notifications[0]!.message}`,
+    );
+  });
+});

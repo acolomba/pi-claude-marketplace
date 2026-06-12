@@ -658,11 +658,14 @@ test("narrowCascadeFailure: NodeJS.ErrnoException code=ENOENT -> {source missing
   assert.equal(__test_narrowCascadeFailure(errnoLike), "source missing");
 });
 
-test("narrowCascadeFailure: AgentsUnstageFailureError -> {not in manifest} (documented fallback)", () => {
+test("narrowCascadeFailure: AgentsUnstageFailureError -> {source mismatch} (ATTR-09 / D-NCF align with uninstall.ts)", () => {
+  // D-NCF: foreign content owned by another process is a content/ownership
+  // mismatch, not a manifest absence. Aligned with uninstall.ts's ATTR-09
+  // mapping (`AgentsUnstageFailureError` -> `"source mismatch"`).
   const err = new AgentsUnstageFailureError("agents leak", [
     { generatedName: "foo", targetPath: "/agents/foo.md", reason: "EACCES" },
   ]);
-  assert.equal(__test_narrowCascadeFailure(err), "not in manifest");
+  assert.equal(__test_narrowCascadeFailure(err), "source mismatch");
 });
 
 test("narrowCascadeFailure: arbitrary bare Error with 'unreadable' substring -> {unreadable} (defensive textual fallback)", () => {

@@ -662,3 +662,80 @@ test("CFG-03 / T-56-02-05: invalid local config aborts the flip; basename-only m
     assert.equal(recordAutoupdate(after.marketplaces["mp"]), false);
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// D-UPD: autoupdate flag-flip must leave a DISABLED plugin record alone.
+// `setMarketplaceAutoupdate` flips a config flag; it does NOT update plugins.
+// This test pins that the flip never accidentally re-materializes a
+// disabled-but-recorded plugin's resources (the canonical
+// isRecordedButDisabled marker: empty resources.* + installable=true).
+// ──────────────────────────────────────────────────────────────────────────
+
+test("D-UPD: setMarketplaceAutoupdate leaves a disabled plugin record untouched (state-side resources stay empty)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const locations = locationsFor("project", cwd);
+    await mkdir(locations.extensionRoot, { recursive: true });
+    // Seed a marketplace with a disabled plugin row: empty resources.* +
+    // installable:true. The autoupdate flag-flip is a config-only mutation;
+    // it must never re-materialize.
+    const seededMp = makeMarketplaceRecord("mp", "project", cwd, false);
+    (seededMp as { plugins: Record<string, unknown> }).plugins = {
+      foo: {
+        version: "1.0.0",
+        resolvedSource: "/tmp/dummy-mp/plugins/foo",
+        compatibility: {
+          installable: true,
+          notes: [],
+          supported: [],
+          unsupported: [],
+        },
+        resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+        installedAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    };
+    await saveState(locations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: { mp: seededMp },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await setMarketplaceAutoupdate({
+      ctx,
+      pi,
+      name: "mp",
+      enable: true,
+      scope: "project",
+      cwd,
+    });
+
+    // Flag-flip surfaced (rendered byte form pinned by other tests).
+    assert.ok(notifications.length >= 1);
+
+    // D-UPD: state-side plugin record is UNTOUCHED -- resources.* still
+    // empty (the plugin stays disabled until the user explicitly enables).
+    const after = await loadState(locations.extensionRoot);
+    const rec = (
+      after.marketplaces["mp"] as unknown as {
+        plugins: Record<
+          string,
+          {
+            resources: {
+              skills: string[];
+              prompts: string[];
+              agents: string[];
+              mcpServers: string[];
+            };
+            compatibility: { installable: boolean };
+          }
+        >;
+      }
+    ).plugins.foo;
+    assert.ok(rec !== undefined);
+    assert.deepEqual(rec.resources.skills, [], "disabled record stays disabled across flag-flip");
+    assert.deepEqual(rec.resources.prompts, []);
+    assert.deepEqual(rec.resources.agents, []);
+    assert.deepEqual(rec.resources.mcpServers, []);
+    assert.equal(rec.compatibility.installable, true, "installable flag preserved");
+  });
+});

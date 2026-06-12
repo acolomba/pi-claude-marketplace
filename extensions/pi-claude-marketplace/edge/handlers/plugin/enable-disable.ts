@@ -14,6 +14,8 @@
 // `notifyUsageError`.
 
 import { setPluginEnabled } from "../../../orchestrators/plugin/enable-disable.ts";
+import { errorMessage } from "../../../shared/errors.ts";
+import { notify } from "../../../shared/notify.ts";
 // Shared scanner; see edge/handlers/shared.ts.
 import { extractLocalFlag } from "../shared.ts";
 
@@ -45,15 +47,40 @@ export function makeEnableDisableHandler(
       return;
     }
 
-    await setPluginEnabled({
-      ctx,
-      pi,
-      cwd: ctx.cwd,
-      marketplace: parsed.marketplace,
-      plugin: parsed.plugin,
-      enable,
-      ...(parsed.scope !== undefined && { scope: parsed.scope }),
-      ...(localFlag.local && { local: true }),
-    });
+    try {
+      await setPluginEnabled({
+        ctx,
+        pi,
+        cwd: ctx.cwd,
+        marketplace: parsed.marketplace,
+        plugin: parsed.plugin,
+        enable,
+        ...(parsed.scope !== undefined && { scope: parsed.scope }),
+        ...(localFlag.local && { local: true }),
+      });
+    } catch (err) {
+      // C1 defense-in-depth: the orchestrator's "never re-throws" contract
+      // wraps every loadState + transaction call internally, but a defect or
+      // injected throw escaping here must still surface through notify() per
+      // IL-2 -- never as a raw process.stderr trace with no user-visible row.
+      const scope = parsed.scope ?? "user";
+      const cause = err instanceof Error ? err : new Error(errorMessage(err));
+      notify(ctx, pi, {
+        marketplaces: [
+          {
+            name: parsed.marketplace,
+            scope,
+            plugins: [
+              {
+                status: "failed",
+                name: parsed.plugin,
+                reasons: ["unreadable"] as const,
+                cause,
+              },
+            ],
+          },
+        ],
+      });
+    }
   };
 }

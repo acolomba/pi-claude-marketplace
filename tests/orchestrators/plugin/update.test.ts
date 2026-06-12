@@ -99,8 +99,14 @@ function makePluginRecord(
     version,
     resolvedSource: "/tmp",
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    // D-UPD: a record with empty resources.* + installable=true is the
+    // disabled-but-recorded marker (the same intersection
+    // `isRecordedButDisabled` reads in plan.ts). Default to a populated
+    // skill so the update flow exercises the enabled-update path, not
+    // the disabled-record short-circuit. Tests that need a disabled
+    // record pass `resources.skills: []` explicitly.
     resources: {
-      skills: resources.skills ?? [],
+      skills: resources.skills ?? ["seeded-skill"],
       prompts: resources.prompts ?? [],
       agents: resources.agents ?? [],
       mcpServers: resources.mcpServers ?? [],
@@ -108,6 +114,21 @@ function makePluginRecord(
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
+}
+
+/**
+ * D-UPD test helper: seeded record with EMPTY resources.* -- the canonical
+ * "currently disabled" marker that `isRecordedButDisabled` reads. The
+ * `update` orchestrator must refresh the version/source pin but keep
+ * resources empty (the artefacts re-materialize on the next `enable`).
+ */
+function makeDisabledPluginRecord(version: string): PluginRecord {
+  return makePluginRecord(version, {
+    skills: [],
+    prompts: [],
+    agents: [],
+    mcpServers: [],
+  });
 }
 
 interface SeededPathMp {
@@ -835,7 +856,7 @@ test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'pl
       );
       assert.deepEqual(
         [...rec.resources.skills],
-        [],
+        ["seeded-skill"],
         "failed bridge resources stay at pre-update value",
       );
       assert.deepEqual(
@@ -1832,7 +1853,9 @@ test("phase3a-commands-fail: command target occupied by directory -> phase3aFail
       assert.equal(rec.version, "1.0.0");
       assert.equal(rec.compatibility.installable, false);
       assert.ok(rec.compatibility.notes.includes("update-in-progress"));
-      assert.deepEqual([...rec.resources.skills], []);
+      // Failed bridges retain pre-update resources; succeeded bridges write
+      // empty arrays (seed declares no entries for agents/mcp).
+      assert.deepEqual([...rec.resources.skills], ["seeded-skill"]);
       assert.deepEqual([...rec.resources.prompts], []);
       assert.deepEqual([...rec.resources.agents], []);
       assert.deepEqual([...rec.resources.mcpServers], []);
@@ -1908,7 +1931,10 @@ test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAge
       assert.equal(rec.version, "1.0.0");
       assert.equal(rec.compatibility.installable, false);
       assert.ok(rec.compatibility.notes.includes("update-in-progress"));
-      assert.deepEqual([...rec.resources.skills], []);
+      // Failed bridges retain pre-update skills; agents failed too (no entry
+      // in seed so previously [] and stays []); commands/mcp succeeded with
+      // empty recorded[].
+      assert.deepEqual([...rec.resources.skills], ["seeded-skill"]);
       assert.deepEqual([...rec.resources.prompts], []);
       assert.deepEqual([...rec.resources.agents], []);
       assert.deepEqual([...rec.resources.mcpServers], []);
@@ -1972,8 +1998,8 @@ test("TR-04 matrix: skills-fails-others-succeed", async () => {
       assert.equal(rec.version, "1.0.0");
       assert.equal(rec.compatibility.installable, false);
       assert.ok(rec.compatibility.notes.includes("update-in-progress"));
-      // Failed bridge: skills resources stay at pre-update value (empty).
-      assert.deepEqual([...rec.resources.skills], []);
+      // Failed bridge: skills resources stay at pre-update value.
+      assert.deepEqual([...rec.resources.skills], ["seeded-skill"]);
       // Succeeded bridges: resources updated to new generated names.
       assert.deepEqual([...rec.resources.prompts], ["hello:deploy"]);
       assert.deepEqual([...rec.resources.agents], [`${GENERATED_AGENT_PREFIX}hello-bot`]);
@@ -2160,7 +2186,8 @@ test("TR-04 retry: partial-success-state-converges-to-new-version", async () => 
       assert.equal(midRec.version, "1.0.0");
       assert.equal(midRec.compatibility.installable, false);
       assert.ok(midRec.compatibility.notes.includes("update-in-progress"));
-      assert.deepEqual([...midRec.resources.skills], []);
+      // Failed skills bridge: pre-update value retained.
+      assert.deepEqual([...midRec.resources.skills], ["seeded-skill"]);
 
       // Between calls: clear the obstacle so the second commit's rename
       // can succeed cleanly.
@@ -2376,6 +2403,118 @@ test("WB-01 / Pitfall 2: --local update targets the local file; base file untouc
       // Base bytes UNCHANGED (Pitfall 2: --local NEVER touches the base file).
       const baseBytesAfter = await readFile(locations.configJsonPath);
       assert.deepEqual(baseBytesAfter, baseBytesBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─── D-UPD: update vs disabled plugin ──────────────────────────────────────
+
+test("D-UPD: update on a disabled plugin refreshes version pin BUT keeps resources empty (no re-materialization)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-d-upd-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        // No installedVersions -- we override the record below.
+      });
+
+      // Overwrite the seeded record with a DISABLED-shaped record:
+      // empty resources.* + installable:true (the isRecordedButDisabled marker).
+      const state = await loadState(locations.extensionRoot);
+      state.marketplaces["mp"]!.plugins["hello"] = makeDisabledPluginRecord("1.0.0");
+      await saveState(locations.extensionRoot, state);
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // D-UPD: rendered status reuses the existing `unchanged` byte form
+      // (`(skipped) {up-to-date}`) -- no new catalog token introduced. The
+      // user-visible artefact state really IS unchanged (no re-materialization).
+      assert.equal(notifications.length, 1);
+      assert.match(notifications[0]!.message, /\(skipped\) \{up-to-date\}/);
+
+      // State: record's version + resolvedSource refreshed (the next `enable`
+      // re-materializes from the now-current pin); resources.* stay empty
+      // (the plugin remains disabled).
+      const after = await loadState(locations.extensionRoot);
+      const rec = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(rec !== undefined);
+      assert.equal(rec.version, "1.1.0", "version refreshed to manifest pin");
+      // resolvedSource refreshed to the current pluginRoot.
+      assert.ok(
+        rec.resolvedSource.includes("hello"),
+        `resolvedSource refreshed to current pluginRoot: ${rec.resolvedSource}`,
+      );
+      assert.deepEqual(
+        [...rec.resources.skills],
+        [],
+        "resources.skills stay empty (still disabled)",
+      );
+      assert.deepEqual([...rec.resources.prompts], []);
+      assert.deepEqual([...rec.resources.agents], []);
+      assert.deepEqual([...rec.resources.mcpServers], []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─── S5: invalid config write-back no longer silently skips ─────────────────
+
+test("S5: update success + invalid config write-back surfaces a warning row (no longer silently skipped)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-s5-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      // Corrupt claude-plugins.json so the post-success write-back's loadConfig
+      // returns `invalid`. Pre-S5 this was a silent skip while the success
+      // notify proceeded; post-S5 a warning row must surface.
+      await writeFile(locations.configJsonPath, "{ not json ", "utf8");
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // Two notify calls: the success row + a warning failed row pinned to
+      // the basename-only invalid-manifest cause.
+      assert.ok(
+        notifications.length >= 2,
+        `expected >= 2 notifications (success + S5 warning); got ${notifications.length}: ${notifications
+          .map((n) => n.message)
+          .join("\n---\n")}`,
+      );
+      const allText = notifications.map((n) => n.message).join("\n");
+      assert.match(allText, /\(updated\)/, "success row still emitted");
+      assert.match(allText, /\(failed\) \{invalid manifest\}/, "S5 warning row emitted");
+      assert.match(allText, /claude-plugins\.json/, "basename mentioned in S5 cause");
+      assert.ok(
+        !allText.includes(locations.configJsonPath),
+        `absolute config path must not leak: ${allText}`,
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

@@ -6,7 +6,7 @@
 // scope, visible in the `[scope]` bracket).
 
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -150,4 +150,49 @@ test("Flag: --scope user|project is parsed and forwarded to the orchestrator (di
     assert.equal(notifications[0]!.severity, "error");
     assert.match(notifications[0]!.message, /⊘ mp \[project\] \(failed\) \{not added\}/);
   });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// C1: corrupt state.json driven through the edge handler must surface via
+// notify (IL-2), not as a raw throw. The orchestrator catches the load-state
+// throw internally; the handler's defense-in-depth try/catch covers any
+// future leak past that contract.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("C1: corrupt state.json -> edge handler renders a (failed) row via notify(); no exception escapes", async () => {
+  const originalHome = process.env.HOME;
+  const home = await mkdtemp(path.join(tmpdir(), "enable-disable-c1-"));
+  const cwd = await mkdtemp(path.join(tmpdir(), "enable-disable-c1-cwd-"));
+  process.env.HOME = home;
+  try {
+    // Seed a CORRUPT user-scope state.json so loadState throws at parse.
+    const extRoot = path.join(home, ".pi", "agent", "pi-claude-marketplace");
+    await mkdir(extRoot, { recursive: true });
+    const statePath = path.join(extRoot, "state.json");
+    await writeFile(statePath, "{ not json ", "utf8");
+
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeEnableDisableHandler(makePi(), true);
+    // Must NOT throw -- the contract is honored end-to-end (orchestrator's
+    // internal try/catch + handler's defense-in-depth catch).
+    await handler("foo@mp --scope user", ctx);
+
+    // Exactly one notify; the load-state failure surfaced through IL-2.
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.match(notifications[0]!.message, /\(failed\)/);
+    assert.ok(
+      !notifications[0]!.message.includes(statePath),
+      `absolute state.json path must not leak: ${notifications[0]!.message}`,
+    );
+  } finally {
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+
+    await rm(home, { recursive: true, force: true });
+    await rm(cwd, { recursive: true, force: true });
+  }
 });

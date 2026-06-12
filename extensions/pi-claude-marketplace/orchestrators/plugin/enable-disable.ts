@@ -71,12 +71,19 @@ import {
   synthesizeAdoptedMarketplaceSource,
 } from "./shared.ts";
 
+import type { InstallFailureCapture } from "./install.ts";
 import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { ContentReason, PluginNotificationMessage, Reason } from "../../shared/notify.ts";
+import type {
+  ContentReason,
+  PluginFailedMessage,
+  PluginNotificationMessage,
+  Reason,
+} from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
 
 /**
  * RECON-03: controls how `setPluginEnabled` surfaces
@@ -154,7 +161,12 @@ type SetEnabledOutcome =
   | { kind: "fresh"; version?: string }
   | { kind: "invalid-config" }
   | { kind: "not-recorded" }
-  | { kind: "enable-failed"; cause: Error; recordedVersion?: string }
+  | {
+      kind: "enable-failed";
+      cause: Error;
+      recordedVersion?: string;
+      rollbackPartials?: readonly RollbackPartial[];
+    }
   | { kind: "disable-failed"; cause: Error; recordedVersion?: string };
 
 /**
@@ -202,15 +214,25 @@ async function runEnableBranch(
   state: ExtensionState,
   recordedVersion: string,
 ): Promise<SetEnabledOutcome> {
+  // I4: thread an InstallFailureCapture so a rollback-partial enable failure
+  // surfaces the per-phase rollback children in the (failed) row, matching
+  // the install/uninstall cascade rendering. The ledger populates this BEFORE
+  // it rethrows (D-02 PI-14 bypass preserves the raw error).
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
   try {
-    const result = await runInstallLedger(state, locations, {
-      scope,
-      cwd: opts.cwd,
-      marketplace: opts.marketplace,
-      plugin: opts.plugin,
-      pinVersionOverride: recordedVersion,
-      allowExistingRecord: true,
-    });
+    const result = await runInstallLedger(
+      state,
+      locations,
+      {
+        scope,
+        cwd: opts.cwd,
+        marketplace: opts.marketplace,
+        plugin: opts.plugin,
+        pinVersionOverride: recordedVersion,
+        allowExistingRecord: true,
+      },
+      capture,
+    );
     if (result.kind === "marketplace-absent") {
       // Defensive: the caller already verified the marketplace container is
       // recorded in this scope's state, so the CMP-2..4 source resolution
@@ -228,6 +250,7 @@ async function runEnableBranch(
       kind: "enable-failed",
       cause: err instanceof Error ? err : new Error(errorMessage(err)),
       recordedVersion,
+      ...(capture.rollbackPartials.length > 0 && { rollbackPartials: capture.rollbackPartials }),
     };
   }
 }
@@ -247,14 +270,25 @@ async function runDisableBranch(
   opts: EnableDisablePluginOptions,
   locations: ScopedLocations,
   installed: InstalledPluginRecord,
-): Promise<SetEnabledOutcome> {
+): Promise<{ outcome: SetEnabledOutcome; saveShrunken: boolean }> {
   const recordedVersion = installed.version;
   const cascade = await cascadeUnstagePlugin(opts.plugin, opts.marketplace, locations, installed);
   if (!cascade.ok) {
+    // I3: cascade.dropped lists artefacts already unstaged before the throw.
+    // Fold them into the record so state.json never claims artefacts gone
+    // from disk (NFR-3 fail-clean). The asymmetric dropped.commands ->
+    // resources.prompts mapping is per TR-03 (cascade primitive naming).
+    // Mirrors the uninstall.ts:applyPartialCascadeFold TR-03 path; the
+    // caller saves the shrunken record before surfacing the failure.
+    applyPartialDisableCascadeFold(installed, cascade.dropped);
+    installed.updatedAt = new Date().toISOString();
     return {
-      kind: "disable-failed",
-      cause: cascade.cause ?? new Error(`Cascade unstage failed for plugin "${opts.plugin}".`),
-      recordedVersion,
+      outcome: {
+        kind: "disable-failed",
+        cause: cascade.cause ?? new Error(`Cascade unstage failed for plugin "${opts.plugin}".`),
+        recordedVersion,
+      },
+      saveShrunken: true,
     };
   }
 
@@ -266,7 +300,35 @@ async function runDisableBranch(
   installed.resources.mcpServers = [];
   installed.updatedAt = new Date().toISOString();
 
-  return { kind: "fresh", version: recordedVersion };
+  return { outcome: { kind: "fresh", version: recordedVersion }, saveShrunken: false };
+}
+
+/**
+ * I3 / TR-03: subtract the cascade-dropped artefacts from the record in place.
+ * dropped.commands maps to resources.prompts (cascade primitive naming);
+ * the other three axes are name-identical.
+ */
+function applyPartialDisableCascadeFold(
+  installed: InstalledPluginRecord,
+  dropped: {
+    readonly skills: readonly string[];
+    readonly commands: readonly string[];
+    readonly agents: readonly string[];
+    readonly mcpServers: readonly string[];
+  },
+): void {
+  installed.resources.skills = installed.resources.skills.filter(
+    (n) => !dropped.skills.includes(n),
+  );
+  installed.resources.prompts = installed.resources.prompts.filter(
+    (n) => !dropped.commands.includes(n),
+  );
+  installed.resources.agents = installed.resources.agents.filter(
+    (n) => !dropped.agents.includes(n),
+  );
+  installed.resources.mcpServers = installed.resources.mcpServers.filter(
+    (n) => !dropped.mcpServers.includes(n),
+  );
 }
 
 /**
@@ -282,19 +344,42 @@ type InstalledPluginRecord = ExtensionState["marketplaces"][string]["plugins"][s
  * single `notify()` call per IL-2 (standalone) OR a typed outcome per
  * RECON-03 (orchestrated).
  */
+// Sequencing the cross-scope resolve, the locked transaction body, the
+// post-guard branch dispatch, and the C1 / I3 / I4 failure routings in one
+// audited flow exceeds the default cognitive-complexity budget; splitting it
+// would obscure the per-arm save-vs-throw discipline.
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export async function setPluginEnabled(
   opts: EnableDisablePluginOptions,
 ): Promise<EnableDisablePluginOutcome | undefined> {
   const { ctx, pi, cwd, marketplace, plugin, enable } = opts;
   const orchestrated = opts.notifications?.mode === "orchestrated";
 
-  // SCOPE-01 / ATTR-04: resolve the cross-scope target.
-  const resolution = await resolveCrossScopePluginTarget({
-    cwd,
-    marketplace,
-    plugin,
-    ...(opts.scope !== undefined && { explicitScope: opts.scope }),
-  });
+  // C1: `resolveCrossScopePluginTarget` calls `loadState`, which throws on a
+  // corrupt/unparseable state.json in either scope. The throw must NOT escape
+  // setPluginEnabled (the doc above promises "never re-throws") -- route it
+  // through the same classifyTransactionThrow taxonomy the lower try/catch
+  // uses. Mirrors the read-only `listPlugins` containment in preview.ts.
+  let resolution;
+  try {
+    // SCOPE-01 / ATTR-04: resolve the cross-scope target.
+    resolution = await resolveCrossScopePluginTarget({
+      cwd,
+      marketplace,
+      plugin,
+      ...(opts.scope !== undefined && { explicitScope: opts.scope }),
+    });
+  } catch (err) {
+    return emitResolutionFailure({
+      ctx,
+      pi,
+      marketplace,
+      plugin,
+      requestedScope: opts.scope,
+      cause: err instanceof Error ? err : new Error(errorMessage(err)),
+      orchestrated,
+    });
+  }
 
   if (resolution.kind === "marketplace-absent" || resolution.kind === "other-scope") {
     const requestedScope: Scope | undefined = resolution.requestedScope;
@@ -330,6 +415,12 @@ export async function setPluginEnabled(
 
   try {
     // CR-01 / WR-01: a single per-scope lock owns the whole critical section.
+    // The closure sequences CFG-03 load, ENBL-02 idempotency, the
+    // enable/disable branch dispatch, the I3 shrunken-record save, and the
+    // WR-09 / UAT-05 config write-back -- splitting it would require
+    // additional state-snapshot threading and obscure the save-vs-throw
+    // discipline.
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     await withLockedStateTransaction(locations, async (tx) => {
       const state = tx.state;
       const cfg = await loadConfig(targetConfigPath);
@@ -385,9 +476,21 @@ export async function setPluginEnabled(
         return;
       }
 
-      outcome = enable
-        ? await runEnableBranch(opts, scope, locations, state, installed.version)
-        : await runDisableBranch(opts, locations, installed);
+      if (enable) {
+        outcome = await runEnableBranch(opts, scope, locations, state, installed.version);
+      } else {
+        const disableResult = await runDisableBranch(opts, locations, installed);
+        outcome = disableResult.outcome;
+        // I3: a partial disable cascade mutated `installed.resources.*` in
+        // place to drop the artefacts already removed before the throw.
+        // Persist the shrunken record so state.json never claims artefacts
+        // gone from disk (NFR-3 fail-clean), THEN fall through to the
+        // post-guard branch that surfaces the failed row.
+        if (disableResult.saveShrunken) {
+          await tx.save();
+          return;
+        }
+      }
 
       if (outcome.kind !== "fresh") {
         return;
@@ -484,6 +587,85 @@ function classifyTransactionThrow(cause: Error): Reason {
 }
 
 /**
+ * C1: route a pre-lock `resolveCrossScopePluginTarget` throw (corrupt
+ * state.json -> `loadState` throw) through the same closed-set Reason
+ * taxonomy the transaction catch uses. Renders a `(failed)` plugin row.
+ *
+ * T-53-02-02 information-disclosure mitigation: `loadState`'s error message
+ * embeds the absolute state.json path. We compose a basename-only Error so
+ * the rendered cause-chain trailer leaks only `state.json`, not the absolute
+ * scopeRoot path. The `requestedScope` (when known) chooses the mp-row scope
+ * bracket; the bare form picks the requested scope or "user" so the failed
+ * row always carries a scope token (no ambiguous bareheader).
+ */
+function emitResolutionFailure(args: {
+  ctx: ExtensionContext;
+  pi: ExtensionAPI;
+  marketplace: string;
+  plugin: string;
+  requestedScope: Scope | undefined;
+  cause: Error;
+  orchestrated: boolean;
+}): EnableDisablePluginOutcome | undefined {
+  const { ctx, pi, marketplace, plugin, requestedScope, cause, orchestrated } = args;
+  const sanitized = sanitizeStateLoadError(cause);
+  // classifyTransactionThrow returns a `Reason` (closed set including
+  // "lock held"); none of the narrower outputs are the structural
+  // "not added" sentinel, so a ContentReason cast is sound here.
+  const reason: ContentReason = classifyTransactionThrow(sanitized) as ContentReason;
+  if (orchestrated) {
+    return {
+      status: "failed",
+      reason,
+      error: sanitized,
+      cause: errorMessage(sanitized),
+    };
+  }
+
+  const scope: Scope = requestedScope ?? "user";
+  notify(ctx, pi, {
+    marketplaces: [
+      {
+        name: marketplace,
+        scope,
+        plugins: [
+          {
+            status: "failed",
+            name: plugin,
+            reasons: [reason],
+            cause: sanitized,
+          },
+        ],
+      },
+    ],
+  });
+  return undefined;
+}
+
+/**
+ * T-53-02-02: rewrite a `loadState` Error so its message carries the basename
+ * of the failing path instead of the absolute path. The chained `cause` is
+ * preserved unchanged (the renderer's 4-space-indent trailer surfaces the
+ * top-level message only).
+ */
+function sanitizeStateLoadError(err: Error): Error {
+  const original = errorMessage(err);
+  // loadState formats messages as "Failed to read <abs>:" / "state.json at
+  // <abs> is not valid JSON:" / "state.json at <abs> failed schema validation:"
+  // The absolute path is the only PII; replace with the basename. The match
+  // is greedy on the path segment up to ":" so embedded paths under
+  // <scopeRoot>/pi-claude-marketplace/state.json collapse to "state.json".
+  const sanitized = original.replace(/\/[^\s:]*state\.json/g, "state.json");
+  if (sanitized === original) {
+    return err;
+  }
+
+  const wrapped = new Error(sanitized);
+  wrapped.name = err.name;
+  return wrapped;
+}
+
+/**
  * RECON-03: map the internal `SetEnabledOutcome` sentinel to the typed
  * `EnableDisablePluginOutcome` for orchestrated callers. Mirrors the
  * standalone `composeOutcomeRow` taxonomy.
@@ -521,9 +703,19 @@ function outcomeToTypedResult(args: {
     }
 
     case "enable-failed": {
+      // I4: orchestrated callers cannot consume the structured
+      // `rollbackPartial[]` rows (they aggregate into the reconcile cascade
+      // which already composes its own per-plugin rows), but the
+      // `rollback partial` reason on the typed outcome lets the caller pick
+      // the catalog `(failed) {rollback partial}` byte form when rendering.
+      const partials = outcome.rollbackPartials ?? [];
+      const reason: ContentReason =
+        partials.length > 0
+          ? "rollback partial"
+          : (narrowEnableFailure(outcome.cause)[0] ?? "unreadable");
       return {
         status: "failed",
-        reason: narrowEnableFailure(outcome.cause)[0] ?? "unreadable",
+        reason,
         error: outcome.cause,
         cause: errorMessage(outcome.cause),
       };
@@ -639,14 +831,31 @@ function composeOutcomeRow(args: {
       };
     }
 
-    case "enable-failed":
-      return {
+    case "enable-failed": {
+      // I4: a non-empty `rollbackPartials` capture means the install ledger
+      // unwound a partial commit before rethrowing; render the catalog
+      // `rollback partial` reason + per-phase child rows (MSG-RP-1) so the
+      // operator sees which phases needed recovery, matching the standalone
+      // install/uninstall path (`composeInstallFailureMessage`).
+      const partials = outcome.rollbackPartials ?? [];
+      const baseReasons =
+        partials.length > 0 ? (["rollback partial"] as const) : narrowEnableFailure(outcome.cause);
+      const row: PluginFailedMessage = {
         status: "failed",
         name: plugin,
-        reasons: narrowEnableFailure(outcome.cause),
+        reasons: baseReasons,
         ...(outcome.recordedVersion !== undefined && { version: outcome.recordedVersion }),
         cause: outcome.cause,
+        ...(partials.length > 0 && {
+          rollbackPartial: partials.map((p) => ({
+            phase: p.phase,
+            ...(p.cause !== undefined && { cause: p.cause }),
+          })),
+        }),
       };
+      return row;
+    }
+
     case "disable-failed":
       return {
         status: "failed",

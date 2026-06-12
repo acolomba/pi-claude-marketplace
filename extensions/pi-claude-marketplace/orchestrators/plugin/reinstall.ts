@@ -22,6 +22,7 @@
 // surface is absent.
 
 import { rm } from "node:fs/promises";
+import path from "node:path";
 
 import {
   abortPreparedAgents,
@@ -192,6 +193,14 @@ type ReplacementEntry =
 interface LockedSuccess {
   readonly outcome: ReinstallPluginOutcome;
   readonly bridgeWarnings: readonly string[];
+  /**
+   * S5: when the config-back loadConfig returned `invalid`, the write-back
+   * was skipped while the success notify proceeded. The single-plugin caller
+   * surfaces this as a separate warning row AFTER the reinstall success row
+   * so the user knows the on-disk artefacts were reinstalled but the config
+   * entry was not written.
+   */
+  readonly invalidConfigWriteBack?: boolean;
 }
 
 interface ResolvedReinstallTarget {
@@ -269,6 +278,33 @@ export async function reinstallPlugin(
   notify(ctx, pi, {
     marketplaces: [{ name: marketplace, scope, plugins: [reinstalledRow] }],
   });
+
+  // S5: when the config write-back loadConfig returned `invalid`, emit a
+  // separate warning row so the user sees that the on-disk artefacts were
+  // reinstalled but the config entry was not written. Pre-S5 this arm
+  // silently dropped the warning while the success notify proceeded.
+  if (locked.invalidConfigWriteBack === true) {
+    const targetBasename = path.basename(
+      opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath,
+    );
+    notify(ctx, pi, {
+      marketplaces: [
+        {
+          name: marketplace,
+          scope,
+          plugins: [
+            {
+              status: "failed",
+              name: plugin,
+              reasons: ["invalid manifest"] as const,
+              cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
+            },
+          ],
+        },
+      ],
+    });
+  }
+
   return locked.outcome;
 }
 
@@ -1031,6 +1067,7 @@ async function runLockedReinstall(
   });
   const replacements = await replaceAll(handles, force);
 
+  let invalidConfigWriteBack: boolean;
   try {
     updateStateRecord(tx.state, marketplace, plugin, oldSnapshot, installable, handles);
 
@@ -1041,7 +1078,14 @@ async function runLockedReinstall(
     // prospective `{...existing, ...patch}` shape against the existing
     // entry; a byte-stable patch (the common reinstall case -- entry shape
     // unchanged) leaves the config file untouched.
-    await maybeWritePluginConfigBack(tx.state, locations, marketplace, plugin, opts);
+    const writeResult = await maybeWritePluginConfigBack(
+      tx.state,
+      locations,
+      marketplace,
+      plugin,
+      opts,
+    );
+    invalidConfigWriteBack = writeResult.invalidConfig;
 
     await tx.save();
   } catch (err) {
@@ -1055,6 +1099,7 @@ async function runLockedReinstall(
   return {
     outcome: successOutcome(scope, marketplace, plugin, oldSnapshot, handles),
     bridgeWarnings,
+    ...(invalidConfigWriteBack && { invalidConfigWriteBack: true }),
   };
 }
 
@@ -1083,12 +1128,16 @@ async function maybeWritePluginConfigBack(
   marketplace: string,
   plugin: string,
   opts: { readonly local?: boolean },
-): Promise<void> {
+): Promise<{ readonly invalidConfig: boolean }> {
   const targetConfigPath =
     opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath;
   const cfg = await loadConfig(targetConfigPath);
   if (cfg.status === "invalid") {
-    return;
+    // S5: previously a silent skip while the success notify proceeded -- the
+    // caller now surfaces the abort via a warning row so the user knows
+    // the on-disk artefacts were reinstalled but the config entry was not
+    // written.
+    return { invalidConfig: true };
   }
 
   const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
@@ -1103,7 +1152,7 @@ async function maybeWritePluginConfigBack(
   // the key -- WRITE so the user-authored config gains the implicit
   // declaration.
   if (existingEntry !== undefined) {
-    return;
+    return { invalidConfig: false };
   }
 
   await writePluginConfigEntry(
@@ -1114,6 +1163,7 @@ async function maybeWritePluginConfigBack(
     marketplace,
     {},
   );
+  return { invalidConfig: false };
 }
 
 async function loadCachedEntry(
