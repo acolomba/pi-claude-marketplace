@@ -10,7 +10,7 @@
 <!-- markdownlint-disable MD033 -->
 
 <p align="center">
-  <a href="https://github.com/acolomba/pi-claude-marketplace"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/icons/github-dark.svg"><img src="assets/icons/github-light.svg" alt="" height="16" align="middle"></picture>&nbsp;GitHub</a>&nbsp;&nbsp;&nbsp;<a href="https://www.npmjs.com/package/pi-claude-marketplace"><img src="assets/icons/npm.svg" alt="" height="16" align="middle">&nbsp;npm</a>&nbsp;&nbsp;&nbsp;<a href="https://pi.dev/packages/pi-claude-marketplace"><img src="assets/icons/pi.svg" alt="" height="16" align="middle">&nbsp;pi.dev</a>
+  <a href="https://github.com/acolomba/pi-claude-marketplace" target="_blank" rel="noopener noreferrer" style="text-decoration: none"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/icons/github-dark.svg"><img src="assets/icons/github-light.svg" alt="" height="16" align="middle"></picture>&nbsp;</a><a href="https://github.com/acolomba/pi-claude-marketplace" target="_blank" rel="noopener noreferrer">GitHub</a>&nbsp;&nbsp;&nbsp;<a href="https://www.npmjs.com/package/pi-claude-marketplace" target="_blank" rel="noopener noreferrer" style="text-decoration: none"><img src="assets/icons/npm.svg" alt="" height="16" align="middle">&nbsp;</a><a href="https://www.npmjs.com/package/pi-claude-marketplace" target="_blank" rel="noopener noreferrer">npm</a>&nbsp;&nbsp;&nbsp;<a href="https://pi.dev/packages/pi-claude-marketplace" target="_blank" rel="noopener noreferrer" style="text-decoration: none"><img src="assets/icons/pi.svg" alt="" height="16" align="middle">&nbsp;</a><a href="https://pi.dev/packages/pi-claude-marketplace" target="_blank" rel="noopener noreferrer">pi.dev</a>
 </p>
 <!-- markdownlint-enable MD033 -->
 
