@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.0] - 2026-06-11
+
+- New declarative config files. `claude-plugins.json` at each scope root (user `~/.pi/agent/`, project `<cwd>/.pi/`) is now the authoritative record of added marketplaces (source, autoupdate) and installed plugins; a gitignore-able `claude-plugins.local.json` overrides base entries wholesale at the entry level. A corrupt or 0-byte config is an abort signal for that scope -- it is never read as "uninstall everything". On the first load after upgrading, the config is generated losslessly from your existing installs; nothing is uninstalled, and scopes with nothing installed get no file at all.
+- Load-time reconciliation. On every Pi startup and `/reload`, installed reality is reconciled to the merged config: declared-but-missing marketplaces/plugins are added/installed, installed-but-undeclared ones (only those this extension manages) are removed. Network failures soft-fail per entry and never block Pi load; a repeated load is a strict no-op that rewrites nothing.
+- New `/claude:plugin preview` command: a read-only dry run showing exactly what the next load's reconcile would do (`will add` / `will remove` / `will install` / `will uninstall` / `will enable` / `will disable` rows); no writes, no network.
+- New `/claude:plugin enable|disable <plugin>@<marketplace>` commands. `disable` keeps the config entry and version pin while removing the plugin's Pi artefacts (rendered as `(disabled)` on list/info and in the command cascade); `enable` re-materializes from the cached marketplace clone with no network, preserving the pinned version.
+- Config write-back. Every mutating command (`marketplace add/remove/autoupdate/noautoupdate`, `install/uninstall/reinstall/update`, `import`, `bootstrap`) records its change in the config file as a targeted entry-level patch; a `--local` flag targets `claude-plugins.local.json` instead, and a `--local` write never touches the base file or shadows its settings. `import` and `bootstrap` write a single batched patch.
+- README documents the config-file workflow and the `.local` gitignore convention.
+- Known limitation: the reconcile report cascade is visible at Pi startup but not after `/reload` (the host TUI rebuilds the chat from the transcript and drops extension notifications); run `/claude:plugin preview` before reloading or `list` after to see what changed.
+
 ## [0.4.3] - 2026-06-09
 
 - Internal refactor to cut SonarCloud copy-paste duplication: extracted shared helpers across the plugin and marketplace edge handlers (`--map-model` arg-parse boilerplate; the single-`<name>` marketplace handler factory), the marketplace orchestrators (the `resolveScopeOrNotifyNotAdded` scope-resolution helper, now lifted to `shared.ts`), and the notify plugin-row renderer (the four identical switch arms folded into one helper). No behavior or output change -- output is byte-identical to before.
