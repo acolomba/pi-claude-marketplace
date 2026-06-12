@@ -196,9 +196,9 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
     // saveState validates -- the merged shape must satisfy STATE_SCHEMA.
   } as unknown as Parameters<typeof saveState>[1]);
 
-  // Phase 56-04 / SPLIT-01: autoupdate read-path lives in claude-plugins.json.
-  // Seed the config when autoupdate is set so the SPLIT-01-rewired list/info
-  // orchestrators read the autoupdate truth from the new source of truth.
+  // SPLIT-01: autoupdate read-path lives in claude-plugins.json. Seed the
+  // config when autoupdate is set so the list/info orchestrators read the
+  // autoupdate truth from the new source of truth.
   if (opts.autoupdate !== undefined) {
     const cfgPath = locations.configJsonPath;
     let existingCfg: { marketplaces?: Record<string, { source: string; autoupdate?: boolean }> } =

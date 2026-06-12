@@ -1,6 +1,6 @@
 // tests/orchestrators/reconcile/apply.test.ts
 //
-// RECON-01..05 (Phase 55 Plan 02) behavior proofs for `applyReconcile`.
+// RECON-01..05 behavior proofs for `applyReconcile`.
 //
 // Coverage:
 //   - RECON-01 (decl-but-missing -> add at load): config declares a path-source

@@ -151,7 +151,7 @@ test("RECON-04 wiring: a clean reconcile against an empty scope returns a Resour
 });
 
 /**
- * WR-08 (Phase 55 review): seed a project scope whose config is invalid so
+ * WR-08: seed a project scope whose config is invalid so
  * applyReconcile accumulates an invalid-block outcome and CALLS
  * `ctx.ui.notify` with the cascade. A throwing notify stub then makes
  * applyReconcile itself throw -- the only injection-free way to drive the

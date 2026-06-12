@@ -9,7 +9,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 /**
  * DIFF-01 architecture purity gate.
  *
- * `orchestrators/reconcile/plan.ts` is the foundation of the Phase 53 reconcile
+ * `orchestrators/reconcile/plan.ts` is the foundation of the reconcile
  * surface. Its `planReconcile` function is a pure bidirectional 7-bucket diff
  * between `MergedConfig` and `ExtensionState` and MUST NOT import anything
  * effectful -- no `node:fs`, no `node:fs/promises`, no `platform/git`, no
@@ -23,7 +23,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
  * notify" without self-invalidating the gate (Pitfall 5 / Pitfall 8).
  *
  * Why this exists: the DIFF-01 SC#1 purity invariant is the seam that lets
- * the planner be unit-tested in isolation and that Phase 55 can call from
+ * the planner be unit-tested in isolation and that load-time apply can call from
  * inside `resources_discover` without dragging in any I/O surface.
  */
 const TARGET = "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";

@@ -1,7 +1,7 @@
-// Phase 56 Plan 01 Task 3 -- SPLIT-01 cast-read baseline + rewire-completion gate.
+// SPLIT-01 cast-read baseline + rewire-completion gate.
 //
-// SPLIT-01 (Phase 51-02) carved `autoupdate` out of MARKETPLACE_RECORD_SCHEMA
-// and moved the truth into the per-marketplace config entry. The state
+// SPLIT-01 carved `autoupdate` out of MARKETPLACE_RECORD_SCHEMA and moved
+// the truth into the per-marketplace config entry. The state
 // record's `autoupdate` is read via a cast in 6 orchestrator files (7 total
 // cast-read sites; marketplace/info.ts and plugin/info.ts each contain 2):
 //
@@ -13,21 +13,22 @@
 //   - extensions/pi-claude-marketplace/orchestrators/plugin/info.ts
 //
 // Note on marketplace/shared.ts: that file holds the autoupdate FLIP logic.
-// WR-05 (Phase 56 review) made `classifyAutoupdateFlip` classify-only --
+// WR-05 made `classifyAutoupdateFlip` classify-only --
 // the legacy state field is read (two-step cast, not the trailing-cast form
 // below) but never assigned. The ASSIGNMENT-form sibling pattern further
 // down locks that in: no orchestrator may write `.autoupdate =` into a
 // state record (the config write-back is the sole flip surface).
 //
-// Rewire target (Plan 04 closes the loop):
+// Rewire target:
 //
 //   const merged = await loadMergedScopeConfig(locations);
 //   const autoupdate = merged.marketplaces[name]?.entry.autoupdate ?? false;
 //
-// Plan 04 SHRINKS `ALLOWED_SPLIT_01_AUTOUPDATE_CAST_FILES` to size 0 as each
-// cast site is rewired; the "exactly 6" sibling assertion forces a
-// deliberate edit per rewire (silent widening or silent shrinking are both
-// caught in CI -- the same pattern config-state-write-seams.test.ts uses).
+// `ALLOWED_SPLIT_01_AUTOUPDATE_CAST_FILES` is now empty -- every cast site
+// has been rewired. The sibling "exactly 0" assertion forces a deliberate
+// edit if a new cast read regresses (silent widening or silent shrinking
+// are both caught in CI -- the same pattern config-state-write-seams.test.ts
+// uses).
 //
 // Shape: mirrors tests/architecture/config-state-write-seams.test.ts (the
 // SPLIT-02 architecture test) -- recursive walk of every `.ts` file under
@@ -43,7 +44,7 @@ import { fileURLToPath } from "node:url";
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const ORCHESTRATORS_ROOT = path.join(REPO_ROOT, "extensions/pi-claude-marketplace/orchestrators");
 
-// Phase 56 Plan 04 Task 2: all 7 cast-read sites rewired to MergedConfig.
+// All 7 cast-read sites rewired to MergedConfig.
 // The allow-list is now empty -- Pitfall 6 closed. The sibling 'exactly 0'
 // assertion below catches any future regression that adds a new cast read.
 const ALLOWED_SPLIT_01_AUTOUPDATE_CAST_FILES: ReadonlySet<string> = new Set<string>();
@@ -59,7 +60,7 @@ const ALLOWED_SPLIT_01_AUTOUPDATE_CAST_FILES: ReadonlySet<string> = new Set<stri
 // avoid false-positives on unrelated `Record<string, unknown>` casts.
 const SPLIT_01_AUTOUPDATE_CAST_PATTERN = /as unknown as Record<string,\s*unknown>\)\.autoupdate/;
 
-// WR-05 (Phase 56 review): sibling ASSIGNMENT-form pattern. SPLIT-01 carved
+// WR-05: sibling ASSIGNMENT-form pattern. SPLIT-01 carved
 // `autoupdate` out of the state schema; writing `<expr>.autoupdate = ...`
 // re-introduces a schema-stripped legacy field into state.json that the
 // D-13 scrub removes again on the next load (pointless churn + a window
@@ -98,7 +99,7 @@ test("SPLIT-01 baseline: every cast-read of autoupdate is in the allow-list", as
   assert.deepEqual(
     offenders,
     [],
-    `SPLIT-01 baseline violation: a new cast-read of \`autoupdate\` appeared outside the allow-list:\n  ${offenders.join("\n  ")}\n  (the carved-out autoupdate field lives in claude-plugins.json now; new reads should go through loadMergedScopeConfig(loc).merged.marketplaces[name]?.entry.autoupdate. If you intentionally need a new cast read, add the file to ALLOWED_SPLIT_01_AUTOUPDATE_CAST_FILES above AND update the 'exactly N' sibling assertion in this file in the same commit. Plan 04 SHRINKS the allow-list to size 0 as each site rewires.)`,
+    `SPLIT-01 baseline violation: a new cast-read of \`autoupdate\` appeared outside the allow-list:\n  ${offenders.join("\n  ")}\n  (the carved-out autoupdate field lives in claude-plugins.json now; new reads should go through loadMergedScopeConfig(loc).merged.marketplaces[name]?.entry.autoupdate. If you intentionally need a new cast read, add the file to ALLOWED_SPLIT_01_AUTOUPDATE_CAST_FILES above AND update the 'exactly N' sibling assertion in this file in the same commit. The allow-list MUST stay at size 0 for SPLIT-01 to remain closed.)`,
   );
 });
 

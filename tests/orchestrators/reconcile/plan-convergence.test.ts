@@ -17,16 +17,14 @@ import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/p
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 /**
- * Phase 52 deferred SC#4 -- the PLANNER-LEVEL convergence proof.
+ * Deferred SC#4 -- the PLANNER-LEVEL convergence proof.
  *
  *   planReconcile(mergeScopeConfigs(buildConfigFromState(state), {}), state, scope)
  *     deepEqual emptyReconcilePlan(scope)
  *
- * for any populated state. The Phase 52 close in
- * `tests/persistence/migrate-config.test.ts` Section D records the
- * data-level surrogate (key-set + provenance equality); this file owns the
- * planner-level no-op proof that Phase 52 explicitly deferred to Phase 53
- * Plan 01.
+ * for any populated state. The data-level surrogate (key-set + provenance
+ * equality) lives in `tests/persistence/migrate-config.test.ts` Section D;
+ * this file owns the planner-level no-op proof.
  */
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -40,8 +38,8 @@ const FIXTURE_PATH = path.resolve(
  * -- load the populated fixture and normalise its `source` strings to
  * `ParsedSource` objects, matching the post-`loadState` in-memory shape.
  * Re-implemented inline here (rather than re-exported across test trees) so
- * this convergence file stays self-contained and the Phase 52 Section D
- * surrogate's helper is not load-bearing for the Phase 53 proof.
+ * this convergence file stays self-contained and the Section D
+ * surrogate's helper is not load-bearing for the planner-level proof.
  */
 async function loadPopulatedState(): Promise<ExtensionState> {
   const raw = JSON.parse(await readFile(FIXTURE_PATH, "utf8")) as {
@@ -74,12 +72,12 @@ function assertConvergesForScope(state: ExtensionState, scope: Scope): void {
   assert.deepEqual(plan, emptyReconcilePlan(scope));
 }
 
-test("Phase 52 SC#4 (project): build-from-state + merge + plan = empty (deepEqual)", async () => {
+test("SC#4 (project): build-from-state + merge + plan = empty (deepEqual)", async () => {
   const state = await loadPopulatedState();
   assertConvergesForScope(state, "project");
 });
 
-test("Phase 52 SC#4 (user): build-from-state + merge + plan = empty (deepEqual)", async () => {
+test("SC#4 (user): build-from-state + merge + plan = empty (deepEqual)", async () => {
   const state = await loadPopulatedState();
   assertConvergesForScope(state, "user");
 });

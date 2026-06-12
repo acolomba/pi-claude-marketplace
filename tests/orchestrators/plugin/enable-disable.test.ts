@@ -1,9 +1,8 @@
-// Phase 54 Plan 02 -- ENBL behaviors for the setPluginEnabled orchestrator.
+// ENBL behaviors for the setPluginEnabled orchestrator.
 //
-// Wave 0 scaffolds (Plan 01) flipped to GREEN bodies in lockstep with the new
-// `extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts`
-// source file. Each test exercises an ENBL-{01..04} behavior or an
-// idempotency / CFG-03 / --local invariant.
+// Each test exercises an ENBL-{01..04} behavior or an idempotency / CFG-03
+// / --local invariant against
+// `extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts`.
 //
 // Hermetic harness: each test uses a temp HOME + cwd so state/config files
 // are isolated. The orchestrator is exercised end-to-end through its single
@@ -287,7 +286,7 @@ test("ENBL-02: disable preserves version pin and empties resources arrays", asyn
       scope: "user",
     });
 
-    // UAT-03 (v1.12 milestone UAT decision 2026-06-11): catalog
+    // UAT-03: catalog
     // `disable-fresh` byte form -- bare marketplace header + the closed-set
     // `(disabled)` row (same glyph + token as the disabled-inventory row,
     // version slot kept) + the `/reload` trailer (the orchestrator
@@ -659,7 +658,7 @@ test("Marketplace not added: explicit --scope emits standalone marketplace-not-a
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// RECON-03 (Phase 55 Plan 01): orchestrated-mode coverage
+// RECON-03: orchestrated-mode coverage
 // ──────────────────────────────────────────────────────────────────────────
 
 test("RECON-03 enable-disable orchestrated mode -- disable returns { status: 'disabled', name, version } with ZERO notify calls", async () => {

@@ -1,4 +1,4 @@
-// Phase 56 Plan 04 Task 3 -- WB-01 SC#4 architecture test gate, LIVE.
+// WB-01 SC#4 architecture test gate.
 //
 // Locks the round-trip integrity contract: after any mutating command lands,
 // reading the post-mutation config + state and running planReconcile against
@@ -8,7 +8,7 @@
 //
 // The reconcile no-op proof complements RECON-05 byte-stability: a fixed
 // point in the reconcile-then-mutate-then-reconcile dynamic is the goal-
-// backward criterion for the milestone v1.12 GREEN gate. The orchestrated-
+// backward criterion for the config/state split GREEN gate. The orchestrated-
 // mode SKIP discipline (WR-09) is also structurally guarded here: when an
 // orchestrator is called from a reconciler-driven caller (notifications:
 // {mode: "orchestrated"}), the per-entry write-back SKIPS so the parent
@@ -38,10 +38,10 @@ import { DEFAULT_STATE } from "../../extensions/pi-claude-marketplace/persistenc
 
 import type { ScopeConfig } from "../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 
-// Phase 56-02: the addMarketplace path is now wired (write-back lands the
-// marketplace entry into claude-plugins.json under the locked transaction).
-// `saveConfig` is exercised transitively through the write-back helper; the
-// direct import is retained for symmetry with the other plans.
+// The addMarketplace path is wired so write-back lands the marketplace
+// entry into claude-plugins.json under the locked transaction. `saveConfig`
+// is exercised transitively through the write-back helper; the direct
+// import is retained for symmetry with sibling tests.
 void saveConfig;
 
 async function tmpScopeRoot(): Promise<{ scopeRoot: string; cleanup: () => Promise<void> }> {
@@ -68,7 +68,7 @@ async function tmpScopeRoot(): Promise<{ scopeRoot: string; cleanup: () => Promi
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// LIVE smoke: helper + planner integration (Plan 01 land)
+// LIVE smoke: helper + planner integration
 // ──────────────────────────────────────────────────────────────────────────
 
 test("config-state-consistency: writeMarketplaceConfigEntry + planReconcile reads back the one declared marketplace", async () => {
@@ -111,7 +111,7 @@ test("config-state-consistency: writeMarketplaceConfigEntry + planReconcile read
 
     // Sanity check: a freshly emptyReconcilePlan and our 1-bucket plan are
     // not deepEqual (the asymmetry is the point -- the FULL no-op proof
-    // requires orchestrator-level state mutation, deferred to Plan 04).
+    // requires orchestrator-level state mutation, exercised by sibling tests).
     assert.notDeepEqual(plan, emptyReconcilePlan("user"));
   } finally {
     await cleanup();
@@ -119,7 +119,7 @@ test("config-state-consistency: writeMarketplaceConfigEntry + planReconcile read
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// SKIP placeholders: Plan 02 / 04 turns these into live tests
+// Live coverage of the orchestrator write-back paths
 // ──────────────────────────────────────────────────────────────────────────
 
 test("WB-01 SC#4 (add path): after addMarketplace, reconcile is a no-op AND state ⊆ config (round-trip integrity)", async () => {
@@ -387,7 +387,7 @@ test("WB-01 SC#4 (add + remove cascade): post-remove reconcile is a no-op and co
 });
 
 test("WB-01 SC#4 (bare-form autoupdate flip, 2 marketplaces): BOTH config entries survive the batched write-back", async () => {
-  // CR-01 regression (Phase 56 review): the per-name sequential
+  // CR-01 regression: the per-name sequential
   // writeMarketplaceConfigEntry loop rebuilt the file from the SAME stale
   // snapshot on each iteration, so a bare-form flip over N marketplaces
   // persisted only the LAST marketplace's entry. The batched write-back must
@@ -448,7 +448,7 @@ test("WB-01 SC#4 (bare-form autoupdate flip, 2 marketplaces): BOTH config entrie
 });
 
 test("WB-01 SC#4 (cross-scope CMP-3 install): project-scope install via user-scope marketplace fallback declares the adopted marketplace -- reconcile is a no-op", async () => {
-  // CR-02 regression (Phase 56 review): a project-scope install resolving
+  // CR-02 regression: a project-scope install resolving
   // the marketplace via the CMP-3 user-scope fallback clones the record into
   // PROJECT state. The write-back must declare BOTH the plugin key AND the
   // adopted marketplace entry in the project config -- a bare plugin key is

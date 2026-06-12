@@ -75,11 +75,11 @@ async function withHermeticHome<T>(
   }
 }
 
-// SPLIT-01: autoupdate carved out of MARKETPLACE_RECORD_SCHEMA in Phase 51-02.
-// Phase 56-02: write-back wired -- autoupdate now lives in
-// `claude-plugins.json` (CFG-02). After a flip, read the post-flip value from
-// the config file, not from state.json (D-13 ORDERING RAIL scrubs the legacy
-// field on the next loadState once the config file exists).
+// SPLIT-01: autoupdate is carved out of MARKETPLACE_RECORD_SCHEMA and the
+// write-back lives in `claude-plugins.json` (CFG-02). After a flip, read
+// the post-flip value from the config file, not from state.json (D-13
+// ORDERING RAIL scrubs the legacy field on the next loadState once the
+// config file exists).
 function recordAutoupdate(
   rec: ExtensionState["marketplaces"][string] | undefined,
 ): boolean | undefined {
@@ -135,7 +135,7 @@ test("MAU-1 / UXG-04: enable=true on a single marketplace flips false->true and 
     const { ctx, pi, notifications } = makeCtx();
     await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: true, scope: "project", cwd });
 
-    // Phase 56-02: post-flip `autoupdate` lives in `claude-plugins.json`.
+    // post-flip `autoupdate` lives in `claude-plugins.json`.
     assert.equal(await configAutoupdate(locations, "mp"), true);
     assert.equal(notifications.length, 1);
     // SNM-33 / D-22-03: a fresh autoupdate flip mutates a marketplace record,
@@ -214,7 +214,7 @@ test("MAU-4: missing autoupdate field treated as false; enable=true flips it to 
     });
     const { ctx, pi, notifications } = makeCtx();
     await setMarketplaceAutoupdate({ ctx, pi, name: "mp", enable: true, scope: "project", cwd });
-    // Phase 56-02: post-flip `autoupdate` lives in `claude-plugins.json`.
+    // post-flip `autoupdate` lives in `claude-plugins.json`.
     assert.equal(await configAutoupdate(locations, "mp"), true);
     // SNM-33 / D-22-03: fresh autoupdate flip -> NO `/reload` trailer.
     assert.equal(notifications[0]!.message, "● mp [project] <autoupdate>");
@@ -258,7 +258,7 @@ test("MAU-2 / CMC-33 (V2): bare form flips every marketplace in scope; one notif
     const { ctx, pi, notifications } = makeCtx();
     await setMarketplaceAutoupdate({ ctx, pi, enable: true, scope: "project", cwd });
 
-    // Phase 56-02 / Pitfall 5: only the FRESH flip (to-flip) writes back to
+    // Pitfall 5: only the FRESH flip (to-flip) writes back to
     // the config; the idempotent `already` row is byte-stable. Both end up
     // resolved as `autoupdate: true` via the merged config (state still
     // carries the seeded `already.autoupdate=true` unscrubbed because the
@@ -329,7 +329,7 @@ test("Single-name flip across BOTH scopes when --scope omitted: flip in user sco
     await setMarketplaceAutoupdate({ ctx, pi, name: "only", enable: true, cwd });
     // user-scope flip succeeded; project-scope MarketplaceNotFoundError was swallowed gracefully.
     assert.equal(notifications.length, 1);
-    // Phase 56-02: post-flip `autoupdate` lives in `claude-plugins.json` (user scope).
+    // post-flip `autoupdate` lives in `claude-plugins.json` (user scope).
     assert.equal(await configAutoupdate(userLocations, "only"), true);
     // SNM-33 / D-22-03: fresh autoupdate flip -> NO `/reload` trailer.
     assert.equal(notifications[0]!.message, "● only [user] <autoupdate>");
@@ -441,7 +441,7 @@ test("NFR-5: autoupdate source has zero references to platform/git, gitOps, or D
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Phase 56 Plan 02 (Task 1): autoupdate WB-01 / --local / WR-09 / Pitfall 5
+// autoupdate WB-01 / --local / WR-09 / Pitfall 5
 // ──────────────────────────────────────────────────────────────────────────
 
 test("WB-01: fresh enable writes back autoupdate=true to claude-plugins.json (with source carried from state)", async () => {

@@ -1464,7 +1464,7 @@ test("TR-03 (AG-5 cause): full row preserved intact when cause instanceof Agents
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// RECON-03 (Phase 55 Plan 01): orchestrated-mode coverage
+// RECON-03: orchestrated-mode coverage
 // ───────────────────────────────────────────────────────────────────────────
 
 test("RECON-03 uninstall orchestrated mode -- success returns { status: 'uninstalled', name, version } with ZERO notify calls", async () => {
@@ -1611,7 +1611,7 @@ test("RECON-03 uninstall standalone-default mode -- omitted notifications option
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Phase 56 Plan 03 (Task 1): WB-01/WB-02 write-back, --local, WR-09, CFG-03
+// WB-01/WB-02 write-back, --local, WR-09, CFG-03
 // ──────────────────────────────────────────────────────────────────────────
 
 test("WB-01: standalone uninstall deletes the plugin entry from claude-plugins.json", async () => {
@@ -1810,7 +1810,7 @@ test("CFG-03 / T-56-03-04: invalid config aborts uninstall; basename-only cause;
       await mkdir(path.dirname(locations.configJsonPath), { recursive: true });
       await writeFile(locations.configJsonPath, "{ not valid json", "utf8");
 
-      // WR-04 (Phase 56 review): the abort must not rewrite state.json at
+      // WR-04: the abort must not rewrite state.json at
       // all -- bytes AND mtime stable (no-save abort discipline).
       const statePath = path.join(locations.extensionRoot, "state.json");
       const stateBytesPre = await readFile(statePath, "utf8");

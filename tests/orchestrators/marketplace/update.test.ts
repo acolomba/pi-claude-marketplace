@@ -118,7 +118,7 @@ async function seedGithubMarketplace(opts: {
       },
     },
   });
-  // Phase 56-04 / SPLIT-01: autoupdate now lives in claude-plugins.json.
+  // SPLIT-01: autoupdate lives in claude-plugins.json.
   // The state-side autoupdate above is harmless legacy seeding (D-13 scrubs
   // on next loadState once the config exists); seed the config too so the
   // SPLIT-01-rewired orchestrators (update.ts reads via loadMergedScopeConfig)

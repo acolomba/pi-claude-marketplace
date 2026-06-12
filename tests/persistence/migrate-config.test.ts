@@ -26,25 +26,25 @@ import {
  * MIG-01 (lossless first-run generation from state.json -> claude-plugins.json)
  * + MIG-02 (atomic, idempotent, no-overwrite, convergence-ready) test suite.
  *
- * HAZARD (deferred to Phase 55 -- load wiring):
+ * HAZARD (deferred to the load wiring):
  *   - Pitfall 52-2: concurrent first-loads racing on the same scope. The
- *     Phase 55 call site MUST invoke `migrateFirstRunConfig` inside the
+ *     load-time call site MUST invoke `migrateFirstRunConfig` inside the
  *     scope's `withStateGuard` lock so two processes do not both see
- *     `absent` and race the projection. This phase 52 seam is a pure data
+ *     `absent` and race the projection. This seam is a pure data
  *     transform + a single ENOENT-gated write -- the lock-coverage proof
- *     belongs in Phase 55, not here.
+ *     belongs to the load wiring, not here.
  *   - Pitfall 52-4: D-13 gate race. The legacy `autoupdate` field is kept
- *     in-memory on the FIRST load (existsSync gate CLOSED) so this phase 52
- *     migration can capture it. The ordering rail (migrate-then-scrub) is
- *     owned by the Phase 55 load wiring, not by this seam.
+ *     in-memory on the FIRST load (existsSync gate CLOSED) so this migration
+ *     can capture it. The ordering rail (migrate-then-scrub) is owned by the
+ *     load wiring, not by this seam.
  *
  * The planner-level convergence proof
  *   `planReconcile(mergeScopeConfigs(buildConfigFromState(state), {}), state)
  *    deepEqual { adds:[], installs:[], removes:[], uninstalls:[],
  *                transitions:[] }`
- * is DEFERRED to Phase 53 where `planReconcile` lands. Section D below
- * exercises the DATA-level surrogate (key-set + provenance equality) that
- * Phase 52 owns; the planner-level no-op proof is a Phase 53 obligation.
+ * is DEFERRED to the planner test suite. Section D below exercises the
+ * DATA-level surrogate (key-set + provenance equality) that this migration
+ * seam owns; the planner-level no-op proof lives with the planner tests.
  */
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -295,7 +295,7 @@ test("MIG-02 UAT-01 fresh install: empty state SKIPS migration -- no empty confi
   try {
     const loc = locationsFor("project", tmpDir);
     await mkdir(loc.scopeRoot, { recursive: true });
-    // UAT-01 (v1.12 milestone UAT): an empty-but-present state (DEFAULT_STATE
+    // UAT-01: an empty-but-present state (DEFAULT_STATE
     // on ENOENT, or a scope whose state.json has zero marketplaces) must NOT
     // spawn an empty claude-plugins.json in the scope root. The config file
     // first appears when there is real desired state to record (populated
@@ -410,7 +410,7 @@ test("Pitfall 52-5: pre-existing 0-byte claude-plugins.json is NOT overwritten",
     assert.equal(result.migrated, false);
     if (!result.migrated) {
       // CFG-03: 0-byte file is the `invalid` arm; the loadConfig detail rides
-      // along so the Phase 55 caller can surface it without a second probe.
+      // along so the caller can surface it without a second probe.
       assert.equal(result.reason, "existing-invalid");
       assert.match(result.error ?? "", /JSON parse failed/);
     }
@@ -474,9 +474,9 @@ test("Pitfall 52-5: pre-existing INVALID (schema-failing) claude-plugins.json is
 //   planReconcile(mergeScopeConfigs(buildConfigFromState(state), {}), state)
 //     deepEqual emptyReconcilePlan(scope)
 // -- is DISCHARGED in tests/orchestrators/reconcile/plan-convergence.test.ts
-// (Phase 53 Plan 01) where `planReconcile` lands. This data-level
+// where `planReconcile` lands. This data-level
 // convergence (key-set + provenance equality on the merged view) is the
-// Phase 52 surrogate kept here for archaeological continuity.
+// data-level surrogate kept here for archaeological continuity.
 // ──────────────────────────────────────────────────────────────────────────
 
 test("MIG-02 data-level convergence: merged marketplaces key set === state key set", async () => {

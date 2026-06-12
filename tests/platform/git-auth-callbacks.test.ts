@@ -51,7 +51,7 @@ import type {
 const HOST = "github.com";
 const REMOTE_URL = "https://github.com/owner/repo.git";
 
-test("Phase 33 buildAuthCallbacks: fill-hit returns stored credential without invoking onAuthRequired (SC-1)", async () => {
+test("buildAuthCallbacks: fill-hit returns stored credential without invoking onAuthRequired (SC-1)", async () => {
   const stored: GitCredentials = { username: "u", password: "p" };
   const { credOps, state } = makeMockCredentialOps({
     store: new Map([[HOST, stored]]),
@@ -72,7 +72,7 @@ test("Phase 33 buildAuthCallbacks: fill-hit returns stored credential without in
   assert.equal(onAuthRequiredCalls, 0, "Device Flow MUST NOT run on fill hit (AUTH-02)");
 });
 
-test("Phase 33 buildAuthCallbacks: fill-miss + DF ok returns Device-Flow credential (SC-1)", async () => {
+test("buildAuthCallbacks: fill-miss + DF ok returns Device-Flow credential (SC-1)", async () => {
   const { credOps, state } = makeMockCredentialOps();
   const dfCred: GitCredentials = { username: "x-access-token", password: "<DF_TOKEN>" };
   let onAuthRequiredCalls = 0;
@@ -90,7 +90,7 @@ test("Phase 33 buildAuthCallbacks: fill-miss + DF ok returns Device-Flow credent
   assert.equal(onAuthRequiredCalls, 1);
 });
 
-test("Phase 33 buildAuthCallbacks: fill-miss + DF !ok returns { cancel: true }", async () => {
+test("buildAuthCallbacks: fill-miss + DF !ok returns { cancel: true }", async () => {
   const { credOps, state } = makeMockCredentialOps();
   const onAuthRequired: OnAuthRequiredFn = async () => {
     await Promise.resolve();
@@ -108,7 +108,7 @@ test("Phase 33 buildAuthCallbacks: fill-miss + DF !ok returns { cancel: true }",
   assert.equal(state.fillCalls.length, 1);
 });
 
-test("Phase 33 buildAuthCallbacks: fill throws -- onAuth returns { cancel: true } (CP-10)", async () => {
+test("buildAuthCallbacks: fill throws -- onAuth returns { cancel: true } (CP-10)", async () => {
   // The mock fillThrows simulates the underlying subprocess error a real
   // CredentialOps would see (e.g. ENOENT for missing git on PATH). The
   // production seam wraps that in the buildAuthCallbacks try/catch and
@@ -130,7 +130,7 @@ test("Phase 33 buildAuthCallbacks: fill throws -- onAuth returns { cancel: true 
   );
 });
 
-test("Phase 33 buildAuthCallbacks: onAuthFailure post-DF-attempt rejects + cancels (CP-9 / SC-2)", async () => {
+test("buildAuthCallbacks: onAuthFailure post-DF-attempt rejects + cancels (CP-9 / SC-2)", async () => {
   const { credOps, state } = makeMockCredentialOps();
   const dfCred: GitCredentials = { username: "x-access-token", password: "<DF_TOKEN>" };
   const onAuthRequired: OnAuthRequiredFn = async () => {
@@ -150,7 +150,7 @@ test("Phase 33 buildAuthCallbacks: onAuthFailure post-DF-attempt rejects + cance
   assert.deepEqual(state.rejectCalls[0], { host: HOST, cred: dfCred });
 });
 
-test("Phase 33 buildAuthCallbacks: onAuthFailure pre-DF stale-keychain rejects + cancels (CP-9)", async () => {
+test("buildAuthCallbacks: onAuthFailure pre-DF stale-keychain rejects + cancels (CP-9)", async () => {
   // Defensive: a real isomorphic-git session calls onAuth -> 401 ->
   // onAuthFailure. This test simulates the case where isomorphic-git
   // invokes onAuthFailure DIRECTLY (e.g. on a 401 from a credential
@@ -173,7 +173,7 @@ test("Phase 33 buildAuthCallbacks: onAuthFailure pre-DF stale-keychain rejects +
   assert.deepEqual(state.rejectCalls[0], { host: HOST, cred: staleCred });
 });
 
-test("Phase 33 buildAuthCallbacks: reject throws -- onAuthFailure still returns { cancel: true } (CP-10)", async () => {
+test("buildAuthCallbacks: reject throws -- onAuthFailure still returns { cancel: true } (CP-10)", async () => {
   const timeoutErr = new Error("git credential reject subprocess timed out");
   const { credOps, state } = makeMockCredentialOps({ rejectThrows: timeoutErr });
   const onAuthRequired: OnAuthRequiredFn = () => {
@@ -188,7 +188,7 @@ test("Phase 33 buildAuthCallbacks: reject throws -- onAuthFailure still returns 
   assert.equal(state.rejectCalls.length, 1, "reject was called before throwing");
 });
 
-test("Phase 33 buildAuthCallbacks: onAuthRequired throws -- onAuth returns { cancel: true } (CP-10)", async () => {
+test("buildAuthCallbacks: onAuthRequired throws -- onAuth returns { cancel: true } (CP-10)", async () => {
   const { credOps, state } = makeMockCredentialOps();
   const onAuthRequired: OnAuthRequiredFn = async () => {
     await Promise.resolve();
@@ -240,7 +240,7 @@ async function makeLocalRepo(): Promise<{ dir: string; destroy: () => Promise<vo
   };
 }
 
-test("Phase 33 git.ts: currentBranch returns branch name after init+commit (line 206-212)", async () => {
+test("git.ts: currentBranch returns branch name after init+commit (line 206-212)", async () => {
   const repo = await makeLocalRepo();
   try {
     const branch = await currentBranch({ dir: repo.dir });
@@ -254,7 +254,7 @@ test("Phase 33 git.ts: currentBranch returns branch name after init+commit (line
   }
 });
 
-test("Phase 33 git.ts: resolveRef resolves HEAD to a SHA after initial commit (lines 165-171)", async () => {
+test("git.ts: resolveRef resolves HEAD to a SHA after initial commit (lines 165-171)", async () => {
   const repo = await makeLocalRepo();
   try {
     const sha = await resolveRef({ dir: repo.dir, ref: "HEAD" });
@@ -266,7 +266,7 @@ test("Phase 33 git.ts: resolveRef resolves HEAD to a SHA after initial commit (l
   }
 });
 
-test("Phase 33 git.ts: listBranches returns local branches (lines 214-220)", async () => {
+test("git.ts: listBranches returns local branches (lines 214-220)", async () => {
   const repo = await makeLocalRepo();
   try {
     const branches = await listBranches({ dir: repo.dir });
@@ -277,7 +277,7 @@ test("Phase 33 git.ts: listBranches returns local branches (lines 214-220)", asy
   }
 });
 
-test("Phase 33 git.ts: listBranches with remote option returns empty array for no remotes (lines 214-220)", async () => {
+test("git.ts: listBranches with remote option returns empty array for no remotes (lines 214-220)", async () => {
   const repo = await makeLocalRepo();
   try {
     const remoteBranches = await listBranches({ dir: repo.dir, remote: "origin" });
@@ -288,7 +288,7 @@ test("Phase 33 git.ts: listBranches with remote option returns empty array for n
   }
 });
 
-test("Phase 33 git.ts: listRemotes returns empty array for a fresh local repo (lines 222-230)", async () => {
+test("git.ts: listRemotes returns empty array for a fresh local repo (lines 222-230)", async () => {
   const repo = await makeLocalRepo();
   try {
     const remotes = await listRemotes({ dir: repo.dir });
@@ -299,7 +299,7 @@ test("Phase 33 git.ts: listRemotes returns empty array for a fresh local repo (l
   }
 });
 
-test("Phase 33 git.ts: forceUpdateRef writes a new ref value (lines 183-191)", async () => {
+test("git.ts: forceUpdateRef writes a new ref value (lines 183-191)", async () => {
   const repo = await makeLocalRepo();
   try {
     const sha = await resolveRef({ dir: repo.dir, ref: "HEAD" });
@@ -319,7 +319,7 @@ test("Phase 33 git.ts: forceUpdateRef writes a new ref value (lines 183-191)", a
   }
 });
 
-test("Phase 33 git.ts: checkout switches to an existing branch (lines 156-163)", async () => {
+test("git.ts: checkout switches to an existing branch (lines 156-163)", async () => {
   const repo = await makeLocalRepo();
   try {
     const sha = await resolveRef({ dir: repo.dir, ref: "HEAD" });
@@ -337,7 +337,7 @@ test("Phase 33 git.ts: checkout switches to an existing branch (lines 156-163)",
   }
 });
 
-test("Phase 33 git.ts: checkout with noCheckout option does not throw (lines 156-163)", async () => {
+test("git.ts: checkout with noCheckout option does not throw (lines 156-163)", async () => {
   const repo = await makeLocalRepo();
   try {
     // noCheckout: true updates HEAD without touching the working tree.
@@ -350,7 +350,7 @@ test("Phase 33 git.ts: checkout with noCheckout option does not throw (lines 156
   }
 });
 
-test("Phase 33 git.ts: clone with auth builds callbacks before invoking isomorphic-git (lines 125-139)", async () => {
+test("git.ts: clone with auth builds callbacks before invoking isomorphic-git (lines 125-139)", async () => {
   // clone() constructs buildAuthCallbacks when opts.auth is present (line 125).
   // The clone itself will throw because the URL is invalid -- but the
   // auth-callback construction still runs, covering line 125 and the
@@ -397,7 +397,7 @@ test("Phase 33 git.ts: clone with auth builds callbacks before invoking isomorph
   }
 });
 
-test("Phase 33 git.ts: clone without auth does not build callbacks (lines 125-139)", async () => {
+test("git.ts: clone without auth does not build callbacks (lines 125-139)", async () => {
   // When opts.auth is undefined, clone() sets authCbs to undefined and the
   // conditional spread (lines 133-136) emits no onAuth / onAuthFailure fields.
   const tmpDir = path.join(os.tmpdir(), `pi-cm-clone-noauth-${Date.now()}`);
@@ -414,7 +414,7 @@ test("Phase 33 git.ts: clone without auth does not build callbacks (lines 125-13
   }
 });
 
-test("Phase 33 git.ts: fetch without auth calls isomorphic-git fetch (lines 141-154)", async () => {
+test("git.ts: fetch without auth calls isomorphic-git fetch (lines 141-154)", async () => {
   // fetch() on a local-only repo (no remotes) throws from isomorphic-git
   // with a 'remote not found' style error. The wrapper still executes
   // line 142 (authCbs = undefined) and line 143 (git.fetch call).
@@ -430,7 +430,7 @@ test("Phase 33 git.ts: fetch without auth calls isomorphic-git fetch (lines 141-
   }
 });
 
-test("Phase 33 git.ts: fetch with auth builds callbacks before invoking isomorphic-git (lines 141-154)", async () => {
+test("git.ts: fetch with auth builds callbacks before invoking isomorphic-git (lines 141-154)", async () => {
   // Mirrors the clone+auth test: verifies the auth-callback construction path
   // (line 142) runs even when the underlying git.fetch call throws.
   const repo = await makeLocalRepo();

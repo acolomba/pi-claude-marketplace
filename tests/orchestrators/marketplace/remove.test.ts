@@ -896,7 +896,7 @@ test("TR-03 (AG-5 cause): failed plugin row preserved INTACT in remove.ts per-pl
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// RECON-03 (Phase 55 Plan 01): orchestrated-mode coverage
+// RECON-03: orchestrated-mode coverage
 // ───────────────────────────────────────────────────────────────────────────
 
 test("RECON-03 remove orchestrated mode -- clean success returns { status: 'removed', name, unstaged: [] } with ZERO notify calls", async () => {
@@ -1025,7 +1025,7 @@ test("RECON-03 remove standalone-default mode -- omitted notifications option re
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Phase 56 Plan 02 (Task 2): cascade write-back, --local, WR-09, CFG-03
+// cascade write-back, --local, WR-09, CFG-03
 // ──────────────────────────────────────────────────────────────────────────
 
 test("WB-01 / Pitfall 4: cascade removes the marketplace entry AND every plugin entry ending in @<mp>", async () => {

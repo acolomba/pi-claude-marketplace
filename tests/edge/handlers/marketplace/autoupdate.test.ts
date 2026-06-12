@@ -129,7 +129,7 @@ test("shim :: --scope user/project propagated", async () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Phase 56 Plan 02 (Task 1): --local flag scanning at the edge boundary
+// --local flag scanning at the edge boundary
 // ──────────────────────────────────────────────────────────────────────────
 
 test("USAGE strings contain [--local] (both verbs)", async () => {

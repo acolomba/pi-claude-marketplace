@@ -228,7 +228,7 @@ test("SPLIT-01: legacy state.json with autoupdate still loads (typebox lenient)"
     await writeFile(path.join(root, "state.json"), fixtureRaw);
     // D-13 gate is CLOSED here because no <scopeRoot>/claude-plugins.json
     // exists alongside the tmp extensionRoot -- the migrator preserves the
-    // legacy `autoupdate` in-memory for Phase 52 to capture, while the
+    // legacy `autoupdate` in-memory for the first-run migration to capture, while the
     // STATE_SCHEMA carve-out (autoupdate removed from MARKETPLACE_RECORD_SCHEMA)
     // means the lenient typebox default ACCEPTS the extra property at the
     // schema gate. Both halves must hold for the load to succeed.

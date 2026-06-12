@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-// Hermetic guard: Phase 56 wired config write-back into importClaudeSettings, so
+// Hermetic guard: config write-back is wired into importClaudeSettings, so
 // user-scope tests that are not wrapped in withHermeticHome would otherwise write
 // fixture entries into the developer's real ~/.pi/agent/claude-plugins.json.
 // Redirect the agent dir for the whole file; withHermeticHome-wrapped tests
@@ -1097,7 +1097,7 @@ test("importClaudeSettings keeps user and project operations independent", async
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// WB-03: per-scope batched post-pass (Phase 56 Plan 04 Task 1)
+// WB-03: per-scope batched post-pass
 //
 // import runs each per-entry orchestrator in `notifications: { mode:
 // "orchestrated" }` so WR-09 SKIPS their per-entry write-back. After all

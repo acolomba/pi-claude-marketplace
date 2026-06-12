@@ -127,7 +127,7 @@ test("D-13 GATE CLOSED: scrub does NOT fire when scrubAutoupdate=false; autoupda
   ) as unknown;
   const { marketplaces } = migrateLegacyMarketplaceRecords(fixture, "/ext-root", GATE_CLOSED);
   const mp = marketplaces["mp-with-autoupdate"] as { autoupdate?: boolean };
-  // Gate closed -> autoupdate field PRESERVED for Phase 52 first-run migration to capture.
+  // Gate closed -> autoupdate field PRESERVED for the first-run migration to capture.
   assert.equal(mp.autoupdate, true);
 });
 

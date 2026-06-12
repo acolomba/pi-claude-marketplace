@@ -53,17 +53,15 @@ const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
   "extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts",
-  // DIFF-01 SC #2 / Phase 53 Plan 02: the reconcile preview/planner/projection
+  // DIFF-01 SC #2: the reconcile preview/planner/projection
   // family is read-only and pure. preview.ts is the user-facing orchestrator;
   // plan.ts + notify.ts are belt-and-braces (plan.ts also has the stricter
   // reconcile-planner-purity gate -- this is cheap defensive cover).
   "extensions/pi-claude-marketplace/orchestrators/reconcile/preview.ts",
   "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts",
   "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts",
-  // ENBL-03 / Phase 54 Plan 02: the enable/disable orchestrator
-  // re-materializes from cache (Pitfall 54-3) -- NO network. Armed in
-  // Plan 01 so the gate activates the moment Plan 02 creates the file
-  // (the ENOENT-skip path keeps this GREEN until then).
+  // ENBL-03: the enable/disable orchestrator re-materializes from cache
+  // (Pitfall 54-3) -- NO network.
   "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
 ];
 

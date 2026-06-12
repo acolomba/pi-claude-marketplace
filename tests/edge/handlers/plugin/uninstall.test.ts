@@ -134,7 +134,7 @@ test('shim :: --scope project calls uninstallPlugin with scope: "project"', asyn
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Phase 56 Plan 03: --local flag scanning at the edge boundary
+// --local flag scanning at the edge boundary
 // ──────────────────────────────────────────────────────────────────────────
 
 test("USAGE string contains [--local]", async () => {

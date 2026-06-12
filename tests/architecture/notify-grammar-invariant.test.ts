@@ -153,7 +153,7 @@ const FIXTURES: readonly GrammarFixture[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// DIFF-02 (Phase 53 Plan 02): subject-first row grammar for the 6 new
+// DIFF-02: subject-first row grammar for the 6 new
 // pending-tense `(will *)` tokens. Each rendered row matches
 // `<glyph> <name> [<scope>] (<token>)` with the status token AFTER the
 // subject, never before. The status token is the load-bearing assertion --
@@ -195,7 +195,7 @@ const WILL_VARIANT_FIXTURES: readonly GrammarFixture[] = [
     },
   },
   {
-    label: "DIFF-02 / will enable plugin row (Phase 54 hand-off shape)",
+    label: "DIFF-02 / will enable plugin row",
     pi: piWithBothLoaded(),
     message: {
       marketplaces: [
@@ -224,7 +224,7 @@ const WILL_VARIANT_FIXTURES: readonly GrammarFixture[] = [
 const WILL_TOKEN_RE =
   /^(?:[●○⊘]) [A-Za-z0-9_-]+(?: \[(?:user|project)\])?(?: \(will (?:add|remove|install|uninstall|enable|disable)\))?$/;
 
-// D-54-01 / ENBL-04 (Phase 54 Plan 02): subject-first row grammar for the new
+// D-54-01 / ENBL-04: subject-first row grammar for the new
 // `(disabled)` inventory token. Each row matches
 // `⊘ <name> [<scope>] v<version> (disabled)` with the status token AFTER the
 // subject, never before. The status token is the load-bearing assertion --
@@ -364,7 +364,7 @@ test("D-54-01 / ENBL-04: every (disabled) row renders subject-first `⊘ <name> 
 });
 
 // ---------------------------------------------------------------------------
-// RECON-04 (Phase 55 Plan 02): subject-first row grammar for the
+// RECON-04: subject-first row grammar for the
 // `reconcile-applied-cascade` standalone variant. Carries realized
 // transition tokens (`added` / `installed` / `uninstalled` / `disabled` /
 // `failed`) which would otherwise trigger the `/reload to pick up changes`

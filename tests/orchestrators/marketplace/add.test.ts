@@ -877,7 +877,7 @@ test("AUTH-01 add: the GitAuthBundle is forwarded by reference into gitOps.clone
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// RECON-03 (Phase 55 Plan 01): orchestrated-mode coverage
+// RECON-03: orchestrated-mode coverage
 // ───────────────────────────────────────────────────────────────────────────
 
 test("RECON-03 orchestrated mode -- github source success returns { status: 'added' } with ZERO notify calls", async () => {
@@ -1042,7 +1042,7 @@ test("RECON-03 standalone-default mode -- omitted notifications option remains b
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Phase 56 Plan 02 (Task 1): WB-01 write-back, --local, WR-09, CFG-03
+// WB-01 write-back, --local, WR-09, CFG-03
 // ──────────────────────────────────────────────────────────────────────────
 
 test("WB-01: standalone add writes the marketplace entry to claude-plugins.json (source verbatim)", async () => {
@@ -1070,7 +1070,7 @@ test("WB-01: standalone add writes the marketplace entry to claude-plugins.json 
     }
 
     // PATTERNS §"Verbatim rawSource": source field MUST equal opts.rawSource
-    // verbatim so the Phase 53 reconcile planner's `samePlannedSource` stays
+    // verbatim so the reconcile planner's `samePlannedSource` stays
     // a no-op on the next load.
     assert.equal(
       cfg.config.marketplaces?.["valid-marketplace"]?.source,

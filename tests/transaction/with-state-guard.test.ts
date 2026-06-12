@@ -248,7 +248,7 @@ test("D-06 save failure releases the lock for the next state guard call", async 
 // PRL-10: manual-save transaction helper for reinstall rollback
 // ──────────────────────────────────────────────────────────────────────────
 
-test("Phase 8 / PRL-10 manual transaction saves only when tx.save is called", async () => {
+test("PRL-10 manual transaction saves only when tx.save is called", async () => {
   const { loc, cleanup } = await setupTmpScope();
   try {
     await withStateGuard(loc, (state) => {
@@ -279,7 +279,7 @@ test("Phase 8 / PRL-10 manual transaction saves only when tx.save is called", as
   }
 });
 
-test("Phase 8 / PRL-10 manual transaction holds the per-scope lock while callback runs", async () => {
+test("PRL-10 manual transaction holds the per-scope lock while callback runs", async () => {
   const { loc, cleanup } = await setupTmpScope();
   try {
     await withLockedStateTransaction(loc, async () => {
@@ -304,7 +304,7 @@ test("Phase 8 / PRL-10 manual transaction holds the per-scope lock while callbac
   }
 });
 
-test("Phase 8 / PRL-10 manual transaction save failure releases lock", async () => {
+test("PRL-10 manual transaction save failure releases lock", async () => {
   const { loc, cleanup } = await setupTmpScope();
   try {
     await assert.rejects(
@@ -333,7 +333,7 @@ test("Phase 8 / PRL-10 manual transaction save failure releases lock", async () 
   }
 });
 
-test("Phase 8 / PRL-10 manual transaction callback failure does not save and releases lock", async () => {
+test("PRL-10 manual transaction callback failure does not save and releases lock", async () => {
   const { loc, cleanup } = await setupTmpScope();
   try {
     await withStateGuard(loc, (state) => {
@@ -470,7 +470,7 @@ test("ST-9 update concurrent change: caller B sees caller A's version bump and t
   }
 });
 
-test("Phase 8 / PRL-10 manual transaction surfaces StateLockHeldError when scope lock is pre-held", async () => {
+test("PRL-10 manual transaction surfaces StateLockHeldError when scope lock is pre-held", async () => {
   const { loc, cleanup } = await setupTmpScope();
   const release = await lockfile.lock(loc.extensionRoot, {
     lockfilePath: loc.stateLockFile,
@@ -496,7 +496,7 @@ test("Phase 8 / PRL-10 manual transaction surfaces StateLockHeldError when scope
   }
 });
 
-test("Phase 8 / PRL-10 manual transaction surfaces release errors when callback succeeds", async (t) => {
+test("PRL-10 manual transaction surfaces release errors when callback succeeds", async (t) => {
   if (process.platform === "win32") {
     t.skip("POSIX-only chmod 0 failure path");
     return;

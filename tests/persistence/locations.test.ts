@@ -303,7 +303,7 @@ test("SC-3 ScopedLocations new bridge-target fields are not writable (frozen)", 
   }, /Cannot assign to read only property|object is not extensible/);
 });
 
-test("Phase 3 bridge-target dirs are all under extensionRoot (defense-in-depth)", () => {
+test("bridge-target dirs are all under extensionRoot (defense-in-depth)", () => {
   const loc = locationsFor("project", "/p");
   // String-prefix containment check: every bridge target lives under
   // extensionRoot. Bridges still call assertPathInside before writing leaf

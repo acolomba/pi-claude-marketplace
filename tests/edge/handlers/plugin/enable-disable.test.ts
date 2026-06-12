@@ -1,4 +1,4 @@
-// Phase 54 Plan 02 -- enable/disable edge handler shim tests.
+// Enable/disable edge handler shim tests.
 //
 // Mirrors `uninstall.test.ts`. Valid-args tests run a well-formed
 // `plugin@marketplace` against empty state and assert the `{not added}` row

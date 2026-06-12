@@ -79,7 +79,7 @@ function loadCatalogExamples(catalog: string): readonly CatalogExample[] {
   let inFence = false;
   let fenceBody: string[] = [];
 
-  // RECON-04 (Phase 55 Plan 02): the `reconcile-applied-cascade` H2 is a
+  // RECON-04: the `reconcile-applied-cascade` H2 is a
   // command-less section -- the cascade is emitted programmatically by the
   // load-time apply orchestrator, not via a `/claude:plugin` verb. The
   // parser accepts a plain non-backtick heading whose text matches the
@@ -513,7 +513,7 @@ const FIXTURES: FixtureMap = {
       },
     },
 
-    // D-54-01 / ENBL-04 (Phase 54 Plan 02): list-surface inventory row for a
+    // D-54-01 / ENBL-04: list-surface inventory row for a
     // recorded-but-disabled plugin. The new `(disabled)` closed-set token
     // mirrors the catalog list section's `disabled-inventory` state.
     "disabled-inventory": {
@@ -2231,7 +2231,7 @@ const FIXTURES: FixtureMap = {
   "/claude:plugin disable <plugin>@<marketplace>": {
     "disable-fresh": {
       pi: piWithBothLoaded(),
-      // UAT-03 (v1.12 milestone UAT decision 2026-06-11): the fresh-disable
+      // UAT-03: the fresh-disable
       // row carries the closed-set `(disabled)` token -- same glyph + token
       // as the disabled-inventory row, version slot kept. The reload-hint
       // fires via the `disable-cascade` kind (SNM-33 carve-out); kind-less
@@ -2368,9 +2368,10 @@ const FIXTURES: FixtureMap = {
       },
     },
     "enable-disable-transitions": {
-      // Pitfall 53-4: Phase 53 produces ZERO will-enable rows in practice; the
-      // catalog fixture is hand-constructed (not routed through planReconcile)
-      // so Phase 54's enable-bucket wiring can land against an exercised path.
+      // Pitfall 53-4: the will-enable bucket is populated only by the
+      // recorded-but-disabled marker; the catalog fixture is hand-constructed
+      // (not routed through planReconcile) so the enable-bucket wiring can
+      // land against an exercised path.
       pi: piWithBothLoaded(),
       message: {
         marketplaces: [
@@ -2421,7 +2422,7 @@ const FIXTURES: FixtureMap = {
   },
 
   // -------------------------------------------------------------------------
-  // reconcile-applied-cascade -- RECON-04 (Phase 55 Plan 02) load-time apply
+  // reconcile-applied-cascade -- RECON-04 load-time apply
   // cascade. Standalone-dispatched variant; severity is content-derived
   // (mirrors the cascade-arm ladder); shouldEmitReloadHint structurally
   // false (the reconcile already ran on /reload).

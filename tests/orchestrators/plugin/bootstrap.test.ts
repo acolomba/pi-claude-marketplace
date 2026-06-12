@@ -105,7 +105,7 @@ async function withHermeticHome<T>(
   }
 }
 
-/** Phase 56-02: post-flip `autoupdate` lives in `claude-plugins.json`. */
+/** post-flip `autoupdate` lives in `claude-plugins.json`. */
 async function configAutoupdate(
   locations: ScopedLocations,
   name: string,
@@ -125,8 +125,9 @@ function makeBootstrapMarketplaceRecord(
   // The bootstrap target name; matches the manifest name field served
   // by the test fixture at
   // tests/orchestrators/plugin/_fixtures/claude-plugins-official.
-  // SPLIT-01: autoupdate carved out of MARKETPLACE_RECORD_SCHEMA in Phase 51-02.
-  // Test fixture seeds autoupdate via cast until Phase 54-56 rewires to MergedConfig (CFG-02).
+  // SPLIT-01: autoupdate is carved out of MARKETPLACE_RECORD_SCHEMA. The
+  // test fixture seeds autoupdate via cast for parity with the legacy state
+  // shape (CFG-02 reads it via MergedConfig at runtime).
   return {
     name: "claude-plugins-official",
     scope: "user",
@@ -167,7 +168,7 @@ test("bootstrap (clean state): adds marketplace + enables autoupdate; two notifi
     const recorded = userState.marketplaces["claude-plugins-official"];
     assert.ok(recorded);
     assert.equal(recorded.scope, "user");
-    // Phase 56-02: post-flip `autoupdate` lives in `claude-plugins.json`.
+    // post-flip `autoupdate` lives in `claude-plugins.json`.
     assert.equal(await configAutoupdate(userLocations, "claude-plugins-official"), true);
 
     // Exactly two notifications in order. SNM-33 / D-22-01 / D-22-03:
@@ -250,7 +251,7 @@ test("bootstrap (half-configured: autoupdate off): swallows duplicate-name, flip
 
     await bootstrapClaudePlugin({ ctx, pi, cwd, gitOps });
 
-    // Phase 56-02: post-flip `autoupdate` lives in `claude-plugins.json`.
+    // post-flip `autoupdate` lives in `claude-plugins.json`.
     assert.equal(await configAutoupdate(userLocations, "claude-plugins-official"), true);
     assert.equal(notifications.length, 1);
     // SNM-33 / D-22-03: UXG-04 `<autoupdate>` marker-as-outcome header-only
@@ -323,14 +324,14 @@ test("bootstrap (non-duplicate clone error): propagates and autoupdate step is N
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Phase 56 Plan 02 (Task 3): WB-04 composed-write smoke test
+// WB-04 composed-write smoke test
 // ──────────────────────────────────────────────────────────────────────────
 
 test("WB-04: bootstrap records marketplace + autoupdate=true into the config via composed addMarketplace + setMarketplaceAutoupdate writes", async () => {
   // RESEARCH A2 + PATTERNS §"bootstrap.ts (composed 2-write)": bootstrap
   // composition is the locked decision. WB-04 is satisfied transitively once
-  // addMarketplace and setMarketplaceAutoupdate write back -- which Task 1
-  // landed in this plan. This smoke test proves the end-state config matches:
+  // addMarketplace and setMarketplaceAutoupdate write back. This smoke
+  // test proves the end-state config matches:
   //   marketplaces[<name>] === { source, autoupdate: true }
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, pi } = makeCtx();

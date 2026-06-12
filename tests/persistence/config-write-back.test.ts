@@ -1,4 +1,4 @@
-// Phase 56 Plan 01 Task 1 -- config-write-back helper unit tests.
+// Config-write-back helper unit tests.
 //
 // WB-01 (entry-level patch) / WB-02 (--local) / WB-03 (batched) / WB-04
 // (bootstrap composed). Exercises the new persistence/config-write-back.ts

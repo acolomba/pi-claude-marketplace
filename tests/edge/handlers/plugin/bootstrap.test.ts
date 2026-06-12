@@ -137,7 +137,7 @@ test("bootstrap handler (no args, clean state): dispatches to orchestrator and e
     const userLocations = locationsFor("user", cwd);
     const userState = await loadState(userLocations.extensionRoot);
     assert.ok("claude-plugins-official" in userState.marketplaces);
-    // Phase 56-02: post-flip `autoupdate` lives in `claude-plugins.json`.
+    // post-flip `autoupdate` lives in `claude-plugins.json`.
     const cfg = await loadConfig(userLocations.configJsonPath);
     assert.equal(cfg.status, "valid");
     if (cfg.status === "valid") {

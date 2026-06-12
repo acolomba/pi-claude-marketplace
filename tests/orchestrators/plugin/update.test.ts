@@ -998,7 +998,7 @@ test("PUP-1 pl@mp: targeting a plugin not in state AND not in manifest -> partit
 // ─── ATTR-02 missing marketplace -> standalone {not added} (both forms) ───────
 
 // ATTR-02 / SCOPE-01: `@<mp>` form against an absent marketplace with an
-// explicit `--scope` emits the standalone Phase 46 `MarketplaceNotAddedMessage`
+// explicit `--scope` emits the standalone `MarketplaceNotAddedMessage`
 // (`{not added}` on the marketplace subject) carrying the requested-scope
 // bracket -- NOT the former `(failed) {not found}` synthetic plugin row (M10/M11
 // misattribution). No raw MarketplaceNotFoundError/Error escapes the
@@ -2203,7 +2203,7 @@ test("TR-04 retry: partial-success-state-converges-to-new-version", async () => 
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Phase 56 Plan 03 (Task 2): WB-01/WB-02 deep-equal short-circuit + --local
+// WB-01/WB-02 deep-equal short-circuit + --local
 // ──────────────────────────────────────────────────────────────────────────
 
 test("WB-01 / A7: CHANGED update with ABSENT entry writes the implicit declaration", async () => {

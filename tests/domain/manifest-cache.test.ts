@@ -6,10 +6,7 @@ import test from "node:test";
 
 // Import createManifestCache directly (NOT the module-level cache singleton) so
 // every test gets a guaranteed cold start by constructing a fresh instance
-// (D-01 / RESEARCH Pitfall 6 -- singleton leakage). This module does NOT yet
-// exist; it lands in Plan 45-02. The suite is therefore EXPECTED to fail at
-// import resolution until then -- that failing state is the intended Wave 0 RED
-// scaffold, not a defect.
+// (D-01 / RESEARCH Pitfall 6 -- singleton leakage).
 import { createManifestCache } from "../../extensions/pi-claude-marketplace/domain/manifest-cache.ts";
 // Cross-check the CACHE-05 message-equivalence against the same accessor the
 // soft-load consumer (list.ts) uses.

@@ -294,7 +294,7 @@ test("shim :: parseArgs failure (invalid --scope value) surfaces error with rein
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Phase 56 Plan 03 (Task 2): --local flag scanning at the edge boundary
+// --local flag scanning at the edge boundary
 // ──────────────────────────────────────────────────────────────────────────
 
 test("USAGE string contains [--local]", async () => {

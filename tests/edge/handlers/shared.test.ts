@@ -1,14 +1,14 @@
-// Phase 56 Plan 01 Task 2 -- shared edge scanner unit tests.
+// Shared edge scanner unit tests.
 //
-// Covers the lifted-from-Phase-54 `extractLocalFlag` scanner now living at
-// edge/handlers/shared.ts (cross-cutting; marketplace/ and plugin/ subtrees
-// continue to host their domain-specific shared.ts files separately).
+// Covers the `extractLocalFlag` scanner living at edge/handlers/shared.ts
+// (cross-cutting; marketplace/ and plugin/ subtrees continue to host their
+// domain-specific shared.ts files separately).
 //
-// Position-independence is the load-bearing property -- WR-02 (Phase 54
-// review) corrected a regression where `enable --local foo@mp` failed with
-// a misleading message because `--local` was being passed as a positional
-// to the downstream parser. The lifted scanner removes `--local` from the
-// residualArgs so flag position cannot change the outcome.
+// Position-independence is the load-bearing property -- WR-02 corrected a
+// regression where `enable --local foo@mp` failed with a misleading message
+// because `--local` was being passed as a positional to the downstream
+// parser. The lifted scanner removes `--local` from the residualArgs so
+// flag position cannot change the outcome.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";

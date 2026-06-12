@@ -291,7 +291,7 @@ test("commitPreparedCommands removes previous-named files (re-stage path)", asyn
   }
 });
 
-test("Phase 8 / PRL-10 replacePreparedCommands can rollback to previous prompt bytes", async () => {
+test("PRL-10 replacePreparedCommands can rollback to previous prompt bytes", async () => {
   const scope = await tmpScope();
 
   try {
@@ -323,7 +323,7 @@ test("Phase 8 / PRL-10 replacePreparedCommands can rollback to previous prompt b
   }
 });
 
-test("Phase 8 / PRL-10 finalizeCommandsReplacement removes backups and keeps staged content", async () => {
+test("PRL-10 finalizeCommandsReplacement removes backups and keeps staged content", async () => {
   const scope = await tmpScope();
 
   try {
@@ -355,7 +355,7 @@ test("Phase 8 / PRL-10 finalizeCommandsReplacement removes backups and keeps sta
   }
 });
 
-test("Phase 8 / PRL-10 replacePreparedCommands restores backups if unrelated prompt blocks rename", async () => {
+test("PRL-10 replacePreparedCommands restores backups if unrelated prompt blocks rename", async () => {
   const scope = await tmpScope();
 
   try {
@@ -383,7 +383,7 @@ test("Phase 8 / PRL-10 replacePreparedCommands restores backups if unrelated pro
   }
 });
 
-test("Phase 8 / PRL-10 noop command replacements rollback and finalize without leaks", async () => {
+test("PRL-10 noop command replacements rollback and finalize without leaks", async () => {
   const scope = await tmpScope();
 
   try {
@@ -527,7 +527,7 @@ test("prepareStageCommands surfaces appendLeakToError when readFile fails (POSIX
 
 test("staged file basenames contain literal colon character (POSIX-only)", async (t) => {
   if (process.platform === "win32") {
-    t.skip("Windows does not allow `:` in filenames; Phase 3 targets POSIX");
+    t.skip("Windows does not allow `:` in filenames; the bridges target POSIX");
     return;
   }
 
@@ -587,7 +587,7 @@ test("StageCommandsCommitResult.recorded captures sourcePath + targetPath per co
   }
 });
 
-test("Phase 8 / PRL-10 finalizeCommandsReplacement throws on unknown replacement handle (defensive)", async () => {
+test("PRL-10 finalizeCommandsReplacement throws on unknown replacement handle (defensive)", async () => {
   const bogus = { kind: "replaced" } as Parameters<typeof finalizeCommandsReplacement>[0];
   await assert.rejects(
     () => finalizeCommandsReplacement(bogus),
@@ -595,7 +595,7 @@ test("Phase 8 / PRL-10 finalizeCommandsReplacement throws on unknown replacement
   );
 });
 
-test("Phase 8 / PRL-10 replacePreparedCommands skips backup when previous command file vanished", async () => {
+test("PRL-10 replacePreparedCommands skips backup when previous command file vanished", async () => {
   const scope = await tmpScope();
 
   try {

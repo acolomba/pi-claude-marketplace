@@ -306,7 +306,7 @@ test("commitPreparedSkills removes previous-named target dirs before rename (re-
   });
 });
 
-test("Phase 8 / PRL-10 replacePreparedSkills can rollback to previous skill bytes", async () => {
+test("PRL-10 replacePreparedSkills can rollback to previous skill bytes", async () => {
   await withTmpScope(async ({ locations }) => {
     const oldDir = path.join(locations.skillsTargetDir, "acme-knowledge");
     await mkdir(oldDir, { recursive: true });
@@ -348,7 +348,7 @@ test("Phase 8 / PRL-10 replacePreparedSkills can rollback to previous skill byte
   });
 });
 
-test("Phase 8 / PRL-10 finalizeSkillsReplacement removes backups and keeps staged content", async () => {
+test("PRL-10 finalizeSkillsReplacement removes backups and keeps staged content", async () => {
   await withTmpScope(async ({ locations }) => {
     const oldDir = path.join(locations.skillsTargetDir, "acme-knowledge");
     await mkdir(oldDir, { recursive: true });
@@ -385,7 +385,7 @@ test("Phase 8 / PRL-10 finalizeSkillsReplacement removes backups and keeps stage
   });
 });
 
-test("Phase 8 / PRL-10 replacePreparedSkills restores backups if an unrelated target blocks rename", async () => {
+test("PRL-10 replacePreparedSkills restores backups if an unrelated target blocks rename", async () => {
   await withTmpScope(async ({ locations }) => {
     const oldDir = path.join(locations.skillsTargetDir, "acme-knowledge");
     await mkdir(oldDir, { recursive: true });
@@ -420,7 +420,7 @@ test("Phase 8 / PRL-10 replacePreparedSkills restores backups if an unrelated ta
   });
 });
 
-test("Phase 8 / PRL-10 noop skills replacements rollback and finalize without leaks", async () => {
+test("PRL-10 noop skills replacements rollback and finalize without leaks", async () => {
   await withTmpScope(async ({ locations }) => {
     const pluginRoot = path.join(FIXTURES, "empty-mcp");
     const skillsDir = path.join(pluginRoot, "skills");
@@ -542,12 +542,12 @@ test("prepareStageSkills surfaces appendLeakToError when a skill source is unrea
   });
 });
 
-test("Phase 8 / PRL-10 finalizeSkillsReplacement throws on unknown replacement handle (defensive)", async () => {
+test("PRL-10 finalizeSkillsReplacement throws on unknown replacement handle (defensive)", async () => {
   const bogus = { kind: "replaced" } as Parameters<typeof finalizeSkillsReplacement>[0];
   await assert.rejects(() => finalizeSkillsReplacement(bogus), /Unknown skills replacement handle/);
 });
 
-test("Phase 8 / PRL-10 replacePreparedSkills skips backup when previous skill dir vanished", async () => {
+test("PRL-10 replacePreparedSkills skips backup when previous skill dir vanished", async () => {
   // The replace path's backup loop has a "skip if target doesn't exist"
   // branch. Trigger: declare a previousSkillName whose target dir is not on
   // disk; the backup loop should `continue` past it instead of attempting

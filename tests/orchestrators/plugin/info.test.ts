@@ -193,9 +193,9 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
     marketplaces: { ...existing.marketplaces, [mpName]: record },
   } as unknown as Parameters<typeof saveState>[1]);
 
-  // Phase 56-04 / SPLIT-01: autoupdate read-path lives in claude-plugins.json.
-  // Seed the config when autoupdate is set so the SPLIT-01-rewired info
-  // orchestrator reads the autoupdate truth from the new source of truth.
+  // SPLIT-01: autoupdate read-path lives in claude-plugins.json. Seed the
+  // config when autoupdate is set so the info orchestrator reads the
+  // autoupdate truth from the new source of truth.
   if (opts.autoupdate !== undefined) {
     const cfgPath = locations.configJsonPath;
     let existingCfg: { marketplaces?: Record<string, { source: string; autoupdate?: boolean }> } =
@@ -550,7 +550,7 @@ test("UXG-08: missing plugin in known marketplace emits `⊘ <plugin> (failed) {
 // the info-severity `plugin-info-cascade`. It is separated out and surfaced as
 // its own `error` + summary notify -- the same LOUD shape the single-scope arm
 // (test h) produces. Guards against the standalone-vs-cascade divergence
-// resurfacing on the fan-out path (Phase-50 code review WR-01/WR-02).
+// resurfacing on the fan-out path (code review WR-01/WR-02).
 // ---------------------------------------------------------------------------
 
 test("GRAM-04: both-scopes missing plugin emits per-scope `error` + summary, NOT a silent info cascade", async () => {

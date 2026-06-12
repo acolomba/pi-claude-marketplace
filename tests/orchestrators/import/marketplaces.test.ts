@@ -159,7 +159,7 @@ test("buildClaudeImportPlan skips one unmappable plugin without blocking another
   assert.equal(scoped.diagnostics.length, 1);
 });
 
-test("import foundation modules stay pure and expose the Phase 10 API", async () => {
+test("import foundation modules stay pure and expose the expected API", async () => {
   const moduleNames = ["settings.ts", "refs.ts", "marketplaces.ts"] as const;
   for (const moduleName of moduleNames) {
     const source = await readFile(

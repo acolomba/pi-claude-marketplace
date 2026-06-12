@@ -210,7 +210,7 @@ test("shim :: rejects unknown long flag on pl@mp form with USAGE", async () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Phase 56 Plan 03 (Task 2): --local flag scanning at the edge boundary
+// --local flag scanning at the edge boundary
 // ──────────────────────────────────────────────────────────────────────────
 
 test("USAGE string contains [--local]", async () => {

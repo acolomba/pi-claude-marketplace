@@ -163,7 +163,7 @@ test("MP cell (declared, recorded, unknown-stored): 1 PlannedSourceMismatch caus
   assert.equal(mm.declaredSource, "acme/tools");
   // recordedSource is a stable string form of the unrecognised record.
   // The exact bytes (here `String(object) === "[object Object]"`) are an
-  // implementation detail Phase 55 may refine; the structural assertion
+  // implementation detail downstream consumers may refine; the structural assertion
   // is just that the field is a non-empty string.
   assert.equal(typeof mm.recordedSource, "string");
   assert.ok(mm.recordedSource.length > 0);
@@ -277,7 +277,7 @@ test("Plugin cell (not declared, recorded): 1 PlannedPluginUninstall", () => {
 });
 
 test("Plugin cell (declared+enabled-true, recorded, non-empty resources): pluginsToEnable empty (steady-state preserved)", () => {
-  // Phase 54 ENBL-02: the empty-resources arrays serve as the implicit
+  // ENBL-02: the empty-resources arrays serve as the implicit
   // "currently disabled" marker (A1; SPLIT-01 preserved -- no schema bump).
   // A recorded plugin with non-empty resources is steady-state, NOT a
   // candidate for the enable bucket.
@@ -291,7 +291,7 @@ test("Plugin cell (declared+enabled-true, recorded, non-empty resources): plugin
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Phase 54 Plan 01: ENBL-02 recorded-but-disabled (empty-resources marker)
+// ENBL-02 recorded-but-disabled (empty-resources marker)
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
@@ -368,7 +368,7 @@ test("ENBL-02 (c) / WR-05: recorded + empty resources + enabled===false -> STEAD
   // with empty resources + config enabled:false" (ENBL-02 keeps the
   // record). The planner must treat it as steady state -- NOT a perpetual
   // pluginsToDisable entry that would render `(will disable)` forever and
-  // make Phase 55's apply path re-run a no-op disable on every reload.
+  // make the apply path re-run a no-op disable on every reload.
   // Symmetric with the enable case: "recorded + populated + enabled" is
   // steady state too.
   const state = stateWithDisabledRecord("mp", "acme/tools", "cr");
@@ -509,7 +509,7 @@ test("Edge: declared plugin under a recorded-but-undeclared marketplace -> dangl
   // entry" config: mp exists only in state (-> marketplacesToRemove) while
   // cr@mp is still declared. Classifying cr as an install would produce a
   // self-contradictory plan ("will remove" mp AND "will install" cr into
-  // it) that Phase 55's apply path would consume verbatim. The entry must
+  // it) that the apply path would consume verbatim. The entry must
   // surface as a dangling diagnostic instead.
   const state = stateWithOneGithubMarketplace("mp", "acme/tools");
   const merged = mergeScopeConfigs(configWith({}, { "cr@mp": { enabled: true } }), {});

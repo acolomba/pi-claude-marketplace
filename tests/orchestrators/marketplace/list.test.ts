@@ -16,7 +16,7 @@ import { saveState } from "../../../extensions/pi-claude-marketplace/persistence
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-// Phase 56-04 / SPLIT-01: autoupdate read-path rewired to MergedConfig
+// SPLIT-01: autoupdate read-path routes through MergedConfig
 // (claude-plugins.json). Seed the autoupdate truth on the config side; the
 // state-side autoupdate field is no longer the source of truth (D-13 scrubs
 // it on next loadState once the config exists).

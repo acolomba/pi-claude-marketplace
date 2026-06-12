@@ -10,10 +10,10 @@ import type { ReconcilePlan } from "../../../extensions/pi-claude-marketplace/or
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 /**
- * DIFF-01 + DIFF-02 plan-to-message projection tests. Plan 02 replaces the
- * Plan 01 placeholder status strings ("added" / "removed" / "uninstalled") on
- * the projection's output with the pending-tense `will *` token set; the
- * structural shape tests are unchanged.
+ * DIFF-01 + DIFF-02 plan-to-message projection tests. DIFF-02 replaced
+ * the initial DIFF-01 placeholder status strings ("added" / "removed" /
+ * "uninstalled") on the projection's output with the pending-tense
+ * `will *` token set; the structural shape tests are unchanged.
  */
 
 function emptyPlan(scope: Scope): ReconcilePlan {

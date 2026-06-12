@@ -105,7 +105,7 @@ test('shim :: valid source calls addMarketplace with { ctx, scope: "user", cwd, 
     const { ctx, notifications } = makeCtx(cwd);
     const { deps, gitMock } = makeDeps();
     const handler = makeAddHandler(makePi(), deps);
-    // ATTR-07 (Phase 48): a non-existent path source surfaces an ENOENT-class
+    // ATTR-07: a non-existent path source surfaces an ENOENT-class
     // error from addMarketplace's stat() probe. The orchestrator now routes
     // that precondition through notify as a structured `(failed) {source
     // missing}` row instead of throwing past the orchestrator -- so the call
@@ -144,7 +144,7 @@ test("shim :: --scope project propagated to addMarketplace", async () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Phase 56 Plan 02 (Task 1): --local flag scanning at the edge boundary
+// --local flag scanning at the edge boundary
 // ──────────────────────────────────────────────────────────────────────────
 
 test("USAGE string contains [--local]", async () => {

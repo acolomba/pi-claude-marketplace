@@ -545,7 +545,7 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
 
 // ===========================================================================
 // Pitfall 1 (D-48-A byte-regression locks): adding `reasons?` to the MpFailed
-// arm (Plan 48-01) MUST NOT change the byte form of an existing bare-`(failed)`
+// arm MUST NOT change the byte form of an existing bare-`(failed)`
 // marketplace state that omits `reasons`. `composeReasons(undefined, ...)`
 // returns "", and the renderer's `reasonsBrace === ""` ternary then emits the
 // bare `⊘ <name> [<scope>] (failed)` header with NO reason brace. These tests
@@ -2646,7 +2646,7 @@ function pluginInfoDescriptionBlock(description: string): string[] {
   return lines.slice(2);
 }
 
-test("Phase 42 / wrapDescription: empty description omits the wrap block entirely", () => {
+test("wrapDescription: empty description omits the wrap block entirely", () => {
   // Empty input -> wrapDescription returns [] -> renderer pushes no
   // description lines. The body skips straight from the plugin row to the
   // `components: not resolved` marker.
@@ -2654,12 +2654,12 @@ test("Phase 42 / wrapDescription: empty description omits the wrap block entirel
   assert.deepEqual(tail, ["    components: not resolved"]);
 });
 
-test("Phase 42 / wrapDescription: short description renders as a single 4-space-indented line", () => {
+test("wrapDescription: short description renders as a single 4-space-indented line", () => {
   const tail = pluginInfoDescriptionBlock("Hello world.");
   assert.deepEqual(tail, ["    Hello world.", "    components: not resolved"]);
 });
 
-test("Phase 42 / wrapDescription: text fitting exactly 66 chars on a word boundary stays on one line", () => {
+test("wrapDescription: text fitting exactly 66 chars on a word boundary stays on one line", () => {
   // 66 chars of text (no indent) -- last word ends at col 66 exactly.
   // 6 words of 10 chars + 5 single-space separators = 65 chars; add a
   // trailing 1-char word to hit 66 (with the leading space, +2).
@@ -2676,7 +2676,7 @@ test("Phase 42 / wrapDescription: text fitting exactly 66 chars on a word bounda
   assert.deepEqual(tail, [`    ${text}`, "    components: not resolved"]);
 });
 
-test("Phase 42 / wrapDescription: long description wraps at word boundary at 66-char text width", () => {
+test("wrapDescription: long description wraps at word boundary at 66-char text width", () => {
   // Two 60-char words separated by a space -- 121 chars total; the first
   // word fits on line 1 (60 chars), the second wraps to line 2 (also 60).
   // Lock: both lines indented 4 spaces; no ellipsis; no truncation.
@@ -2686,7 +2686,7 @@ test("Phase 42 / wrapDescription: long description wraps at word boundary at 66-
   assert.deepEqual(tail, [`    ${first}`, `    ${second}`, "    components: not resolved"]);
 });
 
-test("Phase 42 / wrapDescription: an over-length single word emits on its own line at indent with no ellipsis", () => {
+test("wrapDescription: an over-length single word emits on its own line at indent with no ellipsis", () => {
   // INFO-02 forbids ellipsis. A 70-char single token is emitted at indent;
   // the rendered line WILL exceed the 70-char total width and that is the
   // intentional contract (no truncation).
@@ -2695,14 +2695,14 @@ test("Phase 42 / wrapDescription: an over-length single word emits on its own li
   assert.deepEqual(tail, [`    ${word}`, "    components: not resolved"]);
 });
 
-test("Phase 42 / wrapDescription: whitespace collapsed (tabs, newlines, double spaces) into single-space-separated words", () => {
+test("wrapDescription: whitespace collapsed (tabs, newlines, double spaces) into single-space-separated words", () => {
   // Mixed whitespace input -> tokenized via /\s+/ -> joined with single
   // spaces. Three words ("hello", "world", "foo") fit on a single line.
   const tail = pluginInfoDescriptionBlock("  hello\t\tworld\n\nfoo  ");
   assert.deepEqual(tail, ["    hello world foo", "    components: not resolved"]);
 });
 
-test("Phase 42 / WR-05 / wrapDescription: whitespace-only description reaches wrapDescription and returns no body lines", () => {
+test("WR-05 / wrapDescription: whitespace-only description reaches wrapDescription and returns no body lines", () => {
   // WR-05: the renderer's short-circuit at `description.length > 0` only
   // catches the empty-string case. A whitespace-only string (e.g. "   ")
   // has length > 0, so wrapDescription IS called -- it splits on /\s+/,
@@ -2715,7 +2715,7 @@ test("Phase 42 / WR-05 / wrapDescription: whitespace-only description reaches wr
   assert.deepEqual(tail, ["    components: not resolved"]);
 });
 
-test("Phase 42 / WR-05 / wrapDescription: two words whose `current.length + 1 + word.length === wrapCol` stay on one line (boundary-equality)", () => {
+test("WR-05 / wrapDescription: two words whose `current.length + 1 + word.length === wrapCol` stay on one line (boundary-equality)", () => {
   // WR-05: the greedy accumulator's boundary predicate is
   // `current.length + 1 + word.length <= wrapCol`. Exercise the equality
   // (<=) branch with two words whose joined length is EXACTLY 66 chars.
@@ -2789,7 +2789,7 @@ test("GRAM-02: standalone failed plugin-info renders `1 plugin operation failed.
   ]);
 });
 
-test("Phase 42 / INFO-04: {not added} row never carries a reload-hint (read-only surface)", () => {
+test("INFO-04: {not added} row never carries a reload-hint (read-only surface)", () => {
   // TYPE-03: `shouldEmitReloadHint` routes the new `marketplace-not-added`
   // arm to `false` through the single `isInfoKind` guard. Lock that the bare
   // row does NOT carry `\n\n/reload to pick up changes`.
@@ -2808,7 +2808,7 @@ test("Phase 42 / INFO-04: {not added} row never carries a reload-hint (read-only
   );
 });
 
-test("Phase 42 / INFO-01: renderMarketplaceInfo (github source + ref + lastUpdated + description)", () => {
+test("INFO-01: renderMarketplaceInfo (github source + ref + lastUpdated + description)", () => {
   // Full github source rendering: header + github line with #ref + last_updated
   // + single-attribute description line (NOT wrapped -- description wrapping
   // is plugin info-only per INFO-02).
@@ -2842,7 +2842,7 @@ test("Phase 42 / INFO-01: renderMarketplaceInfo (github source + ref + lastUpdat
   assert.equal(args.length, 1);
 });
 
-test("Phase 42 / INFO-01: renderMarketplaceInfo (path source, no lastUpdated, no description)", () => {
+test("INFO-01: renderMarketplaceInfo (path source, no lastUpdated, no description)", () => {
   // Path source omits the `last_updated:` line (last_updated is github-only
   // per INFO-01) AND omits the `description:` line when description is
   // undefined. The header carries the `<no autoupdate>` marker because
@@ -2866,7 +2866,7 @@ test("Phase 42 / INFO-01: renderMarketplaceInfo (path source, no lastUpdated, no
   assert.equal(args.length, 1);
 });
 
-test("Phase 42 / INFO-02 / INFO-05: renderPluginInfo (componentsResolved:true with sorted components + dependencies + wrapping description)", () => {
+test("INFO-02 / INFO-05: renderPluginInfo (componentsResolved:true with sorted components + dependencies + wrapping description)", () => {
   // Full plugin info path: marketplace header + 2-space-indent plugin row +
   // wrapped description (4-space indent, 66-col text width) + per-kind
   // component lines (alphabetical by kind: agents, commands, mcp, skills)
@@ -2913,7 +2913,7 @@ test("Phase 42 / INFO-02 / INFO-05: renderPluginInfo (componentsResolved:true wi
   assert.equal(args.length, 1);
 });
 
-test("Phase 42 / INFO-05: renderPluginInfo (componentsResolved:false emits the `components: not resolved` marker)", () => {
+test("INFO-05: renderPluginInfo (componentsResolved:false emits the `components: not resolved` marker)", () => {
   // INFO-05 unresolved marker: when the plugin's plugin.json lives at an
   // unsynced external source, the renderer emits a single marker line
   // INSTEAD of per-kind component lists. No per-kind lines, no dependencies
@@ -2960,7 +2960,7 @@ test("Phase 42 / INFO-05: renderPluginInfo (componentsResolved:false emits the `
 // renderer (SC#4 byte-equality).
 // ===========================================================================
 
-test("Phase 43 / INFO-03: marketplace-info-cascade with a single block byte-equals the bare marketplace-info render", () => {
+test("INFO-03: marketplace-info-cascade with a single block byte-equals the bare marketplace-info render", () => {
   // The single-block case is the SAME byte form as the bare
   // MarketplaceInfoMessage variant -- no extra blank line, no header
   // decoration. Locks the composition discipline: the wrapper is just a
@@ -3000,7 +3000,7 @@ test("Phase 43 / INFO-03: marketplace-info-cascade with a single block byte-equa
   assert.equal(args.length, 1);
 });
 
-test("Phase 43 / INFO-03: marketplace-info-cascade with two blocks renders project-first then user, joined by one blank line", () => {
+test("INFO-03: marketplace-info-cascade with two blocks renders project-first then user, joined by one blank line", () => {
   // The orchestrator iterates project-first per MSG-GR-3 / INFO-03; the
   // renderer honors caller-supplied order (no internal sort). Lock the
   // `\n\n` separator + project-first ordering.
@@ -3040,7 +3040,7 @@ test("Phase 43 / INFO-03: marketplace-info-cascade with two blocks renders proje
   );
 });
 
-test("Phase 43 / INFO-03: marketplace-info-cascade severity is always info (no second arg) and no reload-hint", () => {
+test("INFO-03: marketplace-info-cascade severity is always info (no second arg) and no reload-hint", () => {
   // No failure can be expressed on the fan-out wrapper -- computeSeverity
   // routes the variant to undefined (info / no 2nd arg). The dispatcher
   // omits the 2nd arg accordingly. Reload-hint never fires (info surface).
@@ -3074,7 +3074,7 @@ test("Phase 43 / INFO-03: marketplace-info-cascade severity is always info (no s
   );
 });
 
-test("Phase 43 / INFO-03 + INFO-01: single-block fan-out (github source, all optional fields) byte form", () => {
+test("INFO-03 + INFO-01: single-block fan-out (github source, all optional fields) byte form", () => {
   // INFO-01 full github happy path through the new fan-out wrapper. The
   // single-block case proves the wrapper does not add any per-block
   // decoration beyond `renderMarketplaceInfo`.
@@ -3112,7 +3112,7 @@ test("Phase 43 / INFO-03 + INFO-01: single-block fan-out (github source, all opt
   assert.equal(args.length, 1);
 });
 
-test("Phase 43 / INFO-03 + INFO-01: single-block fan-out (path source, minimal) byte form omits last_updated and description", () => {
+test("INFO-03 + INFO-01: single-block fan-out (path source, minimal) byte form omits last_updated and description", () => {
   // INFO-01 path-source arm: NO `last_updated:` (gated on github source);
   // NO `description:` when undefined. The fan-out wrapper preserves the
   // bare two-line body verbatim.
@@ -3155,7 +3155,7 @@ test("Phase 43 / INFO-03 + INFO-01: single-block fan-out (path source, minimal) 
 // renderer (SC#4 byte-equality).
 // ===========================================================================
 
-test("Phase 44 / INFO-02: plugin-info-cascade with a single block byte-equals the bare plugin-info render", () => {
+test("INFO-02: plugin-info-cascade with a single block byte-equals the bare plugin-info render", () => {
   // The single-block case is the SAME byte form as the bare
   // PluginInfoMessage variant -- no extra blank line, no header
   // decoration. Locks the composition discipline: the wrapper is just a
@@ -3190,7 +3190,7 @@ test("Phase 44 / INFO-02: plugin-info-cascade with a single block byte-equals th
   assert.equal(args.length, 1);
 });
 
-test("Phase 44 / INFO-02 + INFO-03: plugin-info-cascade with two blocks renders project-first then user, joined by one blank line", () => {
+test("INFO-02 + INFO-03: plugin-info-cascade with two blocks renders project-first then user, joined by one blank line", () => {
   // The orchestrator iterates project-first per MSG-GR-3 / INFO-03; the
   // renderer honors caller-supplied order (no internal sort). Lock the
   // `\n\n` separator + project-first ordering. Each block carries its
@@ -3245,7 +3245,7 @@ test("Phase 44 / INFO-02 + INFO-03: plugin-info-cascade with two blocks renders 
   );
 });
 
-test("Phase 44 / INFO-02: plugin-info-cascade severity is always info (no second arg) and no reload-hint", () => {
+test("INFO-02: plugin-info-cascade severity is always info (no second arg) and no reload-hint", () => {
   // No failure can be expressed on the fan-out wrapper -- computeSeverity
   // routes the variant to undefined (info / no 2nd arg). The dispatcher
   // omits the 2nd arg accordingly. Reload-hint never fires (info surface).
@@ -3291,7 +3291,7 @@ test("Phase 44 / INFO-02: plugin-info-cascade severity is always info (no second
   );
 });
 
-test("Phase 44 / INFO-02: plugin-info-cascade single block installed with resolved components + dependencies renders full INFO-02 happy path", () => {
+test("INFO-02: plugin-info-cascade single block installed with resolved components + dependencies renders full INFO-02 happy path", () => {
   // INFO-02 happy path through the new fan-out wrapper: marketplace
   // header at column 0; plugin row at 2-space indent (status glyph +
   // name + version + (status)); description wrapped at col 4 / 66; the
@@ -3341,7 +3341,7 @@ test("Phase 44 / INFO-02: plugin-info-cascade single block installed with resolv
   assert.equal(args.length, 1);
 });
 
-test("Phase 44 / INFO-05: plugin-info-cascade single block components-not-resolved emits the marker line at col 4", () => {
+test("INFO-05: plugin-info-cascade single block components-not-resolved emits the marker line at col 4", () => {
   // INFO-05 through the new fan-out wrapper: an external-source plugin
   // surfaces the marker line `    components: not resolved` at 4-space
   // indent in place of the per-kind component lists. The orchestrator
@@ -3380,7 +3380,7 @@ test("Phase 44 / INFO-05: plugin-info-cascade single block components-not-resolv
   assert.equal(args.length, 1);
 });
 
-test('Phase 42 / Migration Strategy #2: cascade payload WITHOUT `kind` field byte-equals payload WITH `kind: "cascade"`', () => {
+test('Migration Strategy #2: cascade payload WITHOUT `kind` field byte-equals payload WITH `kind: "cascade"`', () => {
   // The dispatcher uses `message.kind ?? \"cascade\"` so call sites
   // that omit `kind` continue to route through the cascade arm
   // byte-identically. Lock the equivalence end-to-end: invoke notify() with
@@ -3419,7 +3419,7 @@ test('Phase 42 / Migration Strategy #2: cascade payload WITHOUT `kind` field byt
 });
 
 // ===========================================================================
-// Phase 53 Plan 02 / DIFF-02 -- pending-tense `(will *)` preview rows.
+// DIFF-02 -- pending-tense `(will *)` preview rows.
 //
 // Six new tokens (4 plugin + 2 marketplace) emitted by `/claude:plugin preview`.
 // All are info-severity (no failure / skipped / manual-recovery semantics) so
@@ -3485,7 +3485,7 @@ test("DIFF-02: will-uninstall plugin under existing (no-status) marketplace bloc
   assert.equal(args[0], `● mp [user]\n  ○ old-plugin (will uninstall)`);
 });
 
-test("DIFF-02: will-enable + will-disable rows under same marketplace (Phase 54 hand-off shape)", () => {
+test("DIFF-02: will-enable + will-disable rows under same marketplace", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
@@ -3572,7 +3572,7 @@ test("DIFF-02: will-* cascade computes info severity (no second arg to ctx.ui.no
 });
 
 // ===========================================================================
-// D-54-01 / ENBL-04 (Phase 54 Plan 02): (disabled) inventory row + (already
+// D-54-01 / ENBL-04: (disabled) inventory row + (already
 // enabled) / (already disabled) skip rows. The new closed-set token + REASONS
 // members land in lockstep with the catalog/UAT byte-equality runner.
 // ===========================================================================
@@ -3823,7 +3823,7 @@ test("D-54-01: disable cascade (uninstalled plugin row under list-arm mp) emits 
 });
 
 // ===========================================================================
-// RECON-04 (Phase 55 Plan 02) -- reconcile-applied-cascade standalone
+// RECON-04 -- reconcile-applied-cascade standalone
 // variant.
 //
 // Three catalog states:

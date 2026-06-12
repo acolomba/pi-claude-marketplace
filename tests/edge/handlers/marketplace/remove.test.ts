@@ -108,7 +108,7 @@ test("shim :: --scope propagated; explicit-scope miss routes to `{not added}` WI
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Phase 56 Plan 02 (Task 2): --local flag scanning at the edge boundary
+// --local flag scanning at the edge boundary
 // ──────────────────────────────────────────────────────────────────────────
 
 test("USAGE string contains [--local]", async () => {

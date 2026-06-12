@@ -108,7 +108,7 @@ const EXPECTED_FORBIDDEN: Record<string, string[]> = {
   ],
 };
 
-test("import-x/no-restricted-paths defines exactly 8 zones (one per folder) -- D-11 (Phase 21 retired presentation/)", async () => {
+test("import-x/no-restricted-paths defines exactly 8 zones (one per folder) -- D-11", async () => {
   const zones = await loadZones();
   assert.ok(
     zones !== null,
@@ -241,7 +241,7 @@ test(
     assert.equal(
       unresolvedErrors.length,
       0,
-      `'import-x/no-unresolved' fired -- canary is failing for the WRONG reason (the import target should resolve via Plan 03's bridges/index.ts placeholder). Messages: ${JSON.stringify(messages, null, 2)}`,
+      `'import-x/no-unresolved' fired -- canary is failing for the WRONG reason (the import target should resolve via the bridges/index.ts placeholder). Messages: ${JSON.stringify(messages, null, 2)}`,
     );
   },
 );

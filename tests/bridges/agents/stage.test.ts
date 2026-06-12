@@ -362,7 +362,7 @@ test("AG-5 commit preserves foreign-content index row in agents:", async () => {
   });
 });
 
-test("Phase 8 / PRL-10 replacePreparedAgents can rollback files and agents-index", async () => {
+test("PRL-10 replacePreparedAgents can rollback files and agents-index", async () => {
   await withTmpScope(async ({ locations }) => {
     const pluginRoot = path.join(FIXTURES, "test-plugin");
     const resolved = makeResolved("acme", pluginRoot);
@@ -404,7 +404,7 @@ test("Phase 8 / PRL-10 replacePreparedAgents can rollback files and agents-index
   });
 });
 
-test("Phase 8 / PRL-10 replacePreparedAgents blocks foreign previous content by default", async () => {
+test("PRL-10 replacePreparedAgents blocks foreign previous content by default", async () => {
   await withTmpScope(async ({ locations }) => {
     const pluginRoot = path.join(FIXTURES, "test-plugin");
     const resolved = makeResolved("acme", pluginRoot);
@@ -459,7 +459,7 @@ test("Phase 8 / PRL-10 replacePreparedAgents blocks foreign previous content by 
   });
 });
 
-test("Phase 8 / PRL-10 replacePreparedAgents force overwrites foreign previous content and rollback restores it", async () => {
+test("PRL-10 replacePreparedAgents force overwrites foreign previous content and rollback restores it", async () => {
   await withTmpScope(async ({ locations }) => {
     const pluginRoot = path.join(FIXTURES, "test-plugin");
     const resolved = makeResolved("acme", pluginRoot);
@@ -509,7 +509,7 @@ test("Phase 8 / PRL-10 replacePreparedAgents force overwrites foreign previous c
   });
 });
 
-test("Phase 8 / PRL-10 noop agent replacements rollback and finalize without leaks", async () => {
+test("PRL-10 noop agent replacements rollback and finalize without leaks", async () => {
   await withTmpScope(async ({ locations }) => {
     const pluginRoot = path.join(FIXTURES, "test-plugin");
     const resolved = makeResolved("acme", pluginRoot);
@@ -784,12 +784,12 @@ test("abort cleans up staging dir without touching target dir", async () => {
   });
 });
 
-test("Phase 8 / PRL-10 finalizeAgentsReplacement throws on unknown replacement handle (defensive)", async () => {
+test("PRL-10 finalizeAgentsReplacement throws on unknown replacement handle (defensive)", async () => {
   const bogus = { kind: "replaced" } as Parameters<typeof finalizeAgentsReplacement>[0];
   await assert.rejects(() => finalizeAgentsReplacement(bogus), /Unknown agents replacement handle/);
 });
 
-test("Phase 8 / PRL-10 replacePreparedAgents internal rename failure rolls back and propagates with manual-recovery prefix when leaks", async (t) => {
+test("PRL-10 replacePreparedAgents internal rename failure rolls back and propagates with manual-recovery prefix when leaks", async (t) => {
   // POSIX-only: chmod the agents target dir read-only after prepare but
   // before the inner rename of staged files. The first staged rename fails
   // with EACCES, triggering rollbackAgentsReplacementInternal. Because the
@@ -893,7 +893,7 @@ test("AG-1 prepare/replace skips backup loop entries that vanish between prepare
   });
 });
 
-test("Phase 8 / PRL-10 replacePreparedAgents rollback removes new agents-index when none existed before", async () => {
+test("PRL-10 replacePreparedAgents rollback removes new agents-index when none existed before", async () => {
   // First replace from a clean scope (no prior agents-index). rollback's
   // restoreAgentsIndex hits the `oldIndexText === undefined` branch and
   // rm's the freshly-written index file.
@@ -920,7 +920,7 @@ test("Phase 8 / PRL-10 replacePreparedAgents rollback removes new agents-index w
   });
 });
 
-test("Phase 8 / PRL-10 readOptionalText (non-ENOENT) -> rethrows from inside replacePreparedAgents", async (t) => {
+test("PRL-10 readOptionalText (non-ENOENT) -> rethrows from inside replacePreparedAgents", async (t) => {
   // POSIX-only: chmod a previous agents-index.json to 0 so the
   // readOptionalText call inside replacePreparedAgents hits the
   // non-ENOENT branch, which rethrows.
@@ -1097,7 +1097,7 @@ test("replacePreparedAgents throws when staged target path already exists with n
   });
 });
 
-test("Phase 8 / PRL-10 rollbackAgentsReplacement records leak when restoreAgentsIndex fails", async (t) => {
+test("PRL-10 rollbackAgentsReplacement records leak when restoreAgentsIndex fails", async (t) => {
   // POSIX-only: after replace, chmod the extension root read-only so the
   // rollback's `writeFile` to the agents-index path fails. The catch block
   // in restoreAgentsIndex records a leak.

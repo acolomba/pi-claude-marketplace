@@ -171,7 +171,7 @@ test("routeClaudePlugin :: dispatches list to handlers.list", async () => {
   assert.deepEqual(notifications, []);
 });
 
-test("routeClaudePlugin :: dispatches info to handlers.pluginInfo (Phase 44 / INFO-02)", async () => {
+test("routeClaudePlugin :: dispatches info to handlers.pluginInfo (INFO-02)", async () => {
   const { ctx, notifications } = makeCtx();
   const { handlers, calls } = makeHandlers();
   await routeClaudePlugin("info foo@mp", handlers, ctx);
@@ -179,7 +179,7 @@ test("routeClaudePlugin :: dispatches info to handlers.pluginInfo (Phase 44 / IN
   assert.deepEqual(notifications, []);
 });
 
-test("router :: TOP_LEVEL_SUBCOMMANDS includes `info` (Phase 44 / INFO-02)", () => {
+test("router :: TOP_LEVEL_SUBCOMMANDS includes `info` (INFO-02)", () => {
   assert.ok(
     (TOP_LEVEL_SUBCOMMANDS as readonly string[]).includes("info"),
     `TOP_LEVEL_SUBCOMMANDS missing "info" -- got ${TOP_LEVEL_SUBCOMMANDS.join(", ")}`,

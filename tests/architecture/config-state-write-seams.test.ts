@@ -8,7 +8,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 const EXTENSION_ROOT = path.join(REPO_ROOT, "extensions/pi-claude-marketplace");
 
 /**
- * SPLIT-02 (Phase 51) -- write-seam ownership for the user config file
+ * SPLIT-02 -- write-seam ownership for the user config file
  * (`claude-plugins.json` / `claude-plugins.local.json`) and the internal
  * state file (`state.json`).
  *

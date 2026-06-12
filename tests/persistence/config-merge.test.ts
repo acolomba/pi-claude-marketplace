@@ -144,7 +144,7 @@ test("mergeScopeConfigs dangling plugin reference is a VALID merged result (D-16
   const merged = mergeScopeConfigs(base, local);
   assert.equal(merged.plugins["orphan@missing-mp"]?.source, "base");
   assert.equal(merged.plugins["orphan@missing-mp"]?.entry.enabled, true);
-  // marketplaces map is empty -- reconcile (Phase 55) will soft-fail per-entry.
+  // marketplaces map is empty -- reconcile will soft-fail per-entry.
   assert.deepEqual(merged.marketplaces, {});
 });
 

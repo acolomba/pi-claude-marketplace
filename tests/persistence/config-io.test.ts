@@ -30,7 +30,7 @@ async function tmpScopeRoot(): Promise<{ scopeRoot: string; cleanup: () => Promi
   const scopeRoot = path.join(dir, ".pi");
   await mkdir(scopeRoot, { recursive: true });
   // Cleanup retries with a short sleep -- mirrors state-io.test.ts to absorb
-  // any racing background persists; Plan 51-01 has no fire-and-forget persist
+  // any racing background persists; this seam has no fire-and-forget persist
   // but the convention is cheap and forward-compatible.
   const cleanup = async (): Promise<void> => {
     for (let attempt = 0; attempt < 10; attempt++) {

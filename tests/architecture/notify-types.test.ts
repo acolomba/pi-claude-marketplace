@@ -97,16 +97,16 @@ type _VManualRecovery = Extract<PluginNotificationMessage, { status: "manual rec
 // (dependencies REQUIRED, version OPTIONAL, scope OPTIONAL; no
 // cause / rollbackPartial / reasons / from / to).
 type _VPresent = Extract<PluginNotificationMessage, { status: "present" }>;
-// DIFF-02 (Phase 53 Plan 02): the 4 new pending-tense plugin variants emitted
+// DIFF-02: the 4 new pending-tense plugin variants emitted
 // by `/claude:plugin preview`. Per-variant shape: REQUIRED `name`, OPTIONAL
 // `scope`, no `dependencies` / `reasons` / `version` / `cause` / `rollbackPartial`
-// / `from` / `to` / `description`. Plan 02 length-lock bumps PLUGIN_STATUSES
+// / `from` / `to` / `description`. The length-lock bumps PLUGIN_STATUSES
 // from 11 -> 15.
 type _VWillInstall = Extract<PluginNotificationMessage, { status: "will install" }>;
 type _VWillUninstall = Extract<PluginNotificationMessage, { status: "will uninstall" }>;
 type _VWillEnable = Extract<PluginNotificationMessage, { status: "will enable" }>;
 type _VWillDisable = Extract<PluginNotificationMessage, { status: "will disable" }>;
-// D-54-01 (Phase 54 Plan 02): `PluginDisabledMessage` is the new closed-set
+// D-54-01: `PluginDisabledMessage` is the new closed-set
 // inventory variant emitted on list/info for a recorded-but-disabled plugin.
 // Per-variant shape mirrors `PluginUninstalledMessage`: REQUIRED `name`,
 // OPTIONAL `version?` / `scope?`; NO `dependencies` / `reasons` / `cause` /
@@ -135,7 +135,7 @@ type _Assert_PluginStatusBackward = PluginNotificationMessage["status"] extends 
   : never;
 export const _pb: _Assert_PluginStatusBackward = true;
 
-// D-15-11 + DIFF-02 (Phase 53 Plan 02) + D-54-01 (Phase 54 Plan 02):
+// D-15-11 + DIFF-02 + D-54-01:
 // PLUGIN_STATUSES tuple length is exactly 16 (15 existing + the new closed-set
 // `"disabled"` inventory token). UAT G-21-01: the tuple includes the list-only
 // `"present"` inventory token (SNM-15 surface tightening). DIFF-02 appends the
@@ -146,7 +146,7 @@ export const _pb: _Assert_PluginStatusBackward = true;
 type _Assert_PluginStatusesLen = (typeof PLUGIN_STATUSES)["length"] extends 16 ? true : never;
 export const _l1: _Assert_PluginStatusesLen = true;
 
-// D-17.1-01 + D-15-11 + DIFF-02 (Phase 53 Plan 02): MARKETPLACE_STATUSES
+// D-17.1-01 + D-15-11 + DIFF-02: MARKETPLACE_STATUSES
 // tuple length is exactly 9. DIFF-02 appends `"will add"` / `"will remove"`
 // at the END so the 7 existing entries stay positionally unchanged.
 type _Assert_MarketplaceStatusesLen = (typeof MARKETPLACE_STATUSES)["length"] extends 9
@@ -154,7 +154,7 @@ type _Assert_MarketplaceStatusesLen = (typeof MARKETPLACE_STATUSES)["length"] ex
   : never;
 export const _l2: _Assert_MarketplaceStatusesLen = true;
 
-// DIFF-02 (Phase 53 Plan 02) + D-54-01 (Phase 54 Plan 02): STATUS_TOKENS
+// DIFF-02 + D-54-01: STATUS_TOKENS
 // tuple length is exactly 22 (21 existing + the new `"disabled"` inventory
 // token appended at the end).
 type _Assert_StatusTokensLen = (typeof STATUS_TOKENS)["length"] extends 22 ? true : never;
@@ -164,7 +164,7 @@ export const _l1s: _Assert_StatusTokensLen = true;
 type _Assert_DependenciesLen = (typeof DEPENDENCIES)["length"] extends 2 ? true : never;
 export const _l3: _Assert_DependenciesLen = true;
 
-// SNM-03 + D-15-11 + DIFF-02 (Phase 53 Plan 02) + D-54-01 (Phase 54 Plan 02):
+// SNM-03 + D-15-11 + DIFF-02 + D-54-01:
 // `PluginStatus` is EXACTLY the 16 expected literals (no more, no fewer).
 // Bidirectional `extends` proves set-equality. UAT G-21-01: the `"present"`
 // literal is the list-only inventory token introduced to close the
@@ -196,7 +196,7 @@ type _Assert_PluginStatusValues = _PluginStatusExpected extends PluginStatus
   : never;
 export const _psv: _Assert_PluginStatusValues = true;
 
-// SNM-05 + D-17.1-01 + DIFF-02 (Phase 53 Plan 02): `MarketplaceStatus` is
+// SNM-05 + D-17.1-01 + DIFF-02: `MarketplaceStatus` is
 // EXACTLY the 9 expected literals. DIFF-02 adds `"will add"` / `"will remove"`.
 type _MarketplaceStatusExpected =
   | "added"
@@ -641,7 +641,7 @@ type _Assert_WillDisableShape = _VWillDisable extends _PluginWillDisableExpected
   : never;
 export const _vshpWD: _Assert_WillDisableShape = true;
 
-// D-54-01 / ENBL-04 (Phase 54 Plan 02): PluginDisabledMessage shape proof.
+// D-54-01 / ENBL-04: PluginDisabledMessage shape proof.
 // Mirrors PluginUninstalledMessage exactly except for the status literal --
 // REQUIRED `name`, OPTIONAL `version?` / `scope?`; NO other fields.
 interface _PluginDisabledExpected {
@@ -905,7 +905,7 @@ export const _vD: _Assert_VersionOnDisabled = true;
 // 2); `_l4` / `_l4b` here and `_l5..._l9` cover the info variants below.
 // ============================================================================
 
-// D-54-01 / ENBL-04 (Phase 54 Plan 02): REASONS tuple length is now 31
+// D-54-01 / ENBL-04: REASONS tuple length is now 31
 // (29 existing + `"already enabled"` + `"already disabled"`). Both new
 // members are in BENIGN_REASONS so idempotent enable/disable cascades route
 // to info severity via the UXG-02 / D-28-06 first-match ladder (mirrors the
@@ -1183,7 +1183,7 @@ type _Assert_ExtractCascadeByOptionalKindIsNever =
 export const _l11: _Assert_ExtractCascadeByOptionalKindIsNever = true;
 
 // ============================================================================
-// Phase 46 / TYPE-01..04: type-model foundations compile proofs
+// TYPE-01..04: type-model foundations compile proofs
 //
 // These prove the four type-model deliverables that make the v1.10 attribution
 // foot-guns UNREPRESENTABLE. Negative-presence proofs use `// @ts-expect-error`
@@ -1264,7 +1264,7 @@ type _Assert_NotifSixArms =
               : true;
 export const _l12: _Assert_NotifSixArms = true;
 
-// --- DIFF-01 SC #2 (Phase 53 Plan 02): 7-arm union arity locking the new
+// --- DIFF-01 SC #2: 7-arm union arity locking the new
 //     `reconcile-preview-empty` standalone variant. ---
 
 type _Assert_NotifSevenArms =
@@ -1298,7 +1298,7 @@ type _Assert_ReconcilePreviewEmptyShape = _VReconcilePreviewEmpty extends {
   : never;
 export const _rpe: _Assert_ReconcilePreviewEmptyShape = true;
 
-// --- RECON-04 (Phase 55 Plan 02): 8-arm union arity locking the new
+// --- RECON-04: 8-arm union arity locking the new
 //     `reconcile-applied-cascade` standalone variant. ---
 
 type _Assert_NotifEightArms =
@@ -1397,6 +1397,6 @@ export type _NoReasonsOnMpList = _MpList["reasons"];
 // through this trivial runtime assert.
 // ============================================================================
 
-test("Phase 15 / SNM-01..SNM-11 / D-15-12: notify type model invariants hold at compile time", () => {
+test("SNM-01..SNM-11 / D-15-12: notify type model invariants hold at compile time", () => {
   assert.equal(1, 1);
 });

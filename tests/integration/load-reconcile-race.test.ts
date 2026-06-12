@@ -1,8 +1,8 @@
 // tests/integration/load-reconcile-race.test.ts
 //
-// RECON-06 (Phase 55 Plan 03): two-process load-time apply race.
-// + Phase 52 deferred Pitfall 52-2 / 52-4 lock-coverage proof
-//   (discharges the tests/persistence/migrate-config.test.ts:29-39 hand-off).
+// RECON-06: two-process load-time apply race.
+// + Pitfall 52-2 / 52-4 lock-coverage proof (discharges the
+//   tests/persistence/migrate-config.test.ts:29-39 hand-off).
 //
 // Test design constraint (RESEARCH Pitfall 10): the per-scope read pass is
 // fast (microseconds-scale). The apply loop has no shared lock so racing it
@@ -335,7 +335,7 @@ test("RECON-06 (two-process race): config declares one path-source mp-a + plugin
 });
 
 // ---------------------------------------------------------------------------
-// Scenario B: Phase 52 Pitfall 52-2 concurrent first-load race
+// Scenario B: Pitfall 52-2 concurrent first-load race
 // ---------------------------------------------------------------------------
 
 test("Pitfall 52-2 (concurrent first-load race): two processes race against state with legacy autoupdate + ENOENT claude-plugins.json -> migrate trichotomy serializes; exactly one process writes the config, the other observes 'valid' and short-circuits", async () => {

@@ -369,7 +369,7 @@ test("ATTR-01 / M1: marketplace itself absent -> standalone {not added} on the m
     try {
       // No state seeded -- the marketplace record is absent. After the CMP-3
       // project->user fallback also misses, install re-attributes the failure
-      // to the MARKETPLACE subject via the canonical Phase 46 variant
+      // to the MARKETPLACE subject via the canonical `MarketplaceNotAddedMessage` variant
       // (ATTR-01 / ATTR-08 split), NOT `{not in manifest}` on a plugin row.
       const { ctx, pi, notifications } = makeCtx();
       const outcome = await installPlugin({
@@ -2302,7 +2302,7 @@ test("260525-cjr B2: narrowResolverReasons -> wholly unclassifiable note -> `uns
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Phase 56 Plan 03 (Task 1): WB-01/WB-02 write-back, --local, WR-09, CFG-03
+// WB-01/WB-02 write-back, --local, WR-09, CFG-03
 // ──────────────────────────────────────────────────────────────────────────
 
 test("WB-01: standalone install writes the plugin entry to claude-plugins.json", async () => {
@@ -2458,7 +2458,7 @@ test("CFG-03 / T-56-03-04: invalid config aborts install; basename-only cause; s
       await mkdir(path.dirname(locations.configJsonPath), { recursive: true });
       await writeFile(locations.configJsonPath, "{ not valid json", "utf8");
 
-      // WR-04 (Phase 56 review): the abort must not rewrite state.json at
+      // WR-04: the abort must not rewrite state.json at
       // all -- bytes AND mtime stable (no-save abort discipline).
       const statePath = path.join(locations.extensionRoot, "state.json");
       const stateBytesPre = await readFile(statePath, "utf8");
