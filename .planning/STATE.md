@@ -199,7 +199,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 
 ### Pending Todos
 
-None yet.
+1 pending — see `.planning/todos/pending/`:
+
+- [Coverage sweep: test rare failure arms in update/reinstall/install](./todos/pending/2026-06-12-coverage-sweep-test-rare-failure-arms-in-update-reinstall-in.md) (testing, deferred 2026-06-12)
 
 ### Blockers/Concerns
 
