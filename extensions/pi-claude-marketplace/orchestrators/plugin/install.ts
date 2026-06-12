@@ -13,7 +13,9 @@
 //       PI-2:                cached manifest read ONLY (no network)
 //       PI-4:                resolveStrict + requireInstallable
 //       PI-6:                assertNoCrossPluginConflicts(scope, names, state)
-//       PI-7:                resolveInstallVersion (entry.version > hash fallback)
+//       PI-7:                resolvePluginVersion -- 3-tier precedence
+//                            (plugin.json > entry.version > hash); see
+//                            `shared.ts::resolvePluginVersion`
 //       runPhases(phases, ctx)                             // D-01 5-phase ledger
 //       capture rollbackPartials, throw raw error          // D-02 PI-14 bypass
 //   })
@@ -241,13 +243,13 @@ export interface InstallPluginOptions {
    */
   readonly mapModel?: boolean;
   /**
-   * D-54-01 / ENBL-02 / Pitfall 54-4: when set, bypasses
-   * `resolvePluginVersion` and pins the install ledger to this exact version
-   * string. Used ONLY by `setPluginEnabled` (the enable branch) to preserve
-   * the recorded state record's `version` field across a re-materialization.
-   * The version pin is the load-bearing invariant for ENBL-02 -- a
-   * `resolvePluginVersion` re-read would silently bump the version if
-   * plugin.json or the marketplace entry changed between disable and enable.
+   * D-54-01 / ENBL-02: when set, bypasses `resolvePluginVersion` and pins
+   * the install ledger to this exact version string. Used ONLY by
+   * `setPluginEnabled` (the enable branch) to preserve the recorded state
+   * record's `version` field across a re-materialization. The version pin
+   * is the load-bearing invariant for ENBL-02 -- a `resolvePluginVersion`
+   * re-read would silently bump the version if plugin.json or the
+   * marketplace entry changed between disable and enable.
    *
    * When undefined, the PI-7 / PUP-3 / SNM-34 3-tier precedence applies
    * (plugin.json > entry.version > hash). All other callers leave this
@@ -255,11 +257,10 @@ export interface InstallPluginOptions {
    */
   readonly pinVersionOverride?: string;
   /**
-   * WB-01 / WB-02 / Pitfall 2: when true, target
-   * `claude-plugins.local.json` instead of `claude-plugins.json`. The base
-   * file is NEVER touched on the --local path; loadConfig's `absent` arm
-   * yields an empty starting shape that saveConfig writes back to the local
-   * path.
+   * WB-01 / WB-02: when true, target `claude-plugins.local.json` instead
+   * of `claude-plugins.json`. The base file is NEVER touched on the
+   * --local path; loadConfig's `absent` arm yields an empty starting
+   * shape that saveConfig writes back to the local path.
    */
   readonly local?: boolean;
 }
@@ -412,7 +413,7 @@ export async function runInstallLedger(
     state.marketplaces[marketplace] = targetMp;
   }
 
-  // PI-15 early-sanity check (Pitfall 3 layer (a)): if the record already
+  // PI-15 early-sanity check: if the record already
   // exists in the target scope we throw ConcurrentInstallError BEFORE
   // running the ledger, avoiding any disk write. Layer (b) re-checks
   // inside the state-commit phase defensively in case of intra-process
@@ -491,11 +492,13 @@ export async function runInstallLedger(
   // is already owned by a different plugin IN THE SAME SCOPE.
   assertNoCrossPluginConflicts(scope, generatedNames, state);
 
-  // PI-7 version precedence (entry > hash). D-54-01 / ENBL-02: when
-  // `pinVersionOverride` is set (the enable branch), skip the
-  // resolver and reuse the caller-supplied pin verbatim. This preserves
-  // the recorded state record's `version` field across a
-  // re-materialization (Pitfall 54-4).
+  // PI-7 version precedence: `resolvePluginVersion`'s 3-tier ladder
+  // (plugin.json > entry.version > hash), per
+  // `shared.ts::resolvePluginVersion`. D-54-01 / ENBL-02: when
+  // `pinVersionOverride` is set (the enable branch), skip the resolver and
+  // reuse the caller-supplied pin verbatim so the recorded state record's
+  // `version` field is preserved across a re-materialization (the disabled
+  // record's pin must survive enable).
   const version = opts.pinVersionOverride ?? (await resolvePluginVersion(entry, installable));
 
   // Resolve the per-plugin data dir up front; the bridges receive it
@@ -803,8 +806,10 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   // `runInstallLedger` BEFORE its rethrow). `capture.rollbackPartials`
   // mirrors the ledger's RollbackPartial[] and populates
   // `PluginFailedMessage.rollbackPartial` when non-empty; when empty, the
-  // catch emits the bare failure row form (no rollback children, per
-  // `docs/output-catalog.md:308-314`). `capture.version` is the resolved
+  // catch emits the bare failure row form (no rollback children) -- see
+  // the catalog `/claude:plugin install <plugin>@<marketplace>` "Failure"
+  // arms and the contrasting "Failure with rollback-partial children" arm
+  // in `docs/output-catalog.md`. `capture.version` is the resolved
   // version at throw time (undefined when the throw pre-dated
   // `resolvePluginVersion`).
   const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
@@ -816,19 +821,19 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   // post-guard branch emits the standalone `marketplace-not-added` variant
   // (standalone mode) or returns the failed outcome (orchestrated mode).
   // This is distinct from M2 (plugin absent from a PRESENT manifest), which
-  // stays `{not in manifest}` on the plugin row (Pitfall 2).
+  // stays `{not in manifest}` on the plugin row.
   let marketplaceAbsent = false;
   // WB-01 / CFG-03: invalid-config sentinel; populated inside the guard so
   // the post-guard branch emits the failed row with a basename-only cause.
   let configInvalid = false;
 
-  // WB-01 / Pitfall 2: target-path selection happens ONCE before the lock so
-  // the orchestrator NEVER falls back to the base file on ENOENT. The base
+  // WB-01: target-path selection happens ONCE before the lock so the
+  // orchestrator NEVER falls back to the base file on ENOENT. The base
   // file is NEVER touched on the --local path; loadConfig's `absent` arm
-  // yields an empty starting shape that saveConfig writes back to the local
-  // path. UAT-05: the sibling path is the scope's OTHER physical file, read
-  // fresh inside the lock for the merged-view membership test ONLY -- never
-  // written, never serialized back (Pitfall 1).
+  // yields an empty starting shape that saveConfig writes back to the
+  // local path. UAT-05: the sibling path is the scope's OTHER physical
+  // file, read fresh inside the lock for the merged-view membership test
+  // ONLY -- never written, never serialized back.
   const { targetConfigPath, siblingConfigPath } = selectConfigWriteTarget(locations, opts.local);
   const configBasename = path.basename(targetConfigPath);
   const orchestrated = opts.notifications?.mode === "orchestrated";
@@ -1018,7 +1023,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   // not-added row always renders the `[scope]` bracket (SCOPE-01 resolved
   // Open Question #1). DO NOT route through `resolveInstallMarketplaceSource`
   // -- the CMP-3 project->user fallback already ran inside the guard; only a
-  // double-miss reaches here (Pitfall 1).
+  // double-miss reaches here.
   //
   // WB-01 / CFG-03 / T-56-03-04: invalid-config abort. The basename-only
   // message prevents an absolute-path information leak. No state mutation,
@@ -1081,10 +1086,10 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // text via the 4-space-indent trailer.
     //
     // CR-02: row-level `scope` is OMITTED -- the marketplace block carries
-    // the same scope, and `renderScopeBracket` (shared/notify.ts:743)
-    // suppresses the per-row bracket in that case. Matches the IN-04
-    // omit convention pinned at install.ts:936-944 and the primary catch
-    // path's `composeInstallFailureMessage` recipe.
+    // the same scope, and `shared/notify.ts::renderScopeBracket` suppresses
+    // the per-row bracket in that case. Matches the IN-04 omit convention
+    // used by this file's primary catch path's
+    // `composeInstallFailureMessage` recipe.
     notify(ctx, pi, {
       marketplaces: [
         {
@@ -1207,23 +1212,15 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       dependencies.push("mcp");
     }
 
-    // IN-02: drop the `version !== ""` defensive spread. `resolvePluginVersion`
-    // (orchestrators/plugin/shared.ts) always returns a non-empty string
-    // (either `entry.version` with length > 0 or the 12-hex hash via
-    // `computeHashVersion`), so the guard was dead. The renderer's
-    // version-slot composer treats undefined and empty-string identically
-    // (suppresses the `v<version>` token), so behavior is preserved against
-    // the theoretical legacy-state-with-empty-version case anyway.
-    //
-    // IN-04: `scope` is OMITTED from the row (canonical "only emit fields
-    // that affect the byte output" form). The single-plugin install
-    // surface's row scope is always the same as the marketplace block's
-    // scope -- the renderer's `renderScopeBracket` (shared/notify.ts:719)
-    // suppresses the bracket when `pluginScope === mpScope`, so emitting
-    // `scope` here was a no-op byte-wise but diverged stylistically from
-    // uninstall.ts:298-302 (which omits) and reinstall.ts:247-252 (which
-    // omits via `rowScope === undefined`). Aligning install.ts on the
-    // omit convention reduces future divergence.
+    // IN-02 / IN-04: pass `version` straight through (`resolvePluginVersion`
+    // in `shared.ts::resolvePluginVersion` always returns a non-empty
+    // string, and the renderer's version-slot composer suppresses
+    // `v<version>` on undefined or empty regardless). Row-level `scope` is
+    // OMITTED: the single-plugin install surface's row scope always equals
+    // the marketplace block's scope, and `shared/notify.ts::renderScopeBracket`
+    // suppresses the per-row bracket in that case -- matching the same
+    // omit convention used by `uninstall.ts::uninstallPlugin` and
+    // `reinstall.ts::reinstallPlugin`.
     const installedRow: PluginInstalledMessage = {
       status: "installed",
       name: plugin,

@@ -1,6 +1,6 @@
 // persistence/config-merge.ts
 //
-// CFG-02 / D-01 / D-09 / D-10 / D-18 / Pitfall 51-4 -- entry-level base+local
+// CFG-02 / D-01 / D-09 / D-10 / D-18 -- entry-level base+local
 // merge producing `MergedConfig` with per-entry provenance.
 //
 // The reducer is a PURE function: no I/O, no `node:fs` imports. The override
@@ -16,8 +16,8 @@
 // can target the correct physical file without replaying the merge.
 //
 // `loadMergedScopeConfig` returns BOTH the merged view AND the per-file
-// `ConfigLoadResult`s -- Pitfall 51-4 forbids collapsing the per-file results
-// into the merged view, because downstream write-back needs them separately.
+// `ConfigLoadResult`s -- the per-file results MUST NOT collapse into the
+// merged view, because downstream write-back needs them separately.
 // When one arm is `absent` or `invalid`, the merge treats its contribution as
 // empty `ScopeConfig` so a sensible merged view is still produced (D-18
 // enables the fallback policy downstream); the caller inspects `base.status`
@@ -58,7 +58,7 @@ export interface MergedConfig {
 }
 
 /**
- * Pitfall 51-4: the per-scope loader returns the merged view AND the per-file
+ * The per-scope loader returns the merged view AND the per-file
  * `ConfigLoadResult`s separately. Downstream write-back targets the correct
  * physical file via the per-file results; downstream apply-time consumers read
  * `base.status` / `local.status` to apply the D-18 fallback policy when one
@@ -123,7 +123,7 @@ export function mergeScopeConfigs(base: ScopeConfig, local: ScopeConfig): Merged
 }
 
 /**
- * Pitfall 51-4 / D-18: per-scope loader returning both the merged view and
+ * D-18: per-scope loader returning both the merged view and
  * the per-file `ConfigLoadResult`s.
  *
  * Loads `loc.configJsonPath` (base) and `loc.configLocalJsonPath` (local) via
@@ -136,7 +136,7 @@ export function mergeScopeConfigs(base: ScopeConfig, local: ScopeConfig): Merged
  * `base.status` and `local.status` to decide what to do.
  *
  * This module does NOT inject `notify` calls or any user-visible messaging
- * (D-19 routes through `shared/notify.ts` in downstream phases). This
+ * (D-19 routes through `shared/notify.ts` in downstream layers). This
  * function is a pure data seam.
  */
 export async function loadMergedScopeConfig(loc: ScopedLocations): Promise<ScopeLoadOutcome> {

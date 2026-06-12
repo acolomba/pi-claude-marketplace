@@ -67,7 +67,7 @@ import type { Scope } from "../../shared/types.ts";
  * RECON-03: controls how `uninstallPlugin` surfaces
  * notifications. Mirrors the `AddMarketplaceNotifications` precedent.
  *
- * - `"standalone"` (default when option is omitted): byte-identical to today.
+ * - `"standalone"` (default when option is omitted): matches standalone behavior.
  * - `"orchestrated"`: suppresses every `ctx.ui.notify` call and returns the
  *   typed `UninstallPluginOutcome` for `applyReconcile` to aggregate
  *   (IL-2).
@@ -129,15 +129,14 @@ export interface UninstallPluginOptions {
   readonly cascade?: typeof cascadeUnstagePlugin;
   /**
    * RECON-03: notification mode selector. Omitted
-   * (undefined) === `{ mode: "standalone" }` -- byte-identical to today.
+   * (undefined) === `{ mode: "standalone" }` -- matches standalone behavior.
    */
   readonly notifications?: UninstallPluginNotifications;
   /**
-   * WB-01 / WB-02 / Pitfall 2: when true, target
-   * `claude-plugins.local.json` instead of `claude-plugins.json`. The base
-   * file is NEVER touched on the --local path; loadConfig's `absent` arm
-   * yields an empty starting shape that saveConfig writes back to the local
-   * path.
+   * WB-01 / WB-02: when true, target `claude-plugins.local.json` instead
+   * of `claude-plugins.json`. The base file is NEVER touched on the
+   * --local path; loadConfig's `absent` arm yields an empty starting
+   * shape that saveConfig writes back to the local path.
    */
   readonly local?: boolean;
 }
@@ -190,18 +189,6 @@ function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
   );
 }
 
-/**
- * PU-1..8 entrypoint. Reuses `cascadeUnstagePlugin` (D-02), wraps cascade +
- * state-record-removal in `withStateGuard`, and runs the per-plugin
- * `pluginDataDir` rm-rf OUTSIDE the guard post-state-commit (PU-2 / D-08).
- *
- * Tolerates concurrent uninstall via the silent-converge path (PU-5):
- * whichever process loses the race observes the record absent at re-load
- * and exits silently with no notification (PRD §5.2.2 verbatim).
- *
- * Returns void; the function never re-throws -- failures surface via a
- * single `notify()` call per IL-2 (single ctx.ui.notify chokepoint).
- */
 /**
  * RECON-03: route a cascade-failure cause to either the typed orchestrated
  * outcome or the standalone notify() row. Extracted from `uninstallPlugin`
@@ -383,7 +370,7 @@ export async function uninstallPlugin(
 
   const { scope, locations } = resolution;
 
-  // WB-01 / Pitfall 2: target-path selection happens ONCE before the lock so
+  // WB-01: target-path selection happens ONCE before the lock so
   // the orchestrator NEVER falls back to the base file on ENOENT.
   const targetConfigPath =
     opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath;
@@ -455,18 +442,20 @@ export async function uninstallPlugin(
       //     another process. Re-throw to abort the save -- the row stays
       //     intact for manual recovery / retry (preserves PU-3+PU-7).
       //   - Non-AG-5 partial failure: the cascade dropped some artifacts
-      //     before throwing. Filter sRecord.resources.* by outcome.dropped.*
-      //     so the persisted row reflects only artifacts still on disk
-      //     (no ghost record). Surface the failure via the cascadeFailure
-      //     sentinel so the post-guard branch can fire the
-      //     PluginFailedMessage AFTER the shrunken-row save commits.
+      //     before throwing. Filter installed.resources.* by
+      //     localOutcome.dropped.* so the persisted row reflects only
+      //     artifacts still on disk (no ghost record). Surface the failure
+      //     via the cascadeFailure sentinel so the post-guard branch can
+      //     fire the PluginFailedMessage AFTER the shrunken-row save
+      //     commits.
       //
-      // CRITICAL field-name mapping: dropped.commands populates from
-      // resources.prompts (cascade primitive at shared.ts:339), so the
-      // filter MUST wire dropped.commands -> resources.prompts. The other
-      // three axes are name-identical (skills, agents, mcpServers).
+      // CRITICAL field-name mapping: `dropped.commands` populates from
+      // `installed.resources.prompts` (the cascade primitive at
+      // `orchestrators/marketplace/shared.ts::cascadeUnstagePlugin`), so
+      // the filter MUST wire dropped.commands -> resources.prompts. The
+      // other three axes are name-identical (skills, agents, mcpServers).
       if (!localOutcome.ok) {
-        // outcome.cause is non-undefined when ok=false (D-03 contract).
+        // localOutcome.cause is non-undefined when ok=false (D-03 contract).
         const cause =
           localOutcome.cause ?? new Error(`Cascade unstage failed for plugin "${plugin}".`);
         if (cause instanceof AgentsUnstageFailureError) {
@@ -492,7 +481,7 @@ export async function uninstallPlugin(
       // SKIPPED in orchestrated mode (reconcile derives desired state FROM
       // the merged config; writing back would clobber a per-machine override).
       // The ALREADY-GONE arm above never reaches here -- it returns early
-      // (WB-01 / Pitfall 5: uninstall alreadyGone leaves config untouched;
+      // (WB-01: uninstall alreadyGone leaves config untouched;
       // planReconcile surfaces the declared-but-missing on next load).
       //
       // WR-02: ALSO skipped when the targeted physical
@@ -614,9 +603,10 @@ export async function uninstallPlugin(
   // PU-8 reload hint: computed by notify from the
   // PluginUninstalledMessage status (uninstalled is in the state-changing
   // variant set). The reload-hint trigger is per-variant status, not
-  // per-cascade-outcome resource count. `outcome` is defined here because
-  // alreadyGone is false (early-returned above) AND the catch returned on
-  // cascade failure.
+  // per-cascade resource count. Control reaches this point only when
+  // alreadyGone is false (early-returned above) AND the catch did not
+  // intercept a cascade failure (early-returned via `emitCascadeFailure`),
+  // so `removedVersion` was assigned by the closure.
   //
   // CMC-24 / D-13-05 / D-13-06: emit via PluginUninstalledMessage.
   // The uninstalled variant has NO per-row soft-dep predicate fields by
@@ -625,21 +615,15 @@ export async function uninstallPlugin(
   // (uninstalled) rows. There are no aggregated PI_*_NOT_LOADED trailers on
   // uninstall success per D-13-07 + MSG-SD-3 (the soft-dep state
   // is no-op for the operator after uninstall -- the content is gone, so no
-  // marker is useful).
+  // marker is useful). Catalog reference: the `/claude:plugin uninstall
+  // <plugin>@<marketplace>` "Success" arm in `docs/output-catalog.md`.
   //
-  // The defensive-guard branch (cascadeResult === undefined) shares the same
-  // byte shape because both arms route through the same notify() call
-  // with the same PluginUninstalledMessage payload. Reference: catalog UAT
-  // `success` fixture at docs/output-catalog.md:340-348.
-  //
-  // IN-02: keep the `removedVersion !== undefined` guard (variable is
-  // typed `string | undefined` because it is hoisted from inside the
-  // withStateGuard closure; the type system cannot prove the closure
-  // ran), but drop the redundant `!== ""` half of the guard. State
-  // records persisted by install/update paths always carry a
-  // non-empty version by construction (see install.ts IN-02).
-  // The renderer suppresses the `v<version>` token on undefined / empty
-  // anyway, so the empty-version edge case is handled structurally.
+  // IN-02: the `removedVersion !== undefined` guard is kept because the
+  // variable is typed `string | undefined` (hoisted from inside the
+  // withLockedStateTransaction closure; the type system cannot prove the
+  // closure ran). The renderer suppresses the `v<version>` token on
+  // undefined or empty anyway, so the empty-version edge case is handled
+  // structurally.
   if (orchestrated) {
     return {
       status: "uninstalled",

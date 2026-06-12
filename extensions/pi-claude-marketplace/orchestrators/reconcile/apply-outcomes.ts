@@ -116,8 +116,8 @@ export interface PluginUninstallFailedOutcome extends PluginOutcomeBase {
  * materializes the plugin via installPlugin's runInstallLedger; the
  * orchestrated outcome is `{ status: "enabled", name, version? }` (no
  * dependencies). The projection emits an `(installed)` plugin row since
- * `enabled` is NOT a member of `PLUGIN_STATUSES` (RESEARCH Pattern 5
- * Option A: reuse existing transition tokens; an enable IS a re-install).
+ * `enabled` is NOT a member of `PLUGIN_STATUSES` -- the cascade reuses the
+ * existing transition token because an enable IS a re-install.
  */
 export interface PluginEnabledOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-enabled";
@@ -194,8 +194,8 @@ export function sourceMismatchOutcomeSubject(outcome: SourceMismatchOutcome): st
 }
 
 /**
- * Invalid-config outcome from the per-scope read pass (CFG-03 / Pitfall
- * 53-1). Carries the file BASENAME in `basename` so the projection renders
+ * Invalid-config outcome from the per-scope read pass (CFG-03). Carries
+ * the file BASENAME in `basename` so the projection renders
  * `⊘ <basename> [<scope>] (failed) {invalid manifest}` -- the absolute
  * path is NEVER in the outcome (T-55-02-01 / T-53-02-02). The field is
  * `basename`, not the punned `marketplace` used by mp-level outcomes, so
@@ -206,7 +206,12 @@ export interface InvalidBlockOutcome {
   readonly kind: "invalid-block";
   readonly scope: Scope;
   readonly basename: string;
-  /** Closed-set reason from `narrowProbeError` -- `invalid manifest` for CFG-03, `unparseable` for state-json. */
+  /**
+   * Closed-set reason. The CFG-03 read-pass arm hard-codes the literal
+   * `"invalid manifest"`; the state-load throw arm passes the value through
+   * `classifyReadPassThrow` (apply.ts) which yields `"lock held"`,
+   * `"unparseable"`, or another `narrowProbeError` token.
+   */
   readonly reason: ContentReason;
   /**
    * I5 / PR #51: optional path-redacted diagnostic. When set, the projection

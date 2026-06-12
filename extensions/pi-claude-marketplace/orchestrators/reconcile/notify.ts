@@ -1,6 +1,6 @@
 // orchestrators/reconcile/notify.ts
 //
-// DIFF-01 + DIFF-02 pure plan-to-notification projection. Mirrors
+// DIFF-02 pure plan-to-notification projection. Mirrors
 // `buildImportNotificationMarketplaces` (in `orchestrators/import/execute.ts`)
 // in shape and ordering discipline: groups every Plan action by
 // `(scope, marketplace)` into a `MarketplaceBlock`, sorts the resulting
@@ -11,9 +11,7 @@
 // Pure: no I/O. The function NEVER calls `ctx.ui.notify` or any seam in
 // `shared/notify.ts` beyond importing the types and the comparator.
 //
-// DIFF-02 replaces the initial DIFF-01 placeholder strings ("added" /
-// "removed" / "uninstalled" / "skipped+already installed") with the real
-// pending-tense token set:
+// Token mapping (DIFF-02 pending-tense set):
 //
 //   marketplacesToAdd     -> block.status = "will add"
 //   marketplacesToRemove  -> block.status = "will remove"
@@ -22,7 +20,8 @@
 //   pluginsToUninstall    -> child row { status: "will uninstall" }
 //   pluginsToDisable      -> child row { status: "will disable" }
 //   pluginsToEnable       -> child row { status: "will enable" }
-//                            (recorded-but-disabled detection per Pitfall 53-4)
+//                            (recorded-but-disabled detection via the
+//                            empty-resources marker)
 //
 // The empty-plan case is handled by the orchestrator (`preview.ts`) which
 // switches on `plans.every(isPlanEmpty)` and emits a free-form advisory line
@@ -102,8 +101,8 @@ function ensureMarketplaceBlock(
  *  - `"will add"` / `"will remove"` are the new pending-tense marketplace
  *    statuses.
  *  - `"failed"` is reused for source-mismatch blocks; its `reasons` is the
- *    existing `"source mismatch"` REASONS member (Pitfall 53-7 -- REASONS
- *    stays at 29 entries).
+ *    existing `"source mismatch"` REASONS member (no new REASONS literal --
+ *    the closed set already covers it).
  *  - `undefined` is the list/inventory arm; used when a block carries only
  *    plugin child rows (e.g. a pending-uninstall under an existing
  *    marketplace whose source matches).
@@ -149,8 +148,8 @@ function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceNotifica
  * `plannedSourceMismatchSubject`: mp name for source-mismatch /
  * unknown-stored / dangling-reference; rawKey for malformed-plugin-key).
  * Source-mismatch supersedes any prior status (the declaration cannot be
- * honoured byte-for-byte). Pitfall 53-7: reuse the existing
- * "source mismatch" REASONS member; do NOT add a new REASONS literal.
+ * honoured byte-for-byte). Reuse the existing "source mismatch" REASONS
+ * member; do NOT add a new REASONS literal.
  *
  * Plugin-level diagnostics (`dangling-reference` only) surface the
  * offending plugin as a child (failed) row so N dangling plugins under one
@@ -181,14 +180,14 @@ function applySourceMismatch(
  *   - marketplacesToAdd     -> block.status = "will add"
  *   - marketplacesToRemove  -> block.status = "will remove"
  *   - sourceMismatches      -> block.status = "failed", reasons:
- *                              ["source mismatch"] (Pitfall 53-7 -- reuses the
- *                              existing REASONS member; no new literal)
+ *                              ["source mismatch"] (reuses the existing
+ *                              REASONS member; no new literal)
  *   - pluginsToInstall      -> child row { status: "will install" }
  *   - pluginsToUninstall    -> child row { status: "will uninstall" }
  *   - pluginsToDisable      -> child row { status: "will disable" }
  *   - pluginsToEnable       -> child row { status: "will enable" }
- *                              (recorded-but-disabled detection per
- *                              Pitfall 53-4)
+ *                              (recorded-but-disabled detection via the
+ *                              empty-resources marker)
  *
  * Ordering: blocks are sorted by `compareByNameThenScope` (name primary
  * case-insensitive, project-before-user secondary). Plugin rows within a
@@ -243,9 +242,10 @@ export function buildReconcilePreviewNotification(
     }
 
     for (const o of plan.pluginsToEnable) {
-      // Pitfall 53-4: the bucket is populated only when a record carries
-      // the empty-resources marker. The loop runs unconditionally so
-      // enable-wiring lands against a path the projection already exercises.
+      // The bucket is populated only when a recorded plugin carries the
+      // empty-resources marker (`isRecordedButDisabled` in plan.ts). The
+      // loop runs unconditionally so the enable wiring exercises this
+      // projection arm whenever the planner produced any enable rows.
       const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
       block.plugins.push({
         status: "will enable",
@@ -291,9 +291,8 @@ export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boole
 // the read-pass invalid-config rows into a single
 // `ReconcileAppliedCascadeMessage`. Token mapping reuses the existing
 // closed-set transition tokens (`added` / `removed` / `installed` /
-// `uninstalled` / `disabled` / `failed`) per RESEARCH Pattern 5 Option A --
-// no new STATUS_TOKENS / PLUGIN_STATUSES / MARKETPLACE_STATUSES / REASONS /
-// MARKERS literals.
+// `uninstalled` / `disabled` / `failed`) -- no new STATUS_TOKENS /
+// PLUGIN_STATUSES / MARKETPLACE_STATUSES / REASONS / MARKERS literals.
 //
 // T-55-02-02 mitigation: this projection consumes `outcome.reason` only.
 // Raw `error.message` is NEVER read into a row's reasons field or anywhere
@@ -345,7 +344,7 @@ function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome):
       });
       return;
     case "plugin-enabled":
-      // RESEARCH Pattern 5 Option A: reuse existing transition tokens. The
+      // Reuse existing transition tokens (no new closed-set literal). The
       // enable branch re-materializes via runInstallLedger so the realized
       // outcome IS an install -- `(installed)` is the truthful surface row.
       // No dependencies plumbed from EnableDisablePluginOutcome (the orchestrator

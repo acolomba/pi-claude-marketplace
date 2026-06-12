@@ -12,11 +12,10 @@
 // (DIFF-01 SC #2): two consecutive invocations against unchanged state +
 // config produce byte-identical output.
 //
-// CFG-03 (Pitfall 53-1): when EITHER `base` or `local` config arm is
-// `invalid`, surface a `(failed) {invalid manifest}` row for that scope and
-// DO NOT call `planReconcile` for it. Invalid input is NEVER silently
-// coerced to empty desired state (which would render as a mass-uninstall
-// preview).
+// CFG-03: when EITHER `base` or `local` config arm is `invalid`, surface a
+// `(failed) {invalid manifest}` row for that scope and DO NOT call
+// `planReconcile` for it. Invalid input is NEVER silently coerced to empty
+// desired state (which would render as a mass-uninstall preview).
 //
 // IL-2: exactly ONE `notify()` call per invocation -- the orchestrator
 // accumulates per-scope plans + invalid-config rows, builds a single
@@ -64,10 +63,10 @@ export interface PreviewReconcileOptions {
 }
 
 /**
- * CFG-03 / Pitfall 53-1: surface an invalid config arm as a structured
- * `(failed) {invalid manifest}` marketplace row. The marketplace `name`
- * carries the file's BASENAME (never the absolute path -- RESEARCH Security
- * Threat Pattern "Information disclosure" T-53-02-02).
+ * CFG-03: surface an invalid config arm as a structured `(failed)
+ * {invalid manifest}` marketplace row. The marketplace `name` carries the
+ * file's BASENAME (never the absolute path -- information-disclosure
+ * mitigation T-53-02-02).
  */
 function buildInvalidConfigBlock(scope: Scope, filePath: string): MarketplaceNotificationMessage {
   return {
@@ -131,7 +130,7 @@ export async function previewReconcile(opts: PreviewReconcileOptions): Promise<v
     const loc = locationsFor(scope, opts.cwd);
     const outcome = await loadMergedScopeConfig(loc);
 
-    // CFG-03 abort (Pitfall 53-1): if EITHER base or local config is invalid,
+    // CFG-03 abort: if EITHER base or local config is invalid,
     // emit a (failed) {invalid manifest} row for that scope. Do NOT call
     // planReconcile -- invalid input must never be coerced into an empty
     // desired-state diff that would render as a mass-uninstall preview.

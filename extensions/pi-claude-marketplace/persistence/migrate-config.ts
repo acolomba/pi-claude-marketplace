@@ -13,8 +13,8 @@
 //     saveConfig (caller-bug guard: an in-memory projection that fails the
 //     schema fails loudly before any disk touch).
 //   - MIG-02 idempotency via the loadConfig trichotomy: only the `absent`
-//     arm fires the write. The `invalid` (Pitfall 51-1 / 52-5) and `valid`
-//     arms both short-circuit -- no half-set flag, no second probe.
+//     arm fires the write. The `invalid` and `valid` arms both
+//     short-circuit -- no half-set flag, no second probe.
 //   - SPLIT-01 cast for the legacy `autoupdate` field per D-13: the field
 //     does not appear on STATE_SCHEMA but is preserved in-memory on the
 //     first load (gate-closed scrub in migrate.ts) so this projection can
@@ -27,17 +27,25 @@ import type { ExtensionState } from "./state-io.ts";
 import type { ParsedSource } from "../domain/source.ts";
 
 /**
- * MIG-02: result of a first-run migration attempt. The load-wiring caller
- * narrows on `migrated` to decide whether/how to surface the migration via
- * `shared/notify.ts`.
+ * MIG-02: result of a first-run migration attempt.
+ *
+ * The result is INFORMATIONAL and the load-time caller intentionally
+ * discards it. First-run migration is deliberately load-time silent
+ * (NFR-2): every successful arm produces no `notify()` call -- the
+ * migration succeeds (or short-circuits) below the operator's surface, so
+ * starting Pi in a populated scope does not generate a confirmation
+ * message for an action the user did not request. This shape exists for
+ * tests, future read-only diagnostics, and consumers that want to
+ * narrow on the trichotomy without re-probing loadConfig; it is NOT a
+ * notify-routing hook.
  *
  * The `migrated: false` arm preserves the loadConfig trichotomy (CFG-03 /
  * D-15) instead of collapsing it, with `error` cut along the `reason`
  * discriminant so it exists ONLY on the `existing-invalid` arm:
  *   - `"existing-valid"` -- config already declared; nothing to do.
  *   - `"existing-invalid"` -- migration suppressed because the config file
- *     is corrupt; `error` carries loadConfig's invalid-arm detail so the
- *     caller can surface the CFG-03 abort signal without a second
+ *     is corrupt; `error` carries loadConfig's invalid-arm detail so a
+ *     consumer can surface the CFG-03 abort signal without a second
  *     (divergence-prone) loadConfig probe.
  *   - `"empty-state"` -- nothing to capture; an empty-but-present state.json
  *     must NOT spawn an empty claude-plugins.json in every scope root.
@@ -74,11 +82,10 @@ export type MigrateFirstRunResult =
  * declarative ScopeConfig shape consumed by the reconcile planner.
  *
  * No I/O. Every state marketplace and every plugin (including
- * `compatibility.installable === false` -- Pitfall 52-1) appears in the
- * output. Plugin entries are flat-keyed `${pluginName}@${mpName}` (D-01) so
- * the same plugin name across two marketplaces does not collide
- * (Pitfall 52-6). Each plugin entry body is `{}` per D-04 (defaults applied
- * at consume time).
+ * `compatibility.installable === false`) appears in the output. Plugin
+ * entries are flat-keyed `${pluginName}@${mpName}` (D-01) so the same
+ * plugin name across two marketplaces does not collide. Each plugin entry
+ * body is `{}` per D-04 (defaults applied at consume time).
  *
  * `source` is recovered byte-stably via `(mp.source as ParsedSource).raw`
  * (SP-7 verbatim user input). Defense-in-depth: `loadState`'s ST-6 funnel
@@ -100,7 +107,7 @@ export function buildConfigFromState(state: ExtensionState): ScopeConfig {
   const plugins: NonNullable<ScopeConfig["plugins"]> = {};
 
   for (const [mpName, mp] of Object.entries(state.marketplaces)) {
-    // SP-7 / Pitfall 52-3: the raw verbatim user input is the contract.
+    // SP-7: the raw verbatim user input is the contract.
     // Defense-in-depth: ST-6 admits unknown-kind source objects without a
     // string `raw` (NFR-12 forward-compat); coerce those to their JSON
     // string so the projection NEVER emits a non-string source (a schema
@@ -130,7 +137,7 @@ export function buildConfigFromState(state: ExtensionState): ScopeConfig {
 
     marketplaces[mpName] = entry;
 
-    // Pitfall 52-1: iterate plugins UNCONDITIONALLY -- soft-degraded entries
+    // Iterate plugins UNCONDITIONALLY -- soft-degraded entries
     // (compatibility.installable === false) MUST appear in the projection.
     for (const pluginName of Object.keys(mp.plugins)) {
       plugins[`${pluginName}@${mpName}`] = {};
@@ -141,7 +148,7 @@ export function buildConfigFromState(state: ExtensionState): ScopeConfig {
 }
 
 /**
- * MIG-01 + MIG-02 + Pitfall 52-5: thin ENOENT-gated orchestrator.
+ * MIG-01 + MIG-02: thin ENOENT-gated orchestrator.
  *
  * NEVER overwrites a pre-existing `claude-plugins.json` -- neither a valid
  * one nor an invalid (e.g. 0-byte) one. Both arms short-circuit before any

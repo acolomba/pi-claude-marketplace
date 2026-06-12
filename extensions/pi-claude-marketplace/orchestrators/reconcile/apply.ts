@@ -6,36 +6,39 @@
 //   - Per-scope READ PASS (locked, WRITE-FREE -- WR-05) under
 //     `withLockedStateTransaction(loc, ...)` with NO `tx.save()`: a
 //     pristine scope (no state.json, no config) is skipped before the lock;
-//     otherwise run `migrateFirstRunConfig(loc, state)` FIRST (Pitfall 52-2
-//     lock-covered first-load race; Pitfall 52-4 D-13 existsSync gate is
-//     observed at the transaction's internal loadState BEFORE the closure
-//     runs), then `loadMergedScopeConfig(loc)`, then the CFG-03 invalid-arm
-//     check, then `planReconcile(merged, state, scope)`. Closure returns
-//     the plan + invalid blocks; lock releases on closure return;
-//     state.json bytes + mtime stay untouched.
+//     otherwise run `migrateFirstRunConfig(loc, state)` FIRST (the
+//     surrounding lock covers the cross-process concurrent-first-load race;
+//     the D-13 existsSync gate is observed at the transaction's internal
+//     loadState BEFORE the closure runs), then `loadMergedScopeConfig(loc)`,
+//     then the CFG-03 invalid-arm check, then
+//     `planReconcile(merged, state, scope)`. Closure returns the plan +
+//     invalid blocks; lock releases on closure return; state.json bytes +
+//     mtime stay untouched.
 //   - Per-scope APPLY PASS with NO outer lock (CR-01 lesson preserved): for
 //     each scope's plan (skip when invalid-config aborted the read pass),
-//     drive the four orchestrators in fixed order (Pitfall 8 data dependency):
+//     drive the five orchestrators (uninstallPlugin, removeMarketplace,
+//     addMarketplace, installPlugin, setPluginEnabled) in fixed order so
+//     each step's precondition is established by the previous step:
 //
 //        uninstall -> remove -> add -> install -> enable -> disable
 //                  -> source-mismatch (report-only)
 //
 //     Each driven orchestrator call passes `notifications: { mode:
 //     "orchestrated" }` and is wrapped in a try/catch so an unexpected throw
-//     becomes a typed `failed` outcome (Pitfall 5 / RECON-03 soft-fail).
+//     becomes a typed `failed` outcome (RECON-03 soft-fail).
 //   - SINGLE notify() emission per applyReconcile invocation (IL-2 /
 //     RECON-04). Empty-and-clean reconciles are SILENT (NFR-2 / A4) -- the
 //     orchestrator skips the notify() call when no outcomes accumulated AND
 //     no invalid-config rows surfaced.
 //
-// A1 (RESEARCH Assumption A1, VERIFIED 2026-06-10): pi-coding-agent fires
-// `resources_discover` AFTER `session_start` has been emitted to every
-// extension AND after all extension factory functions have returned
-// (`agent-session.js:1648-1656`: bindExtensions emits session_start, then
-// `extendResourcesFromExtensions` checks `hasHandlers("resources_discover")`
-// -- handlers come from each extension's `pi.on(...)` registration during
-// its factory call). softDepStatus(pi) at apply time therefore observes a
-// stable pi-subagents / pi-mcp-adapter status.
+// A1: pi-coding-agent fires `resources_discover` AFTER `session_start` has
+// been emitted to every extension AND after all extension factory functions
+// have returned (`agent-session.js`: bindExtensions emits session_start,
+// then `extendResourcesFromExtensions` checks
+// `hasHandlers("resources_discover")` -- handlers come from each extension's
+// `pi.on(...)` registration during its factory call). softDepStatus(pi) at
+// apply time therefore observes a stable pi-subagents / pi-mcp-adapter
+// status.
 
 import path from "node:path";
 
@@ -65,7 +68,8 @@ import type { GitOps } from "../marketplace/shared.ts";
 
 /**
  * RECON-01..05 options bundle. When `scope` is omitted, applyReconcile fans
- * out across BOTH scopes project-first (mirrors preview.ts:60).
+ * out across BOTH scopes project-first (mirrors
+ * `preview.ts::previewReconcile`'s scope fan-out).
  */
 export interface ApplyReconcileOptions {
   readonly ctx: ExtensionContext;
@@ -88,7 +92,8 @@ export interface ApplyReconcileOptions {
 /**
  * Per-scope read-pass result. `plan` is undefined when CFG-03 aborted the
  * scope (the apply path SKIPS the planner for that scope -- invalid input
- * is never coerced to empty desired state per Pitfall 53-1 / Pitfall 54-N).
+ * is never coerced to an empty desired-state diff, which would render as a
+ * mass-uninstall).
  */
 interface ScopeReadResult {
   readonly scope: Scope;
@@ -133,13 +138,13 @@ async function readPassForScope(scope: Scope, cwd: string): Promise<ScopeReadRes
     const state = tx.state;
     // (1) Migrate FIRST -- generates a fresh `claude-plugins.json` from the
     // current `state.json` on first run (MIG-01). Idempotent: short-circuits
-    // when config already exists (valid OR invalid). Pitfall 52-2: the
-    // surrounding lock covers the cross-process concurrent-first-load race;
-    // Pitfall 52-4: the D-13 existsSync gate is observed at the
-    // transaction's internal loadState BEFORE this closure runs, preserving
-    // legacy-autoupdate capture (the field still lives on state at this
-    // point). WR-05: `tx.save()` is deliberately NEVER called -- the read
-    // pass mutates nothing on state, so state.json stays byte-untouched.
+    // when config already exists (valid OR invalid). The surrounding lock
+    // covers the cross-process concurrent-first-load race; the D-13
+    // existsSync gate is observed at the transaction's internal loadState
+    // BEFORE this closure runs, preserving legacy-autoupdate capture (the
+    // field still lives on state at this point). WR-05: `tx.save()` is
+    // deliberately NEVER called -- the read pass mutates nothing on state,
+    // so state.json stays byte-untouched.
     //
     // S3 / PR #51: when saveConfig inside migrateFirstRunConfig throws
     // (e.g. EACCES on the scope dir), the failing file is
@@ -297,10 +302,10 @@ function dependenciesFromInstall(outcome: {
 /**
  * Apply one plan's marketplacesToRemove bucket. NO outer lock around the
  * loop -- each orchestrator call owns its own per-scope withLockedState
- * critical section (Pattern 3 / Pitfall 3 / CR-01). Per-entry try/catch
- * coerces unexpected throws into typed `failed` outcomes so the apply pass
- * NEVER lets a network failure propagate past the boundary (NFR-5 /
- * RECON-03).
+ * critical section (CR-01: `proper-lockfile` is not re-entrant). Per-entry
+ * try/catch coerces unexpected throws into typed `failed` outcomes so the
+ * apply pass NEVER lets a network failure propagate past the boundary
+ * (NFR-5 / RECON-03).
  */
 async function applyMarketplaceRemoves(
   opts: ApplyReconcileOptions,
@@ -721,14 +726,21 @@ function applySourceMismatches(plan: ReconcilePlan, outcomes: PerEntryOutcome[])
 
 /**
  * Per-scope apply pass. Drives the orchestrators in the documented order
- * (Pitfall 8). NO outer lock -- each orchestrator owns its per-scope
- * critical section (CR-01).
+ * so each step's precondition is established by the previous step. NO
+ * outer lock -- each orchestrator owns its per-scope critical section
+ * (CR-01).
  *
  * Order rationale (data dependency):
- *   1. uninstall plugins under a marketplace BEFORE removing that
- *      marketplace (a removeMarketplace cascade-unstages remaining plugins,
- *      but the planner already split them so we honour the explicit order).
- *   2. remove marketplaces freed by step 1.
+ *   1. uninstall plugins whose marketplace is staying. The planner's
+ *      `buildUninstallBucket` (`plan.ts::buildUninstallBucket`) deliberately
+ *      EXCLUDES plugins under a to-be-removed marketplace (the
+ *      removeMarketplace cascade unstages those whole-cloth, as WR-02 at
+ *      `foldRemoveOutcome` reiterates) -- so this step targets only the
+ *      "plugin declaration dropped, marketplace kept" axis. Running it
+ *      first leaves the marketplace-remove step in step 2 with the
+ *      smallest possible cascade footprint.
+ *   2. remove marketplaces declared dropped (cascade-unstages any
+ *      remaining plugins under them as a single transaction).
  *   3. add new marketplaces BEFORE installing into them.
  *   4. install new plugins under the marketplaces from step 3.
  *   5. enable plugins newly declared enabled.
@@ -845,9 +857,9 @@ export async function applyReconcile(opts: ApplyReconcileOptions): Promise<void>
   // pushDiagnostic channel. Surfacing them through a SECOND notify()
   // (warning severity) preserves the operator's ability to remediate
   // without contaminating the cascade body. This is the only sanctioned
-  // exception to RECON-04's "single notify per applyReconcile" rule and
-  // is anchored at the install.ts:1098-1166 orchestrated collection
-  // path.
+  // exception to RECON-04's "single notify per applyReconcile" rule;
+  // `install.ts::installPlugin` owns the orchestrated-mode collection
+  // path that feeds it.
   surfacePostCommitWarnings(opts, outcomes);
 }
 

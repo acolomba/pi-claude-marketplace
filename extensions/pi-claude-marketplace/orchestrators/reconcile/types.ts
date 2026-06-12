@@ -6,7 +6,7 @@
 // diff that `planReconcile(merged, state, scope)` produces. The seven
 // buckets partition the union of declared marketplaces + plugins (from
 // `MergedConfig`) and recorded marketplaces + plugins (from `ExtensionState`)
-// into the actions a future apply path would take:
+// into the actions the apply path takes:
 //
 //   1. `marketplacesToAdd`    -- declared but not recorded
 //   2. `marketplacesToRemove` -- recorded but not declared
@@ -14,8 +14,10 @@
 //   4. `pluginsToUninstall`   -- recorded but not declared
 //   5. `pluginsToEnable`      -- recorded-but-disabled plugins paired with
 //                                a config entry that has `enabled !== false`
-//                                (recorded-but-disabled marker per Pitfall
-//                                53-4 is "all four resources arrays empty")
+//                                (recorded-but-disabled marker is "all four
+//                                resources arrays empty AND
+//                                installable: true" -- see
+//                                plan.ts::isRecordedButDisabled)
 //   6. `pluginsToDisable`     -- declared with `enabled === false` but
 //                                still recorded
 //   7. `sourceMismatches`     -- four per-cause planner diagnostics

@@ -17,16 +17,27 @@
 //     "cleanup leak after a successful state mutation".
 //
 // Flow:
-//   1. resolveScopeFromState(name, userLocs, projectLocs) when --scope omitted (MR-1).
-//   2. withStateGuard(locations, async (state) => {
-//        record = state.marketplaces[name]
+//   1. resolveScopeOrNotifyNotAdded(opts, userLocs, projectLocs) when --scope
+//      omitted (MR-1). The standalone-mode helper resolves project-then-user
+//      and emits the `{not added}` notify when the marketplace is in neither
+//      scope; orchestrated mode uses `resolveScopeOrFailedOutcome` (defined
+//      below) to return a typed `RemoveMarketplaceOutcome` instead.
+//   2. withLockedStateTransaction(locations, async (tx) => {
+//        CFG-03 abort: `loadConfig(targetConfigPath)` -- if `status ==
+//        "invalid"`, surface the basename-only failure WITHOUT touching
+//        state or saving. No `tx.save()` on this arm.
+//        record = tx.state.marketplaces[name]
 //        for each plugin in record.plugins:
 //          outcome = cascade(plugin, marketplace, locations, installedPlugin)
 //                    // cascade is opts.cascade ?? cascadeUnstagePlugin (DI seam
 //                    // for test determinism; zero runtime cost in production).
 //          if (outcome.ok): delete record.plugins[plugin]; track successfullyUnstaged
 //          else:            failedPlugins.push({name, cause})  // D-02 / D-03 fail-fast per plugin
-//        if (failedPlugins.length === 0): delete state.marketplaces[name]
+//        if (failedPlugins.length === 0): delete tx.state.marketplaces[name]
+//        WB-01: `deleteMarketplaceConfigEntryWithCascade(...)` mirrors the
+//        state-side cascade in the user-authored config (entry-level patch
+//        through saveConfig).
+//        await tx.save()  // WR-04: explicit save on the mutating arms.
 //      })
 //   3. POST-STATE cleanup (after guard returns):
 //        - per-plugin data dirs (always)
@@ -72,7 +83,7 @@ type RecordedSourceKind = "github" | "path" | "unknown";
  * RECON-03: controls how `removeMarketplace` surfaces
  * notifications. Mirrors `AddMarketplaceNotifications`.
  *
- * - `"standalone"` (default when option is omitted): byte-identical to today.
+ * - `"standalone"` (default when option is omitted): matches standalone behavior.
  * - `"orchestrated"`: suppresses every `ctx.ui.notify` call and returns the
  *   typed `RemoveMarketplaceOutcome` for `applyReconcile` to aggregate (IL-2).
  */
@@ -121,7 +132,7 @@ export interface RemoveMarketplaceOptions {
   /** Factory `pi` reference -- carries `getAllTools()` for RH-5 soft-dep probes. */
   readonly pi: ExtensionAPI;
   readonly name: string;
-  /** When omitted, resolveScopeFromState picks the scope; project takes precedence if found in both. */
+  /** When omitted, `resolveScopeOrNotifyNotAdded` (standalone) / `resolveScopeOrFailedOutcome` (orchestrated) picks the scope; project takes precedence if found in both. */
   readonly scope?: Scope;
   /** Project-scope cwd (ignored for user scope). */
   readonly cwd: string;
@@ -135,13 +146,13 @@ export interface RemoveMarketplaceOptions {
   readonly cascade?: typeof cascadeUnstagePlugin;
   /**
    * RECON-03: notification mode selector. Omitted
-   * (undefined) === `{ mode: "standalone" }` -- byte-identical to today.
+   * (undefined) === `{ mode: "standalone" }` -- matches standalone behavior.
    */
   readonly notifications?: RemoveMarketplaceNotifications;
   /**
-   * WB-01 / Pitfall 2: when true, target
-   * `claude-plugins.local.json` instead of `claude-plugins.json`. The base
-   * file is NEVER touched on the --local path.
+   * WB-01: when true, target `claude-plugins.local.json` instead of
+   * `claude-plugins.json`. The base file is NEVER touched on the
+   * --local path.
    */
   readonly local?: boolean;
 }
@@ -394,8 +405,8 @@ async function commitFullRemove(args: {
   // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- state.marketplaces is a dynamic-key Record<string, ...>.
   delete tx.state.marketplaces[marketplace];
 
-  // WB-01 / Pitfall 4: cascade write-back lives in ONE place. The helper
-  // removes the marketplace entry AND every plugin entry whose key ends in
+  // WB-01: cascade write-back lives in ONE place. The helper removes the
+  // marketplace entry AND every plugin entry whose key ends in
   // `@<marketplace>` so the next reconcile is a no-op.
   //
   // WR-09 / T-56-02-01: SKIPPED in orchestrated mode. A reconcile-driven
@@ -613,7 +624,7 @@ export async function removeMarketplace(
 
   const { locations } = resolved;
 
-  // WB-01 / Pitfall 2: target-path selection happens ONCE before the lock so
+  // WB-01: target-path selection happens ONCE before the lock so
   // the orchestrator NEVER falls back to the base file on ENOENT.
   const targetConfigPath =
     opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath;

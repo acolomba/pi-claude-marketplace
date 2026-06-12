@@ -28,24 +28,19 @@
 // `tests/architecture/no-orchestrator-network.test.ts` (FORBIDDEN_TARGETS) is
 // armed for this file -- adding any forbidden surface fails the gate.
 //
-// Pitfall 54-1 / A6: `loadConfig(targetConfigPath)` runs INSIDE the locked
-// transaction so a concurrent flip from another process either fails fast at
-// lock acquisition or retries against the fresh post-flip state.
+// A6: `loadConfig(targetConfigPath)` runs INSIDE the locked transaction so
+// a concurrent flip from another process either fails fast at lock
+// acquisition or retries against the fresh post-flip state.
 //
-// Pitfall 54-2: this file lands in the SAME atomic commit as the
-// `(disabled)` token + variant + renderer arm + catalog amendment. Any
-// intermediate state would trip a drift gate (closed-set length lock,
-// catalog-uat byte equality, etc.).
-//
-// Pitfall 54-4 / ENBL-02 version pin: the enable branch passes
+// ENBL-02 version pin: the enable branch passes
 // `pinVersionOverride: installed.version` to `runInstallLedger` so the
 // install ledger does NOT call `resolvePluginVersion` (which could bump the
 // version if `plugin.json` or the marketplace entry drifted between disable
 // and enable). The cached marketplace manifest read happens inside the
-// ledger via `loadMarketplaceManifest(` -- the cached PI-2 read, never the
+// ledger via `loadMarketplaceManifest` -- the cached PI-2 read, never the
 // network.
 //
-// Pitfall 54-5 / --local file isolation: when `opts.local === true`,
+// --local file isolation: when `opts.local === true`,
 // `targetConfigPath = locations.configLocalJsonPath` UNCONDITIONALLY -- the
 // orchestrator NEVER falls back to the base file on ENOENT (`loadConfig`'s
 // absent arm yields an empty starting shape that `saveConfig` writes back to
@@ -89,7 +84,7 @@ import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
  * RECON-03: controls how `setPluginEnabled` surfaces
  * notifications. Mirrors `AddMarketplaceNotifications`.
  *
- * - `"standalone"` (default when option is omitted): byte-identical to today.
+ * - `"standalone"` (default when option is omitted): matches standalone behavior.
  * - `"orchestrated"`: suppresses every `ctx.ui.notify` call and returns the
  *   typed `EnableDisablePluginOutcome` for `applyReconcile`.
  */
@@ -129,7 +124,7 @@ export type EnableDisablePluginOutcome =
 /**
  * D-54-01 options bundle for `setPluginEnabled`. Mirrors
  * `UninstallPluginOptions` + `enable: boolean` + an opt-in `local?: boolean`
- * for the per-machine override file (Pitfall 54-5).
+ * for the per-machine override file.
  */
 export interface EnableDisablePluginOptions {
   readonly ctx: ExtensionContext;
@@ -144,13 +139,13 @@ export interface EnableDisablePluginOptions {
   /** When undefined, resolves the scope via project-then-user precedence (CMP-5). */
   readonly scope?: Scope;
   /**
-   * Pitfall 54-5: when true, target `claude-plugins.local.json` instead of
+   * When true, target `claude-plugins.local.json` instead of
    * `claude-plugins.json`. The base file is NEVER touched on the --local path.
    */
   readonly local?: boolean;
   /**
    * RECON-03: notification mode selector. Omitted
-   * (undefined) === `{ mode: "standalone" }` -- byte-identical to today.
+   * (undefined) === `{ mode: "standalone" }` -- matches standalone behavior.
    */
   readonly notifications?: EnableDisablePluginNotifications;
 }
@@ -196,11 +191,11 @@ function isCurrentlyDisabled(installed: {
 
 /**
  * Run the enable branch: invoke the guard-FREE `runInstallLedger` against the
- * OUTER transaction's state snapshot with the pinned version override
- * (Pitfall 54-4) and `allowExistingRecord: true` (the disabled record is
- * deliberately KEPT per ENBL-02, so the PI-15 "already installed" sanity
- * throw must not fire for the re-materialization). Returns the outcome
- * sentinel.
+ * OUTER transaction's state snapshot with the pinned version override (so
+ * the disabled record's `version` is preserved across the re-materialization)
+ * and `allowExistingRecord: true` (the disabled record is deliberately KEPT
+ * per ENBL-02, so the PI-15 "already installed" sanity throw must not fire
+ * for the re-materialization). Returns the outcome sentinel.
  *
  * CR-01: `installPlugin` MUST NOT be called here -- it opens its own
  * `withStateGuard` on the same `stateLockFile`, and `proper-lockfile`
@@ -423,7 +418,7 @@ export async function setPluginEnabled(
   const { scope, locations } = resolution;
   // WB-01 / UAT-05: target selected ONCE; the sibling path exists only for
   // the merged-view membership test (read fresh inside the lock, never
-  // written -- Pitfall 1).
+  // written).
   const { targetConfigPath, siblingConfigPath } = selectConfigWriteTarget(locations, opts.local);
   const configBasename = path.basename(targetConfigPath);
 
@@ -524,7 +519,7 @@ export async function setPluginEnabled(
       // reconcile-driven call derives the desired state FROM the merged
       // config (base + local), so the declaration already exists by
       // construction -- possibly ONLY in `claude-plugins.local.json` (the
-      // per-machine override, Pitfall 54-5). Writing it back here would
+      // per-machine override). Writing it back here would
       // copy the local override's `enabled` flag into the shared BASE file
       // and clobber a user-authored base declaration. The config is the
       // reconcile's INPUT; only standalone commands author declarations.

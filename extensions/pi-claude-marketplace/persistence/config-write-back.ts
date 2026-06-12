@@ -9,7 +9,7 @@
 // delegate to the caller for `targetConfigPath` selection (--local
 // discipline lives at the orchestrator boundary, not here).
 //
-// Pitfall 1 structural guard: this file MUST NOT import `config-merge.ts`,
+// Structural guard: this file MUST NOT import `config-merge.ts`,
 // `mergeScopeConfigs`, or `loadMergedScopeConfig`. The write-back patcher
 // operates on a PHYSICAL `ScopeConfig` (the result of `loadConfig`), NEVER
 // on a merged view -- serializing a merged view back to disk would copy
@@ -18,7 +18,7 @@
 // `tests/architecture/config-state-consistency.test.ts` is the round-trip
 // integrity gate.
 //
-// Cascade-delete contract (Pitfall 4): `deleteMarketplaceConfigEntryWithCascade`
+// Cascade-delete contract: `deleteMarketplaceConfigEntryWithCascade`
 // removes the marketplace entry AND every plugin entry whose key ends in
 // `@<marketplace>`. The state-side cascade (`cascadeUnstagePlugin`) is the
 // runtime mirror; this helper keeps the config-side cascade in ONE place so
@@ -27,8 +27,8 @@
 // mismatch on the next reconcile preview.
 //
 // schemaVersion is pinned to `1` on every write (D-11): the literal floor
-// for the v1.12 config family. Future schema versions land in a successor
-// file, not by bumping this literal.
+// for the schemaVersion-1 config family. Future schema versions land in a
+// successor file, not by bumping this literal.
 
 import {
   saveConfig,
@@ -76,7 +76,7 @@ export async function writeMarketplaceConfigEntry(
 /**
  * Delete a marketplace entry AND cascade-delete every plugin entry whose
  * key ends in `@<marketplace>`. Mirrors the state-side cascade so reconcile
- * remains a no-op after `marketplace remove` (Pitfall 4).
+ * remains a no-op after `marketplace remove`.
  */
 export async function deleteMarketplaceConfigEntryWithCascade(
   current: ScopeConfig,

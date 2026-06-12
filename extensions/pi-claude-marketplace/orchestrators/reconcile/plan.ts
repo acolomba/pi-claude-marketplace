@@ -10,22 +10,22 @@
 // `domain/source.ts`) so the planner imports only leaf-pure helpers from
 // `domain/source.ts`.
 //
-// Disabled-entry rule (Pitfall 53-2): a plugin entry with
-// `enabled === false` is declared-but-disabled; `=== true` OR `undefined`
-// is declared-and-enabled (D-04 consume-time default -- the absent field
-// includes, only an explicit `false` excludes).
+// Disabled-entry rule: a plugin entry with `enabled === false` is
+// declared-but-disabled; `=== true` OR `undefined` is declared-and-enabled
+// (D-04 consume-time default -- the absent field includes, only an explicit
+// `false` excludes).
 //
 // ENBL-02: the recorded-but-disabled hand-off closes here.
 // `isRecordedButDisabled(record)` reads the empty-resources marker (all
 // four `resources.*` arrays empty -- A1; SPLIT-01 preserved) so a
 // recorded-but-disabled plugin paired with config `enabled !== false`
 // lands in `pluginsToEnable` while the install branch stays mutually
-// exclusive (Pitfall 54-6).
+// exclusive (the recorded-and-not-recorded branches are disjoint).
 //
-// Plugin-key parser (D-01 / Pitfall 52-6 / Pitfall 53-?): flat-keyed
-// plugin entries are parsed by `lastIndexOf("@")` so a plugin name
-// containing `@` (e.g. `"evil@evil@marketplace"` parses to plugin
-// `"evil@evil"` and marketplace `"marketplace"`) does not collide.
+// Plugin-key parser (D-01): flat-keyed plugin entries are parsed by
+// `lastIndexOf("@")` so a plugin name containing `@` (e.g.
+// `"evil@evil@marketplace"` parses to plugin `"evil@evil"` and marketplace
+// `"marketplace"`) does not collide.
 //
 // Dangling-reference contract: a plugin entry whose
 // `${plugin}@${marketplace}` marketplace name is NOT declared in the merged
@@ -246,20 +246,20 @@ interface DeclaredPluginAccumulator {
 }
 
 /**
- * ENBL-02 / Pattern 4 / A1 -- the empty-resources marker.
+ * ENBL-02 / A1 -- the empty-resources marker.
  *
  * A recorded plugin whose four `resources.{skills,prompts,agents,mcpServers}`
  * arrays are ALL empty AND whose `compatibility.installable === true` is
  * treated as currently disabled. The
- * `orchestrators/plugin/install.ts::statePhase` (lines 617-664) is the only
- * code path that writes `resources.*`; it copies from `c.stagedXxxNames`
- * which the resolver populates from the plugin's components. The
+ * `orchestrators/plugin/install.ts::statePhase` is the only path that
+ * POPULATES `resources.*` (it copies from `c.stagedXxxNames`, which the
+ * resolver fills from the plugin's components); the disable orchestrator
+ * is the only path that empties them while keeping the record. The
  * `requireInstallable` gate rules out the zero-component installable
  * degenerate, so an INSTALLABLE plugin always has at least one populated
- * array.
+ * array after install.
  *
- * The `installable === true` guard is load-bearing (Rule 2 deviation from
- * the original plan's `behavior` block): a soft-degraded
+ * The `installable === true` guard is load-bearing: a soft-degraded
  * (`installable: false`) plugin -- e.g. one whose companion extension is
  * missing -- legally records all four resource arrays empty. Without the
  * guard, the convergence proof
@@ -360,9 +360,9 @@ function classifyDeclaredPlugin(
   }
 
   // Recorded + declared-enabled: split on the empty-resources marker
-  // (ENBL-02 / isRecordedButDisabled). Pitfall 54-6 mutual exclusion: the
-  // install branch above already returned for `!recorded`, so a plugin
-  // CAN'T land in both `install` and `enable` in the same pass.
+  // (ENBL-02 / isRecordedButDisabled). The install branch above already
+  // returned for `!recorded`, so a plugin CAN'T land in both `install` and
+  // `enable` in the same pass.
   const record = state.marketplaces[marketplace]?.plugins[plugin];
   if (record !== undefined && isRecordedButDisabled(record)) {
     acc.enable.push({ scope, plugin, marketplace });

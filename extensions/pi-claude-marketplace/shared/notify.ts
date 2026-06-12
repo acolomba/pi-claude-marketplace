@@ -190,12 +190,15 @@ export function redactAbsolutePaths(text: string): string {
  * tuple; the bare-token render shape (no icon, no scope brackets) is a
  * renderer concern that branches at emission time.
  *
- * DIFF-02 (D-53-02): the 6 trailing `"will *"` entries are the pending-tense
- * tokens emitted by `/claude:plugin preview` rows. They are STRUCTURALLY
- * EXCLUDED from `shouldEmitReloadHint`'s trigger set (preview rows are
+ * DIFF-02 (D-53-02): the 6 `"will *"` entries are the pending-tense tokens
+ * emitted by `/claude:plugin preview` rows. They are STRUCTURALLY EXCLUDED
+ * from `shouldEmitReloadHint`'s trigger set (preview rows are
  * pre-transition; `/reload to pick up changes` is grammatically false for
- * them) and are appended at the END of the tuple so the four head-of-tuple
- * state-change tokens that drive the reload-hint stay positionally unchanged.
+ * them) and sit AFTER the four head-of-tuple state-change tokens that
+ * drive the reload-hint, so those positions stay unchanged. The
+ * `"disabled"` entry is the D-54-01 / ENBL-04 token and is appended LAST
+ * after the `"will *"` block; the head-of-tuple invariant is preserved
+ * because it sits below the reload-hint trigger window.
  */
 export const STATUS_TOKENS = [
   "installed",
@@ -338,13 +341,16 @@ export function notifyDiagnostic(
  * brace slot.
  *
  * The `"present"` entry is the list-only inventory token (SNM-15); the four
- * trailing `"will *"` entries are the DIFF-02 preview pending-tense tokens.
- * The four state-change tokens at the head of the tuple (`installed`,
- * `updated`, `reinstalled`, `uninstalled`) are the structurally-
- * distinguished transition tokens that drive `shouldEmitReloadHint`;
- * `"present"` is deliberately ABSENT from that trigger set so steady-state
- * `/claude:plugin list` rows never emit the `/reload to pick up changes`
- * trailer.
+ * `"will *"` entries are the DIFF-02 preview pending-tense tokens; the
+ * trailing `"disabled"` entry is the D-54-01 / ENBL-04 token. The four
+ * state-change tokens at the head of the tuple (`installed`, `updated`,
+ * `reinstalled`, `uninstalled`) are the structurally-distinguished
+ * transition tokens that drive `shouldEmitReloadHint`; `"present"` and
+ * `"disabled"` are deliberately ABSENT from that default trigger set so
+ * steady-state `/claude:plugin list` rows never emit the
+ * `/reload to pick up changes` trailer. `"disabled"` joins the hint set
+ * only under the `disable-cascade` kind (UAT-03 -- the disable command's
+ * realized-transition cascade).
  *
  * Pattern: closed-set `as const` tuple + `(typeof X)[number]` literal-union.
  */
@@ -538,7 +544,7 @@ export interface PluginUninstalledMessage {
  *
  * NO `dependencies` / `reasons` / `cause` / `rollbackPartial` by construction
  * -- the inventory row is bare. The renderer arm reuses `ICON_UNINSTALLABLE`
- * (`⊘`) per RESEARCH Pattern 5 (mirrors the `will disable` glyph).
+ * (`⊘`) -- the same glyph the `will disable` row uses.
  */
 export interface PluginDisabledMessage {
   readonly status: "disabled";
@@ -700,9 +706,10 @@ export interface PluginWillUninstallMessage {
 /**
  * `(will enable)` -- DIFF-02 preview row for a recorded plugin currently
  * marked disabled but newly declared `enabled: true`. The bucket is
- * populated only when the recorded-but-disabled marker (Pitfall 53-4: all
- * four resource arrays empty + `installable: true`) is paired with a config
- * entry whose `enabled !== false`.
+ * populated only when the recorded-but-disabled marker (all four resource
+ * arrays empty + `installable: true` -- see
+ * `orchestrators/reconcile/plan.ts::isRecordedButDisabled`) is paired
+ * with a config entry whose `enabled !== false`.
  */
 export interface PluginWillEnableMessage {
   readonly status: "will enable";
@@ -1114,14 +1121,14 @@ export interface MarketplaceNotAddedMessage {
  * invalid-config / source-mismatch row. Wraps the same per-status
  * `MarketplaceNotificationMessage[]` shape the cascade arm carries so the
  * existing `renderMpHeader` + `renderPluginRow` helpers compose the body --
- * no new icon, no new closed-set status / reason / marker literals (RESEARCH
- * Pattern 5 Option A).
+ * no new icon, no new closed-set status / reason / marker literals (reuse
+ * the existing closed sets).
  *
  * Dispatched as a StandaloneKind so `shouldEmitReloadHint` returns `false`
  * structurally: the cascade rows carry realized transition tokens
  * (`installed` / `uninstalled` / etc.) which would otherwise trigger the
  * `Run /reload to pick up changes` trailer -- but the reconcile already ran
- * ON /reload, so the trailer would be a lie (Pitfall 4 / RECON-04).
+ * ON /reload, so the trailer would be a lie (RECON-04).
  *
  * `computeSeverity` derives severity from contents (mirrors the cascade
  * arm's first-match ladder); `buildSummaryLine` runs only at error/warning
@@ -1399,15 +1406,14 @@ function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus
 
     case "will add":
       // DIFF-02 / D-53-02: pending-tense preview row for a marketplace
-      // declared in config but not yet recorded. Reuses ICON_INSTALLED per
-      // RESEARCH Pattern 5 (no new icon constant).
+      // declared in config but not yet recorded. Reuses ICON_INSTALLED (no
+      // new icon constant).
       return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (will add)`;
     case "will remove":
       // DIFF-02: pending-tense preview row for a marketplace recorded in
-      // state but no longer declared. Reuses ICON_UNINSTALLED (`○`) per
-      // RESEARCH Pattern 5 -- the same glyph the (uninstalled) plugin row
-      // carries, because a `will remove` is the marketplace-level analog of
-      // an uninstall.
+      // state but no longer declared. Reuses ICON_AVAILABLE (`○`) -- the
+      // same glyph the (uninstalled) plugin row carries, because a
+      // `will remove` is the marketplace-level analog of an uninstall.
       return `${ICON_AVAILABLE} ${mp.name} [${mp.scope}] (will remove)`;
 
     case undefined: {
@@ -1764,9 +1770,9 @@ function renderPluginRow(
       return pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(manual recovery)", probe);
     case "will install":
       // DIFF-02 / D-53-02: pending-tense preview row for a plugin declared in
-      // config but not yet recorded. Reuses ICON_INSTALLED per RESEARCH
-      // Pattern 5. No `version` slot (the install hasn't happened yet); no
-      // reasons (preview rows are pre-transition).
+      // config but not yet recorded. Reuses ICON_INSTALLED. No `version`
+      // slot (the install hasn't happened yet); no reasons (preview rows are
+      // pre-transition).
       return joinTokens([
         ICON_INSTALLED,
         p.name,
@@ -1787,10 +1793,10 @@ function renderPluginRow(
     case "will enable":
       // DIFF-02: pending-tense preview row for a recorded plugin newly
       // declared `enabled: true` after being locally disabled. Reuses
-      // ICON_INSTALLED per RESEARCH Pattern 5. The bucket is populated only
-      // when the recorded-but-disabled marker (Pitfall 53-4) is paired with
-      // a config entry whose `enabled !== false`; the arm is always present
-      // so enable-wiring stays type-complete.
+      // ICON_INSTALLED. The bucket is populated only when the recorded-
+      // but-disabled marker (empty resources + installable true) is paired
+      // with a config entry whose `enabled !== false`; the arm is always
+      // present so enable-wiring stays type-complete.
       return joinTokens([
         ICON_INSTALLED,
         p.name,
@@ -1799,10 +1805,9 @@ function renderPluginRow(
       ]);
     case "will disable":
       // DIFF-02: pending-tense preview row for a recorded plugin newly
-      // declared `enabled: false`. Reuses ICON_UNINSTALLABLE (`⊘`) per
-      // RESEARCH Pattern 5 -- the same glyph the (skipped) / (failed) rows
-      // carry, mirroring the prohibited-symbol semantics of a deliberate
-      // disable.
+      // declared `enabled: false`. Reuses ICON_UNINSTALLABLE (`⊘`) -- the
+      // same glyph the (skipped) / (failed) rows carry, mirroring the
+      // prohibited-symbol semantics of a deliberate disable.
       return joinTokens([
         ICON_UNINSTALLABLE,
         p.name,
@@ -1811,9 +1816,9 @@ function renderPluginRow(
       ]);
     case "disabled":
       // D-54-01 / ENBL-04: list/info inventory row for a recorded-but-disabled
-      // plugin. Subject-first grammar; reuses ICON_UNINSTALLABLE (`⊘`) per
-      // RESEARCH Pattern 5 (shared glyph with `will disable`). NO reasons --
-      // the variant carries none; composeReasons receives undefined + both
+      // plugin. Subject-first grammar; reuses ICON_UNINSTALLABLE (`⊘`) --
+      // the same glyph the `will disable` row carries. NO reasons -- the
+      // variant carries none; composeReasons receives undefined + both
       // soft-dep flags false (the inventory row never emits soft-dep markers).
       return joinTokens([
         ICON_UNINSTALLABLE,
@@ -2257,7 +2262,7 @@ function shouldEmitReloadHint(message: NotificationMessage): boolean {
         // be grammatically false (`/reload` cannot pick up zero changes).
         return false;
       case "reconcile-applied-cascade":
-        // RECON-04 / Pitfall 4: the reconcile already ran ON /reload (the
+        // RECON-04: the reconcile already ran ON /reload (the
         // resources_discover handler IS the trailer's nominal trigger), so
         // emitting `Run /reload to pick up changes` after applying changes
         // would be a lie. Structurally false closes the trailer-leak gap.
