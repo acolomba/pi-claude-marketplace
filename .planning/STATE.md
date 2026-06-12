@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 Phase: Milestone v1.12 complete
 Plan: —
 Status: Milestone v1.12 shipped — PR #51
-Last activity: 2026-06-12 — Completed quick task 260612-9dd: resolved 13 SonarCloud PR #51 violations and folded the 3 new CPD duplication sets
+Last activity: 2026-06-12 — Completed quick task 260612-bcs: fixed all 53 PR #51 five-agent review findings across 8 commits (7 sub-plans + leftover scrub)
 
 ## Performance Metrics
 
@@ -223,6 +223,7 @@ None yet.
 | 260612-70t | Remove GSD history-tracking references (milestone/phase/plan/wave) from TS comments and test titles across extensions/ + tests/ (99 files, traceability IDs kept); add .claude/rules/typescript-comments.md codifying the policy | 2026-06-12 | f2d77ad | Verified | [260612-70t-remove-gsd-history-tracking-comments-fro](./quick/260612-70t-remove-gsd-history-tracking-comments-fro/) |
 | 260612-9dd | Resolve 13 SonarCloud PR #51 violations (S7744 x9, S3863 x2, S4323, S3626) and fold the 3 new CPD duplication sets (reconcile apply toggles, notify cascade severity ladder, marketplace edge opening parse); byte-neutral, check green | 2026-06-12 | 7fa0a2c | Verified | [260612-9dd-resolve-sonarcloud-pr-51-violations-and-](./quick/260612-9dd-resolve-sonarcloud-pr-51-violations-and-/) |
 | 260612-fast | Alias the computed severity union (ComputedSeverity) in shared/notify.ts — fixes the S4323 the cascadeSeverity fold introduced | 2026-06-12 | f0f71be | Verified | (inline /gsd-fast, no task dir) |
+| 260612-bcs | Fix all 53 PR #51 five-agent review findings: critical setPluginEnabled notify-escape, error-channel losses (partial remove rows, autoupdate false success, loadConfig diagnostics), type cuts (samePlannedSource tri-state, PlannedSourceMismatch discriminant, Y3 overloads), test gaps (orchestrated enable, update-vs-disabled), comment/docs scrub + README rewrite; 7 sub-plans + leftover pitfall-ref scrub, 8 commits, check green | 2026-06-12 | f0ae1af |          | [260612-bcs-fix-pr-51-five-agent-review-findings](./quick/260612-bcs-fix-pr-51-five-agent-review-findings/) |
 
 ## Deferred Items
 
