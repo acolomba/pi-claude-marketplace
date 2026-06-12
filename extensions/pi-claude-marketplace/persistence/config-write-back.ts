@@ -55,6 +55,15 @@ export async function writeMarketplaceConfigEntry(
   patch: Partial<MarketplaceConfigEntry>,
 ): Promise<void> {
   const existing = current.marketplaces?.[marketplace] ?? {};
+  // S10 (PR #51): the cast is needed because `existing` may be `{}` (no prior
+  // entry) and `patch` is a `Partial`, so the spread's inferred type does NOT
+  // guarantee the required `source` field. The runtime backstop is
+  // `saveConfig`'s `CONFIG_VALIDATOR.Check(config)` at the single sanctioned
+  // writer (persistence/config-io.ts::saveConfig): a missing `source` is
+  // caught and the write is refused loudly before any bytes hit disk. Callers
+  // are responsible for shaping the patch so the merge has a `source`; this
+  // cast trusts that contract with the saveConfig schema gate as the safety
+  // net.
   const merged: MarketplaceConfigEntry = { ...existing, ...patch } as MarketplaceConfigEntry;
   const patched: ScopeConfig = {
     ...current,

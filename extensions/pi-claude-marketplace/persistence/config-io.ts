@@ -79,6 +79,17 @@ export type ScopeConfig = Type.Static<typeof CONFIG_SCHEMA>;
 export type MarketplaceConfigEntry = Type.Static<typeof MARKETPLACE_CONFIG_ENTRY_SCHEMA>;
 export type PluginConfigEntry = Type.Static<typeof PLUGIN_CONFIG_ENTRY_SCHEMA>;
 
+/**
+ * S7 (PR #51): consume-time tri-state predicate for the optional `enabled`
+ * field. D-04 declares `enabled === false` excludes; everything else (literal
+ * `true` OR an absent field) includes. Consumers should call this helper
+ * instead of repeating the `entry.enabled !== false` comparison so the
+ * "absent means enabled" semantics live in ONE place.
+ */
+export function isDeclaredEnabled(entry: PluginConfigEntry): boolean {
+  return entry.enabled !== false;
+}
+
 /** JIT-compiled validator (D-07 mirror of STATE_VALIDATOR). */
 export const CONFIG_VALIDATOR = Compile(CONFIG_SCHEMA);
 

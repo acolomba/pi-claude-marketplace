@@ -616,6 +616,12 @@ async function applyPluginToggles(
   const successStatus: "enabled" | "disabled" = axes.enable ? "enabled" : "disabled";
   for (const op of ops) {
     try {
+      // Y3 (PR #51): the orchestrated overload of setPluginEnabled returns
+      // `Promise<EnableDisablePluginOutcome>` (no `| undefined`), so the
+      // earlier `if (result === undefined) continue` silent-vanish guard is a
+      // compile error and has been removed. Closes S6's fourth loop without
+      // duplicating the import/execute.ts:613 fail-loud wording (the type
+      // makes the branch unreachable instead of routing through a row).
       const result = await setPluginEnabled({
         ctx: opts.ctx,
         pi: opts.pi,
@@ -626,9 +632,6 @@ async function applyPluginToggles(
         scope: op.scope,
         notifications: { mode: "orchestrated" },
       });
-      if (result === undefined) {
-        continue;
-      }
 
       if (result.status === successStatus) {
         outcomes.push(

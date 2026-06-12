@@ -33,6 +33,7 @@ import path from "node:path";
 import test, { mock } from "node:test";
 
 import { applyReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import { isDeclaredEnabled } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { fixtureMarketplaceDir, makeMockGitOps } from "../../helpers/git-mock.ts";
 
@@ -1007,6 +1008,182 @@ test("S4 / PR #51: synthesizeUndeclaredMarketplaceSource undefined-return is dec
     enableSrc,
     /CONTEXT\.md S4|PR #51 S4|S4 \(PR #51\)/,
     "S4: enable-disable.ts call site must carry a decision-anchored comment",
+  );
+});
+
+test("S7 / PR #51: isDeclaredEnabled implements the D-04 consume-time tri-state -- absent enabled and explicit true include; only explicit false excludes", () => {
+  // The helper centralises the `entry.enabled !== false` repeat that used to
+  // live at every reconcile call site. The truth table the planner depends on
+  // (D-04): an absent `enabled` field defaults to enabled; an explicit `true`
+  // is enabled; only an explicit `false` excludes.
+  assert.equal(isDeclaredEnabled({ enabled: true }), true);
+  assert.equal(isDeclaredEnabled({ enabled: false }), false);
+  assert.equal(isDeclaredEnabled({}), true);
+});
+
+test("Y3 / PR #51: a recorded-but-disabled plugin declared enabled in config drives applyPluginToggles -- when the enable fails the cascade renders a (failed) plugin row instead of vanishing under the pre-Y3 silent-continue", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const projectScopeRoot = path.join(cwd, ".pi");
+    const extensionRoot = path.join(projectScopeRoot, "pi-claude-marketplace");
+    await mkdir(extensionRoot, { recursive: true });
+
+    // Config declares the plugin enabled (no `enabled` field defaults to
+    // included per D-04 / S7's `isDeclaredEnabled`). The marketplace points
+    // at a path that does NOT exist on disk, so the enable branch's install
+    // ledger throws ENOENT from the cached clone read. Pre-Y3 the toggle
+    // loop's `if (result === undefined) continue` guard would silently drop
+    // any orchestrated outcome the orchestrator failed to populate; post-Y3
+    // the overload narrows away the `| undefined` arm so the typed failed
+    // outcome always reaches `applyOutcomeToBlock` and renders a row.
+    const basePath = path.join(projectScopeRoot, "claude-plugins.json");
+    await writeFile(
+      basePath,
+      JSON.stringify(
+        {
+          schemaVersion: 1,
+          marketplaces: { mp: { source: "/tmp/does-not-exist-y3" } },
+          plugins: { "foo@mp": {} },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    // State: recorded plugin in the disabled marker shape (installable: true
+    // + every resources axis empty) so the planner classifies the entry as
+    // `pluginsToEnable` rather than `pluginsToInstall`. The marketplaceRoot
+    // points at the same non-existent path so the enable branch's cached
+    // manifest read fails ENOENT.
+    await writeFile(
+      path.join(extensionRoot, "state.json"),
+      JSON.stringify(
+        {
+          schemaVersion: 1,
+          marketplaces: {
+            mp: {
+              name: "mp",
+              scope: "project",
+              source: { kind: "path", raw: "/tmp/does-not-exist-y3" },
+              addedFromCwd: cwd,
+              manifestPath: "/tmp/does-not-exist-y3/.claude-plugin/marketplace.json",
+              marketplaceRoot: "/tmp/does-not-exist-y3",
+              plugins: {
+                foo: {
+                  version: "1.2.3",
+                  resolvedSource: "/tmp/does-not-exist-y3/plugins/foo",
+                  compatibility: {
+                    installable: true,
+                    notes: [],
+                    supported: [],
+                    unsupported: [],
+                  },
+                  resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+                  installedAt: "2026-01-01T00:00:00.000Z",
+                  updatedAt: "2026-01-01T00:00:00.000Z",
+                },
+              },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const ctx = makeCtx();
+    await applyReconcile({
+      ctx: ctx as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    // Y3 pin: the cascade fired exactly one notify carrying a (failed)
+    // plugin row on the `foo` subject. Pre-Y3 the row would vanish (the
+    // orchestrated arm could return undefined and the toggle loop dropped
+    // it with `continue`), leaving the cascade silent or with a misleading
+    // empty marketplace block.
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.ok(
+      args[0].includes("foo") && args[0].includes("(failed)"),
+      `expected (failed) child row for foo when enable cascade fails; got:\n${args[0]}`,
+    );
+  });
+});
+
+test("S8 / PR #51: MarketplaceBlock.status is narrowed to the closed 5-status union and the defensive runtime throw is deleted", async () => {
+  // MarketplaceBlock is module-internal so the pin is source-shape oriented:
+  // the new `ReconcileBlockStatus` alias must exist and list exactly the 5
+  // statuses the preview / applied projections assign, and the previous
+  // defensive `throw new Error("unexpected reconcile marketplace status: ...")`
+  // arm at `blockToMarketplaceMessage` must be gone (the narrowed type is the
+  // structural gate now).
+  const { readFile } = await import("node:fs/promises");
+  const src = await readFile(
+    "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts",
+    "utf8",
+  );
+  assert.match(
+    src,
+    /type ReconcileBlockStatus = Extract<[\s\S]*?"will add"[\s\S]*?"will remove"[\s\S]*?"added"[\s\S]*?"removed"[\s\S]*?"failed"[\s\S]*?>/,
+    "S8: ReconcileBlockStatus must narrow to exactly the 5 statuses the projection assigns",
+  );
+  assert.ok(
+    src.includes("status?: ReconcileBlockStatus"),
+    "S8: MarketplaceBlock.status must use the narrowed `ReconcileBlockStatus`",
+  );
+  assert.ok(
+    !src.includes("unexpected reconcile marketplace status"),
+    "S8: the defensive runtime throw must be deleted -- the narrowed type catches drift at compile time",
+  );
+});
+
+test("S9 / PR #51: cascadeSeverity's structural-subset param tightens status from `string` to the closed PluginStatus / MarketplaceStatus unions", async () => {
+  // Source-shape pin: the param was previously `readonly status: string` /
+  // `readonly status?: string`, which let a typoed literal silently route to
+  // info severity (no match). Tightening to the closed unions makes a typo a
+  // compile error at the call site.
+  const { readFile } = await import("node:fs/promises");
+  const src = await readFile("extensions/pi-claude-marketplace/shared/notify.ts", "utf8");
+  // The function declaration (capture the parameter object) must reference
+  // PluginStatus / MarketplaceStatus and must NOT carry a bare `status: string`
+  // / `status?: string | undefined` form on the same param.
+  const fnMatch = /function cascadeSeverity\(message:[\s\S]*?\}\): ComputedSeverity/.exec(src);
+  assert.ok(fnMatch, "S9: cascadeSeverity declaration not found");
+  const fnDecl = fnMatch[0];
+  assert.ok(
+    fnDecl.includes("status?: MarketplaceStatus") ||
+      fnDecl.includes("status?: MarketplaceStatus |"),
+    `S9: cascadeSeverity's mp-level status must be the closed MarketplaceStatus union; decl was:\n${fnDecl}`,
+  );
+  assert.ok(
+    fnDecl.includes("status: PluginStatus"),
+    `S9: cascadeSeverity's plugin-level status must be the closed PluginStatus union; decl was:\n${fnDecl}`,
+  );
+  assert.ok(
+    !/status\??:\s*string/.test(fnDecl),
+    `S9: cascadeSeverity's structural-subset param must NOT widen status back to string; decl was:\n${fnDecl}`,
+  );
+});
+
+test("S10 / PR #51: writeMarketplaceConfigEntry's `as MarketplaceConfigEntry` cast comment points at saveConfig's validator backstop", async () => {
+  // Source-shape pin: the comment chain must reference saveConfig's
+  // `CONFIG_VALIDATOR.Check(config)` backstop so a future reader knows the
+  // cast trusts that runtime gate to catch a missing required field.
+  const { readFile } = await import("node:fs/promises");
+  const src = await readFile(
+    "extensions/pi-claude-marketplace/persistence/config-write-back.ts",
+    "utf8",
+  );
+  // The S10 comment block must be immediately above the cast site in
+  // writeMarketplaceConfigEntry.
+  assert.match(
+    src,
+    /S10[\s\S]{0,600}saveConfig[\s\S]{0,200}as MarketplaceConfigEntry/,
+    "S10: the cast comment must reference saveConfig's validator backstop",
   );
 });
 

@@ -1927,12 +1927,20 @@ const RELOAD_HINT_TRAILER = "/reload to pick up changes";
  */
 type ComputedSeverity = "warning" | "error" | undefined;
 
+// S9 (PR #51): the structural-subset shape `cascadeSeverity` evaluates is
+// pinned to the closed `PluginStatus` / `MarketplaceStatus` literal unions
+// (instead of bare `string`). Every caller passes a `NotificationMessage`
+// cascade arm or a `ReconcileAppliedCascadeMessage`, both of which carry the
+// closed-set status discriminants -- a future caller that supplied a `string`
+// would lose first-match-ladder correctness (e.g. typoed `"failed "` would
+// silently route to info), and the tighter parameter type catches that at the
+// call site instead of at first-match runtime.
 function cascadeSeverity(message: {
   readonly marketplaces: readonly {
-    readonly status?: string | undefined;
+    readonly status?: MarketplaceStatus | undefined;
     readonly reasons?: readonly Reason[] | undefined;
     readonly plugins: readonly {
-      readonly status: string;
+      readonly status: PluginStatus;
       readonly reasons?: readonly Reason[] | undefined;
     }[];
   }[];

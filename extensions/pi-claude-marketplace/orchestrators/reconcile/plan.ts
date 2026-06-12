@@ -46,6 +46,7 @@
 // as a `(failed)` row instead of being silently omitted.
 
 import { parsePluginSource, samePlannedSource, sourceLogical } from "../../domain/source.ts";
+import { isDeclaredEnabled } from "../../persistence/config-io.ts";
 
 import { emptyReconcilePlan } from "./types.ts";
 
@@ -328,9 +329,9 @@ function classifyDeclaredPlugin(
     return;
   }
 
-  // D-04 consume-time default: `enabled === false` excludes; everything
-  // else (true or undefined) includes.
-  const enabledExplicitFalse = declared.entry.enabled === false;
+  // D-04 consume-time default via S7's `isDeclaredEnabled`: an absent
+  // `enabled` field includes; only an explicit `false` excludes.
+  const enabledExplicitFalse = !isDeclaredEnabled(declared.entry);
   const recorded = recordedKeys.has(key);
 
   if (enabledExplicitFalse) {

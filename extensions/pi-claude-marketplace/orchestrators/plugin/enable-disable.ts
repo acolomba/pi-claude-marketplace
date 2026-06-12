@@ -343,7 +343,23 @@ type InstalledPluginRecord = ExtensionState["marketplaces"][string]["plugins"][s
  * D-54-01 entrypoint. Never re-throws -- every failure surfaces through a
  * single `notify()` call per IL-2 (standalone) OR a typed outcome per
  * RECON-03 (orchestrated).
+ *
+ * Y3 (PR #51): overload pair so the orchestrated-mode return is narrowed to
+ * `Promise<EnableDisablePluginOutcome>` (no `| undefined`) at the call site.
+ * Mirrors the `AddMarketplaceNotifications` discriminant pattern. The
+ * standalone arm keeps `| undefined` because it fires its own `notify()` and
+ * the caller has nothing to consume. The reconcile cascade
+ * (`applyPluginToggles`) used to carry an `if (result === undefined) continue`
+ * guard that silently dropped the row -- the overload makes that branch a
+ * compile error so the cascade always materialises a row (closes S6's fourth
+ * loop in the same edit).
  */
+export function setPluginEnabled(
+  opts: EnableDisablePluginOptions & { notifications: { mode: "orchestrated" } },
+): Promise<EnableDisablePluginOutcome>;
+export function setPluginEnabled(
+  opts: EnableDisablePluginOptions,
+): Promise<EnableDisablePluginOutcome | undefined>;
 // Sequencing the cross-scope resolve, the locked transaction body, the
 // post-guard branch dispatch, and the C1 / I3 / I4 failure routings in one
 // audited flow exceeds the default cognitive-complexity budget; splitting it

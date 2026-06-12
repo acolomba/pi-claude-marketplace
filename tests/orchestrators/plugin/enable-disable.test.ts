@@ -17,6 +17,7 @@ import { test } from "node:test";
 import { setPluginEnabled } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
+import type { EnableDisablePluginOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 interface NotifyRecord {
@@ -1083,5 +1084,66 @@ test("I4: enable branch threads InstallFailureCapture into runInstallLedger (reg
       !notifications[0]!.message.includes("rollback partial"),
       `empty capture must not render rollback-partial: ${notifications[0]!.message}`,
     );
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// Y3 (PR #51): orchestrated overload narrows the return type to
+// `Promise<EnableDisablePluginOutcome>` (no `| undefined`). The cascade in
+// `applyPluginToggles` relied on this narrowing to drop its silent-vanish
+// guard; a future regression that widens the orchestrated arm back to
+// `| undefined` would re-introduce the lost row, so both shapes are pinned at
+// the type level here.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("Y3: orchestrated overload returns EnableDisablePluginOutcome (no | undefined) -- typecheck pin", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      disabled: false,
+      version: "1.2.3",
+    });
+    const { ctx } = makeCtx(cwd);
+    // The annotation is load-bearing: pre-Y3 the orchestrated arm returned
+    // `Promise<EnableDisablePluginOutcome | undefined>` and this assignment
+    // would fail typecheck (TS2322 -- `Outcome | undefined` not assignable to
+    // `Outcome`). Post-Y3 the overload narrows the return so the assignment
+    // succeeds without a non-null assertion or runtime guard.
+    const outcome: EnableDisablePluginOutcome = await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: false,
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    });
+    assert.equal(outcome.status, "disabled");
+  });
+});
+
+test("Y3: standalone overload still returns | undefined -- typecheck pin", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx } = makeCtx(cwd);
+    // The standalone arm fires its own notify() and the caller has nothing to
+    // consume; the overload pair preserves that shape so existing callers
+    // (edge handlers) keep their current contract.
+    const outcome: EnableDisablePluginOutcome | undefined = await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "ghost-mp",
+      plugin: "foo",
+      enable: false,
+      scope: "user",
+    });
+    // @ts-expect-error -- standalone arm DOES carry `| undefined`; assigning
+    // to a non-undefined type must remain a TS error so a regression that
+    // widens the standalone arm to non-undefined (or narrows it the same way
+    // as orchestrated) is caught at typecheck.
+    const _narrow: EnableDisablePluginOutcome = outcome;
+    void _narrow;
   });
 });

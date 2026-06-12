@@ -51,11 +51,26 @@ import type {
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
+/**
+ * S8 (PR #51): `status` is narrowed to the closed set the preview /
+ * applied-cascade projections actually assign (`"will add"` / `"will remove"`
+ * from the preview; `"added"` / `"removed"` / `"failed"` from the apply
+ * cascade). The `"updated"` / `"autoupdate enabled"` / `"autoupdate disabled"`
+ * / `"skipped"` members of `MarketplaceStatus` belong to other surfaces
+ * (autoupdate flip, marketplace update); the reconcile projection never sets
+ * them, so the previous defensive runtime throw at `blockToMarketplaceMessage`
+ * is replaced by this type narrowing.
+ */
+type ReconcileBlockStatus = Extract<
+  MarketplaceStatus,
+  "will add" | "will remove" | "added" | "removed" | "failed"
+>;
+
 interface MarketplaceBlock {
   readonly key: string;
   readonly name: string;
   readonly scope: Scope;
-  status?: MarketplaceStatus;
+  status?: ReconcileBlockStatus;
   reasons?: readonly ContentReason[];
   plugins: PluginNotificationMessage[];
 }
@@ -97,6 +112,11 @@ function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceNotifica
   const name = block.name;
   const scope = block.scope;
   const plugins = Object.freeze(block.plugins);
+  // S8 (PR #51): the defensive runtime throw for `"updated"` /
+  // `"autoupdate enabled"` / `"autoupdate disabled"` / `"skipped"` has been
+  // deleted; `MarketplaceBlock.status` is now narrowed to
+  // `ReconcileBlockStatus` so any attempt to assign one of those tokens here
+  // is a compile error caught at edit time instead of a runtime signal.
   switch (block.status) {
     case "will add":
       return { name, scope, status: "will add", plugins };
@@ -118,15 +138,6 @@ function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceNotifica
       };
     case undefined:
       return { name, scope, plugins };
-    case "updated":
-    case "autoupdate enabled":
-    case "autoupdate disabled":
-    case "skipped":
-      // The reconcile projections (preview + applied) never assign these
-      // statuses; surface a defensive error so any future
-      // applyOutcomeToBlock change that would assign one of these here
-      // becomes a runtime signal during tests.
-      throw new Error(`unexpected reconcile marketplace status: ${block.status}`);
     default:
       assertNever(block.status);
   }
