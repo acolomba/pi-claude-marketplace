@@ -7,6 +7,13 @@
 
 # Pi Claude Marketplace
 
+<!-- markdownlint-disable MD033 -->
+
+<p align="center">
+  <a href="https://github.com/acolomba/pi-claude-marketplace"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/icons/github-dark.svg"><img src="assets/icons/github-light.svg" alt="" height="16" align="middle"></picture>&nbsp;repo</a>&nbsp;&nbsp;&nbsp;<a href="https://www.npmjs.com/package/pi-claude-marketplace"><img src="assets/icons/npm.svg" alt="" height="16" align="middle">&nbsp;npm</a>&nbsp;&nbsp;&nbsp;<a href="https://pi.dev/packages/pi-claude-marketplace"><img src="assets/icons/pi.svg" alt="" height="16" align="middle">&nbsp;pi.dev</a>
+</p>
+<!-- markdownlint-enable MD033 -->
+
 [![CI](https://github.com/acolomba/pi-claude-marketplace/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/acolomba/pi-claude-marketplace/actions/workflows/ci.yml) [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=alert_status)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=coverage)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Bugs](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=bugs)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=code_smells)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=sqale_rating)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=reliability_rating)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace) [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=acolomba_pi-claude-marketplace&metric=security_rating)](https://sonarcloud.io/summary/overall?id=acolomba_pi-claude-marketplace)
 
 Access Claude plugin marketplaces from Pi Coding Agent.
