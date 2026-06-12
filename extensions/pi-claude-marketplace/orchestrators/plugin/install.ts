@@ -111,7 +111,8 @@ import {
   pickAgentsSourceDir,
   resolveInstallMarketplaceSource,
   resolvePluginVersion,
-  synthesizeUndeclaredMarketplaceSource,
+  selectConfigWriteTarget,
+  synthesizeAdoptedMarketplaceSource,
 } from "./shared.ts";
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
@@ -825,9 +826,10 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   // the orchestrator NEVER falls back to the base file on ENOENT. The base
   // file is NEVER touched on the --local path; loadConfig's `absent` arm
   // yields an empty starting shape that saveConfig writes back to the local
-  // path.
-  const targetConfigPath =
-    opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath;
+  // path. UAT-05: the sibling path is the scope's OTHER physical file, read
+  // fresh inside the lock for the merged-view membership test ONLY -- never
+  // written, never serialized back (Pitfall 1).
+  const { targetConfigPath, siblingConfigPath } = selectConfigWriteTarget(locations, opts.local);
   const configBasename = path.basename(targetConfigPath);
   const orchestrated = opts.notifications?.mode === "orchestrated";
 
@@ -884,17 +886,29 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       // entry shape today carries no install-time field beyond the implicit
       // declaration -- D-04 keeps the "enabled" default at consume time.
       //
-      // CR-02 (Phase 56 review): when the targeted config does not declare
-      // the marketplace -- the CMP-3 user-scope fallback adopted a cloned
-      // record into THIS scope's state, but `marketplace add` only ever ran
-      // at user scope -- declare the marketplace entry in the SAME batched
-      // patch (same lock, one atomic save). Without it the plugin key is a
-      // dangling declaration: the next reconcile plans the adopted clone's
-      // REMOVAL and renders a perpetual `<marketplace not declared>` failed
-      // row (invariant 5 violation).
+      // CR-02 (Phase 56 review): when the scope's MERGED config view does
+      // not declare the marketplace -- the CMP-3 user-scope fallback adopted
+      // a cloned record into THIS scope's state, but `marketplace add` only
+      // ever ran at user scope -- declare the marketplace entry in the SAME
+      // batched patch (same lock, one atomic save). Without it the plugin
+      // key is a dangling declaration: the next reconcile plans the adopted
+      // clone's REMOVAL and renders a perpetual `<marketplace not declared>`
+      // failed row (invariant 5 violation).
+      //
+      // UAT-05: the membership gate must consider BOTH physical files
+      // (base ∪ local), not just the target. A `--local` install against a
+      // base-declared marketplace must NOT re-declare it in the local file:
+      // the bare `{source}` entry would shadow the base entry wholesale
+      // (CFG-02) and silently flip merged `autoupdate`. The sibling file is
+      // read fresh INSIDE the lock and used for the membership test only.
       if (opts.notifications?.mode !== "orchestrated") {
         const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
-        const adoptedSource = synthesizeUndeclaredMarketplaceSource(current, state, marketplace);
+        const adoptedSource = await synthesizeAdoptedMarketplaceSource({
+          current,
+          siblingConfigPath,
+          state,
+          marketplace,
+        });
         await writeBatchedConfigEntries(current, targetConfigPath, locations.scopeRoot, {
           ...(adoptedSource !== undefined && {
             marketplaces: { [marketplace]: { source: adoptedSource } },

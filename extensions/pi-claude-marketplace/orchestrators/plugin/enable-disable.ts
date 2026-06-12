@@ -65,7 +65,11 @@ import { withLockedStateTransaction } from "../../transaction/with-state-guard.t
 import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
 import { runInstallLedger } from "./install.ts";
-import { resolveCrossScopePluginTarget, synthesizeUndeclaredMarketplaceSource } from "./shared.ts";
+import {
+  resolveCrossScopePluginTarget,
+  selectConfigWriteTarget,
+  synthesizeAdoptedMarketplaceSource,
+} from "./shared.ts";
 
 import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -316,8 +320,10 @@ export async function setPluginEnabled(
   }
 
   const { scope, locations } = resolution;
-  const targetConfigPath =
-    opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath;
+  // WB-01 / UAT-05: target selected ONCE; the sibling path exists only for
+  // the merged-view membership test (read fresh inside the lock, never
+  // written -- Pitfall 1).
+  const { targetConfigPath, siblingConfigPath } = selectConfigWriteTarget(locations, opts.local);
   const configBasename = path.basename(targetConfigPath);
 
   let outcome: SetEnabledOutcome | undefined;
@@ -355,7 +361,16 @@ export async function setPluginEnabled(
         const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
         const configEnabled = current.plugins?.[`${plugin}@${marketplace}`]?.enabled;
         if (!orchestrated && configEnabled !== undefined && configEnabled !== enable) {
-          const adoptedSource = synthesizeUndeclaredMarketplaceSource(current, state, marketplace);
+          // UAT-05: membership gate against BOTH physical files (base ∪
+          // local) so a --local flip never re-declares a base-declared
+          // marketplace (CFG-02 wholesale shadowing). Sibling read is fresh
+          // inside the lock; membership test only.
+          const adoptedSource = await synthesizeAdoptedMarketplaceSource({
+            current,
+            siblingConfigPath,
+            state,
+            marketplace,
+          });
           await writeBatchedConfigEntries(current, targetConfigPath, locations.scopeRoot, {
             ...(adoptedSource !== undefined && {
               marketplaces: { [marketplace]: { source: adoptedSource } },
@@ -388,14 +403,23 @@ export async function setPluginEnabled(
       // copy the local override's `enabled` flag into the shared BASE file
       // and clobber a user-authored base declaration. The config is the
       // reconcile's INPUT; only standalone commands author declarations.
-      // CR-02 (Phase 56 review): when the targeted config does not declare
-      // the marketplace (CMP-3 clone-adoption legacy, or a hand-pruned
-      // config), declare it in the SAME batched patch -- a bare plugin key
-      // would otherwise be a dangling declaration the planner converts into
-      // a marketplace removal + perpetual failed row.
+      // CR-02 (Phase 56 review): when the scope's MERGED config view does
+      // not declare the marketplace (CMP-3 clone-adoption legacy, or a
+      // hand-pruned config), declare it in the SAME batched patch -- a bare
+      // plugin key would otherwise be a dangling declaration the planner
+      // converts into a marketplace removal + perpetual failed row.
+      // UAT-05: the gate considers BOTH physical files (base ∪ local) so a
+      // --local flip never re-declares a base-declared marketplace (CFG-02
+      // wholesale shadowing). Sibling read is fresh inside the lock;
+      // membership test only.
       if (!orchestrated) {
         const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
-        const adoptedSource = synthesizeUndeclaredMarketplaceSource(current, state, marketplace);
+        const adoptedSource = await synthesizeAdoptedMarketplaceSource({
+          current,
+          siblingConfigPath,
+          state,
+          marketplace,
+        });
         await writeBatchedConfigEntries(current, targetConfigPath, locations.scopeRoot, {
           ...(adoptedSource !== undefined && {
             marketplaces: { [marketplace]: { source: adoptedSource } },

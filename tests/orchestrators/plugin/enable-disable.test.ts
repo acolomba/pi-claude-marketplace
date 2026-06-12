@@ -791,3 +791,79 @@ test("RECON-03 enable-disable standalone-default mode -- omitted notifications o
     assert.match(notifications[0]!.message, /⊘ ghost-mp-byte \[user\] \(failed\) \{not added\}/);
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// UAT-05: merged-view membership gate for the adopted-marketplace declaration
+// ──────────────────────────────────────────────────────────────────────────
+
+test("UAT-05: --local enable flip with marketplace declared in BASE writes ONLY the plugin entry to local; merged autoupdate from base survives", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const { configPath, configLocalPath } = await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      disabled: false,
+    });
+    // BASE declares the marketplace with autoupdate: true; LOCAL carries an
+    // explicit enabled:false for the plugin so the WR-03 promotion arm fires
+    // a config write against the --local target. The flip must NOT
+    // re-declare the marketplace in local -- the bare {source} entry would
+    // shadow base wholesale per CFG-02 and flip merged autoupdate to false.
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        schemaVersion: 1,
+        marketplaces: { mp: { source: "/tmp/dummy-mp", autoupdate: true } },
+      }),
+      "utf8",
+    );
+    await writeFile(
+      configLocalPath,
+      JSON.stringify({
+        schemaVersion: 1,
+        plugins: { "foo@mp": { enabled: false } },
+      }),
+      "utf8",
+    );
+
+    const { ctx } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+      local: true,
+    });
+
+    const localCfg = (await readConfig(configLocalPath)) as {
+      marketplaces?: Record<string, { source?: string; autoupdate?: boolean }>;
+      plugins?: Record<string, { enabled?: boolean }>;
+    };
+    // The flip landed in local...
+    assert.equal(localCfg.plugins?.["foo@mp"]?.enabled, true);
+    // ...WITHOUT a marketplace re-declaration (CFG-02 shadowing guard).
+    assert.equal(
+      localCfg.marketplaces?.["mp"],
+      undefined,
+      "local file must NOT re-declare a base-declared marketplace",
+    );
+
+    // The merged view's autoupdate (from base) survives the flip.
+    const { mergeScopeConfigs } =
+      await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
+    const { loadConfig } =
+      await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+    const baseLoaded = await loadConfig(configPath);
+    const localLoaded = await loadConfig(configLocalPath);
+    assert.equal(baseLoaded.status, "valid");
+    assert.equal(localLoaded.status, "valid");
+    if (baseLoaded.status !== "valid" || localLoaded.status !== "valid") {
+      return;
+    }
+
+    const merged = mergeScopeConfigs(baseLoaded.config, localLoaded.config);
+    assert.equal(merged.marketplaces["mp"]?.entry.autoupdate, true);
+  });
+});

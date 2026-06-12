@@ -17,6 +17,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { computeHashVersion } from "../../domain/version.ts";
+import { loadConfig } from "../../persistence/config-io.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { CrossPluginConflictError } from "../../shared/errors.ts";
@@ -255,23 +256,81 @@ export function cloneMarketplaceRecordForTargetScope(
  * adopted record's verbatim `source.raw` (the Phase 53 `samePlannedSource`
  * contract).
  *
- * Returns `undefined` when the targeted config already declares the
- * marketplace (nothing to synthesize -- byte-stable) OR when no string
- * `source.raw` exists on the state record (hand-edited/legacy state;
- * writing a source-less entry would trip `saveConfig`'s required-`source`
- * invariant throw).
+ * UAT-05: the membership gate runs against EVERY physical config of the
+ * scope (base AND local -- i.e. the CFG-02 merged view), not just the
+ * targeted file. Gating on the target alone made a `--local` install
+ * re-declare a base-declared marketplace into `claude-plugins.local.json`
+ * as a bare `{source}` entry; the CFG-02 wholesale entry-level override
+ * then shadowed the base entry and silently flipped merged `autoupdate`.
+ * Callers pass BOTH files' configs, read fresh inside the lock (WB-01
+ * discipline); the merged view is used for the membership test ONLY --
+ * never serialized back (Pitfall 1).
+ *
+ * Returns `undefined` when ANY physical config of the scope already
+ * declares the marketplace (nothing to synthesize -- entry-stable) OR when
+ * no string `source.raw` exists on the state record (hand-edited/legacy
+ * state; writing a source-less entry would trip `saveConfig`'s
+ * required-`source` invariant throw).
  */
 export function synthesizeUndeclaredMarketplaceSource(
-  current: ScopeConfig,
+  scopeConfigs: readonly ScopeConfig[],
   state: ExtensionState,
   marketplace: string,
 ): string | undefined {
-  if (current.marketplaces?.[marketplace] !== undefined) {
+  if (scopeConfigs.some((c) => c.marketplaces?.[marketplace] !== undefined)) {
     return undefined;
   }
 
   const raw = (state.marketplaces[marketplace]?.source as { raw?: unknown } | undefined)?.raw;
   return typeof raw === "string" ? raw : undefined;
+}
+
+/**
+ * WB-01 / Pitfall 2 / UAT-05: select the targeted physical config file and
+ * its sibling (the scope's OTHER file). Target-path selection happens ONCE
+ * at the orchestrator boundary so the write path never falls back to the
+ * base file on ENOENT; the sibling path exists ONLY for the UAT-05
+ * merged-view membership test (read fresh inside the lock, never written).
+ */
+export function selectConfigWriteTarget(
+  locations: ScopedLocations,
+  local: boolean | undefined,
+): { readonly targetConfigPath: string; readonly siblingConfigPath: string } {
+  if (local === true) {
+    return {
+      targetConfigPath: locations.configLocalJsonPath,
+      siblingConfigPath: locations.configJsonPath,
+    };
+  }
+
+  return {
+    targetConfigPath: locations.configJsonPath,
+    siblingConfigPath: locations.configLocalJsonPath,
+  };
+}
+
+/**
+ * UAT-05 convenience seam over `synthesizeUndeclaredMarketplaceSource`:
+ * reads the scope's sibling config file FRESH (callers hold the scope lock
+ * -- WB-01 discipline) and runs the merged-view membership gate against
+ * BOTH physical files. The sibling load is membership-test-only input; it
+ * is never serialized back (Pitfall 1). `absent` / `invalid` sibling arms
+ * contribute an empty config, mirroring the D-18 merge fallback.
+ */
+export async function synthesizeAdoptedMarketplaceSource(opts: {
+  readonly current: ScopeConfig;
+  readonly siblingConfigPath: string;
+  readonly state: ExtensionState;
+  readonly marketplace: string;
+}): Promise<string | undefined> {
+  const siblingCfg = await loadConfig(opts.siblingConfigPath);
+  const sibling: ScopeConfig =
+    siblingCfg.status === "valid" ? siblingCfg.config : { schemaVersion: 1 };
+  return synthesizeUndeclaredMarketplaceSource(
+    [opts.current, sibling],
+    opts.state,
+    opts.marketplace,
+  );
 }
 
 /** CMP-5: unqualified single-plugin lifecycle operations prefer project only when both scopes match. */
