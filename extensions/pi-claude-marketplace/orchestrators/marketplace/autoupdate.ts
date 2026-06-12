@@ -109,7 +109,7 @@ export interface AutoupdateOptions {
   /** Project-scope cwd (ignored for user scope). */
   readonly cwd: string;
   /**
-   * WB-01 / Pitfall 2: when true, target
+   * WB-01: when true, target
    * `claude-plugins.local.json` instead of `claude-plugins.json`. The base
    * file is NEVER touched on the --local path.
    */
@@ -219,7 +219,7 @@ function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err
 }
 
 /**
- * WB-01 / Pitfall 5: execute a single-scope autoupdate
+ * WB-01: execute a single-scope autoupdate
  * flip inside `withLockedStateTransaction` so the config write-back happens
  * under the per-scope lock (serialized against concurrent state mutators).
  *
@@ -241,7 +241,7 @@ function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err
  */
 /**
  * Reclassify both state-side `changed` AND state-side `unchanged` names
- * against the CONFIG-side `autoupdate` truth (SPLIT-01 + Pitfall 5). The
+ * against the CONFIG-side `autoupdate` truth (SPLIT-01). The
  * config (claude-plugins.json) is the new source of truth. The D-13 scrub
  * strips legacy `autoupdate` from state once the config file exists.
  *
@@ -391,7 +391,7 @@ async function flipOneScope(
       throw new Error(`Config file "${configBasename}" failed schema validation.`);
     }
 
-    // SPLIT-01 + Pitfall 5: idempotency is measured against the CONFIG-side
+    // SPLIT-01: idempotency is measured against the CONFIG-side
     // truth, not state. The D-13 scrub strips legacy `autoupdate` from state
     // once the config file exists, so a state-side idempotency check would
     // re-classify every same-value flip as a "fresh flip" (mtime drift).
@@ -400,8 +400,8 @@ async function flipOneScope(
     const finalResult = reclassifyByConfigTruth(current, stateResult, opts.enable);
 
     if (finalResult.changed.length === 0) {
-      // Pitfall 5 mtime-drift guard: no fresh flip -> SKIP the config
-      // write-back. The targeted config file's mtime is byte-stable.
+      // mtime-drift guard: no fresh flip -> SKIP the config write-back.
+      // The targeted config file's mtime is byte-stable.
       return { ...finalResult, skipped: [] as readonly string[] };
     }
 

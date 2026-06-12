@@ -1109,7 +1109,7 @@ test("importClaudeSettings keeps user and project operations independent", async
 //     result.installedPlugins for THIS scope
 //   - writeBatchedConfigEntries(current, targetConfigPath, scopeRoot, batch)
 //
-// Race-window (Pitfall 8): per-entry orchestrators committed state under
+// Race-window: per-entry orchestrators committed state under
 // their own locks; the batched-save lock acquires after the last per-entry
 // release. A concurrent reconcile can observe the partial state in that
 // window; the next reconcile self-heals.

@@ -353,7 +353,7 @@ test("TR-02 runPhases: failing-phase undo runs BEFORE reverse-walk, exactly once
   assert.equal(result.error?.message, "boom");
   // EXACT expected sequence: failing phase's own undo FIRST, then reverse
   // walk over executed[] = [p0, p1]. Each undo invoked EXACTLY ONCE (no
-  // double-rollback per Pitfall 2 over-correction guard).
+  // double-rollback per the over-correction guard).
   assert.deepEqual(
     ctx.trace,
     ["do:p0", "do:p1", "do:p2", "undo:p2", "undo:p1", "undo:p0"],

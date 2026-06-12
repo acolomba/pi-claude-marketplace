@@ -91,13 +91,13 @@ test("ST-5 migrate normalizes resources.agents and resources.mcpServers to []", 
   assert.deepEqual(p2.resources["mcpServers"], []);
 });
 
-test("Pitfall 9 migrate on null returns empty marketplaces (no mutation flag)", () => {
+test("migrate on null returns empty marketplaces (no mutation flag)", () => {
   const result = migrateLegacyMarketplaceRecords(null, "/ext-root", GATE_CLOSED);
   assert.deepEqual(result.marketplaces, {});
   assert.equal(result.mutated, false);
 });
 
-test("Pitfall 9 migrate on top-level array returns empty marketplaces", () => {
+test("migrate on top-level array returns empty marketplaces", () => {
   const result = migrateLegacyMarketplaceRecords([1, 2, 3], "/ext-root", GATE_CLOSED);
   assert.deepEqual(result.marketplaces, {});
   assert.equal(result.mutated, false);

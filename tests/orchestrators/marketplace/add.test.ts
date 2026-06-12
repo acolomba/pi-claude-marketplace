@@ -250,7 +250,7 @@ test("MA-9 / ATTR-07: invalid manifest after clone renders (failed) {invalid man
       "state must NOT contain the partial marketplace",
     );
 
-    // (4) Pitfall 4: cleanupStaging from addGithubInGuard's catch STILL ran
+    // (4) cleanupStaging from addGithubInGuard's catch STILL ran
     //     before the failed row was emitted -- no staging-dir leak. If
     //     cleanupStaging succeeded, the parent sources-staging/ dir is gone or
     //     contains no leftover uuid subdirs.
@@ -261,7 +261,7 @@ test("MA-9 / ATTR-07: invalid manifest after clone renders (failed) {invalid man
       assert.equal(
         remaining.length,
         0,
-        `MA-9 / Pitfall 4: cleanupStaging must run before the failed row -- no staging leak. ` +
+        `MA-9: cleanupStaging must run before the failed row -- no staging leak. ` +
           `Got remaining=${JSON.stringify(remaining)}`,
       );
     }
@@ -1083,7 +1083,7 @@ test("WB-01: standalone add writes the marketplace entry to claude-plugins.json 
   });
 });
 
-test("WB-01 / Pitfall 2: --local routes the write to claude-plugins.local.json and never touches the base file", async () => {
+test("WB-01: --local routes the write to claude-plugins.local.json and never touches the base file", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     const { ctx, pi } = makeCtx();
     const { gitOps } = makeMockGitOps({

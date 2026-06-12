@@ -45,7 +45,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 const ORCHESTRATORS_ROOT = path.join(REPO_ROOT, "extensions/pi-claude-marketplace/orchestrators");
 
 // All 7 cast-read sites rewired to MergedConfig.
-// The allow-list is now empty -- Pitfall 6 closed. The sibling 'exactly 0'
+// The allow-list is now empty -- the cast-read hazard is closed. The sibling 'exactly 0'
 // assertion below catches any future regression that adds a new cast read.
 const ALLOWED_SPLIT_01_AUTOUPDATE_CAST_FILES: ReadonlySet<string> = new Set<string>();
 
@@ -103,7 +103,7 @@ test("SPLIT-01 baseline: every cast-read of autoupdate is in the allow-list", as
   );
 });
 
-test("SPLIT-01 whitelist: exactly 0 files may read autoupdate via Record<string,unknown> cast (Pitfall 6 closed)", () => {
+test("SPLIT-01 whitelist: exactly 0 files may read autoupdate via Record<string,unknown> cast", () => {
   assert.deepEqual([...ALLOWED_SPLIT_01_AUTOUPDATE_CAST_FILES].sort(), []);
 });
 

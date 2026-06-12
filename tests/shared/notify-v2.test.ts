@@ -544,7 +544,7 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
 });
 
 // ===========================================================================
-// Pitfall 1 (D-48-A byte-regression locks): adding `reasons?` to the MpFailed
+// D-48-A byte-regression locks: adding `reasons?` to the MpFailed
 // arm MUST NOT change the byte form of an existing bare-`(failed)`
 // marketplace state that omits `reasons`. `composeReasons(undefined, ...)`
 // returns "", and the renderer's `reasonsBrace === ""` ternary then emits the
@@ -561,7 +561,7 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
 // The load-bearing proof is that each renders `(failed)` with NO `{...}` brace.
 // ===========================================================================
 
-test("Pitfall 1 / D-48-A: bare-(failed) add `failure-unreachable` form is byte-unchanged (reasons omitted -> brace collapses)", () => {
+test("D-48-A: bare-(failed) add `failure-unreachable` form is byte-unchanged (reasons omitted -> brace collapses)", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
@@ -580,7 +580,7 @@ test("Pitfall 1 / D-48-A: bare-(failed) add `failure-unreachable` form is byte-u
   assert.doesNotMatch(rendered, /\(failed\) \{/);
 });
 
-test("Pitfall 1 / D-48-A: bare-(failed) update `mp-failure-network` header is byte-unchanged (reasons omitted -> brace collapses)", () => {
+test("D-48-A: bare-(failed) update `mp-failure-network` header is byte-unchanged (reasons omitted -> brace collapses)", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
@@ -597,7 +597,7 @@ test("Pitfall 1 / D-48-A: bare-(failed) update `mp-failure-network` header is by
   assert.doesNotMatch(rendered, /\(failed\) \{/);
 });
 
-test("Pitfall 1 / D-48-A: a reasons-omitted failed marketplace arm renders bare `(failed)` (the third bare form; arm byte-stable)", () => {
+test("D-48-A: a reasons-omitted failed marketplace arm renders bare `(failed)` (the third bare form; arm byte-stable)", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   // Explicitly omit `reasons` on the MpFailed arm: the brace MUST collapse.
@@ -3835,7 +3835,7 @@ test("D-54-01: disable cascade (uninstalled plugin row under list-arm mp) emits 
 //   - Realized transition tokens (`added` / `installed` / `uninstalled` /
 //     `disabled` / `failed`) reused from PLUGIN_STATUSES / MARKETPLACE_STATUSES;
 //     no new closed-set members.
-//   - `/reload to pick up changes` trailer is NEVER emitted (Pitfall 4) even
+//   - `/reload to pick up changes` trailer is NEVER emitted even
 //     though the rows would otherwise trigger it on the cascade arm.
 // ===========================================================================
 
@@ -3870,7 +3870,7 @@ test("RECON-04: success cascade -- mixed marketplace add + plugin install across
   );
 });
 
-test("RECON-04: success cascade NEVER emits `/reload to pick up changes` trailer (Pitfall 4)", () => {
+test("RECON-04: success cascade NEVER emits `/reload to pick up changes` trailer", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {

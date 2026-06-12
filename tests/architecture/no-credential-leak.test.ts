@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
  *   2. The platform/git-credential.ts module (which legitimately handles
  *      credentials) MUST NOT interpolate a credential field into an Error
  *      constructor. Error messages reference operation name + exit code or
- *      timeout-ms only (Pitfall 8).
+ *      timeout-ms only.
  *
  * Test (2) passes vacuously when
  * platform/git-credential.ts does not exist on disk; the file's

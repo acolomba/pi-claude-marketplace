@@ -10,24 +10,24 @@
  * extensions/pi-claude-marketplace/ permitted to import node:child_process
  * (whitelist asserted in tests/architecture/no-shell-out.test.ts).
  *
- * Failure-mode contract (Pitfall 7): when git is absent from PATH, the
+ * Failure-mode contract: when git is absent from PATH, the
  * subprocess spawn emits ENOENT. `credentialFill` catches and returns null;
  * `credentialApprove` / `credentialReject` swallow and silently no-op
  * (best-effort persistence per Pattern 3). The current operation still
  * succeeds via Device Flow -- only keychain reuse is lost.
  *
- * Error-message discipline (Pitfall 8 / AUTH-09): no Error constructor in
+ * Error-message discipline (AUTH-09): no Error constructor in
  * this file interpolates a credential field. The only thrown errors from
  * gitCredentialIO reference the subcommand name + timeout-ms or exit code.
  * approve/reject swallow all subprocess errors so they never escape.
  *
- * Non-interactive guarantee (Pitfall 2): env carries `GIT_TERMINAL_PROMPT=0`
+ * Non-interactive guarantee: env carries `GIT_TERMINAL_PROMPT=0`
  * so a credential-helper miss never falls through to a TTY prompt, and
  * `GCM_INTERACTIVE=never` so Git Credential Manager returns null on a
  * cache miss rather than opening a browser OAuth flow. Pi shows the
  * Device Flow URL + code in its own UI via `initiateDeviceFlow` instead.
  *
- * stdin EOF guarantee (Pitfall 3): both `child.stdin.write(input)` AND
+ * stdin EOF guarantee: both `child.stdin.write(input)` AND
  * `child.stdin.end()` are called -- the trailing blank line in the input
  * satisfies the wire format; .end() flushes EOF on the pipe so the helper
  * never waits for more input.
@@ -50,7 +50,7 @@ import type { GitCredentials } from "./git.ts";
  *
  * buildAuthCallbacks consumes this seam.
  *
- * Caller note for keychain hygiene (Pitfall 5): on macOS, repeated approve
+ * Caller note for keychain hygiene: on macOS, repeated approve
  * without a prior reject can accumulate duplicate keychain entries. The
  * buildAuthCallbacks consumer is responsible for sequencing
  * `reject(host, old) → approve(host, new)` when rotating a token. The
@@ -141,7 +141,7 @@ function sanitizeAttrValue(value: string, field: string): string {
  * Wire format: `key=value` lines separated by `\n`, terminated by a blank
  * line (so the full string ends with `\n\n`).
  *
- * Pitfall 4: NEVER emit a `path=` line. fill/approve/reject must use the
+ * NEVER emit a `path=` line. fill/approve/reject must use the
  * SAME attribute set (protocol + host only), else approve stores under a
  * different keychain key than fill reads from.
  */

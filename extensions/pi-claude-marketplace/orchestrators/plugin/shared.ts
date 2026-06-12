@@ -64,7 +64,7 @@ export interface ResolvedScopedPluginTarget {
  *     (the plugin row may or may not be present -- the caller's
  *     downstream `installed === undefined` branch handles the
  *     plugin-row-absent silent converge, distinct from container
- *     absence per RESEARCH M13 / Pitfall 4).
+ *     absence per RESEARCH M13).
  *   - `other-scope`: the requested explicit scope misses, but the SAME
  *     plugin record exists in the OTHER scope. The caller surfaces this
  *     as a `marketplace-not-added` carrying the REQUESTED scope (the
@@ -144,7 +144,7 @@ export async function resolveCrossScopePluginTarget(opts: {
 
     // Container present in the requested scope: resolve there. The plugin
     // row may still be absent -- the caller's `installed === undefined`
-    // branch handles that silent converge (Pitfall 4).
+    // branch handles that silent converge.
     if (requestedState.marketplaces[opts.marketplace] !== undefined) {
       return { kind: "resolved", scope: requestedScope, locations: requestedLocations };
     }
@@ -264,7 +264,7 @@ export function cloneMarketplaceRecordForTargetScope(
  * then shadowed the base entry and silently flipped merged `autoupdate`.
  * Callers pass BOTH files' configs, read fresh inside the lock (WB-01
  * discipline); the merged view is used for the membership test ONLY --
- * never serialized back (Pitfall 1).
+ * never serialized back.
  *
  * Returns `undefined` when ANY physical config of the scope already
  * declares the marketplace (nothing to synthesize -- entry-stable) OR when
@@ -299,7 +299,7 @@ export function synthesizeUndeclaredMarketplaceSource(
 }
 
 /**
- * WB-01 / Pitfall 2 / UAT-05: select the targeted physical config file and
+ * WB-01 / UAT-05: select the targeted physical config file and
  * its sibling (the scope's OTHER file). Target-path selection happens ONCE
  * at the orchestrator boundary so the write path never falls back to the
  * base file on ENOENT; the sibling path exists ONLY for the UAT-05
@@ -327,7 +327,7 @@ export function selectConfigWriteTarget(
  * reads the scope's sibling config file FRESH (callers hold the scope lock
  * -- WB-01 discipline) and runs the merged-view membership gate against
  * BOTH physical files. The sibling load is membership-test-only input; it
- * is never serialized back (Pitfall 1). `absent` / `invalid` sibling arms
+ * is never serialized back. `absent` / `invalid` sibling arms
  * contribute an empty config, mirroring the D-18 merge fallback.
  */
 export async function synthesizeAdoptedMarketplaceSource(opts: {

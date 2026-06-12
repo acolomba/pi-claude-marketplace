@@ -258,7 +258,7 @@ test("MAU-2 / CMC-33 (V2): bare form flips every marketplace in scope; one notif
     const { ctx, pi, notifications } = makeCtx();
     await setMarketplaceAutoupdate({ ctx, pi, enable: true, scope: "project", cwd });
 
-    // Pitfall 5: only the FRESH flip (to-flip) writes back to
+    // Only the FRESH flip (to-flip) writes back to
     // the config; the idempotent `already` row is byte-stable. Both end up
     // resolved as `autoupdate: true` via the merged config (state still
     // carries the seeded `already.autoupdate=true` unscrubbed because the
@@ -503,7 +503,7 @@ test("NFR-5: autoupdate source has zero references to platform/git, gitOps, or D
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// autoupdate WB-01 / --local / WR-09 / Pitfall 5
+// autoupdate WB-01 / --local / WR-09
 // ──────────────────────────────────────────────────────────────────────────
 
 test("WB-01: fresh enable writes back autoupdate=true to claude-plugins.json (with source carried from state)", async () => {
@@ -530,7 +530,7 @@ test("WB-01: fresh enable writes back autoupdate=true to claude-plugins.json (wi
   });
 });
 
-test("Pitfall 5: IDEMPOTENT flip leaves the targeted config file BYTE-IDENTICAL (no mtime drift)", async () => {
+test("IDEMPOTENT flip leaves the targeted config file BYTE-IDENTICAL (no mtime drift)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
@@ -558,7 +558,7 @@ test("Pitfall 5: IDEMPOTENT flip leaves the targeted config file BYTE-IDENTICAL 
     const bytes2 = await readFile(locations.configJsonPath, "utf8");
     const stat2 = await stat(locations.configJsonPath);
 
-    assert.equal(bytes1, bytes2, "idempotent flip MUST be byte-identical (Pitfall 5)");
+    assert.equal(bytes1, bytes2, "idempotent flip MUST be byte-identical");
     assert.equal(
       stat1.mtimeMs,
       stat2.mtimeMs,
@@ -567,7 +567,7 @@ test("Pitfall 5: IDEMPOTENT flip leaves the targeted config file BYTE-IDENTICAL 
   });
 });
 
-test("WB-01 / Pitfall 2: --local routes the autoupdate write to claude-plugins.local.json; base file untouched", async () => {
+test("WB-01: --local routes the autoupdate write to claude-plugins.local.json; base file untouched", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });

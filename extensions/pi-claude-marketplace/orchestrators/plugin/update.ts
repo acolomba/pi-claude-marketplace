@@ -144,7 +144,7 @@ export type UpdatePluginsTarget =
 // `MarketplaceNotAddedSignal` from `./shared.ts` (one source of truth so
 // `instanceof` agrees with reinstall.ts). The cascade path
 // (`updateSinglePlugin` / `preflightUpdate`) NEVER raises it -- it keeps its
-// non-throwing concurrent-removal outcome (Pitfall 3 / A3).
+// non-throwing concurrent-removal outcome (A3).
 
 export interface UpdatePluginsOptions {
   readonly ctx: ExtensionContext;
@@ -164,7 +164,7 @@ export interface UpdatePluginsOptions {
    */
   readonly mapModel?: boolean;
   /**
-   * WB-01 / WB-02 / Pitfall 2: when true, target
+   * WB-01 / WB-02: when true, target
    * `claude-plugins.local.json` instead of `claude-plugins.json` for
    * write-back on the direct path.
    */
@@ -286,7 +286,7 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
         // resolves to false at the bridge call site so cascade re-installs
         // always omit `model:`.
         mapModel: opts.mapModel ?? false,
-        // WB-01 / Pitfall 2: thread `--local` for the direct-path
+        // WB-01: thread `--local` for the direct-path
         // write-back target selection.
         ...(opts.local === true && { local: true }),
       });
@@ -573,7 +573,7 @@ interface ThreePhaseArgs {
    */
   readonly mapModel?: boolean;
   /**
-   * WB-01 / WB-02 / Pitfall 2: when true, target
+   * WB-01 / WB-02: when true, target
    * `claude-plugins.local.json` instead of `claude-plugins.json` for the
    * direct-path write-back. The cascade path (`cascade: true`) SKIPS
    * write-back regardless -- the marketplace autoupdate cascade owns its
@@ -861,8 +861,8 @@ type Phase3Phase = (typeof PHASE3_FAILURE_PHASES)[number];
  * legitimate same-process intent-mark -> commits -> finalize sequence
  * because intent-mark does not bump the version.
  *
- * Pitfall 7: `compatibility.supported` and `compatibility.unsupported`
- * carry forward UNCHANGED from the pre-update sRecord. They are the
+ * `compatibility.supported` and `compatibility.unsupported` carry forward
+ * UNCHANGED from the pre-update sRecord. They are the
  * truthful current view during the intent-mark window; `finalizeUpdateRecord`
  * rewrites them on the all-success branch.
  *
@@ -898,7 +898,7 @@ async function markUpdateInProgress(
     sRecord.compatibility = {
       installable: false,
       notes: [UPDATE_IN_PROGRESS_NOTE],
-      // Pitfall 7: carry forward from EXISTING sRecord, NOT from
+      // Carry forward from EXISTING sRecord, NOT from
       // preflight.installable -- the pre-update arrays are the truthful
       // view during the intent-mark window.
       supported: [...sRecord.compatibility.supported],
@@ -916,7 +916,7 @@ async function markUpdateInProgress(
  * 1. PER-BRIDGE (independent across bridges): for each of skills /
  *    commands / agents / mcp, if `!failedPhases.has(bridge)` then write
  *    `sRecord.resources.<schemaField> = handles.<bridge>.result.recorded
- *    .map(r => r.generatedName)`. SC#2 + Pitfall 1: do NOT
+ *    .map(r => r.generatedName)`. SC#2: do NOT
  *    gate per-bridge writes on `phase3aFailures.length === 0`; the
  *    independent per-bridge gate is the load-bearing structural contract.
  *
@@ -1060,7 +1060,7 @@ async function finalizeUpdateRecord(
 
     sRecord.updatedAt = new Date().toISOString();
 
-    // WB-01 / A7 / Pitfall 5: deep-equal short-circuited config write-back
+    // WB-01 / A7: deep-equal short-circuited config write-back
     // on the all-success arm. SKIPPED in cascade mode (the marketplace
     // autoupdate cascade owns its own writes; mirrors WR-09 orchestrated-
     // mode semantics). The deep-equal gate compares the prospective
@@ -1277,8 +1277,8 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   // 'mcp' push inside the finalize catch (below) trips the phase-3b branch
   // so the recovery hint fires.
   //
-  // Pitfall 4: a finalize throw routes through
-  // `phase3aFailures` as a synthetic `phase: "mcp"` entry so the existing
+  // A finalize throw routes through `phase3aFailures` as a synthetic
+  // `phase: "mcp"` entry so the existing
   // `notifyDirectFailure` recovery-hint pipeline fires unchanged. The
   // `msg` field carries the explicit `state finalize failed:` text so
   // operator diagnostics see the truthful cause. A dedicated
@@ -1982,7 +1982,7 @@ async function enumerateMarketplaceTarget(
   // (`<plugin>@<mp>` and `@<mp>`). For the plugin form, first try the
   // installed-plugin target; a miss falls back to the marketplace-existence
   // resolver so a present-marketplace/absent-plugin row still reaches the
-  // downstream `(skipped) {not installed}` preflight (Pitfall 4). A
+  // downstream `(skipped) {not installed}` preflight. A
   // marketplace-absent / other-scope outcome raises `MarketplaceNotAddedSignal`
   // -- caught at the `updatePlugins` entrypoint and re-attributed to the
   // standalone `{not added}` variant -- instead of the former raw
@@ -2026,7 +2026,7 @@ async function enumerateMarketplaceTarget(
  *    row is absent, fall back to the marketplace-existence resolver so a
  *    present-marketplace/absent-plugin target resolves against the container's
  *    scope (the downstream `preflightUpdate` emits `(skipped) {not installed}`
- *    -- Pitfall 4); a marketplace-absent / other-scope outcome signals
+ *    ); a marketplace-absent / other-scope outcome signals
  *    `{not added}` carrying the REQUESTED scope (SCOPE-01).
  *  - MARKETPLACE form: consume the discriminated `resolveInstalledMarketplaceTarget`
  *    result directly; `marketplace-absent`/`other-scope` signal `{not added}`

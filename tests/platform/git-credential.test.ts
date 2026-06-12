@@ -8,7 +8,7 @@
  * Production-path tests:
  *  - Test 6: forces ENOENT on the real DEFAULT_CREDENTIAL_OPS.fill by
  *    overriding PATH to an empty / non-existent value. Asserts the
- *    Pitfall 7 try/catch returns null within 2s.
+ *    production try/catch returns null within 2s.
  *  - Test 7: opt-in real-subprocess smoke against an invented host,
  *    gated by `PI_CM_REAL_GIT_CREDENTIAL=1`. Proves the
  *    GIT_TERMINAL_PROMPT=0 + stdin.end() combo prevents the hang.
@@ -55,7 +55,7 @@ test("credOps: fill miss -- mock returns null on empty store", async () => {
 test("credOps: fill ENOENT-equivalent -- mock fillThrows surfaces to caller", async () => {
   // Simulates the underlying subprocess error a caller's try/catch would
   // see. The PRODUCTION fill wraps gitCredentialIO in try/catch and
-  // returns null (Pitfall 7); the MOCK does not -- it faithfully
+  // returns null; the MOCK does not -- it faithfully
   // reproduces the throw so callers can exercise their own handling.
   const enoent = new Error("ENOENT: git not found on PATH");
   const { credOps, state } = makeMockCredentialOps({ fillThrows: enoent });
@@ -93,7 +93,7 @@ test("credOps: reject evicts -- subsequent fill returns null", async () => {
   assert.equal(state.fillCalls.length, 1);
 });
 
-test("credOps: DEFAULT_CREDENTIAL_OPS.fill returns null when git binary is absent (Pitfall 7)", async () => {
+test("credOps: DEFAULT_CREDENTIAL_OPS.fill returns null when git binary is absent", async () => {
   // Skip on Windows: PATH semantics differ (PATHEXT, .exe resolution)
   // and the test isn't materially more informative there. The mock and
   // the real-subprocess smoke (Test 7) cover the contract across
@@ -121,7 +121,8 @@ test("credOps: DEFAULT_CREDENTIAL_OPS.fill returns null when git binary is absen
 
 test("credOps: real `git credential fill` against invented host returns null within 2s (PI_CM_REAL_GIT_CREDENTIAL=1)", async () => {
   // Operator opt-in smoke: proves the GIT_TERMINAL_PROMPT=0 + stdin.end()
-  // combo prevents the hang Pitfall 2 + Pitfall 3 describe. Skipped by
+  // combo prevents the hang the non-interactive + stdin EOF contracts
+  // describe. Skipped by
   // default so the suite never touches the dev's OS keychain.
   if (process.env["PI_CM_REAL_GIT_CREDENTIAL"] !== "1") {
     return;
@@ -139,7 +140,7 @@ test("credOps: real `git credential fill` against invented host returns null wit
   assert.ok(elapsedMs < 2_000, `expected resolution within 2s; took ${elapsedMs}ms`);
 });
 
-test("credOps: fill builds host-only attribute block (Pitfall 4 -- no path= field)", async () => {
+test("credOps: fill builds host-only attribute block (no path= field)", async () => {
   // The mock only sees the `host` argument because the attribute block
   // is an implementation detail of the PRODUCTION fill. Asserting on
   // the mock's call log proves the seam never widens its contract to
@@ -178,7 +179,7 @@ test("credOps: sanitizeAttrValue throws when host contains \\n -- fill propagate
   );
 });
 
-test("credOps: buildAttributeBlock with cred covers username+password lines (Pitfall 4)", async () => {
+test("credOps: buildAttributeBlock with cred covers username+password lines", async () => {
   // approve() calls buildAttributeBlock(host, cred) which emits username= and
   // password= lines (git-credential.ts:146-151). With PATH zeroed the subprocess
   // throws ENOENT; credentialApprove's own try/catch swallows and returns void.

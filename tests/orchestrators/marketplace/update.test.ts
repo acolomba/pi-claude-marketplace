@@ -526,7 +526,7 @@ test("WR-02: corrupt pre-existing manifest routes to (failed), never a silent no
 // InvalidMarketplaceManifestError (thrown by loadMarketplaceManifest, wrapped in
 // MarketplaceUpdateError by refreshRecord) BEFORE the `?? network unreachable`
 // fallback fires. github-source no-errno failures KEEP `{network unreachable}`
-// as the catch-all (Pitfall 3: the path/github classification did not collapse).
+// as the catch-all (the path/github classification did not collapse).
 // ───────────────────────────────────────────────────────────────────────────
 
 /** Seed a path-source marketplace pointing at an on-disk dir under the cwd. */
@@ -653,7 +653,7 @@ test("NFR-5: path-source update FAILURE (invalid manifest) still calls zero gitO
   });
 });
 
-test("Pitfall 3: github-source no-errno refresh failure still renders `{network unreachable}` (classification did not collapse)", async () => {
+test("github-source no-errno refresh failure still renders `{network unreachable}` (classification did not collapse)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // A github fetch failure with NO errno code and NO typed manifest error is
     // genuinely plausibly-network -> the `?? ["network unreachable"]` catch-all

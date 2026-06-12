@@ -15,9 +15,9 @@
 //   - registerClaudeMarketplaceTools(pi):
 //       * delegates to registerListMarketplacesTool + registerListPluginsTool.
 //
-// Pitfall 3: `process.cwd()` is acceptable here at the registration glue
-// layer -- this is the one site where it is sanctioned. The cwd captured
-// here is per-command-registration.
+// `process.cwd()` is acceptable here at the registration glue layer --
+// this is the one site where it is sanctioned. The cwd captured here is
+// per-command-registration.
 //
 // BLOCK C: this file imports from edge/* (sibling), orchestrators/* (one
 // allowed up-import), shared/* (leaf), and the Pi peer dep. The
@@ -99,7 +99,7 @@ export function registerClaudePluginCommand(pi: ExtensionAPI, deps: EdgeDeps): v
   pi.registerCommand("claude:plugin", {
     description: COMMAND_DESCRIPTION,
     handler: (args, ctx) => routeClaudePlugin(args, handlers, ctx),
-    // Pitfall 3: this `process.cwd()` is the single sanctioned site.
+    // This `process.cwd()` is the single sanctioned site.
     // Captured at registration time; threads through every keystroke's
     // completion lookup via the closed-over resolver.
     getArgumentCompletions: (prefix) =>

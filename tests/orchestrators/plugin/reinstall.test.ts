@@ -2408,7 +2408,7 @@ test("WB-01 / A7: reinstall with DIFFERENT existing entry writes back the patche
   });
 });
 
-test("WB-01 / Pitfall 2: --local reinstall targets the local file; base file untouched", async () => {
+test("WB-01: --local reinstall targets the local file; base file untouched", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wb01-local-"));
     try {
@@ -2435,8 +2435,8 @@ test("WB-01 / Pitfall 2: --local reinstall targets the local file; base file unt
       });
       assert.equal(outcome.partition, "reinstalled");
 
-      // Base bytes UNCHANGED on the --local path (Pitfall 2: --local NEVER
-      // touches the base file).
+      // Base bytes UNCHANGED on the --local path (--local NEVER touches the
+      // base file).
       const baseBytesAfter = await readFile(locations.configJsonPath);
       assert.deepEqual(baseBytesAfter, baseBytesBefore);
 

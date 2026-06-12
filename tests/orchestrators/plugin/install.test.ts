@@ -2344,7 +2344,7 @@ test("WB-01: standalone install writes the plugin entry to claude-plugins.json",
   });
 });
 
-test("WB-01 / Pitfall 2: --local routes the write to claude-plugins.local.json; base file untouched", async () => {
+test("WB-01: --local routes the write to claude-plugins.local.json; base file untouched", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-local-"));
     try {
@@ -2617,7 +2617,7 @@ test("UAT-05 / CR-02: --local install with marketplace declared NOWHERE declares
       assert.deepEqual(localCfg.config.plugins?.["hello@mp"], {});
       assert.equal(localCfg.config.marketplaces?.["mp"]?.source, "./mp-src");
 
-      // Base stays untouched (WB-01 / Pitfall 2).
+      // Base stays untouched (WB-01).
       assert.equal((await loadConfig(locations.configJsonPath)).status, "absent");
 
       // Reconcile against (merged view, post-install state) is the EMPTY

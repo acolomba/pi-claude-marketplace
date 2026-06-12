@@ -549,8 +549,8 @@ function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undef
   // manifest failure is network-free (NFR-5), so it MUST NOT fall through to the
   // `?? ["network unreachable"]` default at the refreshOneMarketplace catch; a
   // github clone that advanced and then hit a malformed manifest is genuinely
-  // `invalid manifest` too (Pitfall 3 -- only typed manifest errors map here,
-  // not generic github network failures). The refreshOneMarketplace catch sees
+  // `invalid manifest` too (only typed manifest errors map here, not generic
+  // github network failures). The refreshOneMarketplace catch sees
   // the InvalidMarketplaceManifestError WRAPPED inside a MarketplaceUpdateError
   // (refreshRecord rethrows with `{ cause }`), so unwrap ONE level of cause as
   // well (mirrors add.ts::unwrapAddError). The cascadeAutoupdates catch passes

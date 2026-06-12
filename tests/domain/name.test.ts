@@ -98,7 +98,7 @@ test("SK-2 generatedSkillName basic case", () => {
   assert.equal(generatedSkillName("acme", "foo"), "acme-foo");
 });
 
-test("SK-2 generatedSkillName elides plugin prefix when source starts with it (Pitfall 8)", () => {
+test("SK-2 generatedSkillName elides plugin prefix when source starts with it", () => {
   assert.equal(generatedSkillName("acme", "acme-foo"), "acme-foo");
 });
 
@@ -107,7 +107,7 @@ test("SK-2 generatedSkillName does NOT elide when source merely contains plugin 
   assert.equal(generatedSkillName("ab", "abc"), "ab-abc");
 });
 
-test("SK-2 generatedSkillName does NOT double-elide (Pitfall 8: only one layer of prefix removed)", () => {
+test("SK-2 generatedSkillName does NOT double-elide (only one layer of prefix removed)", () => {
   // Verifies that we don't strip TWO prefixes; only one.
   assert.equal(generatedSkillName("acme", "acme-acme-foo"), "acme-acme-foo");
 });
@@ -128,7 +128,7 @@ test("CM-2 generatedCommandName basic case", () => {
   assert.equal(generatedCommandName("acme", "foo"), "acme:foo");
 });
 
-test("CM-2 generatedCommandName elides plugin- prefix from source (Pitfall 8)", () => {
+test("CM-2 generatedCommandName elides plugin- prefix from source", () => {
   assert.equal(generatedCommandName("acme", "acme-foo"), "acme:foo");
 });
 
@@ -151,7 +151,7 @@ test("AG-1 generatedAgentName basic case", () => {
   assert.equal(generatedAgentName("acme", "bot"), "pi-claude-marketplace-acme-bot");
 });
 
-test("AG-1 generatedAgentName elides plugin- prefix from source (Pitfall 8)", () => {
+test("AG-1 generatedAgentName elides plugin- prefix from source", () => {
   assert.equal(generatedAgentName("acme", "acme-bot"), "pi-claude-marketplace-acme-bot");
 });
 

@@ -720,7 +720,7 @@ async function executeScopedPlan(
     }
   }
 
-  // WB-03 / Pitfall 8: after all per-entry orchestrated-mode addMarketplace
+  // WB-03: after all per-entry orchestrated-mode addMarketplace
   // + installPlugin calls complete for THIS scope, run a per-scope batched
   // post-pass under ONE withLockedStateTransaction. Per-entry orchestrators
   // SKIPPED their own write-back (WR-09 orchestrated-mode discipline) so the

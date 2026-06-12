@@ -264,7 +264,7 @@ test("RECON-06 (two-process race): config declares one path-source mp-a + plugin
     const outcome = await runRace(env);
 
     // NFR-2: both children exit code 0 (neither escapes the harness
-    // boundary). Per Pitfall 10 / the plan's "must haves" truths, a process
+    // boundary). Per the plan's "must haves" truths, a process
     // that loses the read-pass lock is allowed to either succeed (against an
     // already-converged plan) OR soft-fail with the StateLockHeldError
     // marker -- the test does NOT assert "exactly one winner". The

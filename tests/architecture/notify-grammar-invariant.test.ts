@@ -424,7 +424,7 @@ test("RECON-04: reconcile-applied-cascade NEVER emits `/reload to pick up change
     const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
     const emitted = args[0];
 
-    // Pitfall 4 / RECON-04: the trailer is structurally excluded -- the
+    // RECON-04: the trailer is structurally excluded -- the
     // reconcile already ran ON /reload, so the trailer would be a lie.
     assert.ok(
       !emitted.includes("/reload to pick up changes"),

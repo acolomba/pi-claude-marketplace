@@ -359,7 +359,7 @@ export async function commitPreparedAgents(
   // a partial failure -- mirrors the rollback shape in
   // `rollbackReplacementCommon` (shared/fs-utils.ts:135-177): spread-before-
   // reverse to avoid in-place mutation, per-pair try/catch into a leaks[]
-  // string array, and the rollback loop NEVER throws (Pitfall 1).
+  // string array, and the rollback loop NEVER throws.
   const completedRenames: { from: string; to: string }[] = [];
   try {
     await mkdir(prepared.locations.agentsDir, { recursive: true });
@@ -384,8 +384,8 @@ export async function commitPreparedAgents(
 
     // Surface BOTH original err AND rollback leaks AND staging-cleanup leak
     // via appendLeaks (sequential-cause chain; preserves Error.cause for the
-    // depth-5 walker in shared/notify.ts). Pitfall 8: use appendLeaks here,
-    // NOT ManualRecoveryError -- commit-path leaks are transient IO.
+    // depth-5 walker in shared/notify.ts). Use appendLeaks here, NOT
+    // ManualRecoveryError -- commit-path leaks are transient IO.
     throw appendLeaks(err, [
       ...rollbackLeaks,
       await cleanupStaging(prepared.stagingDir, "agents staging directory"),

@@ -45,7 +45,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
  * stripComments rationale (mandatory):
  *   Source files include header docstrings that legally mention the forbidden
  *   symbols (e.g. "MUST NOT import platform/git"). Without `stripComments`,
- *   the assertion would fail on prose. See Pitfall 5 / Pitfall 8.
+ *   the assertion would fail on prose.
  */
 const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts",

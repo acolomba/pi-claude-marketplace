@@ -81,7 +81,7 @@ test("CACHE-01/D-03: hits return the loaded value by reference (r1 === r2 === r3
 //
 // Invalidation is driven off a different BYTE LENGTH (an added plugin entry),
 // never a same-size rewrite -- a same-size rewrite within the filesystem's
-// mtime resolution could collide on (mtimeMs,size) and flake (Pitfall 3/4).
+// mtime resolution could collide on (mtimeMs,size) and flake.
 // ──────────────────────────────────────────────────────────────────────────
 
 test("CACHE-02 success->success: a size change triggers a reload and returns the new value", async () => {
@@ -124,7 +124,7 @@ test("CACHE-02 success->success: a size change triggers a reload and returns the
 // ──────────────────────────────────────────────────────────────────────────
 // CACHE-02 + CACHE-05 (failure -> success): a prior NEGATIVE (failure) entry is
 // discarded on a (mtimeMs,size) change; the next read re-attempts the loader and
-// succeeds. The change is again driven off a SIZE change (Pitfall 3/4).
+// succeeds. The change is again driven off a SIZE change.
 // ──────────────────────────────────────────────────────────────────────────
 
 test("CACHE-02/CACHE-05 failure->success: a negative entry is discarded on a size change; next read succeeds", async () => {

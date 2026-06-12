@@ -21,7 +21,7 @@
 // synthetic `(failed)` cascade row, or a raw throw) would break this gate even
 // though each op's own orchestrator test might not catch the cross-op drift.
 //
-// CANONICAL ROWS (two, per RESEARCH "Pitfall 4"):
+// CANONICAL ROWS (two):
 //   - explicit-scope: `⊘ ghost-mp [project] (failed) {not added}`
 //   - bare/bracketless: `⊘ ghost-mp (failed) {not added}`
 // Both at severity "error", one emission per invocation (IL-2).

@@ -33,7 +33,7 @@
 // `PLUGIN_STATUSES` tuple and the variant `status` literals fall out of sync
 // (e.g., typo `status: "instaled"` in `PluginInstalledMessage`) breaks the
 // bidirectional `_Assert_PluginStatusForward` / `_Assert_PluginStatusBackward`
-// round-trip and fails `npm run typecheck` (Pitfall 1).
+// round-trip and fails `npm run typecheck`.
 //
 // Discretion:
 //   - One named `_Assert_*` block per invariant (vs. a single conjunction
@@ -123,8 +123,7 @@ type _Reason = import("../../extensions/pi-claude-marketplace/shared/notify.ts")
 
 // SNM-04 round-trip: `PluginStatus` IS exactly `PluginNotificationMessage["status"]`.
 // BOTH directions are load-bearing -- dropping either side silently allows the
-// `PLUGIN_STATUSES` tuple and the variant `status` literals to drift apart
-// (Pitfall 1).
+// `PLUGIN_STATUSES` tuple and the variant `status` literals to drift apart.
 type _Assert_PluginStatusForward = PluginStatus extends PluginNotificationMessage["status"]
   ? true
   : never;
@@ -277,7 +276,7 @@ export type _NoTrailerOnNotificationMessage = CascadeNotificationMessage["traile
 // discriminated union. Every arm carries the common `name` / `scope` /
 // `plugins`; `reasons` is reachable ONLY on the `skipped` arm and `details`
 // ONLY on the list (`status?: undefined`) arm. Under a union the old
-// all-optional struct no longer proves the constraint (Pitfall 5) -- instead,
+// all-optional struct no longer proves the constraint -- instead,
 // prove the common fields exist on every arm and that the discriminated
 // `status` set is exactly the closed `MarketplaceStatus` plus `undefined`
 // (list arm). The per-arm co-occurrence proofs (`reasons` only on skipped,
@@ -1023,7 +1022,7 @@ export const _l8b: _Assert_RowUnresolvedBase = true;
 // Resolved arm: components carries the four optional per-kind arrays, plus
 // optional dependencies. Locks the "renderer assumes pre-sorted input"
 // precondition's shape (the precondition itself is enforced by the
-// orchestrator -- see Pitfall 5).
+// orchestrator).
 interface _ComponentsExpected {
   readonly agents?: readonly string[];
   readonly commands?: readonly string[];

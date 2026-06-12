@@ -20,7 +20,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
  * The grep operates over the COMMENT-STRIPPED source (same `stripComments`
  * pattern as `tests/architecture/no-orchestrator-network.test.ts`) so the
  * planner's header docstring may legally mention "this module never imports
- * notify" without self-invalidating the gate (Pitfall 5 / Pitfall 8).
+ * notify" without self-invalidating the gate.
  *
  * Why this exists: the DIFF-01 SC#1 purity invariant is the seam that lets
  * the planner be unit-tested in isolation and that load-time apply can call from

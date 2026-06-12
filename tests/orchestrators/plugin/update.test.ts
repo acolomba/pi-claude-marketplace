@@ -465,7 +465,7 @@ test("PUP-6 happy: version bump triggers 3-phase swap; state reflects new versio
       // intent-mark `compatibility = { installable: false, notes:
       // [update-in-progress] }` set by `markUpdateInProgress` must be
       // overwritten by `finalizeUpdateRecord` on the all-success path.
-      // Pitfall 6 + WR-04 alignment: lock the no-leak assertion.
+      // WR-04 alignment: lock the no-leak assertion.
       assert.equal(record.compatibility.installable, true);
       assert.ok(
         !record.compatibility.notes.includes("update-in-progress"),
@@ -911,7 +911,7 @@ test("WR-04: successful update populates stagedAgents + stagedMcpServers on outc
         process.chdir(prevCwd);
       }
 
-      // TR-04 Pitfall 6: outcome-shape assertions don't
+      // TR-04: outcome-shape assertions don't
       // exercise on-disk state, so lock the all-success finalize contract
       // explicitly. Load state via the project-scope locations resolved
       // from the same cwd that drove updateSinglePlugin.
@@ -2324,7 +2324,7 @@ test("WB-01 / A7: changed update with a DIFFERENT existing entry writes back (pr
   });
 });
 
-test("WB-01 / Pitfall 5: up-to-date update does NOT write the config (RECON-05 fixed-point preserved)", async () => {
+test("WB-01: up-to-date update does NOT write the config (RECON-05 fixed-point preserved)", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-wb01-uptodate-"));
     try {
@@ -2366,7 +2366,7 @@ test("WB-01 / Pitfall 5: up-to-date update does NOT write the config (RECON-05 f
   });
 });
 
-test("WB-01 / Pitfall 2: --local update targets the local file; base file untouched", async () => {
+test("WB-01: --local update targets the local file; base file untouched", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-wb01-local-"));
     try {
@@ -2400,7 +2400,7 @@ test("WB-01 / Pitfall 2: --local update targets the local file; base file untouc
         local: true,
       });
 
-      // Base bytes UNCHANGED (Pitfall 2: --local NEVER touches the base file).
+      // Base bytes UNCHANGED (--local NEVER touches the base file).
       const baseBytesAfter = await readFile(locations.configJsonPath);
       assert.deepEqual(baseBytesAfter, baseBytesBefore);
     } finally {

@@ -372,7 +372,7 @@ test("WB-01 SC#4 (add + remove cascade): post-remove reconcile is a no-op and co
       return;
     }
 
-    // remove cleared the entry (Pitfall 4 cascade: no orphaned plugin keys).
+    // remove cleared the entry (cascade: no orphaned plugin keys).
     assert.equal("valid-marketplace" in (cfg.config.marketplaces ?? {}), false);
 
     const stateAfter = await loadState(locations.extensionRoot);

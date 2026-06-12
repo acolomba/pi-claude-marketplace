@@ -151,7 +151,7 @@ test("RECON-01 (decl-but-missing -> add at load): config declares mp-a, state em
     // No /reload trailer.
     assert.ok(
       !args[0].includes("/reload to pick up changes"),
-      `RECON-04 / Pitfall 4: applyReconcile cascade MUST NOT emit /reload trailer; got:\n${args[0]}`,
+      `RECON-04: applyReconcile cascade MUST NOT emit /reload trailer; got:\n${args[0]}`,
     );
   });
 });
@@ -286,7 +286,7 @@ test("RECON-03 (per-entry network soft-fail): one failing github mp + one succee
       emitted.includes("(added)") && emitted.includes("valid-marketplace"),
       `expected sibling success row to continue past the failure; got:\n${emitted}`,
     );
-    // No /reload trailer (Pitfall 4).
+    // No /reload trailer.
     assert.ok(
       !emitted.includes("/reload to pick up changes"),
       `RECON-04 cascade MUST NOT emit /reload trailer; got:\n${emitted}`,
@@ -1333,8 +1333,8 @@ test("T1 / PR #51: load-time ENABLE through applyReconcile -- disabled record + 
       args[0].includes("foo") && args[0].includes("(installed)"),
       `T1: expected (installed) child row for foo; got:\n${args[0]}`,
     );
-    // RECON-04 / Pitfall 4: applyReconcile cascade MUST NOT emit /reload
-    // trailer (the load-time pass owns the reload, not the user).
+    // RECON-04: applyReconcile cascade MUST NOT emit /reload trailer
+    // (the load-time pass owns the reload, not the user).
     assert.ok(
       !args[0].includes("/reload to pick up changes"),
       `T1: applyReconcile cascade MUST NOT emit /reload trailer; got:\n${args[0]}`,

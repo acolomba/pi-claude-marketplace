@@ -1243,7 +1243,7 @@ test("cache-drop EISDIR swallowed: success notification still emitted, plugin re
 //
 // Both tests stub the cascade (no real filesystem race needed) and
 // re-load state from disk after the orchestrator call to verify the
-// mutation persisted (Pitfall 3: in-memory-only mutations are silent
+// mutation persisted (in-memory-only mutations are silent
 // regressions if not checked against disk).
 
 test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sRecord shrunk on disk", async () => {
@@ -1306,7 +1306,7 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
       });
 
       // (1) Re-load state from disk. The shrunken-row contract requires
-      // saveState to have committed; Pitfall 3 catches in-memory-only
+      // saveState to have committed; the disk re-load catches in-memory-only
       // mutations that never reach state.json.
       const after = await loadState(locations.extensionRoot);
       const sRecord = after.marketplaces["mp"]?.plugins["hello"];
@@ -1343,8 +1343,8 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
         ),
         `TR-03 partial: expected failure row; got "${notifications[0]?.message ?? ""}"`,
       );
-      // (5) No reload-hint trailer on failure (Pitfall 4: cleanup branch
-      // skipped; the (uninstalled) variant never reached the notify call).
+      // (5) No reload-hint trailer on failure (cleanup branch skipped; the
+      // (uninstalled) variant never reached the notify call).
       assert.equal(
         (notifications[0]?.message ?? "").includes("/reload to pick up changes"),
         false,
@@ -1659,7 +1659,7 @@ test("WB-01: standalone uninstall deletes the plugin entry from claude-plugins.j
   });
 });
 
-test("WB-01 / Pitfall 2: --local uninstall deletes from claude-plugins.local.json; base file untouched", async () => {
+test("WB-01: --local uninstall deletes from claude-plugins.local.json; base file untouched", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wb01-local-"));
     try {
@@ -1747,7 +1747,7 @@ test("WR-09 / T-56-03-01: orchestrated-mode uninstall SKIPS write-back; config u
   });
 });
 
-test("WB-01 / Pitfall 5: ALREADY-GONE uninstall leaves config byte-unchanged", async () => {
+test("WB-01: ALREADY-GONE uninstall leaves config byte-unchanged", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wb01-gone-"));
     try {

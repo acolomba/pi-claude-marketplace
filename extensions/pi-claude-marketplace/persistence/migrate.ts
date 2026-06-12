@@ -130,7 +130,7 @@ function ensurePluginResources(mp: Record<string, unknown>): boolean {
  *
  * Behavior:
  *   - non-object / null parsed input -> { marketplaces: {}, mutated: false }
- *   - parsed object with non-object marketplaces -> reset to {} (Pitfall 9)
+ *   - parsed object with non-object marketplaces -> reset to {}
  *   - per-marketplace: fill manifestPath and marketplaceRoot with defaults
  *     derived from `<extensionRoot>/sources/<mp>/...` (ST-4)
  *   - per-plugin: ensure resources.agents and resources.mcpServers are
@@ -145,7 +145,7 @@ export function migrateLegacyMarketplaceRecords(
   extensionRoot: string,
   scrubAutoupdate: boolean,
 ): MigrationResult {
-  // Reject anything that isn't an object (Pitfall 9: null/array -> reset).
+  // Reject anything that isn't an object (null/array -> reset).
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     return { marketplaces: {}, mutated: false };
   }

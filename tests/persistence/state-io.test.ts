@@ -15,12 +15,12 @@ import {
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 /**
- * ST-1, ST-6, Pitfall 9 -- state.json load/save behavior.
+ * ST-1, ST-6 -- state.json load/save behavior.
  *
  * Each test creates an isolated tmpdir representing the extensionRoot and
  * cleans up afterwards. Round-trip uses saveState followed by loadState.
- * Pitfall-9 cases verify ENOENT and structurally-empty states return the
- * canonical DEFAULT_STATE shape.
+ * The missing-file / empty-`{}` cases verify ENOENT and structurally-empty
+ * states return the canonical DEFAULT_STATE shape.
  */
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -51,7 +51,7 @@ async function tmpExtensionRoot(): Promise<{ root: string; cleanup: () => Promis
   return { root, cleanup };
 }
 
-test("Pitfall 9 loadState on missing state.json returns DEFAULT_STATE", async () => {
+test("loadState on missing state.json returns DEFAULT_STATE", async () => {
   const { root, cleanup } = await tmpExtensionRoot();
   try {
     const got = await loadState(root);
@@ -61,7 +61,7 @@ test("Pitfall 9 loadState on missing state.json returns DEFAULT_STATE", async ()
   }
 });
 
-test("Pitfall 9 loadState on empty {} state.json returns DEFAULT_STATE shape", async () => {
+test("loadState on empty {} state.json returns DEFAULT_STATE shape", async () => {
   const { root, cleanup } = await tmpExtensionRoot();
   try {
     await writeFile(path.join(root, "state.json"), "{}");

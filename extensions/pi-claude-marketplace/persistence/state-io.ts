@@ -3,15 +3,15 @@
 // STATE_SCHEMA (ST-1, ST-2, ST-3) + loadState (ST-4..6 funneling) +
 // saveState (NFR-1 / AS-1 via atomicWriteJson).
 //
-// Per Pitfall 9, ENOENT and missing/empty marketplaces map are treated
-// identically as DEFAULT_STATE. Per ST-6, source records flow through
+// ENOENT and missing/empty marketplaces map are treated identically as
+// DEFAULT_STATE. Per ST-6, source records flow through
 // pathSource/githubSource at load time -- the SAME factories used at
 // marketplace-add parse time.
 //
 // Per D-09, state shape nests plugins under their owning
 // marketplace; the (mp, plugin) tuple is the natural composite key.
 //
-// Per Pitfall 4, this layer is INTRA-PROCESS only; cross-process
+// This layer is INTRA-PROCESS only; cross-process
 // safety is NOT claimed. withStateGuard enforces the
 // single-writer-at-a-time discipline; cross-process races resolve
 // last-writer-wins via write-file-atomic's queue.
@@ -91,7 +91,7 @@ export type ExtensionState = Type.Static<typeof STATE_SCHEMA>;
 /** JIT-compiled validator (D-07). */
 export const STATE_VALIDATOR = Compile(STATE_SCHEMA);
 
-/** First-load default (Pitfall 9: ENOENT and empty treated identically). */
+/** First-load default (ENOENT and empty treated identically). */
 export const DEFAULT_STATE: ExtensionState = Object.freeze({
   schemaVersion: 1,
   marketplaces: {},
@@ -147,7 +147,7 @@ function normalizeStoredSource(mpName: string, mp: Record<string, unknown>): voi
 /**
  * ST-1, ST-4, ST-5, ST-6: load + migrate + revalidate state.json.
  *
- * Returns DEFAULT_STATE on ENOENT (Pitfall 9). Throws on any other I/O
+ * Returns DEFAULT_STATE on ENOENT. Throws on any other I/O
  * error or on post-migration schema validation failure (caller logs and
  * surfaces).
  *
@@ -163,7 +163,7 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
     raw = await readFile(stateJsonPath, "utf8");
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      // Pitfall 9: missing file -> default state (NOT throw).
+      // Missing file -> default state (NOT throw).
       return { schemaVersion: 1, marketplaces: {} };
     }
 

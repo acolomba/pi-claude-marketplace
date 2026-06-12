@@ -18,7 +18,7 @@
 // a `NotificationMessage` payload, a `MockPi` factory (to drive the
 // `softDepStatus(pi)` probe inside `notify()`) and an optional
 // `expectedSeverity` ("warning" | "error") so the driver loop can assert
-// the Pi-API magic-string severity arg shape per Pitfall 6.
+// the Pi-API magic-string severity arg shape.
 //
 // PARSER PRESERVATION (D-17-05, D-17-06): the catalog-walking logic
 // (`loadCatalogExamples` + the section/state regular expressions + the
@@ -193,7 +193,7 @@ function piWithNothingLoaded(): MockPi {
 }
 
 // ---------------------------------------------------------------------------
-// Fixture map shape (D-17-05 + Pitfall 6).
+// Fixture map shape (D-17-05).
 // ---------------------------------------------------------------------------
 
 interface CatalogFixture {
@@ -2615,7 +2615,7 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
       });
     }
 
-    // Severity-arg assertion per Pitfall 6.
+    // Severity-arg assertion.
     if (fixture.expectedSeverity !== undefined) {
       if (callArgs.length !== 2 || callArgs[1] !== fixture.expectedSeverity) {
         failures.push({

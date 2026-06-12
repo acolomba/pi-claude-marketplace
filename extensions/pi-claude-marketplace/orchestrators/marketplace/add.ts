@@ -182,7 +182,7 @@ export interface AddMarketplaceOptions {
    */
   readonly notifications?: AddMarketplaceNotifications;
   /**
-   * WB-01 / Pitfall 2: when true, target
+   * WB-01: when true, target
    * `claude-plugins.local.json` instead of `claude-plugins.json`. The base
    * file is NEVER touched on the --local path; loadConfig's `absent` arm
    * yields an empty starting shape that saveConfig writes back to the local
@@ -197,7 +197,7 @@ export interface AddMarketplaceOptions {
  * error via `appendLeakToError` when `cleanupStaging` itself leaks -- that
  * produces a generic `Error` whose `.cause` is the original typed error. Both
  * the unwrapped (no-leak) and wrapped (leak) shapes must classify identically,
- * so ATTR-07 routing survives a cleanup leak (Pitfall 4). Single level only --
+ * so ATTR-07 routing survives a cleanup leak. Single level only --
  * a deeper chain is not an add-precondition shape this orchestrator produces.
  */
 function unwrapAddError(err: unknown): unknown {
@@ -340,7 +340,7 @@ async function runAddInGuard(args: {
     );
   }
 
-  // WB-01 / Pitfall 2: target-path selection happens ONCE before the lock so
+  // WB-01: target-path selection happens ONCE before the lock so
   // the orchestrator NEVER falls back to the base file on ENOENT.
   const targetConfigPath =
     opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath;
@@ -503,7 +503,7 @@ export async function addMarketplace(
   // orchestrator. Genuinely unexpected/catastrophic errors re-throw -- only the
   // closed-set add preconditions are caught here. The github guard's own catch
   // (cleanupStaging + appendLeakToError) runs FIRST and re-throws; this catch
-  // sees the already-cleaned error, so no staging dir leaks (Pitfall 4).
+  // sees the already-cleaned error, so no staging dir leaks.
   let recordedName: string;
   try {
     recordedName = await runAddInGuard({

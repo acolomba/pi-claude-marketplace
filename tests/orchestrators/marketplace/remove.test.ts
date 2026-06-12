@@ -1111,7 +1111,7 @@ test("RECON-03 remove standalone-default mode -- omitted notifications option re
 // cascade write-back, --local, WR-09, CFG-03
 // ──────────────────────────────────────────────────────────────────────────
 
-test("WB-01 / Pitfall 4: cascade removes the marketplace entry AND every plugin entry ending in @<mp>", async () => {
+test("WB-01: cascade removes the marketplace entry AND every plugin entry ending in @<mp>", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-cascade-"));
     try {
@@ -1169,7 +1169,7 @@ test("WB-01 / Pitfall 4: cascade removes the marketplace entry AND every plugin 
   });
 });
 
-test("WB-01 / Pitfall 2: --local routes the cascade to claude-plugins.local.json; base file untouched", async () => {
+test("WB-01: --local routes the cascade to claude-plugins.local.json; base file untouched", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-local-"));
     try {
@@ -1210,7 +1210,7 @@ test("WB-01 / Pitfall 2: --local routes the cascade to claude-plugins.local.json
       const { ctx, pi } = makeCtx();
       await removeMarketplace({ ctx, pi, name: "mp1", scope: "project", cwd, local: true });
 
-      // Base file MUST be byte-identical (Pitfall 2).
+      // Base file MUST be byte-identical.
       const baseBytesAfter = await readFile(projLoc.configJsonPath, "utf8");
       const baseStatAfter = await stat(projLoc.configJsonPath);
       assert.equal(baseBytesAfter, baseBytesBefore);

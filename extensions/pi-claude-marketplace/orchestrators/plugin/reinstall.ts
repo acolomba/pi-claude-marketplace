@@ -133,7 +133,7 @@ export interface ReinstallPluginOptions {
   readonly force?: boolean;
   readonly render?: "default" | "none";
   /**
-   * WB-01 / WB-02 / Pitfall 2: when true, target
+   * WB-01 / WB-02: when true, target
    * `claude-plugins.local.json` instead of `claude-plugins.json`. The base
    * file is NEVER touched on the --local path; loadConfig's `absent` arm
    * yields an empty starting shape that saveConfig writes back to the local
@@ -163,7 +163,7 @@ export interface ReinstallPluginsOptions {
   readonly target: ReinstallPluginsTarget;
   readonly force?: boolean;
   /**
-   * WB-01 / WB-02 / Pitfall 2: when true, target
+   * WB-01 / WB-02: when true, target
    * `claude-plugins.local.json` instead of `claude-plugins.json` for
    * write-back. The base file is NEVER touched on the --local path.
    */
@@ -590,7 +590,7 @@ async function resolveMarketplaceReinstallScope(
     // cross-scope resolver. It resolves against the marketplace CONTAINER's
     // scope when present (so the downstream `runLockedReinstall` `oldRecord ===
     // undefined` branch keeps the legitimate `(skipped) {not installed}` for a
-    // present-marketplace/absent-plugin -- Pitfall 4), and surfaces SCOPE-01 /
+    // present-marketplace/absent-plugin), and surfaces SCOPE-01 /
     // marketplace-absence otherwise.
     const resolution = await resolveCrossScopePluginTarget({
       cwd,
@@ -1071,7 +1071,7 @@ async function runLockedReinstall(
   try {
     updateStateRecord(tx.state, marketplace, plugin, oldSnapshot, installable, handles);
 
-    // WB-01 / A7 / Pitfall 5: deep-equal short-circuit preserves RECON-05
+    // WB-01 / A7: deep-equal short-circuit preserves RECON-05
     // mtime invariant. Reinstall is invoked by the user (both standalone and
     // bulk-cascade paths are user-initiated); there is no orchestrated /
     // reconcile-driven caller today. The deep-equal gate compares the
