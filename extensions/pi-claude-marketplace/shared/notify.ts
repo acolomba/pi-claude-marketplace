@@ -172,7 +172,7 @@ function allBenign(reasons: readonly Reason[] | undefined): boolean {
 export function redactAbsolutePaths(text: string): string {
   // Match absolute paths with at least one internal separator so single-
   // segment leading-slash JSON pointers (`/schemaVersion`) are not eaten.
-  const re = /(?:[A-Za-z]:[\\/]|\\\\\?\\|\/)[\w./\\_~-]+[\\/][\w./\\_~-]+/g;
+  const re = /(?:[A-Za-z]:[\\/]|\\\\\?\\|\/)[\w./\\~-]+[\\/][\w./\\~-]+/g;
   return text.replace(re, (match) => {
     // path.basename handles both POSIX and Windows separators when invoked
     // through the platform-agnostic node:path module, but the renderer ships

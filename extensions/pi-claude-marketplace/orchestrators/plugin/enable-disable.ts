@@ -55,7 +55,7 @@ import path from "node:path";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
 import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
-import { notify } from "../../shared/notify.ts";
+import { notify, redactAbsolutePaths } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
@@ -674,10 +674,10 @@ function sanitizeStateLoadError(err: Error): Error {
   const original = errorMessage(err);
   // loadState formats messages as "Failed to read <abs>:" / "state.json at
   // <abs> is not valid JSON:" / "state.json at <abs> failed schema validation:"
-  // The absolute path is the only PII; replace with the basename. The match
-  // is greedy on the path segment up to ":" so embedded paths under
+  // The absolute path is the only PII; collapse it to the basename through
+  // the shared redactAbsolutePaths seam (T-55-02-02), so paths under
   // <scopeRoot>/pi-claude-marketplace/state.json collapse to "state.json".
-  const sanitized = original.replace(/\/[^\s:]*state\.json/g, "state.json");
+  const sanitized = redactAbsolutePaths(original);
   if (sanitized === original) {
     return err;
   }
