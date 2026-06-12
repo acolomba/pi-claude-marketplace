@@ -23,8 +23,7 @@
 // `error.message` in the projection input -- `outcome.reason` is the sole
 // field the renderer reads.
 
-import type { ContentReason, Reason } from "../../shared/notify.ts";
-import type { Dependency } from "../../shared/notify.ts";
+import type { ContentReason, Dependency, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
 interface OutcomeBase {

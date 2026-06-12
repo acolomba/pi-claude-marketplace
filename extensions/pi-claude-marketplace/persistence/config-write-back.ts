@@ -59,7 +59,7 @@ export async function writeMarketplaceConfigEntry(
   const patched: ScopeConfig = {
     ...current,
     schemaVersion: 1,
-    marketplaces: { ...(current.marketplaces ?? {}), [marketplace]: merged },
+    marketplaces: { ...current.marketplaces, [marketplace]: merged },
   };
   await saveConfig(targetConfigPath, patched, scopeRoot);
 }
@@ -75,7 +75,7 @@ export async function deleteMarketplaceConfigEntryWithCascade(
   scopeRoot: string,
   marketplace: string,
 ): Promise<void> {
-  const marketplaces = { ...(current.marketplaces ?? {}) };
+  const marketplaces = { ...current.marketplaces };
   // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- marketplaces is a dynamic-key Record<string, ...>.
   delete marketplaces[marketplace];
 
@@ -115,7 +115,7 @@ export async function writePluginConfigEntry(
   const patched: ScopeConfig = {
     ...current,
     schemaVersion: 1,
-    plugins: { ...(current.plugins ?? {}), [key]: merged },
+    plugins: { ...current.plugins, [key]: merged },
   };
   await saveConfig(targetConfigPath, patched, scopeRoot);
 }
@@ -132,7 +132,7 @@ export async function deletePluginConfigEntry(
   marketplace: string,
 ): Promise<void> {
   const key = `${plugin}@${marketplace}`;
-  const plugins = { ...(current.plugins ?? {}) };
+  const plugins = { ...current.plugins };
   // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- plugins is a dynamic-key Record<string, ...>.
   delete plugins[key];
   const patched: ScopeConfig = {
@@ -171,15 +171,15 @@ export async function writeBatchedConfigEntries(
   scopeRoot: string,
   batch: BatchedConfigPatch,
 ): Promise<void> {
-  const marketplaces = { ...(current.marketplaces ?? {}) };
+  const marketplaces = { ...current.marketplaces };
   for (const [name, patch] of Object.entries(batch.marketplaces ?? {})) {
     const existing = marketplaces[name] ?? {};
     marketplaces[name] = { ...existing, ...patch } as MarketplaceConfigEntry;
   }
 
-  const plugins = { ...(current.plugins ?? {}) };
+  const plugins = { ...current.plugins };
   for (const [key, patch] of Object.entries(batch.plugins ?? {})) {
-    plugins[key] = { ...(plugins[key] ?? {}), ...patch };
+    plugins[key] = { ...plugins[key], ...patch };
   }
 
   const patched: ScopeConfig = {

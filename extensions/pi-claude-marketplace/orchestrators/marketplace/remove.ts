@@ -66,6 +66,8 @@ import type {
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
+type RecordedSourceKind = "github" | "path" | "unknown";
+
 /**
  * RECON-03: controls how `removeMarketplace` surfaces
  * notifications. Mirrors `AddMarketplaceNotifications`.
@@ -430,7 +432,7 @@ async function runRemoveLockBody(args: {
   readonly successfullyUnstaged: string[];
   readonly failedPlugins: { name: string; cause: Error }[];
   readonly cfgInvalidSentinel: Error;
-}): Promise<"github" | "path" | "unknown" | undefined> {
+}): Promise<RecordedSourceKind | undefined> {
   const {
     tx,
     opts,
@@ -460,7 +462,7 @@ async function runRemoveLockBody(args: {
   }
 
   const src = record.source as { kind?: unknown };
-  const sourceKind: "github" | "path" | "unknown" | undefined =
+  const sourceKind: RecordedSourceKind | undefined =
     src.kind === "github" || src.kind === "path" || src.kind === "unknown" ? src.kind : undefined;
 
   // D-02: per-plugin cascade loop (MR-3 continuation across failures).
@@ -600,7 +602,7 @@ export async function removeMarketplace(
   // Per-plugin tracking accumulators captured by the guard closure.
   const failedPlugins: { name: string; cause: Error }[] = [];
   const successfullyUnstaged: string[] = []; // plugins whose cascade returned ok:true
-  let sourceKindAtRecord: "github" | "path" | "unknown" | undefined;
+  let sourceKindAtRecord: RecordedSourceKind | undefined;
 
   // CFG-03 sentinel: a synthetic throw signaling the lock body aborted on an
   // invalid config. The catch arm BELOW maps it to the structured failed row.

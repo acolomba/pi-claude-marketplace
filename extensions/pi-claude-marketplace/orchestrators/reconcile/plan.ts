@@ -379,7 +379,6 @@ function classifyDeclaredPlugin(
   const record = state.marketplaces[marketplace]?.plugins[plugin];
   if (record !== undefined && isRecordedButDisabled(record)) {
     acc.enable.push({ scope, plugin, marketplace });
-    return;
   }
   // Declared-enabled, recorded, populated: steady state, no action.
 }

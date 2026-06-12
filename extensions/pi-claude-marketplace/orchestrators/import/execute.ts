@@ -914,14 +914,14 @@ function mergeEnsureAndRepairs(
   repair: BatchedConfigPatch,
   current: { marketplaces?: Record<string, unknown>; plugins?: Record<string, unknown> },
 ): BatchedConfigPatch {
-  const marketplaces = { ...(ensure.marketplaces ?? {}) };
+  const marketplaces = { ...ensure.marketplaces };
   for (const [name, patch] of Object.entries(repair.marketplaces ?? {})) {
     if (current.marketplaces?.[name] === undefined && marketplaces[name] === undefined) {
       marketplaces[name] = patch;
     }
   }
 
-  const plugins = { ...(ensure.plugins ?? {}) };
+  const plugins = { ...ensure.plugins };
   for (const [key, patch] of Object.entries(repair.plugins ?? {})) {
     if (current.plugins?.[key] === undefined && plugins[key] === undefined) {
       plugins[key] = patch;
