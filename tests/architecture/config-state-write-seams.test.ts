@@ -12,10 +12,10 @@ const EXTENSION_ROOT = path.join(REPO_ROOT, "extensions/pi-claude-marketplace");
  * (`claude-plugins.json` / `claude-plugins.local.json`) and the internal
  * state file (`state.json`).
  *
- * Phases 51-01 and 51-02 introduced the persistence-layer seams:
+ * The persistence layer exposes these write seams:
  *   - `persistence/config-io.ts::saveConfig` is the SOLE writer of either
  *     config file. `saveConfig` runs `assertPathInside(scopeRoot, filePath,
- *     ...)` BEFORE `atomicWriteJson` (Pitfall 51-5 / NFR-10 write-site).
+ *     ...)` BEFORE `atomicWriteJson` (NFR-10 write-site).
  *   - `persistence/state-io.ts::saveState` and
  *     `persistence/migrate.ts::persistMigratedState` are the SOLE writers of
  *     `state.json`.
@@ -124,7 +124,7 @@ test("SPLIT-02: only saveConfig writes claude-plugins.json / claude-plugins.loca
   assert.deepEqual(
     offenders,
     [],
-    `SPLIT-02 violation: an atomicWriteJson(...) call targets claude-plugins.json or claude-plugins.local.json outside persistence/config-io.ts::saveConfig:\n  ${offenders.join("\n  ")}\n  (saveConfig is the SOLE sanctioned writer -- it runs assertPathInside(scopeRoot, filePath, ...) BEFORE atomicWriteJson per NFR-10 / Pitfall 51-5. Bypassing it would open the path-traversal hole the seam was designed to close. If you intentionally need a new writer, add it to ALLOWED_CONFIG_JSON_WRITERS above AND update the matching 'exactly N' sibling assertion in this file in the same commit.)`,
+    `SPLIT-02 violation: an atomicWriteJson(...) call targets claude-plugins.json or claude-plugins.local.json outside persistence/config-io.ts::saveConfig:\n  ${offenders.join("\n  ")}\n  (saveConfig is the SOLE sanctioned writer -- it runs assertPathInside(scopeRoot, filePath, ...) BEFORE atomicWriteJson per NFR-10. Bypassing it would open the path-traversal hole the seam was designed to close. If you intentionally need a new writer, add it to ALLOWED_CONFIG_JSON_WRITERS above AND update the matching 'exactly N' sibling assertion in this file in the same commit.)`,
   );
 });
 

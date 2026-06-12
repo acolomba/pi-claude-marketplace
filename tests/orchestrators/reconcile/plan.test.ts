@@ -412,7 +412,7 @@ test("WR-05 convergence: populated record + enabled===false -> disable; disabled
   assert.deepEqual(planAfter, emptyReconcilePlan("project"));
 });
 
-test("ENBL-02 (d): NOT recorded + enabled!==false -> pluginsToInstall ONLY, NEVER both (Pitfall 54-6 mutual exclusion)", () => {
+test("ENBL-02 (d): NOT recorded + enabled!==false -> pluginsToInstall ONLY, NEVER both (mutual exclusion)", () => {
   // A NOT-recorded plugin lands in pluginsToInstall (not pluginsToEnable).
   // The recorded-but-disabled check is gated on `recorded === true` so the
   // install branch and the enable branch are structurally mutually

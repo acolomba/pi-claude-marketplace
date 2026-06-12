@@ -2200,7 +2200,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "enable-invalid-config": {
-      // CFG-03 abort. Pitfall 54-1 / T-53-02-02: the marketplace name carries
+      // CFG-03 abort. T-53-02-02: the marketplace name carries
       // the file BASENAME via the renderer; here the plugin row carries the
       // `{invalid manifest}` reason -- the orchestrator aborts BEFORE entering
       // the cascade, so the body is the bare cascade with the failed plugin
@@ -2368,7 +2368,7 @@ const FIXTURES: FixtureMap = {
       },
     },
     "enable-disable-transitions": {
-      // Pitfall 53-4: the will-enable bucket is populated only by the
+      // The will-enable bucket is populated only by the
       // recorded-but-disabled marker; the catalog fixture is hand-constructed
       // (not routed through planReconcile) so the enable-bucket wiring can
       // land against an exercised path.
@@ -2402,7 +2402,7 @@ const FIXTURES: FixtureMap = {
       },
     },
     "invalid-config-abort": {
-      // CFG-03 / Pitfall 53-1: the marketplace `name` is the file BASENAME
+      // CFG-03: the marketplace `name` is the file BASENAME
       // (never the absolute path -- T-53-02-02 information-disclosure
       // mitigation). The orchestrator passes path.basename(filePath).
       pi: piWithBothLoaded(),

@@ -13,11 +13,10 @@
 // reconciler can distinguish absent / invalid / valid and abort cleanly on
 // bad input rather than silently coercing it to empty desired state.
 //
-// Pitfall 51-1 anchor: a 0-byte file lands in JSON.parse failure -> invalid,
-// NEVER valid-with-empty-defaults. NO try/catch+default anywhere in this
-// file.
+// A 0-byte file lands in JSON.parse failure -> invalid, NEVER
+// valid-with-empty-defaults. NO try/catch+default anywhere in this file.
 //
-// SPLIT-02 / Pitfall 51-5: `saveConfig` runs `assertPathInside(scopeRoot,
+// SPLIT-02: `saveConfig` runs `assertPathInside(scopeRoot,
 // filePath, ...)` BEFORE `atomicWriteJson`. PathContainmentError propagates
 // loudly per shared/path-safety.ts semantics; we do NOT catch it.
 //
@@ -110,7 +109,7 @@ function firstConfigValidationErrorDetail(value: unknown): string {
  * coercing it to empty desired state.
  *   - `absent`: file does not exist (ENOENT). NOT an error.
  *   - `invalid`: read I/O failure, JSON parse failure, or schema validation
- *     failure. The Pitfall 51-1 0-byte case lands here via JSON parse.
+ *     failure. The 0-byte case lands here via JSON parse.
  *   - `valid`: file read, parsed, and schema-validated.
  */
 export type ConfigLoadResult =
@@ -122,8 +121,8 @@ export type ConfigLoadResult =
  * CFG-03 / D-15: load a per-scope config file as a discriminated result.
  *
  * NEVER throws on missing, malformed, or schema-invalid input -- every
- * failure mode is encoded into the returned union. The Pitfall 51-1 anchor:
- * a 0-byte file lands in JSON.parse failure (Node's `JSON.parse("")` throws
+ * failure mode is encoded into the returned union. A 0-byte file lands in
+ * JSON.parse failure (Node's `JSON.parse("")` throws
  * `SyntaxError: Unexpected end of JSON input`) and therefore in the
  * `invalid` arm, NOT in `absent` or `valid` with empty defaults.
  */
@@ -174,7 +173,7 @@ export async function loadConfig(filePath: string): Promise<ConfigLoadResult> {
  *      an invalid shape) surfaces here, not on disk. Message format mirrors
  *      `saveState refused: ...` modulo the function name.
  *   2. `await assertPathInside(scopeRoot, filePath, "saveConfig")` --
- *      Pitfall 51-5 / SPLIT-02 write-site enforcement. PathContainmentError
+ *      SPLIT-02 write-site enforcement. PathContainmentError
  *      propagates loudly per the shared seam's PI-14 contract; we do NOT
  *      catch it.
  *   3. `await atomicWriteJson(filePath, config)` -- the single sanctioned

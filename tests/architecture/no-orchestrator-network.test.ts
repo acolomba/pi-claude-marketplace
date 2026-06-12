@@ -61,7 +61,7 @@ const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
   "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts",
   "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts",
   // ENBL-03: the enable/disable orchestrator re-materializes from cache
-  // (Pitfall 54-3) -- NO network.
+  // -- NO network.
   "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
 ];
 

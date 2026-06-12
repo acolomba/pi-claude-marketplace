@@ -221,7 +221,7 @@ test("ENBL-01: disable writes enabled:false to claude-plugins.json (base)", asyn
   });
 });
 
-test("ENBL-01: enable --local writes enabled:true to claude-plugins.local.json (base unchanged, Pitfall 54-5)", async () => {
+test("ENBL-01: enable --local writes enabled:true to claude-plugins.local.json (base unchanged)", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // Reset state to populated (so disable is a fresh transition).
     const { configPath, configLocalPath } = await writeUserState(home, {
@@ -253,7 +253,7 @@ test("ENBL-01: enable --local writes enabled:true to claude-plugins.local.json (
       local: true,
     });
 
-    // Base file should still not exist (Pitfall 54-5).
+    // Base file should still not exist.
     const baseExistsPost = await fileExists(configPath);
     assert.equal(baseExistsPost, baseExistsPre, "base file mtime/existence must be unchanged");
 

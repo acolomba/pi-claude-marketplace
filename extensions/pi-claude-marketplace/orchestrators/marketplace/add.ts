@@ -292,7 +292,7 @@ function addSubjectName(rawErr: unknown, rawSource: string): string {
 }
 
 /**
- * WB-01 / Pitfall 51-1 mitigation: a CFG-03 invalid-config arm aborts the
+ * WB-01 mitigation: a CFG-03 invalid-config arm aborts the
  * command BEFORE any state mutation or network call. Thrown so the
  * entrypoint catch routes through `classifyAddError` -> `invalid manifest`
  * with a basename-only cause (T-56-02-05 information disclosure mitigation).

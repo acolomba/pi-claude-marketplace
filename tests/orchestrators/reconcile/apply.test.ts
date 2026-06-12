@@ -463,7 +463,7 @@ test("WR-09 (local-file isolation): a disable declared ONLY in claude-plugins.lo
       "utf8",
     );
 
-    // Local override (the per-machine file, Pitfall 54-5): enabled: false.
+    // Local override (the per-machine file): enabled: false.
     const localPath = path.join(projectScopeRoot, "claude-plugins.local.json");
     await writeFile(
       localPath,

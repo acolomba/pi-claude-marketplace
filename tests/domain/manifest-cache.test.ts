@@ -6,7 +6,7 @@ import test from "node:test";
 
 // Import createManifestCache directly (NOT the module-level cache singleton) so
 // every test gets a guaranteed cold start by constructing a fresh instance
-// (D-01 / RESEARCH Pitfall 6 -- singleton leakage).
+// (D-01 -- singleton leakage).
 import { createManifestCache } from "../../extensions/pi-claude-marketplace/domain/manifest-cache.ts";
 // Cross-check the CACHE-05 message-equivalence against the same accessor the
 // soft-load consumer (list.ts) uses.
@@ -21,8 +21,8 @@ import {
 //
 // The observability seam is the INJECTED COUNTING LOADER (it is NOT a readFile /
 // JSON.parse / MARKETPLACE_VALIDATOR spy -- readFile cannot be replaced on the
-// ESM namespace, RESEARCH Pitfall 1). All loads are SEQUENTIAL awaits, fired one
-// at a time -- there is no concurrent in-flight de-dup by design (Pitfall 5).
+// ESM namespace). All loads are SEQUENTIAL awaits, fired one
+// at a time -- there is no concurrent in-flight de-dup by design.
 // ──────────────────────────────────────────────────────────────────────────
 
 test("CACHE-01: N sequential reads of an unchanged manifest -> loader runs exactly once", async () => {

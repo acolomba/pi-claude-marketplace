@@ -27,13 +27,13 @@ import {
  * + MIG-02 (atomic, idempotent, no-overwrite, convergence-ready) test suite.
  *
  * HAZARD (deferred to the load wiring):
- *   - Pitfall 52-2: concurrent first-loads racing on the same scope. The
+ *   - Concurrent first-loads racing on the same scope. The
  *     load-time call site MUST invoke `migrateFirstRunConfig` inside the
  *     scope's `withStateGuard` lock so two processes do not both see
  *     `absent` and race the projection. This seam is a pure data
  *     transform + a single ENOENT-gated write -- the lock-coverage proof
  *     belongs to the load wiring, not here.
- *   - Pitfall 52-4: D-13 gate race. The legacy `autoupdate` field is kept
+ *   - D-13 gate race. The legacy `autoupdate` field is kept
  *     in-memory on the FIRST load (existsSync gate CLOSED) so this migration
  *     can capture it. The ordering rail (migrate-then-scrub) is owned by the
  *     load wiring, not by this seam.
@@ -131,13 +131,13 @@ test("MIG-01 losslessness: every state marketplace + plugin appears in the gener
   assert.deepEqual(Object.keys(cfg.plugins ?? {}).sort(), expectedPluginKeys.sort());
 });
 
-test("MIG-01 Pitfall 52-1: soft-degraded plugin (installable: false) is included", async () => {
+test("MIG-01: soft-degraded plugin (installable: false) is included", async () => {
   const state = await loadPopulatedState();
   const cfg = buildConfigFromState(state);
   assert.ok("soft-degraded@mp-path" in (cfg.plugins ?? {}));
 });
 
-test("MIG-01 Pitfall 52-3: source recovered byte-stably from the .raw field", async () => {
+test("MIG-01: source recovered byte-stably from the .raw field", async () => {
   const state = await loadPopulatedState();
   const cfg = buildConfigFromState(state);
   assert.equal(cfg.marketplaces?.["mp-path"]?.source, "./mp-path-local");
@@ -259,7 +259,7 @@ test("MIG-01 NFR-12 regression: unknown-kind source WITH string raw recovers raw
   assert.equal(cfg.marketplaces?.["mp-forward-raw"]?.source, "future://thing");
 });
 
-test("MIG-01 Pitfall 52-6: same-named plugin across two marketplaces does not collide", async () => {
+test("MIG-01: same-named plugin across two marketplaces does not collide", async () => {
   const state = await loadPopulatedState();
   const cfg = buildConfigFromState(state);
   assert.ok("code-reviewer@mp-path" in (cfg.plugins ?? {}));
@@ -371,7 +371,7 @@ test("MIG-02 round-trip preserves the path-source raw string byte-for-byte", asy
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Section C -- idempotency / no-overwrite guards (MIG-02 + Pitfall 52-5)
+// Section C -- idempotency / no-overwrite guards (MIG-02)
 // ──────────────────────────────────────────────────────────────────────────
 
 test("MIG-02 idempotency: second call short-circuits and does not rewrite the file", async () => {
@@ -400,7 +400,7 @@ test("MIG-02 idempotency: second call short-circuits and does not rewrite the fi
   }
 });
 
-test("Pitfall 52-5: pre-existing 0-byte claude-plugins.json is NOT overwritten", async () => {
+test("MIG-02: pre-existing 0-byte claude-plugins.json is NOT overwritten", async () => {
   const { tmpDir, cleanup } = await tmpScopeRoot();
   try {
     const loc = locationsFor("project", tmpDir);
@@ -424,7 +424,7 @@ test("Pitfall 52-5: pre-existing 0-byte claude-plugins.json is NOT overwritten",
   }
 });
 
-test("Pitfall 52-5: pre-existing VALID claude-plugins.json is NOT overwritten", async () => {
+test("MIG-02: pre-existing VALID claude-plugins.json is NOT overwritten", async () => {
   const { tmpDir, cleanup } = await tmpScopeRoot();
   try {
     const loc = locationsFor("project", tmpDir);
@@ -449,7 +449,7 @@ test("Pitfall 52-5: pre-existing VALID claude-plugins.json is NOT overwritten", 
   }
 });
 
-test("Pitfall 52-5: pre-existing INVALID (schema-failing) claude-plugins.json is NOT overwritten", async () => {
+test("MIG-02: pre-existing INVALID (schema-failing) claude-plugins.json is NOT overwritten", async () => {
   const { tmpDir, cleanup } = await tmpScopeRoot();
   try {
     const loc = locationsFor("project", tmpDir);

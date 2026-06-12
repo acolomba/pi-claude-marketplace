@@ -138,7 +138,7 @@ test("MarketplaceRemove projection -> block.status='will remove'", () => {
   assert.equal(block.status, "will remove");
 });
 
-test("sourceMismatch projection -> block.status='failed' + reasons=['source mismatch'] (Pitfall 53-7)", () => {
+test("sourceMismatch projection -> block.status='failed' + reasons=['source mismatch']", () => {
   const plan: ReconcilePlan = {
     ...emptyPlan("project"),
     sourceMismatches: [
@@ -156,7 +156,7 @@ test("sourceMismatch projection -> block.status='failed' + reasons=['source mism
   const block = msg.marketplaces[0];
   assert.ok(block);
   assert.equal(block.status, "failed");
-  // Pitfall 53-7: the source-mismatch row reuses the existing
+  // The source-mismatch row reuses the existing
   // "source mismatch" REASONS member; no new REASONS literal.
   assert.ok("reasons" in block);
   assert.deepEqual("reasons" in block ? [...(block.reasons ?? [])] : [], ["source mismatch"]);

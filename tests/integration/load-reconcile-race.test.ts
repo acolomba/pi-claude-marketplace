@@ -1,10 +1,10 @@
 // tests/integration/load-reconcile-race.test.ts
 //
 // RECON-06: two-process load-time apply race.
-// + Pitfall 52-2 / 52-4 lock-coverage proof (discharges the
-//   tests/persistence/migrate-config.test.ts:29-39 hand-off).
+// + first-run migrate lock-coverage proof (discharges the
+//   tests/persistence/migrate-config.test.ts hand-off).
 //
-// Test design constraint (RESEARCH Pitfall 10): the per-scope read pass is
+// Test design constraint: the per-scope read pass is
 // fast (microseconds-scale). The apply loop has no shared lock so racing it
 // is benign. We do NOT assert "exactly one winner" -- both processes may
 // report success against a plan that's already converged. Assertions are
@@ -15,9 +15,9 @@
 //   - both children exit code 0 (NFR-2: neither process throws past its
 //     handler boundary)
 //   - first-run migrate captures legacy autoupdate exactly once under the
-//     cross-process lock (Pitfall 52-2)
+//     cross-process lock
 //   - D-13 gate single-process happy path produces a config that carries the
-//     captured autoupdate (Pitfall 52-4 integration cover)
+//     captured autoupdate
 //
 // Mirrors tests/integration/concurrent-install.test.ts for the fork + IPC +
 // ready-sync harness; uses a path-source marketplace fixture so the test is
@@ -335,10 +335,10 @@ test("RECON-06 (two-process race): config declares one path-source mp-a + plugin
 });
 
 // ---------------------------------------------------------------------------
-// Scenario B: Pitfall 52-2 concurrent first-load race
+// Scenario B: concurrent first-load race
 // ---------------------------------------------------------------------------
 
-test("Pitfall 52-2 (concurrent first-load race): two processes race against state with legacy autoupdate + ENOENT claude-plugins.json -> migrate trichotomy serializes; exactly one process writes the config, the other observes 'valid' and short-circuits", async () => {
+test("Concurrent first-load race: two processes race against state with legacy autoupdate + ENOENT claude-plugins.json -> migrate trichotomy serializes; exactly one process writes the config, the other observes 'valid' and short-circuits", async () => {
   const env = await setupRaceEnv("pi-cm-recon06-mig22-");
   try {
     // Pre-record a marketplace in state with the legacy `autoupdate: true`
@@ -400,7 +400,7 @@ test("Pitfall 52-2 (concurrent first-load race): two processes race against stat
     assert.equal(
       config.marketplaces!["mp-legacy"]!.autoupdate,
       true,
-      "Pitfall 52-4: migrate must capture legacy autoupdate from the first-load state",
+      "migrate must capture legacy autoupdate from the first-load state",
     );
 
     // state.json still parses + still has the marketplace record (the
@@ -418,10 +418,10 @@ test("Pitfall 52-2 (concurrent first-load race): two processes race against stat
 });
 
 // ---------------------------------------------------------------------------
-// Scenario C: Pitfall 52-4 D-13 gate single-process integration cover
+// Scenario C: D-13 gate single-process integration cover
 // ---------------------------------------------------------------------------
 
-test("Pitfall 52-4 (D-13 gate, single-process): state with legacy autoupdate + ENOENT claude-plugins.json -> single applyReconcile observes the gate at loadState (before the closure runs), captures autoupdate via migrate inside the locked closure, writes the config carrying autoupdate", async () => {
+test("D-13 gate (single-process): state with legacy autoupdate + ENOENT claude-plugins.json -> single applyReconcile observes the gate at loadState (before the closure runs), captures autoupdate via migrate inside the locked closure, writes the config carrying autoupdate", async () => {
   const env = await setupRaceEnv("pi-cm-recon06-mig24-");
   try {
     await seedStateRaw(env.cwd, {

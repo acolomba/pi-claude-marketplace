@@ -13,7 +13,7 @@ import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence
 import type { ScopeConfig } from "../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 
 /**
- * CFG-02 / D-01 / D-09 / D-10 / D-16 / D-18 / Pitfall 51-4 -- entry-level
+ * CFG-02 / D-01 / D-09 / D-10 / D-16 / D-18 -- entry-level
  * base+local merge + `loadMergedScopeConfig` per-file return shape.
  *
  * The pure-reducer matrix builds `ScopeConfig` literals inline (no disk).
@@ -164,7 +164,7 @@ test("mergeScopeConfigs field-replacement strictness (anti-deepmerge for plugins
 });
 
 // ===================================================================
-// B. loadMergedScopeConfig shape (Pitfall 51-4 + D-18)
+// B. loadMergedScopeConfig shape (D-18)
 // ===================================================================
 
 test("loadMergedScopeConfig both files absent -> empty merged + absent statuses", async () => {
@@ -244,7 +244,7 @@ test("loadMergedScopeConfig both valid -> merged per matrix + both per-file resu
     assert.equal(outcome.merged.marketplaces["alpha"]?.entry.autoupdate, undefined);
     // Beta only in base
     assert.equal(outcome.merged.marketplaces["beta"]?.source, "base");
-    // Pitfall 51-4: per-file results are returned alongside merged view
+    // Per-file results are returned alongside the merged view
     if (outcome.base.status === "valid") {
       assert.equal(outcome.base.filePath, projLoc.configJsonPath);
     }
@@ -262,13 +262,13 @@ test("loadMergedScopeConfig base invalid + local absent -> still returns ScopeLo
   try {
     const projLoc = locationsFor("project", root);
     await mkdir(path.dirname(projLoc.configJsonPath), { recursive: true });
-    // 0-byte file (Pitfall 51-1 anchor): JSON.parse fails -> invalid
+    // 0-byte file: JSON.parse fails -> invalid
     await writeFile(projLoc.configJsonPath, "", "utf8");
     const outcome = await loadMergedScopeConfig(projLoc);
     assert.equal(outcome.base.status, "invalid");
     assert.equal(outcome.local.status, "absent");
     // Merged view treats invalid arm as empty for the merge computation
-    // (D-18 fallback shape; user-visible messaging lives in Phases 52/55/56).
+    // (D-18 fallback shape; user-visible messaging lives in downstream layers).
     assert.deepEqual(outcome.merged.marketplaces, {});
     assert.deepEqual(outcome.merged.plugins, {});
   } finally {

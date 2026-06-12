@@ -1,6 +1,6 @@
 // tests/orchestrators/reconcile/preview.test.ts
 //
-// DIFF-01 SC #2 + DIFF-02 + CFG-03 abort (Pitfall 53-1) proofs for
+// DIFF-01 SC #2 + DIFF-02 + CFG-03 abort proofs for
 // `orchestrators/reconcile/preview.ts`. The suite covers:
 //
 //   1. Idempotency: two consecutive invocations against unchanged state +
@@ -8,7 +8,7 @@
 //   2. No-mutation: file mtimes + on-disk bytes of `state.json`,
 //      `claude-plugins.json`, `claude-plugins.local.json` are unchanged across
 //      both invocations.
-//   3. CFG-03 abort (Pitfall 53-1): a malformed `claude-plugins.json` surfaces
+//   3. CFG-03 abort: a malformed `claude-plugins.json` surfaces
 //      a `(failed) {invalid manifest}` row carrying the BASENAME (never the
 //      absolute path) AND `planReconcile`'s side effects (any plan content)
 //      do NOT appear for that scope. Invalid input is NEVER coerced into an
@@ -154,7 +154,7 @@ test("DIFF-01 SC #2 / no-mutation: preview run leaves config + state file mtimes
   });
 });
 
-test("CFG-03 abort / Pitfall 53-1: malformed claude-plugins.json -> (failed) {invalid manifest} row with BASENAME (not absolute path)", async () => {
+test("CFG-03 abort: malformed claude-plugins.json -> (failed) {invalid manifest} row with BASENAME (not absolute path)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const projectScopeRoot = path.join(cwd, ".pi");
     const extensionRoot = path.join(projectScopeRoot, "pi-claude-marketplace");
@@ -191,7 +191,7 @@ test("CFG-03 abort / Pitfall 53-1: malformed claude-plugins.json -> (failed) {in
       emitted.includes("(failed)") && emitted.includes("{invalid manifest}"),
       `expected (failed) {invalid manifest} row; got:\n${emitted}`,
     );
-    // Pitfall 53-1: the row must NOT render as `(will uninstall)` etc. --
+    // The row must NOT render as `(will uninstall)` etc. --
     // invalid config NEVER coerced to an empty desired state.
     assert.ok(
       !emitted.includes("will uninstall"),

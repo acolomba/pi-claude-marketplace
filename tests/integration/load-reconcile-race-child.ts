@@ -1,6 +1,6 @@
 // tests/integration/load-reconcile-race-child.ts
 //
-// RECON-06 / Pitfall 52-2 / Pitfall 52-4 child entry point. Forked by
+// RECON-06 child entry point. Forked by
 // load-reconcile-race.test.ts; receives an IPC `{ cwd }` payload + a `go`
 // signal (delivered as the IPC message itself); calls applyReconcile via a
 // stub ctx + stub pi; reports notify args back over IPC; exits 0.
@@ -10,7 +10,7 @@
 // match the production resources_discover handler's surface: ctx.ui.notify
 // accumulates messages into an array (parent uses this for diagnostic
 // visibility only -- the integration assertions are state-consistency
-// oriented per RESEARCH Pitfall 10, NOT byte-equality on notify output).
+// oriented, NOT byte-equality on notify output).
 
 import { applyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 

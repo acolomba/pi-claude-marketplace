@@ -20,7 +20,7 @@ import {
  * Mirrors `tests/persistence/state-io.test.ts` for scaffolding:
  * isolated tmp scopeRoot per test, retry-cleanup loop, no shared fixtures.
  *
- * Pitfall 51-1 anchor: a 0-byte `claude-plugins.json` MUST land in the
+ * A 0-byte `claude-plugins.json` MUST land in the
  * `invalid` arm, never `valid` with empty desired state. The renderer that
  * encoded the violation as GREEN at v1.10/v1.11 must not recur here.
  */
@@ -66,7 +66,7 @@ test("CFG-03 loadConfig on missing file returns { status: 'absent' }", async () 
   }
 });
 
-test("Pitfall 51-1 loadConfig on 0-byte file lands in 'invalid' (never 'valid' with empty config)", async () => {
+test("CFG-03: loadConfig on 0-byte file lands in 'invalid' (never 'valid' with empty config)", async () => {
   const { scopeRoot, cleanup } = await tmpScopeRoot();
   try {
     const filePath = path.join(scopeRoot, "claude-plugins.json");
@@ -260,7 +260,7 @@ test("CFG-01 saveConfig refuses in-memory value that fails schema validation", a
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// D. saveConfig NFR-10 containment (SPLIT-02 write-site, Pitfall 51-5)
+// D. saveConfig NFR-10 containment (SPLIT-02 write-site)
 // ──────────────────────────────────────────────────────────────────────────
 
 test("NFR-10 / SPLIT-02 saveConfig refuses filePath that escapes scopeRoot", async () => {
