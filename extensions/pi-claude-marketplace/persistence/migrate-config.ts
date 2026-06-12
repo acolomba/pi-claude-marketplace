@@ -27,16 +27,24 @@ import type { ExtensionState } from "./state-io.ts";
 import type { ParsedSource } from "../domain/source.ts";
 
 /**
- * MIG-02: result of a first-run migration attempt. The load-wiring
- * caller narrows on `migrated` to decide whether/how to surface the
- * migration via `shared/notify.ts`.
+ * MIG-02: result of a first-run migration attempt. The load-wiring caller
+ * narrows on `migrated` to decide whether/how to surface the migration via
+ * `shared/notify.ts`.
  *
  * The `migrated: false` arm preserves the loadConfig trichotomy (CFG-03 /
- * D-15) instead of collapsing it: `"existing-valid"` means "nothing to do,
- * config already declared"; `"existing-invalid"` means "migration was
- * suppressed because the config file is corrupt" and carries loadConfig's
- * `error` detail so the caller can surface the CFG-03 abort signal
- * without a second (divergence-prone) loadConfig probe.
+ * D-15) instead of collapsing it, with `error` cut along the `reason`
+ * discriminant so it exists ONLY on the `existing-invalid` arm:
+ *   - `"existing-valid"` -- config already declared; nothing to do.
+ *   - `"existing-invalid"` -- migration suppressed because the config file
+ *     is corrupt; `error` carries loadConfig's invalid-arm detail so the
+ *     caller can surface the CFG-03 abort signal without a second
+ *     (divergence-prone) loadConfig probe.
+ *   - `"empty-state"` -- nothing to capture; an empty-but-present state.json
+ *     must NOT spawn an empty claude-plugins.json in every scope root.
+ *
+ * Cutting `error` along the discriminant means the type system rejects
+ * `result.error` reads on the `existing-valid` / `empty-state` arms; the
+ * caller MUST narrow on `reason` first.
  */
 export type MigrateFirstRunResult =
   | {
@@ -46,9 +54,18 @@ export type MigrateFirstRunResult =
     }
   | {
       readonly migrated: false;
-      readonly reason: "existing-valid" | "existing-invalid" | "empty-state";
-      /** loadConfig's invalid-arm detail; present iff reason is "existing-invalid". */
-      readonly error?: string;
+      readonly reason: "existing-valid";
+      readonly filePath: string;
+    }
+  | {
+      readonly migrated: false;
+      readonly reason: "existing-invalid";
+      readonly error: string;
+      readonly filePath: string;
+    }
+  | {
+      readonly migrated: false;
+      readonly reason: "empty-state";
       readonly filePath: string;
     };
 

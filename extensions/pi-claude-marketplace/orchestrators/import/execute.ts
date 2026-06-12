@@ -538,41 +538,48 @@ async function executeScopedPlan(
     const existing = state.marketplaces[marketplace.marketplace];
     if (existing !== undefined) {
       const sourceMatch = samePlannedSource(existing.source, marketplace.source);
-      if (sourceMatch === "unknown-stored") {
-        // The stored source record is in an unrecognized format (e.g. manually
-        // edited state.json). Block dependent plugins and emit a clear diagnostic
-        // rather than a misleading source-mismatch message.
-        blockedMarketplaces.add(marketplace.marketplace);
-        pushDiagnostic(
-          result,
-          marketplace.scope,
-          "unrecognized-stored-source",
-          `Marketplace "${marketplace.marketplace}" has an unrecognized stored source format. Verify state.json or remove and re-add the marketplace.`,
-          { marketplace: marketplace.marketplace },
-        );
-      } else if (sourceMatch) {
-        result.skippedExistingMarketplaces.push({
-          kind: "marketplace-skip",
-          scope: marketplace.scope,
-          marketplace: marketplace.marketplace,
-          reason: "already-present",
-        });
-      } else {
-        blockedMarketplaces.add(marketplace.marketplace);
-        const cause = `Existing marketplace source ${sourceLogical(parsePluginSource(existing.source))} does not match Claude settings source ${marketplace.source}.`;
-        for (const plugin of pluginsForMarketplace(
-          scopePlan.pluginsToInstall,
-          marketplace.marketplace,
-        )) {
-          result.sourceMismatches.push({
-            kind: "source-mismatch",
-            scope: plugin.scope,
-            plugin: plugin.ref.plugin,
-            marketplace: plugin.ref.marketplace,
-            ref: refLabel(plugin),
-            reason: "source-mismatch",
-            cause,
+      switch (sourceMatch) {
+        case "unknown-stored":
+          // The stored source record is in an unrecognized format (e.g.
+          // manually edited state.json). Block dependent plugins and emit a
+          // clear diagnostic rather than a misleading source-mismatch
+          // message.
+          blockedMarketplaces.add(marketplace.marketplace);
+          pushDiagnostic(
+            result,
+            marketplace.scope,
+            "unrecognized-stored-source",
+            `Marketplace "${marketplace.marketplace}" has an unrecognized stored source format. Verify state.json or remove and re-add the marketplace.`,
+            { marketplace: marketplace.marketplace },
+          );
+          break;
+        case "same":
+          result.skippedExistingMarketplaces.push({
+            kind: "marketplace-skip",
+            scope: marketplace.scope,
+            marketplace: marketplace.marketplace,
+            reason: "already-present",
           });
+          break;
+        case "different": {
+          blockedMarketplaces.add(marketplace.marketplace);
+          const cause = `Existing marketplace source ${sourceLogical(parsePluginSource(existing.source))} does not match Claude settings source ${marketplace.source}.`;
+          for (const plugin of pluginsForMarketplace(
+            scopePlan.pluginsToInstall,
+            marketplace.marketplace,
+          )) {
+            result.sourceMismatches.push({
+              kind: "source-mismatch",
+              scope: plugin.scope,
+              plugin: plugin.ref.plugin,
+              marketplace: plugin.ref.marketplace,
+              ref: refLabel(plugin),
+              reason: "source-mismatch",
+              cause,
+            });
+          }
+
+          break;
         }
       }
 

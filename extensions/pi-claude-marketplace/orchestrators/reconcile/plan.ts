@@ -30,21 +30,20 @@
 // Dangling-reference contract: a plugin entry whose
 // `${plugin}@${marketplace}` marketplace name is NOT declared in the merged
 // config is recorded as a `PlannedSourceMismatch` with cause
-// `"source-mismatch"`, `plugin` set to the offending plugin name,
-// `declaredSource: ""`, and `recordedSource: "<marketplace not declared>"`.
-// The sentinel is stable so the apply path can render it without ambiguity.
-// The check is against the DECLARED map (not the declared+recorded union):
-// a plugin declared under a marketplace that exists only in state (i.e. the
-// marketplace is in `marketplacesToRemove`) is dangling too -- classifying
-// it as an install/disable would emit a self-contradictory plan ("will
-// remove" the marketplace AND "will install" into it) that the apply
-// path would consume verbatim.
+// `"dangling-reference"`, `marketplace` set to the undeclared marketplace
+// name, and `plugin` set to the offending plugin name. The check is against
+// the DECLARED map (not the declared+recorded union): a plugin declared
+// under a marketplace that exists only in state (i.e. the marketplace is in
+// `marketplacesToRemove`) is dangling too -- classifying it as an
+// install/disable would emit a self-contradictory plan ("will remove" the
+// marketplace AND "will install" into it) that the apply path would consume
+// verbatim.
 //
 // Malformed-key contract: a declared plugin key `parsePluginKey` rejects
 // (no `@`, leading `@`, trailing `@`) is recorded as a
-// `PlannedSourceMismatch` with the RAW key in the `marketplace` field,
-// `declaredSource: ""`, and `recordedSource: "<malformed plugin key>"` --
-// the entry surfaces as a `(failed)` row instead of being silently omitted.
+// `PlannedSourceMismatch` with cause `"malformed-plugin-key"` and the RAW
+// key carried in `rawKey` as the renderable subject -- the entry surfaces
+// as a `(failed)` row instead of being silently omitted.
 
 import { parsePluginSource, samePlannedSource, sourceLogical } from "../../domain/source.ts";
 
@@ -63,16 +62,6 @@ import type {
 import type { MergedConfig } from "../../persistence/config-merge.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
-
-/** Sentinel for the dangling-plugin-reference diagnostic. */
-const MARKETPLACE_NOT_DECLARED = "<marketplace not declared>";
-
-/**
- * Sentinel for the malformed-plugin-key diagnostic (a declared plugin key
- * with no `@`, a leading `@`, or a trailing `@`). The raw key is carried in
- * the diagnostic's `marketplace` field as the renderable subject.
- */
-const MALFORMED_PLUGIN_KEY = "<malformed plugin key>";
 
 /**
  * Parse a flat-keyed plugin entry `"${plugin}@${marketplace}"` into its
@@ -135,7 +124,7 @@ function findRecordedBySource(
       continue;
     }
 
-    if (samePlannedSource(record.source, declaredSource) === true) {
+    if (samePlannedSource(record.source, declaredSource) === "same") {
       return name;
     }
   }
@@ -190,31 +179,31 @@ function diffMarketplaces(
 
     declaredAndRecorded.add(mpName);
     const match = samePlannedSource(recordedRecord.source, declaredEntry.entry.source);
-    if (match === true) {
-      // Steady state -- no action.
-      continue;
+    switch (match) {
+      case "same":
+        // Steady state -- no action.
+        continue;
+      case "unknown-stored":
+        mismatches.push({
+          scope,
+          cause: "unknown-stored",
+          marketplace: mpName,
+          declaredSource: declaredEntry.entry.source,
+          recordedSource: String(recordedRecord.source),
+        });
+        continue;
+      case "different":
+        // Recognised stored source, but different from declaration: render
+        // the recorded source via sourceLogical for a stable diagnostic form.
+        mismatches.push({
+          scope,
+          cause: "source-mismatch",
+          marketplace: mpName,
+          declaredSource: declaredEntry.entry.source,
+          recordedSource: sourceLogical(parsePluginSource(recordedRecord.source)),
+        });
+        continue;
     }
-
-    if (match === "unknown-stored") {
-      mismatches.push({
-        scope,
-        marketplace: mpName,
-        declaredSource: declaredEntry.entry.source,
-        recordedSource: String(recordedRecord.source),
-        cause: "unknown-stored",
-      });
-      continue;
-    }
-
-    // Recognised stored source, but different from declaration: render the
-    // recorded source via sourceLogical for a stable diagnostic form.
-    mismatches.push({
-      scope,
-      marketplace: mpName,
-      declaredSource: declaredEntry.entry.source,
-      recordedSource: sourceLogical(parsePluginSource(recordedRecord.source)),
-      cause: "source-mismatch",
-    });
   }
 
   for (const mpName of Object.keys(recorded)) {
@@ -312,13 +301,12 @@ function classifyDeclaredPlugin(
   if (parsed === undefined) {
     // Malformed key (no `@`, leading `@`, or trailing `@`, e.g. the user
     // forgot the `@marketplace` suffix). Surface a diagnostic carrying the
-    // raw key as the subject instead of silently omitting the entry.
+    // raw key as the renderable subject instead of silently omitting the
+    // entry.
     acc.dangling.push({
       scope,
-      marketplace: key,
-      declaredSource: "",
-      recordedSource: MALFORMED_PLUGIN_KEY,
-      cause: "source-mismatch",
+      cause: "malformed-plugin-key",
+      rawKey: key,
     });
     return;
   }
@@ -333,11 +321,9 @@ function classifyDeclaredPlugin(
   if (declaredMarketplaces[marketplace] === undefined) {
     acc.dangling.push({
       scope,
+      cause: "dangling-reference",
       marketplace,
       plugin,
-      declaredSource: "",
-      recordedSource: MARKETPLACE_NOT_DECLARED,
-      cause: "source-mismatch",
     });
     return;
   }

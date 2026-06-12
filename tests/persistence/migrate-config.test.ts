@@ -388,7 +388,8 @@ test("MIG-02 idempotency: second call short-circuits and does not rewrite the fi
     assert.equal(second.migrated, false);
     if (!second.migrated) {
       assert.equal(second.reason, "existing-valid");
-      assert.equal(second.error, undefined);
+      // Y5: `error` lives only on the `existing-invalid` arm; the type
+      // system rejects `second.error` reads here, so we only assert reason.
     }
 
     assert.equal(second.filePath, loc.configJsonPath);
@@ -412,7 +413,9 @@ test("Pitfall 52-5: pre-existing 0-byte claude-plugins.json is NOT overwritten",
       // CFG-03: 0-byte file is the `invalid` arm; the loadConfig detail rides
       // along so the caller can surface it without a second probe.
       assert.equal(result.reason, "existing-invalid");
-      assert.match(result.error ?? "", /JSON parse failed/);
+      if (result.reason === "existing-invalid") {
+        assert.match(result.error, /JSON parse failed/);
+      }
     }
 
     assert.equal(await readFile(loc.configJsonPath, "utf8"), "");
@@ -436,7 +439,8 @@ test("Pitfall 52-5: pre-existing VALID claude-plugins.json is NOT overwritten", 
     assert.equal(result.migrated, false);
     if (!result.migrated) {
       assert.equal(result.reason, "existing-valid");
-      assert.equal(result.error, undefined);
+      // Y5: `error` lives only on the `existing-invalid` arm; the type
+      // system rejects `result.error` reads here.
     }
 
     assert.equal(await readFile(loc.configJsonPath, "utf8"), preExisting);
@@ -458,7 +462,9 @@ test("Pitfall 52-5: pre-existing INVALID (schema-failing) claude-plugins.json is
     assert.equal(result.migrated, false);
     if (!result.migrated) {
       assert.equal(result.reason, "existing-invalid");
-      assert.match(result.error ?? "", /schema validation failed/);
+      if (result.reason === "existing-invalid") {
+        assert.match(result.error, /schema validation failed/);
+      }
     }
 
     assert.equal(await readFile(loc.configJsonPath, "utf8"), preExisting);
@@ -508,4 +514,57 @@ test("MIG-02 data-level convergence: every merged entry has provenance source='b
   for (const entry of Object.values(merged.plugins)) {
     assert.equal(entry.source, "base");
   }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Y5: MigrateFirstRunResult discriminant cut -- `error` exists ONLY on the
+// `existing-invalid` arm. Reading `error` without narrowing on `reason`
+// MUST be a TYPE error.
+// ─────────────────────────────────────────────────────────────────────────
+
+test("Y5 MigrateFirstRunResult: reading `error` without narrowing on `reason` is a TYPE error", () => {
+  // Synthesise each arm in-place and assert that the only legal read of
+  // `error` is inside the `existing-invalid` narrowing block. The
+  // `@ts-expect-error` comments below assert that the compiler rejects
+  // the wider reads -- if a future widening of the type breaks the cut,
+  // the test fails to compile (a stronger guarantee than a runtime
+  // assertion).
+  const valid: MigrateFirstRunResult = {
+    migrated: false,
+    reason: "existing-valid",
+    filePath: "/tmp/x",
+  };
+  const invalid: MigrateFirstRunResult = {
+    migrated: false,
+    reason: "existing-invalid",
+    error: "schema validation failed",
+    filePath: "/tmp/x",
+  };
+  const empty: MigrateFirstRunResult = {
+    migrated: false,
+    reason: "empty-state",
+    filePath: "/tmp/x",
+  };
+  const ok: MigrateFirstRunResult = { migrated: true, entryCount: 1, filePath: "/tmp/x" };
+
+  // Legal reads -- inside the `existing-invalid` narrowing block.
+  if (!invalid.migrated && invalid.reason === "existing-invalid") {
+    assert.equal(invalid.error, "schema validation failed");
+  }
+
+  // Forbidden reads -- the compiler rejects accessing `.error` on the
+  // `existing-valid` / `empty-state` / `migrated: true` arms.
+  // @ts-expect-error -- Y5: `error` is not declared on the existing-valid arm.
+  void valid.error;
+  // @ts-expect-error -- Y5: `error` is not declared on the empty-state arm.
+  void empty.error;
+  // @ts-expect-error -- Y5: `error` is not declared on the migrated:true arm.
+  void ok.error;
+
+  // Runtime sanity: the narrowed reads above exercise the type at least
+  // once so node:test reports a passing case.
+  assert.equal(typeof invalid.filePath, "string");
+  assert.equal(typeof valid.filePath, "string");
+  assert.equal(typeof empty.filePath, "string");
+  assert.equal(typeof ok.filePath, "string");
 });

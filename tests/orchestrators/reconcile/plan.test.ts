@@ -124,8 +124,12 @@ test("MP cell (declared, recorded, source-mismatch): 1 PlannedSourceMismatch wit
   const mm = plan.sourceMismatches[0];
   assert.ok(mm);
   assert.equal(mm.scope, "project");
-  assert.equal(mm.marketplace, "mp");
   assert.equal(mm.cause, "source-mismatch");
+  if (mm.cause !== "source-mismatch") {
+    throw new Error("test fixture broken -- expected cause=source-mismatch");
+  }
+
+  assert.equal(mm.marketplace, "mp");
   assert.equal(mm.declaredSource, "other/tools");
   // recordedSource flows through sourceLogical for stable diagnostic form
   // (github gets the https form).
@@ -485,21 +489,23 @@ test("Edge: populated merged + empty state -> every mp + enabled plugin in add/i
   assert.equal(plan.pluginsToUninstall.length, 0);
 });
 
-test("Edge: dangling plugin reference (mp not in declared nor recorded) -> PlannedSourceMismatch with sentinel", () => {
+test("Edge: dangling plugin reference (mp not in declared nor recorded) -> PlannedSourceMismatch with cause=dangling-reference", () => {
   const state: ExtensionState = { schemaVersion: 1, marketplaces: {} };
   const merged = mergeScopeConfigs(configWith({}, { "cr@phantom-mp": { enabled: true } }), {});
   const plan = planReconcile(merged, state, "project");
   assert.equal(plan.sourceMismatches.length, 1);
   const dangling = plan.sourceMismatches[0];
   assert.ok(dangling);
-  assert.equal(dangling.cause, "source-mismatch");
+  assert.equal(dangling.cause, "dangling-reference");
+  if (dangling.cause !== "dangling-reference") {
+    throw new Error("test fixture broken -- expected cause=dangling-reference");
+  }
+
   assert.equal(dangling.marketplace, "phantom-mp");
   // WR-03: the diagnostic carries the plugin component of the offending
   // config key so N dangling plugins under one undeclared marketplace stay
   // individually attributable.
   assert.equal(dangling.plugin, "cr");
-  assert.equal(dangling.declaredSource, "");
-  assert.equal(dangling.recordedSource, "<marketplace not declared>");
   // Crucially, the dangling reference does NOT land in pluginsToInstall.
   assert.equal(plan.pluginsToInstall.length, 0);
 });
@@ -519,10 +525,13 @@ test("Edge: declared plugin under a recorded-but-undeclared marketplace -> dangl
   assert.equal(plan.sourceMismatches.length, 1);
   const dangling = plan.sourceMismatches[0];
   assert.ok(dangling);
+  assert.equal(dangling.cause, "dangling-reference");
+  if (dangling.cause !== "dangling-reference") {
+    throw new Error("test fixture broken -- expected cause=dangling-reference");
+  }
+
   assert.equal(dangling.marketplace, "mp");
   assert.equal(dangling.plugin, "cr");
-  assert.equal(dangling.cause, "source-mismatch");
-  assert.equal(dangling.recordedSource, "<marketplace not declared>");
 });
 
 test("Edge: declared-disabled plugin under a recorded-but-undeclared marketplace -> dangling diagnostic, NOT disable (WR-01)", () => {
@@ -538,6 +547,11 @@ test("Edge: declared-disabled plugin under a recorded-but-undeclared marketplace
   assert.equal(plan.sourceMismatches.length, 1);
   const dangling = plan.sourceMismatches[0];
   assert.ok(dangling);
+  assert.equal(dangling.cause, "dangling-reference");
+  if (dangling.cause !== "dangling-reference") {
+    throw new Error("test fixture broken -- expected cause=dangling-reference");
+  }
+
   assert.equal(dangling.plugin, "cr");
 });
 
@@ -561,19 +575,18 @@ test("Edge: malformed plugin keys -> diagnostic with raw key as subject, NEVER s
   const plan = planReconcile(merged, state, "project");
   assert.equal(plan.pluginsToInstall.length, 0);
   assert.equal(plan.sourceMismatches.length, 3);
+  const rawKeys: string[] = [];
   for (const mm of plan.sourceMismatches) {
-    assert.equal(mm.cause, "source-mismatch");
-    assert.equal(mm.declaredSource, "");
-    assert.equal(mm.recordedSource, "<malformed plugin key>");
-    assert.equal(mm.plugin, undefined);
+    assert.equal(mm.cause, "malformed-plugin-key");
+    if (mm.cause !== "malformed-plugin-key") {
+      throw new Error("test fixture broken -- expected cause=malformed-plugin-key");
+    }
+
+    rawKeys.push(mm.rawKey);
   }
 
   // The raw keys are carried verbatim as the renderable subjects.
-  assert.deepEqual(plan.sourceMismatches.map((mm) => mm.marketplace).sort(), [
-    "@leading",
-    "my-plugin",
-    "trailing@",
-  ]);
+  assert.deepEqual(rawKeys.sort(), ["@leading", "my-plugin", "trailing@"]);
 });
 
 test("Plugin key parser: lastIndexOf('@') admits plugin names containing '@'", () => {

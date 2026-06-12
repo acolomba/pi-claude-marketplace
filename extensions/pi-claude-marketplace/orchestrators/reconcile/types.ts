@@ -18,11 +18,11 @@
 //                                53-4 is "all four resources arrays empty")
 //   6. `pluginsToDisable`     -- declared with `enabled === false` but
 //                                still recorded
-//   7. `sourceMismatches`     -- declared marketplace whose recorded
-//                                source disagrees with the declaration
-//                                (cause: "source-mismatch") or whose
-//                                stored record is in an unrecognised shape
-//                                (cause: "unknown-stored")
+//   7. `sourceMismatches`     -- four per-cause planner diagnostics
+//                                (`source-mismatch`, `unknown-stored`,
+//                                `dangling-reference`, `malformed-plugin-key`);
+//                                each variant carries only the fields its
+//                                diagnostic actually renders.
 //
 // Every array field is `readonly` so the planner output is immutable at
 // the type level and downstream consumers (notify projection, apply
@@ -107,46 +107,80 @@ export interface PlannedPluginDisable {
 }
 
 /**
- * Recorded source diverges from declared source. `cause` distinguishes the
- * two diagnostic modes returned by `samePlannedSource`:
+ * Recorded source diverges from declared source -- four per-cause variants
+ * surface distinct planner diagnostics on a single bucket. Each cause
+ * carries only the fields its diagnostic actually renders; the prior fused
+ * shape was overloading sentinel strings (`"<marketplace not declared>"`,
+ * `"<malformed plugin key>"`) onto data fields and punning `marketplace` as
+ * a raw config-key carrier. The discriminant-cut variants close those
+ * misreads at the type level.
  *
- *   - `"source-mismatch"`  -- both shapes are recognised; the declaration
+ *   - `"source-mismatch"` -- both shapes are recognised; the declaration
  *      and the record describe different sources. `declaredSource` is the
  *      raw declaration string; `recordedSource` is the recorded source in
  *      stable diagnostic form (via `sourceLogical(parsePluginSource(...))`).
- *   - `"unknown-stored"`   -- the stored record is in an unrecognised shape
+ *   - `"unknown-stored"` -- the stored record is in an unrecognised shape
  *      (e.g. manually edited state.json). `declaredSource` is the raw
  *      declaration string; `recordedSource` is `String(stored)` so the
  *      operator can see what the unrecognised value actually is.
- *
- * A third use of the variant captures the DANGLING-REFERENCE diagnostic
- * (a plugin entry whose `${plugin}@${marketplace}` marketplace name is NOT
- * declared in the merged config): cause `"source-mismatch"`,
- * `declaredSource` is the empty string, `recordedSource` is the literal
- * sentinel `"<marketplace not declared>"`, and `plugin` carries the plugin
- * component of the offending config key so N dangling plugins under one
- * undeclared marketplace stay individually attributable. The apply path
- * surfaces this as a planning-time advisory.
- *
- * A fourth use captures the MALFORMED-PLUGIN-KEY diagnostic (a declared
- * plugin key with no `@`, a leading `@`, or a trailing `@`): cause
- * `"source-mismatch"`, `marketplace` carries the RAW config key as the
- * renderable subject, `declaredSource` is the empty string, and
- * `recordedSource` is the literal sentinel `"<malformed plugin key>"`.
+ *   - `"dangling-reference"` -- a plugin entry whose
+ *      `${plugin}@${marketplace}` marketplace name is NOT declared in the
+ *      merged config. `marketplace` is the undeclared marketplace name and
+ *      `plugin` (required) is the plugin component of the offending config
+ *      key so N dangling plugins under one undeclared marketplace stay
+ *      individually attributable.
+ *   - `"malformed-plugin-key"` -- a declared plugin key `parsePluginKey`
+ *      rejects (no `@`, leading `@`, trailing `@`). `rawKey` carries the
+ *      raw config key as the renderable subject -- the entry surfaces as a
+ *      `(failed)` row instead of being silently omitted. The field is
+ *      `rawKey`, NOT a punned `marketplace`, so the type system enforces
+ *      "this is the user's typo, not a real marketplace name".
  */
-export interface PlannedSourceMismatch {
+export interface PlannedSourceMismatchOfSourceMismatch {
   readonly scope: Scope;
+  readonly cause: "source-mismatch";
   readonly marketplace: string;
-  /**
-   * Present ONLY on plugin-level diagnostics (dangling reference): the
-   * plugin component of the offending `${plugin}@${marketplace}` config
-   * key. Marketplace-level mismatches (`source-mismatch` /
-   * `unknown-stored` on a declared+recorded marketplace) carry no plugin.
-   */
-  readonly plugin?: string;
   readonly declaredSource: string;
   readonly recordedSource: string;
-  readonly cause: "source-mismatch" | "unknown-stored";
+}
+
+export interface PlannedSourceMismatchOfUnknownStored {
+  readonly scope: Scope;
+  readonly cause: "unknown-stored";
+  readonly marketplace: string;
+  readonly declaredSource: string;
+  readonly recordedSource: string;
+}
+
+export interface PlannedSourceMismatchOfDanglingReference {
+  readonly scope: Scope;
+  readonly cause: "dangling-reference";
+  readonly marketplace: string;
+  readonly plugin: string;
+}
+
+export interface PlannedSourceMismatchOfMalformedPluginKey {
+  readonly scope: Scope;
+  readonly cause: "malformed-plugin-key";
+  readonly rawKey: string;
+}
+
+export type PlannedSourceMismatch =
+  | PlannedSourceMismatchOfSourceMismatch
+  | PlannedSourceMismatchOfUnknownStored
+  | PlannedSourceMismatchOfDanglingReference
+  | PlannedSourceMismatchOfMalformedPluginKey;
+
+/**
+ * Derive the renderable subject (the `name` keying the
+ * `(scope, name)` MarketplaceBlock) from a `PlannedSourceMismatch`. For
+ * source-mismatch / unknown-stored / dangling-reference the subject is the
+ * marketplace name; for malformed-plugin-key the subject is the raw config
+ * key. Keeping this in one place lets the renderers stay byte-identical
+ * across the four causes.
+ */
+export function plannedSourceMismatchSubject(mismatch: PlannedSourceMismatch): string {
+  return mismatch.cause === "malformed-plugin-key" ? mismatch.rawKey : mismatch.marketplace;
 }
 
 /**

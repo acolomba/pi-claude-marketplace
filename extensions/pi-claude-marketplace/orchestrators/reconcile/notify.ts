@@ -35,6 +35,9 @@
 import { assertNever } from "../../shared/errors.ts";
 import { compareByNameThenScope } from "../../shared/notify.ts";
 
+import { sourceMismatchOutcomeSubject } from "./apply-outcomes.ts";
+import { plannedSourceMismatchSubject } from "./types.ts";
+
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ReconcilePlan } from "./types.ts";
 import type {
@@ -130,12 +133,15 @@ function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceNotifica
 }
 
 /**
- * Fold one `PlannedSourceMismatch` into its `(scope, marketplace)` block.
+ * Fold one `PlannedSourceMismatch` into its `(scope, name)` block, where
+ * `name` is the renderable subject derived from the cause (see
+ * `plannedSourceMismatchSubject`: mp name for source-mismatch /
+ * unknown-stored / dangling-reference; rawKey for malformed-plugin-key).
  * Source-mismatch supersedes any prior status (the declaration cannot be
  * honoured byte-for-byte). Pitfall 53-7: reuse the existing
  * "source mismatch" REASONS member; do NOT add a new REASONS literal.
  *
- * Plugin-level diagnostics (dangling reference -- `plugin` set) surface the
+ * Plugin-level diagnostics (`dangling-reference` only) surface the
  * offending plugin as a child (failed) row so N dangling plugins under one
  * undeclared marketplace stay individually attributable instead of
  * collapsing into one anonymous marketplace row.
@@ -146,7 +152,7 @@ function applySourceMismatch(
 ): void {
   block.status = "failed";
   block.reasons = ["source mismatch"];
-  if (mismatch.plugin !== undefined) {
+  if (mismatch.cause === "dangling-reference") {
     block.plugins.push({
       status: "failed",
       name: mismatch.plugin,
@@ -195,7 +201,10 @@ export function buildReconcilePreviewNotification(
     }
 
     for (const o of plan.sourceMismatches) {
-      applySourceMismatch(ensureMarketplaceBlock(byMp, o.scope, o.marketplace), o);
+      applySourceMismatch(
+        ensureMarketplaceBlock(byMp, o.scope, plannedSourceMismatchSubject(o)),
+        o,
+      );
     }
 
     for (const o of plan.pluginsToInstall) {
@@ -360,7 +369,7 @@ function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome):
     case "source-mismatch":
       block.status = "failed";
       block.reasons = ["source mismatch"];
-      if (outcome.plugin !== undefined) {
+      if (outcome.cause === "dangling-reference") {
         block.plugins.push({
           status: "failed",
           name: outcome.plugin,
@@ -370,7 +379,7 @@ function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome):
 
       return;
     case "invalid-block":
-      // CFG-03 row: the marketplace name IS the file basename (T-55-02-01).
+      // CFG-03 row: the row subject IS the file basename (T-55-02-01).
       // The block is keyed by (scope, basename) so multiple invalid files in
       // the same scope render as distinct rows.
       block.status = "failed";
@@ -387,7 +396,7 @@ function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome):
       if (outcome.cause !== undefined) {
         block.plugins.push({
           status: "failed",
-          name: outcome.marketplace,
+          name: outcome.basename,
           reasons: [outcome.reason],
           cause: outcome.cause,
         });
@@ -397,6 +406,30 @@ function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome):
     default:
       assertNever(outcome);
   }
+}
+
+/**
+ * Derive the renderable block-key subject from a per-entry outcome. Most
+ * variants carry `marketplace`; the Y2 / Y4 cuts moved two subjects off
+ * that field:
+ *   - `invalid-block` carries `basename` (the file basename, T-55-02-01).
+ *   - `source-mismatch` of cause `"malformed-plugin-key"` carries `rawKey`
+ *     (the raw user-typed config key, NOT a marketplace name).
+ *
+ * Centralising the derivation here keeps the byte form of the cascade
+ * identical across the four source-mismatch causes and across the
+ * invalid-block rename.
+ */
+function outcomeSubject(outcome: PerEntryOutcome): string {
+  if (outcome.kind === "invalid-block") {
+    return outcome.basename;
+  }
+
+  if (outcome.kind === "source-mismatch") {
+    return sourceMismatchOutcomeSubject(outcome);
+  }
+
+  return outcome.marketplace;
 }
 
 /**
@@ -431,12 +464,13 @@ export function buildReconcileAppliedCascade(
   const byMp = new Map<string, MarketplaceBlock>();
 
   for (const outcome of outcomes) {
-    // For invalid-block outcomes, `marketplace` is the file basename so
-    // distinct files render as distinct rows; for source-mismatch the
-    // outcome already carries the offending marketplace name from the
-    // planner. Every variant routes through ensureMarketplaceBlock so the
+    // Block keying derives the renderable subject per outcome variant: most
+    // outcomes carry `marketplace`; `invalid-block` carries `basename` (the
+    // file basename so distinct invalid files render as distinct rows); a
+    // `source-mismatch` of cause `"malformed-plugin-key"` carries `rawKey`.
+    // Every variant routes through ensureMarketplaceBlock so the
     // (scope, name) key is the single accumulation seam.
-    const block = ensureMarketplaceBlock(byMp, outcome.scope, outcome.marketplace);
+    const block = ensureMarketplaceBlock(byMp, outcome.scope, outcomeSubject(outcome));
     applyOutcomeToBlock(block, outcome);
   }
 

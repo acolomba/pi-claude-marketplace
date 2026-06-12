@@ -147,24 +147,65 @@ export interface PluginDisableFailedOutcome extends PluginOutcomeBase {
  * NOT drive an orchestrator for these; the planner surfaces them on the
  * cascade as a `(failed) {source mismatch}` mp row with an optional plugin
  * child carrying the offending plugin name (mirrors the preview projection).
+ *
+ * The four per-cause variants mirror `PlannedSourceMismatch`: each carries
+ * only the fields its diagnostic renders. The `marketplace` field on the
+ * first three variants is the renderable mp-name subject; on
+ * `malformed-plugin-key` the subject is `rawKey` instead, NOT a punned
+ * `marketplace` (preserves the type-level "this is the user's typo, not a
+ * real marketplace name" contract).
  */
-export interface SourceMismatchOutcome extends OutcomeBase {
-  readonly kind: "source-mismatch";
-  /**
-   * Present only on plugin-level dangling references; absent on mp-level
-   * mismatches. Mirrors `PlannedSourceMismatch.plugin`.
-   */
-  readonly plugin?: string;
+export type SourceMismatchOutcome =
+  | {
+      readonly kind: "source-mismatch";
+      readonly cause: "source-mismatch";
+      readonly scope: Scope;
+      readonly marketplace: string;
+    }
+  | {
+      readonly kind: "source-mismatch";
+      readonly cause: "unknown-stored";
+      readonly scope: Scope;
+      readonly marketplace: string;
+    }
+  | {
+      readonly kind: "source-mismatch";
+      readonly cause: "dangling-reference";
+      readonly scope: Scope;
+      readonly marketplace: string;
+      readonly plugin: string;
+    }
+  | {
+      readonly kind: "source-mismatch";
+      readonly cause: "malformed-plugin-key";
+      readonly scope: Scope;
+      readonly rawKey: string;
+    };
+
+/**
+ * Derive the renderable subject (the marketplace-block key name) from a
+ * `SourceMismatchOutcome`. For source-mismatch / unknown-stored /
+ * dangling-reference the subject is `marketplace`; for malformed-plugin-key
+ * the subject is `rawKey`. Centralising the derivation here keeps the
+ * renderers byte-identical across the four causes.
+ */
+export function sourceMismatchOutcomeSubject(outcome: SourceMismatchOutcome): string {
+  return outcome.cause === "malformed-plugin-key" ? outcome.rawKey : outcome.marketplace;
 }
 
 /**
  * Invalid-config outcome from the per-scope read pass (CFG-03 / Pitfall
- * 53-1). Carries the file BASENAME in `marketplace` so the projection
- * renders `⊘ <basename> [<scope>] (failed) {invalid manifest}` -- the
- * absolute path is NEVER in the outcome (T-55-02-01 / T-53-02-02).
+ * 53-1). Carries the file BASENAME in `basename` so the projection renders
+ * `⊘ <basename> [<scope>] (failed) {invalid manifest}` -- the absolute
+ * path is NEVER in the outcome (T-55-02-01 / T-53-02-02). The field is
+ * `basename`, not the punned `marketplace` used by mp-level outcomes, so
+ * the type system makes the "this is a file name, not a marketplace name"
+ * contract explicit.
  */
-export interface InvalidBlockOutcome extends OutcomeBase {
+export interface InvalidBlockOutcome {
   readonly kind: "invalid-block";
+  readonly scope: Scope;
+  readonly basename: string;
   /** Closed-set reason from `narrowProbeError` -- `invalid manifest` for CFG-03, `unparseable` for state-json. */
   readonly reason: ContentReason;
   /**

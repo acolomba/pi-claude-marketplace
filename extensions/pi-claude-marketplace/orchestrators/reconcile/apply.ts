@@ -169,7 +169,7 @@ async function readPassForScope(scope: Scope, cwd: string): Promise<ScopeReadRes
       invalidOutcomes.push({
         kind: "invalid-block",
         scope,
-        marketplace: path.basename(outcome.base.filePath),
+        basename: path.basename(outcome.base.filePath),
         reason: "invalid manifest",
         cause: new Error(redactAbsolutePaths(outcome.base.error)),
       });
@@ -179,7 +179,7 @@ async function readPassForScope(scope: Scope, cwd: string): Promise<ScopeReadRes
       invalidOutcomes.push({
         kind: "invalid-block",
         scope,
-        marketplace: path.basename(outcome.local.filePath),
+        basename: path.basename(outcome.local.filePath),
         reason: "invalid manifest",
         cause: new Error(redactAbsolutePaths(outcome.local.error)),
       });
@@ -589,7 +589,6 @@ async function applyPluginInstalls(
 
 interface PluginToggleAxes {
   readonly enable: boolean;
-  readonly successStatus: "enabled" | "disabled";
   readonly buildSuccess: (info: {
     scope: Scope;
     marketplace: string;
@@ -610,6 +609,11 @@ async function applyPluginToggles(
   outcomes: PerEntryOutcome[],
   axes: PluginToggleAxes,
 ): Promise<void> {
+  // Y6: successStatus is derivable from `enable` -- enable=true => "enabled",
+  // enable=false => "disabled". Deriving it here closes a redundant-axis
+  // footgun where a caller could pass an inconsistent (enable, successStatus)
+  // pair (e.g. enable:true + successStatus:"disabled").
+  const successStatus: "enabled" | "disabled" = axes.enable ? "enabled" : "disabled";
   for (const op of ops) {
     try {
       const result = await setPluginEnabled({
@@ -626,7 +630,7 @@ async function applyPluginToggles(
         continue;
       }
 
-      if (result.status === axes.successStatus) {
+      if (result.status === successStatus) {
         outcomes.push(
           axes.buildSuccess({
             scope: op.scope,
@@ -669,12 +673,46 @@ async function applyPluginToggles(
  */
 function applySourceMismatches(plan: ReconcilePlan, outcomes: PerEntryOutcome[]): void {
   for (const m of plan.sourceMismatches) {
-    outcomes.push({
-      kind: "source-mismatch",
-      scope: m.scope,
-      marketplace: m.marketplace,
-      ...(m.plugin !== undefined && { plugin: m.plugin }),
-    });
+    // Per-cause propagation: each variant lifts its renderable fields onto
+    // the corresponding SourceMismatchOutcome arm. The renderer derives
+    // byte-identical output from the new variants via
+    // `sourceMismatchOutcomeSubject` (mp-name for the first three causes;
+    // rawKey for malformed-plugin-key).
+    switch (m.cause) {
+      case "source-mismatch":
+        outcomes.push({
+          kind: "source-mismatch",
+          cause: "source-mismatch",
+          scope: m.scope,
+          marketplace: m.marketplace,
+        });
+        break;
+      case "unknown-stored":
+        outcomes.push({
+          kind: "source-mismatch",
+          cause: "unknown-stored",
+          scope: m.scope,
+          marketplace: m.marketplace,
+        });
+        break;
+      case "dangling-reference":
+        outcomes.push({
+          kind: "source-mismatch",
+          cause: "dangling-reference",
+          scope: m.scope,
+          marketplace: m.marketplace,
+          plugin: m.plugin,
+        });
+        break;
+      case "malformed-plugin-key":
+        outcomes.push({
+          kind: "source-mismatch",
+          cause: "malformed-plugin-key",
+          scope: m.scope,
+          rawKey: m.rawKey,
+        });
+        break;
+    }
   }
 }
 
@@ -705,13 +743,11 @@ async function applyPlan(
   await applyPluginInstalls(opts, plan, outcomes);
   await applyPluginToggles(opts, plan.pluginsToEnable, outcomes, {
     enable: true,
-    successStatus: "enabled",
     buildSuccess: (info) => ({ kind: "plugin-enabled", ...info }),
     buildFailed: (info) => ({ kind: "plugin-enable-failed", ...info }),
   });
   await applyPluginToggles(opts, plan.pluginsToDisable, outcomes, {
     enable: false,
-    successStatus: "disabled",
     buildSuccess: (info) => ({ kind: "plugin-disabled", ...info }),
     buildFailed: (info) => ({ kind: "plugin-disable-failed", ...info }),
   });
@@ -755,7 +791,7 @@ export async function applyReconcile(opts: ApplyReconcileOptions): Promise<void>
       // load pass was trying to WRITE, not state.json. Pre-fix every
       // read-pass throw lied about the failing file.
       const isMigrateSave = err instanceof MigrateConfigSaveError;
-      const marketplace = isMigrateSave ? path.basename(err.configFilePath) : "state.json";
+      const basename = isMigrateSave ? path.basename(err.configFilePath) : "state.json";
       // Unwrap the cause for classification so the closed-set reason
       // (`permission denied`, `unparseable`, etc.) reflects the underlying
       // error, not the sentinel.
@@ -764,7 +800,7 @@ export async function applyReconcile(opts: ApplyReconcileOptions): Promise<void>
       outcomes.push({
         kind: "invalid-block",
         scope,
-        marketplace,
+        basename,
         reason: classifyReadPassThrow(classifiable),
         cause: new Error(redactAbsolutePaths(causeText)),
       });
