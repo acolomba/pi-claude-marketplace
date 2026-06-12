@@ -67,7 +67,7 @@ import type {
 import type { Scope } from "../../shared/types.ts";
 
 /**
- * RECON-03 (Phase 55 Plan 01): controls how `removeMarketplace` surfaces
+ * RECON-03: controls how `removeMarketplace` surfaces
  * notifications. Mirrors `AddMarketplaceNotifications`.
  *
  * - `"standalone"` (default when option is omitted): byte-identical to today.
@@ -119,12 +119,12 @@ export interface RemoveMarketplaceOptions {
    */
   readonly cascade?: typeof cascadeUnstagePlugin;
   /**
-   * RECON-03 (Phase 55 Plan 01): notification mode selector. Omitted
+   * RECON-03: notification mode selector. Omitted
    * (undefined) === `{ mode: "standalone" }` -- byte-identical to today.
    */
   readonly notifications?: RemoveMarketplaceNotifications;
   /**
-   * WB-01 / Pitfall 2 (Phase 56 Plan 02): when true, target
+   * WB-01 / Pitfall 2: when true, target
    * `claude-plugins.local.json` instead of `claude-plugins.json`. The base
    * file is NEVER touched on the --local path.
    */
@@ -265,7 +265,7 @@ function emitPartialFailure(args: {
   const { opts, orchestrated, resolvedScope, successfullyUnstaged, failedPlugins } = args;
   if (orchestrated) {
     // Collapse the per-plugin partial-failure surface to ONE typed outcome.
-    // The apply cascade caller (Plan 02) composes per-plugin rows from its
+    // The apply cascade caller composes per-plugin rows from its
     // own bucket walk; here we surface the first failed plugin's classified
     // reason as the marketplace-level failure reason.
     const first = failedPlugins[0];
@@ -384,7 +384,7 @@ async function commitFullRemove(args: {
     return;
   }
 
-  // WR-02 (Phase 56 review): short-circuit when the TARGETED physical file
+  // WR-02: short-circuit when the TARGETED physical file
   // declares neither the marketplace nor any plugin key under it. Writing
   // anyway would rewrite the file (mtime bump) for a semantic no-op -- or
   // CREATE claude-plugins.json containing only empty maps when the file is

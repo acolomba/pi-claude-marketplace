@@ -1,6 +1,6 @@
 // orchestrators/reconcile/apply-outcomes.ts
 //
-// RECON-04 (Phase 55 Plan 02): the per-entry outcome discriminated union
+// RECON-04: the per-entry outcome discriminated union
 // consumed by `buildReconcileAppliedCascade`. Each variant captures one
 // orchestrator call's structured result (success or failure) so the
 // projection helper can fold N outcomes into one
@@ -14,7 +14,7 @@
 //   - planner-only:    invalid-block (CFG-03 from the read pass)
 //
 // Failure variants carry `reason: Reason` (broader than ContentReason so the
-// structural `"not added"` sentinel can flow through; mirrors the Plan 01
+// structural `"not added"` sentinel can flow through; mirrors the orchestrator
 // outcome shapes). Success variants carry the minimum fields the projection
 // renders.
 //

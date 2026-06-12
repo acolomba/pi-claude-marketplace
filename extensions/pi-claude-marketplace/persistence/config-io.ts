@@ -22,7 +22,7 @@
 // loudly per shared/path-safety.ts semantics; we do NOT catch it.
 //
 // D-02: `source` is a raw `Type.String()`; the semantic gate
-// (`parsePluginSource`) runs at downstream consume time (Phases 53/55), not
+// (`parsePluginSource`) runs at downstream consume time (planner / apply), not
 // inside this schema. D-09: schema is lenient by default -- typebox
 // `Type.Object` accepts unknown extra keys; we do NOT add the
 // extra-property-forbidding directive anywhere. D-11: `schemaVersion` is

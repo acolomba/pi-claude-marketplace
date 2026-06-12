@@ -1,6 +1,6 @@
 // orchestrators/plugin/enable-disable.ts
 //
-// D-54-01 / ENBL-01 / ENBL-02 / ENBL-03 / ENBL-04 (Phase 54 Plan 02).
+// D-54-01 / ENBL-01 / ENBL-02 / ENBL-03 / ENBL-04.
 //
 // Single orchestrator parameterized by `enable: boolean`. Mirrors the
 // `setMarketplaceAutoupdate` shape: composes `resolveCrossScopePluginTarget`
@@ -8,7 +8,7 @@
 // guard-free install ledger) + `saveConfig` + a single terminal `notify()`
 // per IL-2.
 //
-// CR-01 (Phase 54 review) locking model: exactly ONE per-scope lock owns the
+// CR-01 locking model: exactly ONE per-scope lock owns the
 // whole critical section. The enable branch calls `runInstallLedger` (the
 // guard-FREE ledger body exported by install.ts) against THIS transaction's
 // state snapshot -- calling `installPlugin` here would nest a second
@@ -18,13 +18,13 @@
 // ledger's state mutation is what gets saved (no outer stale-snapshot
 // clobber; ST-7 / D-06 single-writer preserved).
 //
-// WR-01 (Phase 54 review) save discipline: `tx.save()` fires ONLY on the
+// WR-01 save discipline: `tx.save()` fires ONLY on the
 // `fresh` arms. The `invalid-config` / `idempotent` / `not-recorded` /
 // `*-failed` arms return without saving, so state.json's mtime is UNCHANGED
 // on every abort/no-op -- exactly what the catalog's CFG-03 states claim.
 //
 // NFR-5 (no network): this file MUST NOT import platform/git or DEFAULT_GIT_OPS.
-// The Phase 54 Plan 01 architecture gate at
+// The architecture gate at
 // `tests/architecture/no-orchestrator-network.test.ts` (FORBIDDEN_TARGETS) is
 // armed for this file -- adding any forbidden surface fails the gate.
 //
@@ -53,7 +53,7 @@
 //
 // T-53-02-02 / T-54-02-02 information disclosure mitigation: the CFG-03
 // abort row carries `path.basename(targetConfigPath)` -- never the absolute
-// path -- reusing the Phase 53 preview pattern.
+// path -- reusing the dry-run preview pattern.
 
 import path from "node:path";
 
@@ -79,12 +79,12 @@ import type { ContentReason, PluginNotificationMessage, Reason } from "../../sha
 import type { Scope } from "../../shared/types.ts";
 
 /**
- * RECON-03 (Phase 55 Plan 01): controls how `setPluginEnabled` surfaces
+ * RECON-03: controls how `setPluginEnabled` surfaces
  * notifications. Mirrors `AddMarketplaceNotifications`.
  *
  * - `"standalone"` (default when option is omitted): byte-identical to today.
  * - `"orchestrated"`: suppresses every `ctx.ui.notify` call and returns the
- *   typed `EnableDisablePluginOutcome` for `applyReconcile` (Plan 02).
+ *   typed `EnableDisablePluginOutcome` for `applyReconcile`.
  */
 export type EnableDisablePluginNotifications =
   | { readonly mode: "standalone" }
@@ -142,7 +142,7 @@ export interface EnableDisablePluginOptions {
    */
   readonly local?: boolean;
   /**
-   * RECON-03 (Phase 55 Plan 01): notification mode selector. Omitted
+   * RECON-03: notification mode selector. Omitted
    * (undefined) === `{ mode: "standalone" }` -- byte-identical to today.
    */
   readonly notifications?: EnableDisablePluginNotifications;
@@ -347,7 +347,7 @@ export async function setPluginEnabled(
 
       // ENBL-02 idempotency: empty-resources + installable:true marker.
       if (isCurrentlyDisabled(installed) === !enable) {
-        // WR-03 (Phase 56 review): state-side truth alone is not enough.
+        // WR-03: state-side truth alone is not enough.
         // When the targeted config carries the OPPOSITE EXPLICIT `enabled`
         // value (hand-edited config, or base/local divergence pending
         // reconcile), skipping here would leave the config diverged -- and
@@ -395,7 +395,7 @@ export async function setPluginEnabled(
 
       // Config write-back via the SOLE sanctioned saveConfig seam (SPLIT-02).
       //
-      // WR-09 (Phase 55 review): SKIPPED in orchestrated mode. A
+      // WR-09: SKIPPED in orchestrated mode. A
       // reconcile-driven call derives the desired state FROM the merged
       // config (base + local), so the declaration already exists by
       // construction -- possibly ONLY in `claude-plugins.local.json` (the
@@ -403,7 +403,7 @@ export async function setPluginEnabled(
       // copy the local override's `enabled` flag into the shared BASE file
       // and clobber a user-authored base declaration. The config is the
       // reconcile's INPUT; only standalone commands author declarations.
-      // CR-02 (Phase 56 review): when the scope's MERGED config view does
+      // CR-02: when the scope's MERGED config view does
       // not declare the marketplace (CMP-3 clone-adoption legacy, or a
       // hand-pruned config), declare it in the SAME batched patch -- a bare
       // plugin key would otherwise be a dangling declaration the planner
@@ -469,7 +469,7 @@ export async function setPluginEnabled(
 }
 
 /**
- * WR-04 (Phase 55 review): closed-set reason for an orchestrated transaction
+ * WR-04: closed-set reason for an orchestrated transaction
  * throw. The transaction body also runs loadConfig, writeConfigEntry /
  * saveConfig, and tx.save() -- an EACCES on the config write or a disk-full
  * on state save is NOT a lock conflict. Only a genuine StateLockHeldError
@@ -571,7 +571,7 @@ function dispatchOutcome(args: {
 }): void {
   const { ctx, pi, marketplace, scope, plugin, enable, configBasename, outcome } = args;
   const row = composeOutcomeRow({ plugin, enable, configBasename, outcome });
-  // UAT-03 (v1.12 milestone UAT decision 2026-06-11): the disable verb
+  // UAT-03: the disable verb
   // dispatches with the `"disable-cascade"` kind so the fresh `(disabled)`
   // row counts as a realized transition in `shouldEmitReloadHint` (artefacts
   // were unstaged -- SNM-33). Rendering is byte-identical to the plain

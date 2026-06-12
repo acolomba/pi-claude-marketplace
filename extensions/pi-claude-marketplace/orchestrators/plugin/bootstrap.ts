@@ -25,7 +25,7 @@
 //   - Only `MarketplaceDuplicateNameError` is swallowed from
 //     `addMarketplace`. All other errors propagate so the surface
 //     matches existing orchestrator behavior.
-//   - ATTR-07 (Phase 48): `addMarketplace` now routes precondition failures
+//   - ATTR-07: `addMarketplace` now routes precondition failures
 //     (incl. duplicate name) through `notify` as a `(failed) {<reason>}` row
 //     for the public `marketplace add` command. Bootstrap MUST keep the
 //     one-signal-per-state-change contract, so it passes

@@ -194,9 +194,9 @@ function refLabel(plugin: PlannedPluginImport): string {
   return plugin.ref.raw;
 }
 
-// `samePlannedSource` moved to `domain/source.ts` in Phase 53 Plan 01 so
-// the new pure `orchestrators/reconcile/plan.ts` can import it without
-// dragging this module's effectful transitive closure.
+// `samePlannedSource` lives in `domain/source.ts` so the pure
+// `orchestrators/reconcile/plan.ts` can import it without dragging this
+// module's effectful transitive closure.
 
 function stateLoader(
   deps: ImportDeps | undefined,
@@ -482,7 +482,7 @@ function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceNotifica
 type ScopedImportPlan = ReturnType<typeof buildClaudeImportPlan>["scopes"][number];
 
 /**
- * WR-07 (Phase 55 review): shared failure bookkeeping for a marketplace add
+ * WR-07: shared failure bookkeeping for a marketplace add
  * that did not record (typed failed outcome OR unexpected throw): block
  * dependent plugin installs and attribute the cause on both the marketplace
  * row and each dependent plugin's warning row.
@@ -579,7 +579,7 @@ async function executeScopedPlan(
       continue;
     }
 
-    // WR-07 (Phase 55 review): drive the add in ORCHESTRATED mode and
+    // WR-07: drive the add in ORCHESTRATED mode and
     // dispatch on the typed outcome. In standalone mode a classified
     // precondition failure (duplicate name, stale clone, invalid manifest,
     // unsupported source, source missing) does NOT throw -- it fires its own
@@ -720,7 +720,7 @@ async function executeScopedPlan(
   // post-pass owns the ONLY write to claude-plugins.json for the import
   // command.
   //
-  // WR-01 (Phase 56 review): the post-pass also REPAIRS missing config
+  // WR-01: the post-pass also REPAIRS missing config
   // declarations for already-present (skipped) entries. If a previous
   // import's post-pass failed (the defensive catch below records a
   // diagnostic and moves on), state carries entries the config never
@@ -740,7 +740,7 @@ async function executeScopedPlan(
  * successful installedPlugins), and writes the patch under ONE
  * withLockedStateTransaction with exactly ONE saveConfig call.
  *
- * WR-01 (Phase 56 review): skip outcomes (`skippedExistingMarketplaces` /
+ * WR-01: skip outcomes (`skippedExistingMarketplaces` /
  * `skippedExistingPlugins`) are included as REPAIR candidates -- written
  * ONLY when the loaded config does not already declare the key (the
  * key-absence gate preserves RECON-05 byte stability for the all-declared
@@ -753,7 +753,7 @@ async function executeScopedPlan(
  * targets `locations.configJsonPath` unconditionally.
  *
  * Source: verbatim `rawSource` from `scopePlan.marketplacesToEnsure` keyed by
- * marketplace name, preserving the Phase 53 `samePlannedSource` contract.
+ * marketplace name, preserving the `samePlannedSource` contract.
  *
  * CFG-03: invalid claude-plugins.json aborts THIS scope's post-pass but does
  * NOT throw -- other scopes' post-passes still run. State was already saved
@@ -826,7 +826,7 @@ function buildBatchedPatchForScope(
 ): { ensure: BatchedConfigPatch; repair: BatchedConfigPatch } {
   // Map marketplace name -> verbatim rawSource so the batched patch records
   // `source: rawSource` exactly as the user/Claude settings declared it
-  // (Phase 53 `samePlannedSource` contract).
+  // (`samePlannedSource` contract).
   const rawSourceByName = new Map<string, string>();
   for (const mp of scopePlan.marketplacesToEnsure) {
     rawSourceByName.set(mp.marketplace, mp.source);
@@ -866,7 +866,7 @@ function buildBatchedPatchForScope(
 }
 
 /**
- * WR-01 (Phase 56 review): already-present (skipped) entries are REPAIR
+ * WR-01: already-present (skipped) entries are REPAIR
  * candidates -- state carries them, so a missing config declaration is a
  * divergence the reconcile planner would resolve DESTRUCTIVELY (teardown).
  * The caller applies these only when the loaded config lacks the key.

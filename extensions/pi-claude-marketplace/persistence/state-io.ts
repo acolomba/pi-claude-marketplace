@@ -182,7 +182,7 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
   // ST-4 / ST-5 / D-13: normalize legacy records. The third argument is the
   // D-13 ORDERING RAIL gate: the `autoupdate` scrub fires only when the
   // scope's `claude-plugins.json` already exists, preserving the legacy
-  // field on the first load before Phase 52's first-run migration has
+  // field on the first load before the first-run migration has
   // captured it. The gate predicate lives HERE (not inside the migrator) so
   // `migrateLegacyMarketplaceRecords` stays a pure function with no hidden
   // I/O, and the D-13 gate decision is visible at the load seam where the

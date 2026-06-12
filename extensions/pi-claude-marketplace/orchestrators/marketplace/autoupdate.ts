@@ -81,7 +81,7 @@ import type {
 import type { Scope } from "../../shared/types.ts";
 
 /**
- * RECON-03 (Phase 55 Plan 01) / WR-09: notification mode selector. Mirrors
+ * RECON-03 / WR-09: notification mode selector. Mirrors
  * the marketplace add/remove shape. Omitted (undefined) ===
  * `{ mode: "standalone" }` -- byte-identical to today. Orchestrated mode
  * suppresses config write-back so a reconcile-driven flip never clobbers a
@@ -109,7 +109,7 @@ export interface AutoupdateOptions {
   /** Project-scope cwd (ignored for user scope). */
   readonly cwd: string;
   /**
-   * WB-01 / Pitfall 2 (Phase 56 Plan 02): when true, target
+   * WB-01 / Pitfall 2: when true, target
    * `claude-plugins.local.json` instead of `claude-plugins.json`. The base
    * file is NEVER touched on the --local path.
    */
@@ -211,11 +211,11 @@ function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err
 }
 
 /**
- * WB-01 / Pitfall 5 (Phase 56 Plan 02): execute a single-scope autoupdate
+ * WB-01 / Pitfall 5: execute a single-scope autoupdate
  * flip inside `withLockedStateTransaction` so the config write-back happens
  * under the per-scope lock (serialized against concurrent state mutators).
  *
- * WR-05 (Phase 56 review): the flip never writes state.json --
+ * WR-05: the flip never writes state.json --
  * `classifyAutoupdateFlip` is classify-only and the closure has no
  * tx.save(). SPLIT-01 moved autoupdate truth into the config; the config
  * write-back IS the flip.
@@ -234,9 +234,8 @@ function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err
 /**
  * Reclassify both state-side `changed` AND state-side `unchanged` names
  * against the CONFIG-side `autoupdate` truth (SPLIT-01 + Pitfall 5). The
- * config (claude-plugins.json) is the new source of truth after Phase 51's
- * D-13 scrub strips legacy `autoupdate` from state once the config file
- * exists.
+ * config (claude-plugins.json) is the new source of truth. The D-13 scrub
+ * strips legacy `autoupdate` from state once the config file exists.
  *
  * Two reclassification directions:
  *  - `changed` -> `unchanged`: when the config already carries the
@@ -287,7 +286,7 @@ function reclassifyByConfigTruth(
  * Build the per-marketplace patch passed to writeMarketplaceConfigEntry.
  * On a first-time write where no existing config entry carries `source`,
  * synthesize it from the state record's `source.raw` (the verbatim
- * user-typed string -- the Phase 53 reconcile planner's `samePlannedSource`
+ * user-typed string -- the reconcile planner's `samePlannedSource`
  * contract).
  */
 function buildAutoupdatePatch(
@@ -322,7 +321,7 @@ function buildAutoupdatePatch(
  * one. The batched form applies all N patches in memory before the single
  * atomic save, which also makes a mid-write failure all-or-nothing (NFR-3).
  *
- * WR-06(b) (Phase 56 review): an entry is SKIPPED from the batch when no
+ * WR-06(b): an entry is SKIPPED from the batch when no
  * string `source` can be synthesized for a first-time write (config entry
  * absent AND the state record's `source.raw` is not a string -- hand-edited
  * or legacy state). Including it would trip `saveConfig`'s required-`source`
@@ -400,7 +399,7 @@ async function flipOneScope(
       );
     }
 
-    // WR-05 (Phase 56 review): NO tx.save() -- classifyAutoupdateFlip no
+    // WR-05: NO tx.save() -- classifyAutoupdateFlip no
     // longer mutates state, so a flip never rewrites state.json. The config
     // write-back above IS the flip (SPLIT-01: config owns autoupdate truth;
     // the D-13 scrub strips the legacy state field on the next load).

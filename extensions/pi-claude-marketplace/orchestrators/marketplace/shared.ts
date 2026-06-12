@@ -413,7 +413,7 @@ export interface AutoupdateFlipResult {
  * - MAU-4: missing/undefined `record.autoupdate` is read as `false`
  *   via the `=== true` comparison.
  *
- * WR-05 (Phase 56 review): CLASSIFY ONLY -- the legacy state-side
+ * WR-05: CLASSIFY ONLY -- the legacy state-side
  * `autoupdate` field is READ (a state record pre-dating the D-13 scrub may
  * still carry it) but NEVER written. SPLIT-01 moved the truth into the
  * per-marketplace config entry; the config write-back is the real flip.

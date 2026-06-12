@@ -1,6 +1,6 @@
 // persistence/config-write-back.ts
 //
-// WB-01 / WB-02 / WB-03 / WB-04 (Phase 56 Plan 01).
+// WB-01 / WB-02 / WB-03 / WB-04.
 //
 // Single sanctioned config-write-back module. All mutating-command
 // write-backs route through these helpers; each helper wraps `saveConfig`
@@ -15,8 +15,8 @@
 // on a merged view -- serializing a merged view back to disk would copy
 // `claude-plugins.local.json` entries into `claude-plugins.json` and
 // silently clobber the per-machine override. The architecture test at
-// `tests/architecture/config-state-consistency.test.ts` (Plan 04 wires it
-// fully GREEN) is the round-trip integrity gate.
+// `tests/architecture/config-state-consistency.test.ts` is the round-trip
+// integrity gate.
 //
 // Cascade-delete contract (Pitfall 4): `deleteMarketplaceConfigEntryWithCascade`
 // removes the marketplace entry AND every plugin entry whose key ends in
@@ -42,7 +42,7 @@ import {
  * the existing entry, so unknown forward-compat keys are preserved (D-09 /
  * round-trip integrity per WB-01 SC#4).
  *
- * Source-field contract (Phase 53 reconcile planner / `samePlannedSource`):
+ * Source-field contract (reconcile planner / `samePlannedSource`):
  * the caller MUST pass `source` verbatim from the user-typed `rawSource` on
  * the add path; on autoupdate / passthrough paths the existing entry MUST
  * already carry `source`.

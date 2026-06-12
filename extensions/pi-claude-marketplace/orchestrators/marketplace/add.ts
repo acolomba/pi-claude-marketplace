@@ -84,7 +84,7 @@ import type { ContentReason, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
- * RECON-03 (Phase 55 Plan 01): controls how `addMarketplace` surfaces
+ * RECON-03: controls how `addMarketplace` surfaces
  * notifications. Mirrors the `InstallPluginNotifications` precedent.
  *
  * - `"standalone"` (default when option is omitted): the orchestrator fires
@@ -94,9 +94,9 @@ import type { Scope } from "../../shared/types.ts";
  *   composer, catalog UAT) observes zero output drift.
  * - `"orchestrated"`: suppresses every `ctx.ui.notify` call and returns the
  *   typed `AddMarketplaceOutcome` instead. Consumed by `applyReconcile`
- *   (Plan 02) which aggregates per-entry outcomes into ONE notify() per load
- *   (IL-2). The orchestrated caller is contractually required to render the
- *   outcome itself.
+ *   which aggregates per-entry outcomes into ONE notify() per load (IL-2).
+ *   The orchestrated caller is contractually required to render the outcome
+ *   itself.
  */
 export type AddMarketplaceNotifications =
   | { readonly mode: "standalone" }
@@ -124,7 +124,7 @@ export type AddMarketplaceNotifications =
  */
 /**
  * `reason` is typed as `Reason` (not `ContentReason`) so the `applyReconcile`
- * caller (Plan 02) can dispatch on the broader closed set, including the
+ * caller can dispatch on the broader closed set, including the
  * structural `"not added"` sentinel surfaced by the `remove` sibling. This
  * adopts a broader-than-the-plan type to keep the orchestrated outcome
  * dispatchable end-to-end without a separate marker field.
@@ -176,13 +176,13 @@ export interface AddMarketplaceOptions {
    */
   readonly rethrowPreconditionErrors?: boolean;
   /**
-   * RECON-03 (Phase 55 Plan 01): notification mode selector. Omitted
+   * RECON-03: notification mode selector. Omitted
    * (undefined) === `{ mode: "standalone" }` -- byte-identical to today.
    * Orchestrated mode suppresses notify() and returns a typed outcome.
    */
   readonly notifications?: AddMarketplaceNotifications;
   /**
-   * WB-01 / Pitfall 2 (Phase 56 Plan 02): when true, target
+   * WB-01 / Pitfall 2: when true, target
    * `claude-plugins.local.json` instead of `claude-plugins.json`. The base
    * file is NEVER touched on the --local path; loadConfig's `absent` arm
    * yields an empty starting shape that saveConfig writes back to the local
@@ -248,7 +248,7 @@ function classifyAddError(rawErr: unknown): ContentReason | undefined {
       return "source missing";
     }
 
-    // WR-03 (Phase 55 review): a clone network failure (errno-carrying
+    // WR-03: a clone network failure (errno-carrying
     // throw from the github guard's gitOps.clone) is the NFR-5 per-entry
     // soft-fail the catalog's `soft-fail-mixed` state documents as
     // `{network unreachable}`. The clone-catch only cleans staging and
@@ -309,7 +309,7 @@ class ConfigInvalidError extends InvalidMarketplaceManifestError {
  * entrypoint try/catch (ATTR-07) wraps BOTH the synchronous source-kind refusal
  * (S5a/S5b -> UnsupportedSourceError) and the guard body uniformly.
  *
- * WB-01 / WR-09 (Phase 56 Plan 02): converted from `withStateGuard` to
+ * WB-01 / WR-09: converted from `withStateGuard` to
  * `withLockedStateTransaction` so config write-back happens inside the SAME
  * per-scope lock as the state mutation. The config write-back fires only in
  * standalone mode (orchestrated/reconcile-driven calls derive desired state
@@ -350,7 +350,7 @@ async function runAddInGuard(args: {
   await withLockedStateTransaction(locations, async (tx) => {
     const state = tx.state;
 
-    // CFG-03 (Phase 56 / T-56-02-05): abort BEFORE any state mutation. The
+    // CFG-03 (T-56-02-05): abort BEFORE any state mutation. The
     // basename-only error message prevents an absolute-path information leak.
     const cfg = await loadConfig(targetConfigPath);
     if (cfg.status === "invalid") {
@@ -380,11 +380,11 @@ async function runAddInGuard(args: {
     // WB-01 / WR-09: write-back the marketplace entry to the user-authored
     // config. SKIPPED in orchestrated mode (reconcile derives desired state
     // FROM the config; writing back would clobber a per-machine override).
-    // The `source` field is `opts.rawSource` VERBATIM so the Phase 53
-    // reconcile planner's `samePlannedSource` comparison stays a no-op on
-    // the next load.
+    // The `source` field is `opts.rawSource` VERBATIM so the reconcile
+    // planner's `samePlannedSource` comparison stays a no-op on the next
+    // load.
     //
-    // WR-07 (Phase 56 review): by this point `addGithubInGuard` has ALREADY
+    // WR-07: by this point `addGithubInGuard` has ALREADY
     // renamed the clone into its final `sources/<name>/` path, and its own
     // MA-9 cleanup catch is out of scope. If the config write-back or
     // tx.save() throws (disk full, EACCES on claude-plugins.json), the state

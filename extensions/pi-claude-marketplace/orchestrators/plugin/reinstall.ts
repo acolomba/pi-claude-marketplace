@@ -132,7 +132,7 @@ export interface ReinstallPluginOptions {
   readonly force?: boolean;
   readonly render?: "default" | "none";
   /**
-   * WB-01 / WB-02 / Pitfall 2 (Phase 56 Plan 03): when true, target
+   * WB-01 / WB-02 / Pitfall 2: when true, target
    * `claude-plugins.local.json` instead of `claude-plugins.json`. The base
    * file is NEVER touched on the --local path; loadConfig's `absent` arm
    * yields an empty starting shape that saveConfig writes back to the local
@@ -162,7 +162,7 @@ export interface ReinstallPluginsOptions {
   readonly target: ReinstallPluginsTarget;
   readonly force?: boolean;
   /**
-   * WB-01 / WB-02 / Pitfall 2 (Phase 56 Plan 03): when true, target
+   * WB-01 / WB-02 / Pitfall 2: when true, target
    * `claude-plugins.local.json` instead of `claude-plugins.json` for
    * write-back. The base file is NEVER touched on the --local path.
    */
@@ -531,7 +531,7 @@ async function enumerateMarketplaceReinstallTargets(
  * for the marketplace/plugin reinstall forms, raising
  * `MarketplaceNotAddedSignal` when the marketplace is not added.
  *
- *  - explicit-scope PLUGIN form: reuse the Plan 47-01 discriminated
+ *  - explicit-scope PLUGIN form: reuse the discriminated
  *    cross-scope resolver so an other-scope-only target yields the SCOPE-01
  *    hint (signal carrying the REQUESTED scope) rather than a synthesized
  *    `(skipped) {not installed}` phantom target.
@@ -550,7 +550,7 @@ async function resolveMarketplaceReinstallScope(
   explicitScope: Scope | undefined,
 ): Promise<{ scope: Scope; locations: ReturnType<typeof locationsFor> }> {
   if (target.kind === "plugin") {
-    // PLUGIN form (explicit OR bare): reuse the Plan 47-01 discriminated
+    // PLUGIN form (explicit OR bare): reuse the discriminated
     // cross-scope resolver. It resolves against the marketplace CONTAINER's
     // scope when present (so the downstream `runLockedReinstall` `oldRecord ===
     // undefined` branch keeps the legitimate `(skipped) {not installed}` for a

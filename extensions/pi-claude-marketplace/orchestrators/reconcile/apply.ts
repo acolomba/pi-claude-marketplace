@@ -1,6 +1,6 @@
 // orchestrators/reconcile/apply.ts
 //
-// RECON-01..05 (Phase 55 Plan 02): the load-time apply orchestrator.
+// RECON-01..05: the load-time apply orchestrator.
 //
 // CONTRACT:
 //   - Per-scope READ PASS (locked, WRITE-FREE -- WR-05) under
@@ -99,18 +99,18 @@ interface ScopeReadResult {
 
 /**
  * Per-scope read pass under the scope lock. Migrate-then-load-then-plan
- * inside ONE lock so the Phase 52 deferred ordering rail is wired.
+ * inside ONE lock so the deferred ordering rail is wired.
  *
- * WR-05 (Phase 55 review): the read pass is WRITE-FREE.
+ * WR-05: the read pass is WRITE-FREE.
  *
  *   - Pristine-scope gate: a scope with NO state.json and NO config file
  *     has never been used by the extension -- the read pass returns before
  *     taking the lock (no mkdir, no lock file, no generated config). The
- *     pre-Phase-55 handler was read-only; starting Pi in an arbitrary
+ *     pre-reconcile handler was read-only; starting Pi in an arbitrary
  *     repository must not create `.pi/claude-plugins.json` +
- *     `.pi/pi-claude-marketplace/state.json` there. The Phase 52 MIG-01
- *     contract is "generate the config from EXISTING state.json on first
- *     load" -- an absent state.json means nothing to migrate.
+ *     `.pi/pi-claude-marketplace/state.json` there. The MIG-01 contract is
+ *     "generate the config from EXISTING state.json on first load" -- an
+ *     absent state.json means nothing to migrate.
  *   - No state save: the closure mutates nothing on state (migrate writes
  *     the CONFIG via saveConfig; load + plan are pure), so the guard is
  *     `withLockedStateTransaction` WITHOUT `tx.save()` -- a no-op reconcile
@@ -248,7 +248,7 @@ async function applyMarketplaceRemoves(
       }
 
       if (result.status === "removed") {
-        // WR-02 (Phase 55 review): the planner deliberately excludes plugins
+        // WR-02: the planner deliberately excludes plugins
         // under a to-be-removed marketplace from `pluginsToUninstall` (the
         // remove cascade unstages them -- no double-billing), so the cascade
         // outcome is the ONLY carrier of those rows. Fold `result.unstaged`
@@ -601,7 +601,7 @@ export async function applyReconcile(opts: ApplyReconcileOptions): Promise<void>
   const outcomes: PerEntryOutcome[] = [];
 
   for (const scope of scopes) {
-    // WR-01 (Phase 55 review): per-scope failure isolation. A read-pass
+    // WR-01: per-scope failure isolation. A read-pass
     // throw (corrupt/unparseable state.json, StateLockHeldError from a
     // concurrent process, an EACCES on the lock file) must NOT discard the
     // sibling scope's already-accumulated outcomes or skip its reconcile --

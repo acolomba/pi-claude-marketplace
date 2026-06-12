@@ -18,7 +18,7 @@
 //       capture rollbackPartials, throw raw error          // D-02 PI-14 bypass
 //   })
 //
-// CR-01 (Phase 54 review): the ledger body is extracted into the exported
+// CR-01: the ledger body is extracted into the exported
 // guard-FREE `runInstallLedger` so `setPluginEnabled`'s enable branch can run
 // it inside ITS OWN `withLockedStateTransaction` -- `proper-lockfile`
 // (`retries: 0`) is not re-entrant, so nesting `installPlugin`'s guard under
@@ -241,7 +241,7 @@ export interface InstallPluginOptions {
    */
   readonly mapModel?: boolean;
   /**
-   * D-54-01 / ENBL-02 / Pitfall 54-4 (Phase 54 Plan 02): when set, bypasses
+   * D-54-01 / ENBL-02 / Pitfall 54-4: when set, bypasses
    * `resolvePluginVersion` and pins the install ledger to this exact version
    * string. Used ONLY by `setPluginEnabled` (the enable branch) to preserve
    * the recorded state record's `version` field across a re-materialization.
@@ -255,7 +255,7 @@ export interface InstallPluginOptions {
    */
   readonly pinVersionOverride?: string;
   /**
-   * WB-01 / WB-02 / Pitfall 2 (Phase 56 Plan 03): when true, target
+   * WB-01 / WB-02 / Pitfall 2: when true, target
    * `claude-plugins.local.json` instead of `claude-plugins.json`. The base
    * file is NEVER touched on the --local path; loadConfig's `absent` arm
    * yields an empty starting shape that saveConfig writes back to the local
@@ -357,7 +357,7 @@ type InstallLedgerResult =
   | { readonly kind: "marketplace-absent" };
 
 /**
- * CR-01 (Phase 54 review): the guard-FREE install ledger body -- the
+ * CR-01: the guard-FREE install ledger body -- the
  * complete PI-15 / PI-3 / PI-2 / PI-4 / PI-6 / PI-7 + 5-phase ledger
  * sequence that previously lived inline in `installPlugin`'s
  * `withStateGuard` closure.
@@ -492,7 +492,7 @@ export async function runInstallLedger(
   assertNoCrossPluginConflicts(scope, generatedNames, state);
 
   // PI-7 version precedence (entry > hash). D-54-01 / ENBL-02: when
-  // `pinVersionOverride` is set (Phase 54 enable branch), skip the
+  // `pinVersionOverride` is set (the enable branch), skip the
   // resolver and reuse the caller-supplied pin verbatim. This preserves
   // the recorded state record's `version` field across a
   // re-materialization (Pitfall 54-4).
@@ -838,7 +838,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // and the load/save lifecycle live HERE; `runInstallLedger` mutates the
     // snapshot only.
     //
-    // WR-04 (Phase 56 review): explicit-save transaction so the abort arms
+    // WR-04: explicit-save transaction so the abort arms
     // (CFG-03 invalid config, marketplace-absent) return WITHOUT rewriting
     // state.json -- `withStateGuard` saved unconditionally on closure
     // return, bumping state.json's mtime on every abort, diverging from the
@@ -886,7 +886,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       // entry shape today carries no install-time field beyond the implicit
       // declaration -- D-04 keeps the "enabled" default at consume time.
       //
-      // CR-02 (Phase 56 review): when the scope's MERGED config view does
+      // CR-02: when the scope's MERGED config view does
       // not declare the marketplace -- the CMP-3 user-scope fallback adopted
       // a cloned record into THIS scope's state, but `marketplace add` only
       // ever ran at user scope -- declare the marketplace entry in the SAME
@@ -999,7 +999,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
 
   // ATTR-01 / ATTR-08 / M1: marketplace-absent precondition (set inside the
   // guard, no state mutated). The marketplace subject is reported via the
-  // canonical Phase 46 `MarketplaceNotAddedMessage` variant -- standalone
+  // canonical `MarketplaceNotAddedMessage` variant -- standalone
   // top-level emission per D-47-A, matching `info` exactly. Orchestrated
   // mode (import cascade) returns the failed outcome WITHOUT emitting; the
   // cascade caller renders its own rows (mirrors the entity-error

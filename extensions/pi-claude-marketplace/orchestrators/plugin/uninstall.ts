@@ -64,13 +64,13 @@ import type {
 import type { Scope } from "../../shared/types.ts";
 
 /**
- * RECON-03 (Phase 55 Plan 01): controls how `uninstallPlugin` surfaces
+ * RECON-03: controls how `uninstallPlugin` surfaces
  * notifications. Mirrors the `AddMarketplaceNotifications` precedent.
  *
  * - `"standalone"` (default when option is omitted): byte-identical to today.
  * - `"orchestrated"`: suppresses every `ctx.ui.notify` call and returns the
- *   typed `UninstallPluginOutcome` for `applyReconcile` (Plan 02) to
- *   aggregate (IL-2).
+ *   typed `UninstallPluginOutcome` for `applyReconcile` to aggregate
+ *   (IL-2).
  */
 export type UninstallPluginNotifications =
   | { readonly mode: "standalone" }
@@ -81,7 +81,7 @@ export type UninstallPluginNotifications =
  * orchestrated mode. The success arm carries the optional `version` of the
  * removed record (when available) so apply can compose the per-plugin row.
  *
- * WR-06 (Phase 55 review): the PU-5 silent converge (record already absent
+ * WR-06: the PU-5 silent converge (record already absent
  * -- another process completed first, or there was never an install) is its
  * own `"converged"` arm so orchestrated consumers can DROP it (PU-5 "literal
  * silence", PRD §5.2.2) instead of rendering an `(uninstalled)` row for work
@@ -128,12 +128,12 @@ export interface UninstallPluginOptions {
    */
   readonly cascade?: typeof cascadeUnstagePlugin;
   /**
-   * RECON-03 (Phase 55 Plan 01): notification mode selector. Omitted
+   * RECON-03: notification mode selector. Omitted
    * (undefined) === `{ mode: "standalone" }` -- byte-identical to today.
    */
   readonly notifications?: UninstallPluginNotifications;
   /**
-   * WB-01 / WB-02 / Pitfall 2 (Phase 56 Plan 03): when true, target
+   * WB-01 / WB-02 / Pitfall 2: when true, target
    * `claude-plugins.local.json` instead of `claude-plugins.json`. The base
    * file is NEVER touched on the --local path; loadConfig's `absent` arm
    * yields an empty starting shape that saveConfig writes back to the local
@@ -404,7 +404,7 @@ export async function uninstallPlugin(
   let cascadeFailure: Error | undefined;
 
   try {
-    // WR-04 (Phase 56 review): explicit-save transaction so the abort arms
+    // WR-04: explicit-save transaction so the abort arms
     // (CFG-03 invalid config, PU-5 already-gone) return WITHOUT rewriting
     // state.json -- `withStateGuard` saved unconditionally on closure
     // return, bumping state.json's mtime on every abort, diverging from the
@@ -495,7 +495,7 @@ export async function uninstallPlugin(
       // (WB-01 / Pitfall 5: uninstall alreadyGone leaves config untouched;
       // planReconcile surfaces the declared-but-missing on next load).
       //
-      // WR-02 (Phase 56 review): ALSO skipped when the targeted physical
+      // WR-02: ALSO skipped when the targeted physical
       // file does not declare the key (e.g. declared only in
       // claude-plugins.local.json while targeting base, or not declared at
       // all). Writing anyway would rewrite the file -- or CREATE it with
@@ -554,7 +554,7 @@ export async function uninstallPlugin(
 
   // PU-5 silent converge: literal silence, no notification (PRD §5.2.2
   // verbatim). WR-06: in orchestrated mode the converge surfaces as the
-  // explicit `converged` outcome so apply (Plan 02) can DROP it -- both the
+  // explicit `converged` outcome so apply can DROP it -- both the
   // standalone-silence path and the orchestrated converge render no row,
   // and a reconcile racing another process never reports an uninstall it
   // did not perform.

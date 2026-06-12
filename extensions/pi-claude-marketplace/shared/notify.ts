@@ -463,7 +463,7 @@ export interface PluginUninstalledMessage {
  * `info` surfaces for plugins whose state record carries the
  * empty-resources + `installable: true` marker (the load-bearing predicate is
  * `orchestrators/reconcile/plan.ts::isRecordedButDisabled`), AND -- per the
- * UAT-03 v1.12 milestone decision (2026-06-11) -- as the `/claude:plugin
+ * UAT-03 decision -- as the `/claude:plugin
  * disable` command's fresh cascade row (byte-identical to the inventory row;
  * the reload-hint fires there via the cascade's `"disable-cascade"` kind,
  * never via this variant alone). Structurally
@@ -634,10 +634,10 @@ export interface PluginWillUninstallMessage {
 
 /**
  * `(will enable)` -- DIFF-02 preview row for a recorded plugin currently
- * marked disabled but newly declared `enabled: true`. Phase 53 produces ZERO
- * of these (Pitfall 53-4: the Phase 53 state model has no disabled marker);
- * the variant ships so Phase 54's enable-bucket wiring lands against an
- * already-defined type model.
+ * marked disabled but newly declared `enabled: true`. The bucket is
+ * populated only when the recorded-but-disabled marker (Pitfall 53-4: all
+ * four resource arrays empty + `installable: true`) is paired with a config
+ * entry whose `enabled !== false`.
  */
 export interface PluginWillEnableMessage {
   readonly status: "will enable";
@@ -827,7 +827,7 @@ export type MarketplaceNotificationMessage =
  * carry a REQUIRED `kind` literal so they cannot be confused with a cascade
  * payload at construction time.
  *
- * UAT-03 (v1.12 milestone UAT decision 2026-06-11): the `"disable-cascade"`
+ * UAT-03: the `"disable-cascade"`
  * kind marks the `/claude:plugin disable` command's realized-transition
  * cascade. Rendering is byte-identical to the plain cascade arm; the ONLY
  * behavioral difference is in `shouldEmitReloadHint`, where a `(disabled)`
@@ -1002,7 +1002,7 @@ export interface PluginInfoCascadeMessage {
 }
 
 /**
- * DIFF-01 SC #2 / D-53-01 (Phase 53 Plan 02): the dedicated empty-steady-state
+ * DIFF-01 SC #2 / D-53-01: the dedicated empty-steady-state
  * variant emitted by `/claude:plugin preview` when the next reload's
  * reconcile would apply zero actions in every scope (no marketplaces /
  * plugins / source-mismatches / invalid-config rows). Routes through the
@@ -1043,7 +1043,7 @@ export interface MarketplaceNotAddedMessage {
 }
 
 /**
- * RECON-04 (Phase 55 Plan 02): the load-time reconcile apply cascade variant
+ * RECON-04: the load-time reconcile apply cascade variant
  * emitted by `applyReconcile` after every resources_discover invocation that
  * resulted in at least one apply action OR carried at least one
  * invalid-config / source-mismatch row. Wraps the same per-status
@@ -1722,9 +1722,10 @@ function renderPluginRow(
     case "will enable":
       // DIFF-02: pending-tense preview row for a recorded plugin newly
       // declared `enabled: true` after being locally disabled. Reuses
-      // ICON_INSTALLED per RESEARCH Pattern 5. Phase 53 produces ZERO of
-      // these (Pitfall 53-4); the arm ships so Phase 54 wiring is
-      // type-complete.
+      // ICON_INSTALLED per RESEARCH Pattern 5. The bucket is populated only
+      // when the recorded-but-disabled marker (Pitfall 53-4) is paired with
+      // a config entry whose `enabled !== false`; the arm is always present
+      // so enable-wiring stays type-complete.
       return joinTokens([
         ICON_INSTALLED,
         p.name,

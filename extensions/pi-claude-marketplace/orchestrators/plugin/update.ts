@@ -162,7 +162,7 @@ export interface UpdatePluginsOptions {
    */
   readonly mapModel?: boolean;
   /**
-   * WB-01 / WB-02 / Pitfall 2 (Phase 56 Plan 03): when true, target
+   * WB-01 / WB-02 / Pitfall 2: when true, target
    * `claude-plugins.local.json` instead of `claude-plugins.json` for
    * write-back on the direct path.
    */
@@ -571,7 +571,7 @@ interface ThreePhaseArgs {
    */
   readonly mapModel?: boolean;
   /**
-   * WB-01 / WB-02 / Pitfall 2 (Phase 56 Plan 03): when true, target
+   * WB-01 / WB-02 / Pitfall 2: when true, target
    * `claude-plugins.local.json` instead of `claude-plugins.json` for the
    * direct-path write-back. The cascade path (`cascade: true`) SKIPS
    * write-back regardless -- the marketplace autoupdate cascade owns its

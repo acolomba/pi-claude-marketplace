@@ -6,16 +6,16 @@
 // structurally enforces zero effectful imports (no node:fs, no platform
 // git, no save*/withState*/withLockedStateTransaction, no notify).
 //
-// Source comparison delegates to `samePlannedSource` (moved to
-// `domain/source.ts` in Phase 53 Plan 01) so the planner imports only
-// leaf-pure helpers from `domain/source.ts`.
+// Source comparison delegates to `samePlannedSource` (in
+// `domain/source.ts`) so the planner imports only leaf-pure helpers from
+// `domain/source.ts`.
 //
 // Disabled-entry rule (Pitfall 53-2): a plugin entry with
 // `enabled === false` is declared-but-disabled; `=== true` OR `undefined`
 // is declared-and-enabled (D-04 consume-time default -- the absent field
 // includes, only an explicit `false` excludes).
 //
-// ENBL-02 (Phase 54 Plan 01): the Phase 53→54 hand-off closes here.
+// ENBL-02: the recorded-but-disabled hand-off closes here.
 // `isRecordedButDisabled(record)` reads the empty-resources marker (all
 // four `resources.*` arrays empty -- A1; SPLIT-01 preserved) so a
 // recorded-but-disabled plugin paired with config `enabled !== false`
@@ -32,12 +32,12 @@
 // config is recorded as a `PlannedSourceMismatch` with cause
 // `"source-mismatch"`, `plugin` set to the offending plugin name,
 // `declaredSource: ""`, and `recordedSource: "<marketplace not declared>"`.
-// The sentinel is stable so Phase 55 can render it without ambiguity.
+// The sentinel is stable so the apply path can render it without ambiguity.
 // The check is against the DECLARED map (not the declared+recorded union):
 // a plugin declared under a marketplace that exists only in state (i.e. the
 // marketplace is in `marketplacesToRemove`) is dangling too -- classifying
 // it as an install/disable would emit a self-contradictory plan ("will
-// remove" the marketplace AND "will install" into it) that Phase 55's apply
+// remove" the marketplace AND "will install" into it) that the apply
 // path would consume verbatim.
 //
 // Malformed-key contract: a declared plugin key `parsePluginKey` rejects
@@ -108,7 +108,7 @@ interface MarketplaceDiff {
 }
 
 /**
- * CR-01 (Phase 55 review): find a recorded marketplace that carries the SAME
+ * CR-01: find a recorded marketplace that carries the SAME
  * source as a declared entry whose config key matched no recorded name.
  * `addMarketplace` records under the MANIFEST-derived name -- which the user
  * cannot know in advance and which the config key does not have to match.
@@ -275,8 +275,8 @@ interface DeclaredPluginAccumulator {
  * guard, the convergence proof
  * (`tests/orchestrators/reconcile/plan-convergence.test.ts`) would
  * misclassify the `soft-degraded` fixture entry in
- * `state-populated-mixed.json` as `pluginsToEnable`, breaking the Phase 52
- * SC#4 no-op proof. Phase 54 Plan 02's disable orchestrator empties all
+ * `state-populated-mixed.json` as `pluginsToEnable`, breaking the
+ * deferred-convergence no-op proof. The disable orchestrator empties all
  * four arrays (while keeping the version pin -- D-04 / ENBL-02 -- AND
  * preserving the previously-known `installable: true` flag), so the
  * empty-resources + installable-true intersection is the unambiguous
@@ -352,7 +352,7 @@ function classifyDeclaredPlugin(
     // exactly "recorded with empty resources + config `enabled: false`"
     // (ENBL-02 keeps the record). That steady state is NOT a config<->state
     // divergence -- pushing a disable for it would render
-    // `(will disable)` forever and make Phase 55's apply path re-run a
+    // `(will disable)` forever and make the apply path re-run a
     // no-op disable on every reload. Only a recorded record that is NOT
     // already disabled (artefacts still materialised) needs the action --
     // symmetric with the enable branch's "recorded + populated + enabled"

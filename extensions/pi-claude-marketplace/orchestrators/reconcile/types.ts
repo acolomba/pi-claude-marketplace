@@ -1,6 +1,6 @@
 // orchestrators/reconcile/types.ts
 //
-// DIFF-01 (Phase 53 Plan 01) -- pure type surface for the reconcile planner.
+// DIFF-01 -- pure type surface for the reconcile planner.
 //
 // `ReconcilePlan` is the structured result of the bidirectional 7-bucket
 // diff that `planReconcile(merged, state, scope)` produces. The seven
@@ -12,9 +12,10 @@
 //   2. `marketplacesToRemove` -- recorded but not declared
 //   3. `pluginsToInstall`     -- declared+enabled but not recorded
 //   4. `pluginsToUninstall`   -- recorded but not declared
-//   5. `pluginsToEnable`      -- structurally empty in Phase 53 (Pitfall
-//                                53-4; Phase 54 wires this to the real
-//                                disabled-state check)
+//   5. `pluginsToEnable`      -- recorded-but-disabled plugins paired with
+//                                a config entry that has `enabled !== false`
+//                                (recorded-but-disabled marker per Pitfall
+//                                53-4 is "all four resources arrays empty")
 //   6. `pluginsToDisable`     -- declared with `enabled === false` but
 //                                still recorded
 //   7. `sourceMismatches`     -- declared marketplace whose recorded
@@ -24,12 +25,12 @@
 //                                (cause: "unknown-stored")
 //
 // Every array field is `readonly` so the planner output is immutable at
-// the type level and downstream consumers (Plan 02 notify projection,
-// Phase 55 apply orchestrator, Phase 56 write-back orchestrator) cannot
-// retroactively mutate a plan.
+// the type level and downstream consumers (notify projection, apply
+// orchestrator, write-back orchestrator) cannot retroactively mutate a
+// plan.
 //
 // `emptyReconcilePlan(scope)` is the canonical empty target used by the
-// Phase 52 deferred convergence proof:
+// deferred convergence proof:
 //
 //   planReconcile(mergeScopeConfigs(buildConfigFromState(state), {}), state, scope)
 //     deepEqual emptyReconcilePlan(scope)
@@ -49,7 +50,7 @@ export interface PlannedMarketplaceAdd {
    */
   readonly source: string;
   /**
-   * Provenance from `MergedConfigEntry.source` so Phase 56 write-back can
+   * Provenance from `MergedConfigEntry.source` so write-back can
    * target the correct physical file (`claude-plugins.json` vs
    * `claude-plugins.local.json`) without replaying the merge.
    */
@@ -80,12 +81,12 @@ export interface PlannedPluginUninstall {
 /**
  * Planned enable of a plugin declared+enabled but locally disabled in state.
  *
- * ENBL-02 (Phase 54 Plan 01): the planner detects a "currently disabled"
+ * ENBL-02: the planner detects a "currently disabled"
  * recorded plugin via the empty-resources marker -- all four
  * `resources.{skills,prompts,agents,mcpServers}` arrays empty (A1; SPLIT-01
  * preserved, no schema bump). When such a record is paired with a config
  * entry that has `enabled !== false`, the entry lands in this bucket so
- * Phase 55's apply path can re-materialize the artefacts from cache (no
+ * the apply path can re-materialize the artefacts from cache (no
  * network, NFR-5).
  */
 export interface PlannedPluginEnable {
@@ -124,8 +125,8 @@ export interface PlannedPluginDisable {
  * `declaredSource` is the empty string, `recordedSource` is the literal
  * sentinel `"<marketplace not declared>"`, and `plugin` carries the plugin
  * component of the offending config key so N dangling plugins under one
- * undeclared marketplace stay individually attributable. Phase 55 surfaces
- * this as a planning-time advisory.
+ * undeclared marketplace stay individually attributable. The apply path
+ * surfaces this as a planning-time advisory.
  *
  * A fourth use captures the MALFORMED-PLUGIN-KEY diagnostic (a declared
  * plugin key with no `@`, a leading `@`, or a trailing `@`): cause
@@ -165,7 +166,7 @@ export interface ReconcilePlan {
 }
 
 /**
- * Canonical empty-plan factory. The Phase 52 deferred convergence proof
+ * Canonical empty-plan factory. The deferred convergence proof
  * uses this as the `deepEqual` target.
  */
 export function emptyReconcilePlan(scope: Scope): ReconcilePlan {

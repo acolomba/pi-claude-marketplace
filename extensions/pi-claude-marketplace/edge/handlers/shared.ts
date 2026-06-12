@@ -1,20 +1,19 @@
 // edge/handlers/shared.ts
 //
-// Phase 56 Plan 01 Task 2 -- cross-cutting edge-handler helpers shared by
-// both the marketplace/ and plugin/ subtrees. This file sits at the
-// edge/handlers/ directory root, alongside `edge/handlers/marketplace/`
-// and `edge/handlers/plugin/` -- each subtree retains its own domain-
-// specific `shared.ts` (e.g. `parseRequiredPluginMarketplaceRef`); this
-// file hosts ONLY helpers that are genuinely cross-cutting.
+// Cross-cutting edge-handler helpers shared by both the marketplace/ and
+// plugin/ subtrees. This file sits at the edge/handlers/ directory root,
+// alongside `edge/handlers/marketplace/` and `edge/handlers/plugin/` --
+// each subtree retains its own domain-specific `shared.ts` (e.g.
+// `parseRequiredPluginMarketplaceRef`); this file hosts ONLY helpers that
+// are genuinely cross-cutting.
 //
-// extractLocalFlag was originally a private function in
-// `edge/handlers/plugin/enable-disable.ts` (Phase 54 frozen). Plans 02 and
-// 03 of this phase migrate the existing handler to import from here so
-// every mutating-command handler consumes one canonical scanner.
+// extractLocalFlag originated as a private function in
+// `edge/handlers/plugin/enable-disable.ts`. It was lifted here so every
+// mutating-command handler consumes one canonical scanner.
 //
-// WR-02 (Phase 54 review) corrected a regression where `--local` left in
-// the residual args caused `parseRequiredPluginMarketplaceRef` to treat it
-// as a positional and reject the entire command with a misleading
+// WR-02 corrected a regression where `--local` left in the residual args
+// caused `parseRequiredPluginMarketplaceRef` to treat it as a positional
+// and reject the entire command with a misleading
 // "Invalid <plugin>@<marketplace> ref: '--local'." error. The scanner
 // REMOVES `--local` from the residual so flag position cannot change the
 // outcome -- matching how `--scope` is consumed by the downstream parser

@@ -11,9 +11,9 @@
 // Pure: no I/O. The function NEVER calls `ctx.ui.notify` or any seam in
 // `shared/notify.ts` beyond importing the types and the comparator.
 //
-// DIFF-02 (Phase 53 Plan 02) replaces the Plan 01 placeholder strings
-// ("added" / "removed" / "uninstalled" / "skipped+already installed") with
-// the real pending-tense token set:
+// DIFF-02 replaces the initial DIFF-01 placeholder strings ("added" /
+// "removed" / "uninstalled" / "skipped+already installed") with the real
+// pending-tense token set:
 //
 //   marketplacesToAdd     -> block.status = "will add"
 //   marketplacesToRemove  -> block.status = "will remove"
@@ -22,7 +22,7 @@
 //   pluginsToUninstall    -> child row { status: "will uninstall" }
 //   pluginsToDisable      -> child row { status: "will disable" }
 //   pluginsToEnable       -> child row { status: "will enable" }
-//                            (structurally empty in Phase 53 per Pitfall 53-4)
+//                            (recorded-but-disabled detection per Pitfall 53-4)
 //
 // The empty-plan case is handled by the orchestrator (`preview.ts`) which
 // switches on `plans.every(isPlanEmpty)` and emits a free-form advisory line
@@ -100,7 +100,7 @@ function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceNotifica
     case "will remove":
       return { name, scope, status: "will remove", plugins };
     case "added":
-      // RECON-04 (Phase 55 Plan 02): realized apply-time transition token.
+      // RECON-04: realized apply-time transition token.
       return { name, scope, status: "added", plugins };
     case "removed":
       // RECON-04: realized apply-time transition token.
@@ -170,9 +170,8 @@ function applySourceMismatch(
  *   - pluginsToUninstall    -> child row { status: "will uninstall" }
  *   - pluginsToDisable      -> child row { status: "will disable" }
  *   - pluginsToEnable       -> child row { status: "will enable" }
- *                              (structurally empty in Phase 53 per
- *                              Pitfall 53-4 -- the loop runs but the bucket is
- *                              always empty)
+ *                              (recorded-but-disabled detection per
+ *                              Pitfall 53-4)
  *
  * Ordering: blocks are sorted by `compareByNameThenScope` (name primary
  * case-insensitive, project-before-user secondary). Plugin rows within a
@@ -224,8 +223,9 @@ export function buildReconcilePreviewNotification(
     }
 
     for (const o of plan.pluginsToEnable) {
-      // Pitfall 53-4: Phase 53 produces zero of these. The loop runs so
-      // Phase 54 wiring lands against a path the projection already exercises.
+      // Pitfall 53-4: the bucket is populated only when a record carries
+      // the empty-resources marker. The loop runs unconditionally so
+      // enable-wiring lands against a path the projection already exercises.
       const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
       block.plugins.push({
         status: "will enable",
@@ -264,7 +264,7 @@ export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boole
 }
 
 // ---------------------------------------------------------------------------
-// RECON-04 (Phase 55 Plan 02): apply-cascade projection.
+// RECON-04: apply-cascade projection.
 //
 // `buildReconcileAppliedCascade(outcomes)` folds the per-entry orchestrator
 // outcomes (success + failure) plus the planner-only source-mismatches and
@@ -321,8 +321,8 @@ function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome):
       // RESEARCH Pattern 5 Option A: reuse existing transition tokens. The
       // enable branch re-materializes via runInstallLedger so the realized
       // outcome IS an install -- `(installed)` is the truthful surface row.
-      // No dependencies plumbed from EnableDisablePluginOutcome (Plan 01
-      // didn't expose declaresAgents / declaresMcp on the enabled arm); the
+      // No dependencies plumbed from EnableDisablePluginOutcome (the orchestrator
+      // doesn't expose declaresAgents / declaresMcp on the enabled arm); the
       // empty dependencies array suppresses soft-dep markers, which is the
       // safe default for a re-materialization that wouldn't change the
       // companion-extension surface.

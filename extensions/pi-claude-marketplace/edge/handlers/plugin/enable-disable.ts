@@ -1,6 +1,6 @@
 // edge/handlers/plugin/enable-disable.ts
 //
-// D-54-01 / ENBL-01 / ENBL-02 / ENBL-03 / ENBL-04 (Phase 54 Plan 02).
+// D-54-01 / ENBL-01 / ENBL-02 / ENBL-03 / ENBL-04.
 //
 // Dual-form thin-shim handler factory for
 // `/claude:plugin enable <plugin>@<marketplace> [--scope user|project] [--local]`

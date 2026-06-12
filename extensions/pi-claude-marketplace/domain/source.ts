@@ -391,7 +391,7 @@ export function githubSource(raw: string): GitHubSource {
  *     rather than misclassifying the situation as a source-mismatch.
  *
  * Used by `orchestrators/import/execute.ts` (existing import path) and
- * `orchestrators/reconcile/plan.ts` (Phase 53 pure planner foundation).
+ * `orchestrators/reconcile/plan.ts` (the pure planner foundation).
  * Lives in `domain/source.ts` so both callers import a leaf-pure helper
  * without pulling in either orchestrator's effectful transitive closure.
  */

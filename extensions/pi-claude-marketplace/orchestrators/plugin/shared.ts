@@ -241,19 +241,19 @@ export function cloneMarketplaceRecordForTargetScope(
 }
 
 /**
- * CR-02 (Phase 56 review): synthesize the marketplace `source` for a plugin
+ * CR-02: synthesize the marketplace `source` for a plugin
  * write-back into a config that does NOT yet declare the marketplace.
  *
  * When a project-scope install resolves the marketplace via the CMP-3
  * user-scope fallback, the clone-adoption path records the marketplace in
  * PROJECT state -- but only `marketplace add` writes marketplace config
  * entries, and it ran at USER scope. Writing the plugin key alone would
- * leave a dangling declaration: the Phase 53 planner turns it into a
+ * leave a dangling declaration: the reconcile planner turns it into a
  * perpetual `<marketplace not declared>` failed row AND plans the
  * recorded-but-undeclared clone for removal (a destructive, non-converging
  * plan -- invariant 5 violation). The caller must therefore declare the
  * marketplace in the SAME batched patch, synthesizing `source` from the
- * adopted record's verbatim `source.raw` (the Phase 53 `samePlannedSource`
+ * adopted record's verbatim `source.raw` (the `samePlannedSource`
  * contract).
  *
  * UAT-05: the membership gate runs against EVERY physical config of the

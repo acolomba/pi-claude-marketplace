@@ -27,7 +27,7 @@ export function makeRemoveHandler(
   pi: ExtensionAPI,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
-    // WB-01 / Phase 56 Plan 02: extract `--local` BEFORE positional parsing.
+    // WB-01: extract `--local` BEFORE positional parsing.
     const localFlag = extractLocalFlag(args, ctx, USAGE);
     if (localFlag === undefined) {
       return;

@@ -9,25 +9,24 @@
 // `claude-plugins.json` WHOLESALE -- never field-merge (D-01 anti-deepmerge
 // contract). The base entry is fully discarded for that key; unknown fields
 // from the replaced base entry are NOT carried forward into the local entry.
-// (D-10's preservation contract is a Phase 56 write-back concern, not a merge
+// (D-10's preservation contract is a write-back concern, not a merge
 // concern.)
 //
-// Each `MergedConfigEntry` carries `source: "base" | "local"` so Phase 56
-// write-back can target the correct physical file without replaying the merge.
+// Each `MergedConfigEntry` carries `source: "base" | "local"` so write-back
+// can target the correct physical file without replaying the merge.
 //
 // `loadMergedScopeConfig` returns BOTH the merged view AND the per-file
 // `ConfigLoadResult`s -- Pitfall 51-4 forbids collapsing the per-file results
-// into the merged view, because downstream Phase 56 write-back needs them
-// separately. When one arm is `absent` or `invalid`, the merge treats its
-// contribution as empty `ScopeConfig` so a sensible merged view is still
-// produced (D-18 enables the fallback policy downstream); the caller inspects
-// `base.status` / `local.status` to decide what to do. Phase 51 itself does
-// NOT inject `notify` calls (D-19 routes through `shared/notify.ts` in
-// downstream phases).
+// into the merged view, because downstream write-back needs them separately.
+// When one arm is `absent` or `invalid`, the merge treats its contribution as
+// empty `ScopeConfig` so a sensible merged view is still produced (D-18
+// enables the fallback policy downstream); the caller inspects `base.status`
+// / `local.status` to decide what to do. This module itself does NOT inject
+// `notify` calls (D-19 routes through `shared/notify.ts` in downstream layers).
 //
 // D-16: a dangling plugin reference (a plugin entry whose marketplace name
 // does NOT appear in either marketplaces map) is a VALID merged result. The
-// merge does not abort or filter; reconcile soft-fails per-entry in Phase 55.
+// merge does not abort or filter; reconcile soft-fails per-entry at apply time.
 
 import {
   loadConfig,
@@ -41,7 +40,7 @@ import type { ScopedLocations } from "./locations.ts";
 
 /**
  * A merged entry carries the underlying entry value plus its provenance.
- * Provenance binds Phase 56 write-back to the correct physical file
+ * Provenance binds write-back to the correct physical file
  * (`claude-plugins.json` vs `claude-plugins.local.json`).
  */
 export interface MergedConfigEntry<T> {
@@ -60,8 +59,8 @@ export interface MergedConfig {
 
 /**
  * Pitfall 51-4: the per-scope loader returns the merged view AND the per-file
- * `ConfigLoadResult`s separately. Downstream Phase 56 write-back targets the
- * correct physical file via the per-file results; downstream Phase 55 reads
+ * `ConfigLoadResult`s separately. Downstream write-back targets the correct
+ * physical file via the per-file results; downstream apply-time consumers read
  * `base.status` / `local.status` to apply the D-18 fallback policy when one
  * arm is `invalid`.
  */
@@ -132,11 +131,11 @@ export function mergeScopeConfigs(base: ScopeConfig, local: ScopeConfig): Merged
  * returned union). When an arm is `absent` or `invalid`, its contribution to
  * the merged view is treated as empty `ScopeConfig` (`{}`), so a sensible
  * merged view is still produced for the valid arm -- this enables the D-18
- * one-invalid-file fallback that downstream Phase 55 implements. The merged
+ * one-invalid-file fallback that downstream apply implements. The merged
  * view never silently swallows the invalid signal: the caller inspects
  * `base.status` and `local.status` to decide what to do.
  *
- * Phase 51 does NOT inject `notify` calls or any user-visible messaging
+ * This module does NOT inject `notify` calls or any user-visible messaging
  * (D-19 routes through `shared/notify.ts` in downstream phases). This
  * function is a pure data seam.
  */

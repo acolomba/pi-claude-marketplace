@@ -27,7 +27,7 @@ import type { ExtensionState } from "./state-io.ts";
 import type { ParsedSource } from "../domain/source.ts";
 
 /**
- * MIG-02: result of a first-run migration attempt. The Phase 55 load-wiring
+ * MIG-02: result of a first-run migration attempt. The load-wiring
  * caller narrows on `migrated` to decide whether/how to surface the
  * migration via `shared/notify.ts`.
  *
@@ -35,7 +35,7 @@ import type { ParsedSource } from "../domain/source.ts";
  * D-15) instead of collapsing it: `"existing-valid"` means "nothing to do,
  * config already declared"; `"existing-invalid"` means "migration was
  * suppressed because the config file is corrupt" and carries loadConfig's
- * `error` detail so the Phase 55 caller can surface the CFG-03 abort signal
+ * `error` detail so the caller can surface the CFG-03 abort signal
  * without a second (divergence-prone) loadConfig probe.
  */
 export type MigrateFirstRunResult =
@@ -54,7 +54,7 @@ export type MigrateFirstRunResult =
 
 /**
  * MIG-01: pure lossless projection from in-memory ExtensionState to the
- * declarative ScopeConfig shape consumed by Phase 55's reconcile planner.
+ * declarative ScopeConfig shape consumed by the reconcile planner.
  *
  * No I/O. Every state marketplace and every plugin (including
  * `compatibility.installable === false` -- Pitfall 52-1) appears in the
@@ -136,8 +136,8 @@ export function buildConfigFromState(state: ExtensionState): ScopeConfig {
  * On the `absent` arm: builds the projection and writes via saveConfig.
  * Atomicity, NFR-10 containment, and CONFIG_VALIDATOR revalidation are all
  * inherited from saveConfig (SPLIT-02 sole sanctioned writer). No notify(),
- * no console.warn -- saveConfig errors propagate; the Phase 55 caller
- * routes messaging through `shared/notify.ts`.
+ * no console.warn -- saveConfig errors propagate; the caller routes
+ * messaging through `shared/notify.ts`.
  */
 export async function migrateFirstRunConfig(
   loc: ScopedLocations,
@@ -161,7 +161,7 @@ export async function migrateFirstRunConfig(
   const entryCount =
     Object.keys(config.marketplaces ?? {}).length + Object.keys(config.plugins ?? {}).length;
   if (entryCount === 0) {
-    // UAT-01 (v1.12 milestone UAT): nothing to capture -- an empty-but-present
+    // UAT-01: nothing to capture -- an empty-but-present
     // state.json must NOT spawn an empty claude-plugins.json in every scope
     // root. The config file first appears when there is real desired state to
     // record (migration of a populated state, or command write-back).

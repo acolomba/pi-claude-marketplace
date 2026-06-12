@@ -28,9 +28,8 @@ export function makeAddHandler(
   deps: EdgeDeps,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
-    // WB-01 / Phase 56 Plan 02: extract `--local` BEFORE positional parsing
-    // so flag position cannot change the outcome (matches the Phase 54
-    // enable-disable handler shape).
+    // WB-01: extract `--local` BEFORE positional parsing so flag position
+    // cannot change the outcome (matches the enable-disable handler shape).
     const localFlag = extractLocalFlag(args, ctx, USAGE);
     if (localFlag === undefined) {
       return;
