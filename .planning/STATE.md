@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 Phase: Milestone v1.12 complete
 Plan: —
 Status: Milestone v1.12 shipped — PR #51
-Last activity: 2026-06-12 — Completed fast task 260612-son: resolved the 3 SonarCloud PR #51 findings (S5869 x2, S5852 hotspot) blocking the quality gate
+Last activity: 2026-06-12 — Completed quick task 260612-liv: folded both PR #51 CPD duplication sets into shared helpers and corrected README user-scope config paths
 
 ## Performance Metrics
 
@@ -228,6 +228,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 | 260612-bcs | Fix all 53 PR #51 five-agent review findings: critical setPluginEnabled notify-escape, error-channel losses (partial remove rows, autoupdate false success, loadConfig diagnostics), type cuts (samePlannedSource tri-state, PlannedSourceMismatch discriminant, Y3 overloads), test gaps (orchestrated enable, update-vs-disabled), comment/docs scrub + README rewrite; 7 sub-plans + leftover pitfall-ref scrub, 8 commits, check green | 2026-06-12 | f0ae1af |          | [260612-bcs-fix-pr-51-five-agent-review-findings](./quick/260612-bcs-fix-pr-51-five-agent-review-findings/) |
 | 260612-jpn | Strip all 119 bare Pitfall-N planning-artifact refs from TS comments and test titles (39 files, rationale kept, sibling requirement IDs carry the anchor); amend typescript-comments.md to forbid bare Pitfall N / Pattern N going forward; byte-neutral, check green | 2026-06-12 | 8b7817d |          | [260612-jpn-strip-bare-pitfall-n-planning-artifact-r](./quick/260612-jpn-strip-bare-pitfall-n-planning-artifact-r/) |
 | 260612-son | Resolve 3 SonarCloud PR #51 findings: dedupe `_` in redactAbsolutePaths character classes (S5869 x2); replace sanitizeStateLoadError's backtracking-prone regex with the shared redactAbsolutePaths seam (S5852 hotspot, failed quality gate); byte-neutral, check green | 2026-06-12 | aa42131 | Verified | (inline /gsd-fast, no task dir) |
+| 260612-liv | Fold both PR #51 CPD duplication sets into plugin/shared.ts helpers (maybeWritePluginConfigBack for the update/reinstall write-back gate; applyPartialCascadeFold for the uninstall/disable TR-03 mirror), byte-neutral; fix README user-scope config paths to ~/.pi/agent/ preserving operator wording edits | 2026-06-12 | 65d2323 | Verified | [260612-liv-fold-pr-51-cpd-duplication-sets-and-fix-](./quick/260612-liv-fold-pr-51-cpd-duplication-sets-and-fix-/) |
 
 ## Deferred Items
 
