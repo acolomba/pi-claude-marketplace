@@ -61,6 +61,7 @@ import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
 import { runInstallLedger } from "./install.ts";
 import {
+  applyPartialCascadeFold,
   resolveCrossScopePluginTarget,
   selectConfigWriteTarget,
   synthesizeAdoptedMarketplaceSource,
@@ -271,11 +272,10 @@ async function runDisableBranch(
   if (!cascade.ok) {
     // I3: cascade.dropped lists artefacts already unstaged before the throw.
     // Fold them into the record so state.json never claims artefacts gone
-    // from disk (NFR-3 fail-clean). The asymmetric dropped.commands ->
-    // resources.prompts mapping is per TR-03 (cascade primitive naming).
-    // Mirrors the uninstall.ts:applyPartialCascadeFold TR-03 path; the
-    // caller saves the shrunken record before surfacing the failure.
-    applyPartialDisableCascadeFold(installed, cascade.dropped);
+    // from disk (NFR-3 fail-clean). Uses the shared applyPartialCascadeFold
+    // helper (TR-03 path); the caller saves the shrunken record before
+    // surfacing the failure.
+    applyPartialCascadeFold(installed, cascade.dropped);
     installed.updatedAt = new Date().toISOString();
     return {
       outcome: {
@@ -296,34 +296,6 @@ async function runDisableBranch(
   installed.updatedAt = new Date().toISOString();
 
   return { outcome: { kind: "fresh", version: recordedVersion }, saveShrunken: false };
-}
-
-/**
- * I3 / TR-03: subtract the cascade-dropped artefacts from the record in place.
- * dropped.commands maps to resources.prompts (cascade primitive naming);
- * the other three axes are name-identical.
- */
-function applyPartialDisableCascadeFold(
-  installed: InstalledPluginRecord,
-  dropped: {
-    readonly skills: readonly string[];
-    readonly commands: readonly string[];
-    readonly agents: readonly string[];
-    readonly mcpServers: readonly string[];
-  },
-): void {
-  installed.resources.skills = installed.resources.skills.filter(
-    (n) => !dropped.skills.includes(n),
-  );
-  installed.resources.prompts = installed.resources.prompts.filter(
-    (n) => !dropped.commands.includes(n),
-  );
-  installed.resources.agents = installed.resources.agents.filter(
-    (n) => !dropped.agents.includes(n),
-  );
-  installed.resources.mcpServers = installed.resources.mcpServers.filter(
-    (n) => !dropped.mcpServers.includes(n),
-  );
 }
 
 /**

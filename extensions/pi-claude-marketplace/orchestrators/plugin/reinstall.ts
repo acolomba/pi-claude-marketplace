@@ -55,8 +55,6 @@ import {
 import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
-import { loadConfig } from "../../persistence/config-io.ts";
-import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
@@ -80,6 +78,7 @@ import { discoverGeneratedNames } from "./discover-names.ts";
 import {
   assertNoCrossPluginConflicts,
   MarketplaceNotAddedSignal,
+  maybeWritePluginConfigBack,
   resolveCrossScopePluginTarget,
   resolveInstalledMarketplaceTarget,
 } from "./shared.ts";
@@ -89,7 +88,6 @@ import type { CommandsReplacement, PreparedCommandsStaging } from "../../bridges
 import type { McpReplacement, PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging, SkillsReplacement } from "../../bridges/skills/index.ts";
 import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
-import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
@@ -1078,13 +1076,12 @@ async function runLockedReinstall(
     // prospective `{...existing, ...patch}` shape against the existing
     // entry; a byte-stable patch (the common reinstall case -- entry shape
     // unchanged) leaves the config file untouched.
-    const writeResult = await maybeWritePluginConfigBack(
-      tx.state,
+    const writeResult = await maybeWritePluginConfigBack({
       locations,
       marketplace,
       plugin,
-      opts,
-    );
+      local: opts.local === true,
+    });
     invalidConfigWriteBack = writeResult.invalidConfig;
 
     await tx.save();
@@ -1101,69 +1098,6 @@ async function runLockedReinstall(
     bridgeWarnings,
     ...(invalidConfigWriteBack && { invalidConfigWriteBack: true }),
   };
-}
-
-/**
- * WB-01 / A7: deep-equal short-circuited plugin write-back. Loads the
- * target config (base or local per --local), compares the prospective
- * patched entry against the existing entry, and writes back ONLY when
- * they differ. RECON-05 fixed-point: a byte-stable no-op reinstall leaves
- * the config file's mtime + bytes untouched.
- *
- * Tx is the OUTER state transaction; we DO NOT throw on CFG-03 here --
- * the post-success path would have written state already by the time
- * this runs in update.ts; for reinstall the throw is caught and the
- * outer catch wraps it as a manual-recovery error. To keep semantics
- * simple and avoid partial-rollback complexity, an invalid config skips
- * the write-back silently (loadConfig returns `invalid`; we treat it as
- * "no prior shape -> bail without write" so the existing record on disk
- * survives the reinstall unchanged). The CFG-03 abort is an install/
- * uninstall concern; reinstall/update operate on already-installed
- * plugins where a transient config corruption should NOT block the
- * artefact swap.
- */
-async function maybeWritePluginConfigBack(
-  _state: ExtensionState,
-  locations: ScopedLocations,
-  marketplace: string,
-  plugin: string,
-  opts: { readonly local?: boolean },
-): Promise<{ readonly invalidConfig: boolean }> {
-  const targetConfigPath =
-    opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath;
-  const cfg = await loadConfig(targetConfigPath);
-  if (cfg.status === "invalid") {
-    // S5: previously a silent skip while the success notify proceeded -- the
-    // caller now surfaces the abort via a warning row so the user knows
-    // the on-disk artefacts were reinstalled but the config entry was not
-    // written.
-    return { invalidConfig: true };
-  }
-
-  const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
-  const key = `${plugin}@${marketplace}`;
-  const existingEntry = current.plugins?.[key];
-  // The patched shape is `{...existing, ...{}}` -- always equal to the
-  // existing entry (D-04: reinstall preserves the consume-time `enabled`
-  // default and any forward-compat keys; the patch carries no per-reinstall
-  // mutation). So the gate is simply: if the key is ALREADY PRESENT,
-  // writing back would produce a byte-identical file -- SKIP to preserve
-  // RECON-05 mtime stability. If the key is ABSENT, writing back ADDS
-  // the key -- WRITE so the user-authored config gains the implicit
-  // declaration.
-  if (existingEntry !== undefined) {
-    return { invalidConfig: false };
-  }
-
-  await writePluginConfigEntry(
-    current,
-    targetConfigPath,
-    locations.scopeRoot,
-    plugin,
-    marketplace,
-    {},
-  );
-  return { invalidConfig: false };
 }
 
 async function loadCachedEntry(

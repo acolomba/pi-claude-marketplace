@@ -75,8 +75,6 @@ import {
 import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
-import { loadConfig } from "../../persistence/config-io.ts";
-import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
@@ -98,6 +96,7 @@ import { discoverGeneratedNames } from "./discover-names.ts";
 import {
   assertNoCrossPluginConflicts,
   MarketplaceNotAddedSignal,
+  maybeWritePluginConfigBack,
   resolveInstalledMarketplaceTarget,
   resolveInstalledPluginTarget,
   resolvePluginVersion,
@@ -109,7 +108,6 @@ import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
 import type { ParsedSource } from "../../domain/source.ts";
-import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
@@ -959,7 +957,7 @@ function isRecordedButDisabled(
  * D-UPD: refresh a disabled-but-recorded plugin's version pin + resolvedSource
  * inside a withStateGuard so a future `enable` re-materializes from the
  * current manifest. Resources.* stay empty (the plugin is still disabled).
- * The standalone-direct write-back (maybeWritePluginConfigBackUpdate) is
+ * The standalone-direct write-back (maybeWritePluginConfigBack) is
  * SKIPPED -- the config entry already exists by construction (the disabled
  * record only persists when the user explicitly disabled it), and writing
  * the byte-stable `{}` patch would touch state.json mtime via the SOLE
@@ -1069,72 +1067,18 @@ async function finalizeUpdateRecord(
     // is `{}` and a CHANGED update with a byte-stable existing entry
     // produces a no-op (preserving RECON-05 mtime stability).
     if (!args.cascade && phase3aFailures.length === 0) {
-      const writeResult = await maybeWritePluginConfigBackUpdate(
+      const writeResult = await maybeWritePluginConfigBack({
         locations,
         marketplace,
         plugin,
-        args.local === true,
-      );
+        local: args.local === true,
+      });
       if (writeResult.invalidConfig) {
         invalidConfigWriteBack = true;
       }
     }
   });
   return { invalidConfigWriteBack };
-}
-
-/**
- * WB-01 / A7: deep-equal short-circuited plugin write-back for `update`.
- * Mirrors `reinstall.ts::maybeWritePluginConfigBack`. Loads the target
- * config (base or local per --local), compares the prospective patched
- * entry against the existing entry, and writes back ONLY when they differ.
- * RECON-05 fixed-point: a byte-stable update leaves the config file's
- * mtime + bytes untouched.
- */
-async function maybeWritePluginConfigBackUpdate(
-  locations: ScopedLocations,
-  marketplace: string,
-  plugin: string,
-  local: boolean,
-): Promise<{ readonly invalidConfig: boolean }> {
-  const targetConfigPath = local ? locations.configLocalJsonPath : locations.configJsonPath;
-  const cfg = await loadConfig(targetConfigPath);
-  if (cfg.status === "invalid") {
-    // S5: previously a silent skip while the success notify proceeded -- the
-    // caller now surfaces the abort via a warning row. The state mutation
-    // already committed (finalize ran), so the byte form is the success
-    // payload (the plugin DID update on disk) plus the invalid-manifest
-    // warning. Sibling CFG-03 aborts (at preflight) render
-    // `(skipped) {invalid manifest}`; here the mutation already landed so a
-    // skip would lie -- the warning row says "wrote state, could not write
-    // config".
-    return { invalidConfig: true };
-  }
-
-  const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
-  const key = `${plugin}@${marketplace}`;
-  const existingEntry = current.plugins?.[key];
-  // The patched shape is `{...existing, ...{}}` -- always equal to the
-  // existing entry (D-04: update preserves the consume-time `enabled`
-  // default and any forward-compat keys; the patch carries no per-update
-  // mutation). So the gate is simply: if the key is ALREADY PRESENT,
-  // writing back would produce a byte-identical file -- SKIP to preserve
-  // RECON-05 mtime stability. If the key is ABSENT, writing back ADDS
-  // the key -- WRITE so the user-authored config gains the implicit
-  // declaration.
-  if (existingEntry !== undefined) {
-    return { invalidConfig: false };
-  }
-
-  await writePluginConfigEntry(
-    current,
-    targetConfigPath,
-    locations.scopeRoot,
-    plugin,
-    marketplace,
-    {},
-  );
-  return { invalidConfig: false };
 }
 
 // The three-phase update body sequences preflight, the D-UPD disabled-record

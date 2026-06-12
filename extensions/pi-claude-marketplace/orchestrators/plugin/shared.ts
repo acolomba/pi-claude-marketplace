@@ -18,6 +18,7 @@ import path from "node:path";
 
 import { computeHashVersion } from "../../domain/version.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
+import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { CrossPluginConflictError } from "../../shared/errors.ts";
@@ -616,4 +617,94 @@ export function assertNoCrossPluginConflicts(
   if (conflicts.length > 0) {
     throw new CrossPluginConflictError(conflicts);
   }
+}
+
+/**
+ * WB-01 / A7: deep-equal short-circuited plugin write-back shared by the
+ * update and reinstall post-success paths. Loads the target config (base or
+ * local per `--local`), compares the prospective patched entry against the
+ * existing entry, and writes back ONLY when they differ. RECON-05
+ * fixed-point: a byte-stable update / reinstall leaves the config file's
+ * mtime + bytes untouched.
+ *
+ * S5: an `invalid` config returns `{ invalidConfig: true }` so the caller
+ * surfaces the abort via a warning row -- the state mutation already
+ * committed (finalize ran), so the byte form is the success payload (the
+ * plugin DID update / reinstall on disk) plus the invalid-manifest warning.
+ * Sibling CFG-03 aborts (at preflight) render `(skipped) {invalid manifest}`;
+ * here the mutation already landed so a skip would lie -- the warning row
+ * says "wrote state, could not write config".
+ *
+ * D-04: update / reinstall preserves the consume-time `enabled` default and
+ * any forward-compat keys; the patch carries no per-operation mutation. The
+ * patched shape is therefore `{...existing, ...{}}` -- byte-identical to the
+ * existing entry. So the gate is simply: if the key is ALREADY PRESENT,
+ * writing back would produce a byte-identical file -- SKIP to preserve
+ * RECON-05 mtime stability. If the key is ABSENT, writing back ADDS the key
+ * so the user-authored config gains the implicit declaration.
+ */
+export async function maybeWritePluginConfigBack(opts: {
+  readonly locations: ScopedLocations;
+  readonly marketplace: string;
+  readonly plugin: string;
+  readonly local: boolean;
+}): Promise<{ readonly invalidConfig: boolean }> {
+  const targetConfigPath = opts.local
+    ? opts.locations.configLocalJsonPath
+    : opts.locations.configJsonPath;
+  const cfg = await loadConfig(targetConfigPath);
+  if (cfg.status === "invalid") {
+    return { invalidConfig: true };
+  }
+
+  const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
+  const key = `${opts.plugin}@${opts.marketplace}`;
+  const existingEntry = current.plugins?.[key];
+  if (existingEntry !== undefined) {
+    return { invalidConfig: false };
+  }
+
+  await writePluginConfigEntry(
+    current,
+    targetConfigPath,
+    opts.locations.scopeRoot,
+    opts.plugin,
+    opts.marketplace,
+    {},
+  );
+  return { invalidConfig: false };
+}
+
+/**
+ * I3 / TR-03: subtract a non-AG-5 partial-cascade's dropped artefacts from
+ * the state record in place so the persisted row reflects only artefacts
+ * still on disk (NFR-3 fail-clean, no ghost record). Shared by the
+ * `uninstall` partial-cascade arm and the `disable` partial-cascade arm.
+ *
+ * The asymmetric `dropped.commands -> resources.prompts` mapping is per
+ * TR-03 (cascade primitive naming): the other three axes are name-identical.
+ */
+export function applyPartialCascadeFold(
+  installed: {
+    resources: { skills: string[]; prompts: string[]; agents: string[]; mcpServers: string[] };
+  },
+  dropped: {
+    readonly skills: readonly string[];
+    readonly commands: readonly string[];
+    readonly agents: readonly string[];
+    readonly mcpServers: readonly string[];
+  },
+): void {
+  installed.resources.skills = installed.resources.skills.filter(
+    (n) => !dropped.skills.includes(n),
+  );
+  installed.resources.prompts = installed.resources.prompts.filter(
+    (n) => !dropped.commands.includes(n),
+  );
+  installed.resources.agents = installed.resources.agents.filter(
+    (n) => !dropped.agents.includes(n),
+  );
+  installed.resources.mcpServers = installed.resources.mcpServers.filter(
+    (n) => !dropped.mcpServers.includes(n),
+  );
 }

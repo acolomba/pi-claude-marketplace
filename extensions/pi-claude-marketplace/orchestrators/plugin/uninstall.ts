@@ -52,7 +52,7 @@ import { notify } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { AgentsUnstageFailureError, cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
-import { resolveCrossScopePluginTarget } from "./shared.ts";
+import { applyPartialCascadeFold, resolveCrossScopePluginTarget } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
@@ -231,38 +231,6 @@ function emitCascadeFailure(args: {
     ],
   });
   return undefined;
-}
-
-/**
- * TR-03: fold a non-AG-5 partial cascade failure into the state record. The
- * dropped artifacts are subtracted from resources.* IN PLACE so the persisted
- * row reflects only artifacts still on disk (no ghost record). The asymmetric
- * dropped.commands -> resources.prompts mapping is per TR-03 (cascade primitive
- * naming).
- */
-function applyPartialCascadeFold(
-  installed: {
-    resources: { skills: string[]; prompts: string[]; agents: string[]; mcpServers: string[] };
-  },
-  dropped: {
-    skills: readonly string[];
-    commands: readonly string[];
-    agents: readonly string[];
-    mcpServers: readonly string[];
-  },
-): void {
-  installed.resources.skills = installed.resources.skills.filter(
-    (n) => !dropped.skills.includes(n),
-  );
-  installed.resources.prompts = installed.resources.prompts.filter(
-    (n) => !dropped.commands.includes(n),
-  );
-  installed.resources.agents = installed.resources.agents.filter(
-    (n) => !dropped.agents.includes(n),
-  );
-  installed.resources.mcpServers = installed.resources.mcpServers.filter(
-    (n) => !dropped.mcpServers.includes(n),
-  );
 }
 
 /**
