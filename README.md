@@ -129,27 +129,27 @@ It is also possible to install the same plugin in both user and project scopes; 
 
 ## Configuration files
 
-Each scope stores its declarative marketplace and plugin configuration in `claude-plugins.json` under the scope root:
+Each scope stores its declarative marketplace and plugin configuration in `claude-plugins.json` under the scope root.
 
-| Scope     | File path                       |
-| --------- | ------------------------------- |
-| `user`    | `~/.pi/claude-plugins.json`     |
-| `project` | `<cwd>/.pi/claude-plugins.json` |
+| Scope     | File path                         |
+| --------- | --------------------------------- |
+| `user`    | `~/.pi/agent/claude-plugins.json` |
+| `project` | `<cwd>/.pi/claude-plugins.json`   |
 
-Every mutating command (`marketplace add`, `marketplace remove`, `marketplace autoupdate`, `marketplace noautoupdate`, `install`, `uninstall`, `enable`, `disable`, `import`, `bootstrap`) records its change into this file. The file is the authoritative record of which marketplaces and plugins are installed; Pi re-applies its contents at extension load (`/reload`).
+Every mutating command (`marketplace add`, `marketplace remove`, `marketplace autoupdate`, `marketplace noautoupdate`, `install`, `uninstall`, `enable`, `disable`, `import`, `bootstrap`) records its change into this file. The file is the authoritative record of which marketplaces and plugins are installed. Pi applies its contents at extension load (`/reload`).
 
-### `claude-plugins.local.json` and the `.local` convention
+### Local configuration files
 
-Each scope can also have a `claude-plugins.local.json` file alongside the base file:
+Each scope can also have a `claude-plugins.local.json` file alongside the base file.
 
-| Scope     | File path                             |
-| --------- | ------------------------------------- |
-| `user`    | `~/.pi/claude-plugins.local.json`     |
-| `project` | `<cwd>/.pi/claude-plugins.local.json` |
+| Scope     | File path                               |
+| --------- | --------------------------------------- |
+| `user`    | `~/.pi/agent/claude-plugins.local.json` |
+| `project` | `<cwd>/.pi/claude-plugins.local.json`   |
 
 The local file overrides individual entries from the base file: a marketplace or plugin entry in `claude-plugins.local.json` replaces the same-keyed entry in `claude-plugins.json` wholesale.
 
-Pass `--local` to any mutating command to target the local file instead:
+Pass `--local` to any mutating command to target the local file.
 
 ```text
 /claude:plugin install context7-plugin@context7-marketplace --local
@@ -160,7 +160,7 @@ A `--local` write never touches the base file.
 
 ### Gitignore convention
 
-For project scope, commit `claude-plugins.json` so collaborators install the same marketplaces and plugins, but keep `claude-plugins.local.json` out of version control. Add the following to your project's `.gitignore`:
+In the project scope, commit `claude-plugins.json` so collaborators install the same marketplaces and plugins, but keep `claude-plugins.local.json` out of version control. Add the following to your project's `.gitignore`.
 
 ```text
 .pi/claude-plugins.local.json
