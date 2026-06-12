@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 Phase: Milestone v1.12 complete
 Plan: —
 Status: Milestone v1.12 shipped — PR #51
-Last activity: 2026-06-11 — Milestone v1.12 completed and archived
+Last activity: 2026-06-12 — Completed quick task 260612-70t: removed GSD history-tracking comments from TS code; added .claude/rules/typescript-comments.md
 
 ## Performance Metrics
 
@@ -220,6 +220,7 @@ None yet.
 | 260605-tmr | Reconcile v1.8 shipped state (STATE.md frontmatter/body/session-continuity) and prune resolved v1.4-UAT section from BACKLOG.md | 2026-06-05 | 0a11ba3 | Verified | [260605-tmr-reconcile-v1-8-shipped-state-and-prune-s](./quick/260605-tmr-reconcile-v1-8-shipped-state-and-prune-s/) |
 | 260608-npa | Remove brittle README-prose reinstall-docs test; PRL coverage already on behavior/spec tests (output-catalog catalog-uat); re-tag PRL-01; npm run check green | 2026-06-08 | 0d7c797 | Verified | [260608-npa-remove-readme-prose-reinstall-docs-test-](./quick/260608-npa-remove-readme-prose-reinstall-docs-test-/) |
 | 260609-bfq | Reduce SonarCloud CPD duplication via shared-helper extraction (plugin/marketplace edge handlers, marketplace orchestrators, notify plugin-row) + patch bump 0.4.2->0.4.3; byte-neutral (catalog-uat + notify 110/110) | 2026-06-09 | 7242a1e | Verified | [260609-bfq-reduce-sonarcloud-cpd-duplication-via-sh](./quick/260609-bfq-reduce-sonarcloud-cpd-duplication-via-sh/) |
+| 260612-70t | Remove GSD history-tracking references (milestone/phase/plan/wave) from TS comments and test titles across extensions/ + tests/ (99 files, traceability IDs kept); add .claude/rules/typescript-comments.md codifying the policy | 2026-06-12 | f2d77ad | Verified | [260612-70t-remove-gsd-history-tracking-comments-fro](./quick/260612-70t-remove-gsd-history-tracking-comments-fro/) |
 
 ## Deferred Items
 
