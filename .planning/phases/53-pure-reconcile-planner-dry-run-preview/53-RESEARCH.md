@@ -900,4 +900,3 @@ Preview: next reload will apply 1 action.
 
 **Research date:** 2026-06-10
 **Valid until:** 2026-07-10 (30 days; reconcile-design domain is stable, Phase 51-52 frozen foundation locked)
-
