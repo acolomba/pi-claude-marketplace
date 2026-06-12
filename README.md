@@ -147,7 +147,7 @@ The user scope is inherited, so it is possible to install a plugin from a user-s
 
 It is also possible to install the same plugin in both user and project scopes; the plugin in the user scope takes precedence.
 
-## `/claude:plugin` reference
+## Command reference
 
 This extension mirrors Claude Code's `/plugin` command. Use `/claude:plugin` in Pi for marketplace and plugin operations, then run `/reload` after installing, uninstalling, updating, or reinstalling plugins so Pi discovers the changed resources.
 
