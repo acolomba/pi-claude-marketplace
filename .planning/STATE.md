@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 Phase: Milestone v1.12 complete
 Plan: —
 Status: Milestone v1.12 shipped — PR #51
-Last activity: 2026-06-12 — Completed quick task 260612-70t: removed GSD history-tracking comments from TS code; added .claude/rules/typescript-comments.md
+Last activity: 2026-06-12 — Completed quick task 260612-9dd: resolved 13 SonarCloud PR #51 violations and folded the 3 new CPD duplication sets
 
 ## Performance Metrics
 
@@ -221,6 +221,7 @@ None yet.
 | 260608-npa | Remove brittle README-prose reinstall-docs test; PRL coverage already on behavior/spec tests (output-catalog catalog-uat); re-tag PRL-01; npm run check green | 2026-06-08 | 0d7c797 | Verified | [260608-npa-remove-readme-prose-reinstall-docs-test-](./quick/260608-npa-remove-readme-prose-reinstall-docs-test-/) |
 | 260609-bfq | Reduce SonarCloud CPD duplication via shared-helper extraction (plugin/marketplace edge handlers, marketplace orchestrators, notify plugin-row) + patch bump 0.4.2->0.4.3; byte-neutral (catalog-uat + notify 110/110) | 2026-06-09 | 7242a1e | Verified | [260609-bfq-reduce-sonarcloud-cpd-duplication-via-sh](./quick/260609-bfq-reduce-sonarcloud-cpd-duplication-via-sh/) |
 | 260612-70t | Remove GSD history-tracking references (milestone/phase/plan/wave) from TS comments and test titles across extensions/ + tests/ (99 files, traceability IDs kept); add .claude/rules/typescript-comments.md codifying the policy | 2026-06-12 | f2d77ad | Verified | [260612-70t-remove-gsd-history-tracking-comments-fro](./quick/260612-70t-remove-gsd-history-tracking-comments-fro/) |
+| 260612-9dd | Resolve 13 SonarCloud PR #51 violations (S7744 x9, S3863 x2, S4323, S3626) and fold the 3 new CPD duplication sets (reconcile apply toggles, notify cascade severity ladder, marketplace edge opening parse); byte-neutral, check green | 2026-06-12 | 7fa0a2c | Verified | [260612-9dd-resolve-sonarcloud-pr-51-violations-and-](./quick/260612-9dd-resolve-sonarcloud-pr-51-violations-and-/) |
 
 ## Deferred Items
 
