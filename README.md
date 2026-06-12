@@ -10,7 +10,20 @@
 <!-- markdownlint-disable MD033 -->
 
 <p align="center">
-  <a href="https://github.com/acolomba/pi-claude-marketplace" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 0.4em"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/icons/github-dark.svg"><img src="assets/icons/github-light.svg" alt="" height="16"></picture>GitHub</a>&nbsp;&nbsp;&nbsp;<a href="https://www.npmjs.com/package/pi-claude-marketplace" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 0.4em"><img src="assets/icons/npm.svg" alt="" height="16">npm</a>&nbsp;&nbsp;&nbsp;<a href="https://pi.dev/packages/pi-claude-marketplace" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 0.4em"><img src="assets/icons/pi.svg" alt="" height="16">pi.dev</a>
+  <a href="https://github.com/acolomba/pi-claude-marketplace" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 0.4em">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/icons/github-dark.svg">
+      <img src="assets/icons/github-light.svg" alt="" height="16">
+    </picture>GitHub
+  </a>
+  &nbsp;&nbsp;&nbsp;
+  <a href="https://www.npmjs.com/package/pi-claude-marketplace" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 0.4em">
+    <img src="assets/icons/npm.svg" alt="" height="16">npm
+  </a>
+  &nbsp;&nbsp;&nbsp;
+  <a href="https://pi.dev/packages/pi-claude-marketplace" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 0.4em">
+    <img src="assets/icons/pi.svg" alt="" height="16">pi.dev
+  </a>
 </p>
 <!-- markdownlint-enable MD033 -->
 
