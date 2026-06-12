@@ -384,3 +384,40 @@ test("writeBatchedConfigEntries merges patches over existing entries (preserves 
     await cleanup();
   }
 });
+
+test("T6 / PR #51 / S10: writeMarketplaceConfigEntry partial patch on an ABSENT marketplace WITHOUT a `source` field triggers saveConfig's loud refusal -- the S10 cast comment's documented backstop", async () => {
+  // Pre-T6 the S10 cast at config-write-back.ts:58-67 -- a
+  // `Partial<MarketplaceConfigEntry>` spread over an absent entry (`{}`) is
+  // cast to the non-Partial `MarketplaceConfigEntry` -- relied on saveConfig's
+  // `CONFIG_VALIDATOR.Check(config)` to refuse a missing required field
+  // (`source`) before the bytes hit disk. The cast comment names this
+  // backstop; this test pins the loud refusal so a future refactor cannot
+  // silently drop the validator (which would corrupt claude-plugins.json
+  // with a half-formed marketplace entry).
+  const { scopeRoot, cleanup } = await tmpScopeRoot();
+  try {
+    const filePath = path.join(scopeRoot, "claude-plugins.json");
+    // No prior entry -- the marketplace is absent. The patch carries only
+    // `autoupdate`, no `source`, so the merged entry violates the schema.
+    const empty: ScopeConfig = { schemaVersion: 1 };
+    await assert.rejects(
+      () =>
+        writeMarketplaceConfigEntry(empty, filePath, scopeRoot, "mp1", {
+          autoupdate: true,
+        }),
+      /saveConfig refused/,
+      "T6: writeMarketplaceConfigEntry must propagate saveConfig's loud refusal when the merged entry lacks `source`",
+    );
+
+    // And the loud refusal must fire BEFORE any bytes touch disk -- the
+    // atomic writer (write-file-atomic) refuses on the validation gate, so
+    // the config file MUST NOT exist after the rejection.
+    await assert.rejects(
+      () => readFile(filePath, "utf8"),
+      (err: unknown) => (err as NodeJS.ErrnoException).code === "ENOENT",
+      "T6: the loud refusal must fire BEFORE any bytes hit disk (no partial file)",
+    );
+  } finally {
+    await cleanup();
+  }
+});

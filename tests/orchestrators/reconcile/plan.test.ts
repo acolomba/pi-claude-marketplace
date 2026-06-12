@@ -5,7 +5,10 @@ import {
   githubSource,
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { planReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
+import {
+  isRecordedButDisabled,
+  planReconcile,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
 import { emptyReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import { mergeScopeConfigs } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 
@@ -602,4 +605,159 @@ test("Plugin key parser: lastIndexOf('@') admits plugin names containing '@'", (
   assert.ok(ins);
   assert.equal(ins.plugin, "evil@evil");
   assert.equal(ins.marketplace, "marketplace");
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// T5 / PR #51: predicate-drift agreement between
+// `isRecordedButDisabled` (plan.ts) and `isCurrentlyDisabled`
+// (enable-disable.ts). The two predicates are deliberately duplicated --
+// enable-disable.ts duplicates the marker locally to avoid pulling the
+// reconcile module into the orchestrator's import graph (see the JSDoc on
+// `isCurrentlyDisabled` at enable-disable.ts:172-178). The duplication is
+// load-bearing for the convergence proof at plan-convergence.test.ts: a
+// soft-degraded (installable: false) plugin records all four resource
+// arrays empty AND must NOT be classified as `pluginsToEnable`, so both
+// predicates must read the installable axis the same way.
+//
+// This drift gate has two parts:
+//   1. A matrix truth-table assertion on `isRecordedButDisabled` over
+//      `installable: true | false` x `resources: empty | populated`,
+//      pinning the documented "all four empty + installable: true" cell as
+//      the only "disabled" cell.
+//   2. A source-shape pin: `isCurrentlyDisabled`'s function body in
+//      enable-disable.ts is the same `installable && skills.length===0 &&
+//      prompts.length===0 && agents.length===0 && mcpServers.length===0`
+//      conjunction. Since `isCurrentlyDisabled` is module-private (kept
+//      out of the reconcile import graph by design), the structural pin
+//      protects against a hand-edit that flips one branch but forgets the
+//      other.
+// ──────────────────────────────────────────────────────────────────────────
+
+interface DisabledMarkerRecord {
+  compatibility: {
+    installable: boolean;
+    notes: string[];
+    supported: string[];
+    unsupported: string[];
+  };
+  resources: {
+    skills: string[];
+    prompts: string[];
+    agents: string[];
+    mcpServers: string[];
+  };
+  version: string;
+  resolvedSource: string;
+  installedAt: string;
+  updatedAt: string;
+}
+
+function recordWith(installable: boolean, populated: boolean): DisabledMarkerRecord {
+  return {
+    version: "1.0.0",
+    resolvedSource: "/abs/whatever",
+    compatibility: { installable, notes: [], supported: [], unsupported: [] },
+    resources: populated
+      ? { skills: ["s1"], prompts: [], agents: [], mcpServers: [] }
+      : { skills: [], prompts: [], agents: [], mcpServers: [] },
+    installedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+}
+
+test("T5 / PR #51: isRecordedButDisabled truth table over the installable x populated matrix -- only the (installable: true, populated: false) cell is 'disabled'", () => {
+  const cases: ReadonlyArray<{
+    name: string;
+    installable: boolean;
+    populated: boolean;
+    expected: boolean;
+  }> = [
+    {
+      name: "installable: true,  populated: true  (currently installed and enabled)",
+      installable: true,
+      populated: true,
+      expected: false,
+    },
+    {
+      name: "installable: true,  populated: false (the ENBL-02 disabled marker)",
+      installable: true,
+      populated: false,
+      expected: true,
+    },
+    {
+      name: "installable: false, populated: true  (impossible by construction; never disabled)",
+      installable: false,
+      populated: true,
+      expected: false,
+    },
+    {
+      name: "installable: false, populated: false (soft-degraded -- D-04 / Rule 2; never disabled)",
+      installable: false,
+      populated: false,
+      expected: false,
+    },
+  ];
+  for (const c of cases) {
+    const rec = recordWith(c.installable, c.populated);
+    assert.equal(
+      isRecordedButDisabled(rec),
+      c.expected,
+      `T5: isRecordedButDisabled mismatch for cell -- ${c.name}`,
+    );
+  }
+});
+
+test("T5 / PR #51: isCurrentlyDisabled (enable-disable.ts) source-shape pin -- same installable + four-axis-empty conjunction as isRecordedButDisabled (drift gate)", async () => {
+  // The two predicates are deliberately duplicated (see the JSDoc on
+  // `isCurrentlyDisabled` at enable-disable.ts:172-178) to keep the
+  // orchestrator import graph free of the reconcile module. The drift
+  // gate: assert the function body still names the same boolean axes in
+  // the same conjunction, so a hand-edit that flips one side without the
+  // other trips this test before it reaches the convergence proof.
+  const { readFile } = await import("node:fs/promises");
+  const enableSrc = await readFile(
+    "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
+    "utf8",
+  );
+
+  // Extract the isCurrentlyDisabled function body (signature + return
+  // expression). The function is module-private; we match its declaration
+  // textually and assert the body carries every axis isRecordedButDisabled
+  // also tests.
+  const fnMatch = /function isCurrentlyDisabled\([\s\S]*?\): boolean \{([\s\S]*?)\n\}/.exec(
+    enableSrc,
+  );
+  assert.ok(
+    fnMatch,
+    "T5: isCurrentlyDisabled declaration not found -- has the helper been renamed or removed without updating the drift gate?",
+  );
+  const body = fnMatch[1]!;
+
+  // Each axis from isRecordedButDisabled must appear in the
+  // isCurrentlyDisabled body (same conjunction). If any axis is missing or
+  // renamed, the predicates have drifted.
+  const requiredAxes: ReadonlyArray<string> = [
+    "compatibility.installable",
+    "resources.skills.length === 0",
+    "resources.prompts.length === 0",
+    "resources.agents.length === 0",
+    "resources.mcpServers.length === 0",
+  ];
+  for (const axis of requiredAxes) {
+    assert.ok(
+      body.includes(axis) ||
+        // The orchestrator destructures `installed.resources` / `installed.compatibility`
+        // before the conjunction, so the textual form drops the `installed.` prefix.
+        body.includes(axis.replace("compatibility.installable", "installable")),
+      `T5 drift: isCurrentlyDisabled body must reference \`${axis}\` (same axis as isRecordedButDisabled); body was:\n${body}`,
+    );
+  }
+
+  // The connectives must all be conjunctions (&&) -- a stray || would flip
+  // the predicate to "disabled if ANY axis is empty", catastrophically
+  // misclassifying populated records.
+  assert.ok(
+    !body.includes("||"),
+    `T5 drift: isCurrentlyDisabled body must NOT contain || (disjunction would flip the truth table); body was:\n${body}`,
+  );
 });

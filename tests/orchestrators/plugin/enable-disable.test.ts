@@ -1147,3 +1147,43 @@ test("Y3: standalone overload still returns | undefined -- typecheck pin", async
     void _narrow;
   });
 });
+
+test("T1 / PR #51: orchestrated mode enable-success returns { status: 'enabled', name, version } with ZERO notify calls -- pinned alongside the load-time apply-cascade T1 test in apply.test.ts", async () => {
+  // Before T1 only the disable / idempotent-enable / not-added orchestrated
+  // outcomes had explicit tests at :665, :724, :753. The enable-success
+  // outcome (the `enabled` arm of EnableDisablePluginOutcome at
+  // enable-disable.ts:115) was exercised only via the standalone CR-01
+  // fresh-enable at :340, never through the orchestrated notifications
+  // mode the reconcile apply-cascade actually uses. This pins the
+  // contract: a fresh enable against a disabled record returns the typed
+  // outcome (with the version pin preserved) and fires ZERO notifications
+  // (the apply-cascade is the sole projection seam in orchestrated mode).
+  await withHermeticHome(async ({ cwd, home }) => {
+    await seedRealDisabledMarketplace(home, {
+      marketplaceName: "claude-plugins-official",
+      pluginName: "foo-plugin",
+      version: "1.2.3",
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+    const outcome = await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "claude-plugins-official",
+      plugin: "foo-plugin",
+      enable: true,
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    });
+
+    assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+    assert.equal(outcome.status, "enabled");
+    if (outcome.status === "enabled") {
+      assert.equal(outcome.name, "foo-plugin");
+      // ENBL-02: the version pin survives a disable -> enable cycle and
+      // surfaces on the typed outcome so apply.ts can compose the
+      // `(installed) v1.2.3` row in the reconcile cascade.
+      assert.equal(outcome.version, "1.2.3");
+    }
+  });
+});

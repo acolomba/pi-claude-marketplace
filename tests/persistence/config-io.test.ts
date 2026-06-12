@@ -303,3 +303,46 @@ test("CONFIG_VALIDATOR exports a JIT-compiled validator (D-07 mirror)", () => {
   assert.equal(CONFIG_VALIDATOR.Check({ schemaVersion: 2 }), false);
   assert.equal(CONFIG_VALIDATOR.Check({ marketplaces: "x" }), false);
 });
+
+test("T6 / PR #51 / CFG-03: loadConfig non-ENOENT read-failure arm (EISDIR) returns 'invalid' with a `read failed:` error -- portable via a DIRECTORY named claude-plugins.json", async () => {
+  // Pre-T6 the loadConfig non-ENOENT read-failure arm at
+  // config-io.ts:128-133 (the `catch` that returns `invalid` with a
+  // `read failed: <message>` error string for any non-ENOENT readFile
+  // error) had no test hit. The portable way to drive it without chmod
+  // tricks is to create a DIRECTORY at the target path: Node's readFile
+  // against a directory throws EISDIR with `.code === "EISDIR"`, which is
+  // non-ENOENT and so routes through the read-failure arm rather than the
+  // `absent` arm. (chmod 0o000 is not portable on root-owned CI tmpdirs;
+  // EISDIR works on every platform we ship to.)
+  const { scopeRoot, cleanup } = await tmpScopeRoot();
+  try {
+    const filePath = path.join(scopeRoot, "claude-plugins.json");
+    // Directory at the target path -- readFile against it throws EISDIR
+    // (verified: Node 22.x consistently surfaces err.code === "EISDIR").
+    await mkdir(filePath, { recursive: true });
+    const got = await loadConfig(filePath);
+    assert.equal(got.status, "invalid");
+    if (got.status === "invalid") {
+      assert.equal(got.filePath, filePath);
+      // The read-failure arm prefixes the underlying message with
+      // `read failed:` -- this distinguishes it from the JSON-parse arm
+      // (`JSON parse failed:`) and the schema-validation arm
+      // (`schema validation failed:`).
+      assert.match(
+        got.error,
+        /^read failed: /,
+        `T6: expected the read-failure arm prefix; got error=${got.error}`,
+      );
+      // EISDIR is the underlying Node error -- pin it explicitly so a
+      // future refactor that swallows the cause stringification trips this
+      // test instead of silently flattening the diagnostic.
+      assert.match(
+        got.error,
+        /EISDIR/,
+        `T6: expected EISDIR in the cause text; got error=${got.error}`,
+      );
+    }
+  } finally {
+    await cleanup();
+  }
+});

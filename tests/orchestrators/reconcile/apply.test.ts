@@ -1187,6 +1187,449 @@ test("S10 / PR #51: writeMarketplaceConfigEntry's `as MarketplaceConfigEntry` ca
   );
 });
 
+// ──────────────────────────────────────────────────────────────────────────
+// PR #51 T1 / T3 / T4 / T6 -- closing the test-gap findings that did NOT
+// land alongside their behaviour fixes in the earlier sub-plans.
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Build a REAL on-disk path-source marketplace (manifest + skill-bearing
+ * plugin tree) under a per-test tmp directory. Mirrors the
+ * `seedRealDisabledMarketplace` helper in enable-disable.test.ts but lifts
+ * the marketplace clone OUTSIDE the scope dir so the apply pass can re-
+ * materialize the plugin from cache (NFR-5 network-free).
+ */
+async function seedRealPathMarketplace(opts: {
+  parentDir: string;
+  marketplaceName: string;
+  pluginName: string;
+  version: string;
+}): Promise<{ mpRoot: string; manifestPath: string }> {
+  const mpRoot = path.join(opts.parentDir, "mp-src-" + opts.marketplaceName);
+  await mkdir(path.join(mpRoot, ".claude-plugin"), { recursive: true });
+  const pluginRoot = path.join(mpRoot, "plugins", opts.pluginName);
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: opts.pluginName, version: opts.version }),
+  );
+  const skillDir = path.join(pluginRoot, "skills", "s1");
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(path.join(skillDir, "SKILL.md"), "---\nname: s1\n---\n\nBody.\n");
+  const manifestPath = path.join(mpRoot, ".claude-plugin", "marketplace.json");
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      name: opts.marketplaceName,
+      plugins: [
+        {
+          name: opts.pluginName,
+          source: `./plugins/${opts.pluginName}`,
+          version: opts.version,
+        },
+      ],
+    }),
+  );
+  return { mpRoot, manifestPath };
+}
+
+test("T1 / PR #51: load-time ENABLE through applyReconcile -- disabled record + config-enabled fires applyPluginToggles, renders (installed) row, re-populates state, both config files byte-unchanged, second reconcile silent", async () => {
+  // Inversion of the WR-09 disable-axis fixture at apply.test.ts:443.
+  // Pre-T1 the load-time ENABLE arm (apply.ts::applyPluginToggles with
+  // enable:true + notify.ts:320-335 plugin-enabled projection) had zero
+  // end-to-end test coverage -- only the standalone enable-fresh CR-01 case
+  // at enable-disable.test.ts:340 exercised the re-materialization path.
+  // This pins the orchestrated-mode enable wiring end-to-end through the
+  // reconcile cascade.
+  await withHermeticHome(async ({ cwd, home }) => {
+    const projectScopeRoot = path.join(cwd, ".pi");
+    const extensionRoot = path.join(projectScopeRoot, "pi-claude-marketplace");
+    await mkdir(extensionRoot, { recursive: true });
+
+    // A REAL on-disk path-source marketplace lives outside the scope dir so
+    // the enable branch's cached-clone read succeeds (NFR-5: no network).
+    const { mpRoot, manifestPath } = await seedRealPathMarketplace({
+      parentDir: home,
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+
+    // Base config: declared enabled (an absent `enabled` field defaults to
+    // included per D-04 / `isDeclaredEnabled`). The marketplace points at
+    // the real on-disk clone.
+    const basePath = path.join(projectScopeRoot, "claude-plugins.json");
+    await writeFile(
+      basePath,
+      JSON.stringify(
+        {
+          schemaVersion: 1,
+          marketplaces: { mp: { source: mpRoot } },
+          plugins: { "foo@mp": {} },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    // State: KEPT disabled record (ENBL-02 marker) -- installable: true +
+    // every resources axis empty. Planner classifies as pluginsToEnable.
+    await writeFile(
+      path.join(extensionRoot, "state.json"),
+      JSON.stringify(
+        {
+          schemaVersion: 1,
+          marketplaces: {
+            mp: {
+              name: "mp",
+              scope: "project",
+              source: { kind: "path", raw: mpRoot, absPath: mpRoot },
+              addedFromCwd: cwd,
+              manifestPath,
+              marketplaceRoot: mpRoot,
+              plugins: {
+                foo: {
+                  version: "1.2.3",
+                  resolvedSource: path.join(mpRoot, "plugins", "foo"),
+                  compatibility: {
+                    installable: true,
+                    notes: [],
+                    supported: [],
+                    unsupported: [],
+                  },
+                  resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+                  installedAt: "2026-01-01T00:00:00.000Z",
+                  updatedAt: "2026-01-01T00:00:00.000Z",
+                },
+              },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const baseBefore = await readFile(basePath, "utf8");
+
+    const ctx = makeCtx();
+    await applyReconcile({
+      ctx: ctx as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    // Exactly one notify carrying the (installed) row from the enable-
+    // success arm of applyPluginToggles. The notify.ts plugin-enabled tuple
+    // renders the same `(installed)` token as the standalone enable-fresh
+    // cascade (the orchestrated outcome is the same kind).
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.equal(args.length, 1, "load-time ENABLE success routes to info severity (no 2nd arg)");
+    assert.ok(
+      args[0].includes("foo") && args[0].includes("(installed)"),
+      `T1: expected (installed) child row for foo; got:\n${args[0]}`,
+    );
+    // RECON-04 / Pitfall 4: applyReconcile cascade MUST NOT emit /reload
+    // trailer (the load-time pass owns the reload, not the user).
+    assert.ok(
+      !args[0].includes("/reload to pick up changes"),
+      `T1: applyReconcile cascade MUST NOT emit /reload trailer; got:\n${args[0]}`,
+    );
+
+    // State re-populated: resources.skills is non-empty (the install ledger
+    // re-materialized from the cached clone). Version pin preserved.
+    const persisted = await loadState(extensionRoot);
+    const rec = persisted.marketplaces.mp!.plugins.foo!;
+    assert.ok(
+      rec.resources.skills.length > 0,
+      "T1: resources.skills must be non-empty after a load-time enable (state re-populated)",
+    );
+    assert.equal(rec.version, "1.2.3", "T1: ENBL-02 version pin preserved across re-enable");
+
+    // WR-09 contract mirrored: the config is the reconcile's INPUT, never
+    // its write target. The base file is unchanged (no enabled:true
+    // injection -- D-04 defaults are consume-time only).
+    assert.equal(
+      await readFile(basePath, "utf8"),
+      baseBefore,
+      "T1: the base config must NOT be rewritten by a reconcile-driven enable",
+    );
+
+    // Second reconcile is the steady state: recorded + populated + declared-
+    // enabled is not a divergence, so the planner produces an empty plan
+    // and the cascade is silent (NFR-2 / A4 / RECON-05).
+    const ctxB = makeCtx();
+    await applyReconcile({
+      ctx: ctxB as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+    assert.equal(
+      ctxB.ui.notify.mock.calls.length,
+      0,
+      "T1: second reconcile after a load-time enable must be a silent no-op",
+    );
+  });
+});
+
+test("T3 / PR #51: direct pluginsToUninstall bucket through applyReconcile -- marketplace stays DECLARED, one plugin entry deleted from config drives applyPluginUninstalls, renders (uninstalled) row, second reconcile is silent (WR-06 convergence)", async () => {
+  // Pre-T3 the direct `pluginsToUninstall` bucket at apply.ts:469-535 was
+  // only exercised indirectly via the marketplace-remove cascade (WR-02
+  // unstaged-fold path). This pins the DIRECT bucket: a populated plugin
+  // record whose config entry has been deleted but whose marketplace stays
+  // declared -- applyPluginUninstalls drives uninstallPlugin and the
+  // (uninstalled) row renders. The follow-up steady-state reconcile pins
+  // the WR-06 convergence invariant at the apply layer (the planner finds
+  // nothing to uninstall after the row landed).
+  await withHermeticHome(async ({ cwd, home }) => {
+    const projectScopeRoot = path.join(cwd, ".pi");
+    const extensionRoot = path.join(projectScopeRoot, "pi-claude-marketplace");
+    await mkdir(extensionRoot, { recursive: true });
+
+    const { mpRoot, manifestPath } = await seedRealPathMarketplace({
+      parentDir: home,
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+
+    // Config: marketplace STAYS declared; the plugin entry is DELETED.
+    // (Equivalently: the user-authored config never declared foo@mp.)
+    const basePath = path.join(projectScopeRoot, "claude-plugins.json");
+    await writeFile(
+      basePath,
+      JSON.stringify(
+        {
+          schemaVersion: 1,
+          marketplaces: { mp: { source: mpRoot } },
+          plugins: {},
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    // State: the marketplace is recorded AND its plugin `foo` is recorded
+    // populated (resources.skills non-empty -- the planner sees an
+    // installed-and-enabled plugin whose config declaration is gone, so it
+    // lands in `pluginsToUninstall`).
+    await writeFile(
+      path.join(extensionRoot, "state.json"),
+      JSON.stringify(
+        {
+          schemaVersion: 1,
+          marketplaces: {
+            mp: {
+              name: "mp",
+              scope: "project",
+              source: { kind: "path", raw: mpRoot, absPath: mpRoot },
+              addedFromCwd: cwd,
+              manifestPath,
+              marketplaceRoot: mpRoot,
+              plugins: {
+                foo: {
+                  version: "1.2.3",
+                  resolvedSource: path.join(mpRoot, "plugins", "foo"),
+                  compatibility: {
+                    installable: true,
+                    notes: [],
+                    supported: [],
+                    unsupported: [],
+                  },
+                  resources: { skills: ["s1"], prompts: [], agents: [], mcpServers: [] },
+                  installedAt: "2026-01-01T00:00:00.000Z",
+                  updatedAt: "2026-01-01T00:00:00.000Z",
+                },
+              },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const ctx = makeCtx();
+    await applyReconcile({
+      ctx: ctx as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    // Exactly one notify carrying the (uninstalled) row from the DIRECT
+    // pluginsToUninstall bucket (not the marketplace-remove cascade --
+    // the marketplace stays declared).
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.ok(
+      args[0].includes("foo") && args[0].includes("(uninstalled)"),
+      `T3: expected (uninstalled) child row for foo; got:\n${args[0]}`,
+    );
+    // The marketplace must NOT carry a (removed) row -- it stays declared.
+    assert.ok(
+      !args[0].includes("(removed)"),
+      `T3: marketplace must stay declared; (removed) row indicates wrong bucket; got:\n${args[0]}`,
+    );
+
+    // State: the plugin record is gone but the marketplace record remains.
+    const persisted = await loadState(extensionRoot);
+    assert.ok(
+      "mp" in persisted.marketplaces,
+      "T3: marketplace record must remain (only plugin was uninstalled)",
+    );
+    assert.equal(
+      persisted.marketplaces.mp?.plugins.foo,
+      undefined,
+      "T3: plugin record must be gone after direct uninstall",
+    );
+
+    // Second reconcile is the steady state: config has no plugin entry,
+    // state has no plugin record -- nothing to uninstall, plan is empty,
+    // cascade is silent. This pins WR-06 at the apply layer: a
+    // pluginsToUninstall bucket that converged in the prior pass produces
+    // ZERO rows on the next reconcile (no spurious re-uninstall attempt).
+    const ctxB = makeCtx();
+    await applyReconcile({
+      ctx: ctxB as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+    assert.equal(
+      ctxB.ui.notify.mock.calls.length,
+      0,
+      "T3 / WR-06: second reconcile after a direct uninstall must be a silent no-op",
+    );
+  });
+});
+
+test("T4 / PR #51: applySourceMismatches + applied-cascade source-mismatch arm fire through applyReconcile -- dangling-reference variant attributes a (failed) {source mismatch} plugin child row to the offending plugin", async () => {
+  // Sub-plan 04 added byte-equality tables for the four PlannedSourceMismatch
+  // / SourceMismatchOutcome causes in notify.test.ts (the projection seam).
+  // T4 closes the missing piece: an end-to-end applyReconcile pass that
+  // routes a dangling-reference through `applySourceMismatches`
+  // (apply.ts:677-720) and the applied-cascade source-mismatch arm
+  // (notify.ts:353-364). Before T4 no test exercised this code path
+  // through apply -- the projection contract held, but the apply seam that
+  // feeds it could regress unnoticed.
+  await withHermeticHome(async ({ cwd }) => {
+    // Config: plugin `cr@phantom-mp` declared under a marketplace that is
+    // NOT declared anywhere -- the planner emits a PlannedSourceMismatch
+    // with cause: "dangling-reference" and a `plugin` field (Y2 widening,
+    // plan.ts:307-329). The apply pass routes it through
+    // applySourceMismatches into a SourceMismatchOutcome with the same
+    // cause, which the applied-cascade projection renders as a marketplace-
+    // level (failed) row with the `cr` plugin child row attributed below.
+    await setupProjectScope(cwd, {
+      schemaVersion: 1,
+      marketplaces: {},
+      plugins: { "cr@phantom-mp": { enabled: true } },
+    });
+
+    const ctx = makeCtx();
+    await applyReconcile({
+      ctx: ctx as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.equal(args[1], "error", "T4: source-mismatch surfaces error severity");
+    const emitted = args[0];
+    // Marketplace-level (failed) row with the {source mismatch} reason; the
+    // plugin child row carries the `cr` subject (dangling-reference is the
+    // only Y2 cause that attributes a plugin child -- the byte-equality
+    // table in notify.test.ts Y2 rows 1-3-4 carries no plugin child).
+    assert.ok(
+      emitted.includes("phantom-mp"),
+      `T4: expected marketplace subject phantom-mp in failed row; got:\n${emitted}`,
+    );
+    assert.ok(
+      emitted.includes("(failed)") && emitted.includes("{source mismatch}"),
+      `T4: expected (failed) {source mismatch} row; got:\n${emitted}`,
+    );
+    assert.ok(
+      emitted.includes("cr"),
+      `T4: dangling-reference variant must attribute the plugin child row to cr; got:\n${emitted}`,
+    );
+  });
+});
+
+test("T6 / PR #51: classifyReadPassThrow lock-held arm -- a pre-held .state-lock surfaces as a (failed) {lock held} row, not the unparseable fallback", async () => {
+  // Pre-T6 the classifyReadPassThrow function at apply.ts:268-278 had its
+  // StateLockHeldError arm exercised only via the WR-01 corrupt-state.json
+  // test -- the lock-held arm itself was untested. This pins: a concurrent
+  // process holding the per-scope `.state-lock` (proper-lockfile sentinel)
+  // raises a StateLockHeldError inside readPassForScope; the read-pass
+  // catch routes it through classifyReadPassThrow and renders the closed-
+  // set `{lock held}` reason (catalog-stable, mirrors the standalone
+  // lock-held row).
+  const lockfile = (await import("proper-lockfile")).default;
+  await withHermeticHome(async ({ cwd }) => {
+    const projectScopeRoot = path.join(cwd, ".pi");
+    const extensionRoot = path.join(projectScopeRoot, "pi-claude-marketplace");
+    await mkdir(extensionRoot, { recursive: true });
+    await writeFile(
+      path.join(projectScopeRoot, "claude-plugins.json"),
+      JSON.stringify({ schemaVersion: 1, marketplaces: {} }),
+      "utf8",
+    );
+    await writeFile(
+      path.join(extensionRoot, "state.json"),
+      JSON.stringify({ schemaVersion: 1, marketplaces: {} }),
+      "utf8",
+    );
+
+    const stateLockFile = path.join(extensionRoot, ".state-lock");
+    // Pre-hold the lock so applyReconcile's withStateGuard fast-fails with
+    // StateLockHeldError (retries: 0 in acquireStateLock).
+    const release = await lockfile.lock(extensionRoot, {
+      lockfilePath: stateLockFile,
+      realpath: false,
+    });
+
+    try {
+      const ctx = makeCtx();
+      await applyReconcile({
+        ctx: ctx as unknown as ExtensionContext,
+        pi: STUB_PI,
+        cwd,
+        scope: "project",
+      });
+
+      assert.equal(ctx.ui.notify.mock.calls.length, 1);
+      const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+      assert.equal(args[1], "error");
+      const emitted = args[0];
+      // WR-01 invalid-block subject on `state.json` (the basename selected
+      // by the non-MigrateConfigSaveError arm at apply.ts:797) + the
+      // closed-set `{lock held}` reason from classifyReadPassThrow.
+      assert.ok(
+        emitted.includes("state.json") && emitted.includes("{lock held}"),
+        `T6: expected (failed) {lock held} row on state.json subject; got:\n${emitted}`,
+      );
+      // Must NOT flatten to {unparseable} (the SyntaxError-cause fallback
+      // arm of classifyReadPassThrow) or {unreadable} (the generic probe).
+      assert.ok(
+        !emitted.includes("{unparseable}") && !emitted.includes("{unreadable}"),
+        `T6: lock-held must NOT misroute to unparseable/unreadable; got:\n${emitted}`,
+      );
+    } finally {
+      await release();
+    }
+  });
+});
+
 test("Y7 / PR #51: index.ts last-ditch error notify uses errorMessage(err) so non-Error throws render their stringified form", async () => {
   // Pre-fix index.ts:31 used `(err as Error).message` -- throwing a literal
   // string ("boom") through resources_discover rendered
