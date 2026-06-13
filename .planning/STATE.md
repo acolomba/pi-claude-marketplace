@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.12
-milestone_name: milestone
-status: "Milestone v1.12 shipped — PR #51"
-stopped_at: Plan 56-04 complete -- MILESTONE v1.12 GREEN (1795 unit + 10 integration; all 24 v1.12 requirements CLOSED)
-last_updated: "2026-06-12T02:22:23.144Z"
-last_activity: 2026-06-11 — Milestone v1.12 completed and archived
+milestone: v1.13
+milestone_name: Claude Hook Bridge
+status: planning
+last_updated: "2026-06-13T12:00:45.345Z"
+last_activity: 2026-06-13
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 15
-  completed_plans: 15
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -24,10 +23,10 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 
 ## Current Position
 
-Phase: Milestone v1.12 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Milestone v1.12 shipped — PR #51
-Last activity: 2026-06-12 — Completed quick task 260612-liv: folded both PR #51 CPD duplication sets into shared helpers and corrected README user-scope config paths
+Status: Defining requirements
+Last activity: 2026-06-13 — Milestone v1.13 started
 
 ## Performance Metrics
 
