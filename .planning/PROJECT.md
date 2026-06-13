@@ -30,7 +30,10 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 
 Two distinct categories — events that COULD be unlocked by upstream work, and events that are semantically inapplicable to Pi:
 
-- **Upstream-fixable (9 events; documented as known limitations):**
+- **Blocked on upstream PRs not committed by v1.13 (9 events; documented as known limitations):**
+
+  These need somebody to land a PR (us, upstream, or a third party) before the bridge can observe them. v1.13 does NOT depend on any of these PRs and does NOT commit to sending them. Distinct from the `pi-subagents` pattern, where installing the soft dep is sufficient because the events already publish.
+
   - 4 events needing `pi-coding-agent` runtime exposures: `Notification`, `PermissionRequest`, `PermissionDenied`, `MessageDisplay` (display-only semantic)
   - 1 event needing a new Pi feature: `TeammateIdle` (no agent-team primitive in Pi or pi-subagents)
   - 2 events needing two specific PRs to `pi-mcp-adapter`: `Elicitation`, `ElicitationResult` (register `ElicitRequestSchema` handler + publish on `pi.events`)
