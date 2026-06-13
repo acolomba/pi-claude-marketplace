@@ -10,11 +10,11 @@
 <!-- markdownlint-disable MD033 -->
 
 <p align="right">
-  <a href="https://github.com/acolomba/pi-claude-marketplace" target="_blank" rel="noopener noreferrer"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/icons/github-dark.svg"><img src="assets/icons/github-light.svg" alt="" height="16" align="middle"></picture>GitHub</a>
+  <a href="https://github.com/acolomba/pi-claude-marketplace" target="_blank" rel="noopener noreferrer"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/icons/github-dark.svg"><img src="assets/icons/github-light.svg" alt="" height="16" style="vertical-align: middle"></picture>GitHub</a>
   &nbsp;&nbsp;&nbsp;
-  <a href="https://www.npmjs.com/package/pi-claude-marketplace" target="_blank" rel="noopener noreferrer"><img src="assets/icons/npm.svg" alt="" height="16" align="middle">npm</a>
+  <a href="https://www.npmjs.com/package/pi-claude-marketplace" target="_blank" rel="noopener noreferrer"><img src="assets/icons/npm.svg" alt="" height="16" style="vertical-align: middle">npm</a>
   &nbsp;&nbsp;&nbsp;
-  <a href="https://pi.dev/packages/pi-claude-marketplace" target="_blank" rel="noopener noreferrer"><img src="assets/icons/pi.svg" alt="" height="16" align="middle">pi.dev</a>
+  <a href="https://pi.dev/packages/pi-claude-marketplace" target="_blank" rel="noopener noreferrer"><img src="assets/icons/pi.svg" alt="" height="16" style="vertical-align: middle">pi.dev</a>
 </p>
 <!-- markdownlint-enable MD033 -->
 
