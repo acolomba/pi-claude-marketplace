@@ -36,6 +36,7 @@ import {
   __test_narrowProbeError,
   listPlugins,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
+import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { InvalidMarketplaceManifestError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -104,8 +105,16 @@ interface SeedMarketplaceOpts {
   manifest?: unknown;
   /** When provided BUT manifest is undefined, manifestPath in state points here (typically a nonexistent file for PL-6 tests). */
   manifestPathOverride?: string;
-  /** Installed plugin records keyed by plugin name. */
-  installed?: Record<string, { version: string }>;
+  /**
+   * Installed plugin records keyed by plugin name. `disabled: true` seeds
+   * the ENBL-02 empty-resources marker (recorded-but-disabled); the default
+   * seeds a populated `resources.skills` -- a PRODUCTION installed record
+   * always has at least one populated resources array (the resolver's
+   * `requireInstallable` gate rules out zero-component installables), and
+   * the empty-resources + installable:true intersection IS the load-bearing
+   * "currently disabled" marker (D-54-01 / ENBL-04).
+   */
+  installed?: Record<string, { version: string; disabled?: boolean }>;
   /** When provided, sets `autoupdate` on the marketplace record. */
   autoupdate?: boolean;
   /** When provided, plugin source dirs at these names get created so resolver probes find them. */
@@ -157,7 +166,12 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
       version: info.version,
       resolvedSource: "./placeholder",
       compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-      resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+      // ENBL-04: empty resources + installable:true IS the disabled marker;
+      // an enabled installed record always has >= 1 populated array.
+      resources:
+        info.disabled === true
+          ? { skills: [], prompts: [], agents: [], mcpServers: [] }
+          : { skills: [`${name}-skill`], prompts: [], agents: [], mcpServers: [] },
       installedAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
@@ -181,6 +195,33 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
     marketplaces: { ...existing.marketplaces, [mpName]: record },
     // saveState validates -- the merged shape must satisfy STATE_SCHEMA.
   } as unknown as Parameters<typeof saveState>[1]);
+
+  // SPLIT-01: autoupdate read-path lives in claude-plugins.json. Seed the
+  // config when autoupdate is set so the list/info orchestrators read the
+  // autoupdate truth from the new source of truth.
+  if (opts.autoupdate !== undefined) {
+    const cfgPath = locations.configJsonPath;
+    let existingCfg: { marketplaces?: Record<string, { source: string; autoupdate?: boolean }> } =
+      {};
+    try {
+      const raw = await readFile(cfgPath, "utf8");
+      existingCfg = JSON.parse(raw) as typeof existingCfg;
+    } catch {
+      /* no existing config -- first marketplace in scope */
+    }
+
+    await saveConfig(
+      cfgPath,
+      {
+        schemaVersion: 1,
+        marketplaces: {
+          ...(existingCfg.marketplaces ?? {}),
+          [mpName]: { source: `./${mpName}-src`, autoupdate: opts.autoupdate },
+        },
+      },
+      locations.scopeRoot,
+    );
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -339,6 +380,91 @@ test("PL-1: --unavailable alone shows only unavailable (⊘) plugins", async () 
     assert.equal(out.includes("● alpha"), false);
     assert.equal(out.includes("○ beta"), false);
     assert.match(out, /⊘ gamma v3\.0\.0 \(unavailable\)/);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// D-54-01 / ENBL-04: recorded-but-disabled inventory row (CR-02 producer)
+// ──────────────────────────────────────────────────────────────────────────
+
+test("ENBL-04: recorded-but-disabled record renders `(disabled)` -- NOT `(installed)` -- and stays distinct from `(unavailable)`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.2.3" }],
+      },
+      // ENBL-02 marker: empty resources + installable:true.
+      installed: { alpha: { version: "1.2.3", disabled: true } },
+      installablePluginDirs: ["alpha"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    assert.equal(notifications.length, 1);
+    const out = notifications[0]!.message;
+    // Catalog `disabled-inventory` row form: ⊘ glyph, version pin rendered,
+    // `(disabled)` token. Severity info (inventory row, not a failure).
+    assert.match(out, /⊘ alpha v1\.2\.3 \(disabled\)/, out);
+    assert.equal(out.includes("(installed)"), false, `must not render (installed): ${out}`);
+    assert.equal(out.includes("(unavailable)"), false, `must not render (unavailable): ${out}`);
+    assert.equal(notifications[0]!.severity, undefined, "disabled inventory routes to info");
+  });
+});
+
+test("ENBL-04: disabled record with drifted manifest version does NOT render `(upgradable)` (version pin frozen while disabled)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "alpha", source: "./alpha", version: "9.9.9" }],
+      },
+      installed: { alpha: { version: "1.2.3", disabled: true } },
+      installablePluginDirs: ["alpha"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    assert.match(out, /⊘ alpha v1\.2\.3 \(disabled\)/, out);
+    assert.equal(out.includes("(upgradable)"), false, out);
+  });
+});
+
+test("ENBL-04 / PL-1: --installed filter includes the disabled bucket (a disabled plugin IS recorded)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          { name: "alpha", source: "./alpha", version: "1.0.0" },
+          { name: "beta", source: "./beta", version: "2.0.0" },
+        ],
+      },
+      installed: { alpha: { version: "1.0.0", disabled: true } },
+      installablePluginDirs: ["alpha", "beta"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+    const out = notifications[0]!.message;
+    assert.match(out, /⊘ alpha v1\.0\.0 \(disabled\)/, out);
+    assert.equal(out.includes("○ beta"), false, out);
   });
 });
 
@@ -503,7 +629,10 @@ test("CR-01 / G-21-01: project-scope plugin under a CLONED user marketplace fold
               version: "1.0.0",
               resolvedSource: "./placeholder",
               compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-              resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+              // Populated resources: an ENABLED installed record (empty
+              // resources + installable:true would read as disabled per
+              // ENBL-04 and render `(disabled)` instead of `(installed)`).
+              resources: { skills: ["alpha-skill"], prompts: [], agents: [], mcpServers: [] },
               installedAt: "2026-01-01T00:00:00.000Z",
               updatedAt: "2026-01-01T00:00:00.000Z",
             },

@@ -30,10 +30,32 @@ import {
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { getMarketplaceInfo } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts";
+import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
+import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+
+// SPLIT-01: autoupdate read-path routes through MergedConfig
+// (claude-plugins.json). Seed the autoupdate truth on the config side; the
+// state-side autoupdate field is no longer the source of truth (D-13 scrubs
+// it on next loadState once the config exists).
+async function seedConfigAutoupdate(
+  locations: ScopedLocations,
+  name: string,
+  source: string,
+  autoupdate: boolean,
+): Promise<void> {
+  await saveConfig(
+    locations.configJsonPath,
+    {
+      schemaVersion: 1,
+      marketplaces: { [name]: { source, autoupdate } },
+    },
+    locations.scopeRoot,
+  );
+}
 
 interface NotifyRecord {
   message: string;
@@ -62,9 +84,15 @@ async function withHermeticHome<T>(
   fn: (env: { home: string; cwd: string }) => Promise<T>,
 ): Promise<T> {
   const originalHome = process.env.HOME;
+  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
   const home = await mkdtemp(path.join(tmpdir(), "mp-info-home-"));
   const cwd = await mkdtemp(path.join(tmpdir(), "mp-info-cwd-"));
   process.env.HOME = home;
+  // SC-1: getAgentDir() honors PI_CODING_AGENT_DIR FIRST and only falls back
+  // to homedir(). Clear it so the hermetic HOME above actually governs the
+  // user scope -- otherwise a developer/CI env that sets the variable would
+  // make these tests read AND write the real Pi agent dir.
+  delete process.env.PI_CODING_AGENT_DIR;
   try {
     return await fn({ home, cwd });
   } finally {
@@ -72,6 +100,12 @@ async function withHermeticHome<T>(
       delete process.env.HOME;
     } else {
       process.env.HOME = originalHome;
+    }
+
+    if (originalAgentDir === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = originalAgentDir;
     }
 
     await rm(home, { recursive: true, force: true });
@@ -120,11 +154,16 @@ test("INFO-01: single-scope github source with autoupdate + lastUpdatedAt + desc
           manifestPath,
           marketplaceRoot: cwd,
           plugins: {},
-          autoupdate: true,
           lastUpdatedAt: "2026-06-03T00:00:00Z",
         },
       },
     });
+    await seedConfigAutoupdate(
+      userLocations,
+      "claude-plugins-official",
+      "anthropics/claude-plugins-official",
+      true,
+    );
 
     const { ctx, pi, notifications } = makeCtx();
     await getMarketplaceInfo({ ctx, pi, name: "claude-plugins-official", scope: "user", cwd });
@@ -195,7 +234,6 @@ test("INFO-01: single-scope path source renders `path: <abs>`; NO `last_updated:
           // `path:` line per the orchestrator's path-source projection.
           marketplaceRoot: "/abs/path/to/mp",
           plugins: {},
-          autoupdate: false,
         },
       },
     });
@@ -265,10 +303,10 @@ test("INFO-03: both-scopes fan-out emits ONE notify call; project block FIRST, u
           manifestPath: projectManifest,
           marketplaceRoot: "/repo/path/my-mp",
           plugins: {},
-          autoupdate: true,
         },
       },
     });
+    await seedConfigAutoupdate(projectLocations, "my-mp", "/repo/path/my-mp", true);
     await saveState(userLocations.extensionRoot, {
       schemaVersion: 1,
       marketplaces: {
@@ -280,7 +318,6 @@ test("INFO-03: both-scopes fan-out emits ONE notify call; project block FIRST, u
           manifestPath: userManifest,
           marketplaceRoot: cwd,
           plugins: {},
-          autoupdate: false,
         },
       },
     });

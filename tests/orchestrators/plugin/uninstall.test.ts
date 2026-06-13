@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -25,6 +25,7 @@ import {
   __resetCacheForTests,
   getPluginIndex,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
@@ -1242,7 +1243,7 @@ test("cache-drop EISDIR swallowed: success notification still emitted, plugin re
 //
 // Both tests stub the cascade (no real filesystem race needed) and
 // re-load state from disk after the orchestrator call to verify the
-// mutation persisted (Pitfall 3: in-memory-only mutations are silent
+// mutation persisted (in-memory-only mutations are silent
 // regressions if not checked against disk).
 
 test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sRecord shrunk on disk", async () => {
@@ -1305,7 +1306,7 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
       });
 
       // (1) Re-load state from disk. The shrunken-row contract requires
-      // saveState to have committed; Pitfall 3 catches in-memory-only
+      // saveState to have committed; the disk re-load catches in-memory-only
       // mutations that never reach state.json.
       const after = await loadState(locations.extensionRoot);
       const sRecord = after.marketplaces["mp"]?.plugins["hello"];
@@ -1342,8 +1343,8 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
         ),
         `TR-03 partial: expected failure row; got "${notifications[0]?.message ?? ""}"`,
       );
-      // (5) No reload-hint trailer on failure (Pitfall 4: cleanup branch
-      // skipped; the (uninstalled) variant never reached the notify call).
+      // (5) No reload-hint trailer on failure (cleanup branch skipped; the
+      // (uninstalled) variant never reached the notify call).
       assert.equal(
         (notifications[0]?.message ?? "").includes("/reload to pick up changes"),
         false,
@@ -1456,6 +1457,390 @@ test("TR-03 (AG-5 cause): full row preserved intact when cause instanceof Agents
         ),
         `TR-03 AG-5: expected failure row; got "${notifications[0]?.message ?? ""}"`,
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// RECON-03: orchestrated-mode coverage
+// ───────────────────────────────────────────────────────────────────────────
+
+test("RECON-03 uninstall orchestrated mode -- success returns { status: 'uninstalled', name, version } with ZERO notify calls", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-orch-ok-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      const { ctx, pi, notifications } = makeCtx();
+
+      const outcome = await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+      assert.ok(outcome);
+      assert.equal(outcome.status, "uninstalled");
+      if (outcome.status === "uninstalled") {
+        assert.equal(outcome.name, "hello");
+        assert.equal(outcome.version, "0.0.1");
+      }
+
+      // State record removed via orchestrated path -- same cascade ran.
+      const after = await loadState(locations.extensionRoot);
+      assert.equal("hello" in (after.marketplaces["mp"]?.plugins ?? {}), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-06 uninstall orchestrated mode -- PU-5 silent converge (record already absent) returns { status: 'converged' }, never 'uninstalled', with ZERO notify calls", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-orch-converge-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      // Marketplace container present, plugin record ABSENT -- the PU-5
+      // converge arm (another process completed first, or there was never
+      // an install). The orchestrated outcome must be the explicit
+      // `converged` variant so applyReconcile can drop the row instead of
+      // reporting an uninstall this process did not perform.
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: {},
+          },
+        },
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "absent-plugin",
+        notifications: { mode: "orchestrated" },
+      });
+
+      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+      assert.ok(outcome);
+      assert.equal(
+        outcome.status,
+        "converged",
+        "PU-5 converge must surface as the explicit converged arm (WR-06)",
+      );
+      if (outcome.status === "converged") {
+        assert.equal(outcome.name, "absent-plugin");
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RECON-03 uninstall orchestrated mode -- missing marketplace returns { status: 'failed', reason: 'not added' } no notifications", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-orch-na-"));
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "absent-mp",
+        plugin: "anything",
+        notifications: { mode: "orchestrated" },
+      });
+
+      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+      assert.ok(outcome);
+      assert.equal(outcome.status, "failed");
+      if (outcome.status === "failed") {
+        assert.equal(outcome.reason, "not added");
+        assert.ok(outcome.error instanceof MarketplaceNotFoundError);
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RECON-03 uninstall standalone-default mode -- omitted notifications option remains byte-identical to today", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-orch-default-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "byte-hello", cwd);
+      const { ctx, pi, notifications } = makeCtx();
+
+      const outcome = await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "byte-hello",
+      });
+      assert.equal(outcome, undefined, "standalone (omitted) returns undefined");
+      assert.equal(notifications.length, 1);
+      assert.equal(
+        notifications[0]?.message,
+        "● mp [project]\n  ○ byte-hello v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// WB-01/WB-02 write-back, --local, WR-09, CFG-03
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WB-01: standalone uninstall deletes the plugin entry from claude-plugins.json", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wb01-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+
+      // Pre-seed claude-plugins.json with the plugin entry so we can verify
+      // the delete actually removes it.
+      const { saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      await saveConfig(
+        locations.configJsonPath,
+        {
+          schemaVersion: 1,
+          plugins: { "hello@mp": {}, "keep@mp": {} },
+        },
+        locations.scopeRoot,
+      );
+
+      const { ctx, pi } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const cfg = await loadConfig(locations.configJsonPath);
+      assert.equal(cfg.status, "valid");
+      if (cfg.status === "valid") {
+        assert.equal(cfg.config.plugins?.["hello@mp"], undefined);
+        // Other plugin entry preserved.
+        assert.deepEqual(cfg.config.plugins?.["keep@mp"], {});
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WB-01: --local uninstall deletes from claude-plugins.local.json; base file untouched", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wb01-local-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+
+      const { saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      // Pre-seed both files; only the local-file entry should be removed.
+      await saveConfig(
+        locations.configJsonPath,
+        { schemaVersion: 1, plugins: { "hello@mp": {} } },
+        locations.scopeRoot,
+      );
+      await saveConfig(
+        locations.configLocalJsonPath,
+        { schemaVersion: 1, plugins: { "hello@mp": {} } },
+        locations.scopeRoot,
+      );
+
+      // Snapshot base bytes BEFORE the operation.
+      const baseBytesBefore = await readFile(locations.configJsonPath);
+
+      const { ctx, pi } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        local: true,
+      });
+
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const localCfg = await loadConfig(locations.configLocalJsonPath);
+      assert.equal(localCfg.status, "valid");
+      if (localCfg.status === "valid") {
+        assert.equal(localCfg.config.plugins?.["hello@mp"], undefined);
+      }
+
+      // Base file is byte-identical.
+      const baseBytesAfter = await readFile(locations.configJsonPath);
+      assert.deepEqual(baseBytesAfter, baseBytesBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-09 / T-56-03-01: orchestrated-mode uninstall SKIPS write-back; config untouched", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wb01-orch-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+
+      const { saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      await saveConfig(
+        locations.configJsonPath,
+        { schemaVersion: 1, plugins: { "hello@mp": {} } },
+        locations.scopeRoot,
+      );
+      const bytesBefore = await readFile(locations.configJsonPath);
+
+      const { ctx, pi } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // Config file byte-identical -- orchestrated mode skipped the write-back.
+      const bytesAfter = await readFile(locations.configJsonPath);
+      assert.deepEqual(bytesAfter, bytesBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WB-01: ALREADY-GONE uninstall leaves config byte-unchanged", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wb01-gone-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      // Seed marketplace but NOT the plugin record -- triggers PU-5 silent converge.
+      await mkdir(locations.extensionRoot, { recursive: true });
+      const { saveState } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/state-io.ts");
+      await saveState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: {},
+          },
+        },
+      });
+
+      const { saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      await saveConfig(
+        locations.configJsonPath,
+        { schemaVersion: 1, plugins: { "hello@mp": {} } },
+        locations.scopeRoot,
+      );
+      const bytesBefore = await readFile(locations.configJsonPath);
+
+      const { ctx, pi } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // Config bytes UNCHANGED -- alreadyGone arm short-circuits before write-back.
+      const bytesAfter = await readFile(locations.configJsonPath);
+      assert.deepEqual(bytesAfter, bytesBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("CFG-03 / T-56-03-04: invalid config aborts uninstall; basename-only cause; state untouched", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wb01-cfg03-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+
+      // Seed invalid base config.
+      await mkdir(path.dirname(locations.configJsonPath), { recursive: true });
+      await writeFile(locations.configJsonPath, "{ not valid json", "utf8");
+
+      // WR-04: the abort must not rewrite state.json at
+      // all -- bytes AND mtime stable (no-save abort discipline).
+      const statePath = path.join(locations.extensionRoot, "state.json");
+      const stateBytesPre = await readFile(statePath, "utf8");
+      const stateMtimePre = (await stat(statePath)).mtimeMs;
+
+      const { ctx, pi, notifications } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      assert.equal(notifications.length, 1);
+      const note = notifications[0]!;
+      assert.match(note.message, /\{invalid manifest\}/);
+      assert.ok(
+        !note.message.includes(locations.configJsonPath),
+        `MUST NOT leak absolute configJsonPath, got: ${note.message}`,
+      );
+
+      // State record was NOT removed.
+      const after = await loadState(locations.extensionRoot);
+      assert.ok("hello" in (after.marketplaces["mp"]?.plugins ?? {}));
+
+      // WR-04: state.json bytes + mtime unchanged on the CFG-03 abort.
+      assert.equal(await readFile(statePath, "utf8"), stateBytesPre);
+      assert.equal((await stat(statePath)).mtimeMs, stateMtimePre);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

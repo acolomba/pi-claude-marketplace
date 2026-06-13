@@ -58,6 +58,34 @@ function ensureMarketplacePaths(
   return mutated;
 }
 
+/**
+ * SPLIT-01 / D-12 / D-13: scrub the legacy `autoupdate` field from a
+ * marketplace record. Mirrors the shape of `ensureMarketplacePaths` and
+ * `ensurePluginResources`: returns `true` iff a field was removed.
+ *
+ * Gating policy (D-13 ORDERING RAIL): this helper is invoked from
+ * `migrateLegacyMarketplaceRecords` ONLY when the caller passed
+ * `scrubAutoupdate: true` -- the caller (loadState) derives that flag from
+ * the on-disk existence of the scope's `configJsonPath`, preserving the
+ * legacy `autoupdate` intent on the FIRST load (pre-config-migration) so
+ * the first-run migration can capture it before the field is destroyed.
+ * Subsequent loads (after `claude-plugins.json` has been materialized) see
+ * the config file and scrub.
+ *
+ * D-13 is implemented via Mechanism A (existsSync-gated). The alternative
+ * (Mechanism B: pre-read legacy autoupdate via a separate entry point) is
+ * documented in research as equally valid; Mechanism A is the simpler
+ * diff and the locked choice.
+ */
+function ensureNoLegacyAutoupdate(mp: Record<string, unknown>): boolean {
+  if (mp.autoupdate === undefined) {
+    return false;
+  }
+
+  delete mp.autoupdate;
+  return true;
+}
+
 function ensurePluginResources(mp: Record<string, unknown>): boolean {
   const plugins = mp.plugins;
   if (typeof plugins !== "object" || plugins === null || Array.isArray(plugins)) {
@@ -102,17 +130,22 @@ function ensurePluginResources(mp: Record<string, unknown>): boolean {
  *
  * Behavior:
  *   - non-object / null parsed input -> { marketplaces: {}, mutated: false }
- *   - parsed object with non-object marketplaces -> reset to {} (Pitfall 9)
+ *   - parsed object with non-object marketplaces -> reset to {}
  *   - per-marketplace: fill manifestPath and marketplaceRoot with defaults
  *     derived from `<extensionRoot>/sources/<mp>/...` (ST-4)
  *   - per-plugin: ensure resources.agents and resources.mcpServers are
  *     arrays (ST-5)
+ *   - `scrubAutoupdate === true` (D-13 gate OPEN): remove the legacy
+ *     `autoupdate` field from every marketplace record. The CALLER owns
+ *     the gate predicate (loadState probes the scope's
+ *     `claude-plugins.json` existence) so this function stays pure.
  */
 export function migrateLegacyMarketplaceRecords(
   parsed: unknown,
   extensionRoot: string,
+  scrubAutoupdate: boolean,
 ): MigrationResult {
-  // Reject anything that isn't an object (Pitfall 9: null/array -> reset).
+  // Reject anything that isn't an object (null/array -> reset).
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     return { marketplaces: {}, mutated: false };
   }
@@ -146,6 +179,9 @@ export function migrateLegacyMarketplaceRecords(
 
     mutated = ensureMarketplacePaths(mpName, mp, extensionRoot) || mutated;
     mutated = ensurePluginResources(mp) || mutated;
+    if (scrubAutoupdate) {
+      mutated = ensureNoLegacyAutoupdate(mp) || mutated;
+    }
 
     marketplaces[mpName] = mp;
   }

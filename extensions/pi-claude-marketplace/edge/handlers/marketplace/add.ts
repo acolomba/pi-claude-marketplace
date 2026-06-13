@@ -14,48 +14,35 @@
 // `EntityErrorRow` compact lines per CMC-34.
 
 import { addMarketplace } from "../../../orchestrators/marketplace/add.ts";
-import { notifyUsageError } from "../../../shared/notify.ts";
-import { parseCommandArgs } from "../../args-schema.ts";
+
+import { openMarketplaceCommand } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { EdgeDeps } from "../../types.ts";
 
-const USAGE = "Usage: /claude:plugin marketplace add <source> [--scope user|project]";
+const USAGE = "Usage: /claude:plugin marketplace add <source> [--scope user|project] [--local]";
 
 export function makeAddHandler(
   pi: ExtensionAPI,
   deps: EdgeDeps,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
-    const parsed = parseCommandArgs(
-      args,
-      {
-        positional: [{ name: "source" }] as const,
-        usage: USAGE,
-      },
-      (message) => {
-        // MSG-NC-2: argument-parsing failure -> sentence form + Usage
-        // block (notifyUsageError contract: ${message}\n\n${usageBlock}).
-        // Substitute "Missing required argument." when the parser hands
-        // back the usage string verbatim (the duplicate-usage case --
-        // notifyUsageError would re-emit the Usage block otherwise).
-        notifyUsageError(ctx, {
-          message: message === USAGE ? "Missing required argument." : message,
-          usage: USAGE,
-        });
-      },
-    );
-    if (parsed === undefined) {
+    const opened = openMarketplaceCommand(args, ctx, {
+      usage: USAGE,
+      positionalName: "source",
+    });
+    if (opened === undefined) {
       return;
     }
 
     await addMarketplace({
       ctx,
       pi,
-      scope: parsed.scope ?? "user",
+      scope: opened.scope ?? "user",
       cwd: ctx.cwd,
-      rawSource: parsed.source,
+      rawSource: opened.source,
       gitOps: deps.gitOps,
+      ...(opened.local && { local: true }),
     });
   };
 }

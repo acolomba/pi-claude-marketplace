@@ -208,3 +208,49 @@ test("shim :: rejects unknown long flag on pl@mp form with USAGE", async () => {
     assert.match(notifications[0]!.message, /Usage: \/claude:plugin update/);
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// --local flag scanning at the edge boundary
+// ──────────────────────────────────────────────────────────────────────────
+
+test("USAGE string contains [--local]", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeUpdateHandler(makePi());
+    await handler("--frobnicate", ctx);
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\[--local\]/);
+  });
+});
+
+test("Flag: --local at the trailing position is accepted", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeUpdateHandler(makePi());
+    // Bare bulk update against empty state -> (no marketplaces).
+    await handler("--local", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.message, "(no marketplaces)");
+  });
+});
+
+test("Flag: --local at the leading position parses identically", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeUpdateHandler(makePi());
+    await handler("--local --map-model", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.message, "(no marketplaces)");
+  });
+});
+
+test("Unknown long flag -> USAGE error", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeUpdateHandler(makePi());
+    await handler("--frobnicate", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.match(notifications[0]!.message, /Unknown flag: "--frobnicate"\./);
+  });
+});

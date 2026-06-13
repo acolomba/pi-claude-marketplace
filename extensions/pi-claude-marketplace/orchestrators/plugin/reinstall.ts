@@ -22,6 +22,7 @@
 // surface is absent.
 
 import { rm } from "node:fs/promises";
+import path from "node:path";
 
 import {
   abortPreparedAgents,
@@ -77,6 +78,7 @@ import { discoverGeneratedNames } from "./discover-names.ts";
 import {
   assertNoCrossPluginConflicts,
   MarketplaceNotAddedSignal,
+  maybeWritePluginConfigBack,
   resolveCrossScopePluginTarget,
   resolveInstalledMarketplaceTarget,
 } from "./shared.ts";
@@ -128,6 +130,14 @@ export interface ReinstallPluginOptions {
   readonly plugin: string;
   readonly force?: boolean;
   readonly render?: "default" | "none";
+  /**
+   * WB-01 / WB-02: when true, target
+   * `claude-plugins.local.json` instead of `claude-plugins.json`. The base
+   * file is NEVER touched on the --local path; loadConfig's `absent` arm
+   * yields an empty starting shape that saveConfig writes back to the local
+   * path.
+   */
+  readonly local?: boolean;
   /** @internal Test-only seams; production callers omit this. */
   readonly __deps?: ReinstallPluginDeps;
 }
@@ -150,6 +160,12 @@ export interface ReinstallPluginsOptions {
   readonly cwd: string;
   readonly target: ReinstallPluginsTarget;
   readonly force?: boolean;
+  /**
+   * WB-01 / WB-02: when true, target
+   * `claude-plugins.local.json` instead of `claude-plugins.json` for
+   * write-back. The base file is NEVER touched on the --local path.
+   */
+  readonly local?: boolean;
 }
 
 interface PreparedHandles {
@@ -175,6 +191,14 @@ type ReplacementEntry =
 interface LockedSuccess {
   readonly outcome: ReinstallPluginOutcome;
   readonly bridgeWarnings: readonly string[];
+  /**
+   * S5: when the config-back loadConfig returned `invalid`, the write-back
+   * was skipped while the success notify proceeded. The single-plugin caller
+   * surfaces this as a separate warning row AFTER the reinstall success row
+   * so the user knows the on-disk artefacts were reinstalled but the config
+   * entry was not written.
+   */
+  readonly invalidConfigWriteBack?: boolean;
 }
 
 interface ResolvedReinstallTarget {
@@ -252,6 +276,33 @@ export async function reinstallPlugin(
   notify(ctx, pi, {
     marketplaces: [{ name: marketplace, scope, plugins: [reinstalledRow] }],
   });
+
+  // S5: when the config write-back loadConfig returned `invalid`, emit a
+  // separate warning row so the user sees that the on-disk artefacts were
+  // reinstalled but the config entry was not written. Pre-S5 this arm
+  // silently dropped the warning while the success notify proceeded.
+  if (locked.invalidConfigWriteBack === true) {
+    const targetBasename = path.basename(
+      opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath,
+    );
+    notify(ctx, pi, {
+      marketplaces: [
+        {
+          name: marketplace,
+          scope,
+          plugins: [
+            {
+              status: "failed",
+              name: plugin,
+              reasons: ["invalid manifest"] as const,
+              cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
+            },
+          ],
+        },
+      ],
+    });
+  }
+
   return locked.outcome;
 }
 
@@ -354,6 +405,7 @@ export async function reinstallPlugins(
           plugin: target.plugin,
           render: "none",
           ...(opts.force === undefined ? {} : { force: opts.force }),
+          ...(opts.local === true && { local: true }),
         }),
       );
     } catch (err) {
@@ -513,7 +565,7 @@ async function enumerateMarketplaceReinstallTargets(
  * for the marketplace/plugin reinstall forms, raising
  * `MarketplaceNotAddedSignal` when the marketplace is not added.
  *
- *  - explicit-scope PLUGIN form: reuse the Plan 47-01 discriminated
+ *  - explicit-scope PLUGIN form: reuse the discriminated
  *    cross-scope resolver so an other-scope-only target yields the SCOPE-01
  *    hint (signal carrying the REQUESTED scope) rather than a synthesized
  *    `(skipped) {not installed}` phantom target.
@@ -532,11 +584,11 @@ async function resolveMarketplaceReinstallScope(
   explicitScope: Scope | undefined,
 ): Promise<{ scope: Scope; locations: ReturnType<typeof locationsFor> }> {
   if (target.kind === "plugin") {
-    // PLUGIN form (explicit OR bare): reuse the Plan 47-01 discriminated
+    // PLUGIN form (explicit OR bare): reuse the discriminated
     // cross-scope resolver. It resolves against the marketplace CONTAINER's
     // scope when present (so the downstream `runLockedReinstall` `oldRecord ===
     // undefined` branch keeps the legitimate `(skipped) {not installed}` for a
-    // present-marketplace/absent-plugin -- Pitfall 4), and surfaces SCOPE-01 /
+    // present-marketplace/absent-plugin), and surfaces SCOPE-01 /
     // marketplace-absence otherwise.
     const resolution = await resolveCrossScopePluginTarget({
       cwd,
@@ -1013,8 +1065,25 @@ async function runLockedReinstall(
   });
   const replacements = await replaceAll(handles, force);
 
+  let invalidConfigWriteBack: boolean;
   try {
     updateStateRecord(tx.state, marketplace, plugin, oldSnapshot, installable, handles);
+
+    // WB-01 / A7: deep-equal short-circuit preserves RECON-05
+    // mtime invariant. Reinstall is invoked by the user (both standalone and
+    // bulk-cascade paths are user-initiated); there is no orchestrated /
+    // reconcile-driven caller today. The deep-equal gate compares the
+    // prospective `{...existing, ...patch}` shape against the existing
+    // entry; a byte-stable patch (the common reinstall case -- entry shape
+    // unchanged) leaves the config file untouched.
+    const writeResult = await maybeWritePluginConfigBack({
+      locations,
+      marketplace,
+      plugin,
+      local: opts.local === true,
+    });
+    invalidConfigWriteBack = writeResult.invalidConfig;
+
     await tx.save();
   } catch (err) {
     throw errorWithManualRecovery(err, await rollbackReplacements(replacements));
@@ -1027,6 +1096,7 @@ async function runLockedReinstall(
   return {
     outcome: successOutcome(scope, marketplace, plugin, oldSnapshot, handles),
     bridgeWarnings,
+    ...(invalidConfigWriteBack && { invalidConfigWriteBack: true }),
   };
 }
 

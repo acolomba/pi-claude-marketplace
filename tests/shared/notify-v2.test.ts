@@ -544,8 +544,8 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
 });
 
 // ===========================================================================
-// Pitfall 1 (D-48-A byte-regression locks): adding `reasons?` to the MpFailed
-// arm (Plan 48-01) MUST NOT change the byte form of an existing bare-`(failed)`
+// D-48-A byte-regression locks: adding `reasons?` to the MpFailed
+// arm MUST NOT change the byte form of an existing bare-`(failed)`
 // marketplace state that omits `reasons`. `composeReasons(undefined, ...)`
 // returns "", and the renderer's `reasonsBrace === ""` ternary then emits the
 // bare `⊘ <name> [<scope>] (failed)` header with NO reason brace. These tests
@@ -561,7 +561,7 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
 // The load-bearing proof is that each renders `(failed)` with NO `{...}` brace.
 // ===========================================================================
 
-test("Pitfall 1 / D-48-A: bare-(failed) add `failure-unreachable` form is byte-unchanged (reasons omitted -> brace collapses)", () => {
+test("D-48-A: bare-(failed) add `failure-unreachable` form is byte-unchanged (reasons omitted -> brace collapses)", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
@@ -580,7 +580,7 @@ test("Pitfall 1 / D-48-A: bare-(failed) add `failure-unreachable` form is byte-u
   assert.doesNotMatch(rendered, /\(failed\) \{/);
 });
 
-test("Pitfall 1 / D-48-A: bare-(failed) update `mp-failure-network` header is byte-unchanged (reasons omitted -> brace collapses)", () => {
+test("D-48-A: bare-(failed) update `mp-failure-network` header is byte-unchanged (reasons omitted -> brace collapses)", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
@@ -597,7 +597,7 @@ test("Pitfall 1 / D-48-A: bare-(failed) update `mp-failure-network` header is by
   assert.doesNotMatch(rendered, /\(failed\) \{/);
 });
 
-test("Pitfall 1 / D-48-A: a reasons-omitted failed marketplace arm renders bare `(failed)` (the third bare form; arm byte-stable)", () => {
+test("D-48-A: a reasons-omitted failed marketplace arm renders bare `(failed)` (the third bare form; arm byte-stable)", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   // Explicitly omit `reasons` on the MpFailed arm: the brace MUST collapse.
@@ -2646,7 +2646,7 @@ function pluginInfoDescriptionBlock(description: string): string[] {
   return lines.slice(2);
 }
 
-test("Phase 42 / wrapDescription: empty description omits the wrap block entirely", () => {
+test("wrapDescription: empty description omits the wrap block entirely", () => {
   // Empty input -> wrapDescription returns [] -> renderer pushes no
   // description lines. The body skips straight from the plugin row to the
   // `components: not resolved` marker.
@@ -2654,12 +2654,12 @@ test("Phase 42 / wrapDescription: empty description omits the wrap block entirel
   assert.deepEqual(tail, ["    components: not resolved"]);
 });
 
-test("Phase 42 / wrapDescription: short description renders as a single 4-space-indented line", () => {
+test("wrapDescription: short description renders as a single 4-space-indented line", () => {
   const tail = pluginInfoDescriptionBlock("Hello world.");
   assert.deepEqual(tail, ["    Hello world.", "    components: not resolved"]);
 });
 
-test("Phase 42 / wrapDescription: text fitting exactly 66 chars on a word boundary stays on one line", () => {
+test("wrapDescription: text fitting exactly 66 chars on a word boundary stays on one line", () => {
   // 66 chars of text (no indent) -- last word ends at col 66 exactly.
   // 6 words of 10 chars + 5 single-space separators = 65 chars; add a
   // trailing 1-char word to hit 66 (with the leading space, +2).
@@ -2676,7 +2676,7 @@ test("Phase 42 / wrapDescription: text fitting exactly 66 chars on a word bounda
   assert.deepEqual(tail, [`    ${text}`, "    components: not resolved"]);
 });
 
-test("Phase 42 / wrapDescription: long description wraps at word boundary at 66-char text width", () => {
+test("wrapDescription: long description wraps at word boundary at 66-char text width", () => {
   // Two 60-char words separated by a space -- 121 chars total; the first
   // word fits on line 1 (60 chars), the second wraps to line 2 (also 60).
   // Lock: both lines indented 4 spaces; no ellipsis; no truncation.
@@ -2686,7 +2686,7 @@ test("Phase 42 / wrapDescription: long description wraps at word boundary at 66-
   assert.deepEqual(tail, [`    ${first}`, `    ${second}`, "    components: not resolved"]);
 });
 
-test("Phase 42 / wrapDescription: an over-length single word emits on its own line at indent with no ellipsis", () => {
+test("wrapDescription: an over-length single word emits on its own line at indent with no ellipsis", () => {
   // INFO-02 forbids ellipsis. A 70-char single token is emitted at indent;
   // the rendered line WILL exceed the 70-char total width and that is the
   // intentional contract (no truncation).
@@ -2695,14 +2695,14 @@ test("Phase 42 / wrapDescription: an over-length single word emits on its own li
   assert.deepEqual(tail, [`    ${word}`, "    components: not resolved"]);
 });
 
-test("Phase 42 / wrapDescription: whitespace collapsed (tabs, newlines, double spaces) into single-space-separated words", () => {
+test("wrapDescription: whitespace collapsed (tabs, newlines, double spaces) into single-space-separated words", () => {
   // Mixed whitespace input -> tokenized via /\s+/ -> joined with single
   // spaces. Three words ("hello", "world", "foo") fit on a single line.
   const tail = pluginInfoDescriptionBlock("  hello\t\tworld\n\nfoo  ");
   assert.deepEqual(tail, ["    hello world foo", "    components: not resolved"]);
 });
 
-test("Phase 42 / WR-05 / wrapDescription: whitespace-only description reaches wrapDescription and returns no body lines", () => {
+test("WR-05 / wrapDescription: whitespace-only description reaches wrapDescription and returns no body lines", () => {
   // WR-05: the renderer's short-circuit at `description.length > 0` only
   // catches the empty-string case. A whitespace-only string (e.g. "   ")
   // has length > 0, so wrapDescription IS called -- it splits on /\s+/,
@@ -2715,7 +2715,7 @@ test("Phase 42 / WR-05 / wrapDescription: whitespace-only description reaches wr
   assert.deepEqual(tail, ["    components: not resolved"]);
 });
 
-test("Phase 42 / WR-05 / wrapDescription: two words whose `current.length + 1 + word.length === wrapCol` stay on one line (boundary-equality)", () => {
+test("WR-05 / wrapDescription: two words whose `current.length + 1 + word.length === wrapCol` stay on one line (boundary-equality)", () => {
   // WR-05: the greedy accumulator's boundary predicate is
   // `current.length + 1 + word.length <= wrapCol`. Exercise the equality
   // (<=) branch with two words whose joined length is EXACTLY 66 chars.
@@ -2789,7 +2789,7 @@ test("GRAM-02: standalone failed plugin-info renders `1 plugin operation failed.
   ]);
 });
 
-test("Phase 42 / INFO-04: {not added} row never carries a reload-hint (read-only surface)", () => {
+test("INFO-04: {not added} row never carries a reload-hint (read-only surface)", () => {
   // TYPE-03: `shouldEmitReloadHint` routes the new `marketplace-not-added`
   // arm to `false` through the single `isInfoKind` guard. Lock that the bare
   // row does NOT carry `\n\n/reload to pick up changes`.
@@ -2808,7 +2808,7 @@ test("Phase 42 / INFO-04: {not added} row never carries a reload-hint (read-only
   );
 });
 
-test("Phase 42 / INFO-01: renderMarketplaceInfo (github source + ref + lastUpdated + description)", () => {
+test("INFO-01: renderMarketplaceInfo (github source + ref + lastUpdated + description)", () => {
   // Full github source rendering: header + github line with #ref + last_updated
   // + single-attribute description line (NOT wrapped -- description wrapping
   // is plugin info-only per INFO-02).
@@ -2842,7 +2842,7 @@ test("Phase 42 / INFO-01: renderMarketplaceInfo (github source + ref + lastUpdat
   assert.equal(args.length, 1);
 });
 
-test("Phase 42 / INFO-01: renderMarketplaceInfo (path source, no lastUpdated, no description)", () => {
+test("INFO-01: renderMarketplaceInfo (path source, no lastUpdated, no description)", () => {
   // Path source omits the `last_updated:` line (last_updated is github-only
   // per INFO-01) AND omits the `description:` line when description is
   // undefined. The header carries the `<no autoupdate>` marker because
@@ -2866,7 +2866,7 @@ test("Phase 42 / INFO-01: renderMarketplaceInfo (path source, no lastUpdated, no
   assert.equal(args.length, 1);
 });
 
-test("Phase 42 / INFO-02 / INFO-05: renderPluginInfo (componentsResolved:true with sorted components + dependencies + wrapping description)", () => {
+test("INFO-02 / INFO-05: renderPluginInfo (componentsResolved:true with sorted components + dependencies + wrapping description)", () => {
   // Full plugin info path: marketplace header + 2-space-indent plugin row +
   // wrapped description (4-space indent, 66-col text width) + per-kind
   // component lines (alphabetical by kind: agents, commands, mcp, skills)
@@ -2913,7 +2913,7 @@ test("Phase 42 / INFO-02 / INFO-05: renderPluginInfo (componentsResolved:true wi
   assert.equal(args.length, 1);
 });
 
-test("Phase 42 / INFO-05: renderPluginInfo (componentsResolved:false emits the `components: not resolved` marker)", () => {
+test("INFO-05: renderPluginInfo (componentsResolved:false emits the `components: not resolved` marker)", () => {
   // INFO-05 unresolved marker: when the plugin's plugin.json lives at an
   // unsynced external source, the renderer emits a single marker line
   // INSTEAD of per-kind component lists. No per-kind lines, no dependencies
@@ -2960,7 +2960,7 @@ test("Phase 42 / INFO-05: renderPluginInfo (componentsResolved:false emits the `
 // renderer (SC#4 byte-equality).
 // ===========================================================================
 
-test("Phase 43 / INFO-03: marketplace-info-cascade with a single block byte-equals the bare marketplace-info render", () => {
+test("INFO-03: marketplace-info-cascade with a single block byte-equals the bare marketplace-info render", () => {
   // The single-block case is the SAME byte form as the bare
   // MarketplaceInfoMessage variant -- no extra blank line, no header
   // decoration. Locks the composition discipline: the wrapper is just a
@@ -3000,7 +3000,7 @@ test("Phase 43 / INFO-03: marketplace-info-cascade with a single block byte-equa
   assert.equal(args.length, 1);
 });
 
-test("Phase 43 / INFO-03: marketplace-info-cascade with two blocks renders project-first then user, joined by one blank line", () => {
+test("INFO-03: marketplace-info-cascade with two blocks renders project-first then user, joined by one blank line", () => {
   // The orchestrator iterates project-first per MSG-GR-3 / INFO-03; the
   // renderer honors caller-supplied order (no internal sort). Lock the
   // `\n\n` separator + project-first ordering.
@@ -3040,7 +3040,7 @@ test("Phase 43 / INFO-03: marketplace-info-cascade with two blocks renders proje
   );
 });
 
-test("Phase 43 / INFO-03: marketplace-info-cascade severity is always info (no second arg) and no reload-hint", () => {
+test("INFO-03: marketplace-info-cascade severity is always info (no second arg) and no reload-hint", () => {
   // No failure can be expressed on the fan-out wrapper -- computeSeverity
   // routes the variant to undefined (info / no 2nd arg). The dispatcher
   // omits the 2nd arg accordingly. Reload-hint never fires (info surface).
@@ -3074,7 +3074,7 @@ test("Phase 43 / INFO-03: marketplace-info-cascade severity is always info (no s
   );
 });
 
-test("Phase 43 / INFO-03 + INFO-01: single-block fan-out (github source, all optional fields) byte form", () => {
+test("INFO-03 + INFO-01: single-block fan-out (github source, all optional fields) byte form", () => {
   // INFO-01 full github happy path through the new fan-out wrapper. The
   // single-block case proves the wrapper does not add any per-block
   // decoration beyond `renderMarketplaceInfo`.
@@ -3112,7 +3112,7 @@ test("Phase 43 / INFO-03 + INFO-01: single-block fan-out (github source, all opt
   assert.equal(args.length, 1);
 });
 
-test("Phase 43 / INFO-03 + INFO-01: single-block fan-out (path source, minimal) byte form omits last_updated and description", () => {
+test("INFO-03 + INFO-01: single-block fan-out (path source, minimal) byte form omits last_updated and description", () => {
   // INFO-01 path-source arm: NO `last_updated:` (gated on github source);
   // NO `description:` when undefined. The fan-out wrapper preserves the
   // bare two-line body verbatim.
@@ -3155,7 +3155,7 @@ test("Phase 43 / INFO-03 + INFO-01: single-block fan-out (path source, minimal) 
 // renderer (SC#4 byte-equality).
 // ===========================================================================
 
-test("Phase 44 / INFO-02: plugin-info-cascade with a single block byte-equals the bare plugin-info render", () => {
+test("INFO-02: plugin-info-cascade with a single block byte-equals the bare plugin-info render", () => {
   // The single-block case is the SAME byte form as the bare
   // PluginInfoMessage variant -- no extra blank line, no header
   // decoration. Locks the composition discipline: the wrapper is just a
@@ -3190,7 +3190,7 @@ test("Phase 44 / INFO-02: plugin-info-cascade with a single block byte-equals th
   assert.equal(args.length, 1);
 });
 
-test("Phase 44 / INFO-02 + INFO-03: plugin-info-cascade with two blocks renders project-first then user, joined by one blank line", () => {
+test("INFO-02 + INFO-03: plugin-info-cascade with two blocks renders project-first then user, joined by one blank line", () => {
   // The orchestrator iterates project-first per MSG-GR-3 / INFO-03; the
   // renderer honors caller-supplied order (no internal sort). Lock the
   // `\n\n` separator + project-first ordering. Each block carries its
@@ -3245,7 +3245,7 @@ test("Phase 44 / INFO-02 + INFO-03: plugin-info-cascade with two blocks renders 
   );
 });
 
-test("Phase 44 / INFO-02: plugin-info-cascade severity is always info (no second arg) and no reload-hint", () => {
+test("INFO-02: plugin-info-cascade severity is always info (no second arg) and no reload-hint", () => {
   // No failure can be expressed on the fan-out wrapper -- computeSeverity
   // routes the variant to undefined (info / no 2nd arg). The dispatcher
   // omits the 2nd arg accordingly. Reload-hint never fires (info surface).
@@ -3291,7 +3291,7 @@ test("Phase 44 / INFO-02: plugin-info-cascade severity is always info (no second
   );
 });
 
-test("Phase 44 / INFO-02: plugin-info-cascade single block installed with resolved components + dependencies renders full INFO-02 happy path", () => {
+test("INFO-02: plugin-info-cascade single block installed with resolved components + dependencies renders full INFO-02 happy path", () => {
   // INFO-02 happy path through the new fan-out wrapper: marketplace
   // header at column 0; plugin row at 2-space indent (status glyph +
   // name + version + (status)); description wrapped at col 4 / 66; the
@@ -3341,7 +3341,7 @@ test("Phase 44 / INFO-02: plugin-info-cascade single block installed with resolv
   assert.equal(args.length, 1);
 });
 
-test("Phase 44 / INFO-05: plugin-info-cascade single block components-not-resolved emits the marker line at col 4", () => {
+test("INFO-05: plugin-info-cascade single block components-not-resolved emits the marker line at col 4", () => {
   // INFO-05 through the new fan-out wrapper: an external-source plugin
   // surfaces the marker line `    components: not resolved` at 4-space
   // indent in place of the per-kind component lists. The orchestrator
@@ -3380,7 +3380,7 @@ test("Phase 44 / INFO-05: plugin-info-cascade single block components-not-resolv
   assert.equal(args.length, 1);
 });
 
-test('Phase 42 / Migration Strategy #2: cascade payload WITHOUT `kind` field byte-equals payload WITH `kind: "cascade"`', () => {
+test('Migration Strategy #2: cascade payload WITHOUT `kind` field byte-equals payload WITH `kind: "cascade"`', () => {
   // The dispatcher uses `message.kind ?? \"cascade\"` so call sites
   // that omit `kind` continue to route through the cascade arm
   // byte-identically. Lock the equivalence end-to-end: invoke notify() with
@@ -3415,5 +3415,538 @@ test('Phase 42 / Migration Strategy #2: cascade payload WITHOUT `kind` field byt
     noKindArgs,
     withKindArgs,
     'Optional kind?:"cascade" must produce byte-identical notify() output to omitted kind',
+  );
+});
+
+// ===========================================================================
+// DIFF-02 -- pending-tense `(will *)` preview rows.
+//
+// Six new tokens (4 plugin + 2 marketplace) emitted by `/claude:plugin preview`.
+// All are info-severity (no failure / skipped / manual-recovery semantics) so
+// the 2nd `ctx.ui.notify` arg is omitted. None are in shouldEmitReloadHint's
+// trigger set, so no `/reload to pick up changes` trailer is appended.
+// ===========================================================================
+
+test("DIFF-02: will-add marketplace header + will-install plugin child (orphan-fold suppresses [scope])", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "new-mp",
+        scope: "user",
+        status: "will add",
+        plugins: [{ status: "will install", name: "alpha" }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  // info severity -> single-arg notify
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(args[0], `● new-mp [user] (will add)\n  ● alpha (will install)`);
+});
+
+test("DIFF-02: will-remove marketplace header (open circle, no plugin children)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "old-mp",
+        scope: "project",
+        status: "will remove",
+        plugins: [],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(args[0], `○ old-mp [project] (will remove)`);
+});
+
+test("DIFF-02: will-uninstall plugin under existing (no-status) marketplace block", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "mp",
+        scope: "user",
+        plugins: [{ status: "will uninstall", name: "old-plugin" }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(args[0], `● mp [user]\n  ○ old-plugin (will uninstall)`);
+});
+
+test("DIFF-02: will-enable + will-disable rows under same marketplace", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "mp",
+        scope: "user",
+        plugins: [
+          { status: "will enable", name: "to-enable" },
+          { status: "will disable", name: "to-disable" },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(args[0], `● mp [user]\n  ● to-enable (will enable)\n  ⊘ to-disable (will disable)`);
+});
+
+test("DIFF-02: cross-scope orphan-fold -- plugin scope differs from marketplace scope -> [scope] bracket renders", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "shared",
+        scope: "project",
+        status: "will add",
+        plugins: [
+          // Plugin's scope explicitly differs from marketplace -> bracket emits.
+          { status: "will install", name: "alpha", scope: "user" },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(args[0], `● shared [project] (will add)\n  ● alpha [user] (will install)`);
+});
+
+test("DIFF-02: will-* cascade emits NO /reload to pick up changes trailer (preview rows are pre-transition)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "mp",
+        scope: "user",
+        status: "will add",
+        plugins: [
+          { status: "will install", name: "a" },
+          { status: "will uninstall", name: "b" },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.ok(
+    !emitted.includes("/reload to pick up changes"),
+    "preview rows MUST NOT emit the reload-hint trailer",
+  );
+});
+
+test("DIFF-02: will-* cascade computes info severity (no second arg to ctx.ui.notify)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "mp",
+        scope: "user",
+        status: "will remove",
+        plugins: [{ status: "will uninstall", name: "p" }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  // info severity routing: emitWithSummary omits the 2nd arg entirely.
+  assert.equal(args.length, 1);
+});
+
+// ===========================================================================
+// D-54-01 / ENBL-04: (disabled) inventory row + (already
+// enabled) / (already disabled) skip rows. The new closed-set token + REASONS
+// members land in lockstep with the catalog/UAT byte-equality runner.
+// ===========================================================================
+
+test("D-54-01: (disabled) inventory row renders subject-first with version under list-arm marketplace (info severity, no /reload)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        details: { autoupdate: true },
+        plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3" }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  // info severity -> no 2nd arg.
+  assert.equal(args.length, 1);
+  assert.equal(args[0], `● official [user] <autoupdate>\n  ⊘ foo-plugin v1.2.3 (disabled)`);
+});
+
+test("D-54-01: (disabled) inventory row without version omits the v<version> slot cleanly", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [{ status: "disabled", name: "foo-plugin" }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(args[0], `● official [user]\n  ⊘ foo-plugin (disabled)`);
+});
+
+test("D-54-01: (disabled) inventory row with orphan-fold scope bracket -- explicit p.scope differs from mp.scope", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "shared",
+        scope: "user",
+        plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3", scope: "project" }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(args[0], `● shared [user]\n  ⊘ foo-plugin [project] v1.2.3 (disabled)`);
+});
+
+test("D-54-01: (disabled) inventory row WITHOUT orphan-fold -- p.scope matches mp.scope -> no row bracket", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3", scope: "user" }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(args[0], `● official [user]\n  ⊘ foo-plugin v1.2.3 (disabled)`);
+});
+
+test("UAT-03: (disabled) row on a `disable-cascade`-kind cascade DOES emit the /reload trailer (realized transition; byte-identical row form)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  // The /claude:plugin disable command's fresh cascade: the orchestrator
+  // dispatches with the `disable-cascade` kind so the `(disabled)` row
+  // counts as a state-change transition in shouldEmitReloadHint (artefacts
+  // were unstaged -- SNM-33). The row itself renders byte-identically to
+  // the kind-less inventory form asserted above; ONLY the trailer differs.
+  const msg: NotificationMessage = {
+    kind: "disable-cascade",
+    marketplaces: [
+      {
+        name: "claude-plugins-official",
+        scope: "user",
+        plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3" }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  // info severity -> no 2nd arg (a fresh disable is the user-requested
+  // state, not a failure).
+  assert.equal(args.length, 1);
+  assert.equal(
+    args[0],
+    [
+      "● claude-plugins-official [user]",
+      "  ⊘ foo-plugin v1.2.3 (disabled)",
+      "",
+      "/reload to pick up changes",
+    ].join("\n"),
+  );
+});
+
+test("UAT-03: `disable-cascade` kind WITHOUT a (disabled) row stays trailer-free for non-trigger rows (kind alone is not a trigger)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  // The disable verb's idempotent arm also carries the kind (a no-op for
+  // the hint ladder): a (skipped) {already disabled} row must NOT emit the
+  // trailer -- the kind only promotes `(disabled)` rows, it is not a
+  // blanket trigger.
+  const msg: NotificationMessage = {
+    kind: "disable-cascade",
+    marketplaces: [
+      {
+        name: "claude-plugins-official",
+        scope: "user",
+        plugins: [{ status: "skipped", name: "foo-plugin", reasons: ["already disabled"] }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(
+    args[0],
+    `● claude-plugins-official [user]\n  ⊘ foo-plugin (skipped) {already disabled}`,
+  );
+});
+
+test("D-54-01 / ENBL idempotency: (skipped) {already enabled} row routes to info severity (benign reason)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "claude-plugins-official",
+        scope: "user",
+        plugins: [
+          {
+            status: "skipped",
+            name: "foo-plugin",
+            reasons: ["already enabled"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  // benign reason -> info severity (no 2nd arg).
+  assert.equal(args.length, 1);
+  assert.equal(
+    args[0],
+    `● claude-plugins-official [user]\n  ⊘ foo-plugin (skipped) {already enabled}`,
+  );
+});
+
+test("D-54-01 / ENBL idempotency: (skipped) {already disabled} row routes to info severity (benign reason)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "claude-plugins-official",
+        scope: "user",
+        plugins: [
+          {
+            status: "skipped",
+            name: "foo-plugin",
+            reasons: ["already disabled"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(
+    args[0],
+    `● claude-plugins-official [user]\n  ⊘ foo-plugin (skipped) {already disabled}`,
+  );
+});
+
+test("D-54-01: enable cascade (installed plugin row under added mp header) emits /reload trailer", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "claude-plugins-official",
+        scope: "user",
+        status: "added",
+        plugins: [
+          {
+            status: "installed",
+            name: "foo-plugin",
+            version: "1.2.3",
+            dependencies: [],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(
+    args[0],
+    `● claude-plugins-official [user] (added)\n  ● foo-plugin v1.2.3 (installed)\n\n/reload to pick up changes`,
+  );
+});
+
+test("D-54-01: disable cascade (uninstalled plugin row under list-arm mp) emits /reload trailer", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "claude-plugins-official",
+        scope: "user",
+        plugins: [
+          {
+            status: "uninstalled",
+            name: "foo-plugin",
+            version: "1.2.3",
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(
+    args[0],
+    `● claude-plugins-official [user]\n  ○ foo-plugin v1.2.3 (uninstalled)\n\n/reload to pick up changes`,
+  );
+});
+
+// ===========================================================================
+// RECON-04 -- reconcile-applied-cascade standalone
+// variant.
+//
+// Three catalog states:
+//   (a) success cascade with mixed mp add + plugin install across both scopes
+//   (b) soft-fail per-entry: one failed mp row + one successful install row
+//   (c) CFG-03 invalid-config row carrying ONLY the basename
+//
+// Load-bearing invariants:
+//   - Realized transition tokens (`added` / `installed` / `uninstalled` /
+//     `disabled` / `failed`) reused from PLUGIN_STATUSES / MARKETPLACE_STATUSES;
+//     no new closed-set members.
+//   - `/reload to pick up changes` trailer is NEVER emitted even
+//     though the rows would otherwise trigger it on the cascade arm.
+// ===========================================================================
+
+test("RECON-04: success cascade -- mixed marketplace add + plugin install across both scopes, project-first ordering", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "reconcile-applied-cascade",
+    marketplaces: [
+      {
+        name: "new-mp",
+        scope: "project",
+        status: "added",
+        plugins: [{ status: "installed", name: "new-plugin", dependencies: [] }],
+      },
+      {
+        name: "other-mp",
+        scope: "user",
+        status: "added",
+        plugins: [{ status: "installed", name: "other-plugin", dependencies: [] }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  // info severity -> single-arg notify (no second arg).
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(
+    args[0],
+    `● new-mp [project] (added)\n  ● new-plugin (installed)\n\n● other-mp [user] (added)\n  ● other-plugin (installed)`,
+  );
+});
+
+test("RECON-04: success cascade NEVER emits `/reload to pick up changes` trailer", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "reconcile-applied-cascade",
+    marketplaces: [
+      {
+        name: "new-mp",
+        scope: "user",
+        status: "added",
+        plugins: [
+          { status: "installed", name: "a", dependencies: [] },
+          { status: "uninstalled", name: "b" },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.ok(
+    !emitted.includes("/reload to pick up changes"),
+    "RECON-04: reconcile-applied-cascade MUST NOT emit the reload-hint trailer (the reconcile already ran ON /reload)",
+  );
+});
+
+test("RECON-04: soft-fail per-entry -- failed mp row mixed with successful install row routes to error + summary prepended", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "reconcile-applied-cascade",
+    marketplaces: [
+      {
+        name: "flaky-mp",
+        scope: "user",
+        status: "failed",
+        reasons: ["network unreachable"],
+        plugins: [],
+      },
+      {
+        name: "ok-mp",
+        scope: "user",
+        status: "added",
+        plugins: [{ status: "installed", name: "ok-plugin", dependencies: [] }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 2);
+  assert.equal(args[1], "error");
+  assert.equal(
+    args[0],
+    `1 marketplace operation failed.\n\n⊘ flaky-mp [user] (failed) {network unreachable}\n\n● ok-mp [user] (added)\n  ● ok-plugin (installed)`,
+  );
+});
+
+test("RECON-04: CFG-03 invalid-config row carries BASENAME only (T-55-02-01 information-disclosure mitigation)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "reconcile-applied-cascade",
+    marketplaces: [
+      {
+        name: "claude-plugins.json",
+        scope: "project",
+        status: "failed",
+        reasons: ["invalid manifest"],
+        plugins: [],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 2);
+  assert.equal(args[1], "error");
+  assert.equal(
+    args[0],
+    `1 marketplace operation failed.\n\n⊘ claude-plugins.json [project] (failed) {invalid manifest}`,
   );
 });

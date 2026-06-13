@@ -171,7 +171,14 @@ function marketplaceNameWanted(positionals: readonly string[]): boolean {
   );
 }
 
-type PluginRefMode = "install" | "uninstall" | "update" | "reinstall" | "info";
+type PluginRefMode =
+  | "install"
+  | "uninstall"
+  | "update"
+  | "reinstall"
+  | "info"
+  | "enable"
+  | "disable";
 
 interface PluginRefBranchConfig {
   readonly mode: PluginRefMode;
@@ -211,6 +218,24 @@ function pluginRefBranchConfig(
       // the `{not added}` row.
       return {
         mode: "info",
+        allowMarketplaceOnly: false,
+        ...(explicitScope !== undefined && { targetScope: explicitScope }),
+      };
+    case "enable":
+      // D-54-01 / ENBL-01: enable targets recorded plugins (the state record
+      // exists; the empty-resources marker discriminates disabled from
+      // populated, but the completion surface accepts any installed plugin).
+      // Reuse the installed-only completion (mirrors `uninstall`).
+      return {
+        mode: "enable",
+        allowMarketplaceOnly: false,
+        ...(explicitScope !== undefined && { targetScope: explicitScope }),
+      };
+    case "disable":
+      // D-54-01 / ENBL-02: disable targets installed plugins (the state
+      // record must exist). Reuse the installed-only completion.
+      return {
+        mode: "disable",
         allowMarketplaceOnly: false,
         ...(explicitScope !== undefined && { targetScope: explicitScope }),
       };

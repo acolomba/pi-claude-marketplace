@@ -14,6 +14,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { makeBootstrapHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/bootstrap.ts";
+import { loadConfig } from "../../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { fixtureMarketplaceDir, makeMockGitOps } from "../../../helpers/git-mock.ts";
@@ -51,9 +52,15 @@ function makePi(): ExtensionAPI {
 
 async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Promise<T> {
   const originalHome = process.env.HOME;
+  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
   const home = await mkdtemp(path.join(tmpdir(), "bootstrap-shim-home-"));
   const cwd = await mkdtemp(path.join(tmpdir(), "bootstrap-shim-cwd-"));
   process.env.HOME = home;
+  // SC-1: getAgentDir() honors PI_CODING_AGENT_DIR FIRST and only falls back
+  // to homedir(). Clear it so the hermetic HOME above actually governs the
+  // user scope -- otherwise a developer/CI env that sets the variable would
+  // make these tests install bootstrap records into the real Pi agent dir.
+  delete process.env.PI_CODING_AGENT_DIR;
   try {
     return await fn({ cwd });
   } finally {
@@ -61,6 +68,12 @@ async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Pr
       delete process.env.HOME;
     } else {
       process.env.HOME = originalHome;
+    }
+
+    if (originalAgentDir === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = originalAgentDir;
     }
 
     await rm(home, { recursive: true, force: true });
@@ -120,11 +133,16 @@ test("bootstrap handler (no args, clean state): dispatches to orchestrator and e
       "https://github.com/anthropics/claude-plugins-official.git",
     );
 
-    // State reflects the marketplace at user scope with autoupdate=true.
+    // State reflects the marketplace at user scope.
     const userLocations = locationsFor("user", cwd);
     const userState = await loadState(userLocations.extensionRoot);
     assert.ok("claude-plugins-official" in userState.marketplaces);
-    assert.equal(userState.marketplaces["claude-plugins-official"]?.autoupdate, true);
+    // post-flip `autoupdate` lives in `claude-plugins.json`.
+    const cfg = await loadConfig(userLocations.configJsonPath);
+    assert.equal(cfg.status, "valid");
+    if (cfg.status === "valid") {
+      assert.equal(cfg.config.marketplaces?.["claude-plugins-official"]?.autoupdate, true);
+    }
   });
 });
 

@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   DEFAULT_STATE,
   STATE_VALIDATOR,
@@ -14,12 +15,12 @@ import {
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 /**
- * ST-1, ST-6, Pitfall 9 -- state.json load/save behavior.
+ * ST-1, ST-6 -- state.json load/save behavior.
  *
  * Each test creates an isolated tmpdir representing the extensionRoot and
  * cleans up afterwards. Round-trip uses saveState followed by loadState.
- * Pitfall-9 cases verify ENOENT and structurally-empty states return the
- * canonical DEFAULT_STATE shape.
+ * The missing-file / empty-`{}` cases verify ENOENT and structurally-empty
+ * states return the canonical DEFAULT_STATE shape.
  */
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -50,7 +51,7 @@ async function tmpExtensionRoot(): Promise<{ root: string; cleanup: () => Promis
   return { root, cleanup };
 }
 
-test("Pitfall 9 loadState on missing state.json returns DEFAULT_STATE", async () => {
+test("loadState on missing state.json returns DEFAULT_STATE", async () => {
   const { root, cleanup } = await tmpExtensionRoot();
   try {
     const got = await loadState(root);
@@ -60,7 +61,7 @@ test("Pitfall 9 loadState on missing state.json returns DEFAULT_STATE", async ()
   }
 });
 
-test("Pitfall 9 loadState on empty {} state.json returns DEFAULT_STATE shape", async () => {
+test("loadState on empty {} state.json returns DEFAULT_STATE shape", async () => {
   const { root, cleanup } = await tmpExtensionRoot();
   try {
     await writeFile(path.join(root, "state.json"), "{}");
@@ -213,4 +214,110 @@ test("STATE_VALIDATOR exports a JIT-compiled validator (D-07)", () => {
   assert.equal(typeof STATE_VALIDATOR.Check, "function");
   assert.equal(STATE_VALIDATOR.Check(DEFAULT_STATE), true);
   assert.equal(STATE_VALIDATOR.Check({ schemaVersion: 2, marketplaces: {} }), false);
+});
+
+test("SPLIT-01: legacy state.json with autoupdate still loads (typebox lenient)", async (t) => {
+  const { root, cleanup } = await tmpExtensionRoot();
+  // Suppress the IL-3 sanctioned warn: ST-4 fire-and-forget persist may race
+  // the cleanup `rm`, surfacing as a harmless persist failure.
+  t.mock.method(console, "warn", () => {
+    // suppress noise
+  });
+  try {
+    const fixtureRaw = await readFile(path.join(FIXTURES, "state-with-autoupdate.json"), "utf8");
+    await writeFile(path.join(root, "state.json"), fixtureRaw);
+    // D-13 gate is CLOSED here because no <scopeRoot>/claude-plugins.json
+    // exists alongside the tmp extensionRoot -- the migrator preserves the
+    // legacy `autoupdate` in-memory for the first-run migration to capture, while the
+    // STATE_SCHEMA carve-out (autoupdate removed from MARKETPLACE_RECORD_SCHEMA)
+    // means the lenient typebox default ACCEPTS the extra property at the
+    // schema gate. Both halves must hold for the load to succeed.
+    const got = await loadState(root);
+    assert.equal(got.schemaVersion, 1);
+    const mp = (got.marketplaces as Record<string, { name: string }>)["mp-with-autoupdate"];
+    assert.ok(mp);
+    assert.equal(mp.name, "mp-with-autoupdate");
+    // Flush fire-and-forget persist.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  } finally {
+    await cleanup();
+  }
+});
+
+test("D-13 GATE OPEN through loadState: sibling claude-plugins.json triggers the autoupdate scrub (in-memory + persisted)", async (t) => {
+  const { root, cleanup } = await tmpExtensionRoot();
+  // Suppress the IL-3 sanctioned warn: ST-4 fire-and-forget persist may race
+  // the cleanup `rm`, surfacing as a harmless persist failure.
+  t.mock.method(console, "warn", () => {
+    // suppress noise
+  });
+  try {
+    // `root` is <scopeRoot>/pi-claude-marketplace; the D-13 gate path is the
+    // SIBLING <scopeRoot>/claude-plugins.json. Materializing it here proves
+    // loadState's internal derivation (path.dirname(extensionRoot) join)
+    // actually points at the file the gate is specified against -- the scrub
+    // must fire end-to-end through loadState, not just at the migrator unit.
+    const scopeRoot = path.dirname(root);
+    await writeFile(path.join(scopeRoot, "claude-plugins.json"), "{}", "utf8");
+    const fixtureRaw = await readFile(path.join(FIXTURES, "state-with-autoupdate.json"), "utf8");
+    const stateJsonPath = path.join(root, "state.json");
+    await writeFile(stateJsonPath, fixtureRaw);
+
+    const got = await loadState(root);
+    const mp = (got.marketplaces as Record<string, Record<string, unknown>>)["mp-with-autoupdate"];
+    assert.ok(mp);
+    // Gate OPEN -> the legacy autoupdate flag is scrubbed from the in-memory record.
+    assert.equal(mp["autoupdate"], undefined);
+
+    // Flush the ST-4 fire-and-forget persist, then assert the scrub was
+    // persisted: the on-disk state.json no longer carries the flag either.
+    // write-file-atomic performs real fs work (write + fsync + rename), so
+    // poll with a short backoff instead of relying on a fixed tick count.
+    let persisted: { marketplaces: Record<string, Record<string, unknown>> } | undefined;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      persisted = JSON.parse(await readFile(stateJsonPath, "utf8")) as {
+        marketplaces: Record<string, Record<string, unknown>>;
+      };
+      if (persisted.marketplaces["mp-with-autoupdate"]?.["autoupdate"] === undefined) {
+        break;
+      }
+
+      await new Promise<void>((resolve) => setTimeout(resolve, 25));
+    }
+
+    assert.ok(persisted);
+    assert.equal(persisted.marketplaces["mp-with-autoupdate"]?.["autoupdate"], undefined);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("D-13 drift guard: loadState's configJsonPath derivation matches locationsFor byte-for-byte", () => {
+  // loadState derives the gate path as
+  // path.join(path.dirname(extensionRoot), "claude-plugins.json") without
+  // importing locationsFor (its external signature must stay
+  // loadState(extensionRoot)). Pin the equivalence so a future edit to
+  // either construction cannot silently divert the D-13 gate.
+  const loc = locationsFor("project", path.join(tmpdir(), "drift-guard-cwd"));
+  assert.equal(
+    path.join(path.dirname(loc.extensionRoot), "claude-plugins.json"),
+    loc.configJsonPath,
+  );
+});
+
+test("SPLIT-01 / D-12: STATE_SCHEMA.schemaVersion stays Type.Literal(1) (saveState refuses schemaVersion: 2)", async () => {
+  const { root, cleanup } = await tmpExtensionRoot();
+  try {
+    // The compile-time `Type.Literal(1)` forces the cast below; the runtime
+    // STATE_VALIDATOR.Check inside saveState must REFUSE because the on-disk
+    // contract is locked at schemaVersion 1 (D-12: no STATE_SCHEMA bump).
+    const bumped = {
+      schemaVersion: 2 as 1,
+      marketplaces: {},
+    } as ExtensionState;
+    await assert.rejects(() => saveState(root, bumped), /failed schema validation/);
+  } finally {
+    await cleanup();
+  }
 });

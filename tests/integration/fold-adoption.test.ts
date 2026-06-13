@@ -132,6 +132,14 @@ async function seedPathMarketplaceFixture(
   await mkdir(path.join(mpRoot, ".claude-plugin"), { recursive: true });
   const alphaDir = path.join(mpRoot, "alpha");
   await mkdir(alphaDir, { recursive: true });
+  // ENBL-04: give alpha a real skill so the installed record's
+  // `resources.skills` is populated. A zero-component install records all
+  // four resources arrays empty, which IS the recorded-but-disabled marker
+  // (empty resources + installable:true) and would render `(disabled)`
+  // instead of `(installed)` on list.
+  const skillDir = path.join(alphaDir, "skills", "s1");
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(path.join(skillDir, "SKILL.md"), "---\nname: s1\n---\n\nBody.\n");
   await writeFile(
     path.join(mpRoot, ".claude-plugin", "marketplace.json"),
     JSON.stringify({

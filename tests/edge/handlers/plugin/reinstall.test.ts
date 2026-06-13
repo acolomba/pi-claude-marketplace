@@ -292,3 +292,51 @@ test("shim :: parseArgs failure (invalid --scope value) surfaces error with rein
     assert.match(notifications[0]?.message ?? "", /Usage: \/claude:plugin reinstall/);
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// --local flag scanning at the edge boundary
+// ──────────────────────────────────────────────────────────────────────────
+
+test("USAGE string contains [--local]", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeReinstallHandler(makePi());
+    await handler("badtoken --frobnicate", ctx);
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\[--local\]/);
+  });
+});
+
+test("Flag: --local at the trailing position is accepted (control reaches reinstallPlugins)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeReinstallHandler(makePi());
+    // Bare bulk reinstall against empty state -> (no marketplaces). The
+    // --local flag MUST NOT trip USAGE.
+    await handler("--local", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.message, "(no marketplaces)");
+  });
+});
+
+test("Flag: --local at the leading position parses identically", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeReinstallHandler(makePi());
+    await handler("--local @mymkt", ctx);
+    // @mymkt against empty state -> {not added} on the marketplace.
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\(failed\) \{not added\}|\(no marketplaces\)/);
+  });
+});
+
+test("Unknown long flag -> USAGE error (no orchestrator call)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeReinstallHandler(makePi());
+    await handler("--frobnicate", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.match(notifications[0]!.message, /Unknown flag: "--frobnicate"\./);
+  });
+});

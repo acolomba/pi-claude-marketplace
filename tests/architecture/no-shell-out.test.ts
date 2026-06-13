@@ -68,7 +68,7 @@ const FORBIDDEN_PATTERNS: ReadonlyArray<RegExp> = [
   /import\s*\(\s*["']child_process["']\s*\)/,
 ];
 
-test("no child_process imports outside the Phase 31 whitelist (D-21 + Phase 31 narrowing)", async () => {
+test("no child_process imports outside the platform/git-credential whitelist (D-21)", async () => {
   const offenders: string[] = [];
   for await (const file of walkTsFiles(EXTENSION_ROOT)) {
     const rel = path.relative(REPO_ROOT, file);
@@ -87,7 +87,7 @@ test("no child_process imports outside the Phase 31 whitelist (D-21 + Phase 31 n
   assert.deepEqual(
     offenders,
     [],
-    `D-21 violation: child_process import detected outside the Phase 31 whitelist:\n  ${offenders.join("\n  ")}\n  (MA-7's "git CLI not found" failure mode is superseded by isomorphic-git for clone/fetch/pull; only platform/git-credential.ts is permitted to spawn git subprocesses, and only for OS keychain access per AUTH-06/08/09. Reintroducing child_process anywhere else would re-open the supersession)`,
+    `D-21 violation: child_process import detected outside the platform/git-credential whitelist:\n  ${offenders.join("\n  ")}\n  (MA-7's "git CLI not found" failure mode is superseded by isomorphic-git for clone/fetch/pull; only platform/git-credential.ts is permitted to spawn git subprocesses, and only for OS keychain access per AUTH-06/08/09. Reintroducing child_process anywhere else would re-open the supersession)`,
   );
 });
 
@@ -97,7 +97,7 @@ test("no child_process imports outside the Phase 31 whitelist (D-21 + Phase 31 n
 // ALLOWED_CHILD_PROCESS_FILES above AND this assertion's expected array
 // in the same commit, with a justification recorded in the
 // docstring header.
-test("Phase 31 whitelist: exactly one file may import node:child_process", () => {
+test("whitelist: exactly one file may import node:child_process", () => {
   assert.deepEqual([...ALLOWED_CHILD_PROCESS_FILES].sort(), [
     "extensions/pi-claude-marketplace/platform/git-credential.ts",
   ]);

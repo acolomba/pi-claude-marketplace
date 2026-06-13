@@ -54,6 +54,10 @@ export interface ScopedLocations {
   readonly agentsIndexPath: string;
   /** `<scopeRoot>/mcp.json` -- MCP server registry (SC-2). */
   readonly mcpJsonPath: string;
+  /** `<scopeRoot>/claude-plugins.json` -- declarative config base (CFG-01). */
+  readonly configJsonPath: string;
+  /** `<scopeRoot>/claude-plugins.local.json` -- per-machine override layer (CFG-02). */
+  readonly configLocalJsonPath: string;
   /** `<extensionRoot>/skills-staging/` -- per-skill atomic-rename source (D-04). */
   readonly skillsStagingDir: string;
   /** `<extensionRoot>/commands-staging/` -- per-command atomic-rename source. */
@@ -121,6 +125,13 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
   const agentsStagingDir = path.join(extensionRoot, "agents-staging");
   const agentsIndexPath = path.join(extensionRoot, "agents-index.json");
   const mcpJsonPath = path.join(scopeRoot, "mcp.json");
+  // CFG-01 / CFG-02: declarative config base + per-machine override sit under
+  // scopeRoot at the same tier as agentsDir and mcpJsonPath. NFR-10 containment
+  // is enforced at the WRITE site (saveConfig) rather than here; both paths are
+  // composed from hard-coded suffixes on scopeRoot so the locations.ts comment
+  // block below (lines 134-143) covering the suffix-only construction applies.
+  const configJsonPath = path.join(scopeRoot, "claude-plugins.json");
+  const configLocalJsonPath = path.join(scopeRoot, "claude-plugins.local.json");
   const skillsStagingDir = path.join(extensionRoot, "skills-staging");
   const commandsStagingDir = path.join(extensionRoot, "commands-staging");
   const skillsTargetDir = path.join(extensionRoot, "resources", "skills");
@@ -152,6 +163,8 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
     agentsStagingDir,
     agentsIndexPath,
     mcpJsonPath,
+    configJsonPath,
+    configLocalJsonPath,
     skillsStagingDir,
     commandsStagingDir,
     skillsTargetDir,

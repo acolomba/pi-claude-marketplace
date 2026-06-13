@@ -8,7 +8,7 @@
  * Production-path tests:
  *  - Test 6: forces ENOENT on the real DEFAULT_CREDENTIAL_OPS.fill by
  *    overriding PATH to an empty / non-existent value. Asserts the
- *    Pitfall 7 try/catch returns null within 2s.
+ *    production try/catch returns null within 2s.
  *  - Test 7: opt-in real-subprocess smoke against an invented host,
  *    gated by `PI_CM_REAL_GIT_CREDENTIAL=1`. Proves the
  *    GIT_TERMINAL_PROMPT=0 + stdin.end() combo prevents the hang.
@@ -29,7 +29,7 @@ import { makeMockCredentialOps } from "../helpers/credential-mock.ts";
 
 import type { GitCredentials } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 
-test("Phase 31 credOps: fill hit -- mock returns stored credential", async () => {
+test("credOps: fill hit -- mock returns stored credential", async () => {
   const stored: GitCredentials = { username: "u", password: "p" };
   const { credOps, state } = makeMockCredentialOps({
     store: new Map([["github.com", stored]]),
@@ -42,7 +42,7 @@ test("Phase 31 credOps: fill hit -- mock returns stored credential", async () =>
   assert.deepEqual(state.fillCalls[0], { host: "github.com" });
 });
 
-test("Phase 31 credOps: fill miss -- mock returns null on empty store", async () => {
+test("credOps: fill miss -- mock returns null on empty store", async () => {
   const { credOps, state } = makeMockCredentialOps();
 
   const result = await credOps.fill("github.com");
@@ -52,10 +52,10 @@ test("Phase 31 credOps: fill miss -- mock returns null on empty store", async ()
   assert.deepEqual(state.fillCalls[0], { host: "github.com" });
 });
 
-test("Phase 31 credOps: fill ENOENT-equivalent -- mock fillThrows surfaces to caller", async () => {
+test("credOps: fill ENOENT-equivalent -- mock fillThrows surfaces to caller", async () => {
   // Simulates the underlying subprocess error a caller's try/catch would
   // see. The PRODUCTION fill wraps gitCredentialIO in try/catch and
-  // returns null (Pitfall 7); the MOCK does not -- it faithfully
+  // returns null; the MOCK does not -- it faithfully
   // reproduces the throw so callers can exercise their own handling.
   const enoent = new Error("ENOENT: git not found on PATH");
   const { credOps, state } = makeMockCredentialOps({ fillThrows: enoent });
@@ -64,7 +64,7 @@ test("Phase 31 credOps: fill ENOENT-equivalent -- mock fillThrows surfaces to ca
   assert.equal(state.fillCalls.length, 1);
 });
 
-test("Phase 31 credOps: approve persists -- subsequent fill returns the approved cred", async () => {
+test("credOps: approve persists -- subsequent fill returns the approved cred", async () => {
   const { credOps, state } = makeMockCredentialOps();
   const cred: GitCredentials = { username: "user", password: "token" };
 
@@ -78,7 +78,7 @@ test("Phase 31 credOps: approve persists -- subsequent fill returns the approved
   assert.deepEqual(state.fillCalls[0], { host: "github.com" });
 });
 
-test("Phase 31 credOps: reject evicts -- subsequent fill returns null", async () => {
+test("credOps: reject evicts -- subsequent fill returns null", async () => {
   const cred: GitCredentials = { username: "user", password: "stale" };
   const { credOps, state } = makeMockCredentialOps({
     store: new Map([["github.com", cred]]),
@@ -93,7 +93,7 @@ test("Phase 31 credOps: reject evicts -- subsequent fill returns null", async ()
   assert.equal(state.fillCalls.length, 1);
 });
 
-test("Phase 31 credOps: DEFAULT_CREDENTIAL_OPS.fill returns null when git binary is absent (Pitfall 7)", async () => {
+test("credOps: DEFAULT_CREDENTIAL_OPS.fill returns null when git binary is absent", async () => {
   // Skip on Windows: PATH semantics differ (PATHEXT, .exe resolution)
   // and the test isn't materially more informative there. The mock and
   // the real-subprocess smoke (Test 7) cover the contract across
@@ -119,9 +119,10 @@ test("Phase 31 credOps: DEFAULT_CREDENTIAL_OPS.fill returns null when git binary
   }
 });
 
-test("Phase 31 credOps: real `git credential fill` against invented host returns null within 2s (PI_CM_REAL_GIT_CREDENTIAL=1)", async () => {
+test("credOps: real `git credential fill` against invented host returns null within 2s (PI_CM_REAL_GIT_CREDENTIAL=1)", async () => {
   // Operator opt-in smoke: proves the GIT_TERMINAL_PROMPT=0 + stdin.end()
-  // combo prevents the hang Pitfall 2 + Pitfall 3 describe. Skipped by
+  // combo prevents the hang the non-interactive + stdin EOF contracts
+  // describe. Skipped by
   // default so the suite never touches the dev's OS keychain.
   if (process.env["PI_CM_REAL_GIT_CREDENTIAL"] !== "1") {
     return;
@@ -139,7 +140,7 @@ test("Phase 31 credOps: real `git credential fill` against invented host returns
   assert.ok(elapsedMs < 2_000, `expected resolution within 2s; took ${elapsedMs}ms`);
 });
 
-test("Phase 31 credOps: fill builds host-only attribute block (Pitfall 4 -- no path= field)", async () => {
+test("credOps: fill builds host-only attribute block (no path= field)", async () => {
   // The mock only sees the `host` argument because the attribute block
   // is an implementation detail of the PRODUCTION fill. Asserting on
   // the mock's call log proves the seam never widens its contract to
@@ -163,7 +164,7 @@ test("Phase 31 credOps: fill builds host-only attribute block (Pitfall 4 -- no p
 // Test 14: credentialReject try/catch -- swallows subprocess error (best-effort)
 // ---------------------------------------------------------------------------
 
-test("Phase 31 credOps: sanitizeAttrValue throws when host contains \\n -- fill propagates (WR-01)", async () => {
+test("credOps: sanitizeAttrValue throws when host contains \\n -- fill propagates (WR-01)", async () => {
   // sanitizeAttrValue is called inside buildAttributeBlock(host) BEFORE the
   // try/catch in credentialFill, so the throw propagates to the caller.
   // The control-char host triggers the /[\r\n\0]/ guard at git-credential.ts:126.
@@ -178,7 +179,7 @@ test("Phase 31 credOps: sanitizeAttrValue throws when host contains \\n -- fill 
   );
 });
 
-test("Phase 31 credOps: buildAttributeBlock with cred covers username+password lines (Pitfall 4)", async () => {
+test("credOps: buildAttributeBlock with cred covers username+password lines", async () => {
   // approve() calls buildAttributeBlock(host, cred) which emits username= and
   // password= lines (git-credential.ts:146-151). With PATH zeroed the subprocess
   // throws ENOENT; credentialApprove's own try/catch swallows and returns void.
@@ -209,7 +210,7 @@ test("Phase 31 credOps: buildAttributeBlock with cred covers username+password l
   }
 });
 
-test("Phase 31 credOps: parseCredentialOutput + credentialFill success -- fake git binary returns credentials", async () => {
+test("credOps: parseCredentialOutput + credentialFill success -- fake git binary returns credentials", async () => {
   // Create a fake 'git' binary in a tmpdir that prints a valid
   // credential wire-format to stdout and exits 0. This covers:
   //   - parseCredentialOutput (lines 163-177): key=value parsing
@@ -252,7 +253,7 @@ test("Phase 31 credOps: parseCredentialOutput + credentialFill success -- fake g
   }
 });
 
-test("Phase 31 credOps: credentialFill returns null when git exits non-zero (no credential helper configured)", async () => {
+test("credOps: credentialFill returns null when git exits non-zero (no credential helper configured)", async () => {
   // A fake git that exits with code 128 (git's usual 'no credential helper' exit).
   // credentialFill checks result.code !== 0 and returns null (lines 199-201).
   if (process.platform === "win32") {
@@ -282,7 +283,7 @@ test("Phase 31 credOps: credentialFill returns null when git exits non-zero (no 
   }
 });
 
-test("Phase 31 credOps: credentialApprove swallows subprocess error (best-effort, lines 222-229)", async () => {
+test("credOps: credentialApprove swallows subprocess error (best-effort, lines 222-229)", async () => {
   // credentialReject has identical try/catch structure; this test proves both
   // approve AND reject swallow subprocess failures silently (Pattern 3).
   // Use a fake git that exits non-zero to trigger the error branch.
@@ -329,7 +330,7 @@ test("Phase 31 credOps: credentialApprove swallows subprocess error (best-effort
   }
 });
 
-test("Phase 31 credOps: credentialReject swallows ENOENT (best-effort catch block, lines 244-245)", async () => {
+test("credOps: credentialReject swallows ENOENT (best-effort catch block, lines 244-245)", async () => {
   // credentialReject's catch block (lines 244-245) fires when gitCredentialIO
   // rejects -- i.e. when git is absent from PATH (ENOENT). Verify that the
   // ENOENT propagates through gitCredentialIO's 'error' event as a rejection,
@@ -358,7 +359,7 @@ test("Phase 31 credOps: credentialReject swallows ENOENT (best-effort catch bloc
   }
 });
 
-test("Phase 31 credOps: credentialFill returns null when exit-0 output lacks username or password", async () => {
+test("credOps: credentialFill returns null when exit-0 output lacks username or password", async () => {
   // parseCredentialOutput parses the stdout but credentialFill checks that
   // BOTH username and password are present (lines 204-207). If either is
   // missing, fill returns null even on a clean exit.

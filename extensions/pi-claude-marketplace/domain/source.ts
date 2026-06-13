@@ -376,6 +376,68 @@ export function githubSource(raw: string): GitHubSource {
 }
 
 /**
+ * Compare a stored source record against a planned raw source string for
+ * semantic equality.
+ *
+ * Both inputs are funnelled through `parsePluginSource` so the comparison
+ * happens on the discriminated `ParsedSource` shape, not on raw strings.
+ * Callers receive one of three tri-state results:
+ *
+ *   - `"same"` -- planned and stored describe the same source.
+ *   - `"different"` -- recognised stored source, but different from the
+ *     plan.
+ *   - `"unknown-stored"` -- stored record is in an unrecognised format
+ *     (e.g. manually edited `state.json`). The discriminant lets callers
+ *     emit a meaningful diagnostic ("verify state.json or remove and
+ *     re-add") rather than misclassifying the situation as a
+ *     source-mismatch.
+ *
+ * The tri-state union (vs `boolean | "unknown-stored"`) closes a
+ * truthy-coercion footgun: under the prior shape a bare
+ * `if (samePlannedSource(...))` silently treated `"unknown-stored"` (a
+ * corrupt record) as a source match. With the literal union the compiler
+ * forces every caller to switch on the discriminant explicitly.
+ *
+ * Used by `orchestrators/import/execute.ts` (existing import path) and
+ * `orchestrators/reconcile/plan.ts` (the pure planner foundation).
+ * Lives in `domain/source.ts` so both callers import a leaf-pure helper
+ * without pulling in either orchestrator's effectful transitive closure.
+ */
+export type SamePlannedSourceResult = "same" | "different" | "unknown-stored";
+
+export function samePlannedSource(stored: unknown, plannedRaw: string): SamePlannedSourceResult {
+  const planned = parsePluginSource(plannedRaw);
+  const current = parsePluginSource(stored);
+
+  // Treat unrecognized stored source as a special discriminant so callers
+  // can emit a meaningful diagnostic rather than a generic source-mismatch.
+  if (current.kind === "unknown") {
+    return "unknown-stored";
+  }
+
+  if (planned.kind !== current.kind) {
+    return "different";
+  }
+
+  switch (planned.kind) {
+    case "github":
+      return current.kind === "github" &&
+        planned.owner === current.owner &&
+        planned.repo === current.repo &&
+        planned.ref === current.ref
+        ? "same"
+        : "different";
+    case "path":
+      return current.kind === "path" && planned.logical === current.logical ? "same" : "different";
+    /* c8 ignore next 3 -- callers only generate path/github sources today */
+    case "url":
+    case "git-subdir":
+    case "npm":
+      return sourceLogical(planned) === sourceLogical(current) ? "same" : "different";
+  }
+}
+
+/**
  * ML-2 / list-format helper. Returns the user-visible logical source label
  * for the `marketplace list` renderer.
  *

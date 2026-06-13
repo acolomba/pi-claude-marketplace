@@ -152,6 +152,328 @@ const FIXTURES: readonly GrammarFixture[] = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// DIFF-02: subject-first row grammar for the 6 new
+// pending-tense `(will *)` tokens. Each rendered row matches
+// `<glyph> <name> [<scope>] (<token>)` with the status token AFTER the
+// subject, never before. The status token is the load-bearing assertion --
+// the row icon + name + optional bracket are exercised by the catalog-uat
+// byte-equality runner.
+// ---------------------------------------------------------------------------
+
+const WILL_VARIANT_FIXTURES: readonly GrammarFixture[] = [
+  {
+    label: "DIFF-02 / will add marketplace header",
+    pi: piWithBothLoaded(),
+    message: {
+      marketplaces: [{ name: "mp", scope: "user", status: "will add", plugins: [] }],
+    },
+  },
+  {
+    label: "DIFF-02 / will remove marketplace header",
+    pi: piWithBothLoaded(),
+    message: {
+      marketplaces: [{ name: "mp", scope: "user", status: "will remove", plugins: [] }],
+    },
+  },
+  {
+    label: "DIFF-02 / will install plugin row under list-arm marketplace",
+    pi: piWithBothLoaded(),
+    message: {
+      marketplaces: [
+        { name: "mp", scope: "user", plugins: [{ status: "will install", name: "p" }] },
+      ],
+    },
+  },
+  {
+    label: "DIFF-02 / will uninstall plugin row",
+    pi: piWithBothLoaded(),
+    message: {
+      marketplaces: [
+        { name: "mp", scope: "user", plugins: [{ status: "will uninstall", name: "p" }] },
+      ],
+    },
+  },
+  {
+    label: "DIFF-02 / will enable plugin row",
+    pi: piWithBothLoaded(),
+    message: {
+      marketplaces: [
+        { name: "mp", scope: "user", plugins: [{ status: "will enable", name: "p" }] },
+      ],
+    },
+  },
+  {
+    label: "DIFF-02 / will disable plugin row",
+    pi: piWithBothLoaded(),
+    message: {
+      marketplaces: [
+        { name: "mp", scope: "user", plugins: [{ status: "will disable", name: "p" }] },
+      ],
+    },
+  },
+];
+
+// Subject-first row grammar for DIFF-02 will-* rows: glyph + name + optional
+// [scope] bracket + optional `(will ...)` status token. The status token is
+// optional because a list-arm (no-status) marketplace header renders the
+// bare `● mp [scope]` form when its plugin children carry the will-* tokens
+// -- this is the catalog's `plugin-pending-uninstall` / `enable-disable-
+// transitions` shape. The load-bearing invariant is that the status token,
+// when present, ALWAYS follows the subject -- never precedes it.
+const WILL_TOKEN_RE =
+  /^(?:[●○⊘]) [A-Za-z0-9_-]+(?: \[(?:user|project)\])?(?: \(will (?:add|remove|install|uninstall|enable|disable)\))?$/;
+
+// D-54-01 / ENBL-04: subject-first row grammar for the new
+// `(disabled)` inventory token. Each row matches
+// `⊘ <name> [<scope>] v<version> (disabled)` with the status token AFTER the
+// subject, never before. The status token is the load-bearing assertion --
+// the row icon + name + optional bracket + optional version are exercised by
+// the catalog-uat byte-equality runner.
+const DISABLED_TOKEN_RE =
+  /^⊘ [A-Za-z0-9_-]+(?: \[(?:user|project)\])?(?: v[A-Za-z0-9.#_-]+)? \(disabled\)$/;
+
+const DISABLED_VARIANT_FIXTURES: readonly GrammarFixture[] = [
+  {
+    label: "D-54-01 / disabled plugin row with version under list-arm marketplace",
+    pi: piWithBothLoaded(),
+    message: {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "user",
+          plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3" }],
+        },
+      ],
+    },
+  },
+  {
+    label: "D-54-01 / disabled plugin row without version",
+    pi: piWithBothLoaded(),
+    message: {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "user",
+          plugins: [{ status: "disabled", name: "foo-plugin" }],
+        },
+      ],
+    },
+  },
+  {
+    label: "D-54-01 / disabled plugin row with orphan-fold scope bracket",
+    pi: piWithBothLoaded(),
+    message: {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "user",
+          plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3", scope: "project" }],
+        },
+      ],
+    },
+  },
+];
+
+test("DIFF-02: every will-* row renders subject-first `<glyph> <name> [<scope>] (will ...)` with the status token AFTER the subject", () => {
+  for (const fixture of WILL_VARIANT_FIXTURES) {
+    const ctx = makeCtx();
+    notify(ctx as never, fixture.pi as never, fixture.message);
+    assert.equal(
+      ctx.ui.notify.mock.calls.length,
+      1,
+      `notify() must call ctx.ui.notify exactly once for: ${fixture.label}`,
+    );
+    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    // will-* tokens are info severity -> no 2nd arg.
+    assert.equal(
+      args.length,
+      1,
+      `${fixture.label}: will-* rows route to info severity (no 2nd notify arg)`,
+    );
+    const emitted = args[0];
+    // Every line in the rendered output must match the subject-first grammar
+    // (mp header, plugin row -- both shapes match the regex since the regex
+    // strips the leading 2-space plugin indent before checking).
+    const lines = emitted
+      .split("\n")
+      .map((l) => l.replace(/^ {2}/, ""))
+      .filter((l) => l.length > 0);
+    for (const line of lines) {
+      assert.match(
+        line,
+        WILL_TOKEN_RE,
+        `${fixture.label}: subject-first row grammar must hold for line '${line}'`,
+      );
+    }
+
+    // Reload-hint trailer MUST NOT fire on a preview cascade.
+    assert.ok(
+      !emitted.includes("/reload to pick up changes"),
+      `${fixture.label}: will-* preview rows must NOT emit the reload-hint trailer`,
+    );
+  }
+});
+
+test("D-54-01 / ENBL-04: every (disabled) row renders subject-first `⊘ <name> [<scope>] v<version> (disabled)` with the status token AFTER the subject", () => {
+  for (const fixture of DISABLED_VARIANT_FIXTURES) {
+    const ctx = makeCtx();
+    notify(ctx as never, fixture.pi as never, fixture.message);
+    assert.equal(
+      ctx.ui.notify.mock.calls.length,
+      1,
+      `notify() must call ctx.ui.notify exactly once for: ${fixture.label}`,
+    );
+    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    // (disabled) is an inventory token; routes to info severity (no 2nd arg).
+    assert.equal(
+      args.length,
+      1,
+      `${fixture.label}: (disabled) rows route to info severity (no 2nd notify arg)`,
+    );
+    const emitted = args[0];
+    // Every plugin row line (stripped 2-space indent) must match the
+    // subject-first grammar; the name appears BEFORE `(disabled)`.
+    const lines = emitted
+      .split("\n")
+      .map((l) => l.replace(/^ {2}/, ""))
+      .filter((l) => l.length > 0 && l.includes("(disabled)"));
+    assert.ok(lines.length > 0, `${fixture.label}: expected at least one (disabled) row`);
+    for (const line of lines) {
+      assert.match(
+        line,
+        DISABLED_TOKEN_RE,
+        `${fixture.label}: subject-first row grammar must hold for line '${line}'`,
+      );
+      // Belt-and-braces: assert the name token appears at byte index before
+      // `(disabled)` so the subject-first invariant is independent of the regex.
+      const nameIdx = line.indexOf("foo-plugin");
+      const tokenIdx = line.indexOf("(disabled)");
+      assert.ok(
+        nameIdx !== -1 && tokenIdx !== -1 && nameIdx < tokenIdx,
+        `${fixture.label}: subject 'foo-plugin' must appear before '(disabled)' in '${line}'`,
+      );
+    }
+
+    // Reload-hint trailer MUST NOT fire on an inventory cascade.
+    assert.ok(
+      !emitted.includes("/reload to pick up changes"),
+      `${fixture.label}: (disabled) inventory rows must NOT emit the reload-hint trailer`,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// RECON-04: subject-first row grammar for the
+// `reconcile-applied-cascade` standalone variant. Carries realized
+// transition tokens (`added` / `installed` / `uninstalled` / `disabled` /
+// `failed`) which would otherwise trigger the `/reload to pick up changes`
+// trailer on the cascade arm; the StandaloneKind dispatch path returns
+// `shouldEmitReloadHint = false` so the trailer NEVER appears.
+// ---------------------------------------------------------------------------
+
+const RECONCILE_APPLIED_FIXTURES: readonly GrammarFixture[] = [
+  {
+    label: "RECON-04 / success cascade with realized installed plugin row (transition token)",
+    pi: piWithBothLoaded(),
+    message: {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "new-mp",
+          scope: "user",
+          status: "added",
+          plugins: [{ status: "installed", name: "new-plugin", dependencies: [] }],
+        },
+      ],
+    },
+  },
+  {
+    label: "RECON-04 / soft-fail cascade mixing failed mp row + installed plugin row",
+    pi: piWithBothLoaded(),
+    message: {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "flaky-mp",
+          scope: "user",
+          status: "failed",
+          reasons: ["network unreachable"],
+          plugins: [],
+        },
+        {
+          name: "ok-mp",
+          scope: "user",
+          status: "added",
+          plugins: [{ status: "installed", name: "ok-plugin", dependencies: [] }],
+        },
+      ],
+    },
+  },
+];
+
+test("RECON-04: reconcile-applied-cascade NEVER emits `/reload to pick up changes` even on cascades with realized transition tokens", () => {
+  for (const fixture of RECONCILE_APPLIED_FIXTURES) {
+    const ctx = makeCtx();
+    notify(ctx as never, fixture.pi as never, fixture.message);
+    assert.equal(
+      ctx.ui.notify.mock.calls.length,
+      1,
+      `notify() must call ctx.ui.notify exactly once (IL-2) for: ${fixture.label}`,
+    );
+    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    const emitted = args[0];
+
+    // RECON-04: the trailer is structurally excluded -- the
+    // reconcile already ran ON /reload, so the trailer would be a lie.
+    assert.ok(
+      !emitted.includes("/reload to pick up changes"),
+      `${fixture.label}: reconcile-applied-cascade MUST NOT emit the reload-hint trailer`,
+    );
+  }
+});
+
+test("RECON-04: every reconcile-applied-cascade row renders subject-first `<glyph> <name> [<scope>] (<token>)` with the status token AFTER the subject", () => {
+  // Mirrors the WILL_TOKEN_RE / DISABLED_TOKEN_RE invariant but for the
+  // realized-token row grammar (added / removed / installed / uninstalled /
+  // disabled / failed; optional reasons brace; optional 4-space cause-chain
+  // indent on failed rows). The load-bearing assertion is that no line
+  // starts with a `(<token>)` discriminator -- the subject (glyph + name)
+  // always precedes the token.
+  const ROW_ICONS_AT_START = ["●", "○", "⊘"];
+  for (const fixture of RECONCILE_APPLIED_FIXTURES) {
+    const ctx = makeCtx();
+    notify(ctx as never, fixture.pi as never, fixture.message);
+    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    const emitted = args[0];
+
+    // Drop the summary line (if present) -- the cascade body starts AFTER the
+    // first `\n\n` separator at error/warning severity.
+    const body = emitted.includes("\n\n") ? emitted.slice(emitted.indexOf("\n\n") + 2) : emitted;
+    const lines = body
+      .split("\n")
+      .map((l) => l.replace(/^ {2}/, ""))
+      .filter((l) => l.length > 0);
+
+    for (const line of lines) {
+      // Subject-first invariant: every non-empty row line starts with one of
+      // the closed-set row icons (or is a deeper-indent cause-chain trailer).
+      assert.ok(
+        ROW_ICONS_AT_START.some((icon) => line.startsWith(icon)) || line.startsWith("    "),
+        `${fixture.label}: row line MUST start with a row icon (subject-first); got '${line}'`,
+      );
+      // The status token must never APPEAR before the row icon.
+      const tokenMatch = /\((added|removed|installed|uninstalled|disabled|failed)\)/.exec(line);
+      if (tokenMatch?.index !== undefined) {
+        assert.ok(
+          tokenMatch.index > 0,
+          `${fixture.label}: status token '(${tokenMatch[1] ?? ""})' must follow the subject; got '${line}'`,
+        );
+      }
+    }
+  }
+});
+
 test("GRAM-01/04/05: every error/warning emission has a non-empty summary first line distinct from the detail block", () => {
   for (const fixture of FIXTURES) {
     const ctx = makeCtx();

@@ -6,10 +6,7 @@ import test from "node:test";
 
 // Import createManifestCache directly (NOT the module-level cache singleton) so
 // every test gets a guaranteed cold start by constructing a fresh instance
-// (D-01 / RESEARCH Pitfall 6 -- singleton leakage). This module does NOT yet
-// exist; it lands in Plan 45-02. The suite is therefore EXPECTED to fail at
-// import resolution until then -- that failing state is the intended Wave 0 RED
-// scaffold, not a defect.
+// (D-01 -- singleton leakage).
 import { createManifestCache } from "../../extensions/pi-claude-marketplace/domain/manifest-cache.ts";
 // Cross-check the CACHE-05 message-equivalence against the same accessor the
 // soft-load consumer (list.ts) uses.
@@ -24,8 +21,8 @@ import {
 //
 // The observability seam is the INJECTED COUNTING LOADER (it is NOT a readFile /
 // JSON.parse / MARKETPLACE_VALIDATOR spy -- readFile cannot be replaced on the
-// ESM namespace, RESEARCH Pitfall 1). All loads are SEQUENTIAL awaits, fired one
-// at a time -- there is no concurrent in-flight de-dup by design (Pitfall 5).
+// ESM namespace). All loads are SEQUENTIAL awaits, fired one
+// at a time -- there is no concurrent in-flight de-dup by design.
 // ──────────────────────────────────────────────────────────────────────────
 
 test("CACHE-01: N sequential reads of an unchanged manifest -> loader runs exactly once", async () => {
@@ -84,7 +81,7 @@ test("CACHE-01/D-03: hits return the loaded value by reference (r1 === r2 === r3
 //
 // Invalidation is driven off a different BYTE LENGTH (an added plugin entry),
 // never a same-size rewrite -- a same-size rewrite within the filesystem's
-// mtime resolution could collide on (mtimeMs,size) and flake (Pitfall 3/4).
+// mtime resolution could collide on (mtimeMs,size) and flake.
 // ──────────────────────────────────────────────────────────────────────────
 
 test("CACHE-02 success->success: a size change triggers a reload and returns the new value", async () => {
@@ -127,7 +124,7 @@ test("CACHE-02 success->success: a size change triggers a reload and returns the
 // ──────────────────────────────────────────────────────────────────────────
 // CACHE-02 + CACHE-05 (failure -> success): a prior NEGATIVE (failure) entry is
 // discarded on a (mtimeMs,size) change; the next read re-attempts the loader and
-// succeeds. The change is again driven off a SIZE change (Pitfall 3/4).
+// succeeds. The change is again driven off a SIZE change.
 // ──────────────────────────────────────────────────────────────────────────
 
 test("CACHE-02/CACHE-05 failure->success: a negative entry is discarded on a size change; next read succeeds", async () => {

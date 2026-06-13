@@ -106,3 +106,42 @@ test("shim :: --scope propagated; explicit-scope miss routes to `{not added}` WI
     assert.equal(notifications[0]!.severity, "error");
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// --local flag scanning at the edge boundary
+// ──────────────────────────────────────────────────────────────────────────
+
+test("USAGE string contains [--local]", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeRemoveHandler(makePi());
+    await handler("", ctx);
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\[--local\]/);
+  });
+});
+
+test("Flag: --local at trailing position parses and routes to the orchestrator", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeRemoveHandler(makePi());
+    // `ghost` not present in any scope; --local at the trailing position is
+    // accepted by the scanner. The orchestrator's not-added precondition then
+    // surfaces the standard standalone variant. The test just proves the flag
+    // did not break parsing.
+    await handler("ghost --local", ctx);
+    assert.ok(notifications.length >= 1);
+    assert.match(notifications[0]!.message, /\(failed\) \{not added\}/);
+  });
+});
+
+test("Unknown long flag -> USAGE error (remove handler)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeRemoveHandler(makePi());
+    await handler("ghost --frobnicate", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.match(notifications[0]!.message, /Unknown flag: "--frobnicate"\./);
+  });
+});

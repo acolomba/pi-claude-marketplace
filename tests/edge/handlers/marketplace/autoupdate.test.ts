@@ -127,3 +127,47 @@ test("shim :: --scope user/project propagated", async () => {
     assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// --local flag scanning at the edge boundary
+// ──────────────────────────────────────────────────────────────────────────
+
+test("USAGE strings contain [--local] (both verbs)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    // The handler does not surface USAGE through notification when no error
+    // occurs. Force an unknown-flag error to capture the USAGE block.
+    const handlerEnable = makeAutoupdateHandler(makePi(), true);
+    await handlerEnable("--frobnicate", ctx);
+    assert.match(notifications.at(-1)!.message, /\[--local\]/);
+    assert.match(notifications.at(-1)!.message, /autoupdate/);
+
+    const handlerDisable = makeAutoupdateHandler(makePi(), false);
+    await handlerDisable("--frobnicate", ctx);
+    assert.match(notifications.at(-1)!.message, /\[--local\]/);
+    assert.match(notifications.at(-1)!.message, /noautoupdate/);
+  });
+});
+
+test("Flag: --local parses at trailing position (project scope, no name)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeAutoupdateHandler(makePi(), true);
+    // Empty scope + --local at trailing position. Scanner removes --local;
+    // residual is `--scope project`. Bare form with empty scope -> sentinel.
+    await handler("--scope project --local", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.message, "(no marketplaces)");
+  });
+});
+
+test("Unknown long flag -> USAGE error (autoupdate handler)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeAutoupdateHandler(makePi(), true);
+    await handler("--frobnicate", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.match(notifications[0]!.message, /Unknown flag: "--frobnicate"\./);
+  });
+});

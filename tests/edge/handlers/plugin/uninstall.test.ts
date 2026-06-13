@@ -132,3 +132,48 @@ test('shim :: --scope project calls uninstallPlugin with scope: "project"', asyn
     assert.match(notifications[0]!.message, /⊘ mymkt \[project\] \(failed\) \{not added\}/);
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// --local flag scanning at the edge boundary
+// ──────────────────────────────────────────────────────────────────────────
+
+test("USAGE string contains [--local]", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeUninstallHandler(makePi());
+    await handler("", ctx);
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\[--local\]/);
+  });
+});
+
+test("Flag: --local at the trailing position is accepted; control reaches uninstallPlugin", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeUninstallHandler(makePi());
+    await handler("myplug@mymkt --local", ctx);
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\(failed\) \{not added\}/);
+  });
+});
+
+test("Flag: --local at the leading position parses identically", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeUninstallHandler(makePi());
+    await handler("--local myplug@mymkt", ctx);
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\(failed\) \{not added\}/);
+  });
+});
+
+test("Unknown long flag -> USAGE error", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeUninstallHandler(makePi());
+    await handler("myplug@mymkt --frobnicate", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.match(notifications[0]!.message, /Unknown flag: "--frobnicate"\./);
+  });
+});

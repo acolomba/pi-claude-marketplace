@@ -9,10 +9,32 @@ import {
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { listMarketplaces } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts";
+import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
+import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+
+// SPLIT-01: autoupdate read-path routes through MergedConfig
+// (claude-plugins.json). Seed the autoupdate truth on the config side; the
+// state-side autoupdate field is no longer the source of truth (D-13 scrubs
+// it on next loadState once the config exists).
+async function seedConfigAutoupdate(
+  locations: ScopedLocations,
+  name: string,
+  source: string,
+  autoupdate: boolean,
+): Promise<void> {
+  await saveConfig(
+    locations.configJsonPath,
+    {
+      schemaVersion: 1,
+      marketplaces: { [name]: { source, autoupdate } },
+    },
+    locations.scopeRoot,
+  );
+}
 
 interface NotifyRecord {
   message: string;
@@ -43,9 +65,15 @@ async function withHermeticHome<T>(
   fn: (env: { home: string; cwd: string }) => Promise<T>,
 ): Promise<T> {
   const originalHome = process.env.HOME;
+  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
   const home = await mkdtemp(path.join(tmpdir(), "mp-list-home-"));
   const cwd = await mkdtemp(path.join(tmpdir(), "mp-list-cwd-"));
   process.env.HOME = home;
+  // SC-1: getAgentDir() honors PI_CODING_AGENT_DIR FIRST and only falls back
+  // to homedir(). Clear it so the hermetic HOME above actually governs the
+  // user scope -- otherwise a developer/CI env that sets the variable would
+  // make these tests read AND write the real Pi agent dir.
+  delete process.env.PI_CODING_AGENT_DIR;
   try {
     return await fn({ home, cwd });
   } finally {
@@ -53,6 +81,12 @@ async function withHermeticHome<T>(
       delete process.env.HOME;
     } else {
       process.env.HOME = originalHome;
+    }
+
+    if (originalAgentDir === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = originalAgentDir;
     }
 
     await rm(home, { recursive: true, force: true });
@@ -140,10 +174,10 @@ test("CMC-05 / MSG-GR-5: autoupdate=true emits `<autoupdate>` marker", async () 
           manifestPath: path.join(cwd, "marketplace.json"),
           marketplaceRoot: cwd,
           plugins: {},
-          autoupdate: true,
         },
       },
     });
+    await seedConfigAutoupdate(projectLocations, "auto", "./auto-src", true);
 
     const { ctx, pi, notifications } = makeCtx();
     await listMarketplaces({ ctx, pi, scope: "project", cwd });
@@ -175,11 +209,11 @@ test("ML-V2 / UXG-01: list surface does NOT render `<last-updated <iso>>`; lastU
           manifestPath: path.join(cwd, "marketplace.json"),
           marketplaceRoot: cwd,
           plugins: {},
-          autoupdate: true,
           lastUpdatedAt: "2026-05-25T00:00:00Z",
         },
       },
     });
+    await seedConfigAutoupdate(projectLocations, "test-mp", "./tm-src", true);
 
     const { ctx, pi, notifications } = makeCtx();
     await listMarketplaces({ ctx, pi, scope: "project", cwd });

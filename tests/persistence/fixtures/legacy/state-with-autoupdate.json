@@ -1,0 +1,29 @@
+{
+  "marketplaces": {
+    "mp-with-autoupdate": {
+      "name": "mp-with-autoupdate",
+      "scope": "user",
+      "source": "./mp-with-autoupdate-local",
+      "addedFromCwd": "/some/cwd",
+      "autoupdate": true,
+      "plugins": {
+        "p1": {
+          "version": "1.0.0",
+          "resolvedSource": "/abs/p1",
+          "compatibility": {
+            "installable": true,
+            "notes": [],
+            "supported": ["skills"],
+            "unsupported": []
+          },
+          "resources": {
+            "skills": ["mp-s1"],
+            "prompts": []
+          },
+          "installedAt": "2025-01-01T00:00:00.000Z",
+          "updatedAt": "2025-01-01T00:00:00.000Z"
+        }
+      }
+    }
+  }
+}

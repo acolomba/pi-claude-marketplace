@@ -48,7 +48,7 @@ function makeNotifyRecorder(): {
   return { notifyFn, calls };
 }
 
-test("Phase 32 initiateDeviceFlow: AUTH-01 happy path returns ok+cred+authAttempted", async () => {
+test("initiateDeviceFlow: AUTH-01 happy path returns ok+cred+authAttempted", async () => {
   const { http, state: httpState } = makeMockDeviceFlowHttp({
     deviceCode: {
       device_code: "MOCK_DEVICE_CODE",
@@ -79,7 +79,7 @@ test("Phase 32 initiateDeviceFlow: AUTH-01 happy path returns ok+cred+authAttemp
   assert.equal(httpState.pollTokenCalls.length, 1);
 });
 
-test("Phase 32 initiateDeviceFlow: AUTH-01 approve on success persists via credentialOps", async () => {
+test("initiateDeviceFlow: AUTH-01 approve on success persists via credentialOps", async () => {
   const { http } = makeMockDeviceFlowHttp({
     deviceCode: {
       device_code: "MOCK_DEVICE_CODE",
@@ -101,7 +101,7 @@ test("Phase 32 initiateDeviceFlow: AUTH-01 approve on success persists via crede
   assert.equal(credState.approveCalls[0]!.cred.username, "x-access-token");
 });
 
-test("Phase 32 initiateDeviceFlow: AUTH-03 notify content includes user_code AND verification_uri", async () => {
+test("initiateDeviceFlow: AUTH-03 notify content includes user_code AND verification_uri", async () => {
   const { http } = makeMockDeviceFlowHttp({
     deviceCode: {
       device_code: "MOCK_DEVICE_CODE",
@@ -125,7 +125,7 @@ test("Phase 32 initiateDeviceFlow: AUTH-03 notify content includes user_code AND
   );
 });
 
-test("Phase 32 initiateDeviceFlow: AUTH-04 cumulative slow_down increments intervalSec by 5 each occurrence", async () => {
+test("initiateDeviceFlow: AUTH-04 cumulative slow_down increments intervalSec by 5 each occurrence", async () => {
   const { http, state: httpState } = makeMockDeviceFlowHttp({
     deviceCode: {
       device_code: "MOCK_DEVICE_CODE",
@@ -151,7 +151,7 @@ test("Phase 32 initiateDeviceFlow: AUTH-04 cumulative slow_down increments inter
   assert.equal(httpState.pollTokenCalls[2]!.intervalSec, 10);
 });
 
-test("Phase 32 initiateDeviceFlow: AUTH-04 pending no-change keeps intervalSec stable across iterations", async () => {
+test("initiateDeviceFlow: AUTH-04 pending no-change keeps intervalSec stable across iterations", async () => {
   const { http, state: httpState } = makeMockDeviceFlowHttp({
     deviceCode: {
       device_code: "MOCK_DEVICE_CODE",
@@ -178,7 +178,7 @@ test("Phase 32 initiateDeviceFlow: AUTH-04 pending no-change keeps intervalSec s
   }
 });
 
-test("Phase 32 initiateDeviceFlow: AUTH-05 access_denied produces human reason and authAttempted", async () => {
+test("initiateDeviceFlow: AUTH-05 access_denied produces human reason and authAttempted", async () => {
   const { http } = makeMockDeviceFlowHttp({
     deviceCode: {
       device_code: "MOCK_DEVICE_CODE",
@@ -212,7 +212,7 @@ test("Phase 32 initiateDeviceFlow: AUTH-05 access_denied produces human reason a
   }
 });
 
-test("Phase 32 initiateDeviceFlow: AUTH-05 expired_token produces human reason mentioning expiration", async () => {
+test("initiateDeviceFlow: AUTH-05 expired_token produces human reason mentioning expiration", async () => {
   const { http } = makeMockDeviceFlowHttp({
     deviceCode: {
       device_code: "MOCK_DEVICE_CODE",
@@ -245,7 +245,7 @@ test("Phase 32 initiateDeviceFlow: AUTH-05 expired_token produces human reason m
   }
 });
 
-test("Phase 32 initiateDeviceFlow: AUTH-05 timeout terminates loop without polling when expires_in is 0", async () => {
+test("initiateDeviceFlow: AUTH-05 timeout terminates loop without polling when expires_in is 0", async () => {
   const { http, state: httpState } = makeMockDeviceFlowHttp({
     deviceCode: {
       device_code: "MOCK_DEVICE_CODE",
@@ -277,7 +277,7 @@ test("Phase 32 initiateDeviceFlow: AUTH-05 timeout terminates loop without polli
   }
 });
 
-test("Phase 32 initiateDeviceFlow: AUTH-05 init failure returns ok:false when requestCode throws", async () => {
+test("initiateDeviceFlow: AUTH-05 init failure returns ok:false when requestCode throws", async () => {
   const { http } = makeMockDeviceFlowHttp({
     requestCodeThrows: new Error("network down"),
   });
@@ -302,7 +302,7 @@ test("Phase 32 initiateDeviceFlow: AUTH-05 init failure returns ok:false when re
   }
 });
 
-test("Phase 32 initiateDeviceFlow: AUTH-07 authAttempted true on success", async () => {
+test("initiateDeviceFlow: AUTH-07 authAttempted true on success", async () => {
   const { http } = makeMockDeviceFlowHttp({
     deviceCode: {
       device_code: "MOCK_DEVICE_CODE",
@@ -327,7 +327,7 @@ test("Phase 32 initiateDeviceFlow: AUTH-07 authAttempted true on success", async
   assert.equal(result.authAttempted, true);
 });
 
-test("Phase 32 initiateDeviceFlow: AUTH-07 authAttempted on failure stays true for access_denied", async () => {
+test("initiateDeviceFlow: AUTH-07 authAttempted on failure stays true for access_denied", async () => {
   const { http } = makeMockDeviceFlowHttp({
     deviceCode: {
       device_code: "MOCK_DEVICE_CODE",
@@ -352,7 +352,7 @@ test("Phase 32 initiateDeviceFlow: AUTH-07 authAttempted on failure stays true f
   assert.equal(result.authAttempted, true);
 });
 
-test("Phase 32 initiateDeviceFlow: AUTH-09 notify content negative scan -- no token or device_code leaked", async () => {
+test("initiateDeviceFlow: AUTH-09 notify content negative scan -- no token or device_code leaked", async () => {
   const successPoll: PollResult = {
     kind: "success",
     accessToken: "gho_test",
@@ -394,7 +394,7 @@ test("Phase 32 initiateDeviceFlow: AUTH-09 notify content negative scan -- no to
   }
 });
 
-test("Phase 32 initiateDeviceFlow: unexpected poll error returns ok:false with error description (WR-03)", async () => {
+test("initiateDeviceFlow: unexpected poll error returns ok:false with error description (WR-03)", async () => {
   const { http } = makeMockDeviceFlowHttp({
     deviceCode: {
       device_code: "MOCK_DEVICE_CODE",
@@ -424,7 +424,7 @@ test("Phase 32 initiateDeviceFlow: unexpected poll error returns ok:false with e
   }
 });
 
-test("Phase 32 initiateDeviceFlow: pollToken throw returns ok:false authAttempted:true (WR-01)", async () => {
+test("initiateDeviceFlow: pollToken throw returns ok:false authAttempted:true (WR-01)", async () => {
   const { http } = makeMockDeviceFlowHttp({
     deviceCode: {
       device_code: "MOCK_DEVICE_CODE",
@@ -453,7 +453,7 @@ test("Phase 32 initiateDeviceFlow: pollToken throw returns ok:false authAttempte
   }
 });
 
-test("Phase 32 initiateDeviceFlow: AbortSignal cancels poll loop mid-sleep (opts.signal path)", async () => {
+test("initiateDeviceFlow: AbortSignal cancels poll loop mid-sleep (opts.signal path)", async () => {
   // opts.signal abort path: runPollLoop wraps sleepMs with the signal. When the
   // signal fires while the loop is sleeping, the sleepMs rejects with an
   // AbortError which the catch block converts to { ok: false, reason: "Device
@@ -503,7 +503,7 @@ test("Phase 32 initiateDeviceFlow: AbortSignal cancels poll loop mid-sleep (opts
   }
 });
 
-test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.requestCode: throws on HTTP error status (lines 162-167)", async () => {
+test("DEFAULT_DEVICE_FLOW_HTTP.requestCode: throws on HTTP error status (lines 162-167)", async () => {
   // requestCodeImpl is the real implementation behind DEFAULT_DEVICE_FLOW_HTTP.
   // Covering it requires intercepting globalThis.fetch. We temporarily replace
   // fetch with a stub that returns a non-ok response, then restore it.
@@ -525,7 +525,7 @@ test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.requestCode: throws on HTTP error status
   }
 });
 
-test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.requestCode: throws TypeError on missing required fields (lines 170-180)", async () => {
+test("DEFAULT_DEVICE_FLOW_HTTP.requestCode: throws TypeError on missing required fields (lines 170-180)", async () => {
   // requestCodeImpl validates the response shape; a response missing required
   // fields (e.g. no device_code) must throw TypeError.
   const originalFetch = globalThis.fetch;
@@ -546,7 +546,7 @@ test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.requestCode: throws TypeError on missing
   }
 });
 
-test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.requestCode: returns DeviceCodeResponse on success (lines 152-181)", async () => {
+test("DEFAULT_DEVICE_FLOW_HTTP.requestCode: returns DeviceCodeResponse on success (lines 152-181)", async () => {
   // Happy path: fetch returns 200 with a valid device code response.
   const originalFetch = globalThis.fetch;
   const fakeDeviceCode = {
@@ -571,7 +571,7 @@ test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.requestCode: returns DeviceCodeResponse 
   }
 });
 
-test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns success PollResult when access_token present (lines 229-237)", async () => {
+test("DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns success PollResult when access_token present (lines 229-237)", async () => {
   // pollTokenImpl parses the response body for access_token; when present,
   // returns { kind: 'success', accessToken, tokenType, scope }.
   const originalFetch = globalThis.fetch;
@@ -601,7 +601,7 @@ test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns success PollResult wh
   }
 });
 
-test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns pending on authorization_pending error (lines 241-242)", async () => {
+test("DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns pending on authorization_pending error (lines 241-242)", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (): Promise<Response> => {
     return Promise.resolve(
@@ -617,7 +617,7 @@ test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns pending on authorizat
   }
 });
 
-test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns slow_down on slow_down error (lines 243-244)", async () => {
+test("DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns slow_down on slow_down error (lines 243-244)", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (): Promise<Response> => {
     return Promise.resolve(new Response(JSON.stringify({ error: "slow_down" }), { status: 200 }));
@@ -631,7 +631,7 @@ test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns slow_down on slow_dow
   }
 });
 
-test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns access_denied on access_denied error (lines 245-246)", async () => {
+test("DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns access_denied on access_denied error (lines 245-246)", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (): Promise<Response> => {
     return Promise.resolve(
@@ -647,7 +647,7 @@ test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns access_denied on acce
   }
 });
 
-test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns expired_token on expired_token error (lines 247-248)", async () => {
+test("DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns expired_token on expired_token error (lines 247-248)", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (): Promise<Response> => {
     return Promise.resolve(
@@ -663,7 +663,7 @@ test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns expired_token on expi
   }
 });
 
-test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns unexpected on unknown error code (lines 249-256)", async () => {
+test("DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns unexpected on unknown error code (lines 249-256)", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (): Promise<Response> => {
     return Promise.resolve(
@@ -685,7 +685,7 @@ test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns unexpected on unknown
   }
 });
 
-test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns network_error unexpected on fetch throw (lines 204-209)", async () => {
+test("DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns network_error unexpected on fetch throw (lines 204-209)", async () => {
   // When fetch itself throws (network error), pollTokenImpl catches and
   // returns { kind: 'unexpected', error: 'network_error', description: String(err) }.
   const originalFetch = globalThis.fetch;
@@ -705,7 +705,7 @@ test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns network_error unexpec
   }
 });
 
-test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns invalid_json unexpected on malformed body (lines 214-218)", async () => {
+test("DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns invalid_json unexpected on malformed body (lines 214-218)", async () => {
   // When res.json() throws (malformed JSON body), pollTokenImpl catches and
   // returns { kind: 'unexpected', error: 'invalid_json', description: 'HTTP <status>' }.
   const originalFetch = globalThis.fetch;
@@ -725,7 +725,7 @@ test("Phase 32 DEFAULT_DEVICE_FLOW_HTTP.pollToken: returns invalid_json unexpect
   }
 });
 
-test("Phase 32 initiateDeviceFlow: approveThrows propagates -- Phase 32 does not wrap CredentialOps.approve (A9)", async () => {
+test("initiateDeviceFlow: approveThrows propagates -- initiateDeviceFlow does not wrap CredentialOps.approve (A9)", async () => {
   const { http } = makeMockDeviceFlowHttp({
     deviceCode: {
       device_code: "MOCK_DEVICE_CODE",

@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
  *   2. The platform/git-credential.ts module (which legitimately handles
  *      credentials) MUST NOT interpolate a credential field into an Error
  *      constructor. Error messages reference operation name + exit code or
- *      timeout-ms only (Pitfall 8).
+ *      timeout-ms only.
  *
  * Test (2) passes vacuously when
  * platform/git-credential.ts does not exist on disk; the file's
@@ -83,7 +83,7 @@ test("AUTH-09: platform/git-credential.ts never interpolates a password in an Er
     // gate is vacuously satisfied. The file's creation activates it.
     assert.ok(
       true,
-      "platform/git-credential.ts not yet authored; AUTH-09 Error-interpolation gate inactive until Task 2",
+      "platform/git-credential.ts not yet authored; AUTH-09 Error-interpolation gate inactive until the file exists",
     );
     return;
   }
@@ -101,7 +101,7 @@ test("AUTH-09: platform/git-credential.ts never interpolates a password in an Er
   );
 });
 
-test("AUTH-09 (Phase 32): domain/github-auth.ts never interpolates a token in an Error or notifyFn message", async () => {
+test("AUTH-09: domain/github-auth.ts never interpolates a token in an Error or notifyFn message", async () => {
   const absPath = path.join(REPO_ROOT, GITHUB_AUTH_FILE);
   const exists = await access(absPath).then(
     () => true,
@@ -113,7 +113,7 @@ test("AUTH-09 (Phase 32): domain/github-auth.ts never interpolates a token in an
     // activates the gate automatically.
     assert.ok(
       true,
-      "domain/github-auth.ts not yet authored; AUTH-09 Phase-32 gate inactive until Plan 32-02",
+      "domain/github-auth.ts not yet authored; AUTH-09 gate inactive until the file exists",
     );
     return;
   }
@@ -134,7 +134,7 @@ test("AUTH-09 (Phase 32): domain/github-auth.ts never interpolates a token in an
   );
 });
 
-test("AUTH-09 (Phase 35): orchestrators/marketplace/{add,update}.ts never interpolate a credential field in an Error or ctx.ui.notify message", async () => {
+test("AUTH-09: orchestrators/marketplace/{add,update}.ts never interpolate a credential field in an Error or ctx.ui.notify message", async () => {
   // Closes review WR-02. add.ts and update.ts construct the Device Flow
   // onAuthRequired closure. The closure captures `credentialOps` by
   // reference -- a future regression that interpolates
@@ -168,7 +168,7 @@ test("AUTH-09 (Phase 35): orchestrators/marketplace/{add,update}.ts never interp
     assert.equal(
       forbidden.test(stripped),
       false,
-      `Error or ctx.ui.notify in ${rel} interpolates a credential field (AUTH-09 violation; closes Phase 33 review WR-02)`,
+      `Error or ctx.ui.notify in ${rel} interpolates a credential field (AUTH-09 violation; closes review WR-02)`,
     );
   }
 });

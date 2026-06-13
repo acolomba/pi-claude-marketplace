@@ -179,3 +179,50 @@ test("shim :: rejects unknown long flag with USAGE", async () => {
     assert.match(notifications[0]!.message, /Usage: \/claude:plugin install/);
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// --local flag scanning at the edge boundary
+// ──────────────────────────────────────────────────────────────────────────
+
+test("USAGE string contains [--local]", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeInstallHandler(makePi());
+    await handler("", ctx);
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\[--local\]/);
+  });
+});
+
+test("Flag: --local at the trailing position is accepted and control reaches installPlugin", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeInstallHandler(makePi());
+    await handler("myplug@mymkt --local", ctx);
+    // Control reaches installPlugin; ATTR-01 `{not added}` row surfaces.
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.match(notifications[0]!.message, /\(failed\) \{not added\}/);
+  });
+});
+
+test("Flag: --local at the leading position parses identically", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeInstallHandler(makePi());
+    await handler("--local myplug@mymkt", ctx);
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\(failed\) \{not added\}/);
+  });
+});
+
+test("Unknown long flag -> USAGE error (no orchestrator call)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeInstallHandler(makePi());
+    await handler("myplug@mymkt --frobnicate", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.match(notifications[0]!.message, /Unknown flag: "--frobnicate"\./);
+  });
+});

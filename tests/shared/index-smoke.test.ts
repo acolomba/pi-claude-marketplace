@@ -72,7 +72,7 @@ test("registers command, read-only tools, session_start, and resources_discover 
   assert.equal(
     tools.length,
     2,
-    `Phase 7 must register 2 read-only LLM tools; got ${JSON.stringify(tools)}`,
+    `Pi entry point must register 2 read-only LLM tools; got ${JSON.stringify(tools)}`,
   );
   assert.deepEqual(tools.map((e) => e.name).sort(), [
     "pi_claude_marketplace_list",

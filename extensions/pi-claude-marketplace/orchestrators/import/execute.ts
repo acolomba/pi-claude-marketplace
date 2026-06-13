@@ -1,14 +1,20 @@
-import { parsePluginSource, sourceLogical } from "../../domain/source.ts";
+import { parsePluginSource, samePlannedSource, sourceLogical } from "../../domain/source.ts";
 import { addMarketplace as defaultAddMarketplace } from "../../orchestrators/marketplace/add.ts";
 import {
   installPlugin as defaultInstallPlugin,
   type InstallPluginOptions,
   type InstallPluginOutcome,
 } from "../../orchestrators/plugin/install.ts";
+import { loadConfig } from "../../persistence/config-io.ts";
+import {
+  writeBatchedConfigEntries,
+  type BatchedConfigPatch,
+} from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState as defaultLoadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
 import { compareByNameThenScope, notify } from "../../shared/notify.ts";
+import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import { buildClaudeImportPlan } from "./marketplaces.ts";
 import { loadMergedClaudeSettingsForScope as defaultLoadSettings } from "./settings.ts";
@@ -19,7 +25,10 @@ import type {
   MergedClaudeSettingsResult,
   PlannedPluginImport,
 } from "./types.ts";
-import type { AddMarketplaceOptions } from "../../orchestrators/marketplace/add.ts";
+import type {
+  AddMarketplaceOptions,
+  AddMarketplaceOutcome,
+} from "../../orchestrators/marketplace/add.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
   ContentReason,
@@ -151,7 +160,9 @@ interface ImportDeps {
     opts: { cwd: string },
   ) => Promise<MergedClaudeSettingsResult>;
   readonly loadState?: (scope: Scope, cwd: string) => Promise<ExtensionState>;
-  readonly addMarketplace?: (opts: AddMarketplaceOptions) => Promise<void>;
+  readonly addMarketplace?: (
+    opts: AddMarketplaceOptions,
+  ) => Promise<AddMarketplaceOutcome | undefined>;
   readonly installPlugin?: (opts: InstallPluginOptions) => Promise<InstallPluginOutcome>;
 }
 
@@ -183,37 +194,9 @@ function refLabel(plugin: PlannedPluginImport): string {
   return plugin.ref.raw;
 }
 
-function samePlannedSource(stored: unknown, plannedRaw: string): boolean | "unknown-stored" {
-  const planned = parsePluginSource(plannedRaw);
-  const current = parsePluginSource(stored);
-
-  // Treat unrecognized stored source as a special sentinel so callers can
-  // emit a meaningful diagnostic rather than a generic source-mismatch.
-  if (current.kind === "unknown") {
-    return "unknown-stored";
-  }
-
-  if (planned.kind !== current.kind) {
-    return false;
-  }
-
-  switch (planned.kind) {
-    case "github":
-      return (
-        current.kind === "github" &&
-        planned.owner === current.owner &&
-        planned.repo === current.repo &&
-        planned.ref === current.ref
-      );
-    case "path":
-      return current.kind === "path" && planned.logical === current.logical;
-    /* c8 ignore next 3 -- import planner only generates path/github sources */
-    case "url":
-    case "git-subdir":
-    case "npm":
-      return sourceLogical(planned) === sourceLogical(current);
-  }
-}
+// `samePlannedSource` lives in `domain/source.ts` so the pure
+// `orchestrators/reconcile/plan.ts` can import it without dragging this
+// module's effectful transitive closure.
 
 function stateLoader(
   deps: ImportDeps | undefined,
@@ -234,7 +217,7 @@ function settingsLoader(
 
 function addMarketplaceFn(
   deps: ImportDeps | undefined,
-): (opts: AddMarketplaceOptions) => Promise<void> {
+): (opts: AddMarketplaceOptions) => Promise<AddMarketplaceOutcome | undefined> {
   return deps?.addMarketplace ?? defaultAddMarketplace;
 }
 
@@ -496,6 +479,34 @@ function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceNotifica
   }
 }
 
+type ScopedImportPlan = ReturnType<typeof buildClaudeImportPlan>["scopes"][number];
+
+/**
+ * WR-07: shared failure bookkeeping for a marketplace add
+ * that did not record (typed failed outcome OR unexpected throw): block
+ * dependent plugin installs and attribute the cause on both the marketplace
+ * row and each dependent plugin's warning row.
+ */
+function recordMarketplaceAddFailure(
+  result: MutableImportResult,
+  blockedMarketplaces: Set<string>,
+  scopePlan: ScopedImportPlan,
+  marketplace: ScopedImportPlan["marketplacesToEnsure"][number],
+  cause: string,
+): void {
+  blockedMarketplaces.add(marketplace.marketplace);
+  result.marketplaceFailures.push({
+    kind: "marketplace-failure",
+    scope: marketplace.scope,
+    marketplace: marketplace.marketplace,
+    reason: "add-failed",
+    cause,
+  });
+  for (const plugin of pluginsForMarketplace(scopePlan.pluginsToInstall, marketplace.marketplace)) {
+    pushPluginWarning(result, plugin, "marketplace-failed", cause);
+  }
+}
+
 // The import workflow is intentionally linear: ensure marketplaces, record diagnostics,
 // then install plugins while preserving per-item continuation semantics.
 // eslint-disable-next-line sonarjs/cognitive-complexity
@@ -527,78 +538,98 @@ async function executeScopedPlan(
     const existing = state.marketplaces[marketplace.marketplace];
     if (existing !== undefined) {
       const sourceMatch = samePlannedSource(existing.source, marketplace.source);
-      if (sourceMatch === "unknown-stored") {
-        // The stored source record is in an unrecognized format (e.g. manually
-        // edited state.json). Block dependent plugins and emit a clear diagnostic
-        // rather than a misleading source-mismatch message.
-        blockedMarketplaces.add(marketplace.marketplace);
-        pushDiagnostic(
-          result,
-          marketplace.scope,
-          "unrecognized-stored-source",
-          `Marketplace "${marketplace.marketplace}" has an unrecognized stored source format. Verify state.json or remove and re-add the marketplace.`,
-          { marketplace: marketplace.marketplace },
-        );
-      } else if (sourceMatch) {
-        result.skippedExistingMarketplaces.push({
-          kind: "marketplace-skip",
-          scope: marketplace.scope,
-          marketplace: marketplace.marketplace,
-          reason: "already-present",
-        });
-      } else {
-        blockedMarketplaces.add(marketplace.marketplace);
-        const cause = `Existing marketplace source ${sourceLogical(parsePluginSource(existing.source))} does not match Claude settings source ${marketplace.source}.`;
-        for (const plugin of pluginsForMarketplace(
-          scopePlan.pluginsToInstall,
-          marketplace.marketplace,
-        )) {
-          result.sourceMismatches.push({
-            kind: "source-mismatch",
-            scope: plugin.scope,
-            plugin: plugin.ref.plugin,
-            marketplace: plugin.ref.marketplace,
-            ref: refLabel(plugin),
-            reason: "source-mismatch",
-            cause,
+      switch (sourceMatch) {
+        case "unknown-stored":
+          // The stored source record is in an unrecognized format (e.g.
+          // manually edited state.json). Block dependent plugins and emit a
+          // clear diagnostic rather than a misleading source-mismatch
+          // message.
+          blockedMarketplaces.add(marketplace.marketplace);
+          pushDiagnostic(
+            result,
+            marketplace.scope,
+            "unrecognized-stored-source",
+            `Marketplace "${marketplace.marketplace}" has an unrecognized stored source format. Verify state.json or remove and re-add the marketplace.`,
+            { marketplace: marketplace.marketplace },
+          );
+          break;
+        case "same":
+          result.skippedExistingMarketplaces.push({
+            kind: "marketplace-skip",
+            scope: marketplace.scope,
+            marketplace: marketplace.marketplace,
+            reason: "already-present",
           });
+          break;
+        case "different": {
+          blockedMarketplaces.add(marketplace.marketplace);
+          const cause = `Existing marketplace source ${sourceLogical(parsePluginSource(existing.source))} does not match Claude settings source ${marketplace.source}.`;
+          for (const plugin of pluginsForMarketplace(
+            scopePlan.pluginsToInstall,
+            marketplace.marketplace,
+          )) {
+            result.sourceMismatches.push({
+              kind: "source-mismatch",
+              scope: plugin.scope,
+              plugin: plugin.ref.plugin,
+              marketplace: plugin.ref.marketplace,
+              ref: refLabel(plugin),
+              reason: "source-mismatch",
+              cause,
+            });
+          }
+
+          break;
         }
       }
 
       continue;
     }
 
+    // WR-07: drive the add in ORCHESTRATED mode and
+    // dispatch on the typed outcome. In standalone mode a classified
+    // precondition failure (duplicate name, stale clone, invalid manifest,
+    // unsupported source, source missing) does NOT throw -- it fires its own
+    // standalone notify (breaking import's one-cascade-per-command
+    // discipline) and returns undefined, so the import recorded the
+    // marketplace as (added), never blocked its dependent plugins, and each
+    // install then failed with a misleading reason.
     try {
-      await addMarketplace({
+      const outcome = await addMarketplace({
         ctx: opts.ctx,
         pi: opts.pi,
         scope: marketplace.scope,
         cwd: opts.cwd,
         rawSource: marketplace.source,
+        notifications: { mode: "orchestrated" },
         ...(opts.gitOps !== undefined && { gitOps: opts.gitOps }),
       });
-      result.addedMarketplaces.push({
-        kind: "marketplace-added",
-        scope: marketplace.scope,
-        marketplace: marketplace.marketplace,
-        reason: "added",
-      });
-    } catch (err) {
-      blockedMarketplaces.add(marketplace.marketplace);
-      const cause = errorMessage(err);
-      result.marketplaceFailures.push({
-        kind: "marketplace-failure",
-        scope: marketplace.scope,
-        marketplace: marketplace.marketplace,
-        reason: "add-failed",
-        cause,
-      });
-      for (const plugin of pluginsForMarketplace(
-        scopePlan.pluginsToInstall,
-        marketplace.marketplace,
-      )) {
-        pushPluginWarning(result, plugin, "marketplace-failed", cause);
+      if (outcome?.status === "added") {
+        result.addedMarketplaces.push({
+          kind: "marketplace-added",
+          scope: marketplace.scope,
+          marketplace: marketplace.marketplace,
+          reason: "added",
+        });
+      } else {
+        recordMarketplaceAddFailure(
+          result,
+          blockedMarketplaces,
+          scopePlan,
+          marketplace,
+          outcome?.cause ?? "addMarketplace returned no outcome in orchestrated mode",
+        );
       }
+    } catch (err) {
+      // Defensive: orchestrated mode coerces classified failures into typed
+      // outcomes, so only a genuinely unexpected throw lands here.
+      recordMarketplaceAddFailure(
+        result,
+        blockedMarketplaces,
+        scopePlan,
+        marketplace,
+        errorMessage(err),
+      );
     }
   }
 
@@ -688,6 +719,230 @@ async function executeScopedPlan(
         break;
     }
   }
+
+  // WB-03: after all per-entry orchestrated-mode addMarketplace
+  // + installPlugin calls complete for THIS scope, run a per-scope batched
+  // post-pass under ONE withLockedStateTransaction. Per-entry orchestrators
+  // SKIPPED their own write-back (WR-09 orchestrated-mode discipline) so the
+  // post-pass owns the ONLY write to claude-plugins.json for the import
+  // command.
+  //
+  // WR-01: the post-pass also REPAIRS missing config
+  // declarations for already-present (skipped) entries. If a previous
+  // import's post-pass failed (the defensive catch below records a
+  // diagnostic and moves on), state carries entries the config never
+  // declared -- and without the repair, a re-run would skip them as
+  // "already-present" while the next reconcile plans the undeclared
+  // marketplace for REMOVAL and its plugins for UNINSTALL. The repair makes
+  // a re-run converge CONSTRUCTIVELY (re-declare what import installed)
+  // instead of destructively.
+  await writeBatchedConfigForScope(opts, result, scopePlan);
+}
+
+/**
+ * WB-03: per-scope batched post-pass.
+ *
+ * Reads back `result` for entries WHOSE scope matches this scope, builds a
+ * `BatchedConfigPatch` (one entry per successful addedMarketplaces + one per
+ * successful installedPlugins), and writes the patch under ONE
+ * withLockedStateTransaction with exactly ONE saveConfig call.
+ *
+ * WR-01: skip outcomes (`skippedExistingMarketplaces` /
+ * `skippedExistingPlugins`) are included as REPAIR candidates -- written
+ * ONLY when the loaded config does not already declare the key (the
+ * key-absence gate preserves RECON-05 byte stability for the all-declared
+ * steady state). This makes a previously failed post-pass converge
+ * constructively on the next import run instead of leaving
+ * recorded-but-undeclared entries the reconcile planner would tear down.
+ *
+ * Target: import does NOT support `--local` (per RESEARCH project structure;
+ * the flag is per-command and not on the import surface), so the post-pass
+ * targets `locations.configJsonPath` unconditionally.
+ *
+ * Source: verbatim `rawSource` from `scopePlan.marketplacesToEnsure` keyed by
+ * marketplace name, preserving the `samePlannedSource` contract.
+ *
+ * CFG-03: invalid claude-plugins.json aborts THIS scope's post-pass but does
+ * NOT throw -- other scopes' post-passes still run. State was already saved
+ * by per-entry orchestrators; this post-pass writes only the config.
+ *
+ * Empty batch (no successful additions AND no missing-declaration repairs):
+ * SKIP entirely (RECON-05 byte-stable).
+ */
+async function writeBatchedConfigForScope(
+  opts: ImportClaudeSettingsOptions,
+  result: MutableImportResult,
+  scopePlan: ScopedImportPlan,
+): Promise<void> {
+  const scope = scopePlan.scope;
+  const { ensure, repair } = buildBatchedPatchForScope(result, scopePlan);
+  if (isEmptyPatch(ensure) && isEmptyPatch(repair)) {
+    return;
+  }
+
+  const locations = locationsFor(scope, opts.cwd);
+  const targetConfigPath = locations.configJsonPath;
+
+  try {
+    await withLockedStateTransaction(locations, async () => {
+      const cfg = await loadConfig(targetConfigPath);
+      if (cfg.status === "invalid") {
+        // CFG-03: per-scope abort. Surface as a diagnostic; do not save.
+        pushDiagnostic(
+          result,
+          scope,
+          "settings-read-error",
+          `Cannot write ${scope} scope claude-plugins.json: existing file is invalid.`,
+        );
+        return;
+      }
+
+      const current = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 as const };
+      // WR-01: repairs apply ONLY when the key is absent from the loaded
+      // config (already-declared entries are untouched -- byte stability).
+      const batch = mergeEnsureAndRepairs(ensure, repair, current);
+      if (isEmptyPatch(batch)) {
+        // Everything already declared -- no write, mtime stable (RECON-05).
+        return;
+      }
+
+      await writeBatchedConfigEntries(current, targetConfigPath, locations.scopeRoot, batch);
+      // NO tx.save() -- state was already committed by per-entry
+      // orchestrators inside their own withStateGuard / withLockedStateTransaction
+      // closures. The bounded race between the last per-entry lock release and
+      // this batched-save lock acquire converges via the WR-01 repair pass:
+      // a re-run of import re-declares any entry the failed write left
+      // undeclared (constructive convergence, not a reconcile teardown).
+    });
+  } catch (err) {
+    // Defensive: a write-back failure (disk full, EACCES, lock contention)
+    // does not abort the import command result -- per-entry orchestrators
+    // already committed state. Surface as a per-scope diagnostic.
+    pushDiagnostic(
+      result,
+      scope,
+      "settings-read-error",
+      `Failed to write ${scope} scope claude-plugins.json batched post-pass: ${errorMessage(err)}`,
+    );
+  }
+}
+
+function buildBatchedPatchForScope(
+  result: MutableImportResult,
+  scopePlan: ScopedImportPlan,
+): { ensure: BatchedConfigPatch; repair: BatchedConfigPatch } {
+  // Map marketplace name -> verbatim rawSource so the batched patch records
+  // `source: rawSource` exactly as the user/Claude settings declared it
+  // (`samePlannedSource` contract).
+  const rawSourceByName = new Map<string, string>();
+  for (const mp of scopePlan.marketplacesToEnsure) {
+    rawSourceByName.set(mp.marketplace, mp.source);
+  }
+
+  const marketplaces: Record<string, { source: string }> = {};
+  for (const added of result.addedMarketplaces) {
+    if (added.scope !== scopePlan.scope) {
+      continue;
+    }
+
+    const rawSource = rawSourceByName.get(added.marketplace);
+    if (rawSource === undefined) {
+      // Defensive: should not happen -- every addedMarketplaces entry
+      // originated from a marketplacesToEnsure entry. Skip rather than
+      // synthesize a wrong source.
+      continue;
+    }
+
+    marketplaces[added.marketplace] = { source: rawSource };
+  }
+
+  const plugins: Record<string, Record<string, never>> = {};
+  for (const installed of result.installedPlugins) {
+    if (installed.scope !== scopePlan.scope) {
+      continue;
+    }
+
+    const key = `${installed.plugin}@${installed.marketplace}`;
+    plugins[key] = {};
+  }
+
+  return {
+    ensure: { marketplaces, plugins },
+    repair: buildRepairPatchForScope(result, scopePlan, rawSourceByName),
+  };
+}
+
+/**
+ * WR-01: already-present (skipped) entries are REPAIR
+ * candidates -- state carries them, so a missing config declaration is a
+ * divergence the reconcile planner would resolve DESTRUCTIVELY (teardown).
+ * The caller applies these only when the loaded config lacks the key.
+ */
+function buildRepairPatchForScope(
+  result: MutableImportResult,
+  scopePlan: ScopedImportPlan,
+  rawSourceByName: ReadonlyMap<string, string>,
+): BatchedConfigPatch {
+  const marketplaces: Record<string, { source: string }> = {};
+  for (const skipped of result.skippedExistingMarketplaces) {
+    if (skipped.scope !== scopePlan.scope) {
+      continue;
+    }
+
+    const rawSource = rawSourceByName.get(skipped.marketplace);
+    if (rawSource === undefined) {
+      continue;
+    }
+
+    marketplaces[skipped.marketplace] = { source: rawSource };
+  }
+
+  const plugins: Record<string, Record<string, never>> = {};
+  for (const skipped of result.skippedExistingPlugins) {
+    if (skipped.scope !== scopePlan.scope) {
+      continue;
+    }
+
+    plugins[`${skipped.plugin}@${skipped.marketplace}`] = {};
+  }
+
+  return { marketplaces, plugins };
+}
+
+/**
+ * WR-01: merge the always-written `ensure` patch with the subset of `repair`
+ * entries whose keys are ABSENT from the loaded config. Already-declared
+ * keys are dropped so the all-declared steady state stays byte-stable
+ * (RECON-05) -- the post-pass then skips the save entirely when nothing
+ * remains.
+ */
+function mergeEnsureAndRepairs(
+  ensure: BatchedConfigPatch,
+  repair: BatchedConfigPatch,
+  current: { marketplaces?: Record<string, unknown>; plugins?: Record<string, unknown> },
+): BatchedConfigPatch {
+  const marketplaces = { ...ensure.marketplaces };
+  for (const [name, patch] of Object.entries(repair.marketplaces ?? {})) {
+    if (current.marketplaces?.[name] === undefined && marketplaces[name] === undefined) {
+      marketplaces[name] = patch;
+    }
+  }
+
+  const plugins = { ...ensure.plugins };
+  for (const [key, patch] of Object.entries(repair.plugins ?? {})) {
+    if (current.plugins?.[key] === undefined && plugins[key] === undefined) {
+      plugins[key] = patch;
+    }
+  }
+
+  return { marketplaces, plugins };
+}
+
+function isEmptyPatch(batch: BatchedConfigPatch): boolean {
+  return (
+    Object.keys(batch.marketplaces ?? {}).length === 0 &&
+    Object.keys(batch.plugins ?? {}).length === 0
+  );
 }
 
 /**

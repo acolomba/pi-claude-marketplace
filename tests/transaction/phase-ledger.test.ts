@@ -99,10 +99,10 @@ test("AS-4 runPhases: undo failure aggregated with phase name", async () => {
   const result = await runPhases(phases, {});
   assert.equal(result.ok, false);
   assert.equal(result.error?.message, "boom");
-  // Task 260525-cjr C1: RollbackPartial preserves the original undo
-  // throw via `cause`. Assert field-by-field instead of a deep-equal on
-  // the whole row so the test does not encode the Error instance
-  // identity into the fixture.
+  // RollbackPartial preserves the original undo throw via `cause`.
+  // Assert field-by-field instead of a deep-equal on the whole row so
+  // the test does not encode the Error instance identity into the
+  // fixture.
   assert.equal(result.rollbackPartials.length, 1);
   const first = result.rollbackPartials[0];
   assert.ok(first !== undefined);
@@ -251,12 +251,11 @@ test("D-01 runPhases: ctx threaded to every do AND undo call", async () => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// Task 260525-cjr C1: RollbackPartial preserves the original undo throw's
-// Error.cause chain so the presentation layer can surface the depth-5 walk
-// to the user.
+// RollbackPartial preserves the original undo throw's Error.cause chain so
+// the presentation layer can surface the depth-5 walk to the user.
 // ───────────────────────────────────────────────────────────────────────────
 
-test("260525-cjr C1: undo error's Error.cause is preserved on the RollbackPartial.cause field", async () => {
+test("undo error's Error.cause is preserved on the RollbackPartial.cause field", async () => {
   const innermost = new Error("disk write failed");
   const undoErr = new Error("rm leak", { cause: innermost });
   const phases: Phase<object>[] = [
@@ -354,7 +353,7 @@ test("TR-02 runPhases: failing-phase undo runs BEFORE reverse-walk, exactly once
   assert.equal(result.error?.message, "boom");
   // EXACT expected sequence: failing phase's own undo FIRST, then reverse
   // walk over executed[] = [p0, p1]. Each undo invoked EXACTLY ONCE (no
-  // double-rollback per Pitfall 2 over-correction guard).
+  // double-rollback per the over-correction guard).
   assert.deepEqual(
     ctx.trace,
     ["do:p0", "do:p1", "do:p2", "undo:p2", "undo:p1", "undo:p0"],

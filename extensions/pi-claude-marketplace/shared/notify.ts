@@ -52,8 +52,10 @@ import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../platform/
 // ---------------------------------------------------------------------------
 
 /**
- * CMC-11 closed reasons set. Byte-equal to the `reasons:` block in the
- * binding frontmatter at `docs/messaging-style-guide.md`. The set covers the
+ * CMC-11 closed reasons set. This tuple is the SOLE closed-set authority
+ * (style guide v2.0 retired the binding YAML frontmatter at
+ * `docs/messaging-style-guide.md`; the guide's prose references these
+ * tuples). The set covers the
  * autoupdate-flip idempotent rows (`"already autoupdate"` /
  * `"already no autoupdate"`) and the failure-class closed Reasons the catalog
  * UAT requires across uninstall / marketplace-remove partial / reinstall /
@@ -93,6 +95,8 @@ export const REASONS = [
   "lock held",
   "already autoupdate",
   "already no autoupdate",
+  "already enabled",
+  "already disabled",
   "permission denied",
   "source missing",
   "network unreachable",
@@ -129,6 +133,8 @@ const BENIGN_REASONS: ReadonlySet<Reason> = new Set([
   "already installed",
   "already autoupdate",
   "already no autoupdate",
+  "already enabled",
+  "already disabled",
 ]);
 
 /**
@@ -143,11 +149,56 @@ function allBenign(reasons: readonly Reason[] | undefined): boolean {
 }
 
 /**
- * CMC-08 closed status-token set. Byte-equal to the `status_tokens:` block
- * in the binding frontmatter at `docs/messaging-style-guide.md`.
+ * I5 / PR #51 / T-53-02-02 / T-55-02-01: collapse any absolute-path token
+ * (POSIX `/...` or Windows `<drive>:\...` / `\\?\...`) in a free-text
+ * diagnostic to its basename. Preserves the surrounding parse / permission
+ * detail (NFR-9: surface only message text, never `.stack`) so callers can
+ * thread `loadConfig`'s `result.error` -- which embeds the absolute
+ * `filePath` -- through the rendered cause-chain trailer WITHOUT leaking
+ * the path. Single canonical implementation here; consumers route their
+ * diagnostic strings through this seam before constructing a synthetic
+ * Error for `notify()`'s cause-chain walker.
+ *
+ * Conservative match:
+ *   - POSIX absolute: `/` followed by a non-whitespace, non-quote run
+ *     (`[\w./_~-]` chars), with at least one path separator inside the run.
+ *   - Windows drive: `<letter>:[\\/]` followed by the same run.
+ *   - UNC extended: `\\?\` followed by the same run.
+ * Each match is replaced with `path.basename(match)`. Non-path tokens
+ * (e.g. JSON pointers like `/schemaVersion`) are short -- single-segment
+ * after the leading `/` -- and intentionally excluded so JSON-validator
+ * diagnostics survive intact for the operator.
+ */
+export function redactAbsolutePaths(text: string): string {
+  // Match absolute paths with at least one internal separator so single-
+  // segment leading-slash JSON pointers (`/schemaVersion`) are not eaten.
+  const re = /(?:[A-Za-z]:[\\/]|\\\\\?\\|\/)[\w./\\~-]+[\\/][\w./\\~-]+/g;
+  return text.replace(re, (match) => {
+    // path.basename handles both POSIX and Windows separators when invoked
+    // through the platform-agnostic node:path module, but the renderer ships
+    // on POSIX and a hand-rolled split is byte-stable across runtimes here.
+    const lastSep = Math.max(match.lastIndexOf("/"), match.lastIndexOf("\\"));
+    return lastSep < 0 ? match : match.slice(lastSep + 1);
+  });
+}
+
+/**
+ * CMC-08 closed status-token set. This tuple is the SOLE closed-set
+ * authority (style guide v2.0 retired the binding YAML frontmatter at
+ * `docs/messaging-style-guide.md`).
  * `(no marketplaces)` and `(no plugins)` are FLAT members of this single
  * tuple; the bare-token render shape (no icon, no scope brackets) is a
  * renderer concern that branches at emission time.
+ *
+ * DIFF-02 (D-53-02): the 6 `"will *"` entries are the pending-tense tokens
+ * emitted by `/claude:plugin preview` rows. They are STRUCTURALLY EXCLUDED
+ * from `shouldEmitReloadHint`'s trigger set (preview rows are
+ * pre-transition; `/reload to pick up changes` is grammatically false for
+ * them) and sit AFTER the four head-of-tuple state-change tokens that
+ * drive the reload-hint, so those positions stay unchanged. The
+ * `"disabled"` entry is the D-54-01 / ENBL-04 token and is appended LAST
+ * after the `"will *"` block; the head-of-tuple invariant is preserved
+ * because it sits below the reload-hint trigger window.
  */
 export const STATUS_TOKENS = [
   "installed",
@@ -165,13 +216,21 @@ export const STATUS_TOKENS = [
   "manual recovery",
   "no marketplaces",
   "no plugins",
+  "will add",
+  "will remove",
+  "will install",
+  "will uninstall",
+  "will enable",
+  "will disable",
+  "disabled",
 ] as const;
 
 export type StatusToken = (typeof STATUS_TOKENS)[number];
 
 /**
- * CMC-38 closed marker set. Byte-equal to the `markers:` block in the
- * binding frontmatter at `docs/messaging-style-guide.md`. Entries are
+ * CMC-38 closed marker set. This tuple is the SOLE closed-set authority
+ * (style guide v2.0 retired the binding YAML frontmatter at
+ * `docs/messaging-style-guide.md`). Entries are
  * stored WITHOUT surrounding `<>` chevrons; the `<marker>` chevron form
  * is composed by the renderer at emission time (MSG-GR-5).
  */
@@ -180,8 +239,9 @@ export const MARKERS = ["autoupdate", "no autoupdate"] as const;
 export type Marker = (typeof MARKERS)[number];
 
 /**
- * CMC-38 closed pattern-class set. Byte-equal to the `pattern_classes:`
- * block in the binding frontmatter at `docs/messaging-style-guide.md`.
+ * CMC-38 closed pattern-class set. This tuple is the SOLE closed-set
+ * authority (style guide v2.0 retired the binding YAML frontmatter at
+ * `docs/messaging-style-guide.md`).
  * Pattern classes label the SHAPES of compact-line emissions (success /
  * failure / cascade-row / etc.) for documentation and rule-attribution
  * purposes. They are NOT emitted in the rendered output -- the renderer
@@ -218,12 +278,44 @@ export function notifyUsageError(ctx: ExtensionContext, message: UsageErrorMessa
   ctx.ui.notify(`${message.message}\n\n${message.usage}`, "error");
 }
 
+/**
+ * S2 / PR #51: post-cascade hygiene warnings out-of-band notification seam.
+ *
+ * Surfaces post-state-commit warnings (data-dir mkdir deferred,
+ * completion-cache refresh deferred, agent foreign-content preserved,
+ * bridge-side soft warnings) that have no representation in the
+ * `MarketplaceNotificationMessage` cascade body. The reconcile apply
+ * pass collects these from `InstallPluginOutcome.postCommitWarnings`
+ * across the install bucket and fires this helper exactly once -- a
+ * sanctioned exception to the per-cascade single-notify discipline
+ * (RECON-04 / IL-2) that mirrors `import/execute.ts`'s `pushDiagnostic`
+ * channel.
+ *
+ * The on-the-wire form is `${header}\n\n${lines.join("\n")}` at
+ * `"warning"` severity. The header counts the per-warning lines so the
+ * operator sees both the total and the per-warning detail without
+ * re-flowing the cascade body. Standalone-mode commands swallow these
+ * per D-19-01; orchestrated-mode (cascade) callers use this seam.
+ */
+export function notifyDiagnostic(
+  ctx: ExtensionContext,
+  header: string,
+  lines: readonly string[],
+): void {
+  if (lines.length === 0) {
+    return;
+  }
+
+  ctx.ui.notify(`${header}\n\n${lines.join("\n")}`, "warning");
+}
+
 // ---------------------------------------------------------------------------
 // Structured notification type model.
 //
 // Satisfies SNM-01 (NotificationMessage), SNM-02
 // (MarketplaceNotificationMessage), SNM-03 (PluginNotificationMessage
-// discriminated union, 11 variants), SNM-04 (PluginStatus derived via indexed
+// discriminated union; variant count is type-length-locked in
+// tests/architecture/notify-types.test.ts), SNM-04 (PluginStatus derived via indexed
 // access), SNM-05 (MarketplaceStatus closed set), SNM-06 (Dependency +
 // required `dependencies` on installed/updated/reinstalled), SNM-07
 // (MarketplaceDetails shape), SNM-08 (UsageErrorMessage shape), SNM-09
@@ -241,19 +333,24 @@ export function notifyUsageError(ctx: ExtensionContext, message: UsageErrorMessa
 // ---------------------------------------------------------------------------
 
 /**
- * Runtime tuple of every plugin status literal. 11 entries.
+ * Runtime tuple of every plugin status literal (entry count is
+ * type-length-locked in tests/architecture/notify-types.test.ts).
  * `"manual recovery"` is a literal string WITH A SPACE; do not transform to
  * kebab-case ("manual-recovery") or camelCase ("manualRecovery") -- the
  * renderer emits the discriminator literal directly into the `(<status>)`
  * brace slot.
  *
- * The trailing `"present"` entry is the list-only inventory token (SNM-15).
- * The four state-change tokens at the head of the tuple (`installed`,
- * `updated`, `reinstalled`, `uninstalled`) are the structurally-
- * distinguished transition tokens that drive `shouldEmitReloadHint`;
- * `"present"` is deliberately ABSENT from that trigger set so steady-state
- * `/claude:plugin list` rows never emit the `/reload to pick up changes`
- * trailer.
+ * The `"present"` entry is the list-only inventory token (SNM-15); the four
+ * `"will *"` entries are the DIFF-02 preview pending-tense tokens; the
+ * trailing `"disabled"` entry is the D-54-01 / ENBL-04 token. The four
+ * state-change tokens at the head of the tuple (`installed`, `updated`,
+ * `reinstalled`, `uninstalled`) are the structurally-distinguished
+ * transition tokens that drive `shouldEmitReloadHint`; `"present"` and
+ * `"disabled"` are deliberately ABSENT from that default trigger set so
+ * steady-state `/claude:plugin list` rows never emit the
+ * `/reload to pick up changes` trailer. `"disabled"` joins the hint set
+ * only under the `disable-cascade` kind (UAT-03 -- the disable command's
+ * realized-transition cascade).
  *
  * Pattern: closed-set `as const` tuple + `(typeof X)[number]` literal-union.
  */
@@ -269,14 +366,20 @@ export const PLUGIN_STATUSES = [
   "skipped",
   "manual recovery",
   "present",
+  "will install",
+  "will uninstall",
+  "will enable",
+  "will disable",
+  "disabled",
 ] as const;
 
 /**
- * Runtime tuple of every marketplace status literal. 7 entries. The 3 final
- * entries (`"autoupdate enabled"`, `"autoupdate disabled"`, `"skipped"`)
- * support the autoupdate-flip surface; order is normative -- the 4 leading
- * entries retain their position to match the `renderMpHeader` switch-arm
- * ordering.
+ * Runtime tuple of every marketplace status literal (entry count is
+ * type-length-locked in tests/architecture/notify-types.test.ts).
+ * `"autoupdate enabled"` / `"autoupdate disabled"` / `"skipped"` support the
+ * autoupdate-flip surface; the 2 trailing `"will *"` entries are the DIFF-02
+ * preview pending-tense tokens. Order is normative -- the 4 leading entries
+ * retain their position to match the `renderMpHeader` switch-arm ordering.
  *
  * Pattern: closed-set `as const` tuple + `(typeof X)[number]` literal-union.
  */
@@ -288,6 +391,8 @@ export const MARKETPLACE_STATUSES = [
   "autoupdate enabled",
   "autoupdate disabled",
   "skipped",
+  "will add",
+  "will remove",
 ] as const;
 
 /**
@@ -425,6 +530,30 @@ export interface PluginUninstalledMessage {
 }
 
 /**
+ * `(disabled)` -- D-54-01 / ENBL-04 closed-set token. Emitted on `list` /
+ * `info` surfaces for plugins whose state record carries the
+ * empty-resources + `installable: true` marker (the load-bearing predicate is
+ * `orchestrators/reconcile/plan.ts::isRecordedButDisabled`), AND -- per the
+ * UAT-03 decision -- as the `/claude:plugin
+ * disable` command's fresh cascade row (byte-identical to the inventory row;
+ * the reload-hint fires there via the cascade's `"disable-cascade"` kind,
+ * never via this variant alone). Structurally
+ * distinct from `(unavailable)`: the variant carries no `reasons` (a disabled
+ * plugin is in the user-requested state, not a failure state), and the byte
+ * form differs (`(disabled)` vs `(unavailable)`).
+ *
+ * NO `dependencies` / `reasons` / `cause` / `rollbackPartial` by construction
+ * -- the inventory row is bare. The renderer arm reuses `ICON_UNINSTALLABLE`
+ * (`⊘`) -- the same glyph the `will disable` row uses.
+ */
+export interface PluginDisabledMessage {
+  readonly status: "disabled";
+  readonly name: string;
+  readonly version?: string;
+  readonly scope?: Scope;
+}
+
+/**
  * `(available)` -- list-surface row for installable, not-yet-installed
  * plugins. NO `scope` (SNM-11 carve-out: MSG-PL-6 omits `[<scope>]`
  * brackets on available rows); no `reasons`; no `dependencies`. PL-4:
@@ -552,6 +681,54 @@ export interface PluginManualRecoveryMessage {
 }
 
 /**
+ * `(will install)` -- DIFF-02 preview row for a plugin declared in config but
+ * not yet recorded. Carries NO `dependencies` (the soft-dep probe is
+ * meaningless before installation); NO `reasons`; NO `version` (the recorded
+ * version does not exist yet for an install).
+ */
+export interface PluginWillInstallMessage {
+  readonly status: "will install";
+  readonly name: string;
+  readonly scope?: Scope;
+}
+
+/**
+ * `(will uninstall)` -- DIFF-02 preview row for a plugin recorded in state
+ * but no longer declared. Carries NO `reasons`; NO `version`; NO
+ * `dependencies`.
+ */
+export interface PluginWillUninstallMessage {
+  readonly status: "will uninstall";
+  readonly name: string;
+  readonly scope?: Scope;
+}
+
+/**
+ * `(will enable)` -- DIFF-02 preview row for a recorded plugin currently
+ * marked disabled but newly declared `enabled: true`. The bucket is
+ * populated only when the recorded-but-disabled marker (all four resource
+ * arrays empty + `installable: true` -- see
+ * `orchestrators/reconcile/plan.ts::isRecordedButDisabled`) is paired
+ * with a config entry whose `enabled !== false`.
+ */
+export interface PluginWillEnableMessage {
+  readonly status: "will enable";
+  readonly name: string;
+  readonly scope?: Scope;
+}
+
+/**
+ * `(will disable)` -- DIFF-02 preview row for a recorded plugin newly
+ * declared `enabled: false`. Carries NO `reasons`; NO `version`; NO
+ * `dependencies`.
+ */
+export interface PluginWillDisableMessage {
+  readonly status: "will disable";
+  readonly name: string;
+  readonly scope?: Scope;
+}
+
+/**
  * Discriminated union of every per-plugin notification variant (SNM-03).
  * The renderer narrows via `switch (msg.status)` + `assertNever` for
  * exhaustiveness; downstream tests iterate `PLUGIN_STATUSES` to enumerate
@@ -570,7 +747,12 @@ export type PluginNotificationMessage =
   | PluginPresentMessage
   | PluginFailedMessage
   | PluginSkippedMessage
-  | PluginManualRecoveryMessage;
+  | PluginManualRecoveryMessage
+  | PluginWillInstallMessage
+  | PluginWillUninstallMessage
+  | PluginWillEnableMessage
+  | PluginWillDisableMessage
+  | PluginDisabledMessage;
 
 /**
  * Common fields shared by every arm of the per-status
@@ -647,6 +829,24 @@ interface MpSkipped extends MpCommon {
 }
 
 /**
+ * `(will add)` marketplace block (DIFF-02). Preview row for a marketplace
+ * declared in config but not yet recorded. Never carries `reasons` /
+ * `details` -- preview rows are pre-transition.
+ */
+interface MpWillAdd extends MpCommon {
+  readonly status: "will add";
+}
+
+/**
+ * `(will remove)` marketplace block (DIFF-02). Preview row for a marketplace
+ * recorded in state but no longer declared. Never carries `reasons` /
+ * `details`.
+ */
+interface MpWillRemove extends MpCommon {
+  readonly status: "will remove";
+}
+
+/**
  * List / inventory marketplace block (status omitted). Modeled as
  * `status?: undefined` so the many status-omitted construction sites compile
  * unchanged and the renderer's `case undefined:` narrows to this arm.
@@ -675,6 +875,8 @@ export type MarketplaceNotificationMessage =
   | MpAutoupdateEnabled
   | MpAutoupdateDisabled
   | MpSkipped
+  | MpWillAdd
+  | MpWillRemove
   | MpList;
 
 /**
@@ -696,9 +898,20 @@ export type MarketplaceNotificationMessage =
  * info-surface variants (`MarketplaceInfoMessage`, `PluginInfoMessage`)
  * carry a REQUIRED `kind` literal so they cannot be confused with a cascade
  * payload at construction time.
+ *
+ * UAT-03: the `"disable-cascade"`
+ * kind marks the `/claude:plugin disable` command's realized-transition
+ * cascade. Rendering is byte-identical to the plain cascade arm; the ONLY
+ * behavioral difference is in `shouldEmitReloadHint`, where a `(disabled)`
+ * plugin row counts as a state-change transition (artefacts were unstaged
+ * -- SNM-33) and fires the `/reload to pick up changes` trailer. Kind-less
+ * / `"cascade"` payloads (the list / info inventory surfaces, which emit
+ * structurally identical `disabled` rows) stay hint-free. The split is
+ * structural at the KIND level, mirroring `reconcile-applied-cascade`'s
+ * structural trailer exclusion.
  */
 export interface CascadeNotificationMessage {
-  readonly kind?: "cascade";
+  readonly kind?: "cascade" | "disable-cascade";
   readonly marketplaces: readonly MarketplaceNotificationMessage[];
 }
 
@@ -861,6 +1074,27 @@ export interface PluginInfoCascadeMessage {
 }
 
 /**
+ * DIFF-01 SC #2 / D-53-01: the dedicated empty-steady-state
+ * variant emitted by `/claude:plugin preview` when the next reload's
+ * reconcile would apply zero actions in every scope (no marketplaces /
+ * plugins / source-mismatches / invalid-config rows). Routes through the
+ * standalone-dispatched arm of `notify()` with severity `info` (no second
+ * arg) and emits the catalog-locked free-form advisory body line:
+ *
+ *   Preview: next reload will apply 0 actions.
+ *
+ * Carries NO fields -- the body is a hard-coded literal in
+ * `renderReconcilePreviewEmpty` so the byte form cannot drift from the
+ * catalog state. `shouldEmitReloadHint` is structurally false on this arm
+ * (preview rows are pre-transition; `/reload to pick up changes` is
+ * grammatically false). `buildSummaryLine` returns the empty string
+ * (info-severity -- no summary semantics apply).
+ */
+export interface ReconcilePreviewEmptyMessage {
+  readonly kind: "reconcile-preview-empty";
+}
+
+/**
  * TYPE-01 / D-46-01: the dedicated marketplace-not-added variant -- the 6th
  * arm of `NotificationMessage`. Carries ONLY the fields its row renders:
  * `name` (the MARKETPLACE name) and an optional `scope` (`scope` present =>
@@ -881,9 +1115,39 @@ export interface MarketplaceNotAddedMessage {
 }
 
 /**
+ * RECON-04: the load-time reconcile apply cascade variant
+ * emitted by `applyReconcile` after every resources_discover invocation that
+ * resulted in at least one apply action OR carried at least one
+ * invalid-config / source-mismatch row. Wraps the same per-status
+ * `MarketplaceNotificationMessage[]` shape the cascade arm carries so the
+ * existing `renderMpHeader` + `renderPluginRow` helpers compose the body --
+ * no new icon, no new closed-set status / reason / marker literals (reuse
+ * the existing closed sets).
+ *
+ * Dispatched as a StandaloneKind so `shouldEmitReloadHint` returns `false`
+ * structurally: the cascade rows carry realized transition tokens
+ * (`installed` / `uninstalled` / etc.) which would otherwise trigger the
+ * `Run /reload to pick up changes` trailer -- but the reconcile already ran
+ * ON /reload, so the trailer would be a lie (RECON-04).
+ *
+ * `computeSeverity` derives severity from contents (mirrors the cascade
+ * arm's first-match ladder); `buildSummaryLine` runs only at error/warning
+ * severity and reuses `countFailedOperations` / `countSkippedOperations`
+ * over `marketplaces`.
+ *
+ * Empty-and-clean callers MUST short-circuit BEFORE invoking notify() per
+ * the load-time silence contract (NFR-2 / A4) -- this variant is never
+ * dispatched with an empty `marketplaces` array.
+ */
+export interface ReconcileAppliedCascadeMessage {
+  readonly kind: "reconcile-applied-cascade";
+  readonly marketplaces: readonly MarketplaceNotificationMessage[];
+}
+
+/**
  * Top-level discriminated-union envelope consumed by `notify(ctx, pi,
  * NotificationMessage)`. The cascade arm omits `kind` (or sets it to
- * `"cascade"`); the five standalone-dispatched arms set `kind` explicitly. The
+ * `"cascade"`); the six standalone-dispatched arms set `kind` explicitly. The
  * dispatcher narrows with an `assertNever` default arm so every future
  * variant addition becomes a compile-time error at the switch.
  */
@@ -893,7 +1157,9 @@ export type NotificationMessage =
   | PluginInfoMessage
   | MarketplaceInfoCascadeMessage
   | PluginInfoCascadeMessage
-  | MarketplaceNotAddedMessage;
+  | MarketplaceNotAddedMessage
+  | ReconcilePreviewEmptyMessage
+  | ReconcileAppliedCascadeMessage;
 
 /**
  * TYPE-03 / D-46-04: the closed set of STANDALONE-DISPATCHED message kinds --
@@ -913,7 +1179,9 @@ type StandaloneKind =
   | "plugin-info"
   | "marketplace-info-cascade"
   | "plugin-info-cascade"
-  | "marketplace-not-added";
+  | "marketplace-not-added"
+  | "reconcile-preview-empty"
+  | "reconcile-applied-cascade";
 
 /**
  * Single-source type-predicate for the standalone-dispatched kinds
@@ -930,7 +1198,9 @@ function isInfoKind(
     m.kind === "plugin-info" ||
     m.kind === "marketplace-info-cascade" ||
     m.kind === "plugin-info-cascade" ||
-    m.kind === "marketplace-not-added"
+    m.kind === "marketplace-not-added" ||
+    m.kind === "reconcile-preview-empty" ||
+    m.kind === "reconcile-applied-cascade"
   );
 }
 
@@ -1048,6 +1318,9 @@ function wrapDescription(text: string, indentCol: number, wrapCol: number): stri
  *                           `... <no autoupdate> {already no autoupdate}`
  *                           (marker-as-outcome + idempotence brace, no
  *                           `(skipped)` token).
+ *   "will add"           -> `${ICON_INSTALLED} ${name} [${scope}] (will add)`
+ *   "will remove"        -> `${ICON_AVAILABLE} ${name} [${scope}] (will remove)`
+ *                           (DIFF-02 preview pending-tense arms.)
  *   undefined (list-surface):
  *     SUB-BRANCH A (mp.details === undefined): `${ICON_INSTALLED} ${name} [${scope}]`
  *     SUB-BRANCH B (mp.details !== undefined): `${ICON_INSTALLED} ${name} [${scope}]`
@@ -1057,9 +1330,11 @@ function wrapDescription(text: string, indentCol: number, wrapCol: number): stri
  *       NOT rendered on the list surface (UXG-01 -- the raw ISO timestamp is
  *       noise and meaningless for path-source marketplaces).
  *
- * The icon arms use ICON_AVAILABLE nowhere -- marketplaces are either ok
- * (●) or failure-class (⊘); the open-circle ○ is reserved for available /
- * uninstalled PLUGIN rows that `renderPluginRow` owns.
+ * The only ICON_AVAILABLE (○) marketplace arm is the preview
+ * `"will remove"` (the marketplace-level analog of an uninstall); every
+ * other arm is either ok (●) or failure-class (⊘). The other open-circle
+ * uses are the available / uninstalled / will-uninstall PLUGIN rows that
+ * `renderPluginRow` owns.
  *
  * The `"skipped"` arm reuses the file-private `composeReasons` helper to
  * render the reasons brace, which requires the threaded `SoftDepStatus` probe
@@ -1128,6 +1403,18 @@ function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus
         ? `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (skipped)`
         : `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (skipped) ${reasonsBrace}`;
     }
+
+    case "will add":
+      // DIFF-02 / D-53-02: pending-tense preview row for a marketplace
+      // declared in config but not yet recorded. Reuses ICON_INSTALLED (no
+      // new icon constant).
+      return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (will add)`;
+    case "will remove":
+      // DIFF-02: pending-tense preview row for a marketplace recorded in
+      // state but no longer declared. Reuses ICON_AVAILABLE (`○`) -- the
+      // same glyph the (uninstalled) plugin row carries, because a
+      // `will remove` is the marketplace-level analog of an uninstall.
+      return `${ICON_AVAILABLE} ${mp.name} [${mp.scope}] (will remove)`;
 
     case undefined: {
       // List-surface case. mp.details is OPTIONAL and INDEPENDENT of mp.status.
@@ -1481,6 +1768,66 @@ function renderPluginRow(
     case "manual recovery":
       // `(manual recovery)` discriminator preserved verbatim WITH A SPACE.
       return pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(manual recovery)", probe);
+    case "will install":
+      // DIFF-02 / D-53-02: pending-tense preview row for a plugin declared in
+      // config but not yet recorded. Reuses ICON_INSTALLED. No `version`
+      // slot (the install hasn't happened yet); no reasons (preview rows are
+      // pre-transition).
+      return joinTokens([
+        ICON_INSTALLED,
+        p.name,
+        renderScopeBracket(p.scope, mpScope),
+        "(will install)",
+      ]);
+    case "will uninstall":
+      // DIFF-02: pending-tense preview row for a plugin recorded in state but
+      // no longer declared. Reuses ICON_AVAILABLE (open circle `○`) -- same
+      // glyph as the realized (uninstalled) row, because a `will uninstall`
+      // is its pre-transition analog.
+      return joinTokens([
+        ICON_AVAILABLE,
+        p.name,
+        renderScopeBracket(p.scope, mpScope),
+        "(will uninstall)",
+      ]);
+    case "will enable":
+      // DIFF-02: pending-tense preview row for a recorded plugin newly
+      // declared `enabled: true` after being locally disabled. Reuses
+      // ICON_INSTALLED. The bucket is populated only when the recorded-
+      // but-disabled marker (empty resources + installable true) is paired
+      // with a config entry whose `enabled !== false`; the arm is always
+      // present so enable-wiring stays type-complete.
+      return joinTokens([
+        ICON_INSTALLED,
+        p.name,
+        renderScopeBracket(p.scope, mpScope),
+        "(will enable)",
+      ]);
+    case "will disable":
+      // DIFF-02: pending-tense preview row for a recorded plugin newly
+      // declared `enabled: false`. Reuses ICON_UNINSTALLABLE (`⊘`) -- the
+      // same glyph the (skipped) / (failed) rows carry, mirroring the
+      // prohibited-symbol semantics of a deliberate disable.
+      return joinTokens([
+        ICON_UNINSTALLABLE,
+        p.name,
+        renderScopeBracket(p.scope, mpScope),
+        "(will disable)",
+      ]);
+    case "disabled":
+      // D-54-01 / ENBL-04: list/info inventory row for a recorded-but-disabled
+      // plugin. Subject-first grammar; reuses ICON_UNINSTALLABLE (`⊘`) --
+      // the same glyph the `will disable` row carries. NO reasons -- the
+      // variant carries none; composeReasons receives undefined + both
+      // soft-dep flags false (the inventory row never emits soft-dep markers).
+      return joinTokens([
+        ICON_UNINSTALLABLE,
+        p.name,
+        renderScopeBracket(p.scope, mpScope),
+        renderVersion(p.version),
+        "(disabled)",
+        composeReasons(undefined, false, false, probe),
+      ]);
     default: {
       assertNever(p);
       return "";
@@ -1522,6 +1869,9 @@ function renderPluginRow(
 //
 // Reload-hint trigger (SNM-33):
 //   - Any plugin.status in {"installed", "updated", "reinstalled", "uninstalled"}.
+//   - Any plugin.status === "disabled" iff message.kind === "disable-cascade"
+//     (UAT-03: the disable command's realized-transition cascade; kind-less
+//     list/info inventory `disabled` rows stay hint-free).
 //   - No marketplace-status arm: marketplace records are bookkeeping, not Pi-visible.
 //
 // Empty-marketplaces sentinel: "(no marketplaces)".
@@ -1563,7 +1913,84 @@ const RELOAD_HINT_TRAILER = "/reload to pick up changes";
  * (SNM-33) -- severity and reload-hint are separate ladders. Severity is the
  * second arg, never part of the body.
  */
-function computeSeverity(message: NotificationMessage): "warning" | "error" | undefined {
+/**
+ * Cascade severity ladder body shared by the cascade arm of `computeSeverity`
+ * and the RECON-04 `reconcile-applied-cascade` standalone arm
+ * (`reconcileAppliedSeverity`). Structural-subset typed so any message whose
+ * marketplaces[] carries the (status, reasons?, plugins[].status,
+ * plugins[].reasons) shape can be evaluated.
+ *
+ * 4-arm first-match (D-28-08 / D-28-09):
+ *   1. any failed plugin / mp row                           -> "error"
+ *   2. any manual-recovery plugin row                       -> "warning"
+ *   3. any plugin-level "skipped" with not-all-benign reasons
+ *      (first-match poisoning per D-28-09)                  -> "warning"
+ *   4. any mp-level "skipped" with not-all-benign reasons?
+ *      (missing/empty reasons? -> warning, the D-28-08 safe default
+ *      since allBenign(undefined|[]) === false)             -> "warning"
+ *   5. otherwise                                            -> undefined (info)
+ */
+type ComputedSeverity = "warning" | "error" | undefined;
+
+// S9 (PR #51): the structural-subset shape `cascadeSeverity` evaluates is
+// pinned to the closed `PluginStatus` / `MarketplaceStatus` literal unions
+// (instead of bare `string`). Every caller passes a `NotificationMessage`
+// cascade arm or a `ReconcileAppliedCascadeMessage`, both of which carry the
+// closed-set status discriminants -- a future caller that supplied a `string`
+// would lose first-match-ladder correctness (e.g. typoed `"failed "` would
+// silently route to info), and the tighter parameter type catches that at the
+// call site instead of at first-match runtime.
+function cascadeSeverity(message: {
+  readonly marketplaces: readonly {
+    readonly status?: MarketplaceStatus | undefined;
+    readonly reasons?: readonly Reason[] | undefined;
+    readonly plugins: readonly {
+      readonly status: PluginStatus;
+      readonly reasons?: readonly Reason[] | undefined;
+    }[];
+  }[];
+}): ComputedSeverity {
+  const hasError = message.marketplaces.some(
+    (mp) => mp.status === "failed" || mp.plugins.some((p) => p.status === "failed"),
+  );
+  if (hasError) {
+    return "error";
+  }
+
+  const hasManualRecovery = message.marketplaces.some((mp) =>
+    mp.plugins.some((p) => p.status === "manual recovery"),
+  );
+  if (hasManualRecovery) {
+    return "warning";
+  }
+
+  const hasActionablePluginSkip = message.marketplaces.some((mp) =>
+    mp.plugins.some((p) => p.status === "skipped" && !allBenign(p.reasons)),
+  );
+  if (hasActionablePluginSkip) {
+    return "warning";
+  }
+
+  const hasActionableMpSkip = message.marketplaces.some(
+    (mp) => mp.status === "skipped" && !allBenign(mp.reasons),
+  );
+  if (hasActionableMpSkip) {
+    return "warning";
+  }
+
+  return undefined;
+}
+
+/**
+ * RECON-04 severity for the `reconcile-applied-cascade` standalone variant.
+ * Empty-and-clean cascades MUST be short-circuited by the caller (NFR-2 / A4)
+ * and never reach this arm.
+ */
+function reconcileAppliedSeverity(message: ReconcileAppliedCascadeMessage): ComputedSeverity {
+  return cascadeSeverity(message);
+}
+
+function computeSeverity(message: NotificationMessage): ComputedSeverity {
   // INFO-04 / SC#2 / INFO-03 / INFO-02: info-surface kinds take precedence
   // over the cascade severity ladder.
   // `marketplace-info` payloads carry no failure state and route to info
@@ -1579,14 +2006,21 @@ function computeSeverity(message: NotificationMessage): "warning" | "error" | un
     // is absent -- a failure surface); `plugin-info` routes to "error" only
     // when its embedded row is `(failed)`; the read-only info/cascade kinds
     // carry no failure state and route to info (undefined).
+    // `reconcile-applied-cascade` (RECON-04) is content-derived: any failed
+    // row -> error, any actionable skip -> warning, otherwise info (mirrors
+    // the cascade-arm ladder below).
     switch (message.kind) {
       case "marketplace-not-added":
         return "error";
       case "plugin-info":
         return message.plugin.status === "failed" ? "error" : undefined;
+      case "reconcile-applied-cascade":
+        return reconcileAppliedSeverity(message);
       case "marketplace-info":
       case "marketplace-info-cascade":
       case "plugin-info-cascade":
+      case "reconcile-preview-empty":
+        // DIFF-01 SC #2: the empty-steady-state advisory is read-only / info.
         return undefined;
       default:
         assertNever(message);
@@ -1594,44 +2028,8 @@ function computeSeverity(message: NotificationMessage): "warning" | "error" | un
     }
   }
 
-  // Arm 1: any failed (plugin or marketplace) -> "error".
-  const hasError = message.marketplaces.some(
-    (mp) => mp.status === "failed" || mp.plugins.some((p) => p.status === "failed"),
-  );
-  if (hasError) {
-    return "error";
-  }
-
-  // Arm 2: any manual-recovery plugin row -> "warning" (always actionable).
-  const hasManualRecovery = message.marketplaces.some((mp) =>
-    mp.plugins.some((p) => p.status === "manual recovery"),
-  );
-  if (hasManualRecovery) {
-    return "warning";
-  }
-
-  // Arm 3: any plugin-level "skipped" whose REQUIRED reasons are not all
-  // benign -> "warning" (first-match poisoning per D-28-09 -- one actionable
-  // skip warning-routes the whole cascade).
-  const hasActionablePluginSkip = message.marketplaces.some((mp) =>
-    mp.plugins.some((p) => p.status === "skipped" && !allBenign(p.reasons)),
-  );
-  if (hasActionablePluginSkip) {
-    return "warning";
-  }
-
-  // Arm 4: any mp-level "skipped" whose OPTIONAL reasons? are not all benign
-  // -> "warning". Missing/empty reasons? cannot be proven benign (allBenign
-  // returns false on undefined/empty) -> warning, the D-28-08 safe default.
-  const hasActionableMpSkip = message.marketplaces.some(
-    (mp) => mp.status === "skipped" && !allBenign(mp.reasons),
-  );
-  if (hasActionableMpSkip) {
-    return "warning";
-  }
-
-  // Arm 5: otherwise success / benign-only skip (omit 2nd arg = info).
-  return undefined;
+  // Cascade arm: delegate to the shared 4-arm ladder (D-28-08 / D-28-09).
+  return cascadeSeverity(message);
 }
 
 /**
@@ -1651,18 +2049,28 @@ interface SummaryCounts {
  * defensive short-circuit).
  */
 function countFailedOperations(message: CascadeNotificationMessage): SummaryCounts {
-  let plugins = 0;
-  let marketplaces = 0;
+  return countFailedRows(message.marketplaces);
+}
 
-  for (const mp of message.marketplaces) {
+/**
+ * Shared per-marketplaces-array failure counter consumed by both the cascade
+ * arm and the RECON-04 `reconcile-applied-cascade` standalone arm. Both
+ * carry a structurally identical `readonly MarketplaceNotificationMessage[]`
+ * shape so the counting logic is single-sourced.
+ */
+function countFailedRows(marketplaces: readonly MarketplaceNotificationMessage[]): SummaryCounts {
+  let plugins = 0;
+  let mpCount = 0;
+
+  for (const mp of marketplaces) {
     if (mp.status === "failed") {
-      marketplaces++;
+      mpCount++;
     }
 
     plugins += mp.plugins.filter((p) => p.status === "failed").length;
   }
 
-  return { plugins, marketplaces };
+  return { plugins, marketplaces: mpCount };
 }
 
 /**
@@ -1673,12 +2081,17 @@ function countFailedOperations(message: CascadeNotificationMessage): SummaryCoun
  * `countFailedOperations`).
  */
 function countSkippedOperations(message: CascadeNotificationMessage): SummaryCounts {
-  let plugins = 0;
-  let marketplaces = 0;
+  return countSkippedRows(message.marketplaces);
+}
 
-  for (const mp of message.marketplaces) {
+/** Shared per-marketplaces-array skip counter (mirrors countFailedRows). */
+function countSkippedRows(marketplaces: readonly MarketplaceNotificationMessage[]): SummaryCounts {
+  let plugins = 0;
+  let mpCount = 0;
+
+  for (const mp of marketplaces) {
     if (mp.status === "skipped" && !allBenign(mp.reasons)) {
-      marketplaces++;
+      mpCount++;
     }
 
     plugins += mp.plugins.filter(
@@ -1686,7 +2099,34 @@ function countSkippedOperations(message: CascadeNotificationMessage): SummaryCou
     ).length;
   }
 
-  return { plugins, marketplaces };
+  return { plugins, marketplaces: mpCount };
+}
+
+/**
+ * RECON-04: shared summary-line wording over a marketplaces array. Mirrors
+ * the cascade-arm tail of `buildSummaryLine` so the reconcile-applied
+ * variant emits identical phrasing.
+ */
+function buildSummaryLineForCascade(
+  marketplaces: readonly MarketplaceNotificationMessage[],
+  severity: "error" | "warning",
+): string {
+  const verb = severity === "error" ? "failed" : "skipped";
+  const counts =
+    severity === "error" ? countFailedRows(marketplaces) : countSkippedRows(marketplaces);
+
+  const pluginPhrase = operationPhrase(counts.plugins, "plugin");
+  const marketplacePhrase = operationPhrase(counts.marketplaces, "marketplace");
+
+  if (counts.plugins > 0 && counts.marketplaces > 0) {
+    return `${pluginPhrase} and ${marketplacePhrase} ${verb}.`;
+  }
+
+  if (counts.marketplaces > 0) {
+    return `${marketplacePhrase} ${verb}.`;
+  }
+
+  return `${pluginPhrase} ${verb}.`;
 }
 
 /**
@@ -1735,9 +2175,17 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
         return `${operationPhrase(1, "marketplace")} failed.`;
       case "plugin-info":
         return message.plugin.status === "failed" ? `${operationPhrase(1, "plugin")} failed.` : "";
+      case "reconcile-applied-cascade":
+        // RECON-04: at error/warning severity reuse the cascade-arm counting
+        // helpers over the same per-status `marketplaces` shape; at info
+        // severity buildSummaryLine isn't called (emitWithSummary short-
+        // circuits) so the empty arm below is unreachable in practice.
+        return buildSummaryLineForCascade(message.marketplaces, severity);
       case "marketplace-info":
       case "marketplace-info-cascade":
       case "plugin-info-cascade":
+      case "reconcile-preview-empty":
+        // DIFF-01 SC #2: info-severity / read-only -- no summary semantics.
         return "";
       default:
         assertNever(message);
@@ -1772,12 +2220,18 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
  *
  * The rule is therefore plugin-row-driven only: emit iff some marketplace
  * carries a plugin row whose status is one of the four state-change tokens
- * `installed | updated | reinstalled | uninstalled`. No marketplace status
+ * `installed | updated | reinstalled | uninstalled` -- or, ONLY on a cascade
+ * dispatched with the `"disable-cascade"` kind (the `/claude:plugin disable`
+ * command's realized-transition cascade, UAT-03), a `disabled` row. No
+ * marketplace status
  * (added / removed / updated / autoupdate enabled / autoupdate disabled /
- * skipped / failed) triggers on its own. This mirrors the G-21-01 invariant:
- * every status discriminator either always triggers the reload-hint or never
- * does -- no token straddles inventory vs transition, so the predicate is
- * unambiguous.
+ * skipped / failed) triggers on its own. This refines the G-21-01 invariant:
+ * within a given cascade KIND every status discriminator either always
+ * triggers the reload-hint or never does; `disabled` is inventory (hint-free)
+ * on kind-less / `"cascade"` payloads (list / info surfaces) and a realized
+ * transition (hint fires) on `"disable-cascade"` payloads -- the straddle is
+ * resolved structurally at the kind level, mirroring
+ * `reconcile-applied-cascade`'s structural exclusion below.
  *
  * A fresh autoupdate enabled/disabled flip does NOT emit the trailer (the
  * flip changes a marketplace record, not a Pi-visible resource). The
@@ -1803,6 +2257,15 @@ function shouldEmitReloadHint(message: NotificationMessage): boolean {
       case "marketplace-info-cascade":
       case "plugin-info-cascade":
       case "marketplace-not-added":
+      case "reconcile-preview-empty":
+        // DIFF-01 SC #2: preview rows are pre-transition; the trailer would
+        // be grammatically false (`/reload` cannot pick up zero changes).
+        return false;
+      case "reconcile-applied-cascade":
+        // RECON-04: the reconcile already ran ON /reload (the
+        // resources_discover handler IS the trailer's nominal trigger), so
+        // emitting `Run /reload to pick up changes` after applying changes
+        // would be a lie. Structurally false closes the trailer-leak gap.
         return false;
       default:
         assertNever(message);
@@ -1810,13 +2273,19 @@ function shouldEmitReloadHint(message: NotificationMessage): boolean {
     }
   }
 
+  // UAT-03: the `"disable-cascade"` kind is the structural marker under
+  // which a `(disabled)` row counts as a realized transition (the disable
+  // command unstaged Pi-visible artefacts -- SNM-33). Kind-less / "cascade"
+  // payloads keep `disabled` hint-free (list / info inventory surfaces).
+  const disabledIsTransition = message.kind === "disable-cascade";
   for (const mp of message.marketplaces) {
     for (const p of mp.plugins) {
       if (
         p.status === "installed" ||
         p.status === "updated" ||
         p.status === "reinstalled" ||
-        p.status === "uninstalled"
+        p.status === "uninstalled" ||
+        (disabledIsTransition && p.status === "disabled")
       ) {
         return true;
       }
@@ -2234,6 +2703,23 @@ function composeMarketplaceBlock(mp: MarketplaceNotificationMessage, probe: Soft
 }
 
 /**
+ * RECON-04: compose the `reconcile-applied-cascade` body using the SAME
+ * per-mp / per-plugin helpers the cascade arm uses, so realized transition
+ * tokens (`added` / `installed` / `uninstalled` / `disabled` / `failed`)
+ * render byte-identical to their standalone-command counterparts. The empty-
+ * marketplaces case is unreachable (callers MUST short-circuit BEFORE
+ * invoking notify() per NFR-2 / A4); we defensively fall back to the
+ * `(no marketplaces)` sentinel for parity with the cascade arm.
+ */
+function composeReconcileAppliedBody(
+  message: ReconcileAppliedCascadeMessage,
+  probe: SoftDepStatus,
+): string {
+  const blocks = message.marketplaces.map((mp) => composeMarketplaceBlock(mp, probe));
+  return blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
+}
+
+/**
  * GRAM-04: the single summary-emission seam shared by the standalone arm
  * (`dispatchInfoMessage`) and the cascade arm of `notify()`. Computing the
  * severity and prepending the summary in ONE place is the structural
@@ -2288,6 +2774,20 @@ function dispatchInfoMessage(
     case "marketplace-not-added":
       body = renderMarketplaceNotAdded(message, probe);
       break;
+    case "reconcile-preview-empty":
+      // DIFF-01 SC #2: catalog-locked free-form advisory body line. Hard-coded
+      // here so the byte form cannot drift from `docs/output-catalog.md`'s
+      // `empty-steady-state` state.
+      body = "Preview: next reload will apply 0 actions.";
+      break;
+    case "reconcile-applied-cascade":
+      // RECON-04: compose the same cascade body the cascade arm renders
+      // (per-mp header + per-plugin row via the existing helpers). The
+      // reload-hint trailer is structurally suppressed by
+      // shouldEmitReloadHint's arm above; emitWithSummary handles the
+      // summary prepend at error/warning severity.
+      body = composeReconcileAppliedBody(message, probe);
+      break;
     default:
       assertNever(message);
       return;
@@ -2334,7 +2834,11 @@ export function notify(
   switch (message.kind) {
     case undefined:
     case "cascade":
-      // Cascade body falls through below.
+    case "disable-cascade":
+      // Cascade body falls through below. The `disable-cascade` kind
+      // (UAT-03) renders byte-identically; it differs only inside
+      // `shouldEmitReloadHint`, where `(disabled)` rows count as realized
+      // transitions.
       break;
     default:
       assertNever(message);

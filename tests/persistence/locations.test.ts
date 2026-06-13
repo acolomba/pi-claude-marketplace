@@ -45,6 +45,13 @@ test("SC-1 / SC-2 locationsFor('user') returns Pi agent dir default paths", () =
     assert.ok(loc.stateJsonPath.endsWith("state.json"));
     assert.ok(loc.agentsDir.endsWith(path.join(".pi", "agent", "agents")));
     assert.ok(loc.mcpJsonPath.endsWith(path.join(".pi", "agent", "mcp.json")));
+    // CFG-01: config paths sit under scopeRoot at the same tier as mcp.json.
+    assert.ok(loc.configJsonPath.endsWith(path.join(".pi", "agent", "claude-plugins.json")));
+    assert.ok(loc.configJsonPath.startsWith(loc.scopeRoot));
+    assert.ok(
+      loc.configLocalJsonPath.endsWith(path.join(".pi", "agent", "claude-plugins.local.json")),
+    );
+    assert.ok(loc.configLocalJsonPath.startsWith(loc.scopeRoot));
   });
 });
 
@@ -56,6 +63,12 @@ test("SC-1 / SC-2 locationsFor('user') honors PI_CODING_AGENT_DIR", () => {
     assert.equal(loc.extensionRoot, path.join("/tmp", "pi-home", "agent", "pi-claude-marketplace"));
     assert.equal(loc.agentsDir, path.join("/tmp", "pi-home", "agent", "agents"));
     assert.equal(loc.mcpJsonPath, path.join("/tmp", "pi-home", "agent", "mcp.json"));
+    // CFG-01: configJsonPath / configLocalJsonPath under scopeRoot (sibling of mcp.json).
+    assert.equal(loc.configJsonPath, path.join("/tmp", "pi-home", "agent", "claude-plugins.json"));
+    assert.equal(
+      loc.configLocalJsonPath,
+      path.join("/tmp", "pi-home", "agent", "claude-plugins.local.json"),
+    );
   });
 });
 
@@ -70,6 +83,22 @@ test("SC-1 / SC-2 locationsFor('project', cwd) returns <cwd>/.pi/ paths", () => 
   );
   assert.equal(loc.agentsDir, path.join("/my/proj", ".pi", "agents"));
   assert.equal(loc.mcpJsonPath, path.join("/my/proj", ".pi", "mcp.json"));
+  // CFG-01: config paths sit under scopeRoot (.pi), NOT under extensionRoot.
+  assert.equal(loc.configJsonPath, path.join("/my/proj", ".pi", "claude-plugins.json"));
+  assert.equal(loc.configLocalJsonPath, path.join("/my/proj", ".pi", "claude-plugins.local.json"));
+});
+
+test("CFG-01 ScopedLocations config fields are not writable (frozen)", () => {
+  const loc = locationsFor("user", "/x") as ScopedLocations & {
+    configJsonPath: string;
+    configLocalJsonPath: string;
+  };
+  assert.throws(() => {
+    loc.configJsonPath = "/tmp/evil";
+  }, /Cannot assign to read only property|object is not extensible/);
+  assert.throws(() => {
+    loc.configLocalJsonPath = "/tmp/evil";
+  }, /Cannot assign to read only property|object is not extensible/);
 });
 
 test("SC-2 ScopedLocations exposes agents-staging dir under extensionRoot", () => {
@@ -274,7 +303,7 @@ test("SC-3 ScopedLocations new bridge-target fields are not writable (frozen)", 
   }, /Cannot assign to read only property|object is not extensible/);
 });
 
-test("Phase 3 bridge-target dirs are all under extensionRoot (defense-in-depth)", () => {
+test("bridge-target dirs are all under extensionRoot (defense-in-depth)", () => {
   const loc = locationsFor("project", "/p");
   // String-prefix containment check: every bridge target lives under
   // extensionRoot. Bridges still call assertPathInside before writing leaf

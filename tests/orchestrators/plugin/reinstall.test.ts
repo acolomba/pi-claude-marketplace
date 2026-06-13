@@ -484,7 +484,7 @@ test("PRL-10: force overwrites foreign previous agent content and rollback resto
   });
 });
 
-test("PRL-12 (Plan 19-04): cache and data cleanup failures are SILENTLY swallowed after successful reinstall (V1 warning surface DROPPED per D-19-01)", async () => {
+test("PRL-12: cache and data cleanup failures are SILENTLY swallowed after successful reinstall (V1 warning surface DROPPED per D-19-01)", async () => {
   // D-19-01 DROPS the two standalone-mode warning surfaces (bridgeWarnings
   // + maintenanceWarnings) that would otherwise fire after a successful
   // reinstall when the post-state-commit cache/data cleanup paths failed:
@@ -537,7 +537,7 @@ test("PRL-12 (Plan 19-04): cache and data cleanup failures are SILENTLY swallowe
   });
 });
 
-test("PRL-12/RH-5 (Plan 19-04): V2 per-variant reload-hint -- emitted on reinstalled even with zero resources changed (cascade stub); agents/MCP warn when unloaded", async () => {
+test("PRL-12/RH-5: V2 per-variant reload-hint -- emitted on reinstalled even with zero resources changed (cascade stub); agents/MCP warn when unloaded", async () => {
   // The reload-hint is emitted structurally from
   // `PluginReinstalledMessage.status` per D-16-12 (the `reinstalled`
   // status is in the state-changing variant set), NOT from
@@ -1235,7 +1235,7 @@ test("PRL-15 batch soft dependency warnings aggregate successful restaged resour
  * literal `"manual recovery"` WITH a space per
  * shared/grammar/status-tokens.ts).
  */
-test("Plan 19-04 / D-19-02: outcomeToPluginMessage maps failureClass=manual-recovery -> PluginManualRecoveryMessage with rollback partial", () => {
+test("D-19-02: outcomeToPluginMessage maps failureClass=manual-recovery -> PluginManualRecoveryMessage with rollback partial", () => {
   const outcome: ReinstallFailedOutcome = {
     partition: "failed",
     name: "hello",
@@ -1274,7 +1274,7 @@ test("ATTR-09 / D-47-B: outcomeToPluginMessage without failureClass falls back t
   assert.deepEqual([...row.reasons], ["unreadable"]);
 });
 
-test("Plan 19-04 / D-19-02: outcomeToPluginMessage rollback substring still maps to rollback partial", () => {
+test("D-19-02: outcomeToPluginMessage rollback substring still maps to rollback partial", () => {
   // The `"rollback"` substring branch in `narrowReason` stays in place --
   // it covers non-manual-recovery rollback scenarios (the rollback-partial
   // fallback path) and produces a PluginFailedMessage (NOT a
@@ -1299,7 +1299,7 @@ test("Plan 19-04 / D-19-02: outcomeToPluginMessage rollback substring still maps
 // precise closed Reason instead of degrading to `not in manifest`.
 // ───────────────────────────────────────────────────────────────────────────
 
-test("Plan 19-04 / D-19-02: outcomeToPluginMessage prefers typed `outcome.reasons` (`permission denied`) over notes-substring fallback", () => {
+test("D-19-02: outcomeToPluginMessage prefers typed `outcome.reasons` (`permission denied`) over notes-substring fallback", () => {
   const outcome: ReinstallFailedOutcome = {
     partition: "failed",
     name: "hello",
@@ -1316,7 +1316,7 @@ test("Plan 19-04 / D-19-02: outcomeToPluginMessage prefers typed `outcome.reason
   assert.deepEqual([...row.reasons], ["permission denied"]);
 });
 
-test("Plan 19-04 / D-19-02: outcomeToPluginMessage `source missing` typed reason wins over notes fallback", () => {
+test("D-19-02: outcomeToPluginMessage `source missing` typed reason wins over notes fallback", () => {
   const outcome: ReinstallFailedOutcome = {
     partition: "failed",
     name: "hello",
@@ -1349,7 +1349,7 @@ test("ATTR-09 / D-47-B: outcomeToPluginMessage without `reasons` falls back to t
   assert.deepEqual([...row.reasons], ["unreadable"]);
 });
 
-test("Plan 19-04 / D-19-02: outcomeToPluginMessage `failureClass=manual-recovery` STILL wins over typed `reasons` (precedence locked)", () => {
+test("D-19-02: outcomeToPluginMessage `failureClass=manual-recovery` STILL wins over typed `reasons` (precedence locked)", () => {
   // The precedence order in outcomeToPluginMessage:
   //   (1) failureClass="manual-recovery"  -> PluginManualRecoveryMessage
   //                                          with reasons: ["rollback partial"]
@@ -1383,7 +1383,7 @@ test("Plan 19-04 / D-19-02: outcomeToPluginMessage `failureClass=manual-recovery
  * final `.leaks` payload counts it ONCE. The implementation uses a
  * `Set`-dedup on the merged array.
  */
-test("Plan 13-02a-02 / CMC-16 / F-5: errorWithManualRecovery dedups overlapping leaks", () => {
+test("CMC-16 / F-5: errorWithManualRecovery dedups overlapping leaks", () => {
   const inner = new ManualRecoveryError("inner failed", ["agents: foo"]);
   const wrapped = __test_errorWithManualRecovery(inner, ["agents: foo"]);
   assert.ok(wrapped instanceof ManualRecoveryError);
@@ -1397,14 +1397,14 @@ test("Plan 13-02a-02 / CMC-16 / F-5: errorWithManualRecovery dedups overlapping 
   assert.equal((wrapped as ManualRecoveryError & { cause: unknown }).cause, inner);
 });
 
-test("Plan 13-02a-02 / CMC-16 / F-5: errorWithManualRecovery merges disjoint leaks without dedup", () => {
+test("CMC-16 / F-5: errorWithManualRecovery merges disjoint leaks without dedup", () => {
   const inner = new ManualRecoveryError("inner failed", ["agents: foo"]);
   const wrapped = __test_errorWithManualRecovery(inner, ["skills: bar"]);
   assert.ok(wrapped instanceof ManualRecoveryError);
   assert.deepEqual([...wrapped.leaks], ["agents: foo", "skills: bar"]);
 });
 
-test("Plan 13-02a-02 / CMC-16: errorWithManualRecovery wraps non-ManualRecoveryError with new ManualRecoveryError", () => {
+test("CMC-16: errorWithManualRecovery wraps non-ManualRecoveryError with new ManualRecoveryError", () => {
   const inner = new Error("raw error");
   const wrapped = __test_errorWithManualRecovery(inner, ["x: leak"]);
   assert.ok(wrapped instanceof ManualRecoveryError);
@@ -1413,7 +1413,7 @@ test("Plan 13-02a-02 / CMC-16: errorWithManualRecovery wraps non-ManualRecoveryE
   assert.equal((wrapped as ManualRecoveryError & { cause: unknown }).cause, inner);
 });
 
-test("Plan 13-02a-02 / CMC-16: errorWithManualRecovery short-circuits on zero leaks", () => {
+test("CMC-16: errorWithManualRecovery short-circuits on zero leaks", () => {
   const inner = new Error("raw error");
   const wrapped = __test_errorWithManualRecovery(inner, []);
   // Zero-leak fast path preserves the original Error reference verbatim.
@@ -1504,7 +1504,7 @@ test("WR-01: findManualRecoveryError respects the depth-5 bound", () => {
  * no `failed` row tips it to error). notify() computes severity from
  * contents.
  */
-test("Plan 19-04 / D-19-02: manual-recovery outcome folds into cascade plugins[] as PluginManualRecoveryMessage row", () => {
+test("D-19-02: manual-recovery outcome folds into cascade plugins[] as PluginManualRecoveryMessage row", () => {
   const { ctx, pi, notifications } = makeCtx();
   const outcomes: readonly ReinstallPluginOutcome[] = [
     {
@@ -1559,7 +1559,7 @@ test("Plan 19-04 / D-19-02: manual-recovery outcome folds into cascade plugins[]
   assert.match(body, /\/reload to pick up changes/);
 });
 
-test("Plan 19-04 / D-19-02: outcomeToPluginMessage stays correct when the orchestrator catches a release-wrapped MRE (WR-01 V2 successor)", () => {
+test("D-19-02: outcomeToPluginMessage stays correct when the orchestrator catches a release-wrapped MRE (WR-01 V2 successor)", () => {
   // End-to-end binding: simulate the catch block's behavior on a
   // release-also-failed wrapper. The spread guard uses
   // findManualRecoveryError, so the failureClass tag IS set, and
@@ -2297,6 +2297,159 @@ test("GAP-19: reinstallPlugin updateStateRecord concurrent-removal detection", a
         note.includes("concurrently removed"),
         `expected 'concurrently removed' in: ${note}`,
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// WB-01/WB-02 deep-equal short-circuit + --local
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WB-01 / A7: reinstall with EQUAL existing entry leaves config byte- and mtime-unchanged (RECON-05)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wb01-noop-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "s", command: "c" },
+        install: true,
+      });
+
+      // seedMarketplace -> installPlugin already wrote claude-plugins.json
+      // with the entry `{}`. Snapshot bytes + mtime BEFORE reinstall.
+      const bytesBefore = await readFile(locations.configJsonPath);
+      const statBefore = await (await import("node:fs/promises")).stat(locations.configJsonPath);
+
+      // Pause to ensure any write would produce a different mtime.
+      await new Promise((r) => setTimeout(r, 50));
+
+      const { ctx, pi } = makeCtx();
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      assert.equal(outcome.partition, "reinstalled");
+
+      const bytesAfter = await readFile(locations.configJsonPath);
+      const statAfter = await (await import("node:fs/promises")).stat(locations.configJsonPath);
+      assert.deepEqual(bytesAfter, bytesBefore);
+      assert.equal(statAfter.mtimeMs, statBefore.mtimeMs, "config mtime MUST be unchanged");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WB-01 / A7: reinstall with DIFFERENT existing entry writes back the patched shape (forward-compat key preserved)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wb01-diff-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "s", command: "c" },
+        install: true,
+      });
+
+      // Overwrite the entry with a known-different shape carrying an unknown
+      // forward-compat key. The reinstall MUST preserve the unknown key
+      // (D-09) -- the deep-equal short-circuit fires when the prospective
+      // patched shape ({} spread over existing) == existing.
+      const { saveConfig, loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const cur = await loadConfig(locations.configJsonPath);
+      assert.equal(cur.status, "valid");
+      if (cur.status !== "valid") {
+        return;
+      }
+
+      await saveConfig(
+        locations.configJsonPath,
+        {
+          schemaVersion: 1,
+          plugins: { "hello@mp": { enabled: false, futureKey: "x" } as never },
+        },
+        locations.scopeRoot,
+      );
+
+      const { ctx, pi } = makeCtx();
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      assert.equal(outcome.partition, "reinstalled");
+
+      // Existing shape `{ enabled: false, futureKey: "x" }` deep-equals
+      // the spread-over-existing patched shape -- byte-stable, write
+      // SKIPPED. The unknown key MUST still be present (no clobber).
+      const after = await loadConfig(locations.configJsonPath);
+      assert.equal(after.status, "valid");
+      if (after.status === "valid") {
+        const entry = after.config.plugins?.["hello@mp"] as Record<string, unknown> | undefined;
+        assert.equal(entry?.enabled, false);
+        assert.equal(entry?.futureKey, "x");
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WB-01: --local reinstall targets the local file; base file untouched", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wb01-local-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "s", command: "c" },
+        install: true,
+      });
+
+      // Snapshot base bytes BEFORE the --local reinstall.
+      const baseBytesBefore = await readFile(locations.configJsonPath);
+
+      const { ctx, pi } = makeCtx();
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        local: true,
+      });
+      assert.equal(outcome.partition, "reinstalled");
+
+      // Base bytes UNCHANGED on the --local path (--local NEVER touches the
+      // base file).
+      const baseBytesAfter = await readFile(locations.configJsonPath);
+      assert.deepEqual(baseBytesAfter, baseBytesBefore);
+
+      // Local file received the write -- the local file was ABSENT before
+      // the reinstall, so the key is missing -> WRITE fires to add the
+      // implicit declaration.
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const localCfg = await loadConfig(locations.configLocalJsonPath);
+      assert.equal(localCfg.status, "valid");
+      if (localCfg.status === "valid") {
+        assert.deepEqual(localCfg.config.plugins?.["hello@mp"], {});
+      }
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

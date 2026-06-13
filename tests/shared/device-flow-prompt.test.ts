@@ -48,7 +48,7 @@ function makeNotifyRecorder(): {
   return { notifyFn, calls };
 }
 
-test("Phase 35 AUTH-03: Device Flow prompt byte form matches docs/output-catalog.md exactly", async () => {
+test("AUTH-03: Device Flow prompt byte form matches docs/output-catalog.md exactly", async () => {
   // Mock values match the catalog example at
   // docs/output-catalog.md -> ## Out-of-band notifications ->
   // ### Device Flow user-code prompt (catalog-state: device-flow-prompt).
@@ -93,7 +93,7 @@ test("Phase 35 AUTH-03: Device Flow prompt byte form matches docs/output-catalog
   assert.equal(promptCall.severity, "info", 'AUTH-03 severity lock: severity must be "info"');
 });
 
-test("Phase 35 AUTH-03: Device Flow prompt is emitted BEFORE the poll loop (token not yet acquired -- AUTH-09)", async () => {
+test("AUTH-03: Device Flow prompt is emitted BEFORE the poll loop (token not yet acquired -- AUTH-09)", async () => {
   // Drive a poll sequence that fails immediately (access_denied) so the
   // poll loop terminates on the first iteration. The prompt MUST still
   // fire before the failure -- it is emitted on the device-code response,

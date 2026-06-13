@@ -8,7 +8,7 @@ import { TARGETS, targetSourcePath } from "./_targets.ts";
 
 const FIXTURE_ROOT = path.resolve("tests/e2e/_fixtures", PINNED_SHA);
 
-test("07-05 Task 1 :: pinned SHA and target catalog are deterministic", () => {
+test("pinned SHA and target catalog are deterministic", () => {
   assert.equal(PINNED_SHA, "6196a61bdeece7b9889ecda1e45bd7085788ae75");
   assert.deepEqual(
     TARGETS.map((target) => [target.plugin, target.kind, target.softDepMatrix]),
@@ -28,7 +28,7 @@ test("07-05 Task 1 :: pinned SHA and target catalog are deterministic", () => {
   }
 });
 
-test("07-05 Task 1 :: fixture snapshots live under the full pinned SHA", async () => {
+test("fixture snapshots live under the full pinned SHA", async () => {
   await access(path.join(FIXTURE_ROOT, "marketplace.json"));
 
   for (const target of TARGETS) {

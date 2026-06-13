@@ -21,6 +21,7 @@
 //   Cross-name ordering is insertion order (Object.values on
 //   state.marketplaces); there is no alphabetic sort.
 
+import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { notify } from "../../shared/notify.ts";
@@ -51,6 +52,10 @@ export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<v
   for (const scope of scopes) {
     const locations = locationsFor(scope, opts.cwd);
     const state = await loadState(locations.extensionRoot);
+    // SPLIT-01 rewire: autoupdate lives in claude-plugins.json (config).
+    // Pre-compute the merged view ONCE per scope; the inner loop reads
+    // `merged.marketplaces[name]?.entry.autoupdate` for each record.
+    const { merged } = await loadMergedScopeConfig(locations);
     for (const record of Object.values(state.marketplaces)) {
       // NotificationMessage construction recipe.
       // - One MarketplaceNotificationMessage per record, emitted via one
@@ -58,20 +63,22 @@ export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<v
       // - Discriminator here: `mp.status === undefined` (list-surface arm of
       //   renderMpHeader). Unique to this orchestrator in the marketplace family.
       // - `details: MarketplaceDetails` is OPTIONAL and INDEPENDENT of status
-      //   per D-15-06; SET when the persisted record carries `autoupdate`
-      //   and/or `lastUpdatedAt`, OMITTED otherwise so the renderer emits a
-      //  bare `● <name> [<scope>]` row (list-surface sub-branch A).
+      //   per D-15-06; SET when the merged config carries `autoupdate` and/or
+      //   when the state record carries `lastUpdatedAt`, OMITTED otherwise so
+      //   the renderer emits a bare `● <name> [<scope>]` row (list-surface
+      //   sub-branch A).
       // - Severity (info; no 2nd arg) and reload-hint are computed by
       //  notify (list surface emits neither).
       // - Reference: catalog UAT `mixed-scopes` fixture (binding
       //   `<autoupdate>` + `<last-updated <iso>>` tokens).
+      const autoupdate = merged.marketplaces[record.name]?.entry.autoupdate ?? false;
       marketplaces.push({
         name: record.name,
         scope: record.scope,
-        ...(record.autoupdate !== undefined || record.lastUpdatedAt !== undefined
+        ...(autoupdate || record.lastUpdatedAt !== undefined
           ? {
               details: {
-                autoupdate: record.autoupdate ?? false,
+                autoupdate,
                 ...(record.lastUpdatedAt !== undefined && {
                   lastUpdatedAt: record.lastUpdatedAt,
                 }),

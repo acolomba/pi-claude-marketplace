@@ -13,6 +13,7 @@
 
 import { updatePlugins } from "../../../orchestrators/plugin/update.ts";
 import { notifyUsageError } from "../../../shared/notify.ts";
+import { extractLocalFlag } from "../shared.ts";
 
 import { parseMapModelArgs, splitPluginMarketplaceRef } from "./shared.ts";
 
@@ -20,13 +21,20 @@ import type { UpdatePluginsTarget } from "../../../orchestrators/plugin/update.t
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
 const USAGE =
-  "Usage: /claude:plugin update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--map-model]";
+  "Usage: /claude:plugin update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--map-model] [--local]";
 
 export function makeUpdateHandler(
   pi: ExtensionAPI,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
-    const flagged = parseMapModelArgs(args, ctx, USAGE);
+    // Shared scanner; see edge/handlers/shared.ts. `--map-model` is
+    // downstream-consumed; pass through verbatim.
+    const localFlag = extractLocalFlag(args, ctx, USAGE, ["--map-model"]);
+    if (localFlag === undefined) {
+      return;
+    }
+
+    const flagged = parseMapModelArgs(localFlag.residualArgs, ctx, USAGE);
     if (flagged === undefined) {
       return;
     }
@@ -67,6 +75,7 @@ export function makeUpdateHandler(
       target,
       ...(flagged.scope !== undefined && { scope: flagged.scope }),
       ...(mapModel && { mapModel: true }),
+      ...(localFlag.local && { local: true }),
     });
   };
 }

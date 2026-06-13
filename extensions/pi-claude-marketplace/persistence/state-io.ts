@@ -3,15 +3,15 @@
 // STATE_SCHEMA (ST-1, ST-2, ST-3) + loadState (ST-4..6 funneling) +
 // saveState (NFR-1 / AS-1 via atomicWriteJson).
 //
-// Per Pitfall 9, ENOENT and missing/empty marketplaces map are treated
-// identically as DEFAULT_STATE. Per ST-6, source records flow through
+// ENOENT and missing/empty marketplaces map are treated identically as
+// DEFAULT_STATE. Per ST-6, source records flow through
 // pathSource/githubSource at load time -- the SAME factories used at
 // marketplace-add parse time.
 //
 // Per D-09, state shape nests plugins under their owning
 // marketplace; the (mp, plugin) tuple is the natural composite key.
 //
-// Per Pitfall 4, this layer is INTRA-PROCESS only; cross-process
+// This layer is INTRA-PROCESS only; cross-process
 // safety is NOT claimed. withStateGuard enforces the
 // single-writer-at-a-time discipline; cross-process races resolve
 // last-writer-wins via write-file-atomic's queue.
@@ -22,6 +22,7 @@
 // (assertPathInside applied at read site). This layer loads the value
 // verbatim.
 
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -63,12 +64,19 @@ const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
 const MARKETPLACE_RECORD_SCHEMA = Type.Object({
   name: Type.String(),
   scope: Type.Union([Type.Literal("user"), Type.Literal("project")]),
+  // D-14: `source` KEEPS on the state record (materialized machine fact). The
+  // user-authored desired-state `source` lives on `CONFIG_SCHEMA` in
+  // `persistence/config-io.ts`; the two are deliberately separate per the
+  // ownership split.
   source: Type.Unknown(),
   addedFromCwd: Type.String(),
   manifestPath: Type.String(),
   marketplaceRoot: Type.String(),
   lastUpdatedAt: Type.Optional(Type.String()),
-  autoupdate: Type.Optional(Type.Boolean()),
+  // SPLIT-01 / D-12: `autoupdate` field REMOVED from MARKETPLACE_RECORD_SCHEMA.
+  // It lives in CONFIG_SCHEMA (per-marketplace config entry) now. Legacy
+  // state.json that still has the field loads cleanly via typebox's lenient
+  // default; the D-13-gated scrub in migrate.ts removes it post-migration.
   plugins: Type.Record(Type.String(), PLUGIN_INSTALL_RECORD_SCHEMA),
 });
 
@@ -83,7 +91,7 @@ export type ExtensionState = Type.Static<typeof STATE_SCHEMA>;
 /** JIT-compiled validator (D-07). */
 export const STATE_VALIDATOR = Compile(STATE_SCHEMA);
 
-/** First-load default (Pitfall 9: ENOENT and empty treated identically). */
+/** First-load default (ENOENT and empty treated identically). */
 export const DEFAULT_STATE: ExtensionState = Object.freeze({
   schemaVersion: 1,
   marketplaces: {},
@@ -139,7 +147,7 @@ function normalizeStoredSource(mpName: string, mp: Record<string, unknown>): voi
 /**
  * ST-1, ST-4, ST-5, ST-6: load + migrate + revalidate state.json.
  *
- * Returns DEFAULT_STATE on ENOENT (Pitfall 9). Throws on any other I/O
+ * Returns DEFAULT_STATE on ENOENT. Throws on any other I/O
  * error or on post-migration schema validation failure (caller logs and
  * surfaces).
  *
@@ -155,7 +163,7 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
     raw = await readFile(stateJsonPath, "utf8");
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      // Pitfall 9: missing file -> default state (NOT throw).
+      // Missing file -> default state (NOT throw).
       return { schemaVersion: 1, marketplaces: {} };
     }
 
@@ -171,8 +179,30 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
     });
   }
 
-  // ST-4 / ST-5: normalize legacy records.
-  const { marketplaces, mutated } = migrateLegacyMarketplaceRecords(parsed, extensionRoot);
+  // ST-4 / ST-5 / D-13: normalize legacy records. The third argument is the
+  // D-13 ORDERING RAIL gate: the `autoupdate` scrub fires only when the
+  // scope's `claude-plugins.json` already exists, preserving the legacy
+  // field on the first load before the first-run migration has
+  // captured it. The gate predicate lives HERE (not inside the migrator) so
+  // `migrateLegacyMarketplaceRecords` stays a pure function with no hidden
+  // I/O, and the D-13 gate decision is visible at the load seam where the
+  // path is derived. The SYNC `existsSync` probe is taken once, before the
+  // fully-synchronous migrate call, so the gate cannot race the in-memory
+  // transform. `extensionRoot` is `<scopeRoot>/pi-claude-marketplace`, so
+  // `path.dirname(extensionRoot)` is `<scopeRoot>` and the config sits as a
+  // sibling at `<scopeRoot>/claude-plugins.json` -- this matches the
+  // `locationsFor` construction in `persistence/locations.ts` byte-for-byte
+  // (pinned by a drift-guard test in tests/persistence/state-io.test.ts).
+  // We do NOT import `locationsFor` here because the external
+  // `loadState(extensionRoot)` signature MUST stay unchanged for
+  // orchestrator callers.
+  const configJsonPath = path.join(path.dirname(extensionRoot), "claude-plugins.json");
+  const scrubAutoupdate = existsSync(configJsonPath);
+  const { marketplaces, mutated } = migrateLegacyMarketplaceRecords(
+    parsed,
+    extensionRoot,
+    scrubAutoupdate,
+  );
 
   // ST-6: revalidate stored source records through the SAME factories used at
   // parse time. Three legal storage shapes:

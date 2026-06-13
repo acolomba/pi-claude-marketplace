@@ -17,7 +17,7 @@
 //     Throws MarketplaceNotFoundError or MarketplaceAmbiguousScopeError
 //     (both exported by shared/errors.ts).
 //
-//   - applyAutoupdateFlipInPlace (MAU-1..4): single helper used by
+//   - classifyAutoupdateFlip (MAU-1..4): single helper used by
 //     autoupdate.ts. Idempotent -- already-matching marketplaces land
 //     in `unchanged[]`.
 //
@@ -402,8 +402,8 @@ export interface AutoupdateFlipResult {
 }
 
 /**
- * MAU-1..4: idempotent autoupdate-flip.
- * - When `name` is undefined, flip every marketplace in this scope's
+ * MAU-1..4: idempotent autoupdate-flip classification.
+ * - When `name` is undefined, classify every marketplace in this scope's
  *   state (MAU-2 bare form).
  * - When `name` is given but missing, throw MarketplaceNotFoundError
  *   with an empty scope list -- the caller fills the scope detail.
@@ -411,15 +411,21 @@ export interface AutoupdateFlipResult {
  *   caller composes the user-visible "Already enabled/disabled: ..."
  *   line.
  * - MAU-4: missing/undefined `record.autoupdate` is read as `false`
- *   via the `?? false` coalescing.
+ *   via the `=== true` comparison.
  *
- * WR-06: name suffix "InPlace" is deliberate -- the `state` parameter
- * is MUTATED in place (the caller is INSIDE a withStateGuard closure;
- * the guard saves on no-throw). Returning the result as a plain object
- * (no Object.freeze) makes that contract unambiguous: callers must not
- * conclude from a frozen return that the function is pure.
+ * WR-05: CLASSIFY ONLY -- the legacy state-side
+ * `autoupdate` field is READ (a state record pre-dating the D-13 scrub may
+ * still carry it) but NEVER written. SPLIT-01 moved the truth into the
+ * per-marketplace config entry; the config write-back is the real flip.
+ * Writing the carved-out field back into state.json would re-introduce a
+ * schema-stripped legacy field that the D-13 scrub removes again on the
+ * next load -- pointless state churn the architecture gate at
+ * tests/architecture/no-split-01-cast-reads.test.ts now forbids (the
+ * assignment-form sibling pattern). The caller reclassifies this state-side
+ * result against the CONFIG truth (`reclassifyByConfigTruth`) before any
+ * write.
  */
-export function applyAutoupdateFlipInPlace(
+export function classifyAutoupdateFlip(
   state: ExtensionState,
   name: string | undefined,
   enable: boolean,
@@ -427,16 +433,18 @@ export function applyAutoupdateFlipInPlace(
   const changed: string[] = [];
   const unchanged: string[] = [];
 
+  // D-04: undefined === false. Read through `Record<string, unknown>` cast
+  // (legacy field; not on MARKETPLACE_RECORD_SCHEMA since SPLIT-01).
   if (name !== undefined) {
     const record = state.marketplaces[name];
     if (record === undefined) {
       throw new MarketplaceNotFoundError(name, []);
     }
 
-    if ((record.autoupdate ?? false) === enable) {
+    const legacy = record as unknown as Record<string, unknown>;
+    if ((legacy.autoupdate === true) === enable) {
       unchanged.push(name);
     } else {
-      record.autoupdate = enable;
       changed.push(name);
     }
 
@@ -444,10 +452,10 @@ export function applyAutoupdateFlipInPlace(
   }
 
   for (const [mp, record] of Object.entries(state.marketplaces)) {
-    if ((record.autoupdate ?? false) === enable) {
+    const legacy = record as unknown as Record<string, unknown>;
+    if ((legacy.autoupdate === true) === enable) {
       unchanged.push(mp);
     } else {
-      record.autoupdate = enable;
       changed.push(mp);
     }
   }

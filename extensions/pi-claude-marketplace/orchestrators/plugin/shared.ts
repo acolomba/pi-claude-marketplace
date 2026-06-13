@@ -17,12 +17,15 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { computeHashVersion } from "../../domain/version.ts";
+import { loadConfig } from "../../persistence/config-io.ts";
+import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { CrossPluginConflictError } from "../../shared/errors.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
+import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -62,7 +65,7 @@ export interface ResolvedScopedPluginTarget {
  *     (the plugin row may or may not be present -- the caller's
  *     downstream `installed === undefined` branch handles the
  *     plugin-row-absent silent converge, distinct from container
- *     absence per RESEARCH M13 / Pitfall 4).
+ *     absence per RESEARCH M13).
  *   - `other-scope`: the requested explicit scope misses, but the SAME
  *     plugin record exists in the OTHER scope. The caller surfaces this
  *     as a `marketplace-not-added` carrying the REQUESTED scope (the
@@ -142,7 +145,7 @@ export async function resolveCrossScopePluginTarget(opts: {
 
     // Container present in the requested scope: resolve there. The plugin
     // row may still be absent -- the caller's `installed === undefined`
-    // branch handles that silent converge (Pitfall 4).
+    // branch handles that silent converge.
     if (requestedState.marketplaces[opts.marketplace] !== undefined) {
       return { kind: "resolved", scope: requestedScope, locations: requestedLocations };
     }
@@ -236,6 +239,112 @@ export function cloneMarketplaceRecordForTargetScope(
     scope: targetScope,
     plugins: {},
   };
+}
+
+/**
+ * CR-02: synthesize the marketplace `source` for a plugin
+ * write-back into a config that does NOT yet declare the marketplace.
+ *
+ * When a project-scope install resolves the marketplace via the CMP-3
+ * user-scope fallback, the clone-adoption path records the marketplace in
+ * PROJECT state -- but only `marketplace add` writes marketplace config
+ * entries, and it ran at USER scope. Writing the plugin key alone would
+ * leave a dangling declaration: the reconcile planner turns it into a
+ * perpetual `<marketplace not declared>` failed row AND plans the
+ * recorded-but-undeclared clone for removal (a destructive, non-converging
+ * plan -- invariant 5 violation). The caller must therefore declare the
+ * marketplace in the SAME batched patch, synthesizing `source` from the
+ * adopted record's verbatim `source.raw` (the `samePlannedSource`
+ * contract).
+ *
+ * UAT-05: the membership gate runs against EVERY physical config of the
+ * scope (base AND local -- i.e. the CFG-02 merged view), not just the
+ * targeted file. Gating on the target alone made a `--local` install
+ * re-declare a base-declared marketplace into `claude-plugins.local.json`
+ * as a bare `{source}` entry; the CFG-02 wholesale entry-level override
+ * then shadowed the base entry and silently flipped merged `autoupdate`.
+ * Callers pass BOTH files' configs, read fresh inside the lock (WB-01
+ * discipline); the merged view is used for the membership test ONLY --
+ * never serialized back.
+ *
+ * Returns `undefined` when ANY physical config of the scope already
+ * declares the marketplace (nothing to synthesize -- entry-stable) OR when
+ * no string `source.raw` exists on the state record (hand-edited/legacy
+ * state; writing a source-less entry would trip `saveConfig`'s
+ * required-`source` invariant throw).
+ *
+ * S4 (PR #51, CONTEXT.md S4): the `undefined` return is OVERLOADED across
+ * two semantically distinct arms -- the BENIGN already-declared arm AND the
+ * DANGEROUS no-string-raw arm. Callers compose
+ * `...(adoptedSource !== undefined && { marketplaces: { ... } })` and write
+ * the plugin key REGARDLESS, so the dangerous arm silently writes a
+ * dangling plugin declaration the reconcile planner converts into a
+ * destructive `<marketplace not declared>` + recorded-clone removal plan
+ * (the exact invariant-5 violation the function doc warns about). The
+ * dangerous arm is rare in practice (hand-edited legacy state) and the
+ * write-back fall-through is deliberate for now -- a future PR should
+ * widen the return to a discriminated result so callers can route the
+ * `unsynthesizable` arm to a (failed) row instead of sealing the fate.
+ */
+export function synthesizeUndeclaredMarketplaceSource(
+  scopeConfigs: readonly ScopeConfig[],
+  state: ExtensionState,
+  marketplace: string,
+): string | undefined {
+  if (scopeConfigs.some((c) => c.marketplaces?.[marketplace] !== undefined)) {
+    return undefined;
+  }
+
+  const raw = (state.marketplaces[marketplace]?.source as { raw?: unknown } | undefined)?.raw;
+  return typeof raw === "string" ? raw : undefined;
+}
+
+/**
+ * WB-01 / UAT-05: select the targeted physical config file and
+ * its sibling (the scope's OTHER file). Target-path selection happens ONCE
+ * at the orchestrator boundary so the write path never falls back to the
+ * base file on ENOENT; the sibling path exists ONLY for the UAT-05
+ * merged-view membership test (read fresh inside the lock, never written).
+ */
+export function selectConfigWriteTarget(
+  locations: ScopedLocations,
+  local: boolean | undefined,
+): { readonly targetConfigPath: string; readonly siblingConfigPath: string } {
+  if (local === true) {
+    return {
+      targetConfigPath: locations.configLocalJsonPath,
+      siblingConfigPath: locations.configJsonPath,
+    };
+  }
+
+  return {
+    targetConfigPath: locations.configJsonPath,
+    siblingConfigPath: locations.configLocalJsonPath,
+  };
+}
+
+/**
+ * UAT-05 convenience seam over `synthesizeUndeclaredMarketplaceSource`:
+ * reads the scope's sibling config file FRESH (callers hold the scope lock
+ * -- WB-01 discipline) and runs the merged-view membership gate against
+ * BOTH physical files. The sibling load is membership-test-only input; it
+ * is never serialized back. `absent` / `invalid` sibling arms
+ * contribute an empty config, mirroring the D-18 merge fallback.
+ */
+export async function synthesizeAdoptedMarketplaceSource(opts: {
+  readonly current: ScopeConfig;
+  readonly siblingConfigPath: string;
+  readonly state: ExtensionState;
+  readonly marketplace: string;
+}): Promise<string | undefined> {
+  const siblingCfg = await loadConfig(opts.siblingConfigPath);
+  const sibling: ScopeConfig =
+    siblingCfg.status === "valid" ? siblingCfg.config : { schemaVersion: 1 };
+  return synthesizeUndeclaredMarketplaceSource(
+    [opts.current, sibling],
+    opts.state,
+    opts.marketplace,
+  );
 }
 
 /** CMP-5: unqualified single-plugin lifecycle operations prefer project only when both scopes match. */
@@ -508,4 +617,94 @@ export function assertNoCrossPluginConflicts(
   if (conflicts.length > 0) {
     throw new CrossPluginConflictError(conflicts);
   }
+}
+
+/**
+ * WB-01 / A7: deep-equal short-circuited plugin write-back shared by the
+ * update and reinstall post-success paths. Loads the target config (base or
+ * local per `--local`), compares the prospective patched entry against the
+ * existing entry, and writes back ONLY when they differ. RECON-05
+ * fixed-point: a byte-stable update / reinstall leaves the config file's
+ * mtime + bytes untouched.
+ *
+ * S5: an `invalid` config returns `{ invalidConfig: true }` so the caller
+ * surfaces the abort via a warning row -- the state mutation already
+ * committed (finalize ran), so the byte form is the success payload (the
+ * plugin DID update / reinstall on disk) plus the invalid-manifest warning.
+ * Sibling CFG-03 aborts (at preflight) render `(skipped) {invalid manifest}`;
+ * here the mutation already landed so a skip would lie -- the warning row
+ * says "wrote state, could not write config".
+ *
+ * D-04: update / reinstall preserves the consume-time `enabled` default and
+ * any forward-compat keys; the patch carries no per-operation mutation. The
+ * patched shape is therefore `{...existing, ...{}}` -- byte-identical to the
+ * existing entry. So the gate is simply: if the key is ALREADY PRESENT,
+ * writing back would produce a byte-identical file -- SKIP to preserve
+ * RECON-05 mtime stability. If the key is ABSENT, writing back ADDS the key
+ * so the user-authored config gains the implicit declaration.
+ */
+export async function maybeWritePluginConfigBack(opts: {
+  readonly locations: ScopedLocations;
+  readonly marketplace: string;
+  readonly plugin: string;
+  readonly local: boolean;
+}): Promise<{ readonly invalidConfig: boolean }> {
+  const targetConfigPath = opts.local
+    ? opts.locations.configLocalJsonPath
+    : opts.locations.configJsonPath;
+  const cfg = await loadConfig(targetConfigPath);
+  if (cfg.status === "invalid") {
+    return { invalidConfig: true };
+  }
+
+  const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
+  const key = `${opts.plugin}@${opts.marketplace}`;
+  const existingEntry = current.plugins?.[key];
+  if (existingEntry !== undefined) {
+    return { invalidConfig: false };
+  }
+
+  await writePluginConfigEntry(
+    current,
+    targetConfigPath,
+    opts.locations.scopeRoot,
+    opts.plugin,
+    opts.marketplace,
+    {},
+  );
+  return { invalidConfig: false };
+}
+
+/**
+ * I3 / TR-03: subtract a non-AG-5 partial-cascade's dropped artefacts from
+ * the state record in place so the persisted row reflects only artefacts
+ * still on disk (NFR-3 fail-clean, no ghost record). Shared by the
+ * `uninstall` partial-cascade arm and the `disable` partial-cascade arm.
+ *
+ * The asymmetric `dropped.commands -> resources.prompts` mapping is per
+ * TR-03 (cascade primitive naming): the other three axes are name-identical.
+ */
+export function applyPartialCascadeFold(
+  installed: {
+    resources: { skills: string[]; prompts: string[]; agents: string[]; mcpServers: string[] };
+  },
+  dropped: {
+    readonly skills: readonly string[];
+    readonly commands: readonly string[];
+    readonly agents: readonly string[];
+    readonly mcpServers: readonly string[];
+  },
+): void {
+  installed.resources.skills = installed.resources.skills.filter(
+    (n) => !dropped.skills.includes(n),
+  );
+  installed.resources.prompts = installed.resources.prompts.filter(
+    (n) => !dropped.commands.includes(n),
+  );
+  installed.resources.agents = installed.resources.agents.filter(
+    (n) => !dropped.agents.includes(n),
+  );
+  installed.resources.mcpServers = installed.resources.mcpServers.filter(
+    (n) => !dropped.mcpServers.includes(n),
+  );
 }

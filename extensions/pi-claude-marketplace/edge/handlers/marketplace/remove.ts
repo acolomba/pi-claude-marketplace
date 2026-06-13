@@ -15,14 +15,32 @@
 
 import { removeMarketplace } from "../../../orchestrators/marketplace/remove.ts";
 
-import { makeSingleNameMarketplaceHandler } from "./shared.ts";
+import { openMarketplaceCommand } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
-const USAGE = "Usage: /claude:plugin marketplace <remove|rm> <name> [--scope user|project]";
+const USAGE =
+  "Usage: /claude:plugin marketplace <remove|rm> <name> [--scope user|project] [--local]";
 
 export function makeRemoveHandler(
   pi: ExtensionAPI,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return makeSingleNameMarketplaceHandler(pi, USAGE, removeMarketplace);
+  return async (args, ctx): Promise<void> => {
+    const opened = openMarketplaceCommand(args, ctx, {
+      usage: USAGE,
+      positionalName: "name",
+    });
+    if (opened === undefined) {
+      return;
+    }
+
+    await removeMarketplace({
+      ctx,
+      pi,
+      name: opened.name,
+      cwd: ctx.cwd,
+      ...(opened.scope !== undefined && { scope: opened.scope }),
+      ...(opened.local && { local: true }),
+    });
+  };
 }

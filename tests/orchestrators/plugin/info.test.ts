@@ -40,6 +40,7 @@ import {
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { getPluginInfo } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
+import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { InvalidMarketplaceManifestError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -96,7 +97,14 @@ interface SeedPathMarketplaceOpts {
   readonly cwd: string;
   readonly mpName: string;
   readonly manifest: { name: string; plugins: readonly Record<string, unknown>[] };
-  readonly installed?: Record<string, { version: string }>;
+  /**
+   * Installed plugin records. `disabled: true` seeds the ENBL-02
+   * empty-resources marker (recorded-but-disabled); the default seeds a
+   * populated `resources.skills` -- a production installed record always has
+   * >= 1 populated array (the empty-resources + installable:true
+   * intersection IS the disabled marker, D-54-01 / ENBL-04).
+   */
+  readonly installed?: Record<string, { version: string; disabled?: boolean }>;
   readonly autoupdate?: boolean;
   /** Plugin source dirs to create under <mpRoot> so resolveStrict probes succeed. */
   readonly installablePluginDirs?: readonly string[];
@@ -147,7 +155,12 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
       version: info.version,
       resolvedSource: "./placeholder",
       compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-      resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+      // ENBL-04: empty resources + installable:true IS the disabled marker;
+      // an enabled installed record always has >= 1 populated array.
+      resources:
+        info.disabled === true
+          ? { skills: [], prompts: [], agents: [], mcpServers: [] }
+          : { skills: [`${name}-skill`], prompts: [], agents: [], mcpServers: [] },
       installedAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
@@ -179,6 +192,33 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
     schemaVersion: 1,
     marketplaces: { ...existing.marketplaces, [mpName]: record },
   } as unknown as Parameters<typeof saveState>[1]);
+
+  // SPLIT-01: autoupdate read-path lives in claude-plugins.json. Seed the
+  // config when autoupdate is set so the info orchestrator reads the
+  // autoupdate truth from the new source of truth.
+  if (opts.autoupdate !== undefined) {
+    const cfgPath = locations.configJsonPath;
+    let existingCfg: { marketplaces?: Record<string, { source: string; autoupdate?: boolean }> } =
+      {};
+    try {
+      const raw = await readFile(cfgPath, "utf8");
+      existingCfg = JSON.parse(raw) as typeof existingCfg;
+    } catch {
+      /* first marketplace in scope */
+    }
+
+    await saveConfig(
+      cfgPath,
+      {
+        schemaVersion: 1,
+        marketplaces: {
+          ...(existingCfg.marketplaces ?? {}),
+          [mpName]: { source: `./${mpName}-src`, autoupdate: opts.autoupdate },
+        },
+      },
+      locations.scopeRoot,
+    );
+  }
 
   return mpRoot;
 }
@@ -510,7 +550,7 @@ test("UXG-08: missing plugin in known marketplace emits `⊘ <plugin> (failed) {
 // the info-severity `plugin-info-cascade`. It is separated out and surfaced as
 // its own `error` + summary notify -- the same LOUD shape the single-scope arm
 // (test h) produces. Guards against the standalone-vs-cascade divergence
-// resurfacing on the fan-out path (Phase-50 code review WR-01/WR-02).
+// resurfacing on the fan-out path (code review WR-01/WR-02).
 // ---------------------------------------------------------------------------
 
 test("GRAM-04: both-scopes missing plugin emits per-scope `error` + summary, NOT a silent info cascade", async () => {
@@ -1122,7 +1162,10 @@ test("NFR-5 end-to-end: github-source marketplace record resolves plugin info fr
               version: "1.0.0",
               resolvedSource: "./local-plug",
               compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-              resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+              // Populated resources: an ENABLED installed record (empty
+              // resources + installable:true would read as disabled per
+              // ENBL-04 and route to the `(disabled)` inventory arm).
+              resources: { skills: ["local-plug-skill"], prompts: [], agents: [], mcpServers: [] },
               installedAt: "2026-01-01T00:00:00.000Z",
               updatedAt: "2026-01-01T00:00:00.000Z",
             },
@@ -1149,5 +1192,97 @@ test("NFR-5 end-to-end: github-source marketplace record resolves plugin info fr
         "    skills: s1",
       ].join("\n"),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D-54-01 / ENBL-04: recorded-but-disabled plugin on the info surface (CR-02)
+// ---------------------------------------------------------------------------
+
+test("ENBL-04: info on a recorded-but-disabled plugin renders the list-arm `(disabled)` inventory row (not the installed info block)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "foo",
+            source: "./foo",
+            version: "1.2.3",
+            description: "Foo plugin",
+            skills: "skills",
+          },
+        ],
+      },
+      // ENBL-02 marker: empty resources + installable:true.
+      installed: { foo: { version: "1.2.3", disabled: true } },
+      installablePluginDirs: ["foo"],
+      componentDirs: { foo: ["skills/s1"] },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // Single notify (IL-2 holds on the all-disabled path); list-arm
+    // marketplace header + `(disabled)` row per the catalog's info-surface
+    // paragraph; NO per-kind component lines (the plugin has no
+    // materialized artefacts -- ENBL-02). Severity info.
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined, "disabled inventory routes to info");
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp [user]", "  ⊘ foo v1.2.3 (disabled)"].join("\n"),
+    );
+  });
+});
+
+test("ENBL-04: bare info (no --scope) with disabled record in one scope and info block in the other emits BOTH surfaces", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const projectRoot = path.join(cwd, ".pi");
+    // Project scope: enabled installed record (info block).
+    await seedPathMarketplace({
+      scope: "project",
+      scopeRoot: projectRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "foo", source: "./foo", version: "1.0.0", skills: "skills" }],
+      },
+      installed: { foo: { version: "1.0.0" } },
+      installablePluginDirs: ["foo"],
+      componentDirs: { foo: ["skills/s1"] },
+    });
+    // User scope: disabled record.
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "foo", source: "./foo", version: "1.2.3", skills: "skills" }],
+      },
+      installed: { foo: { version: "1.2.3", disabled: true } },
+      installablePluginDirs: ["foo"],
+      componentDirs: { foo: ["skills/s1"] },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", cwd });
+
+    // Two notifies: the project-scope info block + the user-scope
+    // `(disabled)` inventory block (mirrors the GRAM-04 mixed-surface
+    // separation -- the two message kinds cannot share one cascade).
+    assert.equal(notifications.length, 2);
+    const all = notifications.map((n) => n.message).join("\n---\n");
+    assert.match(all, /● foo v1\.0\.0 \(installed\)/, all);
+    assert.match(all, /⊘ foo v1\.2\.3 \(disabled\)/, all);
   });
 });

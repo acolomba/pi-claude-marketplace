@@ -30,10 +30,10 @@
 // bytes the loader actually observed rather than the pre-load stat, tightening
 // the stat/read TOCTOU window (WR-01).
 //
-// Residual risk (accepted, RESEARCH Pitfall 3): a same-size rewrite within the
+// Residual risk (accepted): a same-size rewrite within the
 // filesystem's mtime resolution can collide on (mtimeMs, size) and serve a stale
 // entry. This is an OWNED limitation, not a silent bug -- content hashing is a
-// Non-Goal for this phase.
+// deliberate non-goal.
 
 import { stat } from "node:fs/promises";
 

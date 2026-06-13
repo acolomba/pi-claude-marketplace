@@ -23,6 +23,7 @@ import {
   __resetCacheForTests,
   getMarketplaceNames,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -657,11 +658,14 @@ test("narrowCascadeFailure: NodeJS.ErrnoException code=ENOENT -> {source missing
   assert.equal(__test_narrowCascadeFailure(errnoLike), "source missing");
 });
 
-test("narrowCascadeFailure: AgentsUnstageFailureError -> {not in manifest} (documented fallback)", () => {
+test("narrowCascadeFailure: AgentsUnstageFailureError -> {source mismatch} (ATTR-09 / D-NCF align with uninstall.ts)", () => {
+  // D-NCF: foreign content owned by another process is a content/ownership
+  // mismatch, not a manifest absence. Aligned with uninstall.ts's ATTR-09
+  // mapping (`AgentsUnstageFailureError` -> `"source mismatch"`).
   const err = new AgentsUnstageFailureError("agents leak", [
     { generatedName: "foo", targetPath: "/agents/foo.md", reason: "EACCES" },
   ]);
-  assert.equal(__test_narrowCascadeFailure(err), "not in manifest");
+  assert.equal(__test_narrowCascadeFailure(err), "source mismatch");
 });
 
 test("narrowCascadeFailure: arbitrary bare Error with 'unreadable' substring -> {unreadable} (defensive textual fallback)", () => {
@@ -888,6 +892,447 @@ test("TR-03 (AG-5 cause): failed plugin row preserved INTACT in remove.ts per-pl
         ["mcp1", "mcp2"],
         "AG-5: resources.mcpServers UNCHANGED",
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// RECON-03: orchestrated-mode coverage
+// ───────────────────────────────────────────────────────────────────────────
+
+test("RECON-03 remove orchestrated mode -- clean success returns { status: 'removed', name, unstaged: [] } with ZERO notify calls", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-orch-ok-"));
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      const projLoc = locationsFor("project", cwd);
+      const seed = {
+        source: pathSource("./src"),
+        addedFromCwd: cwd,
+        manifestPath: path.join(cwd, "marketplace.json"),
+        marketplaceRoot: cwd,
+        plugins: {},
+      };
+      await seedState(projLoc.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: { "orch-mp": { name: "orch-mp", scope: "project", ...seed } },
+      });
+
+      const outcome = await removeMarketplace({
+        ctx,
+        pi,
+        name: "orch-mp",
+        scope: "project",
+        cwd,
+        notifications: { mode: "orchestrated" },
+      });
+
+      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+      assert.ok(outcome);
+      assert.equal(outcome.status, "removed");
+      if (outcome.status === "removed") {
+        assert.equal(outcome.name, "orch-mp");
+        assert.deepEqual(outcome.unstaged, []);
+      }
+
+      const after = await loadState(projLoc.extensionRoot);
+      assert.ok(!("orch-mp" in after.marketplaces), "state record removed");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RECON-03 remove orchestrated mode -- missing marketplace returns { status: 'failed', reason: 'not added', error: MarketplaceNotFoundError } no notifications", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-orch-na-"));
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await removeMarketplace({
+        ctx,
+        pi,
+        name: "absent-xx",
+        cwd,
+        notifications: { mode: "orchestrated" },
+      });
+
+      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+      assert.ok(outcome);
+      assert.equal(outcome.status, "failed");
+      if (outcome.status === "failed") {
+        assert.equal(outcome.reason, "not added");
+        assert.ok(outcome.error instanceof MarketplaceNotFoundError);
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RECON-03 remove orchestrated mode -- explicit --scope miss returns failed with MarketplaceNotFoundError (no notify)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-orch-na-scope-"));
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await removeMarketplace({
+        ctx,
+        pi,
+        name: "ghost",
+        scope: "project",
+        cwd,
+        notifications: { mode: "orchestrated" },
+      });
+
+      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+      assert.ok(outcome);
+      assert.equal(outcome.status, "failed");
+      if (outcome.status === "failed") {
+        assert.equal(outcome.reason, "not added");
+        assert.ok(outcome.error instanceof MarketplaceNotFoundError);
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("I1 / PR #51: orchestrated partial remove returns { status: 'partial' } carrying unstaged + per-plugin failures (one row per plugin, never a 1-of-N collapse)", async () => {
+  // Pre-fix the orchestrated arm collapsed any per-plugin cascade failure to a
+  // single { status: 'failed', reason } outcome -- losing both the
+  // successfully-unstaged plugins (rendered nowhere) AND failures 2..N. After
+  // the fix the orchestrated outcome carries `unstaged: readonly string[]`
+  // AND `failed: readonly { name, reason }[]` so the reconcile cascade can
+  // render N rows for N plugins.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-orch-partial-"));
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      const locations = locationsFor("user", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          "acme-mp": {
+            name: "acme-mp",
+            scope: "user",
+            source: { kind: "github", raw: "owner/repo", owner: "owner", repo: "repo" },
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: {
+              "plugin-ok": makePluginRecord(),
+              "plugin-fail-a": makePluginRecord(),
+              "plugin-fail-b": makePluginRecord(),
+            },
+          },
+        },
+      });
+
+      // Stub: plugin-ok succeeds, plugin-fail-a fails (EACCES), plugin-fail-b
+      // fails (ENOENT). Caller-iteration order maps to plugins object order.
+      const stubCascade: typeof cascadeUnstagePlugin = (pluginName) => {
+        if (pluginName === "plugin-ok") {
+          return Promise.resolve({
+            ok: true,
+            dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          });
+        }
+
+        const code = pluginName === "plugin-fail-a" ? "EACCES" : "ENOENT";
+        return Promise.resolve({
+          ok: false,
+          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          cause: Object.assign(new Error(`forced ${code}`), { code }),
+        });
+      };
+
+      const outcome = await removeMarketplace({
+        ctx,
+        pi,
+        name: "acme-mp",
+        scope: "user",
+        cwd,
+        cascade: stubCascade,
+        notifications: { mode: "orchestrated" },
+      });
+
+      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+      assert.ok(outcome);
+      assert.equal(outcome.status, "partial", "orchestrated partial-cascade arm");
+      if (outcome.status === "partial") {
+        // Every successfully-unstaged plugin is carried.
+        assert.deepEqual([...outcome.unstaged], ["plugin-ok"]);
+        // Every failed plugin is carried with its closed-set reason.
+        assert.equal(outcome.failed.length, 2);
+        const failedByName: Record<string, string> = Object.fromEntries(
+          outcome.failed.map((f) => [f.name, f.reason]),
+        );
+        assert.equal(failedByName["plugin-fail-a"], "permission denied");
+        assert.equal(failedByName["plugin-fail-b"], "source missing");
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RECON-03 remove standalone-default mode -- omitted notifications option remains byte-identical to today (regression guard)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-orch-default-"));
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      const projLoc = locationsFor("project", cwd);
+      const seed = {
+        source: pathSource("./src"),
+        addedFromCwd: cwd,
+        manifestPath: path.join(cwd, "marketplace.json"),
+        marketplaceRoot: cwd,
+        plugins: {},
+      };
+      await seedState(projLoc.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: { "byte-mp": { name: "byte-mp", scope: "project", ...seed } },
+      });
+
+      // No `notifications` option -- must behave EXACTLY as today.
+      const outcome = await removeMarketplace({ ctx, pi, name: "byte-mp", scope: "project", cwd });
+      assert.equal(outcome, undefined, "standalone (omitted) returns void");
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.message, "● byte-mp [project] (removed)");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// cascade write-back, --local, WR-09, CFG-03
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WB-01: cascade removes the marketplace entry AND every plugin entry ending in @<mp>", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-cascade-"));
+    try {
+      const projLoc = locationsFor("project", cwd);
+      await seedState(projLoc.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp1: {
+            name: "mp1",
+            scope: "project",
+            source: pathSource("./src1"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "m1.json"),
+            marketplaceRoot: cwd,
+            plugins: {},
+          },
+        },
+      });
+
+      // Seed the config with: mp1 marketplace, mp2 marketplace (intact),
+      // foo@mp1 plugin (must cascade away), bar@mp2 plugin (must SURVIVE).
+      const { saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      await saveConfig(
+        projLoc.configJsonPath,
+        {
+          schemaVersion: 1,
+          marketplaces: { mp1: { source: "./src1" }, mp2: { source: "./src2" } },
+          plugins: { "foo@mp1": { enabled: true }, "bar@mp2": { enabled: true } },
+        },
+        projLoc.scopeRoot,
+      );
+
+      const { ctx, pi } = makeCtx();
+      await removeMarketplace({ ctx, pi, name: "mp1", scope: "project", cwd });
+
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const cfg = await loadConfig(projLoc.configJsonPath);
+      assert.equal(cfg.status, "valid");
+      if (cfg.status !== "valid") {
+        return;
+      }
+
+      // mp1 removed; mp2 retained.
+      assert.equal(cfg.config.marketplaces?.["mp1"], undefined);
+      assert.deepEqual(cfg.config.marketplaces?.["mp2"], { source: "./src2" });
+
+      // Plugin cascade: foo@mp1 removed; bar@mp2 retained.
+      assert.equal(cfg.config.plugins?.["foo@mp1"], undefined);
+      assert.deepEqual(cfg.config.plugins?.["bar@mp2"], { enabled: true });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WB-01: --local routes the cascade to claude-plugins.local.json; base file untouched", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-local-"));
+    try {
+      const projLoc = locationsFor("project", cwd);
+      await seedState(projLoc.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp1: {
+            name: "mp1",
+            scope: "project",
+            source: pathSource("./src1"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "m1.json"),
+            marketplaceRoot: cwd,
+            plugins: {},
+          },
+        },
+      });
+
+      const { saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      // Base file retains mp1; the local file is the override carrying mp1.
+      await saveConfig(
+        projLoc.configJsonPath,
+        { schemaVersion: 1, marketplaces: { mp1: { source: "./src1" } } },
+        projLoc.scopeRoot,
+      );
+      await saveConfig(
+        projLoc.configLocalJsonPath,
+        { schemaVersion: 1, marketplaces: { mp1: { source: "./src1", autoupdate: true } } },
+        projLoc.scopeRoot,
+      );
+
+      const { readFile, stat } = await import("node:fs/promises");
+      const baseBytesBefore = await readFile(projLoc.configJsonPath, "utf8");
+      const baseStatBefore = await stat(projLoc.configJsonPath);
+
+      const { ctx, pi } = makeCtx();
+      await removeMarketplace({ ctx, pi, name: "mp1", scope: "project", cwd, local: true });
+
+      // Base file MUST be byte-identical.
+      const baseBytesAfter = await readFile(projLoc.configJsonPath, "utf8");
+      const baseStatAfter = await stat(projLoc.configJsonPath);
+      assert.equal(baseBytesAfter, baseBytesBefore);
+      assert.equal(baseStatAfter.mtimeMs, baseStatBefore.mtimeMs);
+
+      // Local file has mp1 removed.
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const localCfg = await loadConfig(projLoc.configLocalJsonPath);
+      assert.equal(localCfg.status, "valid");
+      if (localCfg.status === "valid") {
+        assert.equal(localCfg.config.marketplaces?.["mp1"], undefined);
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-09 / T-56-02-01: orchestrated remove SKIPS the cascade write-back; config untouched", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-orch-"));
+    try {
+      const projLoc = locationsFor("project", cwd);
+      await seedState(projLoc.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp1: {
+            name: "mp1",
+            scope: "project",
+            source: pathSource("./src1"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "m1.json"),
+            marketplaceRoot: cwd,
+            plugins: {},
+          },
+        },
+      });
+
+      const { saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      await saveConfig(
+        projLoc.configJsonPath,
+        {
+          schemaVersion: 1,
+          marketplaces: { mp1: { source: "./src1" } },
+          plugins: { "foo@mp1": { enabled: true } },
+        },
+        projLoc.scopeRoot,
+      );
+
+      const { readFile, stat } = await import("node:fs/promises");
+      const bytesBefore = await readFile(projLoc.configJsonPath, "utf8");
+      const statBefore = await stat(projLoc.configJsonPath);
+
+      const { ctx, pi } = makeCtx();
+      const outcome = await removeMarketplace({
+        ctx,
+        pi,
+        name: "mp1",
+        scope: "project",
+        cwd,
+        notifications: { mode: "orchestrated" },
+      });
+      assert.equal((outcome as { status: string }).status, "removed");
+
+      // Config file byte-identical (no cascade fired).
+      const bytesAfter = await readFile(projLoc.configJsonPath, "utf8");
+      const statAfter = await stat(projLoc.configJsonPath);
+      assert.equal(bytesAfter, bytesBefore);
+      assert.equal(statAfter.mtimeMs, statBefore.mtimeMs);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("CFG-03 / T-56-02-05: invalid local config aborts the remove; basename-only cause; state untouched", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-cfg03-"));
+    try {
+      const projLoc = locationsFor("project", cwd);
+      await seedState(projLoc.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp1: {
+            name: "mp1",
+            scope: "project",
+            source: pathSource("./src1"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "m1.json"),
+            marketplaceRoot: cwd,
+            plugins: {},
+          },
+        },
+      });
+
+      await writeFile(projLoc.configLocalJsonPath, "{ malformed json", "utf8");
+
+      const { ctx, pi, notifications } = makeCtx();
+      await removeMarketplace({
+        ctx,
+        pi,
+        name: "mp1",
+        scope: "project",
+        cwd,
+        local: true,
+      });
+
+      // CFG-03: failed row with `{invalid manifest}` reason; basename only.
+      assert.ok(notifications.length >= 1);
+      const note = notifications[0]!;
+      assert.match(note.message, /\(failed\) \{invalid manifest\}/);
+      // T-56-02-05: must NOT leak the absolute local config path.
+      assert.ok(
+        !note.message.includes(projLoc.configLocalJsonPath),
+        `must NOT leak absolute path, got: ${note.message}`,
+      );
+
+      // State was NOT mutated: mp1 still recorded.
+      const after = await loadState(projLoc.extensionRoot);
+      assert.ok("mp1" in after.marketplaces);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

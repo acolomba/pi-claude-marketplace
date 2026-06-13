@@ -169,12 +169,21 @@ function projectRowStatus(status: PluginNotificationMessage["status"]): ToolPlug
       return "available";
     case "unavailable":
       return "unavailable";
+    case "disabled":
+      // D-54-01 / ENBL-04: a disabled plugin is recorded but its artefacts
+      // are not materialized -- the LLM-tool projection treats it as not
+      // currently usable, mirroring `unavailable`.
+      return "unavailable";
     case "updated":
     case "reinstalled":
     case "uninstalled":
     case "failed":
     case "skipped":
     case "manual recovery":
+    case "will install":
+    case "will uninstall":
+    case "will enable":
+    case "will disable":
       throw new Error(
         `pi_claude_marketplace_plugin_list: unexpected plugin status "${status}" on list payload`,
       );
@@ -305,6 +314,9 @@ function pluginScopeOrFallback(
     case "present":
     case "installed":
     case "upgradable":
+    case "disabled":
+      // D-54-01 / ENBL-04: disabled rows carry an explicit `scope?` (the
+      // SNM-11 carve-out applies only to `available` / `unavailable`).
       return p.scope ?? marketplaceScope;
     case "available":
     case "unavailable":
@@ -315,7 +327,13 @@ function pluginScopeOrFallback(
     case "failed":
     case "skipped":
     case "manual recovery":
-      // Unreachable on the list surface; renderer-as-spec guard.
+    case "will install":
+    case "will uninstall":
+    case "will enable":
+    case "will disable":
+      // Unreachable on the list surface; renderer-as-spec guard. The DIFF-02
+      // will-* variants are emitted only by `/claude:plugin preview`, which
+      // does not project through this list-tool surface.
       return marketplaceScope;
   }
 }
@@ -353,11 +371,21 @@ function pluginVersion(p: PluginNotificationMessage): string | undefined {
     case "failed":
     case "skipped":
     case "manual recovery":
+    case "disabled":
+      // D-54-01 / ENBL-04: disabled row carries optional `version?` -- the
+      // recorded state record preserves the pinned version (ENBL-02).
       return p.version;
     case "updated":
       // The updated variant has `from`/`to` instead of a single `version`;
       // synthesize the post-update version for downstream callers.
       return p.to;
+    case "will install":
+    case "will uninstall":
+    case "will enable":
+    case "will disable":
+      // DIFF-02 preview rows carry no version slot (the variant has no
+      // `version` field). Unreachable on the list surface.
+      return undefined;
   }
 }
 

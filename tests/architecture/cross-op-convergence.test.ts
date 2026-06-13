@@ -4,9 +4,9 @@
 //
 // The audit's Class C finding was that the "marketplace absent in the target
 // scope" precondition rendered DIFFERENT user-facing rows across ops (some
-// converged on the dedicated `{not added}` form, some threw raw). Phases 46-48 +
-// Plan 49-01 closed every op onto the SINGLE dedicated
-// `MarketplaceNotAddedMessage` variant + the ONE shared renderer
+// converged on the dedicated `{not added}` form, some threw raw). Every op
+// now lands on the SINGLE dedicated `MarketplaceNotAddedMessage` variant
+// + the ONE shared renderer
 // (`renderMarketplaceNotAdded`). This test PROVES no op slipped its own row in.
 //
 // MECHANISM (WR-01 strengthening): rather than feeding one shared payload to the
@@ -21,7 +21,7 @@
 // synthetic `(failed)` cascade row, or a raw throw) would break this gate even
 // though each op's own orchestrator test might not catch the cross-op drift.
 //
-// CANONICAL ROWS (two, per RESEARCH "Pitfall 4"):
+// CANONICAL ROWS (two):
 //   - explicit-scope: `⊘ ghost-mp [project] (failed) {not added}`
 //   - bare/bracketless: `⊘ ghost-mp (failed) {not added}`
 // Both at severity "error", one emission per invocation (IL-2).
@@ -193,7 +193,7 @@ const INVOKERS: Record<string, Invoker> = {
       ...(mode === "explicit" && { scope: "project" as const }),
     });
   },
-  // marketplace update -- NEWLY converged in Plan 49-01. A mock gitOps is
+  // marketplace update -- converged via the cross-op gate. A mock gitOps is
   // injected so a (regression) stray network call would be recorded; the
   // pre-guard miss short-circuits before it is reached (NFR-5). update.test.ts
   // SC#1.

@@ -39,6 +39,7 @@ import test from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { bootstrapClaudePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts";
+import { loadConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -46,6 +47,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { makeMockGitOps } from "../../helpers/git-mock.ts";
 
+import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -74,9 +76,15 @@ async function withHermeticHome<T>(
   fn: (env: { home: string; cwd: string }) => Promise<T>,
 ): Promise<T> {
   const originalHome = process.env.HOME;
+  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
   const home = await mkdtemp(path.join(tmpdir(), "bootstrap-home-"));
   const cwd = await mkdtemp(path.join(tmpdir(), "bootstrap-cwd-"));
   process.env.HOME = home;
+  // SC-1: getAgentDir() honors PI_CODING_AGENT_DIR FIRST and only falls back
+  // to homedir(). Clear it so the hermetic HOME above actually governs the
+  // user scope -- otherwise a developer/CI env that sets the variable would
+  // make these tests install bootstrap records into the real Pi agent dir.
+  delete process.env.PI_CODING_AGENT_DIR;
   try {
     return await fn({ home, cwd });
   } finally {
@@ -86,9 +94,28 @@ async function withHermeticHome<T>(
       process.env.HOME = originalHome;
     }
 
+    if (originalAgentDir === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = originalAgentDir;
+    }
+
     await rm(home, { recursive: true, force: true });
     await rm(cwd, { recursive: true, force: true });
   }
+}
+
+/** post-flip `autoupdate` lives in `claude-plugins.json`. */
+async function configAutoupdate(
+  locations: ScopedLocations,
+  name: string,
+): Promise<boolean | undefined> {
+  const cfg = await loadConfig(locations.configJsonPath);
+  if (cfg.status !== "valid") {
+    return undefined;
+  }
+
+  return cfg.config.marketplaces?.[name]?.autoupdate;
 }
 
 function makeBootstrapMarketplaceRecord(
@@ -98,6 +125,9 @@ function makeBootstrapMarketplaceRecord(
   // The bootstrap target name; matches the manifest name field served
   // by the test fixture at
   // tests/orchestrators/plugin/_fixtures/claude-plugins-official.
+  // SPLIT-01: autoupdate is carved out of MARKETPLACE_RECORD_SCHEMA. The
+  // test fixture seeds autoupdate via cast for parity with the legacy state
+  // shape (CFG-02 reads it via MergedConfig at runtime).
   return {
     name: "claude-plugins-official",
     scope: "user",
@@ -111,7 +141,7 @@ function makeBootstrapMarketplaceRecord(
     marketplaceRoot: cwd,
     plugins: {},
     autoupdate,
-  };
+  } as unknown as ExtensionState["marketplaces"][string];
 }
 
 function fixtureClaudePluginsOfficial(): string {
@@ -131,14 +161,15 @@ test("bootstrap (clean state): adds marketplace + enables autoupdate; two notifi
 
     await bootstrapClaudePlugin({ ctx, pi, cwd, gitOps });
 
-    // State has the marketplace recorded under user scope with autoupdate=true.
+    // State has the marketplace recorded under user scope.
     const userLocations = locationsFor("user", cwd);
     const userState = await loadState(userLocations.extensionRoot);
     assert.ok("claude-plugins-official" in userState.marketplaces);
     const recorded = userState.marketplaces["claude-plugins-official"];
     assert.ok(recorded);
     assert.equal(recorded.scope, "user");
-    assert.equal(recorded.autoupdate, true);
+    // post-flip `autoupdate` lives in `claude-plugins.json`.
+    assert.equal(await configAutoupdate(userLocations, "claude-plugins-official"), true);
 
     // Exactly two notifications in order. SNM-33 / D-22-01 / D-22-03:
     // both are marketplace-status-only blocks (no plugin rows), so NEITHER
@@ -220,8 +251,8 @@ test("bootstrap (half-configured: autoupdate off): swallows duplicate-name, flip
 
     await bootstrapClaudePlugin({ ctx, pi, cwd, gitOps });
 
-    const after = await loadState(userLocations.extensionRoot);
-    assert.equal(after.marketplaces["claude-plugins-official"]?.autoupdate, true);
+    // post-flip `autoupdate` lives in `claude-plugins.json`.
+    assert.equal(await configAutoupdate(userLocations, "claude-plugins-official"), true);
     assert.equal(notifications.length, 1);
     // SNM-33 / D-22-03: UXG-04 `<autoupdate>` marker-as-outcome header-only
     // block, NO `/reload` trailer (the autoupdate flag is not a Pi-visible
@@ -289,5 +320,44 @@ test("bootstrap (non-duplicate clone error): propagates and autoupdate step is N
     const userLocations = locationsFor("user", cwd);
     const userState = await loadState(userLocations.extensionRoot);
     assert.deepEqual(userState.marketplaces, {});
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// WB-04 composed-write smoke test
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WB-04: bootstrap records marketplace + autoupdate=true into the config via composed addMarketplace + setMarketplaceAutoupdate writes", async () => {
+  // RESEARCH A2 + PATTERNS §"bootstrap.ts (composed 2-write)": bootstrap
+  // composition is the locked decision. WB-04 is satisfied transitively once
+  // addMarketplace and setMarketplaceAutoupdate write back. This smoke
+  // test proves the end-state config matches:
+  //   marketplaces[<name>] === { source, autoupdate: true }
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, pi } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureClaudePluginsOfficial(),
+    });
+
+    await bootstrapClaudePlugin({ ctx, pi, cwd, gitOps });
+
+    const userLocations = locationsFor("user", cwd);
+    const { loadConfig } =
+      await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+    const cfg = await loadConfig(userLocations.configJsonPath);
+    assert.equal(cfg.status, "valid");
+    if (cfg.status !== "valid") {
+      return;
+    }
+
+    // End-state config shape (2 composed writes converged):
+    //   marketplaces["claude-plugins-official"] = {
+    //     source: "anthropics/claude-plugins-official",   // addMarketplace verbatim rawSource
+    //     autoupdate: true,                               // setMarketplaceAutoupdate
+    //   }
+    const entry = cfg.config.marketplaces?.["claude-plugins-official"];
+    assert.ok(entry, "marketplace entry must exist in claude-plugins.json");
+    assert.equal(entry.source, "anthropics/claude-plugins-official");
+    assert.equal(entry.autoupdate, true);
   });
 });

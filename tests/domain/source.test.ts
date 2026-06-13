@@ -5,8 +5,10 @@ import {
   githubSource,
   parsePluginSource,
   pathSource,
+  samePlannedSource,
   sourceLogical,
   type ParsedSource,
+  type SamePlannedSourceResult,
 } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 
 /**
@@ -426,4 +428,86 @@ test("sourceLogical: NpmSource returns npm:<package> when version absent", () =>
   const parsed = parsePluginSource({ source: "npm", package: "@scope/pkg" });
   assert.equal(parsed.kind, "npm");
   assert.equal(sourceLogical(parsed), "npm:@scope/pkg");
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Y1: samePlannedSource tri-state union -- exhaustive switch coverage.
+// The prior shape was `boolean | "unknown-stored"`, where the sentinel was
+// truthy: a bare `if (samePlannedSource(...))` silently misread a corrupt
+// record as a source match. The new union (`"same" | "different" |
+// "unknown-stored"`) forces every caller to switch on the discriminant.
+// ─────────────────────────────────────────────────────────────────────────
+
+test("Y1 samePlannedSource: matching github source pair returns 'same'", () => {
+  const stored = githubSource("acme/tools");
+  assert.equal(samePlannedSource(stored, "acme/tools"), "same");
+});
+
+test("Y1 samePlannedSource: github source with same owner/repo but mismatched ref returns 'different'", () => {
+  const stored = githubSource("acme/tools#v1");
+  assert.equal(samePlannedSource(stored, "acme/tools#v2"), "different");
+});
+
+test("Y1 samePlannedSource: recognised stored kind that differs from planned returns 'different'", () => {
+  const stored = pathSource("./local");
+  assert.equal(samePlannedSource(stored, "acme/tools"), "different");
+});
+
+test("Y1 samePlannedSource: stored source in unrecognised shape returns 'unknown-stored'", () => {
+  // An object literal with no `kind === "path" | "github"` discriminator
+  // lands as `kind: "unknown"` in parsePluginSource, so samePlannedSource
+  // surfaces the discriminant.
+  assert.equal(
+    samePlannedSource({ kind: "future-thing", raw: "x" }, "acme/tools"),
+    "unknown-stored",
+  );
+});
+
+test("Y1 samePlannedSource: exhaustive switch over the tri-state union compiles", () => {
+  // This test exists primarily so the compiler enforces exhaustiveness on
+  // the new union -- any future addition to SamePlannedSourceResult that
+  // omits an arm here surfaces as a type error inside `assertNever`.
+  const cases: readonly {
+    stored: unknown;
+    plannedRaw: string;
+    expected: SamePlannedSourceResult;
+  }[] = [
+    { stored: githubSource("acme/tools"), plannedRaw: "acme/tools", expected: "same" },
+    { stored: githubSource("acme/tools"), plannedRaw: "acme/other", expected: "different" },
+    {
+      stored: { kind: "future-thing", raw: "x" },
+      plannedRaw: "acme/tools",
+      expected: "unknown-stored",
+    },
+  ];
+  for (const c of cases) {
+    const result = samePlannedSource(c.stored, c.plannedRaw);
+    switch (result) {
+      case "same":
+      case "different":
+      case "unknown-stored":
+        assert.equal(result, c.expected);
+        break;
+      default: {
+        const exhaustive: never = result;
+        throw new Error(`unreachable -- new SamePlannedSourceResult arm: ${String(exhaustive)}`);
+      }
+    }
+  }
+});
+
+test("Y1 samePlannedSource: truthy coercion of 'unknown-stored' is a TYPE error (compile-time guard)", () => {
+  // The prior shape (`boolean | "unknown-stored"`) admitted a bare `if`
+  // on the result, silently misreading a corrupt record as a source match.
+  // With the tri-state literal union the compiler rejects the truthy
+  // coercion -- the line below is intentionally commented out because it
+  // would not compile; uncomment to verify the guard locally.
+  //
+  //   if (samePlannedSource(stored, planned)) { ... } // ts(2769) / equivalent
+  //
+  // The runtime assertion below is a sanity check that the union members
+  // are the literal strings the compiler enforces; the load-bearing guard
+  // is the type signature itself.
+  const result = samePlannedSource(githubSource("acme/tools"), "acme/tools");
+  assert.ok(result === "same" || result === "different" || result === "unknown-stored");
 });

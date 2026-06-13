@@ -53,6 +53,8 @@ import path from "node:path";
 import { initiateDeviceFlow } from "../../domain/github-auth.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
+import { loadConfig } from "../../persistence/config-io.ts";
+import { writeMarketplaceConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { DEFAULT_CREDENTIAL_OPS } from "../../platform/git-credential.ts";
 import { dropMarketplaceCache, invalidateMarketplaceNames } from "../../shared/completion-cache.ts";
@@ -66,19 +68,75 @@ import {
 } from "../../shared/errors.ts";
 import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
 import { makeRawNotifyFn, notify } from "../../shared/notify.ts";
-import { withStateGuard } from "../../transaction/with-state-guard.ts";
+import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import { DEFAULT_GIT_OPS, type GitAuthBundle, type GitOps } from "./shared.ts";
 
 import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
 import type { GitHubSource, PathSource } from "../../domain/source.ts";
+import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { AuthAttemptResult } from "../../platform/git.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { ContentReason } from "../../shared/notify.ts";
+import type { ContentReason, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
+
+/**
+ * RECON-03: controls how `addMarketplace` surfaces
+ * notifications. Mirrors the `InstallPluginNotifications` precedent.
+ *
+ * - `"standalone"` (default when option is omitted): the orchestrator fires
+ *   one `notify(ctx, pi, ...)` per outcome arm with the per-variant
+ *   `MarketplaceNotificationMessage` / `MarketplaceNotAddedMessage` payload.
+ *   Byte-identical to today; every existing caller (edge handler, bootstrap
+ *   composer, catalog UAT) observes zero output drift.
+ * - `"orchestrated"`: suppresses every `ctx.ui.notify` call and returns the
+ *   typed `AddMarketplaceOutcome` instead. Consumed by `applyReconcile`
+ *   which aggregates per-entry outcomes into ONE notify() per load (IL-2).
+ *   The orchestrated caller is contractually required to render the outcome
+ *   itself.
+ */
+export type AddMarketplaceNotifications =
+  | { readonly mode: "standalone" }
+  | { readonly mode: "orchestrated" };
+
+/**
+ * RECON-03: discriminated outcome returned by `addMarketplace` in
+ * orchestrated mode. Standalone mode returns `void` for back-compat.
+ *
+ * `success` (status: "added") carries the `name` of the newly recorded
+ * marketplace so the apply cascade can render the row.
+ *
+ * `failed` collapses every classified precondition failure
+ * (`classifyAddError` recognized: duplicate name / stale clone / invalid
+ * manifest / unsupported source / source missing / network unreachable)
+ * plus the catastrophic
+ * fallback ("unparseable" -- chosen because every recognised add precondition
+ * yields a typed error, so a non-enumerated throw is by construction an
+ * unparseable / corrupted source-tree shape). Consumers narrow on
+ * `instanceof MarketplaceDuplicateNameError` etc. via `outcome.error` to
+ * recover the specific failure class.
+ *
+ * `cause` carries the formatted user-visible text for orchestrated callers
+ * that surface it directly.
+ */
+/**
+ * `reason` is typed as `Reason` (not `ContentReason`) so the `applyReconcile`
+ * caller can dispatch on the broader closed set, including the
+ * structural `"not added"` sentinel surfaced by the `remove` sibling. This
+ * adopts a broader-than-the-plan type to keep the orchestrated outcome
+ * dispatchable end-to-end without a separate marker field.
+ */
+export type AddMarketplaceOutcome =
+  | { readonly status: "added"; readonly name: string }
+  | {
+      readonly status: "failed";
+      readonly reason: Reason;
+      readonly error: Error;
+      readonly cause: string;
+    };
 
 export interface AddMarketplaceOptions {
   readonly ctx: ExtensionContext;
@@ -117,6 +175,20 @@ export interface AddMarketplaceOptions {
    * structured failed row. Omitted (undefined) => route through notify.
    */
   readonly rethrowPreconditionErrors?: boolean;
+  /**
+   * RECON-03: notification mode selector. Omitted
+   * (undefined) === `{ mode: "standalone" }` -- byte-identical to today.
+   * Orchestrated mode suppresses notify() and returns a typed outcome.
+   */
+  readonly notifications?: AddMarketplaceNotifications;
+  /**
+   * WB-01: when true, target
+   * `claude-plugins.local.json` instead of `claude-plugins.json`. The base
+   * file is NEVER touched on the --local path; loadConfig's `absent` arm
+   * yields an empty starting shape that saveConfig writes back to the local
+   * path.
+   */
+  readonly local?: boolean;
 }
 
 /**
@@ -125,7 +197,7 @@ export interface AddMarketplaceOptions {
  * error via `appendLeakToError` when `cleanupStaging` itself leaks -- that
  * produces a generic `Error` whose `.cause` is the original typed error. Both
  * the unwrapped (no-leak) and wrapped (leak) shapes must classify identically,
- * so ATTR-07 routing survives a cleanup leak (Pitfall 4). Single level only --
+ * so ATTR-07 routing survives a cleanup leak. Single level only --
  * a deeper chain is not an add-precondition shape this orchestrator produces.
  */
 function unwrapAddError(err: unknown): unknown {
@@ -175,6 +247,24 @@ function classifyAddError(rawErr: unknown): ContentReason | undefined {
     if (code === "ENOENT" || code === "ENOTDIR") {
       return "source missing";
     }
+
+    // WR-03: a clone network failure (errno-carrying
+    // throw from the github guard's gitOps.clone) is the NFR-5 per-entry
+    // soft-fail the catalog's `soft-fail-mixed` state documents as
+    // `{network unreachable}`. The clone-catch only cleans staging and
+    // rethrows unclassified, so the errno must be recognised HERE --
+    // otherwise the reason falls through to `unparseable`, falsely implying
+    // a corrupted manifest when the user's network is down.
+    if (
+      code === "ENETUNREACH" ||
+      code === "ECONNREFUSED" ||
+      code === "ENOTFOUND" ||
+      code === "ETIMEDOUT" ||
+      code === "ECONNRESET" ||
+      code === "EAI_AGAIN"
+    ) {
+      return "network unreachable";
+    }
   }
 
   return undefined;
@@ -202,9 +292,28 @@ function addSubjectName(rawErr: unknown, rawSource: string): string {
 }
 
 /**
+ * WB-01 mitigation: a CFG-03 invalid-config arm aborts the
+ * command BEFORE any state mutation or network call. Thrown so the
+ * entrypoint catch routes through `classifyAddError` -> `invalid manifest`
+ * with a basename-only cause (T-56-02-05 information disclosure mitigation).
+ */
+class ConfigInvalidError extends InvalidMarketplaceManifestError {
+  constructor(configBasename: string) {
+    super(`Config file "${configBasename}" failed schema validation.`);
+    this.name = "ConfigInvalidError";
+  }
+}
+
+/**
  * Dispatch the source-kind precondition + the in-guard add. Extracted so the
  * entrypoint try/catch (ATTR-07) wraps BOTH the synchronous source-kind refusal
  * (S5a/S5b -> UnsupportedSourceError) and the guard body uniformly.
+ *
+ * WB-01 / WR-09: converted from `withStateGuard` to
+ * `withLockedStateTransaction` so config write-back happens inside the SAME
+ * per-scope lock as the state mutation. The config write-back fires only in
+ * standalone mode (orchestrated/reconcile-driven calls derive desired state
+ * FROM the merged config; writing back would clobber a per-machine override).
  */
 async function runAddInGuard(args: {
   opts: AddMarketplaceOptions;
@@ -212,8 +321,9 @@ async function runAddInGuard(args: {
   source: ReturnType<typeof parsePluginSource>;
   gitOps: GitOps;
   credentialOps: CredentialOps;
+  orchestrated: boolean;
 }): Promise<string> {
-  const { opts, locations, source, gitOps, credentialOps } = args;
+  const { opts, locations, source, gitOps, credentialOps, orchestrated } = args;
 
   // S5a (MA-10): parser produced an unknown kind with a reason -- surface
   // verbatim on the cause, classified as `unsupported source` (D-48-C A3).
@@ -230,8 +340,23 @@ async function runAddInGuard(args: {
     );
   }
 
+  // WB-01: target-path selection happens ONCE before the lock so
+  // the orchestrator NEVER falls back to the base file on ENOENT.
+  const targetConfigPath =
+    opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath;
+  const configBasename = path.basename(targetConfigPath);
+
   let recordedName: string | undefined;
-  await withStateGuard(locations, async (state) => {
+  await withLockedStateTransaction(locations, async (tx) => {
+    const state = tx.state;
+
+    // CFG-03 (T-56-02-05): abort BEFORE any state mutation. The
+    // basename-only error message prevents an absolute-path information leak.
+    const cfg = await loadConfig(targetConfigPath);
+    if (cfg.status === "invalid") {
+      throw new ConfigInvalidError(configBasename);
+    }
+
     if (source.kind === "github") {
       recordedName = await addGithubInGuard({
         ctx: opts.ctx,
@@ -251,6 +376,46 @@ async function runAddInGuard(args: {
         cwd: opts.cwd,
       });
     }
+
+    // WB-01 / WR-09: write-back the marketplace entry to the user-authored
+    // config. SKIPPED in orchestrated mode (reconcile derives desired state
+    // FROM the config; writing back would clobber a per-machine override).
+    // The `source` field is `opts.rawSource` VERBATIM so the reconcile
+    // planner's `samePlannedSource` comparison stays a no-op on the next
+    // load.
+    //
+    // WR-07: by this point `addGithubInGuard` has ALREADY
+    // renamed the clone into its final `sources/<name>/` path, and its own
+    // MA-9 cleanup catch is out of scope. If the config write-back or
+    // tx.save() throws (disk full, EACCES on claude-plugins.json), the state
+    // snapshot is discarded (no save) but the clone would be orphaned --
+    // making every retry fail MA-6 `{stale clone}` until the user manually
+    // deletes the directory (NFR-3 violation). Mirror the MA-9 discipline:
+    // remove the committed final clone and append any cleanup leak to the
+    // rethrown error.
+    try {
+      if (!orchestrated) {
+        const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
+        await writeMarketplaceConfigEntry(
+          current,
+          targetConfigPath,
+          locations.scopeRoot,
+          recordedName,
+          { source: opts.rawSource },
+        );
+      }
+
+      await tx.save();
+    } catch (err) {
+      let wrapped: unknown = err;
+      if (source.kind === "github") {
+        const finalDir = await locations.sourceCloneDir(recordedName);
+        const leak = await cleanupStaging(finalDir, `marketplace final clone ${finalDir}`);
+        wrapped = appendLeakToError(wrapped, leak);
+      }
+
+      throw wrapped instanceof Error ? wrapped : new Error(errorMessage(wrapped));
+    }
   });
 
   if (recordedName === undefined) {
@@ -261,11 +426,76 @@ async function runAddInGuard(args: {
   return recordedName;
 }
 
-export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void> {
+/**
+ * RECON-03: route the catch arm of `addMarketplace` to either a typed
+ * orchestrated outcome OR a standalone notify() row. Returns an
+ * `AddMarketplaceOutcome` when orchestrated, otherwise `undefined` after
+ * having fired the standalone notify().
+ *
+ * The non-enumerated catastrophic branch in orchestrated mode collapses to
+ * the closed-set `"unparseable"` reason because every recognised add
+ * precondition yields a typed error and network reachability failures are
+ * classified by `classifyAddError`'s errno ladder (WR-03 -- the github
+ * guard's clone-catch only cleans staging and rethrows unclassified), so an
+ * unrecognised throw is by construction an opaque source-tree shape.
+ */
+function handleAddFailure(
+  opts: AddMarketplaceOptions,
+  err: unknown,
+  orchestrated: boolean,
+): AddMarketplaceOutcome | undefined {
+  const reason = classifyAddError(err);
+  if (reason === undefined) {
+    if (orchestrated) {
+      const wrapped = err instanceof Error ? err : new Error(errorMessage(err));
+      return {
+        status: "failed",
+        reason: "unparseable",
+        error: wrapped,
+        cause: errorMessage(err),
+      };
+    }
+
+    // Not an enumerated add precondition (e.g. a StateLockHeldError or an
+    // unforeseen catastrophic error) -- never swallow it in standalone mode.
+    throw err;
+  }
+
+  if (orchestrated) {
+    const wrapped = err instanceof Error ? err : new Error(errorMessage(err));
+    return { status: "failed", reason, error: wrapped, cause: errorMessage(err) };
+  }
+
+  notify(opts.ctx, opts.pi, {
+    marketplaces: [
+      {
+        name: addSubjectName(err, opts.rawSource),
+        scope: opts.scope,
+        status: "failed",
+        reasons: [reason],
+        plugins: [],
+      },
+    ],
+  });
+  return undefined;
+}
+
+/**
+ * RECON-03: returns `AddMarketplaceOutcome` in orchestrated mode and
+ * `undefined` in standalone mode (after firing the standalone notify()).
+ * Callers in orchestrated mode know the outcome is defined; standalone
+ * callers ignore the return.
+ */
+export async function addMarketplace(
+  opts: AddMarketplaceOptions,
+): Promise<AddMarketplaceOutcome | undefined> {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
   const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
   const locations = locationsFor(opts.scope, opts.cwd);
   const source = parsePluginSource(opts.rawSource);
+  // RECON-03: orchestrated mode suppresses every notify() call and returns the
+  // typed outcome instead. Standalone (default/omitted) preserves byte-identity.
+  const orchestrated = opts.notifications?.mode === "orchestrated";
 
   // ATTR-07: route every enumerated precondition failure through notify as a
   // structured `⊘ <subject> [<scope>] (failed) {<reason>}` row on the
@@ -273,7 +503,7 @@ export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void>
   // orchestrator. Genuinely unexpected/catastrophic errors re-throw -- only the
   // closed-set add preconditions are caught here. The github guard's own catch
   // (cleanupStaging + appendLeakToError) runs FIRST and re-throws; this catch
-  // sees the already-cleaned error, so no staging dir leaks (Pitfall 4).
+  // sees the already-cleaned error, so no staging dir leaks.
   let recordedName: string;
   try {
     recordedName = await runAddInGuard({
@@ -282,15 +512,12 @@ export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void>
       source,
       gitOps,
       credentialOps,
+      orchestrated,
     });
   } catch (err) {
-    const reason = classifyAddError(err);
-    if (reason === undefined) {
-      // Not an enumerated add precondition (e.g. a StateLockHeldError or an
-      // unforeseen catastrophic error) -- never swallow it.
-      throw err;
-    }
-
+    // rethrowPreconditionErrors short-circuits BEFORE the mode branch so the
+    // bootstrap composer contract is preserved in BOTH standalone and
+    // orchestrated modes (the typed precondition flows past the orchestrator).
     if (opts.rethrowPreconditionErrors === true) {
       // Composition seam (bootstrap): re-throw the typed precondition so the
       // caller can make a control-flow decision (e.g. swallow the idempotent
@@ -298,18 +525,7 @@ export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void>
       throw err;
     }
 
-    notify(opts.ctx, opts.pi, {
-      marketplaces: [
-        {
-          name: addSubjectName(err, opts.rawSource),
-          scope: opts.scope,
-          status: "failed",
-          reasons: [reason],
-          plugins: [],
-        },
-      ],
-    });
-    return;
+    return handleAddFailure(opts, err, orchestrated);
   }
 
   // D-03-INV: post-state-commit completion-cache invalidation.
@@ -331,6 +547,10 @@ export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void>
     // mutation already succeeded; only the completion-cache is stale.
   }
 
+  if (orchestrated) {
+    return { status: "added", name: recordedName };
+  }
+
   // Emit one MarketplaceNotificationMessage per outcome. Severity and
   // reload-hint are computed by notify(); callers MUST NOT compose them.
   // Catalog: `path-source` + `github-source` fixtures in catalog-uat.test.ts.
@@ -344,6 +564,7 @@ export async function addMarketplace(opts: AddMarketplaceOptions): Promise<void>
       },
     ],
   });
+  return undefined;
 }
 
 async function addGithubInGuard(args: {

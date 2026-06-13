@@ -50,6 +50,8 @@
 // resolveScopeFromState). MUST NOT import from
 // orchestrators/marketplace/{add,remove,list,update,autoupdate}.ts.
 
+import path from "node:path";
+
 import {
   abortPreparedAgents,
   commitPreparedAgents,
@@ -94,6 +96,7 @@ import { discoverGeneratedNames } from "./discover-names.ts";
 import {
   assertNoCrossPluginConflicts,
   MarketplaceNotAddedSignal,
+  maybeWritePluginConfigBack,
   resolveInstalledMarketplaceTarget,
   resolveInstalledPluginTarget,
   resolvePluginVersion,
@@ -139,7 +142,7 @@ export type UpdatePluginsTarget =
 // `MarketplaceNotAddedSignal` from `./shared.ts` (one source of truth so
 // `instanceof` agrees with reinstall.ts). The cascade path
 // (`updateSinglePlugin` / `preflightUpdate`) NEVER raises it -- it keeps its
-// non-throwing concurrent-removal outcome (Pitfall 3 / A3).
+// non-throwing concurrent-removal outcome (A3).
 
 export interface UpdatePluginsOptions {
   readonly ctx: ExtensionContext;
@@ -158,6 +161,12 @@ export interface UpdatePluginsOptions {
    * accept this flag; cascade-driven re-installs always omit `model:`.
    */
   readonly mapModel?: boolean;
+  /**
+   * WB-01 / WB-02: when true, target
+   * `claude-plugins.local.json` instead of `claude-plugins.json` for
+   * write-back on the direct path.
+   */
+  readonly local?: boolean;
 }
 
 /**
@@ -275,6 +284,9 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
         // resolves to false at the bridge call site so cascade re-installs
         // always omit `model:`.
         mapModel: opts.mapModel ?? false,
+        // WB-01: thread `--local` for the direct-path
+        // write-back target selection.
+        ...(opts.local === true && { local: true }),
       });
     } catch (err) {
       // PUP-9 direct path: phase-2-or-earlier throws (including PI-14
@@ -558,6 +570,14 @@ interface ThreePhaseArgs {
    * via `args.mapModel ?? false` in `prepareUpdateHandles`.
    */
   readonly mapModel?: boolean;
+  /**
+   * WB-01 / WB-02: when true, target
+   * `claude-plugins.local.json` instead of `claude-plugins.json` for the
+   * direct-path write-back. The cascade path (`cascade: true`) SKIPS
+   * write-back regardless -- the marketplace autoupdate cascade owns its
+   * own config writes (mirrors WR-09 orchestrated-mode semantics).
+   */
+  readonly local?: boolean;
 }
 
 interface PrepHandles {
@@ -839,8 +859,8 @@ type Phase3Phase = (typeof PHASE3_FAILURE_PHASES)[number];
  * legitimate same-process intent-mark -> commits -> finalize sequence
  * because intent-mark does not bump the version.
  *
- * Pitfall 7: `compatibility.supported` and `compatibility.unsupported`
- * carry forward UNCHANGED from the pre-update sRecord. They are the
+ * `compatibility.supported` and `compatibility.unsupported` carry forward
+ * UNCHANGED from the pre-update sRecord. They are the
  * truthful current view during the intent-mark window; `finalizeUpdateRecord`
  * rewrites them on the all-success branch.
  *
@@ -876,7 +896,7 @@ async function markUpdateInProgress(
     sRecord.compatibility = {
       installable: false,
       notes: [UPDATE_IN_PROGRESS_NOTE],
-      // Pitfall 7: carry forward from EXISTING sRecord, NOT from
+      // Carry forward from EXISTING sRecord, NOT from
       // preflight.installable -- the pre-update arrays are the truthful
       // view during the intent-mark window.
       supported: [...sRecord.compatibility.supported],
@@ -894,7 +914,7 @@ async function markUpdateInProgress(
  * 1. PER-BRIDGE (independent across bridges): for each of skills /
  *    commands / agents / mcp, if `!failedPhases.has(bridge)` then write
  *    `sRecord.resources.<schemaField> = handles.<bridge>.result.recorded
- *    .map(r => r.generatedName)`. SC#2 + Pitfall 1: do NOT
+ *    .map(r => r.generatedName)`. SC#2: do NOT
  *    gate per-bridge writes on `phase3aFailures.length === 0`; the
  *    independent per-bridge gate is the load-bearing structural contract.
  *
@@ -914,15 +934,74 @@ async function markUpdateInProgress(
  * `sRecord.updatedAt` is set on BOTH branches: even a failed finalize
  * is a truthful "we touched this record" stamp.
  */
+/**
+ * D-UPD: same intersection as `reconcile/plan.ts::isRecordedButDisabled`.
+ * Duplicated here to avoid pulling the reconcile module into the orchestrator's
+ * import graph; the planner is the canonical owner and this predicate is the
+ * deliberate same-rule mirror (`enable-disable.ts::isCurrentlyDisabled` does
+ * the same for its own reasons).
+ */
+function isRecordedButDisabled(
+  record: ExtensionState["marketplaces"][string]["plugins"][string],
+): boolean {
+  return (
+    record.compatibility.installable &&
+    record.resources.skills.length === 0 &&
+    record.resources.prompts.length === 0 &&
+    record.resources.agents.length === 0 &&
+    record.resources.mcpServers.length === 0
+  );
+}
+
+/**
+ * D-UPD: refresh a disabled-but-recorded plugin's version pin + resolvedSource
+ * inside a withStateGuard so a future `enable` re-materializes from the
+ * current manifest. Resources.* stay empty (the plugin is still disabled).
+ * The standalone-direct write-back (maybeWritePluginConfigBack) is
+ * SKIPPED -- the config entry already exists by construction (the disabled
+ * record only persists when the user explicitly disabled it), and writing
+ * the byte-stable `{}` patch would touch state.json mtime via the SOLE
+ * sanctioned save seam without changing user-visible bytes.
+ */
+async function refreshDisabledRecord(
+  args: ThreePhaseArgs,
+  preflight: PluginPreflight,
+): Promise<void> {
+  const { plugin, marketplace, locations } = args;
+  const { installable, toVersion } = preflight;
+  await withStateGuard(locations, (s) => {
+    const sMp = s.marketplaces[marketplace];
+    if (sMp === undefined) {
+      return;
+    }
+
+    const sRecord = sMp.plugins[plugin];
+    if (sRecord === undefined) {
+      return;
+    }
+
+    sRecord.version = toVersion;
+    sRecord.resolvedSource = installable.pluginRoot;
+    sRecord.compatibility = {
+      installable: true,
+      notes: [...installable.notes],
+      supported: [...installable.supported],
+      unsupported: [...installable.unsupported],
+    };
+    sRecord.updatedAt = new Date().toISOString();
+  });
+}
+
 async function finalizeUpdateRecord(
   args: ThreePhaseArgs,
   preflight: PluginPreflight,
   handles: PrepHandles,
   phase3aFailures: readonly Phase3Failure[],
-): Promise<void> {
+): Promise<{ readonly invalidConfigWriteBack: boolean }> {
   const { plugin, marketplace, locations } = args;
   const { installable, toVersion } = preflight;
-  await withStateGuard(locations, (s) => {
+  let invalidConfigWriteBack = false;
+  await withStateGuard(locations, async (s) => {
     const sMp = s.marketplaces[marketplace];
     if (sMp === undefined) {
       throw new Error(
@@ -978,9 +1057,36 @@ async function finalizeUpdateRecord(
     }
 
     sRecord.updatedAt = new Date().toISOString();
+
+    // WB-01 / A7: deep-equal short-circuited config write-back
+    // on the all-success arm. SKIPPED in cascade mode (the marketplace
+    // autoupdate cascade owns its own writes; mirrors WR-09 orchestrated-
+    // mode semantics). The deep-equal gate compares the prospective
+    // `{...existing, ...patch}` shape against the existing entry; the
+    // current plugin entry shape carries no version field, so the patch
+    // is `{}` and a CHANGED update with a byte-stable existing entry
+    // produces a no-op (preserving RECON-05 mtime stability).
+    if (!args.cascade && phase3aFailures.length === 0) {
+      const writeResult = await maybeWritePluginConfigBack({
+        locations,
+        marketplace,
+        plugin,
+        local: args.local === true,
+      });
+      if (writeResult.invalidConfig) {
+        invalidConfigWriteBack = true;
+      }
+    }
   });
+  return { invalidConfigWriteBack };
 }
 
+// The three-phase update body sequences preflight, the D-UPD disabled-record
+// fast path, prepare-handles, the intent-mark window, phase-3a per-bridge
+// commits, finalize, the phase-3b aggregate error path, and the S5
+// invalid-config write-back warning -- splitting it would require additional
+// state-snapshot threading and obscure the per-phase save-vs-throw discipline.
+// eslint-disable-next-line sonarjs/cognitive-complexity
 async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOutcome> {
   const { plugin, marketplace, scope } = args;
 
@@ -992,6 +1098,24 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   }
 
   const { installable, fromVersion, toVersion } = preflight;
+
+  // D-UPD: a disabled-but-recorded plugin (empty resources.* + installable=true,
+  // the same marker the planner reads via isRecordedButDisabled) must NOT
+  // re-materialize artefacts; an `enable` after the update is the rematerialization
+  // surface. Refresh the record's version + resolvedSource so a future enable
+  // reads the current pin, but keep `resources.*` empty. Renders the existing
+  // `unchanged` byte form -- the artefact state really is unchanged.
+  if (isRecordedButDisabled(preflight.record)) {
+    await refreshDisabledRecord(args, preflight);
+    return {
+      partition: "unchanged",
+      name: plugin,
+      fromVersion,
+      toVersion: fromVersion,
+      declaresAgents: false,
+      declaresMcp: false,
+    };
+  }
 
   // ─── : prepare into tmp ────────────────────────────────────────────
   //
@@ -1097,14 +1221,16 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   // 'mcp' push inside the finalize catch (below) trips the phase-3b branch
   // so the recovery hint fires.
   //
-  // Pitfall 4: a finalize throw routes through
-  // `phase3aFailures` as a synthetic `phase: "mcp"` entry so the existing
+  // A finalize throw routes through `phase3aFailures` as a synthetic
+  // `phase: "mcp"` entry so the existing
   // `notifyDirectFailure` recovery-hint pipeline fires unchanged. The
   // `msg` field carries the explicit `state finalize failed:` text so
   // operator diagnostics see the truthful cause. A dedicated
   // `phase: "finalize"` Phase3Failure member is deferred.
+  let invalidConfigWriteBack = false;
   try {
-    await finalizeUpdateRecord(args, preflight, handles, phase3aFailures);
+    const finalizeResult = await finalizeUpdateRecord(args, preflight, handles, phase3aFailures);
+    invalidConfigWriteBack = finalizeResult.invalidConfigWriteBack;
   } catch (finalizeErr) {
     phase3aFailures.push({
       phase: "mcp",
@@ -1188,6 +1314,39 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   const stagedAgents = handles.agents.result.recorded.map((r) => r.generatedName);
   const stagedMcpServers = handles.mcp.result.recorded.map((r) => r.generatedName);
   await dropPluginCompletionCache(args);
+  // S5: an invalid config file silently skipped the write-back while the
+  // success notify proceeded. Direct-path callers now surface the abort as a
+  // separate warning notification AFTER the success row so the user knows
+  // the on-disk artefacts were updated but the config entry was not written.
+  // The cascade path never calls the write-back (gated by `!args.cascade`),
+  // so it is structurally unaffected.
+  if (
+    invalidConfigWriteBack &&
+    isDirectUpdate(args) &&
+    args.ctx !== undefined &&
+    args.pi !== undefined
+  ) {
+    const targetBasename = path.basename(
+      args.local === true ? args.locations.configLocalJsonPath : args.locations.configJsonPath,
+    );
+    notify(args.ctx, args.pi, {
+      marketplaces: [
+        {
+          name: marketplace,
+          scope,
+          plugins: [
+            {
+              status: "failed",
+              name: plugin,
+              reasons: ["invalid manifest"] as const,
+              cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
+            },
+          ],
+        },
+      ],
+    });
+  }
+
   return {
     partition: "updated",
     name: plugin,
@@ -1767,7 +1926,7 @@ async function enumerateMarketplaceTarget(
   // (`<plugin>@<mp>` and `@<mp>`). For the plugin form, first try the
   // installed-plugin target; a miss falls back to the marketplace-existence
   // resolver so a present-marketplace/absent-plugin row still reaches the
-  // downstream `(skipped) {not installed}` preflight (Pitfall 4). A
+  // downstream `(skipped) {not installed}` preflight. A
   // marketplace-absent / other-scope outcome raises `MarketplaceNotAddedSignal`
   // -- caught at the `updatePlugins` entrypoint and re-attributed to the
   // standalone `{not added}` variant -- instead of the former raw
@@ -1811,7 +1970,7 @@ async function enumerateMarketplaceTarget(
  *    row is absent, fall back to the marketplace-existence resolver so a
  *    present-marketplace/absent-plugin target resolves against the container's
  *    scope (the downstream `preflightUpdate` emits `(skipped) {not installed}`
- *    -- Pitfall 4); a marketplace-absent / other-scope outcome signals
+ *    ); a marketplace-absent / other-scope outcome signals
  *    `{not added}` carrying the REQUESTED scope (SCOPE-01).
  *  - MARKETPLACE form: consume the discriminated `resolveInstalledMarketplaceTarget`
  *    result directly; `marketplace-absent`/`other-scope` signal `{not added}`

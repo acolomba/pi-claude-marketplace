@@ -18,7 +18,7 @@
 // a `NotificationMessage` payload, a `MockPi` factory (to drive the
 // `softDepStatus(pi)` probe inside `notify()`) and an optional
 // `expectedSeverity` ("warning" | "error") so the driver loop can assert
-// the Pi-API magic-string severity arg shape per Pitfall 6.
+// the Pi-API magic-string severity arg shape.
 //
 // PARSER PRESERVATION (D-17-05, D-17-06): the catalog-walking logic
 // (`loadCatalogExamples` + the section/state regular expressions + the
@@ -79,7 +79,13 @@ function loadCatalogExamples(catalog: string): readonly CatalogExample[] {
   let inFence = false;
   let fenceBody: string[] = [];
 
-  const sectionRe = /^## (`(\/claude:plugin [^`]+)`|Manual recovery anchors)\s*$/;
+  // RECON-04: the `reconcile-applied-cascade` H2 is a
+  // command-less section -- the cascade is emitted programmatically by the
+  // load-time apply orchestrator, not via a `/claude:plugin` verb. The
+  // parser accepts a plain non-backtick heading whose text matches the
+  // discriminator-style identifier.
+  const sectionRe =
+    /^## (`(\/claude:plugin [^`]+)`|Manual recovery anchors|reconcile-applied-cascade)\s*$/;
   const stateRe = /^<!-- catalog-state: ([a-z0-9-]+) -->\s*$/;
 
   for (const line of lines) {
@@ -105,7 +111,20 @@ function loadCatalogExamples(catalog: string): readonly CatalogExample[] {
 
     const sectionMatch = sectionRe.exec(line);
     if (sectionMatch !== null) {
-      currentSection = sectionMatch[2] ?? "manual-recovery-anchors";
+      // sectionMatch[2] is the backtick-wrapped `/claude:plugin ...` capture
+      // (present only on the command-section arm). When absent, fall back to
+      // the literal section name from group 1 (transformed to kebab-case for
+      // the `Manual recovery anchors` arm; left as-is for the plain
+      // `reconcile-applied-cascade` arm -- RECON-04).
+      const groupOne = sectionMatch[1] ?? "";
+      if (sectionMatch[2] !== undefined) {
+        currentSection = sectionMatch[2];
+      } else if (groupOne === "Manual recovery anchors") {
+        currentSection = "manual-recovery-anchors";
+      } else {
+        currentSection = groupOne;
+      }
+
       pendingState = null;
       continue;
     }
@@ -174,7 +193,7 @@ function piWithNothingLoaded(): MockPi {
 }
 
 // ---------------------------------------------------------------------------
-// Fixture map shape (D-17-05 + Pitfall 6).
+// Fixture map shape (D-17-05).
 // ---------------------------------------------------------------------------
 
 interface CatalogFixture {
@@ -489,6 +508,23 @@ const FIXTURES: FixtureMap = {
                 description: "Unavailable plugin that still surfaces its description.",
               },
             ],
+          },
+        ],
+      },
+    },
+
+    // D-54-01 / ENBL-04: list-surface inventory row for a
+    // recorded-but-disabled plugin. The new `(disabled)` closed-set token
+    // mirrors the catalog list section's `disabled-inventory` state.
+    "disabled-inventory": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            details: { autoupdate: true },
+            plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3" }],
           },
         ],
       },
@@ -2062,6 +2098,214 @@ const FIXTURES: FixtureMap = {
   },
 
   // -------------------------------------------------------------------------
+  // /claude:plugin enable -- D-54-01 / ENBL-01 / ENBL-03 enable-from-cache.
+  // -------------------------------------------------------------------------
+  "/claude:plugin enable <plugin>@<marketplace>": {
+    "enable-fresh": {
+      pi: piWithBothLoaded(),
+      // Re-materialization through the install ledger -- UAT-04 (v1.12
+      // milestone UAT decision 2026-06-11): BARE always-marketplace-header
+      // form (no `(added)` token; that header belongs to `marketplace add`)
+      // + `(installed)` plugin row (existing state-change token);
+      // reload-hint fires per SNM-33.
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                name: "foo-plugin",
+                version: "1.2.3",
+                dependencies: [],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    "enable-idempotent": {
+      pi: piWithBothLoaded(),
+      // Idempotent no-op -- benign reason routes to info per UXG-02 / D-28-06.
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                name: "foo-plugin",
+                reasons: ["already enabled"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    "enable-not-installed": {
+      pi: piWithBothLoaded(),
+      // WR-03: marketplace present, plugin row absent -> actionable skip
+      // (`not installed` is NOT benign, so the cascade routes to warning
+      // per D-28-03 and carries the skipped-summary line).
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                name: "foo-plugin",
+                reasons: ["not installed"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    "enable-source-missing": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "foo-plugin",
+                reasons: ["source missing"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    "enable-marketplace-not-added": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+        scope: "user",
+      } satisfies NotificationMessage,
+    },
+
+    "enable-invalid-config": {
+      // CFG-03 abort. T-53-02-02: the marketplace name carries
+      // the file BASENAME via the renderer; here the plugin row carries the
+      // `{invalid manifest}` reason -- the orchestrator aborts BEFORE entering
+      // the cascade, so the body is the bare cascade with the failed plugin
+      // row.
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "foo-plugin",
+                reasons: ["invalid manifest"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+  },
+
+  // -------------------------------------------------------------------------
+  // /claude:plugin disable -- D-54-01 / ENBL-02 cascade unstage + config flip.
+  // -------------------------------------------------------------------------
+  "/claude:plugin disable <plugin>@<marketplace>": {
+    "disable-fresh": {
+      pi: piWithBothLoaded(),
+      // UAT-03: the fresh-disable
+      // row carries the closed-set `(disabled)` token -- same glyph + token
+      // as the disabled-inventory row, version slot kept. The reload-hint
+      // fires via the `disable-cascade` kind (SNM-33 carve-out); kind-less
+      // list/info inventory `disabled` rows stay hint-free.
+      message: {
+        kind: "disable-cascade",
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "disabled",
+                name: "foo-plugin",
+                version: "1.2.3",
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    "disable-idempotent": {
+      pi: piWithBothLoaded(),
+      // Benign reason -> info severity.
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                name: "foo-plugin",
+                reasons: ["already disabled"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    "disable-marketplace-not-added": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+        scope: "user",
+      } satisfies NotificationMessage,
+    },
+
+    "disable-invalid-config": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "foo-plugin",
+                reasons: ["invalid manifest"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+  },
+
+  // -------------------------------------------------------------------------
   // Manual recovery anchors -- per-plugin manual-recovery row inside a block.
   // -------------------------------------------------------------------------
   "manual-recovery-anchors": {
@@ -2081,6 +2325,218 @@ const FIXTURES: FixtureMap = {
                 reasons: ["unreadable"],
                 cause: new Error("bridge: agent staging conflict"),
               },
+            ],
+          },
+        ],
+      },
+    },
+  },
+
+  // -------------------------------------------------------------------------
+  // /claude:plugin preview -- DIFF-01 SC #2 / D-53-01 read-only diff command.
+  // -------------------------------------------------------------------------
+  "/claude:plugin preview": {
+    "empty-steady-state": {
+      pi: piWithBothLoaded(),
+      // Dedicated standalone variant; the renderer hard-codes the advisory
+      // body line so the byte form cannot drift from the catalog state.
+      message: { kind: "reconcile-preview-empty" },
+    },
+    "mp-add-plugin-install": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "new-mp",
+            scope: "user",
+            status: "will add",
+            plugins: [{ status: "will install", name: "new-plugin" }],
+          },
+        ],
+      },
+    },
+    "plugin-pending-uninstall": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [{ status: "will uninstall", name: "old-plugin" }],
+          },
+        ],
+      },
+    },
+    "enable-disable-transitions": {
+      // The will-enable bucket is populated only by the
+      // recorded-but-disabled marker; the catalog fixture is hand-constructed
+      // (not routed through planReconcile) so the enable-bucket wiring can
+      // land against an exercised path.
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              { status: "will enable", name: "to-enable" },
+              { status: "will disable", name: "to-disable" },
+            ],
+          },
+        ],
+      },
+    },
+    "source-mismatch": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            status: "failed",
+            reasons: ["source mismatch"],
+            plugins: [],
+          },
+        ],
+      },
+    },
+    "invalid-config-abort": {
+      // CFG-03: the marketplace `name` is the file BASENAME
+      // (never the absolute path -- T-53-02-02 information-disclosure
+      // mitigation). The orchestrator passes path.basename(filePath).
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins.json",
+            scope: "project",
+            status: "failed",
+            reasons: ["invalid manifest"],
+            plugins: [],
+          },
+        ],
+      },
+    },
+  },
+
+  // -------------------------------------------------------------------------
+  // reconcile-applied-cascade -- RECON-04 load-time apply
+  // cascade. Standalone-dispatched variant; severity is content-derived
+  // (mirrors the cascade-arm ladder); shouldEmitReloadHint structurally
+  // false (the reconcile already ran on /reload).
+  // -------------------------------------------------------------------------
+  "reconcile-applied-cascade": {
+    "success-cascade-mixed": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        marketplaces: [
+          {
+            name: "new-mp",
+            scope: "project",
+            status: "added",
+            plugins: [{ status: "installed", name: "new-plugin", dependencies: [] }],
+          },
+          {
+            name: "other-mp",
+            scope: "user",
+            status: "added",
+            plugins: [{ status: "installed", name: "other-plugin", dependencies: [] }],
+          },
+        ],
+      },
+    },
+    "soft-fail-mixed": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        marketplaces: [
+          {
+            name: "flaky-mp",
+            scope: "user",
+            status: "failed",
+            reasons: ["network unreachable"],
+            plugins: [],
+          },
+          {
+            name: "ok-mp",
+            scope: "user",
+            status: "added",
+            plugins: [{ status: "installed", name: "ok-plugin", dependencies: [] }],
+          },
+        ],
+      },
+    },
+    "invalid-config-row": {
+      // T-55-02-01 / T-53-02-02: BASENAME only -- never the absolute path.
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        marketplaces: [
+          {
+            name: "claude-plugins.json",
+            scope: "project",
+            status: "failed",
+            reasons: ["invalid manifest"],
+            plugins: [],
+          },
+        ],
+      },
+    },
+
+    // I5 / PR #51: invalid-config row that carries the loadConfig diagnostic
+    // detail (EACCES / JSON-parse / schema key) via a synthetic plugin child
+    // (SNM-10 pattern -- mp headers cannot carry a cause). Absolute paths
+    // are stripped at the apply boundary via `redactAbsolutePaths`; the
+    // parse / permission detail survives so the operator can debug.
+    "invalid-config-row-with-cause": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        marketplaces: [
+          {
+            name: "claude-plugins.json",
+            scope: "project",
+            status: "failed",
+            reasons: ["invalid manifest"],
+            plugins: [
+              {
+                status: "failed",
+                name: "claude-plugins.json",
+                reasons: ["invalid manifest"],
+                cause: new Error("schema validation failed: /marketplaces: Expected object"),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // I1 / PR #51: reconcile-driven `marketplace remove` whose cascade
+    // unstaged some plugins and failed others. Bare `(failed)` mp header +
+    // one row per unstaged plugin (○ uninstalled) + one row per failed
+    // plugin (⊘ {reason}). Mirrors the standalone `marketplace remove`
+    // `partial` byte form. Pre-fix the orchestrated arm collapsed this to
+    // ONE mp-failed row, silently dropping the N-1 other rows.
+    "partial-marketplace-remove": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        marketplaces: [
+          {
+            name: "acme-mp",
+            scope: "user",
+            status: "failed",
+            plugins: [
+              { status: "uninstalled", name: "plugin-ok" },
+              { status: "failed", name: "plugin-fail-a", reasons: ["permission denied"] },
+              { status: "failed", name: "plugin-fail-b", reasons: ["source missing"] },
             ],
           },
         ],
@@ -2159,7 +2615,7 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
       });
     }
 
-    // Severity-arg assertion per Pitfall 6.
+    // Severity-arg assertion.
     if (fixture.expectedSeverity !== undefined) {
       if (callArgs.length !== 2 || callArgs[1] !== fixture.expectedSeverity) {
         failures.push({

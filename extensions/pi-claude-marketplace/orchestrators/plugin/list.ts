@@ -55,6 +55,7 @@
 
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
 import { resolveStrict } from "../../domain/resolver.ts";
+import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { errorMessage } from "../../shared/errors.ts";
@@ -63,12 +64,14 @@ import {
   narrowProbeError as sharedNarrowProbeError,
   narrowResolverNotes as sharedNarrowResolverNotes,
 } from "../../shared/probe-classifiers.ts";
+import { isRecordedButDisabled } from "../reconcile/plan.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
   Dependency,
   MarketplaceNotificationMessage,
   PluginAvailableMessage,
+  PluginDisabledMessage,
   PluginFailedMessage,
   PluginNotificationMessage,
   PluginPresentMessage,
@@ -84,10 +87,12 @@ import type { Scope } from "../../shared/types.ts";
  * subset per shared/notify.ts. UAT G-21-01: the installed bucket emits the
  * list-only `present` token instead of the cascade-context `installed`
  * token so `shouldEmitReloadHint` does not misfire on steady-state list
- * invocations; the PL-1 `--installed` filter treats `present` and
- * `upgradable` as the installed bucket.
+ * invocations; the PL-1 `--installed` filter treats `present`, `upgradable`,
+ * and `disabled` as the installed bucket (a disabled plugin IS recorded --
+ * the catalog's `disabled-inventory` state sits under the installed
+ * inventory; D-54-01 / ENBL-04).
  */
-type PluginRenderStatus = "present" | "upgradable" | "available" | "unavailable";
+type PluginRenderStatus = "present" | "upgradable" | "available" | "unavailable" | "disabled";
 
 /**
  * Options bag for {@link listPlugins}. The edge layer constructs this
@@ -130,7 +135,10 @@ function shouldShow(opts: ListPluginsOptions, status: PluginRenderStatus): boole
     return true;
   }
 
-  if (opts.installed === true && (status === "present" || status === "upgradable")) {
+  if (
+    opts.installed === true &&
+    (status === "present" || status === "upgradable" || status === "disabled")
+  ) {
     return true;
   }
 
@@ -222,7 +230,7 @@ function installedRowMessage(
   marketplaceScope: Scope,
   record: ExtensionState["marketplaces"][string]["plugins"][string],
   manifestEntry: MarketplaceManifest["plugins"][number] | undefined,
-): PluginPresentMessage | PluginUpgradableMessage {
+): PluginPresentMessage | PluginUpgradableMessage | PluginDisabledMessage {
   const declaresAgents = record.resources.agents.length > 0;
   const declaresMcp = record.resources.mcpServers.length > 0;
   const upgradable =
@@ -237,6 +245,21 @@ function installedRowMessage(
 
   const descriptionField: { readonly description?: string } =
     manifestEntry?.description === undefined ? {} : { description: manifestEntry.description };
+
+  // D-54-01 / ENBL-04: a recorded-but-disabled record (empty-resources +
+  // `installable: true` -- the canonical `isRecordedButDisabled` marker the
+  // disable orchestrator writes) renders the `(disabled)` inventory token,
+  // NOT `(installed)`. Checked BEFORE the upgradable branch: the version pin
+  // is frozen while disabled (ENBL-02), so a manifest-version drift must not
+  // surface a misleading `(upgradable)` on a plugin with no artefacts.
+  if (isRecordedButDisabled(record)) {
+    return {
+      status: "disabled",
+      name: pluginName,
+      version: record.version,
+      ...scopeField,
+    };
+  }
 
   if (upgradable) {
     // The PluginUpgradableMessage type structurally requires `reasons`
@@ -487,10 +510,12 @@ async function buildMarketplaceMessage(args: {
   mpName: string;
   mpScope: Scope;
   mpRecord: ExtensionState["marketplaces"][string];
+  /** SPLIT-01 rewire: autoupdate read from MergedConfig at the caller. */
+  autoupdate: boolean;
   extraPlugins: readonly PluginNotificationMessage[];
   excludeFromAvailable?: ReadonlySet<string>;
 }): Promise<BuiltMarketplace> {
-  const { opts, mpName, mpScope, mpRecord, extraPlugins, excludeFromAvailable } = args;
+  const { opts, mpName, mpScope, mpRecord, autoupdate, extraPlugins, excludeFromAvailable } = args;
   const { manifest, loadError } = await loadMarketplaceManifestSoftly(mpRecord);
 
   // Unparseable manifest: catalog `unparseable-mp` form (lines 215-226)
@@ -533,8 +558,9 @@ async function buildMarketplaceMessage(args: {
   // reference: every `/claude:plugin list` fixture at
   // docs/output-catalog.md:139-263 has `details: { autoupdate: true }` --
   // no `lastUpdatedAt` field.
-  const detailsField: { readonly details?: { autoupdate: boolean } } =
-    mpRecord.autoupdate === true ? { details: { autoupdate: true } } : {};
+  const detailsField: { readonly details?: { autoupdate: boolean } } = autoupdate
+    ? { details: { autoupdate: true } }
+    : {};
 
   return {
     mp: {
@@ -559,9 +585,13 @@ export async function loadPluginListPayload(
   // D-13-19: read both scopes' state.
   const userLocations = locationsFor("user", opts.cwd);
   const projectLocations = locationsFor("project", opts.cwd);
-  const [userState, projectState] = await Promise.all([
+  const [userState, projectState, userMerged, projectMerged] = await Promise.all([
     loadState(userLocations.extensionRoot),
     loadState(projectLocations.extensionRoot),
+    // SPLIT-01 rewire: autoupdate lives in claude-plugins.json (config).
+    // Pre-compute the merged view per scope ONCE before the fold loops below.
+    loadMergedScopeConfig(userLocations).then((r) => r.merged),
+    loadMergedScopeConfig(projectLocations).then((r) => r.merged),
   ]);
 
   const blocks: BuiltMarketplace[] = [];
@@ -586,6 +616,7 @@ export async function loadPluginListPayload(
       mpName,
       mpScope: "project",
       mpRecord,
+      autoupdate: projectMerged.marketplaces[mpName]?.entry.autoupdate ?? false,
       extraPlugins: [],
     });
     blocks.push(built);
@@ -627,12 +658,17 @@ export async function loadPluginListPayload(
       // UAT G-21-01: `installedRowMessage` emits `status: "present"`
       // (list-only) for the steady-state inventory row, not the
       // cascade-context `"installed"` token. The carry-over filter MUST
-      // discriminate on `"present"` (plus the `"upgradable"` arm) so
-      // orphan-folded rows survive (CR-01). The integration regression for
+      // discriminate on `"present"` (plus the `"upgradable"` and ENBL-04
+      // `"disabled"` arms) so orphan-folded rows survive (CR-01). A disabled
+      // record IS an installed record -- dropping it here would both hide
+      // the row and let the user-side enumeration re-emit the plugin as a
+      // duplicate `(available)`. The integration regression for
       // this fold lives at tests/integration/fold-adoption.test.ts; the
       // orchestrator-level reproduction is in
       // tests/orchestrators/plugin/list.test.ts ("CR-01 / G-21-01 fold-carryover...").
-      folded = projectSideRows.filter((r) => r.status === "present" || r.status === "upgradable");
+      folded = projectSideRows.filter(
+        (r) => r.status === "present" || r.status === "upgradable" || r.status === "disabled",
+      );
       // Record the folded plugin names so the user-scope manifest's
       // available-bucket enumeration skips them (catalog
       // `project-orphan-folded` state shows a single
@@ -646,6 +682,7 @@ export async function loadPluginListPayload(
       mpName,
       mpScope: "user",
       mpRecord,
+      autoupdate: userMerged.marketplaces[mpName]?.entry.autoupdate ?? false,
       extraPlugins: folded,
       excludeFromAvailable: foldedNames,
     });
@@ -729,6 +766,10 @@ function sortPluginsInBlock(
       case "present":
       case "upgradable":
       case "installed":
+      case "disabled":
+        // D-54-01 / ENBL-04: disabled rows carry an explicit `scope?` and
+        // join the scope-bearing list-surface variants. The SNM-11 carve-out
+        // applies only to `available` / `unavailable`.
         return p.scope ?? marketplaceScope;
       case "available":
       case "unavailable":
@@ -739,7 +780,14 @@ function sortPluginsInBlock(
       case "failed":
       case "skipped":
       case "manual recovery":
-        // Unreachable on the list surface; renderer-as-spec guard.
+      case "will install":
+      case "will uninstall":
+      case "will enable":
+      case "will disable":
+        // Unreachable on the list surface; renderer-as-spec guard. The
+        // DIFF-02 will-* preview variants are emitted only by
+        // `/claude:plugin preview`, which does not flow through this list
+        // orchestrator.
         return marketplaceScope;
     }
   };

@@ -14,6 +14,7 @@ import {
   updateAllMarketplaces,
   updateMarketplace,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
+import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -117,6 +118,27 @@ async function seedGithubMarketplace(opts: {
       },
     },
   });
+  // SPLIT-01: autoupdate lives in claude-plugins.json.
+  // The state-side autoupdate above is harmless legacy seeding (D-13 scrubs
+  // on next loadState once the config exists); seed the config too so the
+  // SPLIT-01-rewired orchestrators (update.ts reads via loadMergedScopeConfig)
+  // observe the autoupdate truth.
+  if (opts.autoupdate !== undefined) {
+    await saveConfig(
+      locations.configJsonPath,
+      {
+        schemaVersion: 1,
+        marketplaces: {
+          [opts.name]: {
+            source: "anthropics/claude-plugins-official",
+            autoupdate: opts.autoupdate,
+          },
+        },
+      },
+      locations.scopeRoot,
+    );
+  }
+
   return { cloneDir };
 }
 
@@ -504,7 +526,7 @@ test("WR-02: corrupt pre-existing manifest routes to (failed), never a silent no
 // InvalidMarketplaceManifestError (thrown by loadMarketplaceManifest, wrapped in
 // MarketplaceUpdateError by refreshRecord) BEFORE the `?? network unreachable`
 // fallback fires. github-source no-errno failures KEEP `{network unreachable}`
-// as the catch-all (Pitfall 3: the path/github classification did not collapse).
+// as the catch-all (the path/github classification did not collapse).
 // ───────────────────────────────────────────────────────────────────────────
 
 /** Seed a path-source marketplace pointing at an on-disk dir under the cwd. */
@@ -631,7 +653,7 @@ test("NFR-5: path-source update FAILURE (invalid manifest) still calls zero gitO
   });
 });
 
-test("Pitfall 3: github-source no-errno refresh failure still renders `{network unreachable}` (classification did not collapse)", async () => {
+test("github-source no-errno refresh failure still renders `{network unreachable}` (classification did not collapse)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // A github fetch failure with NO errno code and NO typed manifest error is
     // genuinely plausibly-network -> the `?? ["network unreachable"]` catch-all

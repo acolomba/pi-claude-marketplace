@@ -11,6 +11,7 @@
 // hide behind a healthy other-scope render.
 
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { notify } from "../../shared/notify.ts";
@@ -50,7 +51,10 @@ type MarketplaceRecord = ExtensionState["marketplaces"][string];
  * non-github kind coerces to the `path` arm with `record.marketplaceRoot`
  * -- surfacing a bare row beats refusing to render (NFR-12).
  */
-async function buildBlock(record: MarketplaceRecord): Promise<MarketplaceInfoMessage> {
+async function buildBlock(
+  record: MarketplaceRecord,
+  autoupdate: boolean,
+): Promise<MarketplaceInfoMessage> {
   const src = record.source as ParsedSource;
   const source: MarketplaceInfoMessage["source"] =
     src.kind === "github"
@@ -65,7 +69,7 @@ async function buildBlock(record: MarketplaceRecord): Promise<MarketplaceInfoMes
   // The renderer gates `last_updated:` line emission on
   // `sourceKind === "github"` AND `lastUpdatedAt !== undefined`.
   const details: MarketplaceInfoMessage["details"] = {
-    autoupdate: record.autoupdate ?? false,
+    autoupdate,
     ...(record.lastUpdatedAt !== undefined && { lastUpdatedAt: record.lastUpdatedAt }),
   };
 
@@ -111,12 +115,15 @@ function buildNotAddedMessage(name: string, scope: Scope | undefined): Notificat
 function buildManifestFailureMessage(
   record: MarketplaceRecord,
   reason: ContentReason,
+  autoupdate: boolean,
 ): NotificationMessage {
   return {
     kind: "plugin-info",
     marketplaceName: record.name,
     marketplaceScope: record.scope,
-    marketplaceDetails: { autoupdate: record.autoupdate ?? false },
+    marketplaceDetails: {
+      autoupdate,
+    },
     plugin: {
       status: "failed",
       name: record.name,
@@ -134,13 +141,19 @@ export async function getMarketplaceInfo(opts: GetMarketplaceInfoOptions): Promi
 
   // Each scope's state is loaded read-only via `loadState` (NFR-5
   // preserved -- NO network).
-  const found: { scope: Scope; record: MarketplaceRecord }[] = [];
+  //
+  // SPLIT-01 rewire: autoupdate lives in claude-plugins.json (config),
+  // not state. Load the merged config per scope alongside state so each
+  // (scope, record) tuple carries the per-scope autoupdate truth.
+  const found: { scope: Scope; record: MarketplaceRecord; autoupdate: boolean }[] = [];
   for (const scope of scopes) {
     const locations = locationsFor(scope, opts.cwd);
     const state = await loadState(locations.extensionRoot);
     const record = state.marketplaces[opts.name];
     if (record !== undefined) {
-      found.push({ scope, record });
+      const { merged } = await loadMergedScopeConfig(locations);
+      const autoupdate = merged.marketplaces[opts.name]?.entry.autoupdate ?? false;
+      found.push({ scope, record, autoupdate });
     }
   }
 
@@ -155,9 +168,9 @@ export async function getMarketplaceInfo(opts: GetMarketplaceInfoOptions): Promi
   const failures: NotificationMessage[] = [];
   for (const f of found) {
     try {
-      blocks.push(await buildBlock(f.record));
+      blocks.push(await buildBlock(f.record, f.autoupdate));
     } catch (err) {
-      failures.push(buildManifestFailureMessage(f.record, narrowProbeError(err)));
+      failures.push(buildManifestFailureMessage(f.record, narrowProbeError(err), f.autoupdate));
     }
   }
 

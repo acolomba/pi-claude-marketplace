@@ -27,11 +27,23 @@ const MIGRATE_PATH = path.join(
   "extensions/pi-claude-marketplace/persistence/migrate.ts",
 );
 
+// SPLIT-01 / D-13: `scrubAutoupdate: false` keeps the D-13 autoupdate scrub
+// GATE-CLOSED, preserving prior behavior for fixtures that do not carry an
+// `autoupdate` field. The migrator is a pure function -- the caller
+// (loadState) owns the existsSync gate predicate, so the unit tests here
+// pass the boolean directly.
+const GATE_CLOSED = false;
+const GATE_OPEN = true;
+
 test("ST-4 migrate fills missing manifestPath + marketplaceRoot (v0 fixture)", async () => {
   const fixture = JSON.parse(
     await readFile(path.join(FIXTURES, "v0-no-schemaversion.json"), "utf8"),
   ) as unknown;
-  const { marketplaces, mutated } = migrateLegacyMarketplaceRecords(fixture, "/ext-root");
+  const { marketplaces, mutated } = migrateLegacyMarketplaceRecords(
+    fixture,
+    "/ext-root",
+    GATE_CLOSED,
+  );
   assert.equal(mutated, true);
   const alpha = marketplaces["alpha"] as { manifestPath: string; marketplaceRoot: string };
   assert.equal(
@@ -45,7 +57,11 @@ test("ST-4 migrate fills only missing manifestPath (v1-missing-manifestpath fixt
   const fixture = JSON.parse(
     await readFile(path.join(FIXTURES, "v1-missing-manifestpath.json"), "utf8"),
   ) as unknown;
-  const { marketplaces, mutated } = migrateLegacyMarketplaceRecords(fixture, "/ext-root");
+  const { marketplaces, mutated } = migrateLegacyMarketplaceRecords(
+    fixture,
+    "/ext-root",
+    GATE_CLOSED,
+  );
   assert.equal(mutated, true);
   const beta = marketplaces["beta"] as { manifestPath: string; marketplaceRoot: string };
   assert.ok(
@@ -60,7 +76,11 @@ test("ST-5 migrate normalizes resources.agents and resources.mcpServers to []", 
   const fixture = JSON.parse(
     await readFile(path.join(FIXTURES, "v1-missing-resources.json"), "utf8"),
   ) as unknown;
-  const { marketplaces, mutated } = migrateLegacyMarketplaceRecords(fixture, "/ext-root");
+  const { marketplaces, mutated } = migrateLegacyMarketplaceRecords(
+    fixture,
+    "/ext-root",
+    GATE_CLOSED,
+  );
   assert.equal(mutated, true);
   const gamma = marketplaces["gamma"] as {
     plugins: Record<string, { resources: Record<string, unknown> }>;
@@ -71,28 +91,80 @@ test("ST-5 migrate normalizes resources.agents and resources.mcpServers to []", 
   assert.deepEqual(p2.resources["mcpServers"], []);
 });
 
-test("Pitfall 9 migrate on null returns empty marketplaces (no mutation flag)", () => {
-  const result = migrateLegacyMarketplaceRecords(null, "/ext-root");
+test("migrate on null returns empty marketplaces (no mutation flag)", () => {
+  const result = migrateLegacyMarketplaceRecords(null, "/ext-root", GATE_CLOSED);
   assert.deepEqual(result.marketplaces, {});
   assert.equal(result.mutated, false);
 });
 
-test("Pitfall 9 migrate on top-level array returns empty marketplaces", () => {
-  const result = migrateLegacyMarketplaceRecords([1, 2, 3], "/ext-root");
+test("migrate on top-level array returns empty marketplaces", () => {
+  const result = migrateLegacyMarketplaceRecords([1, 2, 3], "/ext-root", GATE_CLOSED);
   assert.deepEqual(result.marketplaces, {});
   assert.equal(result.mutated, false);
 });
 
 test("migrate on marketplaces:[] (array, not object) resets to {} with mutated=true", () => {
-  const result = migrateLegacyMarketplaceRecords({ marketplaces: [] }, "/ext-root");
+  const result = migrateLegacyMarketplaceRecords({ marketplaces: [] }, "/ext-root", GATE_CLOSED);
   assert.deepEqual(result.marketplaces, {});
   assert.equal(result.mutated, true);
 });
 
 test("migrate on marketplaces missing entirely returns {} with mutated=false", () => {
-  const result = migrateLegacyMarketplaceRecords({ schemaVersion: 1 }, "/ext-root");
+  const result = migrateLegacyMarketplaceRecords({ schemaVersion: 1 }, "/ext-root", GATE_CLOSED);
   assert.deepEqual(result.marketplaces, {});
   assert.equal(result.mutated, false);
+});
+
+// ===================================================================
+// SPLIT-01 / D-12 / D-13 -- autoupdate scrub gated on scrubAutoupdate
+// (the existsSync(configJsonPath) gate predicate lives in loadState;
+// loadState-level gate coverage is in tests/persistence/state-io.test.ts)
+// ===================================================================
+
+test("D-13 GATE CLOSED: scrub does NOT fire when scrubAutoupdate=false; autoupdate preserved", async () => {
+  const fixture = JSON.parse(
+    await readFile(path.join(FIXTURES, "state-with-autoupdate.json"), "utf8"),
+  ) as unknown;
+  const { marketplaces } = migrateLegacyMarketplaceRecords(fixture, "/ext-root", GATE_CLOSED);
+  const mp = marketplaces["mp-with-autoupdate"] as { autoupdate?: boolean };
+  // Gate closed -> autoupdate field PRESERVED for the first-run migration to capture.
+  assert.equal(mp.autoupdate, true);
+});
+
+test("D-13 GATE OPEN: scrub fires when scrubAutoupdate=true; autoupdate removed and mutated=true", async () => {
+  const fixture = JSON.parse(
+    await readFile(path.join(FIXTURES, "state-with-autoupdate.json"), "utf8"),
+  ) as unknown;
+  const { marketplaces, mutated } = migrateLegacyMarketplaceRecords(
+    fixture,
+    "/ext-root",
+    GATE_OPEN,
+  );
+  const mp = marketplaces["mp-with-autoupdate"] as { autoupdate?: boolean };
+  // Gate open -> autoupdate field SCRUBBED.
+  assert.equal(mp.autoupdate, undefined);
+  assert.equal(mutated, true);
+});
+
+test("D-13 idempotency: second migrate on already-scrubbed input returns mutated=false (gate open)", async () => {
+  const fixture = JSON.parse(
+    await readFile(path.join(FIXTURES, "state-with-autoupdate.json"), "utf8"),
+  ) as unknown;
+  // First migrate: scrub fires.
+  const first = migrateLegacyMarketplaceRecords(fixture, "/ext-root", GATE_OPEN);
+  assert.equal(first.mutated, true);
+  // Wrap the already-scrubbed marketplaces back into a top-level state shape and
+  // re-run the migrator. Idempotency: the second call must report mutated=false
+  // because every per-marketplace ensure* helper is a no-op on already-normalized
+  // data (no missing paths / no missing resources / no autoupdate field).
+  const second = migrateLegacyMarketplaceRecords(
+    { schemaVersion: 1, marketplaces: first.marketplaces },
+    "/ext-root",
+    GATE_OPEN,
+  );
+  assert.equal(second.mutated, false);
+  const mp = second.marketplaces["mp-with-autoupdate"] as { autoupdate?: boolean };
+  assert.equal(mp.autoupdate, undefined);
 });
 
 test("IL-3 persistMigratedState swallows write failures and emits ONE console.warn", async (t) => {

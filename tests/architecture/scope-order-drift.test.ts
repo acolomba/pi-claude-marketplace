@@ -1,7 +1,7 @@
 // tests/architecture/scope-order-drift.test.ts
 //
-// Task 260525-cjr B3: drift guard for scope-order literals OUTSIDE the
-// canonical declaration sites. Complements the runtime ESLint rule
+// Drift guard for scope-order literals OUTSIDE the canonical declaration
+// sites. Complements the runtime ESLint rule
 // `msg-gr-3-per-scope` (which is scoped to `orchestrators/**` and
 // `edge/handlers/**` only).
 //

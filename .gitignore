@@ -1,6 +1,7 @@
 # ai harnesses
 /.claude/*
 !/.claude/settings.json
+!/.claude/rules/
 /.codex
 /.opencode
 /.pi/

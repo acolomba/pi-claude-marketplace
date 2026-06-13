@@ -15,9 +15,9 @@
 //   - registerClaudeMarketplaceTools(pi):
 //       * delegates to registerListMarketplacesTool + registerListPluginsTool.
 //
-// Pitfall 3: `process.cwd()` is acceptable here at the registration glue
-// layer -- this is the one site where it is sanctioned. The cwd captured
-// here is per-command-registration.
+// `process.cwd()` is acceptable here at the registration glue layer --
+// this is the one site where it is sanctioned. The cwd captured here is
+// per-command-registration.
 //
 // BLOCK C: this file imports from edge/* (sibling), orchestrators/* (one
 // allowed up-import), shared/* (leaf), and the Pi peer dep. The
@@ -45,10 +45,12 @@ import { makeMarketplaceListHandler } from "./handlers/marketplace/list.ts";
 import { makeRemoveHandler } from "./handlers/marketplace/remove.ts";
 import { makeMarketplaceUpdateHandler } from "./handlers/marketplace/update.ts";
 import { makeBootstrapHandler } from "./handlers/plugin/bootstrap.ts";
+import { makeEnableDisableHandler } from "./handlers/plugin/enable-disable.ts";
 import { makeImportHandler } from "./handlers/plugin/import.ts";
 import { makePluginInfoHandler } from "./handlers/plugin/info.ts";
 import { makeInstallHandler } from "./handlers/plugin/install.ts";
 import { makeListHandler } from "./handlers/plugin/list.ts";
+import { makePreviewHandler } from "./handlers/plugin/preview.ts";
 import { makeReinstallHandler } from "./handlers/plugin/reinstall.ts";
 import { makeUninstallHandler } from "./handlers/plugin/uninstall.ts";
 import { makeUpdateHandler } from "./handlers/plugin/update.ts";
@@ -81,6 +83,9 @@ export function registerClaudePluginCommand(pi: ExtensionAPI, deps: EdgeDeps): v
     reinstall: makeReinstallHandler(pi),
     list: makeListHandler(pi),
     pluginInfo: makePluginInfoHandler(pi),
+    preview: makePreviewHandler(pi),
+    enable: makeEnableDisableHandler(pi, true),
+    disable: makeEnableDisableHandler(pi, false),
     import: makeImportHandler(pi, deps),
     marketplaceAdd: makeAddHandler(pi, deps),
     marketplaceRemove: makeRemoveHandler(pi),
@@ -94,7 +99,7 @@ export function registerClaudePluginCommand(pi: ExtensionAPI, deps: EdgeDeps): v
   pi.registerCommand("claude:plugin", {
     description: COMMAND_DESCRIPTION,
     handler: (args, ctx) => routeClaudePlugin(args, handlers, ctx),
-    // Pitfall 3: this `process.cwd()` is the single sanctioned site.
+    // This `process.cwd()` is the single sanctioned site.
     // Captured at registration time; threads through every keystroke's
     // completion lookup via the closed-over resolver.
     getArgumentCompletions: (prefix) =>

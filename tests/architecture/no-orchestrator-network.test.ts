@@ -45,7 +45,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
  * stripComments rationale (mandatory):
  *   Source files include header docstrings that legally mention the forbidden
  *   symbols (e.g. "MUST NOT import platform/git"). Without `stripComments`,
- *   the assertion would fail on prose. See Pitfall 5 / Pitfall 8.
+ *   the assertion would fail on prose.
  */
 const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts",
@@ -53,6 +53,16 @@ const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
   "extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts",
+  // DIFF-01 SC #2: the reconcile preview/planner/projection
+  // family is read-only and pure. preview.ts is the user-facing orchestrator;
+  // plan.ts + notify.ts are belt-and-braces (plan.ts also has the stricter
+  // reconcile-planner-purity gate -- this is cheap defensive cover).
+  "extensions/pi-claude-marketplace/orchestrators/reconcile/preview.ts",
+  "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts",
+  "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts",
+  // ENBL-03: the enable/disable orchestrator re-materializes from cache
+  // -- NO network.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
 ];
 
 const FORBIDDEN_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> = [

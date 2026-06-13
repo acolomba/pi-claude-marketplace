@@ -356,7 +356,7 @@ test("MC-3 prepare preserves non-mcp top-level fields in mcp.json", async () => 
 // replacement rollback
 // ---------------------------------------------------------------------------
 
-test("Phase 8 / PRL-10 replacePreparedMcp rollback restores previous mcp.json bytes", async () => {
+test("PRL-10 replacePreparedMcp rollback restores previous mcp.json bytes", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
     const previous = '{"customField":"keep-shape","mcpServers":{"old":{"command":"old"}}}\n';
@@ -381,7 +381,7 @@ test("Phase 8 / PRL-10 replacePreparedMcp rollback restores previous mcp.json by
   });
 });
 
-test("Phase 8 / PRL-10 replacePreparedMcp rollback removes newly-created mcp.json when absent before", async () => {
+test("PRL-10 replacePreparedMcp rollback removes newly-created mcp.json when absent before", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     const prepared = await prepareStageMcpServers({
       locations,
@@ -401,7 +401,7 @@ test("Phase 8 / PRL-10 replacePreparedMcp rollback removes newly-created mcp.jso
   });
 });
 
-test("Phase 8 / PRL-10 noop MCP replacements rollback and finalize without leaks", async () => {
+test("PRL-10 noop MCP replacements rollback and finalize without leaks", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     const prepared = await prepareStageMcpServers({
       locations,
@@ -418,7 +418,7 @@ test("Phase 8 / PRL-10 noop MCP replacements rollback and finalize without leaks
   });
 });
 
-test("Phase 8 / PRL-10 replacePreparedMcp preserves prepare-owned MCP collision policy", async () => {
+test("PRL-10 replacePreparedMcp preserves prepare-owned MCP collision policy", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
     await writeFile(
@@ -509,12 +509,12 @@ test("stagedNames matches recorded.map(r=>r.generatedName)", async () => {
   });
 });
 
-test("Phase 8 / PRL-10 finalizeMcpReplacement throws on unknown replacement handle (defensive)", () => {
+test("PRL-10 finalizeMcpReplacement throws on unknown replacement handle (defensive)", () => {
   const bogus = { kind: "replaced" } as Parameters<typeof finalizeMcpReplacement>[0];
   assert.throws(() => finalizeMcpReplacement(bogus), /Unknown MCP replacement handle/);
 });
 
-test("Phase 8 / PRL-10 replacePreparedMcp rollback records leak when restore fails", async (t) => {
+test("PRL-10 replacePreparedMcp rollback records leak when restore fails", async (t) => {
   // POSIX-only: chmod the mcp.json parent dir read-only so the rollback's
   // writeFile fails. The catch block accumulates a leak message rather
   // than throwing.

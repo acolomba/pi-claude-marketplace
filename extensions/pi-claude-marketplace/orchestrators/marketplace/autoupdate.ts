@@ -45,9 +45,10 @@
 // Flow:
 //  scopes = opts.scope !== undefined ? [opts.scope] : ["project", "user"] // SC-6
 //  for each scope:
-//  withStateGuard(locations, async (state) => {
-//  result = applyAutoupdateFlipInPlace(state, opts.name, opts.enable) // MAU-1, MAU-3, MAU-4
-//  }) // saves state.json on no-throw
+//  withLockedStateTransaction(locations, async (tx) => {
+//  result = classifyAutoupdateFlip(tx.state, opts.name, opts.enable) // MAU-1, MAU-3, MAU-4
+//  }) // WR-05: classify-only -- state.json is NEVER written by a flip;
+//     // the config write-back is the real flip (SPLIT-01)
 //  accumulate result.changed[] and result.unchanged[] across scopes
 //
 //  compose one MarketplaceNotificationMessage per outcome; emit ONE
@@ -59,13 +60,18 @@
 // NFR-5: zero git surface -- autoupdate never imports platform/git
 // or DEFAULT_GIT_OPS.
 
+import path from "node:path";
+
+import { loadConfig } from "../../persistence/config-io.ts";
+import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
-import { withStateGuard } from "../../transaction/with-state-guard.ts";
+import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
-import { applyAutoupdateFlipInPlace } from "./shared.ts";
+import { classifyAutoupdateFlip } from "./shared.ts";
 
+import type { MarketplaceConfigEntry, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
   ContentReason,
@@ -73,6 +79,17 @@ import type {
   PluginFailedMessage,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
+
+/**
+ * RECON-03 / WR-09: notification mode selector. Mirrors
+ * the marketplace add/remove shape. Omitted (undefined) ===
+ * `{ mode: "standalone" }` -- byte-identical to today. Orchestrated mode
+ * suppresses config write-back so a reconcile-driven flip never clobbers a
+ * per-machine override (WR-09 / T-56-02-01).
+ */
+export type AutoupdateNotifications =
+  | { readonly mode: "standalone" }
+  | { readonly mode: "orchestrated" };
 
 export interface AutoupdateOptions {
   readonly ctx: ExtensionContext;
@@ -91,6 +108,18 @@ export interface AutoupdateOptions {
   readonly scope?: Scope;
   /** Project-scope cwd (ignored for user scope). */
   readonly cwd: string;
+  /**
+   * WB-01: when true, target
+   * `claude-plugins.local.json` instead of `claude-plugins.json`. The base
+   * file is NEVER touched on the --local path.
+   */
+  readonly local?: boolean;
+  /**
+   * RECON-03 / WR-09: notification mode selector. Omitted === standalone.
+   * Orchestrated mode skips config write-back so reconcile-driven flips
+   * never clobber per-machine overrides.
+   */
+  readonly notifications?: AutoupdateNotifications;
 }
 
 function shouldCollectNotFound(opts: AutoupdateOptions, err: unknown): boolean {
@@ -101,6 +130,14 @@ interface AutoupdateFlipRow {
   readonly name: string;
   readonly scope: Scope;
   readonly alreadyMatching: boolean;
+  /**
+   * I2 / PR #51: when true, the write-back was silently skipped because no
+   * `source` could be synthesized for a first-time config write. The row
+   * renders as a `(failed) {not found}` mp row instead of the success
+   * marker. Pre-fix these names rendered as silent fresh flips even though
+   * the config never landed.
+   */
+  readonly writeBackSkipped?: boolean;
 }
 
 function missingEverywhere(
@@ -181,6 +218,230 @@ function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err
   });
 }
 
+/**
+ * WB-01: execute a single-scope autoupdate
+ * flip inside `withLockedStateTransaction` so the config write-back happens
+ * under the per-scope lock (serialized against concurrent state mutators).
+ *
+ * WR-05: the flip never writes state.json --
+ * `classifyAutoupdateFlip` is classify-only and the closure has no
+ * tx.save(). SPLIT-01 moved autoupdate truth into the config; the config
+ * write-back IS the flip.
+ *
+ * Write-back fires ONLY on FRESH flips (result.changed). Idempotent flips
+ * (already-matching) return BEFORE the write-back call so the targeted config
+ * file's mtime is byte-stable (RECON-05 fixed-point preserved).
+ *
+ * WR-09 / T-56-02-01: orchestrated-mode SKIPS write-back so a reconcile-
+ * driven flip never copies a `claude-plugins.local.json` override back into
+ * the shared base file.
+ *
+ * T-56-02-05: CFG-03 invalid-config surfaces with a basename-only error
+ * message via the synthetic `Error` -- no absolute path leak.
+ */
+/**
+ * Reclassify both state-side `changed` AND state-side `unchanged` names
+ * against the CONFIG-side `autoupdate` truth (SPLIT-01). The
+ * config (claude-plugins.json) is the new source of truth. The D-13 scrub
+ * strips legacy `autoupdate` from state once the config file exists.
+ *
+ * Two reclassification directions:
+ *  - `changed` -> `unchanged`: when the config already carries the
+ *    requested `enable` value, the write-back is a no-op (RECON-05 mtime
+ *    stability).
+ *  - `unchanged` -> `changed`: when the state-side classifier saw "nothing
+ *    to do" (because the D-13 scrub stripped state.autoupdate so it reads
+ *    as undefined === false), BUT the config-side truth is the OPPOSITE
+ *    of `enable`, the user's flip is a real change that MUST land in the
+ *    config. Without this promotion, a `disable` issued after a previous
+ *    `enable` (config=true; state.autoupdate scrubbed to undefined) would
+ *    silently no-op even though the user's intent is the opposite of the
+ *    config truth. A MISSING config entry / missing `autoupdate` field
+ *    keeps the state-side classification as-is.
+ */
+function reclassifyByConfigTruth(
+  current: ScopeConfig,
+  result: { changed: readonly string[]; unchanged: readonly string[] },
+  enable: boolean,
+): { changed: readonly string[]; unchanged: readonly string[] } {
+  const reallyChanged: string[] = [];
+  const reallyUnchanged: string[] = [];
+
+  for (const name of result.changed) {
+    if (current.marketplaces?.[name]?.autoupdate === enable) {
+      reallyUnchanged.push(name);
+    } else {
+      reallyChanged.push(name);
+    }
+  }
+
+  for (const name of result.unchanged) {
+    const configValue = current.marketplaces?.[name]?.autoupdate;
+    // Promote: config carries the OPPOSITE explicit value. The user's flip
+    // would diverge from config truth without a write-back, so it's a
+    // fresh change.
+    if (configValue !== undefined && configValue !== enable) {
+      reallyChanged.push(name);
+    } else {
+      reallyUnchanged.push(name);
+    }
+  }
+
+  return { changed: reallyChanged, unchanged: reallyUnchanged };
+}
+
+/**
+ * Build the per-marketplace patch passed to writeMarketplaceConfigEntry.
+ * On a first-time write where no existing config entry carries `source`,
+ * synthesize it from the state record's `source.raw` (the verbatim
+ * user-typed string -- the reconcile planner's `samePlannedSource`
+ * contract).
+ */
+function buildAutoupdatePatch(
+  current: ScopeConfig,
+  state: { marketplaces: Record<string, unknown> },
+  name: string,
+  enable: boolean,
+): { source?: string; autoupdate: boolean } {
+  const patch: { source?: string; autoupdate: boolean } = { autoupdate: enable };
+  if (current.marketplaces?.[name]?.source !== undefined) {
+    return patch;
+  }
+
+  const stateRecord = state.marketplaces[name] as { source?: unknown } | undefined;
+  const raw = (stateRecord?.source as { raw?: unknown } | undefined)?.raw;
+  if (typeof raw === "string") {
+    patch.source = raw;
+  }
+
+  return patch;
+}
+
+/**
+ * Accumulate ONE batched patch across every fresh-flipped marketplace and
+ * issue a SINGLE `writeBatchedConfigEntries` call (one `saveConfig`,
+ * all-or-nothing).
+ *
+ * Per-name sequential `writeMarketplaceConfigEntry` calls against the same
+ * stale `current` snapshot were a last-write-wins clobber: each save rebuilt
+ * the whole file from `current` (which never gained the previous iteration's
+ * patch), so a bare-form flip over N marketplaces persisted only the LAST
+ * one. The batched form applies all N patches in memory before the single
+ * atomic save, which also makes a mid-write failure all-or-nothing (NFR-3).
+ *
+ * WR-06(b): an entry is SKIPPED from the batch when no
+ * string `source` can be synthesized for a first-time write (config entry
+ * absent AND the state record's `source.raw` is not a string -- hand-edited
+ * or legacy state). Including it would trip `saveConfig`'s required-`source`
+ * invariant throw, which the failure router narrows to a lying `{not found}`
+ * row -- a misclassification of a config write refusal.
+ */
+async function writeAutoupdateBack(
+  current: ScopeConfig,
+  state: { marketplaces: Record<string, unknown> },
+  targetConfigPath: string,
+  scopeRoot: string,
+  changed: readonly string[],
+  enable: boolean,
+): Promise<{ readonly skipped: readonly string[] }> {
+  const marketplaces: Record<string, Partial<MarketplaceConfigEntry>> = {};
+  const skipped: string[] = [];
+  for (const name of changed) {
+    const patch = buildAutoupdatePatch(current, state, name, enable);
+    const hasConfigSource = current.marketplaces?.[name]?.source !== undefined;
+    if (!hasConfigSource && patch.source === undefined) {
+      // I2 / PR #51 / WR-06(b): unsynthesizable source. Pre-fix this entry
+      // was silently dropped from the batch -- but the name STAYED in
+      // `finalResult.changed`, so the final notify rendered success for a
+      // flip that was never persisted. We now return the skipped names so
+      // the orchestrator can demote them into an honest failed row.
+      skipped.push(name);
+      continue;
+    }
+
+    marketplaces[name] = patch;
+  }
+
+  if (Object.keys(marketplaces).length === 0) {
+    return { skipped };
+  }
+
+  await writeBatchedConfigEntries(current, targetConfigPath, scopeRoot, { marketplaces });
+  return { skipped };
+}
+
+async function flipOneScope(
+  opts: AutoupdateOptions,
+  scope: Scope,
+): Promise<{
+  changed: readonly string[];
+  unchanged: readonly string[];
+  skipped: readonly string[];
+}> {
+  const locations = locationsFor(scope, opts.cwd);
+  const orchestrated = opts.notifications?.mode === "orchestrated";
+  const targetConfigPath =
+    opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath;
+  const configBasename = path.basename(targetConfigPath);
+
+  return await withLockedStateTransaction(locations, async (tx) => {
+    // CFG-03 (T-56-02-05): abort BEFORE any state mutation; basename-only.
+    const cfg = await loadConfig(targetConfigPath);
+    if (cfg.status === "invalid") {
+      throw new Error(`Config file "${configBasename}" failed schema validation.`);
+    }
+
+    // SPLIT-01: idempotency is measured against the CONFIG-side
+    // truth, not state. The D-13 scrub strips legacy `autoupdate` from state
+    // once the config file exists, so a state-side idempotency check would
+    // re-classify every same-value flip as a "fresh flip" (mtime drift).
+    const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
+    const stateResult = classifyAutoupdateFlip(tx.state, opts.name, opts.enable);
+    const finalResult = reclassifyByConfigTruth(current, stateResult, opts.enable);
+
+    if (finalResult.changed.length === 0) {
+      // mtime-drift guard: no fresh flip -> SKIP the config write-back.
+      // The targeted config file's mtime is byte-stable.
+      return { ...finalResult, skipped: [] as readonly string[] };
+    }
+
+    // WR-09 / T-56-02-01: orchestrated-mode SKIPS write-back.
+    // I2 / PR #51: even in orchestrated mode we still need to detect
+    // unsynthesizable-source skips so the cascade caller can demote them
+    // honestly. Run the dry classifier (no disk write) to identify which
+    // entries would have been silently dropped.
+    let skipped: readonly string[];
+    if (orchestrated) {
+      const drySkipped: string[] = [];
+      for (const name of finalResult.changed) {
+        const patch = buildAutoupdatePatch(current, tx.state, name, opts.enable);
+        const hasConfigSource = current.marketplaces?.[name]?.source !== undefined;
+        if (!hasConfigSource && patch.source === undefined) {
+          drySkipped.push(name);
+        }
+      }
+
+      skipped = drySkipped;
+    } else {
+      const writeResult = await writeAutoupdateBack(
+        current,
+        tx.state,
+        targetConfigPath,
+        locations.scopeRoot,
+        finalResult.changed,
+        opts.enable,
+      );
+      skipped = writeResult.skipped;
+    }
+
+    // WR-05: NO tx.save() -- classifyAutoupdateFlip no
+    // longer mutates state, so a flip never rewrites state.json. The config
+    // write-back above IS the flip (SPLIT-01: config owns autoupdate truth;
+    // the D-13 scrub strips the legacy state field on the next load).
+    return { ...finalResult, skipped };
+  });
+}
+
 export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise<void> {
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
 
@@ -188,22 +449,22 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
   const errors: { scope: Scope; cause: unknown }[] = [];
 
   for (const scope of scopes) {
-    const locations = locationsFor(scope, opts.cwd);
     try {
-      const result = await withStateGuard(locations, (state) => {
-        // applyAutoupdateFlipInPlace mutates state in place and returns
-        // plain changed/unchanged arrays. The guard saves on no-throw.
-        return applyAutoupdateFlipInPlace(state, opts.name, opts.enable);
-      });
+      const result = await flipOneScope(opts, scope);
+      const skippedSet = new Set(result.skipped);
       for (const name of result.changed) {
-        rows.push({ name, scope, alreadyMatching: false });
+        // I2 / PR #51: demote write-back-skipped names from success rows
+        // (`<autoupdate>` fresh marker) to honest failed rows. A skipped
+        // name appears in `result.changed` but its config write never
+        // landed, so claiming success would lie about persistence.
+        rows.push({ name, scope, alreadyMatching: false, writeBackSkipped: skippedSet.has(name) });
       }
 
       for (const name of result.unchanged) {
         rows.push({ name, scope, alreadyMatching: true });
       }
     } catch (err) {
-      // For single-name flips: applyAutoupdateFlipInPlace throws
+      // For single-name flips: classifyAutoupdateFlip throws
       // MarketplaceNotFoundError when the name is absent from THIS
       // scope. With SC-6 bare-form, that is expected if the name only
       // lives in the OTHER scope; we collect and only surface if BOTH
@@ -267,6 +528,22 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
         scope: row.scope,
         status: "skipped",
         reasons: [opts.enable ? "already autoupdate" : "already no autoupdate"],
+        plugins: [],
+      };
+    }
+
+    if (row.writeBackSkipped === true) {
+      // I2 / PR #51: the config write-back was silently skipped because no
+      // `source` could be synthesized for a first-time write. Pre-fix this
+      // rendered as a `<autoupdate>` fresh-flip success even though nothing
+      // landed in claude-plugins.json. Demote to a failed row using the
+      // closed-set `not found` reason (matches the synthetic-child cascade
+      // form used elsewhere in this orchestrator -- no new tokens).
+      return {
+        name: row.name,
+        scope: row.scope,
+        status: "failed",
+        reasons: ["not found"],
         plugins: [],
       };
     }

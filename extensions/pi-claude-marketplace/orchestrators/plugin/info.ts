@@ -18,15 +18,18 @@ import path from "node:path";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
 import { resolveStrict } from "../../domain/resolver.ts";
 import { parsePluginSource, type ParsedSource } from "../../domain/source.ts";
+import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { assertNever } from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
 import { narrowProbeError, narrowResolverNotes } from "../../shared/probe-classifiers.ts";
+import { isRecordedButDisabled } from "../reconcile/plan.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
   ContentReason,
+  MarketplaceNotificationMessage,
   NotificationMessage,
   PluginInfoMessage,
   PluginInfoRow,
@@ -234,8 +237,9 @@ async function buildBlock(
   pluginName: string,
   scope: Scope,
   mpRecord: MarketplaceRecord,
+  autoupdate: boolean,
 ): Promise<PluginInfoMessage> {
-  const marketplaceDetails = { autoupdate: mpRecord.autoupdate ?? false };
+  const marketplaceDetails = { autoupdate };
 
   // (a) Manifest read failure -> bare `(failed) {<reason>}` row under
   // the marketplace header. The reason is CLASSIFIED via the same
@@ -516,6 +520,72 @@ async function buildAvailableRow(opts: {
   }
 }
 
+/**
+ * D-54-01 / ENBL-04: list-arm cascade block for a recorded-but-disabled
+ * plugin. The info surface conveys the disabled state via the SAME
+ * `(disabled)` inventory token as the list surface (catalog
+ * `disabled-inventory` state) -- list-arm marketplace header +
+ * `PluginDisabledMessage` row -- rather than the `PluginInfoMessage`
+ * standalone variant: a disabled plugin has no materialized artefacts
+ * (ENBL-02), so the per-kind component/dependencies block would be
+ * misleading.
+ */
+function buildDisabledInventoryBlock(
+  marketplace: string,
+  pluginName: string,
+  scope: Scope,
+  installed: MarketplaceRecord["plugins"][string],
+  autoupdate: boolean,
+): MarketplaceNotificationMessage {
+  // Mirror the list surface's `<autoupdate>` marker composition (details is
+  // emitted ONLY when the flag is true; `lastUpdatedAt` never on this
+  // surface).
+  const detailsField: { readonly details?: { autoupdate: boolean } } = autoupdate
+    ? { details: { autoupdate: true } }
+    : {};
+  return {
+    name: marketplace,
+    scope,
+    ...detailsField,
+    plugins: [{ status: "disabled", name: pluginName, version: installed.version }],
+  };
+}
+
+/**
+ * D-54-01 / ENBL-04: split the found (scope, record) tuples into the
+ * disabled-inventory blocks (recorded-but-disabled marker present) and the
+ * info-surface tuples that proceed through `buildBlock`. Extracted from
+ * `getPluginInfo` to keep its cognitive complexity within the lint budget.
+ */
+function partitionDisabledScopes(
+  opts: GetPluginInfoOptions,
+  found: readonly { scope: Scope; record: MarketplaceRecord; autoupdate: boolean }[],
+): {
+  disabledBlocks: MarketplaceNotificationMessage[];
+  infoFound: { scope: Scope; record: MarketplaceRecord; autoupdate: boolean }[];
+} {
+  const disabledBlocks: MarketplaceNotificationMessage[] = [];
+  const infoFound: { scope: Scope; record: MarketplaceRecord; autoupdate: boolean }[] = [];
+  for (const f of found) {
+    const installed = f.record.plugins[opts.plugin];
+    if (installed !== undefined && isRecordedButDisabled(installed)) {
+      disabledBlocks.push(
+        buildDisabledInventoryBlock(
+          opts.marketplace,
+          opts.plugin,
+          f.scope,
+          installed,
+          f.autoupdate,
+        ),
+      );
+    } else {
+      infoFound.push(f);
+    }
+  }
+
+  return { disabledBlocks, infoFound };
+}
+
 export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // INFO-03 iteration order: project-first per MSG-GR-3 when both
   // scopes are searched; otherwise the explicit scope only.
@@ -524,13 +594,19 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // Collect (scope, record) tuples so the fan-out renderer preserves
   // the outer-loop iteration order. Each scope's state is loaded
   // read-only via `loadState` (NFR-5 preserved -- NO network).
-  const found: { scope: Scope; record: MarketplaceRecord }[] = [];
+  //
+  // SPLIT-01 rewire: autoupdate lives in claude-plugins.json (config),
+  // not state. Load the merged config alongside state per scope so each
+  // (scope, record) tuple carries the per-scope autoupdate truth.
+  const found: { scope: Scope; record: MarketplaceRecord; autoupdate: boolean }[] = [];
   for (const scope of scopes) {
     const locations = locationsFor(scope, opts.cwd);
     const state = await loadState(locations.extensionRoot);
     const record = state.marketplaces[opts.marketplace];
     if (record !== undefined) {
-      found.push({ scope, record });
+      const { merged } = await loadMergedScopeConfig(locations);
+      const autoupdate = merged.marketplaces[opts.marketplace]?.entry.autoupdate ?? false;
+      found.push({ scope, record, autoupdate });
     }
   }
 
@@ -553,12 +629,31 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
     return;
   }
 
+  // D-54-01 / ENBL-04: partition recorded-but-disabled scopes from the
+  // info-surface scopes BEFORE block building. A disabled record renders the
+  // list-arm `(disabled)` inventory cascade (see buildDisabledInventoryBlock)
+  // instead of the standalone `PluginInfoMessage` shape.
+  const { disabledBlocks, infoFound } = partitionDisabledScopes(opts, found);
+
+  // Every found scope holds the disabled marker: a single list-arm notify
+  // (one block per scope) preserves IL-2 on this all-disabled path.
+  if (infoFound.length === 0) {
+    notify(opts.ctx, opts.pi, { marketplaces: disabledBlocks });
+    return;
+  }
+
   // Destructure to make the branch choice unambiguous and avoid the
   // silent fall-through hazard `if (found.length === 1) / if (sole !==
   // undefined)` has under `noUncheckedIndexedAccess`.
-  const [sole, ...rest] = found;
-  if (sole !== undefined && rest.length === 0) {
-    const block = await buildBlock(opts.marketplace, opts.plugin, sole.scope, sole.record);
+  const [sole, ...rest] = infoFound;
+  if (sole !== undefined && rest.length === 0 && disabledBlocks.length === 0) {
+    const block = await buildBlock(
+      opts.marketplace,
+      opts.plugin,
+      sole.scope,
+      sole.record,
+      sole.autoupdate,
+    );
     notify(opts.ctx, opts.pi, block);
     return;
   }
@@ -579,7 +674,9 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // behind a healthy other-scope render; callers wanting strict IL-2 must pass
   // `--scope`. Block order follows the project-first scope iteration (MSG-GR-3).
   const blocks = await Promise.all(
-    found.map((f) => buildBlock(opts.marketplace, opts.plugin, f.scope, f.record)),
+    infoFound.map((f) =>
+      buildBlock(opts.marketplace, opts.plugin, f.scope, f.record, f.autoupdate),
+    ),
   );
   const infoBlocks = blocks.filter((b) => b.plugin.status !== "failed");
   const failedBlocks = blocks.filter((b) => b.plugin.status === "failed");
@@ -595,6 +692,15 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
       kind: "plugin-info-cascade",
       blocks: [firstInfo, ...remainingInfo],
     });
+  }
+
+  // D-54-01 / ENBL-04: surface the disabled-inventory scopes through the
+  // list-arm cascade. Mixed disabled+info renders break IL-2's single-notify
+  // rule the same way the GRAM-04 failure separation below does -- the two
+  // surfaces have incompatible message kinds, and hiding one behind the
+  // other would silently drop a scope's state.
+  if (disabledBlocks.length > 0) {
+    notify(opts.ctx, opts.pi, { marketplaces: disabledBlocks });
   }
 
   // Surface each failed scope as its own `error`-severity notify (GRAM-04).

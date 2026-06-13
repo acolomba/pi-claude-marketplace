@@ -1,281 +1,122 @@
----
-title: Technology Stack -- v1.7 Transaction Resilience Hardening
-project: pi-claude-marketplace
-milestone: v1.7
-researched: 2026-06-02
-mode: ecosystem
-overall_confidence: HIGH
-verdict: NO NEW DEPENDENCIES -- hand-roll fixes against the existing stack
----
+# Stack Research
 
-# Technology Stack -- v1.7 Transaction Resilience Hardening
+**Domain:** Declarative, version-controllable config files (desired-state) for a Pi extension; load-time reconciliation + command write-back
+**Researched:** 2026-06-09
+**Confidence:** HIGH
 
 ## Executive Verdict
 
-**Add nothing. Hand-roll all 8 fixes against the existing stack.**
+**This milestone needs ZERO new runtime dependencies.** Every capability the
+declarative config files require -- atomic writes for hand-edited + machine-written
+JSON, schema validation, cross-process write safety, scoped file reads, migration
+from existing state -- is already covered by libraries the project depends on and
+uses today (`write-file-atomic@^8`, `typebox@^1.1.38`, `proper-lockfile@^4`,
+`node:fs/promises`, `node:test`).
 
-The 8 findings are structural defects in already-hand-rolled, project-specific code
-(`transaction/phase-ledger.ts`, `bridges/agents`, `bridges/commands`, `orchestrators/plugin/update.ts`,
-`transaction/cascadeUnstage`). They are sequencing and ordering bugs -- not missing
-infrastructure. Every npm option in this space is either (a) the wrong shape (generic
-saga libraries for distributed systems), (b) already provided by `node:fs/promises` +
-`write-file-atomic@^8`, or (c) bigger than the bug surface. Introducing a new dep
-during a bug-fix milestone trades a small surgical change for a refactor that disturbs
-the very lock-held, atomic-rename, two-phase-commit invariants the project has
-already validated across 1312 tests and six prior milestones.
+The only stack *decisions* to make are (1) reuse the existing `atomicWriteJson`
+seam vs. add a thin variant, (2) define new TypeBox schemas alongside `STATE_SCHEMA`,
+and (3) explicitly reject the temptation to add a JSONC / comment-preserving JSON
+library. There is no new install command, no file watcher, and no second atomic-write
+mechanism.
 
-The only stack-adjacent guidance worth lifting into planning is *pattern-level*:
-sequential-await-with-per-step-undo for the bridge commit loops (F1, F5), undo-before-pop
-ordering for `runPhases` (F2), full-cascade-or-no-state for `cascadeUnstage` (F3),
-state-after-physical-commit for `update.ts` (F4), and orphan-recovery-on-rename for
-`replacePrepared*` (F6).
+## Recommended Stack
 
-## Summary Table
+### Core Technologies (all ALREADY PRESENT -- carry forward)
 
-| Concern                          | Recommendation                                                                                       | Confidence |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------- |
-| Sequential commit loop w/ undo   | Hand-roll: `for…of` + try/catch + reverse-order rollback over executed steps                         | HIGH       |
-| Phase-ledger undo on self-throw  | Hand-roll: push to `executed` BEFORE `phase.do`, treat self-throw as `executed` for rollback         | HIGH       |
-| Atomic file ops (JSON state)     | Keep `write-file-atomic@^8.0.0` (no change)                                                          | HIGH       |
-| Atomic file ops (staging trees)  | Keep `node:fs/promises` rename (no change)                                                           | HIGH       |
-| Saga / two-phase-commit library  | NOT recommended (`node-sagas`, `@nestjs/cqrs`, `redux-saga`, Temporal -- wrong domain)                | HIGH       |
-| Transactional FS library         | NOT recommended (`fs-extra`, `graceful-fs`, `transactional-fs` -- wrong shape or unmaintained)        | HIGH       |
-| Result-type for rollback paths   | Optional, NOT recommended for v1.7 (`neverthrow@^8.2.0`) -- disturbs too much code for a bug fix      | MEDIUM     |
-| Concurrent ops serialization     | Keep `proper-lockfile@^4.1.2` + existing `withStateGuard` (no change)                                | HIGH       |
+| Technology | Version | Purpose for this milestone | Why Recommended |
+|------------|---------|----------------------------|-----------------|
+| **write-file-atomic** | `^8.0.0` (current `8.0.0`, already a direct dep) | Atomic write of `claude-plugins.json` and `claude-plugins.local.json` (tmp + fsync + rename, internal concurrent-write queue). | The config file is *both* hand-edited and machine-written. `write-file-atomic` is exactly the right tool: a power-loss or crash mid-write-back can never leave a half-written or zero-byte config that the next load fails to parse (NFR-1). It is already the project's only sanctioned JSON-write path (`shared/atomic-json.ts`). **Reuse, do not parallel-add.** |
+| **typebox** | `^1.1.38` (current `1.2.6`; peer dep `*`, dev-pin `^1.1.38`) | Runtime schema + `Compile`d JIT validator for the new config-file shape (marketplaces: name/source/autoupdate; plugins: plugin@marketplace, enabled) and the local-override shape. | The project's established validation pattern is `Type.Object(...)` + `Compile(...)` + `.Check()` / `.Errors()` (see `persistence/state-io.ts`). The config file is a hand-edited contract, so a JIT validator that produces a precise first-error path (`firstValidationErrorDetail`) is the difference between "your config is wrong at `/plugins/3/enabled`" and a silent reconcile that does the wrong thing. **Same pattern, new schema constant.** |
+| **proper-lockfile** | `^4.1.2` (current `4.1.2`, already a direct dep) | Cross-process exclusivity for write-back, via the existing `withStateGuard` / `withLockedStateTransaction` seam. | Write-back mutates the config file *and* internal state.json; both must move under one lock so two Pi processes (or a CLI + a reload) cannot interleave. The existing per-scope `.state-lock` already serializes state mutation -- bring the config write-back inside the *same* lock scope so config + state stay consistent. **No new lock file, no new lock library.** |
+| **node:fs/promises** | built-in (Node >= 20.19.0) | `readFile` of the two config files at load; `mkdir -p` of the scope root before first write; ENOENT-as-default-state branch (the migration trigger). | The load path mirrors `loadState`: `readFile` → `JSON.parse` → migrate/normalize → validate. ENOENT on `claude-plugins.json` is the migration signal (generate from state.json), exactly as ENOENT on state.json yields `DEFAULT_STATE` today. **Built-in; no dep.** |
+| **node:test + memfs** | built-in / `memfs@^4.57.2` (dev, already present) | Unit tests for load/merge/reconcile/write-back without touching the real FS. | `memfs` is already a dev dep used across the suite. Reconciliation (declared-vs-installed diffing) and the base/local merge are pure-ish logic best tested in-memory; atomic-write + lock interactions get a real-FS integration test as the suite already does. **Carry forward.** |
 
-## Existing Stack (validated, carry forward unchanged)
+### Supporting Libraries
 
-| Package                            | Version     | Role in v1.7 fixes                                                                              |
-| ---------------------------------- | ----------- | ----------------------------------------------------------------------------------------------- |
-| `node` runtime                     | `>=20.19.0` | Engine floor (NFR-4). `for await`, `Promise.allSettled`, `fs.rm({force:true})` all available    |
-| `typescript`                       | `^6.0.3`    | Strict mode. Discriminated unions for phase return types (NFR-7)                                |
-| `write-file-atomic`                | `^8.0.0`    | F4 state write happens through this; F3 ghost-record fix re-uses the same write path           |
-| `node:fs/promises` (built-in)      | bundled     | F1, F5, F6 rename loops; F3 cascade unstage; F7 self-healing rm                                 |
-| `proper-lockfile`                  | `^4.1.2`    | Cross-process scope lock (the `.state-lock` per D-25). F2/F3/F4 fixes run INSIDE this lock     |
-| `typebox`                          | `^1.1.38`   | F4 may extend `state.json` schema if a tx-id is added; NOT required for v1.7                    |
-| `@earendil-works/pi-coding-agent`  | `>=0.74.0`  | `ctx.ui.notify` for partial-rollback warnings (RollbackPartial -- IL-2/IL-3)                     |
-| `node:test` (built-in)             | bundled     | Test framework for F7 / F8 documentation tests and new regression tests for F1-F6              |
-| `memfs`                            | `^4.57.2`   | In-memory FS for new rollback-path unit tests (already in dev deps; no upgrade needed)          |
+None. No supporting library is added for this milestone.
 
-## Why No New Dependencies
+The base/local **merge** (entry-level override) is plain object/array reduction over
+two validated POJOs -- it does **not** warrant a deep-merge library (`lodash.merge`,
+`deepmerge`). The override semantics are domain-specific (entry-level, last-writer-wins
+per `plugin@marketplace` key), so a generic recursive merge would be *wrong*, not just
+heavyweight. Write the merge as explicit domain code next to the schemas.
 
-### Saga / two-phase-commit libraries
+### Development Tools
 
-Surveyed (HIGH confidence -- none recommended):
+| Tool | Purpose | Notes |
+|------|---------|-------|
+| (existing) eslint `^10`, prettier `^3.8`, tsc `^6`, `node --test` | Unchanged `npm run check` gate. | The new files plug into the existing typecheck/lint/format/test pipeline. The single sanctioned `console.warn` exception in `persistence/migrate.ts` is the model for any best-effort config-generation persist failure -- reuse that eslint per-file override pattern only if a non-`notify` warn site is genuinely needed; prefer routing through `ctx.ui.notify` (IL-2). |
 
-| Library                                   | Latest       | Why not                                                                                                                                                                  |
-| ----------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `node-sagas`                              | unmaintained | Last publish 2020; designed for distributed microservice compensation, not local FS commits                                                                              |
-| `@nestjs/cqrs` sagas                      | `^11.x`      | NestJS-coupled; pulls RxJS + decorator metadata; massive surface for what is a ~50-line fix                                                                              |
-| `redux-saga`                              | `^1.3.x`     | Generator-driven side-effects model; wrong abstraction for sequential FS commits                                                                                         |
-| `@temporalio/*` workflows                 | current      | Requires a Temporal server; absurd for a CLI extension                                                                                                                   |
-| Custom "Saga" classes (swissknife-style)  | n/a          | Same shape as the existing `Phase<C>` / `runPhases` in `transaction/phase-ledger.ts` -- adopting a library means rewriting a contract that already works for 12+ phases   |
+## Installation
 
-**Verdict:** the project already HAS a phase-ledger. The bug is `runPhases` push-order
-(F2) and bridge loops not USING the ledger pattern at rename granularity (F1, F5). Fix
-the bug at the call-site, do not swap in a third-party orchestrator.
-
-### Transactional file-system libraries
-
-Surveyed (HIGH confidence -- none recommended):
-
-| Library                | Status                       | Why not                                                                                                                                |
-| ---------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `fs-extra`             | `^11.x` actively maintained  | The atomic-write surface (`outputJson`, `move`) is weaker than `write-file-atomic@^8`'s fsync queue; recursive copy already in Node 16+ |
-| `graceful-fs`          | `^4.x`                       | Adds EMFILE retry around file ops -- not the bug class here                                                                             |
-| `transactional-fs`     | unmaintained                 | Tiny userbase; last release 2017; relies on a "transaction log" concept incompatible with the same-FS-rename invariant                 |
-| `npm/fs-minipass`      | `^3.x`                       | Stream-oriented atomic writes; orthogonal to the rename-loop class of bugs                                                             |
-| `@npmcli/fs`           | `^4.x`                       | Adds `cp` polyfills for older Node; redundant on Node 20.19+                                                                           |
-
-**Verdict:** F1/F5/F6 are *control-flow* fixes (sequential vs parallel, rollback on
-throw, orphan-tolerance on target) -- not file-primitive fixes. Wrapping the rename in
-a different library does not change loop semantics.
-
-### Result-type libraries (`neverthrow`, `effect`, `ts-results`)
-
-Surveyed (MEDIUM confidence -- optional, NOT recommended for v1.7):
-
-`neverthrow@^8.2.0` is the cleanest of the cohort, but adopting it would:
-
-- Force every `Phase.do` / `Phase.undo` signature to migrate from
-  `Promise<void> + throws` to `ResultAsync<void, E>` -- a project-wide refactor.
-- Disturb the 1312/1312 GREEN test surface, which depends on throw-based error
-  propagation through `runPhases` and `cascadeUnstagePlugin`.
-- Provide nothing the existing `RollbackPartial` discriminated union does not already provide.
-
-If a result type is wanted for clearer rollback-path data flow, defer to a future
-refactor milestone with its own scope -- not bug fixes mixed into v1.7.
-
-### Concurrent-operation primitives (`p-queue`, `p-limit`, `p-map`)
-
-Surveyed (HIGH confidence -- none recommended):
-
-The fixes go the OPPOSITE direction: F1 and F5 move FROM `Promise.all` (parallel) TO
-sequential. Adding a concurrency-limiter is precisely the wrong tool. `p-queue@^9.3.0`
-is excellent for rate-limited HTTP work; it is the wrong shape for "do these renames
-in order, undo on throw, stop the loop."
-
-## What to Hand-Roll (patterns, not libraries)
-
-These are *patterns* the planner can encode directly in TypeScript; no new dep needed.
-
-### Pattern A -- Sequential commit loop with per-step rollback (F1 agents, F5 commands)
-
-```ts
-// pseudocode -- adapt to bridges/agents/commit.ts and bridges/commands/commit.ts
-async function commitPreparedAgents(prepared: Prepared[]): Promise<void> {
-  const committed: Prepared[] = [];
-  try {
-    for (const p of prepared) {
-      await fs.rename(p.staged, p.target); // ONE rename at a time
-      committed.push(p);                    // record AFTER success
-    }
-  } catch (err) {
-    // reverse-order undo of what already moved
-    for (const c of committed.reverse()) {
-      await fs.rename(c.target, c.staged).catch(() => { /* swallow -- best effort */ });
-    }
-    throw err; // re-raise to the phase-ledger
-  }
-}
+```bash
+# Nothing to install. All required libraries are already in package.json:
+#   dependencies:    write-file-atomic@^8.0.0, proper-lockfile@^4.1.2
+#   peer/dev:        typebox (peer "*", dev "^1.1.38")
+#   built-ins:       node:fs/promises, node:path, node:test
+#   dev (tests):     memfs@^4.57.2
 ```
 
-Why hand-roll: this is ~20 lines and replicates the `Phase<C>` invariant `runPhases`
-already provides -- but at rename granularity, which the bridge needs and the
-phase-ledger does not provide today.
+If anything is touched in `package.json`, it is at most a routine `typebox` dev-pin
+bump (`^1.1.38` → `^1.2.6`, same major, no API change) and is **optional** -- not
+required by this milestone.
 
-### Pattern B -- Phase-ledger undo-on-self-throw (F2)
+## Alternatives Considered
 
-```ts
-// transaction/phase-ledger.ts
-for (const phase of phases) {
-  executed.push(phase);            // push BEFORE do (F2 fix)
-  try {
-    await phase.do(ctx);
-  } catch (err) {
-    // the failing phase itself now gets its undo called by rollbackExecuted
-    await rollbackExecuted(executed.reverse(), ctx, err);
-    throw err;
-  }
-}
-```
+| Recommended | Alternative | When to Use Alternative |
+|-------------|-------------|-------------------------|
+| Reuse `atomicWriteJson` (write-file-atomic) | Hand-rolled `writeFile(tmp)` + `rename` | Only if the config write needs behavior the lib lacks (it does not). The lib already fsyncs + serializes concurrent writes; rolling your own re-introduces the EXDEV/half-write bugs NFR-1 forbids. |
+| One TypeBox schema per file shape | Reuse `STATE_SCHEMA` for the config | Do NOT reuse. The config file is a *Pi-native desired-state* shape (locked decision: NOT Claude's `settings.json`, NOT state.json's machine-bookkeeping shape). It has `enabled` flags and lacks materialized-artefact records. A distinct `CONFIG_SCHEMA` keeps the desired-state/bookkeeping split honest. |
+| Explicit domain merge for base+local | `deepmerge` / `lodash.merge` | Never here. Override is entry-level (per `plugin@marketplace` / per marketplace name), not arbitrary deep-merge; a recursive merge would silently merge arrays/objects the spec says should be replaced. |
+| Validate-on-load, reconcile-on-load | `chokidar` / `fs.watch` live file watching | Never here. The locked decision is reconcile *at extension load only* (Pi startup + reload). A watcher adds a long-lived handle, debounce complexity, and a second reconcile trigger that the design explicitly excludes. |
 
-The current code pushes AFTER `phase.do` resolves, so a partially-applied phase that
-throws never gets its own undo called. The fix is a one-line re-order. Stays inside
-the existing `rollbackExecuted` contract.
+## What NOT to Use
 
-### Pattern C -- Full-cascade-or-no-state for `cascadeUnstagePlugin` (F3)
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| **`comment-json` (`5.0.0`)** | Tempting for "preserve user comments in the hand-edited config." But: it pulls in `esprima` (a full JS parser) as a runtime dep; its CST round-trip is fragile across the machine-write/hand-edit boundary (a write-back re-serializes and can drop/relocate comments anyway); and it becomes a *second* JSON I/O path competing with `atomicWriteJson`. The desired-state model means the file is regularly rewritten by commands -- comment preservation is a losing battle by design. | Plain `JSON.parse` on load + `JSON.stringify(value, null, 2) + "\n"` through `atomicWriteJson` on write. If human annotation is wanted, document a top-of-file convention or a dedicated string field in the schema, not free-floating comments. |
+| **`jsonc-parser` (`3.3.1`)** | Same category: enables comments/trailing commas in the config. But the file is machine-rewritten on every mutating command, so any JSONC niceties a user adds are erased on the next write-back. Accepting JSONC on *read* while emitting strict JSON on *write* creates a confusing asymmetry (your comment vanished after `install`). | Strict JSON both directions. The file is a desired-state record, not a tunable rc-file. |
+| **A second atomic-write helper / direct `write-file-atomic` import in new code** | Bypasses the single sanctioned `shared/atomic-json.ts` seam, fragmenting the NFR-1 guarantee and the mkdir-parent behavior. | Call `atomicWriteJson(configPath, value)`. If a config-specific wrapper is wanted for symmetry with `saveState`, make it a thin `saveConfig` that *delegates* to `atomicWriteJson` (the way `saveState` does), not a new mechanism. |
+| **`fs.watch` / `chokidar` / any file watcher** | Reconciliation is load-time-only by locked decision; a watcher is out of scope and adds lifecycle/handle-leak surface. | Reconcile inside the existing `session_start` / load event handler. |
+| **A new lock file for the config** | Two locks (config-lock + state-lock) can deadlock or interleave config and state inconsistently. | The existing per-scope `.state-lock` via `withStateGuard`; write config + state under one lock. |
+| **`deepmerge` / `lodash.merge` for base+local override** | Generic deep-merge contradicts the entry-level, replace-not-merge override semantics. | Explicit domain merge function over two validated POJOs. |
+| **`semver` for the `enabled`/version-pin logic** | The disable/enable flow keeps an existing resolved version pin verbatim (re-materialize from cache, no network); it is exact-string carry-forward, not version-range math. (Mirrors the existing `hash-<12hex>` exact-equality decision.) | Carry the stored version string through unchanged. |
+| **`yaml@^2.9.0` for the config files** | It is in devDependencies but has **zero import sites in extension source** (confirmed by grep). The config files are JSON by locked decision. Do not reach for YAML here, and do not let this milestone's work depend on `yaml`. | JSON via the existing JSON path. (Separately: `yaml` looks like a candidate for dependency pruning, but that is out of scope for this milestone.) |
 
-```ts
-async function cascadeUnstagePlugin(plugin, scope, ctx): Promise<void> {
-  // Step 1: tear down ALL bridges first, collect partials via allSettled
-  const results = await Promise.allSettled([
-    unstageSkills(plugin, scope),
-    unstageCommands(plugin, scope),
-    unstageAgents(plugin, scope),
-    unstageMcp(plugin, scope),
-  ]);
-  // Step 2: ONLY if every bridge succeeded, drop the state record.
-  //         If any failed, leave state intact + surface a RollbackPartial.
-  const failed = results.filter(r => r.status === "rejected");
-  if (failed.length > 0) {
-    throw new RollbackPartialError("cascade-unstage", failed);
-  }
-  await dropStateRecord(plugin, scope); // last
-}
-```
+## Stack Patterns by Variant
 
-State-record removal is the *commit point* for uninstall -- placing it last mirrors
-how install does it (state-record written last, after physical commits).
+**Load path (mirror `loadState`):**
+- `readFile(claude-plugins.json)` → on ENOENT, **migrate**: generate config from `state.json` (locked decision: nothing uninstalled), write once via `atomicWriteJson`, fire-and-forget persist on the `loadState`/`persistMigratedState` model.
+- `readFile(claude-plugins.local.json)` → ENOENT is the *normal* case (no override); treat as empty override, never an error.
+- `JSON.parse` → `CONFIG_VALIDATOR.Check()` → precise first-error via the existing `firstValidationErrorDetail` pattern. A malformed hand-edited config should fail *loud and specific*, then soft-degrade (do not block Pi load on a bad config -- surface and continue, consistent with "network attempts soft-fail, never block load").
 
-### Pattern D -- State-after-physical-commit for `update.ts` (F4)
+**Write-back path (mirror `saveState`):**
+- Mutating command computes new desired state → assert against `CONFIG_VALIDATOR` (`saveState`'s self-check pattern: a caller bug surfaces here, not as a corrupt file) → `atomicWriteJson`.
+- `--local` flag routes the write to `claude-plugins.local.json`; base writes go to `claude-plugins.json`. Both go through the *same* atomic seam and the *same* lock.
 
-Move `swapStateRecord` from before the agents/commands/skills/mcp commits to after
-*all* of them resolve. On any commit failure, the old state record stays -- exactly the
-recoverable state the user can re-run `update` against. No new schema, no tx-id.
+**Concurrency:**
+- Config write-back joins the existing `withLockedStateTransaction` scope so config + internal state move atomically-together under the one per-scope `.state-lock`. Cross-process last-writer-wins is already the documented model (Pitfall 4 in `state-io.ts`); the config file inherits it for free.
 
-### Pattern E -- Orphan-tolerant rename target (F6 `replacePrepared*`)
+## Version Compatibility
 
-```ts
-async function replacePreparedAgent(staged: string, target: string): Promise<void> {
-  // If an orphan exists at target (left over from an earlier crashed install), rm it
-  // before rename. The orphan is by definition not in state.json (else state would
-  // claim it and reinstall would be blocked at the orchestrator gate), so removing it
-  // restores a recoverable state. No state mutation needed; the rename is the commit.
-  await fs.rm(target, { force: true });
-  await fs.rename(staged, target);
-}
-```
-
-### Pattern F (LOW priority -- docs only) -- F7 / F8
-
-F7 (agents step-1 parallel rm) and F8 (D-19-01 cache-drop swallow) are correctness-OK
-today; they need a short block comment explaining *why* the parallel rm is
-self-healing (idempotent on `force: true`) and *why* the cache-drop catch is intentional
-(probe-buffer drain explicitly retired in D-21-01), plus one regression test each
-asserting the contract. No code change, no library.
-
-## Versions Verified (2026-06-02)
-
-| Package                 | Latest published | In use     | Action     |
-| ----------------------- | ---------------- | ---------- | ---------- |
-| `write-file-atomic`     | 8.0.0            | `^8.0.0`   | None       |
-| `proper-lockfile`       | 4.1.2            | `^4.1.2`   | None       |
-| `typebox`               | 1.1.38           | `^1.1.38`  | None       |
-| `typescript`            | (project pinned) | `^6.0.3`   | None       |
-| `neverthrow` (rejected) | 8.2.0            | --          | Do not add |
-| `p-queue` (rejected)    | 9.3.0            | --          | Do not add |
-| `p-retry` (rejected)    | 8.0.0            | --          | Do not add |
-
-Verified via `npm view <pkg> version time.modified` on 2026-06-02.
-
-## What NOT to Add
-
-| Avoid                                        | Reason                                                                                                          |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Any saga/orchestration library               | The existing `runPhases` is the saga -- bug is in its ordering, not its existence                                |
-| `fs-extra`, `transactional-fs`, `graceful-fs` | Wrong shape; the bugs are loop-control, not file-primitive issues                                                |
-| `neverthrow` / `effect` / `ts-results`       | Forces a milestone-wide signature refactor that disturbs the GREEN test surface                                 |
-| `p-queue`, `p-limit`, `p-map`                | The fixes go from parallel TO sequential -- concurrency primitives are the wrong direction                       |
-| A new "transaction id" persistence column    | Out of scope; F4 fix is ordering, not auditing. If WAL-style audit is wanted, defer to v1.8 backlog              |
-| `tsx` for tests                              | Node 20.19+ with `--test` already strips TS in this project's CI; carry-forward decision from prior milestones  |
-
-## Integration Points With Existing Stack
-
-| v1.7 Finding | Integrates with                                                       | Existing Tests to Re-run                                |
-| ------------ | --------------------------------------------------------------------- | ------------------------------------------------------- |
-| F1 agents    | `bridges/agents/commit.ts` + `transaction/phase-ledger.ts` (via Phase) | `tests/bridges/agents/*.test.ts`, `tests/transaction/*` |
-| F2 ledger    | `transaction/phase-ledger.ts::runPhases`                              | `tests/transaction/phase-ledger.test.ts` (entire file)  |
-| F3 cascade   | `transaction/cascade-unstage.ts` (or current name)                    | `tests/transaction/cascade-unstage*.test.ts`            |
-| F4 update    | `orchestrators/plugin/update.ts` + `persistence/state.ts`             | `tests/orchestrators/plugin/update.test.ts`             |
-| F5 commands  | `bridges/commands/commit.ts`                                          | `tests/bridges/commands/*.test.ts`                      |
-| F6 orphan    | `bridges/*/replacePrepared*` family                                   | `tests/bridges/*/replace-prepared*.test.ts`             |
-| F7 docs      | `bridges/agents/uninstall.ts` (step-1 parallel rm)                    | New: 1 regression test                                  |
-| F8 docs      | `orchestrators/plugin/list.ts::narrowResolverNotes` D-19-01 catch     | New: 1 regression test                                  |
-
-All eight findings stay inside `extensions/pi-claude-marketplace/`. None requires a
-peer-dep bump, a new runtime dep, or a new dev-dep.
+| Package | Version | Compatible With | Notes |
+|---------|---------|-----------------|-------|
+| `write-file-atomic` | `^8.0.0` (cur `8.0.0`) | Node >= 22.x line / >= 20.19.0 baseline as already shipped | Already the project's atomic JSON path; no change. |
+| `typebox` | dev `^1.1.38`, cur `1.2.6` | Node >= 20.19.0, ESM-only | `Type.Object` + `Compile` API stable across 1.1→1.2; optional routine bump only. |
+| `proper-lockfile` | `^4.1.2` (cur `4.1.2`) | Node >= 20.19.0 | Already powers `withStateGuard`; reused as-is. |
+| `node:fs/promises` / `node:path` | built-in | Node >= 20.19.0 (NFR-4) | No constraint. |
+| `memfs` (dev) | `^4.57.2` | Node >= 20.19.0 | Test-only; reused for in-memory reconcile tests. |
 
 ## Sources
 
-### Authoritative (HIGH confidence)
+- `package.json` (this repo, read 2026-06-09) -- confirmed `write-file-atomic@^8.0.0`, `proper-lockfile@^4.1.2`, `typebox` (peer `*`, dev `^1.1.38`), `memfs@^4.57.2`, `yaml@^2.9.0` (dev) present; Node `>=20.19.0` engine. HIGH.
+- `extensions/pi-claude-marketplace/shared/atomic-json.ts` (read) -- confirmed the single sanctioned `write-file-atomic` JSON seam (fsync + concurrent-write queue + mkdir-parent). HIGH.
+- `extensions/pi-claude-marketplace/persistence/state-io.ts` (read) -- confirmed the load/migrate/validate/save pattern (`Type.Object` + `Compile` + `.Check`/`.Errors`, ENOENT→default, self-check before write) the config files should mirror. HIGH.
+- `extensions/pi-claude-marketplace/persistence/migrate.ts` (read) -- confirmed the fire-and-forget best-effort persist + single sanctioned `console.warn` (IL-3) model for first-load generation. HIGH.
+- grep across `extensions/`, `tests/` (2026-06-09) -- confirmed `yaml` has zero extension-source import sites. HIGH.
+- npm registry (`npm view`, 2026-06-09) -- `write-file-atomic@8.0.0`, `typebox@1.2.6`, `proper-lockfile@4.1.2`, `comment-json@5.0.0` (deps: `esprima`, `array-timsort`; engines `>=6`), `jsonc-parser@3.3.1`. HIGH.
+- `.planning/PROJECT.md` (read) -- locked milestone decisions (JSON Pi-native schema, load-time-only reconcile, write-back, `--local`, migrate-from-state), NFR-1 atomic, NFR-5 network policy, Pitfall 4 cross-process model. HIGH.
 
-- npm registry, queried 2026-06-02 via `npm view`:
-  - `write-file-atomic@8.0.0` (published 2026-05-08, engines `^22.22.2 || ^24.15.0 || >=26.0.0`)
-  - `proper-lockfile@4.1.2`
-  - `p-queue@9.3.0`, `p-retry@8.0.0`, `neverthrow@8.2.0`
-- Project source: `extensions/pi-claude-marketplace/transaction/phase-ledger.ts` --
-  confirmed `Phase<C>`, `RollbackPartial`, `runPhases`, `rollbackExecuted` exports;
-  identified the F2 push-order site at the `executed.push(phase)` call.
-- Project source: `package.json` -- confirmed current dep set (no orchestration libraries
-  in use; `write-file-atomic@^8.0.0` and `proper-lockfile@^4.1.2` already adopted).
-- Node.js official docs -- [nodejs.org/api/fs.html#promises-api](https://nodejs.org/api/fs.html#promises-api) --
-  confirmed `fs.rename`, `fs.rm({force:true})` semantics (idempotent on missing target);
-  `Promise.allSettled` semantics for the F3 cascade pattern.
-
-### Cross-referencing (MEDIUM confidence -- context only, not load-bearing)
-
-- npm `node-sagas` (last publish 2020) -- confirms the ecosystem has not produced a
-  competitive local-FS saga library since.
-- `neverthrow` README -- confirms migration shape; supports the verdict that adoption
-  is a milestone-wide change, not a bug-fix change.
+---
+*Stack research for: declarative marketplace/plugin config files (v1.12)*
+*Researched: 2026-06-09*

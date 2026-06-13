@@ -22,15 +22,15 @@ export function notifyUsageError(ctx: ExtensionContext, message: UsageErrorMessa
 
 export type NotificationMessage; // { marketplaces: readonly MarketplaceNotificationMessage[] }
 export type MarketplaceNotificationMessage; // { name; scope; status?; details?; plugins }
-export type PluginNotificationMessage; // 11-variant discriminated union on `status`
-export type PluginStatus; // 11 literal strings, derived from PLUGIN_STATUSES tuple
-export type MarketplaceStatus; // 7 literal strings, derived from MARKETPLACE_STATUSES tuple
+export type PluginNotificationMessage; // 16-variant discriminated union on `status`
+export type PluginStatus; // 16 literal strings, derived from PLUGIN_STATUSES tuple
+export type MarketplaceStatus; // 9 literal strings, derived from MARKETPLACE_STATUSES tuple
 export type Dependency; // "agents" | "mcp", derived from DEPENDENCIES tuple
 export interface MarketplaceDetails; // { autoupdate: boolean; lastUpdatedAt?: string }
 export interface UsageErrorMessage; // { message: string; usage: string }
 ```
 
-The discriminated `PluginNotificationMessage` union has eleven variants; each pins `status` to its literal string for TypeScript narrowing:
+The discriminated `PluginNotificationMessage` union has sixteen variants; each pins `status` to its literal string for TypeScript narrowing:
 
 ```ts
 type PluginNotificationMessage =
@@ -44,21 +44,26 @@ type PluginNotificationMessage =
   | PluginPresentMessage // status: "present";      dependencies (required); inventory token (G-21-01)
   | PluginFailedMessage // status: "failed";       reasons (required); cause?; rollbackPartial?
   | PluginSkippedMessage // status: "skipped";      reasons (required)
-  | PluginManualRecoveryMessage; // status: "manual recovery"; reasons (required); cause?
+  | PluginManualRecoveryMessage // status: "manual recovery"; reasons (required); cause?
+  | PluginWillInstallMessage // status: "will install";   preview pending-tense (DIFF-02); NO version
+  | PluginWillUninstallMessage // status: "will uninstall"; preview pending-tense (DIFF-02); NO version
+  | PluginWillEnableMessage // status: "will enable";    preview pending-tense (DIFF-02); NO version
+  | PluginWillDisableMessage // status: "will disable";   preview pending-tense (DIFF-02); NO version
+  | PluginDisabledMessage; // status: "disabled";       inventory token + disable cascade row (ENBL-04 / D-54-01 / UAT-03)
 ```
 
 The closed sets are encoded as runtime tuples and their literal-union types are derived via indexed access (SNM-04 / SNM-05 / SNM-06 / D-15-11):
 
-- `PLUGIN_STATUSES` -- the closed set of 11 plugin status discriminators. The literal-union type `PluginStatus` is derived as `(typeof PLUGIN_STATUSES)[number]`. Read `extensions/pi-claude-marketplace/shared/notify.ts` for the canonical membership and ordering; do not re-enumerate the values in prose. Fixture iterators (per-variant unit tests, catalog UAT drivers) consume the runtime tuple.
-- `MARKETPLACE_STATUSES` -- the closed set of 7 marketplace status discriminators. `MarketplaceStatus = (typeof MARKETPLACE_STATUSES)[number]`. Same rule. The 3 autoupdate-surface statuses (`autoupdate enabled`, `autoupdate disabled`, `skipped`) were added in Phase 17.1 per D-17.1-01 to support the user-locked surface design in D-18-05.
+- `PLUGIN_STATUSES` -- the closed set of 16 plugin status discriminators. The literal-union type `PluginStatus` is derived as `(typeof PLUGIN_STATUSES)[number]`. Read `extensions/pi-claude-marketplace/shared/notify.ts` for the canonical membership and ordering; do not re-enumerate the values in prose. Fixture iterators (per-variant unit tests, catalog UAT drivers) consume the runtime tuple. The 4 pending-tense `will *` preview statuses are the DIFF-02 read-only preview tokens; `present` (G-21-01) and `disabled` (ENBL-04) are the list-surface inventory tokens -- `disabled` additionally doubles as the `/claude:plugin disable` command's realized cascade-row token (v1.12 UAT-03 decision; the reload-hint distinction is carried by the cascade's `disable-cascade` kind, not by the token).
+- `MARKETPLACE_STATUSES` -- the closed set of 9 marketplace status discriminators. `MarketplaceStatus = (typeof MARKETPLACE_STATUSES)[number]`. Same rule. The 3 autoupdate-surface statuses (`autoupdate enabled`, `autoupdate disabled`, `skipped`) were added in Phase 17.1 per D-17.1-01 to support the user-locked surface design in D-18-05; the 2 pending-tense statuses (`will add`, `will remove`) are the DIFF-02 preview tokens.
 - `DEPENDENCIES` -- the closed set of 2 soft-dependency probe targets. `Dependency = (typeof DEPENDENCIES)[number]`. Same rule. Drives the render-time probe path; `agents` → `pi-subagents`, `mcp` → `pi-mcp-adapter`.
 - `REASONS` (closed-set reason tokens used inside `{<reason>}` braces on the 5 reason-bearing plugin variants) -- defined in `extensions/pi-claude-marketplace/shared/notify.ts::REASONS`. The reason set survives v2.0 unchanged in spirit; the 3 v1.3 reasons structurally absorbed by the type model (`rollback partial`, `requires pi-subagents`, `requires pi-mcp`) no longer appear in any typed `reasons` field -- they are emitted by the renderer from the `rollbackPartial` field and the soft-dep probe, respectively.
 
 The discriminated union and the per-variant field carve-outs are the binding compile-time contract. Adding or removing a variant, or shifting a field's required/optional discipline, is enforced by `assertNever(plugin)` in the renderer's switch (SNM-17) and by the compile-check arch test at `tests/architecture/notify-types.test.ts`. The arch test is the closed-set membership proof; failing it means the type model has drifted from one of the three tuples or the per-variant discipline:
 
-- `reasons: readonly Reason[]` REQUIRED only on `unavailable | upgradable | skipped | failed | manual recovery` (D-15-01). The other 5 variants omit the field so `(installed) {up-to-date}` is a compile error.
-- `dependencies: readonly Dependency[]` REQUIRED only on `installed | updated | reinstalled` (D-15-02 + SNM-06). The other 7 variants omit the field; only those 3 switch arms reach the per-dependency probe path.
-- `version?: string` on every variant EXCEPT `updated`, which carries REQUIRED `from: string; to: string` instead (D-15-04). The hash-version contract (PI-7 `hash-<12hex>`) remains a plain string -- no branded type.
+- `reasons: readonly Reason[]` REQUIRED only on `unavailable | upgradable | skipped | failed | manual recovery` (D-15-01). The other 11 variants omit the field so `(installed) {up-to-date}` is a compile error.
+- `dependencies: readonly Dependency[]` REQUIRED only on `installed | updated | reinstalled | present` (D-15-02 + SNM-06 + G-21-01). The other 12 variants omit the field; only those 4 switch arms reach the per-dependency probe path.
+- `version?: string` on every variant EXCEPT `updated`, which carries REQUIRED `from: string; to: string` instead (D-15-04), and the 4 `will *` preview variants, which omit version entirely (DIFF-02: the recorded version is not load-bearing pre-transition). The hash-version contract (PI-7 `hash-<12hex>`) remains a plain string -- no branded type.
 - `scope?: Scope` on every variant EXCEPT `available | unavailable` (SNM-11 -- MSG-PL-6 carve-out preserved structurally; the list surface does not emit `[<scope>]` brackets for those rows).
 - `cause?: Error` on `failed | manual recovery` only (SNM-10).
 - `rollbackPartial?: readonly { phase: string; cause?: Error }[]` on `failed` only (SNM-09).
@@ -73,7 +78,7 @@ The Phase 16 renderer enforces these grammar invariants structurally. The list i
 - **Indentation discipline.** Marketplace header at column 0. Plugin rows at 2-space indent. Per-plugin cause chains and `rollbackPartial` per-phase children at 4-space indent. One blank line between marketplace blocks (per D-16-07).
 - **Conditional plugin-row scope bracket.** A plugin row emits `[<scope>]` only when its `scope` differs from the parent marketplace's `scope` (orphan-fold case per D-16-17). Same-scope plugins inherit the marketplace's scope from the header and omit the bracket. The `available | unavailable` variants carry no `scope` field at all (SNM-11), so their rows never emit the bracket regardless of context.
 - **Computed severity routing.** `notify()` computes severity from contents per the ladder in §"Severity Routing" (D-16-11). Callers do not supply severity.
-- **Computed reload-hint trailer.** `notify()` appends `/reload to pick up changes` (with one blank line above) iff any plugin status is in `{installed, updated, reinstalled, uninstalled}` or any marketplace status is in the state-changing set `{added, removed, updated}` (D-16-12). A `failed` marketplace status does NOT trigger the trailer (rolled-back state has nothing to reload). Callers do not supply a flag.
+- **Computed reload-hint trailer.** `notify()` appends `/reload to pick up changes` (with one blank line above) iff any plugin status is in `{installed, updated, reinstalled, uninstalled}`, or -- on a cascade dispatched with the `disable-cascade` kind (the `/claude:plugin disable` command's realized-transition cascade, v1.12 UAT-03) -- any plugin status is `disabled` (D-16-12, narrowed by SNM-33). The trigger is plugin-row-driven ONLY: marketplace records are bookkeeping, not Pi-visible resources, so NO marketplace status triggers the trailer on its own (a clean `marketplace remove` still emits it via the per-unstaged-plugin `uninstalled` rows). The list-surface inventory tokens (`present`, and `disabled` on kind-less / `cascade` payloads) and the pending-tense `will *` preview tokens are structurally excluded. Callers do not supply a flag -- the disable orchestrator supplies the cascade KIND, and the hint stays contents-derived within that kind.
 - **Computed soft-dep probe.** Each `dependencies: ["agents"]` triggers a render-time probe for `pi-subagents`; absence emits `{requires pi-subagents}` on the plugin row. `dependencies: ["mcp"]` is the analogous probe for `pi-mcp-adapter` emitting `{requires pi-mcp}` (D-16-15). The probe runs once per `notify()` invocation (D-16-14) and is threaded through every plugin-row render so all rows see a consistent host snapshot.
 - **Inline per-plugin cause chains.** A `failed` or `manual recovery` plugin variant carrying `cause?: Error` surfaces the cause chain inline beneath the plugin row (4-space indent), one chain per failed plugin (per D-16-08). The v1.3 top-level cascade-summary cause line is retired (per SNM-10): multi-failure cascades surface each plugin's chain independently rather than collapsing into a single trailer.
 - **`rollbackPartial` as a sub-state of `failed`.** A `failed` plugin variant carrying `rollbackPartial` renders per-phase children at 4-space indent beneath the failed row. There is no separate `"rollback failed"` status (per SNM-09) -- rollback-partial is structurally a sub-state of `failed`.
@@ -111,7 +116,7 @@ Skipped plugin with the benign `{up-to-date}` reason, **info** severity (per the
 
 1. Any plugin or marketplace with `status === "failed"` → **error**.
 2. Any plugin with `status === "manual recovery"` → **warning** (always actionable).
-3. Any plugin `status === "skipped"` whose reasons are **not** all in the benign closed set (`up-to-date`, `already installed`, `already autoupdate`, `already no autoupdate`) → **warning**. An actionable skip such as `{not installed}` (D-28-03) routes here.
+3. Any plugin `status === "skipped"` whose reasons are **not** all in the benign closed set (`up-to-date`, `already installed`, `already autoupdate`, `already no autoupdate`, `already enabled`, `already disabled`) → **warning**. An actionable skip such as `{not installed}` (D-28-03) routes here.
 4. Any marketplace `status === "skipped"` whose reasons are not all benign -- **including a `skipped` with missing/empty reasons**, which cannot be proven benign (D-28-08 safe default) → **warning**.
 5. Otherwise → **info** (success / default). A cascade whose **only** non-success rows are benign idempotent no-op skips (every reason in the benign closed set) lands here: e.g. an all-`{up-to-date}` update cascade, or an idempotent `<autoupdate> {already autoupdate}` flip, computes info and omits the second argument.
 

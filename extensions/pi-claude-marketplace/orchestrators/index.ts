@@ -13,7 +13,7 @@
 
 export {
   addMarketplace,
-  applyAutoupdateFlipInPlace,
+  classifyAutoupdateFlip,
   cascadeUnstagePlugin,
   DEFAULT_GIT_OPS,
   listMarketplaces,
