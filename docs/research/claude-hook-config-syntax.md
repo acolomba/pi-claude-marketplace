@@ -1,6 +1,6 @@
 # Claude Code hook config syntax -- bridge reference
 
-**Audited:** 2026-06-13 **Confidence:** HIGH on standard fields and per-event contracts (primary source is the live Claude Code Hooks reference at `code.claude.com/docs/en/hooks` plus the hooks guide); HIGH on the `if` field's standard-vs-extension status and per-event applicability (Anthropic-documented since Claude Code v2.1.85); MEDIUM on `asyncRewake` / `rewakeMessage` / `rewakeSummary` semantics (undocumented in the public Hooks reference; verified via the live `security-guidance` source, Anthropic-published Issue #44881, third-party reproductions, and a "read the source" deep-dive); HIGH on per-plugin audit (verified by fetching each `hooks.json` from `anthropics/claude-code` at the audit commit).
+**Audited:** 2026-06-13 **Confidence:** HIGH on standard fields and per-event contracts (primary source is the live Claude Code Hooks reference at `code.claude.com/docs/en/hooks` plus the hooks guide); HIGH on the `if` field's standard-vs-extension status and per-event applicability (Anthropic-documented since Claude Code v2.1.85); HIGH on `asyncRewake` / `rewakeMessage` / `rewakeSummary` semantics post-2026-06-13 deep-dive (documented in the Claude Code Hooks reference Command-hook-fields table since v2.1.72; cross-verified against the live `security-guidance` handler source, Anthropic-published Issue #44881, third-party reproductions, and the buildingbetter.tech source-code deep-dive); HIGH on per-plugin audit (verified by fetching each `hooks.json` from `anthropics/claude-code` at the audit commit).
 
 Authority for v1.13 implementability decisions is this project's `.planning/REQUIREMENTS.md` and the upstream ecosystem audit at `docs/research/claude-hooks-vs-pi-events.md`. This document is a contract reference, not a roadmap.
 
@@ -63,15 +63,15 @@ A plugin has at most one `hooks/hooks.json`. There is no multi-file or directory
 
 ### `command`-type-only fields
 
-| Field           | JSON shape               | Required | Default             | Notes                                                                                                                                                                                                                                                                                                                                            | v1.13 implementability                                                                                                                                                                                                                                                                                                                                                                |
-| --------------- | ------------------------ | -------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `command`       | string                   | required | --                  | Shell command string (when no `args`) or executable path (when `args` is set). Supports `${CLAUDE_PROJECT_DIR}` / `${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PLUGIN_DATA}` env-var expansion inline.                                                                                                                                                    | **IMPLEMENT** -- covered by EXEC-01 / LIFE-03.                                                                                                                                                                                                                                                                                                                                        |
-| `args`          | array of strings         | optional | absent = shell-form | When present, `command` is spawned directly (exec form, no shell).                                                                                                                                                                                                                                                                               | **IMPLEMENT** -- additive to EXEC-01. When `args` is present, switch from shell to exec form.                                                                                                                                                                                                                                                                                         |
-| `async`         | boolean                  | optional | `false`             | Runs in background without blocking the agent. Fire-and-forget. No re-injection.                                                                                                                                                                                                                                                                 | **TOLERATE** for v1.13 -- the bridge can run it foreground without semantic loss for **observation-only** hooks. The hook's exit code / stdout is discarded under `async: true` upstream (no return value reaches the agent), so synchronous execution is strictly stronger than async. Debug-log when encountered. (Distinct from `asyncRewake`, which DOES carry return semantics.) |
-| `asyncRewake`   | boolean                  | optional | `false`             | Implies `async`. Runs in background; on exit code 2, wakes the model and injects stderr (or stdout if stderr empty) as a system reminder for the next turn. **Undocumented in public Hooks reference** but used by `security-guidance` and observable in Anthropic's own [Issue #44881](https://github.com/anthropics/claude-code/issues/44881). | **ESCALATE** (TOOL-02 amendment). See § 7 deep-dive; cannot be honored without semantic loss under v1.13's stack.                                                                                                                                                                                                                                                                     |
-| `rewakeMessage` | string                   | optional | --                  | Companion to `asyncRewake`. Template prefixed to the re-injected system-reminder content on rewake.                                                                                                                                                                                                                                              | **ESCALATE** (subordinate to `asyncRewake`). Has no meaning without `asyncRewake: true`.                                                                                                                                                                                                                                                                                              |
-| `rewakeSummary` | string                   | optional | --                  | Companion to `asyncRewake`. Short status-message string for the UI surface that indicates a background rewake fired.                                                                                                                                                                                                                             | **ESCALATE** (subordinate to `asyncRewake`).                                                                                                                                                                                                                                                                                                                                          |
-| `shell`         | `"bash" \| "powershell"` | optional | `"bash"` on Unix    | Shell selector. Ignored when `args` is set.                                                                                                                                                                                                                                                                                                      | **TOLERATE** -- Unix shell selector; Windows out of scope for v1.13. Debug-log if non-`bash`.                                                                                                                                                                                                                                                                                         |
+| Field           | JSON shape               | Required | Default             | Notes                                                                                                                                                                                                                                                  | v1.13 implementability                                                                                                                                                                                                                                                                                                                                                                |
+| --------------- | ------------------------ | -------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `command`       | string                   | required | --                  | Shell command string (when no `args`) or executable path (when `args` is set). Supports `${CLAUDE_PROJECT_DIR}` / `${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PLUGIN_DATA}` env-var expansion inline.                                                          | **IMPLEMENT** -- covered by EXEC-01 / LIFE-03.                                                                                                                                                                                                                                                                                                                                        |
+| `args`          | array of strings         | optional | absent = shell-form | When present, `command` is spawned directly (exec form, no shell).                                                                                                                                                                                     | **IMPLEMENT** -- additive to EXEC-01. When `args` is present, switch from shell to exec form.                                                                                                                                                                                                                                                                                         |
+| `async`         | boolean                  | optional | `false`             | Runs in background without blocking the agent. Fire-and-forget. No re-injection.                                                                                                                                                                       | **TOLERATE** for v1.13 -- the bridge can run it foreground without semantic loss for **observation-only** hooks. The hook's exit code / stdout is discarded under `async: true` upstream (no return value reaches the agent), so synchronous execution is strictly stronger than async. Debug-log when encountered. (Distinct from `asyncRewake`, which DOES carry return semantics.) |
+| `asyncRewake`   | boolean                  | optional | `false`             | Implies `async`. Runs in background; on exit code 2, wakes the model and injects stderr (or stdout if stderr empty) as a system reminder for the next turn. **Documented in the Claude Code Hooks reference Command-hook-fields table since v2.1.72.** | **IMPLEMENT** (HOOK-06 / EXEC-05). See § 13 deep-dive; bridge spawns detached, watches exit code, injects via Pi's \`pi.sendMessage({...}, { deliverAs: "followUp"                                                                                                                                                                                                                    |
+| `rewakeMessage` | string                   | optional | --                  | Companion to `asyncRewake`. Template prefixed to the re-injected system-reminder content on rewake.                                                                                                                                                    | **ESCALATE** (subordinate to `asyncRewake`). Has no meaning without `asyncRewake: true`.                                                                                                                                                                                                                                                                                              |
+| `rewakeSummary` | string                   | optional | --                  | Companion to `asyncRewake`. Short status-message string for the UI surface that indicates a background rewake fired.                                                                                                                                   | **ESCALATE** (subordinate to `asyncRewake`).                                                                                                                                                                                                                                                                                                                                          |
+| `shell`         | `"bash" \| "powershell"` | optional | `"bash"` on Unix    | Shell selector. Ignored when `args` is set.                                                                                                                                                                                                            | **TOLERATE** -- Unix shell selector; Windows out of scope for v1.13. Debug-log if non-`bash`.                                                                                                                                                                                                                                                                                         |
 
 ### `http`-type fields (out of v1.13 scope)
 
@@ -466,13 +466,16 @@ All five hook-using first-party plugins fetched verbatim. Each file lives at `pl
 
 **Note on `if` syntax variant:** The pattern `Bash(git commit:*)` uses a colon-prefix glob form (`:*`) that the public Hooks reference documents only via `Bash(git *)` example with space-prefix. The colon form appears specific to permission-rule subcommand-matching grammar. Implementability is independent of the variant -- both forms are glob-permission-rule patterns; either is ESCALATE under v1.13.
 
-**Implementability:** UNAVAILABLE under v1.13 -- multiple independent TOOL-02 triggers:
+**Implementability:** UNAVAILABLE under v1.13 -- one remaining TOOL-02 trigger:
 
 - TOOL-02(b): matcher `Edit|Write|MultiEdit|NotebookEdit` contains `MultiEdit` and `NotebookEdit`, neither of which has a Pi mapping under TOOL-01.
-- **Newly identified -- see § 7:** `asyncRewake` family (semantically irrecoverable under v1.13 stack).
-- **Newly identified -- see § 7:** `if` field (requires glob engine + arg-extraction adapters; explicitly out of v1.13 scope per the matcher-engine policy).
 
-The plugin would remain UNAVAILABLE under v1.13 even if all three were independent -- `MultiEdit` / `NotebookEdit` alone is sufficient to trigger TOOL-02(b).
+The two other fields previously cited as blockers are NO LONGER blockers:
+
+- `if` field: IMPLEMENTED in v1.13 per MATCH-03.
+- `asyncRewake` family: IMPLEMENTED in v1.13 per HOOK-06 / EXEC-05 (see § 13 deep-dive).
+
+Once PROM-01 (or a `MultiEdit` / `NotebookEdit` Pi-tool addition) lands in v1.14+, the plugin flips to installable -- no `if` or `asyncRewake` block remains.
 
 ## 7. Per-field implementability decisions
 
@@ -547,50 +550,37 @@ Filter checks each shell subcommand inside `$()` and backticks; falls open (runs
 
 #### `asyncRewake` / `rewakeMessage` / `rewakeSummary` family
 
-**Verdict:** ESCALATE.
+**Verdict:** IMPLEMENT.
 
-**Standard-vs-extension status:** UNDOCUMENTED in the public Hooks reference. Observable in:
+**Update -- this section was ESCALATE prior to the 2026-06-13 deep-dive in § 13.** Re-reading the security-guidance handler source end-to-end, fetching the documented (since v2.1.72) field definition from Claude Code's hooks reference, and pulling the precise `_pendingNextTurnMessages` plumbing out of `@earendil-works/pi-coding-agent`'s `agent-session.js` shows the bridge can deliver matching semantics using primitives that already exist in the peer dep. The full evidence and pseudocode live in § 13; this section just records the verdict and the propagated REQ implications.
 
-1. The Anthropic-shipped `security-guidance` plugin source (audit commit).
-2. [Anthropic Issue #44881](https://github.com/anthropics/claude-code/issues/44881), where Anthropic engineers acknowledge `asyncRewake` and treat the visible system-reminder rendering as a bug -- confirming it's a real production feature.
-3. Multiple third-party plugin source uses (e.g. [claude-intercom](https://github.com/sanztheo/claude-intercom) wires `asyncRewake: true` on its watcher hooks).
-4. The "I Read the Claude Code Source Code" deep-dive ([buildingbetter.tech](https://buildingbetter.tech/p/i-read-the-claude-code-source-code)) which describes it as production-implemented but undocumented.
+**Standard-vs-extension status:** STANDARD (documented). The Claude Code hooks reference at `code.claude.com/docs/en/hooks` documents `asyncRewake` in the Command hook fields table verbatim: `"asyncRewake | no | If true, runs in the background and wakes Claude on exit code 2. Implies async. The hook's stderr, or stdout if stderr is empty, is shown to Claude as a system reminder so it can react to a long-running background failure"` (fetched 2026-06-13). Field has been in the settings schema since Claude Code v2.1.72.
 
-Treat as a stable extension in Anthropic's own first-party stack but absent from the published contract.
+**Actual semantics (cross-referenced from the Hooks reference, Issue #44881 transcript, security-guidance handler source, and a buildingbetter.tech source-code deep-dive):**
 
-**Actual semantics (cross-referenced):**
+- `asyncRewake: true` implies `async: true` -- hook runs detached in the background, not blocking the triggering tool call.
+- The background process runs to completion subject to the handler's own `timeout`.
+- Exit code 2 from the background process causes Claude Code to inject the process's stderr (or stdout if stderr is empty) into the agent's conversation context wrapped in a `<system-reminder>` block. Non-2 exit codes -- including 0 -- complete silently.
+- `rewakeMessage` is an OPTIONAL string template; the security-guidance plugin uses it as the conversational "header" prefixed to the body of the rewake content (e.g. `"Background security review of commit -- address or acknowledge the findings below, then continue with the user's original request or continue waiting for their reply:"`). The plugin embeds its OWN per-handler banner via its `PROVENANCE_BANNER` / `CONTINUATION_SUFFIX` constants in stderr; the field is layered atop. Empirically the field appears to be passed through to Claude Code's runtime which prefixes it (the handler script does not read it back).
+- `rewakeSummary` is a short UI-only one-line status string used by Claude Code's TUI to render the spinner-replacement notice when a background rewake fires (e.g. `"Commit security review found issues"`). The model does not see it directly.
+- The handler script does NOT branch on async vs sync mode. The same `sys.exit(2)` + stderr-write path is used for both. Claude Code's runtime alone interprets `asyncRewake: true` and decides to background-spawn + wrap stderr as `<system-reminder>` instead of blocking inline.
+- The VSCode extension does NOT honor `asyncRewake: true` per the buildingbetter writeup; it falls back to inline synchronous foreground -- treating the rewake as a regular blocking exit-2 in the current tool turn. This means *Anthropic's own non-CLI host already degrades the field*, which is precedent for the bridge to do the same in degraded contexts.
 
-- `asyncRewake: true` implies `async: true` -- hook runs in the background, not blocking the current turn.
-- The background process runs to completion (subject to `timeout`).
-- **Exit code 2 from the background process wakes Claude back up** and injects the process's stderr (or stdout if stderr empty) into the agent's next turn as a `<system-reminder>` block.
-- `rewakeMessage` is a string template prefixed to the injected reminder (the "header" the model sees).
-- `rewakeSummary` is a short status-message string used by the UI to indicate a background rewake happened.
-- Exit code 0 (or anything other than 2) from the background process is a normal background completion -- no rewake, no injection.
-- The VSCode extension does NOT honor `asyncRewake: true` -- it falls back to synchronous foreground.
+**Why the prior ESCALATE was wrong -- corrected concerns:**
 
-**Implementability sketch in Pi:**
+1. **"Out-of-band turn semantics"** -- Pi's peer dep exposes `pi.sendMessage(message, { deliverAs: "nextTurn" })` in `agent-session.js` at the `sendCustomMessage` method. The implementation pushes the message onto a `_pendingNextTurnMessages` queue that is drained on the NEXT user prompt boundary (line 790-794 of the compiled JS: `"Inject any pending 'nextTurn' messages as context alongside the user message"`). When combined with the IDLE-vs-STREAMING branch at line 988 (which uses `agent.followUp()` for in-stream injection during an active loop), Pi covers BOTH delivery modes asyncRewake needs.
 
-The mechanical components exist:
+2. **"System-reminder vs user-message rendering"** -- Pi's `sendMessage` API takes a `CustomMessage<T>` (`role: "custom"`, `customType: string`, `content: string | TextContent[]`, `display: boolean`). With `display: false` the message is invisible to the user UI but `convertToLlm()` in `messages.ts` still emits it as model context. The `customType` discriminator lets the bridge tag the message (e.g. `"claude-hook-rewake"`) so it's identifiable in the transcript. This delivers the privileged-side-channel semantic asyncRewake needs without forcing the user-message role.
 
-- `node:child_process.spawn` can run background processes.
-- `pi.sendUserMessage(reason, { deliverAs: "followUp" })` is already used for PAYL-03 bucket-D Stop synthesis.
-- A bridge-owned async-rewake registry could spawn the process, watch its exit code, and call `sendUserMessage` on exit 2.
+3. **"Synchronous fallback is semantically destructive"** -- No fallback needed; the async path is implementable. (Even if it weren't, the security-guidance handler's `CONTINUATION_SUFFIX` -- `"\n\nAfter addressing or acknowledging this finding, continue with the user's original request or continue waiting for their reply -- this review is supplementary feedback, not a replacement for your previous response."` -- is specifically designed to remain coherent even when the rewake fires in an unexpected turn boundary. The handler is robust to delivery-mode variation.)
 
-**Why ESCALATE despite mechanical feasibility:**
+4. **"Subordinate fields hard-fail"** -- Resolved: all three fields are implemented together as a coordinated triple. `rewakeMessage` is prepended to the stderr payload (or empty-string default); `rewakeSummary` is surfaced via `ctx.ui.notify(summary, "info")` at the moment the bridge enqueues the next-turn message.
 
-1. **Out-of-band turn semantics.** Claude Code's `asyncRewake` injects the system-reminder into the **next turn even if the user has not yet submitted one** -- i.e. it interrupts an idle agent. Pi's `sendUserMessage(deliverAs: "followUp")` is intended for in-stream interjection during an active loop; the idle-interruption semantic is not part of its documented contract. Cannot deliver matching behavior without a clean Pi runtime primitive for "inject a system message into the next turn, even from idle."
+**Decision.** IMPLEMENT. Plugins declaring `asyncRewake: true` install cleanly. The bridge owns a per-plugin async-rewake registry that spawns the hook detached, watches its exit code, and on exit 2 routes the (rewakeMessage + stderr) into Pi's next-turn / followUp delivery path. See § 13.6 for the implementation sketch (~250-300 LoC, one new bridge module + small additions to the existing hook dispatcher).
 
-2. **System-reminder vs user-message rendering.** Claude Code wraps the injection in `<system-reminder>` (visible in Issue #44881's reproduction) -- a privileged channel that's not a user message and is parsed differently by the model. Pi's `sendUserMessage` is by design a user-message channel. Forcing the security-review feedback to appear as a user message changes how the model handles it (e.g. the model may try to respond directly to the user instead of treating it as side-channel context).
+**TOOL-02 condition (h) -- REMOVE** the `asyncRewake: true` trigger; `asyncRewake` no longer marks a plugin unavailable. (No renumbering required: under the current REQUIREMENTS.md (post-`if`-flip) (h) is the asyncRewake condition; the remaining condition (i) -- non-`command` `type` -- shifts up to (h).)
 
-3. **Synchronous fallback is semantically destructive.** Silently degrading `asyncRewake: true` to synchronous in-band execution (the current v1.13 stance pre-research) means the hook fires synchronously on the same Bash `git commit` / `git push` turn that triggered it -- making the entire `git push` block on the security review. The security-guidance plugin's design relies on the review running in the background; synchronous fallback creates a UX regression where every `git push` invocation hangs for the duration of the LLM-driven security review (potentially minutes).
-
-4. **The "subordinate fields" hard-fail.** If we ESCALATE `asyncRewake`, `rewakeMessage` and `rewakeSummary` MUST also ESCALATE -- they have no meaning without `asyncRewake: true` and supporting them in isolation would be a no-op.
-
-**Decision.** Mark plugins declaring `asyncRewake: true` as `(unavailable) {unsupported hooks}` under TOOL-02. This is a deliberate regression from HOOK-03's current "tolerate + warn" stance -- the strict-supportability rule applies. Document `asyncRewake` family as a v1.14+ candidate (REQ EXTH-V2-01).
-
-**TOOL-02 amendment needed.** Add condition (i): hook entry contains `asyncRewake: true`.
-
-**Implementation note for parser:** `rewakeMessage` and `rewakeSummary` without `asyncRewake: true` are no-op (per Claude Code's contract -- they have no effect without async-rewake). Plugin declaring them in isolation does NOT trigger (i); only `asyncRewake: true` does. The other two are warned-about-only.
+**Implementation note for parser:** `rewakeMessage` and `rewakeSummary` without `asyncRewake: true` remain no-op upstream (per Claude Code's documented contract -- they only have effect inside an `asyncRewake` block). SURF-05's existing warning for the standalone-subordinate-fields case is preserved unchanged.
 
 ### Unknown future fields
 
@@ -604,13 +594,13 @@ The pre-strict audit (`docs/research/claude-hooks-vs-pi-events.md` § "Aggregate
 
 Final v1.13 coverage:
 
-| Plugin                     | Status      | TOOL-02 condition(s) triggered                                                                                                |
-| -------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `explanatory-output-style` | SUPPORTED   | none                                                                                                                          |
-| `learning-output-style`    | SUPPORTED   | none                                                                                                                          |
-| `ralph-wiggum`             | SUPPORTED   | none (bucket-D Stop synthesis required)                                                                                       |
-| `hookify`                  | SUPPORTED   | none                                                                                                                          |
-| `security-guidance`        | UNAVAILABLE | (b) `MultiEdit` / `NotebookEdit` in matcher; (h) `if` field; (i) `asyncRewake: true` family -- any one of three is sufficient |
+| Plugin                     | Status      | TOOL-02 condition(s) triggered                                                                                        |
+| -------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------- |
+| `explanatory-output-style` | SUPPORTED   | none                                                                                                                  |
+| `learning-output-style`    | SUPPORTED   | none                                                                                                                  |
+| `ralph-wiggum`             | SUPPORTED   | none (bucket-D Stop synthesis required)                                                                               |
+| `hookify`                  | SUPPORTED   | none                                                                                                                  |
+| `security-guidance`        | UNAVAILABLE | (b) `MultiEdit` / `NotebookEdit` in matcher -- the only remaining blocker; `if` and `asyncRewake` are now implemented |
 
 **Net result: 4/5 first-party hook-using plugins supported (80%); 1/5 unavailable.**
 
@@ -623,27 +613,29 @@ Of 13 total first-party plugins, 8 ship no hooks (`agent-sdk-dev`, `claude-opus-
 - No-hook plugins (install unchanged): 8/8 (100%)
 - **Total catalog coverage: 12/13 (92.3%)**
 
-The single regression -- `security-guidance` -- is justified by the strict-supportability stance. Each of the three trigger conditions (`MultiEdit` / `NotebookEdit` tool-map gap; `if` field; `asyncRewake` family) is independently a blocker. Even if PROM-01 lands `MultiEdit` / `NotebookEdit` analogs in v1.14+, the plugin remains blocked by `if` and `asyncRewake` until those are also implemented (PROM-V2-01 and EXTH-V2-01 respectively).
+The single regression -- `security-guidance` -- is justified by the strict-supportability stance and now has a single concrete unblocker. With `if` implemented (MATCH-03) and `asyncRewake` implemented (HOOK-06 / EXEC-05), the only remaining v1.13 blocker is the `MultiEdit` / `NotebookEdit` tool-map gap. PROM-01 alone is enough to flip the plugin to installable in v1.14+ -- no other downstream dependency remains.
 
 ## 9. Proposed REQ amendments for REQUIREMENTS.md
 
-Paste-ready REQ language. The four new conditions extend TOOL-02 to (a)..(i); HOOK-03 narrows to known additive-only extensions only; one new EXEC REQ and one optional new HOOK REQ surface implementation specifics.
+Paste-ready REQ language. The asyncRewake flip (research § 13) drops what was condition (h) in REQUIREMENTS.md's prior wording; the remaining `type !== "command"` clause shifts up. HOOK-03, SURF-05, and the v1.14+ EXTH-V2-01 row each get a matching amendment. New REQ HOOK-06 / EXEC-05 specify the bridge's asyncRewake implementation contract.
 
 ### Amend TOOL-02 -- extend the `(unavailable) {unsupported hooks}` triggers
 
 Replace TOOL-02's current condition list with the following (additions in bold):
 
+**Drop condition (h) -- `asyncRewake: true` no longer triggers unavailability.** Renumber the trailing `type !== "command"` clause from (i) to (h). The final TOOL-02 condition list reads:
+
 > A plugin is marked `(unavailable) {unsupported hooks}` at resolve time -- non-installable, no per-entry soft-degrade -- if its `hooks.json` declares ANY entry meeting any of these conditions:
 >
-> (a) matcher is a regex pattern per MATCH-02; (b) matcher contains any token (after pipe-OR split and MCP pass-through) without a TOOL-01 mapping entry -- meaning the plugin declares a hook matching a Claude tool with no Pi analog (e.g. `MultiEdit`, `NotebookEdit`, `WebFetch`, `Task`); (c) event is in bucket E (Notification, PermissionRequest, PermissionDenied, MessageDisplay); (d) event is in bucket F (TeammateIdle); (e) event is in bucket G (Elicitation, ElicitationResult, WorktreeCreate, WorktreeRemove); (f) event is in bucket H (ConfigChange, Setup, InstructionsLoaded, TaskCreated, TaskCompleted); (g) event is SubagentStart or SubagentStop AND `softDepStatus(pi).agents.present === false` at probe time; **(h) entry contains an `if` field -- the field requires permission-rule-syntax glob matching, per-tool argument-extraction adapters, and Bash subcommand parsing, none of which fit v1.13's matcher-engine policy. Silent degrade is not safe (would over-fire by ignoring the filter);** **(i) entry contains `asyncRewake: true` -- the field's out-of-band rewake-on-exit-2 semantic cannot be honored by Pi's in-stream `sendUserMessage` primitive without semantic loss (foreground synchronous fallback would block every triggering turn, e.g. every `git push`, for the hook's full duration). The companion `rewakeMessage` / `rewakeSummary` fields without `asyncRewake: true` are no-op and do NOT trigger this condition (HOOK-03 still warns at install);** **(j) handler `type` is anything other than `"command"` -- `http` / `mcp_tool` / `prompt` / `agent` types require runtime infrastructure (HTTP client, MCP server-tool dispatch, LLM evaluation) not in v1.13's scope and not exercised by any first-party plugin.**
+> (a) matcher is a regex pattern per MATCH-02; (b) matcher contains any token (after pipe-OR split and MCP pass-through) without a TOOL-01 mapping entry -- meaning the plugin declares a hook matching a Claude tool with no Pi analog (e.g. `MultiEdit`, `NotebookEdit`, `WebFetch`, `Task`); (c) event is in bucket E (Notification, PermissionRequest, PermissionDenied, MessageDisplay); (d) event is in bucket F (TeammateIdle); (e) event is in bucket G (Elicitation, ElicitationResult, WorktreeCreate, WorktreeRemove); (f) event is in bucket H (ConfigChange, Setup, InstructionsLoaded, TaskCreated, TaskCompleted); (g) event is SubagentStart or SubagentStop AND `softDepStatus(pi).agents.present === false` at probe time; **(h) handler `type` is anything other than `"command"` -- `http` / `mcp_tool` / `prompt` / `agent` types require runtime infrastructure (HTTP client, MCP server-tool dispatch, LLM evaluation) not in v1.13's scope and not exercised by any first-party plugin.**
 >
-> The resolver's `installable: true | false` discriminator flips on these conditions; reconcile honors the flip across `/reload` cycles. All conditions render the same `{unsupported hooks}` reason; the distinguishing detail belongs in debug-log only.
+> The resolver's `installable: true | false` discriminator flips on these conditions; reconcile honors the flip across `/reload` cycles. All conditions render the same `{unsupported hooks}` reason; the distinguishing detail belongs in debug-log only. The `if` field is implemented per MATCH-03 (not escalated); `asyncRewake: true` is implemented per HOOK-06 / EXEC-05 (not escalated).
 
 ### Amend HOOK-03 -- narrow extension tolerance to additive-only fields
 
 Replace HOOK-03 with:
 
-> Hook-config TypeBox schema uses `additionalProperties: true` at every nesting level; unknown payload fields preserved through state round-trip. The known additive-only extension set is `{ statusMessage, once, async (without asyncRewake), shell, args }` -- each is silently honored or silently dropped per § "Per-field implementability decisions" without affecting plugin installability. The `asyncRewake` / `rewakeMessage` / `rewakeSummary` family triggers TOOL-02(i) plugin-unavailability; the `if` field triggers TOOL-02(h); non-`command` handler types trigger TOOL-02(j). Unknown extension field names surface debug-log only and do NOT trigger unavailability (forward-compat with Claude Code's tolerant parsing).
+> Hook-config TypeBox schema uses `additionalProperties: true` at every nesting level; unknown payload fields preserved through state round-trip. The known additive-only extension set is `{ statusMessage, once, async (without asyncRewake), shell, args }` -- each is silently honored or silently dropped per § "Per-field implementability decisions" without affecting plugin installability. The `asyncRewake` / `rewakeMessage` / `rewakeSummary` family is IMPLEMENTED per HOOK-06 / EXEC-05 (background spawn + `_pendingNextTurnMessages` injection on exit 2); the `if` field is IMPLEMENTED per MATCH-03; non-`command` handler types trigger TOOL-02(h). Unknown extension field names surface debug-log only and do NOT trigger unavailability (forward-compat with Claude Code's tolerant parsing).
 
 ### Add HOOK-05 -- `CLAUDE_*` env var setup completeness
 
@@ -667,39 +659,53 @@ Replace HOOK-03 with:
 
 ### Amend SURF-05 -- narrow extension-warning surface
 
-Current SURF-05 emits an install-time warning per plugin per known payload-extension field present (`asyncRewake` / `rewakeMessage` / `rewakeSummary`). Under the strict policy, plugins declaring `asyncRewake: true` are UNAVAILABLE (TOOL-02(i)) and never reach the install-success surface that SURF-05 warns from. The two subordinate fields without `asyncRewake: true` are no-op upstream and warning would be noise.
+SURF-05's purpose narrows to catching plugin-author config bugs (orphan `rewakeMessage` / `rewakeSummary`). Plugins declaring `asyncRewake: true` now install normally (HOOK-06 / EXEC-05) so the field no longer surfaces a warning. The two subordinate fields without `asyncRewake: true` remain no-op upstream and are surfaced as a one-line warning so the plugin author can spot the missing parent.
 
 Replace SURF-05 with:
 
-> Install-time warning emits once per plugin when `rewakeMessage` or `rewakeSummary` are declared without `asyncRewake: true` (no-op upstream; warn so the plugin author can spot a config bug). Unknown extension field names surface only in debug-log. The `asyncRewake: true` case does NOT reach this surface -- those plugins are unavailable per TOOL-02(i) and never install.
+> Install-time warning emits once per plugin when `rewakeMessage` or `rewakeSummary` are declared without `asyncRewake: true` (no-op upstream; warn so the plugin author can spot a config bug). Unknown extension field names surface only in debug-log. Plugins declaring `asyncRewake: true` install normally per HOOK-06 / EXEC-05; the field does NOT surface a warning.
+
+### Add HOOK-06 -- `asyncRewake` registry contract
+
+> The bridge maintains an in-process async-rewake registry keyed by `(plugin-id, hookHandlerIndex, dispatchId)`. On dispatch of any hook handler with `asyncRewake: true`, the bridge spawns the child via `node:child_process.spawn(...)` with `detached: false` and `stdio: ["pipe", "pipe", "pipe"]`, returns from the dispatcher IMMEDIATELY (the triggering tool call is not blocked), and records the registry entry. The bridge attaches `child.on("exit", code => ...)` and `child.on("error", err => ...)` watchers BEFORE returning. On exit code 2: the bridge reads collected stderr (or stdout if stderr is empty), prefixes the `rewakeMessage` field value if present, and calls Pi's `pi.sendMessage({ customType: "claude-hook-rewake", content: <text>, display: false, details: { pluginId, hookHandlerIndex } }, { deliverAs: <chosen> })` where the delivery mode is selected at injection time: `"followUp"` if `ctx.isIdle() === false` at exit time, `"nextTurn"` otherwise. If `rewakeSummary` is set, the bridge ALSO calls `ctx.ui.notify(rewakeSummary, "info")` at the same moment (the model never sees `rewakeSummary` -- it is a UI-only signal). Non-2 / non-0 exit codes complete silently with a debug-log entry; exit code 0 completes silently. The registry's per-entry lifetime ends at exit-handler return, normal `timeout` SIGTERM, or `/reload`. On `/reload`, the bridge SIGKILLs every entry still alive (parent process retains kill rights because `detached: false`). On parent process exit, the OS reaps. Test gate: a fixture plugin that exits 2 after a 200ms sleep must (a) NOT block the triggering tool call (the bridge returns within ≤50ms) and (b) inject content visible to the model on the next assistant turn (verifiable via `agent_end` transcript inspection).
+
+### Add EXEC-05 -- `asyncRewake` background-spawn pattern
+
+> When dispatching a hook handler with `asyncRewake: true`:
+>
+> - `spawn(command, args, { shell: shellForm, env: enrichedEnv, cwd: ctx.cwd, detached: false, stdio: ["pipe", "pipe", "pipe"] })`. The `detached: false` setting is deliberate -- it keeps the child in the bridge's process group so SIGKILL on `/reload` reaps it. (Upstream Claude Code uses `detached: true` in CLI mode but the bridge runs inside a long-lived Pi extension process, so the lifecycle is different.)
+> - Stdin payload write is identical to EXEC-01 (event JSON, capped at 256KB).
+> - The bridge collects stderr into an in-memory buffer capped at 64KB; on overflow, the suffix is truncated with a `…[truncated]` marker (model-visible context cap matches upstream's `additionalContext` 10KB-but-with-headroom convention).
+> - Hook handler's own `timeout` is enforced via `setTimeout(() => kill(child, "SIGTERM"), timeoutMs)` and a 5s grace before SIGKILL. Default for `asyncRewake: true` hooks remains the EXEC-02 default (600s).
+> - Multi-hook fan-in: when N independent handlers all have `asyncRewake: true` and ALL fire on the same triggering tool call, each runs in its own registry entry independently. If multiple exit 2 within a tight window, the bridge injects N separate messages with distinct `details.dispatchId` -- Pi's `_pendingNextTurnMessages` queue is a list, not a single slot, so they accumulate naturally and are all delivered on the next user prompt boundary.
 
 ### Out-of-Scope additions
 
 Add to PROJECT.md `### Out of Scope` and REQUIREMENTS.md `### v1.14+ Requirements`:
 
-- **`if`-field implementation** (`MATCH-V2-02`): Permission-rule-syntax glob matching with per-tool argument-extraction adapters and Bash subcommand parsing. Unblocks no first-party plugin in v1.13 (`security-guidance` is also blocked by `MultiEdit`/`NotebookEdit` and `asyncRewake`); revisit when third-party-plugin demand materializes.
-- **`asyncRewake` family implementation** (`EXTH-V2-01`): Requires a Pi runtime primitive for "inject system-reminder into next turn, even when agent is idle." Open upstream feature ask to `@earendil-works/pi-coding-agent`; no PR commitment from v1.13.
+- **`if`-field implementation**: NOW IMPLEMENTED in v1.13 per MATCH-03; MATCH-V2-02 is dropped from v1.14+.
+- **`asyncRewake` family implementation**: NOW IMPLEMENTED in v1.13 per HOOK-06 / EXEC-05; EXTH-V2-01 is dropped from v1.14+ Requirements.
 - **Non-`command` handler types** (`TYPES-V2-01`): `http` / `mcp_tool` / `prompt` / `agent` handler types. None used by first-party plugins today; revisit when ecosystem demand materializes.
 
 ## 10. Revised marketplace coverage table (supersedes REQUIREMENTS.md § "Known marketplace-audit regression from TOOL-02")
 
-| Plugin                      | Hooks? | v1.13 result                                                      | Block reason(s)                                                                                        |
-| --------------------------- | ------ | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `agent-sdk-dev`             | no     | INSTALLS                                                          | n/a                                                                                                    |
-| `claude-opus-4-5-migration` | no     | INSTALLS                                                          | n/a                                                                                                    |
-| `code-review`               | no     | INSTALLS                                                          | n/a                                                                                                    |
-| `commit-commands`           | no     | INSTALLS                                                          | n/a                                                                                                    |
-| `feature-dev`               | no     | INSTALLS                                                          | n/a                                                                                                    |
-| `frontend-design`           | no     | INSTALLS                                                          | n/a                                                                                                    |
-| `plugin-dev`                | no     | INSTALLS                                                          | n/a                                                                                                    |
-| `pr-review-toolkit`         | no     | INSTALLS                                                          | n/a                                                                                                    |
-| `explanatory-output-style`  | yes    | INSTALLS -- hooks dispatchable                                    | n/a                                                                                                    |
-| `learning-output-style`     | yes    | INSTALLS -- hooks dispatchable                                    | n/a                                                                                                    |
-| `ralph-wiggum`              | yes    | INSTALLS -- hooks dispatchable (bucket-D Stop synthesis required) | n/a                                                                                                    |
-| `hookify`                   | yes    | INSTALLS -- hooks dispatchable                                    | n/a                                                                                                    |
-| `security-guidance`         | yes    | **UNAVAILABLE `{unsupported hooks}`**                             | TOOL-02(b) `MultiEdit`/`NotebookEdit`; TOOL-02(h) `if`; TOOL-02(i) `asyncRewake` -- any one sufficient |
+| Plugin                      | Hooks? | v1.13 result                                                      | Block reason(s)                                                                                             |
+| --------------------------- | ------ | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `agent-sdk-dev`             | no     | INSTALLS                                                          | n/a                                                                                                         |
+| `claude-opus-4-5-migration` | no     | INSTALLS                                                          | n/a                                                                                                         |
+| `code-review`               | no     | INSTALLS                                                          | n/a                                                                                                         |
+| `commit-commands`           | no     | INSTALLS                                                          | n/a                                                                                                         |
+| `feature-dev`               | no     | INSTALLS                                                          | n/a                                                                                                         |
+| `frontend-design`           | no     | INSTALLS                                                          | n/a                                                                                                         |
+| `plugin-dev`                | no     | INSTALLS                                                          | n/a                                                                                                         |
+| `pr-review-toolkit`         | no     | INSTALLS                                                          | n/a                                                                                                         |
+| `explanatory-output-style`  | yes    | INSTALLS -- hooks dispatchable                                    | n/a                                                                                                         |
+| `learning-output-style`     | yes    | INSTALLS -- hooks dispatchable                                    | n/a                                                                                                         |
+| `ralph-wiggum`              | yes    | INSTALLS -- hooks dispatchable (bucket-D Stop synthesis required) | n/a                                                                                                         |
+| `hookify`                   | yes    | INSTALLS -- hooks dispatchable                                    | n/a                                                                                                         |
+| `security-guidance`         | yes    | **UNAVAILABLE `{unsupported hooks}`**                             | TOOL-02(b) `MultiEdit`/`NotebookEdit` -- sole remaining blocker; `if` and `asyncRewake` are now implemented |
 
-**Coverage:** 12/13 first-party plugins install under v1.13 (92.3%). Of the 5 hook-using plugins, 4/5 (80%) are fully supported; the remaining 1 is unavailable for three independent reasons, any of which alone would block it. Confirms the strict-supportability stance reduces coverage by exactly one plugin in the official catalog.
+**Coverage:** 12/13 first-party plugins install under v1.13 (92.3%). Of the 5 hook-using plugins, 4/5 (80%) are fully supported; the remaining 1 (`security-guidance`) is unavailable solely because of the `MultiEdit` / `NotebookEdit` tool-map gap (TOOL-02(b)). PROM-01 in v1.14+ is the single unblocker -- no `if` or `asyncRewake` follow-up required.
 
 ## 11. Sources
 
@@ -723,7 +729,7 @@ Add to PROJECT.md `### Out of Scope` and REQUIREMENTS.md `### v1.14+ Requirement
 ### Contradictions and resolutions
 
 - **`timeout` default** -- Primary docs say `command`-type default is 600s; REQ EXEC-02 currently specifies 60s for the bridge. NOT a primary-source contradiction; REQ EXEC-02 was authored before this audit. Resolution: § 9 proposes amending EXEC-02 to 600s for upstream parity; flag for roadmapper resolution if the conservative 60s is preferred.
-- **`asyncRewake` documentation status** -- Public Hooks reference does not list it; security-guidance source uses it; Anthropic Issue #44881 acknowledges it; third-party plugins use it. Resolution: treat as real-but-undocumented stable extension. Bridge ESCALATES regardless.
+- **`asyncRewake` documentation status** -- Public Hooks reference DOES document it in the Command-hook-fields table (since v2.1.72; verified 2026-06-13 fetch); security-guidance source uses it; Anthropic Issue #44881 acknowledges it; third-party plugins (claude-intercom) use it. Resolution: treat as documented stable field. Bridge IMPLEMENTS via the `_pendingNextTurnMessages` / `agent.followUp()` path in `@earendil-works/pi-coding-agent`'s `sendCustomMessage`; see § 13 deep-dive.
 - **`if` field exact glob grammar** -- `Bash(git *)` (space-prefix subcommand) is the documented form in the hooks guide; `Bash(git commit:*)` (colon-prefix subcommand argument list) appears in security-guidance source and matches Claude Code's broader permission-rule grammar. Both are valid permission-rule patterns; the colon form is more restrictive (matches `git commit ...` argument list explicitly). Resolution: not a contradiction -- both are standard glob forms; bridge ESCALATES regardless of which form is used.
 - **`Edit` matcher target token capitalization** -- Claude Code uses `Edit`; Pi uses lowercase `edit`. Resolution: documented in TOOL-01 via the bidirectional mapping table. Not a contradiction, just a translation.
 
@@ -742,3 +748,333 @@ Add to PROJECT.md `### Out of Scope` and REQUIREMENTS.md `### v1.14+ Requirement
 6. **`hookEventName` echo in `hookSpecificOutput`** -- Every `hookSpecificOutput` shape includes `hookEventName: "..."`. The bridge must validate this matches the firing event and either accept or warn on mismatch. LOW risk -- bridge can ignore the field (use the event from dispatch context instead) since the field's purpose upstream is mainly to discriminate when one hook serves multiple events.
 
 7. **`reloadSkills` on `SessionStart` return** -- Per § 4, `SessionStart.hookSpecificOutput.reloadSkills: true` triggers a skills reload upstream. Pi has a `resources_discover` mechanism but the bridge doesn't currently re-emit it from `session_start`. Document as v1.13 limitation; if a plugin returns `reloadSkills: true`, the bridge can no-op + debug-log.
+
+## 13. `asyncRewake` deep-dive (2026-06-13)
+
+This section supersedes the earlier ESCALATE verdict for `asyncRewake` recorded in prior revisions of this document. The shift is grounded in three concrete findings that the prior research had not fully verified: (a) Claude Code's public Hooks reference DOES document `asyncRewake` in its Command-hook-fields table (since v2.1.72); (b) the precise wake-injection primitive needed -- "queue a side-channel context message for delivery at the next turn boundary, with model-visible but user-invisible rendering" -- is already exposed by `@earendil-works/pi-coding-agent` as `pi.sendMessage({...}, { deliverAs: "nextTurn" })` plus `pi.sendMessage({...}, { deliverAs: "followUp" })` for the in-stream case; and (c) the security-guidance handler script itself contains NO branch on async-vs-sync mode -- Claude Code's runtime alone interprets the field, which means the same handler script (already passing through Pi's bash tool unchanged) will produce the same exit-2-on-finding stderr stream regardless of how the bridge dispatches it.
+
+### 13.1 Verified semantics of `asyncRewake`
+
+Cross-source, cross-checked against the Claude Code Hooks reference (`code.claude.com/docs/en/hooks`, Command-hook-fields table), Anthropic Issue [#44881](https://github.com/anthropics/claude-code/issues/44881), the security-guidance handler source at audit commit `ca9f6045`, the [claude-intercom](https://github.com/sanztheo/claude-intercom) third-party plugin, and the [buildingbetter.tech "I Read the Claude Code Source Code"](https://buildingbetter.tech/p/i-read-the-claude-code-source-code) deep-dive:
+
+| Aspect                       | Verified behavior                                                                                                                                                                                                                                                                                                                                                                              | Primary source                                                                                                      |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| **Run mode**                 | Detached background; non-blocking on the triggering tool call. Foreground for VSCode extension fallback.                                                                                                                                                                                                                                                                                       | Hooks reference + buildingbetter deep-dive                                                                          |
+| **Wake trigger**             | Exit code 2 SPECIFICALLY. Non-2 exits (including 0) complete silently.                                                                                                                                                                                                                                                                                                                         | Hooks reference Command-hook-fields table; security-guidance source consistently `sys.exit(2)` on findings          |
+| **Wake payload**             | `stderr` if non-empty; else `stdout`. Concatenated as a single text blob.                                                                                                                                                                                                                                                                                                                      | Hooks reference quote: `"the hook's stderr, or stdout if stderr is empty, is shown to Claude as a system reminder"` |
+| **Wake rendering**           | Wrapped in `<system-reminder>` markup. (Issue #44881 documents a bug where the wrapping leaks to the user terminal -- proving the wrapping exists in normal runs.)                                                                                                                                                                                                                             | Hooks reference + Issue #44881 reproduction                                                                         |
+| **Wake delivery**            | At the next turn boundary. The buildingbetter deep-dive describes "wakes the model back up" -- empirically the security-guidance plugin's `CONTINUATION_SUFFIX` design ("After addressing or acknowledging this finding, continue with the user's original request or continue waiting for their reply") presumes the rewake can land at unexpected boundaries; the handler is robust to this. | buildingbetter + security-guidance handler source                                                                   |
+| **Idle-state behavior**      | The Hooks reference does not explicitly say whether the wake happens during idle or only at next user submit. In practice both the security-guidance handler's `CONTINUATION_SUFFIX` wording AND the claude-intercom plugin's "watcher → exit(2) → asyncRewake" architecture imply the wake can interject without a user prompt. CC's runtime can drive an LLM turn purely on the wake signal. | Inference from handler design + claude-intercom architecture                                                        |
+| **Multi-hook fan-in**        | Not explicitly documented. By extrapolation from how Claude Code's hook dispatcher treats concurrent handlers (per the hooks reference's general "all hooks run concurrently" model), each `asyncRewake: true` hook produces its own background process whose exit-2 contributes its own stderr to the rewake.                                                                                 | Hooks reference general dispatcher model                                                                            |
+| **`rewakeMessage`**          | Optional string prefixed to the rewake payload as a model-visible conversational header. The security-guidance plugin's three handlers use distinct values (commit / push / Stop). Empirically the handler script does not read this field back -- it's interpreted entirely by Claude Code's runtime, which prepends it to stderr.                                                            | security-guidance hooks.json + handler source                                                                       |
+| **`rewakeSummary`**          | Optional short string for the TUI's spinner-replacement notice. User-visible, NOT model-visible. The security-guidance plugin's three values are explicitly one-line summaries (e.g. `"Commit security review found issues"`).                                                                                                                                                                 | security-guidance hooks.json + handler emits via SyncHookJSONOutput                                                 |
+| **Failure modes**            | Background process timeout: SIGTERM (Claude Code default). Process crash: treated as non-2 exit -- silent. Non-2 / non-0 exit: silent.                                                                                                                                                                                                                                                         | Hooks reference Exit-code-output section + general timeout policy                                                   |
+| **Handler script branching** | NO. The same `sys.exit(2)` + stderr-write path is used regardless of async vs sync invocation. Claude Code's runtime alone interprets `asyncRewake: true`.                                                                                                                                                                                                                                     | security-guidance handler source (verified: no env-var checks, no mode flag)                                        |
+
+### 13.2 The matching Pi primitive: `pi.sendMessage({...}, { deliverAs })`
+
+`@earendil-works/pi-coding-agent` exposes `pi.sendMessage<T>(message, options)` where `message` is `Pick<CustomMessage<T>, "customType" | "content" | "display" | "details">` and `options.deliverAs` is one of `"steer" | "followUp" | "nextTurn"`. The `CustomMessage<T>` shape (verified in `dist/core/messages.d.ts`):
+
+```typescript
+export interface CustomMessage<T = unknown> {
+    role: "custom";
+    customType: string;
+    content: string | (TextContent | ImageContent)[];
+    display: boolean;        // false = invisible to user UI; still model-visible
+    details?: T;
+    timestamp: number;
+}
+```
+
+The runtime path for `deliverAs: "nextTurn"` (verified in `dist/core/agent-session.js` lines 985-987 and 790-794):
+
+```javascript
+// In sendCustomMessage(message, options):
+if (options?.deliverAs === "nextTurn") {
+    this._pendingNextTurnMessages.push(appMessage);
+}
+
+// In the next-user-prompt processing path:
+// Inject any pending "nextTurn" messages as context alongside the user message
+for (const msg of this._pendingNextTurnMessages) {
+    messages.push(msg);
+}
+this._pendingNextTurnMessages = [];
+```
+
+The runtime path for `deliverAs: "followUp"` (verified at `dist/core/agent-session.js` lines 988-991):
+
+```javascript
+else if (this.isStreaming) {
+    if (options?.deliverAs === "followUp") {
+        this.agent.followUp(appMessage);
+    }
+    ...
+}
+```
+
+Both paths use `role: "custom"`. The custom-message-to-LLM conversion is centralized in `dist/core/messages.ts::convertToLlm()` and emits the custom message as model context (referenced from the d.ts: `"Transform AgentMessages (including custom types) to LLM-compatible Messages. This is used by: Agent's transformToLlm option (for prompt calls and queued messages), Compaction's generateSummary (for summarization), Custom extensions and tools"`).
+
+**Key implication for `display: false`:** the user-facing TUI consults a per-`customType` `MessageRenderer<T>`; without a registered renderer (or with the renderer returning `undefined` on `display: false`), the message is invisible to the user. But `convertToLlm()` still emits the content to the model. This is precisely the `<system-reminder>`-equivalent semantic: user-invisible, model-visible side channel.
+
+### 13.3 Why each prior ESCALATE concern dissolves
+
+1. **"Out-of-band turn semantics"** -- The `_pendingNextTurnMessages` queue drains at next user prompt boundary. Combined with the `agent.followUp()` path for in-stream injection, the bridge covers both cases. When the bridge selects `deliverAs` at exit-2 time based on `ctx.isIdle()` (false → followUp; true → nextTurn), it matches the semantic intent of asyncRewake -- inject context at the next turn boundary, idle or active.
+
+2. **"System-reminder vs user-message rendering"** -- Pi's `CustomMessage` with `display: false` and a discriminator `customType: "claude-hook-rewake"` IS a privileged side-channel: invisible to the user UI but visible in the LLM context window via `convertToLlm()`. The model sees the content as background context, not as a user message. The framing is functionally equivalent to `<system-reminder>` -- the model receives the text as side-channel context distinct from the user's direct prompt.
+
+3. **"Synchronous fallback is semantically destructive"** -- Not needed. The async path is implementable end-to-end without any fallback. Even if degradation were necessary for an edge case (e.g. Pi version with no `nextTurn` support detected at probe time), the security-guidance handler's `CONTINUATION_SUFFIX` -- `"\n\nAfter addressing or acknowledging this finding, continue with the user's original request or continue waiting for their reply -- this review is supplementary feedback, not a replacement for your previous response."` -- is explicitly designed to keep the rewake coherent even when it lands in an unexpected turn boundary. The handler authors anticipated delivery-mode variation.
+
+4. **"Subordinate-fields hard-fail"** -- Resolved: all three fields are implemented as a coordinated triple. `rewakeMessage` is prepended to the stderr payload before injection; `rewakeSummary` is surfaced via `ctx.ui.notify(rewakeSummary, "info")` at the moment the bridge enqueues the next-turn message (matching Claude Code's TUI spinner-replacement behavior).
+
+### 13.4 Source-audit findings
+
+**security-guidance handler script (`hooks/security_reminder_hook.py` at commit `ca9f6045`):**
+
+- The script is dispatch-mode-agnostic: every finding-detection path unconditionally writes to `sys.stderr` and calls `sys.exit(2)`. No `if asyncRewake` / no `CLAUDE_ASYNC_REWAKE` env-var check / no mode flag.
+- Stderr payload structure: `PROVENANCE_BANNER + "\n\n" + concrete_guidance + CONTINUATION_SUFFIX + "\n"`. The `PROVENANCE_BANNER` is defined in the sibling `_base` module (not in the handler script itself).
+- The handler also emits a single JSON line on stdout (`SyncHookJSONOutput`) containing `{"metrics": {...}, "rewakeSummary": "..."}` -- but this is supplementary to the exit-2 stderr path. When stderr is non-empty, Claude Code's `asyncRewake` runtime prefers stderr (per the documented `"stderr, or stdout if stderr is empty"` rule).
+- `CONTINUATION_SUFFIX` text verified verbatim: `"\n\nAfter addressing or acknowledging this finding, continue with the user's original request or continue waiting for their reply -- this review is supplementary feedback, not a replacement for your previous response."`. This is the smoking gun that the handler authors expect the rewake to potentially land in an unexpected turn boundary.
+
+**claude-intercom handler (`~/.claude/mcp-intercom/src/watcher.ts`):**
+
+- The plugin pairs `asyncRewake: true` with `timeout: 300000` (5 minutes) on both `Stop` and `SessionStart` events.
+- The script implements an `fs.watch` on an inbox directory; on detection of new files, it calls `process.exit(2)` to trigger the rewake.
+- The plugin does NOT use `rewakeMessage` or `rewakeSummary` -- it relies on the raw stderr-to-system-reminder injection path. Confirms the subordinate fields are genuinely optional.
+
+**Anthropic Issue #44881:**
+
+- The reporter (`@nedlern`) misuses the field as `"type": "asyncRewake"` instead of the documented `"type": "command"` + `"asyncRewake": true`. The closed-as-duplicate status implies Anthropic engineers acknowledged the underlying `<system-reminder>` wrapping is the correct invisible-context-injection mechanism that the user could not see in normal usage -- the bug is the rendering-leak, not the mechanism itself.
+
+- The reproduction transcript shows the actual `<system-reminder>` wrapper text Claude Code emits internally:
+
+  ```text
+  <system-reminder>
+  Stop hook blocking error from command "SessionStart:resume":
+  {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"background check result"}}
+  </system-reminder>
+  ```
+
+  Confirms the wake injection IS rendered as a `<system-reminder>` block in the model's view -- a privileged side-channel distinct from user messages.
+
+### 13.5 Pi runtime compatibility verification
+
+| Pi primitive needed                                                 | Available at peer-dep `^0.79.0`? | Source                                                                            |
+| ------------------------------------------------------------------- | -------------------------------- | --------------------------------------------------------------------------------- |
+| `pi.sendMessage({...}, { deliverAs: "nextTurn" })`                  | YES                              | `types.d.ts:857-860`, `SendMessageHandler` type at `:1046-1049`                   |
+| `pi.sendMessage({...}, { deliverAs: "followUp" })`                  | YES                              | same as above                                                                     |
+| `CustomMessage` with `display: false`                               | YES                              | `messages.d.ts:32-39`                                                             |
+| `ctx.isIdle()` for IDLE-vs-STREAMING branch                         | YES                              | `types.d.ts:223-224` (`isIdle(): boolean`)                                        |
+| `ctx.ui.notify(text, severity)` for `rewakeSummary`                 | YES                              | already used in v1.13                                                             |
+| `_pendingNextTurnMessages` runtime queue drains on next user prompt | YES                              | `agent-session.js:790-794` shows the drain inside the user-prompt processing path |
+
+Zero gaps. Every primitive the bridge needs is present in the peer dep.
+
+### 13.6 Implementation sketch (HOOK-06 / EXEC-05)
+
+Estimated LoC: ~250-300, split across one new module and small additions to existing dispatcher.
+
+**New module: `src/bridges/hooks/async-rewake-registry.ts` (~180 LoC):**
+
+```typescript
+import { spawn, type ChildProcess } from "node:child_process";
+import type { Pi, ExtensionContext } from "@earendil-works/pi-coding-agent";
+
+interface RewakeEntry {
+  pluginId: string;
+  handlerIndex: number;
+  dispatchId: string;
+  child: ChildProcess;
+  stderr: Buffer[];
+  stdout: Buffer[];
+  rewakeMessage?: string;
+  rewakeSummary?: string;
+  timeoutHandle: NodeJS.Timeout;
+}
+
+const MAX_STDERR_BYTES = 64 * 1024;
+
+export class AsyncRewakeRegistry {
+  private entries = new Map<string, RewakeEntry>();
+
+  constructor(private pi: Pi, private ctx: ExtensionContext) {}
+
+  /** Spawn detached and register. Returns immediately. */
+  enqueue(opts: {
+    pluginId: string;
+    handlerIndex: number;
+    command: string;
+    args?: string[];
+    env: NodeJS.ProcessEnv;
+    cwd: string;
+    stdinPayload: string;
+    timeoutMs: number;
+    rewakeMessage?: string;
+    rewakeSummary?: string;
+    shell?: string;
+  }): void {
+    const dispatchId = `${opts.pluginId}#${opts.handlerIndex}#${Date.now()}`;
+    const useShell = opts.args === undefined;
+    const child = spawn(
+      opts.command,
+      opts.args ?? [],
+      {
+        shell: useShell ? (opts.shell ?? true) : false,
+        env: opts.env,
+        cwd: opts.cwd,
+        detached: false,
+        stdio: ["pipe", "pipe", "pipe"],
+      }
+    );
+
+    const entry: RewakeEntry = {
+      pluginId: opts.pluginId,
+      handlerIndex: opts.handlerIndex,
+      dispatchId,
+      child,
+      stderr: [],
+      stdout: [],
+      rewakeMessage: opts.rewakeMessage,
+      rewakeSummary: opts.rewakeSummary,
+      timeoutHandle: setTimeout(() => this.killEntry(dispatchId, "SIGTERM"), opts.timeoutMs),
+    };
+    this.entries.set(dispatchId, entry);
+
+    let stderrBytes = 0;
+    let stdoutBytes = 0;
+    child.stderr?.on("data", (chunk: Buffer) => {
+      if (stderrBytes < MAX_STDERR_BYTES) {
+        entry.stderr.push(chunk);
+        stderrBytes += chunk.length;
+      }
+    });
+    child.stdout?.on("data", (chunk: Buffer) => {
+      if (stdoutBytes < MAX_STDERR_BYTES) {
+        entry.stdout.push(chunk);
+        stdoutBytes += chunk.length;
+      }
+    });
+
+    child.on("exit", (code) => this.onExit(dispatchId, code));
+    child.on("error", (err) => this.onError(dispatchId, err));
+
+    child.stdin?.write(opts.stdinPayload);
+    child.stdin?.end();
+  }
+
+  private onExit(dispatchId: string, code: number | null): void {
+    const entry = this.entries.get(dispatchId);
+    if (!entry) return;
+    clearTimeout(entry.timeoutHandle);
+    this.entries.delete(dispatchId);
+
+    if (code !== 2) {
+      // Silent for non-2 exits (including 0). Debug-log only.
+      return;
+    }
+
+    const stderrText = Buffer.concat(entry.stderr).toString("utf8");
+    const stdoutText = Buffer.concat(entry.stdout).toString("utf8");
+    const payloadBody = stderrText.length > 0 ? stderrText : stdoutText;
+    if (payloadBody.length === 0) return;
+
+    const fullText = entry.rewakeMessage
+      ? `${entry.rewakeMessage}\n\n${payloadBody}`
+      : payloadBody;
+
+    const deliverAs = this.ctx.isIdle() ? "nextTurn" : "followUp";
+    this.pi.sendMessage({
+      customType: "claude-hook-rewake",
+      content: fullText,
+      display: false,
+      details: { pluginId: entry.pluginId, handlerIndex: entry.handlerIndex, dispatchId },
+    }, { deliverAs });
+
+    if (entry.rewakeSummary) {
+      this.ctx.ui.notify(entry.rewakeSummary, "info");
+    }
+  }
+
+  private onError(dispatchId: string, err: Error): void {
+    const entry = this.entries.get(dispatchId);
+    if (!entry) return;
+    clearTimeout(entry.timeoutHandle);
+    this.entries.delete(dispatchId);
+    // Debug-log only; not user-visible.
+  }
+
+  private killEntry(dispatchId: string, signal: NodeJS.Signals): void {
+    const entry = this.entries.get(dispatchId);
+    if (!entry) return;
+    try { entry.child.kill(signal); } catch {}
+    if (signal === "SIGTERM") {
+      // 5s grace, then SIGKILL.
+      setTimeout(() => {
+        if (this.entries.has(dispatchId)) {
+          try { entry.child.kill("SIGKILL"); } catch {}
+        }
+      }, 5000);
+    }
+  }
+
+  /** Called from the bridge's /reload teardown path. */
+  shutdownAll(): void {
+    for (const dispatchId of this.entries.keys()) {
+      this.killEntry(dispatchId, "SIGKILL");
+    }
+    this.entries.clear();
+  }
+}
+```
+
+**Dispatcher integration (~50 LoC added to existing hook dispatcher):**
+
+```typescript
+// In the bridge's dispatchHookHandler(handler, event, ctx):
+if (handler.asyncRewake === true) {
+  asyncRewakeRegistry.enqueue({
+    pluginId: handler.pluginId,
+    handlerIndex: handler.index,
+    command: handler.command,
+    args: handler.args,
+    env: buildEnv(handler, ctx),
+    cwd: ctx.cwd,
+    stdinPayload: serializeStdinPayload(event),
+    timeoutMs: (handler.timeout ?? 600) * 1000,
+    rewakeMessage: handler.rewakeMessage,
+    rewakeSummary: handler.rewakeSummary,
+    shell: handler.shell,
+  });
+  return; // Non-blocking; do not await
+}
+// ...existing synchronous dispatch path for non-asyncRewake handlers...
+```
+
+**File list:**
+
+- NEW `src/bridges/hooks/async-rewake-registry.ts` (~180 LoC, the class above)
+- MODIFY `src/bridges/hooks/dispatch.ts` (or equivalent existing dispatcher) -- add the `if (handler.asyncRewake === true)` branch and registry construction in the bridge's lifecycle bootstrap
+- MODIFY `src/bridges/lifecycle.ts` (or equivalent `/reload` teardown) -- call `asyncRewakeRegistry.shutdownAll()` on reload and on extension shutdown
+- NEW `tests/bridges/hooks/async-rewake-registry.test.ts` (~100 LoC) -- fixture plugin that exits 2 after 200ms sleep; assert (a) dispatcher returns within ≤50ms, (b) `pi.sendMessage` called exactly once with `customType: "claude-hook-rewake"` and the expected content, (c) `ctx.ui.notify(rewakeSummary, "info")` called when `rewakeSummary` set, (d) `display: false` in the sent message, (e) `deliverAs` is `"followUp"` when `ctx.isIdle()` returns false and `"nextTurn"` when true
+
+**Loss-mode disclosure (none required, but document for completeness):**
+
+If a future Pi peer-dep version drops `deliverAs: "nextTurn"` (would be a breaking change), the bridge can fall back to `deliverAs: "followUp"` only -- in which case idle-state rewakes would be lost until the next user prompt. Detect at extension load via feature-probe on `pi.sendMessage`'s type signature; emit one warning via `ctx.ui.notify` if the probe fails. v1.13 implementation can ship without the probe and add it later if needed (current peer-dep `^0.79.0` has the field; the contract is stable).
+
+### 13.7 Failure-mode reference
+
+| Failure mode                                                  | Bridge behavior                                                                                                                                                                                   | User-visible?                                                   |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Background process never exits (hangs)                        | After `timeout` (default 600s), SIGTERM → 5s grace → SIGKILL. No injection.                                                                                                                       | No                                                              |
+| Background process crashes (SIGSEGV etc.)                     | `child.on("error", ...)` fires; entry cleaned up; no injection. Debug-log only.                                                                                                                   | No                                                              |
+| Exit code 0                                                   | Entry cleaned up; no injection. Normal "no findings" path.                                                                                                                                        | No                                                              |
+| Exit code non-2, non-0 (e.g. 1)                               | Entry cleaned up; no injection. Debug-log only. Matches Claude Code's "exit 2 is the only blocking signal" rule for asyncRewake.                                                                  | No                                                              |
+| Bridge `/reload` while process alive                          | `shutdownAll()` SIGKILLs every entry. No injection. Reload completes.                                                                                                                             | No                                                              |
+| Parent Pi process crashes                                     | OS reaps the child since `detached: false`.                                                                                                                                                       | No                                                              |
+| Empty stderr AND empty stdout on exit 2                       | No injection (nothing to send). Debug-log only.                                                                                                                                                   | No                                                              |
+| stderr exceeds 64KB                                           | Truncated with `…[truncated]` suffix. Injection proceeds with truncated content.                                                                                                                  | Model-visible (the truncation marker reaches the model context) |
+| Multiple `asyncRewake: true` hooks all exit 2 in tight window | Each enqueues independently into `_pendingNextTurnMessages`. All deliver on next user prompt boundary as separate `customType: "claude-hook-rewake"` messages with distinct `details.dispatchId`. | No                                                              |
+
+### 13.8 Final verdict
+
+**IMPLEMENT.** The bridge implements `asyncRewake` / `rewakeMessage` / `rewakeSummary` end-to-end via HOOK-06 (registry contract) and EXEC-05 (background-spawn pattern). Plugins declaring `asyncRewake: true` install cleanly. The only remaining v1.13 blocker for `security-guidance` is TOOL-02(b) -- the `MultiEdit` / `NotebookEdit` Pi-tool-map gap -- which is addressable in v1.14+ via PROM-01. No upstream Pi-runtime PR is required; every primitive needed (`pi.sendMessage` with `deliverAs: "followUp" | "nextTurn"`, `CustomMessage` with `display: false`, `ctx.isIdle()`, `ctx.ui.notify`) is already present in `@earendil-works/pi-coding-agent` `^0.79.0`. The asyncRewake-related v1.14+ deferral (EXTH-V2-01) is dropped.
