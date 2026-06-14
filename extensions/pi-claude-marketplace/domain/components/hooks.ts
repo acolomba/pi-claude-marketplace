@@ -442,7 +442,24 @@ function tryNonToolEventTrip(
   }
 
   const closedSet = NON_TOOL_EVENT_CLOSED_SETS[event];
-  if (!closedSet?.has(rawMatcher)) {
+  if (closedSet === undefined) {
+    // WR-04 (D-58 review): NON_TOOL_EVENT_FIELDS declared a matcher
+    // target field for this event but NON_TOOL_EVENT_CLOSED_SETS has no
+    // corresponding entry -- the two tables fell out of sync. This is a
+    // programming error, not a user-input miss; distinguish it from the
+    // ordinary "value not in the closed set" case so the debug detail
+    // tells the truth. The architecture test in
+    // `tests/architecture/hooks-supportability.test.ts` red-fails CI
+    // when the two tables disagree, so this branch should be
+    // statically unreachable today; it is the loud fallback for future
+    // table edits.
+    return {
+      ok: false,
+      debugDetail: `(c) missing closed-set entry for non-tool event: ${event}`,
+    };
+  }
+
+  if (!closedSet.has(rawMatcher)) {
     return {
       ok: false,
       debugDetail: `(c) matcher value not in closed set for ${event}: ${rawMatcher}`,

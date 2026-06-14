@@ -184,6 +184,37 @@ test("D-58-06: UserPromptSubmit has no entry in NON_TOOL_EVENT_CLOSED_SETS", () 
 });
 
 // ──────────────────────────────────────────────────────────────────────────
+// Block 5b: WR-04 table-synchrony invariant for NON_TOOL_EVENT_FIELDS /
+// NON_TOOL_EVENT_CLOSED_SETS.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WR-04: every NON_TOOL_EVENT_FIELDS event with a non-null field name has a NON_TOOL_EVENT_CLOSED_SETS entry", () => {
+  // The two tables must stay synchronized. An event mapped to a Claude
+  // field name (non-null string) declares "this event takes a matcher
+  // value, and the admissible value set lives in NON_TOOL_EVENT_CLOSED_SETS";
+  // an event mapped to `null` declares "this event has no matcher
+  // support" and MUST NOT have a closed-set entry. A future contributor
+  // adding a fifth non-tool event to NON_TOOL_EVENT_FIELDS with a string
+  // target but forgetting the parallel closed-set entry would cause
+  // `tryNonToolEventTrip` to fall into the WR-04 "missing entry" branch
+  // at runtime; this test red-fails CI at compile time instead.
+  const fieldEntries = Object.entries(NON_TOOL_EVENT_FIELDS);
+  for (const [event, field] of fieldEntries) {
+    if (field === null) {
+      assert.ok(
+        !(event in NON_TOOL_EVENT_CLOSED_SETS),
+        `${event} has the null no-matcher-support sentinel -- it MUST NOT have a NON_TOOL_EVENT_CLOSED_SETS entry`,
+      );
+    } else {
+      assert.ok(
+        event in NON_TOOL_EVENT_CLOSED_SETS,
+        `${event} declares matcher field "${field}" but has no NON_TOOL_EVENT_CLOSED_SETS entry -- the two tables fell out of sync`,
+      );
+    }
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
 // Block 6: TOOL-02 checkMatcherSupportability debugDetail prefix contract
 // ──────────────────────────────────────────────────────────────────────────
 
