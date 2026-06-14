@@ -4,14 +4,14 @@ milestone: v1.13
 milestone_name: Claude Hook Bridge
 status: executing
 stopped_at: Completed 57-01-PLAN.md
-last_updated: "2026-06-14T09:32:00.000Z"
+last_updated: "2026-06-14T09:59:17.315Z"
 last_activity: 2026-06-14 -- Phase 57 Plan 01 completed (HOOK-02 schema + migrator default-fill)
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
-  percent: 14
+  completed_plans: 2
+  percent: 0
 ---
 
 # Project State
@@ -25,8 +25,8 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 ## Current Position
 
 Phase: 57 (Schema, Component Type & Payload-Extension Tolerance) — EXECUTING
-Plan: 2 of 4
-Status: Executing Phase 57 (Plan 01 complete)
+Plan: 3 of 4
+Status: Ready to execute
 Last activity: 2026-06-14 -- Phase 57 Plan 01 completed (HOOK-02 schema + migrator default-fill)
 
 ## Performance Metrics
@@ -104,6 +104,7 @@ Last activity: 2026-06-14 -- Phase 57 Plan 01 completed (HOOK-02 schema + migrat
 | Phase 56 P03 | 54min | 3 tasks | 19 files |
 | Phase 56 P04 | ~165m | 4 tasks | 17 files |
 | Phase 57 P01 | ~39m | 2 tasks | 21 files |
+| Phase 57 P02 | 28 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -198,6 +199,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: Plan 56-03: Phase 54 enable-disable.ts migration is byte-neutral -- private writeConfigEntry + private extractLocalFlag deleted, call sites route through shared helpers, no behavior change, no test edits required
 - [Phase 56]: Plan 56-04 -- MILESTONE v1.12 GREEN. WB-03 import batched per-scope post-pass landed (writeBatchedConfigForScope at end of executeScopedPlan; loadConfig + CFG-03 abort + writeBatchedConfigEntries under ONE withLockedStateTransaction; no tx.save inside -- per-entry orchestrators already committed state; Pitfall 8 race-window self-heals on next reconcile; empty batch SKIPS post-pass for RECON-05 byte-stable). SPLIT-01 read-path rewire of 7 cast sites across 6 files: marketplace/list.ts + marketplace/info.ts (2) + marketplace/update.ts (snapshotAfterRefresh reads OUTSIDE withStateGuard) + plugin/list.ts (parallel userMerged + projectMerged via Promise.all) + plugin/info.ts (2; per-found-scope merged load). ALLOWED_SPLIT_01_AUTOUPDATE_CAST_FILES shrunk from 6 -> 0 via single ReadonlySet replacement + 'exactly N' sibling assertion to 0; Pitfall 6 closed structurally. WB-01 SC#4 LIVE round-trip + reconcile no-op proofs landed (add / add+autoupdate-enable with futureField/futureTopLevel preservation / add+autoupdate-disable / add+remove cascade / WR-09 orchestrated SKIP). Auto-fixed bug (Rule 1): reclassifyByConfigTruth bidirectional promotion -- when state classifier puts name in unchanged (D-13 scrub strips state.autoupdate so it reads undefined === false) BUT config carries the OPPOSITE explicit value of enable, PROMOTE unchanged -> changed so disable after enable lands the write-back. README ## Configuration files section between Scoping and /claude:plugin reference per CFG-04. SPLIT-02 architecture test verified via Phase 52 A1 protocol -- byte-unchanged, allow-list size 1 preserved. Test fixture migration in lockstep: seedConfigAutoupdate helper added to marketplace/list+info tests; seedMarketplace / seedPathMarketplace / seedGithubMarketplace extended in plugin/list+info + marketplace/update tests to write the autoupdate truth on the config side. All 24 v1.12 requirements CLOSED. npm run check GREEN 1795 unit (+92 from Phase 55 baseline 1703) + 10 integration. -- Plan 56-04. PHASE 56 COMPLETE -- MILESTONE v1.12 GREEN.
 - [Phase 57]: HOOK-02 closed (D-57-01 additive variant). PLUGIN_INSTALL_RECORD_SCHEMA.resources gains a REQUIRED hooks: Type.Array(Type.String()) field; STATE_SCHEMA.schemaVersion stays Type.Literal(1) (no widening — every v1.0..v1.12 hook-using plugin was rejected as UNSUPPORTED_COMPONENT_KIND, so no existing state.json record carries hook resources to "migrate"). ensurePluginResources extended with a hooks-default arm that mirrors the existing agents / mcpServers arms in lockstep: undefined -> [], mutated=true, idempotent on already-normalized input. The new mutation rides the existing persistMigratedState fire-and-forget atomic-write seam (NFR-1 unchanged, no new save call sites). 4 new STATE_VALIDATOR cases + 4 new ensurePluginResources cases + 1 v1.12-shaped state.json round-trip case in tests/persistence/; install.ts/reinstall.ts (3 production fixture-builder sites) + 16 test-fixture call sites updated in lockstep so saveState's schema gate accepts the records and byte-equality on no-op state.json assertions holds. npm run check GREEN 1862 unit + 10 integration. -- Plan 57-01.
+- [Phase 57]: Conditional REQUIRED `command` field on type: 'command' handler entries expressed via JSON Schema 2020-12 if/then conditional via Type.Unsafe — TypeBox 1.x first-class combinators don't compose into a discriminator-with-required-field shape cleanly; Union-anyOf with NonCommandHandler.type=String would silently accept {type:'command'} without command, contradicting the REQUIRED invariant. (Plan 57-02)
+- [Phase 57]: hookDebugLog ships as a Phase-57 stub gated on PI_CLAUDE_MARKETPLACE_DEBUG === '1' routing through console.error; OBS-01 (Phase 59) will swap the implementation to a shared debug-log helper without touching parseHooksConfig callers. Per-file ESLint override on domain/components/hooks.ts retires with the OBS-01 swap. (Plan 57-02)
 
 ### Pending Todos
 
@@ -253,7 +256,7 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-14T09:32:00.000Z
+Last session: 2026-06-14T09:58:18.950Z
 Stopped At: Completed 57-01-PLAN.md
 Resume File: .planning/phases/57-schema-component-type-payload-extension-tolerance/57-02-PLAN.md
 

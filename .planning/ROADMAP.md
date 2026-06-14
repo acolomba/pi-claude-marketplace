@@ -200,8 +200,8 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 **Plans**: 4 plans
 **Wave 1**
 
-- [ ] 57-01-PLAN.md — State schema extension + `ensurePluginResources` default-fill (HOOK-02 / D-57-01)
-- [ ] 57-02-PLAN.md — `HOOKS_CONFIG_SCHEMA` + `parseHooksConfig` + debug-log seam (HOOK-03 / D-57-02 / D-57-04)
+- [x] 57-01-PLAN.md — State schema extension + `ensurePluginResources` default-fill (HOOK-02 / D-57-01)
+- [x] 57-02-PLAN.md — `HOOKS_CONFIG_SCHEMA` + `parseHooksConfig` + debug-log seam (HOOK-03 / D-57-02 / D-57-04)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -383,7 +383,7 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 | 54. Enable/Disable Commands                                         | v1.12     | 2/2 | Complete    | 2026-06-10 |
 | 55. Load-Time Reconcile Apply, Notification & Wiring                | v1.12     | 3/3 | Complete    | 2026-06-11 |
 | 56. Write-Back Integration & Documentation                          | v1.12     | 4/4 | Complete    | 2026-06-11 |
-| 57. Schema, Component Type & Payload-Extension Tolerance            | v1.13     | 1/4 | In progress | -          |
+| 57. Schema, Component Type & Payload-Extension Tolerance            | v1.13     | 2/4 | In Progress|  |
 | 58. Matcher Parser, Tool-Name Mapping & Supportability Gate         | v1.13     | 0/0 | Not started | -          |
 | 59. Bridge Dispatch Core & Debug Seam                               | v1.13     | 0/0 | Not started | -          |
 | 60. Hook Execution, Payload Translators & Env Vars                  | v1.13     | 0/0 | Not started | -          |
