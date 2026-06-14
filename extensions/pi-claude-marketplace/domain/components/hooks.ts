@@ -32,6 +32,8 @@ import { Compile } from "typebox/compile";
 
 import { errorMessage } from "../../shared/errors.ts";
 
+import { CLAUDE_TO_PI_TOOL_NAMES, type PiToolName } from "./hook-tool-names.ts";
+
 // ──────────────────────────────────────────────────────────────────────────
 // Schema layer-by-layer
 // ──────────────────────────────────────────────────────────────────────────
@@ -177,4 +179,152 @@ export function parseHooksConfig(raw: string): HookConfigParseResult {
   }
 
   return { ok: true, value: parsed };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Matcher parser (MATCH-01 / MATCH-02 / TOOL-01 reverse-map at parse time)
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * A matcher token's allowed character class. Any character outside this set
+ * (other than the `mcp__server__tool` literal shape, which is matched
+ * separately) makes the matcher a regex per MATCH-02.
+ *
+ * `_` is admitted because Pi-form tool tokens carry no underscores but a
+ * Claude-form contributor may use them in pipe-OR alternation tokens (the
+ * Claude grammar does not constrain underscores); the per-token validator
+ * `SAFE_TOKEN_CHARS` is the actual gate that decides whether each split
+ * token reaches the TOOL-01 reverse-map lookup.
+ *
+ * `|` is admitted at this top-level pass because pipe-OR alternation is
+ * the only multi-token shape this parser admits; the post-split per-token
+ * validator handles the per-token character set.
+ */
+const SAFE_MATCHER_CHARS = /^[A-Za-z0-9_|-]+$/;
+
+/**
+ * Per-token character class (post pipe-OR split). A token failing this
+ * regex is a regex matcher per MATCH-02.
+ */
+const SAFE_TOKEN_CHARS = /^[A-Za-z0-9_-]+$/;
+
+/**
+ * MCP-literal matcher shape. A `mcp__<server>__<tool>` literal is a
+ * supportable matcher per MATCH-01 even though no individual character is
+ * outside `SAFE_MATCHER_CHARS` -- the parser treats it as its own arm so
+ * downstream consumers can route to the MCP-aware bridge dispatcher.
+ *
+ * Server + tool segments allow `[A-Za-z0-9_-]+` to match the Claude
+ * grammar's loose token rules.
+ */
+const MCP_LITERAL = /^mcp__[A-Za-z0-9_-]+__[A-Za-z0-9_-]+$/;
+
+/**
+ * Parsed matcher discriminated union. The five arms are:
+ *
+ *   - `match-all`: raw === `""` or `"*"` (MATCH-01 empty-string-matches-all).
+ *   - `tool-set`: one or more Claude tool names (single or pipe-OR
+ *     alternation), each successfully translated through the TOOL-01
+ *     reverse map to a Pi-form tool literal. The `piTools` set is the Pi-
+ *     form lowercase tokens the dispatcher compares against at runtime.
+ *   - `mcp-literal`: a `mcp__<server>__<tool>` literal. Single-token only;
+ *     pipe-OR mixing with MCP literals is rejected as `regex` per the
+ *     strict-supportability stance.
+ *   - `regex`: any character outside the safe matcher charset, OR a
+ *     malformed pipe-OR (lone `"|"`, leading `"|Edit"`, trailing `"Edit|"`),
+ *     OR mixed tool-name + MCP-literal pipe-OR. Trips TOOL-02(a).
+ *   - `unmapped`: a Claude-form token with no TOOL-01 mapping
+ *     (`MultiEdit` / `WebFetch` / `Task` / Pi-form lowercase tokens like
+ *     `edit`). Trips TOOL-02(b). The first unmapped token short-circuits
+ *     and wins.
+ *
+ * The split between `regex` and `unmapped` is preserved for per-condition
+ * debugDetail clarity even though both arms collapse to TOOL-02 trip in
+ * `checkMatcherSupportability`.
+ */
+export type ParsedMatcher =
+  | { kind: "match-all" }
+  | { kind: "tool-set"; piTools: ReadonlySet<PiToolName> }
+  | { kind: "mcp-literal"; literal: string }
+  | { kind: "regex" }
+  | { kind: "unmapped"; token: string };
+
+/**
+ * Parse a single Claude-form matcher string into a `ParsedMatcher`
+ * discriminated arm.
+ *
+ * MATCH-01: empty string and `*` parse to `match-all`. Single tokens and
+ * pipe-OR alternation of tokens are translated through the TOOL-01 reverse
+ * map (`CLAUDE_TO_PI_TOOL_NAMES`) at parse time -- the dispatcher reads
+ * Pi-form lowercase tokens at runtime and the reverse map is the single
+ * authoritative source.
+ *
+ * MATCH-02: any character outside `[A-Za-z0-9_|-]` (and not part of a
+ * `mcp__...__...` literal) parses to `regex`. Per the strict-supportability
+ * stance (D-58-06), malformed pipe-OR shapes also parse to `regex` rather
+ * than silently degrading to match-all.
+ *
+ * Pi-form rejection: a lowercase token like `"edit"` is NOT a Claude-form
+ * key in the TOOL-01 reverse map, so it parses to `{kind: "unmapped",
+ * token: "edit"}` -- guaranteeing the matcher never silently matches a
+ * Pi runtime event (the dispatcher only compares against Pi-form tokens
+ * sourced from this parser).
+ *
+ * Pure and total: never throws. Returns one of the five `ParsedMatcher`
+ * arms for every possible input string.
+ */
+export function parseMatcher(raw: string): ParsedMatcher {
+  // MATCH-01: match-all sentinels.
+  if (raw === "" || raw === "*") {
+    return { kind: "match-all" };
+  }
+
+  // MCP-literal single-token: MUST be checked BEFORE the safe-charset gate,
+  // because `mcp__server__tool` contains only safe characters AND must
+  // route to its own discriminated arm. Pipe-OR mixing with an MCP literal
+  // is forbidden -- the regex pin already excludes `|` from the MCP shape,
+  // so any pipe-OR containing an MCP literal token will fall through to
+  // the per-token loop below and be rejected as a regex (`mcp__a__b` is
+  // not a Claude tool name).
+  if (MCP_LITERAL.test(raw)) {
+    return { kind: "mcp-literal", literal: raw };
+  }
+
+  // MATCH-02: character-set gate. Any char outside the safe set (and not
+  // part of an MCP literal) trips regex. Pipe is admitted here; per-token
+  // gating happens after the split.
+  if (!SAFE_MATCHER_CHARS.test(raw)) {
+    return { kind: "regex" };
+  }
+
+  // Pipe-OR split + per-token validation. An empty token (lone `"|"`,
+  // leading `"|Edit"`, trailing `"Edit|"`) is the malformed pipe-OR shape
+  // that loud-rejects to regex per D-58-06.
+  const tokens = raw.split("|");
+  const piTools = new Set<PiToolName>();
+
+  for (const token of tokens) {
+    if (token.length === 0) {
+      return { kind: "regex" };
+    }
+
+    if (!SAFE_TOKEN_CHARS.test(token)) {
+      return { kind: "regex" };
+    }
+
+    // TOOL-01 reverse-map lookup. The map's keys are the seven Claude-form
+    // PascalCase / uppercase tool names; any other token (Pi-form
+    // lowercase, unsupported Claude tools like `MultiEdit` / `WebFetch` /
+    // `Task`, or a `mcp__...` segment that survived the literal check by
+    // being part of a pipe-OR) reads as `undefined` and short-circuits to
+    // unmapped.
+    const piName = (CLAUDE_TO_PI_TOOL_NAMES as Record<string, PiToolName | undefined>)[token];
+    if (piName === undefined) {
+      return { kind: "unmapped", token };
+    }
+
+    piTools.add(piName);
+  }
+
+  return { kind: "tool-set", piTools };
 }

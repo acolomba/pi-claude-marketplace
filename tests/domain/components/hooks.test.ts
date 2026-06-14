@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   HOOKS_VALIDATOR,
   parseHooksConfig,
+  parseMatcher,
 } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -158,4 +159,113 @@ test("parseHooksConfig returns {ok:false,reason} when a type:'command' entry is 
     assert.equal(typeof result.reason, "string");
     assert.notEqual(result.reason.length, 0);
   }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// parseMatcher (MATCH-01 / MATCH-02 / TOOL-01 reverse-map at parse time)
+// ──────────────────────────────────────────────────────────────────────────
+
+test("parseMatcher: empty/`*` -> match-all", () => {
+  assert.deepEqual(parseMatcher(""), { kind: "match-all" });
+  assert.deepEqual(parseMatcher("*"), { kind: "match-all" });
+});
+
+test("parseMatcher: single Claude tool token -> tool-set with mapped Pi name", () => {
+  // Each of the 7 TOOL-01 reverse-map entries.
+  const cases: ReadonlyArray<readonly [string, string]> = [
+    ["Bash", "bash"],
+    ["Read", "read"],
+    ["Edit", "edit"],
+    ["Write", "write"],
+    ["Grep", "grep"],
+    ["Glob", "find"],
+    ["LS", "ls"],
+  ];
+  for (const [claudeName, piName] of cases) {
+    const result = parseMatcher(claudeName);
+    assert.equal(result.kind, "tool-set", `expected tool-set for ${claudeName}`);
+    if (result.kind === "tool-set") {
+      assert.deepEqual(Array.from(result.piTools).sort(), [piName]);
+    }
+  }
+});
+
+test("parseMatcher: pipe-OR alternation -> tool-set with multiple Pi names", () => {
+  const editWrite = parseMatcher("Edit|Write");
+  assert.equal(editWrite.kind, "tool-set");
+  if (editWrite.kind === "tool-set") {
+    assert.deepEqual(Array.from(editWrite.piTools).sort(), ["edit", "write"]);
+  }
+
+  const triple = parseMatcher("Read|Write|Grep");
+  assert.equal(triple.kind, "tool-set");
+  if (triple.kind === "tool-set") {
+    assert.deepEqual(Array.from(triple.piTools).sort(), ["grep", "read", "write"]);
+  }
+});
+
+test("parseMatcher: MCP literal -> mcp-literal", () => {
+  const result = parseMatcher("mcp__github__create_issue");
+  assert.deepEqual(result, { kind: "mcp-literal", literal: "mcp__github__create_issue" });
+
+  // Server / tool segments tolerate `-` and digits per MCP_LITERAL.
+  const dashed = parseMatcher("mcp__my-server-1__some_tool");
+  assert.deepEqual(dashed, { kind: "mcp-literal", literal: "mcp__my-server-1__some_tool" });
+});
+
+test("parseMatcher: Pi-form lowercase token -> unmapped (Pi-form rejection)", () => {
+  // Pi-form rejection: a lowercase token like `edit` is NOT a Claude-form
+  // key in the TOOL-01 reverse map; it must NOT silently produce a
+  // tool-set arm that would match Pi runtime events. Strict-supportability
+  // sentinel test.
+  const result = parseMatcher("edit");
+  assert.deepEqual(result, { kind: "unmapped", token: "edit" });
+  // Strong assertion: definitely NOT a tool-set.
+  assert.notEqual(result.kind, "tool-set");
+
+  for (const piForm of ["bash", "read", "write", "grep", "find", "ls"]) {
+    const r = parseMatcher(piForm);
+    assert.equal(r.kind, "unmapped", `Pi-form "${piForm}" must be unmapped`);
+  }
+});
+
+test("parseMatcher: Claude-form unmapped tool (MultiEdit, WebFetch, Task) -> unmapped", () => {
+  // TOOL-02(b) trip surface: Claude tools with no Pi peer-dep analog.
+  for (const token of ["MultiEdit", "WebFetch", "Task"]) {
+    assert.deepEqual(parseMatcher(token), { kind: "unmapped", token });
+  }
+});
+
+test("parseMatcher: regex chars (Edit.*, *bash, .* alone) -> regex (MATCH-02)", () => {
+  assert.deepEqual(parseMatcher("Edit.*"), { kind: "regex" });
+  // Leading `*` makes the matcher contain a char outside the safe set
+  // when paired with letters (the lone `*` shape is reserved as the
+  // match-all sentinel; `*bash` is regex).
+  assert.deepEqual(parseMatcher("*bash"), { kind: "regex" });
+  assert.deepEqual(parseMatcher(".*"), { kind: "regex" });
+  assert.deepEqual(parseMatcher("Edit$"), { kind: "regex" });
+  assert.deepEqual(parseMatcher("(Edit)"), { kind: "regex" });
+});
+
+test("parseMatcher: malformed pipe-OR (lone |, trailing |, leading |) -> regex (strict-supportability)", () => {
+  // Strict-supportability loud rejection per D-58-06 -- malformed pipe-OR
+  // is NOT silently treated as match-all.
+  assert.deepEqual(parseMatcher("|"), { kind: "regex" });
+  assert.deepEqual(parseMatcher("Edit|"), { kind: "regex" });
+  assert.deepEqual(parseMatcher("|Edit"), { kind: "regex" });
+  assert.deepEqual(parseMatcher("Edit||Write"), { kind: "regex" });
+});
+
+test("parseMatcher: mixed tool|mcp literal -> regex (mixed-token rejection)", () => {
+  // Claude's grammar does not mix tool-name alternation with MCP literals.
+  // Pipe-OR carrying an MCP token rejects: the `mcp__a__b` segment fails
+  // the per-token `SAFE_TOKEN_CHARS` (no underscores allowed by the strict
+  // tool-name shape would be wrong -- actually SAFE_TOKEN_CHARS DOES allow
+  // `_`, so the segment passes the charset gate but FAILS the TOOL-01
+  // reverse-map lookup, producing `unmapped`). Either outcome is loud
+  // rejection; we assert the non-tool-set property explicitly.
+  const result = parseMatcher("Edit|mcp__a__b");
+  assert.notEqual(result.kind, "tool-set");
+  assert.notEqual(result.kind, "mcp-literal");
+  assert.notEqual(result.kind, "match-all");
 });
