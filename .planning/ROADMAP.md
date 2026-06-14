@@ -174,7 +174,7 @@ Declarative per-scope config files (`claude-plugins.json` + entry-level-override
 
 Add a hooks component bridge alongside skills/commands/agents/MCP, translating Claude plugin hook declarations into Pi extension event subscriptions and shell-outs. Ships the **8 bucket-A direct-1:1-map events only** (SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PreCompact, PostCompact, SessionEnd) — the subset where dispatch fires at 100% fidelity. Strict-supportability stance at BOTH event and plugin levels: a plugin referencing any other Claude hook event, an unmapped Claude tool, a regex matcher, or a non-`command` handler installs as `(unavailable) {unsupported hooks}`. Forward-compat investments retained: the `if` field permission-rule matcher (~300 LoC) and the `asyncRewake` registry (~250 LoC) ship in v1.13 despite no first-party plugin exercising them under bucket-A-only scope. See `.planning/REQUIREMENTS.md` for the 31-REQ contract; `docs/research/claude-hooks-vs-pi-events.md` + `docs/research/claude-hook-config-syntax.md` are the authority sources.
 
-- [ ] Phase 57: Schema, Component Type & Payload-Extension Tolerance -- HOOK-01, HOOK-02, HOOK-03
+- [x] Phase 57: Schema, Component Type & Payload-Extension Tolerance -- HOOK-01, HOOK-02, HOOK-03 (completed 2026-06-14)
 - [ ] Phase 58: Matcher Parser, Tool-Name Mapping & Supportability Gate -- MATCH-01, MATCH-02, TOOL-01, TOOL-02
 - [ ] Phase 59: Bridge Dispatch Core & Debug Seam -- DISP-01..04, OBS-01
 - [ ] Phase 60: Hook Execution, Payload Translators & Env Vars -- EXEC-01..04, PAYL-01, HOOK-05
@@ -209,7 +209,7 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 57-04-PLAN.md — Architecture invariant tests pinning the four leaf-foundation contracts (HOOK-01 / HOOK-02 / HOOK-03 / D-57-01)
+- [x] 57-04-PLAN.md — Architecture invariant tests pinning the four leaf-foundation contracts (HOOK-01 / HOOK-02 / HOOK-03 / D-57-01)
 
 #### Phase 58: Matcher Parser, Tool-Name Mapping & Supportability Gate
 
@@ -383,7 +383,7 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 | 54. Enable/Disable Commands                                         | v1.12     | 2/2 | Complete    | 2026-06-10 |
 | 55. Load-Time Reconcile Apply, Notification & Wiring                | v1.12     | 3/3 | Complete    | 2026-06-11 |
 | 56. Write-Back Integration & Documentation                          | v1.12     | 4/4 | Complete    | 2026-06-11 |
-| 57. Schema, Component Type & Payload-Extension Tolerance            | v1.13     | 3/4 | In Progress|  |
+| 57. Schema, Component Type & Payload-Extension Tolerance            | v1.13     | 4/4 | Complete   | 2026-06-14 |
 | 58. Matcher Parser, Tool-Name Mapping & Supportability Gate         | v1.13     | 0/0 | Not started | -          |
 | 59. Bridge Dispatch Core & Debug Seam                               | v1.13     | 0/0 | Not started | -          |
 | 60. Hook Execution, Payload Translators & Env Vars                  | v1.13     | 0/0 | Not started | -          |

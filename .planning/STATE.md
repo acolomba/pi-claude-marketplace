@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.13
 milestone_name: Claude Hook Bridge
-status: executing
+status: verifying
 stopped_at: Completed 57-01-PLAN.md
-last_updated: "2026-06-14T10:42:10.683Z"
+last_updated: "2026-06-14T10:58:17.399Z"
 last_activity: 2026-06-14 -- Phase 57 Plan 01 completed (HOOK-02 schema + migrator default-fill)
 progress:
   total_phases: 7
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 3
-  percent: 0
+  completed_plans: 4
+  percent: 14
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 
 Phase: 57 (Schema, Component Type & Payload-Extension Tolerance) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-14 -- Phase 57 Plan 01 completed (HOOK-02 schema + migrator default-fill)
 
 ## Performance Metrics
@@ -106,6 +106,7 @@ Last activity: 2026-06-14 -- Phase 57 Plan 01 completed (HOOK-02 schema + migrat
 | Phase 57 P01 | ~39m | 2 tasks | 21 files |
 | Phase 57 P02 | 28 | 2 tasks | 3 files |
 | Phase 57-schema-component-type-payload-extension-tolerance P03 | 95 | 2 tasks | 7 files |
+| Phase 57 P04 | 18 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -203,6 +204,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 57]: Conditional REQUIRED `command` field on type: 'command' handler entries expressed via JSON Schema 2020-12 if/then conditional via Type.Unsafe — TypeBox 1.x first-class combinators don't compose into a discriminator-with-required-field shape cleanly; Union-anyOf with NonCommandHandler.type=String would silently accept {type:'command'} without command, contradicting the REQUIRED invariant. (Plan 57-02)
 - [Phase 57]: hookDebugLog ships as a Phase-57 stub gated on PI_CLAUDE_MARKETPLACE_DEBUG === '1' routing through console.error; OBS-01 (Phase 59) will swap the implementation to a shared debug-log helper without touching parseHooksConfig callers. Per-file ESLint override on domain/components/hooks.ts retires with the OBS-01 swap. (Plan 57-02)
 - [Phase ?]: HOOK-01 + D-57-04 wired: SUPPORTED_COMPONENT_KINDS extends to a 4-tuple, parseHooksConfig drives admission via the convention file, hooksDir lands on ScopedLocations
+- [Phase ?]: Phase 57 P04: Architecture tests pin HOOK-01/02/03/D-57-01/NFR-7 leaf-foundation invariants — any single-line regression RED-fails CI before it lands.
+- [Phase ?]: Phase 57 P04: UNSUPPORTED_COMPONENT_KINDS widened from module-private to module-public; behavior byte-identical.
 
 ### Pending Todos
 
@@ -258,7 +261,7 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-14T10:42:00.474Z
+Last session: 2026-06-14T10:57:39.987Z
 Stopped At: Completed 57-01-PLAN.md
 Resume File: .planning/phases/57-schema-component-type-payload-extension-tolerance/57-02-PLAN.md
 
