@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.13
 milestone_name: Claude Hook Bridge
 status: executing
-stopped_at: Phase 58 context gathered
-last_updated: "2026-06-14T13:28:07.825Z"
-last_activity: 2026-06-14 -- Phase 58 planning complete
+stopped_at: Phase 58 Plan 01 complete
+last_updated: "2026-06-14T13:54:59Z"
+last_activity: 2026-06-14 -- Phase 58 Plan 01 complete
 progress:
   total_phases: 7
   completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
-  percent: 14
+  total_plans: 8
+  completed_plans: 5
+  percent: 16
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-08)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 57 — Schema, Component Type & Payload-Extension Tolerance
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 58 — Matcher Parser, Tool-Name Mapping & Supportability Gate
 
 ## Current Position
 
-Phase: 58
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-06-14 -- Phase 58 planning complete
+Phase: 58 (Matcher Parser, Tool-Name Mapping & Supportability Gate) — EXECUTING
+Plan: 2 of 4 (Plan 01 complete; TOOL-01 shipped)
+Status: Executing Phase 58
+Last activity: 2026-06-14 -- Phase 58 Plan 01 complete
 
 ## Performance Metrics
 
@@ -107,6 +107,7 @@ Last activity: 2026-06-14 -- Phase 58 planning complete
 | Phase 57 P02 | 28 | 2 tasks | 3 files |
 | Phase 57-schema-component-type-payload-extension-tolerance P03 | 95 | 2 tasks | 7 files |
 | Phase 57 P04 | 18 | 2 tasks | 3 files |
+| Phase 58 P01 | 12m | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -206,6 +207,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: HOOK-01 + D-57-04 wired: SUPPORTED_COMPONENT_KINDS extends to a 4-tuple, parseHooksConfig drives admission via the convention file, hooksDir lands on ScopedLocations
 - [Phase ?]: Phase 57 P04: Architecture tests pin HOOK-01/02/03/D-57-01/NFR-7 leaf-foundation invariants — any single-line regression RED-fails CI before it lands.
 - [Phase ?]: Phase 57 P04: UNSUPPORTED_COMPONENT_KINDS widened from module-private to module-public; behavior byte-identical.
+- [Phase 58]: TOOL-01 bidirectional Claude <-> Pi tool-name map landed at `domain/components/hook-tool-names.ts` (D-58-04 locked path). `PI_TO_CLAUDE_TOOL_NAMES` + `CLAUDE_TO_PI_TOOL_NAMES` static records (7 entries each) with hand-written reverse (computed reverse would erase the locked `ClaudeToolName` literal keys). `find <-> Glob` locked per D-58-05 with the LOW-confidence semantic-mismatch JSDoc. `PiToolName` derived via discriminated-union arm filtering (`type LiteralToolNameArm<T> = T extends { toolName: infer N } ? string extends N ? never : N : never;`) rather than the research-proposed `Exclude<ToolCallEvent["toolName"], string>` which evaluates to `never` because the open-ended `CustomToolCallEvent.toolName: string` arm widens the parent union to plain `string` at the property-access step. `as const satisfies Record<PiToolName, string>` is the load-bearing compile-time exhaustiveness gate; runtime architecture test (`tests/architecture/hooks-tool-name-map.test.ts`) carries 3 supplementary invariants (inverse round-trip, peer-dep completeness with 7-entry count-lock, find <-> Glob lock). `ToolCallEvent` re-exported through `platform/pi-api.ts` per the `no-restricted-imports` boundary rule. npm run check GREEN 1900 unit + 10 integration. -- Plan 58-01.
 
 ### Pending Todos
 
@@ -261,9 +263,9 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-14T12:30:52.633Z
-Stopped At: Phase 58 context gathered
-Resume File: .planning/phases/58-matcher-parser-tool-name-mapping-supportability-gate/58-CONTEXT.md
+Last session: 2026-06-14T13:54:59Z
+Stopped At: Phase 58 Plan 01 complete (TOOL-01 shipped)
+Resume File: .planning/phases/58-matcher-parser-tool-name-mapping-supportability-gate/58-02-PLAN.md
 
 ## Operator Next Steps
 
