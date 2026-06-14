@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.13
 milestone_name: Claude Hook Bridge
 status: executing
-stopped_at: Phase 58 Plan 03 complete
-last_updated: "2026-06-14T15:30:00Z"
-last_activity: 2026-06-14 -- Phase 58 Plan 03 complete
+stopped_at: Phase 58 Plan 04 complete
+last_updated: "2026-06-14T14:55:00Z"
+last_activity: 2026-06-14 -- Phase 58 Plan 04 complete (HOOK-04 closed)
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 8
-  completed_plans: 7
-  percent: 22
+  completed_plans: 8
+  percent: 25
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 
 ## Current Position
 
-Phase: 58 (Matcher Parser, Tool-Name Mapping & Supportability Gate) — EXECUTING
-Plan: 4 of 4 (Plans 01/02/03 complete; TOOL-01 + bucket-A event closed-set + matcher parser + supportability gate shipped; D-58-03 single-seam invariant verified -- resolver.ts byte-unchanged)
-Status: Executing Phase 58
-Last activity: 2026-06-14 -- Phase 58 Plan 03 complete
+Phase: 58 (Matcher Parser, Tool-Name Mapping & Supportability Gate) — COMPLETE
+Plan: 4 of 4 complete (Plans 01/02/03/04 all shipped; TOOL-01 + bucket-A event closed-set + matcher parser + supportability gate + HOOK-04 atomic byte rename + D-58-02 manifest carve-out drop landed; D-58-03 single-seam invariant verified)
+Status: Phase 58 complete -- next phase 59 (DISP family) pending
+Last activity: 2026-06-14 -- Phase 58 Plan 04 complete (HOOK-04 closed)
 
 ## Performance Metrics
 
@@ -110,6 +110,7 @@ Last activity: 2026-06-14 -- Phase 58 Plan 03 complete
 | Phase 58 P01 | 12m | 2 tasks | 3 files |
 | Phase 58 P02 | ~14m | 2 tasks | 2 files |
 | Phase 58 P03 | ~35m | 2 tasks | 3 files |
+| Phase 58 P04 | ~13m | 2 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -211,6 +212,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: Phase 57 P04: UNSUPPORTED_COMPONENT_KINDS widened from module-private to module-public; behavior byte-identical.
 - [Phase 58]: TOOL-01 bidirectional Claude <-> Pi tool-name map landed at `domain/components/hook-tool-names.ts` (D-58-04 locked path). `PI_TO_CLAUDE_TOOL_NAMES` + `CLAUDE_TO_PI_TOOL_NAMES` static records (7 entries each) with hand-written reverse (computed reverse would erase the locked `ClaudeToolName` literal keys). `find <-> Glob` locked per D-58-05 with the LOW-confidence semantic-mismatch JSDoc. `PiToolName` derived via discriminated-union arm filtering (`type LiteralToolNameArm<T> = T extends { toolName: infer N } ? string extends N ? never : N : never;`) rather than the research-proposed `Exclude<ToolCallEvent["toolName"], string>` which evaluates to `never` because the open-ended `CustomToolCallEvent.toolName: string` arm widens the parent union to plain `string` at the property-access step. `as const satisfies Record<PiToolName, string>` is the load-bearing compile-time exhaustiveness gate; runtime architecture test (`tests/architecture/hooks-tool-name-map.test.ts`) carries 3 supplementary invariants (inverse round-trip, peer-dep completeness with 7-entry count-lock, find <-> Glob lock). `ToolCallEvent` re-exported through `platform/pi-api.ts` per the `no-restricted-imports` boundary rule. npm run check GREEN 1900 unit + 10 integration. -- Plan 58-01.
 - [Phase 58]: Bucket-A 8-event closed-set tuple + tool-event 3-tuple subset + per-non-tool-event Claude-side matcher target fields + per-event admissible-value closed sets shipped at `domain/components/hook-events.ts` (D-58-06 strict-supportability stance locked into the value sets). `BUCKET_A_EVENTS` 8-tuple in deterministic-iteration order; `TOOL_EVENTS` 3-tuple subset (PreToolUse/PostToolUse/PostToolUseFailure); `NON_TOOL_EVENT_FIELDS` Readonly<Partial<Record>> with `source`/`reason`/`trigger` + `null` UserPromptSubmit sentinel; `NON_TOOL_EVENT_CLOSED_SETS` derived from Pi peer-dep verification (SessionStart `{startup, resume}` -- no Pi analog for `clear`/`compact`; SessionEnd / PreCompact / PostCompact empty under v1.13 -- no semantically safe Pi field/value overlap). Architecture test (`tests/architecture/hooks-supportability.test.ts`) carries 5 ID-prefixed invariants (BUCKET_A_EVENTS deepEqual lock, TOOL_EVENTS deepEqual + subset lock, NON_TOOL_EVENT_FIELDS per-event lock, NON_TOOL_EVENT_CLOSED_SETS per-event value-set lock, UserPromptSubmit absent-from-closed-sets lock) with a `// Plan 03 extends ...` extension-point marker. npm run check GREEN at plan close. -- Plan 58-02.
+- [Phase 58]: HOOK-04 atomic byte rename + D-58-02 manifest-field carve-out drop landed in ONE atomic commit (`f74005b`). REASONS member `"hooks"` -> `"unsupported hooks"` at `shared/notify.ts:81`; tuple length 31 (rename, not addition). `narrowResolverNotes` substring detection tightened from `note.includes("hooks")` to `startsWith` checks anchored on the four prefix tokens parseHooksConfig + the resolver wrapper emit (`hooks.json is not valid JSON:`, `hooks.json failed schema validation:`, `unsupported hooks:`, `malformed hooks.json:`) -- Pitfall 2 locked by a new `tests/shared/probe-classifiers.test.ts` (9 GREEN tests, including the negative case where a free-form note containing the word `hooks` mid-string falls through to the permissive `unsupported source` fallback). `MANIFEST_FIELD_REASONS` set in `orchestrators/plugin/install.ts` drops `"hooks"` (keeps `"lspServers"` as the SOLE manifest-field carve-out); `MANIFEST_FIELD_TO_REASON` drops the `hooks: "hooks"` entry. Under v1.13 `hooks` is a SUPPORTED component kind so the resolver never emits a `"contains hooks"` note; the dead carve-out branch is removed. 6 byte-form occurrences in `docs/output-catalog.md` re-keyed + 7 catalog-uat fixture rows + 4 notify-v2 fixtures + snm37/snm38 readability locks + 2 info.test.ts string snapshots + 3 install.test.ts narrowResolverReasons tests rewritten for post-D-58-02 behavior + 1 list.test.ts regex assertion -- 15 files in ONE commit. REQUIREMENTS.md HOOK-04 reassigned from `Phase 63 / Pending` to `Phase 58 (Plan 04) / Complete`. npm run check GREEN 1935 unit + 10 integration. PHASE 58 COMPLETE -- requirements TOOL-01 / TOOL-02 / MATCH-01 / MATCH-02 / HOOK-04 all CLOSED. -- Plan 58-04.
 
 ### Pending Todos
 
