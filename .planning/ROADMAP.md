@@ -176,7 +176,7 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 
 - [x] Phase 57: Schema, Component Type & Payload-Extension Tolerance -- HOOK-01, HOOK-02, HOOK-03 (completed 2026-06-14)
 - [x] Phase 58: Matcher Parser, Tool-Name Mapping & Supportability Gate -- MATCH-01, MATCH-02, TOOL-01, TOOL-02, HOOK-04 (pulled forward per D-58-01) (completed 2026-06-14)
-- [ ] Phase 59: Bridge Dispatch Core & Debug Seam -- DISP-01..04, OBS-01
+- [x] Phase 59: Bridge Dispatch Core & Debug Seam -- DISP-01..04, OBS-01 (completed 2026-06-14)
 - [ ] Phase 60: Hook Execution, Payload Translators & Env Vars -- EXEC-01..04, PAYL-01, HOOK-05
 - [ ] Phase 61: `if` Field Permission-Rule Matcher -- MATCH-03
 - [ ] Phase 62: `asyncRewake` Registry & Background-Spawn -- HOOK-06, EXEC-05
@@ -269,7 +269,7 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 59-03-PLAN.md — Wiring + architecture tests: `registerHooksBridge` in `index.ts` factory, `rebuildRoutingTables` call site in `apply.ts`, cache add/remove in `install.ts`/`uninstall.ts`, and `tests/architecture/hooks-dispatch.test.ts` pinning DISP-01..04 + OBS-01 invariants (DISP-01..04 / OBS-01 / D-59-02)
+- [x] 59-03-PLAN.md — Wiring + architecture tests: `registerHooksBridge` in `index.ts` factory, `rebuildRoutingTables` call site in `apply.ts`, cache add/remove in `install.ts`/`uninstall.ts`, and `tests/architecture/hooks-dispatch.test.ts` pinning DISP-01..04 + OBS-01 invariants (DISP-01..04 / OBS-01 / D-59-02)
 
 #### Phase 60: Hook Execution, Payload Translators & Env Vars
 
@@ -410,7 +410,7 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 | 56. Write-Back Integration & Documentation                          | v1.12     | 4/4 | Complete    | 2026-06-11 |
 | 57. Schema, Component Type & Payload-Extension Tolerance            | v1.13     | 4/4 | Complete    | 2026-06-14 |
 | 58. Matcher Parser, Tool-Name Mapping & Supportability Gate         | v1.13     | 4/4 | Complete    | 2026-06-14 |
-| 59. Bridge Dispatch Core & Debug Seam                               | v1.13     | 2/3 | In Progress|  |
+| 59. Bridge Dispatch Core & Debug Seam                               | v1.13     | 3/3 | Complete   | 2026-06-14 |
 | 60. Hook Execution, Payload Translators & Env Vars                  | v1.13     | 0/0 | Not started | -          |
 | 61. `if` Field Permission-Rule Matcher                              | v1.13     | 0/0 | Not started | -          |
 | 62. `asyncRewake` Registry & Background-Spawn                       | v1.13     | 0/0 | Not started | -          |

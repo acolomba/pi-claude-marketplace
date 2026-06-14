@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.13
 milestone_name: Claude Hook Bridge
-status: executing
+status: verifying
 stopped_at: Completed 59-02-PLAN.md
-last_updated: "2026-06-14T21:48:39.001Z"
+last_updated: "2026-06-14T22:35:17.007Z"
 last_activity: 2026-06-14 -- Phase 59 execution started
 progress:
   total_phases: 7
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 11
-  completed_plans: 10
-  percent: 29
+  completed_plans: 11
+  percent: 43
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 
 Phase: 59 (bridge-dispatch-core-debug-seam) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-14 -- Phase 59 execution started
 
 ## Performance Metrics
@@ -113,6 +113,7 @@ Last activity: 2026-06-14 -- Phase 59 execution started
 | Phase 58 P04 | ~13m | 2 tasks | 15 files |
 | Phase Phase 59 PP01 | 25min | 2 tasks | 4 files |
 | Phase 59 P02 | 43m | 3 tasks | 9 files |
+| Phase 59 P03 | 95min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -223,6 +224,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: D-59-04 confirmed: dispatchHookExec ships as no-op Promise<void> stub; execution layer fills body without changing signature
 - [Phase ?]: Plan 59-02: peer-dep UserPromptSubmitEvent does not exist; substituted InputEvent (Pi event name 'input') in platform/pi-api.ts re-exports and pi.on registration. Claude-side UserPromptSubmit bucket name unchanged.
 - [Phase ?]: Plan 59-02: dispatch.ts exposes bridge-internal _setExecutorForTest/_resetExecutorForTest seam (ESM imports are read-only, t.mock.method fails with 'Cannot redefine property'). Production default is dispatchHookExec; seam is not re-exported via index.ts
+- [Phase ?]: [Phase 59 Plan 03]: async-factory contract for index.ts locked; Pi's loader awaits the factory Promise, so an awaited registerHooksBridge call guarantees 7 pi.on registrations + user-scope hydrate complete BEFORE the first session event fires. Void fire-and-forget rejected.
+- [Phase ?]: [Phase 59 Plan 03]: deferred project-scope hydrate via hydrateProjectScopeForCwd(event.cwd) at first resources_discover. Plan 02's registerHooksBridge needs cwd at factory time; the factory passes homedir() so user scope hydrates correctly, then project re-hydrates with the real cwd before applyReconcile rebuilds.
+- [Phase ?]: [Phase 59 Plan 03]: WR-05 pristine-scope gate on rebuildScopeRoutingTable (pathExists check on state.json) prevents the lock acquisition's mkdir(extensionRoot) from creating .pi/pi-claude-marketplace/ directories in pristine scopes. Correctness-equivalent: pristine scope has zero plugins to register.
+- [Phase ?]: [Phase 59 Plan 03]: reinstall.ts and update.ts do NOT route through installPlugin/uninstallPlugin -- cache add/remove does not flow transitively. Gap is bounded (cache stays stale until next reconcile rebuild). Future plan should wire cache mutators into reinstall + update directly.
 
 ### Pending Todos
 
@@ -278,7 +283,7 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-14T21:48:38.982Z
+Last session: 2026-06-14T22:34:32.706Z
 Stopped At: Completed 59-02-PLAN.md
 Resume File: None
 
