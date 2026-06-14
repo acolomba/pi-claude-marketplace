@@ -44,6 +44,7 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
 
+import { removePluginConfigFromCache } from "../../bridges/hooks/index.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { deletePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
@@ -444,6 +445,15 @@ export async function uninstallPlugin(
       // on closure return.
       // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- mp.plugins is a dynamic-key Record<string, ...>.
       delete mp.plugins[plugin];
+
+      // D-59-02: hooks-bridge cache lifecycle -- synchronous in-memory
+      // remove. Idempotent: removing a missing key is a no-op (so the
+      // unconditional call is safe even for plugins that never declared
+      // hooks). Bounded leak on a closure throw between this line and
+      // `tx.save()`: the routing table still resolves entries on the next
+      // dispatch until reconcile rebuilds, but the next `/reload` resets
+      // the cache (D-59-03 epoch bump + factory-time hydrate from disk).
+      removePluginConfigFromCache(scope, marketplace, plugin);
 
       // WB-01 / WR-09: delete the plugin entry from the user-authored config.
       // SKIPPED in orchestrated mode (reconcile derives desired state FROM

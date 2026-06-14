@@ -62,7 +62,7 @@
 // remove.ts / update.ts cycle). User-visible output flows through
 // shared/notify.ts; this file holds no rendering imports.
 
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -77,6 +77,7 @@ import {
   prepareStageCommands,
   unstagePluginCommands,
 } from "../../bridges/commands/index.ts";
+import { addPluginConfigToCache } from "../../bridges/hooks/index.ts";
 import {
   commitPreparedMcp,
   prepareStageMcpServers,
@@ -88,6 +89,7 @@ import {
   prepareStageSkills,
   unstagePluginSkills,
 } from "../../bridges/skills/index.ts";
+import { parseHooksConfig } from "../../domain/components/hooks.ts";
 import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
@@ -95,6 +97,7 @@ import { loadConfig } from "../../persistence/config-io.ts";
 import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   assertNever,
   causeChainTrailer,
@@ -311,6 +314,43 @@ async function loadCachedMarketplaceManifest(
   manifestPath: string,
 ): Promise<{ name: string; plugins: readonly PluginEntry[] }> {
   return loadMarketplaceManifest(manifestPath);
+}
+
+/**
+ * D-59-02 cache lifecycle (install arm). Read the on-disk hooks.json the
+ * resolver discovered, re-parse via the same domain seam the resolver used,
+ * and on success populate the hooks bridge's in-memory parsed-config cache.
+ *
+ * Both failure arms (read-throw / parse-error) are non-fatal: the resolver
+ * already validated the file at install entry, so a fresh failure here is
+ * defensive only. The detail routes through the OBS-01 debug seam; reconcile
+ * rehydrates the cache from disk on the next pass.
+ */
+async function addInstalledPluginHooksToCache(
+  scope: Scope,
+  marketplace: string,
+  plugin: string,
+  hooksJsonPath: string,
+): Promise<void> {
+  let raw: string;
+  try {
+    raw = await readFile(hooksJsonPath, "utf8");
+  } catch (err) {
+    hookDebugLog(
+      `install: hooks.json read failed for ${plugin}@${marketplace}: ${errorMessage(err)}`,
+    );
+    return;
+  }
+
+  const parsed = parseHooksConfig(raw);
+  if (!parsed.ok) {
+    hookDebugLog(
+      `install: parsed hooks.json failed re-parse for ${plugin}@${marketplace}: ${parsed.reason}`,
+    );
+    return;
+  }
+
+  addPluginConfigToCache(scope, marketplace, plugin, parsed.value);
 }
 
 /**
@@ -887,6 +927,24 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       // Success: lift the install context up so the post-guard path can
       // compose the user-visible notification without re-entering the closure.
       installCtx = result.installCtx;
+
+      // D-59-02: hooks-bridge parsed-config cache add. Synchronous in-memory
+      // mutation; bounded leak on a closure throw between this line and
+      // `tx.save()` -- the next `/reload` resets the cache (D-59-03 epoch
+      // bump + factory-time hydrate from disk). Skipped when the plugin
+      // declares no hooks (`resources.hooks` is empty by construction).
+      // Read+parse failures are non-fatal: the resolver already validated
+      // the config at install-entry time; a re-parse failure here is the
+      // sole defensive arm and surfaces only through the OBS-01 debug seam.
+      // Reconcile rehydrates from disk on the next pass.
+      if (installCtx.resolved.hooksConfigPath !== undefined) {
+        await addInstalledPluginHooksToCache(
+          scope,
+          marketplace,
+          plugin,
+          path.join(installCtx.resolved.pluginRoot, installCtx.resolved.hooksConfigPath),
+        );
+      }
 
       // WB-01 / WR-09: write-back the plugin entry to the user-authored
       // config. SKIPPED in orchestrated mode (reconcile derives desired
