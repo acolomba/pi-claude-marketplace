@@ -306,6 +306,80 @@ test("D-13 drift guard: loadState's configJsonPath derivation matches locationsF
   );
 });
 
+// ===================================================================
+// HOOK-02 / D-57-01: additive `resources.hooks` field on the plugin
+// install record. STATE_SCHEMA.schemaVersion stays Type.Literal(1) -- the
+// migration is purely additive (every v1.0..v1.12 hook-using plugin was
+// rejected as UNSUPPORTED_COMPONENT_KIND, so no existing state.json
+// record carries hook resources to "migrate"). The validator is the
+// schema gate; the default-fill in persistence/migrate.ts is the
+// responsibility for adding `hooks: []` before validation runs.
+// ===================================================================
+
+function buildValidatorFixture(opts: { hooks?: unknown; omitHooks?: boolean }): {
+  schemaVersion: 1;
+  marketplaces: Record<string, unknown>;
+} {
+  const resources: Record<string, unknown> = {
+    skills: [],
+    prompts: [],
+    agents: [],
+    mcpServers: [],
+  };
+  if (!opts.omitHooks) {
+    resources["hooks"] = opts.hooks ?? [];
+  }
+
+  return {
+    schemaVersion: 1,
+    marketplaces: {
+      mp: {
+        name: "mp",
+        scope: "user",
+        source: { kind: "path", raw: "./mp", logical: "./mp" },
+        addedFromCwd: "/cwd",
+        manifestPath: "/abs/mp/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/abs/mp",
+        plugins: {
+          p1: {
+            version: "1.0.0",
+            resolvedSource: "/abs/mp/p1",
+            compatibility: {
+              installable: true,
+              notes: [],
+              supported: [],
+              unsupported: [],
+            },
+            resources,
+            installedAt: "2025-01-01T00:00:00.000Z",
+            updatedAt: "2025-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  };
+}
+
+test("HOOK-02: STATE_VALIDATOR accepts resources.hooks: []", () => {
+  const fixture = buildValidatorFixture({ hooks: [] });
+  assert.equal(STATE_VALIDATOR.Check(fixture), true);
+});
+
+test("HOOK-02 / D-57-03: STATE_VALIDATOR accepts resources.hooks with a generatedName entry", () => {
+  const fixture = buildValidatorFixture({ hooks: ["my-plugin"] });
+  assert.equal(STATE_VALIDATOR.Check(fixture), true);
+});
+
+test("HOOK-02: STATE_VALIDATOR rejects resources.hooks of a non-array shape", () => {
+  const fixture = buildValidatorFixture({ hooks: "not-an-array" });
+  assert.equal(STATE_VALIDATOR.Check(fixture), false);
+});
+
+test("HOOK-02 / D-57-01: STATE_VALIDATOR rejects a record missing resources.hooks (default-fill is the migrator's responsibility)", () => {
+  const fixture = buildValidatorFixture({ omitHooks: true });
+  assert.equal(STATE_VALIDATOR.Check(fixture), false);
+});
+
 test("SPLIT-01 / D-12: STATE_SCHEMA.schemaVersion stays Type.Literal(1) (saveState refuses schemaVersion: 2)", async () => {
   const { root, cleanup } = await tmpExtensionRoot();
   try {
