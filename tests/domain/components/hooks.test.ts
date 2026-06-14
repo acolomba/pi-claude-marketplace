@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   HOOKS_VALIDATOR,
+  checkMatcherSupportability,
   parseHooksConfig,
   parseMatcher,
 } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
@@ -268,4 +269,178 @@ test("parseMatcher: mixed tool|mcp literal -> regex (mixed-token rejection)", ()
   assert.notEqual(result.kind, "tool-set");
   assert.notEqual(result.kind, "mcp-literal");
   assert.notEqual(result.kind, "match-all");
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// checkMatcherSupportability (TOOL-02 four-condition gate) + parseHooksConfig
+// single-seam extension (D-58-03)
+// ──────────────────────────────────────────────────────────────────────────
+
+test("checkMatcherSupportability: regex matcher -> (a) via parseHooksConfig", () => {
+  const raw = JSON.stringify({
+    PreToolUse: [{ matcher: "Edit.*", hooks: [{ type: "command", command: "/bin/false" }] }],
+  });
+  const result = parseHooksConfig(raw);
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.ok(
+      result.reason.startsWith("unsupported hooks: (a) regex matcher"),
+      `expected "(a) regex matcher" prefix, got: ${result.reason}`,
+    );
+  }
+});
+
+test("checkMatcherSupportability: unmapped tool (MultiEdit) -> (b)", () => {
+  const raw = JSON.stringify({
+    PreToolUse: [{ matcher: "MultiEdit", hooks: [{ type: "command", command: "/bin/false" }] }],
+  });
+  const result = parseHooksConfig(raw);
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.ok(
+      result.reason.includes("(b) unmapped tool in PreToolUse: MultiEdit"),
+      `expected "(b) unmapped tool" detail, got: ${result.reason}`,
+    );
+  }
+});
+
+test("checkMatcherSupportability: non-bucket-A event (Stop) -> (c)", () => {
+  const raw = JSON.stringify({
+    Stop: [{ matcher: "", hooks: [{ type: "command", command: "/bin/false" }] }],
+  });
+  const result = parseHooksConfig(raw);
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.ok(
+      result.reason.includes("(c) non-bucket-A event: Stop"),
+      `expected "(c) non-bucket-A event: Stop" detail, got: ${result.reason}`,
+    );
+  }
+});
+
+test("checkMatcherSupportability: UserPromptSubmit with non-empty matcher -> (c) no-matcher-support", () => {
+  // Pi-side / Claude-side disposition: UserPromptSubmit has no upstream
+  // matcher support, so any non-empty matcher trips TOOL-02(c) per
+  // strict-supportability stance.
+  const raw = JSON.stringify({
+    UserPromptSubmit: [
+      { matcher: "anything", hooks: [{ type: "command", command: "/bin/false" }] },
+    ],
+  });
+  const result = parseHooksConfig(raw);
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.ok(
+      result.reason.includes("(c) matcher on no-matcher-support event: UserPromptSubmit"),
+      `expected no-matcher-support detail, got: ${result.reason}`,
+    );
+  }
+});
+
+test("checkMatcherSupportability: SessionStart source=clear -> (c) closed-set", () => {
+  // Pi `SessionStartEvent.reason` does NOT expose `clear` -- strict-
+  // supportability trip.
+  const raw = JSON.stringify({
+    SessionStart: [{ matcher: "clear", hooks: [{ type: "command", command: "/bin/false" }] }],
+  });
+  const result = parseHooksConfig(raw);
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.ok(
+      result.reason.includes("(c) matcher value not in closed set for SessionStart: clear"),
+      `expected closed-set detail, got: ${result.reason}`,
+    );
+  }
+});
+
+test("checkMatcherSupportability: SessionStart source=startup -> ok (admissible)", () => {
+  // Pi-side analog: `startup` IS in the SessionStart closed set.
+  const raw = JSON.stringify({
+    SessionStart: [{ matcher: "startup", hooks: [{ type: "command", command: "/bin/false" }] }],
+  });
+  const result = parseHooksConfig(raw);
+  assert.equal(result.ok, true);
+});
+
+test("checkMatcherSupportability: PreCompact trigger=manual -> (c) closed-set", () => {
+  // Pi compact events carry no `trigger` field -- empty closed set;
+  // every non-empty matcher trips.
+  const raw = JSON.stringify({
+    PreCompact: [{ matcher: "manual", hooks: [{ type: "command", command: "/bin/false" }] }],
+  });
+  const result = parseHooksConfig(raw);
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.ok(
+      result.reason.includes("(c) matcher value not in closed set for PreCompact: manual"),
+      `expected closed-set detail, got: ${result.reason}`,
+    );
+  }
+});
+
+test("checkMatcherSupportability: PreCompact empty matcher -> ok (match-all)", () => {
+  // Match-all is always supportable on every bucket-A event per D-58-06.
+  const raw = JSON.stringify({
+    PreCompact: [{ matcher: "", hooks: [{ type: "command", command: "/bin/false" }] }],
+  });
+  const result = parseHooksConfig(raw);
+  assert.equal(result.ok, true);
+});
+
+test("checkMatcherSupportability: non-command handler type (http) -> (d)", () => {
+  // HOOK-03 lenient schema accepts unknown handler types; TOOL-02(d)
+  // owns the supportability trip.
+  const raw = JSON.stringify({
+    PreToolUse: [{ matcher: "Edit", hooks: [{ type: "http", command: "/bin/false" }] }],
+  });
+  const result = parseHooksConfig(raw);
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.ok(
+      result.reason.includes("(d) non-command handler in PreToolUse: http"),
+      `expected "(d) non-command handler" detail, got: ${result.reason}`,
+    );
+  }
+});
+
+test("checkMatcherSupportability: success path -> ok=true", () => {
+  // Clean PreToolUse + Edit matcher + command handler = fully supportable.
+  const raw = JSON.stringify({
+    PreToolUse: [{ matcher: "Edit", hooks: [{ type: "command", command: "/bin/false" }] }],
+  });
+  const result = parseHooksConfig(raw);
+  assert.equal(result.ok, true);
+
+  // Direct gate call on a typed HooksConfig: also ok.
+  const direct = checkMatcherSupportability({
+    PreToolUse: [{ matcher: "Edit", hooks: [{ type: "command", command: "/bin/false" }] }],
+  });
+  assert.deepEqual(direct, { ok: true });
+});
+
+test("parseHooksConfig: hookDebugLog fires for supportability failure when PI_CLAUDE_MARKETPLACE_DEBUG=1", (t) => {
+  const prior = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  const captured: string[] = [];
+  t.mock.method(console, "error", (msg: unknown) => {
+    captured.push(String(msg));
+  });
+
+  try {
+    const raw = JSON.stringify({
+      PreToolUse: [{ matcher: "Edit.*", hooks: [{ type: "command", command: "/bin/false" }] }],
+    });
+    const result = parseHooksConfig(raw);
+    assert.equal(result.ok, false);
+    assert.ok(
+      captured.some((line) => line.includes("unsupported hooks: (a) regex matcher")),
+      `expected debug-log line, captured: ${JSON.stringify(captured)}`,
+    );
+  } finally {
+    if (prior === undefined) {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    } else {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = prior;
+    }
+  }
 });

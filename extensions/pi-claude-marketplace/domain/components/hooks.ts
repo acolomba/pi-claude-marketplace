@@ -32,6 +32,14 @@ import { Compile } from "typebox/compile";
 
 import { errorMessage } from "../../shared/errors.ts";
 
+import {
+  BUCKET_A_EVENTS,
+  NON_TOOL_EVENT_CLOSED_SETS,
+  NON_TOOL_EVENT_FIELDS,
+  TOOL_EVENTS,
+  type BucketAEvent,
+  type ToolEvent,
+} from "./hook-events.ts";
 import { CLAUDE_TO_PI_TOOL_NAMES, type PiToolName } from "./hook-tool-names.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -174,6 +182,20 @@ export function parseHooksConfig(raw: string): HookConfigParseResult {
   if (!HOOKS_VALIDATOR.Check(parsed)) {
     const detail = firstHookValidationDetail(parsed);
     const reason = `hooks.json failed schema validation: ${detail}`;
+    hookDebugLog(reason);
+    return { ok: false, reason };
+  }
+
+  // D-58-03 single-seam supportability gate (TOOL-02). Fold matcher /
+  // event / handler-type supportability failure into the EXISTING
+  // `{ok:false, reason}` arm so the resolver's not-installable cascade
+  // narrows on `ok` unchanged. The reason carries the parse-time
+  // `"unsupported hooks: " + debugDetail` form; the catalog-layer
+  // narrowing in `shared/probe-classifiers.ts::narrowResolverNotes`
+  // collapses this to the closed-set `{unsupported hooks}` Reason.
+  const supportability = checkMatcherSupportability(parsed);
+  if (!supportability.ok) {
+    const reason = `unsupported hooks: ${supportability.debugDetail}`;
     hookDebugLog(reason);
     return { ok: false, reason };
   }
@@ -327,4 +349,165 @@ export function parseMatcher(raw: string): ParsedMatcher {
   }
 
   return { kind: "tool-set", piTools };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// checkMatcherSupportability (TOOL-02 four-condition gate, D-58-06)
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Supportability verdict carried out of the four-condition TOOL-02 gate.
+ * `ok: true` means every event / matcher / handler combination in the
+ * config has a Pi peer-dep analog the dispatcher can fire on. `ok: false`
+ * carries the per-condition `debugDetail` string with a locked
+ * `(a)` / `(b)` / `(c)` / `(d)` prefix routed to `hookDebugLog` only --
+ * never to `ctx.ui.notify` or stdout.
+ *
+ * The four conditions map to the audit-locked TOOL-02 catalog:
+ *   - `(a)`: regex matcher (MATCH-02 trip).
+ *   - `(b)`: tool-event matcher referencing a Claude tool with no Pi
+ *            TOOL-01 reverse-map entry (`MultiEdit` / `WebFetch` /
+ *            `Task` / Pi-form lowercase / etc.).
+ *   - `(c)`: non-bucket-A event, OR non-tool-event matcher value outside
+ *            the Pi-mappable closed set, OR non-empty matcher on a
+ *            no-matcher-support event.
+ *   - `(d)`: a hook handler whose `type` is not `"command"`.
+ */
+type SupportabilityResult = { ok: true } | { ok: false; debugDetail: string };
+
+/**
+ * TOOL-02 supportability gate. Pure and total: iterates every event /
+ * group / handler triple and returns the FIRST encountered failure with
+ * a per-condition debug detail. Strict per-PLUGIN policy: a single
+ * unsupportable matcher trips the entire plugin to
+ * `(unavailable) {unsupported hooks}`.
+ *
+ * No-op happy path: an empty config, or a config whose events are all
+ * bucket-A members with admissible matchers + `command` handlers, returns
+ * `{ok: true}` without producing a debug-log line.
+ */
+const BUCKET_A_MEMBERS = new Set<string>(BUCKET_A_EVENTS);
+const TOOL_EVENT_MEMBERS = new Set<string>(TOOL_EVENTS);
+
+/**
+ * TOOL-02(a)/(b) gate for tool events. Translates a parsed matcher arm
+ * into the corresponding `(a)` / `(b)` failure detail when the matcher
+ * is unsupportable on a tool event. Returns `null` when the matcher is
+ * admissible (match-all / tool-set / mcp-literal).
+ */
+function tryToolEventTrip(event: ToolEvent, rawMatcher: string): SupportabilityResult | null {
+  const parsed = parseMatcher(rawMatcher);
+
+  if (parsed.kind === "regex") {
+    return { ok: false, debugDetail: `(a) regex matcher in ${event}: ${rawMatcher}` };
+  }
+
+  if (parsed.kind === "unmapped") {
+    return { ok: false, debugDetail: `(b) unmapped tool in ${event}: ${parsed.token}` };
+  }
+
+  return null;
+}
+
+/**
+ * TOOL-02(c) gate for non-tool bucket-A events. Handles two sub-cases:
+ *
+ *   - Null sentinel in `NON_TOOL_EVENT_FIELDS`: Claude has no upstream
+ *     matcher support (UserPromptSubmit). Any non-empty matcher trips.
+ *   - String field in `NON_TOOL_EVENT_FIELDS`: matcher value must be in
+ *     the Pi-mappable closed set per `NON_TOOL_EVENT_CLOSED_SETS`.
+ *
+ * Match-all (empty / `*`) is always admissible and short-circuits to
+ * `null` before this function is called.
+ */
+function tryNonToolEventTrip(
+  event: Exclude<BucketAEvent, ToolEvent>,
+  rawMatcher: string,
+): SupportabilityResult | null {
+  const fieldName = NON_TOOL_EVENT_FIELDS[event];
+
+  if (fieldName === null) {
+    return {
+      ok: false,
+      debugDetail: `(c) matcher on no-matcher-support event: ${event}`,
+    };
+  }
+
+  const closedSet = NON_TOOL_EVENT_CLOSED_SETS[event];
+  if (!closedSet?.has(rawMatcher)) {
+    return {
+      ok: false,
+      debugDetail: `(c) matcher value not in closed set for ${event}: ${rawMatcher}`,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * TOOL-02(d) gate. Scans the handler list and returns the FIRST
+ * non-`command` handler's type in a `(d)` failure detail. Returns `null`
+ * when every handler is `command`.
+ */
+function tryHandlerTrip(
+  event: BucketAEvent,
+  handlers: ReadonlyArray<HookHandlerEntry>,
+): SupportabilityResult | null {
+  for (const handler of handlers) {
+    if (handler.type !== "command") {
+      return {
+        ok: false,
+        debugDetail: `(d) non-command handler in ${event}: ${handler.type}`,
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Per-event-group gate composing the four TOOL-02 conditions. Routes the
+ * matcher through tool-event (a/b) or non-tool-event (c) handling and
+ * scans the handler list for (d). Returns `null` when every check passes.
+ */
+function tryGroupTrip(
+  event: BucketAEvent,
+  group: { matcher?: string; hooks: ReadonlyArray<HookHandlerEntry> },
+): SupportabilityResult | null {
+  const rawMatcher = group.matcher ?? "";
+
+  if (TOOL_EVENT_MEMBERS.has(event)) {
+    const toolTrip = tryToolEventTrip(event as ToolEvent, rawMatcher);
+    if (toolTrip !== null) {
+      return toolTrip;
+    }
+  } else if (rawMatcher !== "" && rawMatcher !== "*") {
+    // D-58-06: match-all is always supportable on every bucket-A event.
+    // Anything non-empty routes through the non-tool-event closed-set
+    // gate.
+    const nonToolTrip = tryNonToolEventTrip(event as Exclude<BucketAEvent, ToolEvent>, rawMatcher);
+    if (nonToolTrip !== null) {
+      return nonToolTrip;
+    }
+  }
+
+  return tryHandlerTrip(event, group.hooks);
+}
+
+export function checkMatcherSupportability(config: HooksConfig): SupportabilityResult {
+  for (const [eventName, groups] of Object.entries(config)) {
+    if (!BUCKET_A_MEMBERS.has(eventName)) {
+      return { ok: false, debugDetail: `(c) non-bucket-A event: ${eventName}` };
+    }
+
+    const bucketAEvent = eventName as BucketAEvent;
+    for (const group of groups) {
+      const trip = tryGroupTrip(bucketAEvent, group);
+      if (trip !== null) {
+        return trip;
+      }
+    }
+  }
+
+  return { ok: true };
 }

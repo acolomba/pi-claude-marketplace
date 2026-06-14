@@ -33,6 +33,7 @@ import {
   NON_TOOL_EVENT_FIELDS,
   TOOL_EVENTS,
 } from "../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
+import { checkMatcherSupportability } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Block 1: TOOL-02 bucket-A 8-event tuple (D-58-06)
@@ -182,4 +183,64 @@ test("D-58-06: UserPromptSubmit has no entry in NON_TOOL_EVENT_CLOSED_SETS", () 
   );
 });
 
-// Plan 03 extends with checkMatcherSupportability invariants below this line.
+// ──────────────────────────────────────────────────────────────────────────
+// Block 6: TOOL-02 checkMatcherSupportability debugDetail prefix contract
+// ──────────────────────────────────────────────────────────────────────────
+
+test("TOOL-02: checkMatcherSupportability debugDetail prefixes are (a)/(b)/(c)/(d)", () => {
+  // Locks the per-condition debug-detail prefix shape so downstream
+  // consumers (the debug-log channel and the catalog-layer narrowing in
+  // `shared/probe-classifiers.ts::narrowResolverNotes`) have a stable
+  // token contract. A future contributor who renames any of the four
+  // prefixes red-fails this assertion.
+
+  // (a) regex matcher.
+  const regexResult = checkMatcherSupportability({
+    PreToolUse: [{ matcher: "Edit.*", hooks: [{ type: "command", command: "/bin/false" }] }],
+  });
+  assert.equal(regexResult.ok, false);
+  if (!regexResult.ok) {
+    assert.ok(
+      regexResult.debugDetail.startsWith("(a) "),
+      `(a) regex prefix expected, got: ${regexResult.debugDetail}`,
+    );
+  }
+
+  // (b) unmapped tool.
+  const unmappedResult = checkMatcherSupportability({
+    PreToolUse: [{ matcher: "MultiEdit", hooks: [{ type: "command", command: "/bin/false" }] }],
+  });
+  assert.equal(unmappedResult.ok, false);
+  if (!unmappedResult.ok) {
+    assert.ok(
+      unmappedResult.debugDetail.startsWith("(b) "),
+      `(b) unmapped-tool prefix expected, got: ${unmappedResult.debugDetail}`,
+    );
+  }
+
+  // (c) non-bucket-A event (the simplest (c) variant; the (c) closed-set
+  // and no-matcher-support variants share the same prefix and are
+  // covered in tests/domain/components/hooks.test.ts).
+  const nonBucketAResult = checkMatcherSupportability({
+    Stop: [{ matcher: "", hooks: [{ type: "command", command: "/bin/false" }] }],
+  });
+  assert.equal(nonBucketAResult.ok, false);
+  if (!nonBucketAResult.ok) {
+    assert.ok(
+      nonBucketAResult.debugDetail.startsWith("(c) "),
+      `(c) non-bucket-A prefix expected, got: ${nonBucketAResult.debugDetail}`,
+    );
+  }
+
+  // (d) non-command handler.
+  const nonCommandResult = checkMatcherSupportability({
+    PreToolUse: [{ matcher: "Edit", hooks: [{ type: "http", command: "/bin/false" }] }],
+  });
+  assert.equal(nonCommandResult.ok, false);
+  if (!nonCommandResult.ok) {
+    assert.ok(
+      nonCommandResult.debugDetail.startsWith("(d) "),
+      `(d) non-command-handler prefix expected, got: ${nonCommandResult.debugDetail}`,
+    );
+  }
+});
