@@ -231,7 +231,7 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 **Wave 1** (parallel — no shared file conflicts):
 
 - [x] 58-01-PLAN.md — TOOL-01 bidirectional tool-name map + completeness architecture test (`domain/components/hook-tool-names.ts` per D-58-04)
-- [ ] 58-02-PLAN.md — Bucket-A 8-event tuple + per-non-tool-event field/value-set maps + supportability architecture-test scaffold (`domain/components/hook-events.ts` per D-58-06)
+- [x] 58-02-PLAN.md — Bucket-A 8-event tuple + per-non-tool-event field/value-set maps + supportability architecture-test scaffold (`domain/components/hook-events.ts` per D-58-06)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
