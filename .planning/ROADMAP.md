@@ -193,11 +193,23 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 **Success Criteria** (what must be TRUE):
 
 1. A plugin manifest declaring `hooks` resolves through the discriminated `installable: true | false` resolver alongside `skills`/`commands`/`agents`/`mcpServers` (HOOK-01; NFR-7 preserved).
-2. A v1.12 `state.json` loads cleanly under v1.13 code without losing any field; `schemaVersion` widens to `Literal(1) | Literal(2)` and the additive `resources.hooks ??= []` migration runs once inside `withLockedStateTransaction` (HOOK-02; NFR-1).
+2. A v1.12 `state.json` loads cleanly under v1.13 code without losing any field; `schemaVersion` STAYS at `Literal(1)` (D-57-01 amends HOOK-02 — no bump) and the additive `resources.hooks: []` default-fill runs inside `ensurePluginResources` before `STATE_VALIDATOR.Check`, with the mutation flag riding the existing `persistMigratedState` fire-and-forget atomic-write seam (HOOK-02; NFR-1).
 3. The hook-config TypeBox schema uses `additionalProperties: true` at every nesting level and a round-trip through state preserves unknown payload fields verbatim (HOOK-03).
 4. The known additive extension set `{ statusMessage, once, async, shell, args }` is honored or silently dropped per the field-level decisions; unknown extension names surface debug-log only and never flip installability (HOOK-03 forward-compat tolerance).
 
-**Plans**: TBD
+**Plans**: 4 plans
+**Wave 1**
+
+- [ ] 57-01-PLAN.md — State schema extension + `ensurePluginResources` default-fill (HOOK-02 / D-57-01)
+- [ ] 57-02-PLAN.md — `HOOKS_CONFIG_SCHEMA` + `parseHooksConfig` + debug-log seam (HOOK-03 / D-57-02 / D-57-04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 57-03-PLAN.md — Resolver admission move + `locations.hooksDir` (HOOK-01 / D-57-03)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 57-04-PLAN.md — Architecture invariant tests pinning the four leaf-foundation contracts (HOOK-01 / HOOK-02 / HOOK-03 / D-57-01)
 
 #### Phase 58: Matcher Parser, Tool-Name Mapping & Supportability Gate
 
@@ -371,7 +383,7 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 | 54. Enable/Disable Commands                                         | v1.12     | 2/2 | Complete    | 2026-06-10 |
 | 55. Load-Time Reconcile Apply, Notification & Wiring                | v1.12     | 3/3 | Complete    | 2026-06-11 |
 | 56. Write-Back Integration & Documentation                          | v1.12     | 4/4 | Complete    | 2026-06-11 |
-| 57. Schema, Component Type & Payload-Extension Tolerance            | v1.13     | 0/0 | Not started | -          |
+| 57. Schema, Component Type & Payload-Extension Tolerance            | v1.13     | 0/4 | In progress | -          |
 | 58. Matcher Parser, Tool-Name Mapping & Supportability Gate         | v1.13     | 0/0 | Not started | -          |
 | 59. Bridge Dispatch Core & Debug Seam                               | v1.13     | 0/0 | Not started | -          |
 | 60. Hook Execution, Payload Translators & Env Vars                  | v1.13     | 0/0 | Not started | -          |
