@@ -1165,7 +1165,13 @@ test("NFR-5 end-to-end: github-source marketplace record resolves plugin info fr
               // Populated resources: an ENABLED installed record (empty
               // resources + installable:true would read as disabled per
               // ENBL-04 and route to the `(disabled)` inventory arm).
-              resources: { skills: ["local-plug-skill"], prompts: [], agents: [], mcpServers: [] },
+              resources: {
+                skills: ["local-plug-skill"],
+                prompts: [],
+                agents: [],
+                mcpServers: [],
+                hooks: [],
+              },
               installedAt: "2026-01-01T00:00:00.000Z",
               updatedAt: "2026-01-01T00:00:00.000Z",
             },

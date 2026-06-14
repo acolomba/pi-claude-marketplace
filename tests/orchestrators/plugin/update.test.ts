@@ -110,6 +110,7 @@ function makePluginRecord(
       prompts: resources.prompts ?? [],
       agents: resources.agents ?? [],
       mcpServers: resources.mcpServers ?? [],
+      hooks: resources.hooks ?? [],
     },
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",

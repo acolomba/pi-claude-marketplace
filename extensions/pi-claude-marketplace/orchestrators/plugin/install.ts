@@ -717,6 +717,10 @@ export async function runInstallLedger(
           prompts: [...c.stagedCommandNames],
           agents: [...c.stagedAgentNames],
           mcpServers: [...c.stagedMcpServerNames],
+          // HOOK-02 / D-57-01: additive required field; bucket-A hook
+          // installation is wired in later phases (DISP/EXEC). Until then
+          // every fresh install records an empty hooks inventory.
+          hooks: [],
         },
         // D-54-01 / ENBL-02: on re-materialization (allowExistingRecord),
         // PRESERVE the original installedAt -- the record was never

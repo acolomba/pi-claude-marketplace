@@ -41,7 +41,7 @@ function stateWithOneGithubMarketplace(
       // array for any installable plugin per `requireInstallable`). Tests
       // that need a "currently disabled" record use `stateWithDisabledRecord`
       // (all four arrays empty -- A1).
-      resources: { skills: ["s1"], prompts: [], agents: [], mcpServers: [] },
+      resources: { skills: ["s1"], prompts: [], agents: [], mcpServers: [], hooks: [] },
       installedAt: "2025-01-01T00:00:00.000Z",
       updatedAt: "2025-01-01T00:00:00.000Z",
     };
@@ -79,7 +79,7 @@ function stateWithOnePathMarketplace(
       // array for any installable plugin per `requireInstallable`). Tests
       // that need a "currently disabled" record use `stateWithDisabledRecord`
       // (all four arrays empty -- A1).
-      resources: { skills: ["s1"], prompts: [], agents: [], mcpServers: [] },
+      resources: { skills: ["s1"], prompts: [], agents: [], mcpServers: [], hooks: [] },
       installedAt: "2025-01-01T00:00:00.000Z",
       updatedAt: "2025-01-01T00:00:00.000Z",
     };
@@ -330,7 +330,9 @@ function stateWithDisabledRecord(
             resolvedSource: "/abs/whatever",
             compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
             // All four arrays empty -- the disabled marker per A1.
-            resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+            // HOOK-02 / D-57-01: `hooks: []` is the additive required field
+            // (also empty in the disabled-marker shape).
+            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
             installedAt: "2025-01-01T00:00:00.000Z",
             updatedAt: "2025-01-01T00:00:00.000Z",
           },
@@ -645,6 +647,7 @@ interface DisabledMarkerRecord {
     prompts: string[];
     agents: string[];
     mcpServers: string[];
+    hooks: string[];
   };
   version: string;
   resolvedSource: string;
@@ -658,8 +661,8 @@ function recordWith(installable: boolean, populated: boolean): DisabledMarkerRec
     resolvedSource: "/abs/whatever",
     compatibility: { installable, notes: [], supported: [], unsupported: [] },
     resources: populated
-      ? { skills: ["s1"], prompts: [], agents: [], mcpServers: [] }
-      : { skills: [], prompts: [], agents: [], mcpServers: [] },
+      ? { skills: ["s1"], prompts: [], agents: [], mcpServers: [], hooks: [] }
+      : { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };

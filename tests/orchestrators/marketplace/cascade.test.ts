@@ -28,6 +28,7 @@ function makePluginRecord(
       prompts: over.resources?.prompts ?? [],
       agents: over.resources?.agents ?? [],
       mcpServers: over.resources?.mcpServers ?? [],
+      hooks: over.resources?.hooks ?? [],
     },
     installedAt: over.installedAt ?? "2026-01-01T00:00:00.000Z",
     updatedAt: over.updatedAt ?? "2026-01-01T00:00:00.000Z",
@@ -53,7 +54,9 @@ test("cascadeUnstagePlugin (a): empty resources -- all bridges return cleanly wi
       "hello",
       "valid-marketplace",
       locations,
-      makePluginRecord({ resources: { skills: [], prompts: [], agents: [], mcpServers: [] } }),
+      makePluginRecord({
+        resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+      }),
     );
     assert.equal(outcome.ok, true);
     assert.deepEqual(outcome.dropped, { skills: [], commands: [], agents: [], mcpServers: [] });
@@ -75,7 +78,13 @@ test("cascadeUnstagePlugin (a): real skills unstage path -- pre-staged skill is 
       "valid-marketplace",
       locations,
       makePluginRecord({
-        resources: { skills: ["hello-greet"], prompts: [], agents: [], mcpServers: [] },
+        resources: {
+          skills: ["hello-greet"],
+          prompts: [],
+          agents: [],
+          mcpServers: [],
+          hooks: [],
+        },
       }),
     );
     assert.equal(outcome.ok, true);
@@ -109,6 +118,7 @@ test("cascadeUnstagePlugin (c): bogus locations -- agents-index.json IO surface 
           prompts: [],
           agents: ["pi-claude-marketplace-hello-greet-agent"],
           mcpServers: [],
+          hooks: [],
         },
       }),
     );

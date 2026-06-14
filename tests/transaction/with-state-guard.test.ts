@@ -67,7 +67,7 @@ function withInstalledPlugin(
         version,
         resolvedSource: `/abs/${plName}`,
         compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-        resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+        resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
         installedAt: "2025-01-01T00:00:00.000Z",
         updatedAt: "2025-01-01T00:00:00.000Z",
       },

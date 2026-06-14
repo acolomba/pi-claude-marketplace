@@ -1247,6 +1247,10 @@ function resourcesFromHandles(handles: PreparedHandles): PluginRecord["resources
     prompts: handles.commands.result.recorded.map((r) => r.generatedName),
     agents: handles.agents.result.recorded.map((r) => r.generatedName),
     mcpServers: handles.mcp.result.recorded.map((r) => r.generatedName),
+    // HOOK-02 / D-57-01: additive required field. Bucket-A hook
+    // re-materialization is wired in later phases (DISP/EXEC); reinstall
+    // records an empty hooks inventory until then.
+    hooks: [],
   };
 }
 
@@ -1535,6 +1539,8 @@ function clonePluginRecord(record: PluginRecord): PluginRecord {
       prompts: [...record.resources.prompts],
       agents: [...record.resources.agents],
       mcpServers: [...record.resources.mcpServers],
+      // HOOK-02 / D-57-01: clone the additive required hooks inventory verbatim.
+      hooks: [...record.resources.hooks],
     },
     installedAt: record.installedAt,
     updatedAt: record.updatedAt,
