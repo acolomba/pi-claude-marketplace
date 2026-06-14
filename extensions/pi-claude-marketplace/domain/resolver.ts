@@ -170,7 +170,7 @@ type SupportedPathKind = (typeof SUPPORTED_COMPONENT_PATH_KINDS)[number];
  * in SUPPORTED_COMPONENT_KINDS nor in this list would be silently ignored.
  * Re-audit when Claude Code adds new component kinds.
  */
-const UNSUPPORTED_COMPONENT_KINDS = [
+export const UNSUPPORTED_COMPONENT_KINDS = [
   "lspServers",
   "monitors",
   "themes",
