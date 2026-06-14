@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { HOOKS_VALIDATOR } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
+import {
+  HOOKS_VALIDATOR,
+  parseHooksConfig,
+} from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // HOOKS_CONFIG_SCHEMA accept matrix
@@ -113,4 +116,46 @@ test("HOOKS accepts an unknown handler-type literal (schema does not gate on han
     }),
     true,
   );
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// parseHooksConfig discriminated result (D-57-04 invalid-parse path)
+// ──────────────────────────────────────────────────────────────────────────
+
+test("parseHooksConfig returns {ok:true,value} for a syntactically + structurally valid payload", () => {
+  const raw = JSON.stringify({
+    PreToolUse: [{ matcher: "Edit", hooks: [{ type: "command", command: "/bin/false" }] }],
+  });
+  const result = parseHooksConfig(raw);
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.value, JSON.parse(raw));
+  }
+});
+
+test("parseHooksConfig returns {ok:false,reason} on invalid JSON", () => {
+  const result = parseHooksConfig("not-valid-json");
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(typeof result.reason, "string");
+    assert.notEqual(result.reason.length, 0);
+  }
+});
+
+test("parseHooksConfig returns {ok:false,reason} on a structurally-malformed payload", () => {
+  const result = parseHooksConfig('{"PreToolUse": "not-an-array"}');
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(typeof result.reason, "string");
+    assert.notEqual(result.reason.length, 0);
+  }
+});
+
+test("parseHooksConfig returns {ok:false,reason} when a type:'command' entry is missing the required `command` field", () => {
+  const result = parseHooksConfig('{"PreToolUse": [{"hooks": [{"type": "command"}]}]}');
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(typeof result.reason, "string");
+    assert.notEqual(result.reason.length, 0);
+  }
 });
