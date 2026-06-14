@@ -1,6 +1,8 @@
 // domain/components/hooks.ts
 //
-// TypeBox schema for Claude `hooks/hooks.json` files.
+// TypeBox schema for Claude `hooks/hooks.json` files + `parseHooksConfig`
+// discriminated parser. Consumed by `domain/resolver.ts` to flip
+// `installable: false` on parse failure per D-57-04.
 //
 // HOOK-03: `additionalProperties: true` at EVERY nesting level. Unknown
 // extension field names on a hook entry, unknown top-level event keys, and
@@ -20,11 +22,15 @@
 // `parseHooksConfig` as `{ ok: false, reason }`. The resolver consumes this
 // to flip `installable: false` with the `{unsupported hooks}` reason.
 // `hookDebugLog` is the OBS-01 hand-off seam: this module ships a stub
-// implementation; the implementation will later route through a shared
-// debug-log helper without touching `parseHooksConfig` callers.
+// implementation gated on `PI_CLAUDE_MARKETPLACE_DEBUG === "1"`; OBS-01 will
+// later route this through a shared debug-log helper without touching
+// `parseHooksConfig` callers. The per-file ESLint override that permits
+// `console.error` for this stub retires with the OBS-01 swap.
 
 import Type from "typebox";
 import { Compile } from "typebox/compile";
+
+import { errorMessage } from "../../shared/errors.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Schema layer-by-layer
@@ -108,3 +114,67 @@ export type HooksConfig = Type.Static<typeof HOOKS_CONFIG_SCHEMA>;
  * pattern: module-level `Compile` keeps the cost amortized across calls.
  */
 export const HOOKS_VALIDATOR = Compile(HOOKS_CONFIG_SCHEMA);
+
+// ──────────────────────────────────────────────────────────────────────────
+// parseHooksConfig (D-57-04): JSON.parse + HOOKS_VALIDATOR.Check + debug-log
+// hand-off + discriminated result.
+// ──────────────────────────────────────────────────────────────────────────
+
+/** Format the first validator error into a single-line message. */
+function firstHookValidationDetail(value: unknown): string {
+  const errors = HOOKS_VALIDATOR.Errors(value);
+  const first = errors[0];
+  if (!first) {
+    return "(no detail available)";
+  }
+
+  return `${first.instancePath || "<root>"}: ${first.message}`;
+}
+
+/**
+ * Discriminated parse result. Consumers (resolver) narrow on `ok` to
+ * surface the `{unsupported hooks}` reason on failure (D-57-04).
+ */
+export type HookConfigParseResult =
+  | { ok: true; value: HooksConfig }
+  | { ok: false; reason: string };
+
+/**
+ * OBS-01 hand-off seam. Phase-57 implementation is a stub: routes the
+ * parse-failure detail to `console.error` when
+ * `PI_CLAUDE_MARKETPLACE_DEBUG === "1"`, otherwise no-op. OBS-01 will
+ * replace this implementation to route through a shared debug-log helper
+ * without changing the function name or signature, so every existing
+ * `parseHooksConfig` caller keeps working unchanged.
+ */
+export function hookDebugLog(detail: string): void {
+  if (process.env.PI_CLAUDE_MARKETPLACE_DEBUG === "1") {
+    console.error(`[hooks] ${detail}`);
+  }
+}
+
+/**
+ * D-57-04 parse path. Returns the discriminated `{ok:true,value}` on
+ * success; on failure returns `{ok:false,reason}` and forwards the
+ * detail through `hookDebugLog`. The resolver maps the failure to
+ * `installable: false` with the `{unsupported hooks}` reason. No throws.
+ */
+export function parseHooksConfig(raw: string): HookConfigParseResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    const reason = `hooks.json is not valid JSON: ${errorMessage(err)}`;
+    hookDebugLog(reason);
+    return { ok: false, reason };
+  }
+
+  if (!HOOKS_VALIDATOR.Check(parsed)) {
+    const detail = firstHookValidationDetail(parsed);
+    const reason = `hooks.json failed schema validation: ${detail}`;
+    hookDebugLog(reason);
+    return { ok: false, reason };
+  }
+
+  return { ok: true, value: parsed };
+}

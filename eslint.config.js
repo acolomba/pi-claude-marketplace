@@ -158,6 +158,19 @@ export default tseslint.config(
     },
   },
   {
+    // Per-file override -- domain/components/hooks.ts ships the OBS-01
+    // hand-off stub `hookDebugLog`, which routes parse-failure detail to
+    // `console.error` when PI_CLAUDE_MARKETPLACE_DEBUG === "1". Trips both
+    // the `console.error` selector in `no-restricted-syntax` and the
+    // catch-all `no-console: error`. The override retires when OBS-01
+    // replaces the stub with the shared debug-log helper.
+    files: ["extensions/pi-claude-marketplace/domain/components/hooks.ts"],
+    rules: {
+      "no-console": "off",
+      "no-restricted-syntax": "off",
+    },
+  },
+  {
     // BLOCK C (D-11): Import-direction enforcement. 9-zone no-restricted-paths
     // mapping: each folder declares which sibling folders MUST NOT import from
     // it (i.e. enforces the upward/inward direction of the dep graph).
