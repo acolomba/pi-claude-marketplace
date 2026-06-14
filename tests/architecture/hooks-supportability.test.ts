@@ -265,13 +265,13 @@ test("TOOL-02: checkMatcherSupportability debugDetail prefixes are (a)/(b)/(c)/(
 
   // (d) non-command handler.
   const nonCommandResult = checkMatcherSupportability({
-    PreToolUse: [{ matcher: "Edit", hooks: [{ type: "http", command: "/bin/false" }] }],
+    PreToolUse: [{ matcher: "Edit", hooks: [{ type: "frobnicate", command: "/bin/false" }] }],
   });
   assert.equal(nonCommandResult.ok, false);
   if (!nonCommandResult.ok) {
     assert.ok(
       nonCommandResult.debugDetail.startsWith("(d) "),
-      `(d) non-command-handler prefix expected, got: ${nonCommandResult.debugDetail}`,
+      `expected "(d) non-command-handler" prefix on synthetic handler type, got: ${nonCommandResult.debugDetail}`,
     );
   }
 });
