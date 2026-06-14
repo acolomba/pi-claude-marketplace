@@ -71,6 +71,15 @@ export interface ScopedLocations {
   /** `<extensionRoot>/sources/` -- where GitHub clones land. */
   readonly sourcesDir: string;
   /**
+   * `<extensionRoot>/hooks/` -- HOOK-01 / D-57-03 per-plugin hooks
+   * container-dir root. Sibling of `dataRoot`, `sourcesDir`, `cacheDir`.
+   * Hard-coded suffix on `extensionRoot`; no name input participates at
+   * this layer (NFR-10 containment-by-construction). LIFE-03 is the
+   * binding caller that asserts containment of plugin `hooks/hooks.json`
+   * paths against this dir.
+   */
+  readonly hooksDir: string;
+  /**
    * `<extensionRoot>/cache/` -- D-03 completion cache root.
    * Sibling of `dataRoot`, `sourcesDir`. Optimization-only: every file
    * inside this directory is rebuildable from `state.json` +
@@ -138,15 +147,21 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
   const promptsTargetDir = path.join(extensionRoot, "resources", "prompts");
   const dataRoot = path.join(extensionRoot, "data");
   const sourcesDir = path.join(extensionRoot, "sources");
+  // HOOK-01 / D-57-03: per-plugin hooks container-dir root. Sibling of
+  // dataRoot, sourcesDir, cacheDir. Hard-coded suffix on extensionRoot;
+  // no name input participates at this layer (NFR-10 by construction).
+  // LIFE-03 is the binding caller that will assert plugin hooks/hooks.json
+  // paths against this root.
+  const hooksDir = path.join(extensionRoot, "hooks");
   // D-03: completion cache root. Sibling of dataRoot, sourcesDir.
   const cacheDir = path.join(extensionRoot, "cache");
   const marketplaceNamesCacheFile = path.join(cacheDir, "marketplace-names.json");
 
-  // T-03-04 disposition: every new field above is constructed from
-  // `extensionRoot` joined to a HARD-CODED suffix; no untrusted name
-  // components participate. Per W-10 / B-04, the bridges that join leaf
-  // names onto these dirs MUST call assertPathInside on the resulting
-  // leaf.
+  // T-03-04 disposition: every new field above (including hooksDir per
+  // HOOK-01 / D-57-03) is constructed from `extensionRoot` joined to a
+  // HARD-CODED suffix; no untrusted name components participate. Per W-10
+  // / B-04, the bridges that join leaf names onto these dirs MUST call
+  // assertPathInside on the resulting leaf.
   // We do not call assertPathInside here because (a) it is async and
   // locationsFor is sync (callers like loadState/saveState rely on the
   // sync shape), and (b) the suffix-only construction makes a containment
@@ -171,6 +186,7 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
     promptsTargetDir,
     dataRoot,
     sourcesDir,
+    hooksDir,
     cacheDir,
     marketplaceNamesCacheFile,
 
