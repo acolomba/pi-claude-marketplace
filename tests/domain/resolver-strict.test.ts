@@ -126,30 +126,96 @@ test("PR-2(4) malformed plugin.json -> notInstallable", async () => {
   );
 });
 
-test("PR-2(5) / PR-3 declared unsupported component (hooks) -> notInstallable + 'contains hooks' note", async () => {
+// HOOK-01: hooks moved from UNSUPPORTED to SUPPORTED. A plugin declaring
+// `hooks` at the entry level with NO hooks/hooks.json on disk is no longer
+// rejected with "contains hooks" -- Phase 57 owns convention-file discovery
+// only; entry/manifest-level hooks-field semantics are deferred to Phase 58.
+test("HOOK-01: entry declares hooks field but no hooks/hooks.json on disk -> installable WITHOUT hooks in supported", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r = await resolveStrict(basicEntry({ source: "./local", hooks: { onLoad: "x" } }), ctx);
-  assert.equal(r.installable, false);
-  assert.ok(
-    r.notes.some((n) => n === "contains hooks"),
-    `notes: ${r.notes.join(" / ")}`,
-  );
-  assert.ok(r.unsupported.includes("hooks"));
+  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
+
+  if (r.installable) {
+    assert.ok(!r.supported.includes("hooks"));
+    assert.ok(
+      !r.notes.some((n) => n.includes("contains hooks")),
+      `notes must no longer contain "contains hooks": ${r.notes.join(" / ")}`,
+    );
+  }
 });
 
-test("PR-4 hooks/hooks.json convention -> notInstallable + 'contains hooks' note", async () => {
+// HOOK-01 / D-57-04: a parseable hooks/hooks.json on disk admits the plugin
+// with hooks added to the supported set (mirrors the supported-side
+// implicit-by-convention pattern used for skills/commands/agents).
+test("HOOK-01: hooks/hooks.json present + parseable -> installable WITH hooks in supported", async () => {
   const localRoot = ROOT("./local");
   const ctx = mockCtx(MP, {
     [localRoot]: "dir",
-    [path.join(localRoot, "hooks", "hooks.json")]: { contents: JSON.stringify({ hooks: {} }) },
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({
+        PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo hi" }] }],
+      }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
+
+  if (r.installable) {
+    assert.ok(r.supported.includes("hooks"));
+    assert.ok(
+      !r.notes.some((n) => n.includes("contains hooks")),
+      `notes must no longer contain "contains hooks": ${r.notes.join(" / ")}`,
+    );
+  }
+});
+
+// D-57-04: structurally-malformed hooks/hooks.json flips installable: false
+// with the parse-failure detail surfaced in notes.
+test("D-57-04: hooks/hooks.json present + parse-fails -> notInstallable + parse-detail note", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: { contents: "not-valid-json" },
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
   assert.equal(r.installable, false);
   assert.ok(
-    r.notes.some((n) => n === "contains hooks"),
-    `notes: ${r.notes.join(" / ")}`,
+    r.notes.some((n) => /malformed hooks\.json/.test(n) || /hooks\.json/.test(n)),
+    `notes must mention hooks.json parse failure: ${r.notes.join(" / ")}`,
   );
-  assert.ok(r.unsupported.includes("hooks"));
+});
+
+// D-57-04 parse-fail second arm: structurally-malformed JSON (valid syntax,
+// wrong shape per HOOKS_VALIDATOR) also flips installable: false.
+test("D-57-04: hooks/hooks.json with structural-shape mismatch -> notInstallable", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    // Top-level value not an array -> HOOKS_VALIDATOR rejects.
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({ PreToolUse: "not-an-array" }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.installable, false);
+  assert.ok(
+    r.notes.some((n) => /hooks\.json/.test(n)),
+    `notes must mention hooks.json: ${r.notes.join(" / ")}`,
+  );
+});
+
+// HOOK-01 regression guard: absent hooks/hooks.json + no entry/manifest
+// declaration -> installable: true and hooks NOT in supported. This is the
+// no-hooks happy path; the supported-side convention probe must not invent
+// a hooks entry where none exists on disk.
+test("HOOK-01: no hooks declared and no hooks/hooks.json -> installable WITHOUT hooks in supported", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.installable, true);
+
+  if (r.installable) {
+    assert.ok(!r.supported.includes("hooks"));
+  }
 });
 
 test("PR-4 discovers unsupported default component locations", async () => {

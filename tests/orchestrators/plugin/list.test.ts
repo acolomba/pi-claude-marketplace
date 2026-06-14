@@ -1073,12 +1073,13 @@ test("TR-08 / D-19-01: list.ts has no module-level PROBE_FAILURES-style accumula
 // Uncovered-path gap tests
 // ──────────────────────────────────────────────────────────────────────────
 
-// Gap 1: hooks unsupported kind via declared field
-// resolveStrict reaches step 9 (addUnsupportedKindNotes) and finds
-// "hooks" in declaresUnsupportedKind; pushes note "contains hooks"; the
-// manifestEntryStatus returns {status:"uninstallable", notes:["contains
-// hooks"]} via the notes.length > 0 branch.
-test("gap: plugin declaring hooks field buckets as ⊘ with 'contains hooks' note", async () => {
+// HOOK-01: hooks moved from UNSUPPORTED_COMPONENT_KINDS to the supported
+// set. A plugin declaring `hooks` at entry level with NO hooks/hooks.json
+// on disk is no longer rejected -- Phase 57 owns convention-file
+// discovery only; entry/manifest-level hooks-field semantics are deferred
+// to Phase 58. The plugin now lands as `available` (not installed, no
+// admission blocker).
+test("HOOK-01: plugin declaring hooks field with no hooks/hooks.json on disk buckets as ○ (available)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
@@ -1088,21 +1089,18 @@ test("gap: plugin declaring hooks field buckets as ⊘ with 'contains hooks' not
       mpName: "mp1",
       manifest: {
         name: "mp1",
-        plugins: [
-          // hooks declared at entry level -- declaresUnsupportedKind fires.
-          { name: "hooks-plugin", source: "./hooks-plugin", hooks: ["hooks.json"] },
-        ],
+        plugins: [{ name: "hooks-plugin", source: "./hooks-plugin", hooks: ["hooks.json"] }],
       },
-      // Source dir must exist so the resolver passes the "dir does not exist"
-      // preflight check and reaches the unsupported-kind step.
       installablePluginDirs: ["hooks-plugin"],
     });
 
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
-    assert.match(out, /⊘ hooks-plugin/);
-    assert.match(out, /{hooks}/);
+    // Plugin admits cleanly (no hooks.json on disk -> no parse-fail flip).
+    assert.match(out, /○ hooks-plugin/);
+    assert.doesNotMatch(out, /\{hooks\}/);
+    assert.doesNotMatch(out, /contains hooks/);
   });
 });
 
@@ -1131,11 +1129,10 @@ test("gap: plugin declaring lspServers field buckets as ⊘ with 'contains lspSe
   });
 });
 
-// Gap 3: hooks unsupported kind via file convention (UNSUPPORTED_COMPONENT_CONVENTIONS)
-// Plugin dir exists but contains hooks/hooks.json -- detected via
-// hasUnsupportedConvention; resolver returns installable:false with note
-// "contains hooks".
-test("gap: plugin dir with hooks/hooks.json file buckets as ⊘ via file convention", async () => {
+// HOOK-01 + D-57-04: hooks/hooks.json convention file now drives admission.
+// A PARSEABLE file admits the plugin (no longer unavailable); a MALFORMED
+// file flips to unavailable with the parse-failure note.
+test("HOOK-01: plugin dir with parseable hooks/hooks.json buckets as ○ (available)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     const mpRoot = path.join(userRoot, "marketplaces", "mp1");
@@ -1152,8 +1149,6 @@ test("gap: plugin dir with hooks/hooks.json file buckets as ⊘ via file convent
       installablePluginDirs: ["hooks-conv"],
     });
 
-    // Write hooks/hooks.json inside the plugin source dir AFTER seeding so
-    // resolver's hasUnsupportedConvention probe finds it.
     const pluginDir = path.join(mpRoot, "hooks-conv");
     await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
     await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{}", "utf8");
@@ -1161,8 +1156,40 @@ test("gap: plugin dir with hooks/hooks.json file buckets as ⊘ via file convent
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
+    assert.match(out, /○ hooks-conv/);
+    assert.doesNotMatch(out, /\{hooks\}/);
+  });
+});
+
+// D-57-04: malformed hooks/hooks.json now flips to ⊘ with {hooks} reason
+// (the parse-failure detail flows through narrowResolverNotes's substring
+// match on "hooks").
+test("D-57-04: plugin dir with malformed hooks/hooks.json buckets as ⊘ with {hooks} reason", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = path.join(userRoot, "marketplaces", "mp1");
+
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "hooks-conv", source: "./hooks-conv" }],
+      },
+      installablePluginDirs: ["hooks-conv"],
+    });
+
+    const pluginDir = path.join(mpRoot, "hooks-conv");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
     assert.match(out, /⊘ hooks-conv/);
-    assert.match(out, /{hooks}/);
+    assert.match(out, /\{hooks\}/);
   });
 });
 

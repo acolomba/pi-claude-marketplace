@@ -322,10 +322,10 @@ test("INFO-02: single-scope available (path source) renders `○ ... (available)
 // (c) single-scope unavailable with `{hooks}` reason.
 // ---------------------------------------------------------------------------
 
-test("INFO-02: single-scope unavailable (declares hooks) renders `⊘ ... (unavailable) {hooks}` + components: not resolved", async () => {
+test("INFO-02: single-scope unavailable (malformed hooks/hooks.json) renders `⊘ ... (unavailable) {hooks}` + components: not resolved", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
-    await seedPathMarketplace({
+    const mpRoot = await seedPathMarketplace({
       scope: "user",
       scopeRoot: userRoot,
       cwd,
@@ -337,13 +337,19 @@ test("INFO-02: single-scope unavailable (declares hooks) renders `⊘ ... (unava
             name: "legacy",
             source: "./legacy",
             version: "0.1.0",
-            description: "Old plugin that declares hooks.",
-            hooks: { path: "./hooks.json" },
+            description: "Old plugin with a malformed hooks/hooks.json.",
           },
         ],
       },
       installablePluginDirs: ["legacy"],
     });
+
+    // HOOK-01 / D-57-04: plugin admission now depends on the convention file
+    // parse result, not on entry-level hooks-field declaration. Seed an
+    // unparseable hooks/hooks.json so resolveStrict flips installable: false.
+    const pluginDir = path.join(mpRoot, "legacy");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
 
     const { ctx, pi, notifications } = makeCtx();
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
@@ -354,7 +360,7 @@ test("INFO-02: single-scope unavailable (declares hooks) renders `⊘ ... (unava
       [
         "● mp [user] <no autoupdate>",
         "  ⊘ legacy v0.1.0 (unavailable) {hooks}",
-        "    Old plugin that declares hooks.",
+        "    Old plugin with a malformed hooks/hooks.json.",
         "    components: not resolved",
       ].join("\n"),
     );
@@ -683,10 +689,10 @@ test("WR-01: narrowProbeError -> generic Error falls through to `unreadable` (NO
 // row instead of swallowing them silently.
 // ---------------------------------------------------------------------------
 
-test("WR-01: installed plugin whose manifest declares hooks surfaces `{hooks}` on the (installed) row", async () => {
+test("WR-01: installed plugin with malformed hooks/hooks.json surfaces `{hooks}` on the (installed) row", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
-    await seedPathMarketplace({
+    const mpRoot = await seedPathMarketplace({
       scope: "user",
       scopeRoot: userRoot,
       cwd,
@@ -698,16 +704,19 @@ test("WR-01: installed plugin whose manifest declares hooks surfaces `{hooks}` o
             name: "legacy",
             source: "./legacy",
             version: "0.1.0",
-            // Declares hooks -> resolveStrict returns NotInstallable
-            // with a note like "contains hooks" that
-            // `narrowResolverNotes` maps to the `hooks` Reason.
-            hooks: { path: "./hooks.json" },
           },
         ],
       },
       installed: { legacy: { version: "0.1.0" } },
       installablePluginDirs: ["legacy"],
     });
+
+    // HOOK-01 / D-57-04: a malformed hooks/hooks.json now flips the
+    // resolver to NotInstallable with a parse-failure note that
+    // narrowResolverNotes maps to the `hooks` Reason (substring match).
+    const pluginDir = path.join(mpRoot, "legacy");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
 
     const { ctx, pi, notifications } = makeCtx();
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
