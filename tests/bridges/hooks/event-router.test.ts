@@ -3,19 +3,33 @@ import * as fs from "node:fs";
 import { test, beforeEach } from "node:test";
 
 import {
+  _resetExecutorForTest,
+  _setExecutorForTest,
+  compositeHandlerFor,
+  toolResultCompositeHandler,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
+import {
+  _bumpEpochForTest,
   _parsedConfigCacheForTest,
   _resetForTest,
   _routingTableForTest,
+  _setRoutingBucketForTest,
   addPluginConfigToCache,
   currentEpoch,
   rebuildRoutingTables,
   removePluginConfigFromCache,
+  type RoutingEntry,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import { BUCKET_A_EVENTS } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
+import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 import type { HooksConfig } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type {
+  ExtensionContext,
+  ToolResultEvent,
+} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 /**
  * Unit tests for `bridges/hooks/event-router.ts` -- the hooks-bridge
@@ -283,8 +297,275 @@ test("rebuildRoutingTables: zero disk I/O on the hot path", (t) => {
 
 test("currentEpoch: starts at 0 in a fresh module load and exposes a number", () => {
   // _resetForTest in beforeEach restores the cell to 0. The registerHooks-
-  // Bridge increment path is exercised by the dispatch.ts test suite and
-  // by Plan 03's architecture test.
+  // Bridge increment path is exercised by the dispatch suite below and by
+  // the architecture test that ships with the wiring plan.
   assert.equal(currentEpoch(), 0);
   assert.equal(typeof currentEpoch(), "number");
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// Dispatch tests (compositeHandlerFor + toolResultCompositeHandler)
+// ──────────────────────────────────────────────────────────────────────────
+
+// Build a synthetic RoutingEntry. `rawMatcher` defaults to "" (match-all).
+function makeEntry(input: {
+  pluginId: string;
+  rawMatcher?: string;
+  command?: string;
+  declarationIndex?: number;
+}): RoutingEntry {
+  const rawMatcher = input.rawMatcher ?? "";
+  return {
+    scope: "user",
+    marketplace: "mp",
+    pluginId: input.pluginId,
+    matcher: parseMatcher(rawMatcher),
+    rawMatcher,
+    handlerDecl: { type: "command", command: input.command ?? `echo ${input.pluginId}` },
+    declarationIndex: input.declarationIndex ?? 0,
+  };
+}
+
+const stubCtx = {} as unknown as ExtensionContext;
+
+test("compositeHandlerFor: fires dispatchHookExec for each bucket entry sequentially", async (t) => {
+  const calls: string[] = [];
+  _setExecutorForTest((entry) => {
+    calls.push(entry.pluginId);
+    return Promise.resolve();
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("PreToolUse", [
+    makeEntry({ pluginId: "p1", declarationIndex: 0 }),
+    makeEntry({ pluginId: "p2", declarationIndex: 1 }),
+    makeEntry({ pluginId: "p3", declarationIndex: 2 }),
+  ]);
+
+  const handler = compositeHandlerFor("PreToolUse", currentEpoch());
+  await handler(
+    { type: "tool_call", toolCallId: "x", toolName: "bash", input: { command: "ls" } },
+    stubCtx,
+  );
+
+  assert.deepEqual(calls, ["p1", "p2", "p3"]);
+});
+
+test("compositeHandlerFor: skips entries whose matcher does not fire", async (t) => {
+  const fired: string[] = [];
+  _setExecutorForTest((entry) => {
+    fired.push(entry.pluginId);
+    return Promise.resolve();
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("PreToolUse", [
+    makeEntry({ pluginId: "p-edit-a", rawMatcher: "Edit" }),
+    makeEntry({ pluginId: "p-edit-b", rawMatcher: "Edit" }),
+    makeEntry({ pluginId: "p-bash", rawMatcher: "Bash" }),
+  ]);
+
+  const handler = compositeHandlerFor("PreToolUse", currentEpoch());
+  await handler(
+    { type: "tool_call", toolCallId: "x", toolName: "edit", input: {} as never },
+    stubCtx,
+  );
+
+  assert.deepEqual(fired, ["p-edit-a", "p-edit-b"]);
+});
+
+test("compositeHandlerFor: SessionStart filter against event.reason", async (t) => {
+  const fired: string[] = [];
+  _setExecutorForTest((entry) => {
+    fired.push(entry.pluginId);
+    return Promise.resolve();
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("SessionStart", [
+    makeEntry({ pluginId: "p-any", rawMatcher: "" }),
+    makeEntry({ pluginId: "p-startup", rawMatcher: "startup" }),
+    makeEntry({ pluginId: "p-resume", rawMatcher: "resume" }),
+  ]);
+
+  const handler = compositeHandlerFor("SessionStart", currentEpoch());
+  await handler({ type: "session_start", reason: "startup" }, stubCtx);
+
+  assert.deepEqual(fired, ["p-any", "p-startup"]);
+});
+
+test("compositeHandlerFor: UserPromptSubmit fires unconditionally on every event", async (t) => {
+  const fired: string[] = [];
+  _setExecutorForTest((entry) => {
+    fired.push(entry.pluginId);
+    return Promise.resolve();
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("UserPromptSubmit", [
+    makeEntry({ pluginId: "p-a", rawMatcher: "" }),
+    makeEntry({ pluginId: "p-b", rawMatcher: "" }),
+  ]);
+
+  const handler = compositeHandlerFor("UserPromptSubmit", currentEpoch());
+  await handler({ type: "input", text: "hello", source: "interactive" }, stubCtx);
+
+  assert.deepEqual(fired, ["p-a", "p-b"]);
+});
+
+test("compositeHandlerFor: epoch mismatch causes no-op without invoking dispatchHookExec", async (t) => {
+  const fired: string[] = [];
+  _setExecutorForTest((entry) => {
+    fired.push(entry.pluginId);
+    return Promise.resolve();
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("PreToolUse", [makeEntry({ pluginId: "p1" })]);
+
+  // Capture an epoch value, then bump the live cell so the handler's
+  // captured value is stale.
+  const stale = currentEpoch();
+  _bumpEpochForTest();
+  assert.notEqual(stale, currentEpoch());
+
+  const handler = compositeHandlerFor("PreToolUse", stale);
+  await handler(
+    { type: "tool_call", toolCallId: "x", toolName: "bash", input: { command: "ls" } },
+    stubCtx,
+  );
+
+  assert.deepEqual(fired, []);
+});
+
+test("toolResultCompositeHandler: event.isError true routes to PostToolUseFailure bucket", async (t) => {
+  const fired: string[] = [];
+  _setExecutorForTest((entry) => {
+    fired.push(entry.pluginId);
+    return Promise.resolve();
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("PostToolUseFailure", [makeEntry({ pluginId: "p-failure" })]);
+  _setRoutingBucketForTest("PostToolUse", [makeEntry({ pluginId: "p-success" })]);
+
+  const handler = toolResultCompositeHandler(currentEpoch());
+  await handler(
+    {
+      type: "tool_result",
+      toolCallId: "x",
+      toolName: "bash",
+      input: {},
+      content: [],
+      isError: true,
+      details: undefined,
+    } as unknown as ToolResultEvent,
+    stubCtx,
+  );
+
+  assert.deepEqual(fired, ["p-failure"]);
+});
+
+test("toolResultCompositeHandler: event.isError false routes to PostToolUse bucket", async (t) => {
+  const fired: string[] = [];
+  _setExecutorForTest((entry) => {
+    fired.push(entry.pluginId);
+    return Promise.resolve();
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("PostToolUseFailure", [makeEntry({ pluginId: "p-failure" })]);
+  _setRoutingBucketForTest("PostToolUse", [makeEntry({ pluginId: "p-success" })]);
+
+  const handler = toolResultCompositeHandler(currentEpoch());
+  await handler(
+    {
+      type: "tool_result",
+      toolCallId: "x",
+      toolName: "bash",
+      input: {},
+      content: [],
+      isError: false,
+      details: undefined,
+    } as unknown as ToolResultEvent,
+    stubCtx,
+  );
+
+  assert.deepEqual(fired, ["p-success"]);
+});
+
+test("toolResultCompositeHandler: epoch mismatch causes no-op", async (t) => {
+  const fired: string[] = [];
+  _setExecutorForTest((entry) => {
+    fired.push(entry.pluginId);
+    return Promise.resolve();
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("PostToolUse", [makeEntry({ pluginId: "p1" })]);
+  _setRoutingBucketForTest("PostToolUseFailure", [makeEntry({ pluginId: "p2" })]);
+
+  const stale = currentEpoch();
+  _bumpEpochForTest();
+
+  const handler = toolResultCompositeHandler(stale);
+  await handler(
+    {
+      type: "tool_result",
+      toolCallId: "x",
+      toolName: "bash",
+      input: {},
+      content: [],
+      isError: false,
+      details: undefined,
+    } as unknown as ToolResultEvent,
+    stubCtx,
+  );
+
+  assert.deepEqual(fired, []);
+});
+
+test("dispatch is sequential awaited (NOT Promise.all)", async (t) => {
+  // Prove serial dispatch by recording start AND end positions of each
+  // call. If entries were dispatched via Promise.all, both calls would
+  // start before either ended; with sequential await, the second start
+  // must follow the first end.
+  const events: string[] = [];
+  _setExecutorForTest(async (entry) => {
+    events.push(`start:${entry.pluginId}`);
+    await new Promise((r) => setTimeout(r, 10));
+    events.push(`end:${entry.pluginId}`);
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("PreToolUse", [
+    makeEntry({ pluginId: "p1", declarationIndex: 0 }),
+    makeEntry({ pluginId: "p2", declarationIndex: 1 }),
+  ]);
+
+  const handler = compositeHandlerFor("PreToolUse", currentEpoch());
+  await handler(
+    { type: "tool_call", toolCallId: "x", toolName: "bash", input: { command: "ls" } },
+    stubCtx,
+  );
+
+  assert.deepEqual(events, ["start:p1", "end:p1", "start:p2", "end:p2"]);
 });

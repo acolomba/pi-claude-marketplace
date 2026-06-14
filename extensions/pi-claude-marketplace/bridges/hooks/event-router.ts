@@ -46,8 +46,9 @@ import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { compareByNameThenScope } from "../../shared/notify.ts";
+import { SCOPES } from "../../shared/types.ts";
 
-import { dispatchHookExec } from "./dispatch-exec.ts";
+import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -315,10 +316,9 @@ async function hydrateCacheFromDisk(opts: {
   ctx: ExtensionContext;
   cwd: string;
 }): Promise<readonly HydratedScope[]> {
-  const scopes: Scope[] = ["user", "project"];
   const hydrated: HydratedScope[] = [];
 
-  for (const scope of scopes) {
+  for (const scope of SCOPES) {
     const loc = locationsFor(scope, scope === "project" ? opts.cwd : homedir());
 
     let state: ExtensionState;
@@ -396,58 +396,17 @@ async function tryHydrateOnePlugin(
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Composite handlers (DISP-01 / DISP-03 / DISP-04) -- inline pending the
-// dispatch.ts extraction. The 7 distinct pi.on registrations + the
-// `event.isError` split for `tool_result` (D-59-01) live here for now;
-// the dispatch.ts module replaces these closures with the locked
-// compositeHandlerFor + toolResultCompositeHandler shapes.
+// Routing-table reader (consumed by dispatch.ts)
 // ──────────────────────────────────────────────────────────────────────────
 
-function getBucket(claudeEvent: BucketAEvent): ReadonlyArray<RoutingEntry> {
+/**
+ * Production-side accessor for a per-event routing bucket. Returns the
+ * bucket or an empty array; never undefined. Imported by dispatch.ts so
+ * the composite handlers don't reach into the routingTable cell directly
+ * (the cell stays module-private).
+ */
+export function getRoutingBucket(claudeEvent: BucketAEvent): ReadonlyArray<RoutingEntry> {
   return routingTable.get(claudeEvent) ?? [];
-}
-
-/**
- * D-59-03 epoch defense -- short-circuit when the handler's captured
- * value does not match the live cell.
- */
-function isStaleEpoch(capturedEpoch: number): boolean {
-  return capturedEpoch !== liveEpoch;
-}
-
-/**
- * Match-against-tool predicate (PreToolUse / PostToolUse / PostToolUseFailure
- * matchers carry a Pi-form tool literal in `piTools`). Unreachable
- * `regex`/`unmapped` arms (parser tripped them at parse time and the
- * resolver flipped the plugin unavailable) return `false` defensively.
- */
-function matcherFiresOnToolEvent(matcher: ParsedMatcher, toolName: string): boolean {
-  switch (matcher.kind) {
-    case "match-all":
-      return true;
-    case "tool-set":
-      return matcher.piTools.has(toolName as never);
-    case "mcp-literal":
-      return matcher.literal === toolName;
-    case "regex":
-    case "unmapped":
-      return false;
-  }
-}
-
-async function dispatchToBucket(
-  bucket: ReadonlyArray<RoutingEntry>,
-  predicate: (entry: RoutingEntry) => boolean,
-  event: unknown,
-  ctx: ExtensionContext,
-): Promise<void> {
-  for (const entry of bucket) {
-    if (!predicate(entry)) {
-      continue;
-    }
-
-    await dispatchHookExec(entry, event, ctx);
-  }
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -482,102 +441,13 @@ export async function registerHooksBridge(
     rebuildRoutingTables(state, loc);
   }
 
-  // SessionStart -- filters on `event.reason` against the per-entry
-  // rawMatcher; match-all admits every reason.
-  pi.on("session_start", async (event, ctx) => {
-    if (isStaleEpoch(capturedEpoch)) {
-      return;
-    }
-
-    await dispatchToBucket(
-      getBucket("SessionStart"),
-      (entry) => matcherFiresOnSessionStart(entry, event.reason),
-      event,
-      ctx,
-    );
-  });
-
-  // SessionEnd -- no per-entry filter (the non-tool closed set is empty;
-  // only match-all matchers reach this bucket per D-58-06).
-  pi.on("session_shutdown", async (event, ctx) => {
-    if (isStaleEpoch(capturedEpoch)) {
-      return;
-    }
-
-    await dispatchToBucket(getBucket("SessionEnd"), () => true, event, ctx);
-  });
-
-  // PreCompact -- no per-entry filter (closed set is empty per D-58-06).
-  pi.on("session_before_compact", async (event, ctx) => {
-    if (isStaleEpoch(capturedEpoch)) {
-      return;
-    }
-
-    await dispatchToBucket(getBucket("PreCompact"), () => true, event, ctx);
-  });
-
-  // PostCompact -- no per-entry filter (closed set is empty per D-58-06).
-  pi.on("session_compact", async (event, ctx) => {
-    if (isStaleEpoch(capturedEpoch)) {
-      return;
-    }
-
-    await dispatchToBucket(getBucket("PostCompact"), () => true, event, ctx);
-  });
-
-  // UserPromptSubmit -- no per-entry filter (Pi InputEvent has no matcher
-  // target; parser already rejects non-empty matchers on this event).
-  pi.on("input", async (event, ctx) => {
-    if (isStaleEpoch(capturedEpoch)) {
-      return;
-    }
-
-    await dispatchToBucket(getBucket("UserPromptSubmit"), () => true, event, ctx);
-  });
-
-  // PreToolUse -- matcher fires against Pi-form `event.toolName`.
-  pi.on("tool_call", async (event, ctx) => {
-    if (isStaleEpoch(capturedEpoch)) {
-      return;
-    }
-
-    await dispatchToBucket(
-      getBucket("PreToolUse"),
-      (entry) => matcherFiresOnToolEvent(entry.matcher, event.toolName),
-      event,
-      ctx,
-    );
-  });
-
-  // tool_result -- D-59-01 isError split. ONE composite handler routes to
-  // PostToolUse on falsy isError and to PostToolUseFailure on truthy
-  // isError; the matcher fires against Pi-form `event.toolName` against
-  // whichever bucket was selected.
-  pi.on("tool_result", async (event, ctx) => {
-    if (isStaleEpoch(capturedEpoch)) {
-      return;
-    }
-
-    const claudeEvent: BucketAEvent = event.isError ? "PostToolUseFailure" : "PostToolUse";
-    await dispatchToBucket(
-      getBucket(claudeEvent),
-      (entry) => matcherFiresOnToolEvent(entry.matcher, event.toolName),
-      event,
-      ctx,
-    );
-  });
-}
-
-/**
- * SessionStart per-entry filter. The parser narrows the closed set to
- * `{startup, resume}` at parse time, so by the time a routing entry lands
- * here the rawMatcher is one of `""`, `"*"`, `"startup"`, `"resume"`.
- * Match-all fires unconditionally; a literal-token matcher fires only when
- * `event.reason` equals the literal.
- */
-function matcherFiresOnSessionStart(entry: RoutingEntry, reason: string): boolean {
-  const raw = entry.rawMatcher;
-  return raw === "" || raw === "*" || raw === reason;
+  pi.on("session_start", compositeHandlerFor("SessionStart", capturedEpoch));
+  pi.on("session_shutdown", compositeHandlerFor("SessionEnd", capturedEpoch));
+  pi.on("session_before_compact", compositeHandlerFor("PreCompact", capturedEpoch));
+  pi.on("session_compact", compositeHandlerFor("PostCompact", capturedEpoch));
+  pi.on("input", compositeHandlerFor("UserPromptSubmit", capturedEpoch));
+  pi.on("tool_call", compositeHandlerFor("PreToolUse", capturedEpoch));
+  pi.on("tool_result", toolResultCompositeHandler(capturedEpoch));
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -609,4 +479,27 @@ export function _resetForTest(): void {
   liveEpoch = 0;
   parsedConfigCache.clear();
   routingTable.clear();
+}
+
+/**
+ * Synthetic epoch bump for unit tests that pin the
+ * mismatch-causes-no-op contract without exercising the full
+ * registerHooksBridge factory path. Not part of the public surface.
+ */
+export function _bumpEpochForTest(): number {
+  liveEpoch += 1;
+  return liveEpoch;
+}
+
+/**
+ * Inject a synthetic bucket directly into the routing table so dispatch
+ * tests can exercise the composite-handler closures without first
+ * standing up a full state + cache fixture. Not part of the public
+ * surface.
+ */
+export function _setRoutingBucketForTest(
+  claudeEvent: BucketAEvent,
+  entries: ReadonlyArray<RoutingEntry>,
+): void {
+  routingTable.set(claudeEvent, entries);
 }
