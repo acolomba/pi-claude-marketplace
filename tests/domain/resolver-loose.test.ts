@@ -208,7 +208,7 @@ test("D-57-04 loose: hooks/hooks.json present + parse-fails -> notInstallable + 
   const r = await resolveLoose(basicEntry({ source: "./local" }), ctx);
   assert.equal(r.installable, false);
   assert.ok(
-    r.notes.some((n) => /hooks\.json/.test(n)),
+    r.notes.some((n) => n.includes("hooks.json")),
     `notes must mention hooks.json: ${r.notes.join(" / ")}`,
   );
 });

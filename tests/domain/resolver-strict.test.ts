@@ -128,8 +128,9 @@ test("PR-2(4) malformed plugin.json -> notInstallable", async () => {
 
 // HOOK-01: hooks moved from UNSUPPORTED to SUPPORTED. A plugin declaring
 // `hooks` at the entry level with NO hooks/hooks.json on disk is no longer
-// rejected with "contains hooks" -- Phase 57 owns convention-file discovery
-// only; entry/manifest-level hooks-field semantics are deferred to Phase 58.
+// rejected with "contains hooks" -- the resolver only owns convention-file
+// discovery; entry/manifest-level hooks-field semantics are deferred to a
+// future dispatch milestone.
 test("HOOK-01: entry declares hooks field but no hooks/hooks.json on disk -> installable WITHOUT hooks in supported", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r = await resolveStrict(basicEntry({ source: "./local", hooks: { onLoad: "x" } }), ctx);
@@ -180,7 +181,7 @@ test("D-57-04: hooks/hooks.json present + parse-fails -> notInstallable + parse-
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
   assert.equal(r.installable, false);
   assert.ok(
-    r.notes.some((n) => /malformed hooks\.json/.test(n) || /hooks\.json/.test(n)),
+    r.notes.some((n) => n.includes("malformed hooks.json") || n.includes("hooks.json")),
     `notes must mention hooks.json parse failure: ${r.notes.join(" / ")}`,
   );
 });
@@ -199,7 +200,7 @@ test("D-57-04: hooks/hooks.json with structural-shape mismatch -> notInstallable
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
   assert.equal(r.installable, false);
   assert.ok(
-    r.notes.some((n) => /hooks\.json/.test(n)),
+    r.notes.some((n) => n.includes("hooks.json")),
     `notes must mention hooks.json: ${r.notes.join(" / ")}`,
   );
 });

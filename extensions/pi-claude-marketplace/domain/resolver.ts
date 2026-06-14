@@ -14,6 +14,14 @@
 //
 // Per D-05: use boolean-literal `installable: true | false` (PRD §6.4
 // verbatim), NOT the string-tag form (e.g. kind discriminator).
+//
+// HOOK-01: `hooks` is admitted alongside `skills` / `commands` / `agents` /
+// `mcpServers`. The supported-kind tuple is the PUBLIC closed set; the
+// path-validation loop iterates a PRIVATE subset (`SUPPORTED_COMPONENT_PATH_KINDS`)
+// because `hooks` carries no per-entry component-path semantics -- the
+// discovery path is the convention file `<pluginRoot>/hooks/hooks.json`,
+// parsed through `parseHooksConfig` (D-57-04: parse failure flips
+// `installable: false`).
 
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
@@ -23,6 +31,7 @@ import Type from "typebox";
 import { PluginShapeError } from "../shared/errors.ts";
 import { PathContainmentError, assertPathInside } from "../shared/path-safety.ts";
 
+import { parseHooksConfig, type HooksConfig } from "./components/hooks.ts";
 import { MCP_SERVERS_VALIDATOR } from "./components/mcp.ts";
 import { PLUGIN_MANIFEST_VALIDATOR, type PluginEntry } from "./components/plugin.ts";
 import { assertSafeName } from "./name.ts";
@@ -54,6 +63,11 @@ const ResolvedPluginInstallableSchema = Type.Object({
   notes: Type.Array(Type.String()),
   componentPaths: ComponentPathsSchema,
   mcpServers: McpServersFieldSchema,
+  // HOOK-01: relative path of the discovered hooks/hooks.json when the
+  // convention-file probe found a parseable file. Undefined when no hooks
+  // file exists on disk or when parse failed (the not-installable variant
+  // also carries this marker -- see schema below).
+  hooksConfigPath: Type.Optional(Type.String()),
 });
 
 const ResolvedPluginNotInstallableSchema = Type.Object({
@@ -64,6 +78,9 @@ const ResolvedPluginNotInstallableSchema = Type.Object({
   notes: Type.Array(Type.String()), // PR-3: contains "contains <name>" entries
   componentPaths: ComponentPathsSchema,
   mcpServers: McpServersFieldSchema,
+  // HOOK-01: symmetric with the installable variant so downstream
+  // consumers can read the marker without narrowing on `installable`.
+  hooksConfigPath: Type.Optional(Type.String()),
   // pluginRoot intentionally absent -- NFR-7 enforces non-readability
 });
 
@@ -123,8 +140,27 @@ function readFileTextOf(ctx: ResolveContext): (p: string) => Promise<string> {
 // Helpers
 // ──────────────────────────────────────────────────────────────────────────
 
-const SUPPORTED_COMPONENT_KINDS = ["skills", "commands", "agents"] as const;
-type SupportedKind = (typeof SUPPORTED_COMPONENT_KINDS)[number];
+/**
+ * HOOK-01: the PUBLIC closed set of supported component kinds. Downstream
+ * consumers (surface renderers, OBS/SURF tests) read this tuple as the
+ * authoritative supported-kind list. `hooks` is admitted here even though
+ * the path-validation loop iterates a narrower subset
+ * (`SUPPORTED_COMPONENT_PATH_KINDS`) -- the hooks-config discovery path
+ * is a convention file, not a component-path field.
+ */
+export const SUPPORTED_COMPONENT_KINDS = ["skills", "commands", "agents", "hooks"] as const;
+export type SupportedKind = (typeof SUPPORTED_COMPONENT_KINDS)[number];
+
+/**
+ * HOOK-01: the PRIVATE subset of supported kinds that carry per-entry
+ * component-path semantics (entry/manifest declares a relative dir; the
+ * resolver validates each path and adds it to `componentPaths.<kind>`).
+ * `hooks` is deliberately excluded -- its discovery path is the
+ * convention file `<pluginRoot>/hooks/hooks.json`, parsed by
+ * `parseHooksConfig`, NOT a path-bearing field.
+ */
+const SUPPORTED_COMPONENT_PATH_KINDS = ["skills", "commands", "agents"] as const;
+type SupportedPathKind = (typeof SUPPORTED_COMPONENT_PATH_KINDS)[number];
 
 /**
  * PR-3: any of these kinds declared in entry OR manifest disqualifies install
@@ -135,7 +171,6 @@ type SupportedKind = (typeof SUPPORTED_COMPONENT_KINDS)[number];
  * Re-audit when Claude Code adds new component kinds.
  */
 const UNSUPPORTED_COMPONENT_KINDS = [
-  "hooks",
   "lspServers",
   "monitors",
   "themes",
@@ -153,7 +188,6 @@ const UNSUPPORTED_COMPONENT_CONVENTIONS: Partial<
     readonly { readonly relativePath: string; readonly kind: "file" | "dir" }[]
   >
 > = {
-  hooks: [{ relativePath: path.join("hooks", "hooks.json"), kind: "file" }],
   lspServers: [{ relativePath: ".lsp.json", kind: "file" }],
   monitors: [{ relativePath: path.join("monitors", "monitors.json"), kind: "file" }],
   themes: [{ relativePath: "themes", kind: "dir" }],
@@ -168,9 +202,16 @@ interface PartialResolution {
   notes: string[];
   componentPaths: { skills: string[]; commands: string[]; agents: string[] };
   mcpServers: Record<string, unknown>;
+  // HOOK-01: relative path of the discovered hooks/hooks.json when the
+  // convention probe found a parseable file. Undefined when no file
+  // exists on disk or when parse failed.
+  hooksConfigPath?: string;
 }
 
 function emptyResolution(): PartialResolution {
+  // hooksConfigPath is left absent (not `undefined`) to satisfy
+  // exactOptionalPropertyTypes; consumers narrow on
+  // `partial.hooksConfigPath !== undefined`.
   return {
     supported: [],
     unsupported: [],
@@ -193,6 +234,7 @@ function notInstallable(
     notes: [...partial.notes, ...additionalNotes],
     componentPaths: partial.componentPaths,
     mcpServers: partial.mcpServers,
+    ...(partial.hooksConfigPath !== undefined && { hooksConfigPath: partial.hooksConfigPath }),
   };
 }
 
@@ -210,6 +252,7 @@ function installable(
     notes: partial.notes,
     componentPaths: partial.componentPaths,
     mcpServers: partial.mcpServers,
+    ...(partial.hooksConfigPath !== undefined && { hooksConfigPath: partial.hooksConfigPath }),
   };
 }
 
@@ -445,7 +488,7 @@ function readPathOrArray(value: unknown): readonly unknown[] {
  * manifest fields).
  */
 async function validateComponentPath(
-  kind: SupportedKind,
+  kind: SupportedPathKind,
   raw: unknown,
   pluginRoot: string,
 ): Promise<{ ok: true; relative: string } | { ok: false; reason: string }> {
@@ -492,7 +535,7 @@ async function validateComponentPath(
 
 function addComponentPath(
   partial: PartialResolution,
-  kind: SupportedKind,
+  kind: SupportedPathKind,
   seenPaths: Set<string>,
   relative: string,
 ): void {
@@ -506,7 +549,7 @@ function addComponentPath(
 
 async function addValidatedComponentPath(
   partial: PartialResolution,
-  kind: SupportedKind,
+  kind: SupportedPathKind,
   seenPaths: Set<string>,
   raw: unknown,
   pluginRoot: string,
@@ -528,7 +571,7 @@ async function collectStrictComponentKind(
   partial: PartialResolution,
   pluginRoot: string,
   ctx: ResolveContext,
-  kind: SupportedKind,
+  kind: SupportedPathKind,
 ): Promise<boolean> {
   let dirty = false;
   const seenPaths = new Set<string>();
@@ -569,6 +612,82 @@ async function readStandaloneMcp(
       reason: `malformed mcpServers (.mcp.json): ${err instanceof Error ? err.message : String(err)}`,
     };
   }
+}
+
+/**
+ * HOOK-01 / D-57-04: discover + parse the per-plugin hooks config file.
+ *
+ * Returns:
+ *   - `{ ok: true }` when no `<pluginRoot>/hooks/hooks.json` exists on disk
+ *     (the no-op happy path: the plugin neither declares nor provides hooks).
+ *   - `{ ok: true, value, relativePath }` when the file exists AND
+ *     `parseHooksConfig` succeeds. The caller adds `"hooks"` to
+ *     `partial.supported` and records `partial.hooksConfigPath`.
+ *   - `{ ok: false, reason }` when the file exists but `parseHooksConfig`
+ *     fails (invalid JSON, structural shape mismatch, missing REQUIRED
+ *     `command` on a `type: "command"` handler). The reason is prefixed
+ *     with `malformed hooks.json: ` so downstream substring narrowing in
+ *     `shared/probe-classifiers.ts::narrowResolverNotes` (which matches
+ *     `note.includes("hooks")`) emits the `hooks` Reason.
+ *
+ * Disk I/O is routed through the injected `statKind` + `readFileText`
+ * readers, mirroring the `readStandaloneMcp` pattern for testability.
+ */
+async function readStandaloneHooks(
+  ctx: ResolveContext,
+  pluginRoot: string,
+): Promise<
+  { ok: true; value?: HooksConfig; relativePath?: string } | { ok: false; reason: string }
+> {
+  const hooksPath = path.join(pluginRoot, "hooks", "hooks.json");
+  if ((await statKindOf(ctx)(hooksPath)) !== "file") {
+    return { ok: true };
+  }
+
+  let raw: string;
+  try {
+    raw = await readFileTextOf(ctx)(hooksPath);
+  } catch (err) {
+    return {
+      ok: false,
+      reason: `malformed hooks.json: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  const parsed = parseHooksConfig(raw);
+  if (!parsed.ok) {
+    return { ok: false, reason: `malformed hooks.json: ${parsed.reason}` };
+  }
+
+  return { ok: true, value: parsed.value, relativePath: path.join("hooks", "hooks.json") };
+}
+
+/**
+ * HOOK-01 + D-57-04 wiring helper. Probe `hooks/hooks.json`, update the
+ * partial resolution, and report whether the result flips installability.
+ * Mode-agnostic: both `resolveStrict` and `resolveLoose` call this
+ * unchanged (D-57-04 parse-failure semantics do not depend on
+ * entry-vs-manifest declaration mode).
+ */
+async function applyHooksConfig(
+  ctx: ResolveContext,
+  pluginRoot: string,
+  partial: PartialResolution,
+): Promise<boolean> {
+  const hooksResult = await readStandaloneHooks(ctx, pluginRoot);
+  if (!hooksResult.ok) {
+    partial.notes.push(hooksResult.reason);
+    return true;
+  }
+
+  if (hooksResult.value !== undefined) {
+    partial.supported.push("hooks");
+    if (hooksResult.relativePath !== undefined) {
+      partial.hooksConfigPath = hooksResult.relativePath;
+    }
+  }
+
+  return false;
 }
 
 function applyMcpValue(partial: PartialResolution, mcp: unknown, detail = true): boolean {
@@ -615,7 +734,7 @@ async function collectLooseComponentKind(
   manifest: Record<string, unknown> | null,
   partial: PartialResolution,
   pluginRoot: string,
-  kind: SupportedKind,
+  kind: SupportedPathKind,
 ): Promise<boolean> {
   const fromEntry = (entry as Record<string, unknown>)[kind];
   const fromManifest = manifest?.[kind];
@@ -710,7 +829,12 @@ export async function resolveStrict(
   // dir exists on disk and is not already declared, it is appended to the
   // array. First-wins dedup by relative-path string preserves ordering
   // (declared first, implicit last).
-  for (const kind of SUPPORTED_COMPONENT_KINDS) {
+  //
+  // HOOK-01: iterates SUPPORTED_COMPONENT_PATH_KINDS (skills/commands/agents),
+  // NOT the full SUPPORTED_COMPONENT_KINDS tuple, because `hooks` carries no
+  // per-entry component-path semantics. The hooks-config probe in step 8b
+  // owns the discovery + admission of the `hooks` supported kind.
+  for (const kind of SUPPORTED_COMPONENT_PATH_KINDS) {
     dirty =
       (await collectStrictComponentKind(entry, manifest, partial, pluginRoot, ctx, kind)) || dirty;
   }
@@ -718,8 +842,15 @@ export async function resolveStrict(
   // Step 8 (MM-5): mcpServers union (entry > manifest > standalone .mcp.json).
   dirty = (await applyStrictMcp(entry, manifest, partial, pluginRoot, ctx)) || dirty;
 
+  // Step 8b (HOOK-01 / D-57-04): probe `<pluginRoot>/hooks/hooks.json` and
+  // either add `hooks` to supported (parse OK) or flip installable=false
+  // with the parse-failure detail.
+  dirty = (await applyHooksConfig(ctx, pluginRoot, partial)) || dirty;
+
   // Step 9 (PR-3 / PR-4): unsupported components declared explicitly or via
-  // Claude Code default locations (.lsp.json, hooks/hooks.json, etc.).
+  // Claude Code default locations (.lsp.json, monitors/monitors.json, etc.).
+  // `hooks` is no longer in UNSUPPORTED_COMPONENT_KINDS -- HOOK-01 admission
+  // is owned by step 8b.
   dirty = (await addUnsupportedKindNotes(entry, manifest, pluginRoot, ctx, partial)) || dirty;
 
   // Step 10 (PR-5): dependencies stay installable but get a note.
@@ -750,13 +881,20 @@ export async function resolveLoose(
   // manifest declarations without a matching entry-level declaration are a
   // conflict. Array shape mirrors strict mode, but with first-wins dedup
   // applied only to entry-declared paths (no convention probing).
-  for (const kind of SUPPORTED_COMPONENT_KINDS) {
+  //
+  // HOOK-01: iterates the PATH-kinds subset only (see strict-mode note above).
+  for (const kind of SUPPORTED_COMPONENT_PATH_KINDS) {
     dirty = (await collectLooseComponentKind(entry, manifest, partial, pluginRoot, kind)) || dirty;
     // No implicit-by-convention in loose mode.
   }
 
   // Step 8 (MM-7 loose mcpServers).
   dirty = (await applyLooseMcp(entry, manifest, partial, pluginRoot, ctx)) || dirty;
+
+  // Step 8b (HOOK-01 / D-57-04): the hooks-config probe is mode-agnostic.
+  // Entry-vs-manifest hooks-FIELD conflict semantics are deferred to the
+  // dispatch milestone; here the convention file is the sole gate.
+  dirty = (await applyHooksConfig(ctx, pluginRoot, partial)) || dirty;
 
   // Step 9 (PR-3 / PR-4): unsupported components -- same as strict.
   dirty = (await addUnsupportedKindNotes(entry, manifest, pluginRoot, ctx, partial)) || dirty;

@@ -1075,10 +1075,10 @@ test("TR-08 / D-19-01: list.ts has no module-level PROBE_FAILURES-style accumula
 
 // HOOK-01: hooks moved from UNSUPPORTED_COMPONENT_KINDS to the supported
 // set. A plugin declaring `hooks` at entry level with NO hooks/hooks.json
-// on disk is no longer rejected -- Phase 57 owns convention-file
+// on disk is no longer rejected -- the resolver owns convention-file
 // discovery only; entry/manifest-level hooks-field semantics are deferred
-// to Phase 58. The plugin now lands as `available` (not installed, no
-// admission blocker).
+// to a future dispatch milestone. The plugin now lands as `available`
+// (not installed, no admission blocker).
 test("HOOK-01: plugin declaring hooks field with no hooks/hooks.json on disk buckets as ○ (available)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
