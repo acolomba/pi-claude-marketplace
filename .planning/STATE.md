@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.13
 milestone_name: Claude Hook Bridge
 status: executing
-stopped_at: Phase 59 context gathered
-last_updated: "2026-06-14T20:56:43.357Z"
+stopped_at: Completed 59-02-PLAN.md
+last_updated: "2026-06-14T21:48:39.001Z"
 last_activity: 2026-06-14 -- Phase 59 execution started
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 11
-  completed_plans: 9
+  completed_plans: 10
   percent: 29
 ---
 
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 ## Current Position
 
 Phase: 59 (bridge-dispatch-core-debug-seam) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-06-14 -- Phase 59 execution started
 
@@ -112,6 +112,7 @@ Last activity: 2026-06-14 -- Phase 59 execution started
 | Phase 58 P03 | ~35m | 2 tasks | 3 files |
 | Phase 58 P04 | ~13m | 2 tasks | 15 files |
 | Phase Phase 59 PP01 | 25min | 2 tasks | 4 files |
+| Phase 59 P02 | 43m | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -215,6 +216,13 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 58]: Bucket-A 8-event closed-set tuple + tool-event 3-tuple subset + per-non-tool-event Claude-side matcher target fields + per-event admissible-value closed sets shipped at `domain/components/hook-events.ts` (D-58-06 strict-supportability stance locked into the value sets). `BUCKET_A_EVENTS` 8-tuple in deterministic-iteration order; `TOOL_EVENTS` 3-tuple subset (PreToolUse/PostToolUse/PostToolUseFailure); `NON_TOOL_EVENT_FIELDS` Readonly<Partial<Record>> with `source`/`reason`/`trigger` + `null` UserPromptSubmit sentinel; `NON_TOOL_EVENT_CLOSED_SETS` derived from Pi peer-dep verification (SessionStart `{startup, resume}` -- no Pi analog for `clear`/`compact`; SessionEnd / PreCompact / PostCompact empty under v1.13 -- no semantically safe Pi field/value overlap). Architecture test (`tests/architecture/hooks-supportability.test.ts`) carries 5 ID-prefixed invariants (BUCKET_A_EVENTS deepEqual lock, TOOL_EVENTS deepEqual + subset lock, NON_TOOL_EVENT_FIELDS per-event lock, NON_TOOL_EVENT_CLOSED_SETS per-event value-set lock, UserPromptSubmit absent-from-closed-sets lock) with a `// Plan 03 extends ...` extension-point marker. npm run check GREEN at plan close. -- Plan 58-02.
 - [Phase 58]: HOOK-04 atomic byte rename + D-58-02 manifest-field carve-out drop landed in ONE atomic commit (`f74005b`). REASONS member `"hooks"` -> `"unsupported hooks"` at `shared/notify.ts:81`; tuple length 31 (rename, not addition). `narrowResolverNotes` substring detection tightened from `note.includes("hooks")` to `startsWith` checks anchored on the four prefix tokens parseHooksConfig + the resolver wrapper emit (`hooks.json is not valid JSON:`, `hooks.json failed schema validation:`, `unsupported hooks:`, `malformed hooks.json:`) -- Pitfall 2 locked by a new `tests/shared/probe-classifiers.test.ts` (9 GREEN tests, including the negative case where a free-form note containing the word `hooks` mid-string falls through to the permissive `unsupported source` fallback). `MANIFEST_FIELD_REASONS` set in `orchestrators/plugin/install.ts` drops `"hooks"` (keeps `"lspServers"` as the SOLE manifest-field carve-out); `MANIFEST_FIELD_TO_REASON` drops the `hooks: "hooks"` entry. Under v1.13 `hooks` is a SUPPORTED component kind so the resolver never emits a `"contains hooks"` note; the dead carve-out branch is removed. 6 byte-form occurrences in `docs/output-catalog.md` re-keyed + 7 catalog-uat fixture rows + 4 notify-v2 fixtures + snm37/snm38 readability locks + 2 info.test.ts string snapshots + 3 install.test.ts narrowResolverReasons tests rewritten for post-D-58-02 behavior + 1 list.test.ts regex assertion -- 15 files in ONE commit. REQUIREMENTS.md HOOK-04 reassigned from `Phase 63 / Pending` to `Phase 58 (Plan 04) / Complete`. npm run check GREEN 1935 unit + 10 integration. PHASE 58 COMPLETE -- requirements TOOL-01 / TOOL-02 / MATCH-01 / MATCH-02 / HOOK-04 all CLOSED. -- Plan 58-04.
 - [Phase ?]: [Phase 59]: D-59-05 locked: OBS-01 seam re-homed at extensions/pi-claude-marketplace/shared/debug-log.ts; env-gated hookDebugLog signature preserved byte-for-byte; per-file ESLint override mirrors BLOCK B (shared/notify.ts). -- Plan 59-01.
+- [Phase ?]: D-59-01: 7 distinct pi.on call sites; tool_result splits on event.isError inside ONE composite handler -- routes to PostToolUseFailure on truthy or PostToolUse on falsy
+- [Phase ?]: D-59-02 PLAN-LOCAL: bridges/ cannot import transaction/; hydrateCacheFromDisk calls loadState(loc.extensionRoot) directly. The factory-time read is intentionally non-locked because reconcile re-runs after every state mutation
+- [Phase ?]: D-59-02 confirmed: parsedConfigCache bridge-owned in-memory; rebuildRoutingTables synchronous + zero-disk-I/O on hot path (DISP-02 pinned by fs.promises.readFile sentinel test)
+- [Phase ?]: D-59-03 confirmed: liveEpoch module-top let cell; bumped on registerHooksBridge entry; composite handlers capture+compare; mismatch is a no-op
+- [Phase ?]: D-59-04 confirmed: dispatchHookExec ships as no-op Promise<void> stub; execution layer fills body without changing signature
+- [Phase ?]: Plan 59-02: peer-dep UserPromptSubmitEvent does not exist; substituted InputEvent (Pi event name 'input') in platform/pi-api.ts re-exports and pi.on registration. Claude-side UserPromptSubmit bucket name unchanged.
+- [Phase ?]: Plan 59-02: dispatch.ts exposes bridge-internal _setExecutorForTest/_resetExecutorForTest seam (ESM imports are read-only, t.mock.method fails with 'Cannot redefine property'). Production default is dispatchHookExec; seam is not re-exported via index.ts
 
 ### Pending Todos
 
@@ -270,9 +278,9 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-14T20:56:22.361Z
-Stopped At: Phase 59 context gathered
-Resume File: .planning/phases/59-bridge-dispatch-core-debug-seam/59-CONTEXT.md
+Last session: 2026-06-14T21:48:38.982Z
+Stopped At: Completed 59-02-PLAN.md
+Resume File: None
 
 ## Operator Next Steps
 

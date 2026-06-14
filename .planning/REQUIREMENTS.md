@@ -45,10 +45,10 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Bridge Dispatch Core
 
-- [ ] **DISP-01**: Bridge calls `pi.on(eventName, handler)` exactly once per supported Pi event type at extension-factory time; routing state is read from `shared/event-router.ts`
-- [ ] **DISP-02**: Routing table is cleared and rebuilt synchronously by `rebuildRoutingTables(state, loc)` called from `orchestrators/reconcile/apply.ts` after each scope's apply pass; rebuild is sub-millisecond and atomic by Node's single-thread model
-- [ ] **DISP-03**: Every composite handler closes over an epoch integer; a module-level `liveEpoch` cell is bumped on each bridge load; stale handlers from prior loads are no-ops (NFR-2: `/reload` always suffices, no Pi restart required)
-- [ ] **DISP-04**: Dispatch ordering is deterministic -- entries sorted by `compareByNameThenScope` (project-first, alphabetical); within one plugin, declaration order from `hooks.json`; fan-out sequential and awaited within one composite-handler invocation
+- [x] **DISP-01**: Bridge calls `pi.on(eventName, handler)` exactly once per supported Pi event type at extension-factory time; routing state is read from `shared/event-router.ts`
+- [x] **DISP-02**: Routing table is cleared and rebuilt synchronously by `rebuildRoutingTables(state, loc)` called from `orchestrators/reconcile/apply.ts` after each scope's apply pass; rebuild is sub-millisecond and atomic by Node's single-thread model
+- [x] **DISP-03**: Every composite handler closes over an epoch integer; a module-level `liveEpoch` cell is bumped on each bridge load; stale handlers from prior loads are no-ops (NFR-2: `/reload` always suffices, no Pi restart required)
+- [x] **DISP-04**: Dispatch ordering is deterministic -- entries sorted by `compareByNameThenScope` (project-first, alphabetical); within one plugin, declaration order from `hooks.json`; fan-out sequential and awaited within one composite-handler invocation
 
 ### Hook Child-Process Execution
 
@@ -191,10 +191,10 @@ Per the audit in `docs/research/claude-hook-config-syntax.md` § 10 (cross-check
 | MATCH-03 | Phase 61 | Pending |
 | TOOL-01 | Phase 58 (Plan 01) | Complete |
 | TOOL-02 | Phase 58 (Plan 03) | Complete |
-| DISP-01 | Phase 59 | Pending |
-| DISP-02 | Phase 59 | Pending |
-| DISP-03 | Phase 59 | Pending |
-| DISP-04 | Phase 59 | Pending |
+| DISP-01 | Phase 59 | Complete |
+| DISP-02 | Phase 59 | Complete |
+| DISP-03 | Phase 59 | Complete |
+| DISP-04 | Phase 59 | Complete |
 | EXEC-01 | Phase 60 | Pending |
 | EXEC-02 | Phase 60 | Pending |
 | EXEC-03 | Phase 60 | Pending |
