@@ -269,11 +269,11 @@ const FIXTURES: FixtureMap = {
                 version: "1.0.0",
                 reasons: ["stale clone"],
               },
-              { status: "unavailable", name: "delta", reasons: ["hooks"] },
+              { status: "unavailable", name: "delta", reasons: ["unsupported hooks"] },
               {
                 status: "unavailable",
                 name: "epsilon",
-                reasons: ["hooks", "lsp"],
+                reasons: ["unsupported hooks", "lsp"],
               },
               { status: "available", name: "gamma", version: "2.0.0" },
             ],
@@ -504,7 +504,7 @@ const FIXTURES: FixtureMap = {
               {
                 status: "unavailable",
                 name: "delta",
-                reasons: ["hooks"],
+                reasons: ["unsupported hooks"],
                 description: "Unavailable plugin that still surfaces its description.",
               },
             ],
@@ -579,7 +579,7 @@ const FIXTURES: FixtureMap = {
               {
                 status: "unavailable",
                 name: "helper",
-                reasons: ["hooks", "lsp"],
+                reasons: ["unsupported hooks", "lsp"],
               },
             ],
           },
@@ -826,7 +826,7 @@ const FIXTURES: FixtureMap = {
                 version: "1.0.0",
                 dependencies: [],
               },
-              { status: "unavailable", name: "delta", reasons: ["hooks"] },
+              { status: "unavailable", name: "delta", reasons: ["unsupported hooks"] },
             ],
           },
         ],
@@ -1172,7 +1172,7 @@ const FIXTURES: FixtureMap = {
             status: "added",
             plugins: [
               { status: "installed", name: "local-plugin", dependencies: [] },
-              { status: "unavailable", name: "unavailable-plugin", reasons: ["hooks"] },
+              { status: "unavailable", name: "unavailable-plugin", reasons: ["unsupported hooks"] },
             ],
           },
           {
@@ -1612,7 +1612,7 @@ const FIXTURES: FixtureMap = {
   //     * installed-single-scope                       (INFO-02 happy path)
   //     * installed-single-scope-with-dependencies     (INFO-02 + dependencies line)
   //     * available-single-scope                       (INFO-02 available bucket)
-  //     * unavailable-single-scope                     (INFO-02 unavailable + {hooks})
+  //     * unavailable-single-scope                     (INFO-02 unavailable + {unsupported hooks})
   //   - Multi-scope fan-out:
   //     * installed-both-scopes-fan-out                (INFO-03 project-first fan-out)
   //   - Components arm (INFO-05):
@@ -1705,7 +1705,7 @@ const FIXTURES: FixtureMap = {
           name: "legacy-plugin",
           version: "0.1.0",
           description: "Old plugin that declares hooks; not installable in Pi.",
-          reasons: ["hooks"],
+          reasons: ["unsupported hooks"],
           componentsResolved: false,
         },
       } satisfies NotificationMessage,

@@ -165,7 +165,7 @@ async function loadManifestSoftly(manifestPath: string): Promise<MarketplaceMani
 
 /**
  * Reasons emitted by the list orchestrator. The resolver-narrowing path
- * produces `hooks` / `lsp` / `unsupported source`; the
+ * produces `unsupported hooks` / `lsp` / `unsupported source`; the
  * probe-error path produces `invalid manifest` / `permission denied` /
  * `source missing` / `unreadable` / `unparseable`. All values are members
  * of the closed `Reason` set so the renderer accepts them unchanged
@@ -173,7 +173,7 @@ async function loadManifestSoftly(manifestPath: string): Promise<MarketplaceMani
  * schema-invalid manifest case).
  */
 type ListReason =
-  | "hooks"
+  | "unsupported hooks"
   | "lsp"
   | "unsupported source"
   | "invalid manifest"

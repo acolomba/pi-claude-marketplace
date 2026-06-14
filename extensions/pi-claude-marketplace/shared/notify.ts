@@ -78,7 +78,7 @@ export const REASONS = [
   "invalid manifest",
   "no longer installable",
   "unsupported source",
-  "hooks",
+  "unsupported hooks",
   "lsp",
   "requires pi-subagents",
   "requires pi-mcp",

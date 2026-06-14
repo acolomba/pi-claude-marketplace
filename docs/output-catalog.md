@@ -56,7 +56,7 @@ This 0 / 2 / 4 / 6 ladder is the byte-exact contract `notify()` emits at the `ct
 
 ### Reasons rendering
 
-Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Manifest field names render verbatim as the sole carve-out (`{hooks}`, `{lsp}`). The closed-set membership is defined by `extensions/pi-claude-marketplace/shared/notify.ts::REASONS`.
+Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Manifest field names render verbatim as the sole carve-out (`{lsp}`). HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The closed-set membership is defined by `extensions/pi-claude-marketplace/shared/notify.ts::REASONS`.
 
 The soft-dep markers `requires pi-subagents` and `requires pi-mcp` live INSIDE the same brace block as the variant's typed reasons (D-16-15 injection). They are emitted by the renderer at render time from the plugin's `dependencies` field and the Pi-host probe; callers do not place them in `reasons` directly. The 3 dep-bearing variants (`installed | updated | reinstalled`) carry the `dependencies` field per D-15-02; the other 7 variants cannot emit soft-dep markers structurally.
 
@@ -133,7 +133,7 @@ ______________________________________________________________________
 | `(reinstalled)`                             | ●    | Plugin row -- reinstall cascade.                                                                                                                                            |
 | `(uninstalled)`                             | ○    | Plugin row -- uninstall single-plugin, marketplace-remove partial success rows.                                                                                             |
 | `(available)`                               | ○    | Plugin row -- `marketplace list` / plugin-list surface (no scope bracket per MSG-PL-6 / SNM-11).                                                                            |
-| `(unavailable)`                             | ⊘    | Plugin row -- install / reinstall / import / list surfaces when a manifest declares unsupported Claude features; carries `{hooks}` / `{lsp}` etc.                           |
+| `(unavailable)`                             | ⊘    | Plugin row -- install / reinstall / import / list surfaces when a manifest declares unsupported Claude features; carries `{unsupported hooks}` / `{lsp}` etc.               |
 | `(upgradable)`                              | ●    | Plugin row -- plugin-list surface only (advisory).                                                                                                                          |
 | `(failed)`                                  | ⊘    | Plugin row -- any failure variant; carries `reasons`, optional `cause:` trailer, optional `rollbackPartial` children.                                                       |
 | `(skipped)`                                 | ⊘    | Plugin row -- per-plugin skip inside cascades; carries `reasons` (e.g. `{up-to-date}`, `{already installed}`).                                                              |
@@ -179,8 +179,8 @@ The renderer emits the literal `(no marketplaces)` body for an empty top-level `
 ● official [user] <autoupdate>
   ● alpha v1.0.0 (installed)
   ● beta v1.0.0 (upgradable) {stale clone}
-  ⊘ delta (unavailable) {hooks}
-  ⊘ epsilon (unavailable) {hooks, lsp}
+  ⊘ delta (unavailable) {unsupported hooks}
+  ⊘ epsilon (unavailable) {unsupported hooks, lsp}
   ○ gamma v2.0.0 (available)
 ```
 
@@ -298,7 +298,7 @@ The plugin's persisted version is the PI-7 content hash `hash-2ea95f85703d`; the
     A longer description that is exactly sixty-three characters lon...
   ○ gamma v2.0.0 (available)
     Installable plugin with a description.
-  ⊘ delta (unavailable) {hooks}
+  ⊘ delta (unavailable) {unsupported hooks}
     Unavailable plugin that still surfaces its description.
 ```
 
@@ -353,7 +353,7 @@ Marketplace header is SUB-BRANCH A (bare label header, no details). Plugin row o
 
 ```text
 ● official [user]
-  ⊘ helper (unavailable) {hooks, lsp}
+  ⊘ helper (unavailable) {unsupported hooks, lsp}
 ```
 
 The manifest declares Claude features Pi doesn't support; the `unavailable` variant has no `scope` field (SNM-11) so the plugin row carries no bracket; reasons name the offending fields verbatim. No `cause:` trailer -- the reason carries the explanation. No reload-hint (no state-changing status); severity is info.
@@ -531,7 +531,7 @@ Failed-only cascade. No reload-hint per D-16-12 (no plugin in the state-changing
 ```text
 ● official [user]
   ● alpha v1.0.0 (reinstalled)
-  ⊘ delta (unavailable) {hooks}
+  ⊘ delta (unavailable) {unsupported hooks}
 
 /reload to pick up changes
 ```
@@ -747,7 +747,7 @@ Multi-marketplace + multi-plugin cascade. Each marketplace header carries its ow
 
 ● directory-marketplace [user] (added)
   ● local-plugin (installed)
-  ⊘ unavailable-plugin (unavailable) {hooks}
+  ⊘ unavailable-plugin (unavailable) {unsupported hooks}
 
 ● github-marketplace [project] (added)
   ● github-plugin (installed)
@@ -1135,13 +1135,13 @@ The `info` surface conveys a recorded-but-disabled plugin via the SAME `(disable
 
 ### Success -- unavailable single scope
 
-Triggered when `resolveStrict` returns `installable: false` for the plugin entry (typically because the manifest declares an unsupported component such as `hooks` or `lspServers`). The status glyph is `⊘`; the row reads `(unavailable)` followed by a closed-set REASON brace (`{hooks}` / `{lsp}` / `{unsupported source}` per `narrowResolverNotes`). The renderer's `componentsResolved: false` switch arm fires for the unavailable arm, emitting the `components: not resolved` marker line in place of per-kind component lists -- the plugin is not installable so its component layout is moot. Severity `info` (unavailable is not a failure on the info surface; only `failed` routes to error).
+Triggered when `resolveStrict` returns `installable: false` for the plugin entry (typically because the manifest declares an unsupported component such as `lspServers` or carries a `hooks/hooks.json` whose contents fail parse/schema/supportability). The status glyph is `⊘`; the row reads `(unavailable)` followed by a closed-set REASON brace (`{unsupported hooks}` / `{lsp}` / `{unsupported source}` per `narrowResolverNotes`). The renderer's `componentsResolved: false` switch arm fires for the unavailable arm, emitting the `components: not resolved` marker line in place of per-kind component lists -- the plugin is not installable so its component layout is moot. Severity `info` (unavailable is not a failure on the info surface; only `failed` routes to error).
 
 <!-- catalog-state: unavailable-single-scope -->
 
 ```text
 ● community-mp [user] <no autoupdate>
-  ⊘ legacy-plugin v0.1.0 (unavailable) {hooks}
+  ⊘ legacy-plugin v0.1.0 (unavailable) {unsupported hooks}
     Old plugin that declares hooks; not installable in Pi.
     components: not resolved
 ```

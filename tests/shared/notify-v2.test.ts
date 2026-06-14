@@ -373,7 +373,7 @@ test("notify renders unavailable plugin with reasons (MSG-PL-6 carve-out: NO sco
           {
             status: "unavailable",
             name: "commit-commands",
-            reasons: ["hooks"],
+            reasons: ["unsupported hooks"],
           },
         ],
       },
@@ -383,7 +383,7 @@ test("notify renders unavailable plugin with reasons (MSG-PL-6 carve-out: NO sco
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // Variant has no `version` set -> renderVersion("") -> "" slot collapsed.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `● demo [user]\n  ⊘ commit-commands (unavailable) {hooks}`,
+    `● demo [user]\n  ⊘ commit-commands (unavailable) {unsupported hooks}`,
   ]);
 });
 
@@ -1061,7 +1061,7 @@ test("PL-4: unavailable row with description emits description line", () => {
           {
             status: "unavailable",
             name: "delta",
-            reasons: ["hooks"],
+            reasons: ["unsupported hooks"],
             description: "Unavailable plugin that still surfaces its description.",
           },
         ],
@@ -1072,7 +1072,7 @@ test("PL-4: unavailable row with description emits description line", () => {
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   assert.equal(
     body,
-    "● official [user]\n  ⊘ delta (unavailable) {hooks}\n    Unavailable plugin that still surfaces its description.",
+    "● official [user]\n  ⊘ delta (unavailable) {unsupported hooks}\n    Unavailable plugin that still surfaces its description.",
   );
 });
 

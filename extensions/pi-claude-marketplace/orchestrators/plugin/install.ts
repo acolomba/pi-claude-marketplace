@@ -145,7 +145,7 @@ import type { Scope } from "../../shared/types.ts";
  * consumer.
  *
  * Examples: `⊘ unknown@claude-plugins-official (failed) {not found}`;
- * `⊘ hookify [user] (unavailable) {hooks}`.
+ * `⊘ hookify [user] (unavailable) {unsupported hooks}`.
  */
 interface EntityErrorRow {
   readonly kind: "entity-error";
@@ -1464,27 +1464,33 @@ function classifyEntityShapeError(
 }
 
 // Manifest field names detected through the MSG-GR-4 carve-out. The closed
-// set holds the BARE camelCase token (`hooks`, `lspServers`) -- the DETECTION
-// key sliced from the resolver note, derived from the real `.claude-plugin/
+// set holds the BARE camelCase token (`lspServers`) -- the DETECTION key
+// sliced from the resolver note, derived from the real `.claude-plugin/
 // plugin.json` JSON key. The resolver prefixes the kind with `"contains "`
 // when populating `r.notes` (the `addUnsupportedKindNotes` helper pushes
 // a `contains ${kind}` note for every UNSUPPORTED_COMPONENT_KINDS member
 // it detects).
 // The carve-out: `startsWith("contains ")` strips the resolver's prefix,
 // then checks the remaining token against the set.
+// HOOK-04 / D-58-02: `lspServers` is now the SOLE manifest-field
+// carve-out. `hooks` was a supported component kind under v1.13
+// (Phase 57 SUPPORTED_COMPONENT_KINDS extension) so the resolver no
+// longer emits a `"contains hooks"` note; the dead carve-out entry was
+// dropped. The `{unsupported hooks}` reason is now a normal 2-word
+// REASON sourced through `shared/probe-classifiers.ts::narrowResolverNotes`
+// against the `parseHooksConfig` prefix tokens, not a manifest-field
+// carve-out emitted here.
 // New detection tokens added here MUST also have an entry in
 // `MANIFEST_FIELD_TO_REASON` below mapping them to a member of the closed
 // `Reason` set in `shared/notify.ts::REASONS` so the renderer accepts them.
-const MANIFEST_FIELD_REASONS: ReadonlySet<string> = new Set(["hooks", "lspServers"]);
+const MANIFEST_FIELD_REASONS: ReadonlySet<string> = new Set(["lspServers"]);
 const MANIFEST_FIELD_NOTE_PREFIX = "contains ";
 
 // SNM-36 / D-24-04 detection-vs-emission seam: the DETECTION token stays
 // camelCase (matches the resolver note derived from the JSON manifest key);
 // the EMITTED closed-set Reason is the user-rendered value. `lspServers`
-// detects but renders as `lsp` (parallel to the single-word `hooks`
-// carve-out); `hooks` detects and renders unchanged.
+// detects but renders as `lsp`.
 const MANIFEST_FIELD_TO_REASON: Readonly<Record<string, ContentReason>> = {
-  hooks: "hooks",
   lspServers: "lsp",
 };
 
@@ -1515,7 +1521,8 @@ function manifestFieldTokenFromNote(note: string): ContentReason | undefined {
 /**
  * Narrow resolver `r.notes` (free-form strings) to the closed `Reason` set
  * for renderer consumption. Classification order:
- *   1. manifest-field carve-out (`contains hooks` / `contains lspServers`)
+ *   1. manifest-field carve-out (`contains lspServers`) -- HOOK-04 / D-58-02
+ *      dropped the dead `contains hooks` half (hooks is supported under v1.13)
  *   2. "source" substring -> `unsupported source`
  *   3. errno-like substrings (EACCES / EPERM / ENOENT / SyntaxError)
  *   4. permissive fallback: `unsupported source`

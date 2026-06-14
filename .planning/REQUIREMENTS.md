@@ -183,7 +183,7 @@ Per the audit in `docs/research/claude-hook-config-syntax.md` § 10 (cross-check
 | HOOK-01 | Phase 57 | Complete |
 | HOOK-02 | Phase 57 | Complete (Plan 57-01) |
 | HOOK-03 | Phase 57 | Complete |
-| HOOK-04 | Phase 63 | Pending |
+| HOOK-04 | Phase 58 (Plan 04) | Complete |
 | HOOK-05 | Phase 60 | Pending |
 | HOOK-06 | Phase 62 | Pending |
 | MATCH-01 | Phase 58 (Plan 03) | Complete |

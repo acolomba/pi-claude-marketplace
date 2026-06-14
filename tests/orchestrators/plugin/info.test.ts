@@ -10,7 +10,7 @@
 // Coverage:
 //   (a) single-scope installed with resolved components + description
 //   (b) single-scope available with description
-//   (c) single-scope unavailable with `{hooks}` reason
+//   (c) single-scope unavailable with `{unsupported hooks}` reason
 //   (d) single-scope external source -> componentsResolved: false marker
 //   (e) both-scopes fan-out (project-first per MSG-GR-3 / INFO-03)
 //   (f) `--scope` mismatch -> INFO-04 `{not added}` row with
@@ -319,10 +319,10 @@ test("INFO-02: single-scope available (path source) renders `○ ... (available)
 });
 
 // ---------------------------------------------------------------------------
-// (c) single-scope unavailable with `{hooks}` reason.
+// (c) single-scope unavailable with `{unsupported hooks}` reason.
 // ---------------------------------------------------------------------------
 
-test("INFO-02: single-scope unavailable (malformed hooks/hooks.json) renders `⊘ ... (unavailable) {hooks}` + components: not resolved", async () => {
+test("INFO-02: single-scope unavailable (malformed hooks/hooks.json) renders `⊘ ... (unavailable) {unsupported hooks}` + components: not resolved", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     const mpRoot = await seedPathMarketplace({
@@ -359,7 +359,7 @@ test("INFO-02: single-scope unavailable (malformed hooks/hooks.json) renders `�
       notifications[0]!.message,
       [
         "● mp [user] <no autoupdate>",
-        "  ⊘ legacy v0.1.0 (unavailable) {hooks}",
+        "  ⊘ legacy v0.1.0 (unavailable) {unsupported hooks}",
         "    Old plugin with a malformed hooks/hooks.json.",
         "    components: not resolved",
       ].join("\n"),
@@ -689,7 +689,7 @@ test("WR-01: narrowProbeError -> generic Error falls through to `unreadable` (NO
 // row instead of swallowing them silently.
 // ---------------------------------------------------------------------------
 
-test("WR-01: installed plugin with malformed hooks/hooks.json surfaces `{hooks}` on the (installed) row", async () => {
+test("WR-01: installed plugin with malformed hooks/hooks.json surfaces `{unsupported hooks}` on the (installed) row", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     const mpRoot = await seedPathMarketplace({
@@ -713,7 +713,8 @@ test("WR-01: installed plugin with malformed hooks/hooks.json surfaces `{hooks}`
 
     // HOOK-01 / D-57-04: a malformed hooks/hooks.json now flips the
     // resolver to NotInstallable with a parse-failure note that
-    // narrowResolverNotes maps to the `hooks` Reason (substring match).
+    // narrowResolverNotes maps to the `unsupported hooks` Reason via
+    // prefix-anchored detection (HOOK-04 tightening).
     const pluginDir = path.join(mpRoot, "legacy");
     await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
     await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
@@ -725,7 +726,7 @@ test("WR-01: installed plugin with malformed hooks/hooks.json surfaces `{hooks}`
       notifications[0]!.message,
       [
         "● mp [user] <no autoupdate>",
-        "  ● legacy v0.1.0 (installed) {hooks}",
+        "  ● legacy v0.1.0 (installed) {unsupported hooks}",
         "    components: not resolved",
       ].join("\n"),
     );

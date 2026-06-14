@@ -626,9 +626,9 @@ async function readStandaloneMcp(
  *   - `{ ok: false, reason }` when the file exists but `parseHooksConfig`
  *     fails (invalid JSON, structural shape mismatch, missing REQUIRED
  *     `command` on a `type: "command"` handler). The reason is prefixed
- *     with `malformed hooks.json: ` so downstream substring narrowing in
- *     `shared/probe-classifiers.ts::narrowResolverNotes` (which matches
- *     `note.includes("hooks")`) emits the `hooks` Reason.
+ *     with `malformed hooks.json: ` so downstream `startsWith`-anchored
+ *     narrowing in `shared/probe-classifiers.ts::narrowResolverNotes`
+ *     (HOOK-04 tightened detection) emits the `unsupported hooks` Reason.
  *
  * Disk I/O is routed through the injected `statKind` + `readFileText`
  * readers, mirroring the `readStandaloneMcp` pattern for testability.

@@ -1161,10 +1161,11 @@ test("HOOK-01: plugin dir with parseable hooks/hooks.json buckets as ○ (availa
   });
 });
 
-// D-57-04: malformed hooks/hooks.json now flips to ⊘ with {hooks} reason
-// (the parse-failure detail flows through narrowResolverNotes's substring
-// match on "hooks").
-test("D-57-04: plugin dir with malformed hooks/hooks.json buckets as ⊘ with {hooks} reason", async () => {
+// D-57-04 / HOOK-04: malformed hooks/hooks.json flips to ⊘ with
+// {unsupported hooks} reason (the parse-failure detail flows through
+// narrowResolverNotes's prefix-anchored detection on the resolver's
+// `"malformed hooks.json: "` wrapper).
+test("D-57-04: plugin dir with malformed hooks/hooks.json buckets as ⊘ with {unsupported hooks} reason", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     const mpRoot = path.join(userRoot, "marketplaces", "mp1");
@@ -1189,7 +1190,7 @@ test("D-57-04: plugin dir with malformed hooks/hooks.json buckets as ⊘ with {h
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
     assert.match(out, /⊘ hooks-conv/);
-    assert.match(out, /\{hooks\}/);
+    assert.match(out, /\{unsupported hooks\}/);
   });
 });
 

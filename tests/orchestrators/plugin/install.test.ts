@@ -2104,8 +2104,16 @@ test("classifyEntityShapeError dispatches on kind=not-installable -> unavailable
   // The resolver's `r.notes` carry the
   // `"contains <kind>"` prefix (via `addUnsupportedKindNotes`); the
   // carve-out in `narrowResolverReasons` strips the prefix and emits
-  // the bare token as the Reason. The test matches the actual upstream
-  // form so we exercise the live code path.
+  // the bare token as the Reason. HOOK-04 / D-58-02 dropped the
+  // `contains hooks` half of the carve-out (under v1.13 `hooks` is a
+  // supported component kind, so the resolver no longer emits a
+  // `"contains hooks"` note in real traffic; the dead branch was
+  // removed). `contains lspServers` remains the SOLE manifest-field
+  // carve-out and maps to `lsp` per SNM-36 / D-24-04. The test pins
+  // the post-D-58-02 behavior: a synthetic input mixing `contains hooks`
+  // with `contains lspServers` extracts only `lsp` (the `contains hooks`
+  // arm falls through to the permissive `unsupported source` fallback,
+  // but is dedup-suppressed when another permissive arm already fired).
   const err = new PluginShapeError({
     kind: "not-installable",
     plugin: "p",
@@ -2118,10 +2126,7 @@ test("classifyEntityShapeError dispatches on kind=not-installable -> unavailable
   });
   assert.ok(row);
   assert.equal(row.status, "unavailable");
-  // MSG-GR-4 carve-out: the manifest-field detection token `lspServers`
-  // (camelCase) is detected and emitted as the closed-set Reason `lsp`
-  // (SNM-36 / D-24-04); `hooks` emits unchanged.
-  assert.deepEqual(row.reasons, ["hooks", "lsp"]);
+  assert.deepEqual(row.reasons, ["lsp"]);
 });
 
 test("classifyEntityShapeError dispatches on kind=not-installable with source note -> {unsupported source}", async () => {
@@ -2221,27 +2226,30 @@ test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "fail
 // `unsupported source` fallback runs only when no classifier matched.
 // ───────────────────────────────────────────────────────────────────────────
 
-test("260525-cjr B2 / C5: narrowResolverReasons -> `contains hooks` extracts the bare `hooks` Reason", () => {
-  // The predicate matches the resolver's actual emission form
-  // (`"contains hooks"`). The user-visible catalog row shape
-  // (`(unavailable) {hooks}`) is unchanged.
-  assert.deepEqual([...__test_narrowResolverReasons(["contains hooks"])], ["hooks"]);
+test("HOOK-04 / D-58-02: narrowResolverReasons drops the dead `contains hooks` carve-out -> permissive fallback `unsupported source`", () => {
+  // Under v1.13, `hooks` is a SUPPORTED component kind
+  // (`SUPPORTED_COMPONENT_KINDS` in `domain/resolver.ts` includes
+  // `"hooks"`), so the resolver no longer emits a
+  // `"contains hooks"` note in real traffic. D-58-02 dropped the
+  // dead branch from `MANIFEST_FIELD_REASONS` / `MANIFEST_FIELD_TO_REASON`;
+  // a synthetic `"contains hooks"` input now misses the carve-out and
+  // falls through to the permissive `unsupported source` fallback.
+  // The real `{unsupported hooks}` reason is sourced through
+  // `shared/probe-classifiers.ts::narrowResolverNotes` against the
+  // `parseHooksConfig` prefix tokens, not through this carve-out.
+  assert.deepEqual([...__test_narrowResolverReasons(["contains hooks"])], ["unsupported source"]);
 });
 
 test("260525-cjr B2 / C5: narrowResolverReasons -> `contains lspServers` extracts the `lspServers` token and emits the `lsp` Reason (SNM-36)", () => {
   assert.deepEqual([...__test_narrowResolverReasons(["contains lspServers"])], ["lsp"]);
 });
 
-test("260525-cjr C5: narrowResolverReasons recognises the resolver's `contains hooks` prefix and emits bare `hooks`", () => {
-  // The resolver's `addUnsupportedKindNotes` writes
-  // `partial.notes.push("contains " + kind)` for
-  // every UNSUPPORTED_COMPONENT_KINDS member. The narrower strips
-  // the `contains ` prefix and re-checks `MANIFEST_FIELD_REASONS`; the
-  // mapped Reason is emitted, matching the catalog's
-  // `(unavailable) {hooks}` / `(unavailable) {lsp}` forms (the
-  // `lspServers` detection token maps to the `lsp` Reason per
-  // SNM-36 / D-24-04).
-  assert.deepEqual([...__test_narrowResolverReasons(["contains hooks"])], ["hooks"]);
+test("260525-cjr C5: narrowResolverReasons recognises `contains lspServers` as the sole remaining manifest-field carve-out", () => {
+  // HOOK-04 / D-58-02: `lspServers` is now the SOLE
+  // `MANIFEST_FIELD_REASONS` member. The `contains hooks` half was
+  // dropped (dead under v1.13). The `lspServers` detection token maps
+  // to the `lsp` Reason per SNM-36 / D-24-04; the catalog row form is
+  // `(unavailable) {lsp}`.
   assert.deepEqual([...__test_narrowResolverReasons(["contains lspServers"])], ["lsp"]);
 });
 

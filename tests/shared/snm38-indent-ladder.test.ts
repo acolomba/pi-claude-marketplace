@@ -14,7 +14,7 @@
 //   indents = [0, 2, 2, 2, 2, 4, 0, 0, 2]
 //     0  ● official [user] <autoupdate>        (marketplace header, column 0)
 //     2    ● alpha v1.0.0 (installed)          (plugin row, 2-space)
-//     2    ⊘ epsilon (unavailable) {hooks, lsp} (plugin row, {...} brace)
+//     2    ⊘ epsilon (unavailable) {unsupported hooks, lsp} (plugin row, {...} brace)
 //     2    ○ gamma v2.0.0 (available)          (plugin row, 2-space)
 //     2    ⊘ zeta (failed) {permission denied} (plugin row, 2-space)
 //     4      cause: disk write blocked         (cause trailer, 4-space)
@@ -98,7 +98,7 @@ function piWithBothLoaded(): MockPi {
 // discriminators). Exercises the locked minimums for the ladder evidence:
 //   - >=1 marketplace header (column 0);
 //   - an installed/available mix (`present` + `available` rows, 2-space);
-//   - a `{...}` reason-brace row (`epsilon (unavailable) {hooks, lsp}`);
+//   - a `{...}` reason-brace row (`epsilon (unavailable) {unsupported hooks, lsp}`);
 //   - a `failed`/`cause` row so the 4-space cause-chain trailer is exercised.
 // ---------------------------------------------------------------------------
 
@@ -110,7 +110,7 @@ const LIST_MESSAGE: NotificationMessage = {
       details: { autoupdate: true },
       plugins: [
         { status: "present", name: "alpha", version: "1.0.0", dependencies: [] },
-        { status: "unavailable", name: "epsilon", reasons: ["hooks", "lsp"] },
+        { status: "unavailable", name: "epsilon", reasons: ["unsupported hooks", "lsp"] },
         { status: "available", name: "gamma", version: "2.0.0" },
         {
           status: "failed",
