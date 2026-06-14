@@ -21,16 +21,15 @@
 // missing REQUIRED `command` on a `type: "command"` handler) surface through
 // `parseHooksConfig` as `{ ok: false, reason }`. The resolver consumes this
 // to flip `installable: false` with the `{unsupported hooks}` reason.
-// `hookDebugLog` is the OBS-01 hand-off seam: this module ships a stub
-// implementation gated on `PI_CLAUDE_MARKETPLACE_DEBUG === "1"`; OBS-01 will
-// later route this through a shared debug-log helper without touching
-// `parseHooksConfig` callers. The inline `eslint-disable-next-line` on the
-// stub's single `console.error` call (the SOLE IL-3 deviation in this
-// file) retires with the OBS-01 swap.
+// `hookDebugLog` is the OBS-01 debug-output seam (imported from
+// shared/debug-log.ts); env-gated on `PI_CLAUDE_MARKETPLACE_DEBUG === "1"`,
+// the sanctioned IL-2 / IL-3 escape lives at the seam's canonical home and
+// no console.* call survives in this file.
 
 import Type from "typebox";
 import { Compile } from "typebox/compile";
 
+import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 
 import {
@@ -149,27 +148,6 @@ function firstHookValidationDetail(value: unknown): string {
 export type HookConfigParseResult =
   | { ok: true; value: HooksConfig }
   | { ok: false; reason: string };
-
-/**
- * OBS-01 hand-off seam. Current implementation is a stub: routes the
- * parse-failure detail to `console.error` when
- * `PI_CLAUDE_MARKETPLACE_DEBUG === "1"`, otherwise no-op. OBS-01 will
- * replace this implementation to route through a shared debug-log helper
- * without changing the function name or signature, so every existing
- * `parseHooksConfig` caller keeps working unchanged.
- *
- * TODO(OBS-01): remove the inline lint disables below and replace this
- * stub with the shared debug-log helper. The two `eslint-disable-next-line`
- * directives below are the SOLE sanctioned IL-3 deviation in this file --
- * scoped to the single `console.error` line so a stray `console.error`
- * added elsewhere in the file still trips lint (WR-03).
- */
-export function hookDebugLog(detail: string): void {
-  if (process.env.PI_CLAUDE_MARKETPLACE_DEBUG === "1") {
-    // eslint-disable-next-line no-console, no-restricted-syntax -- OBS-01 hand-off seam (D-58-03); retires when the shared debug-log helper lands
-    console.error(`[hooks] ${detail}`);
-  }
-}
 
 /**
  * D-57-04 parse path. Returns the discriminated `{ok:true,value}` on
