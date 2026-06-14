@@ -1,20 +1,23 @@
 ---
 phase: 58-matcher-parser-tool-name-mapping-supportability-gate
 verified: 2026-06-14T16:00:00Z
-status: human_needed
+status: passed
 score: 9/10 must-haves verified
-overrides_applied: 0
+overrides_applied: 1
 human_verification:
   - test: "Run `npm run check` (typecheck + ESLint + Prettier + full test suite) and confirm GREEN exit"
     expected: "All 1935 unit tests pass; typecheck, lint, and format all clean"
     why_human: "Cannot run the full suite in the verification environment; individual test runs confirm the targeted behaviors pass but a full regression sweep verifies no cross-file regressions from the 15-file atomic commit"
+    result: pass
+    closed_by: 58-UAT.md
+    closed_at: 2026-06-14T16:10:00Z
 ---
 
 # Phase 58: Matcher Parser, Tool-Name Mapping & Supportability Gate Verification Report
 
 **Phase Goal:** A plugin's `hooks.json` is parsed into a normalized internal model, with regex / unmapped-tool / non-bucket-A / non-`command` plugins flipped to `(unavailable) {unsupported hooks}` at resolve time.
 **Verified:** 2026-06-14T16:00:00Z
-**Status:** human_needed
+**Status:** passed (UAT closed human verification 2026-06-14T16:10:00Z)
 **Re-verification:** No — initial verification
 
 ## Goal Achievement
@@ -128,5 +131,27 @@ The code review findings (WR-01 through WR-04) are warnings, not blockers. None 
 
 ---
 
+## Acknowledged Gaps
+
+User acknowledged the following items as not-blocking for phase completion during the
+`/gsd-verify-work 58` UAT pass on 2026-06-14T16:10:00Z:
+
+1. **Plan 04 must-have #10 — 5 new catalog-state sections per surface.** Documentation-only;
+   not a ROADMAP success criterion. The atomic byte rename + the existing fixture rows in
+   install / list / info cover the catalog-uat byte-equality gate. Adding `{unsupported hooks}`
+   states to `preview` and `reconcile-applied-cascade` is a follow-up doc improvement.
+2. **Code-review WR-01 (`narrowResolverNotes` dedup misfires).** Real defect; does not touch
+   any Phase 58 must-have truth. Candidate for `/gsd-code-review 58 --fix` follow-up or a
+   Phase 58.1 gap-closure plan.
+3. **Code-review WR-02 (`readStandaloneHooks` EACCES masquerade).** Real defect; does not
+   touch any Phase 58 must-have truth. Same follow-up disposition as WR-01.
+4. **Code-review WR-03 (`hookDebugLog` widens IL-3 ESLint override).** Per-file scope
+   instead of line-scoped; OBS-01 retirement path noted. Follow-up plan candidate.
+5. **Code-review WR-04 (`tryNonToolEventTrip` optional-chain collapses two failure modes).**
+   Defensive nit; architecture tests lock the current 4 entries so exposure is bounded.
+
+---
+
 _Verified: 2026-06-14T16:00:00Z_
 _Verifier: Claude (gsd-verifier)_
+_UAT closed: 2026-06-14T16:10:00Z_
