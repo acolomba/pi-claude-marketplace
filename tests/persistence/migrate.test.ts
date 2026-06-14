@@ -167,6 +167,115 @@ test("D-13 idempotency: second migrate on already-scrubbed input returns mutated
   assert.equal(mp.autoupdate, undefined);
 });
 
+// ===================================================================
+// HOOK-02 / D-57-01 -- ensurePluginResources `hooks: []` default-fill
+// arm. Mirrors the existing `agents: []` / `mcpServers: []` arms.
+// ===================================================================
+
+/**
+ * Build an in-memory parsed-state shape with one marketplace and one
+ * plugin. `resources` is the in-place resources object; pass `undefined`
+ * to omit the field entirely (exercises the synthesized-resources arm).
+ */
+function buildLegacyMigrationInput(opts: {
+  resources?: Record<string, unknown> | undefined;
+  omitResources?: boolean;
+}): { schemaVersion: 1; marketplaces: Record<string, unknown> } {
+  const plugin: Record<string, unknown> = {
+    version: "1.0.0",
+    resolvedSource: "/abs/mp/p1",
+    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    installedAt: "2025-01-01T00:00:00.000Z",
+    updatedAt: "2025-01-01T00:00:00.000Z",
+  };
+  if (!opts.omitResources) {
+    plugin["resources"] = opts.resources ?? {
+      skills: [],
+      prompts: [],
+      agents: [],
+      mcpServers: [],
+    };
+  }
+
+  return {
+    schemaVersion: 1,
+    marketplaces: {
+      mp: {
+        name: "mp",
+        scope: "user",
+        source: { kind: "path", raw: "./mp", logical: "./mp" },
+        addedFromCwd: "/cwd",
+        manifestPath: "/abs/mp/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/abs/mp",
+        plugins: { p1: plugin },
+      },
+    },
+  };
+}
+
+test("HOOK-02 / D-57-01: ensurePluginResources fills hooks: [] when absent", async () => {
+  const fixture = buildLegacyMigrationInput({
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+  });
+  const { marketplaces, mutated } = migrateLegacyMarketplaceRecords(
+    fixture,
+    "/ext-root",
+    GATE_CLOSED,
+  );
+  assert.equal(mutated, true);
+  const mp = marketplaces["mp"] as {
+    plugins: Record<string, { resources: Record<string, unknown> }>;
+  };
+  const p1 = mp.plugins["p1"];
+  assert.ok(p1);
+  assert.deepEqual(p1.resources["hooks"], []);
+});
+
+test("HOOK-02 / D-57-01: ensurePluginResources is idempotent for the hooks arm (whole-function mutated=false on already-normalized input)", async () => {
+  // Already-normalized record: every default-fill arm reports no-op, so
+  // the whole-function `mutated` flag must come back false. This pins
+  // the idempotency contract for the new hooks arm on top of the
+  // existing agents / mcpServers arms.
+  const fixture = buildLegacyMigrationInput({
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+  });
+  const { mutated } = migrateLegacyMarketplaceRecords(fixture, "/ext-root", GATE_CLOSED);
+  assert.equal(mutated, false);
+});
+
+test("HOOK-02 / D-57-03: ensurePluginResources preserves a pre-existing resources.hooks: ['x']", async () => {
+  const fixture = buildLegacyMigrationInput({
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["x"] },
+  });
+  const { marketplaces } = migrateLegacyMarketplaceRecords(fixture, "/ext-root", GATE_CLOSED);
+  const mp = marketplaces["mp"] as {
+    plugins: Record<string, { resources: Record<string, unknown> }>;
+  };
+  const p1 = mp.plugins["p1"];
+  assert.ok(p1);
+  assert.deepEqual(p1.resources["hooks"], ["x"]);
+});
+
+test("HOOK-02 / D-57-01: ensurePluginResources fills hooks: [] when the entire resources field is missing", async () => {
+  // Synthesized-resources arm: when `pl.resources` is absent, the helper
+  // creates a fresh `{}` and fills agents/mcpServers/hooks defaults.
+  const fixture = buildLegacyMigrationInput({ omitResources: true });
+  const { marketplaces, mutated } = migrateLegacyMarketplaceRecords(
+    fixture,
+    "/ext-root",
+    GATE_CLOSED,
+  );
+  assert.equal(mutated, true);
+  const mp = marketplaces["mp"] as {
+    plugins: Record<string, { resources: Record<string, unknown> }>;
+  };
+  const p1 = mp.plugins["p1"];
+  assert.ok(p1);
+  assert.deepEqual(p1.resources["agents"], []);
+  assert.deepEqual(p1.resources["mcpServers"], []);
+  assert.deepEqual(p1.resources["hooks"], []);
+});
+
 test("IL-3 persistMigratedState swallows write failures and emits ONE console.warn", async (t) => {
   // Force atomicWriteJson to fail by passing a path whose dirname is an
   // existing FILE (not a directory). atomicWriteJson runs `mkdir(parent)`

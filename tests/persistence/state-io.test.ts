@@ -380,6 +380,78 @@ test("HOOK-02 / D-57-01: STATE_VALIDATOR rejects a record missing resources.hook
   assert.equal(STATE_VALIDATOR.Check(fixture), false);
 });
 
+test("HOOK-02 / D-57-01: v1.12-shaped state.json round-trips through loadState; every plugin record gains resources.hooks default", async (t) => {
+  const { root, cleanup } = await tmpExtensionRoot();
+  // Suppress IL-3 sanctioned warn: ST-4 fire-and-forget persist may race
+  // the cleanup `rm`, surfacing as a harmless persist failure.
+  t.mock.method(console, "warn", () => {
+    // suppress noise
+  });
+  try {
+    // v1.12-shaped state.json -- plugin records carry skills/prompts/
+    // agents/mcpServers but NO `hooks`. A second plugin record carries a
+    // pre-existing `hooks: ["pre-existing"]` to assert the migrator
+    // leaves it untouched. schemaVersion stays 1 per D-57-01.
+    const v12State = {
+      schemaVersion: 1,
+      marketplaces: {
+        mp: {
+          name: "mp",
+          scope: "user",
+          source: { kind: "path", raw: "./mp", logical: "./mp" },
+          addedFromCwd: "/cwd",
+          manifestPath: "/abs/mp/.claude-plugin/marketplace.json",
+          marketplaceRoot: "/abs/mp",
+          plugins: {
+            "needs-default": {
+              version: "1.0.0",
+              resolvedSource: "/abs/mp/needs-default",
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+              installedAt: "2025-01-01T00:00:00.000Z",
+              updatedAt: "2025-01-01T00:00:00.000Z",
+            },
+            "has-preexisting": {
+              version: "2.0.0",
+              resolvedSource: "/abs/mp/has-preexisting",
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: {
+                skills: [],
+                prompts: [],
+                agents: [],
+                mcpServers: [],
+                hooks: ["pre-existing"],
+              },
+              installedAt: "2025-01-02T00:00:00.000Z",
+              updatedAt: "2025-01-02T00:00:00.000Z",
+            },
+          },
+        },
+      },
+    };
+    await writeFile(path.join(root, "state.json"), JSON.stringify(v12State));
+
+    const got = await loadState(root);
+    const mp = (
+      got.marketplaces as Record<
+        string,
+        { plugins: Record<string, { resources: Record<string, unknown> }> }
+      >
+    )["mp"];
+    assert.ok(mp);
+    // The migrator's hooks arm fills the default for the v1.12-shaped
+    // record (no hooks field on disk).
+    assert.deepEqual(mp.plugins["needs-default"]?.resources["hooks"], []);
+    // The migrator leaves an existing hooks array untouched (D-57-03).
+    assert.deepEqual(mp.plugins["has-preexisting"]?.resources["hooks"], ["pre-existing"]);
+    // Flush fire-and-forget persist before cleanup races.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  } finally {
+    await cleanup();
+  }
+});
+
 test("SPLIT-01 / D-12: STATE_SCHEMA.schemaVersion stays Type.Literal(1) (saveState refuses schemaVersion: 2)", async () => {
   const { root, cleanup } = await tmpExtensionRoot();
   try {
