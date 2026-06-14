@@ -18,9 +18,15 @@ export type {
   ExtensionAPI,
   ExtensionCommandContext,
   ExtensionContext,
+  InputEvent,
+  SessionBeforeCompactEvent,
+  SessionCompactEvent,
+  SessionShutdownEvent,
+  SessionStartEvent,
   ToolCallEvent,
   ToolDefinition,
   ToolInfo,
+  ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
 
 export type { AutocompleteItem } from "@earendil-works/pi-tui";

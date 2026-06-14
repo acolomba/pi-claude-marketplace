@@ -58,7 +58,7 @@ import { CLAUDE_TO_PI_TOOL_NAMES, type PiToolName } from "./hook-tool-names.ts";
 // `Type.Union`) don't compose into a discriminator-with-required-field
 // shape cleanly. The runtime `Compile` handles `if/then/else` natively
 // (see `node_modules/typebox/build/schema/engine/if.mjs`).
-interface HookHandlerEntry {
+export interface HookHandlerEntry {
   type: string;
   command?: string;
   // HOOK-03 tolerated additive extensions (silently accepted; semantics
