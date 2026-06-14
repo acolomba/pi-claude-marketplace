@@ -257,7 +257,19 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 4. Within one composite-handler invocation, entries dispatch in deterministic order — `compareByNameThenScope` (project-first, alphabetical) across plugins, declaration order within a plugin's `hooks.json`, sequential awaited fan-out (DISP-04).
 5. All runtime hook diagnostic output goes through `shared/debug-log.ts` gated on `PI_CLAUDE_MARKETPLACE_DEBUG=1`; nothing in the dispatch path calls `console.error`, `process.stderr.write`, or `ctx.ui.notify` for diagnostics (OBS-01; IL-2).
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+**Wave 1**
+
+- [ ] 59-01-PLAN.md — OBS-01 debug-log seam at `shared/debug-log.ts` + ESLint per-file override + retirement of the Phase 57 local `hookDebugLog` stub (OBS-01 / D-59-05)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 59-02-PLAN.md — Dispatch core: `bridges/hooks/event-router.ts` module-state holder (liveEpoch + parsedConfigCache + routingTable), `bridges/hooks/dispatch.ts` 7 composite handler bodies with `tool_result` isError split, `bridges/hooks/dispatch-exec.ts` no-op stub, barrel + Pi peer-import re-exports (DISP-01..04 / D-59-01..04)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 59-03-PLAN.md — Wiring + architecture tests: `registerHooksBridge` in `index.ts` factory, `rebuildRoutingTables` call site in `apply.ts`, cache add/remove in `install.ts`/`uninstall.ts`, and `tests/architecture/hooks-dispatch.test.ts` pinning DISP-01..04 + OBS-01 invariants (DISP-01..04 / OBS-01 / D-59-02)
 
 #### Phase 60: Hook Execution, Payload Translators & Env Vars
 
@@ -398,7 +410,7 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 | 56. Write-Back Integration & Documentation                          | v1.12     | 4/4 | Complete    | 2026-06-11 |
 | 57. Schema, Component Type & Payload-Extension Tolerance            | v1.13     | 4/4 | Complete    | 2026-06-14 |
 | 58. Matcher Parser, Tool-Name Mapping & Supportability Gate         | v1.13     | 4/4 | Complete    | 2026-06-14 |
-| 59. Bridge Dispatch Core & Debug Seam                               | v1.13     | 0/0 | Not started | -          |
+| 59. Bridge Dispatch Core & Debug Seam                               | v1.13     | 0/3 | Planning    | -          |
 | 60. Hook Execution, Payload Translators & Env Vars                  | v1.13     | 0/0 | Not started | -          |
 | 61. `if` Field Permission-Rule Matcher                              | v1.13     | 0/0 | Not started | -          |
 | 62. `asyncRewake` Registry & Background-Spawn                       | v1.13     | 0/0 | Not started | -          |
