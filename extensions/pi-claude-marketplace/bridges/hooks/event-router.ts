@@ -414,6 +414,38 @@ export function getRoutingBucket(claudeEvent: BucketAEvent): ReadonlyArray<Routi
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
+ * Project-scope deferred-hydrate entrypoint. The factory at index.ts has no
+ * access to a project cwd at extension-load time (Pi's `resources_discover`
+ * event is the first signal that delivers `event.cwd`), so the factory's
+ * factory-time `registerHooksBridge(pi, { cwd: homedir() })` call hydrates
+ * ONLY the user scope correctly -- project hydration uses the wrong cwd
+ * (it falls back to homedir) and silently misses real project entries.
+ *
+ * This helper re-runs project-scope hydrate against the correct cwd at the
+ * first `resources_discover` event, BEFORE `applyReconcile` runs its
+ * per-scope `rebuildRoutingTables` call. The user scope is untouched (its
+ * factory-time hydrate already used homedir correctly).
+ *
+ * DISP-02: cache mutations only; no pi.on, no epoch bump, no rebuild --
+ * the caller's `applyReconcile` rebuilds the routing tables per scope.
+ */
+export async function hydrateProjectScopeForCwd(cwd: string): Promise<void> {
+  const loc = locationsFor("project", cwd);
+
+  let state: ExtensionState;
+  try {
+    state = await loadState(loc.extensionRoot);
+  } catch (err) {
+    hookDebugLog(
+      `hydrate-project: loadState failed for cwd=${cwd} extensionRoot=${loc.extensionRoot}: ${errorMessage(err)}`,
+    );
+    return;
+  }
+
+  await hydrateScopeFromState(state, loc);
+}
+
+/**
  * D-59-03 / DISP-01 / DISP-02 / DISP-03 hooks-bridge factory.
  *
  * Step order is load-bearing:
