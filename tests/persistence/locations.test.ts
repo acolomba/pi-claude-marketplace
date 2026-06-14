@@ -316,6 +316,36 @@ test("bridge-target dirs are all under extensionRoot (defense-in-depth)", () => 
 });
 
 // ──────────────────────────────────────────────────────────────────────────
+// HOOK-01 / D-57-03 hooksDir: the per-scope container-dir root that
+// LIFE-03 binds against for containment checks on plugin hooks/hooks.json
+// paths. Hard-coded suffix only (no name input participates).
+// ──────────────────────────────────────────────────────────────────────────
+
+test("HOOK-01 locationsFor('user') sets hooksDir to <extensionRoot>/hooks", () => {
+  const loc = locationsFor("user", "/anywhere");
+  assert.equal(loc.hooksDir, path.join(loc.extensionRoot, "hooks"));
+  assert.ok(loc.hooksDir.startsWith(loc.extensionRoot));
+});
+
+test("HOOK-01 locationsFor('project') sets hooksDir to <extensionRoot>/hooks", () => {
+  const loc = locationsFor("project", "/my/proj");
+  assert.equal(loc.hooksDir, path.join("/my/proj", ".pi", "pi-claude-marketplace", "hooks"));
+  assert.equal(loc.hooksDir, path.join(loc.extensionRoot, "hooks"));
+});
+
+test("HOOK-01 ScopedLocations.hooksDir is enumerable on the frozen bundle", () => {
+  const loc = locationsFor("project", "/p");
+  assert.ok(Object.keys(loc).includes("hooksDir"));
+});
+
+test("HOOK-01 ScopedLocations.hooksDir is not writable (frozen)", () => {
+  const loc = locationsFor("user", "/x") as ScopedLocations & { hooksDir: string };
+  assert.throws(() => {
+    loc.hooksDir = "/tmp/evil";
+  }, /Cannot assign to read only property|object is not extensible/);
+});
+
+// ──────────────────────────────────────────────────────────────────────────
 // D-03 completion-cache path helpers:
 // cacheDir, marketplaceNamesCacheFile, pluginCacheFile.
 // ──────────────────────────────────────────────────────────────────────────
