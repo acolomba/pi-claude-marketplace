@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.13
 milestone_name: Claude Hook Bridge
 status: verifying
-stopped_at: Completed 57-01-PLAN.md
-last_updated: "2026-06-14T11:18:44.520Z"
+stopped_at: Phase 58 context gathered
+last_updated: "2026-06-14T12:30:52.652Z"
 last_activity: 2026-06-14
 progress:
   total_phases: 7
@@ -261,9 +261,9 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-14T10:57:39.987Z
-Stopped At: Completed 57-01-PLAN.md
-Resume File: .planning/phases/57-schema-component-type-payload-extension-tolerance/57-02-PLAN.md
+Last session: 2026-06-14T12:30:52.633Z
+Stopped At: Phase 58 context gathered
+Resume File: .planning/phases/58-matcher-parser-tool-name-mapping-supportability-gate/58-CONTEXT.md
 
 ## Operator Next Steps
 
