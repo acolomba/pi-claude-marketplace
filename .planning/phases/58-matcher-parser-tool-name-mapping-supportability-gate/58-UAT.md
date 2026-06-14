@@ -1,19 +1,14 @@
 ---
-status: testing
+status: complete
 phase: 58-matcher-parser-tool-name-mapping-supportability-gate
 source: [58-VERIFICATION.md]
 started: 2026-06-14T16:05:00Z
-updated: 2026-06-14T16:05:00Z
+updated: 2026-06-14T16:10:00Z
 ---
 
 ## Current Test
 
-number: 1
-name: Run `npm run check` and confirm GREEN exit
-expected: |
-  All 1935 unit tests pass; typecheck, lint, and format all clean.
-  Cross-file regressions from the 15-file atomic commit (`f74005b`) are independently confirmed.
-awaiting: user response
+[testing complete]
 
 ## Tests
 
@@ -33,14 +28,14 @@ context: |
   all pass with the atomic snapshot". Pre-commit hooks ran on every plan
   commit (no --no-verify, no SKIP=trufflehog). Spot-check evidence is
   consistent with a green full suite.
-result: [pending]
+result: pass
 
 ## Summary
 
 total: 1
-passed: 0
+passed: 1
 issues: 0
-pending: 1
+pending: 0
 skipped: 0
 blocked: 0
 
