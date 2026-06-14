@@ -18,6 +18,7 @@ export type {
   ExtensionAPI,
   ExtensionCommandContext,
   ExtensionContext,
+  ToolCallEvent,
   ToolDefinition,
   ToolInfo,
 } from "@earendil-works/pi-coding-agent";
