@@ -175,12 +175,12 @@ Declarative per-scope config files (`claude-plugins.json` + entry-level-override
 Add a hooks component bridge alongside skills/commands/agents/MCP, translating Claude plugin hook declarations into Pi extension event subscriptions and shell-outs. Ships the **8 bucket-A direct-1:1-map events only** (SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PreCompact, PostCompact, SessionEnd) — the subset where dispatch fires at 100% fidelity. Strict-supportability stance at BOTH event and plugin levels: a plugin referencing any other Claude hook event, an unmapped Claude tool, a regex matcher, or a non-`command` handler installs as `(unavailable) {unsupported hooks}`. Forward-compat investments retained: the `if` field permission-rule matcher (~300 LoC) and the `asyncRewake` registry (~250 LoC) ship in v1.13 despite no first-party plugin exercising them under bucket-A-only scope. See `.planning/REQUIREMENTS.md` for the 31-REQ contract; `docs/research/claude-hooks-vs-pi-events.md` + `docs/research/claude-hook-config-syntax.md` are the authority sources.
 
 - [x] Phase 57: Schema, Component Type & Payload-Extension Tolerance -- HOOK-01, HOOK-02, HOOK-03 (completed 2026-06-14)
-- [ ] Phase 58: Matcher Parser, Tool-Name Mapping & Supportability Gate -- MATCH-01, MATCH-02, TOOL-01, TOOL-02
+- [ ] Phase 58: Matcher Parser, Tool-Name Mapping & Supportability Gate -- MATCH-01, MATCH-02, TOOL-01, TOOL-02, HOOK-04 (pulled forward per D-58-01)
 - [ ] Phase 59: Bridge Dispatch Core & Debug Seam -- DISP-01..04, OBS-01
 - [ ] Phase 60: Hook Execution, Payload Translators & Env Vars -- EXEC-01..04, PAYL-01, HOOK-05
 - [ ] Phase 61: `if` Field Permission-Rule Matcher -- MATCH-03
 - [ ] Phase 62: `asyncRewake` Registry & Background-Spawn -- HOOK-06, EXEC-05
-- [ ] Phase 63: Lifecycle Cascade, User-Facing Surface & Docs -- LIFE-01..03, HOOK-04, SURF-01..06
+- [ ] Phase 63: Lifecycle Cascade, User-Facing Surface & Docs -- LIFE-01..03, SURF-01..06
 
 #### Phase 57: Schema, Component Type & Payload-Extension Tolerance
 
@@ -217,16 +217,29 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 
 **Depends on**: Phase 57 (component type + schema must exist before the parser can target it)
 
-**Requirements**: MATCH-01, MATCH-02, TOOL-01, TOOL-02
+**Requirements**: MATCH-01, MATCH-02, TOOL-01, TOOL-02, HOOK-04 (pulled forward per D-58-01)
 
 **Success Criteria** (what must be TRUE):
 
 1. A user can write Claude-form literal matchers (`Edit`, `Bash`, `Read`), pipe-OR alternation (`Edit|Write`), empty `""` (match-all), and `mcp__server__tool` patterns and the bridge matches them against normalized incoming events (MATCH-01). Pi-form lowercase matchers never match.
 2. A `hooks.json` containing any regex pattern (any char outside `[A-Za-z0-9_|\-]` not part of an `mcp__` prefix) installs the plugin as `(unavailable) {unsupported hooks}`; no per-entry skip (MATCH-02 + TOOL-02(a)).
-3. A bidirectional Claude ↔ Pi tool-name mapping lives at `bridges/hooks/tool-names.ts` with an architecture test asserting every Pi `toolName` literal exported by the peer-dep types has a mapping; MCP tools bypass the table (TOOL-01).
+3. A bidirectional Claude ↔ Pi tool-name mapping lives at `domain/components/hook-tool-names.ts` (per D-58-04) with an architecture test asserting every Pi `toolName` literal exported by the peer-dep types has a mapping; MCP tools bypass the table (TOOL-01).
 4. A plugin declaring hooks against any non-bucket-A event, an unmapped Claude tool (`MultiEdit`, `WebFetch`, `Task`, ...), or a non-`command` handler type installs as `(unavailable) {unsupported hooks}`; reconcile honors the flip across `/reload` (TOOL-02(b)/(c)/(d)).
 
-**Plans**: TBD
+**Plans**: 4 plans (Wave 1: 58-01, 58-02 parallel; Wave 2: 58-03; Wave 3: 58-04)
+
+**Wave 1** (parallel — no shared file conflicts):
+
+- [ ] 58-01-PLAN.md — TOOL-01 bidirectional tool-name map + completeness architecture test (`domain/components/hook-tool-names.ts` per D-58-04)
+- [ ] 58-02-PLAN.md — Bucket-A 8-event tuple + per-non-tool-event field/value-set maps + supportability architecture-test scaffold (`domain/components/hook-events.ts` per D-58-06)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 58-03-PLAN.md — Matcher parser + supportability gate + parseHooksConfig single-seam extension (MATCH-01 / MATCH-02 / TOOL-02 / D-58-03)
+
+**Wave 3** *(blocked on Wave 2 completion — atomic byte-form rename single commit per D-58-01)*
+
+- [ ] 58-04-PLAN.md — HOOK-04 atomic byte rename + narrowResolverNotes tightening + MANIFEST_FIELD carve-out drop (D-58-02) + catalog/docs/fixtures in lockstep
 
 #### Phase 59: Bridge Dispatch Core & Debug Seam
 
@@ -309,7 +322,7 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 
 **Depends on**: Phase 62 (entire dispatch / exec / forward-compat surface must exist before lifecycle, surface, and docs are meaningful)
 
-**Requirements**: LIFE-01, LIFE-02, LIFE-03, HOOK-04, SURF-01, SURF-02, SURF-03, SURF-04, SURF-05, SURF-06
+**Requirements**: LIFE-01, LIFE-02, LIFE-03, SURF-01, SURF-02, SURF-03, SURF-04, SURF-05, SURF-06 (HOOK-04 moved to Phase 58 per D-58-01)
 
 **Success Criteria** (what must be TRUE):
 
@@ -384,7 +397,7 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 | 55. Load-Time Reconcile Apply, Notification & Wiring                | v1.12     | 3/3 | Complete    | 2026-06-11 |
 | 56. Write-Back Integration & Documentation                          | v1.12     | 4/4 | Complete    | 2026-06-11 |
 | 57. Schema, Component Type & Payload-Extension Tolerance            | v1.13     | 4/4 | Complete    | 2026-06-14 |
-| 58. Matcher Parser, Tool-Name Mapping & Supportability Gate         | v1.13     | 0/0 | Not started | -          |
+| 58. Matcher Parser, Tool-Name Mapping & Supportability Gate         | v1.13     | 0/4 | Not started | -          |
 | 59. Bridge Dispatch Core & Debug Seam                               | v1.13     | 0/0 | Not started | -          |
 | 60. Hook Execution, Payload Translators & Env Vars                  | v1.13     | 0/0 | Not started | -          |
 | 61. `if` Field Permission-Rule Matcher                              | v1.13     | 0/0 | Not started | -          |
