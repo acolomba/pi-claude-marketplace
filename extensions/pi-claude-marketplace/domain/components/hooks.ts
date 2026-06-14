@@ -24,8 +24,9 @@
 // `hookDebugLog` is the OBS-01 hand-off seam: this module ships a stub
 // implementation gated on `PI_CLAUDE_MARKETPLACE_DEBUG === "1"`; OBS-01 will
 // later route this through a shared debug-log helper without touching
-// `parseHooksConfig` callers. The per-file ESLint override that permits
-// `console.error` for this stub retires with the OBS-01 swap.
+// `parseHooksConfig` callers. The inline `eslint-disable-next-line` on the
+// stub's single `console.error` call (the SOLE IL-3 deviation in this
+// file) retires with the OBS-01 swap.
 
 import Type from "typebox";
 import { Compile } from "typebox/compile";
@@ -150,15 +151,22 @@ export type HookConfigParseResult =
   | { ok: false; reason: string };
 
 /**
- * OBS-01 hand-off seam. Phase-57 implementation is a stub: routes the
+ * OBS-01 hand-off seam. Current implementation is a stub: routes the
  * parse-failure detail to `console.error` when
  * `PI_CLAUDE_MARKETPLACE_DEBUG === "1"`, otherwise no-op. OBS-01 will
  * replace this implementation to route through a shared debug-log helper
  * without changing the function name or signature, so every existing
  * `parseHooksConfig` caller keeps working unchanged.
+ *
+ * TODO(OBS-01): remove the inline lint disables below and replace this
+ * stub with the shared debug-log helper. The two `eslint-disable-next-line`
+ * directives below are the SOLE sanctioned IL-3 deviation in this file --
+ * scoped to the single `console.error` line so a stray `console.error`
+ * added elsewhere in the file still trips lint (WR-03).
  */
 export function hookDebugLog(detail: string): void {
   if (process.env.PI_CLAUDE_MARKETPLACE_DEBUG === "1") {
+    // eslint-disable-next-line no-console, no-restricted-syntax -- OBS-01 hand-off seam (D-58-03); retires when the shared debug-log helper lands
     console.error(`[hooks] ${detail}`);
   }
 }
