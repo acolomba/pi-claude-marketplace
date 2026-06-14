@@ -78,8 +78,8 @@ async function writeUserState(
   const configPath = path.join(scopeRoot, "claude-plugins.json");
   const configLocalPath = path.join(scopeRoot, "claude-plugins.local.json");
   const resources = opts.disabled
-    ? { skills: [], prompts: [], agents: [], mcpServers: [] }
-    : { skills: ["s1"], prompts: [], agents: [], mcpServers: [] };
+    ? { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] }
+    : { skills: ["s1"], prompts: [], agents: [], mcpServers: [], hooks: [] };
   const state = {
     schemaVersion: 1,
     marketplaces: {
@@ -182,7 +182,7 @@ async function seedRealDisabledMarketplace(
             version: opts.version,
             resolvedSource: pluginRoot,
             compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-            resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
             installedAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-01T00:00:00.000Z",
           },

@@ -11,7 +11,11 @@
 //
 // Per ST-4: missing manifestPath / marketplaceRoot are filled with
 // the default derivation. Per ST-5: missing resources.agents /
-// resources.mcpServers are normalized to [].
+// resources.mcpServers / resources.hooks are normalized to []
+// (the hooks arm lands per HOOK-02 / D-57-01; the schema requires
+// `resources.hooks: string[]` and the additive default-fill is what
+// lets v1.0..v1.12 state.json files load cleanly without a
+// schemaVersion bump).
 //
 // Per ST-4 "persisted asynchronously (best-effort)": the persist call
 // does NOT re-throw on failure; the IL-3 warn surfaces the cause and
@@ -117,6 +121,15 @@ function ensurePluginResources(mp: Record<string, unknown>): boolean {
       resources.mcpServers = [];
       mutated = true;
     }
+
+    // HOOK-02 / D-57-01: additive default-fill for the new required
+    // `resources.hooks` field. Mirrors the agents / mcpServers arms
+    // above; STATE_VALIDATOR.Check would reject a record missing this
+    // field, so the default-fill MUST run before validation.
+    if (resources.hooks === undefined) {
+      resources.hooks = [];
+      mutated = true;
+    }
   }
 
   return mutated;
@@ -133,8 +146,11 @@ function ensurePluginResources(mp: Record<string, unknown>): boolean {
  *   - parsed object with non-object marketplaces -> reset to {}
  *   - per-marketplace: fill manifestPath and marketplaceRoot with defaults
  *     derived from `<extensionRoot>/sources/<mp>/...` (ST-4)
- *   - per-plugin: ensure resources.agents and resources.mcpServers are
- *     arrays (ST-5)
+ *   - per-plugin: ensure resources.agents, resources.mcpServers, and
+ *     resources.hooks are arrays (ST-5; the hooks arm per HOOK-02 /
+ *     D-57-01 -- the schema requires `resources.hooks: string[]` as an
+ *     additive REQUIRED field, so the default-fill MUST run before
+ *     STATE_VALIDATOR.Check)
  *   - `scrubAutoupdate === true` (D-13 gate OPEN): remove the legacy
  *     `autoupdate` field from every marketplace record. The CALLER owns
  *     the gate predicate (loadState probes the scope's

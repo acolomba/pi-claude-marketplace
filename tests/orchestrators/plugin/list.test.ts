@@ -170,8 +170,8 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
       // an enabled installed record always has >= 1 populated array.
       resources:
         info.disabled === true
-          ? { skills: [], prompts: [], agents: [], mcpServers: [] }
-          : { skills: [`${name}-skill`], prompts: [], agents: [], mcpServers: [] },
+          ? { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] }
+          : { skills: [`${name}-skill`], prompts: [], agents: [], mcpServers: [], hooks: [] },
       installedAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
@@ -632,7 +632,13 @@ test("CR-01 / G-21-01: project-scope plugin under a CLONED user marketplace fold
               // Populated resources: an ENABLED installed record (empty
               // resources + installable:true would read as disabled per
               // ENBL-04 and render `(disabled)` instead of `(installed)`).
-              resources: { skills: ["alpha-skill"], prompts: [], agents: [], mcpServers: [] },
+              resources: {
+                skills: ["alpha-skill"],
+                prompts: [],
+                agents: [],
+                mcpServers: [],
+                hooks: [],
+              },
               installedAt: "2026-01-01T00:00:00.000Z",
               updatedAt: "2026-01-01T00:00:00.000Z",
             },

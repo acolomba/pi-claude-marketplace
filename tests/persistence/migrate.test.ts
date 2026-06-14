@@ -213,7 +213,7 @@ function buildLegacyMigrationInput(opts: {
   };
 }
 
-test("HOOK-02 / D-57-01: ensurePluginResources fills hooks: [] when absent", async () => {
+test("HOOK-02 / D-57-01: ensurePluginResources fills hooks: [] when absent", () => {
   const fixture = buildLegacyMigrationInput({
     resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
   });
@@ -231,7 +231,7 @@ test("HOOK-02 / D-57-01: ensurePluginResources fills hooks: [] when absent", asy
   assert.deepEqual(p1.resources["hooks"], []);
 });
 
-test("HOOK-02 / D-57-01: ensurePluginResources is idempotent for the hooks arm (whole-function mutated=false on already-normalized input)", async () => {
+test("HOOK-02 / D-57-01: ensurePluginResources is idempotent for the hooks arm (whole-function mutated=false on already-normalized input)", () => {
   // Already-normalized record: every default-fill arm reports no-op, so
   // the whole-function `mutated` flag must come back false. This pins
   // the idempotency contract for the new hooks arm on top of the
@@ -243,7 +243,7 @@ test("HOOK-02 / D-57-01: ensurePluginResources is idempotent for the hooks arm (
   assert.equal(mutated, false);
 });
 
-test("HOOK-02 / D-57-03: ensurePluginResources preserves a pre-existing resources.hooks: ['x']", async () => {
+test("HOOK-02 / D-57-03: ensurePluginResources preserves a pre-existing resources.hooks: ['x']", () => {
   const fixture = buildLegacyMigrationInput({
     resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["x"] },
   });
@@ -256,7 +256,7 @@ test("HOOK-02 / D-57-03: ensurePluginResources preserves a pre-existing resource
   assert.deepEqual(p1.resources["hooks"], ["x"]);
 });
 
-test("HOOK-02 / D-57-01: ensurePluginResources fills hooks: [] when the entire resources field is missing", async () => {
+test("HOOK-02 / D-57-01: ensurePluginResources fills hooks: [] when the entire resources field is missing", () => {
   // Synthesized-resources arm: when `pl.resources` is absent, the helper
   // creates a fresh `{}` and fills agents/mcpServers/hooks defaults.
   const fixture = buildLegacyMigrationInput({ omitResources: true });

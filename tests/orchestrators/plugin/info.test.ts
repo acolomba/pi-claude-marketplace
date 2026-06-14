@@ -159,8 +159,8 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
       // an enabled installed record always has >= 1 populated array.
       resources:
         info.disabled === true
-          ? { skills: [], prompts: [], agents: [], mcpServers: [] }
-          : { skills: [`${name}-skill`], prompts: [], agents: [], mcpServers: [] },
+          ? { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] }
+          : { skills: [`${name}-skill`], prompts: [], agents: [], mcpServers: [], hooks: [] },
       installedAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
