@@ -205,6 +205,52 @@ test("D-57-04: hooks/hooks.json with structural-shape mismatch -> notInstallable
   );
 });
 
+// WR-02 (D-58 review): an I/O failure reading hooks/hooks.json
+// PROPAGATES out of resolveStrict instead of being wrapped with the
+// `malformed hooks.json:` prefix and lumped into the `{unsupported hooks}`
+// bucket. The outer `narrowProbeError` ladder (used by list / info)
+// classifies the thrown error by `.code` so the row reports the truthful
+// failure class (e.g. `{permission denied}` for EACCES).
+test("WR-02: hooks/hooks.json EACCES propagates out of resolveStrict (not wrapped as malformed)", async () => {
+  const localRoot = ROOT("./local");
+  const hooksPath = path.join(localRoot, "hooks", "hooks.json");
+  // Custom context: statKind reports the file exists, readFileText
+  // throws EACCES (the file is readable to stat but not to read).
+  const ctx: ResolveContext = {
+    marketplaceRoot: MP,
+    statKind(p: string): Promise<"file" | "dir" | null> {
+      if (p === localRoot) {
+        return Promise.resolve("dir");
+      }
+
+      if (p === hooksPath) {
+        return Promise.resolve("file");
+      }
+
+      return Promise.resolve(null);
+    },
+    readFileText(p: string): Promise<string> {
+      if (p === hooksPath) {
+        return Promise.reject(Object.assign(new Error("EACCES"), { code: "EACCES" }));
+      }
+
+      return Promise.reject(Object.assign(new Error("ENOENT"), { code: "ENOENT" }));
+    },
+  };
+  await assert.rejects(
+    () => resolveStrict(basicEntry({ source: "./local" }), ctx),
+    (err: unknown) => {
+      assert.ok(err instanceof Error, "rejection must be an Error");
+      assert.equal(
+        (err as NodeJS.ErrnoException).code,
+        "EACCES",
+        "EACCES must propagate unchanged for narrowProbeError to classify",
+      );
+      return true;
+    },
+  );
+});
+
 // HOOK-01 regression guard: absent hooks/hooks.json + no entry/manifest
 // declaration -> installable: true and hooks NOT in supported. This is the
 // no-hooks happy path; the supported-side convention probe must not invent

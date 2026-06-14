@@ -625,10 +625,21 @@ async function readStandaloneMcp(
  *     `partial.supported` and records `partial.hooksConfigPath`.
  *   - `{ ok: false, reason }` when the file exists but `parseHooksConfig`
  *     fails (invalid JSON, structural shape mismatch, missing REQUIRED
- *     `command` on a `type: "command"` handler). The reason is prefixed
- *     with `malformed hooks.json: ` so downstream `startsWith`-anchored
- *     narrowing in `shared/probe-classifiers.ts::narrowResolverNotes`
- *     (HOOK-04 tightened detection) emits the `unsupported hooks` Reason.
+ *     `command` on a `type: "command"` handler, or TOOL-02 supportability
+ *     trip). The reason is prefixed with `malformed hooks.json: ` so
+ *     downstream `startsWith`-anchored narrowing in
+ *     `shared/probe-classifiers.ts::narrowResolverNotes` (HOOK-04
+ *     tightened detection) emits the `unsupported hooks` Reason.
+ *
+ * WR-02 (D-58 review): a read I/O failure (EACCES / EPERM / etc.) is
+ * RE-THROWN unchanged rather than wrapped with the `malformed hooks.json:`
+ * prefix. The outer probe-classifier (`narrowProbeError` in
+ * `orchestrators/plugin/{list,info}.ts`) then classifies the error by
+ * its `.code` and emits the truthful `{permission denied}` /
+ * `{unreadable}` Reason -- the previous wrapper silently lumped I/O
+ * failures into the `{unsupported hooks}` bucket. Schema / parse /
+ * supportability failures still flow through the structured note path so
+ * the catalog layer continues to emit `{unsupported hooks}` for them.
  *
  * Disk I/O is routed through the injected `statKind` + `readFileText`
  * readers, mirroring the `readStandaloneMcp` pattern for testability.
@@ -644,15 +655,11 @@ async function readStandaloneHooks(
     return { ok: true };
   }
 
-  let raw: string;
-  try {
-    raw = await readFileTextOf(ctx)(hooksPath);
-  } catch (err) {
-    return {
-      ok: false,
-      reason: `malformed hooks.json: ${err instanceof Error ? err.message : String(err)}`,
-    };
-  }
+  // WR-02 (D-58 review): let read errors propagate so the outer
+  // `narrowProbeError` ladder classifies them by `.code` rather than
+  // lying about the cause class with a generic `malformed hooks.json:`
+  // wrapper.
+  const raw = await readFileTextOf(ctx)(hooksPath);
 
   const parsed = parseHooksConfig(raw);
   if (!parsed.ok) {
