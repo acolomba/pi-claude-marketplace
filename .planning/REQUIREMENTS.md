@@ -89,7 +89,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Operator Observability
 
-- [ ] **OBS-01**: `shared/debug-log.ts` is the sole debug output seam for the hook bridge; gated on `PI_CLAUDE_MARKETPLACE_DEBUG=1`; never uses `console.error`, `process.stderr.write`, or `ctx.ui.notify` for runtime hook diagnostic output
+- [x] **OBS-01**: `shared/debug-log.ts` is the sole debug output seam for the hook bridge; gated on `PI_CLAUDE_MARKETPLACE_DEBUG=1`; never uses `console.error`, `process.stderr.write`, or `ctx.ui.notify` for runtime hook diagnostic output
 
 ## v1.14+ Requirements
 
@@ -210,4 +210,4 @@ Per the audit in `docs/research/claude-hook-config-syntax.md` § 10 (cross-check
 | LIFE-01 | Phase 63 | Pending |
 | LIFE-02 | Phase 63 | Pending |
 | LIFE-03 | Phase 63 | Pending |
-| OBS-01 | Phase 59 | Pending |
+| OBS-01 | Phase 59 | Complete |
