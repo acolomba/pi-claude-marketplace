@@ -397,7 +397,7 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 | 55. Load-Time Reconcile Apply, Notification & Wiring                | v1.12     | 3/3 | Complete    | 2026-06-11 |
 | 56. Write-Back Integration & Documentation                          | v1.12     | 4/4 | Complete    | 2026-06-11 |
 | 57. Schema, Component Type & Payload-Extension Tolerance            | v1.13     | 4/4 | Complete    | 2026-06-14 |
-| 58. Matcher Parser, Tool-Name Mapping & Supportability Gate         | v1.13     | 1/4 | In progress | 2026-06-14 |
+| 58. Matcher Parser, Tool-Name Mapping & Supportability Gate         | v1.13     | 3/4 | In progress | 2026-06-14 |
 | 59. Bridge Dispatch Core & Debug Seam                               | v1.13     | 0/0 | Not started | -          |
 | 60. Hook Execution, Payload Translators & Env Vars                  | v1.13     | 0/0 | Not started | -          |
 | 61. `if` Field Permission-Rule Matcher                              | v1.13     | 0/0 | Not started | -          |
