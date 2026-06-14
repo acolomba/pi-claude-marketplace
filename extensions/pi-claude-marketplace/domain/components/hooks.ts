@@ -258,6 +258,18 @@ const SAFE_TOKEN_CHARS = /^[A-Za-z0-9_-]+$/;
  *
  * Server + tool segments allow `[A-Za-z0-9_-]+` to match the Claude
  * grammar's loose token rules.
+ *
+ * The `__` delimiter is ambiguous when server or tool segments themselves
+ * contain `__` (e.g. `mcp__a__b__c` could parse as server `a` + tool
+ * `b__c`, or server `a__b` + tool `c`). This ambiguity is intentional and
+ * harmless at this layer: the parsed value is opaque
+ * (`{kind: "mcp-literal", literal: raw}`) -- this parser only decides that
+ * the matcher is a supportable MCP literal and stores the raw string. The
+ * downstream MCP-aware bridge dispatcher (out of scope for v1.13) owns
+ * splitting the literal on its own canonical delimiter when it needs to
+ * route to a specific server/tool pair. Tightening the regex to disallow
+ * `__` inside segments would push the disambiguation work into this
+ * parser without any consumer that needs the split today.
  */
 const MCP_LITERAL = /^mcp__[A-Za-z0-9_-]+__[A-Za-z0-9_-]+$/;
 
