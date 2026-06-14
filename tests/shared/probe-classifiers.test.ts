@@ -81,21 +81,29 @@ test("HOOK-04: narrowResolverNotes returns an empty array for an empty notes inp
   assert.deepEqual([...reasons], []);
 });
 
-test("HOOK-04: narrowResolverNotes deduplicates repeated classifications (multi-note input)", () => {
+test("HOOK-04 / WR-01: narrowResolverNotes deduplicates repeated classifications without falling through to the catch-all", () => {
   // Two parseHooksConfig-style failures classify to the same Reason and
-  // dedup at the bucket level. The second note re-matches the hooks
-  // prefix; the `seen` guard skips re-pushing `unsupported hooks` AND
-  // -- because the note IS hooks-prefixed -- it falls through to the
-  // permissive `unsupported source` fallback (already-classified bucket
-  // does not re-emit, but the per-note loop still walks every arm).
+  // dedup at the bucket level. Each note belongs to exactly one bucket
+  // (hooks-prefixed -> `unsupported hooks`); a second hooks-prefixed note
+  // is a no-op and MUST NOT fall through to the trailing
+  // `unsupported source` catch-all (WR-01 fix).
   const reasons = narrowResolverNotes([
     "hooks.json is not valid JSON: foo",
     "hooks.json is not valid JSON: bar",
   ]);
   // The first note pushes `unsupported hooks`. The second note matches
-  // the hooks prefix but `seen` already has `unsupported hooks`; the
-  // arm's `&& !seen.has(...)` predicate is false so it falls through
-  // to the permissive fallback (which is also gated by `seen.has`).
-  // Net dedup: `unsupported hooks` once + `unsupported source` once.
-  assert.deepEqual([...reasons], ["unsupported hooks", "unsupported source"]);
+  // the hooks prefix; the explicit `continue` after the dedup guard
+  // prevents fall-through to the `unsupported source` arm.
+  assert.deepEqual([...reasons], ["unsupported hooks"]);
+});
+
+test("WR-01: a second `malformed hooks.json:` note does NOT leak an unrelated `unsupported source` reason", () => {
+  // Future resolver flows that emit both an initial parse-error note
+  // AND a supportability-trip note must not pollute the row brace with
+  // an `unsupported source` reason that has no on-disk basis.
+  const reasons = narrowResolverNotes([
+    "malformed hooks.json: hooks.json is not valid JSON: Unexpected token",
+    "malformed hooks.json: unsupported hooks: (a) regex matcher in PreToolUse: Edit.*",
+  ]);
+  assert.deepEqual([...reasons], ["unsupported hooks"]);
 });

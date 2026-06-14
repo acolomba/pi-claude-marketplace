@@ -79,6 +79,10 @@ export function narrowProbeError(
  * the resolver's `"contains lspServers"` note) maps to the emitted
  * Reason `lsp`. Any other unsupported-source note falls through to
  * `unsupported source`. Empty notes -> empty reasons array.
+ *
+ * Each note classifies into EXACTLY ONE bucket; once a bucket has been
+ * pushed, repeated notes for the same bucket are no-ops (and crucially do
+ * NOT fall through to the catch-all `unsupported source` arm -- WR-01).
  */
 export function narrowResolverNotes(
   notes: readonly string[],
@@ -86,21 +90,26 @@ export function narrowResolverNotes(
   const out: ("unsupported hooks" | "lsp" | "unsupported source")[] = [];
   const seen = new Set<string>();
   for (const note of notes) {
-    if (
-      (note.startsWith("hooks.json is not valid JSON:") ||
-        note.startsWith("hooks.json failed schema validation:") ||
-        note.startsWith("unsupported hooks:") ||
-        note.startsWith("malformed hooks.json:")) &&
-      !seen.has("unsupported hooks")
-    ) {
-      out.push("unsupported hooks");
-      seen.add("unsupported hooks");
+    const isHooksNote =
+      note.startsWith("hooks.json is not valid JSON:") ||
+      note.startsWith("hooks.json failed schema validation:") ||
+      note.startsWith("unsupported hooks:") ||
+      note.startsWith("malformed hooks.json:");
+    if (isHooksNote) {
+      if (!seen.has("unsupported hooks")) {
+        out.push("unsupported hooks");
+        seen.add("unsupported hooks");
+      }
+
       continue;
     }
 
-    if (note.includes("lspServers") && !seen.has("lsp")) {
-      out.push("lsp");
-      seen.add("lsp");
+    if (note.includes("lspServers")) {
+      if (!seen.has("lsp")) {
+        out.push("lsp");
+        seen.add("lsp");
+      }
+
       continue;
     }
 
