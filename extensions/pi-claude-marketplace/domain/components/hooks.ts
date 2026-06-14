@@ -226,6 +226,18 @@ export function parseHooksConfig(raw: string): HookConfigParseResult {
  * `SAFE_TOKEN_CHARS` is the actual gate that decides whether each split
  * token reaches the TOOL-01 reverse-map lookup.
  *
+ * The looser top-level charset is intentional forward-compat: today none of
+ * the seven Claude tool names in the TOOL-01 reverse map contain an
+ * underscore (`Bash | Read | Edit | Write | Grep | Glob | LS`), so a
+ * tighter `/^[A-Za-z0-9|-]+$/` would behave identically against today's
+ * tool catalog. If a future Claude release introduces a tool whose name
+ * carries an underscore, admitting `_` here lets such a token reach the
+ * TOOL-01 reverse-map lookup (where it can be mapped or flagged unmapped)
+ * instead of being silently demoted to the regex arm one step earlier.
+ * The downstream TOOL-02 supportability gate still produces a precise
+ * debugDetail in either path -- this charset just controls which arm
+ * (`(a) regex matcher` vs `(b) unmapped tool`) carries the trip.
+ *
  * `|` is admitted at this top-level pass because pipe-OR alternation is
  * the only multi-token shape this parser admits; the post-split per-token
  * validator handles the per-token character set.
