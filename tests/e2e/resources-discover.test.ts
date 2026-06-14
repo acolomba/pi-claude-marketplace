@@ -10,7 +10,7 @@ test("resources_discover covers /reload by returning staged skill and prompt res
     const { mock, ctx } = await installTargetWithMockPi(env, "frontend-design", []);
     await installTargetWithMockPi(env, "code-review", []);
 
-    claudeMarketplaceExtension(mock.pi);
+    await claudeMarketplaceExtension(mock.pi);
     const handler = mock.events.get("resources_discover")?.[0];
     assert.ok(handler !== undefined, "resources_discover handler registered");
 

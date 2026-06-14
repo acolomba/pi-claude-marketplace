@@ -878,9 +878,19 @@ export async function applyReconcile(opts: ApplyReconcileOptions): Promise<void>
  * not mutate state. A transient lock-held / EACCES throw propagates so the
  * caller's WR-01 isolation arm coerces it into a structured
  * `invalid-block` outcome.
+ *
+ * Pristine-scope gate (WR-05): skip the rebuild entirely when state.json
+ * does not exist -- the lock acquisition itself would mkdir the
+ * extensionRoot, violating the "clean reconcile creates no unsolicited
+ * files" contract. A scope without a state.json has zero installed plugins
+ * to register anyway.
  */
 async function rebuildScopeRoutingTable(scope: Scope, cwd: string): Promise<void> {
   const loc = locationsFor(scope, cwd);
+  if (!(await pathExists(loc.stateJsonPath))) {
+    return;
+  }
+
   await withLockedStateTransaction(loc, async (tx) => {
     rebuildRoutingTables(tx.state, loc);
     // NO tx.save() -- read-only snapshot acquisition.

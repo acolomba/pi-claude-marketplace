@@ -57,10 +57,10 @@ test("default export is a function", () => {
   assert.equal(typeof claudeMarketplaceExtension, "function");
 });
 
-test("registers command, read-only tools, session_start, and resources_discover exactly once", () => {
+test("registers command, read-only tools, session_start, and resources_discover exactly once", async () => {
   const log: RegistrationLog[] = [];
   const { pi } = makePiMock(log);
-  claudeMarketplaceExtension(pi);
+  await claudeMarketplaceExtension(pi);
 
   const commands = log.filter((e) => e.type === "command");
   const events = log.filter((e) => e.type === "event");
@@ -68,7 +68,23 @@ test("registers command, read-only tools, session_start, and resources_discover 
 
   assert.equal(commands.length, 1, `expected exactly 1 command, got ${JSON.stringify(commands)}`);
   assert.equal(commands[0]!.name, "claude:plugin");
-  assert.deepEqual(events.map((e) => e.name).sort(), ["resources_discover", "session_start"]);
+  // DISP-01: the hooks bridge adds 7 additional pi.on registrations
+  // (session_start, session_shutdown, session_before_compact,
+  // session_compact, input, tool_call, tool_result) alongside the
+  // long-standing resources_discover registration. session_start is also
+  // registered by registerClaudePluginCommand (read-only-tools surface), so
+  // its multiplicity rises to 2.
+  assert.deepEqual(events.map((e) => e.name).sort(), [
+    "input",
+    "resources_discover",
+    "session_before_compact",
+    "session_compact",
+    "session_shutdown",
+    "session_start",
+    "session_start",
+    "tool_call",
+    "tool_result",
+  ]);
   assert.equal(
     tools.length,
     2,
@@ -83,7 +99,7 @@ test("registers command, read-only tools, session_start, and resources_discover 
 test("resources_discover handler resolves project cwd at invocation time", async () => {
   const log: RegistrationLog[] = [];
   const { pi, events } = makePiMock(log);
-  claudeMarketplaceExtension(pi);
+  await claudeMarketplaceExtension(pi);
 
   const handlers = events.get("resources_discover") ?? [];
   assert.equal(handlers.length, 1, "exactly one resources_discover handler");
