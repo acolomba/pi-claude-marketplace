@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.13
 milestone_name: Claude Hook Bridge
-status: executing
-stopped_at: Phase 58 Plan 04 complete
-last_updated: "2026-06-14T14:55:00Z"
+status: completed
+stopped_at: Phase 59 context gathered
+last_updated: "2026-06-14T19:20:17.799Z"
 last_activity: 2026-06-14 -- Phase 58 Plan 04 complete (HOOK-04 closed)
 progress:
   total_phases: 7
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 8
   completed_plans: 8
-  percent: 25
+  percent: 29
 ---
 
 # Project State
@@ -268,9 +268,9 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-14T14:11:00Z
-Stopped At: Phase 58 Plan 02 complete (bucket-A event closed-set + non-tool matcher tables shipped)
-Resume File: .planning/phases/58-matcher-parser-tool-name-mapping-supportability-gate/58-03-PLAN.md
+Last session: 2026-06-14T19:20:17.779Z
+Stopped At: Phase 59 context gathered
+Resume File: .planning/phases/59-bridge-dispatch-core-debug-seam/59-CONTEXT.md
 
 ## Operator Next Steps
 
