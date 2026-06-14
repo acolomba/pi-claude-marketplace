@@ -179,12 +179,34 @@ Per the audit in `docs/research/claude-hook-config-syntax.md` § 10 (cross-check
 
 | REQ-ID | Phase | Status |
 |---|---|---|
-| HOOK-01..06 | (filled by roadmapper) | (filled by roadmapper) |
-| MATCH-01..03 | (filled by roadmapper) | (filled by roadmapper) |
-| TOOL-01..02 | (filled by roadmapper) | (filled by roadmapper) |
-| DISP-01..04 | (filled by roadmapper) | (filled by roadmapper) |
-| EXEC-01..05 | (filled by roadmapper) | (filled by roadmapper) |
-| PAYL-01 | (filled by roadmapper) | (filled by roadmapper) |
-| SURF-01..06 | (filled by roadmapper) | (filled by roadmapper) |
-| LIFE-01..03 | (filled by roadmapper) | (filled by roadmapper) |
-| OBS-01 | (filled by roadmapper) | (filled by roadmapper) |
+| HOOK-01 | Phase 57 | Pending |
+| HOOK-02 | Phase 57 | Pending |
+| HOOK-03 | Phase 57 | Pending |
+| HOOK-04 | Phase 63 | Pending |
+| HOOK-05 | Phase 60 | Pending |
+| HOOK-06 | Phase 62 | Pending |
+| MATCH-01 | Phase 58 | Pending |
+| MATCH-02 | Phase 58 | Pending |
+| MATCH-03 | Phase 61 | Pending |
+| TOOL-01 | Phase 58 | Pending |
+| TOOL-02 | Phase 58 | Pending |
+| DISP-01 | Phase 59 | Pending |
+| DISP-02 | Phase 59 | Pending |
+| DISP-03 | Phase 59 | Pending |
+| DISP-04 | Phase 59 | Pending |
+| EXEC-01 | Phase 60 | Pending |
+| EXEC-02 | Phase 60 | Pending |
+| EXEC-03 | Phase 60 | Pending |
+| EXEC-04 | Phase 60 | Pending |
+| EXEC-05 | Phase 62 | Pending |
+| PAYL-01 | Phase 60 | Pending |
+| SURF-01 | Phase 63 | Pending |
+| SURF-02 | Phase 63 | Pending |
+| SURF-03 | Phase 63 (reserved for v1.14+) | Pending |
+| SURF-04 | Phase 63 | Pending |
+| SURF-05 | Phase 63 | Pending |
+| SURF-06 | Phase 63 | Pending |
+| LIFE-01 | Phase 63 | Pending |
+| LIFE-02 | Phase 63 | Pending |
+| LIFE-03 | Phase 63 | Pending |
+| OBS-01 | Phase 59 | Pending |

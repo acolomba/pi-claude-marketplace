@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-06-13T12:00:45.345Z"
 last_activity: 2026-06-13
 progress:
-  total_phases: 0
+  total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -19,14 +19,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-08)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 56 — write-back-integration-documentation
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 57 — schema-component-type-and-payload-extension-tolerance (v1.13 starts here)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 57 (not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-06-13 — Milestone v1.13 started
+Status: Roadmap complete; Phase 57 next
+Last activity: 2026-06-13 — v1.13 ROADMAP.md created (7 phases 57-63; 31 REQs mapped 100%)
 
 ## Performance Metrics
 

@@ -16,6 +16,7 @@
 - Done **v1.10 Error Attribution & Message-Type Consistency** -- Phases 46-49 (shipped 2026-06-08)
 - Done **v1.11 Notification Summary-Line Grammar** -- Phase 50 (shipped 2026-06-08)
 - Done **v1.12 Marketplace and Plugin Config Files** -- Phases 51-56 (shipped 2026-06-11)
+- In progress **v1.13 Claude Hook Bridge** -- Phases 57-63 (planning)
 
 For full details of each milestone, see `.planning/milestones/v[X.Y]-ROADMAP.md` and `.planning/milestones/v[X.Y]-REQUIREMENTS.md`.
 
@@ -169,6 +170,149 @@ Declarative per-scope config files (`claude-plugins.json` + entry-level-override
 
 </details>
 
+### In progress v1.13 Claude Hook Bridge
+
+Add a hooks component bridge alongside skills/commands/agents/MCP, translating Claude plugin hook declarations into Pi extension event subscriptions and shell-outs. Ships the **8 bucket-A direct-1:1-map events only** (SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PreCompact, PostCompact, SessionEnd) — the subset where dispatch fires at 100% fidelity. Strict-supportability stance at BOTH event and plugin levels: a plugin referencing any other Claude hook event, an unmapped Claude tool, a regex matcher, or a non-`command` handler installs as `(unavailable) {unsupported hooks}`. Forward-compat investments retained: the `if` field permission-rule matcher (~300 LoC) and the `asyncRewake` registry (~250 LoC) ship in v1.13 despite no first-party plugin exercising them under bucket-A-only scope. See `.planning/REQUIREMENTS.md` for the 31-REQ contract; `docs/research/claude-hooks-vs-pi-events.md` + `docs/research/claude-hook-config-syntax.md` are the authority sources.
+
+- [ ] Phase 57: Schema, Component Type & Payload-Extension Tolerance -- HOOK-01, HOOK-02, HOOK-03
+- [ ] Phase 58: Matcher Parser, Tool-Name Mapping & Supportability Gate -- MATCH-01, MATCH-02, TOOL-01, TOOL-02
+- [ ] Phase 59: Bridge Dispatch Core & Debug Seam -- DISP-01..04, OBS-01
+- [ ] Phase 60: Hook Execution, Payload Translators & Env Vars -- EXEC-01..04, PAYL-01, HOOK-05
+- [ ] Phase 61: `if` Field Permission-Rule Matcher -- MATCH-03
+- [ ] Phase 62: `asyncRewake` Registry & Background-Spawn -- HOOK-06, EXEC-05
+- [ ] Phase 63: Lifecycle Cascade, User-Facing Surface & Docs -- LIFE-01..03, HOOK-04, SURF-01..06
+
+#### Phase 57: Schema, Component Type & Payload-Extension Tolerance
+
+**Goal**: A new `hooks` component type is observable in the resolver and state schema with v1.12 state files migrating cleanly.
+
+**Depends on**: Nothing (foundation; first new phase after v1.12)
+
+**Requirements**: HOOK-01, HOOK-02, HOOK-03
+
+**Success Criteria** (what must be TRUE):
+
+1. A plugin manifest declaring `hooks` resolves through the discriminated `installable: true | false` resolver alongside `skills`/`commands`/`agents`/`mcpServers` (HOOK-01; NFR-7 preserved).
+2. A v1.12 `state.json` loads cleanly under v1.13 code without losing any field; `schemaVersion` widens to `Literal(1) | Literal(2)` and the additive `resources.hooks ??= []` migration runs once inside `withLockedStateTransaction` (HOOK-02; NFR-1).
+3. The hook-config TypeBox schema uses `additionalProperties: true` at every nesting level and a round-trip through state preserves unknown payload fields verbatim (HOOK-03).
+4. The known additive extension set `{ statusMessage, once, async, shell, args }` is honored or silently dropped per the field-level decisions; unknown extension names surface debug-log only and never flip installability (HOOK-03 forward-compat tolerance).
+
+**Plans**: TBD
+
+#### Phase 58: Matcher Parser, Tool-Name Mapping & Supportability Gate
+
+**Goal**: A plugin's `hooks.json` is parsed into a normalized internal model, with regex / unmapped-tool / non-bucket-A / non-`command` plugins flipped to `(unavailable) {unsupported hooks}` at resolve time.
+
+**Depends on**: Phase 57 (component type + schema must exist before the parser can target it)
+
+**Requirements**: MATCH-01, MATCH-02, TOOL-01, TOOL-02
+
+**Success Criteria** (what must be TRUE):
+
+1. A user can write Claude-form literal matchers (`Edit`, `Bash`, `Read`), pipe-OR alternation (`Edit|Write`), empty `""` (match-all), and `mcp__server__tool` patterns and the bridge matches them against normalized incoming events (MATCH-01). Pi-form lowercase matchers never match.
+2. A `hooks.json` containing any regex pattern (any char outside `[A-Za-z0-9_|\-]` not part of an `mcp__` prefix) installs the plugin as `(unavailable) {unsupported hooks}`; no per-entry skip (MATCH-02 + TOOL-02(a)).
+3. A bidirectional Claude ↔ Pi tool-name mapping lives at `bridges/hooks/tool-names.ts` with an architecture test asserting every Pi `toolName` literal exported by the peer-dep types has a mapping; MCP tools bypass the table (TOOL-01).
+4. A plugin declaring hooks against any non-bucket-A event, an unmapped Claude tool (`MultiEdit`, `WebFetch`, `Task`, ...), or a non-`command` handler type installs as `(unavailable) {unsupported hooks}`; reconcile honors the flip across `/reload` (TOOL-02(b)/(c)/(d)).
+
+**Plans**: TBD
+
+#### Phase 59: Bridge Dispatch Core & Debug Seam
+
+**Goal**: A single composite handler per supported Pi event type dispatches synchronously to the right plugin entries in deterministic order, surviving `/reload` without zombie callbacks.
+
+**Depends on**: Phase 58 (dispatch reads parser output)
+
+**Requirements**: DISP-01, DISP-02, DISP-03, DISP-04, OBS-01
+
+**Success Criteria** (what must be TRUE):
+
+1. The bridge calls `pi.on(eventName, handler)` exactly once per supported Pi event type at extension-factory time; routing state is read from `shared/event-router.ts` (DISP-01).
+2. After every scope apply pass `rebuildRoutingTables(state, loc)` (called from `orchestrators/reconcile/apply.ts`) clears and rebuilds routing tables in sub-millisecond synchronous time (DISP-02).
+3. A `/reload` cycle never produces a zombie dispatch from a prior load: every composite handler closes over an epoch integer compared against a module-level `liveEpoch` bumped on bridge load; stale invocations no-op (DISP-03; NFR-2).
+4. Within one composite-handler invocation, entries dispatch in deterministic order — `compareByNameThenScope` (project-first, alphabetical) across plugins, declaration order within a plugin's `hooks.json`, sequential awaited fan-out (DISP-04).
+5. All runtime hook diagnostic output goes through `shared/debug-log.ts` gated on `PI_CLAUDE_MARKETPLACE_DEBUG=1`; nothing in the dispatch path calls `console.error`, `process.stderr.write`, or `ctx.ui.notify` for diagnostics (OBS-01; IL-2).
+
+**Plans**: TBD
+
+#### Phase 60: Hook Execution, Payload Translators & Env Vars
+
+**Goal**: A dispatched hook spawns a child process with the right cwd / env / args / timeout, receives a faithfully translated bucket-A stdin payload (with Pi → Claude tool-name translation), and surfaces its stderr only to the debug log.
+
+**Depends on**: Phase 59 (dispatch core must invoke an exec layer)
+
+**Requirements**: EXEC-01, EXEC-02, EXEC-03, EXEC-04, PAYL-01, HOOK-05
+
+**Success Criteria** (what must be TRUE):
+
+1. Each of the 8 bucket-A events (SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PostToolUseFailure / PreCompact / PostCompact / SessionEnd) round-trips through a translator at `bridges/hooks/payloads/<event>.ts` with an architecture-test fixture; PreToolUse / PostToolUse / PostToolUseFailure additionally map Pi's lowercase `event.toolName` to Claude's capitalized `tool_name` via TOOL-01 (PAYL-01).
+2. The hook child runs via `node:child_process.spawn` with cwd = Pi `ctx.cwd` snapshot at dispatch time and env merging process env + both `CLAUDE_*` and `PI_*` variables (EXEC-01).
+3. Every hook child sees `CLAUDE_PROJECT_DIR` / `CLAUDE_PLUGIN_ROOT` / `CLAUDE_PLUGIN_DATA` set; `CLAUDE_ENV_FILE` is present only for events that use it upstream (`SessionStart` in v1.13); `CLAUDE_CODE_REMOTE` is intentionally unset (HOOK-05).
+4. A hook's `timeout` field overrides the 600s bridge default (Claude Code parity); timeout escalates SIGTERM → 5s grace → SIGKILL; stdout `maxBuffer: 1MB`; stdin truncated at 256KB with `_truncated: true` (EXEC-02).
+5. Hook stderr is debug-logged only and never reaches `ctx.ui.notify` at runtime; install-time hook-config errors continue to surface through `notify` (EXEC-03; IL-2).
+6. A handler declaring `args: [string, ...]` invokes `spawn(command, args, options)` exec-form; the default (no `args`) stays shell-form; the `shell` field (HOOK-03 extension) selects the shell binary for shell-form only (EXEC-04).
+
+**Plans**: TBD
+
+#### Phase 61: `if` Field Permission-Rule Matcher
+
+**Goal**: A hook entry's optional `if` field narrows tool-event dispatch via Claude Code's permission-rule syntax, matching the upstream truth table verbatim with explicit fail-open on parse failure.
+
+**Depends on**: Phase 60 (the `if` filter sits between dispatch and exec; tool-name translation must already work)
+
+**Requirements**: MATCH-03
+
+**Success Criteria** (what must be TRUE):
+
+1. On a PreToolUse / PostToolUse / PostToolUseFailure dispatch, an `if: Bash(...)` entry only fires when one of the parsed subcommands (after compound-separator split, `$()`/backtick recursion, process-wrapper strip) matches the glob; an `if: Edit(*.ts)` (and the other file-path tool forms) only fires when the per-tool argument path matches the gitignore-semantics glob with the four anchors (`//abs`, `~/home`, `/project-root`, `./cwd`); an `if: mcp__<server>__<tool>` only fires on literal `event.toolName` match (MATCH-03 core).
+2. Bash-glob edge cases match Claude Code byte-for-byte: word-boundary at trailing space (`Bash(ls *)` excludes `lsof`; `Bash(ls*)` includes both), `:*` trailing-sugar equivalence (`Bash(ls:*)` ≡ `Bash(ls *)`), patterns more specific than `<command> *` fire on `$()`/backtick/`$VAR` interpolation (MATCH-03 fail-open-on-uncertain-context).
+3. An unparseable Bash command fires the hook regardless (fail-open documented behavior; matches Claude Code's "best-effort, not a security boundary" contract).
+4. The `if` field composes with `matcher` under AND semantics (matcher filters at group level, `if` narrows within).
+5. An architecture test at `bridges/hooks/if-field/` exercises every fixture row in the upstream `hooks-guide` § "Filter by tool name and arguments" truth table verbatim; the bridge ignores `if` on non-tool events (matches upstream's "attaching prevents the hook from running" behavior).
+
+**Plans**: TBD
+
+#### Phase 62: `asyncRewake` Registry & Background-Spawn
+
+**Goal**: A hook entry declaring `asyncRewake: true` spawns detached, returns immediately, and on exit code 2 injects its output into the model context via Pi's `<system-reminder>`-equivalent primitive.
+
+**Depends on**: Phase 60 (background spawn extends the EXEC-01..04 surface)
+
+**Requirements**: HOOK-06, EXEC-05
+
+**Success Criteria** (what must be TRUE):
+
+1. A hook with `asyncRewake: true` spawns via `spawn(command, args, { detached: false, stdio: ["pipe","pipe","pipe"] })`, registers `{pid, dispatchId, plugin}` in the bridge-owned `AsyncRewakeRegistry`, and returns immediately — the triggering tool call proceeds without awaiting the child (EXEC-05).
+2. On child exit code 2 the bridge injects `pi.sendMessage({role:"custom", customType:"claude-hook-rewake", display:false, content:<rewakeMessage+stderr|stdout>}, { deliverAs: ctx.isIdle() ? "nextTurn" : "followUp" })` — `display: false` matches Claude Code's `<system-reminder>` semantic (user-invisible / model-visible) (HOOK-06 core).
+3. On exit code 0 or any non-2 code: silent background completion (no model-context injection); if `rewakeSummary` is set the bridge surfaces it via `ctx.ui.notify` at process exit (UI-only) (HOOK-06).
+4. The registry is cleared on `/reload`; orphan children from a crashed prior load are SIGKILLed at next bridge load via PID-table scan; multi-hook fan-in via independent `dispatchId` per registered process (HOOK-06 lifecycle; NFR-2).
+5. `rewakeMessage` / `rewakeSummary` declared without `asyncRewake: true` install normally (warning surfaced per SURF-05 in Phase 63 — no-op upstream).
+
+**Plans**: TBD
+
+**UI hint**: yes
+
+#### Phase 63: Lifecycle Cascade, User-Facing Surface & Docs
+
+**Goal**: Hook install/uninstall flows through the v1.12 reconcile cascade, `info <plugin>` and `(unavailable) {unsupported hooks}` rows render correctly, and a first-time reader can find and understand the hook-support story in `docs/hooks.md`.
+
+**Depends on**: Phase 62 (entire dispatch / exec / forward-compat surface must exist before lifecycle, surface, and docs are meaningful)
+
+**Requirements**: LIFE-01, LIFE-02, LIFE-03, HOOK-04, SURF-01, SURF-02, SURF-03, SURF-04, SURF-05, SURF-06
+
+**Success Criteria** (what must be TRUE):
+
+1. Installing or uninstalling a plugin with hooks emits a `NotificationMessage` plugin row through the existing v1.4 cascade (no new top-level notify pattern; no new state-change tokens) and triggers the existing `/reload` hint cascade (LIFE-01, LIFE-02). The 5th bridge slot appears in `transaction/runPhases.ts` (plan/stage/unstage/discover mirrors the existing cascade shape).
+2. Hook files live under `<scopeRoot>/pi-claude-marketplace/hooks/<plugin>/hooks.json` (NFR-10 extension); a symlinked-escape `command` path is rejected at install with a notify error via `fs.realpath` + `assertPathInside(<pluginRoot>, realpath)` (LIFE-03; NFR-10).
+3. The closed-set `REASONS` token `"hooks"` is renamed to `"unsupported hooks"` at `shared/notify.ts::REASONS`; every catalog-UAT fixture row `(unavailable) {hooks}` in `docs/output-catalog.md` is updated to `(unavailable) {unsupported hooks}` in lockstep with the source rename and the corresponding byte-equality test cases (HOOK-04 atomic catalog-UAT lockstep).
+4. `info <plugin>` renders a `hooks:` line per declared hook entry (event + matcher) for installable plugins; `hooks` slots alphabetically between `commands` and `mcp`; unavailable plugins continue to render `components: not resolved` (SURF-01). `list` does NOT add a hook-count column and no standalone `/claude:plugin hooks <plugin>` command ships (SURF-04).
+5. `shared/notify.ts` gains a typed `HookSummary` discriminated model plus a closed-set `ClaudeHookEvent` tuple (8 bucket-A events); all UI surfaces consume `HookSummary` (no string re-derivation) (SURF-02). No install-time synthesis-caveat warnings ship in v1.13 (SURF-03 reserved for v1.14+).
+6. A plugin declaring `rewakeMessage` or `rewakeSummary` without `asyncRewake: true` emits one install-time warning (no-op upstream); plugins with `asyncRewake: true` install normally with no warning (SURF-05).
+7. `docs/hooks.md` exists, is linked from `README.md`'s new "Hook support" section, and is written in plain English for first-time readers (plugin authors and end users) — no internal jargon, no bucket-A/D taxonomy, no REQ-IDs / phase numbers, using Claude Code's own field names verbatim. It covers: the 8 supported events with plain descriptions; 4–6 worked examples (auto-formatter, bash-safety net, session-start rule injection, prompt audit log, background security review, compaction snapshot); the unsupported event groups with one-line reasons each; the Pi ↔ Claude tool-name mapping table and currently-unmapped Claude tools; a "what happens to my plugin?" section; the marketplace coverage note (10/13 installable); and cross-references to the two authority docs (SURF-06).
+
+**Plans**: TBD
+
+**UI hint**: yes
+
 ## Progress
 
 | Phase                                                                | Milestone | Plans Complete | Status      | Completed  |
@@ -227,3 +371,10 @@ Declarative per-scope config files (`claude-plugins.json` + entry-level-override
 | 54. Enable/Disable Commands                                         | v1.12     | 2/2 | Complete    | 2026-06-10 |
 | 55. Load-Time Reconcile Apply, Notification & Wiring                | v1.12     | 3/3 | Complete    | 2026-06-11 |
 | 56. Write-Back Integration & Documentation                          | v1.12     | 4/4 | Complete    | 2026-06-11 |
+| 57. Schema, Component Type & Payload-Extension Tolerance            | v1.13     | 0/0 | Not started | -          |
+| 58. Matcher Parser, Tool-Name Mapping & Supportability Gate         | v1.13     | 0/0 | Not started | -          |
+| 59. Bridge Dispatch Core & Debug Seam                               | v1.13     | 0/0 | Not started | -          |
+| 60. Hook Execution, Payload Translators & Env Vars                  | v1.13     | 0/0 | Not started | -          |
+| 61. `if` Field Permission-Rule Matcher                              | v1.13     | 0/0 | Not started | -          |
+| 62. `asyncRewake` Registry & Background-Spawn                       | v1.13     | 0/0 | Not started | -          |
+| 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 0/0 | Not started | -          |
