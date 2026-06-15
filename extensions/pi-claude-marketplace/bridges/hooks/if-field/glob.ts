@@ -32,7 +32,9 @@
 //
 // DoS mitigation: zero alternation and zero quantifier-nesting. `**` is
 // segment-bounded (consumes whole path segments, not arbitrary characters);
-// `*` is segment-local (cannot consume `/`). Linear-time match against
+// `*` is segment-local in path mode (cannot consume `/`), but consumes
+// across `/` in Bash mode (CR-01) because Bash subcommands carry path
+// arguments (`rm /tmp/foo`, `cat /etc/passwd`). Linear-time match against
 // `pattern.length * text.length`. Recursion is bounded by `text.length`.
 //
 // Anchor resolution context: callers pass `{ homedir, cwd, projectRoot }`.
@@ -179,8 +181,14 @@ function tokenize(pattern: string): GlobToken[] {
 
 /**
  * Recursive-descent glob match. `literal` consumes its text verbatim;
- * `star` consumes within a single segment (cannot cross `/`); `globstar`
- * consumes zero or more full segments; `slash` consumes exactly `/`.
+ * `star` consumes within a single segment in path mode (cannot cross
+ * `/`) or across `/` in Bash mode (D-61-04); `globstar` consumes zero or
+ * more full segments; `slash` consumes exactly `/`.
+ *
+ * `crossSegment` is the path/Bash mode flag (CR-01). Path-tool callers
+ * pass `false` so `*` stops at `/` (`Read(*.ts)` must not match
+ * `src/foo.ts`); Bash callers pass `true` so `*` can consume path
+ * arguments (`Bash(rm *)` must match `rm -rf /tmp/foo`).
  *
  * Returns true iff the entire token list matches a prefix of `text` AND
  * the consumed prefix equals `text` (i.e. no unmatched trailing
@@ -193,14 +201,16 @@ function matchStar(
   text: string,
   ti: number,
   xi: number,
+  crossSegment: boolean,
 ): boolean {
-  // Consume zero or more chars within one segment (NOT across "/").
+  // Consume zero or more chars. Path mode stops at "/"; Bash mode (per
+  // CR-01) keeps going so `Bash(rm *)` matches `rm /tmp/foo`.
   for (let k = xi; k <= text.length; k++) {
-    if (matchTokens(tokens, text, ti + 1, k)) {
+    if (matchTokens(tokens, text, ti + 1, k, crossSegment)) {
       return true;
     }
 
-    if (text[k] === "/") {
+    if (!crossSegment && text[k] === "/") {
       return false;
     }
   }
@@ -213,10 +223,11 @@ function matchGlobstar(
   text: string,
   ti: number,
   xi: number,
+  crossSegment: boolean,
 ): boolean {
   // Consume zero or more whole segments. Try every position in remainder.
   for (let k = xi; k <= text.length; k++) {
-    if (matchTokens(tokens, text, ti + 1, k)) {
+    if (matchTokens(tokens, text, ti + 1, k, crossSegment)) {
       return true;
     }
   }
@@ -229,6 +240,7 @@ function matchTokens(
   text: string,
   ti: number,
   xi: number,
+  crossSegment: boolean,
 ): boolean {
   if (ti === tokens.length) {
     return xi === text.length;
@@ -242,14 +254,15 @@ function matchTokens(
   switch (tok.kind) {
     case "literal":
       return (
-        text.startsWith(tok.text, xi) && matchTokens(tokens, text, ti + 1, xi + tok.text.length)
+        text.startsWith(tok.text, xi) &&
+        matchTokens(tokens, text, ti + 1, xi + tok.text.length, crossSegment)
       );
     case "slash":
-      return text[xi] === "/" && matchTokens(tokens, text, ti + 1, xi + 1);
+      return text[xi] === "/" && matchTokens(tokens, text, ti + 1, xi + 1, crossSegment);
     case "star":
-      return matchStar(tokens, text, ti, xi);
+      return matchStar(tokens, text, ti, xi, crossSegment);
     case "globstar":
-      return matchGlobstar(tokens, text, ti, xi);
+      return matchGlobstar(tokens, text, ti, xi, crossSegment);
     default:
       return assertNever(tok);
   }
@@ -268,8 +281,10 @@ function matchBashGlob(
 ): boolean {
   // The Bash glob anchors at the start of the subcommand. The subcommand
   // is treated as a single "segment" (no `/` boundary semantics) so the
-  // `star` token can consume the entire tail.
-  if (matchTokens(tokens, subcommand, 0, 0)) {
+  // `star` token can consume the entire tail -- CR-01: pass
+  // `crossSegment=true` so path-bearing arguments like `rm /tmp/foo` are
+  // consumed by `Bash(rm *)`.
+  if (matchTokens(tokens, subcommand, 0, 0, true)) {
     return true;
   }
 
@@ -281,7 +296,7 @@ function matchBashGlob(
   // excludes `lsof` (because `lsof` does not start with `ls ` and never
   // gets a trailing-space appended that would change that) while
   // admitting bare `ls` and `timeout`-stripped `npm test`.
-  if (trailingWordBoundary && matchTokens(tokens, subcommand + " ", 0, 0)) {
+  if (trailingWordBoundary && matchTokens(tokens, subcommand + " ", 0, 0, true)) {
     return true;
   }
 
@@ -407,7 +422,7 @@ function matchPathGlob(
   absPath: string,
 ): boolean {
   if (anchor.kind === "filesystem-root") {
-    return matchTokens(tokens, absPath, 0, 0);
+    return matchTokens(tokens, absPath, 0, 0, false);
   }
 
   const tail = stripBase(absoluteBase, absPath);
@@ -419,12 +434,12 @@ function matchPathGlob(
     case "home":
     case "project-root":
     case "cwd":
-      return matchTokens(tokens, tail, 0, 0);
+      return matchTokens(tokens, tail, 0, 0, false);
     case "gitignore-bare": {
       // Bare filename matches at any depth -- try every segment boundary.
       let scan = 0;
       while (scan <= tail.length) {
-        if (matchTokens(tokens, tail, 0, scan)) {
+        if (matchTokens(tokens, tail, 0, scan, false)) {
           return true;
         }
 

@@ -156,6 +156,67 @@ test("MATCH-03: compileBashGlob colon-sugar table matches upstream", () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────
+// Block 3b: Bash glob `*` MUST consume `/`-bearing arguments (CR-01)
+// ──────────────────────────────────────────────────────────────────────────
+//
+// The shared `matchStar` helper short-circuits at `/` in path-glob mode
+// (correct for `Read(*.ts)` which must not match `src/foo.ts`). Bash-glob
+// mode passes `crossSegment=true` so `Bash(rm *)` matches `rm -rf /tmp/foo`
+// -- path arguments are the most common Bash invocation shape. The fixture
+// pins the regression so a future refactor that drops the crossSegment
+// flag would red-fail rather than silently regress fail-CLOSED.
+
+const BASH_PATH_ARG_TABLE: ReadonlyArray<{
+  readonly ifPattern: string;
+  readonly bashCommand: string;
+  readonly fires: boolean;
+  readonly reason: string;
+}> = [
+  {
+    ifPattern: "Bash(rm *)",
+    bashCommand: "rm -rf /tmp/foo",
+    fires: true,
+    reason: "star must consume `/` in Bash arguments (CR-01)",
+  },
+  {
+    ifPattern: "Bash(cat *)",
+    bashCommand: "cat /etc/passwd",
+    fires: true,
+    reason: "star must consume `/` in Bash arguments (CR-01)",
+  },
+  {
+    ifPattern: "Bash(git push *)",
+    bashCommand: "git push origin/main",
+    fires: true,
+    reason: "star must consume `/` in subcommand args (CR-01)",
+  },
+  {
+    ifPattern: "Bash(find *)",
+    bashCommand: "find ./src -name x",
+    fires: true,
+    reason: "star must consume `/` in Bash arguments (CR-01)",
+  },
+  {
+    ifPattern: "Bash(ls *)",
+    bashCommand: "lsof /var/log",
+    fires: false,
+    reason: "word-boundary preserved even with `/`-bearing args (CR-01)",
+  },
+];
+
+test("MATCH-03: Bash glob star consumes `/`-bearing arguments (CR-01)", () => {
+  for (const row of BASH_PATH_ARG_TABLE) {
+    const glob = compileBashGlob(stripBashWrapper(row.ifPattern));
+    const actual = glob.test(row.bashCommand);
+    assert.equal(
+      actual,
+      row.fires,
+      `${row.ifPattern} vs "${row.bashCommand}" expected fires=${String(row.fires)} -- ${row.reason}`,
+    );
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
 // Block 4: parseBashSubcommands process-wrapper truth table (D-61-04)
 // ──────────────────────────────────────────────────────────────────────────
 
