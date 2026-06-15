@@ -49,6 +49,7 @@ import {
 } from "./event-adapters.ts";
 import { currentEpoch, getRoutingBucket, type RoutingEntry } from "./event-router.ts";
 import { assertNever, type HookExecResult } from "./exec-result.ts";
+import { ifFires } from "./if-field/index.ts";
 
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type { ParsedMatcher } from "../../domain/components/hooks.ts";
@@ -169,6 +170,12 @@ async function reduceBucket(
   let finalResult: HookExecResult = { kind: "noop" };
   for (const entry of bucket) {
     if (!matcherFires(entry)) {
+      continue;
+    }
+
+    // MATCH-03 / D-61-02: AND composition with the group-level matcher.
+    // if-no-match -> continue (skip entry), NOT block.
+    if (!ifFires(entry.ifPredicate, event, ctx, entry.claudeEvent)) {
       continue;
     }
 
