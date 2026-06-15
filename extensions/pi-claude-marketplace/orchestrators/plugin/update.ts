@@ -50,6 +50,7 @@
 // resolveScopeFromState). MUST NOT import from
 // orchestrators/marketplace/{add,remove,list,update,autoupdate}.ts.
 
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -63,6 +64,11 @@ import {
   prepareStageCommands,
 } from "../../bridges/commands/index.ts";
 import {
+  addPluginConfigToCache,
+  rebuildRoutingTables,
+  removePluginConfigFromCache,
+} from "../../bridges/hooks/index.ts";
+import {
   abortPreparedMcp,
   commitPreparedMcp,
   prepareStageMcpServers,
@@ -72,12 +78,14 @@ import {
   commitPreparedSkills,
   prepareStageSkills,
 } from "../../bridges/skills/index.ts";
+import { parseHooksConfig } from "../../domain/components/hooks.ts";
 import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   appendLeaks,
   assertNever,
@@ -1041,6 +1049,16 @@ async function finalizeUpdateRecord(
       sRecord.resources.mcpServers = handles.mcp.result.recorded.map((r) => r.generatedName);
     }
 
+    // WR-03: hooks-inventory toggle mirrors install.ts / reinstall.ts. The
+    // hooks "phase" has no bridge prep handles (the parsed-config cache is
+    // the source of truth, not a per-plugin staging directory), so the
+    // inventory either appears (when the resolver advertises a hooks
+    // config in the post-update tree) or disappears (when the post-update
+    // tree drops hooks). The state-walk gate in `rebuildRoutingTables`
+    // consults `resources.hooks.length > 0`; updating the slug here keeps
+    // the gate aligned with the cache+rebuild lower down.
+    sRecord.resources.hooks = installable.hooksConfigPath !== undefined ? [plugin] : [];
+
     // SC#2 all-or-nothing: version bump + installable=true + resolvedSource
     // happen ONLY on the all-success path. On failure the intent-mark
     // `compatibility` set by `markUpdateInProgress` carries forward
@@ -1057,6 +1075,31 @@ async function finalizeUpdateRecord(
     }
 
     sRecord.updatedAt = new Date().toISOString();
+
+    // WR-03 + D-60-05: update does NOT delegate to install/uninstall, so
+    // without an explicit cache+rebuild step the parsed-config cache would
+    // still hold the PRE-update hooks config and dispatch would fire the
+    // old command paths until `/reload`. Mirror the install / uninstall
+    // pattern explicitly inside the existing per-plugin lock: drop the old
+    // cache entry, repopulate from the just-staged `hooks.json` (when
+    // present), then rebuild the routing table once. The cache step ONLY
+    // runs on the all-success arm; an aggregated phase-3 failure leaves
+    // the OLD config in place (truthful "we did not complete the swap"
+    // view that mirrors the SC#2 compatibility/resolvedSource decision
+    // immediately above).
+    if (phase3aFailures.length === 0) {
+      removePluginConfigFromCache(args.scope, marketplace, plugin);
+      if (installable.hooksConfigPath !== undefined) {
+        await readAndCacheUpdatedPluginHooks(
+          args.scope,
+          marketplace,
+          plugin,
+          path.join(installable.pluginRoot, installable.hooksConfigPath),
+        );
+      }
+
+      rebuildRoutingTables(s, locations);
+    }
 
     // WB-01 / A7: deep-equal short-circuited config write-back
     // on the all-success arm. SKIPPED in cascade mode (the marketplace
@@ -1079,6 +1122,40 @@ async function finalizeUpdateRecord(
     }
   });
   return { invalidConfigWriteBack };
+}
+
+/**
+ * D-59-02 cache lifecycle (update arm). Mirror of the install /
+ * reinstall helpers: read the just-staged hooks.json from disk, re-parse
+ * via the same domain seam the resolver used, and populate the bridge
+ * cache. Both failure arms (read, parse) are non-fatal and route through
+ * the OBS-01 debug seam; reconcile rehydrates from disk on the next pass.
+ */
+async function readAndCacheUpdatedPluginHooks(
+  scope: Scope,
+  marketplace: string,
+  plugin: string,
+  hooksJsonPath: string,
+): Promise<void> {
+  let raw: string;
+  try {
+    raw = await readFile(hooksJsonPath, "utf8");
+  } catch (err) {
+    hookDebugLog(
+      `update: hooks.json read failed for ${plugin}@${marketplace}: ${errorMessage(err)}`,
+    );
+    return;
+  }
+
+  const parsed = parseHooksConfig(raw);
+  if (!parsed.ok) {
+    hookDebugLog(
+      `update: parsed hooks.json failed re-parse for ${plugin}@${marketplace}: ${parsed.reason}`,
+    );
+    return;
+  }
+
+  addPluginConfigToCache(scope, marketplace, plugin, parsed.value);
 }
 
 // The three-phase update body sequences preflight, the D-UPD disabled-record

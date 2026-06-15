@@ -77,7 +77,7 @@ import {
   prepareStageCommands,
   unstagePluginCommands,
 } from "../../bridges/commands/index.ts";
-import { addPluginConfigToCache } from "../../bridges/hooks/index.ts";
+import { addPluginConfigToCache, rebuildRoutingTables } from "../../bridges/hooks/index.ts";
 import {
   commitPreparedMcp,
   prepareStageMcpServers,
@@ -757,10 +757,16 @@ export async function runInstallLedger(
           prompts: [...c.stagedCommandNames],
           agents: [...c.stagedAgentNames],
           mcpServers: [...c.stagedMcpServerNames],
-          // HOOK-02 / D-57-01: additive required field; bucket-A hook
-          // installation is wired in later phases (DISP/EXEC). Until then
-          // every fresh install records an empty hooks inventory.
-          hooks: [],
+          // HOOK-02 / D-57-01: additive required field. WR-03: when the
+          // resolver advertises a hooks config (i.e. `<pluginRoot>/hooks/
+          // hooks.json` exists and parses), record the plugin's id as the
+          // per-plugin hooks-container-dir slug so `rebuildRoutingTables`'
+          // state walk (gated on `resources.hooks.length > 0` per
+          // collectPluginsInScope) actually visits this plugin and pulls
+          // its `parsedConfigCache` entry into the routing table without
+          // requiring `/reload` (NFR-2). When the resolver did not surface
+          // a hooks config, the inventory stays empty.
+          hooks: c.resolved.hooksConfigPath !== undefined ? [c.plugin] : [],
         },
         // D-54-01 / ENBL-02: on re-materialization (allowExistingRecord),
         // PRESERVE the original installedAt -- the record was never
@@ -944,6 +950,13 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
           plugin,
           path.join(installCtx.resolved.pluginRoot, installCtx.resolved.hooksConfigPath),
         );
+
+        // WR-03: keep the routing table in lockstep with the parsed-config
+        // cache so a standalone install (outside a reconcile cascade) starts
+        // dispatching to the new plugin's hooks immediately, without
+        // requiring `/reload` (NFR-2). Synchronous + zero disk I/O per
+        // DISP-02, so the per-plugin lock holds for sub-millisecond extra.
+        rebuildRoutingTables(state, locations);
       }
 
       // WB-01 / WR-09: write-back the plugin entry to the user-authored

@@ -77,6 +77,12 @@ interface ResourceSet {
   readonly command?: string;
   readonly agent?: string;
   readonly mcp?: boolean;
+  /**
+   * WR-03: seed `<pluginRoot>/hooks/hooks.json` so reinstall's resolver
+   * advertises `hooksConfigPath` and the per-plugin lock runs the
+   * cache+rebuild pattern.
+   */
+  readonly hooksJson?: object;
 }
 
 async function seedMarketplace(opts: {
@@ -179,6 +185,14 @@ async function writePluginTree(
       path.join(pluginRoot, ".mcp.json"),
       JSON.stringify({ mcpServers: { server1: { command: "node", args: ["server.js"] } } }),
     );
+  }
+
+  // WR-03: seed hooks payload so the resolver advertises hooksConfigPath
+  // and the reinstall ledger exercises the cache+rebuild path.
+  if (resources.hooksJson !== undefined) {
+    const hooksDir = path.join(pluginRoot, "hooks");
+    await mkdir(hooksDir, { recursive: true });
+    await writeFile(path.join(hooksDir, "hooks.json"), JSON.stringify(resources.hooksJson));
   }
 }
 
@@ -2450,6 +2464,70 @@ test("WB-01: --local reinstall targets the local file; base file untouched", asy
       if (localCfg.status === "valid") {
         assert.deepEqual(localCfg.config.plugins?.["hello@mp"], {});
       }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WR-03 / D-60-05: after reinstallPlugin succeeds, the hooks-bridge routing
+// table reflects the post-reinstall entry set. Reinstall does NOT delegate
+// to install/uninstall (per Phase 59 Plan 03 SUMMARY), so the cache lifecycle
+// is wired explicitly inside the per-plugin lock and verified end-to-end.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries without /reload", async () => {
+  const { _resetForTest, getRoutingBucket } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wr03-"));
+    try {
+      _resetForTest();
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        install: true,
+        resources: {
+          skill: "old skill",
+          hooksJson: {
+            PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hi" }] }],
+          },
+        },
+      });
+
+      // After the seed install, the routing table contains the plugin's
+      // PreToolUse entry (install-arm WR-03 wiring confirmed elsewhere).
+      const preBucket = getRoutingBucket("PreToolUse");
+      assert.equal(preBucket.length, 1);
+      assert.equal(preBucket[0]?.pluginId, "hello");
+
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      assert.equal(outcome.partition, "reinstalled");
+      const summary = notifications.map((n) => n.message).join("\n");
+      assert.ok(
+        !summary.includes("(failed)"),
+        `expected clean reinstall notification; got: ${summary}`,
+      );
+
+      // Post-condition: the routing-table entry still reflects the plugin
+      // after the explicit remove+add inside the per-plugin lock. This
+      // proves both `removePluginConfigFromCache` and
+      // `addPluginConfigToCache` plus the trailing `rebuildRoutingTables`
+      // call landed in the right order.
+      const postBucket = getRoutingBucket("PreToolUse");
+      assert.equal(postBucket.length, 1);
+      assert.equal(postBucket[0]?.pluginId, "hello");
+      assert.equal(postBucket[0]?.handlerDecl["command"], "echo hi");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

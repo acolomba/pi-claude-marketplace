@@ -1847,3 +1847,104 @@ test("CFG-03 / T-56-03-04: invalid config aborts uninstall; basename-only cause;
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WR-03 / D-60-05: after a successful uninstallPlugin, the hooks-bridge
+// routing table no longer contains entries for the uninstalled plugin.
+// Without the rebuildRoutingTables call inside the per-plugin lock,
+// dispatch would continue to fire stale handlers (which the never-throws
+// contract would convert to noop + hookDebugLog spawn-ENOENT entries --
+// correct but wasteful and a /reload-blocked NFR-2 regression).
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /reload", async () => {
+  const { _resetForTest, _setRoutingBucketForTest, addPluginConfigToCache, getRoutingBucket } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { parseHooksConfig, parseMatcher } =
+    await import("../../../extensions/pi-claude-marketplace/domain/components/hooks.ts");
+
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wr03-"));
+    try {
+      _resetForTest();
+      const locations = locationsFor("project", cwd);
+
+      // Pre-seed state with a hooks-bearing plugin so the rebuild walk sees
+      // a hooks resource. The slug `"p1"` mirrors the install-arm convention
+      // (pluginId as the per-plugin hooks-container-dir slug).
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: {
+              p1: makePluginRecord({ hooks: ["p1"] }),
+            },
+          },
+        },
+      });
+
+      // Pre-seed the parsed-config cache + routing table for the plugin so
+      // the uninstall has something visible to remove. Two parallel seeds:
+      // (a) cache so rebuild walks pick it up, (b) explicit routing-table
+      // injection so the test's pre-condition assertion is unambiguous.
+      const parsed = parseHooksConfig(
+        JSON.stringify({
+          PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hi" }] }],
+        }),
+      );
+      assert.ok(parsed.ok);
+      addPluginConfigToCache("project", "mp", "p1", parsed.value);
+      _setRoutingBucketForTest("PreToolUse", [
+        {
+          scope: "project",
+          marketplace: "mp",
+          pluginId: "p1",
+          claudeEvent: "PreToolUse",
+          matcher: parseMatcher(""),
+          rawMatcher: "",
+          handlerDecl: { type: "command", command: "echo hi" },
+          declarationIndex: 0,
+        },
+      ]);
+
+      // Pre-condition: routing table holds the entry.
+      assert.equal(getRoutingBucket("PreToolUse").length, 1);
+
+      const { ctx, pi, notifications } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "p1",
+      });
+
+      // Confirm uninstall succeeded (notification reports `uninstalled`,
+      // not a failure marker).
+      const summary = notifications.map((n) => n.message).join("\n");
+      assert.ok(
+        !summary.includes("(failed)"),
+        `expected clean uninstall notification; got: ${summary}`,
+      );
+
+      // Post-condition: the plugin is removed from state.
+      const after = await loadState(locations.extensionRoot);
+      assert.equal("p1" in (after.marketplaces["mp"]?.plugins ?? {}), false);
+
+      // Post-condition: the routing-table entry for the uninstalled plugin
+      // is gone. This proves WR-03's `rebuildRoutingTables(state, locations)`
+      // ran inside `withLockedStateTransaction` right after
+      // `removePluginConfigFromCache`.
+      assert.equal(getRoutingBucket("PreToolUse").length, 0);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});

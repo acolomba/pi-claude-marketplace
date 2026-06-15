@@ -44,7 +44,7 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
 
-import { removePluginConfigFromCache } from "../../bridges/hooks/index.ts";
+import { rebuildRoutingTables, removePluginConfigFromCache } from "../../bridges/hooks/index.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { deletePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
@@ -454,6 +454,14 @@ export async function uninstallPlugin(
       // dispatch until reconcile rebuilds, but the next `/reload` resets
       // the cache (D-59-03 epoch bump + factory-time hydrate from disk).
       removePluginConfigFromCache(scope, marketplace, plugin);
+
+      // WR-03: keep the routing table in lockstep with the parsed-config
+      // cache so subsequent events bypass the now-removed plugin without
+      // requiring `/reload` (NFR-2). Otherwise dispatch would still attempt
+      // to spawn the uninstalled command (the never-throws contract would
+      // convert ENOENT to `{ kind: "noop" }` + hookDebugLog -- correct but
+      // wasteful). Synchronous + zero disk I/O per DISP-02.
+      rebuildRoutingTables(state, locations);
 
       // WB-01 / WR-09: delete the plugin entry from the user-authored config.
       // SKIPPED in orchestrated mode (reconcile derives desired state FROM
