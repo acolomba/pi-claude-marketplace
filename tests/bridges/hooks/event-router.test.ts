@@ -21,6 +21,7 @@ import {
   removePluginConfigFromCache,
   type RoutingEntry,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import {
   BUCKET_A_EVENTS,
   type BucketAEvent,
@@ -127,8 +128,8 @@ function makeConfig(
 test("cache: addPluginConfigToCache + removePluginConfigFromCache are idempotent", () => {
   const config = makeConfig([{ event: "PreToolUse", handlers: 1 }]);
 
-  addPluginConfigToCache("user", "mp", "p1", config);
-  addPluginConfigToCache("user", "mp", "p1", config); // overwrite, not duplicate
+  addPluginConfigToCache("user", "mp", "p1", config, new Map());
+  addPluginConfigToCache("user", "mp", "p1", config, new Map()); // overwrite, not duplicate
   assert.equal(_parsedConfigCacheForTest().size, 1);
 
   removePluginConfigFromCache("user", "mp", "p1");
@@ -144,15 +145,15 @@ test("cache: addPluginConfigToCache + removePluginConfigFromCache are idempotent
 test("cache: key includes marketplace -- same (scope, pluginId) under different marketplaces do NOT collide", () => {
   const config = makeConfig([{ event: "PreToolUse", handlers: 1 }]);
 
-  addPluginConfigToCache("user", "mp-alpha", "shared-id", config);
-  addPluginConfigToCache("user", "mp-beta", "shared-id", config);
+  addPluginConfigToCache("user", "mp-alpha", "shared-id", config, new Map());
+  addPluginConfigToCache("user", "mp-beta", "shared-id", config, new Map());
 
   assert.equal(_parsedConfigCacheForTest().size, 2);
 });
 
 test("rebuildRoutingTables: produces 8 Claude-event buckets", () => {
   const config = makeConfig([{ event: "PreToolUse", handlers: 1 }]);
-  addPluginConfigToCache("user", "mp", "p1", config);
+  addPluginConfigToCache("user", "mp", "p1", config, new Map());
 
   const state = makeState({
     marketplaces: { mp: { scope: "user", plugins: { p1: { hooks: ["slug-p1"] } } } },
@@ -175,9 +176,9 @@ test("rebuildRoutingTables: cross-plugin order matches compareByNameThenScope (a
   // strictly alphabetical: alpha, beta, gamma.
   const config = makeConfig([{ event: "PreToolUse", handlers: 1 }]);
 
-  addPluginConfigToCache("user", "mp", "alpha", config);
-  addPluginConfigToCache("project", "mp", "beta", config);
-  addPluginConfigToCache("project", "mp", "gamma", config);
+  addPluginConfigToCache("user", "mp", "alpha", config, new Map());
+  addPluginConfigToCache("project", "mp", "beta", config, new Map());
+  addPluginConfigToCache("project", "mp", "gamma", config, new Map());
 
   const projectState = makeState({
     marketplaces: {
@@ -213,7 +214,7 @@ test("rebuildRoutingTables: within-plugin declaration order preserved via declar
     { event: "PreToolUse", matcher: "", handlers: 2 },
     { event: "PreToolUse", matcher: "", handlers: 1 },
   ]);
-  addPluginConfigToCache("user", "mp", "p1", config);
+  addPluginConfigToCache("user", "mp", "p1", config, new Map());
 
   const state = makeState({
     marketplaces: { mp: { scope: "user", plugins: { p1: { hooks: ["slug"] } } } },
@@ -236,7 +237,7 @@ test("rebuildRoutingTables: within-plugin declaration order preserved via declar
 
 test("rebuildRoutingTables: empty rebuild clears stale entries", () => {
   const config = makeConfig([{ event: "PreToolUse", handlers: 1 }]);
-  addPluginConfigToCache("user", "mp", "p1", config);
+  addPluginConfigToCache("user", "mp", "p1", config, new Map());
 
   let state = makeState({
     marketplaces: { mp: { scope: "user", plugins: { p1: { hooks: ["s-p1"] } } } },
@@ -278,7 +279,7 @@ test("rebuildRoutingTables: cache miss for a state-declared plugin is silent", (
 
 test("rebuildRoutingTables: zero disk I/O on the hot path", (t) => {
   const config = makeConfig([{ event: "PreToolUse", handlers: 1 }]);
-  addPluginConfigToCache("user", "mp", "p1", config);
+  addPluginConfigToCache("user", "mp", "p1", config, new Map());
 
   const state = makeState({
     marketplaces: { mp: { scope: "user", plugins: { p1: { hooks: ["slug"] } } } },
@@ -329,6 +330,7 @@ function makeEntry(input: {
     rawMatcher,
     handlerDecl: { type: "command", command: input.command ?? `echo ${input.pluginId}` },
     declarationIndex: input.declarationIndex ?? 0,
+    ifPredicate: MATCH_ALL_IF,
   };
 }
 
@@ -593,7 +595,7 @@ test("WR-01: hydrateProjectScopeForCwd clears phantom project-arm cache entries 
 
   // Pre-seed a phantom project-scope entry as if factory-time hydrate ran
   // under the wrong cwd and slurped a project-scope plugin into the cache.
-  addPluginConfigToCache("project", "mp-phantom", "phantom-plugin", config);
+  addPluginConfigToCache("project", "mp-phantom", "phantom-plugin", config, new Map());
   assert.equal(_parsedConfigCacheForTest().size, 1);
 
   // Invoke the re-hydrate against a temp cwd whose `.pi/agent/state.json`
@@ -611,8 +613,8 @@ test("WR-01: hydrateProjectScopeForCwd leaves user-scope cache entries untouched
   // Pre-seed BOTH a user-scope entry (legitimate, factory-time hydrate under
   // homedir() was correct for user scope) AND a project-scope entry
   // (phantom from factory-time hydrate under the wrong cwd).
-  addPluginConfigToCache("user", "mp-u", "user-plugin", config);
-  addPluginConfigToCache("project", "mp-p", "project-plugin", config);
+  addPluginConfigToCache("user", "mp-u", "user-plugin", config, new Map());
+  addPluginConfigToCache("project", "mp-p", "project-plugin", config, new Map());
   assert.equal(_parsedConfigCacheForTest().size, 2);
 
   await hydrateProjectScopeForCwd("/nonexistent/cwd-for-wr-01-test");
@@ -633,10 +635,10 @@ test("WR-01: hydrateProjectScopeForCwd clears all project-scope entries regardle
 
   // Multiple phantom project-scope entries across different marketplaces:
   // the prefix-on-`<scope>\x00` clear MUST drop all of them.
-  addPluginConfigToCache("project", "mp-alpha", "p1", config);
-  addPluginConfigToCache("project", "mp-beta", "p2", config);
-  addPluginConfigToCache("project", "mp-gamma", "p3", config);
-  addPluginConfigToCache("user", "mp-u", "u1", config);
+  addPluginConfigToCache("project", "mp-alpha", "p1", config, new Map());
+  addPluginConfigToCache("project", "mp-beta", "p2", config, new Map());
+  addPluginConfigToCache("project", "mp-gamma", "p3", config, new Map());
+  addPluginConfigToCache("user", "mp-u", "u1", config, new Map());
   assert.equal(_parsedConfigCacheForTest().size, 4);
 
   await hydrateProjectScopeForCwd("/nonexistent/cwd-for-wr-01-test");

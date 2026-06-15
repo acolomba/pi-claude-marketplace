@@ -35,6 +35,7 @@ import {
   _setRoutingBucketForTest,
   type RoutingEntry,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import { MATCH_ALL_IF } from "../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import { type BucketAEvent } from "../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import { parseMatcher } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 
@@ -65,6 +66,7 @@ function makeEntry(input: {
     rawMatcher,
     handlerDecl: { type: "command", command: `echo ${input.pluginId}` },
     declarationIndex: input.declarationIndex ?? 0,
+    ifPredicate: MATCH_ALL_IF,
   };
 }
 

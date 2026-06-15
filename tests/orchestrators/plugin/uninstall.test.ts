@@ -1860,6 +1860,8 @@ test("CFG-03 / T-56-03-04: invalid config aborts uninstall; basename-only cause;
 test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /reload", async () => {
   const { _resetForTest, _setRoutingBucketForTest, addPluginConfigToCache, getRoutingBucket } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { compileIfPredicate, MATCH_ALL_IF } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts");
   const { parseHooksConfig, parseMatcher } =
     await import("../../../extensions/pi-claude-marketplace/domain/components/hooks.ts");
 
@@ -1894,16 +1896,15 @@ test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /
       // (a) cache so rebuild walks pick it up, (b) explicit routing-table
       // injection so the test's pre-condition assertion is unambiguous.
       const TEST_IF_CTX = { homedir: "/home/u", cwd, projectRoot: cwd } as const;
-      const TEST_COMPILE_IF = (): null => null;
       const parsed = parseHooksConfig(
         JSON.stringify({
           PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hi" }] }],
         }),
         TEST_IF_CTX,
-        TEST_COMPILE_IF,
+        compileIfPredicate,
       );
       assert.ok(parsed.ok);
-      addPluginConfigToCache("project", "mp", "p1", parsed.value);
+      addPluginConfigToCache("project", "mp", "p1", parsed.value, parsed.ifPredicates);
       _setRoutingBucketForTest("PreToolUse", [
         {
           scope: "project",
@@ -1914,6 +1915,7 @@ test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /
           rawMatcher: "",
           handlerDecl: { type: "command", command: "echo hi" },
           declarationIndex: 0,
+          ifPredicate: MATCH_ALL_IF,
         },
       ]);
 

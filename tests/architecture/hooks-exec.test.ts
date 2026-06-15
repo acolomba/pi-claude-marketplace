@@ -40,6 +40,7 @@ import {
   _resetForTest,
   registerHooksBridge,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import { MATCH_ALL_IF } from "../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 
 import type { RoutingEntry } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import type { BucketAEvent } from "../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
@@ -180,6 +181,7 @@ function makeEntry(input: {
     rawMatcher: "",
     handlerDecl: handlerDecl as RoutingEntry["handlerDecl"],
     declarationIndex: 0,
+    ifPredicate: MATCH_ALL_IF,
   };
 }
 

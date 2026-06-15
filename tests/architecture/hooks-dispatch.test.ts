@@ -49,6 +49,7 @@ import {
   _setRoutingBucketForTest,
   type RoutingEntry,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import { MATCH_ALL_IF } from "../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import {
   BUCKET_A_EVENTS,
   type BucketAEvent,
@@ -167,6 +168,7 @@ function makeEntry(input: {
     rawMatcher,
     handlerDecl: { type: "command", command: input.command ?? `echo ${input.pluginId}` },
     declarationIndex: input.declarationIndex ?? 0,
+    ifPredicate: MATCH_ALL_IF,
   };
 }
 
@@ -283,7 +285,7 @@ test("DISP-02: rebuildRoutingTables produces exactly the BUCKET_A_EVENTS keyset 
     { event: "PostCompact", handlers: 1 },
     { event: "SessionEnd", handlers: 1 },
   ]);
-  addPluginConfigToCache("user", "mp", "p1", config);
+  addPluginConfigToCache("user", "mp", "p1", config, new Map());
 
   const state = makeState({
     marketplaces: { mp: { scope: "user", plugins: { p1: { hooks: ["slug-p1"] } } } },
@@ -308,9 +310,9 @@ test("DISP-04: cross-plugin sort matches compareByNameThenScope (alphabetical, p
   // scopes. compareByNameThenScope sorts primarily by name; the
   // project-before-user tie-breaker only fires on same-name pairs. With
   // distinct names the expected cross-plugin order is strictly alphabetical.
-  addPluginConfigToCache("user", "mp", "alpha", config);
-  addPluginConfigToCache("project", "mp", "beta", config);
-  addPluginConfigToCache("project", "mp", "gamma", config);
+  addPluginConfigToCache("user", "mp", "alpha", config, new Map());
+  addPluginConfigToCache("project", "mp", "beta", config, new Map());
+  addPluginConfigToCache("project", "mp", "gamma", config, new Map());
 
   // Per-scope rebuild (the production wiring fires rebuildRoutingTables once
   // per scope inside applyReconcile's per-scope loop). Project goes first so
@@ -357,7 +359,7 @@ test("DISP-04: within-plugin declaration order preserved via monotonic declarati
     { event: "PreToolUse", matcher: "", handlers: 2 },
     { event: "PreToolUse", matcher: "", handlers: 1 },
   ]);
-  addPluginConfigToCache("user", "mp", "p1", config);
+  addPluginConfigToCache("user", "mp", "p1", config, new Map());
 
   rebuildRoutingTables(
     makeState({

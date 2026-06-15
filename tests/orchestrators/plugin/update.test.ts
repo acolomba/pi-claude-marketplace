@@ -2542,6 +2542,8 @@ test("S5: update success + invalid config write-back surfaces a warning row (no 
 test("WR-03: updatePlugins refreshes the plugin's routing-table entries to the new hooks config without /reload", async () => {
   const { _resetForTest, addPluginConfigToCache, getRoutingBucket } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { compileIfPredicate } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts");
   const { parseHooksConfig } =
     await import("../../../extensions/pi-claude-marketplace/domain/components/hooks.ts");
 
@@ -2583,14 +2585,13 @@ test("WR-03: updatePlugins refreshes the plugin's routing-table entries to the n
       await saveState(locations.extensionRoot, seededState);
 
       const TEST_IF_CTX = { homedir: "/home/u", cwd, projectRoot: cwd } as const;
-      const TEST_COMPILE_IF = (): null => null;
       const parsedOld = parseHooksConfig(
         JSON.stringify(oldHooksJson),
         TEST_IF_CTX,
-        TEST_COMPILE_IF,
+        compileIfPredicate,
       );
       assert.ok(parsedOld.ok);
-      addPluginConfigToCache("project", "mp", "hello", parsedOld.value);
+      addPluginConfigToCache("project", "mp", "hello", parsedOld.value, parsedOld.ifPredicates);
 
       // Rewrite the on-disk plugin tree to v2.0.0 with NEW hooks config.
       await rewriteManifest(seeded.manifestPath, "mp", { hello: { version: "2.0.0" } });

@@ -1168,7 +1168,7 @@ async function readAndCacheUpdatedPluginHooks(
     return;
   }
 
-  addPluginConfigToCache(scope, marketplace, plugin, parsed.value);
+  addPluginConfigToCache(scope, marketplace, plugin, parsed.value, parsed.ifPredicates);
 }
 
 // The three-phase update body sequences preflight, the D-UPD disabled-record

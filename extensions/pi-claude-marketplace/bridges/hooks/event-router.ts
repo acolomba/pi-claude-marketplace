@@ -50,7 +50,7 @@ import { assertPathInside } from "../../shared/path-safety.ts";
 import { SCOPES } from "../../shared/types.ts";
 
 import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
-import { compileIfPredicate } from "./if-field/index.ts";
+import { compileIfPredicate, MATCH_ALL_IF, type IfPredicate } from "./if-field/index.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -89,6 +89,14 @@ export interface RoutingEntry {
   readonly rawMatcher: string;
   readonly handlerDecl: HookHandlerEntry;
   readonly declarationIndex: number;
+  /**
+   * MATCH-03 / D-61-02 always-present-with-sentinel: absent or
+   * malformed `if` resolves to MATCH_ALL_IF so dispatch never observes
+   * undefined. Populated from the side-Map produced by
+   * `parseHooksConfig` at parse time -- never recompiled at flatten
+   * time (mirrors the registration-time-translation stance).
+   */
+  readonly ifPredicate: IfPredicate;
 }
 
 interface CacheEntry {
@@ -96,6 +104,13 @@ interface CacheEntry {
   readonly marketplace: string;
   readonly pluginId: string;
   readonly config: HooksConfig;
+  /**
+   * MATCH-03: compiled `if`-field predicates keyed on
+   * `${claudeEvent}|${groupIndex}|${handlerIndex}`. Carried alongside
+   * the parsed `config` so `flattenPluginIntoBuckets` can populate
+   * each `RoutingEntry.ifPredicate` field without re-parsing.
+   */
+  readonly ifPredicates: ReadonlyMap<string, IfPredicate>;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -135,12 +150,14 @@ export function addPluginConfigToCache(
   marketplace: string,
   pluginId: string,
   config: HooksConfig,
+  ifPredicates: ReadonlyMap<string, IfPredicate>,
 ): void {
   parsedConfigCache.set(cacheKey(scope, marketplace, pluginId), {
     scope,
     marketplace,
     pluginId,
     config,
+    ifPredicates,
   });
 }
 
@@ -272,11 +289,26 @@ function flattenPluginIntoBuckets(
       continue;
     }
 
-    for (const group of groups) {
+    for (let groupIndex = 0; groupIndex < groups.length; groupIndex++) {
+      const group = groups[groupIndex];
+      if (group === undefined) {
+        continue;
+      }
+
       const rawMatcher = group.matcher ?? "";
       const matcher = parseMatcher(rawMatcher);
 
-      for (const handlerDecl of group.hooks) {
+      for (let handlerIndex = 0; handlerIndex < group.hooks.length; handlerIndex++) {
+        const handlerDecl = group.hooks[handlerIndex];
+        if (handlerDecl === undefined) {
+          continue;
+        }
+
+        // MATCH-03 / D-61-02 always-present-with-sentinel: missing key
+        // (handler had no `if` field) falls back to MATCH_ALL_IF.
+        const key = `${claudeEvent}|${groupIndex}|${handlerIndex}`;
+        const ifPredicate = cacheEntry.ifPredicates.get(key) ?? MATCH_ALL_IF;
+
         bucket.push({
           scope: cacheEntry.scope,
           marketplace: cacheEntry.marketplace,
@@ -286,6 +318,7 @@ function flattenPluginIntoBuckets(
           rawMatcher,
           handlerDecl,
           declarationIndex,
+          ifPredicate,
         });
 
         declarationIndex += 1;
@@ -431,7 +464,7 @@ async function tryHydrateOnePlugin(
     return;
   }
 
-  addPluginConfigToCache(scope, marketplace, pluginId, result.value);
+  addPluginConfigToCache(scope, marketplace, pluginId, result.value, result.ifPredicates);
 }
 
 // ──────────────────────────────────────────────────────────────────────────

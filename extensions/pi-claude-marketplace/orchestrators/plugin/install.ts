@@ -357,7 +357,7 @@ async function addInstalledPluginHooksToCache(
     return;
   }
 
-  addPluginConfigToCache(scope, marketplace, plugin, parsed.value);
+  addPluginConfigToCache(scope, marketplace, plugin, parsed.value, parsed.ifPredicates);
 }
 
 /**

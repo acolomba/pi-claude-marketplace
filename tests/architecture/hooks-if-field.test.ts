@@ -773,7 +773,102 @@ test("MATCH-03: parseHooksConfig success arm collapses malformed `if` to MATCH_A
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Block 13: Plan 03 wiring placeholders (dispatch-time consult)
+// Block 13: ifPredicate rides on RoutingEntry (MATCH-03 / D-61-02)
+// ──────────────────────────────────────────────────────────────────────────
+
+test("MATCH-03: ifPredicate populates from parser side-Map into RoutingEntry (Bash + path-tool + unknown-prefix + absent)", async () => {
+  const router =
+    await import("../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+
+  router._resetForTest();
+  const raw = JSON.stringify({
+    PreToolUse: [
+      {
+        matcher: "",
+        hooks: [
+          // 0: Bash if-field
+          { type: "command", command: "echo a", if: "Bash(git *)" },
+          // 1: Read path-tool if-field
+          { type: "command", command: "echo b", if: "Read(src/**)" },
+          // 2: unknown prefix -> fall-open
+          { type: "command", command: "echo c", if: "Grep(*.ts)" },
+          // 3: absent if-field
+          { type: "command", command: "echo d" },
+        ],
+      },
+    ],
+  });
+  const parsed = parseHooksConfig(raw, TEST_IF_CTX, compileIfPredicate);
+  assert.ok(parsed.ok);
+  router.addPluginConfigToCache("project", "mp", "p1", parsed.value, parsed.ifPredicates);
+
+  // Synthetic state + locations fixture. The shape mirrors
+  // `persistence/state-io.ts` but is constructed in-memory; the cast is
+  // load-bearing because the architecture test does not import the
+  // full state-io surface. `rebuildRoutingTables` reads only `scope` +
+  // `plugins[*].resources.hooks.length` from the state record.
+  const stateRecord = {
+    schemaVersion: 1 as const,
+    marketplaces: {
+      mp: {
+        name: "mp",
+        scope: "project" as const,
+        source: { kind: "path", raw: "./src" },
+        addedFromCwd: "/projects/p",
+        manifestPath: "/projects/p/marketplace.json",
+        marketplaceRoot: "/projects/p",
+        plugins: {
+          p1: {
+            installedAt: "2026-06-15T00:00:00Z",
+            updatedAt: "2026-06-15T00:00:00Z",
+            resolvedSource: "test://",
+            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: ["p1"],
+            },
+            version: "1.0.0",
+          },
+        },
+      },
+    },
+  };
+  const loc = {
+    scope: "project" as const,
+    extensionRoot: "/projects/p/.pi/pi-claude-marketplace",
+  };
+  router.rebuildRoutingTables(
+    stateRecord,
+    loc as unknown as Parameters<typeof router.rebuildRoutingTables>[1],
+  );
+
+  const bucket = router._routingTableForTest().get("PreToolUse");
+  assert.ok(bucket !== undefined);
+  assert.equal(bucket.length, 4);
+
+  const [bashRow, readRow, grepRow, bareRow] = bucket;
+  assert.ok(bashRow !== undefined);
+  assert.ok(readRow !== undefined);
+  assert.ok(grepRow !== undefined);
+  assert.ok(bareRow !== undefined);
+
+  assert.equal(bashRow.ifPredicate.kind, "bash");
+  assert.equal(readRow.ifPredicate.kind, "path-tool");
+  assert.equal(grepRow.ifPredicate.kind, "match-all");
+  assert.equal(bareRow.ifPredicate.kind, "match-all");
+
+  // Bare-handler row uses the MATCH_ALL_IF sentinel via referential
+  // equality (D-61-02 always-present-with-sentinel).
+  assert.strictEqual(bareRow.ifPredicate, MATCH_ALL_IF);
+
+  router._resetForTest();
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// Block 14: Plan 03 wiring placeholders (dispatch-time consult)
 // ──────────────────────────────────────────────────────────────────────────
 
 test.todo(

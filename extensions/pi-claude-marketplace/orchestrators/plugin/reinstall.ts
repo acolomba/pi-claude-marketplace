@@ -1177,7 +1177,7 @@ async function readAndCacheReinstalledPluginHooks(
     return;
   }
 
-  addPluginConfigToCache(scope, marketplace, plugin, parsed.value);
+  addPluginConfigToCache(scope, marketplace, plugin, parsed.value, parsed.ifPredicates);
 }
 
 async function loadCachedEntry(
