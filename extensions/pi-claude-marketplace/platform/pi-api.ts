@@ -19,15 +19,35 @@ export type {
   ExtensionCommandContext,
   ExtensionContext,
   InputEvent,
+  InputEventResult,
   SessionBeforeCompactEvent,
   SessionCompactEvent,
   SessionShutdownEvent,
   SessionStartEvent,
   ToolCallEvent,
+  ToolCallEventResult,
   ToolDefinition,
   ToolInfo,
   ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
+
+/**
+ * Structural Pi `tool_result` handler return shape.
+ *
+ * Peer-dep does not re-export `ToolResultEventResult` from its root, but
+ * the `pi.on("tool_result", handler)` registration in
+ * `@earendil-works/pi-coding-agent`'s `ExtensionAPI.on` overload accepts
+ * an `ExtensionHandler<ToolResultEvent, ToolResultEventResult>` whose
+ * return-shape interface (defined in the peer-dep's internal
+ * `core/extensions/types.d.ts`) carries the three optional fields
+ * mirrored here. Tracked as a peer-dep export gap; structurally
+ * compatible with the upstream declaration.
+ */
+export interface ToolResultEventResult {
+  content?: unknown[];
+  details?: unknown;
+  isError?: boolean;
+}
 
 export type { AutocompleteItem } from "@earendil-works/pi-tui";
 
