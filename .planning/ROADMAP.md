@@ -288,7 +288,20 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 5. Hook stderr is debug-logged only and never reaches `ctx.ui.notify` at runtime; install-time hook-config errors continue to surface through `notify` (EXEC-03; IL-2).
 6. A handler declaring `args: [string, ...]` invokes `spawn(command, args, options)` exec-form; the default (no `args`) stays shell-form; the `shell` field (HOOK-03 extension) selects the shell binary for shell-form only (EXEC-04).
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+**Wave 1**
+
+- [ ] 60-01-PLAN.md — Translators, tool-name helper, TranslationContext (PAYL-01 / D-60-04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 60-02-PLAN.md — Exec body, wire-protocol parser, timer ladder, _shared mkdir, whitelist amendment (EXEC-01..04 / HOOK-05 / D-60-01 / D-60-06)
+
+**Wave 3** *(blocked on Wave 2 completion; 60-03 and 60-04 run in parallel)*
+
+- [ ] 60-03-PLAN.md — Reducer loop and per-Pi-event adapters (D-60-02 / D-60-03)
+- [ ] 60-04-PLAN.md — Lifecycle hardening: WR-01, WR-03, REQUIREMENTS amendment (D-60-05 / D-60-06)
 
 #### Phase 61: `if` Field Permission-Rule Matcher
 
@@ -306,7 +319,20 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 4. The `if` field composes with `matcher` under AND semantics (matcher filters at group level, `if` narrows within).
 5. An architecture test at `bridges/hooks/if-field/` exercises every fixture row in the upstream `hooks-guide` § "Filter by tool name and arguments" truth table verbatim; the bridge ignores `if` on non-tool events (matches upstream's "attaching prevents the hook from running" behavior).
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+**Wave 1**
+
+- [ ] 60-01-PLAN.md — Translators, tool-name helper, TranslationContext (PAYL-01 / D-60-04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 60-02-PLAN.md — Exec body, wire-protocol parser, timer ladder, _shared mkdir, whitelist amendment (EXEC-01..04 / HOOK-05 / D-60-01 / D-60-06)
+
+**Wave 3** *(blocked on Wave 2 completion; 60-03 and 60-04 run in parallel)*
+
+- [ ] 60-03-PLAN.md — Reducer loop and per-Pi-event adapters (D-60-02 / D-60-03)
+- [ ] 60-04-PLAN.md — Lifecycle hardening: WR-01, WR-03, REQUIREMENTS amendment (D-60-05 / D-60-06)
 
 #### Phase 62: `asyncRewake` Registry & Background-Spawn
 
@@ -324,7 +350,20 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 4. The registry is cleared on `/reload`; orphan children from a crashed prior load are SIGKILLed at next bridge load via PID-table scan; multi-hook fan-in via independent `dispatchId` per registered process (HOOK-06 lifecycle; NFR-2).
 5. `rewakeMessage` / `rewakeSummary` declared without `asyncRewake: true` install normally (warning surfaced per SURF-05 in Phase 63 — no-op upstream).
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+**Wave 1**
+
+- [ ] 60-01-PLAN.md — Translators, tool-name helper, TranslationContext (PAYL-01 / D-60-04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 60-02-PLAN.md — Exec body, wire-protocol parser, timer ladder, _shared mkdir, whitelist amendment (EXEC-01..04 / HOOK-05 / D-60-01 / D-60-06)
+
+**Wave 3** *(blocked on Wave 2 completion; 60-03 and 60-04 run in parallel)*
+
+- [ ] 60-03-PLAN.md — Reducer loop and per-Pi-event adapters (D-60-02 / D-60-03)
+- [ ] 60-04-PLAN.md — Lifecycle hardening: WR-01, WR-03, REQUIREMENTS amendment (D-60-05 / D-60-06)
 
 **UI hint**: yes
 
@@ -346,7 +385,20 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 6. A plugin declaring `rewakeMessage` or `rewakeSummary` without `asyncRewake: true` emits one install-time warning (no-op upstream); plugins with `asyncRewake: true` install normally with no warning (SURF-05).
 7. `docs/hooks.md` exists, is linked from `README.md`'s new "Hook support" section, and is written in plain English for first-time readers (plugin authors and end users) — no internal jargon, no bucket-A/D taxonomy, no REQ-IDs / phase numbers, using Claude Code's own field names verbatim. It covers: the 8 supported events with plain descriptions; 4–6 worked examples (auto-formatter, bash-safety net, session-start rule injection, prompt audit log, background security review, compaction snapshot); the unsupported event groups with one-line reasons each; the Pi ↔ Claude tool-name mapping table and currently-unmapped Claude tools; a "what happens to my plugin?" section; the marketplace coverage note (10/13 installable); and cross-references to the two authority docs (SURF-06).
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+**Wave 1**
+
+- [ ] 60-01-PLAN.md — Translators, tool-name helper, TranslationContext (PAYL-01 / D-60-04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 60-02-PLAN.md — Exec body, wire-protocol parser, timer ladder, _shared mkdir, whitelist amendment (EXEC-01..04 / HOOK-05 / D-60-01 / D-60-06)
+
+**Wave 3** *(blocked on Wave 2 completion; 60-03 and 60-04 run in parallel)*
+
+- [ ] 60-03-PLAN.md — Reducer loop and per-Pi-event adapters (D-60-02 / D-60-03)
+- [ ] 60-04-PLAN.md — Lifecycle hardening: WR-01, WR-03, REQUIREMENTS amendment (D-60-05 / D-60-06)
 
 **UI hint**: yes
 
