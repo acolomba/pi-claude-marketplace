@@ -248,11 +248,18 @@ export type HookConfigParseResult<P> =
  * `ctx` is the `CompileIfPredicateContext` consumed by the path-glob
  * compiler; production call sites construct it from the in-scope
  * `ExtensionContext.cwd` per the A1 projectRoot fallback.
+ *
+ * `options.skipIfMap` short-circuits the `if`-predicate side-Map walk for
+ * callers that only need the installable verdict (resolver `list`/`info`
+ * probe). When `true`, the success arm returns an empty Map without
+ * invoking `compileIf` for any handler. The discarded-result optimization
+ * is bounded but non-zero on configs with many `if`-bearing handlers.
  */
 export function parseHooksConfig<P>(
   raw: string,
   ctx: CompileIfPredicateContext,
   compileIf: CompileIfCallback<P>,
+  options: { skipIfMap?: boolean } = {},
 ): HookConfigParseResult<P> {
   let parsed: unknown;
   try {
@@ -288,7 +295,11 @@ export function parseHooksConfig<P>(
   // supplied `compileIf` callback. Per D-61-02 every failure path
   // inside `compileIfPredicate` collapses to MATCH_ALL_IF -- the
   // parser never fails on an `if`-field issue (plugin always installs).
-  const ifPredicates = buildIfPredicateMap(parsed, ctx, compileIf);
+  // The `skipIfMap` opt-out returns an empty Map without iteration for
+  // callers that consume only the installable verdict (resolver probe).
+  const ifPredicates: CompiledIfPredicateMap<P> = options.skipIfMap
+    ? new Map<string, P>()
+    : buildIfPredicateMap(parsed, ctx, compileIf);
 
   return { ok: true, value: parsed, ifPredicates };
 }

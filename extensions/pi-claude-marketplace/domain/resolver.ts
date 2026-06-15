@@ -667,14 +667,15 @@ async function readStandaloneHooks(
   // `os.homedir()` + `process.cwd()`. The resolver's outcome is the
   // discriminated `installable` shape -- the `if`-field side-Map is
   // discarded here (only the bridge cache hydrate / install /
-  // reinstall / update paths consume it), so the `compileIf` callback
-  // is a no-op that returns a synthetic fall-open token. Domain MUST
-  // NOT import the bridge `IfPredicate` union (D-11), and the
-  // resolver-emitted map is unreachable from any consumer at this
-  // call site.
+  // reinstall / update paths consume it). The `skipIfMap` opt-out
+  // short-circuits the handler walk entirely; the `compileIf` callback
+  // is still a no-op sentinel for type-system completeness, but is
+  // never invoked when `skipIfMap` is set. Domain MUST NOT import the
+  // bridge `IfPredicate` union (D-11), and the resolver-emitted map is
+  // unreachable from any consumer at this call site.
   const ifCtx = { homedir: homedir(), cwd: process.cwd(), projectRoot: process.cwd() };
   const noopCompileIf = (): null => null;
-  const parsed = parseHooksConfig(raw, ifCtx, noopCompileIf);
+  const parsed = parseHooksConfig(raw, ifCtx, noopCompileIf, { skipIfMap: true });
   if (!parsed.ok) {
     return { ok: false, reason: `malformed hooks.json: ${parsed.reason}` };
   }
