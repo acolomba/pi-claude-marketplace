@@ -130,7 +130,7 @@ test("pid-table: writePidTable writes the version=1 envelope", async () => {
   try {
     await writePidTable(loc, []);
     const raw = await readFile(pidTablePath(loc), "utf8");
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw) as { version: unknown; entries: unknown };
     assert.equal(parsed.version, 1);
     assert.deepEqual(parsed.entries, []);
   } finally {
