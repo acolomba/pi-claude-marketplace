@@ -115,6 +115,13 @@ export interface HookHandlerEntry {
   async?: unknown;
   shell?: unknown;
   args?: unknown;
+  // HOOK-06 / EXEC-05: asyncRewake field family. Schema admission is
+  // type-loose per the HOOK-03 lenient stance -- runtime narrowing
+  // (typeof boolean / typeof string guards) lives in the
+  // bridges/hooks/async-rewake/ registry, not here.
+  asyncRewake?: unknown;
+  rewakeMessage?: unknown;
+  rewakeSummary?: unknown;
   // HOOK-03 forward-compat: unknown extension field names also accepted.
   [k: string]: unknown;
 }
@@ -130,6 +137,14 @@ const HOOK_HANDLER_SCHEMA = Type.Unsafe<HookHandlerEntry>({
     // "command required when type === 'command'" discriminator). The
     // user-facing field is OPTIONAL -- absent on most handlers.
     if: { type: "string" },
+    // HOOK-06 / EXEC-05: asyncRewake / rewakeMessage / rewakeSummary
+    // schema admission. Empty-object JSON Schema means "accept any
+    // value" -- non-boolean asyncRewake or non-string rewakeMessage /
+    // rewakeSummary values do not flip the plugin to (unavailable);
+    // the runtime guards in bridges/hooks/async-rewake/ narrow each.
+    asyncRewake: {},
+    rewakeMessage: {},
+    rewakeSummary: {},
   },
   if: {
     type: "object",
