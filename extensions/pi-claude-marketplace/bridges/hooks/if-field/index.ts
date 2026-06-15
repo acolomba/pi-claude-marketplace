@@ -298,6 +298,16 @@ function extractBashCommand(event: unknown): string | undefined {
   return typeof cmd === "string" ? cmd : undefined;
 }
 
+/**
+ * Returns `event.toolName` when it is a string, `""` otherwise.
+ *
+ * The empty-string coercion is fail-CLOSED by design: every downstream
+ * check (`piEvents` membership for the `path-tool` arm, literal
+ * equality for the `mcp-literal` arm, `startsWith` for the
+ * `mcp-server-prefix` arm) rejects the empty string. A malformed event
+ * payload missing `toolName` therefore matches no MCP-shaped predicate
+ * arm, which is the desired safe default.
+ */
 function extractToolName(event: unknown): string {
   const name = (event as { toolName?: unknown }).toolName;
   return typeof name === "string" ? name : "";
