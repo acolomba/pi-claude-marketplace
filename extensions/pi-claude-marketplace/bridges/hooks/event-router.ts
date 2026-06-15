@@ -456,6 +456,24 @@ export function getRoutingBucket(claudeEvent: BucketAEvent): ReadonlyArray<Routi
  * the caller's `applyReconcile` rebuilds the routing tables per scope.
  */
 export async function hydrateProjectScopeForCwd(cwd: string): Promise<void> {
+  // WR-01: factory-time hydrate ran with `cwd = homedir()` because
+  // `resources_discover` had not fired yet, so any project-scope entries
+  // in `parsedConfigCache` were hydrated against the wrong project root
+  // (i.e. read from `<homedir>/.pi/...` state, not `<cwd>/.pi/...`). Clear
+  // all project-scope entries before re-hydrating against the real cwd so
+  // those phantom entries cannot leak into the next `rebuildRoutingTables`
+  // pass. The user-scope entries are untouched -- their factory-time hydrate
+  // used homedir correctly and remains valid across project-cwd changes.
+  // Cache-key shape is `<scope>\x00<marketplace>\x00<pluginId>` (per
+  // `cacheKey()`); we scope the delete to keys whose first segment is the
+  // literal `"project"` token.
+  const projectKeyPrefix = "project\x00";
+  for (const key of parsedConfigCache.keys()) {
+    if (key.startsWith(projectKeyPrefix)) {
+      parsedConfigCache.delete(key);
+    }
+  }
+
   const loc = locationsFor("project", cwd);
 
   let state: ExtensionState;

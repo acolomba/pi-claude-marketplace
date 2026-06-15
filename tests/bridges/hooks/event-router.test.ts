@@ -16,6 +16,7 @@ import {
   _setRoutingBucketForTest,
   addPluginConfigToCache,
   currentEpoch,
+  hydrateProjectScopeForCwd,
   rebuildRoutingTables,
   removePluginConfigFromCache,
   type RoutingEntry,
@@ -574,4 +575,74 @@ test("dispatch is sequential awaited (NOT Promise.all)", async (t) => {
   );
 
   assert.deepEqual(events, ["start:p1", "end:p1", "start:p2", "end:p2"]);
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// WR-01: hydrateProjectScopeForCwd clears phantom project-arm cache entries
+// before re-hydrating. Phantom entries originate at factory time when the
+// extension loads before `resources_discover` has supplied a real project
+// cwd: `registerHooksBridge` then hydrates the project scope under
+// `homedir()`, populating `parsedConfigCache` with entries read from the
+// wrong project root. The fix clears every `project`-scope cache entry on
+// every call to `hydrateProjectScopeForCwd` so the re-hydrate against the
+// real cwd starts from a clean slate. User-scope entries are untouched.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("WR-01: hydrateProjectScopeForCwd clears phantom project-arm cache entries before re-hydrating", async () => {
+  const config = makeConfig([{ event: "PreToolUse", handlers: 1 }]);
+
+  // Pre-seed a phantom project-scope entry as if factory-time hydrate ran
+  // under the wrong cwd and slurped a project-scope plugin into the cache.
+  addPluginConfigToCache("project", "mp-phantom", "phantom-plugin", config);
+  assert.equal(_parsedConfigCacheForTest().size, 1);
+
+  // Invoke the re-hydrate against a temp cwd whose `.pi/agent/state.json`
+  // does not exist. `loadState` returns DEFAULT_STATE on ENOENT, so the
+  // hydrate is effectively a no-op past the clear-cache prefix.
+  await hydrateProjectScopeForCwd("/nonexistent/cwd-for-wr-01-test");
+
+  // The phantom is gone; no project-scope entries remain.
+  assert.equal(_parsedConfigCacheForTest().size, 0);
+});
+
+test("WR-01: hydrateProjectScopeForCwd leaves user-scope cache entries untouched", async () => {
+  const config = makeConfig([{ event: "PreToolUse", handlers: 1 }]);
+
+  // Pre-seed BOTH a user-scope entry (legitimate, factory-time hydrate under
+  // homedir() was correct for user scope) AND a project-scope entry
+  // (phantom from factory-time hydrate under the wrong cwd).
+  addPluginConfigToCache("user", "mp-u", "user-plugin", config);
+  addPluginConfigToCache("project", "mp-p", "project-plugin", config);
+  assert.equal(_parsedConfigCacheForTest().size, 2);
+
+  await hydrateProjectScopeForCwd("/nonexistent/cwd-for-wr-01-test");
+
+  // Only the user-scope entry survives.
+  const cache = _parsedConfigCacheForTest();
+  assert.equal(cache.size, 1);
+  // Inspect the surviving entry: the value record carries `scope`, so we
+  // can assert that the survivor is the user-scope one without parsing the
+  // key format.
+  const survivor = [...cache.values()][0];
+  assert.equal(survivor?.scope, "user");
+  assert.equal(survivor?.pluginId, "user-plugin");
+});
+
+test("WR-01: hydrateProjectScopeForCwd clears all project-scope entries regardless of marketplace", async () => {
+  const config = makeConfig([{ event: "PreToolUse", handlers: 1 }]);
+
+  // Multiple phantom project-scope entries across different marketplaces:
+  // the prefix-on-`<scope>\x00` clear MUST drop all of them.
+  addPluginConfigToCache("project", "mp-alpha", "p1", config);
+  addPluginConfigToCache("project", "mp-beta", "p2", config);
+  addPluginConfigToCache("project", "mp-gamma", "p3", config);
+  addPluginConfigToCache("user", "mp-u", "u1", config);
+  assert.equal(_parsedConfigCacheForTest().size, 4);
+
+  await hydrateProjectScopeForCwd("/nonexistent/cwd-for-wr-01-test");
+
+  const cache = _parsedConfigCacheForTest();
+  assert.equal(cache.size, 1);
+  const survivor = [...cache.values()][0];
+  assert.equal(survivor?.scope, "user");
 });
