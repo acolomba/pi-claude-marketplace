@@ -115,3 +115,31 @@ export const CLAUDE_TO_PI_TOOL_NAMES = {
   Glob: "find",
   LS: "ls",
 } as const satisfies Record<string, PiToolName>;
+
+/**
+ * One-way Pi-form -> Claude-form tool-name translation used by the three
+ * tool-event payload translators (PreToolUse / PostToolUse /
+ * PostToolUseFailure). For the seven literal Pi tool names (`bash`,
+ * `read`, `edit`, `write`, `grep`, `find`, `ls`) returns the locked
+ * Claude-form spelling from `PI_TO_CLAUDE_TOOL_NAMES`; for any other
+ * string returns the input unchanged.
+ *
+ * D-60-04 / PAYL-01: the three tool translators share one tested call
+ * site so the per-translator unit tests do not duplicate the lookup-vs-
+ * passthrough decision matrix; TOOL-01 reuse stays anchored at this
+ * single helper.
+ *
+ * The string passthrough arm is the `CustomToolCallEvent` path -- Pi's
+ * `ToolCallEvent` union has one open-ended `CustomToolCallEvent { toolName:
+ * string }` arm (e.g. `mcp__server__tool`); the `??` fallback emits the
+ * supplied tool-name verbatim so MCP-form tool calls flow through Claude's
+ * `tool_name` field unchanged.
+ *
+ * NOTE: this is one-directional. The reverse direction (Claude -> Pi)
+ * lives at `CLAUDE_TO_PI_TOOL_NAMES` for the matcher parser; an already-
+ * capitalised input here (`"Bash"`) falls through the passthrough arm
+ * unchanged rather than round-tripping.
+ */
+export function mapPiToClaudeToolName(name: string): string {
+  return (PI_TO_CLAUDE_TOOL_NAMES as Record<string, string>)[name] ?? name;
+}

@@ -26,6 +26,7 @@ import test from "node:test";
 import {
   CLAUDE_TO_PI_TOOL_NAMES,
   PI_TO_CLAUDE_TOOL_NAMES,
+  mapPiToClaudeToolName,
 } from "../../extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -117,4 +118,47 @@ test("TOOL-01: find <-> Glob mapping is locked in both directions", () => {
     "find",
     'CLAUDE_TO_PI_TOOL_NAMES.Glob must map to "find" (D-58-05)',
   );
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// Block 4: TOOL-01 mapPiToClaudeToolName helper (PAYL-01 / D-60-04)
+// ──────────────────────────────────────────────────────────────────────────
+
+test("TOOL-01: mapPiToClaudeToolName returns the Claude-form for every Pi tool literal", () => {
+  // The seven Pi-form tool names must round-trip to their locked
+  // Claude-form spellings. This is the single tested call site the
+  // three tool translators (PreToolUse / PostToolUse /
+  // PostToolUseFailure) share -- a drift here propagates to every
+  // tool-event payload at dispatch time.
+  assert.equal(mapPiToClaudeToolName("bash"), "Bash");
+  assert.equal(mapPiToClaudeToolName("read"), "Read");
+  assert.equal(mapPiToClaudeToolName("edit"), "Edit");
+  assert.equal(mapPiToClaudeToolName("write"), "Write");
+  assert.equal(mapPiToClaudeToolName("grep"), "Grep");
+  // D-58-05: LOW-confidence find -> Glob mismatch propagates here.
+  assert.equal(mapPiToClaudeToolName("find"), "Glob");
+  assert.equal(mapPiToClaudeToolName("ls"), "LS");
+});
+
+test("TOOL-01: mapPiToClaudeToolName passes CustomToolCallEvent tool-names through unchanged", () => {
+  // D-60-04 / PAYL-01: the `CustomToolCallEvent` arm of Pi's
+  // `ToolCallEvent` union has an open-ended `toolName: string` -- e.g.
+  // `mcp__server__tool` from `pi-mcp-adapter`. The helper's `??`
+  // fallback emits the supplied name verbatim so MCP-form tool calls
+  // flow through Claude's `tool_name` field unchanged.
+  assert.equal(mapPiToClaudeToolName("mcp__server__tool"), "mcp__server__tool");
+  assert.equal(mapPiToClaudeToolName("subagent"), "subagent");
+  assert.equal(mapPiToClaudeToolName("some_custom_tool"), "some_custom_tool");
+  assert.equal(mapPiToClaudeToolName(""), "");
+});
+
+test("TOOL-01: mapPiToClaudeToolName is one-directional (Claude-form inputs are NOT remapped)", () => {
+  // The helper is Pi -> Claude only; an already-capitalized input
+  // (`"Bash"`) is not a Pi tool literal so it falls through the
+  // passthrough arm unchanged rather than reverse-translating back to
+  // `"bash"`. The reverse direction lives at `CLAUDE_TO_PI_TOOL_NAMES`
+  // for the matcher parser; the two seams must not be conflated.
+  assert.equal(mapPiToClaudeToolName("Bash"), "Bash");
+  assert.equal(mapPiToClaudeToolName("Read"), "Read");
+  assert.equal(mapPiToClaudeToolName("Glob"), "Glob");
 });
