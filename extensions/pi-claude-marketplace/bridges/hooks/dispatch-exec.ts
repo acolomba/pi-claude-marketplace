@@ -164,17 +164,62 @@ export async function dispatchHookExec(
 // Translator dispatch
 // ──────────────────────────────────────────────────────────────────────────
 
+/**
+ * Per-event required-field set used by `buildPayload`'s defensive runtime
+ * probe (WR-03).  The dispatch router upstream (`dispatch.ts` composite
+ * handler) already narrows by `entry.claudeEvent`, so this check is a
+ * belt-over-suspenders that converts a silent envelope-corruption bug
+ * (router lands the wrong event shape on the wrong translator) into an
+ * observable `hookDebugLog` signal under
+ * `PI_CLAUDE_MARKETPLACE_DEBUG=1`.  The translator still runs after a
+ * probe miss so the never-throws contract is preserved -- the goal is
+ * diagnostic, not blocking.
+ */
+const REQUIRED_EVENT_FIELDS: Record<BucketAEvent, readonly string[]> = {
+  SessionStart: [],
+  UserPromptSubmit: ["text"],
+  PreToolUse: ["toolName", "input"],
+  PostToolUse: ["toolName", "input"],
+  PostToolUseFailure: ["toolName", "input"],
+  PreCompact: [],
+  PostCompact: [],
+  SessionEnd: [],
+};
+
 function buildPayload(
   claudeEvent: BucketAEvent,
   event: unknown,
   transCtx: TranslationContext,
 ): unknown {
   const translator = TRANSLATORS[claudeEvent];
-  // Defensive narrowing: an unknown event arrives here as `unknown`; the
-  // per-translator argument shape was already validated at the dispatch
-  // router (composite handler) before fan-out. The `as never` cast is the
-  // dispatcher's bridge between the per-event closed set and the
-  // translator's typed signature.
+  // WR-03: defensive runtime probe.  The `as never` cast crossing the
+  // unknown-event boundary is necessary (the per-translator argument
+  // shape is per-event and the runtime `event` is `unknown`), but if a
+  // future routing bug or a Pi peer-dep shape change lands a wrong-
+  // shaped event in the wrong translator, JSON.stringify silently elides
+  // the missing fields and the child process receives a partial envelope
+  // with no diagnostic.  Probe the required-field set under
+  // `PI_CLAUDE_MARKETPLACE_DEBUG=1` so a corrupted envelope is at least
+  // observable in the debug seam.  The translator still runs after a
+  // miss -- the never-throws contract is preserved (the user-visible
+  // surface is a translator-emitted JSON envelope; a missing field is
+  // not the bridge's problem to refuse).
+  const required = REQUIRED_EVENT_FIELDS[claudeEvent];
+  if (event === null || typeof event !== "object") {
+    hookDebugLog(
+      `buildPayload: ${claudeEvent} event is ${event === null ? "null" : typeof event}, not an object; partial envelope likely`,
+    );
+  } else if (required.length > 0) {
+    const obj = event as Record<string, unknown>;
+    for (const field of required) {
+      if (!(field in obj)) {
+        hookDebugLog(
+          `buildPayload: ${claudeEvent} event missing required field "${field}"; partial envelope likely`,
+        );
+      }
+    }
+  }
+
   return translator(event as never, transCtx);
 }
 
