@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.13
 milestone_name: Claude Hook Bridge
-status: executing
-stopped_at: Phase 61 complete
-last_updated: "2026-06-15T17:11:12.910Z"
-last_activity: 2026-06-15 -- Phase 61 complete (MATCH-03 `if` field permission-rule matcher)
+status: Ready to discuss
+stopped_at: Phase 62 context gathered
+last_updated: "2026-06-15T21:37:43.794Z"
+last_activity: 2026-06-15 -- Phase 61 complete; MATCH-03 `if` field permission-rule matcher landed atomically with REQUIREMENTS.md amendment (D-61-03 / D-58-01)
 progress:
   total_phases: 7
   completed_phases: 5
@@ -294,9 +294,9 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-15T13:26:27.516Z
-Stopped At: Phase 61 complete
-Resume File: .planning/phases/61-if-field-permission-rule-matcher/61-VERIFICATION.md
+Last session: 2026-06-15T21:37:43.760Z
+Stopped At: Phase 62 context gathered
+Resume File: .planning/phases/62-asyncrewake-registry-background-spawn/62-CONTEXT.md
 
 ## Operator Next Steps
 
